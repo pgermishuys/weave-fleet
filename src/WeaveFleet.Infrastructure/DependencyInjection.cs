@@ -208,6 +208,7 @@ public static class DependencyInjection
             client.Timeout = TimeSpan.FromSeconds(30);
             client.DefaultRequestHeaders.UserAgent.ParseAdd("fleet-reports/1.0");
         });
+        services.AddScoped<SessionMessageDelivery>();
         services.AddScoped<SessionMessageBridge>();
         // @ sessions in the composer: the block a message's references become, and fleet_session_read.
         services.AddScoped<SessionReferenceExpander>();

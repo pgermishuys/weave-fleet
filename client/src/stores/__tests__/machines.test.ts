@@ -420,5 +420,14 @@ describe("machines store", () => {
       expect(loadMachines()).toEqual([]);
       expect(store.hasMachines).toBe(false);
     });
+
+    it("finds a machine by its id: home, a listed one, or none", async () => {
+      const store = useMachinesStore();
+      await store.loadHome();
+
+      expect(store.keyOfMachine(homeInfo.id)).toBe(HOME_MACHINE_KEY);
+      expect(store.keyOfMachine(falcon.id)).toBe(falcon.id);
+      expect(store.keyOfMachine("cccccccccccccccccccccccccccccccc")).toBeNull();
+    });
   });
 });

@@ -158,7 +158,8 @@ This is what any client relies on. The web app is one client. A native app would
       { "type": "opencode", "name": "OpenCode", "available": true, "enabled": true, "version": "1.18.32" },
       { "type": "claude-code", "name": "Claude Code", "available": false, "enabled": false, "version": null }
     ],
-    "sessions": { "working": 2, "needsYou": 1 }
+    "sessions": { "working": 2, "needsYou": 1 },
+    "peerMessages": true
   }
 }
 ```
@@ -184,6 +185,9 @@ This is what any client relies on. The web app is one client. A native app would
     check, so a harness installed since shows up after something on that machine asks for the harness list again.
   - `sessions`: how many of the caller's sessions there are `working` (in a turn) or `needsYou` (stopped on a
     question or a permission ask). Top-level sessions only, counted as the session list shows them.
+  - `peerMessages`: whether the machine takes messages from sessions on other machines
+    ([`/api/machine/peer`](#sessions-on-other-machines-apimachinepeer)). `true` in local mode. Fleets before it
+    leave it out, and don't.
 
 `PUT /api/machine` with `{ "name": "…", "publicUrl": "…" }` changes either for every client (local mode only, owner
 only: `403` for a device token or an agent). A
@@ -284,6 +288,27 @@ Machine tokens are kept encrypted (Data Protection). Home keeps one SignalR conn
 machine token as the bearer, the `sessions` topic) to push those machines' notifications to its phones; it doesn't
 forward one that names a machine other than the one it came from, and labels each with the id and name in its own
 list.
+
+### Sessions on other machines: `/api/machine/peer`
+
+An agent in a session on one machine can talk to a session on another. The agent never calls the other machine: it
+calls one of Fleet's tools, its own Fleet works out which session is calling (as it does for `fleet_message` on one
+machine), and that Fleet calls here with the machine token it keeps for this machine. The agent never sees the token.
+
+- `POST /api/machine/peer/sessions/{id}/message` with `{ fromMachineId, fromMachineName, fromSessionId, fromTitle,
+  text }`: delivers `text` to session `{id}` as `fleet_message` does, wrapped to say who sent it:
+  `<fleet-session-message from="…" title="…" machine="…" machine-name="…">`. It never arrives as the user's own
+  prompt. It sends `session.messaged` with `fromMachineId` on the session's topic. Returns `{ sessionId, title,
+  messageId }`; `messageId` is the id the session's harness got for the message, when it gives one. `400` names a
+  missing field, or `fromMachineId` being this machine; `404` when there's no such session here.
+- `GET /api/machine/peer/sessions/{id}/page?before=&limit=`: a page of the session's conversation, `{ title, text }`,
+  as `fleet_session_read` shows it to an agent. `limit` is 1 to 50.
+
+Only the machine token may call them (local mode only). A paired device gets `403`, and so do the owner's browser,
+loopback without the token, and an agent on this machine. **A machine trusts the sender a token holder names exactly
+as far as it trusts that token.** Whoever has the token can already do anything here; naming the sender only marks
+the message as a peer's rather than the user's. The Fleet sending it names only a session it resolved from its own
+agent's process, never one the agent wrote.
 
 ### Push: `/api/push/*`
 

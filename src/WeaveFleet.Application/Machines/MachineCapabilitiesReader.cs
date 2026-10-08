@@ -1,3 +1,4 @@
+using WeaveFleet.Application.Configuration;
 using WeaveFleet.Application.Harnesses;
 using WeaveFleet.Application.Services;
 using WeaveFleet.Domain.Harnesses;
@@ -8,7 +9,11 @@ namespace WeaveFleet.Application.Machines;
 /// <summary>What a machine can run, and how busy it is: <c>capabilities</c> in <c>GET /api/machine</c>.</summary>
 /// <param name="Harnesses">Each harness Fleet knows, as last checked; <see langword="null"/> until the first check finishes.</param>
 /// <param name="Sessions">The caller's sessions on this machine that are working or need them.</param>
-public sealed record MachineCapabilities(IReadOnlyList<MachineHarness>? Harnesses, MachineSessionCounts Sessions);
+/// <param name="PeerMessages">
+/// Whether it takes messages from sessions on other machines (<c>/api/machine/peer</c>): a Fleet with a machine token
+/// that knows the endpoints. Absent from older Fleets.
+/// </param>
+public sealed record MachineCapabilities(IReadOnlyList<MachineHarness>? Harnesses, MachineSessionCounts Sessions, bool PeerMessages);
 
 /// <param name="Type">The harness type, e.g. <c>opencode</c>.</param>
 /// <param name="Name">What to call it, e.g. <c>OpenCode</c>.</param>
@@ -27,6 +32,7 @@ public sealed record MachineSessionCounts(int Working, int NeedsYou);
 /// session list shows them (top-level only, a question outranking work), and only the caller's own.
 /// </summary>
 public sealed class MachineCapabilitiesReader(
+    FleetOptions options,
     HarnessAvailabilityCache harnesses,
     IUserPreferenceRepository preferences,
     ISessionRepository sessions,
@@ -67,6 +73,8 @@ public sealed class MachineCapabilitiesReader(
             }
         }
 
-        return new MachineCapabilities(harnessList, new MachineSessionCounts(working, needsYou));
+        // The same condition the peer endpoints are mapped on: only local mode has a machine token.
+        var peerMessages = !options.Auth.Enabled && options.Auth.TokenAuthEnabled;
+        return new MachineCapabilities(harnessList, new MachineSessionCounts(working, needsYou), peerMessages);
     }
 }

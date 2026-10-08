@@ -6,6 +6,10 @@
  *   …text…
  *   </fleet-session-message>
  *
+ * A sender on another machine is named with that machine, which its Fleet passed on with this machine's token:
+ *
+ *   <fleet-session-message from="ses_…" title="Fix login flake" machine="<machine id>" machine-name="atlas">
+ *
  * When the sender asked to hear back, Fleet tells it once the other session's turn ends, with a different tag so
  * the update can't pass for something that session's agent wrote:
  *
@@ -22,9 +26,13 @@ export const SESSION_MESSAGES_PREFERENCE_KEY = "SessionMessages";
 export interface PeerSender {
   sessionId: string;
   title: string;
+  /** The machine the sender is on (its id), when it isn't the machine the message arrived at. */
+  machineId?: string;
+  machineName?: string;
 }
 
-const PEER_MESSAGE = /^<fleet-session-message from="([^"]*)" title="([^"]*)">\n?([\s\S]*?)\n?<\/fleet-session-message>\s*$/;
+const PEER_MESSAGE =
+  /^<fleet-session-message from="([^"]*)" title="([^"]*)"(?: machine="([^"]*)" machine-name="([^"]*)")?>\n?([\s\S]*?)\n?<\/fleet-session-message>\s*$/;
 
 // Fleet HTML-encodes the id and title in the tag.
 const ENTITIES: Record<string, string> = { "&amp;": "&", "&quot;": "\"", "&#39;": "'", "&lt;": "<", "&gt;": ">" };
@@ -37,7 +45,12 @@ function decode(value: string): string {
 export function parsePeerMessage(body: string): { peer: PeerSender; text: string } | null {
   const match = PEER_MESSAGE.exec(body);
   if (!match) return null;
-  return { peer: { sessionId: decode(match[1]), title: decode(match[2]) }, text: match[3] };
+  const peer: PeerSender = { sessionId: decode(match[1]), title: decode(match[2]) };
+  if (match[3] !== undefined) {
+    peer.machineId = decode(match[3]);
+    peer.machineName = decode(match[4]);
+  }
+  return { peer, text: match[5] };
 }
 
 export type PeerOutcome = "finished" | "failed";

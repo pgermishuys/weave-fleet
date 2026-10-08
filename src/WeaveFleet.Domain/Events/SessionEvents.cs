@@ -199,6 +199,11 @@ public sealed record SessionMessagedPayload
     public required string FromSessionId { get; init; }
 
     /// <summary>
+    /// Gets the machine the sender is on, when it's another machine; null when it's this one.
+    /// </summary>
+    public string? FromMachineId { get; init; }
+
+    /// <summary>
     /// Gets the session that received it.
     /// </summary>
     public required string ToSessionId { get; init; }

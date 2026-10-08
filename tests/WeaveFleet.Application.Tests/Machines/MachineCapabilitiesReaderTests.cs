@@ -1,5 +1,6 @@
 using Microsoft.Extensions.Logging.Abstractions;
 using Shouldly;
+using WeaveFleet.Application.Configuration;
 using WeaveFleet.Application.Harnesses;
 using WeaveFleet.Application.Machines;
 using WeaveFleet.Application.Services;
@@ -16,12 +17,26 @@ public sealed class MachineCapabilitiesReaderTests
     private readonly InMemoryUserPreferenceRepository _preferences = new();
     private readonly InMemorySessionRepository _sessions = new();
     private readonly SessionActivityTracker _activity = new();
+    private readonly FleetOptions _options = new();
     private readonly MachineCapabilitiesReader _reader;
 
     public MachineCapabilitiesReaderTests()
     {
         _cache = new HarnessAvailabilityCache(_registry, TimeProvider.System, NullLogger<HarnessAvailabilityCache>.Instance);
-        _reader = new MachineCapabilitiesReader(_cache, _preferences, _sessions, _activity);
+        _reader = new MachineCapabilitiesReader(_options, _cache, _preferences, _sessions, _activity);
+    }
+
+    [Fact]
+    public async Task It_takes_peer_messages_only_with_a_machine_token()
+    {
+        (await _reader.ReadAsync()).PeerMessages.ShouldBeTrue();
+
+        _options.Auth.Enabled = true;
+        (await _reader.ReadAsync()).PeerMessages.ShouldBeFalse();
+
+        _options.Auth.Enabled = false;
+        _options.Auth.TokenAuthEnabled = false;
+        (await _reader.ReadAsync()).PeerMessages.ShouldBeFalse();
     }
 
     [Fact]

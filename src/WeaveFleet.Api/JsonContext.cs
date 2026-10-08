@@ -332,6 +332,10 @@ internal sealed record ErrorResponse(string Error);
 [JsonSerializable(typeof(WeaveFleet.Application.Devices.DeviceSummary))]
 [JsonSerializable(typeof(WeaveFleet.Api.Contracts.CreateDeviceRequest))]
 [JsonSerializable(typeof(WeaveFleet.Api.Contracts.CreateDeviceResponse))]
+// Sessions on other machines (peer messages)
+[JsonSerializable(typeof(WeaveFleet.Api.Contracts.PeerSessionMessageRequest))]
+[JsonSerializable(typeof(WeaveFleet.Api.Contracts.PeerSessionMessageResponse))]
+[JsonSerializable(typeof(WeaveFleet.Api.Contracts.PeerSessionPageResponse))]
 // Machines (server-side list)
 [JsonSerializable(typeof(WeaveFleet.Api.Contracts.MachineEntryResponse))]
 [JsonSerializable(typeof(WeaveFleet.Api.Contracts.MachineListResponse))]

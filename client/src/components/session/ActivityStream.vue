@@ -38,6 +38,7 @@ import { parseVisualPayload, type VisualPayload } from "@/lib/visual-payload";
 import { isQuestionPart } from "@/lib/question-types";
 import { diagLog } from "@/lib/message-diagnostics";
 import { useSessionsStore } from "@/stores/sessions";
+import { useMachinesStore } from "@/stores/machines";
 import { dispatchSessionUpsert } from "@/lib/session-sync";
 import { useCanvasesStore } from "@/stores/canvases";
 import { focusServerCanvas } from "@/composables/use-server-canvases";
@@ -112,6 +113,7 @@ const props = defineProps<{
 }>();
 
 const machine = useMachineTarget();
+const machines = useMachinesStore();
 
 const emit = defineEmits<{
   /** Whether a turn is running, and the newest reply's text: a side conversation's tab shows both while it's folded. */
@@ -793,10 +795,24 @@ function openReferencedSession(sessionId: string): void {
   void router.navigate({ to: "/sessions/$id", params: { id: sessionId }, search: { instanceId: undefined, parentSessionId: undefined } });
 }
 
+/**
+ * The machine a sender is on, as this page knows it: the live one for a sender on the same machine, its key for one
+ * in the machine list, null for one that isn't listed here (the chip then names it but doesn't open it).
+ */
+function peerMachineKey(peer: PeerSender): string | null {
+  return peer.machineId ? machines.keyOfMachine(peer.machineId) : machines.liveKey;
+}
+
 function handlePeerLinkClick(event: MouseEvent, peer: PeerSender): void {
   // A modified click opens the sender elsewhere, as a link would.
   if (event.metaKey || event.ctrlKey || event.shiftKey || event.button !== 0) return;
   event.preventDefault();
+  const key = peerMachineKey(peer);
+  if (key === null) return;
+  if (key !== machines.liveKey) {
+    machines.openOn(key, `/sessions/${encodeURIComponent(peer.sessionId)}`);
+    return;
+  }
   void router.navigate({ to: "/sessions/$id", params: { id: peer.sessionId }, search: { instanceId: undefined, parentSessionId: undefined } });
 }
 
@@ -1365,11 +1381,13 @@ function handleImproveSkill(skill: string, toolId: string): void {
           />
           <span class="peer-from__title">Sent mid-turn</span>
         </span>
-        <a
+        <component
+          :is="peerMachineKey(message.peer) === null ? 'span' : 'a'"
           v-if="message.peer"
           class="peer-from"
           :class="{ 'peer-from--failed': message.peerOutcome === 'failed' }"
-          :href="`/sessions/${encodeURIComponent(message.peer.sessionId)}`"
+          :href="peerMachineKey(message.peer) === null ? undefined : `/sessions/${encodeURIComponent(message.peer.sessionId)}`"
+          :title="message.peer.machineName ? `A session on ${message.peer.machineName}` : undefined"
           data-testid="peer-from"
           @click="handlePeerLinkClick($event, message.peer)"
         >
@@ -1383,14 +1401,20 @@ function handleImproveSkill(skill: string, toolId: string): void {
           >From</span>
           <span class="peer-from__title">{{ message.peer.title }}</span>
           <span
+            v-if="message.peer.machineName"
+            class="peer-from__machine"
+            data-testid="peer-from-machine"
+          >· {{ message.peer.machineName }}</span>
+          <span
             v-if="message.peerOutcome"
             class="peer-from__label peer-from__outcome"
           >{{ message.peerOutcome }}</span>
           <ArrowUpRight
+            v-if="peerMachineKey(message.peer) !== null"
             class="peer-from__icon"
             aria-hidden="true"
           />
-        </a>
+        </component>
         <ShellCommandBlock
           v-if="message.shell"
           :command="message.shell"
@@ -1911,7 +1935,7 @@ function handleImproveSkill(skill: string, toolId: string): void {
   transition: border-color var(--transition) ease, background-color var(--transition) ease;
 }
 
-.peer-from:hover {
+a.peer-from:hover {
   border-color: color-mix(in srgb, var(--primary, #6366f1) 24%, var(--border));
   background: color-mix(in srgb, var(--card-bg, var(--panel-bg)) 88%, var(--accent-dim) 12%);
 }
@@ -1932,6 +1956,11 @@ function handleImproveSkill(skill: string, toolId: string): void {
   color: var(--text);
   font-weight: 600;
   text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.peer-from__machine {
+  flex-shrink: 0;
   white-space: nowrap;
 }
 </style>

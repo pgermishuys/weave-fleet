@@ -460,6 +460,12 @@ export const useMachinesStore = defineStore("machines", () => {
     return key === HOME_MACHINE_KEY ? null : connections.value.find((connection) => connection.id === key) ?? null;
   }
 
+  /** The key of the machine with id `machineId` (home's own id gives `HOME_MACHINE_KEY`); null when it isn't listed. */
+  function keyOfMachine(machineId: string): string | null {
+    if (home.value?.id === machineId) return HOME_MACHINE_KEY;
+    return connections.value.some((connection) => connection.id === machineId) ? machineId : null;
+  }
+
   /** Renames a machine for every client, on the machine itself. */
   async function renameMachine(key: string, name: string): Promise<void> {
     const connection = connectionFor(key);
@@ -760,6 +766,7 @@ export const useMachinesStore = defineStore("machines", () => {
     refreshOthers,
     rememberLiveSessions,
     startPolling,
+    keyOfMachine,
     openOn,
   };
 });
