@@ -138,6 +138,7 @@ echo Usage: fleet [command] [--port ^<port^>] [--host ^<host^>] [--data-dir ^<pa
 echo.
 echo Commands:
 echo   (none)       Start the Fleet server
+echo   node         Start a node: the API without the web app ^(see "fleet node help"^)
 echo   version      Print the installed version
 echo   update       Update to the latest version
 echo   uninstall    Remove Fleet
@@ -160,12 +161,35 @@ echo   Fleet__AnalyticsDatabasePath    Analytics database path override
 echo   Fleet__DataProtection__KeyPath  Data protection key directory override
 exit /b 0
 
+:show_node_help
+call :read_version
+echo Fleet v!VERSION!
+echo.
+echo Usage: fleet node [--port ^<port^>] [--host ^<host^>] [--data-dir ^<path^>] [--profile ^<name^>]
+echo.
+echo Starts Fleet as a node: the API without the web app. Every request needs the access token,
+echo even from this machine. Add the node to another Fleet in Settings ^> Machines ^> Add a machine.
+echo.
+echo Options:
+echo   --port ^<port^>       Override the server port
+echo   --host ^<host^>       Override the bind host ^(0.0.0.0 lets other machines connect^)
+echo   --data-dir ^<path^>   Override the data directory (default: %%USERPROFILE%%\.weave)
+echo   --profile ^<name^>    Use a profile-specific data directory
+exit /b 0
+
 :parse_args
 set "PORT_OVERRIDE="
 set "HOST_OVERRIDE="
 set "DATA_DIR_OVERRIDE="
 set "PROFILE_NAME="
 set "REQUIRE_TOKEN="
+set "NODE="
+
+rem "fleet node ..." takes the same server options; it only has to come first.
+if /i "%~1"=="node" (
+    set "NODE=1"
+    shift
+)
 
 :parse_args_loop
 if "%~1"=="" goto :start_server
@@ -284,6 +308,7 @@ if not "%~2"=="" (
     echo Error: help does not accept additional arguments. >&2
     exit /b 1
 )
+if defined NODE goto :show_node_help
 goto :show_help
 
 :do_import_legacy
@@ -361,7 +386,12 @@ if not defined Fleet__AnalyticsDatabasePath set "Fleet__AnalyticsDatabasePath=%A
 if not defined Fleet__DataProtection__KeyPath set "Fleet__DataProtection__KeyPath=%KEY_DIR_DEFAULT%"
 if defined REQUIRE_TOKEN set "Fleet__Auth__RequireToken=true"
 
-echo Fleet v!VERSION! starting on %LISTEN_URL%
+if defined NODE (
+    set "EXTRA_ARGS=!EXTRA_ARGS! --node"
+    echo Fleet v!VERSION! starting as a node on %LISTEN_URL%
+) else (
+    echo Fleet v!VERSION! starting on %LISTEN_URL%
+)
 if defined EXTRA_ARGS (
     "%APP_BIN%" --urls "%LISTEN_URL%" --contentRoot "%APP_CONTENT_ROOT%" !EXTRA_ARGS!
 ) else (

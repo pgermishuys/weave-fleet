@@ -168,6 +168,7 @@ show_help() {
   echo ""
   echo "Commands:"
   echo "  (none)       Start the Fleet server"
+  echo "  node         Start a node: the API without the web app (see 'fleet node help')"
   echo "  version      Print the installed version"
   echo "  update       Update to the latest version"
   echo "  uninstall    Remove Fleet"
@@ -189,6 +190,29 @@ echo "  Fleet__DatabasePath             SQLite database path override"
   echo "  Fleet__AnalyticsDatabasePath    Analytics database path override"
   echo "  Fleet__DataProtection__KeyPath  Data protection key directory override"
 }
+
+show_node_help() {
+  VERSION="$(read_version)"
+  echo "Fleet v${VERSION}"
+  echo ""
+  echo "Usage: fleet node [--port <port>] [--host <host>] [--data-dir <path>] [--profile <name>]"
+  echo ""
+  echo "Starts Fleet as a node: the API without the web app. Every request needs the access token,"
+  echo "even from this machine. Add the node to another Fleet in Settings > Machines > Add a machine."
+  echo ""
+  echo "Options:"
+  echo "  --port <port>       Override the server port"
+  echo "  --host <host>       Override the bind host (0.0.0.0 lets other machines connect)"
+  echo "  --data-dir <path>   Override the data directory (default: ~/.weave)"
+  echo "  --profile <name>    Use a profile-specific data directory"
+}
+
+# `fleet node …` takes the same server options; it only has to come first.
+NODE=0
+if [ "${1:-}" = "node" ]; then
+  NODE=1
+  shift
+fi
 
 PORT_OVERRIDE=""
 HOST_OVERRIDE=""
@@ -241,7 +265,11 @@ while [ "$#" -gt 0 ]; do
         echo "Error: help does not accept additional arguments." >&2
         exit 1
       fi
-      show_help
+      if [ "$NODE" -eq 1 ]; then
+        show_node_help
+      else
+        show_help
+      fi
       exit 0
       ;;
     import-legacy-sessions)
@@ -371,6 +399,10 @@ export Fleet__DataProtection__KeyPath="${Fleet__DataProtection__KeyPath:-$KEY_DI
 if [ "$REQUIRE_TOKEN" -eq 1 ]; then
   export Fleet__Auth__RequireToken=true
 fi
-
-echo "Fleet v${VERSION} starting on ${LISTEN_URL}"
+if [ "$NODE" -eq 1 ]; then
+  EXTRA_ARGS="$EXTRA_ARGS --node"
+  echo "Fleet v${VERSION} starting as a node on ${LISTEN_URL}"
+else
+  echo "Fleet v${VERSION} starting on ${LISTEN_URL}"
+fi
 exec "$APP_BIN" --urls "$LISTEN_URL" --contentRoot "$APP_CONTENT_ROOT" $EXTRA_ARGS

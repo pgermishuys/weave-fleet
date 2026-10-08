@@ -8,8 +8,9 @@ set -eu
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
 ROOT_DIR="$(cd "$SCRIPT_DIR/.." && pwd)"
 
-# Options Program.cs reads that people don't pass to `fleet`: dev switches, and import-legacy-sessions' own options.
-APP_ONLY_OPTIONS="--harness --transport --import-legacy-sessions --source"
+# Options Program.cs reads that people don't pass to `fleet`: dev switches, import-legacy-sessions' own options, and
+# --node, which `fleet node` passes.
+APP_ONLY_OPTIONS="--harness --transport --import-legacy-sessions --source --node"
 
 WORK="$(mktemp -d)"
 trap 'rm -rf "$WORK"' EXIT
@@ -54,6 +55,11 @@ expect_record() {
   fi
 }
 
+# Whether the app was started with --node.
+started_as_node() {
+  grep '^args=' "$WORK/out" | tr ' ' '\n' | grep -qx -- "--node"
+}
+
 # --require-token reaches the app as Fleet:Auth:RequireToken.
 run_fleet --port 2113 --require-token || true
 if expect_started --port 2113 --require-token; then
@@ -80,6 +86,46 @@ elif [ -f "$WORK/out" ]; then
 elif ! grep -q "Unknown command or option: --requre-token" "$WORK/stdout"; then
   fail "fleet --requre-token: unexpected output: $(cat "$WORK/stdout")"
 fi
+
+# `fleet node` starts the app with --node and the usual options; plain `fleet` doesn't.
+run_fleet node --port 5512 --host 0.0.0.0 || true
+if expect_started node --port 5512 --host 0.0.0.0; then
+  started_as_node || fail "fleet node didn't pass --node: $(tr '\n' ' ' < "$WORK/out")"
+  expect_record "port=5512" "node --port 5512 --host 0.0.0.0"
+  expect_record "host=0.0.0.0" "node --port 5512 --host 0.0.0.0"
+fi
+run_fleet --port 5512 || true
+if expect_started --port 5512 && started_as_node; then
+  fail "fleet --port 5512 passed --node"
+fi
+
+# `node` only works first, and a typo after it still stops before the app starts.
+if run_fleet --port 5512 node; then
+  fail "fleet --port 5512 node should fail"
+fi
+if run_fleet node --requre-token; then
+  fail "fleet node --requre-token should fail"
+elif [ -f "$WORK/out" ]; then
+  fail "fleet node --requre-token started the app"
+fi
+
+# `fleet node help` explains node mode, and every option it lists is accepted after `fleet node`.
+run_fleet node help || fail "fleet node help failed"
+if [ -f "$WORK/out" ]; then
+  fail "fleet node help started the app"
+fi
+grep -q "Usage: fleet node" "$WORK/stdout" || fail "fleet node help: unexpected output: $(cat "$WORK/stdout")"
+NODE_HELP_OPTIONS="$(grep -o -- '--[a-z][a-z-]*' "$WORK/stdout" | sort -u)"
+for option in $NODE_HELP_OPTIONS; do
+  case "$option" in
+    --port) run_fleet node "$option" 2113 ;;
+    --host) run_fleet node "$option" 127.0.0.1 ;;
+    --profile) run_fleet node "$option" test ;;
+    --data-dir) run_fleet node "$option" "$WORK/data-dir" ;;
+    *) fail "fleet node help lists $option, which this test doesn't know how to run"; continue ;;
+  esac || true
+  expect_started node "$option" && { started_as_node || fail "fleet node $option didn't pass --node"; }
+done
 
 # Every option `fleet help` lists is accepted.
 run_fleet help || fail "fleet help failed"

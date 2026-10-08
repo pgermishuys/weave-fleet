@@ -88,6 +88,48 @@ if ($script:fleetExitCode -eq 0) { Fail "fleet --requre-token should fail" }
 if (Test-Path $out) { Fail "fleet --requre-token started the app" }
 if ($output -notmatch 'Unknown command or option: --requre-token') { Fail "fleet --requre-token: unexpected output: $output" }
 
+function Test-StartedAsNode {
+    $argsLine = Get-Content $out | Where-Object { $_ -like 'args=*' }
+    return ($argsLine -split ' ') -contains '--node'
+}
+
+# `fleet node` starts the app with --node and the usual options; plain `fleet` doesn't.
+$output = Invoke-Fleet 'node --port 5512 --host 0.0.0.0'
+if (Test-Started 'node --port 5512 --host 0.0.0.0' $output) {
+    if (-not (Test-StartedAsNode)) { Fail "fleet node didn't pass --node: $((Get-Content $out) -join ' ')" }
+    Test-Record 'port=5512' 'node --port 5512 --host 0.0.0.0'
+    Test-Record 'host=0.0.0.0' 'node --port 5512 --host 0.0.0.0'
+}
+$output = Invoke-Fleet '--port 5512'
+if ((Test-Started '--port 5512' $output) -and (Test-StartedAsNode)) { Fail "fleet --port 5512 passed --node" }
+
+# `node` only works first, and a typo after it still stops before the app starts.
+$output = Invoke-Fleet '--port 5512 node'
+if ($script:fleetExitCode -eq 0) { Fail "fleet --port 5512 node should fail" }
+$output = Invoke-Fleet 'node --requre-token'
+if ($script:fleetExitCode -eq 0) { Fail "fleet node --requre-token should fail" }
+if (Test-Path $out) { Fail "fleet node --requre-token started the app" }
+
+# `fleet node help` explains node mode, and every option it lists is accepted after `fleet node`.
+$nodeHelp = Invoke-Fleet 'node help'
+if (Test-Path $out) { Fail "fleet node help started the app" }
+if ($nodeHelp -notmatch 'Usage: fleet node') { Fail "fleet node help: unexpected output: $nodeHelp" }
+$nodeValues = @{
+    '--port' = '2113'
+    '--host' = '127.0.0.1'
+    '--profile' = 'test'
+    '--data-dir' = "`"$(Join-Path $work 'data-dir')`""
+}
+foreach ($option in ([regex]::Matches($nodeHelp, '--[a-z][a-z-]*') | ForEach-Object { $_.Value } | Sort-Object -Unique)) {
+    if (-not $nodeValues.ContainsKey($option)) {
+        Fail "fleet node help lists $option, which this test doesn't know how to run"
+        continue
+    }
+    $arguments = "node $option $($nodeValues[$option])"
+    $output = Invoke-Fleet $arguments
+    if ((Test-Started $arguments $output) -and -not (Test-StartedAsNode)) { Fail "fleet $arguments didn't pass --node" }
+}
+
 # Every option `fleet help` lists is accepted.
 $help = Invoke-Fleet 'help'
 $helpOptions = [regex]::Matches($help, '--[a-z][a-z-]*') | ForEach-Object { $_.Value } | Sort-Object -Unique

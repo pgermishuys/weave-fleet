@@ -14,6 +14,12 @@ public sealed class FleetOptions
     /// <summary>Host/IP address Kestrel binds to. Default: 127.0.0.1.</summary>
     public string Host { get; set; } = "127.0.0.1";
 
+    /// <summary>
+    /// Serve the web app (<c>wwwroot</c>) next to the API. <c>fleet node</c> (<c>--node</c>) turns it off: the API, the
+    /// hub and terminal sockets stay, <c>/</c> answers a short note, and other pages are 404. Default: true.
+    /// </summary>
+    public bool ServeUi { get; set; } = true;
+
     /// <summary>Path to the SQLite database file. Default: <c>&lt;LocalAppData&gt;/WeaveFleet/fleet.db</c>.</summary>
     public string DatabasePath { get; set; } = Path.Combine(FleetPaths.DefaultAppDataDirectory, "fleet.db");
 

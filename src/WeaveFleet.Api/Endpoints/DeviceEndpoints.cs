@@ -46,6 +46,12 @@ public static class DeviceEndpoints
             PairingCodeStore codes,
             MachineIdentityStore identities) =>
         {
+            // The code opens this Fleet's /pair page, which a node doesn't serve. The phone reaches a node through its
+            // home machine instead (device grants).
+            if (!fleetOptions.ServeUi)
+                return Results.Conflict(new ErrorResponse(
+                    "Pairing a phone needs a Fleet with the web app. Pair the phone with that Fleet, and add this node to it."));
+
             var baseUrl = request.BaseUrl is null ? null : MachineEndpoints.NormalizeBaseUrl(request.BaseUrl.Trim());
             if (baseUrl is null)
                 return Results.BadRequest(new ErrorResponse("baseUrl must be the full http:// or https:// address the phone will open."));

@@ -316,6 +316,7 @@ internal sealed record ErrorResponse(string Error);
 [JsonSerializable(typeof(MachineAccessResponse))]
 [JsonSerializable(typeof(MachineAddress))]
 [JsonSerializable(typeof(TokenLoginRequest))]
+[JsonSerializable(typeof(NodeNoteResponse))]
 // Devices and pairing
 [JsonSerializable(typeof(WeaveFleet.Api.Contracts.CreatePairingRequest))]
 [JsonSerializable(typeof(WeaveFleet.Api.Contracts.CreatePairingResponse))]
