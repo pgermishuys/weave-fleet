@@ -28,13 +28,13 @@ public sealed class AutomationRepository : IAutomationRepository
                 max_concurrent_runs, max_runs_per_hour, timeout_minutes,
                 is_enabled, is_deleted, workspace_id, model, agent,
                 created_at, updated_at, user_id, target_tags, target_type, time_zone, isolation, base_branch, harness_type,
-                workflow_id, workflow_steps
+                workflow_id, workflow_steps, target_machine_id
             ) VALUES (
                 @Id, @Name, @Prompt, @TriggerType, @TriggerConfig,
                 @MaxConcurrentRuns, @MaxRunsPerHour, @TimeoutMinutes,
                 @IsEnabled, @IsDeleted, @WorkspaceId, @Model, @Agent,
                 @CreatedAt, @UpdatedAt, @UserId, @TargetTags, @TargetType, @TimeZone, @Isolation, @BaseBranch, @HarnessType,
-                @WorkflowId, @WorkflowSteps
+                @WorkflowId, @WorkflowSteps, @TargetMachineId
             )
             """,
             cmd =>
@@ -63,6 +63,7 @@ public sealed class AutomationRepository : IAutomationRepository
                 cmd.AddParameter("HarnessType", automation.HarnessType);
                 cmd.AddParameter("WorkflowId", automation.WorkflowId);
                 cmd.AddParameter("WorkflowSteps", SerializeWorkflowSteps(automation.WorkflowSteps));
+                cmd.AddParameter("TargetMachineId", automation.TargetMachineId);
             });
     }
 
@@ -90,7 +91,8 @@ public sealed class AutomationRepository : IAutomationRepository
                 base_branch = @BaseBranch,
                 harness_type = @HarnessType,
                 workflow_id = @WorkflowId,
-                workflow_steps = @WorkflowSteps
+                workflow_steps = @WorkflowSteps,
+                target_machine_id = @TargetMachineId
             WHERE id = @Id AND user_id = @UserId AND is_deleted = 0
             """,
             cmd =>
@@ -116,6 +118,7 @@ public sealed class AutomationRepository : IAutomationRepository
                 cmd.AddParameter("HarnessType", automation.HarnessType);
                 cmd.AddParameter("WorkflowId", automation.WorkflowId);
                 cmd.AddParameter("WorkflowSteps", SerializeWorkflowSteps(automation.WorkflowSteps));
+                cmd.AddParameter("TargetMachineId", automation.TargetMachineId);
             });
     }
 
@@ -254,6 +257,7 @@ public sealed class AutomationRepository : IAutomationRepository
             HarnessType = r.GetNullableString(r.GetOrdinal("harness_type")),
             WorkflowId = r.GetNullableString(r.GetOrdinal("workflow_id")),
             WorkflowSteps = DeserializeTargetTags(r.GetNullableString(r.GetOrdinal("workflow_steps"))),
+            TargetMachineId = r.GetNullableString(r.GetOrdinal("target_machine_id")),
         };
     }
 

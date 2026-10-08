@@ -34,7 +34,7 @@ public static class AutomationEndpoints
                 request.MaxConcurrentRuns, request.MaxRunsPerHour, request.TimeoutMinutes,
                 request.WorkspaceId, request.Model, request.Agent, request.TargetTags, request.TargetType,
                 request.TimeZone, request.Isolation, request.BaseBranch, request.HarnessType,
-                request.WorkflowId, request.WorkflowSteps);
+                request.WorkflowId, request.WorkflowSteps, request.TargetMachineId);
             return result.IsSuccess
                 ? Results.Created($"/api/automations/{result.Value.Id}", MapToResponse(result.Value, null, time))
                 : ErrorResult(result.Error);
@@ -54,7 +54,7 @@ public static class AutomationEndpoints
                 request.MaxConcurrentRuns, request.MaxRunsPerHour, request.TimeoutMinutes,
                 request.WorkspaceId, request.Model, request.Agent, request.TargetTags, request.TargetType,
                 request.TimeZone, request.Isolation, request.BaseBranch, request.HarnessType,
-                request.WorkflowId, request.WorkflowSteps);
+                request.WorkflowId, request.WorkflowSteps, request.TargetMachineId);
             if (result.IsFailure)
                 return ErrorResult(result.Error);
 
@@ -192,7 +192,8 @@ public static class AutomationEndpoints
         ? null
         : new AutomationRunResponse(
             run.Id, run.AutomationId, run.Trigger, run.ScheduledFor, run.StartedAt,
-            await runService.StateOfAsync(run), run.SessionId, run.InstanceId, run.Error, run.WorkflowRunId);
+            await runService.StateOfAsync(run), run.SessionId, run.InstanceId, run.Error, run.WorkflowRunId,
+            run.MachineId, run.MachineName);
 
     private static AutomationResponse MapToResponse(Automation a, AutomationRunResponse? lastRun, TimeProvider time) => new(
         a.Id, a.Name, a.Prompt, a.TriggerType, a.TriggerConfig,
@@ -200,7 +201,8 @@ public static class AutomationEndpoints
         a.IsEnabled, a.WorkspaceId, a.Model, a.Agent, a.CreatedAt, a.UpdatedAt, a.TargetTags, a.TargetType, a.TimeZone,
         a.Isolation, a.BaseBranch, a.HarnessType, a.WorkflowId, a.WorkflowId is null ? null : a.WorkflowSteps,
         a.IsEnabled ? AutomationSchedule.NextOccurrenceUtc(a, time.GetUtcNow().UtcDateTime)?.ToString("O") : null,
-        lastRun);
+        lastRun,
+        a.TargetMachineId);
 }
 
 #pragma warning restore IL2026

@@ -22,7 +22,8 @@ public static class AutomationTargets
 /// </summary>
 public sealed class AutomationService(
     IAutomationRepository automationRepository,
-    IUserContext userContext)
+    IUserContext userContext,
+    IRemoteMachineRepository? machines = null)
 {
     /// <summary>
     /// Creates a new automation with the specified configuration, switched on: the person just asked for it.
@@ -46,7 +47,8 @@ public sealed class AutomationService(
         string? baseBranch = null,
         string? harnessType = null,
         string? workflowId = null,
-        List<string>? workflowSteps = null)
+        List<string>? workflowSteps = null,
+        string? targetMachineId = null)
     {
         var isWorkflow = targetType == AutomationTargets.Workflow;
         if (isWorkflow)
@@ -55,7 +57,8 @@ public sealed class AutomationService(
             ?? ValidateTargetType(targetType)
             ?? ValidateWorkflow(targetType, workflowId, workspaceId)
             ?? ValidateWhere(workspaceId, isolation, baseBranch)
-            ?? ValidateModel(model);
+            ?? ValidateModel(model)
+            ?? await ValidateMachineAsync(targetMachineId, targetType);
         if (error is not null)
             return error;
 
@@ -83,6 +86,7 @@ public sealed class AutomationService(
             TimeZone = NormalizeTimeZone(timeZone),
             Isolation = NormalizeOptional(isolation),
             BaseBranch = NormalizeOptional(baseBranch),
+            TargetMachineId = NormalizeOptional(targetMachineId),
             CreatedAt = DateTime.UtcNow.ToString("O"),
             UserId = userContext.UserId
         };
@@ -114,7 +118,8 @@ public sealed class AutomationService(
         string? baseBranch = null,
         string? harnessType = null,
         string? workflowId = null,
-        List<string>? workflowSteps = null)
+        List<string>? workflowSteps = null,
+        string? targetMachineId = null)
     {
         var existing = await automationRepository.GetByIdAsync(id);
         if (existing is null)
@@ -128,7 +133,8 @@ public sealed class AutomationService(
             ?? ValidateTargetType(targetType)
             ?? ValidateWorkflow(targetType, workflowId, workspaceId)
             ?? ValidateWhere(workspaceId, isolation, baseBranch)
-            ?? ValidateModel(model);
+            ?? ValidateModel(model)
+            ?? await ValidateMachineAsync(targetMachineId, targetType);
         if (error is not null)
             return error;
 
@@ -150,6 +156,7 @@ public sealed class AutomationService(
         existing.TimeZone = NormalizeTimeZone(timeZone);
         existing.Isolation = NormalizeOptional(isolation);
         existing.BaseBranch = NormalizeOptional(baseBranch);
+        existing.TargetMachineId = NormalizeOptional(targetMachineId);
         existing.UpdatedAt = DateTime.UtcNow.ToString("O");
 
         await automationRepository.UpdateAsync(existing);
@@ -279,6 +286,25 @@ public sealed class AutomationService(
         return string.IsNullOrWhiteSpace(workspaceId)
             ? FleetError.ValidationError("WorkspaceId", "A workflow runs in a repository. Pick one.")
             : null;
+    }
+
+    /// <summary>
+    /// Another machine to run on must be in this Fleet's list, which holds its token. On it, runs start a new session,
+    /// go back to the same one, or start a workflow; the older targets pick a session on this machine.
+    /// </summary>
+    private async Task<FleetError?> ValidateMachineAsync(string? targetMachineId, string? targetType)
+    {
+        var machineId = NormalizeOptional(targetMachineId);
+        if (machineId is null)
+            return null;
+        if (machineId == Automation.AnyMachine)
+            return FleetError.ValidationError("TargetMachineId", "Fleet can't pick a machine yet. Pick one.");
+        if (targetType is AutomationTargets.MostRecentSession or AutomationTargets.TaggedSession)
+            return FleetError.ValidationError("TargetType", "That target picks a session on this machine. Use a new session or the same session each run.");
+
+        return machines is not null && await machines.GetAsync(machineId) is not null
+            ? null
+            : FleetError.ValidationError("TargetMachineId", "That machine isn't in this Fleet's list. Add it in Settings › Machines.");
     }
 
     private static List<string> NormalizeSteps(List<string>? steps) =>

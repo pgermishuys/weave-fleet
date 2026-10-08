@@ -20,6 +20,10 @@ public sealed class AutomationRun
     public string? InstanceId { get; set; }
     /// <summary>The workflow run it started, for a <c>workflow</c> target; its state follows that run's.</summary>
     public string? WorkflowRunId { get; set; }
+    /// <summary>The machine it went to (<see cref="Automation.TargetMachineId"/>); null for this machine.</summary>
+    public string? MachineId { get; set; }
+    /// <summary>That machine's name when the run went to it, so the run reads right after a rename or removal.</summary>
+    public string? MachineName { get; set; }
     /// <summary>Why it failed or was skipped, in words.</summary>
     public string? Error { get; set; }
 }
