@@ -114,6 +114,7 @@ export function applyDomainEvent(state: SessionStreamState, event: DomainEvent):
           event.payload.partID,
           event.payload.sessionID,
           event.payload.delta,
+          event.payload.offset,
         ),
       }
 

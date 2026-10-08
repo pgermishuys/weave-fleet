@@ -113,6 +113,13 @@ public sealed record MessagePartDeltaStreamedPayload
     /// Gets the streamed text delta.
     /// </summary>
     public required string Delta { get; init; }
+
+    /// <summary>
+    /// Where the delta starts in the part's text, counted by Fleet as the deltas went out. A client that already has
+    /// that much of the text (the snapshot it joined with had it) skips what it has. Null from a Fleet that doesn't
+    /// count.
+    /// </summary>
+    public int? Offset { get; init; }
 }
 
 /// <summary>

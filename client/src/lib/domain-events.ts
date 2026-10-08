@@ -238,6 +238,8 @@ export interface MessagePartDeltaStreamedPayload {
   partID: string;
   field: string;
   delta: string;
+  /** Where the delta starts in the part's text; absent from a Fleet that doesn't count. */
+  offset?: number | null;
 }
 
 export interface DelegationCreatedPayload {

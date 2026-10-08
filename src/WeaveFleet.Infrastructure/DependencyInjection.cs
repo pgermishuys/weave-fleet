@@ -218,6 +218,8 @@ public static class DependencyInjection
         services.AddScoped<ISessionUpdateSender, SessionUpdateSender>();
         // Singleton: holds which messages a session asked to hear back about, until the turn handling them ends.
         services.AddSingleton<SessionUpdates>();
+        // Singleton: holds the text of the replies streaming now, until their turn ends; snapshots read it.
+        services.AddSingleton<StreamingReplies>();
         services.AddScoped<IQueuedPromptRepository, QueuedPromptRepository>();
         services.AddScoped<IScheduledRetryRepository, ScheduledRetryRepository>();
         // Singleton: devices belong to the machine, not a user, and the auth handler reads them on every request.

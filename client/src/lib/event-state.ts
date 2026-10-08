@@ -459,12 +459,18 @@ export function applyPartUpdate(
   });
 }
 
+/**
+ * Adds a streamed delta to its part. With its `offset` (where it starts in the part's text), only the text the part
+ * doesn't have yet is added: a snapshot taken mid-reply already has the text so far, and some of the deltas that
+ * arrive around it are in that text.
+ */
 export function applyTextDelta(
   prev: AccumulatedMessage[],
   messageId: string,
   partId: string,
   sessionId: string,
-  delta: string
+  delta: string,
+  offset?: number | null
 ): AccumulatedMessage[] {
   const msgIndex = prev.findIndex((m) => m.messageId === messageId);
 
@@ -486,8 +492,12 @@ export function applyTextDelta(
   let updatedMsg: AccumulatedMessage;
   if (partIndex !== -1) {
     const existingPart = msg.parts[partIndex] as AccumulatedTextPart | AccumulatedReasoningPart;
+    const known = offset == null ? 0 : Math.max(0, existingPart.text.length - offset);
+    if (known >= delta.length) {
+      return prev;
+    }
     const newParts = msg.parts.slice();
-    newParts[partIndex] = { ...existingPart, text: existingPart.text + delta };
+    newParts[partIndex] = { ...existingPart, text: existingPart.text + delta.slice(known) };
     updatedMsg = { ...msg, parts: newParts };
   } else {
     const newPart: AccumulatedTextPart = { partId, type: "text", text: delta };

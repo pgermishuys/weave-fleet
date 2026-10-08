@@ -1010,6 +1010,41 @@ describe("domain-event-reducer", () => {
   })
 })
 
+describe("joining a reply mid-stream", () => {
+  function delta(text: string, offset?: number): DomainEvent {
+    return {
+      type: "message.part.delta.streamed",
+      payload: { sessionID: "session-1", messageID: "msg_reply", partID: "prt_reply", field: "text", delta: text, offset },
+    }
+  }
+
+  function replyText(state: SessionStreamState): string | undefined {
+    const part = state.messages.find((message) => message.messageId === "msg_reply")?.parts[0]
+    return part && "text" in part ? part.text : undefined
+  }
+
+  // The snapshot came with the reply so far; deltas that went out while it was read arrive too, and say where they start.
+  it("skips the text the snapshot already has and adds the rest", () => {
+    const joined = createSessionStreamState(createSnapshot({
+      activityStatus: "busy",
+      messages: [createMessageLifecyclePayload({ id: "msg_reply", role: "assistant", createdAt: 1000, text: "Checking the rate", partId: "prt_reply" })],
+    }))
+
+    const state = applyEvents(joined, [delta("rate limit ", 13), delta("headers", 24), delta(".", 31)])
+
+    expect(replyText(state)).toBe("Checking the rate limit headers.")
+  })
+
+  it("adds a delta without an offset whole, as from a Fleet that doesn't send one", () => {
+    const joined = createSessionStreamState(createSnapshot({
+      activityStatus: "busy",
+      messages: [createMessageLifecyclePayload({ id: "msg_reply", role: "assistant", createdAt: 1000, text: "Checking the ", partId: "prt_reply" })],
+    }))
+
+    expect(replyText(applyDomainEvent(joined, delta("rate limit ")))).toBe("Checking the rate limit ")
+  })
+})
+
 describe("turn.failed", () => {
   const error = { name: "APIError", message: "Overloaded", isRetryable: false }
 
