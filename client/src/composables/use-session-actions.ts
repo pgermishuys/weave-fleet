@@ -199,7 +199,7 @@ function getSessionsStoreSafely() {
 /** The list row for a session started from another (a fork, or a new session in its folder), until the list reloads. */
 function buildForkedSessionListItem(
   sourceSession: SessionListItem | undefined,
-  response: Pick<ForkSessionResponse, "instanceId" | "workspaceId" | "session">,
+  response: Pick<ForkSessionResponse, "instanceId" | "workspaceId" | "session" | "harnessType">,
 ): SessionListItem {
   return {
     instanceId: response.instanceId,
@@ -223,6 +223,7 @@ function buildForkedSessionListItem(
     totalCost: sourceSession?.totalCost,
     projectId: sourceSession?.projectId ?? null,
     projectName: sourceSession?.projectName ?? null,
+    harnessType: response.harnessType,
     tags: response.session.tags,
   };
 }

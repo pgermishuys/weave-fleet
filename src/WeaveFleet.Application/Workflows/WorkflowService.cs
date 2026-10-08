@@ -48,8 +48,6 @@ public sealed class WorkflowService(
     IUserContext user,
     TimeProvider time)
 {
-    private const string DefaultHarnessPreferenceKey = "defaultHarnessType";
-    private const string FallbackHarness = "opencode";
     private const int MaxRequestLength = 4000;
 
     public async Task<WorkflowLibraryDto> ListAsync(string? directory, CancellationToken ct)
@@ -119,7 +117,7 @@ public sealed class WorkflowService(
         }
 
         var harnessType = string.IsNullOrWhiteSpace(request.HarnessType)
-            ? await preferences.GetAsync(DefaultHarnessPreferenceKey).ConfigureAwait(false) is { Length: > 0 } preferred ? preferred : FallbackHarness
+            ? HarnessPreferences.DefaultHarness(await preferences.GetAsync(HarnessPreferences.DefaultHarnessKey).ConfigureAwait(false))
             : request.HarnessType.Trim();
         if (harnesses.GetByType(harnessType) is not { } harness)
             return FleetError.NotFoundFor("Harness", harnessType);

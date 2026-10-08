@@ -111,7 +111,7 @@ function subtitle(harness: HarnessInfo): string {
     case "update-needed":
       return harness.reason ?? `${harness.displayName} is too old for Fleet.`;
     case "not-installed":
-      return harnessDisplay(harness.type).pitch ?? harness.reason ?? `${harness.displayName} isn't installed.`;
+      return harnessDisplay(harness).pitch ?? harness.reason ?? `${harness.displayName} isn't installed.`;
   }
 }
 
@@ -240,7 +240,7 @@ defineExpose({ closeTerminal });
       <div class="harness-setup-rows__head">
         <div class="harness-setup-rows__icon">
           <component
-            :is="harnessDisplay(harness.type).icon"
+            :is="harnessDisplay(harness).icon"
             :size="17"
             aria-hidden="true"
           />

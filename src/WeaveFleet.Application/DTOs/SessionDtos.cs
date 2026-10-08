@@ -27,7 +27,7 @@ public sealed record SessionListResponse(
     double? TotalCost,
     string? ProjectId,
     string? ProjectName,
-    string? HarnessType,
+    string HarnessType,
     SessionActionCapabilities Capabilities,
     List<string> Tags)
 {

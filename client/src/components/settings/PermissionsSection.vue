@@ -2,6 +2,7 @@
 import { computed } from "vue";
 import { Clock, Info } from "lucide-vue-next";
 import StatusGlyph from "@/components/sessions/StatusGlyph.vue";
+import { useEnabledHarnesses } from "@/composables/use-enabled-harnesses";
 import {
   DEFAULT_PERMISSION_LEVEL,
   PERMISSION_LEVEL_KEY,
@@ -43,42 +44,19 @@ const LEVELS: readonly LevelOption[] = [
   },
 ];
 
-interface HarnessRow {
-  type: string;
-  name: string;
-  /** What Fleet hands the harness at each level. */
-  handed: Record<PermissionLevel, string>;
-}
+const { harnesses } = useEnabledHarnesses();
 
-const HARNESSES: readonly HarnessRow[] = [
-  {
-    type: "opencode",
-    name: "OpenCode",
-    handed: {
-      ask: "Fleet allows reading and asks you about the rest",
-      edits: "Fleet allows reading and edits, and asks you about the rest",
-      all: "Fleet allows everything OpenCode asks about",
-    },
-  },
-  {
-    type: "opencode2",
-    name: "OpenCode 2",
-    handed: {
-      ask: "Session rules ask for everything but reading",
-      edits: "Session rules ask for everything but reading and edits",
-      all: "Session rules allow everything",
-    },
-  },
-  {
-    type: "claude-code",
-    name: "Claude Code",
-    handed: {
-      ask: "--permission-mode default, asking Fleet",
-      edits: "--permission-mode acceptEdits, asking Fleet",
-      all: "--permission-mode bypassPermissions",
-    },
-  },
-];
+/** Every harness Fleet knows, with what it hands each at the level, or null when it can't hand one a level. */
+const harnessRows = computed(() =>
+  harnesses.value.map((harness) => ({
+    type: harness.type,
+    name: harness.displayName,
+    handed: harness.capabilities.supportsPermissionLevels === true
+      ? harness.presentation?.permissionModes ?? null
+      : null,
+    supported: harness.capabilities.supportsPermissionLevels === true,
+  })),
+);
 
 const defaultLevel = computed<PermissionLevel>(
   () => toPermissionLevel(preferencesStore.preferences[PERMISSION_LEVEL_KEY]) ?? DEFAULT_PERMISSION_LEVEL,
@@ -197,16 +175,23 @@ function onLevelKeydown(event: KeyboardEvent, index: number): void {
       </div>
       <div class="permissions-rows">
         <div
-          v-for="harness in HARNESSES"
+          v-for="harness in harnessRows"
           :key="harness.type"
           class="permissions-row"
         >
           <span class="permissions-row__name">{{ harness.name }}</span>
           <span
+            v-if="!harness.supported"
+            class="permissions-row__handed permissions-row__handed--plain"
+            :data-testid="`permission-handed-${harness.type}`"
+          >Fleet can't hand {{ harness.name }} a permission level yet.</span>
+          <span
+            v-else
             class="permissions-row__handed"
             :data-testid="`permission-handed-${harness.type}`"
-          >{{ harness.handed[effectiveLevel(harness.type)] }}</span>
+          >{{ harness.handed?.[effectiveLevel(harness.type)] ?? PERMISSION_LEVEL_NAMES[effectiveLevel(harness.type)] }}</span>
           <select
+            v-if="harness.supported"
             :id="`permission-harness-${harness.type}`"
             class="permissions-select"
             :aria-label="`${harness.name} permissions`"

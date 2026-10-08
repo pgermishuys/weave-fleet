@@ -60,5 +60,27 @@ public sealed class OpenCode2Harness : IHarness
         ReportsBackgroundWork = true,
         SupportsChildSessions = true,
         ChildSessionsResumable = true,
+        // Session rules Fleet sets for the level; V2's asks come to Fleet.
+        SupportsPermissionLevels = true,
+    };
+
+    /// <inheritdoc />
+    public HarnessPresentation Presentation { get; } = new()
+    {
+        // The OpenCode Fleet leads with.
+        Order = 0,
+        Eyebrow = "CLI harness",
+        Description = "Harness for sessions backed by OpenCode 2's server, next to OpenCode 1 or on its own.",
+        Pitch = "The new OpenCode. It can live in a folder of its own, next to OpenCode 1.",
+        Icon = HarnessIcons.Terminal,
+        PermissionModes = new(
+            Ask: "Session rules ask for everything but reading",
+            Edits: "Session rules ask for everything but reading and edits",
+            All: "Session rules allow everything"),
+        AgentBrowser = "Its own browser tools, in Code Mode. Fleet is the browser behind them.",
+        ProfileNote = "Fleet hands this to OpenCode 2 as `OPENCODE_CONFIG`, on top of your own opencode.json. Fleet's own "
+            + "settings (every tool allowed, the Fleet plugin) still apply after it. Keep API keys out of it: sign in to "
+            + "providers in OpenCode 2 itself, or refer to a variable Fleet runs with as `{env:NAME}`. Sessions on a profile "
+            + "run on an OpenCode 2 server of their own, which stops after a few minutes unused.",
     };
 }

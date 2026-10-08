@@ -45,6 +45,7 @@ function createDeferred<T>() {
 
 function createSessionListItem(overrides: Partial<SessionListItem> = {}): SessionListItem {
   return {
+    harnessType: "opencode",
     instanceId: "instance-1",
     workspaceId: "workspace-1",
     workspaceDirectory: "/tmp/project",
@@ -89,6 +90,7 @@ describe("useSessionActions", () => {
     const responseBody: CreateSessionResponse = {
       instanceId: "instance-1",
       workspaceId: "workspace-1",
+      harnessType: "opencode",
       session: {
         id: "session-1",
         title: "My session",
@@ -184,6 +186,7 @@ describe("useSessionActions", () => {
       instanceId: "instance-2",
       workspaceId: "workspace-2",
       forkedFromSessionId: "session-1",
+      harnessType: "opencode2",
       session: {
         id: "session-2",
         title: "Forked",
@@ -226,6 +229,8 @@ describe("useSessionActions", () => {
       lifecycleStatus: "running",
       activityStatus: "idle",
       sessionStatus: "idle",
+      // The fork's harness, as the server says.
+      harnessType: "opencode2",
     });
     expect(apiFetchMock).toHaveBeenCalledWith("/api/sessions/{id}/fork", {
       body: { title: "Forked" },
@@ -242,6 +247,7 @@ describe("useSessionActions", () => {
     const responseBody: CreateSessionResponse = {
       instanceId: "instance-3",
       workspaceId: "workspace-3",
+      harnessType: "opencode",
       session: { id: "session-3", title: "Untitled", time: { created: 10, updated: 11 }, tags: [] },
     };
     // eslint-disable-next-line @typescript-eslint/no-explicit-any

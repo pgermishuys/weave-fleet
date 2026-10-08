@@ -196,7 +196,7 @@ public sealed record GetSessionResponse(
     string? ArchivedAt,
     int? TotalTokens,
     double? TotalCost,
-    string? HarnessType,
+    string HarnessType,
     string? ProjectId,
     string? ProjectName,
     SessionOriginDto? Origin,
@@ -233,7 +233,11 @@ public sealed record GetSessionResponse(
 /// </summary>
 public sealed record WorkOutputResponse(string Output, long NextOffset, long Size, bool Truncated);
 
-public sealed record CreateSessionApiResponse(string InstanceId, string WorkspaceId, Session Session, string? Branch);
+public sealed record CreateSessionApiResponse(string InstanceId, string WorkspaceId, Session Session, string? Branch)
+{
+    /// <summary>The harness the session runs on, so a client never has to guess it.</summary>
+    public string HarnessType => Session.HarnessType;
+}
 
 public sealed record PreviewSessionResponse(SessionPreviewEnvelope Preview);
 
@@ -247,7 +251,11 @@ public sealed record ForkSessionApiResponse(
     string InstanceId,
     string WorkspaceId,
     Session Session,
-    string ForkedFromSessionId);
+    string ForkedFromSessionId)
+{
+    /// <summary>The harness the fork runs on, so a client never has to guess it.</summary>
+    public string HarnessType => Session.HarnessType;
+}
 
 public sealed record GetSessionMessagesApiResponse(
     IReadOnlyList<HarnessMessage> Messages,

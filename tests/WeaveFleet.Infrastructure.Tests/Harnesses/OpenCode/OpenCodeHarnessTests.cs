@@ -19,7 +19,7 @@ namespace WeaveFleet.Infrastructure.Tests.Harnesses.OpenCode;
 
 public sealed class OpenCodeHarnessTests
 {
-    private static OpenCodeHarness CreateHarness() => new();
+    private static OpenCodeHarness CreateHarness() => new(new FleetOptions());
 
     private static OpenCodeHarnessRuntime CreateRuntime() =>
         CreateRuntime(new FleetOptions(), new WeaveFleet.Testing.Fakes.Repositories.InMemoryUserPreferenceRepository());

@@ -45,6 +45,7 @@ function project(id: string, name: string, position: number): ProjectResponse {
 
 function item(id: string, title: string, projectId: string): SessionListItem {
   return {
+    harnessType: "opencode",
     instanceId: `inst-${id}`, workspaceId: "w", workspaceDirectory: "/repo", workspaceDisplayName: null, isolationStrategy: "existing",
     sessionStatus: "idle", activityStatus: "idle", session: { id, title, time: { created: 1, updated: 1 }, tags: [] } as never,
     instanceStatus: "running", lifecycleStatus: "running", retentionStatus: "active", typedInstanceStatus: "running",

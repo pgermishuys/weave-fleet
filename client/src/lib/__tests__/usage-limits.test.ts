@@ -1,7 +1,6 @@
 import { describe, expect, it } from "vitest";
 import {
   currentWindows,
-  harnessShortName,
   percentLabel,
   resetLabel,
   toHarnessUsage,
@@ -62,10 +61,5 @@ describe("usage limits", () => {
       { window: "five_hour", utilization: 0.5, resetsAt: at(2), status: "rejected" },
       { window: "seven_day", utilization: 0.95, resetsAt: at(60) },
     ]), now)?.window).toBe("five_hour");
-  });
-
-  it("calls Claude Code just Claude", () => {
-    expect(harnessShortName("claude-code", "Claude Code")).toBe("Claude");
-    expect(harnessShortName("codex", "Codex")).toBe("Codex");
   });
 });

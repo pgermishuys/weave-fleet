@@ -182,21 +182,30 @@ describe("WeaveSection", () => {
       acceptsFleetConfig: true,
       addedByFleet: true,
     };
+    // In the harnesses' own order, as the server sends them: OpenCode 2 first.
     const without = config({
       harnesses: [
-        { harnessType: "opencode", harnessName: "OpenCode", checked: true, installs: [], addTo: "/home/you/.config/opencode/opencode.json" },
         { harnessType: "opencode2", harnessName: "OpenCode 2", checked: true, installs: [], addTo: "/home/you/.weave/harnesses/opencode2/config/opencode.json" },
+        { harnessType: "opencode", harnessName: "OpenCode", checked: true, installs: [], addTo: "/home/you/.config/opencode/opencode.json" },
       ],
     });
 
-    it("lists OpenCode 2 first and says where Add Weave writes", async () => {
+    it("lists the harnesses in the server's order and says where Add Weave writes", async () => {
       const wrapper = await mountSection(without);
 
       const rows = wrapper.get("[data-testid='weave-harnesses']").findAll("li");
       expect(rows[0]!.text()).toContain("OpenCode 2");
       expect(rows[0]!.text()).toContain("Add Weave puts it in /home/you/.weave/harnesses/opencode2/config/opencode.json.");
+      expect(rows[1]!.text()).toContain("Add Weave puts it in /home/you/.config/opencode/opencode.json.");
       expect(wrapper.find("[data-testid='weave-add-opencode2']").exists()).toBe(true);
       expect(wrapper.get("[data-testid='weave-none']").text()).toContain("Add Weave above puts it there for you.");
+    });
+
+    it("doesn't reorder what the server sends", async () => {
+      const wrapper = await mountSection(config({ harnesses: [...without.harnesses].reverse() }));
+
+      const rows = wrapper.get("[data-testid='weave-harnesses']").findAll("li");
+      expect(rows[0]!.text()).toContain("Add Weave puts it in /home/you/.config/opencode/opencode.json.");
     });
 
     it("adds Weave to the harness and says what happened", async () => {

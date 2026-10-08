@@ -243,6 +243,7 @@ describe("session route files view close", () => {
     const pinia = createPinia();
     setActivePinia(pinia);
     useSessionsStore(pinia).setSessions([{
+      harnessType: "opencode",
       instanceId: "instance-1",
       workspaceId: "workspace-1",
       workspaceDirectory: "/workspace/project",

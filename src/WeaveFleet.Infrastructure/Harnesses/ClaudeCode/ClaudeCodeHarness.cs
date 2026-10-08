@@ -54,5 +54,24 @@ public sealed class ClaudeCodeHarness : IHarness
         SupportsAgentBrowser = true,
         // One process per session, so only a step's process gets fleet_step_done; Fleet refuses a subagent's call.
         SupportsWorkflowSteps = true,
+        // --permission-mode for the level, and its asks come to Fleet through the stdio permission prompt tool.
+        SupportsPermissionLevels = true,
+    };
+
+    /// <inheritdoc />
+    public HarnessPresentation Presentation { get; } = new()
+    {
+        Order = 2,
+        // The usage limits it reports are the Claude subscription's, not Claude Code's.
+        ShortName = "Claude",
+        Eyebrow = "CLI harness",
+        Description = "Harness for Anthropic Claude Code sessions and project-aware coding workflows.",
+        Pitch = "Anthropic's coding tool. Needs a Claude subscription or an API key.",
+        Icon = HarnessIcons.Hexagon,
+        PermissionModes = new(
+            Ask: "--permission-mode default, asking Fleet",
+            Edits: "--permission-mode acceptEdits, asking Fleet",
+            All: "--permission-mode bypassPermissions"),
+        AgentBrowser = "Fleet's browser tools: read the page, act on it.",
     };
 }

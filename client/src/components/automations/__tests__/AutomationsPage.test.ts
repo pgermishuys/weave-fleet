@@ -61,6 +61,23 @@ vi.mock("@/composables/use-harness-catalog", async () => {
     },
   };
 });
+// The machine's harnesses: OpenCode, which the server marks as the default.
+vi.mock("@/composables/use-harnesses", () => ({
+  useHarnesses: () => ({
+    harnesses: shallowRef([{
+      type: "opencode",
+      displayName: "OpenCode",
+      available: true,
+      userEnabled: true,
+      isDefault: true,
+      state: "ready",
+      capabilities: { supportsAgents: true, supportsModelSelection: true, supportsWorkflowSteps: true },
+    }]),
+    isLoading: shallowRef(false),
+    error: shallowRef(undefined),
+    refresh: async () => undefined,
+  }),
+}));
 vi.mock("@/composables/use-repository-detail", () => ({
   useRepositoryDetail: () => ({ detail: shallowRef(null), isLoading: shallowRef(false), error: shallowRef(null) }),
 }));

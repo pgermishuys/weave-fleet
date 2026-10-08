@@ -112,6 +112,22 @@ public sealed class SessionTagTests : IAsyncLifetime, IDisposable
     }
 
     [Fact]
+    public async Task POST_create_session_says_which_harness_it_runs_on()
+    {
+        var response = await _http.PostAsJsonAsync("/api/sessions", new
+        {
+            Title = "Harness Session",
+            Directory = _server.TempDirectory,
+            HarnessType = "opencode"
+        });
+
+        // The client builds the new session's row from this, so it never guesses the harness.
+        response.StatusCode.ShouldBe(HttpStatusCode.OK);
+        using var body = System.Text.Json.JsonDocument.Parse(await response.Content.ReadAsStringAsync());
+        body.RootElement.GetProperty("harnessType").GetString().ShouldBe("opencode");
+    }
+
+    [Fact]
     public async Task PATCH_update_tags_replaces_existing_tags()
     {
         // Arrange: create a session with initial tags

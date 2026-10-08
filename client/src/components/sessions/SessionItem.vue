@@ -233,7 +233,7 @@ const isStartingInFolder = computed(() => startingFromSessionId.value === sessio
  */
 const canSaveAsWorkflow = computed(() => isWorkflowsEnabled.value
   && !isArchivedSession.value
-  && harnesses.value.find((harness) => harness.type === (props.session.harnessType ?? "opencode"))?.capabilities.supportsOffTheRecordPrompt === true);
+  && harnesses.value.find((harness) => harness.type === props.session.harnessType)?.capabilities.supportsOffTheRecordPrompt === true);
 const isAnyActionPending = computed(() =>
   isRestoring.value
   || isDeleting.value
@@ -290,8 +290,7 @@ const FORK_HINT = "A new session with a copy of this conversation.";
 
 /** The menu's footer while no row is highlighted: where the session lives and what runs it. */
 const menuFooter = computed(() => {
-  const harnessType = props.session.harnessType ?? "opencode";
-  const harness = harnesses.value.find((item) => item.type === harnessType)?.displayName;
+  const harness = harnesses.value.find((item) => item.type === props.session.harnessType)?.displayName;
   return [props.session.projectName ?? props.session.workspaceDisplayName, props.session.branch, harness]
     .filter(Boolean)
     .join(" · ");

@@ -158,6 +158,7 @@ describe("SessionDetailHeader lineage", () => {
 
   it("links a session another session started back to it, by its title", async () => {
     useSessionsStore().setSessions([{
+      harnessType: "opencode",
       instanceId: "i-parent", workspaceId: "w", workspaceDirectory: "/repo", workspaceDisplayName: null, isolationStrategy: "existing",
       sessionStatus: "idle", session: { id: "parent", title: "What can we learn from t3code?" } as SessionListItem["session"],
       instanceStatus: "running", lifecycleStatus: "running", retentionStatus: "active", typedInstanceStatus: "running",

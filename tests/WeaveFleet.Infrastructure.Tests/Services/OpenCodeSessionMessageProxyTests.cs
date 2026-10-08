@@ -1,6 +1,7 @@
 using System.Text.Json;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging.Abstractions;
+using WeaveFleet.Application.Configuration;
 using WeaveFleet.Application.Events;
 using WeaveFleet.Application.Services;
 using WeaveFleet.Application.Sessions;
@@ -22,7 +23,7 @@ public sealed class OpenCodeSessionMessageProxyTests
 {
     /// <summary>The real harness descriptors: which of them keep their history is what the proxy asks.</summary>
     private static HarnessRegistry Harnesses()
-        => new([new OpenCodeHarness(), new OpenCode2Harness(), new ClaudeCodeHarness()], []);
+        => new([new OpenCodeHarness(new FleetOptions()), new OpenCode2Harness(), new ClaudeCodeHarness()], []);
 
     private static ServiceProvider CreateServiceProvider(ISessionActivator sessionActivator)
     {

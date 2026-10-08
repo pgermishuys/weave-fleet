@@ -343,7 +343,8 @@ const SessionDetailPage = defineComponent({
             projectName: nextRemoteSession.projectName ?? selectedSession.value?.projectName ?? null,
             capabilities: nextRemoteSession.capabilities ?? selectedSession.value?.capabilities,
             origin: nextRemoteSession.origin ?? selectedSession.value?.origin ?? null,
-            harnessType: nextRemoteSession.harnessType ?? selectedSession.value?.harnessType ?? null,
+            // The server always sends it; an empty one finds no harness, so nothing harness-specific is offered.
+            harnessType: nextRemoteSession.harnessType ?? selectedSession.value?.harnessType ?? "",
             tags: nextRemoteSession.tags ?? selectedSession.value?.tags ?? [],
             // Which attempt a retrying session is on, why and when, so a page opened mid-retry says so.
             ...(normalizedActivityStatus === "retry"

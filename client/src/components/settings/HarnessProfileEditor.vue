@@ -4,6 +4,7 @@ import { Check, LoaderCircle, Play, X } from "lucide-vue-next";
 import type { HarnessProfile, HarnessProfileCheck } from "@/api/client";
 import { Button } from "@/components/ui/button";
 import ProfileConfigEditor from "@/components/settings/ProfileConfigEditor.vue";
+import { splitCode } from "@/lib/harness-display";
 import { NEW_PROFILE_CONTENT, parseJsonc } from "@/lib/harness-profile";
 import { useHarnessProfilesStore } from "@/stores/harness-profiles";
 
@@ -11,6 +12,8 @@ import { useHarnessProfilesStore } from "@/stores/harness-profiles";
 const props = defineProps<{
   harnessType: string;
   harnessName: string;
+  /** What the harness says about a profile's config, with `code` in backticks; shown under the editor. */
+  profileNote?: string | null;
   profile: HarnessProfile | null;
   /** What a new profile starts with, when it's a copy of another. */
   seed?: { name: string; content: string } | null;
@@ -110,16 +113,22 @@ async function remove(): Promise<void> {
       @save="save"
     />
 
-    <p class="text-xs text-muted">
-      Fleet hands this to {{ harnessName }} as <code class="font-mono text-text">OPENCODE_CONFIG</code>, on top of your
-      own opencode.json. Fleet's own settings (every tool allowed, the Fleet plugin) still apply after it.
-      <template v-if="harnessType === 'opencode2'">
-        Keep API keys out of it: sign in to providers in {{ harnessName }} itself, or refer to a variable Fleet runs with
-        as <code class="font-mono text-text">{env:NAME}</code>. Sessions on a profile run on an {{ harnessName }} server
-        of their own, which stops after a few minutes unused.
-      </template>
-      <template v-else>
-        Keep API keys in Credentials and refer to them with <code class="font-mono text-text">{env:NAME}</code>.
+    <p
+      v-if="profileNote"
+      class="text-xs text-muted"
+      data-testid="harness-profile-note"
+    >
+      <template
+        v-for="(piece, index) in splitCode(profileNote)"
+        :key="index"
+      >
+        <code
+          v-if="piece.code"
+          class="font-mono text-text"
+        >{{ piece.text }}</code>
+        <template v-else>
+          {{ piece.text }}
+        </template>
       </template>
     </p>
     <p

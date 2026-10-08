@@ -101,6 +101,23 @@ public sealed record HarnessInfo(
     /// <summary>When Fleet last checked the harnesses (see <see cref="HarnessAvailabilityCache"/>); filled in by the endpoint.</summary>
     public DateTimeOffset? CheckedAt { get; init; }
 
+    /// <summary>How the harness describes itself (<see cref="IHarness.Presentation"/>).</summary>
+    public HarnessPresentation Presentation { get; init; } = new();
+
+    /// <summary>Its switches in Settings → Harnesses (<see cref="IHarness.Settings"/>).</summary>
+    public IReadOnlyList<HarnessSetting> Settings { get; init; } = [];
+
+    /// <summary>A session that names no harness starts on this one (see <see cref="HarnessPreferences.DefaultHarness"/>); filled in by the endpoint.</summary>
+    public bool IsDefault { get; init; }
+
+    /// <summary>The harness as its runtime found it; <see cref="UserEnabled"/> is filled in later.</summary>
+    public static HarnessInfo From(IHarness harness, HarnessAvailability availability, HarnessSetup? setup = null) =>
+        From(harness.Type, harness.DisplayName, harness.Capabilities, availability, setup) with
+        {
+            Presentation = harness.Presentation,
+            Settings = harness.Settings,
+        };
+
     /// <summary>The harness as its runtime found it; <see cref="UserEnabled"/> is filled in later.</summary>
     public static HarnessInfo From(
         string type,

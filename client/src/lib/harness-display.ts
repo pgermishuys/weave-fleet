@@ -11,40 +11,33 @@ export interface HarnessDisplayMetadata {
   pitch?: string;
 }
 
-const harnessDisplayMetadata: Record<string, HarnessDisplayMetadata> = {
-  opencode: {
-    eyebrow: "CLI harness",
-    description: "Harness for sessions backed by the OpenCode command-line runtime.",
-    icon: TerminalSquare,
-    pitch: "Open source. Includes free models, or sign in to your own provider.",
-  },
-  opencode2: {
-    eyebrow: "CLI harness",
-    description: "Harness for sessions backed by OpenCode 2's server, next to OpenCode 1 or on its own.",
-    icon: TerminalSquare,
-    pitch: "The new OpenCode. It can live in a folder of its own, next to OpenCode 1.",
-  },
-  "claude-code": {
-    eyebrow: "CLI harness",
-    description: "Harness for Anthropic Claude Code sessions and project-aware coding workflows.",
-    icon: Hexagon,
-    pitch: "Anthropic's coding tool. Needs a Claude subscription or an API key.",
-  },
-  pi: {
-    eyebrow: "CLI harness",
-    description: "Harness for sessions backed by the Pi command-line runtime from pi.dev.",
-    icon: Infinity,
-  },
+/** The icons a harness can ask for (`HarnessIcons` on the server). */
+const harnessIcons: Record<string, Component> = {
+  terminal: TerminalSquare,
+  hexagon: Hexagon,
+  infinity: Infinity,
+  plug: Cable,
 };
 
-const fallbackHarnessMetadata: HarnessDisplayMetadata = {
-  eyebrow: "Harness",
-  description: "Harness runtime registered by the backend.",
-  icon: Cable,
-};
+/** How the harness describes itself, with a plain stand-in for what it leaves out (a Fleet older than presentations). */
+export function harnessDisplay(harness: Pick<HarnessInfo, "presentation">): HarnessDisplayMetadata {
+  const presentation = harness.presentation;
+  return {
+    eyebrow: presentation?.eyebrow || "Harness",
+    description: presentation?.description || "Harness runtime registered by the backend.",
+    icon: (presentation?.icon && harnessIcons[presentation.icon]) || Cable,
+    pitch: presentation?.pitch ?? undefined,
+  };
+}
 
-export function harnessDisplay(type: string): HarnessDisplayMetadata {
-  return harnessDisplayMetadata[type] ?? fallbackHarnessMetadata;
+/** The harness's name where room is short (the status bar), e.g. "Claude" for Claude Code. */
+export function harnessShortName(harness: Pick<HarnessInfo, "displayName" | "presentation">): string {
+  return harness.presentation?.shortName?.trim() || harness.displayName;
+}
+
+/** `text` split at backticks: the odd pieces are code. For the notes a harness sends, such as `profileNote`. */
+export function splitCode(text: string): { text: string; code: boolean }[] {
+  return text.split("`").map((piece, index) => ({ text: piece, code: index % 2 === 1 })).filter((piece) => piece.text !== "");
 }
 
 /** A harness's state, or "disabled" when the user turned it off. */

@@ -63,6 +63,13 @@ function openCode(overrides: Partial<HarnessInfo> = {}): HarnessInfo {
     reason: "OpenCode isn't installed.",
     capabilities,
     setup: { installCommand: "curl -fsSL https://opencode.ai/install | bash", docsUrl: "https://opencode.ai/docs" },
+    presentation: {
+      order: 1,
+      eyebrow: "CLI harness",
+      description: "Harness for sessions backed by the OpenCode command-line runtime.",
+      icon: "terminal",
+      pitch: "Open source. Includes free models, or sign in to your own provider.",
+    },
     ...overrides,
   };
 }
@@ -140,7 +147,9 @@ describe("HarnessSetupRows", () => {
     const rows = view.findAll("[data-testid^='harness-setup-row-']").map((row) => row.attributes("data-testid"));
     expect(rows).toEqual(["harness-setup-row-opencode", "harness-setup-row-claude-code"]);
     expect(view.get("[data-testid='harness-setup-install-opencode']").text()).toBe("Install OpenCode");
+    // The pitch the harness sends; Claude Code here sends none, so its reason shows.
     expect(view.text()).toContain("Open source. Includes free models");
+    expect(view.text()).toContain("Claude Code isn't installed.");
   });
 
   it("says where OpenCode 2 goes and what to know before installing it", async () => {

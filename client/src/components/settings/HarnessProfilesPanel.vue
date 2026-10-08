@@ -11,6 +11,8 @@ import { useHarnessProfilesStore } from "@/stores/harness-profiles";
 const props = defineProps<{
   harnessType: string;
   harnessName: string;
+  /** What the harness says about a profile's config, shown under the editor (`presentation.profileNote`). */
+  profileNote?: string | null;
 }>();
 
 /** Which editor is open: a profile's id, or "new" (optionally a copy of another). */
@@ -225,6 +227,7 @@ function usage(profile: HarnessProfile): string {
           <HarnessProfileEditor
             :harness-type="harnessType"
             :harness-name="harnessName"
+            :profile-note="profileNote"
             :profile="profile"
             @close="closeEditor"
             @duplicate="(seed) => edit({ id: 'new', seed })"
@@ -244,6 +247,7 @@ function usage(profile: HarnessProfile): string {
           :key="editing.seed?.name ?? 'blank'"
           :harness-type="harnessType"
           :harness-name="harnessName"
+          :profile-note="profileNote"
           :profile="null"
           :seed="editing.seed ?? null"
           @close="closeEditor"

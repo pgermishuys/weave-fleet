@@ -964,6 +964,26 @@ export function mockApiPlugin(options: MockApiOptions = {}): Plugin {
             displayName: "OpenCode",
             available: true,
             userEnabled: true,
+            isDefault: true,
+            presentation: {
+              order: 1,
+              eyebrow: "CLI harness",
+              description: "Harness for sessions backed by the OpenCode command-line runtime.",
+              pitch: "Open source. Includes free models, or sign in to your own provider.",
+              icon: "terminal",
+              permissionModes: {
+                ask: "Fleet allows reading and asks you about the rest",
+                edits: "Fleet allows reading and edits, and asks you about the rest",
+                all: "Fleet allows everything OpenCode asks about",
+              },
+              agentBrowser: "Fleet's browser tools: read the page, act on it.",
+            },
+            settings: [{
+              key: "PooledOpenCodeHarness",
+              label: "Pooled OpenCode Mode",
+              description: "New OpenCode sessions run on a shared OpenCode process that Fleet starts when they need it, so they take a prompt after Fleet restarts without a manual Resume. Sessions that already exist keep their mode.",
+              default: true,
+            }],
             capabilities: {
               requiresInitialPrompt: false,
               supportsAgents: true,
@@ -974,6 +994,8 @@ export function mockApiPlugin(options: MockApiOptions = {}): Plugin {
               supportsImageAttachments: true,
               supportsStreaming: true,
               supportsDelegation: true,
+              supportsAgentBrowser: true,
+              supportsPermissionLevels: true,
             },
           },
         ]), {

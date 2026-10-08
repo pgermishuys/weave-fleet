@@ -81,6 +81,7 @@ function createCapabilities(overrides: Partial<NonNullable<SessionListItem["capa
 
 function createSession(overrides: Partial<SessionListItem> = {}): SessionListItem {
   return {
+    harnessType: "opencode",
     instanceId: "instance-1",
     workspaceId: "workspace-1",
     workspaceDirectory: "/tmp/workspace",

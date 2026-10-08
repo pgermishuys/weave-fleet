@@ -3,8 +3,8 @@ import { computed, onBeforeUnmount, shallowRef } from "vue";
 import { Gauge } from "lucide-vue-next";
 import { useHarnessUsage } from "@/composables/use-harness-usage";
 import { useHarnesses } from "@/composables/use-harnesses";
+import { harnessShortName } from "@/lib/harness-display";
 import {
-  harnessShortName,
   percentLabel,
   resetLabel,
   windowLabel,
@@ -30,7 +30,8 @@ const chips = computed(() =>
     .map((harness) => ({ harness, window: windowToFlag(harness, now.value) }))
     .filter((entry): entry is { harness: typeof entry.harness; window: NonNullable<typeof entry.window> } => entry.window !== null)
     .map(({ harness, window }) => {
-      const name = harnessShortName(harness.harnessType, harnesses.value.find((h) => h.type === harness.harnessType)?.displayName);
+      const info = harnesses.value.find((h) => h.type === harness.harnessType);
+      const name = info ? harnessShortName(info) : harness.harnessType;
       const reset = resetLabel(window.resetsAt, now.value);
       const used = window.status === "rejected";
       const percent = percentLabel(window);

@@ -148,7 +148,8 @@ describe("the sessions the @ list offers", () => {
   ];
 
   it("ranks titles that start with the text, then words that do, then the rest; newest first within each", () => {
-    const offered = matchReferableSessions(items, "t3c", { excludeId: "here", limit: 5 });
+    const names: Record<string, string> = { "claude-code": "Claude Code", opencode2: "OpenCode 2" };
+    const offered = matchReferableSessions(items, "t3c", { excludeId: "here", limit: 5, harnessName: (type) => names[type] });
 
     expect(offered.map((session) => session.id)).toEqual(["parent", "child", "old"]);
     expect(offered.map((session) => session.description)).toEqual([
@@ -169,5 +170,11 @@ describe("the sessions the @ list offers", () => {
     const offered = matchReferableSessions(items, "fleet", { limit: 5, harnessName: (type) => `<${type}>` });
 
     expect(offered[0].description).toBe("weave-fleet · <opencode2>");
+  });
+
+  it("names a harness the caller doesn't know by its type, without guessing a name", () => {
+    const offered = matchReferableSessions(items, "fleet", { limit: 5, harnessName: () => undefined });
+
+    expect(offered[0].description).toBe("weave-fleet · opencode2");
   });
 });

@@ -173,7 +173,50 @@ describe("HarnessesSection", () => {
     expect(install.get("[data-testid='harness-install-sign-in']").text()).toContain("OPENCODE_CONFIG_DIR=/c OPENCODE_DB=/d");
     // Pi says nothing about its install, so it keeps the placeholder.
     expect(wrapper.findAll("article").map((card) => card.text().includes("No settings yet"))).toEqual([false, true]);
-    expect(wrapper.find("[data-testid='pooled-opencode-mode-setting']").exists()).toBe(false);
+    expect(wrapper.find("[data-testid^='harness-setting-']").exists()).toBe(false);
+  });
+
+  it("shows the harness as it describes itself, the default as the server marks it", async () => {
+    mockApiResponses({}, () => [
+      createHarness("acme", "Acme Code", {
+        isDefault: true,
+        presentation: { order: 0, eyebrow: "Cloud harness", description: "An invented harness for tests.", icon: "hexagon" },
+      }),
+      createHarness("pi", "Pi"),
+    ]);
+
+    const wrapper = await mountHarnessesSection();
+
+    const acme = wrapper.findAll("article")[0]!;
+    expect(acme.text()).toContain("Cloud harness");
+    expect(acme.text()).toContain("An invented harness for tests.");
+    expect(acme.text()).toContain("Default");
+    // One that sends no presentation (an older Fleet) still shows, plainly.
+    expect(wrapper.findAll("article")[1]!.text()).toContain("Harness runtime registered by the backend.");
+  });
+
+  it("shows a harness's own switches, on by the default it sends until the user sets them", async () => {
+    const setting = { key: "acme.fast", label: "Fast mode", description: "Sessions start sooner.", default: true };
+    mockApiResponses({}, () => [createHarness("acme", "Acme Code", { settings: [setting] }), createHarness("pi", "Pi")]);
+
+    const wrapper = await mountHarnessesSection();
+
+    const row = wrapper.get("[data-testid='harness-setting-acme.fast']");
+    expect(row.text()).toContain("Fast mode");
+    expect(row.text()).toContain("On by default. Sessions start sooner.");
+    const toggle = wrapper.get("[data-testid='harness-setting-toggle-acme.fast']");
+    expect(toggle.attributes("aria-checked")).toBe("true");
+    // A harness with switches has settings; one without, and no install to describe, says so.
+    expect(wrapper.findAll("article").map((card) => card.text().includes("No settings yet"))).toEqual([false, true]);
+
+    await toggle.trigger("click");
+    await flushPromises();
+
+    expect(apiFetchMock).toHaveBeenCalledWith("/api/preferences/{key}", expect.objectContaining({
+      params: { path: { key: "acme.fast" } },
+      body: { value: "false" },
+    }));
+    expect(toggle.attributes("aria-checked")).toBe("false");
   });
 
   it("lists OpenCode 2's providers when Fleet signs in to them, keeping the terminal as the fallback", async () => {

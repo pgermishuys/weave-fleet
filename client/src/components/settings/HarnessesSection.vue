@@ -11,7 +11,8 @@ import { refreshAllHarnesses, useHarnesses } from "@/composables/use-harnesses";
 import { useAppShellStore } from "@/stores/app-shell";
 import { useHarnessSetupStore } from "@/stores/harness-setup";
 import { usePreferencesStore } from "@/stores/preferences";
-import type { HarnessInfo } from "@/api/client";
+import type { HarnessInfo, HarnessSetting } from "@/api/client";
+import { DEFAULT_HARNESS_PREFERENCE_KEY, resolveDefaultHarness } from "@/composables/use-enabled-harnesses";
 import { formatRelativeTime } from "@/lib/format-utils";
 import {
   harnessDisplay,
@@ -41,20 +42,20 @@ interface HarnessCard {
   offersSignIn: boolean;
   /** The harness describes how it's installed here (OpenCode 2's install mode), shown under its card. */
   describesInstall: boolean;
+  /** Its own switches, as the harness describes them. */
+  settings: readonly HarnessSetting[];
   /** The harness as the server described it, for its update. */
   info: HarnessInfo;
 }
-
-const DEFAULT_HARNESS_TYPE = "opencode";
-const POOLED_OPEN_CODE_MODE_PREFERENCE_KEY = "PooledOpenCodeHarness";
 
 const prefsStore = usePreferencesStore();
 const harnessSetup = useHarnessSetupStore();
 const { config } = storeToRefs(useAppShellStore());
 const { harnesses: registeredHarnesses, isLoading: isCheckingHarnesses, refresh: checkHarnessesAgain } = useHarnesses();
 
-const isSavingPooledOpenCodeMode = shallowRef(false);
-const pooledOpenCodeModeError = shallowRef<string | null>(null);
+/** The harness switch being saved (its preference key), and the last save that failed. */
+const savingSetting = shallowRef<string | null>(null);
+const settingError = shallowRef<{ key: string; message: string } | null>(null);
 
 onMounted(async () => {
   // The list shows what Fleet found last at once; opening Settings checks every harness again behind it.
@@ -73,10 +74,14 @@ const checkedLabel = computed(() => {
   return `Checked ${formatRelativeTime(checkedAt, now.value)}`;
 });
 
-const defaultHarnessId = computed(() => prefsStore.get("defaultHarnessType", DEFAULT_HARNESS_TYPE));
-const isPooledOpenCodeModeEnabled = computed(
-  () => prefsStore.get(POOLED_OPEN_CODE_MODE_PREFERENCE_KEY, "false") === "true",
-);
+const defaultHarnessId = computed(() =>
+  resolveDefaultHarness(prefsStore.get(DEFAULT_HARNESS_PREFERENCE_KEY, ""), registeredHarnesses.value));
+
+/** A switch is on as saved; unset (or empty), it's what the harness says its default is. */
+function isSettingOn(setting: HarnessSetting): boolean {
+  const saved = prefsStore.get(setting.key, "");
+  return saved === "" ? setting.default : saved === "true";
+}
 
 const harnesses = computed<readonly HarnessCard[]>(() => {
   return registeredHarnesses.value.map(toHarnessCard);
@@ -120,31 +125,29 @@ async function toggleHarness(harness: HarnessCard): Promise<void> {
 
 async function makeDefaultHarness(harness: HarnessCard): Promise<void> {
   if (!harness.canDefault || !harness.enabled) return;
-  await prefsStore.set("defaultHarnessType", harness.id);
+  await prefsStore.set(DEFAULT_HARNESS_PREFERENCE_KEY, harness.id);
 }
 
-async function togglePooledOpenCodeMode(): Promise<void> {
-  if (isSavingPooledOpenCodeMode.value) return;
+async function toggleSetting(setting: HarnessSetting): Promise<void> {
+  if (savingSetting.value) return;
 
-  isSavingPooledOpenCodeMode.value = true;
-  pooledOpenCodeModeError.value = null;
+  savingSetting.value = setting.key;
+  settingError.value = null;
 
   try {
-    await prefsStore.set(
-      POOLED_OPEN_CODE_MODE_PREFERENCE_KEY,
-      isPooledOpenCodeModeEnabled.value ? "false" : "true",
-    );
+    await prefsStore.set(setting.key, isSettingOn(setting) ? "false" : "true");
   } catch (error) {
-    pooledOpenCodeModeError.value = error instanceof Error
-      ? error.message
-      : "Failed to update pooled OpenCode mode.";
+    settingError.value = {
+      key: setting.key,
+      message: error instanceof Error ? error.message : `Fleet couldn't change ${setting.label}.`,
+    };
   } finally {
-    isSavingPooledOpenCodeMode.value = false;
+    savingSetting.value = null;
   }
 }
 
 function toHarnessCard(harness: HarnessInfo): HarnessCard {
-  const metadata = harnessDisplay(harness.type);
+  const metadata = harnessDisplay(harness);
   // The saved switch, as soon as it's flipped; without one, what the server says (on until turned off).
   const enabled = prefsStore.get(`${harness.type}.enabled`, harness.userEnabled ? "true" : "false") === "true";
 
@@ -163,6 +166,7 @@ function toHarnessCard(harness: HarnessInfo): HarnessCard {
     supportsProfiles: harness.capabilities?.supportsProfiles === true,
     offersSignIn: harness.capabilities?.supportsProviderSignIn === true && harness.available,
     describesInstall: Boolean(harness.setup?.mode),
+    settings: harness.settings ?? [],
     info: harness,
   };
 }
@@ -378,7 +382,7 @@ function statusForHarness(harness: HarnessInfo, enabled: boolean): HarnessStatus
               </button>
 
               <span
-                v-if="harness.id !== 'opencode' && !harness.describesInstall"
+                v-if="harness.settings.length === 0 && !harness.describesInstall"
                 class="inline-flex items-center rounded-btn px-2.5 py-1.5 text-xs font-medium text-muted"
               >
                 No settings yet
@@ -411,30 +415,34 @@ function statusForHarness(harness: HarnessInfo, enabled: boolean): HarnessStatus
         />
 
         <div
-          v-if="harness.id === 'opencode'"
-          class="mt-4 border-t border-border pt-4"
-          data-testid="pooled-opencode-mode-setting"
+          v-if="harness.settings.length > 0"
+          class="mt-4 grid gap-3 border-t border-border pt-4"
         >
-          <div class="flex items-start justify-between gap-4 rounded-card border border-border bg-main-bg p-4">
+          <div
+            v-for="setting in harness.settings"
+            :key="setting.key"
+            class="flex items-start justify-between gap-4 rounded-card border border-border bg-main-bg p-4"
+            :data-testid="`harness-setting-${setting.key}`"
+          >
             <div>
               <p class="text-sm font-medium text-text">
-                Pooled OpenCode Mode
+                {{ setting.label }}
               </p>
               <p class="mt-1 text-xs text-muted">
-                Off by default. When enabled, newly created OpenCode sessions use pooled automatic runtime mode and can prompt after Fleet restart without manual Resume. Existing sessions continue in their current mode.
+                {{ setting.default ? "On" : "Off" }} by default. {{ setting.description }}
               </p>
               <p
-                v-if="pooledOpenCodeModeError"
+                v-if="settingError?.key === setting.key"
                 class="mt-2 text-xs text-red-300"
                 role="alert"
               >
-                {{ pooledOpenCodeModeError }}
+                {{ settingError.message }}
               </p>
             </div>
 
             <div class="flex items-center gap-2">
               <LoaderCircle
-                v-if="isSavingPooledOpenCodeMode"
+                v-if="savingSetting === setting.key"
                 :size="16"
                 class="animate-spin text-muted"
                 aria-hidden="true"
@@ -442,17 +450,17 @@ function statusForHarness(harness: HarnessInfo, enabled: boolean): HarnessStatus
               <button
                 type="button"
                 role="switch"
-                :aria-checked="isPooledOpenCodeModeEnabled"
-                :disabled="prefsStore.isLoading || isSavingPooledOpenCodeMode"
-                aria-label="Enable Pooled OpenCode Mode"
+                :aria-checked="isSettingOn(setting)"
+                :disabled="prefsStore.isLoading || savingSetting !== null"
+                :aria-label="setting.label"
                 class="relative inline-flex h-6 w-11 shrink-0 cursor-pointer rounded-full border-2 border-transparent transition-colors duration-200 ease-in-out focus:outline-none focus:ring-2 focus:ring-accent focus:ring-offset-2 focus:ring-offset-main-bg disabled:cursor-not-allowed disabled:opacity-60"
-                :class="isPooledOpenCodeModeEnabled ? 'bg-accent' : 'bg-border'"
-                data-testid="pooled-opencode-mode-toggle"
-                @click="togglePooledOpenCodeMode"
+                :class="isSettingOn(setting) ? 'bg-accent' : 'bg-border'"
+                :data-testid="`harness-setting-toggle-${setting.key}`"
+                @click="toggleSetting(setting)"
               >
                 <span
                   class="pointer-events-none inline-block h-5 w-5 rounded-full bg-white shadow ring-0 transition duration-200 ease-in-out"
-                  :class="isPooledOpenCodeModeEnabled ? 'translate-x-5' : 'translate-x-0'"
+                  :class="isSettingOn(setting) ? 'translate-x-5' : 'translate-x-0'"
                 />
               </button>
             </div>
@@ -466,6 +474,7 @@ function statusForHarness(harness: HarnessInfo, enabled: boolean): HarnessStatus
           <HarnessProfilesPanel
             :harness-type="harness.id"
             :harness-name="harness.name"
+            :profile-note="harness.info.presentation?.profileNote ?? null"
           />
         </div>
       </article>
