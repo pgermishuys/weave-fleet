@@ -42,20 +42,20 @@ public static class SessionMessages
     /// another machine adds that machine's id and name.
     /// </summary>
     public static string Wrap(string fromSessionId, string fromTitle, string text, SessionMessageMachine? fromMachine = null)
-    {
-        var machine = fromMachine is null
-            ? ""
-            : $" machine=\"{WebUtility.HtmlEncode(fromMachine.Id)}\" machine-name=\"{WebUtility.HtmlEncode(fromMachine.Name)}\"";
-        return $"<{Tag} from=\"{WebUtility.HtmlEncode(fromSessionId)}\" title=\"{WebUtility.HtmlEncode(fromTitle)}\"{machine}>\n{text}\n</{Tag}>";
-    }
+        => $"<{Tag} from=\"{WebUtility.HtmlEncode(fromSessionId)}\" title=\"{WebUtility.HtmlEncode(fromTitle)}\"{MachineAttributes(fromMachine)}>\n{text}\n</{Tag}>";
 
     /// <summary>
     /// The prompt text an update arrives as, when a session this one messaged is done: which session, how its turn
     /// ended (<c>finished</c> or <c>failed</c>), then its last reply or the failure. A different tag from a message,
-    /// so the update can't be mistaken for something the other session's agent wrote.
+    /// so the update can't be mistaken for something the other session's agent wrote. A session on another machine
+    /// adds that machine's id and name.
     /// </summary>
-    public static string WrapUpdate(string sessionId, string title, string outcome, string text)
-        => $"<{UpdateTag} session=\"{WebUtility.HtmlEncode(sessionId)}\" title=\"{WebUtility.HtmlEncode(title)}\" outcome=\"{outcome}\">\n{text}\n</{UpdateTag}>";
+    public static string WrapUpdate(string sessionId, string title, string outcome, string text, SessionMessageMachine? machine = null)
+        => $"<{UpdateTag} session=\"{WebUtility.HtmlEncode(sessionId)}\" title=\"{WebUtility.HtmlEncode(title)}\" outcome=\"{outcome}\"{MachineAttributes(machine)}>\n{text}\n</{UpdateTag}>";
+
+    private static string MachineAttributes(SessionMessageMachine? machine) => machine is null
+        ? ""
+        : $" machine=\"{WebUtility.HtmlEncode(machine.Id)}\" machine-name=\"{WebUtility.HtmlEncode(machine.Name)}\"";
 }
 
 /// <summary>Whether messages between sessions are on for the current user.</summary>

@@ -1,5 +1,7 @@
 using System.Net;
 using System.Text.Json;
+using Microsoft.Extensions.DependencyInjection;
+using Microsoft.Extensions.Logging.Abstractions;
 using Shouldly;
 using WeaveFleet.Application.Canvases;
 using WeaveFleet.Application.Configuration;
@@ -7,6 +9,8 @@ using WeaveFleet.Application.Machines;
 using WeaveFleet.Application.Services;
 using WeaveFleet.Application.Sessions;
 using WeaveFleet.Domain.Entities;
+using WeaveFleet.Domain.Events;
+using WeaveFleet.Domain.Harnesses;
 using WeaveFleet.Testing.Builders;
 using WeaveFleet.Testing.Fakes;
 using WeaveFleet.Testing.Fakes.Repositories;
@@ -27,6 +31,9 @@ public sealed class MachineHandoffBridgeTests : IDisposable
     private readonly FakeResolver _resolver = new() { Caller = new HarnessCanvasCaller(Sender, UserId) };
     private readonly string _identityPath = Path.Combine(Path.GetTempPath(), $"fleet-handoff-{Guid.NewGuid():N}.db");
     private readonly MachineIdentityStore _identity;
+    private readonly CapturingSender _updates = new();
+    private readonly FollowedSessions _followed = new();
+    private readonly SessionUpdates _watches;
     private readonly MachineHandoffBridge _bridge;
 
     public MachineHandoffBridgeTests()
@@ -46,13 +53,23 @@ public sealed class MachineHandoffBridgeTests : IDisposable
         });
         var sessions = new SessionService(builder.SessionRepository, builder.ProjectRepository, builder.Build(), builder.ActivityTracker);
         var options = new FleetOptions();
+        _watches = new SessionUpdates(
+            new SessionActivityTracker(),
+            TestServiceScopeFactory.Create(services =>
+            {
+                services.AddSingleton<IBackgroundUserScope>(new NoUserScope());
+                services.AddSingleton<ISessionUpdateSender>(_updates);
+            }),
+            NullLogger<SessionUpdates>.Instance);
         _bridge = new MachineHandoffBridge(
             [_resolver],
             new NoUserScope(),
             new AgentHandoffFeature(options, _preferences, new SessionMessagesFeature(options, _preferences)),
             sessions,
             new RemoteSessions(_atlas.Service, _atlas),
-            _identity);
+            _identity,
+            _watches,
+            _followed);
 
         _atlas.Answer = request => request switch
         {
@@ -202,12 +219,50 @@ public sealed class MachineHandoffBridgeTests : IDisposable
     }
 
     [Fact]
-    public async Task Being_told_when_it_is_done_isnt_offered_across_machines_yet()
+    public async Task Asking_to_be_told_watches_the_turn_there_that_answers_the_message()
     {
-        var sent = await _bridge.MessageAsync(new HarnessCanvasCaller(Sender, UserId), "atlas", "s-remote", "Tell me.", notifyWhenDone: true);
+        var sent = await _bridge.MessageAsync(new HarnessCanvasCaller(Sender, UserId), "atlas", "s-remote", "Tell me which fail.", notifyWhenDone: true);
 
-        sent.Error!.Message.ShouldBe(MachineHandoffBridge.NoNotifyAcrossMachinesMessage);
-        _atlas.Requests.ShouldBeEmpty();
+        sent.Value!.Output.ShouldEndWith("Fleet will send you its reply when it's done, as a new message; you don't need to check on it.");
+        _followed.Sessions.ShouldBe([(FakeMachine.Id, "s-remote")]);
+        await TurnEndsAsync("s-remote", answering: "msg-1");
+        var watch = _updates.Read.ShouldHaveSingleItem();
+        watch.ShouldBe(new SessionUpdateWatch(Sender, "s-remote", UserId, "msg-1", new SessionMessageMachine(FakeMachine.Id, FakeMachine.Name), "Run the integration tests"));
+    }
+
+    [Fact]
+    public async Task A_session_started_there_can_be_watched_from_the_start()
+    {
+        var result = await _bridge.StartAsync(
+            "token", "oc-1", "atlas", "/srv/harbor-api", "Run the integration tests", "Run them.", "fix/login-flake", null, notifyWhenDone: true);
+
+        result.Value!.Output.ShouldEndWith("Fleet will send you its reply when it's done, as a new message; you don't need to check on it.");
+        await TurnEndsAsync("s-remote", answering: "msg-1");
+        _updates.Read.ShouldHaveSingleItem().Machine!.Id.ShouldBe(FakeMachine.Id);
+    }
+
+    [Fact]
+    public async Task Without_asking_nothing_is_watched()
+    {
+        await _bridge.MessageAsync(new HarnessCanvasCaller(Sender, UserId), "atlas", "s-remote", "FYI.", notifyWhenDone: false);
+
+        await TurnEndsAsync("s-remote", answering: "msg-1");
+        _updates.Read.ShouldBeEmpty();
+        _followed.Sessions.ShouldBeEmpty();
+    }
+
+    /// <summary>The session there replies to <paramref name="answering"/> and goes idle, as its events say.</summary>
+    private async Task TurnEndsAsync(string sessionId, string answering)
+    {
+        _watches.Observe(sessionId, new MessageUpdated
+        {
+            Payload = new MessageLifecyclePayload
+            {
+                Info = new MessageEventInfo { Id = "reply-1", Role = "assistant", SessionId = sessionId, ParentId = answering, Time = new MessageEventTime { Created = 0 } },
+            },
+        });
+        _watches.Observe(sessionId, new SessionIdled { Payload = new SessionIdledPayload { SessionId = sessionId } });
+        await _watches.Pending;
     }
 
     private void Allow(bool allowed)
@@ -229,6 +284,26 @@ public sealed class MachineHandoffBridgeTests : IDisposable
 
         public Task<HarnessCanvasCaller?> ResolveAsync(string bridgeToken, string harnessSessionId, CancellationToken ct = default)
             => Task.FromResult(Caller);
+    }
+
+    private sealed class FollowedSessions : IRemoteSessionEvents
+    {
+        public List<(string MachineId, string SessionId)> Sessions { get; } = [];
+
+        public void Follow(string machineId, string sessionId) => Sessions.Add((machineId, sessionId));
+    }
+
+    private sealed class CapturingSender : ISessionUpdateSender
+    {
+        public List<SessionUpdateWatch> Read { get; } = [];
+
+        public Task<SessionUpdate?> ReadAsync(SessionUpdateWatch watch, TurnError? failure, CancellationToken ct)
+        {
+            Read.Add(watch);
+            return Task.FromResult<SessionUpdate?>(null);
+        }
+
+        public Task<bool> SendAsync(SessionUpdate update, CancellationToken ct) => Task.FromResult(true);
     }
 
     private sealed class NoUserScope : IBackgroundUserScope

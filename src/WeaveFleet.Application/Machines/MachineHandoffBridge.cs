@@ -2,6 +2,7 @@ using System.Text;
 using WeaveFleet.Application.Canvases;
 using WeaveFleet.Application.Configuration;
 using WeaveFleet.Application.Services;
+using WeaveFleet.Application.Sessions;
 using WeaveFleet.Domain.Entities;
 
 namespace WeaveFleet.Application.Machines;
@@ -18,15 +19,14 @@ public sealed class MachineHandoffBridge(
     AgentHandoffFeature feature,
     SessionService sessions,
     RemoteSessions remote,
-    MachineIdentityStore identity)
+    MachineIdentityStore identity,
+    SessionUpdates updates,
+    IRemoteSessionEvents events)
 {
     public const string TurnedOffMessage = "Handing work to other machines is turned off in Fleet's Settings.";
 
     public const string NoMachinesMessage =
         "No machine takes work from agents here yet. The user allows it per machine in Settings › Machines.";
-
-    public const string NoNotifyAcrossMachinesMessage =
-        "Fleet can't tell you yet when a session on another machine is done. Send it with notifyWhenDone false, and read its reply with fleet_session_read, naming the machine.";
 
     /// <summary><c>fleet_machine_list</c>: the machines the agent may hand work to, and what each can run.</summary>
     public Task<CanvasResult<CanvasToolOutput>> ListAsync(string? bridgeToken, string? harnessSessionId, CancellationToken ct = default)
@@ -84,6 +84,7 @@ public sealed class MachineHandoffBridge(
         string? task,
         string? branch,
         string? harness,
+        bool notifyWhenDone = false,
         CancellationToken ct = default)
         => AsCallerAsync(bridgeToken, harnessSessionId, async caller =>
         {
@@ -95,6 +96,9 @@ public sealed class MachineHandoffBridge(
                 return Invalid("\"title\" is required.");
             if (string.IsNullOrWhiteSpace(task))
                 return Invalid("\"task\" is required.");
+
+            if (notifyWhenDone && updates.IsStartedByUpdate(caller.FleetSessionId))
+                return Refused(SessionMessageBridge.NoNotifyFromUpdateMessage);
 
             var (machine, token, error) = await remote.FindAsync(machineName).ConfigureAwait(false);
             if (machine is null)
@@ -117,19 +121,20 @@ public sealed class MachineHandoffBridge(
             if (started is null)
                 return Refused($"Fleet couldn't start it: {startError}");
 
-            var (_, messageError) = await remote.MessageAsync(machine, token!, started.SessionId, sender, task.Trim(), ct).ConfigureAwait(false);
-            if (messageError is not null)
+            var (delivered, messageError) = await remote.MessageAsync(machine, token!, started.SessionId, sender, task.Trim(), ct).ConfigureAwait(false);
+            if (delivered is null)
             {
                 return Refused(
                     $"Started {started.Title} on {machine.Name} ({started.SessionId}), but couldn't give it the task: {messageError} "
                     + $"Send it with fleet_message, machine {machine.Name}.");
             }
 
+            var watching = notifyWhenDone && Watch(caller, machine, started.SessionId, started.Title, delivered.MessageId);
             var where = started.Branch is { } onBranch ? $" in a worktree on {onBranch}" : $" in {folder.Trim()}";
             return CanvasResult.Ok(new CanvasToolOutput(
                 $"Started {started.Title} on {machine.Name}",
                 $"Started {started.Title} on {machine.Name} ({started.SessionId}){where}, and gave it the task. It's working on it now. "
-                + $"Its reply stays there: read it with fleet_session_read, machine {machine.Name}."));
+                + ReplyNote(watching, machine.Name)));
         });
 
     /// <summary><c>fleet_message</c> naming a machine, once <see cref="Sessions.SessionMessageBridge"/> has placed the caller.</summary>
@@ -142,8 +147,8 @@ public sealed class MachineHandoffBridge(
         CancellationToken ct = default)
         => WithMachineAsync(caller, machineName, async (machine, token) =>
         {
-            if (notifyWhenDone)
-                return Refused(NoNotifyAcrossMachinesMessage);
+            if (notifyWhenDone && updates.IsStartedByUpdate(caller.FleetSessionId))
+                return Refused(SessionMessageBridge.NoNotifyFromUpdateMessage);
 
             var sender = await SenderAsync(caller).ConfigureAwait(false);
             if (sender is null)
@@ -153,10 +158,11 @@ public sealed class MachineHandoffBridge(
             if (delivered is null)
                 return Refused($"Fleet couldn't deliver it: {error}");
 
+            var watching = notifyWhenDone && Watch(caller, machine, toSessionId, delivered.Title, delivered.MessageId);
             return CanvasResult.Ok(new CanvasToolOutput(
                 $"Messaged {delivered.Title} on {machine.Name}",
                 $"Delivered to {delivered.Title} on {machine.Name} ({toSessionId}). It starts on it now, or when the turn it's on ends. "
-                + $"Its reply stays in that session: read it with fleet_session_read, machine {machine.Name}."));
+                + ReplyNote(watching, machine.Name)));
         });
 
     /// <summary><c>fleet_session_read</c> naming a machine, once <see cref="Sessions.SessionReadBridge"/> has placed the caller.</summary>
@@ -223,6 +229,26 @@ public sealed class MachineHandoffBridge(
         var self = identity.Get();
         return new RemotePeerSender(self.Id, self.Name ?? Environment.MachineName, caller.FleetSessionId, session.Value.Title);
     }
+
+    /// <summary>
+    /// Asks to hear when the turn that handles the message ends there, as <c>fleet_message</c> does for a session here:
+    /// this Fleet follows that session's events until it's told (<see cref="RemoteSessionTurns"/>).
+    /// False when that machine's harness gave the message no id, so there's no telling which turn answers it.
+    /// </summary>
+    private bool Watch(HarnessCanvasCaller caller, RemoteMachine machine, string sessionId, string title, string? messageId)
+    {
+        if (messageId is null)
+            return false;
+
+        updates.Watch(new SessionUpdateWatch(
+            caller.FleetSessionId, sessionId, caller.UserId, messageId, new SessionMessageMachine(machine.Id, machine.Name), title));
+        events.Follow(machine.Id, sessionId);
+        return true;
+    }
+
+    private static string ReplyNote(bool watching, string machine) => watching
+        ? "Fleet will send you its reply when it's done, as a new message; you don't need to check on it."
+        : $"Its reply stays in that session: read it with fleet_session_read, machine {machine}.";
 
     private static string TooOld(string machine) => $"Fleet on {machine} is too old to take work from an agent here. Update it there.";
 

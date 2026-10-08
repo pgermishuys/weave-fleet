@@ -372,7 +372,8 @@ public sealed record SessionStartBridgeRequest(
     string? Title = null,
     string? Task = null,
     string? Branch = null,
-    string? Harness = null);
+    string? Harness = null,
+    bool NotifyWhenDone = false);
 
 /// <summary>
 /// What the tool returns to the harness as-is: a tool-card title, the text the model reads, metadata, and any

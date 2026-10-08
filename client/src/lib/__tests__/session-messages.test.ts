@@ -46,6 +46,16 @@ describe("parsePeerUpdate", () => {
     });
   });
 
+  it("names the machine of a session on another one", () => {
+    const body = '<fleet-session-update session="ses_2" title="Run the tests" outcome="finished" machine="m-mini" machine-name="mini">\n2 failed.\n</fleet-session-update>';
+
+    expect(parsePeerUpdate(body)).toEqual({
+      peer: { sessionId: "ses_2", title: "Run the tests", machineId: "m-mini", machineName: "mini" },
+      outcome: "finished",
+      text: "2 failed.",
+    });
+  });
+
   it("reads a failure and decodes the title", () => {
     const body = '<fleet-session-update session="ses_2" title="Docs &amp; tests" outcome="failed">\nRate limited.\n</fleet-session-update>';
 

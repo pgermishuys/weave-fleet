@@ -108,7 +108,7 @@ public static class CanvasBridgeEndpoints
 
         session.MapPost("/start", async (SessionStartBridgeRequest request, HttpContext http, MachineHandoffBridge bridge, CancellationToken ct)
                 => ToResult(await bridge.StartAsync(
-                    BridgeToken(http), request.HarnessSessionId, request.Machine, request.Folder, request.Title, request.Task, request.Branch, request.Harness, ct)))
+                    BridgeToken(http), request.HarnessSessionId, request.Machine, request.Folder, request.Title, request.Task, request.Branch, request.Harness, request.NotifyWhenDone, ct)))
             .WithName("MachineHandoffBridgeStart");
 
         // fleet_step_done: a workflow step's session finishes the step. Only the step's own session can.

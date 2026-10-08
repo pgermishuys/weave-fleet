@@ -334,7 +334,18 @@ works out which session is calling and makes every call to the other machine its
 - `fleet_message` / `fleet_session_read` with a `machine`: the peer endpoints above.
 
 The new session is a normal session there, in the sidebar under that machine. Its first message says which session on
-which machine sent it. The reply stays there: the agent reads it with `fleet_session_read`.
+which machine sent it. The reply stays there: the agent reads it with `fleet_session_read`, or asks to be told
+(`notifyWhenDone` on `fleet_session_start` or `fleet_message`). Then this Fleet follows that session over the hub
+connection it keeps to the machine (`SubscribeToSessionAsync`), and reads its events as for a session here:
+- a reply whose parent is the message arms the wait;
+- `turn.failed` says why it failed;
+- `session.idled` sends the update, `<fleet-session-update … machine="…" machine-name="…">` with the reply read from
+  `GET /api/sessions/{id}/messages` there.
+
+It doesn't depend on `session_notification`, which a machine leaves out while someone is looking at the session. Each
+time the subscription takes (at first, and after a reconnect), this Fleet also asks whether that turn already ended,
+from the session's state and messages there, so a reply that came while the connection was down still arrives. It stops
+following once nobody waits, or after a day.
 
 ### Push: `/api/push/*`
 
