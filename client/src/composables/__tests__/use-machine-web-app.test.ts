@@ -7,7 +7,10 @@ const fetchOnMachine = vi.fn();
 let active: MachineConnection | null = null;
 vi.mock("@/lib/machines", () => ({
   fetchOnMachine: (...args: unknown[]) => fetchOnMachine(...args),
-  getActiveMachine: () => active,
+}));
+// The session's machine: the one the page provides, live or opened in place.
+vi.mock("@/lib/machine-target", () => ({
+  useMachineTarget: () => ({ key: active?.id ?? "home", connection: active, isLive: active === null, api: {} }),
 }));
 
 import { useMachineWebApp } from "../phone/use-machine-web-app";

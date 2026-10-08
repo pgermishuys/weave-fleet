@@ -1,6 +1,9 @@
-import { computed, onMounted, onUnmounted, shallowRef } from "vue";
+import { computed, onMounted, onUnmounted, shallowRef, type InjectionKey } from "vue";
+import type { SessionListItem } from "@/api/client";
 import { useMachineGrants } from "@/composables/phone/use-machine-grants";
 import { useRelativeTime } from "@/composables/use-relative-time";
+import { feedHubFor } from "@/composables/use-signalr-socket";
+import { liveTarget, targetFor as machineTarget } from "@/lib/machine-target";
 import { readCredentials, readCredentialsSync, type DeviceCredentials } from "@/lib/device-credentials";
 import { fetchMachineList, unreachableReason, type ListedMachine } from "@/lib/phone/grants";
 import { buildInbox, type InboxMachineState } from "@/lib/phone/inbox";
@@ -35,6 +38,20 @@ interface MachineEntry {
   feed: InboxFeed | null;
   snapshot: InboxSnapshot | null;
   problem: string | null;
+}
+
+export type Inbox = ReturnType<typeof useInbox>;
+
+/**
+ * The inbox PhoneStack keeps for the inbox page and for a session page pushed over it, which reads its row from it when
+ * its session is on another machine (opened in place, with "Keep every machine live").
+ */
+export const INBOX: InjectionKey<Inbox> = Symbol("inbox");
+
+/** A session's row as its machine's feed last read it; null when the inbox hasn't (yet) heard of it. */
+export function inboxSession(inbox: Inbox | null, machineId: string, sessionId: string): SessionListItem | null {
+  const machine = inbox?.machines.value.find((candidate) => candidate.id === machineId);
+  return machine?.sessions.find((item) => item.session.id === sessionId) ?? null;
 }
 
 /**
@@ -108,9 +125,15 @@ export function useInbox() {
 
     for (const entry of entries.value) {
       if (!entry.target) continue;
+      const { baseUrl } = entry.target;
       const feed = new InboxFeed({
         target: { machineId: entry.listed.id, baseUrl: entry.target.baseUrl, token: entry.target.token },
         onChange: (snapshot) => replace(entry, { snapshot }),
+        // The machine's event hub, shared with a session of it opened in place over the inbox. The inbox only runs with
+        // home live.
+        createHub: (_url, token) => feedHubFor(entry.isHome
+          ? liveTarget()
+          : machineTarget({ id: entry.listed.id, name: entry.listed.name, baseUrl, token: token ?? "", addedAt: "" })),
         onUnauthorized: entry.isHome ? undefined : async () => {
           const token = await grants.renewGrant(entry.listed.id);
           if (token && entry.target) entry.target = { ...entry.target, token };

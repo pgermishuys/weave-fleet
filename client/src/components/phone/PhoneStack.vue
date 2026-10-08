@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { computed, shallowRef, useTemplateRef, watch } from "vue";
+import { computed, provide, shallowRef, useTemplateRef, watch } from "vue";
 import { Outlet, useLocation } from "@tanstack/vue-router";
 import InboxPage from "@/components/phone/InboxPage.vue";
 import NotificationSetup from "@/components/phone/NotificationSetup.vue";
@@ -7,6 +7,7 @@ import type { PhoneTab } from "@/components/phone/PhoneTabBar.vue";
 import PhoneNewSessionPage from "@/components/phone/new/PhoneNewSessionPage.vue";
 import PhoneSessionPage from "@/components/phone/session/PhoneSessionPage.vue";
 import MachineScope from "@/components/layout/MachineScope.vue";
+import { INBOX, useInbox } from "@/composables/phone/use-inbox";
 import { safariSwipedBack } from "@/composables/phone/use-phone-env";
 import { stack, usePhoneNav } from "@/composables/phone/use-phone-nav";
 import { PARALLAX, UNDER_DIM, useSwipeBack } from "@/composables/phone/use-swipe-back";
@@ -14,6 +15,7 @@ import { getActiveMachine, loadMachines } from "@/lib/machines";
 import { targetFor } from "@/lib/machine-target";
 import { EASE, EASE_OUT, animateTo, reducedMotion } from "@/lib/phone/animate";
 import { popDuration } from "@/lib/phone/gestures";
+import { usePreferencesStore } from "@/stores/preferences";
 
 /**
  * The phone app as a navigation stack, the way the phones do it: the inbox (with its three tabs) at the bottom, a
@@ -67,8 +69,13 @@ const machineForNew = computed(() => {
   return typeof asked === "string" && asked ? asked : undefined;
 });
 
-// A session opened on another machine works in that machine with a page load; home's inbox doesn't go under it.
+// A session opened on another machine works in that machine with a page load; home's inbox doesn't go under it. With
+// "Keep every machine live" it opens in place instead: the page stays on home, so the inbox is under it.
 const showInbox = !getActiveMachine();
+// The inbox is kept here, for the inbox page and for a session on another machine pushed over it (its row).
+if (showInbox) provide(INBOX, useInbox());
+// "Keep every machine live" decides how another machine's session opens (`useMachinesStore().opensInPlace`).
+usePreferencesStore().ensureLoaded();
 
 // Which way the stack moved: by the router's history index, else by what came and went.
 let direction: "push" | "pop" = "push";

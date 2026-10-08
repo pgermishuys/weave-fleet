@@ -230,6 +230,14 @@ describe("machines", () => {
       expect(restoreActiveMachine("/sessions/remote-session")?.id).toBe(falcon.id);
     });
 
+    it("keeps the phone on home for another machine's session with every machine live", () => {
+      saveLiveMachinesHint(true);
+      expect(restoreActiveMachine(`/phone/s/${falcon.id}/remote-session`)).toBeNull();
+
+      saveLiveMachinesHint(false);
+      expect(restoreActiveMachine(`/phone/s/${falcon.id}/remote-session`)?.id).toBe(falcon.id);
+    });
+
     it("goes home when the machine the tab was on has been forgotten", () => {
       saveActiveMachineId("gone");
 

@@ -198,16 +198,16 @@ export function saveLiveMachinesHint(on: boolean): void {
 /**
  * Decides which machine this page works in, before anything makes a request: the machine that owns the session
  * in the URL when the client knows it, otherwise the one this tab last worked in, otherwise home. With "Keep every
- * machine live" on, a desktop session's machine doesn't become live: the page stays where it was and the session's
- * views ask its machine (`provideMachineTarget`).
+ * machine live" on, a session's machine doesn't become live: the page stays where it was (the phone's on home) and
+ * the session's views ask its machine (`provideMachineTarget`).
  */
 export function restoreActiveMachine(pathname: string = typeof window === "undefined" ? "/" : window.location.pathname): MachineConnection | null {
   const machines = loadMachines();
 
   // The phone pages say their machine in the path: a session on another machine at /phone/s/<machine>/<session>,
-  // everything else (the inbox, setup) on home.
+  // everything else (the inbox, setup) on home. With every machine live, all of them on home.
   if (pathname === "/phone" || pathname.startsWith("/phone/")) {
-    const machineId = /^\/phone\/s\/([^/]+)\//.exec(pathname)?.[1];
+    const machineId = loadLiveMachinesHint() ? undefined : /^\/phone\/s\/([^/]+)\//.exec(pathname)?.[1];
     const phoneMachine = machineId ? machines.find((candidate) => candidate.id === decodeURIComponent(machineId)) ?? null : null;
     saveActiveMachineId(phoneMachine?.id ?? null);
     setActiveMachine(phoneMachine);

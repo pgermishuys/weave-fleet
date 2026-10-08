@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { computed, nextTick, onMounted, onUnmounted, shallowRef, useTemplateRef, watch } from "vue";
+import { computed, inject, nextTick, onMounted, onUnmounted, shallowRef, useTemplateRef, watch } from "vue";
 import { showToast } from "@/composables/phone/use-phone-toast";
 import { haptic } from "@/lib/phone/haptics";
 import { holdKeyboard } from "@/lib/phone/keyboard";
@@ -41,13 +41,14 @@ import { useSessionProgress } from "@/composables/use-session-progress";
 import { useSessionStream } from "@/composables/use-session-stream";
 import { useSessions } from "@/composables/use-sessions";
 import { readCredentialsSync } from "@/lib/device-credentials";
-import { getActiveMachine } from "@/lib/machines";
+import { useMachineTarget } from "@/lib/machine-target";
 import { foldMessages, groupTools, type FoldedStep } from "@/lib/phone/fold-steps";
 import { sessionFolder } from "@/lib/phone/inbox";
 import { lastSeenAt, markSeen, sinceYouLookedIndex } from "@/lib/phone/last-seen";
 import { headerStatus } from "@/lib/phone/session-status";
 import { useSessionsStore } from "@/stores/sessions";
 import { usePhoneNav } from "@/composables/phone/use-phone-nav";
+import { INBOX, inboxSession } from "@/composables/phone/use-inbox";
 
 /**
  * A session on the phone (`/phone/s/<machine>/<session>`, pushed over the inbox by PhoneStack), in one panel on the
@@ -65,16 +66,22 @@ useDeskPresence("phone");
 const machineId = computed(() => props.machineId);
 const sessionId = computed(() => props.sessionId);
 
-useSessions({ retentionStatus: "all" });
+// The session's machine: the live one, or another opened in place (PhoneStack provides it from the address). The live
+// machine's row comes from its list; another machine's from the inbox's feed for that machine.
+const machine = useMachineTarget();
+if (machine.isLive) useSessions({ retentionStatus: "all" });
 const sessionsStore = useSessionsStore();
-const session = computed(() => sessionsStore.sessionById(sessionId.value));
+const inbox = inject(INBOX, null);
+const session = computed(() => machine.isLive
+  ? sessionsStore.sessionById(sessionId.value)
+  : inboxSession(inbox, machineId.value, sessionId.value));
 
 const stream = useSessionStream(sessionId);
 const { progress } = useSessionProgress(sessionId);
 const blocks = computed(() => foldMessages(stream.messages.value));
 const items = computed(() => groupTools(blocks.value));
 
-const machineName = computed(() => getActiveMachine()?.name ?? readCredentialsSync()?.homeMachineName ?? "This machine");
+const machineName = computed(() => machine.connection?.name ?? readCredentialsSync()?.homeMachineName ?? "This machine");
 const title = computed(() => session.value?.session.title?.trim() || "Session");
 const folder = computed(() => (session.value ? sessionFolder(session.value) : null));
 
@@ -219,7 +226,7 @@ watch(sheet, (open) => {
 const machineWebApp = useMachineWebApp();
 const homeName = computed(() => readCredentialsSync()?.homeMachineName ?? "your computer");
 const computerLink = computed(() => machineWebApp.value
-  ? `${getActiveMachine()?.baseUrl ?? window.location.origin}/sessions/${encodeURIComponent(sessionId.value)}`
+  ? `${machine.connection?.baseUrl ?? window.location.origin}/sessions/${encodeURIComponent(sessionId.value)}`
   : null);
 
 async function onMenu(action: MenuAction): Promise<void> {

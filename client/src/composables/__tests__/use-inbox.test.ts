@@ -5,26 +5,41 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { clearCredentials, saveCredentials } from "@/lib/device-credentials";
 
 const started: { machineId: string; baseUrl: string; token: string | null }[] = [];
+const hubs: unknown[] = [];
+/** What each machine's feed reads, by machine id. */
+const feedSessions: Record<string, unknown[]> = {};
 
 vi.mock("@/lib/phone/inbox-feed", () => ({
   InboxFeed: class {
-    constructor(private readonly options: { target: { machineId: string; baseUrl: string; token: string | null }; onChange: (s: unknown) => void }) {}
+    constructor(private readonly options: {
+      target: { machineId: string; baseUrl: string; token: string | null };
+      onChange: (s: unknown) => void;
+      createHub?: (url: string, token: string | null) => unknown;
+    }) {}
     async start() {
       started.push(this.options.target);
-      this.options.onChange({ status: "live", lastHeardAt: 1, sessions: [], asks: {}, error: null });
+      hubs.push(this.options.createHub?.(`${this.options.target.baseUrl}/hubs/session-events`, this.options.target.token));
+      this.options.onChange({ status: "live", lastHeardAt: 1, sessions: feedSessions[this.options.target.machineId] ?? [], asks: {}, error: null });
     }
     async stop() {}
     async refresh() {}
   },
 }));
 
-import { useInbox } from "../phone/use-inbox";
+// The machine's shared event hub, by the machine the feed asks for.
+vi.mock("@/composables/use-signalr-socket", () => ({
+  feedHubFor: (machine: { key: string; connection: { token: string } | null }) => ({ sharedHubOf: machine.key, token: machine.connection?.token ?? null }),
+}));
+
+import { inboxSession, useInbox } from "../phone/use-inbox";
 
 describe("useInbox", () => {
   let posts: { url: string; init: RequestInit }[];
 
   beforeEach(async () => {
     started.length = 0;
+    hubs.length = 0;
+    for (const id of Object.keys(feedSessions)) delete feedSessions[id];
     posts = [];
     localStorage.clear();
     await clearCredentials();
@@ -75,6 +90,21 @@ describe("useInbox", () => {
     expect(osprey?.status).toBe("unreachable");
     expect(osprey?.problem).toBe("Can't reach osprey from hangar right now.");
     expect(inbox.machines.value.find((m) => m.id === "hangar")?.isHome).toBe(true);
+  });
+
+  it("gives each machine's feed that machine's event hub, which a session opened in place shares", async () => {
+    await mountInbox();
+
+    expect(hubs).toEqual([{ sharedHubOf: "home", token: null }, { sharedHubOf: "falcon", token: "fdt_falcon.1" }]);
+  });
+
+  it("finds a session's row in its machine's feed", async () => {
+    feedSessions.falcon = [{ session: { id: "s-falcon", title: "Hero image sizes" } }];
+    const inbox = await mountInbox();
+
+    expect(inboxSession(inbox, "falcon", "s-falcon")?.session.title).toBe("Hero image sizes");
+    expect(inboxSession(inbox, "hangar", "s-falcon")).toBeNull();
+    expect(inboxSession(null, "falcon", "s-falcon")).toBeNull();
   });
 
   it("knows each machine's operating system: home's from itself, the rest from home's list", async () => {
