@@ -28,11 +28,12 @@ appId: io.tryweave.fleet.experiment
 - tapOn:
     text: "Allow"
     optional: true
+# A pressable row reads as one accessibility label ("Fix pagination off-by-one, 5m 42s") on iOS.
 - extendedWaitUntil:
-    visible: "Fix pagination off-by-one"
+    visible: ".*Fix pagination off-by-one.*"
     timeout: 30000
 - takeScreenshot: 03-sessions
-- tapOn: "Fix pagination off-by-one"
+- tapOn: ".*Fix pagination off-by-one.*"
 - extendedWaitUntil:
     visible: "Here's the plan.*"
     timeout: 30000

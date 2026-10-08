@@ -66,7 +66,7 @@ export default function Sessions() {
         <T weight="semibold" size={17}>Fleet</T>
         <View style={{ flex: 1 }} />
         <View style={{ width: 8, height: 8, borderRadius: 4, backgroundColor: error ? p.error : p.running }} />
-        <T muted size={13}>{credentials.machineName}</T>
+        <T muted size={13} numberOfLines={1} style={{ flexShrink: 1 }}>{credentials.machineName}</T>
       </View>
       <Panel>
         <SectionList

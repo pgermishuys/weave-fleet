@@ -14,7 +14,7 @@ struct PairView: View {
         ScrollView {
             VStack(alignment: .leading, spacing: 14) {
                 Text("Pair with a machine").font(Fleet.display).foregroundStyle(Fleet.text).padding(.top, 24)
-                Text("On your computer, open Fleet → Settings → Devices → Pair a phone. Type its address and the 8-character code, or paste the pairing link.")
+                Text("On your computer, open Fleet → Settings → Machines → This machine → Add a phone. Type its address and the 8-character code, or paste the pairing link.")
                     .font(Fleet.body).foregroundStyle(Fleet.muted)
                 field("Address", text: $address, placeholder: "https://my-machine.example.com", mono: false, id: "address")
                     .keyboardType(.URL)

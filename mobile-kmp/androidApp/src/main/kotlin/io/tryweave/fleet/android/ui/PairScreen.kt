@@ -53,7 +53,7 @@ fun PairScreen(pairing: Pairing, onPaired: (Credentials) -> Unit) {
         Spacer(Modifier.height(4.dp))
         BasicText("Pair with a machine", style = Fleet.display)
         BasicText(
-            "On your computer, open Fleet → Settings → Devices → Pair a phone. Type its address and the 8-character code, or paste the pairing link.",
+            "On your computer, open Fleet → Settings → Machines → This machine → Add a phone. Type its address and the 8-character code, or paste the pairing link.",
             style = Fleet.body.copy(color = Fleet.muted),
         )
         Spacer(Modifier.height(6.dp))
