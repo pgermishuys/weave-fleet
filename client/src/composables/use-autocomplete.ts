@@ -72,12 +72,12 @@ interface UseStaticInstanceDataResult<T> {
 }
 
 function useSessionCommands(sessionId: MaybeRefOrGetter<string | null | undefined>): UseStaticInstanceDataResult<AutocompleteCommand> {
-  const { api } = useMachineTarget();
+  const machine = useMachineTarget();
   const data = ref<AutocompleteCommand[]>([]);
   const currentSessionId = computed(() => toValue(sessionId)?.trim() ?? "");
   const isLoading = shallowRef(Boolean(currentSessionId.value));
   const error = shallowRef<string | undefined>(undefined);
-  const changes = sessionCatalogChanges(currentSessionId);
+  const changes = sessionCatalogChanges(machine, currentSessionId);
 
   watch(
     [currentSessionId, changes],
@@ -100,7 +100,7 @@ function useSessionCommands(sessionId: MaybeRefOrGetter<string | null | undefine
       error.value = undefined;
 
       try {
-        const { data: responseData, error, response } = await api.GET("/api/sessions/{id}/commands", {
+        const { data: responseData, error, response } = await machine.api.GET("/api/sessions/{id}/commands", {
           params: { path: { id: nextSessionId } },
           signal: controller.signal,
         });
@@ -134,7 +134,7 @@ function useSessionAgents(sessionId: MaybeRefOrGetter<string | null | undefined>
   const currentSessionId = computed(() => toValue(sessionId)?.trim() ?? "");
   const isLoading = shallowRef(Boolean(currentSessionId.value));
   const error = shallowRef<string | undefined>(undefined);
-  const changes = sessionCatalogChanges(currentSessionId);
+  const changes = sessionCatalogChanges(machine, currentSessionId);
 
   watch(
     [currentSessionId, changes],

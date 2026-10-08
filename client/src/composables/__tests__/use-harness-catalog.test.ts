@@ -13,7 +13,7 @@ const { mockApi, handlers } = vi.hoisted(() => ({
 
 vi.mock("@/api/client", () => ({ api: mockApi }));
 vi.mock("@/composables/use-signalr-socket", () => ({
-  onGlobalEvent: (_topic: string, handler: (event: DomainEvent) => void) => {
+  onGlobalEvent: (_machine: unknown, _topic: string, handler: (event: DomainEvent) => void) => {
     handlers.add(handler);
     return () => handlers.delete(handler);
   },

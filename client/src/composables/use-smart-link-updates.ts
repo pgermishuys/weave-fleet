@@ -1,5 +1,6 @@
 import { onMounted, onUnmounted } from "vue"
 import { onGlobalEvent, onReconnect } from "@/composables/use-signalr-socket"
+import { liveTarget } from "@/lib/machine-target"
 import { useSmartLinksStore } from "@/stores/smart-links"
 import type { DomainEvent } from "@/lib/domain-events"
 import type { SmartLinkWire } from "@/lib/smart-links"
@@ -19,14 +20,14 @@ export function useSmartLinkUpdates(): void {
 
   onMounted(() => {
     void store.ensureHeaderLinksLoaded()
-    unsubscribe = onGlobalEvent("sessions", (event: DomainEvent) => {
+    unsubscribe = onGlobalEvent(liveTarget(), "sessions", (event: DomainEvent) => {
       if ((event.type as string) !== SMART_LINK_UPDATED) return
       const wire = event.payload as unknown as SmartLinkWire | undefined
       if (!wire?.id || !wire.sessionId) return
 
       store.applyPushed(wire)
     })
-    unsubscribeReconnect = onReconnect(() => {
+    unsubscribeReconnect = onReconnect(liveTarget(), () => {
       void store.reloadHeaderLinks()
     })
   })

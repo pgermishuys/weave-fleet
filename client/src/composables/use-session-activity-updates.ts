@@ -1,5 +1,6 @@
 import { onMounted, onUnmounted } from "vue"
 import { onGlobalEvent } from "@/composables/use-signalr-socket"
+import { liveTarget } from "@/lib/machine-target"
 import { useSessionsStore } from "@/stores/sessions"
 import type { DomainEvent } from "@/lib/domain-events"
 import { toScheduledRetry } from "@/lib/turn-retry"
@@ -51,7 +52,7 @@ export function useSessionActivityUpdates(): void {
   let unsubscribe: (() => void) | null = null
 
   onMounted(() => {
-    unsubscribe = onGlobalEvent("sessions", (event: DomainEvent) => {
+    unsubscribe = onGlobalEvent(liveTarget(), "sessions", (event: DomainEvent) => {
       // When Fleet tries a turn a limit stopped again: the session's row says so.
       if (event.type === "session.retry") {
         sessionsStore.patchSession(event.payload.sessionId, { scheduledRetry: toScheduledRetry(event.payload.retry) })

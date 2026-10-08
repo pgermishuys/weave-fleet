@@ -12,7 +12,7 @@ const { handlers, forgetMock, updateMock, addMock } = vi.hoisted(() => ({
 }));
 
 vi.mock("@/composables/use-signalr-socket", () => ({
-  onGlobalEvent: (topic: string, handler: (event: { type: string; payload: unknown }) => void) => {
+  onGlobalEvent: (_machine: unknown, topic: string, handler: (event: { type: string; payload: unknown }) => void) => {
     if (topic === "sessions") handlers.push(handler);
     return () => handlers.splice(handlers.indexOf(handler), 1);
   },

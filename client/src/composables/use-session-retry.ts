@@ -24,8 +24,8 @@ export function scheduledRetryOf(sessionId: string): ScheduledRetry | null {
  * retry hands the session back to the user.
  */
 export function useSessionRetry(sessionId: string) {
-  const { api } = useMachineTarget();
-  const { subscribeV2 } = useWeaveSocket();
+  const machine = useMachineTarget();
+  const { subscribeV2 } = useWeaveSocket(machine);
   const error = shallowRef<string | undefined>(undefined);
   const busy = shallowRef(false);
   const retry = computed<ScheduledRetry | null>(() => retries[sessionId] ?? null);
@@ -34,7 +34,7 @@ export function useSessionRetry(sessionId: string) {
   async function load(): Promise<void> {
     const current = ++loadId;
     try {
-      const { data, response } = await api.GET("/api/sessions/{id}/retry", { params: { path: { id: sessionId } } });
+      const { data, response } = await machine.api.GET("/api/sessions/{id}/retry", { params: { path: { id: sessionId } } });
       if (current !== loadId || !response.ok) return;
       retries[sessionId] = response.status === 204 ? null : toScheduledRetry(data);
     } catch (loadError) {
@@ -57,7 +57,7 @@ export function useSessionRetry(sessionId: string) {
     },
   );
   void load();
-  const stopReconnect = onReconnect(() => void load());
+  const stopReconnect = onReconnect(machine, () => void load());
 
   onBeforeUnmount(() => {
     unsubscribe();
@@ -88,7 +88,7 @@ export function useSessionRetry(sessionId: string) {
   /** Sends "Continue where you left off." now rather than when the limit resets. */
   function sendNow(): Promise<boolean> {
     return act(
-      () => api.POST("/api/sessions/{id}/retry/send", { params: { path: { id: sessionId } } }),
+      () => machine.api.POST("/api/sessions/{id}/retry/send", { params: { path: { id: sessionId } } }),
       "Fleet couldn't try again now",
     );
   }
@@ -96,7 +96,7 @@ export function useSessionRetry(sessionId: string) {
   /** Fleet doesn't try again; what the user queued goes out now. */
   function cancel(): Promise<boolean> {
     return act(
-      () => api.DELETE("/api/sessions/{id}/retry", { params: { path: { id: sessionId } } }),
+      () => machine.api.DELETE("/api/sessions/{id}/retry", { params: { path: { id: sessionId } } }),
       "Fleet couldn't stop the retry",
     );
   }

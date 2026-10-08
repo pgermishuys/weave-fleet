@@ -15,7 +15,7 @@ describe("useSessionTokenUpdates", () => {
     setActivePinia(createPinia());
     handler = null;
     onGlobalEventMock.mockReset();
-    onGlobalEventMock.mockImplementation((_topic: string, callback: (event: DomainEvent) => void) => {
+    onGlobalEventMock.mockImplementation((_machine: unknown, _topic: string, callback: (event: DomainEvent) => void) => {
       handler = callback;
       return () => {};
     });

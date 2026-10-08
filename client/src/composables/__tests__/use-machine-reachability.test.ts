@@ -4,12 +4,13 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 const handlers: { disconnect?: () => void; reconnect?: () => void } = {};
 vi.mock("@/composables/use-weave-socket", () => ({
-  onDisconnect: (cb: () => void) => { handlers.disconnect = cb; return () => undefined; },
+  onDisconnect: (_machine: unknown, cb: () => void) => { handlers.disconnect = cb; return () => undefined; },
   onConnectionLost: () => () => undefined,
-  onReconnect: (cb: () => void) => { handlers.reconnect = cb; return () => undefined; },
+  onReconnect: (_machine: unknown, cb: () => void) => { handlers.reconnect = cb; return () => undefined; },
 }));
 const fetchOnMachine = vi.fn();
-vi.mock("@/lib/machines", () => ({ fetchOnMachine: (...args: unknown[]) => fetchOnMachine(...args), getActiveMachine: () => null }));
+vi.mock("@/lib/machines", () => ({ fetchOnMachine: (...args: unknown[]) => fetchOnMachine(...args) }));
+vi.mock("@/lib/machine-target", () => ({ useMachineTarget: () => ({ key: "home", connection: null, isLive: true, api: {} }) }));
 
 import { RETRY_STEPS, useMachineReachability } from "../phone/use-machine-reachability";
 

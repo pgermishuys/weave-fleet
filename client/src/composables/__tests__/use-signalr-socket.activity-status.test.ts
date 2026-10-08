@@ -1,8 +1,12 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest"
+import { liveTarget } from "@/lib/machine-target"
 import { HubConnectionState } from "@microsoft/signalr"
 import { createPinia, setActivePinia } from "pinia"
 import { flushAll, mountComposable } from "./test-utils"
 import type { SessionActionCapabilities } from "@/lib/types"
+
+/** Nothing in these tests makes another machine live, so the live machine is home. */
+const home = liveTarget()
 
 // Mock HubConnection
 const mockHubConnection = {
@@ -104,7 +108,7 @@ describe("activity_status event handling", () => {
   it("subscribes to global sessions topic on connect", async () => {
     const { useWeaveSocket } = await import("@/composables/use-signalr-socket")
 
-    await mountComposable(() => useWeaveSocket())
+    await mountComposable(() => useWeaveSocket(home))
     await flushAll()
 
     expect(mockHubConnection.invoke).toHaveBeenCalledWith("SubscribeToSessionsTopicAsync")
@@ -113,7 +117,7 @@ describe("activity_status event handling", () => {
   it("resubscribes to global sessions topic on reconnect", async () => {
     const { useWeaveSocket } = await import("@/composables/use-signalr-socket")
 
-    await mountComposable(() => useWeaveSocket())
+    await mountComposable(() => useWeaveSocket(home))
     await flushAll()
 
     mockHubConnection.invoke.mockClear()
@@ -128,11 +132,11 @@ describe("activity_status event handling", () => {
   it("dispatches activity_status event to global handlers", async () => {
     const { useWeaveSocket, onGlobalEvent } = await import("@/composables/use-signalr-socket")
 
-    await mountComposable(() => useWeaveSocket())
+    await mountComposable(() => useWeaveSocket(home))
     await flushAll()
 
     const handler = vi.fn()
-    onGlobalEvent("sessions", handler)
+    onGlobalEvent(home, "sessions", handler)
 
     // Simulate activity_status event from server (matching BuildActivityStatusPayloadAsync shape)
     const wireEvent = {
@@ -170,11 +174,11 @@ describe("activity_status event handling", () => {
   it("handles activity_status with busy status", async () => {
     const { useWeaveSocket, onGlobalEvent } = await import("@/composables/use-signalr-socket")
 
-    await mountComposable(() => useWeaveSocket())
+    await mountComposable(() => useWeaveSocket(home))
     await flushAll()
 
     const handler = vi.fn()
-    onGlobalEvent("sessions", handler)
+    onGlobalEvent(home, "sessions", handler)
 
     const wireEvent = {
       type: "activity_status",
@@ -211,11 +215,11 @@ describe("activity_status event handling", () => {
   it("handles activity_status with retry status and retry fields", async () => {
     const { useWeaveSocket, onGlobalEvent } = await import("@/composables/use-signalr-socket")
 
-    await mountComposable(() => useWeaveSocket())
+    await mountComposable(() => useWeaveSocket(home))
     await flushAll()
 
     const handler = vi.fn()
-    onGlobalEvent("sessions", handler)
+    onGlobalEvent(home, "sessions", handler)
 
     const wireEvent = {
       type: "activity_status",
@@ -258,13 +262,13 @@ describe("activity_status event handling", () => {
   it("allows multiple global event handlers for the same topic", async () => {
     const { useWeaveSocket, onGlobalEvent } = await import("@/composables/use-signalr-socket")
 
-    await mountComposable(() => useWeaveSocket())
+    await mountComposable(() => useWeaveSocket(home))
     await flushAll()
 
     const handler1 = vi.fn()
     const handler2 = vi.fn()
-    onGlobalEvent("sessions", handler1)
-    onGlobalEvent("sessions", handler2)
+    onGlobalEvent(home, "sessions", handler1)
+    onGlobalEvent(home, "sessions", handler2)
 
     const wireEvent = {
       type: "activity_status",
@@ -284,11 +288,11 @@ describe("activity_status event handling", () => {
   it("unsubscribes global event handler correctly", async () => {
     const { useWeaveSocket, onGlobalEvent } = await import("@/composables/use-signalr-socket")
 
-    await mountComposable(() => useWeaveSocket())
+    await mountComposable(() => useWeaveSocket(home))
     await flushAll()
 
     const handler = vi.fn()
-    const unsubscribe = onGlobalEvent("sessions", handler)
+    const unsubscribe = onGlobalEvent(home, "sessions", handler)
 
     unsubscribe()
 
@@ -322,7 +326,7 @@ describe("activity_status event handling", () => {
 
     mockHubConnection.invoke.mockResolvedValueOnce(snapshot)
 
-    const { result } = await mountComposable(() => useWeaveSocket())
+    const { result } = await mountComposable(() => useWeaveSocket(home))
 
     const sessionEventHandler = vi.fn()
     result.subscribeV2("session:test-session", vi.fn(), sessionEventHandler)
@@ -374,7 +378,7 @@ describe("activity_status sessionStatus mapping", () => {
     const { useSessionsStore } = await import("@/stores/sessions")
 
     await mountComposable(() => {
-      useWeaveSocket()
+      useWeaveSocket(home)
       useSessionActivityUpdates()
     })
     await flushAll()
@@ -430,7 +434,7 @@ describe("activity_status sessionStatus mapping", () => {
     const { useSessionsStore } = await import("@/stores/sessions")
 
     await mountComposable(() => {
-      useWeaveSocket()
+      useWeaveSocket(home)
       useSessionActivityUpdates()
     })
     await flushAll()
@@ -486,7 +490,7 @@ describe("activity_status sessionStatus mapping", () => {
     const { useSessionsStore } = await import("@/stores/sessions")
 
     await mountComposable(() => {
-      useWeaveSocket()
+      useWeaveSocket(home)
       useSessionActivityUpdates()
     })
     await flushAll()
@@ -542,7 +546,7 @@ describe("activity_status sessionStatus mapping", () => {
     const { useSessionsStore } = await import("@/stores/sessions")
 
     await mountComposable(() => {
-      useWeaveSocket()
+      useWeaveSocket(home)
       useSessionActivityUpdates()
     })
     await flushAll()
@@ -598,7 +602,7 @@ describe("activity_status sessionStatus mapping", () => {
     const { useSessionsStore } = await import("@/stores/sessions")
 
     await mountComposable(() => {
-      useWeaveSocket()
+      useWeaveSocket(home)
       useSessionActivityUpdates()
     })
     await flushAll()
@@ -669,7 +673,7 @@ describe("activity_status sessionStatus mapping", () => {
     const { useSessionsStore } = await import("@/stores/sessions")
 
     await mountComposable(() => {
-      useWeaveSocket()
+      useWeaveSocket(home)
       useSessionActivityUpdates()
     })
     await flushAll()
@@ -725,7 +729,7 @@ describe("activity_status sessionStatus mapping", () => {
     const { useSessionsStore } = await import("@/stores/sessions")
 
     await mountComposable(() => {
-      useWeaveSocket()
+      useWeaveSocket(home)
       useSessionActivityUpdates()
     })
     await flushAll()
@@ -781,7 +785,7 @@ describe("activity_status sessionStatus mapping", () => {
     const { useSessionsStore } = await import("@/stores/sessions")
 
     await mountComposable(() => {
-      useWeaveSocket()
+      useWeaveSocket(home)
       useSessionActivityUpdates()
     })
     await flushAll()
@@ -837,7 +841,7 @@ describe("activity_status sessionStatus mapping", () => {
     const { useSessionsStore } = await import("@/stores/sessions")
 
     await mountComposable(() => {
-      useWeaveSocket()
+      useWeaveSocket(home)
       useSessionActivityUpdates()
     })
     await flushAll()

@@ -21,9 +21,13 @@
  */
 
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest"
+import { liveTarget } from "@/lib/machine-target"
 import { HubConnectionState } from "@microsoft/signalr"
 import type { SessionSnapshot } from "@/lib/session-snapshot"
 import { flushAll, mountComposable } from "./test-utils"
+
+/** Nothing in these tests makes another machine live, so the live machine is home. */
+const home = liveTarget()
 
 // Mock HubConnection
 const mockHubConnection = {
@@ -166,7 +170,7 @@ describe("useSignalRSocket V2 — desired behavior after rapid session switching
       return Promise.resolve()
     })
 
-    const { result } = await mountComposable(() => useWeaveSocket())
+    const { result } = await mountComposable(() => useWeaveSocket(home))
 
     // T0: Subscribe to session-1
     const onSnapshot_A = vi.fn()
@@ -211,7 +215,7 @@ describe("useSignalRSocket V2 — desired behavior after rapid session switching
       return Promise.resolve(createSessionSnapshot(sessionId, "snap"))
     })
 
-    const { result } = await mountComposable(() => useWeaveSocket())
+    const { result } = await mountComposable(() => useWeaveSocket(home))
 
     // Subscribe to session-1
     const unsub = result.subscribeV2("session-1", vi.fn(), vi.fn())
@@ -251,7 +255,7 @@ describe("useSignalRSocket V2 — desired behavior after rapid session switching
       return Promise.resolve()
     })
 
-    const { result } = await mountComposable(() => useWeaveSocket())
+    const { result } = await mountComposable(() => useWeaveSocket(home))
 
     // Subscribe to session-1
     const onSnapshot_A = vi.fn()
@@ -325,7 +329,7 @@ describe("useSignalRSocket V2 — desired behavior after rapid session switching
       return Promise.resolve()
     })
 
-    const { result } = await mountComposable(() => useWeaveSocket())
+    const { result } = await mountComposable(() => useWeaveSocket(home))
 
     // S1 initial subscribe
     const unsub1 = result.subscribeV2("session-1", vi.fn(), vi.fn())
@@ -371,7 +375,7 @@ describe("useSignalRSocket V2 — desired behavior after rapid session switching
 
     mockHubConnection.invoke.mockResolvedValue(createSessionSnapshot("session-1", "snap"))
 
-    const { result } = await mountComposable(() => useWeaveSocket())
+    const { result } = await mountComposable(() => useWeaveSocket(home))
 
     const onEvent_old = vi.fn()
     const unsub = result.subscribeV2("session-1", vi.fn(), onEvent_old)

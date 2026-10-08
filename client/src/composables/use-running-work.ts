@@ -12,7 +12,7 @@ import {
   type Ref,
 } from "vue";
 import { api } from "@/api/client";
-import { useMachineTarget, type MachineTarget } from "@/lib/machine-target";
+import { liveTarget, useMachineTarget, type MachineTarget } from "@/lib/machine-target";
 import { onGlobalEvent, onReconnect } from "@/composables/use-signalr-socket";
 import { isWorkEvent } from "@/lib/domain-events";
 import {
@@ -88,11 +88,11 @@ function applyToAcross(item: RunningWorkItem): void {
   else runningAcross.delete(item.id);
 }
 
-/** One listener for the whole app: every `work.*` event on `sessions` updates both views. */
+/** One listener for the whole app: every `work.*` event on the live machine's `sessions` updates both views. */
 function ensureGlobalListener(): void {
   if (globalListenerInstalled) return;
   globalListenerInstalled = true;
-  onGlobalEvent("sessions", (event) => {
+  onGlobalEvent(liveTarget(), "sessions", (event) => {
     if (!isWorkEvent(event)) return;
     const item = toRunningWorkItem(event.payload);
     if (!item) return;
@@ -300,7 +300,7 @@ export function useRunningWork(sessionId: MaybeRefOrGetter<string | null | undef
     if (target && !workBySession[target]) void refresh();
   }, { immediate: true });
 
-  const stopReconnect = onReconnect(() => void refresh());
+  const stopReconnect = onReconnect(machine, () => void refresh());
   if (getCurrentInstance()) onBeforeUnmount(stopReconnect);
 
   const items = computed<readonly RunningWorkItem[]>(() => workBySession[id.value] ?? []);
@@ -360,7 +360,7 @@ async function loadAcross(): Promise<void> {
 export function useRunningWorkAcrossSessions(): UseRunningWorkAcrossSessionsResult {
   ensureGlobalListener();
   void loadAcross();
-  const stopReconnect = onReconnect(() => void loadAcross());
+  const stopReconnect = onReconnect(liveTarget(), () => void loadAcross());
   if (getCurrentInstance()) onBeforeUnmount(stopReconnect);
 
   const running = computed<readonly RunningWorkItem[]>(() =>

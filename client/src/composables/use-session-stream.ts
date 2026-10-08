@@ -24,6 +24,7 @@ import { reuseUnchangedMessages } from "@/lib/reuse-unchanged-messages"
 import type { SessionHistoryPage } from "@/lib/session-snapshot"
 import { loadSessionHistory, useWeaveSocket, type Unsubscribe } from "@/composables/use-weave-socket"
 import { onGlobalEvent } from "@/composables/use-signalr-socket"
+import { useMachineTarget, type MachineTarget } from "@/lib/machine-target"
 import { publishRunningWork } from "@/composables/use-running-work"
 import { publishSessionContext } from "@/composables/use-session-context"
 import type { RunningWorkItem } from "@/lib/running-work"
@@ -58,11 +59,16 @@ interface KeptStream {
 }
 
 const KEPT_SESSIONS = 8
+/** By machine and session (`keptKey`). */
 const keptStreams = new Map<string, KeptStream>()
 
-function keepStream(sessionId: string, kept: KeptStream): void {
-  keptStreams.delete(sessionId)
-  keptStreams.set(sessionId, kept)
+function keptKey(machine: MachineTarget, sessionId: string): string {
+  return `${machine.key}/${sessionId}`
+}
+
+function keepStream(key: string, kept: KeptStream): void {
+  keptStreams.delete(key)
+  keptStreams.set(key, kept)
   for (const oldest of keptStreams.keys()) {
     if (keptStreams.size <= KEPT_SESSIONS) {
       break
@@ -122,7 +128,8 @@ export function useSessionStream(
   sessionId: MaybeRefOrGetter<string>,
   enabled: MaybeRefOrGetter<boolean> = true,
 ): UseSessionStreamResult {
-  const { subscribeV2 } = useWeaveSocket()
+  const machine = useMachineTarget()
+  const { subscribeV2 } = useWeaveSocket(machine)
   const sessionsStore = useSessionsStore()
   const currentSessionId = computed(() => toValue(sessionId))
   const isEnabled = computed(() => toValue(enabled))
@@ -175,7 +182,7 @@ export function useSessionStream(
   /** Keeps the state of the session being left, if it came from a snapshot. */
   function keepCurrentStream(): void {
     if (snapshotSessionId && !isLoading.value && streamState.value.messages.length > 0) {
-      keepStream(snapshotSessionId, {
+      keepStream(keptKey(machine, snapshotSessionId), {
         state: streamState.value,
         hasMore: hasMore.value,
         cursor: cursor.value,
@@ -187,7 +194,7 @@ export function useSessionStream(
 
   /** Shows the session's kept state while its snapshot loads, with the status the session list has now. */
   function showKeptStream(activeSessionId: string): void {
-    const kept = keptStreams.get(activeSessionId)
+    const kept = keptStreams.get(keptKey(machine, activeSessionId))
     if (!kept) {
       return
     }
@@ -294,7 +301,7 @@ export function useSessionStream(
     }
 
     isLoadingOlder.value = true
-    void loadSessionHistory(activeSessionId, requestedCursor).then((page) => {
+    void loadSessionHistory(machine, activeSessionId, requestedCursor).then((page) => {
       // Leaving the session already reset the stream.
       if (currentSessionId.value !== activeSessionId) {
         return
@@ -383,7 +390,7 @@ export function useSessionStream(
 
       // A sub-agent's status comes on the sessions topic like every session's. The reducer keeps its
       // delegations' own and leaves every other session's alone.
-      unsubscribeActivity = onGlobalEvent("sessions", (event) => {
+      unsubscribeActivity = onGlobalEvent(machine, "sessions", (event) => {
         if (event.type !== "activity_status") {
           return
         }

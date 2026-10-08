@@ -27,7 +27,7 @@ vi.mock("@/lib/api-client", () => ({
 
 const { globalHandlers } = vi.hoisted(() => ({ globalHandlers: new Set<(event: unknown) => void>() }));
 vi.mock("@/composables/use-signalr-socket", () => ({
-  onGlobalEvent: (_topic: string, handler: (event: unknown) => void) => {
+  onGlobalEvent: (_machine: unknown, _topic: string, handler: (event: unknown) => void) => {
     globalHandlers.add(handler);
     return () => globalHandlers.delete(handler);
   },

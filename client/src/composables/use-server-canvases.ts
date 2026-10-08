@@ -76,7 +76,7 @@ export function useServerCanvases(sessionId: MaybeRefOrGetter<string | null | un
       if (canvas.browser?.appId === event.payload.appId) store.markUpdated(canvas.id);
     }
   }
-  const { subscribeV2 } = useWeaveSocket();
+  const { subscribeV2 } = useWeaveSocket(machine);
 
   // Events that arrive while a list is loading are replayed on top of it,
   // because the list may have been read before them.
@@ -131,7 +131,7 @@ export function useServerCanvases(sessionId: MaybeRefOrGetter<string | null | un
     { immediate: true },
   );
 
-  const stopReconnect = onReconnect(() => {
+  const stopReconnect = onReconnect(machine, () => {
     const id = toValue(sessionId);
     if (id) void load(id);
   });

@@ -2,6 +2,7 @@ import { computed, reactive, readonly, toValue, type MaybeRefOrGetter } from "vu
 import { api } from "@/api/client";
 import { onGlobalEvent } from "@/composables/use-signalr-socket";
 import { onReconnect } from "@/composables/use-weave-socket";
+import { liveTarget } from "@/lib/machine-target";
 import type { DomainEvent } from "@/lib/domain-events";
 import { HARNESS_USAGE_EVENT, toHarnessUsage, type HarnessUsage } from "@/lib/usage-limits";
 
@@ -29,7 +30,7 @@ async function load(): Promise<void> {
 function start(): void {
   if (started) return;
   started = true;
-  onGlobalEvent("sessions", (event: DomainEvent) => {
+  onGlobalEvent(liveTarget(), "sessions", (event: DomainEvent) => {
     if ((event.type as string) !== HARNESS_USAGE_EVENT) return;
     const usage = toHarnessUsage(event.payload);
     if (!usage) return;
@@ -37,7 +38,7 @@ function start(): void {
     loadId += 1;
     usageByHarness[usage.harnessType] = usage;
   });
-  onReconnect(() => void load());
+  onReconnect(liveTarget(), () => void load());
   void load();
 }
 

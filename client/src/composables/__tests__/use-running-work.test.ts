@@ -12,11 +12,11 @@ const { apiGet, apiPost, globalHandlers, reconnectHandlers } = vi.hoisted(() => 
 
 vi.mock("@/api/client", () => ({ api: { GET: apiGet, POST: apiPost } }));
 vi.mock("@/composables/use-signalr-socket", () => ({
-  onGlobalEvent: (_topic: string, handler: (event: DomainEvent) => void) => {
+  onGlobalEvent: (_machine: unknown, _topic: string, handler: (event: DomainEvent) => void) => {
     globalHandlers.push(handler);
     return () => undefined;
   },
-  onReconnect: (handler: () => void) => {
+  onReconnect: (_machine: unknown, handler: () => void) => {
     reconnectHandlers.push(handler);
     return () => undefined;
   },

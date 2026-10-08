@@ -5,6 +5,7 @@ import { storeToRefs } from "pinia";
 import { Check, Download, FileText, Image as ImageIcon, LoaderCircle, ShieldCheck, TriangleAlert, X } from "lucide-vue-next";
 import { Dialog, DialogContent, DialogDescription, DialogTitle } from "@/components/ui/dialog";
 import { describeSocketForReport } from "@/composables/use-signalr-socket";
+import { liveTarget } from "@/lib/machine-target";
 import { getDesktopBridge } from "@/lib/desktop";
 import { sessionRowStatus } from "@/lib/session-row-status";
 import {
@@ -97,7 +98,7 @@ function close(): void {
 }
 
 function connectionFacts(): ReportFact[] {
-  const socket = describeSocketForReport();
+  const socket = describeSocketForReport(liveTarget());
   const facts: ReportFact[] = [
     { name: "Live updates", value: `${socket.state}${socket.retrying > 0 ? ` · reconnect attempt ${socket.retrying}` : ""}` },
     { name: "Subscribed", value: `${socket.topics} topic${socket.topics === 1 ? "" : "s"}, ${socket.withSnapshot} with a snapshot` },

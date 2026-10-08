@@ -62,8 +62,8 @@ function errorMessage(body: unknown, fallback: string): string {
  * every open client shows the same queue. Loaded when the session opens and again after a reconnect.
  */
 export function useSessionQueue(sessionId: string) {
-  const { api } = useMachineTarget();
-  const { subscribeV2 } = useWeaveSocket();
+  const machine = useMachineTarget();
+  const { subscribeV2 } = useWeaveSocket(machine);
   const error = shallowRef<string | undefined>(undefined);
   const queue = computed<readonly QueuedMessage[]>(() => queues[sessionId] ?? []);
   let loadId = 0;
@@ -71,7 +71,7 @@ export function useSessionQueue(sessionId: string) {
   async function load(): Promise<void> {
     const current = ++loadId;
     try {
-      const { data, response } = await api.GET("/api/sessions/{id}/queue", { params: { path: { id: sessionId } } });
+      const { data, response } = await machine.api.GET("/api/sessions/{id}/queue", { params: { path: { id: sessionId } } });
       if (current !== loadId || !response.ok) return;
       queues[sessionId] = toQueue(data);
     } catch (loadError) {
@@ -94,7 +94,7 @@ export function useSessionQueue(sessionId: string) {
     },
   );
   void load();
-  const stopReconnect = onReconnect(() => void load());
+  const stopReconnect = onReconnect(machine, () => void load());
 
   onBeforeUnmount(() => {
     unsubscribe();
@@ -105,7 +105,7 @@ export function useSessionQueue(sessionId: string) {
   async function enqueue(text: string, options: QueueOptions): Promise<boolean> {
     error.value = undefined;
     try {
-      const { data, error: body, response } = await api.POST("/api/sessions/{id}/queue", {
+      const { data, error: body, response } = await machine.api.POST("/api/sessions/{id}/queue", {
         params: { path: { id: sessionId } },
         body: {
           text,
@@ -139,7 +139,7 @@ export function useSessionQueue(sessionId: string) {
   async function remove(itemId: string): Promise<void> {
     queues[sessionId] = (queues[sessionId] ?? []).filter((item) => item.id !== itemId);
     try {
-      const { response } = await api.DELETE("/api/sessions/{id}/queue/{itemId}", { params: { path: { id: sessionId, itemId } } });
+      const { response } = await machine.api.DELETE("/api/sessions/{id}/queue/{itemId}", { params: { path: { id: sessionId, itemId } } });
       if (!response.ok && response.status !== 404) await load();
     } catch {
       await load();
@@ -150,7 +150,7 @@ export function useSessionQueue(sessionId: string) {
   async function sendNow(itemId: string): Promise<boolean> {
     error.value = undefined;
     try {
-      const { error: body, response } = await api.POST("/api/sessions/{id}/queue/{itemId}/send", {
+      const { error: body, response } = await machine.api.POST("/api/sessions/{id}/queue/{itemId}/send", {
         params: { path: { id: sessionId, itemId } },
       });
       if (!response.ok) {
