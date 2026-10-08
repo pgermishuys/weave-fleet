@@ -526,6 +526,7 @@ defineExpose({ focusMessage });
           :others="machines.others"
           :live-reachable="machines.liveReachable"
           :disabled="busy"
+          heading="Runs on"
           @update:selected="pickMachine"
           @add-machine="addMachine"
           @close-auto-focus="returnFocusToMessage"

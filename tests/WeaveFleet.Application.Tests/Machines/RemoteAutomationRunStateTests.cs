@@ -133,7 +133,9 @@ public sealed class RemoteAutomationRunStateTests : IDisposable
 
         automation.TargetMachineId = FakeMachine.Id;
         _executor.Outcome = StartedOnAtlas();
+        _atlas.Time.Advance(TimeSpan.FromDays(1));
         await _sut.RunAsync(automation, new AutomationRunTrigger("schedule"));
+        _atlas.Time.Advance(TimeSpan.FromDays(1));
         await _sut.RunAsync(automation, new AutomationRunTrigger("schedule"));
 
         _executor.PreviousSessionIds.ShouldBe([null, null, "atlas-session"]);

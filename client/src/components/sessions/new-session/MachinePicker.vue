@@ -19,6 +19,8 @@ const props = defineProps<{
   /** Whether the live machine answers. */
   liveReachable: boolean;
   disabled?: boolean;
+  /** The menu's heading: "Start on" for a session, "Runs on" for an automation. */
+  heading?: string;
 }>();
 
 const emit = defineEmits<{
@@ -92,7 +94,7 @@ const selectedName = computed(() =>
       @close-auto-focus="emit('closeAutoFocus', $event)"
     >
       <div class="ns-pop__label">
-        Start on
+        {{ heading ?? "Start on" }}
       </div>
       <DropdownMenuItem
         v-for="row in rows"

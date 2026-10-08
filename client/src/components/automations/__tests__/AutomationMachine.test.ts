@@ -161,6 +161,7 @@ describe("An automation that runs on another machine", () => {
   async function pickMachine(key: string): Promise<void> {
     await wrapper.find("[data-testid='new-session-machine']").trigger("click");
     await flushPromises();
+    expect(document.querySelector(".ns-pop__label")?.textContent?.trim()).toBe("Runs on");
     document.querySelector<HTMLElement>(`[data-testid='new-session-machine-${key}']`)!.click();
     await flushPromises();
   }
