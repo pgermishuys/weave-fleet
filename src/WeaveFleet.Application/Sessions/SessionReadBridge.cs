@@ -51,45 +51,55 @@ public sealed class SessionReadBridge(
 
         using (userScope.Begin(caller.UserId))
         {
-            var session = await sessions.GetByIdAsync(sessionId.Trim()).ConfigureAwait(false);
-            if (session is null)
-            {
-                return CanvasResult.Fail<CanvasToolOutput>(
+            var page = await ReadPageAsync(sessionId, before, limit, ct).ConfigureAwait(false);
+            return page is null
+                ? CanvasResult.Fail<CanvasToolOutput>(
                     CanvasErrorKind.NotFound,
-                    $"No session {sessionId}. Use the id of a session in a <fleet-session-references> block.");
-            }
-
-            var cursor = string.IsNullOrWhiteSpace(before) ? null : before.Trim();
-            var page = await messages.GetMessagesAsync(session.Id, limit ?? DefaultLimit, cursor, ct).ConfigureAwait(false);
-
-            var output = new StringBuilder();
-            var harness = harnessRegistry.GetByType(session.HarnessType)?.DisplayName ?? session.HarnessType;
-            var status = string.Equals(session.RetentionStatus, "archived", StringComparison.Ordinal)
-                ? "archived"
-                : activityTracker.GetEffectiveActivityStatus(session.Id) ?? session.ActivityStatus ?? "idle";
-            output.Append("Session \"").Append(session.Title).Append("\" (").Append(session.Id).Append(") · ")
-                .Append(harness).Append(" · ").Append(status).Append(" · ").Append(session.Directory).Append('\n');
-
-            if (page.Messages.Count == 0)
-            {
-                output.Append(cursor is null ? "It has no messages yet." : "There are no messages before that one.");
-                return CanvasResult.Ok(new CanvasToolOutput($"Read {session.Title}", output.ToString()));
-            }
-
-            output.Append(cursor is null ? "Its latest " : "The ").Append(page.Messages.Count)
-                .Append(page.Messages.Count == 1 ? " message" : " messages")
-                .Append(cursor is null ? "" : " before that")
-                .Append(", oldest first.");
-            var next = page.HasMore ? page.Cursor ?? page.Messages[0].Id : null;
-            output.Append(next is null
-                ? " That's the start of the session.\n"
-                : $" For older ones, call again with before \"{next}\".\n");
-
-            foreach (var message in page.Messages)
-                AppendMessage(output, message);
-
-            return CanvasResult.Ok(new CanvasToolOutput($"Read {session.Title}", output.ToString().TrimEnd()));
+                    $"No session {sessionId}. Use the id of a session in a <fleet-session-references> block.")
+                : CanvasResult.Ok(page);
         }
+    }
+
+    /// <summary>
+    /// One page of <paramref name="sessionId"/>'s conversation as the tool shows it, for the current user; null when
+    /// they have no such session. Another machine's Fleet reads it here for its own agent's <c>fleet_session_read</c>.
+    /// </summary>
+    public async Task<CanvasToolOutput?> ReadPageAsync(string sessionId, string? before, int? limit, CancellationToken ct = default)
+    {
+        var session = await sessions.GetByIdAsync(sessionId.Trim()).ConfigureAwait(false);
+        if (session is null)
+            return null;
+
+        var cursor = string.IsNullOrWhiteSpace(before) ? null : before.Trim();
+        var page = await messages.GetMessagesAsync(session.Id, limit ?? DefaultLimit, cursor, ct).ConfigureAwait(false);
+
+        var output = new StringBuilder();
+        var harness = harnessRegistry.GetByType(session.HarnessType)?.DisplayName ?? session.HarnessType;
+        var status = string.Equals(session.RetentionStatus, "archived", StringComparison.Ordinal)
+            ? "archived"
+            : activityTracker.GetEffectiveActivityStatus(session.Id) ?? session.ActivityStatus ?? "idle";
+        output.Append("Session \"").Append(session.Title).Append("\" (").Append(session.Id).Append(") · ")
+            .Append(harness).Append(" · ").Append(status).Append(" · ").Append(session.Directory).Append('\n');
+
+        if (page.Messages.Count == 0)
+        {
+            output.Append(cursor is null ? "It has no messages yet." : "There are no messages before that one.");
+            return new CanvasToolOutput($"Read {session.Title}", output.ToString());
+        }
+
+        output.Append(cursor is null ? "Its latest " : "The ").Append(page.Messages.Count)
+            .Append(page.Messages.Count == 1 ? " message" : " messages")
+            .Append(cursor is null ? "" : " before that")
+            .Append(", oldest first.");
+        var next = page.HasMore ? page.Cursor ?? page.Messages[0].Id : null;
+        output.Append(next is null
+            ? " That's the start of the session.\n"
+            : $" For older ones, call again with before \"{next}\".\n");
+
+        foreach (var message in page.Messages)
+            AppendMessage(output, message);
+
+        return new CanvasToolOutput($"Read {session.Title}", output.ToString().TrimEnd());
     }
 
     private static void AppendMessage(StringBuilder output, HarnessMessage message)

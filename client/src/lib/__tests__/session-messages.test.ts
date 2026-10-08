@@ -20,6 +20,15 @@ describe("parsePeerMessage", () => {
     });
   });
 
+  it("names the sender's machine when it's on another one", () => {
+    const body = '<fleet-session-message from="ses_1" title="Fix login flake" machine="m-atlas" machine-name="atlas &amp; co">\nCheck the installer.\n</fleet-session-message>';
+
+    expect(parsePeerMessage(body)).toEqual({
+      peer: { sessionId: "ses_1", title: "Fix login flake", machineId: "m-atlas", machineName: "atlas & co" },
+      text: "Check the installer.",
+    });
+  });
+
   it("ignores a prompt that only mentions the tag", () => {
     expect(parsePeerMessage("Why does <fleet-session-message> show up here?")).toBeNull();
     expect(parsePeerMessage('Look: <fleet-session-message from="a" title="b">\nx\n</fleet-session-message>')).toBeNull();

@@ -2,7 +2,9 @@ using System.Net;
 using System.Text.Json;
 using WeaveFleet.Application.Canvases;
 using WeaveFleet.Application.Configuration;
+using WeaveFleet.Application.DTOs;
 using WeaveFleet.Application.Services;
+using WeaveFleet.Domain.Common;
 using WeaveFleet.Domain.Events;
 using WeaveFleet.Domain.Repositories;
 
@@ -35,10 +37,16 @@ public static class SessionMessages
 
     /// <summary>
     /// The prompt text a message arrives as: the sender's id and title in the opening tag, then the text. The tag
-    /// travels in the text itself, so it survives a reload of the conversation from the harness's store.
+    /// travels in the text itself, so it survives a reload of the conversation from the harness's store. A sender on
+    /// another machine adds that machine's id and name.
     /// </summary>
-    public static string Wrap(string fromSessionId, string fromTitle, string text)
-        => $"<{Tag} from=\"{WebUtility.HtmlEncode(fromSessionId)}\" title=\"{WebUtility.HtmlEncode(fromTitle)}\">\n{text}\n</{Tag}>";
+    public static string Wrap(string fromSessionId, string fromTitle, string text, SessionMessageMachine? fromMachine = null)
+    {
+        var machine = fromMachine is null
+            ? ""
+            : $" machine=\"{WebUtility.HtmlEncode(fromMachine.Id)}\" machine-name=\"{WebUtility.HtmlEncode(fromMachine.Name)}\"";
+        return $"<{Tag} from=\"{WebUtility.HtmlEncode(fromSessionId)}\" title=\"{WebUtility.HtmlEncode(fromTitle)}\"{machine}>\n{text}\n</{Tag}>";
+    }
 
     /// <summary>
     /// The prompt text an update arrives as, when a session this one messaged is done: which session, how its turn
@@ -70,6 +78,56 @@ public interface IHarnessBridgeTokens
     bool IsKnown(string bridgeToken);
 }
 
+/// <summary>The machine a message's sender is on, when that isn't the machine it arrives at.</summary>
+public sealed record SessionMessageMachine(string Id, string Name);
+
+/// <summary>
+/// Hands one session's message to another: the prompt, wrapped to say who sent it (<see cref="SessionMessages.Wrap"/>),
+/// and <c>session.messaged</c> on the receiver's topic. The sender is whoever the caller says; each caller has
+/// checked it first: the bridge from the calling process, a peer request from the machine token it came with.
+/// </summary>
+public sealed class SessionMessageDelivery(SessionOrchestrator orchestrator, IEventBroadcaster broadcaster)
+{
+    public async Task<Result<PromptSessionResult>> DeliverAsync(
+        string fromSessionId,
+        string fromTitle,
+        SessionMessageMachine? fromMachine,
+        string toSessionId,
+        string text,
+        string userId,
+        CancellationToken ct)
+    {
+        var sent = await orchestrator.PromptSessionWithReceiptAsync(
+                toSessionId,
+                SessionMessages.Wrap(fromSessionId, fromTitle, text.Trim(), fromMachine),
+                options: null,
+                userMessageId: null,
+                correlationId: null,
+                ct)
+            .ConfigureAwait(false);
+        if (sent.IsFailure)
+            return sent;
+
+        var payload = new SessionMessagedPayload
+        {
+            FromSessionId = fromSessionId,
+            FromMachineId = fromMachine?.Id,
+            ToSessionId = toSessionId,
+            EventId = sent.Value.EventId,
+            CorrelationId = sent.Value.CorrelationId,
+        };
+        await broadcaster.BroadcastAsync(
+                $"session:{toSessionId}",
+                "session.messaged",
+                JsonSerializer.SerializeToElement(payload, ApplicationJsonContext.Default.SessionMessagedPayload),
+                new SessionMessaged { Payload = payload },
+                userId,
+                ct)
+            .ConfigureAwait(false);
+        return sent;
+    }
+}
+
 /// <summary>
 /// The <c>fleet_message</c> tool, for calls from a harness process. The sender is the session the call resolves to
 /// through <see cref="IHarnessCanvasCallerResolver"/>, the same way the canvas tools find theirs.
@@ -79,8 +137,7 @@ public sealed class SessionMessageBridge(
     IBackgroundUserScope userScope,
     SessionMessagesFeature feature,
     SessionService sessions,
-    SessionOrchestrator orchestrator,
-    IEventBroadcaster broadcaster,
+    SessionMessageDelivery delivery,
     SessionUpdates updates)
 {
     public const string TurnedOffMessage = "Messages between sessions are turned off in Fleet's Settings.";
@@ -128,35 +185,13 @@ public sealed class SessionMessageBridge(
                     CanvasErrorKind.NotFound,
                     $"No session {toSessionId}. Find session ids with GET $FLEET_URL/api/sessions.");
 
-            var sent = await orchestrator.PromptSessionWithReceiptAsync(
-                    toSessionId,
-                    SessionMessages.Wrap(caller.FleetSessionId, from.Value.Title, text.Trim()),
-                    options: null,
-                    userMessageId: null,
-                    correlationId: null,
-                    ct)
+            var sent = await delivery.DeliverAsync(caller.FleetSessionId, from.Value.Title, fromMachine: null, toSessionId, text, caller.UserId, ct)
                 .ConfigureAwait(false);
             if (sent.IsFailure)
                 return CanvasResult.Fail<CanvasToolOutput>(CanvasErrorKind.Refused, $"Fleet couldn't deliver it: {sent.Error.Description}");
 
             if (notifyWhenDone && sent.Value.MessageId is { } messageId)
                 updates.Watch(new SessionUpdateWatch(caller.FleetSessionId, toSessionId, caller.UserId, messageId));
-
-            var payload = new SessionMessagedPayload
-            {
-                FromSessionId = caller.FleetSessionId,
-                ToSessionId = toSessionId,
-                EventId = sent.Value.EventId,
-                CorrelationId = sent.Value.CorrelationId,
-            };
-            await broadcaster.BroadcastAsync(
-                    $"session:{toSessionId}",
-                    "session.messaged",
-                    JsonSerializer.SerializeToElement(payload, ApplicationJsonContext.Default.SessionMessagedPayload),
-                    new SessionMessaged { Payload = payload },
-                    caller.UserId,
-                    ct)
-                .ConfigureAwait(false);
 
             var title = to.Value.Title;
             return CanvasResult.Ok(new CanvasToolOutput(
