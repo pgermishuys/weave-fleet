@@ -1,0 +1,1232 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Fleet nodes: one interface, many machines</title>
+<style>
+  /* Tokens copied from client/src/assets/main.css (dark). */
+  :root {
+    --rail-bg: #0d0d10;
+    --panel-bg: #141418;
+    --card-bg: #1b1b20;
+    --main-bg: #0d0d10;
+    --border: rgba(255, 255, 255, 0.075);
+    --border-strong: rgba(255, 255, 255, 0.14);
+    --text: #e8e8ec;
+    --muted: #8e8e9a;
+    --coral: #D95A3A;
+    --accent: #6366f1;
+    --accent-dim: rgba(99, 102, 241, 0.15);
+    --running: #22c55e;
+    --idle: #f59e0b;
+    --complete: #3b82f6;
+    --error: #ef4444;
+    --queued: #8b5cf6;
+    --radius-btn: 8px;
+    --radius-card: 10px;
+    --radius-panel: 12px;
+    --transition: 150ms ease-out;
+    --menu-shadow: 0 16px 40px -12px rgba(0, 0, 0, 0.55), 0 2px 6px rgba(0, 0, 0, 0.25);
+    --font-sans: "Inter Variable", "Inter", system-ui, -apple-system, sans-serif;
+    --font-mono: "JetBrains Mono Variable", "JetBrains Mono", ui-monospace, monospace;
+  }
+  * { box-sizing: border-box; }
+  [hidden] { display: none !important; }
+  html { scroll-behavior: smooth; }
+  body { margin: 0; background: var(--main-bg); color: var(--text); font-family: var(--font-sans); font-size: 13px; line-height: 1.5; }
+  .page { max-width: 1180px; margin: 0 auto; padding: 0 20px 64px; }
+  code, .mono { font-family: var(--font-mono); }
+  code { font-size: 11.5px; background: color-mix(in srgb, var(--text) 7%, transparent); padding: 0 4px; border-radius: 4px; }
+  b { font-weight: 650; }
+  .muted { color: var(--muted); }
+
+  /* Step nav */
+  .nav {
+    position: sticky; top: 0; z-index: 20; background: color-mix(in srgb, var(--main-bg) 92%, transparent);
+    backdrop-filter: blur(8px); border-bottom: 1px solid var(--border); margin: 0 -20px 0; padding: 10px 20px;
+    display: flex; gap: 6px; flex-wrap: wrap; align-items: center;
+  }
+  .nav .brand { font-weight: 650; margin-right: 10px; }
+  .nav a {
+    color: var(--muted); text-decoration: none; border: 1px solid var(--border); border-radius: 999px; padding: 4px 11px; font-size: 12px;
+  }
+  .nav a:hover { color: var(--text); }
+  .nav a .n { font-family: var(--font-mono); color: var(--coral); margin-right: 5px; font-weight: 600; }
+
+  header.hero { padding: 34px 0 6px; }
+  h1 { font-size: 24px; margin: 0 0 8px; font-weight: 680; letter-spacing: -0.01em; }
+  .lede { color: color-mix(in srgb, var(--text) 78%, transparent); margin: 0; max-width: 780px; font-size: 14px; }
+  .fineprint { color: var(--muted); font-size: 12px; margin-top: 8px; }
+
+  section { padding-top: 42px; scroll-margin-top: 50px; }
+  .eyebrow { font-family: var(--font-mono); font-size: 11px; color: var(--coral); font-weight: 600; letter-spacing: 0.06em; text-transform: uppercase; }
+  h2 { font-size: 19px; margin: 4px 0 6px; font-weight: 660; }
+  .sub { color: var(--muted); margin: 0 0 18px; max-width: 760px; }
+
+  .card { border: 1px solid var(--border); border-radius: var(--radius-panel); background: var(--panel-bg); padding: 16px 18px; }
+  .card h3 { font-size: 13.5px; margin: 0 0 8px; font-weight: 650; }
+  .card p, .card li { color: color-mix(in srgb, var(--text) 84%, transparent); margin: 0; }
+  .card ul { margin: 0; padding-left: 18px; display: flex; flex-direction: column; gap: 6px; }
+  .grid2 { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 16px; }
+  .grid3 { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 14px; }
+  .split { display: grid; grid-template-columns: minmax(0, 1.35fr) minmax(0, 1fr); gap: 18px; align-items: start; }
+
+  .tag { display: inline-block; font-family: var(--font-mono); font-size: 9.5px; font-weight: 700; letter-spacing: 0.08em; text-transform: uppercase; padding: 1px 6px; border-radius: 4px; vertical-align: 1px; }
+  .tag.built { background: rgba(34, 197, 94, 0.14); color: #86e0a6; }
+  .tag.missing { background: rgba(245, 158, 11, 0.14); color: #f5c06b; }
+  .tag.rec { background: color-mix(in srgb, var(--coral) 16%, transparent); color: #f2a48f; }
+  .tag.live { background: color-mix(in srgb, var(--coral) 14%, transparent); color: var(--coral); }
+
+  /* Diagrams */
+  .diagram { background: var(--rail-bg); border: 1px solid var(--border); border-radius: var(--radius-panel); padding: 10px; }
+  .diagram svg { width: 100%; height: auto; display: block; }
+  svg text { font-family: var(--font-sans); fill: var(--text); }
+  svg .t-mono { font-family: var(--font-mono); font-weight: 600; }
+  svg .t-muted { fill: var(--muted); }
+  svg .t-coral { fill: var(--coral); }
+  svg .box { fill: var(--panel-bg); stroke: var(--border-strong); stroke-width: 1; }
+  svg .box-ui { fill: color-mix(in srgb, var(--accent) 10%, var(--panel-bg)); stroke: color-mix(in srgb, var(--accent) 45%, transparent); }
+  svg .box-cp { fill: color-mix(in srgb, var(--coral) 9%, var(--panel-bg)); stroke: color-mix(in srgb, var(--coral) 45%, transparent); }
+  svg .box-live { stroke: color-mix(in srgb, var(--coral) 60%, transparent); }
+  svg .box-dim { opacity: 0.55; }
+  svg .layer { fill: color-mix(in srgb, var(--text) 6%, transparent); }
+  svg .layer-ui { fill: color-mix(in srgb, var(--accent) 22%, transparent); }
+  svg .layer-off { fill: none; stroke: color-mix(in srgb, var(--text) 18%, transparent); stroke-dasharray: 3 3; }
+  svg .wire { fill: none; stroke-width: 1.6; }
+  svg .wire.live { stroke: var(--running); stroke-dasharray: 6 6; animation: flow 0.9s linear infinite; }
+  svg .wire.poll { stroke: color-mix(in srgb, var(--muted) 60%, transparent); stroke-dasharray: 2 6; }
+  svg .wire.relay { stroke: var(--coral); stroke-dasharray: 6 6; animation: flow 0.9s linear infinite; }
+  @keyframes flow { from { stroke-dashoffset: 12; } to { stroke-dashoffset: 0; } }
+  @media (prefers-reduced-motion: reduce) { svg .wire { animation: none !important; } .working { animation: none !important; } }
+  .legend { display: flex; gap: 16px; flex-wrap: wrap; color: var(--muted); font-size: 11.5px; padding: 8px 6px 2px; }
+  .legend span { display: inline-flex; align-items: center; gap: 6px; }
+  .legend i { display: inline-block; width: 22px; height: 0; border-top: 2px dashed; }
+
+  /* Option cards */
+  .option { display: flex; flex-direction: column; gap: 12px; }
+  .option-head { display: flex; align-items: baseline; gap: 10px; }
+  .option-letter { font-family: var(--font-mono); font-weight: 700; font-size: 15px; color: var(--coral); }
+  .option-head h3 { margin: 0; font-size: 15px; }
+  .pc { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
+  .pc h4 { margin: 0 0 6px; font-size: 11px; letter-spacing: 0.06em; text-transform: uppercase; font-family: var(--font-mono); }
+  .pc .pro h4 { color: #86e0a6; }
+  .pc .con h4 { color: #f0a08c; }
+  .pc ul { padding-left: 16px; margin: 0; display: flex; flex-direction: column; gap: 4px; font-size: 12.5px; color: color-mix(in srgb, var(--text) 84%, transparent); }
+
+  table.compare { width: 100%; border-collapse: collapse; font-size: 12.5px; }
+  table.compare th, table.compare td { text-align: left; padding: 9px 12px; border-bottom: 1px solid var(--border); vertical-align: top; }
+  table.compare th { color: var(--muted); font-weight: 600; font-size: 11px; letter-spacing: 0.05em; text-transform: uppercase; }
+  table.compare td:first-child { color: var(--muted); width: 22%; }
+  table.compare tr:last-child td { border-bottom: 0; }
+  .yes { color: #86e0a6; }
+  .meh { color: #f5c06b; }
+  .no { color: #f0a08c; }
+
+  /* Screens */
+  .tabs { display: flex; gap: 6px; flex-wrap: wrap; margin-bottom: 14px; }
+  .tab {
+    border: 1px solid var(--border); background: transparent; color: var(--muted); border-radius: 999px; padding: 6px 13px; font: inherit; cursor: pointer;
+  }
+  .tab:hover { color: var(--text); }
+  .tab[aria-selected="true"] { background: var(--accent-dim); color: var(--text); border-color: transparent; }
+  .tab .n { font-family: var(--font-mono); color: var(--coral); margin-right: 5px; font-weight: 600; }
+  .seg { display: inline-flex; border: 1px solid var(--border); border-radius: 999px; padding: 2px; gap: 2px; }
+  .seg button { border: 0; background: transparent; color: var(--muted); font: inherit; font-size: 12px; padding: 4px 11px; border-radius: 999px; cursor: pointer; }
+  .seg button[aria-pressed="true"] { background: color-mix(in srgb, var(--coral) 16%, transparent); color: var(--text); }
+  .screen { display: none; }
+  .screen.on { display: grid; grid-template-columns: minmax(0, 1fr) 300px; gap: 18px; align-items: start; }
+  .screen-notes { display: flex; flex-direction: column; gap: 12px; }
+  .screen-bar { display: flex; align-items: center; gap: 10px; margin-bottom: 10px; color: var(--muted); font-size: 12px; }
+
+  /* Terminal */
+  .term { background: #08080a; border: 1px solid var(--border); border-radius: var(--radius-panel); overflow: hidden; }
+  .term-top { display: flex; gap: 6px; padding: 9px 12px; border-bottom: 1px solid var(--border); align-items: center; }
+  .term-top i { width: 10px; height: 10px; border-radius: 50%; background: color-mix(in srgb, var(--text) 14%, transparent); }
+  .term-top span { margin-left: 8px; color: var(--muted); font-size: 11.5px; font-family: var(--font-mono); }
+  .term pre { margin: 0; padding: 14px 16px 18px; font-family: var(--font-mono); font-size: 12px; line-height: 1.65; color: #d4d4da; white-space: pre-wrap; }
+  .term .p { color: #86e0a6; }
+  .term .c { color: var(--muted); }
+  .term .k { color: #f2a48f; }
+  .term .ok { color: var(--running); }
+
+  /* App frame */
+  .app {
+    position: relative; display: grid; grid-template-columns: 44px 262px minmax(0, 1fr); height: 600px;
+    border: 1px solid var(--border); border-radius: var(--radius-panel); overflow: hidden; background: var(--rail-bg);
+  }
+  .rail { display: flex; flex-direction: column; align-items: center; gap: 10px; padding-top: 12px; }
+  .rail i { width: 22px; height: 22px; border-radius: 6px; background: color-mix(in srgb, var(--text) 8%, transparent); }
+  .rail i.on { background: var(--accent-dim); }
+  .sidebar { background: var(--panel-bg); border-right: 1px solid var(--border); display: flex; flex-direction: column; min-height: 0; }
+  .sidebar-top { padding: 10px 10px 6px; display: flex; flex-direction: column; gap: 8px; }
+  .new-btn { border: 1px solid var(--border); border-radius: var(--radius-btn); padding: 6px 10px; color: var(--text); font-size: 12.5px; background: color-mix(in srgb, var(--text) 4%, transparent); }
+  .filter { border: 1px solid var(--border); border-radius: var(--radius-btn); padding: 6px 10px; color: var(--muted); font-size: 12px; }
+  .list { flex: 1; overflow-y: auto; padding: 0 6px 16px; scrollbar-width: thin; }
+  .machine-header { min-height: 28px; display: flex; align-items: center; gap: 7px; margin-top: 8px; padding: 0 8px 0 6px; border-radius: var(--radius-btn); }
+  .machine-dot { width: 7px; height: 7px; border-radius: 50%; background: var(--running); flex-shrink: 0; }
+  .machine-dot.off { background: var(--muted); opacity: 0.5; }
+  .machine-name { font-family: var(--font-mono); font-size: 11.5px; font-weight: 600; letter-spacing: 0.02em; }
+  .machine-note { margin-left: auto; font-size: 11px; color: color-mix(in srgb, var(--muted) 80%, transparent); font-variant-numeric: tabular-nums; }
+  .project-header { min-height: 24px; display: flex; align-items: center; gap: 6px; padding: 0 10px 0 10px; color: var(--muted); font-size: 12px; font-weight: 600; }
+  .row {
+    position: relative; width: 100%; min-height: 30px; display: flex; align-items: center; gap: 9px; padding: 0 10px;
+    border: 0; border-radius: var(--radius-btn); background: transparent; font: inherit; text-align: left; cursor: pointer;
+    color: color-mix(in srgb, var(--text) 86%, transparent); transition: background var(--transition);
+  }
+  .row:hover { background: color-mix(in srgb, var(--text) 5%, transparent); }
+  .row.selected { background: var(--accent-dim); color: var(--text); }
+  .row.dim { color: color-mix(in srgb, var(--text) 50%, transparent); }
+  .slot { width: 10px; flex-shrink: 0; display: grid; place-items: center; }
+  .working { width: 7px; height: 7px; border-radius: 50%; background: var(--running); animation: pulse 1.6s ease-in-out infinite; }
+  .working.frozen { animation: none; opacity: 0.55; }
+  .waiting { width: 7px; height: 7px; border-radius: 50%; background: var(--idle); }
+  @keyframes pulse { 50% { opacity: 0.35; } }
+  .title { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: 13px; }
+  .meta { flex-shrink: 0; font-size: 11px; color: color-mix(in srgb, var(--muted) 85%, transparent); font-variant-numeric: tabular-nums; }
+  .needs { flex-shrink: 0; font-size: 10px; font-weight: 700; color: var(--idle); letter-spacing: 0.04em; }
+
+  .convo { background: var(--main-bg); display: flex; flex-direction: column; min-width: 0; min-height: 0; }
+  .convo-head { height: 44px; flex-shrink: 0; display: flex; align-items: center; gap: 10px; padding: 0 16px; border-bottom: 1px solid var(--border); font-weight: 600; min-width: 0; }
+  .convo-head .t { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .chip { flex-shrink: 0; font-family: var(--font-mono); font-size: 10.5px; font-weight: 600; color: var(--coral); border: 1px solid color-mix(in srgb, var(--coral) 35%, transparent); border-radius: 999px; padding: 2px 8px; }
+  .chip.plain { color: var(--muted); border-color: var(--border); }
+  .convo-body { padding: 18px 20px; display: flex; flex-direction: column; gap: 12px; overflow-y: auto; flex: 1; }
+  .bubble { align-self: flex-end; background: var(--card-bg); border-radius: 12px; padding: 9px 12px; max-width: 80%; }
+  .agent { color: color-mix(in srgb, var(--text) 88%, transparent); max-width: 92%; }
+  .tool { display: flex; align-items: center; gap: 8px; font-size: 12px; color: var(--muted); font-family: var(--font-mono); }
+  .tool .tk { color: color-mix(in srgb, var(--text) 75%, transparent); }
+  .tool .add { color: var(--running); } .tool .del { color: var(--error); }
+  .handoff { border: 1px solid color-mix(in srgb, var(--coral) 35%, transparent); background: color-mix(in srgb, var(--coral) 6%, var(--panel-bg)); border-radius: var(--radius-card); padding: 10px 12px; display: flex; flex-direction: column; gap: 6px; max-width: 92%; }
+  .handoff .hh { display: flex; align-items: center; gap: 8px; font-size: 12px; color: var(--muted); }
+  .handoff .ht { font-weight: 600; }
+  .reply { border-left: 2px solid color-mix(in srgb, var(--running) 60%, transparent); padding: 2px 0 2px 10px; font-size: 12.5px; color: color-mix(in srgb, var(--text) 84%, transparent); }
+  .line { height: 9px; border-radius: 5px; background: color-mix(in srgb, var(--text) 9%, transparent); }
+
+  .overlay { position: absolute; inset: 0; background: var(--main-bg); opacity: 0; pointer-events: none; display: grid; place-items: center; color: var(--muted); font-size: 12px; transition: opacity 90ms; }
+  .overlay.on { opacity: 1; }
+  .toast { position: absolute; left: calc(306px + (100% - 306px) / 2); bottom: 14px; transform: translateX(-50%); background: var(--card-bg); border: 1px solid var(--border); border-radius: 8px; padding: 6px 11px; font-size: 11.5px; color: var(--muted); opacity: 0; transition: opacity 200ms; pointer-events: none; white-space: nowrap; }
+  .toast.on { opacity: 1; }
+
+  /* Settings → Nodes */
+  .settings { display: grid; grid-template-columns: 44px 190px minmax(0, 1fr); height: 600px; border: 1px solid var(--border); border-radius: var(--radius-panel); overflow: hidden; background: var(--rail-bg); }
+  .smenu { background: var(--panel-bg); border-right: 1px solid var(--border); padding: 12px 8px; display: flex; flex-direction: column; gap: 2px; }
+  .smenu div { padding: 6px 10px; border-radius: var(--radius-btn); color: var(--muted); font-size: 12.5px; }
+  .smenu div.on { background: var(--accent-dim); color: var(--text); }
+  .sdetail { padding: 20px 22px; overflow-y: auto; display: flex; flex-direction: column; gap: 14px; }
+  .sdetail h3 { margin: 0; font-size: 16px; }
+  .btn { white-space: nowrap; border: 1px solid var(--border); border-radius: var(--radius-btn); padding: 6px 12px; font: inherit; font-size: 12.5px; color: var(--text); background: color-mix(in srgb, var(--text) 5%, transparent); cursor: pointer; }
+  .btn.primary { background: var(--accent); border-color: transparent; color: #fff; }
+  .node-row { display: grid; grid-template-columns: 16px minmax(120px, 1fr) 1.2fr 90px 80px; gap: 10px; align-items: center; padding: 10px 12px; border-bottom: 1px solid var(--border); font-size: 12.5px; }
+  .node-row:last-child { border-bottom: 0; }
+  .node-row .nm { font-family: var(--font-mono); font-weight: 600; }
+  .node-row .os { color: var(--muted); font-size: 11.5px; font-family: var(--font-sans); font-weight: 400; margin-left: 6px; }
+  .hchips { display: flex; gap: 4px; flex-wrap: wrap; }
+  .hchip { font-size: 10.5px; padding: 1px 6px; border-radius: 4px; background: color-mix(in srgb, var(--text) 7%, transparent); color: color-mix(in srgb, var(--text) 80%, transparent); }
+  .hchip.no { opacity: 0.45; text-decoration: line-through; }
+  .nodes-box { border: 1px solid var(--border); border-radius: var(--radius-card); background: var(--panel-bg); }
+  .add-box { border: 1px dashed color-mix(in srgb, var(--coral) 40%, transparent); border-radius: var(--radius-card); padding: 14px; display: flex; flex-direction: column; gap: 10px; background: color-mix(in srgb, var(--coral) 4%, transparent); }
+  .field { display: flex; flex-direction: column; gap: 4px; font-size: 12px; color: var(--muted); }
+  .input { border: 1px solid var(--border); border-radius: var(--radius-btn); padding: 7px 10px; color: var(--text); background: var(--rail-bg); font-family: var(--font-mono); font-size: 12px; }
+  .code-big { font-family: var(--font-mono); font-size: 22px; letter-spacing: 0.12em; font-weight: 700; color: var(--text); }
+
+  /* Composer */
+  .newsession { display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 14px; padding: 30px; }
+  .composer { width: min(560px, 100%); border: 1px solid var(--border-strong); border-radius: 14px; background: var(--panel-bg); padding: 12px 12px 10px; position: relative; }
+  .composer .txt { min-height: 54px; color: var(--text); font-size: 13.5px; padding: 2px 4px 10px; }
+  .composer .chips { display: flex; gap: 6px; flex-wrap: wrap; align-items: center; }
+  .cchip { font-size: 12px; border: 1px solid var(--border); border-radius: 999px; padding: 3px 10px; color: color-mix(in srgb, var(--text) 85%, transparent); }
+  .cchip.open { border-color: color-mix(in srgb, var(--coral) 55%, transparent); color: var(--text); }
+  .send { margin-left: auto; width: 28px; height: 28px; border-radius: 8px; background: var(--accent); }
+  .popover { position: absolute; left: 150px; top: calc(100% + 8px); width: 360px; background: var(--card-bg); border: 1px solid var(--border-strong); border-radius: 12px; box-shadow: var(--menu-shadow); padding: 6px; z-index: 2; }
+  .opt { display: grid; grid-template-columns: 14px 1fr; gap: 10px; padding: 8px 10px; border-radius: 8px; }
+  .opt:hover { background: color-mix(in srgb, var(--text) 5%, transparent); }
+  .opt.sel { background: var(--accent-dim); }
+  .opt .on { width: 8px; height: 8px; border-radius: 50%; margin-top: 6px; background: var(--running); }
+  .opt .on.off { background: var(--muted); opacity: 0.5; }
+  .opt .on.any { background: none; border: 1.5px solid var(--coral); width: 10px; height: 10px; margin-top: 5px; }
+  .opt .n1 { font-size: 12.5px; font-weight: 600; display: flex; gap: 8px; align-items: baseline; }
+  .opt .n1 .mono { font-size: 12px; }
+  .opt .n2 { font-size: 11.5px; color: var(--muted); }
+  .opt.disabled { opacity: 0.5; }
+  .sep { height: 1px; background: var(--border); margin: 4px 6px; }
+  .why-pick { font-size: 11.5px; color: #86e0a6; }
+  .warn { color: #f5c06b; }
+
+  /* Automations */
+  .auto-card { border: 1px solid var(--border); border-radius: var(--radius-card); background: var(--panel-bg); padding: 16px; display: flex; flex-direction: column; gap: 12px; }
+  .sentence { font-size: 15px; line-height: 2.1; }
+  .pill { display: inline-block; border: 1px solid var(--border-strong); border-radius: 6px; padding: 1px 8px; background: color-mix(in srgb, var(--text) 5%, transparent); }
+  .pill.node { border-color: color-mix(in srgb, var(--coral) 55%, transparent); color: #f2a48f; font-family: var(--font-mono); font-size: 13px; }
+  .runs { display: flex; flex-direction: column; }
+  .run { display: grid; grid-template-columns: 90px 1fr 80px 70px; gap: 10px; padding: 7px 4px; border-top: 1px solid var(--border); font-size: 12.5px; }
+  .run .when { color: var(--muted); font-variant-numeric: tabular-nums; }
+
+  /* Decide */
+  .decide { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); gap: 18px; align-items: start; }
+  .q { display: flex; flex-direction: column; gap: 8px; }
+  .q + .q { margin-top: 18px; }
+  .q-title { font-weight: 650; font-size: 13.5px; }
+  .q-help { color: var(--muted); font-size: 12px; margin-top: -4px; }
+  .choice {
+    display: grid; grid-template-columns: 18px 1fr; gap: 10px; text-align: left; border: 1px solid var(--border); border-radius: var(--radius-card);
+    padding: 10px 12px; background: transparent; color: inherit; font: inherit; cursor: pointer; transition: border-color var(--transition), background var(--transition);
+  }
+  .choice:hover { border-color: var(--border-strong); }
+  .choice[aria-pressed="true"] { border-color: color-mix(in srgb, var(--coral) 60%, transparent); background: color-mix(in srgb, var(--coral) 7%, transparent); }
+  .choice .mark { width: 14px; height: 14px; margin-top: 2px; border-radius: 50%; border: 1.5px solid var(--muted); }
+  .choice.multi .mark { border-radius: 4px; }
+  .choice[aria-pressed="true"] .mark { border-color: var(--coral); background: radial-gradient(circle, var(--coral) 45%, transparent 50%); }
+  .choice.multi[aria-pressed="true"] .mark { background: var(--coral); box-shadow: inset 0 0 0 2px var(--panel-bg); }
+  .choice[disabled] { cursor: default; opacity: 0.8; }
+  .choice .c1 { font-weight: 600; font-size: 13px; }
+  .choice .c2 { color: var(--muted); font-size: 12px; }
+  .plan { position: sticky; top: 64px; }
+  .plan h3 { display: flex; align-items: baseline; gap: 10px; }
+  .stage-row { display: grid; grid-template-columns: 26px 1fr 34px; gap: 10px; padding: 10px 0; border-top: 1px solid var(--border); align-items: start; transition: opacity 200ms; }
+  .stage-row:first-of-type { border-top: 0; }
+  .stage-row .num { font-family: var(--font-mono); font-weight: 700; color: var(--coral); font-size: 12px; padding-top: 1px; }
+  .stage-row .st { font-weight: 600; font-size: 13px; }
+  .stage-row .sd { color: var(--muted); font-size: 12px; margin-top: 2px; }
+  .stage-row .size { justify-self: end; font-family: var(--font-mono); font-size: 11px; font-weight: 700; border-radius: 4px; padding: 1px 6px; background: color-mix(in srgb, var(--text) 8%, transparent); }
+  .stage-row.later { opacity: 0.55; }
+  .stage-row.later .num { color: var(--muted); }
+  .stage-row .later-tag { font-size: 10px; font-family: var(--font-mono); color: var(--muted); letter-spacing: 0.06em; text-transform: uppercase; margin-left: 6px; }
+  .total { display: flex; align-items: center; gap: 10px; margin-top: 10px; padding-top: 12px; border-top: 1px solid var(--border); font-size: 12px; color: var(--muted); }
+  .bar { flex: 1; height: 8px; border-radius: 4px; background: color-mix(in srgb, var(--text) 7%, transparent); overflow: hidden; display: flex; }
+  .bar i { display: block; height: 100%; transition: width 250ms ease-out; }
+  .bar i.now { background: var(--coral); }
+  .bar i.later { background: color-mix(in srgb, var(--coral) 30%, transparent); }
+  .verdict { margin-top: 12px; font-size: 12.5px; color: color-mix(in srgb, var(--text) 86%, transparent); background: color-mix(in srgb, var(--text) 4%, transparent); border-radius: 8px; padding: 10px 12px; }
+
+
+  /* Desktop window */
+  .win { border: 1px solid var(--border-strong); border-radius: 12px; overflow: hidden; background: var(--rail-bg); box-shadow: 0 24px 60px -30px rgba(0, 0, 0, 0.8); }
+  .win-bar { height: 32px; display: flex; align-items: center; gap: 7px; padding: 0 12px; background: #111114; border-bottom: 1px solid var(--border); position: relative; }
+  .win-bar i { width: 11px; height: 11px; border-radius: 50%; background: color-mix(in srgb, var(--text) 16%, transparent); }
+  .win-bar span { position: absolute; left: 50%; transform: translateX(-50%); color: var(--muted); font-size: 12px; }
+  .app.in-win { border: 0; border-radius: 0; height: 520px; }
+  .persona { display: flex; flex-direction: column; gap: 8px; }
+  .persona .who { font-family: var(--font-mono); font-size: 11px; font-weight: 700; letter-spacing: 0.08em; text-transform: uppercase; }
+  .persona .who.simple { color: #86e0a6; }
+  .persona .who.adv { color: #f2a48f; }
+  .toggle-row { display: flex; align-items: center; gap: 10px; padding: 10px 12px; border: 1px solid var(--border); border-radius: var(--radius-card); background: var(--rail-bg); }
+  .toggle { width: 30px; height: 17px; border-radius: 999px; background: color-mix(in srgb, var(--text) 18%, transparent); position: relative; flex-shrink: 0; }
+  .toggle::after { content: ""; position: absolute; top: 2px; left: 2px; width: 13px; height: 13px; border-radius: 50%; background: #fff; transition: left var(--transition); }
+  .toggle.on { background: var(--accent); }
+  .toggle.on::after { left: 15px; }
+  .pscreen { display: grid; grid-template-columns: minmax(0, 1fr) 300px; gap: 18px; align-items: start; }
+  .hint { font-size: 12px; color: var(--muted); text-align: center; }
+
+  @media (max-width: 980px) {
+    .grid2, .grid3, .split, .decide, .pc { grid-template-columns: 1fr; }
+    .screen.on, .pscreen { grid-template-columns: 1fr; }
+    .app { grid-template-columns: 262px minmax(0, 1fr); }
+    .app .rail, .settings .rail { display: none; }
+    .settings { grid-template-columns: 170px minmax(0, 1fr); }
+    .toast { left: calc(262px + (100% - 262px) / 2); }
+    .plan { position: static; }
+    .node-row { grid-template-columns: 16px 1fr 80px; }
+    .node-row .hide-n { display: none; }
+  }
+  @media (max-width: 640px) {
+    .app { grid-template-columns: minmax(0, 1fr); }
+    .app .convo { display: none; }
+    .settings { grid-template-columns: minmax(0, 1fr); }
+    .smenu { display: none; }
+    .toast { left: 50%; }
+    .popover { left: 0; width: 100%; }
+    table.compare td:first-child { width: auto; }
+  }
+</style>
+</head>
+<body>
+<div class="page">
+  <nav class="nav">
+    <span class="brand">Fleet nodes</span>
+    <a href="#today"><span class="n">1</span>Today</a>
+    <a href="#customers"><span class="n">2</span>Two kinds of customer</a>
+    <a href="#options"><span class="n">3</span>Two ways to split it</a>
+    <a href="#screens"><span class="n">4</span>What you'd see</a>
+    <a href="#decide"><span class="n">5</span>Choose a path</a>
+  </nav>
+
+  <header class="hero">
+    <h1>One Fleet interface, many machines doing the work</h1>
+    <p class="lede">
+      Run a headless Fleet <b>node</b> on each machine with the CLI, and work with all of them from <b>one interface</b>.
+      Pick which node a session, automation or workflow runs on, or let an agent hand work to another node.
+      This page shows where we are, the two ways to wire it, what the screens would look like, and a plan you can shape
+      at the end.
+    </p>
+    <p class="fineprint">Proposal only. Nothing here is built. Machine names, projects and sessions are made up.</p>
+  </header>
+
+  <!-- 1. Today -->
+  <section id="today">
+    <div class="eyebrow">1 · Today</div>
+    <h2>Every machine runs everything, and the UI works with one at a time</h2>
+    <p class="sub">Most of the building blocks shipped in the multi-machine work (#318–#320, #331, #397). What's missing is a node without a UI, and a UI that's live on every machine at once.</p>
+    <div class="split">
+      <div class="diagram">
+        <svg viewBox="0 0 620 300" role="img" aria-label="Today: the browser is live on one machine and polls the others">
+          <defs>
+            <marker id="ah-g" viewBox="0 0 8 8" refX="7" refY="4" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0,0 L8,4 L0,8 z" fill="#22c55e"/></marker>
+            <marker id="ah-m" viewBox="0 0 8 8" refX="7" refY="4" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0,0 L8,4 L0,8 z" fill="#5e5e68"/></marker>
+            <marker id="ah-c" viewBox="0 0 8 8" refX="7" refY="4" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0,0 L8,4 L0,8 z" fill="#D95A3A"/></marker>
+          </defs>
+          <rect class="box box-ui" x="210" y="14" width="200" height="56" rx="10"/>
+          <text x="310" y="38" text-anchor="middle" font-size="13" font-weight="600">Your browser</text>
+          <text x="310" y="56" text-anchor="middle" font-size="11" class="t-muted">page served by studio</text>
+
+          <path class="wire live" d="M268,70 C220,120 130,140 110,196" marker-end="url(#ah-g)"/>
+          <path class="wire poll" d="M310,70 L310,196" marker-end="url(#ah-m)"/>
+          <path class="wire poll" d="M352,70 C400,120 490,140 510,196" marker-end="url(#ah-m)"/>
+          <text x="150" y="122" font-size="11" fill="#22c55e" text-anchor="end">live</text>
+          <text x="318" y="134" font-size="11" class="t-muted">polled every 15 s</text>
+
+          <!-- studio -->
+          <rect class="box box-live" x="20" y="200" width="180" height="84" rx="10"/>
+          <text x="36" y="222" font-size="12.5" class="t-mono">studio</text>
+          <rect x="146" y="211" width="40" height="15" rx="4" fill="rgba(217,90,58,0.16)"/>
+          <text x="166" y="222" font-size="9" text-anchor="middle" class="t-mono t-coral">LIVE</text>
+          <rect class="layer layer-ui" x="32" y="232" width="48" height="18" rx="4"/><text x="56" y="245" font-size="10" text-anchor="middle">UI</text>
+          <rect class="layer" x="84" y="232" width="48" height="18" rx="4"/><text x="108" y="245" font-size="10" text-anchor="middle">API</text>
+          <rect class="layer" x="136" y="232" width="52" height="18" rx="4"/><text x="162" y="245" font-size="10" text-anchor="middle">sessions</text>
+          <text x="32" y="272" font-size="10.5" class="t-muted">own DB, worktrees, keys</text>
+
+          <!-- atlas -->
+          <rect class="box box-dim" x="220" y="200" width="180" height="84" rx="10"/>
+          <g class="box-dim">
+            <text x="236" y="222" font-size="12.5" class="t-mono">atlas</text>
+            <rect class="layer layer-ui" x="232" y="232" width="48" height="18" rx="4"/><text x="256" y="245" font-size="10" text-anchor="middle">UI</text>
+            <rect class="layer" x="284" y="232" width="48" height="18" rx="4"/><text x="308" y="245" font-size="10" text-anchor="middle">API</text>
+            <rect class="layer" x="336" y="232" width="52" height="18" rx="4"/><text x="362" y="245" font-size="10" text-anchor="middle">sessions</text>
+            <text x="232" y="272" font-size="10.5" class="t-muted">own DB, worktrees, keys</text>
+          </g>
+
+          <!-- mini -->
+          <rect class="box box-dim" x="420" y="200" width="180" height="84" rx="10"/>
+          <g class="box-dim">
+            <text x="436" y="222" font-size="12.5" class="t-mono">mini</text>
+            <rect class="layer layer-ui" x="432" y="232" width="48" height="18" rx="4"/><text x="456" y="245" font-size="10" text-anchor="middle">UI</text>
+            <rect class="layer" x="484" y="232" width="48" height="18" rx="4"/><text x="508" y="245" font-size="10" text-anchor="middle">API</text>
+            <rect class="layer" x="536" y="232" width="52" height="18" rx="4"/><text x="562" y="245" font-size="10" text-anchor="middle">sessions</text>
+            <text x="432" y="272" font-size="10.5" class="t-muted">own DB, worktrees, keys</text>
+          </g>
+        </svg>
+        <div class="legend">
+          <span><i style="border-color: var(--running)"></i>live connection: events, terminals, diffs</span>
+          <span><i style="border-color: #5e5e68; border-top-style: dotted"></i>list refreshed by polling</span>
+        </div>
+      </div>
+      <div class="card">
+        <h3>What exists</h3>
+        <ul>
+          <li><span class="tag built">Built</span> Add a machine by URL and token. Settings → Machines.</li>
+          <li><span class="tag built">Built</span> The sidebar shows every machine's sessions as the same tree.</li>
+          <li><span class="tag built">Built</span> The composer can start a session on another machine.</li>
+          <li><span class="tag built">Built</span> The machine serving the page already holds a live connection to every other machine, but only to forward phone notifications.</li>
+          <li><span class="tag missing">Missing</span> A node with no web UI. Every Fleet serves one.</li>
+          <li><span class="tag missing">Missing</span> Live on more than one machine. Switching reloads the page.</li>
+          <li><span class="tag missing">Missing</span> Automations, workflows and agents can't name a machine.</li>
+          <li><span class="tag missing">Missing</span> A real CLI. <code>fleet</code> just starts the server.</li>
+        </ul>
+      </div>
+    </div>
+  </section>
+
+  <!-- 2. Customers -->
+  <section id="customers">
+    <div class="eyebrow">2 · Two kinds of customer</div>
+    <h2>One Fleet. The simple case stays simple; nodes are something you add.</h2>
+    <p class="sub">
+      Nobody is left out. The desktop app keeps working exactly as it does today. Advanced customers add nodes to the same
+      app, or point a browser at a Fleet that knows them. No separate edition, and no feature only one group gets.
+    </p>
+    <div class="grid2" style="margin-bottom: 16px">
+      <div class="card persona">
+        <div class="who simple">Simple · most customers</div>
+        <h3 style="margin:0">Install the desktop app, and it just works</h3>
+        <p>One computer. The app starts its own Fleet and shows it. They never see the word "node", and nothing in this proposal changes their first run or their defaults.</p>
+      </div>
+      <div class="card persona">
+        <div class="who adv">Advanced</div>
+        <h3 style="margin:0">Run <code>fleet node</code> on other machines, and point a UI at them</h3>
+        <p>A server, a cloud VM, a Mac mini under the desk. The UI is the same desktop app with the nodes added, a browser on a Fleet that knows them, or the phone through its paired machine.</p>
+      </div>
+    </div>
+
+    <div class="screen-bar">
+      <div class="seg" id="persona-seg">
+        <button aria-pressed="true" data-v="simple">Simple · this computer</button>
+        <button aria-pressed="false" data-v="node">Advanced · added a node</button>
+        <button aria-pressed="false" data-v="remote">Advanced · only other machines</button>
+      </div>
+    </div>
+    <div class="pscreen">
+      <div class="win">
+        <div class="win-bar"><i></i><i></i><i></i><span>Fleet</span></div>
+        <div class="app in-win">
+          <div class="rail"><i class="on"></i><i></i><i></i><i></i></div>
+          <aside class="sidebar">
+            <div class="sidebar-top"><div class="new-btn">+ New session</div><div class="filter">Filter sessions</div></div>
+            <div class="list" id="p-list"></div>
+          </aside>
+          <main class="convo" id="p-main"></main>
+        </div>
+      </div>
+      <div class="screen-notes" id="p-notes"></div>
+    </div>
+
+    <div class="grid2" style="margin-top: 16px">
+      <div class="card">
+        <h3>Rules so nobody is left out</h3>
+        <ul>
+          <li><b>Defaults don't change.</b> The desktop app's first run, <code>fleet</code> with no arguments, and the browser on <code>localhost</code> behave as today.</li>
+          <li><b>No node words in the simple path.</b> They appear once you add a second machine.</li>
+          <li><b>macOS, Windows and Linux</b> get each piece before it's announced, <code>install-service</code> included.</li>
+          <li><b>Older and newer Fleets work together,</b> so customers update one machine at a time, when they choose.</li>
+          <li><b>Hosted Fleets with sign-in</b> aren't touched.</li>
+        </ul>
+      </div>
+      <div class="card">
+        <h3>Ways to point a UI at a node</h3>
+        <ul>
+          <li><b>Desktop app:</b> Settings → Machines → Add a machine. Its own Fleet is the interface and keeps the list.</li>
+          <li><b>Browser:</b> any full Fleet (<code>fleet</code>) that has the node in its list, such as an always-on box.</li>
+          <li><b>Phone:</b> through its paired machine, as today.</li>
+          <li>A headless node has no page of its own. That's what keeps it small; any of the above is its UI.</li>
+        </ul>
+      </div>
+    </div>
+  </section>
+
+  <!-- 2. Options -->
+  <section id="options">
+    <div class="eyebrow">3 · Two ways to split it</div>
+    <h2>A node is a whole Fleet without the UI. The question is who connects to whom.</h2>
+    <p class="sub">
+      Both options keep each session, its worktree, git, terminals and keys on the node that runs it. The interface keeps
+      only the list of nodes and your sign-in. They differ in which way the connection goes.
+    </p>
+
+    <div class="grid2">
+      <div class="card option">
+        <div class="option-head"><span class="option-letter">A</span><h3>The interface connects to each node</h3><span class="tag rec">Start here</span></div>
+        <div class="diagram">
+          <svg viewBox="0 0 620 300" role="img" aria-label="Option A: the interface holds a live connection to each node">
+            <rect class="box box-ui" x="185" y="14" width="250" height="58" rx="10"/>
+            <text x="310" y="38" text-anchor="middle" font-size="13" font-weight="600">Fleet interface</text>
+            <text x="310" y="56" text-anchor="middle" font-size="11" class="t-muted">browser · desktop app · phone</text>
+
+            <path class="wire live" d="M250,72 C200,130 90,140 80,196" marker-end="url(#ah-g)"/>
+            <path class="wire live" d="M290,72 C280,130 235,150 230,196" marker-end="url(#ah-g)"/>
+            <path class="wire live" d="M330,72 C340,130 385,150 390,196" marker-end="url(#ah-g)"/>
+            <path class="wire live" d="M370,72 C420,130 530,140 540,196" marker-end="url(#ah-g)"/>
+            <text x="310" y="150" font-size="11" text-anchor="middle" class="t-muted">over your tailnet · one token each</text>
+
+            <g>
+              <rect class="box" x="10" y="200" width="140" height="82" rx="10"/>
+              <text x="24" y="222" font-size="12" class="t-mono">studio</text>
+              <rect class="layer layer-ui" x="22" y="232" width="34" height="16" rx="4"/><text x="39" y="244" font-size="9.5" text-anchor="middle">UI</text>
+              <rect class="layer" x="60" y="232" width="34" height="16" rx="4"/><text x="77" y="244" font-size="9.5" text-anchor="middle">API</text>
+              <rect class="layer" x="98" y="232" width="42" height="16" rx="4"/><text x="119" y="244" font-size="9.5" text-anchor="middle">runs</text>
+              <text x="22" y="270" font-size="10" class="t-muted">serves the UI too</text>
+            </g>
+            <g>
+              <rect class="box" x="160" y="200" width="140" height="82" rx="10"/>
+              <text x="174" y="222" font-size="12" class="t-mono">atlas</text>
+              <rect class="layer-off" x="172" y="232" width="34" height="16" rx="4"/><text x="189" y="244" font-size="9.5" text-anchor="middle" class="t-muted">no UI</text>
+              <rect class="layer" x="210" y="232" width="34" height="16" rx="4"/><text x="227" y="244" font-size="9.5" text-anchor="middle">API</text>
+              <rect class="layer" x="248" y="232" width="42" height="16" rx="4"/><text x="269" y="244" font-size="9.5" text-anchor="middle">runs</text>
+              <text x="172" y="270" font-size="10" class="t-muted">Linux box</text>
+            </g>
+            <g>
+              <rect class="box" x="320" y="200" width="140" height="82" rx="10"/>
+              <text x="334" y="222" font-size="12" class="t-mono">mini</text>
+              <rect class="layer-off" x="332" y="232" width="34" height="16" rx="4"/><text x="349" y="244" font-size="9.5" text-anchor="middle" class="t-muted">no UI</text>
+              <rect class="layer" x="370" y="232" width="34" height="16" rx="4"/><text x="387" y="244" font-size="9.5" text-anchor="middle">API</text>
+              <rect class="layer" x="408" y="232" width="42" height="16" rx="4"/><text x="429" y="244" font-size="9.5" text-anchor="middle">runs</text>
+              <text x="332" y="270" font-size="10" class="t-muted">Mac mini</text>
+            </g>
+            <g>
+              <rect class="box" x="470" y="200" width="140" height="82" rx="10"/>
+              <text x="484" y="222" font-size="12" class="t-mono">lab-win</text>
+              <rect class="layer-off" x="482" y="232" width="34" height="16" rx="4"/><text x="499" y="244" font-size="9.5" text-anchor="middle" class="t-muted">no UI</text>
+              <rect class="layer" x="520" y="232" width="34" height="16" rx="4"/><text x="537" y="244" font-size="9.5" text-anchor="middle">API</text>
+              <rect class="layer" x="558" y="232" width="42" height="16" rx="4"/><text x="579" y="244" font-size="9.5" text-anchor="middle">runs</text>
+              <text x="482" y="270" font-size="10" class="t-muted">cloud VM, must join tailnet</text>
+            </g>
+          </svg>
+        </div>
+        <div class="pc">
+          <div class="pro"><h4>Good</h4><ul>
+            <li>Builds on what's merged: tokens, CORS, the machine list.</li>
+            <li>No middleman. Each node is reached directly, so terminals stay fast.</li>
+            <li>If one machine is down, the others still work.</li>
+          </ul></div>
+          <div class="con"><h4>Costs</h4><ul>
+            <li>Every node must be reachable from every device, phone included. In practice: Tailscale.</li>
+            <li>A token per node to copy and paste.</li>
+            <li>Previews on another node still need work (cookie-bound).</li>
+          </ul></div>
+        </div>
+      </div>
+
+      <div class="card option">
+        <div class="option-head"><span class="option-letter">B</span><h3>Each node connects out to a control plane</h3><span class="tag missing">Bigger</span></div>
+        <div class="diagram">
+          <svg viewBox="0 0 620 300" role="img" aria-label="Option B: nodes connect out to the control plane, the interface talks only to it">
+            <rect class="box box-ui" x="215" y="8" width="190" height="44" rx="10"/>
+            <text x="310" y="35" text-anchor="middle" font-size="12.5" font-weight="600">Fleet interface</text>
+            <path class="wire live" d="M310,52 L310,88" marker-end="url(#ah-g)"/>
+            <text x="318" y="75" font-size="10.5" class="t-muted">one address, one sign-in</text>
+
+            <rect class="box box-cp" x="160" y="92" width="300" height="56" rx="10"/>
+            <text x="310" y="114" text-anchor="middle" font-size="12.5" class="t-mono">studio · control plane</text>
+            <text x="310" y="134" text-anchor="middle" font-size="10.5" class="t-muted">node list · sign-in · relays API, events, terminals</text>
+
+            <path class="wire relay" d="M110,210 C120,175 200,165 230,150" marker-end="url(#ah-c)"/>
+            <path class="wire relay" d="M310,210 L310,152" marker-end="url(#ah-c)"/>
+            <path class="wire relay" d="M510,210 C500,175 420,165 390,150" marker-end="url(#ah-c)"/>
+            <text x="522" y="170" font-size="10.5" class="t-coral">nodes dial out</text>
+            <text x="522" y="184" font-size="10.5" class="t-muted">no open ports</text>
+
+            <g>
+              <rect class="box" x="40" y="212" width="140" height="74" rx="10"/>
+              <text x="54" y="234" font-size="12" class="t-mono">atlas</text>
+              <rect class="layer" x="52" y="244" width="40" height="16" rx="4"/><text x="72" y="256" font-size="9.5" text-anchor="middle">API</text>
+              <rect class="layer" x="96" y="244" width="46" height="16" rx="4"/><text x="119" y="256" font-size="9.5" text-anchor="middle">runs</text>
+              <text x="52" y="277" font-size="10" class="t-muted">home network, NAT</text>
+            </g>
+            <g>
+              <rect class="box" x="240" y="212" width="140" height="74" rx="10"/>
+              <text x="254" y="234" font-size="12" class="t-mono">mini</text>
+              <rect class="layer" x="252" y="244" width="40" height="16" rx="4"/><text x="272" y="256" font-size="9.5" text-anchor="middle">API</text>
+              <rect class="layer" x="296" y="244" width="46" height="16" rx="4"/><text x="319" y="256" font-size="9.5" text-anchor="middle">runs</text>
+              <text x="252" y="277" font-size="10" class="t-muted">office Wi-Fi</text>
+            </g>
+            <g>
+              <rect class="box" x="440" y="212" width="140" height="74" rx="10"/>
+              <text x="454" y="234" font-size="12" class="t-mono">lab-win</text>
+              <rect class="layer" x="452" y="244" width="40" height="16" rx="4"/><text x="472" y="256" font-size="9.5" text-anchor="middle">API</text>
+              <rect class="layer" x="496" y="244" width="46" height="16" rx="4"/><text x="519" y="256" font-size="9.5" text-anchor="middle">runs</text>
+              <text x="452" y="277" font-size="10" class="t-muted">cloud VM, as is</text>
+            </g>
+          </svg>
+        </div>
+        <div class="pc">
+          <div class="pro"><h4>Good</h4><ul>
+            <li>Nodes work from anywhere: behind NAT, in the cloud, no Tailscale.</li>
+            <li>Join with a one-time code. No tokens to copy around.</li>
+            <li>Phones only need to reach one machine.</li>
+          </ul></div>
+          <div class="con"><h4>Costs</h4><ul>
+            <li>The control plane relays everything, terminals and previews included.</li>
+            <li>Control plane down = no access (nodes keep running).</li>
+            <li>A new tunnel to build, secure and keep alive.</li>
+          </ul></div>
+        </div>
+      </div>
+    </div>
+
+    <div class="grid2" style="margin-top: 16px">
+      <div class="card" style="padding: 6px 6px">
+        <table class="compare">
+          <thead><tr><th></th><th>A · interface connects</th><th>B · nodes connect out</th></tr></thead>
+          <tbody>
+            <tr><td>Node needs</td><td class="meh">Reachable address (tailnet)</td><td class="yes">Outbound internet only</td></tr>
+            <tr><td>Adding a node</td><td class="meh">Paste URL + token</td><td class="yes"><code>fleet node join</code> + code</td></tr>
+            <tr><td>Phone</td><td class="meh">Reaches every node</td><td class="yes">Reaches the control plane</td></tr>
+            <tr><td>Terminals, previews</td><td class="yes">Direct</td><td class="meh">Through the relay</td></tr>
+            <tr><td>One machine down</td><td class="yes">Only its sessions</td><td class="no">Control plane down = all</td></tr>
+            <tr><td>New code</td><td class="yes">Mostly client work</td><td class="no">Client work + tunnel + relay</td></tr>
+          </tbody>
+        </table>
+      </div>
+      <div class="card">
+        <h3>Why the node can't be any thinner</h3>
+        <p style="margin-bottom: 8px">
+          A thinner node is possible on paper: one central Fleet keeps every session, and nodes only run the harness
+          process. It doesn't fit how Fleet works:
+        </p>
+        <ul>
+          <li>Harnesses call back into Fleet over loopback for Fleet tools, memory and asks.</li>
+          <li>Worktrees, git, diffs, file views, terminals and previews all read that machine's disk.</li>
+          <li>The harness boundary (<code>IHarnessSession</code>, about 30 methods plus an event stream) would need a remote twin for each of those.</li>
+        </ul>
+        <p style="margin-top: 8px">So a node is the same Fleet binary started with <code>fleet node</code>: no web UI, token required.</p>
+      </div>
+    </div>
+  </section>
+
+  <!-- 3. Screens -->
+  <section id="screens">
+    <div class="eyebrow">4 · What you'd see</div>
+    <h2>Start a node, add it, then send work to it</h2>
+    <p class="sub">Click through in order. Where A and B differ, a switch above the screen shows both.</p>
+
+    <div class="tabs" role="tablist" id="screen-tabs">
+      <button class="tab" role="tab" data-screen="cli" aria-selected="true"><span class="n">1</span>Start a node</button>
+      <button class="tab" role="tab" data-screen="settings" aria-selected="false"><span class="n">2</span>Add it</button>
+      <button class="tab" role="tab" data-screen="sidebar" aria-selected="false"><span class="n">3</span>Every node live</button>
+      <button class="tab" role="tab" data-screen="composer" aria-selected="false"><span class="n">4</span>Pick a node</button>
+      <button class="tab" role="tab" data-screen="automation" aria-selected="false"><span class="n">5</span>Automations</button>
+      <button class="tab" role="tab" data-screen="handoff" aria-selected="false"><span class="n">6</span>Agent hands off</button>
+    </div>
+
+    <!-- 3.1 CLI -->
+    <div class="screen on" data-screen="cli">
+      <div>
+        <div class="screen-bar">
+          <div class="seg" data-ab><button aria-pressed="true" data-v="A">A · interface connects</button><button aria-pressed="false" data-v="B">B · node connects out</button></div>
+        </div>
+        <div class="term">
+          <div class="term-top"><i></i><i></i><i></i><span>atlas — ssh</span></div>
+<pre data-only="A"><span class="p">atlas$</span> fleet node --host 100.88.12.7
+<span class="c">Weave Fleet 0.48.0 · node (no web UI)</span>
+Listening on <span class="k">http://100.88.12.7:2113</span>
+Harnesses   OpenCode 2 <span class="ok">ready</span>   Claude Code <span class="ok">ready</span>   Pi <span class="c">not installed</span>
+Folders     ~/src/harbor-api  ~/src/pocket-notes
+
+Add this node from Fleet → Settings → Nodes → Add a node:
+  URL    <span class="k">http://100.88.12.7:2113</span>
+  Token  <span class="k">fn_q3V8…t2Lw</span>   <span class="c">(fleet node token --show)</span>
+
+<span class="c">Keep it running:  fleet node install-service</span></pre>
+<pre data-only="B" hidden><span class="p">atlas$</span> fleet node join https://studio.tail-4f2a.ts.net --code K7QM-4XPA
+<span class="c">Weave Fleet 0.48.0 · node (no web UI)</span>
+Joined <span class="k">studio</span> as <span class="k">atlas</span>  <span class="ok">done</span>
+Connected out to studio. Nothing listens on this machine.
+Harnesses   OpenCode 2 <span class="ok">ready</span>   Claude Code <span class="ok">ready</span>   Pi <span class="c">not installed</span>
+Folders     ~/src/harbor-api  ~/src/pocket-notes
+
+Waiting for work. Sessions show up in studio's sidebar under <span class="k">atlas</span>.
+
+<span class="c">Keep it running:  fleet node install-service</span></pre>
+        </div>
+      </div>
+      <div class="screen-notes">
+        <div class="card"><h3>What's new here</h3><ul>
+          <li><code>fleet node</code> is today's server with the web UI turned off and a token always required.</li>
+          <li>It prints what you need to add it, and what it can run: harnesses and folders.</li>
+          <li><code>install-service</code> wraps the systemd unit we already ship, plus launchd and Windows later.</li>
+        </ul></div>
+        <div class="card"><h3>A vs B</h3><p>In <b>A</b> the node listens and you copy its address and token. In <b>B</b> it listens nowhere. A one-time code from the control plane makes it join, like phone pairing does today.</p></div>
+      </div>
+    </div>
+
+    <!-- 3.2 Settings -->
+    <div class="screen" data-screen="settings">
+      <div>
+        <div class="screen-bar">
+          <div class="seg" data-ab><button aria-pressed="true" data-v="A">A · interface connects</button><button aria-pressed="false" data-v="B">B · node connects out</button></div>
+        </div>
+        <div class="settings">
+          <div class="rail"><i></i><i></i><i></i><i class="on"></i></div>
+          <div class="smenu"><div>General</div><div>Harnesses</div><div class="on">Nodes</div><div>Phone</div><div>Weave</div><div>Memory</div></div>
+          <div class="sdetail">
+            <div style="display:flex; align-items:center; gap:10px"><h3>Nodes</h3><span class="muted" style="font-size:12px">4 nodes · 4 sessions working</span><span style="margin-left:auto"></span><button class="btn primary">Add a node</button></div>
+            <div class="nodes-box">
+              <div class="node-row"><span class="machine-dot"></span><span class="nm">studio<span class="os">this machine</span></span><span class="hchips hide-n"><span class="hchip">OpenCode 2</span><span class="hchip">Claude Code</span><span class="hchip">Pi</span></span><span class="muted hide-n">2 working</span><span class="muted">now</span></div>
+              <div class="node-row"><span class="machine-dot"></span><span class="nm">atlas<span class="os">Linux</span></span><span class="hchips hide-n"><span class="hchip">OpenCode 2</span><span class="hchip">Claude Code</span><span class="hchip no">Pi</span></span><span class="muted hide-n">1 working</span><span class="muted">now</span></div>
+              <div class="node-row"><span class="machine-dot"></span><span class="nm">mini<span class="os">macOS</span></span><span class="hchips hide-n"><span class="hchip">OpenCode 2</span><span class="hchip no">Claude Code</span><span class="hchip no">Pi</span></span><span class="muted hide-n">1 working</span><span class="muted">now</span></div>
+              <div class="node-row" style="opacity:.6"><span class="machine-dot off"></span><span class="nm">lab-win<span class="os">Windows</span></span><span class="hchips hide-n"><span class="hchip">OpenCode 2</span><span class="hchip">Claude Code</span></span><span class="muted hide-n">idle</span><span class="muted">4 min ago</span></div>
+            </div>
+            <div class="add-box" data-only="A">
+              <div style="font-weight:600">Add a node</div>
+              <div class="field">Address<div class="input">http://100.88.12.7:2113</div></div>
+              <div class="field">Token<div class="input">fn_q3V8••••••••••t2Lw</div></div>
+              <div style="display:flex; gap:8px; align-items:center"><button class="btn primary">Check and add</button><span class="muted" style="font-size:12px">Fleet asks the node who it is before saving. The same as Machines today.</span></div>
+            </div>
+            <div class="add-box" data-only="B" hidden>
+              <div style="font-weight:600">Add a node</div>
+              <div class="muted" style="font-size:12px">Run this on the machine. The code works once, for 10 minutes.</div>
+              <div class="code-big">K7QM-4XPA</div>
+              <div class="term"><pre style="padding:10px 12px"><span class="p">$</span> fleet node join https://studio.tail-4f2a.ts.net --code K7QM-4XPA</pre></div>
+              <div style="display:flex; align-items:center; gap:8px; font-size:12px" class="muted"><span class="working"></span>Waiting for the node to join…</div>
+            </div>
+          </div>
+        </div>
+      </div>
+      <div class="screen-notes">
+        <div class="card"><h3>What's new here</h3><ul>
+          <li>"Machines" becomes "Nodes" and shows what each one can run: harnesses, how busy it is, when it was last seen.</li>
+          <li>Each row shows its harnesses, so you can see where a Claude Code session can run before you pick.</li>
+        </ul></div>
+        <div class="card"><h3>Already built</h3><p>The list, token check and encrypted token storage are today's Settings → Machines (<code>/api/machines</code>). B's join code reuses the phone pairing code format.</p></div>
+      </div>
+    </div>
+
+    <!-- 3.3 Sidebar -->
+    <div class="screen" data-screen="sidebar">
+      <div>
+        <div class="screen-bar">
+          <div class="seg" id="live-seg"><button aria-pressed="false" data-v="today">Today</button><button aria-pressed="true" data-v="live">Every node live</button></div>
+          <span>Click sessions on different machines.</span>
+        </div>
+        <div class="app" id="app">
+          <div class="rail"><i class="on"></i><i></i><i></i><i></i></div>
+          <aside class="sidebar">
+            <div class="sidebar-top"><div class="new-btn">+ New session</div><div class="filter">Filter sessions</div></div>
+            <div class="list" id="list"></div>
+          </aside>
+          <main class="convo">
+            <div class="convo-head"><span class="t" id="c-title"></span><span class="chip" id="c-node"></span><span class="chip plain" id="c-proj"></span></div>
+            <div class="convo-body" id="c-body"></div>
+          </main>
+          <div class="overlay" id="overlay">Reloading…</div>
+          <div class="toast" id="toast"></div>
+        </div>
+      </div>
+      <div class="screen-notes" id="sidebar-notes"></div>
+    </div>
+
+    <!-- 3.4 Composer -->
+    <div class="screen" data-screen="composer">
+      <div>
+        <div class="screen-bar">
+          <div class="seg" id="pick-seg"><button aria-pressed="false" data-v="you">You pick</button><button aria-pressed="true" data-v="fleet">Fleet can pick</button></div>
+        </div>
+        <div class="app" style="grid-template-columns: 44px minmax(0,1fr)">
+          <div class="rail"><i class="on"></i><i></i><i></i><i></i></div>
+          <main class="convo">
+            <div class="convo-head"><span class="t">New session</span></div>
+            <div class="newsession" style="flex:1; justify-content:flex-start; padding-top:90px">
+              <div class="composer">
+                <div class="txt">Profile the image resize path and get p95 under 200 ms. Keep the public API the same.</div>
+                <div class="chips">
+                  <span class="cchip">📁 harbor-api</span>
+                  <span class="cchip">OpenCode 2</span>
+                  <span class="cchip open" id="node-chip">Node: Any node ▾</span>
+                  <span class="send"></span>
+                </div>
+                <div class="popover" id="node-pop">
+                  <div class="opt sel" data-only-pick="fleet"><span class="on any"></span><div><div class="n1">Any node <span class="tag rec">Fleet picks</span></div>
+                    <div class="why-pick">Would use atlas: has harbor-api and OpenCode 2, fewer working than studio</div></div></div>
+                  <div class="sep" data-only-pick="fleet"></div>
+                  <div class="opt" data-node="atlas"><span class="on"></span><div><div class="n1"><span class="mono">atlas</span><span class="muted" style="font-weight:400">Linux · 1 working</span></div><div class="n2">harbor-api ✓ · OpenCode 2 ✓</div></div></div>
+                  <div class="opt"><span class="on"></span><div><div class="n1"><span class="mono">studio</span><span class="muted" style="font-weight:400">this machine · 2 working</span></div><div class="n2">harbor-api ✓ · OpenCode 2 ✓</div></div></div>
+                  <div class="opt"><span class="on"></span><div><div class="n1"><span class="mono">mini</span><span class="muted" style="font-weight:400">macOS · 1 working</span></div><div class="n2"><span class="warn">harbor-api isn't there</span> · Clone it there</div></div></div>
+                  <div class="opt disabled"><span class="on off"></span><div><div class="n1"><span class="mono">lab-win</span><span class="muted" style="font-weight:400">Windows</span></div><div class="n2">Not answering for 4 min</div></div></div>
+                </div>
+              </div>
+            </div>
+          </main>
+        </div>
+      </div>
+      <div class="screen-notes">
+        <div class="card"><h3>What's new here</h3><ul>
+          <li>The Machine chip exists today (#331). It becomes a node picker that shows, for this folder and harness, which nodes can take the work.</li>
+          <li id="pick-note-fleet"><b>Any node</b> lets Fleet choose. It always says why, so the choice never looks random.</li>
+          <li>A node without the folder offers to clone it (the new-folder flow, #323, on that node).</li>
+        </ul></div>
+        <div class="card"><h3>How Fleet would pick</h3><p>Simple rules, in order: the node is answering, has the folder, has the harness, then fewest sessions working. No load balancing beyond that.</p></div>
+      </div>
+    </div>
+
+    <!-- 3.5 Automations -->
+    <div class="screen" data-screen="automation">
+      <div>
+        <div class="app" style="grid-template-columns: 44px 220px minmax(0,1fr)">
+          <div class="rail"><i></i><i></i><i class="on"></i><i></i></div>
+          <aside class="sidebar">
+            <div class="sidebar-top"><div class="new-btn">+ New automation</div></div>
+            <div class="list">
+              <button class="row selected"><span class="title">Nightly dependency check</span><span class="meta">atlas</span></button>
+              <button class="row"><span class="title">Weekly changelog draft</span><span class="meta">any</span></button>
+              <button class="row"><span class="title">Windows installer smoke</span><span class="meta">lab-win</span></button>
+              <button class="row"><span class="title">Triage new issues</span><span class="meta">studio</span></button>
+            </div>
+          </aside>
+          <main class="convo">
+            <div class="convo-head"><span class="t">Nightly dependency check</span></div>
+            <div class="convo-body">
+              <div class="auto-card">
+                <div class="sentence">
+                  Every weekday at <span class="pill">07:00</span>, in <span class="pill">harbor-api</span>, on
+                  <span class="pill node">atlas ▾</span>, run the workflow <span class="pill">Update dependencies</span>
+                </div>
+                <div class="muted" style="font-size:12px">If atlas isn't answering at 07:00: <span class="pill" style="font-size:12px">Skip, and tell me ▾</span> &nbsp;or&nbsp; Run on another node that has harbor-api</div>
+              </div>
+              <div class="auto-card">
+                <div style="font-weight:600">Recent runs</div>
+                <div class="runs">
+                  <div class="run"><span class="when">Today 07:00</span><span>Update dependencies</span><span class="mono">atlas</span><span style="color:var(--running)">Finished</span></div>
+                  <div class="run"><span class="when">Tue 07:00</span><span>Update dependencies</span><span class="mono">atlas</span><span style="color:var(--running)">Finished</span></div>
+                  <div class="run"><span class="when">Mon 07:00</span><span>Update dependencies</span><span class="mono">studio</span><span class="warn">Moved</span></div>
+                </div>
+              </div>
+            </div>
+          </main>
+        </div>
+      </div>
+      <div class="screen-notes">
+        <div class="card"><h3>What's new here</h3><ul>
+          <li>An automation names the node it runs on, or "any node".</li>
+          <li>If the node isn't answering, you choose: skip it, or move the run to another node. "Moved" runs say so.</li>
+          <li>Each workflow run happens on one node. Steps don't hop between machines: the code would have to travel through git between steps.</li>
+        </ul></div>
+        <div class="card"><h3>Where it runs from</h3><p>The schedule has to live somewhere that's always on. In A, the node runs its own automations, so a laptop can be closed. In B, the control plane keeps the schedule and sends the run to a node.</p></div>
+      </div>
+    </div>
+
+    <!-- 3.6 Handoff -->
+    <div class="screen" data-screen="handoff">
+      <div>
+        <div class="app" style="grid-template-columns: 44px minmax(0,1fr)">
+          <div class="rail"><i class="on"></i><i></i><i></i><i></i></div>
+          <main class="convo">
+            <div class="convo-head"><span class="t">Fix installer upgrade path</span><span class="chip">studio</span><span class="chip plain">harbor-desktop</span></div>
+            <div class="convo-body">
+              <div class="bubble">Fix the upgrade path in the installer, and check it on Windows before you open the PR.</div>
+              <div class="tool"><span class="tk">Edit</span> installer/upgrade.ts <span class="add">+38</span> <span class="del">−12</span></div>
+              <div class="tool"><span class="tk">Bash</span> bun test installer — 46 passed</div>
+              <div class="agent">The fix is in and tests pass here. I can't run the Windows installer on this machine, so I'll hand that part to lab-win.</div>
+              <div class="handoff">
+                <div class="hh"><span class="tk mono" style="color:var(--coral)">fleet_session_start</span> on <span class="mono" style="color:var(--text)">lab-win</span> · branch fix/upgrade-path</div>
+                <div class="ht">Verify installer upgrade on Windows 11</div>
+                <div class="hh"><span class="working"></span>Working on lab-win · 3 min</div>
+              </div>
+              <div class="reply"><b>lab-win replied:</b> Upgrade from 2.2.4 keeps settings, no SmartScreen prompt, uninstall leaves nothing behind. Screenshot attached.</div>
+              <div class="agent">Windows checks out. Opening the PR now.</div>
+              <div class="line" style="width: 64%"></div>
+            </div>
+          </main>
+        </div>
+      </div>
+      <div class="screen-notes">
+        <div class="card"><h3>What's new here</h3><ul>
+          <li>An agent can start a session on another node, or message one there. Today <code>fleet_message</code> only reaches sessions on its own machine.</li>
+          <li>The other node gets the work through git: the agent pushes a branch, the new session checks it out.</li>
+          <li>The new session shows up under lab-win in your sidebar like any other, so you can watch or step in.</li>
+        </ul></div>
+        <div class="card"><h3>Guard rails</h3><p>Off by default, like cross-session messages today. The agent sees only nodes you allowed, and each hand-off shows as a card you can open.</p></div>
+      </div>
+    </div>
+  </section>
+
+  <!-- 4. Decide -->
+  <section id="decide">
+    <div class="eyebrow">5 · Choose a path</div>
+    <h2>Three decisions shape the plan</h2>
+    <p class="sub">Change an answer and the plan on the right follows. Sizes are relative: S is days, M about a week, L a couple of weeks.</p>
+    <div class="decide">
+      <div class="card">
+        <div class="q" data-q="wire">
+          <div class="q-title">1. How do nodes connect?</div>
+          <div class="q-help">Are your machines on one tailnet, or do you want nodes that can't be reached directly?</div>
+          <button class="choice" data-v="A" aria-pressed="false"><span class="mark"></span><span><span class="c1">A only: the interface connects to each node</span><br><span class="c2">Everything on a tailnet. Least new code.</span></span></button>
+          <button class="choice" data-v="AB" aria-pressed="true"><span class="mark"></span><span><span class="c1">A now, B later <span class="tag rec">Recommended</span></span><br><span class="c2">Ship the useful part first; add the outbound tunnel if you need nodes outside the tailnet.</span></span></button>
+          <button class="choice" data-v="B" aria-pressed="false"><span class="mark"></span><span><span class="c1">B from the start: nodes connect out</span><br><span class="c2">Cloud VMs and NAT without Tailscale. More to build before anything works.</span></span></button>
+        </div>
+        <div class="q" data-q="pick" data-multi>
+          <div class="q-title">2. Who decides where work runs?</div>
+          <div class="q-help">Pick any that apply.</div>
+          <button class="choice multi" data-v="you" aria-pressed="true" disabled><span class="mark"></span><span><span class="c1">I pick the node</span><br><span class="c2">Composer, automations, workflow runs. Always included.</span></span></button>
+          <button class="choice multi" data-v="fleet" aria-pressed="false"><span class="mark"></span><span><span class="c1">Fleet can pick ("Any node")</span><br><span class="c2">Has the folder, has the harness, fewest working.</span></span></button>
+          <button class="choice multi" data-v="agents" aria-pressed="true"><span class="mark"></span><span><span class="c1">Agents can hand work to another node</span><br><span class="c2">Start or message a session on another node.</span></span></button>
+        </div>
+        <div class="q" data-q="ui">
+          <div class="q-title">3. Does the interface machine run sessions too?</div>
+          <button class="choice" data-v="both" aria-pressed="true"><span class="mark"></span><span><span class="c1">Yes, always <span class="tag rec">Recommended</span></span><br><span class="c2">The simple case. Your desktop stays a normal Fleet that also shows the other machines.</span></span></button>
+          <button class="choice" data-v="uionly" aria-pressed="false"><span class="mark"></span><span><span class="c1">Yes, and offer "only use other machines"</span><br><span class="c2">For advanced customers whose desktop is only the window onto their nodes. Off by default.</span></span></button>
+        </div>
+      </div>
+
+      <div class="card plan">
+        <h3>The plan <span class="muted" style="font-weight:400; font-size:12px" id="plan-sub"></span></h3>
+        <div id="plan"></div>
+        <div class="total"><span>Now</span><div class="bar"><i class="now" id="bar-now"></i><i class="later" id="bar-later"></i></div><span id="bar-label"></span></div>
+        <div class="verdict" id="verdict"></div>
+      </div>
+    </div>
+  </section>
+</div>
+
+<script>
+  // ---------- A/B switches (all share one state) ----------
+  let wire = "A";
+  function setWire(v) {
+    wire = v;
+    document.querySelectorAll("[data-ab] button").forEach(b => b.setAttribute("aria-pressed", String(b.dataset.v === v)));
+    document.querySelectorAll("[data-only]").forEach(el => { el.hidden = el.dataset.only !== v; });
+  }
+  document.querySelectorAll("[data-ab] button").forEach(b => b.addEventListener("click", () => setWire(b.dataset.v)));
+
+  // ---------- Screen tabs ----------
+  const tabs = document.querySelectorAll("#screen-tabs .tab");
+  tabs.forEach(t => t.addEventListener("click", () => {
+    tabs.forEach(x => x.setAttribute("aria-selected", String(x === t)));
+    document.querySelectorAll(".screen").forEach(s => s.classList.toggle("on", s.dataset.screen === t.dataset.screen));
+  }));
+
+  // ---------- Sidebar: every node live ----------
+  const machines = [
+    { name: "studio", here: true, projects: [
+      { name: "harbor-api", sessions: [
+        { id: "s1", title: "Add rate limiting to uploads", state: "working", meta: "" },
+        { id: "s2", title: "Fix flaky checkout test", state: "", meta: "2h" },
+      ]},
+      { name: "pocket-notes", sessions: [
+        { id: "s3", title: "Draft release notes for 2.3", state: "working", meta: "" },
+      ]},
+    ]},
+    { name: "atlas", projects: [
+      { name: "harbor-api", sessions: [
+        { id: "a1", title: "Profile image resize path", state: "working", meta: "" },
+        { id: "a2", title: "Migrate settings to TOML", state: "waiting", meta: "" },
+      ]},
+      { name: "lumen-site", sessions: [
+        { id: "a3", title: "Swap search to static index", state: "", meta: "1d" },
+      ]},
+    ]},
+    { name: "mini", projects: [
+      { name: "pocket-notes", sessions: [
+        { id: "m1", title: "Fix iOS share sheet crash", state: "working", meta: "" },
+        { id: "m2", title: "Widget dark mode colors", state: "", meta: "5h" },
+      ]},
+    ]},
+    { name: "lab-win", off: true, projects: [
+      { name: "harbor-desktop", sessions: [
+        { id: "w1", title: "Verify installer upgrade on Windows 11", state: "", meta: "4m" },
+      ]},
+    ]},
+  ];
+  const bodies = {
+    s1: ["Uploads over 20 per minute from one key should get a 429 with Retry-After.", ["Edit", "src/upload/limits.ts", "+42", "−3"], ["Bash", "bun test upload — 31 passed"]],
+    a1: ["Profile the image resize path and get p95 under 200 ms.", ["Bash", "bun run bench:resize — p95 412 ms"], ["Edit", "src/images/resize.ts", "+27", "−18"]],
+    a2: ["Move settings from JSON to TOML and keep old files loading.", ["Edit", "src/config/load.ts", "+64", "−22"]],
+    m1: ["The share sheet crashes when the note has an image. Find out why.", ["Read", "ios/ShareExtension/Handler.swift"]],
+    s3: ["Draft release notes for 2.3 from merged PRs since 2.2.", ["Bash", "git log v2.2.0..HEAD --merges"]],
+  };
+  let liveMode = true;
+  let liveMachine = "studio";
+  let selected = "s1";
+
+  function machineOf(id) { return machines.find(m => m.projects.some(p => p.sessions.some(s => s.id === id))); }
+  function sessionOf(id) { for (const m of machines) for (const p of m.projects) for (const s of p.sessions) if (s.id === id) return { m, p, s }; }
+
+  function renderList() {
+    const list = document.getElementById("list");
+    list.innerHTML = "";
+    for (const m of machines) {
+      const isLive = liveMode ? !m.off : m.name === liveMachine;
+      const head = document.createElement("div");
+      head.className = "machine-header";
+      let note = "";
+      if (m.off) note = "not answering";
+      else if (!liveMode && !isLive) note = "12 s ago";
+      head.innerHTML = `<span class="machine-dot ${m.off ? "off" : ""}"></span><span class="machine-name">${m.name}</span>` +
+        (!liveMode && m.name === liveMachine ? `<span class="tag live">Live</span>` : "") +
+        (m.here ? `<span class="machine-note">this machine</span>` : `<span class="machine-note">${note}</span>`);
+      list.appendChild(head);
+      for (const p of m.projects) {
+        const ph = document.createElement("div");
+        ph.className = "project-header";
+        ph.textContent = p.name;
+        list.appendChild(ph);
+        for (const s of p.sessions) {
+          const b = document.createElement("button");
+          b.className = "row" + (s.id === selected ? " selected" : "") + ((!isLive || m.off) ? " dim" : "");
+          let slot = "";
+          if (s.state === "working") slot = `<span class="working ${(!isLive) ? "frozen" : ""}"></span>`;
+          if (s.state === "waiting") slot = `<span class="waiting"></span>`;
+          b.innerHTML = `<span class="slot">${slot}</span><span class="title">${s.title}</span>` +
+            (s.state === "waiting" ? `<span class="needs">NEEDS YOU</span>` : `<span class="meta">${s.meta}</span>`);
+          b.addEventListener("click", () => open(s.id));
+          list.appendChild(b);
+        }
+      }
+    }
+  }
+  function renderConvo() {
+    const { m, p, s } = sessionOf(selected);
+    document.getElementById("c-title").textContent = s.title;
+    document.getElementById("c-node").textContent = m.name;
+    document.getElementById("c-proj").textContent = p.name;
+    const body = document.getElementById("c-body");
+    const b = bodies[s.id] || [s.title + "."];
+    let html = `<div class="bubble">${b[0]}</div>`;
+    for (const t of b.slice(1)) {
+      html += t.length === 4
+        ? `<div class="tool"><span class="tk">${t[0]}</span> ${t[1]} <span class="add">${t[2]}</span> <span class="del">${t[3]}</span></div>`
+        : `<div class="tool"><span class="tk">${t[0]}</span> ${t[1]}</div>`;
+    }
+    html += `<div class="line" style="width: 90%"></div><div class="line" style="width: 76%"></div><div class="line" style="width: 82%"></div>`;
+    if (s.state === "working") html += `<div class="tool"><span class="working"></span> Working</div>`;
+    body.innerHTML = html;
+  }
+  let toastTimer;
+  function toast(msg) {
+    const t = document.getElementById("toast");
+    t.textContent = msg; t.classList.add("on");
+    clearTimeout(toastTimer); toastTimer = setTimeout(() => t.classList.remove("on"), 2200);
+  }
+  function open(id) {
+    const m = machineOf(id);
+    if (m.off) { toast(`${m.name} isn't answering. Its last rows stay listed.`); return; }
+    if (!liveMode && m.name !== liveMachine) {
+      const ov = document.getElementById("overlay");
+      ov.classList.add("on");
+      setTimeout(() => {
+        liveMachine = m.name; selected = id; renderList(); renderConvo(); ov.classList.remove("on");
+        toast(`Page reloaded. ${m.name} is live now; the others stopped streaming.`);
+      }, 650);
+      return;
+    }
+    selected = id; renderList(); renderConvo();
+    if (liveMode) toast(`Opened on ${m.name}. No reload; every node keeps streaming.`);
+  }
+  function renderSidebarNotes() {
+    const n = document.getElementById("sidebar-notes");
+    n.innerHTML = liveMode
+      ? `<div class="card"><h3>Every node live</h3><ul>
+          <li>Each node keeps its own live connection, so working dots and <b>Needs you</b> update on every machine at once.</li>
+          <li>Opening a session on another node is instant. No reload, and the others keep streaming.</li>
+          <li>Diffs, files and terminals come from the session's own node.</li></ul></div>
+         <div class="card"><h3>The work behind it</h3><p>The client keeps one connection and one API client for the whole page. That becomes one per node: about 55 files use the shared client. The phone inbox already keeps one connection per machine (<code>machine-feed.ts</code>), which is a starting point. This is the largest piece in every plan.</p></div>`
+      : `<div class="card"><h3>Today</h3><ul>
+          <li>One machine is <span class="tag live">Live</span>. The others are polled every 15 s, and their working dots don't move.</li>
+          <li>Clicking a session on another machine reloads the page and makes that machine live instead.</li></ul></div>`;
+  }
+  document.querySelectorAll("#live-seg button").forEach(b => b.addEventListener("click", () => {
+    liveMode = b.dataset.v === "live";
+    document.querySelectorAll("#live-seg button").forEach(x => x.setAttribute("aria-pressed", String(x === b)));
+    liveMachine = machineOf(selected).name;
+    renderList(); renderSidebarNotes();
+  }));
+  renderList(); renderConvo(); renderSidebarNotes();
+
+  // ---------- Composer: who picks ----------
+  function setPick(v) {
+    document.querySelectorAll("#pick-seg button").forEach(x => x.setAttribute("aria-pressed", String(x.dataset.v === v)));
+    document.querySelectorAll("[data-only-pick]").forEach(el => { el.hidden = el.dataset.onlyPick !== v; });
+    document.getElementById("node-chip").textContent = v === "fleet" ? "Node: Any node ▾" : "Node: atlas ▾";
+    document.querySelector('.opt[data-node="atlas"]').classList.toggle("sel", v !== "fleet");
+    document.getElementById("pick-note-fleet").style.display = v === "fleet" ? "" : "none";
+  }
+  document.querySelectorAll("#pick-seg button").forEach(b => b.addEventListener("click", () => setPick(b.dataset.v)));
+
+
+  // ---------- Two kinds of customer: the desktop app in three states ----------
+  const pRow = (title, state, meta, sel) =>
+    `<button class="row${sel ? " selected" : ""}"><span class="slot">${state === "working" ? '<span class="working"></span>' : state === "waiting" ? '<span class="waiting"></span>' : ""}</span>` +
+    `<span class="title">${title}</span>${state === "waiting" ? '<span class="needs">NEEDS YOU</span>' : `<span class="meta">${meta || ""}</span>`}</button>`;
+  const pProj = name => `<div class="project-header">${name}</div>`;
+  const pMachine = (name, note, off) => `<div class="machine-header"><span class="machine-dot${off ? " off" : ""}"></span><span class="machine-name">${name}</span><span class="machine-note">${note || ""}</span></div>`;
+  const hereRows = sel => pProj("harbor-api") + pRow("Add rate limiting to uploads", "working", "", sel) + pRow("Fix flaky checkout test", "", "2h") +
+    pProj("pocket-notes") + pRow("Draft release notes for 2.3", "working");
+  const atlasRows = sel => pProj("harbor-api") + pRow("Profile image resize path", "working", "", sel) + pRow("Migrate settings to TOML", "waiting");
+  const miniRows = () => pProj("pocket-notes") + pRow("Fix iOS share sheet crash", "working");
+  const convo = (title, chips, prompt, tools) =>
+    `<div class="convo-head"><span class="t">${title}</span>${chips}</div><div class="convo-body"><div class="bubble">${prompt}</div>${tools}` +
+    `<div class="line" style="width: 90%"></div><div class="line" style="width: 74%"></div><div class="line" style="width: 82%"></div><div class="tool"><span class="working"></span> Working</div></div>`;
+  const personas = {
+    simple: {
+      list: hereRows(true),
+      main: convo("Add rate limiting to uploads", '<span class="chip plain">harbor-api</span>', "Uploads over 20 per minute from one key should get a 429 with Retry-After.",
+        '<div class="tool"><span class="tk">Edit</span> src/upload/limits.ts <span class="add">+42</span> <span class="del">−3</span></div>'),
+      notes: `<div class="card"><h3>Exactly today</h3><ul>
+        <li>The desktop app starts its own Fleet and shows it.</li>
+        <li>No machine headers, no node words, no new first-run questions.</li>
+        <li>Nothing in this proposal changes what this customer sees.</li></ul></div>`,
+    },
+    node: {
+      list: pMachine("studio", "this computer") + hereRows(false) + pMachine("atlas", "") + atlasRows(true),
+      main: convo("Profile image resize path", '<span class="chip">atlas</span><span class="chip plain">harbor-api</span>', "Profile the image resize path and get p95 under 200 ms.",
+        '<div class="tool"><span class="tk">Bash</span> bun run bench:resize — p95 412 ms</div>'),
+      notes: `<div class="card"><h3>Same app, one node added</h3><ul>
+        <li>They ran <code>fleet node</code> on atlas and added it under Settings → Machines.</li>
+        <li>This computer still runs sessions. atlas's sessions sit beside them, all live.</li>
+        <li>The composer's Machine chip chooses where a new session runs.</li></ul></div>
+        <div class="card"><h3>Behind the window</h3><p>Still the desktop app's own Fleet. It is the interface: it keeps the machine list and the tokens, and talks to atlas.</p></div>`,
+    },
+    remote: {
+      list: pMachine("studio", "runs no sessions", true) + pProj("harbor-api") + pRow("Fix flaky checkout test", "", "2d") + pMachine("atlas", "") + atlasRows(false) + pMachine("mini", "") + miniRows(),
+      main: `<div class="convo-head"><span class="t">New session</span></div>
+        <div class="newsession" style="flex:1; justify-content:flex-start; padding-top:110px">
+          <div class="composer">
+            <div class="txt">Swap the search page to a static index and keep the URLs the same.</div>
+            <div class="chips"><span class="cchip">📁 lumen-site</span><span class="cchip">OpenCode 2</span><span class="cchip open">Machine: atlas ▾</span><span class="send"></span></div>
+          </div>
+          <div class="hint">This computer runs no sessions. New ones go to atlas. Change it in Settings → Machines.</div>
+        </div>`,
+      notes: `<div class="card"><h3>Only use other machines</h3>
+        <div class="toggle-row"><span class="toggle"></span><span>Run sessions on this computer</span></div>
+        <ul style="margin-top:10px">
+          <li>Off: this computer is only the window. New sessions, automations and hand-offs default to another machine.</li>
+          <li>Sessions already here stay where they are.</li>
+          <li>It's on unless you turn it off, so the simple case never notices it.</li></ul></div>`,
+    },
+  };
+  function setPersona(v) {
+    document.querySelectorAll("#persona-seg button").forEach(b => b.setAttribute("aria-pressed", String(b.dataset.v === v)));
+    document.getElementById("p-list").innerHTML = personas[v].list;
+    document.getElementById("p-main").innerHTML = personas[v].main;
+    document.getElementById("p-notes").innerHTML = personas[v].notes;
+  }
+  document.querySelectorAll("#persona-seg button").forEach(b => b.addEventListener("click", () => setPersona(b.dataset.v)));
+  setPersona("simple");
+
+  // ---------- Decide → plan ----------
+  const answers = { wire: "AB", pick: new Set(["you", "agents"]), ui: "both" };
+  const SIZE = { S: 1, M: 2, L: 4 };
+  function stages() {
+    const s = [];
+    s.push({ t: "Headless node", d: "<code>fleet node</code>: the same Fleet with no web UI and a token always required. Prints how to add it. <code>install-service</code> for systemd, launchd and Windows before it's announced.", size: "S" });
+    s.push({ t: "Every node live, no reload", d: "One connection and API client per node in the web app. Sidebar, conversation, diffs and terminals from any node without switching.", size: "L" });
+    s.push({ t: "Pick a node everywhere", d: "Settings → Nodes with harnesses and load; node on automations and workflow runs; Open in editor hidden for remote nodes.", size: "M" });
+    if (answers.ui === "uionly") s.push({ t: "Desktop: only use other machines", d: "A desktop app setting that keeps this computer as the window onto other machines but runs no sessions here. Off by default.", size: "S" });
+    if (answers.pick.has("fleet")) s.push({ t: "Fleet picks the node", d: "\"Any node\": answering, has the folder, has the harness, fewest working. Always shows why.", size: "M" });
+    if (answers.pick.has("agents")) s.push({ t: "Agents hand off across nodes", d: "Start or message a session on another node, work moved by branch. Behind a switch, like cross-session messages.", size: "M" });
+    if (answers.wire !== "A") s.push({ t: "Nodes connect out", d: "<code>fleet node join</code> with a one-time code; outbound tunnel; control plane relays API, events, terminals and previews.", size: "L", later: answers.wire === "AB" });
+    if (answers.wire === "B") {
+      // Under B the relay comes before the UI work: nothing reaches a node without it.
+      const relay = s.pop();
+      s.splice(1, 0, relay);
+    }
+    return s;
+  }
+  function renderPlan() {
+    const s = stages();
+    let now = 0, later = 0, i = 0;
+    document.getElementById("plan").innerHTML = s.map(st => {
+      if (st.later) later += SIZE[st.size]; else now += SIZE[st.size];
+      const num = st.later ? "–" : String(++i);
+      return `<div class="stage-row ${st.later ? "later" : ""}"><span class="num">${num}</span><div><div class="st">${st.t}${st.later ? '<span class="later-tag">later, if needed</span>' : ""}</div><div class="sd">${st.d}</div></div><span class="size">${st.size}</span></div>`;
+    }).join("");
+    const max = 16;
+    document.getElementById("bar-now").style.width = (now / max * 100) + "%";
+    document.getElementById("bar-later").style.width = (later / max * 100) + "%";
+    document.getElementById("bar-label").textContent = later ? `${now} now + ${later} later` : `${now} units`;
+    document.getElementById("plan-sub").textContent = `${i} stage${i === 1 ? "" : "s"} now`;
+    const first = answers.wire === "B"
+      ? "You'd see the first cross-machine session only after the tunnel and relay land. B costs most before it pays off."
+      : "After stage 2 you already have the main win: nodes without a UI, all live in one interface.";
+    const fleetNote = answers.pick.has("fleet") ? "" : " Fleet picking can come later without changing anything else.";
+    document.getElementById("verdict").innerHTML = first + fleetNote;
+  }
+  document.querySelectorAll(".q").forEach(q => {
+    const key = q.dataset.q;
+    q.querySelectorAll(".choice").forEach(c => c.addEventListener("click", () => {
+      if (c.disabled) return;
+      if (q.hasAttribute("data-multi")) {
+        const on = c.getAttribute("aria-pressed") !== "true";
+        c.setAttribute("aria-pressed", String(on));
+        on ? answers[key].add(c.dataset.v) : answers[key].delete(c.dataset.v);
+      } else {
+        q.querySelectorAll(".choice").forEach(x => x.setAttribute("aria-pressed", String(x === c)));
+        answers[key] = c.dataset.v;
+        if (key === "wire") setWire(c.dataset.v === "B" ? "B" : "A");
+      }
+      renderPlan();
+    }));
+  });
+  setWire("A");
+  setPick("fleet");
+  renderPlan();
+</script>
+</body>
+</html>
