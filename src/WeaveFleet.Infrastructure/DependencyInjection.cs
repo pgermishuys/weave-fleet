@@ -204,6 +204,7 @@ public static class DependencyInjection
         services.AddScoped<WeaveFleet.Application.Sessions.Work.SessionWork>();
         services.AddScoped<WeaveFleet.Application.Sessions.Creation.SessionCreation>();
         services.AddScoped<WeaveFleet.Application.Sessions.Retention.SessionRetention>();
+        services.AddScoped<WeaveFleet.Application.Sessions.Forking.SessionForking>();
         services.AddScoped<SessionOrchestrator>();
         services.AddScoped<HarnessProfileService>();
         services.AddScoped<WeaveFleet.Application.Weave.WeaveConfigService>();

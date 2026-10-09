@@ -1,15 +1,21 @@
 using System.Text.Json;
 using Microsoft.Extensions.Logging;
 using WeaveFleet.Application.Analytics;
+using WeaveFleet.Application.Credentials;
 using WeaveFleet.Application.DTOs;
 using WeaveFleet.Application.Events;
+using WeaveFleet.Application.Git;
 using WeaveFleet.Application.Harnesses;
+using WeaveFleet.Application.Services;
 using WeaveFleet.Application.Sessions;
+using WeaveFleet.Application.Sessions.Activation;
+using WeaveFleet.Application.Workspaces;
 using WeaveFleet.Domain.Common;
 using WeaveFleet.Domain.Entities;
 using WeaveFleet.Domain.Harnesses;
+using WeaveFleet.Domain.Repositories;
 
-namespace WeaveFleet.Application.Services;
+namespace WeaveFleet.Application.Sessions.Forking;
 
 /// <summary>
 /// A session's harness session forked into a new one (<see cref="IHarnessSession.ForkConversationAsync"/>) and attached
@@ -21,8 +27,25 @@ internal sealed record ForkedHarnessSession(ConversationFork Fork, IHarnessSessi
 /// Fork: a new session holding a copy of a session's conversation up to its last finished turn, in the same folder, on
 /// the same harness, profile, agent and model. From there the two go their own ways.
 /// </summary>
-public sealed partial class SessionOrchestrator
+public sealed partial class SessionForking(
+    WorkspaceService workspaceService,
+    InstanceService instanceService,
+    IHarnessRegistry harnessRegistry,
+    InstanceTracker instanceTracker,
+    ISessionRepository sessionRepository,
+    IProjectRepository projectRepository,
+    IEventBroadcaster eventBroadcaster,
+    IAnalyticsCollector analyticsCollector,
+    ICredentialStore credentialStore,
+    SessionActivation activation,
+    ILogger<SessionForking> logger,
+    GitDiffService? gitDiffService = null)
 {
+    private readonly GitDiffService _gitDiffService = gitDiffService ?? new GitDiffService();
+
+    private const string _lifecycleStatusRunning = "running";
+    private const string _activityStatusIdle = "idle";
+
     /// <summary>
     /// Forks session <paramref name="parentId"/>: its harness copies the conversation up to the last finished turn, and
     /// the copy becomes a session of its own, titled "Fork of …" unless <paramref name="title"/> is given. Refused on a
@@ -33,8 +56,8 @@ public sealed partial class SessionOrchestrator
         string? title = null,
         CancellationToken ct = default)
     {
-        using var _ = BeginSessionScope(parentId);
-        var parentResult = await GetSessionAsync(parentId).ConfigureAwait(false);
+        using var _ = logger.BeginSessionScope(parentId);
+        var parentResult = await sessionRepository.GetSessionAsync(parentId).ConfigureAwait(false);
         if (parentResult.IsFailure)
             return parentResult.Error;
 
@@ -141,7 +164,7 @@ public sealed partial class SessionOrchestrator
     /// <paramref name="forkSessionId"/>, on the harness process the session runs on. The instance isn't registered with
     /// the tracker: the caller does that once the Fleet session is saved.
     /// </summary>
-    private async Task<Result<ForkedHarnessSession>> ForkHarnessSessionAsync(Session session, string forkSessionId, CancellationToken ct)
+    internal async Task<Result<ForkedHarnessSession>> ForkHarnessSessionAsync(Session session, string forkSessionId, CancellationToken ct)
     {
         var runtime = harnessRegistry.GetRuntimeByType(session.HarnessType);
         if (runtime is null)
@@ -151,7 +174,7 @@ public sealed partial class SessionOrchestrator
         if (directory.IsFailure)
             return directory.Error;
 
-        var instance = await GetOrActivateInstanceAsync(session, ct).ConfigureAwait(false);
+        var instance = await activation.GetOrActivateInstanceAsync(session, ct).ConfigureAwait(false);
         if (instance.IsFailure)
             return instance.Error;
 
@@ -171,7 +194,7 @@ public sealed partial class SessionOrchestrator
 
         // Prepared as the session is, so the fork runs on the same harness process: a pooled process, or a V2 server,
         // holds its sessions for the launch it was given.
-        var profile = await ResolveSessionProfileAsync(session.HarnessProfileId).ConfigureAwait(false);
+        var profile = await activation.ResolveSessionProfileAsync(session.HarnessProfileId).ConfigureAwait(false);
         if (profile.IsFailure)
             return profile.Error;
 
@@ -222,6 +245,27 @@ public sealed partial class SessionOrchestrator
 
         return new ForkedHarnessSession(fork, forkInstance, directory.Value);
     }
+
+    private string HarnessDisplayName(Session session)
+        => harnessRegistry.GetByType(session.HarnessType)?.DisplayName ?? session.HarnessType;
+
+    private async Task<string?> ResolveProjectNameAsync(string? projectId)
+    {
+        if (projectId is null)
+            return null;
+
+        var projects = await projectRepository.ListAsync();
+        return projects.FirstOrDefault(p => p.Id == projectId)?.Name;
+    }
+
+    private async Task SafeDeleteAsync(IHarnessSession instance, CancellationToken ct)
+    {
+        try { await instance.DeleteAsync(ct); }
+        catch (Exception ex) { LogStopFailed(ex, instance.InstanceId); }
+    }
+
+    [LoggerMessage(Level = LogLevel.Warning, Message = "Failed to stop instance {InstanceId}")]
+    private partial void LogStopFailed(Exception ex, string instanceId);
 
     [LoggerMessage(Level = LogLevel.Warning, Message = "Couldn't fork session {SessionId}")]
     private partial void LogForkFailed(Exception ex, string sessionId);
