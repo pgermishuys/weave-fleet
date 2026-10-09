@@ -826,13 +826,14 @@ async function handleDelete(mode: DeleteProjectMode): Promise<void> {
   flex: 1;
 }
 
-/* What a session started, under it: running subagents, forks, sessions its agent started. */
+/* What a session started, under it: running subagents, forks, sessions its agent started. The line hangs from the
+   parent's status dot, and each child's dot sits under the parent's title. */
 .session-children {
   display: flex;
   flex-direction: column;
   gap: 1px;
-  margin: 1px 0 2px 13px;
-  padding-left: 10px;
+  margin: 1px 0 2px 28px;
+  padding-left: 3px;
   border-left: 1px solid var(--border);
 }
 

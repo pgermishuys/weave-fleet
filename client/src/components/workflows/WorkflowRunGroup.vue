@@ -53,6 +53,10 @@ function openRun(): void {
       :aria-label="`${title}, ${run?.workflowName ?? 'workflow run'}${status ? `, ${status.label}` : ''}`"
       @click="openRun"
     >
+      <span
+        class="wf-group__caret-slot"
+        aria-hidden="true"
+      />
       <StatusGlyph
         v-if="run?.status === 'running'"
         status="active"
@@ -61,10 +65,6 @@ function openRun(): void {
       <WorkflowIcon
         v-else
         class="wf-group__icon"
-        aria-hidden="true"
-      />
-      <span
-        class="wf-group__caret-slot"
         aria-hidden="true"
       />
       <span class="wf-group__title">{{ title }}</span>
@@ -103,7 +103,7 @@ function openRun(): void {
 .wf-group__by {
   display: flex;
   min-width: 0;
-  padding: 0 10px 2px 49px;
+  padding: 0 10px 2px 42px;
 }
 
 .wf-group__head {
@@ -115,7 +115,7 @@ function openRun(): void {
   gap: 9px;
   border: 0;
   border-radius: var(--radius-btn);
-  padding: 0 10px;
+  padding: 0 10px 0 6px;
   background: transparent;
   color: var(--text);
   cursor: pointer;
@@ -133,10 +133,12 @@ function openRun(): void {
   outline-offset: -2px;
 }
 
+/* Sits in the 8px status-glyph column, so the title doesn't move when the run starts or stops working. */
 .wf-group__icon {
   width: 13px;
   height: 13px;
   flex-shrink: 0;
+  margin-inline: -2.5px;
   color: var(--accent);
 }
 
@@ -144,7 +146,7 @@ function openRun(): void {
 .wf-group__caret-slot {
   width: 14px;
   height: 14px;
-  margin-left: -4px;
+  margin-right: -4px;
   flex-shrink: 0;
 }
 
@@ -182,8 +184,8 @@ function openRun(): void {
   color: var(--error);
 }
 
-/* Steps sit under the run, indented past its icon. */
+/* Steps sit under the run, each step's dot under the run's title. */
 .wf-group__step {
-  padding-left: 37px;
+  padding-left: 32px;
 }
 </style>
