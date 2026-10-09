@@ -31,6 +31,10 @@ const label = computed(() => (props.draft.isStarting ? "Starting…" : "Draft"))
         aria-hidden="true"
       />
       <span
+        class="draft-row__caret-slot"
+        aria-hidden="true"
+      />
+      <span
         class="draft-row__title"
         :class="{ 'draft-row__title--empty': !draft.title }"
       >{{ draft.title || "New session" }}</span>
@@ -87,6 +91,14 @@ const label = computed(() => (props.draft.isStarting ? "Starting…" : "Draft"))
   flex-shrink: 0;
   margin-inline: -2px;
   color: var(--muted);
+}
+
+/* The empty caret place a top-level session row keeps, so the title doesn't move when it becomes one. */
+.draft-row__caret-slot {
+  width: 14px;
+  height: 14px;
+  margin-left: -4px;
+  flex-shrink: 0;
 }
 
 .draft-row__title {

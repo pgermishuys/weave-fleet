@@ -680,6 +680,7 @@ async function handleDelete(mode: DeleteProjectMode): Promise<void> {
               :session="entry.session"
               :active="entry.session.session.id === activeSessionId"
               :running-count="runningCounts?.get(entry.session.session.id)"
+              top-level
               :has-children="hasChildren(entry.session)"
               :children-expanded="childrenExpanded(entry.session)"
               :open-on-machine="openOnMachine"
