@@ -138,7 +138,7 @@ public sealed class OpenCodeSessionMessageProxy(
             else if (!string.IsNullOrWhiteSpace(session.HarnessResumeToken))
             {
                 // Harness is missing but we have a resume token - attempt lazy resume
-                // Resolve ISessionActivator lazily to avoid DI cycle with SessionOrchestrator
+                // Resolve ISessionActivator lazily to avoid a DI cycle with SessionActivation
                 LogAttemptingResume(logger, fleetSessionId, null);
                 try
                 {
@@ -214,7 +214,7 @@ public sealed class OpenCodeSessionMessageProxy(
             else if (!string.IsNullOrWhiteSpace(session.HarnessResumeToken))
             {
                 // Harness is missing but we have a resume token - attempt lazy resume
-                // Resolve ISessionActivator lazily to avoid DI cycle with SessionOrchestrator
+                // Resolve ISessionActivator lazily to avoid a DI cycle with SessionActivation
                 LogAttemptingResume(logger, fleetSessionId, null);
                 try
                 {

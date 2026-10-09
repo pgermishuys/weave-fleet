@@ -471,7 +471,7 @@ public sealed class OpenCodeDelegationReplayTests
             Task.FromResult<RuntimePreparation>(new RuntimePreparation.Ready(new StubDelegationReplayLaunchArtifacts()));
         runtime.ResumeBehavior = (_, _) => Task.FromResult<IHarnessSession>(childHarness);
 
-        var orchestrator = builder.Build();
+        builder.Build();
 
         // Wire up DI for the OpenCodeHarnessSession
         var services = new ServiceCollection();
@@ -485,7 +485,7 @@ public sealed class OpenCodeDelegationReplayTests
         services.AddSingleton<IOutboxDispatcher>(new FakeOutboxDispatcher());
         services.AddSingleton<IUserContext>(userContext);
         services.AddSingleton(new DelegationService(builder.DelegationRepository, builder.EventBroadcaster, userContext));
-        services.AddSingleton(orchestrator);
+        services.AddSingleton(builder.Creation);
         var rootProvider = services.BuildServiceProvider();
         var scopeFactory = rootProvider.GetRequiredService<IServiceScopeFactory>();
 

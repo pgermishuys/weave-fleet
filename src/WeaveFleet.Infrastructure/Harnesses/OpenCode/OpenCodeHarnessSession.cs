@@ -4,6 +4,7 @@ using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging;
 using WeaveFleet.Application.Analytics;
 using WeaveFleet.Application.Services;
+using WeaveFleet.Application.Sessions.Creation;
 using WeaveFleet.Domain.Events;
 using WeaveFleet.Application.Workflows;
 using WeaveFleet.Domain.Harnesses;
@@ -1717,11 +1718,11 @@ internal sealed partial class OpenCodeHarnessSession : IHarnessSession
 
             using var userScope = BackgroundUserContext.BeginScope(_ownerUserId);
             using var scope = _scopeFactory.CreateScope();
-            var sessionOrchestrator = scope.ServiceProvider.GetService<SessionOrchestrator>();
-            if (sessionOrchestrator is null)
+            var sessionCreation = scope.ServiceProvider.GetService<SessionCreation>();
+            if (sessionCreation is null)
                 return;
 
-            await sessionOrchestrator.EnsureDelegatedChildSessionAsync(
+            await sessionCreation.EnsureDelegatedChildSessionAsync(
                 _fleetSessionId,
                 childOpenCodeSessionId,
                 title).ConfigureAwait(false);

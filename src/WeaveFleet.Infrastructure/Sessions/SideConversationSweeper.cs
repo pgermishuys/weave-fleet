@@ -3,6 +3,7 @@ using Microsoft.Extensions.Hosting;
 using Microsoft.Extensions.Logging;
 using WeaveFleet.Application.Services;
 using WeaveFleet.Application.Sessions;
+using WeaveFleet.Application.Sessions.Side;
 using WeaveFleet.Domain.Repositories;
 using WeaveFleet.Infrastructure.Users;
 
@@ -56,10 +57,10 @@ internal sealed partial class SideConversationSweeper(
 
         foreach (var side in expired)
         {
-            // As its owner: the orchestrator reads and deletes only the caller's sessions.
+            // As its owner: the session services read and delete only the caller's sessions.
             using var user = BackgroundUserContext.BeginScope(side.UserId);
             using var scope = scopeFactory.CreateScope();
-            await scope.ServiceProvider.GetRequiredService<SessionOrchestrator>()
+            await scope.ServiceProvider.GetRequiredService<SessionSideConversations>()
                 .DeleteDiscardedSideConversationAsync(side.Id, ct).ConfigureAwait(false);
         }
     }

@@ -7,6 +7,7 @@ using WeaveFleet.Application.FleetTools;
 using WeaveFleet.Application.Harnesses;
 using WeaveFleet.Application.Services;
 using WeaveFleet.Application.Sessions;
+using WeaveFleet.Application.Sessions.Creation;
 using WeaveFleet.Domain.Entities;
 using WeaveFleet.Domain.Harnesses;
 using WeaveFleet.Domain.Identity;
@@ -250,7 +251,7 @@ internal sealed class ClaudeCodeHarnessSession : IHarnessSession
     /// <summary>
     /// Makes (or finds) the hidden Fleet session a subagent's steps go to: under Fleet session <c>parent</c>, for the
     /// subagent called with tool call <c>callId</c>, titled <c>title</c>. Returns its id, or null when it can't be made.
-    /// Fleet's <see cref="SessionOrchestrator.EnsureDelegatedChildSessionAsync"/> unless a test says otherwise.
+    /// Fleet's <see cref="SessionCreation.EnsureDelegatedChildSessionAsync"/> unless a test says otherwise.
     /// </summary>
     internal Func<string, string, string, Task<string?>> ChildSessions { get; init; }
 
@@ -1644,15 +1645,15 @@ internal sealed class ClaudeCodeHarnessSession : IHarnessSession
             .ConfigureAwait(false);
     }
 
-    /// <summary>Fleet's hidden child session for a subagent, made like any delegated child (<see cref="SessionOrchestrator"/>).</summary>
+    /// <summary>Fleet's hidden child session for a subagent, made like any delegated child (<see cref="SessionCreation.EnsureDelegatedChildSessionAsync"/>).</summary>
     private async Task<string?> MakeChildSessionAsync(string parentFleetSessionId, string callId, string title)
     {
         using var userScope = BackgroundUserContext.BeginScope(_ownerUserId);
         using var scope = _scopeFactory.CreateScope();
-        if (scope.ServiceProvider.GetService<SessionOrchestrator>() is not { } orchestrator)
+        if (scope.ServiceProvider.GetService<SessionCreation>() is not { } creation)
             return null;
 
-        var child = await orchestrator.EnsureDelegatedChildSessionAsync(parentFleetSessionId, callId, title).ConfigureAwait(false);
+        var child = await creation.EnsureDelegatedChildSessionAsync(parentFleetSessionId, callId, title).ConfigureAwait(false);
         return child.IsSuccess ? child.Value.Id : null;
     }
 
