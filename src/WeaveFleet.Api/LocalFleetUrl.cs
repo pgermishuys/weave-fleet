@@ -3,7 +3,6 @@ using System.Net.Sockets;
 using Microsoft.AspNetCore.Hosting.Server;
 using Microsoft.AspNetCore.Hosting.Server.Features;
 using WeaveFleet.Application.Configuration;
-using WeaveFleet.Application.Services;
 
 namespace WeaveFleet.Api;
 

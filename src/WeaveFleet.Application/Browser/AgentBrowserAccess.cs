@@ -1,5 +1,5 @@
 using WeaveFleet.Application.Canvases;
-using WeaveFleet.Application.Services;
+using WeaveFleet.Application.Configuration;
 using WeaveFleet.Domain.Repositories;
 
 namespace WeaveFleet.Application.Browser;

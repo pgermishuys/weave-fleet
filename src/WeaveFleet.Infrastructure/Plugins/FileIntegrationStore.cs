@@ -1,8 +1,8 @@
 using System.Text.Json;
 using System.Text.Json.Nodes;
-using WeaveFleet.Application.Services;
+using WeaveFleet.Application.Plugins;
 
-namespace WeaveFleet.Infrastructure.Services;
+namespace WeaveFleet.Infrastructure.Plugins;
 
 /// <summary>
 /// Transitional file-backed store for integration-shaped config data.

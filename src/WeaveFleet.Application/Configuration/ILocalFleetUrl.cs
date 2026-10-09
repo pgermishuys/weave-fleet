@@ -1,4 +1,4 @@
-namespace WeaveFleet.Application.Services;
+namespace WeaveFleet.Application.Configuration;
 
 /// <summary>
 /// The URL a process on this machine uses to call back into Fleet, such as a harness plugin calling the

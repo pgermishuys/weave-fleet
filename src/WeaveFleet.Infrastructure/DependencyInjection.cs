@@ -45,6 +45,7 @@ using WeaveFleet.Infrastructure.Harnesses.Pi;
 using WeaveFleet.Infrastructure.Pages;
 using WeaveFleet.Infrastructure.Plugins;
 using WeaveFleet.Infrastructure.Plugins.BuiltIn.GitHub;
+using WeaveFleet.Infrastructure.Recaps;
 using WeaveFleet.Infrastructure.Services;
 using WeaveFleet.Infrastructure.SessionSources;
 using WeaveFleet.Infrastructure.Skills;

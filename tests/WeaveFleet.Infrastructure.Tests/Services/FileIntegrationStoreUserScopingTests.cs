@@ -1,6 +1,6 @@
 using System.Text.Json.Nodes;
 using Shouldly;
-using WeaveFleet.Infrastructure.Services;
+using WeaveFleet.Infrastructure.Plugins;
 
 namespace WeaveFleet.Infrastructure.Tests.Services;
 

@@ -166,7 +166,7 @@ builder.Services.AddSingleton<WeaveFleet.Application.Tools.ToolDetector>();
 builder.Services.AddSingleton<WeaveFleet.Api.Browser.PreviewGateway>();
 builder.Services.AddSingleton(_ => WeaveFleet.Application.Workspaces.KeyFileConfig.Load());
 builder.Services.AddSingleton<WeaveFleet.Application.Workspaces.KeyFileScanner>();
-builder.Services.AddSingleton<WeaveFleet.Application.Services.ILocalFleetUrl, WeaveFleet.Api.LocalFleetUrl>();
+builder.Services.AddSingleton<WeaveFleet.Application.Configuration.ILocalFleetUrl, WeaveFleet.Api.LocalFleetUrl>();
 if (fleetOptions.Desktop.Enabled)
 {
     builder.Services.AddHostedService(sp => new WeaveFleet.Api.Desktop.StandardInputWatcher(
@@ -509,7 +509,7 @@ app.Lifetime.ApplicationStarted.Register(() =>
     if (instanceLock is null)
         return;
 
-    var url = app.Services.GetRequiredService<WeaveFleet.Application.Services.ILocalFleetUrl>().TryGet();
+    var url = app.Services.GetRequiredService<WeaveFleet.Application.Configuration.ILocalFleetUrl>().TryGet();
     if (url is null)
         return;
 
