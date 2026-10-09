@@ -6,6 +6,7 @@ import { EditorView, type ViewUpdate } from "@codemirror/view";
 import { useDiffBase } from "@/composables/use-diff-base";
 import { baseKey, type UseDiffsResult } from "@/composables/use-diffs";
 import { useCanvasAnnotate } from "@/composables/use-canvas-annotation";
+import { useSessionImage } from "@/composables/use-session-image";
 import { appendDraftReference } from "@/composables/use-draft-state";
 import type { AnnotationAnchor } from "@/lib/annotation-types";
 import { dispatchCommandEvent } from "@/lib/command-events";
@@ -14,7 +15,7 @@ import { finishCompare, openBuffer, saveBuffer, useDiskVersion } from "@/lib/cod
 import { useMachineTarget } from "@/lib/machine-target";
 import { createDeletedView, markStripe, setMerge } from "@/lib/code-editor/merge";
 import { getVisualRenderer } from "@/lib/visual-renderer-registry";
-import { hasRenderedView, useCanvasesStore, type FileView } from "@/stores/canvases";
+import { hasRenderedView, isImagePath, useCanvasesStore, type FileView } from "@/stores/canvases";
 import { useFileBuffersStore, type FileBufferRecord } from "@/stores/file-buffers";
 import { useGoToFileStore } from "@/stores/go-to-file";
 
@@ -44,8 +45,9 @@ const saveKey = isMac ? "⌘S" : "Ctrl S";
 
 const renderable = computed(() => hasRenderedView(props.path));
 const isHtml = computed(() => /\.html?$/i.test(props.path));
+const isImage = computed(() => isImagePath(props.path));
 const diffItem = computed(() => sharedDiffs?.byFile.value.get(props.path) ?? null);
-const inDiff = computed(() => diffItem.value !== null);
+const inDiff = computed(() => diffItem.value !== null && !isImage.value);
 // The diff list has no contents; the base is fetched once, when the file is among the changes.
 const diffBase = useDiffBase(() => props.sessionId, () => props.path, inDiff, () => baseKey(sharedDiffs?.base.value));
 const gitBase = computed<Text | null>(() => (inDiff.value && diffBase.value !== null ? baseText(diffBase.value) : null));
@@ -114,6 +116,7 @@ function detach(): void {
  * tabs alive), so a remount, or a cached canvas reused for a reopened file, attaches again.
  */
 async function attach(): Promise<void> {
+  if (isImage.value) return;
   const current = await openBuffer(machine, props.sessionId, props.path);
   if (!editorHost.value || !current.state) return;
   if (attached === current && editor && current.view === editor) {
@@ -175,7 +178,11 @@ onMounted(() => {
   void attach();
   mountDeleted();
 });
-onActivated(() => void attach());
+onActivated(() => {
+  void attach();
+  // The agent may have changed the picture while the tab was in the back.
+  if (image.src.value) image.reload();
+});
 onDeactivated(() => hideChip());
 onBeforeUnmount(() => {
   clearTimeout(stripeTimer);
@@ -183,6 +190,35 @@ onBeforeUnmount(() => {
   detach();
   deletedView?.destroy();
 });
+
+// ─── Images ──────────────────────────────────────────────────────────────────
+
+// An image is only ever shown, never edited, at any size.
+const image = useSessionImage(() => props.sessionId, () => props.path, isImage);
+const imageDims = ref<{ width: number; height: number } | null>(null);
+const imageBroken = ref(false);
+const imageNote = computed(() => image.error.value ?? (imageBroken.value ? "This image couldn't be shown." : null));
+const imageMeta = computed(() => {
+  const bytes = image.bytes.value;
+  if (bytes === null || !image.src.value) return null;
+  const size = bytes >= 1_048_576 ? `${(bytes / 1_048_576).toFixed(1)} MB`
+    : bytes >= 1024 ? `${Math.round(bytes / 1024)} KB`
+    : `${bytes} B`;
+  // An SVG without a width and height has no pixel size of its own.
+  return imageDims.value ? `${imageDims.value.width} × ${imageDims.value.height} · ${size}` : size;
+});
+
+watch(() => image.src.value, () => {
+  imageBroken.value = false;
+});
+watch(() => props.path, () => {
+  imageDims.value = null;
+});
+
+function onImageLoad(event: Event): void {
+  const img = event.target as HTMLImageElement;
+  imageDims.value = img.naturalWidth > 0 ? { width: img.naturalWidth, height: img.naturalHeight } : null;
+}
 
 // ─── Rendered ────────────────────────────────────────────────────────────────
 
@@ -327,6 +363,12 @@ function addToMessage(): void {
       <span class="file-canvas__spacer" />
 
       <span
+        v-if="imageMeta"
+        class="file-canvas__state"
+        data-testid="image-meta"
+      >{{ imageMeta }}</span>
+
+      <span
         v-if="conflict"
         class="file-canvas__state"
         data-testid="file-state"
@@ -467,6 +509,34 @@ function addToMessage(): void {
       {{ info.message }}
     </p>
 
+    <template v-if="isImage">
+      <p
+        v-if="imageNote"
+        class="file-canvas__note"
+        role="status"
+        data-testid="file-unavailable"
+      >
+        {{ imageNote }}
+      </p>
+      <div
+        v-else-if="image.src.value"
+        class="file-canvas__image"
+        data-testid="file-image"
+      >
+        <img
+          :src="image.src.value"
+          :alt="fileName"
+          @load="onImageLoad"
+          @error="imageBroken = true"
+        >
+      </div>
+      <p
+        v-else
+        class="file-canvas__note"
+      >
+        Opening {{ path }}…
+      </p>
+    </template>
     <div
       v-if="showRendered && renderer"
       class="file-canvas__rendered"
@@ -706,6 +776,25 @@ function addToMessage(): void {
   padding: 14px 18px;
   font-size: 13px;
   color: var(--muted);
+}
+
+.file-canvas__image {
+  flex: 1;
+  min-height: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 24px;
+  overflow: hidden;
+}
+
+/* A checkerboard behind the picture, so transparent parts read as transparent in either theme. */
+.file-canvas__image img {
+  max-width: 100%;
+  max-height: 100%;
+  object-fit: contain;
+  background: repeating-conic-gradient(var(--border) 0 25%, transparent 0 50%) 0 0 / 16px 16px;
+  box-shadow: 0 0 0 1px var(--border);
 }
 
 .file-canvas__chip {

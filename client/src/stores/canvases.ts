@@ -108,9 +108,14 @@ export function fileCanvasId(path: string): string {
   return `file:${path}`;
 }
 
-/** Markdown and HTML open rendered; everything else opens in the editor. */
+/** Markdown and HTML open rendered; images are only ever shown; everything else opens in the editor. */
 export function hasRenderedView(path: string): boolean {
   return /\.(md|markdown|mdx|html?)$/i.test(path);
+}
+
+/** The image types the server's `/files/image` serves (`SessionOrchestrator.ImageContentTypes`). */
+export function isImagePath(path: string): boolean {
+  return /\.(png|jpe?g|gif|webp|avif|bmp|ico|svg)$/i.test(path);
 }
 
 export function defaultFileView(path: string): FileView {
