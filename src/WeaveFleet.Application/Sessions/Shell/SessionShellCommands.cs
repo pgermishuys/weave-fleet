@@ -1,16 +1,24 @@
 using Microsoft.Extensions.Logging;
+using WeaveFleet.Application.Harnesses;
+using WeaveFleet.Application.Sessions.Activation;
+using WeaveFleet.Application.Sessions.Prompting;
 using WeaveFleet.Domain.Common;
 using WeaveFleet.Domain.Entities;
 using WeaveFleet.Domain.Harnesses;
 using WeaveFleet.Domain.Identity;
+using WeaveFleet.Domain.Repositories;
 
-namespace WeaveFleet.Application.Services;
+namespace WeaveFleet.Application.Sessions.Shell;
 
 /// <summary>
 /// A shell command the user runs from the composer (<c>!git status</c>). It runs in the session's folder with the
 /// agent's own rights, so it's gated exactly as a prompt is: the session must be the caller's and not archived.
 /// </summary>
-public sealed partial class SessionOrchestrator
+public sealed partial class SessionShellCommands(
+    ISessionRepository sessionRepository,
+    IHarnessRegistry harnessRegistry,
+    SessionActivation activation,
+    ILogger<SessionShellCommands> logger)
 {
     /// <summary>
     /// Runs <paramref name="command"/> in the session's folder through its harness. Returns once the harness has taken
@@ -18,13 +26,13 @@ public sealed partial class SessionOrchestrator
     /// </summary>
     public async Task<Result<Unit>> RunShellCommandAsync(string id, string? command, CancellationToken ct = default)
     {
-        using var _ = BeginSessionScope(id);
+        using var _ = logger.BeginSessionScope(id);
         if (string.IsNullOrWhiteSpace(command))
             return FleetError.ValidationError("Session.ShellCommand", "Type a command to run.");
         if (command.Length > ShellCommands.MaxCommandLength)
             return FleetError.ValidationError("Session.ShellCommand", $"The command is longer than {ShellCommands.MaxCommandLength} characters.");
 
-        var sessionResult = await GetSessionAsync(id);
+        var sessionResult = await sessionRepository.GetSessionAsync(id);
         if (sessionResult.IsFailure)
             return sessionResult.Error;
 
@@ -39,16 +47,16 @@ public sealed partial class SessionOrchestrator
                 $"{HarnessDisplayName(session)} sessions can't run shell commands.");
         }
 
-        var instanceResult = await GetOrActivateInstanceAsync(session, ct).ConfigureAwait(false);
+        var instanceResult = await activation.GetOrActivateInstanceAsync(session, ct).ConfigureAwait(false);
         if (instanceResult.IsFailure)
             return instanceResult.Error;
 
         try
         {
             // The command's output arrives as events, so the subscription has to be up before it runs.
-            await EnsureEventSubscriptionReadyAsync(instanceResult.Value, id, ct).ConfigureAwait(false);
+            await activation.EnsureEventSubscriptionReadyAsync(instanceResult.Value, id, ct).ConfigureAwait(false);
 
-            var choices = WithSessionChoices(options: null, session);
+            var choices = SessionPrompting.WithSessionChoices(options: null, session);
             await instanceResult.Value.RunShellCommandAsync(
                 new ShellCommandOptions
                 {

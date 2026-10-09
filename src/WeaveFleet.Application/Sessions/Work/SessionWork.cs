@@ -1,16 +1,21 @@
+using WeaveFleet.Application.Services;
 using WeaveFleet.Domain.Common;
 using WeaveFleet.Domain.Entities;
 using WeaveFleet.Domain.Events;
 using WeaveFleet.Domain.Harnesses;
+using WeaveFleet.Domain.Repositories;
 
-namespace WeaveFleet.Application.Services;
+namespace WeaveFleet.Application.Sessions.Work;
 
 /// <summary>
 /// What the user can do with work an agent left running: stop one piece of it, or read its output. Both go to the
 /// session's live harness (<see cref="IHarnessSession.StopWorkAsync"/>, <see cref="IHarnessSession.ReadWorkOutputAsync"/>);
 /// work runs in the harness, so a session that isn't running has none left to act on.
 /// </summary>
-public sealed partial class SessionOrchestrator
+public sealed class SessionWork(
+    ISessionRepository sessionRepository,
+    InstanceTracker instanceTracker,
+    DelegationService delegationService)
 {
     /// <summary>
     /// Stops work item <paramref name="itemId"/> of session <paramref name="sessionId"/>, leaving the session and its other
@@ -38,7 +43,7 @@ public sealed partial class SessionOrchestrator
         }
 
         // Not there any more: it ended without Fleet hearing how.
-        var ended = await _delegationService.HandleWorkEndedAsync(
+        var ended = await delegationService.HandleWorkEndedAsync(
                 sessionId, work.WorkId, stopped ? WorkEndedReasons.Cancelled : WorkEndedReasons.Lost, stopped ? "stopped" : null)
             .ConfigureAwait(false);
         return ended ?? DelegationService.ToItem(work);
@@ -81,11 +86,11 @@ public sealed partial class SessionOrchestrator
         Func<Delegation, bool> allowed,
         string notAllowed)
     {
-        var session = await GetSessionAsync(sessionId).ConfigureAwait(false);
+        var session = await sessionRepository.GetSessionAsync(sessionId).ConfigureAwait(false);
         if (session.IsFailure)
             return session.Error;
 
-        var work = await _delegationService.FindWorkAsync(sessionId, itemId).ConfigureAwait(false);
+        var work = await delegationService.FindWorkAsync(sessionId, itemId).ConfigureAwait(false);
         if (work is null)
             return FleetError.NotFoundFor("Work", itemId);
         if (!allowed(work))
