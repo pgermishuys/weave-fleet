@@ -20,64 +20,21 @@ import WorkflowStepper from "@/components/workflows/WorkflowStepper.vue";
 import TerminalToggleButton from "@/components/terminal/TerminalToggleButton.vue";
 import RightPanelSheetButton from "@/components/layout/RightPanelSheetButton.vue";
 import { useDiffs } from "@/composables/use-diffs";
-import {
-  useAbortSession,
-  useDeleteSession,
-  useRenameSession,
-} from "@/composables/use-session-actions";
+import { useSessionDetail } from "@/composables/use-session-detail";
+import { useSessionDetailActions } from "@/composables/use-session-detail-actions";
 import { useSentPrompts } from "@/composables/use-send-prompt";
 import { provideSessionDiffsContext } from "@/composables/use-session-diffs-context";
 import { useSessionRecap } from "@/composables/use-session-recap";
 import { useSessionTerminals } from "@/composables/use-session-terminals";
 import { lineageOf } from "@/lib/session-lineage";
-import { apiFetchOn } from "@/lib/api-client";
-import { useMachineTarget } from "@/lib/machine-target";
-import type { SessionActionCapabilities, SessionListItem, SessionOrigin } from "@/api/client";
+import {
+  isActiveActivityStatus,
+  isDiffStalingStatus,
+  normalizeActivityStatus,
+  normalizeLifecycleStatus,
+} from "@/lib/session-detail";
 import type { SessionActivityStatus } from "@/lib/types";
-import { dispatchSessionUpsert } from "@/lib/session-sync";
 import { useSessionsStore } from "@/stores/sessions";
-import { useArchiveQueueStore } from "@/stores/archive-queue";
-
-function normalizeRetentionStatus(value: string | null | undefined): "active" | "archived" {
-  return value === "archived" ? "archived" : "active";
-}
-
-interface SessionDetailResponse {
-  id?: string | null;
-  instanceId?: string | null;
-  parentSessionId?: string | null;
-  workspaceId?: string | null;
-  workspaceDirectory?: string | null;
-  workspaceDisplayName?: string | null;
-  sourceDirectory?: string | null;
-  isolationStrategy?: string | null;
-  branch?: string | null;
-  title?: string | null;
-  createdAt?: string | null;
-  projectId?: string | null;
-  projectName?: string | null;
-  status?: string | null;
-  activityStatus?: string | null;
-  lifecycleStatus?: string | null;
-  retentionStatus?: string | null;
-  totalTokens?: number | null;
-  totalCost?: number | null;
-  capabilities?: SessionActionCapabilities;
-  origin?: SessionOrigin | null;
-  harnessType?: string | null;
-  /** The profile the session started with, if it has one. */
-  harnessProfileName?: string | null;
-  tags?: string[];
-  forkedFromSessionId?: string | null;
-  spawnedBySessionId?: string | null;
-  spawnKind?: string | null;
-  lineageDetachedAt?: string | null;
-  /** While the harness waits to retry a failed model call: which attempt, out of how many, why and when. */
-  retryAttempt?: number | null;
-  retryMaxAttempts?: number | null;
-  retryMessage?: string | null;
-  retryNext?: string | null;
-}
 
 type ComposerInstance = ComponentPublicInstance & {
   focusPrompt: () => void;
@@ -85,141 +42,10 @@ type ComposerInstance = ComponentPublicInstance & {
 
 type SessionViewMode = "chat" | "files-changed";
 
-function getStringField(
-  value: Record<string, unknown>,
-  camelKey: string,
-  pascalKey: string,
-): string | null | undefined {
-  const candidate = value[camelKey] ?? value[pascalKey];
-  return typeof candidate === "string" ? candidate : candidate == null ? null : undefined;
-}
-
-function getNumberField(
-  value: Record<string, unknown>,
-  camelKey: string,
-  pascalKey: string,
-): number | null | undefined {
-  const candidate = value[camelKey] ?? value[pascalKey];
-  return typeof candidate === "number" ? candidate : candidate == null ? null : undefined;
-}
-
-function normalizeSessionDetailResponse(payload: unknown): SessionDetailResponse {
-  if (!payload || typeof payload !== "object") {
-    return {};
-  }
-
-  const value = payload as Record<string, unknown>;
-
-  const originPayload = value.origin ?? value.Origin;
-  const origin = originPayload && typeof originPayload === "object"
-    ? {
-      sourceType: getStringField(originPayload as Record<string, unknown>, "sourceType", "SourceType") ?? "",
-      title: getStringField(originPayload as Record<string, unknown>, "title", "Title") ?? null,
-      resourceUrl: getStringField(originPayload as Record<string, unknown>, "resourceUrl", "ResourceUrl") ?? null,
-      resourceId: getStringField(originPayload as Record<string, unknown>, "resourceId", "ResourceId") ?? null,
-      providerId: getStringField(originPayload as Record<string, unknown>, "providerId", "ProviderId") ?? "",
-    } satisfies SessionOrigin
-    : originPayload == null
-      ? null
-      : undefined;
-
-  return {
-    id: getStringField(value, "id", "Id"),
-    instanceId: getStringField(value, "instanceId", "InstanceId"),
-    parentSessionId: getStringField(value, "parentSessionId", "ParentSessionId"),
-    forkedFromSessionId: getStringField(value, "forkedFromSessionId", "ForkedFromSessionId"),
-    spawnedBySessionId: getStringField(value, "spawnedBySessionId", "SpawnedBySessionId"),
-    spawnKind: getStringField(value, "spawnKind", "SpawnKind"),
-    workspaceId: getStringField(value, "workspaceId", "WorkspaceId"),
-    workspaceDirectory: getStringField(value, "workspaceDirectory", "WorkspaceDirectory"),
-    workspaceDisplayName: getStringField(value, "workspaceDisplayName", "WorkspaceDisplayName"),
-    sourceDirectory: getStringField(value, "sourceDirectory", "SourceDirectory"),
-    isolationStrategy: getStringField(value, "isolationStrategy", "IsolationStrategy"),
-    branch: getStringField(value, "branch", "Branch"),
-    title: getStringField(value, "title", "Title"),
-    createdAt: getStringField(value, "createdAt", "CreatedAt"),
-    projectId: getStringField(value, "projectId", "ProjectId"),
-    projectName: getStringField(value, "projectName", "ProjectName"),
-    status: getStringField(value, "status", "Status"),
-    activityStatus: getStringField(value, "activityStatus", "ActivityStatus"),
-    lifecycleStatus: getStringField(value, "lifecycleStatus", "LifecycleStatus"),
-    retentionStatus: getStringField(value, "retentionStatus", "RetentionStatus"),
-    totalTokens: getNumberField(value, "totalTokens", "TotalTokens"),
-    totalCost: getNumberField(value, "totalCost", "TotalCost"),
-    capabilities: (value.capabilities ?? value.Capabilities) as SessionActionCapabilities | undefined,
-    origin,
-    harnessType: getStringField(value, "harnessType", "HarnessType"),
-    harnessProfileName: getStringField(value, "harnessProfileName", "HarnessProfileName"),
-    tags: Array.isArray(value.tags ?? value.Tags) ? (value.tags ?? value.Tags) as string[] : undefined,
-    retryAttempt: getNumberField(value, "retryAttempt", "RetryAttempt"),
-    retryMaxAttempts: getNumberField(value, "retryMaxAttempts", "RetryMaxAttempts"),
-    retryMessage: getStringField(value, "retryMessage", "RetryMessage"),
-    retryNext: getStringField(value, "retryNext", "RetryNext"),
-  };
-}
-
-function sessionTimeFromCreatedAt(createdAt: string | null | undefined): { created: number; updated: number } {
-  const createdMs = createdAt ? Date.parse(createdAt) : Number.NaN;
-  const created = Number.isFinite(createdMs) ? createdMs : Date.now();
-  return { created, updated: created };
-}
-
-function normalizeLifecycleStatus(value: string | null | undefined): "running" | "completed" | "stopped" | "error" | "disconnected" | null {
-  switch (value) {
-    case "active":
-    case "delegating":
-    case "idle":
-    case "waiting_input":
-    case "running":
-      return "running";
-    case "complete":
-    case "completed":
-      return "completed";
-    case "error":
-      return "error";
-    case "disconnected":
-      return "disconnected";
-    case "stopped":
-      return "stopped";
-    default:
-      return null;
-  }
-}
-
-function normalizeActivityStatus(value: string | null | undefined): SessionActivityStatus | null {
-  switch (value) {
-    case "active":
-    case "busy":
-      return "busy";
-    case "delegating":
-      return "delegating";
-    case "retry":
-      return "retry";
-    case "waiting_input":
-      return "waiting_input";
-    case "idle":
-      return "idle";
-    default:
-      return null;
-  }
-}
-
-// A retrying session is waiting out a model error mid-turn: still working, never idle.
-function isActiveActivityStatus(value: string | null | undefined): value is "busy" | "delegating" | "retry" {
-  return value === "busy" || value === "delegating" || value === "retry";
-}
-
-function isDiffStalingStatus(
-  activityStatus: SessionActivityStatus | null | undefined,
-  lifecycleStatus: string | null | undefined,
-): boolean {
-  return isActiveActivityStatus(activityStatus) || lifecycleStatus === "running" && activityStatus === "waiting_input";
-}
 
 const SessionDetailPage = defineComponent({
   name: "SessionDetailPage",
   setup(_props, { expose }) {
-    const machine = useMachineTarget();
     const params = Route.useParams();
     useSessionTerminals(() => params.value.id);
     const recap = useSessionRecap(() => params.value.id);
@@ -227,15 +53,14 @@ const SessionDetailPage = defineComponent({
     const navigate = Route.useNavigate();
     const sessionsStore = useSessionsStore();
     const { sessionStateOverrides } = storeToRefs(sessionsStore);
-    const remoteSession = shallowRef<SessionDetailResponse | null>(null);
-    /** The server has no session under this id (a stale link, or one deleted elsewhere). */
-    const sessionMissing = shallowRef(false);
+    const { remoteSession, sessionMissing } = useSessionDetail(
+      () => params.value.id,
+      () => search.value.instanceId,
+    );
     const composerRef = shallowRef<ComposerInstance | null>(null);
     const viewMode = shallowRef<SessionViewMode>(search.value.view === "files" ? "files-changed" : "chat");
     const selectedChangedFile = shallowRef<{ file: string } | null>(null);
     const optimisticWorking = shallowRef(false);
-    const isDeleteDialogOpen = shallowRef(false);
-    const isForkDialogOpen = shallowRef(false);
     const isDiffsTrayOpen = shallowRef(false);
     const optimisticSessionState = shallowRef<{
       activityStatus?: string | null;
@@ -244,12 +69,7 @@ const SessionDetailPage = defineComponent({
       sessionStatus?: string | null;
     } | null>(null);
 
-    const { abortSession, isAborting, error: abortError } = useAbortSession();
-    const archiveQueue = useArchiveQueueStore();
     const isEditingTitle = shallowRef(false);
-    const isRestoring = shallowRef(false);
-    const { deleteSession, isDeleting, error: deleteError } = useDeleteSession();
-    const { renameSession, isLoading: isRenaming, error: renameError } = useRenameSession();
 
     const selectedSession = computed(() => {
       return sessionsStore.sessionById(params.value.id);
@@ -259,113 +79,26 @@ const SessionDetailPage = defineComponent({
       return sessionStateOverrides.value[params.value.id] ?? null;
     });
 
+    // The detail loads in useSessionDetail; this is the page's side of a new id.
     watch(
       () => params.value.id,
-      async (sessionId, _previousSessionId, onCleanup) => {
-        sessionsStore.setActiveSessionId(sessionId ?? null);
-        remoteSession.value = null;
-        sessionMissing.value = false;
+      (sessionId, _previousSessionId, onCleanup) => {
         isEditingTitle.value = false;
 
         if (!sessionId) {
           return;
         }
 
-        const abortController = new AbortController();
+        let cancelled = false;
         onCleanup(() => {
-          abortController.abort();
+          cancelled = true;
         });
 
         void nextTick(() => {
-          if (!abortController.signal.aborted) {
+          if (!cancelled) {
             composerRef.value?.focusPrompt();
           }
         });
-
-        try {
-          const response = await apiFetchOn(machine.connection, `/api/sessions/${encodeURIComponent(sessionId)}`, {
-            signal: abortController.signal,
-          });
-          if (abortController.signal.aborted) {
-            return;
-          }
-          if (!response.ok) {
-            sessionMissing.value = response.status === 404;
-            return;
-          }
-
-          const nextRemoteSession = normalizeSessionDetailResponse(await response.json());
-          remoteSession.value = nextRemoteSession;
-
-          const normalizedLifecycleStatus = normalizeLifecycleStatus(
-            nextRemoteSession.lifecycleStatus ?? nextRemoteSession.status,
-          ) ?? "running";
-          const normalizedActivityStatus = normalizeActivityStatus(nextRemoteSession.activityStatus) ?? "idle";
-
-          const nextSession = {
-            instanceId: nextRemoteSession.instanceId ?? search.value.instanceId ?? selectedSession.value?.instanceId ?? "",
-            workspaceId: nextRemoteSession.workspaceId ?? selectedSession.value?.workspaceId ?? "",
-            workspaceDirectory: nextRemoteSession.workspaceDirectory ?? selectedSession.value?.workspaceDirectory ?? "",
-            workspaceDisplayName: nextRemoteSession.workspaceDisplayName ?? selectedSession.value?.workspaceDisplayName ?? null,
-            isolationStrategy: nextRemoteSession.isolationStrategy ?? selectedSession.value?.isolationStrategy ?? "existing",
-            sessionStatus: normalizedLifecycleStatus === "running"
-              ? normalizedActivityStatus === "waiting_input"
-                ? "waiting_input"
-                : isActiveActivityStatus(normalizedActivityStatus)
-                ? "active"
-                : "idle"
-              : normalizedLifecycleStatus,
-            session: {
-              id: nextRemoteSession.id ?? sessionId,
-              title: nextRemoteSession.title ?? selectedSession.value?.session.title ?? "Untitled session",
-              // A session opened before the list has it (e.g. just created) needs its real age,
-              // not the epoch, or the sidebar shows it as decades old.
-              time: selectedSession.value?.session.time ?? sessionTimeFromCreatedAt(nextRemoteSession.createdAt),
-              tags: nextRemoteSession.tags ?? selectedSession.value?.session.tags ?? [],
-            },
-            instanceStatus: selectedSession.value?.instanceStatus ?? "running",
-            parentSessionId: nextRemoteSession.parentSessionId ?? selectedSession.value?.parentSessionId ?? null,
-            forkedFromSessionId: nextRemoteSession.forkedFromSessionId ?? selectedSession.value?.forkedFromSessionId ?? null,
-            spawnedBySessionId: nextRemoteSession.spawnedBySessionId ?? selectedSession.value?.spawnedBySessionId ?? null,
-            spawnKind: nextRemoteSession.spawnKind ?? selectedSession.value?.spawnKind ?? null,
-            sourceDirectory: nextRemoteSession.sourceDirectory ?? selectedSession.value?.sourceDirectory ?? null,
-            branch: nextRemoteSession.branch ?? selectedSession.value?.branch ?? null,
-            activityStatus: normalizedActivityStatus,
-            lifecycleStatus: normalizedLifecycleStatus,
-            retentionStatus: normalizeRetentionStatus(nextRemoteSession.retentionStatus),
-            archivedAt: selectedSession.value?.archivedAt ?? null,
-            typedInstanceStatus: selectedSession.value?.typedInstanceStatus ?? "running",
-            isHidden: selectedSession.value?.isHidden ?? false,
-            totalTokens: nextRemoteSession.totalTokens ?? selectedSession.value?.totalTokens,
-            totalCost: nextRemoteSession.totalCost ?? selectedSession.value?.totalCost,
-            // The server's project wins: a new session lands in Scratch, not "Ungrouped".
-            projectId: nextRemoteSession.projectId ?? selectedSession.value?.projectId ?? null,
-            projectName: nextRemoteSession.projectName ?? selectedSession.value?.projectName ?? null,
-            capabilities: nextRemoteSession.capabilities ?? selectedSession.value?.capabilities,
-            origin: nextRemoteSession.origin ?? selectedSession.value?.origin ?? null,
-            // The server always sends it; an empty one finds no harness, so nothing harness-specific is offered.
-            harnessType: nextRemoteSession.harnessType ?? selectedSession.value?.harnessType ?? "",
-            tags: nextRemoteSession.tags ?? selectedSession.value?.tags ?? [],
-            // Which attempt a retrying session is on, why and when, so a page opened mid-retry says so.
-            ...(normalizedActivityStatus === "retry"
-              ? {
-                  retryAttempt: nextRemoteSession.retryAttempt ?? selectedSession.value?.retryAttempt ?? null,
-                  retryMaxAttempts: nextRemoteSession.retryMaxAttempts ?? selectedSession.value?.retryMaxAttempts ?? null,
-                  retryMessage: nextRemoteSession.retryMessage ?? selectedSession.value?.retryMessage ?? null,
-                  retryNext: nextRemoteSession.retryNext ?? selectedSession.value?.retryNext ?? null,
-                }
-              : {}),
-          } satisfies SessionListItem;
-
-          // The live machine's list holds only its own sessions.
-          if (machine.isLive) sessionsStore.upsertSession(nextSession);
-          else sessionsStore.upsertElsewhere(machine.key, nextSession);
-          dispatchSessionUpsert(nextSession);
-        } catch (error) {
-          if (error instanceof DOMException && error.name === "AbortError") {
-            return;
-          }
-        }
       },
       { immediate: true },
     );
@@ -558,16 +291,6 @@ const SessionDetailPage = defineComponent({
       ? null
       : effectiveActionCapabilities.value?.forkDisabledReason ?? "This session can't be forked.");
     const canDelete = computed(() => effectiveActionCapabilities.value?.canDelete ?? true);
-    const isAnyActionPending = computed(() => isAborting.value
-      || isRestoring.value
-      || isDeleting.value
-      || isRenaming.value);
-    const actionErrors = computed(() => [
-      abortError.value,
-      deleteError.value,
-      renameError.value,
-    ].filter((message): message is string => Boolean(message)));
-
     const { hasPendingPrompts, sentPrompts } = useSentPrompts(params.value.id);
 
     const effectiveLifecycleStatus = computed(() => {
@@ -661,99 +384,35 @@ const SessionDetailPage = defineComponent({
       };
     }
 
-    function refreshRemoteSession(): void {
-      // Reuse the existing optimistic/store state for immediate UI updates. The
-      // websocket/session-list refresh will reconcile detailed values.
-    }
-
-    async function handleAbort(): Promise<void> {
-      if (!params.value.id || !instanceId.value || !canAbort.value) {
-        return;
-      }
-
-      try {
-        await abortSession(params.value.id);
-        refreshRemoteSession();
-      } catch {
-        // Error is exposed inline by the action toolbar.
-      }
-    }
-
-    function handleFork(): void {
-      if (!params.value.id || !canFork.value) {
-        return;
-      }
-
-      isForkDialogOpen.value = true;
-    }
-
-    function handleDelete(): void {
-      if (!params.value.id || !instanceId.value || !canDelete.value) {
-        return;
-      }
-
-      isDeleteDialogOpen.value = true;
-    }
-
-    async function handleDeleteConfirmed(): Promise<void> {
-      if (!params.value.id || !instanceId.value || !canDelete.value) {
-        return;
-      }
-
-      try {
-        await deleteSession(params.value.id, instanceId.value);
-        isDeleteDialogOpen.value = false;
-        await navigate({ to: "/" });
-      } catch {
-        // Error is exposed inline by the action toolbar.
-      }
-    }
-
-    async function handleRename(proposedTitle: string): Promise<void> {
-      if (!params.value.id) {
-        return;
-      }
-
-      try {
-        await renameSession(params.value.id, proposedTitle, () => {
-          if (remoteSession.value) {
-            remoteSession.value = {
-              ...remoteSession.value,
-              title: proposedTitle,
-            };
-          }
-        });
-      } catch {
-        // Error is exposed inline by the action toolbar.
-      }
-    }
-
-    function handleArchive(): void {
-      if (!params.value.id || !canArchive.value) {
-        return;
-      }
-
-      // Sent after the undo window; the banner shows once it is.
-      archiveQueue.archive([params.value.id]);
-    }
-
-    async function handleRestore(): Promise<void> {
-      if (!params.value.id || !canRestore.value) {
-        return;
-      }
-
-      isRestoring.value = true;
-      try {
-        await archiveQueue.restore(params.value.id);
-        if (optimisticSessionState.value?.retentionStatus) {
-          handleSessionStateChanged({ retentionStatus: "active" });
-        }
-      } catch {
-        // The archive queue shows the error.
-      } finally {
-        isRestoring.value = false;
-      }
-    }
+    const {
+      isAborting,
+      isDeleting,
+      isRenaming,
+      isRestoring,
+      isDeleteDialogOpen,
+      isForkDialogOpen,
+      isAnyActionPending,
+      actionErrors,
+      handleAbort,
+      handleFork,
+      handleDelete,
+      handleDeleteConfirmed,
+      handleRename,
+      handleArchive,
+      handleRestore,
+    } = useSessionDetailActions({
+      sessionId: () => params.value.id,
+      instanceId: () => instanceId.value,
+      canAbort: () => canAbort.value,
+      canFork: () => canFork.value,
+      canDelete: () => canDelete.value,
+      canArchive: () => canArchive.value,
+      canRestore: () => canRestore.value,
+      remoteSession,
+      optimisticRetentionStatus: () => optimisticSessionState.value?.retentionStatus,
+      onSessionStateChanged: handleSessionStateChanged,
+      goHome: () => navigate({ to: "/" }),
+    });
 
     function handleFilesChangedFileSelected(file: { file: string }): void {
       selectedChangedFile.value = file;
