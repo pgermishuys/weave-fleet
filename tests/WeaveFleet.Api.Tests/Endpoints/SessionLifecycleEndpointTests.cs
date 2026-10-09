@@ -134,8 +134,8 @@ public sealed class SessionLifecycleEndpointTests
             Status = "running",
             CreatedAt = DateTime.UtcNow.ToString("O")
         });
-        var orchestrator = builder.Build();
-        return new SessionService(builder.SessionRepository, builder.ProjectRepository, orchestrator, builder.ActivityTracker);
+        builder.Build();
+        return new SessionService(builder.SessionRepository, builder.ProjectRepository, builder.Retention, builder.ActivityTracker);
     }
 
     private static SessionService BuildSessionService(InMemorySessionRepository sessionRepository)
@@ -153,9 +153,9 @@ public sealed class SessionLifecycleEndpointTests
             Status = "running",
             CreatedAt = DateTime.UtcNow.ToString("O")
         });
-        var orchestrator = builder.Build();
+        builder.Build();
         // Return service using the passed-in sessionRepository so ListAsyncCalls are tracked there
-        return new SessionService(sessionRepository, builder.ProjectRepository, orchestrator, builder.ActivityTracker);
+        return new SessionService(sessionRepository, builder.ProjectRepository, builder.Retention, builder.ActivityTracker);
     }
 
     private static Session MakeSession(string id, string status, string retentionStatus)

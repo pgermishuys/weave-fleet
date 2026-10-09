@@ -69,7 +69,7 @@ public sealed partial class WorkflowRunnerTests
             workflows, new WorkflowsFeature(new FleetOptions(), _preferences), _runs, new NoUserScope());
 
         // The workflow target never touches sessions itself: the run's steps start them.
-        var executor = new AutomationExecutionService(null!, null!, NullLogger<AutomationExecutionService>.Instance, FakeMachine.Unused, automationWorkflows);
+        var executor = new AutomationExecutionService(null!, null!, null!, NullLogger<AutomationExecutionService>.Instance, FakeMachine.Unused, automationWorkflows);
         var runRows = new InMemoryAutomationRunRepository();
         return new AutomationRig
         {

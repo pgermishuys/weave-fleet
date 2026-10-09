@@ -38,7 +38,7 @@ public sealed class SessionMessageDeliveryTests : IAsyncDisposable, IDisposable
         });
         _builder.RegisterHarness("opencode", "OpenCode").DefaultSession = _harnessSession;
         _orchestrator = _builder.Build();
-        _sut = new SessionMessageDelivery(_orchestrator, _builder.EventBroadcaster);
+        _sut = new SessionMessageDelivery(_builder.Prompting, _builder.EventBroadcaster);
     }
 
     public ValueTask DisposeAsync() => _harnessSession.DisposeAsync();

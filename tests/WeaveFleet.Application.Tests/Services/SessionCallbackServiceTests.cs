@@ -85,12 +85,16 @@ public sealed class SessionCallbackServiceTests : IAsyncDisposable
         return callback;
     }
 
-    private SessionCallbackService Build() => new(
-        _builder.SessionCallbackRepository,
-        _builder.SessionRepository,
-        _builder.Build(),
-        _builder.ActivityTracker,
-        NullLogger<SessionCallbackService>.Instance);
+    private SessionCallbackService Build()
+    {
+        _builder.Build();
+        return new(
+            _builder.SessionCallbackRepository,
+            _builder.SessionRepository,
+            _builder.Prompting,
+            _builder.ActivityTracker,
+            NullLogger<SessionCallbackService>.Instance);
+    }
 
     private const string Completion = "Session 'Write the tests' (s-worker) completed.";
 
@@ -290,7 +294,7 @@ public sealed class SessionCallbackServiceTests : IAsyncDisposable
 
     private SessionCallbackDispatcher BuildDispatcher()
     {
-        var orchestrator = _builder.Build();
+        _builder.Build();
         return new SessionCallbackDispatcher(
             TestServiceScopeFactory.Create(services =>
             {
@@ -299,7 +303,7 @@ public sealed class SessionCallbackServiceTests : IAsyncDisposable
                 services.AddSingleton(_ => new SessionCallbackService(
                     _builder.SessionCallbackRepository,
                     _builder.SessionRepository,
-                    orchestrator,
+                    _builder.Prompting,
                     _builder.ActivityTracker,
                     NullLogger<SessionCallbackService>.Instance));
             }),

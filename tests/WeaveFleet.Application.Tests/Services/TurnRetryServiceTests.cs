@@ -72,7 +72,8 @@ public sealed class TurnRetryServiceTests : IAsyncDisposable
             services.AddSingleton<TimeProvider>(_time);
             services.AddSingleton(_ => scheduler!);
             services.AddScoped(_ => new PromptQueueService(
-                orchestrator,
+                _builder.Prompting,
+                _builder.ShellCommands,
                 _builder.SessionRepository,
                 _queue,
                 _builder.EventBroadcaster,
@@ -82,7 +83,7 @@ public sealed class TurnRetryServiceTests : IAsyncDisposable
                 scheduler!,
                 NullLogger<PromptQueueService>.Instance));
             services.AddScoped(sp => new TurnRetryService(
-                orchestrator,
+                _builder.Prompting,
                 sp.GetRequiredService<PromptQueueService>(),
                 _builder.SessionRepository,
                 _retries,

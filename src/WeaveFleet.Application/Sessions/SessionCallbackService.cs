@@ -1,5 +1,6 @@
 using Microsoft.Extensions.Logging;
 using WeaveFleet.Application.Services;
+using WeaveFleet.Application.Sessions.Prompting;
 using WeaveFleet.Domain.Entities;
 using WeaveFleet.Domain.Repositories;
 
@@ -24,7 +25,7 @@ namespace WeaveFleet.Application.Sessions;
 public sealed partial class SessionCallbackService(
     ISessionCallbackRepository callbackRepository,
     ISessionRepository sessionRepository,
-    SessionOrchestrator orchestrator,
+    SessionPrompting prompting,
     SessionActivityTracker activity,
     ILogger<SessionCallbackService> logger)
 {
@@ -99,7 +100,7 @@ public sealed partial class SessionCallbackService(
         timeout.CancelAfter(DeliveryTimeout);
         try
         {
-            var sent = await orchestrator.PromptSessionOnceAsync(cb.TargetSessionId, text, options: null, timeout.Token).ConfigureAwait(false);
+            var sent = await prompting.PromptSessionOnceAsync(cb.TargetSessionId, text, options: null, timeout.Token).ConfigureAwait(false);
             if (sent.IsFailure)
             {
                 LogDeliveryFailed(cb.Id, cb.TargetSessionId, sent.Error.Description);

@@ -1,6 +1,7 @@
 using System.Diagnostics;
 using WeaveFleet.Application.Diagnostics;
 using WeaveFleet.Application.Services;
+using WeaveFleet.Application.Sessions.Retention;
 using WeaveFleet.Domain.Common;
 using WeaveFleet.Domain.Entities;
 using WeaveFleet.Domain.Repositories;
@@ -13,7 +14,7 @@ namespace WeaveFleet.Application.Sessions;
 public sealed class SessionService(
     ISessionRepository sessionRepository,
     IProjectRepository projectRepository,
-    SessionOrchestrator sessionOrchestrator,
+    SessionRetention sessionRetention,
     SessionActivityTracker activityTracker)
 {
     public async Task<Result<IReadOnlyList<Session>>> ListSessionsAsync(
@@ -41,8 +42,8 @@ public sealed class SessionService(
         SetSessionTag(id);
         return retentionStatus switch
         {
-            "archived" => await sessionOrchestrator.ArchiveSessionAsync(id),
-            "active" => await sessionOrchestrator.UnarchiveSessionAsync(id),
+            "archived" => await sessionRetention.ArchiveSessionAsync(id),
+            "active" => await sessionRetention.UnarchiveSessionAsync(id),
             _ => FleetError.ValidationError("Session.RetentionStatus", $"Unsupported retention status '{retentionStatus}'.")
         };
     }
@@ -59,7 +60,7 @@ public sealed class SessionService(
     public async Task<Result<bool>> DeleteSessionAsync(string id)
     {
         SetSessionTag(id);
-        var result = await sessionOrchestrator.DeleteSessionAsync(id);
+        var result = await sessionRetention.DeleteSessionAsync(id);
         if (result.IsFailure)
             return result.Error;
 

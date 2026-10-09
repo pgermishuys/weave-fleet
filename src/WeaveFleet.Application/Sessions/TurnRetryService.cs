@@ -3,6 +3,7 @@ using System.Text.Json;
 using Microsoft.Extensions.Logging;
 using WeaveFleet.Application.Events;
 using WeaveFleet.Application.Services;
+using WeaveFleet.Application.Sessions.Prompting;
 using WeaveFleet.Application.Users;
 using WeaveFleet.Domain.Common;
 using WeaveFleet.Domain.Entities;
@@ -41,7 +42,7 @@ public sealed record ScheduledRetryChanged(
 /// "Try again when a limit resets" setting (<see cref="PreferenceKey"/>) turns it off.
 /// </remarks>
 public sealed partial class TurnRetryService(
-    SessionOrchestrator orchestrator,
+    SessionPrompting prompting,
     PromptQueueService queue,
     ISessionRepository sessions,
     IScheduledRetryRepository retries,
@@ -191,7 +192,7 @@ public sealed partial class TurnRetryService(
 
         await BroadcastAsync(sessionId, null, ct).ConfigureAwait(false);
         LogSending(sessionId, retry.Attempt);
-        var sent = await orchestrator.PromptSessionAsync(
+        var sent = await prompting.PromptSessionAsync(
             sessionId,
             ContinueText,
             new PromptOptions { Delivery = PromptDelivery.Queue },

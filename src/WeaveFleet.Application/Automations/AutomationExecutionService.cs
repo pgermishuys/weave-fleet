@@ -3,6 +3,8 @@ using System.Text.RegularExpressions;
 using Microsoft.Extensions.Logging;
 using WeaveFleet.Application.Machines;
 using WeaveFleet.Application.Services;
+using WeaveFleet.Application.Sessions.Creation;
+using WeaveFleet.Application.Sessions.Prompting;
 using WeaveFleet.Application.SessionSources;
 using WeaveFleet.Application.Workflows;
 using WeaveFleet.Domain.Entities;
@@ -41,11 +43,12 @@ public interface IAutomationExecutor
 }
 
 /// <summary>
-/// Service that executes an automation by creating a session via SessionOrchestrator, or, for an automation that runs on
+/// Service that executes an automation by creating a session via SessionCreation, or, for an automation that runs on
 /// another machine, through that machine's API (<see cref="RemoteAutomationRuns"/>).
 /// </summary>
 public sealed partial class AutomationExecutionService(
-    SessionOrchestrator sessionOrchestrator,
+    SessionCreation sessionCreation,
+    SessionPrompting sessionPrompting,
     ISessionRepository sessionRepository,
     ILogger<AutomationExecutionService> logger,
     RemoteAutomationRuns remoteRuns,
@@ -145,7 +148,7 @@ public sealed partial class AutomationExecutionService(
             ModelId = SplitModel(automation.Model).ModelId,
         };
 
-        var result = await sessionOrchestrator.CreateSessionAsync(request, ct);
+        var result = await sessionCreation.CreateSessionAsync(request, ct);
 
         if (result.IsSuccess)
         {
@@ -193,7 +196,7 @@ public sealed partial class AutomationExecutionService(
     {
         // The automation's agent and model apply to this run only, and only on the harness they were picked
         // from; otherwise the session answers with its own.
-        var result = await sessionOrchestrator.PromptSessionOnceAsync(
+        var result = await sessionPrompting.PromptSessionOnceAsync(
             targetSession.Id,
             finalPrompt,
             ChoicesFor(automation, targetSession),

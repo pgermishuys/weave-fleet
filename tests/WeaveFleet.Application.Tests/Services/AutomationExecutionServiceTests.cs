@@ -24,8 +24,10 @@ public sealed class AutomationExecutionServiceTests : IAsyncDisposable
             CreatedAt = "2026-01-01", RetentionStatus = "active", HarnessType = "opencode",
             SelectedAgent = "loom", SelectedProviderId = "github-copilot", SelectedModelId = "claude-opus-4.7",
         });
+        _builder.Build();
         _sut = new AutomationExecutionService(
-            _builder.Build(),
+            _builder.Creation,
+            _builder.Prompting,
             _builder.SessionRepository,
             NullLogger<AutomationExecutionService>.Instance,
             FakeMachine.Unused);

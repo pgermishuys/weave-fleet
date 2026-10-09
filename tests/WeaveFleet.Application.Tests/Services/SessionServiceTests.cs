@@ -35,8 +35,8 @@ public sealed class SessionServiceTests
             CreatedAt = DateTime.UtcNow.ToString("O")
         });
 
-        var orchestrator = _builder.Build();
-        _sut = new SessionService(_builder.SessionRepository, _builder.ProjectRepository, orchestrator, _builder.ActivityTracker);
+        _builder.Build();
+        _sut = new SessionService(_builder.SessionRepository, _builder.ProjectRepository, _builder.Retention, _builder.ActivityTracker);
     }
 
     [Fact]
