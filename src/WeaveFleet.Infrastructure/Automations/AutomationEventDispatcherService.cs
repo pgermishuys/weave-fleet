@@ -2,10 +2,10 @@ using System.Threading.Channels;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Hosting;
 using Microsoft.Extensions.Logging;
-using WeaveFleet.Application.Services;
+using WeaveFleet.Application.Automations;
 using WeaveFleet.Domain.Repositories;
 
-namespace WeaveFleet.Infrastructure.Services;
+namespace WeaveFleet.Infrastructure.Automations;
 
 /// <summary>
 /// Background service that subscribes to domain events and triggers matching automations.

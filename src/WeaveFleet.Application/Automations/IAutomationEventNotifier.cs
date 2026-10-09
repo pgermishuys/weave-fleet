@@ -1,4 +1,4 @@
-namespace WeaveFleet.Application.Services;
+namespace WeaveFleet.Application.Automations;
 
 /// <summary>
 /// Notifies the automation event dispatcher of domain events that may trigger automations.

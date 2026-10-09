@@ -1,5 +1,5 @@
 using System.Text.Json;
-using WeaveFleet.Application.Services;
+using WeaveFleet.Application.Automations;
 using WeaveFleet.Domain.Entities;
 using WeaveFleet.Testing.Fakes;
 using WeaveFleet.Testing.Fakes.Repositories;

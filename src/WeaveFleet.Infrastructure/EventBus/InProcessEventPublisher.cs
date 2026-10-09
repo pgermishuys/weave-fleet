@@ -5,7 +5,7 @@ using Microsoft.Extensions.Logging;
 using WeaveFleet.Application.Diagnostics;
 using WeaveFleet.Application.Events;
 using WeaveFleet.Domain.Harnesses;
-using WeaveFleet.Infrastructure.Services;
+using WeaveFleet.Infrastructure.Automations;
 
 namespace WeaveFleet.Infrastructure.EventBus;
 

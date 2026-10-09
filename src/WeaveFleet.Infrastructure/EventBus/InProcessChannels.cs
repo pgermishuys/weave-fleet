@@ -1,5 +1,5 @@
 using System.Threading.Channels;
-using WeaveFleet.Infrastructure.Services;
+using WeaveFleet.Infrastructure.Automations;
 
 namespace WeaveFleet.Infrastructure.EventBus;
 

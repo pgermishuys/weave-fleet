@@ -1,10 +1,11 @@
 using Microsoft.Extensions.Logging;
 using WeaveFleet.Application.Machines;
+using WeaveFleet.Application.Services;
 using WeaveFleet.Application.Workflows;
 using WeaveFleet.Domain.Entities;
 using WeaveFleet.Domain.Repositories;
 
-namespace WeaveFleet.Application.Services;
+namespace WeaveFleet.Application.Automations;
 
 /// <summary>What started a run.</summary>
 /// <param name="Name">"schedule", "catch_up", "once", "manual", or the event type.</param>

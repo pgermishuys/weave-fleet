@@ -3,7 +3,7 @@ using Cronos;
 using WeaveFleet.Domain.Common;
 using WeaveFleet.Domain.Entities;
 
-namespace WeaveFleet.Application.Services;
+namespace WeaveFleet.Application.Automations;
 
 /// <summary>What the scheduler should do about an automation's latest occurrence.</summary>
 public enum ScheduleDecisionKind

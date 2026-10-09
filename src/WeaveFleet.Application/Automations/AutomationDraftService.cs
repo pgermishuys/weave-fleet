@@ -4,7 +4,7 @@ using WeaveFleet.Domain.Common;
 using WeaveFleet.Domain.Harnesses;
 using WeaveFleet.Domain.Repositories;
 
-namespace WeaveFleet.Application.Services;
+namespace WeaveFleet.Application.Automations;
 
 /// <summary>A new automation's starting point, taken from a session: its first message and where it ran.</summary>
 /// <param name="Prompt">The session's first message, as the person typed it.</param>

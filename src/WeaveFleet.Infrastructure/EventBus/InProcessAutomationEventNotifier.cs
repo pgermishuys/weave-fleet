@@ -1,6 +1,6 @@
 using System.Threading.Channels;
-using WeaveFleet.Application.Services;
-using WeaveFleet.Infrastructure.Services;
+using WeaveFleet.Application.Automations;
+using WeaveFleet.Infrastructure.Automations;
 
 namespace WeaveFleet.Infrastructure.EventBus;
 

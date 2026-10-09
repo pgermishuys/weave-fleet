@@ -3,7 +3,7 @@ using Microsoft.Extensions.Logging;
 using WeaveFleet.Domain.Entities;
 using WeaveFleet.Domain.Repositories;
 
-namespace WeaveFleet.Application.Services;
+namespace WeaveFleet.Application.Automations;
 
 public sealed partial class EventTriggerMatcher
 {
