@@ -1,7 +1,7 @@
 using System.Text.Json;
 using WeaveFleet.Domain.Events;
 
-namespace WeaveFleet.Application.Services;
+namespace WeaveFleet.Application.Events;
 
 /// <summary>
 /// In-memory pub/sub service for real-time event broadcasting.

@@ -1,5 +1,5 @@
 using System.Text.Json;
-using WeaveFleet.Application.Services;
+using WeaveFleet.Application.Events;
 using WeaveFleet.Domain.Events;
 
 namespace WeaveFleet.Testing.Fakes;

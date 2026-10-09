@@ -2,7 +2,7 @@ using System.Globalization;
 using System.Text.Json;
 using WeaveFleet.Application.Browser;
 using WeaveFleet.Application.Data;
-using WeaveFleet.Application.Services;
+using WeaveFleet.Application.Events;
 using WeaveFleet.Domain.Events;
 using WeaveFleet.Infrastructure.Data;
 

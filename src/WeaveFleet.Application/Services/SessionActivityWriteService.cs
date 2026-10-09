@@ -1,4 +1,5 @@
 using WeaveFleet.Application.Data;
+using WeaveFleet.Application.Events;
 using WeaveFleet.Domain.Entities;
 using WeaveFleet.Domain.Repositories;
 

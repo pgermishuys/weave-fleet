@@ -1,7 +1,7 @@
 using System.Text.Json;
 using WeaveFleet.Application.Automations;
 using WeaveFleet.Domain.Entities;
-using WeaveFleet.Infrastructure.Services;
+using WeaveFleet.Infrastructure.EventBus;
 
 namespace WeaveFleet.Infrastructure.Tests.Services;
 

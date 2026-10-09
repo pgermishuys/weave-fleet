@@ -1,6 +1,6 @@
 using System.Threading;
 
-namespace WeaveFleet.Infrastructure.Services;
+namespace WeaveFleet.Infrastructure.EventBus;
 
 public sealed class AsyncAutoResetEvent : IDisposable
 {

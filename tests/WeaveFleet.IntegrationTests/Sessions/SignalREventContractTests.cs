@@ -20,7 +20,7 @@ using WeaveFleet.Domain.DTOs;
 using WeaveFleet.Domain.Events;
 using WeaveFleet.Domain.Harnesses;
 using WeaveFleet.Domain.Repositories;
-using WeaveFleet.Infrastructure.Services;
+using WeaveFleet.Infrastructure.EventBus;
 using WeaveFleet.Infrastructure;
 using WeaveFleet.Infrastructure.Harnesses.ClaudeCode;
 using WeaveFleet.Infrastructure.Harnesses.OpenCode;

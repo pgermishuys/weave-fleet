@@ -1,4 +1,5 @@
 using System.Text.Json;
+using WeaveFleet.Application.Events;
 using WeaveFleet.Application.Services;
 using WeaveFleet.Domain.Repositories;
 using WeaveFleet.Infrastructure;
