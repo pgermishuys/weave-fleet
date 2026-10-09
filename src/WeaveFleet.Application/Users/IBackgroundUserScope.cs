@@ -1,4 +1,4 @@
-namespace WeaveFleet.Application.Services;
+namespace WeaveFleet.Application.Users;
 
 /// <summary>
 /// Runs code as a given user when the request itself doesn't carry that user's identity, for example a

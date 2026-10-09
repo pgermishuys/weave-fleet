@@ -2,6 +2,7 @@ using System.Collections.Concurrent;
 using System.Diagnostics;
 using System.Text.Json;
 using Microsoft.Extensions.Logging;
+using WeaveFleet.Application.Credentials;
 using WeaveFleet.Application.Diagnostics;
 using WeaveFleet.Application.Events;
 using WeaveFleet.Application.Harnesses;

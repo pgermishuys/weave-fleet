@@ -9,6 +9,7 @@ using Microsoft.AspNetCore.Mvc.Testing;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.DependencyInjection.Extensions;
 using WeaveFleet.Api.Tests.Infrastructure;
+using WeaveFleet.Application.Credentials;
 using WeaveFleet.Application.Data;
 using WeaveFleet.Application.Plugins;
 using WeaveFleet.Application.Services;

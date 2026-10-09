@@ -10,8 +10,8 @@ using Microsoft.Extensions.Logging.Abstractions;
 using Microsoft.Extensions.Options;
 using WeaveFleet.Api.Auth;
 using WeaveFleet.Api.Tests.Infrastructure;
-using WeaveFleet.Application.Services;
 using WeaveFleet.Application.Sessions;
+using WeaveFleet.Application.Users;
 
 namespace WeaveFleet.Api.Tests.Auth;
 

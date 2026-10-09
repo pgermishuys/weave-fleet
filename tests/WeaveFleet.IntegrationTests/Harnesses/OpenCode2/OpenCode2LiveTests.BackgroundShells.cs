@@ -8,7 +8,7 @@ using WeaveFleet.Application.Sessions;
 using WeaveFleet.Domain.Events;
 using WeaveFleet.Domain.Repositories;
 using WeaveFleet.Infrastructure.Harnesses.OpenCode2;
-using WeaveFleet.Infrastructure.Services;
+using WeaveFleet.Infrastructure.Users;
 
 namespace WeaveFleet.IntegrationTests.Harnesses.OpenCode2;
 

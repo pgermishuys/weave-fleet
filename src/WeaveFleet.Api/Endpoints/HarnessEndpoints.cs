@@ -1,6 +1,6 @@
 using WeaveFleet.Application.Configuration;
 using WeaveFleet.Application.Harnesses;
-using WeaveFleet.Application.Services;
+using WeaveFleet.Application.Users;
 using WeaveFleet.Domain.Harnesses;
 using WeaveFleet.Domain.Repositories;
 

@@ -1,7 +1,8 @@
+using WeaveFleet.Application.Users;
 using WeaveFleet.Domain.Entities;
 using WeaveFleet.Domain.Repositories;
 
-namespace WeaveFleet.Application.Services;
+namespace WeaveFleet.Application.Credentials;
 
 /// <summary>
 /// Application-layer implementation of <see cref="ICredentialStore"/>.

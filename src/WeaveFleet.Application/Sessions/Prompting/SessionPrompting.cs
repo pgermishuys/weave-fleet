@@ -10,6 +10,7 @@ using WeaveFleet.Application.Recaps;
 using WeaveFleet.Application.Services;
 using WeaveFleet.Application.Sessions.Activation;
 using WeaveFleet.Application.SessionSources;
+using WeaveFleet.Application.Users;
 using WeaveFleet.Domain.Common;
 using WeaveFleet.Domain.DTOs;
 using WeaveFleet.Domain.Entities;

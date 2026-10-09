@@ -12,6 +12,7 @@ using WeaveFleet.Application.Data;
 using WeaveFleet.Application.Machines;
 using WeaveFleet.Application.Services;
 using WeaveFleet.Application.Sessions;
+using WeaveFleet.Application.Users;
 using WeaveFleet.Domain.Events;
 using WeaveFleet.Domain.Harnesses;
 using WeaveFleet.Infrastructure.Services;

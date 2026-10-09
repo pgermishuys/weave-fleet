@@ -3,8 +3,8 @@ extern alias FakeLlm;
 using System.Text.Json;
 using FakeLlm::FakeLlmServer;
 using Microsoft.Extensions.DependencyInjection;
-using WeaveFleet.Application.Services;
 using WeaveFleet.Application.Sessions;
+using WeaveFleet.Application.Users;
 
 namespace WeaveFleet.IntegrationTests.Harnesses.OpenCode2;
 

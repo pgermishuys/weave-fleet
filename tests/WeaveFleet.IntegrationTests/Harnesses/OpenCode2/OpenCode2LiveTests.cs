@@ -10,6 +10,7 @@ using WeaveFleet.Application.Canvases;
 using WeaveFleet.Application.Harnesses;
 using WeaveFleet.Application.Services;
 using WeaveFleet.Application.Sessions;
+using WeaveFleet.Application.Users;
 using WeaveFleet.Domain.Entities;
 using WeaveFleet.Domain.Events;
 using WeaveFleet.Domain.Harnesses;
@@ -17,7 +18,7 @@ using WeaveFleet.Domain.Repositories;
 using WeaveFleet.Infrastructure;
 using WeaveFleet.Infrastructure.Harnesses;
 using WeaveFleet.Infrastructure.Harnesses.OpenCode2;
-using WeaveFleet.Infrastructure.Services;
+using WeaveFleet.Infrastructure.Users;
 
 namespace WeaveFleet.IntegrationTests.Harnesses.OpenCode2;
 

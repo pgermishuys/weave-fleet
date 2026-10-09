@@ -3,7 +3,7 @@ using Microsoft.Extensions.Logging;
 using WeaveFleet.Application.Configuration;
 using WeaveFleet.Application.Skills;
 using WeaveFleet.Domain.Skills;
-using WeaveFleet.Infrastructure.Services;
+using WeaveFleet.Infrastructure.Users;
 
 namespace WeaveFleet.Infrastructure.Skills;
 

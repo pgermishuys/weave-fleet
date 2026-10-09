@@ -5,6 +5,7 @@ using System.Text;
 using Microsoft.Data.Sqlite;
 using WeaveFleet.Application.Data;
 using WeaveFleet.Application.Services;
+using WeaveFleet.Application.Users;
 using WeaveFleet.Infrastructure.Data;
 
 namespace WeaveFleet.Infrastructure.Services;

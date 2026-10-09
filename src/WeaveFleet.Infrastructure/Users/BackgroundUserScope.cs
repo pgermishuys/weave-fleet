@@ -1,6 +1,6 @@
-using WeaveFleet.Application.Services;
+using WeaveFleet.Application.Users;
 
-namespace WeaveFleet.Infrastructure.Services;
+namespace WeaveFleet.Infrastructure.Users;
 
 /// <summary><see cref="IBackgroundUserScope"/> over <see cref="BackgroundUserContext"/>, which every <see cref="IUserContext"/> reads first.</summary>
 internal sealed class BackgroundUserScope : IBackgroundUserScope

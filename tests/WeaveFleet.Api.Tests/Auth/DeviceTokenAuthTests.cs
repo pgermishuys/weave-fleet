@@ -8,7 +8,7 @@ using Microsoft.Extensions.DependencyInjection;
 using WeaveFleet.Api.Auth;
 using WeaveFleet.Api.Tests.Infrastructure;
 using WeaveFleet.Application.Devices;
-using WeaveFleet.Application.Services;
+using WeaveFleet.Application.Users;
 
 namespace WeaveFleet.Api.Tests.Auth;
 

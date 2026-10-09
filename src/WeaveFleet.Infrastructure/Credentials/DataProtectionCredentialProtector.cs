@@ -1,7 +1,7 @@
 using Microsoft.AspNetCore.DataProtection;
-using WeaveFleet.Application.Services;
+using WeaveFleet.Application.Credentials;
 
-namespace WeaveFleet.Infrastructure.Services;
+namespace WeaveFleet.Infrastructure.Credentials;
 
 /// <summary>
 /// <see cref="ICredentialProtector"/> implementation backed by ASP.NET Core Data Protection.

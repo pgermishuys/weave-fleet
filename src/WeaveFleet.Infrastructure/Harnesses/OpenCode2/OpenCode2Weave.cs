@@ -6,7 +6,7 @@ using Microsoft.Extensions.Logging;
 using WeaveFleet.Application.Weave;
 using WeaveFleet.Domain.Entities;
 using WeaveFleet.Domain.Repositories;
-using WeaveFleet.Infrastructure.Services;
+using WeaveFleet.Infrastructure.Users;
 using WeaveFleet.Infrastructure.Weave;
 
 namespace WeaveFleet.Infrastructure.Harnesses.OpenCode2;

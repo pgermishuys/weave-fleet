@@ -1,5 +1,6 @@
 using WeaveFleet.Application.Browser;
 using WeaveFleet.Application.Services;
+using WeaveFleet.Application.Users;
 using WeaveFleet.Infrastructure.Browser;
 
 namespace WeaveFleet.Api.Endpoints;

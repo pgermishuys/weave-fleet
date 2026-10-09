@@ -6,7 +6,7 @@ using System.Text.RegularExpressions;
 using WeaveFleet.Application.Canvases;
 using WeaveFleet.Application.Git;
 using WeaveFleet.Application.Pages;
-using WeaveFleet.Application.Services;
+using WeaveFleet.Application.Users;
 using WeaveFleet.Domain.Repositories;
 
 namespace WeaveFleet.Application.Walkthroughs;

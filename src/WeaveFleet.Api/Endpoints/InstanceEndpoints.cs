@@ -1,5 +1,6 @@
 using WeaveFleet.Api;
 using WeaveFleet.Application.Services;
+using WeaveFleet.Application.Users;
 using WeaveFleet.Domain.Harnesses;
 
 namespace WeaveFleet.Api.Endpoints;

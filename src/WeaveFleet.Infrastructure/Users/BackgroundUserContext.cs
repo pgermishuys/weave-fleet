@@ -1,6 +1,6 @@
 using System.Threading;
 
-namespace WeaveFleet.Infrastructure.Services;
+namespace WeaveFleet.Infrastructure.Users;
 
 internal static class BackgroundUserContext
 {

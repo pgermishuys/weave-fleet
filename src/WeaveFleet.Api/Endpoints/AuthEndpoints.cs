@@ -6,7 +6,7 @@ using Microsoft.AspNetCore.Http;
 using WeaveFleet.Api.Auth;
 using WeaveFleet.Application.Configuration;
 using WeaveFleet.Application.Devices;
-using WeaveFleet.Application.Services;
+using WeaveFleet.Application.Users;
 
 namespace WeaveFleet.Api.Endpoints;
 

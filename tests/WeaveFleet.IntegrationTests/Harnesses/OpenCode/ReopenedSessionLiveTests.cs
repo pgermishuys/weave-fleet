@@ -8,6 +8,7 @@ using Microsoft.Extensions.DependencyInjection;
 using WeaveFleet.Application.Data;
 using WeaveFleet.Application.Harnesses;
 using WeaveFleet.Application.Services;
+using WeaveFleet.Application.Users;
 using WeaveFleet.Domain.Events;
 using WeaveFleet.Domain.Harnesses;
 using WeaveFleet.Infrastructure;

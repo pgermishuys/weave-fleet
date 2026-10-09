@@ -1,7 +1,7 @@
 using Microsoft.Extensions.DependencyInjection;
 using WeaveFleet.Application.Configuration;
 using WeaveFleet.Domain.Repositories;
-using WeaveFleet.Infrastructure.Services;
+using WeaveFleet.Infrastructure.Users;
 
 namespace WeaveFleet.Infrastructure.Harnesses.OpenCode;
 

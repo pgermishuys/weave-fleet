@@ -1,4 +1,4 @@
-namespace WeaveFleet.Application.Services;
+namespace WeaveFleet.Application.Credentials;
 
 /// <summary>
 /// Application-layer interface for encrypting and decrypting credential values.

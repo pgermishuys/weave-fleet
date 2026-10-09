@@ -8,7 +8,7 @@ using WeaveFleet.Api.Tests.Infrastructure;
 using WeaveFleet.Application.Browser;
 using WeaveFleet.Application.Canvases;
 using WeaveFleet.Application.Data;
-using WeaveFleet.Application.Services;
+using WeaveFleet.Application.Users;
 
 namespace WeaveFleet.Api.Tests.Endpoints;
 

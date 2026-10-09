@@ -4,6 +4,7 @@ using Shouldly;
 using WeaveFleet.Application.Canvases;
 using WeaveFleet.Application.Configuration;
 using WeaveFleet.Application.Services;
+using WeaveFleet.Application.Users;
 using WeaveFleet.Application.Workflows;
 using WeaveFleet.Domain.Repositories;
 using WeaveFleet.Testing.Fakes.Repositories;

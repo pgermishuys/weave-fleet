@@ -9,6 +9,7 @@ using Microsoft.Extensions.Logging;
 using WeaveFleet.Application;
 using WeaveFleet.Application.Analytics;
 using WeaveFleet.Application.Configuration;
+using WeaveFleet.Application.Credentials;
 using WeaveFleet.Application.FleetTools;
 using WeaveFleet.Application.Harnesses;
 using WeaveFleet.Application.Machines;
@@ -24,7 +25,7 @@ using WeaveFleet.Domain.Events;
 using WeaveFleet.Domain.Harnesses;
 using WeaveFleet.Domain.Repositories;
 using WeaveFleet.Infrastructure.Harnesses.OpenCode.Pooling;
-using WeaveFleet.Infrastructure.Services;
+using WeaveFleet.Infrastructure.Users;
 
 namespace WeaveFleet.Infrastructure.Harnesses.OpenCode;
 

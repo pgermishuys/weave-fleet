@@ -10,7 +10,7 @@ using WeaveFleet.Api.Tests.Infrastructure;
 using WeaveFleet.Application.Configuration;
 using WeaveFleet.Application.Devices;
 using WeaveFleet.Application.Push;
-using WeaveFleet.Application.Services;
+using WeaveFleet.Application.Users;
 using WeaveFleet.Domain.Entities;
 using WeaveFleet.Domain.Repositories;
 

@@ -6,7 +6,7 @@ using WeaveFleet.Application.Harnesses;
 using WeaveFleet.Domain.Common;
 using WeaveFleet.Domain.Events;
 using WeaveFleet.Infrastructure.Harnesses.OpenCode2;
-using WeaveFleet.Infrastructure.Services;
+using WeaveFleet.Infrastructure.Users;
 
 namespace WeaveFleet.IntegrationTests.Harnesses.OpenCode2;
 

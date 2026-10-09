@@ -1,6 +1,6 @@
 using System.Text.RegularExpressions;
 using WeaveFleet.Application.Configuration;
-using WeaveFleet.Application.Services;
+using WeaveFleet.Application.Users;
 using WeaveFleet.Domain.Repositories;
 
 namespace WeaveFleet.Application.Terminals;

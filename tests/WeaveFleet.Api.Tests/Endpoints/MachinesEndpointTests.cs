@@ -9,7 +9,7 @@ using WeaveFleet.Api.Tests.Infrastructure;
 using WeaveFleet.Application.Configuration;
 using WeaveFleet.Application.Devices;
 using WeaveFleet.Application.Machines;
-using WeaveFleet.Application.Services;
+using WeaveFleet.Application.Users;
 
 namespace WeaveFleet.Api.Tests.Endpoints;
 

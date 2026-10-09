@@ -7,7 +7,7 @@ using WeaveFleet.Application.Services;
 using WeaveFleet.Application.Workflows;
 using WeaveFleet.Domain.Entities;
 using WeaveFleet.Infrastructure.Harnesses.OpenCode2;
-using WeaveFleet.Infrastructure.Services;
+using WeaveFleet.Infrastructure.Users;
 
 namespace WeaveFleet.IntegrationTests.Harnesses.OpenCode2;
 

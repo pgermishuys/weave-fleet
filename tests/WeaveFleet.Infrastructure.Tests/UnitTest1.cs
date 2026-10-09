@@ -2,6 +2,7 @@
 using Microsoft.Extensions.Hosting;
 using WeaveFleet.Application.Configuration;
 using WeaveFleet.Application.Services;
+using WeaveFleet.Application.Users;
 using WeaveFleet.Infrastructure;
 using WeaveFleet.Infrastructure.Services;
 

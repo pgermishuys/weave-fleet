@@ -6,9 +6,11 @@ using System.Text;
 using System.Text.Json;
 using Microsoft.Extensions.Logging;
 using WeaveFleet.Application.Configuration;
+using WeaveFleet.Application.Credentials;
 using WeaveFleet.Application.Diagnostics;
 using WeaveFleet.Application.Harnesses;
 using WeaveFleet.Application.Services;
+using WeaveFleet.Application.Users;
 using WeaveFleet.Domain.Entities;
 using WeaveFleet.Domain.Repositories;
 

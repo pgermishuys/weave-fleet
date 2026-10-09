@@ -2,6 +2,7 @@ using System.Text;
 using System.Text.Json;
 using WeaveFleet.Api;
 using WeaveFleet.Application.Services;
+using WeaveFleet.Application.Users;
 using WeaveFleet.Domain.Repositories;
 
 namespace WeaveFleet.Api.Endpoints;

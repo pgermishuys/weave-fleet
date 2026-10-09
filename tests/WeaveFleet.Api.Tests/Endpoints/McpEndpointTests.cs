@@ -12,8 +12,8 @@ using WeaveFleet.Application.Canvases;
 using WeaveFleet.Application.Data;
 using WeaveFleet.Application.FleetTools;
 using WeaveFleet.Application.Memory;
-using WeaveFleet.Application.Services;
 using WeaveFleet.Application.Sessions;
+using WeaveFleet.Application.Users;
 using WeaveFleet.Domain.Repositories;
 
 namespace WeaveFleet.Api.Tests.Endpoints;

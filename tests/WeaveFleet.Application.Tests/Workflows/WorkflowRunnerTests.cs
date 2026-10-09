@@ -4,6 +4,7 @@ using Shouldly;
 using WeaveFleet.Application.Configuration;
 using WeaveFleet.Application.Services;
 using WeaveFleet.Application.Skills;
+using WeaveFleet.Application.Users;
 using WeaveFleet.Application.Workflows;
 using WeaveFleet.Domain.Entities;
 using WeaveFleet.Domain.Events;

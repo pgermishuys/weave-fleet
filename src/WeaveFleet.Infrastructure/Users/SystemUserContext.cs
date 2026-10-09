@@ -1,6 +1,7 @@
-using WeaveFleet.Application.Services;
+using WeaveFleet.Application.Users;
+using WeaveFleet.Infrastructure.Services;
 
-namespace WeaveFleet.Infrastructure.Services;
+namespace WeaveFleet.Infrastructure.Users;
 
 /// <summary>
 /// User context for background services and startup recovery code that run without an <c>HttpContext</c>.

@@ -6,7 +6,7 @@ using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging;
 using WeaveFleet.Application.Browser;
 using WeaveFleet.Application.Pages;
-using WeaveFleet.Application.Services;
+using WeaveFleet.Application.Users;
 
 namespace WeaveFleet.Infrastructure.Harnesses.OpenCode2;
 
