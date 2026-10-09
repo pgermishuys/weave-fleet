@@ -1318,4 +1318,15 @@ describe("Composer steering", () => {
     expect(promptBodies()).toHaveLength(1);
     expect(promptBodies()[0].delivery).toBeUndefined();
   });
+
+  it("doesn't listen for weave:session-state-changed on window", async () => {
+    const add = vi.spyOn(window, "addEventListener");
+    const wrapper = mountComposer();
+    await flushPromises();
+    wrapper.unmount();
+
+    const stillThere = add.mock.calls.filter(([type]) => String(type) === "weave:session-state-changed");
+    add.mockRestore();
+    expect(stillThere).toHaveLength(0);
+  });
 });
