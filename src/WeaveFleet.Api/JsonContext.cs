@@ -357,8 +357,8 @@ internal sealed record ErrorResponse(string Error);
 [JsonSerializable(typeof(KeyFilesResponse))]
 // Available Tools
 [JsonSerializable(typeof(AvailableToolsResponse))]
-[JsonSerializable(typeof(WeaveFleet.Application.Services.ResolvedTool))]
-[JsonSerializable(typeof(IReadOnlyList<WeaveFleet.Application.Services.ResolvedTool>))]
+[JsonSerializable(typeof(WeaveFleet.Application.Tools.ResolvedTool))]
+[JsonSerializable(typeof(IReadOnlyList<WeaveFleet.Application.Tools.ResolvedTool>))]
 // Telemetry
 [JsonSerializable(typeof(UiActionRequest))]
 // Credentials
