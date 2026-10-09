@@ -2,11 +2,11 @@ using System.Collections.Concurrent;
 using System.Text;
 using System.Text.Json;
 using System.Threading.Channels;
-using WeaveFleet.Application.Services;
+using WeaveFleet.Application.GitHub;
 using WeaveFleet.Domain.Entities;
 using WeaveFleet.Domain.Harnesses;
 
-namespace WeaveFleet.Infrastructure.Services;
+namespace WeaveFleet.Infrastructure.GitHub;
 
 /// <summary>A GitHub link found in a session's messages, waiting to be stored.</summary>
 public sealed record DetectedSmartLink(

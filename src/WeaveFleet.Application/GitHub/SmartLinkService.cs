@@ -1,8 +1,9 @@
 using WeaveFleet.Application.DTOs;
+using WeaveFleet.Application.Services;
 using WeaveFleet.Domain.Entities;
 using WeaveFleet.Domain.Repositories;
 
-namespace WeaveFleet.Application.Services;
+namespace WeaveFleet.Application.GitHub;
 
 /// <summary>
 /// Wakes the background service that finds and refreshes smart links.

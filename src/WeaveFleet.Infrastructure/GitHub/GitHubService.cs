@@ -7,7 +7,7 @@ using WeaveFleet.Application.Services;
 using WeaveFleet.Domain.Entities;
 using WeaveFleet.Domain.Repositories;
 
-namespace WeaveFleet.Infrastructure.Services;
+namespace WeaveFleet.Infrastructure.GitHub;
 
 /// <summary>
 /// GitHub OAuth device flow + token management.

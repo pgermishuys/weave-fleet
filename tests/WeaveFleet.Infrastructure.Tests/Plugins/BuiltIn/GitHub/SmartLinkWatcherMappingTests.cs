@@ -1,5 +1,5 @@
 using System.Text.Json.Nodes;
-using WeaveFleet.Application.Services;
+using WeaveFleet.Application.GitHub;
 using WeaveFleet.Domain.Entities;
 using WeaveFleet.Infrastructure.Plugins.BuiltIn.GitHub;
 

@@ -1,5 +1,5 @@
 using WeaveFleet.Application.DTOs;
-using WeaveFleet.Application.Services;
+using WeaveFleet.Application.GitHub;
 
 namespace WeaveFleet.Api.Endpoints;
 

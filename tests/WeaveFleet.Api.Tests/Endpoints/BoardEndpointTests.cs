@@ -13,8 +13,8 @@ using WeaveFleet.Application.Data;
 using WeaveFleet.Application.Plugins;
 using WeaveFleet.Application.Services;
 using WeaveFleet.Domain.Repositories;
+using WeaveFleet.Infrastructure.GitHub;
 using WeaveFleet.Infrastructure.Plugins;
-using WeaveFleet.Infrastructure.Services;
 using WeaveFleet.Testing.Fakes;
 
 namespace WeaveFleet.Api.Tests.Endpoints;

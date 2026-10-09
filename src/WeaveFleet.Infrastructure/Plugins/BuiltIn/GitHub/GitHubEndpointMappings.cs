@@ -7,7 +7,7 @@ using Microsoft.AspNetCore.Routing;
 using Microsoft.Extensions.DependencyInjection;
 using WeaveFleet.Application.Plugins;
 using WeaveFleet.Application.Services;
-using WeaveFleet.Infrastructure.Services;
+using WeaveFleet.Infrastructure.GitHub;
 
 namespace WeaveFleet.Infrastructure.Plugins.BuiltIn.GitHub;
 

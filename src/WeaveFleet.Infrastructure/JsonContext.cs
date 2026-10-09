@@ -6,9 +6,9 @@ using WeaveFleet.Domain.Events;
 using WeaveFleet.Domain.Harnesses;
 using WeaveFleet.Domain.Skills;
 using WeaveFleet.Domain.Tools;
+using WeaveFleet.Infrastructure.GitHub;
 using WeaveFleet.Infrastructure.Harnesses.ClaudeCode;
 using WeaveFleet.Infrastructure.Harnesses.OpenCode;
-using WeaveFleet.Infrastructure.Services;
 using WeaveFleet.Infrastructure.Tools;
 
 namespace WeaveFleet.Infrastructure;
