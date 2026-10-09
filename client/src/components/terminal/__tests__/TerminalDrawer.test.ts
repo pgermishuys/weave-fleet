@@ -3,6 +3,7 @@ import { defineComponent, h } from "vue";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import TerminalDrawer from "@/components/terminal/TerminalDrawer.vue";
 import type { TerminalSummary } from "@/lib/terminal-api";
+import { useDraftTerminalContext } from "@/composables/use-draft-terminal-context";
 import { useTerminalsStore } from "@/stores/terminals";
 
 const { openNewTerminalMock, closeTerminalTabMock, clearMock } = vi.hoisted(() => ({
@@ -21,7 +22,7 @@ vi.mock("@/components/terminal/TerminalView.vue", () => ({
   default: defineComponent({
     name: "TerminalView",
     props: { sessionId: { type: String, required: true }, terminalId: { type: String, required: true }, shown: Boolean },
-    emits: ["size", "focus", "ended"],
+    emits: ["size", "focus", "ended", "attach"],
     setup(props, { expose }) {
       expose({ clear: () => clearMock(props.terminalId), focus: () => {} });
       return () => h("div", { class: "stub-view", "data-id": props.terminalId, "data-shown": String(props.shown) });
@@ -173,5 +174,25 @@ describe("TerminalDrawer", () => {
     await flushPromises();
 
     expect(wrapper.get(".terminal-drawer__cwd").attributes("title")).toBe("/home/me/source/weave-fleet");
+  });
+
+  it("puts selected lines in the session's draft and asks the composer to take focus", async () => {
+    const store = useTerminalsStore();
+    store.setTerminals("s1", [terminal("t1", "build shell")]);
+    store.setOpen("s1", true);
+    // The plumbing for hearing the focus request lives here only, so the expectations don't depend on it.
+    const heard: unknown[] = [];
+    const listener = (event: Event) => heard.push((event as CustomEvent).detail);
+    window.addEventListener("weave:command-focus-prompt", listener);
+    const wrapper = mountDrawer();
+    await flushPromises();
+
+    wrapper.findComponent({ name: "TerminalView" }).vm.$emit("attach", { from: 4, to: 6, text: "npm ERR! missing script" });
+    window.removeEventListener("weave:command-focus-prompt", listener);
+
+    expect(useDraftTerminalContext("s1").contexts.value).toMatchObject([
+      { terminalId: "t1", label: "build shell", from: 4, to: 6, text: "npm ERR! missing script" },
+    ]);
+    expect(heard).toEqual([{ sessionId: "s1" }]);
   });
 });
