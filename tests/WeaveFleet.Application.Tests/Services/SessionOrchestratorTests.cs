@@ -1735,6 +1735,29 @@ public sealed class SessionOrchestratorTests : IAsyncDisposable
         _builder.EventBroadcaster.Broadcasts.ShouldContain(b => b.Topic == "sessions" && b.Type == "session_archived");
     }
 
+    [Fact]
+    public async Task Archiving_a_session_ends_what_its_agent_left_running()
+    {
+        await using var harness = new FakeHarnessSession("inst-left");
+        _builder.InstanceTracker.Register("inst-left", harness);
+        _builder.SessionRepository.Seed(new Session
+        {
+            Id = "s-left",
+            InstanceId = "inst-left",
+            Title = "Left running",
+            Status = "active",
+            RetentionStatus = "active",
+            Directory = "/tmp",
+            CreatedAt = "2026-01-01"
+        });
+
+        var result = await _sut.ArchiveSessionAsync("s-left");
+
+        result.IsSuccess.ShouldBeTrue();
+        harness.ArchiveCalled.ShouldBeTrue();
+        harness.StopCalled.ShouldBeFalse();
+    }
+
     [Theory]
     [InlineData("archive")]
     [InlineData("delete")]

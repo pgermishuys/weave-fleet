@@ -1399,7 +1399,27 @@ public sealed partial class SessionOrchestrator(
 
         await EndTerminalsAsync(id, ct);
         await StopAppsAsync(id, ct);
+        await ArchiveInstanceAsync(session, ct);
         return Unit.Value;
+    }
+
+    /// <summary>
+    /// Ends what the session's agent started and left running (<see cref="IHarnessSession.ArchiveAsync"/>). Best effort:
+    /// it never fails the caller.
+    /// </summary>
+    private async Task ArchiveInstanceAsync(Session session, CancellationToken ct)
+    {
+        if (instanceTracker.Get(session.InstanceId) is not { } instance)
+            return;
+
+        try
+        {
+            await instance.ArchiveAsync(ct);
+        }
+        catch (Exception ex) when (ex is not OperationCanceledException)
+        {
+            LogArchiveInstanceFailed(ex, session.Id);
+        }
     }
 
     /// <summary>Stops the apps Fleet runs for the session (dev servers). Best effort: it never fails the caller.</summary>
@@ -2293,6 +2313,9 @@ public sealed partial class SessionOrchestrator(
 
     [LoggerMessage(Level = LogLevel.Warning, Message = "Failed to stop the apps of session {SessionId}")]
     private partial void LogAppCleanupFailed(Exception ex, string sessionId);
+
+    [LoggerMessage(Level = LogLevel.Warning, Message = "Failed to end what the agent left running in session {SessionId}")]
+    private partial void LogArchiveInstanceFailed(Exception ex, string sessionId);
 
     [LoggerMessage(Level = LogLevel.Warning, Message = "Failed to delete the screenshots of session {SessionId}")]
     private partial void LogScreenshotCleanupFailed(Exception ex, string sessionId);

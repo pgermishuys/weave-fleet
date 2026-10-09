@@ -32,6 +32,13 @@ public interface IHarnessSession : IAsyncDisposable
     /// <summary>Permanently purge remote session state, then stop the agent process.</summary>
     Task DeleteAsync(CancellationToken ct);
 
+    /// <summary>
+    /// The session was archived: ends what the agent started and left running (a server it started from its shell), as
+    /// archiving ends the session's terminals and apps. The session wakes on its next prompt, as after an idle stop. A
+    /// harness that doesn't support it does nothing.
+    /// </summary>
+    Task ArchiveAsync(CancellationToken ct) => Task.CompletedTask;
+
     /// <summary>Send a user prompt to the agent.</summary>
     Task SendPromptAsync(string text, PromptOptions? options, CancellationToken ct);
 

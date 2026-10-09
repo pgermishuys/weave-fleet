@@ -36,6 +36,7 @@ public sealed class FakeHarnessSession : IHarnessSession
 
     public bool StopCalled { get; private set; }
     public bool DeleteCalled { get; private set; }
+    public bool ArchiveCalled { get; private set; }
     public bool AbortCalled { get; private set; }
 
     // ── Configurable behaviors ───────────────────────────────────────────────
@@ -129,6 +130,12 @@ public sealed class FakeHarnessSession : IHarnessSession
     {
         DeleteCalled = true;
         return DeleteBehavior?.Invoke(ct) ?? Task.CompletedTask;
+    }
+
+    public Task ArchiveAsync(CancellationToken ct)
+    {
+        ArchiveCalled = true;
+        return Task.CompletedTask;
     }
 
     public Task AbortAsync(CancellationToken ct)

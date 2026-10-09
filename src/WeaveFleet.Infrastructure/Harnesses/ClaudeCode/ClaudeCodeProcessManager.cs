@@ -44,6 +44,13 @@ internal sealed record ClaudeCodeProcessOptions
 
     public IReadOnlyDictionary<string, string> EnvironmentVariables { get; init; }
         = new Dictionary<string, string>();
+
+    /// <summary>
+    /// The session's Job Object on Windows (<see cref="ProcessGroupHelper.CreateProcessGroup"/>), which each of its
+    /// processes joins. It outlives the process, so what the agent started and left running (a server in a window of its
+    /// own) goes on until the session ends. Null for a job of the process's own, and on Linux and macOS.
+    /// </summary>
+    public System.Runtime.InteropServices.SafeHandle? ProcessGroup { get; init; }
 }
 
 /// <summary>
@@ -267,7 +274,9 @@ internal sealed class ClaudeCodeProcessManager : IAsyncDisposable
 
         _started = true;
         _process.Start();
-        _jobObjectHandle = ProcessGroupHelper.AssignToProcessGroup(_process, _logger);
+        var job = ProcessGroupHelper.AssignToProcessGroup(_process, _logger, options.ProcessGroup);
+        if (options.ProcessGroup is null)
+            _jobObjectHandle = job; // Its own: it ends with the process.
         _process.BeginErrorReadLine();
 
         LogProcessStarted(_logger, _process.Id, options.WorkingDirectory, null);

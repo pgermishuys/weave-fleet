@@ -23,7 +23,9 @@ namespace WeaveFleet.Infrastructure.Harnesses.ClaudeCode;
 /// after its turn. When that work finishes Claude Code starts a turn by itself, which Fleet shows like any other.
 /// The process ends when the session stops, when Fleet shuts down, and once it has been idle for
 /// <see cref="ClaudeCodeOptions.IdleShutdownSeconds"/> with no background work; the next prompt starts another with
-/// <c>--resume</c>.
+/// <c>--resume</c>. What the agent started from its shell and left running (a dev server) isn't the process's: an idle stop
+/// leaves it running. On Windows the session's processes share one Job Object, which ends it when the session is archived
+/// or stops.
 /// </para>
 /// <para>
 /// That work is Fleet's running work (<see cref="ClaudeCodeTasks"/>, reported as <c>work.*</c> events). A subagent's
@@ -163,6 +165,9 @@ internal sealed class ClaudeCodeHarnessSession : IHarnessSession
     private Turn? _turn;
     private ITimer? _idleTimer;
     private volatile bool _aborting;
+
+    // The session's Job Object on Windows, which each claude process joins: closing it ends what the agent left running.
+    private System.Runtime.InteropServices.SafeHandle? _processGroup;
 
     // When the limit that turned a claude.ai login away resets (rate_limit_event); cleared once a window allows again.
     private DateTimeOffset? _rejectedResetAt;
@@ -521,6 +526,7 @@ internal sealed class ClaudeCodeHarnessSession : IHarnessSession
             AppendSystemPrompt = _memoryNotes,
             SkillsDirectory = settings.Skills?.Folder,
             EnvironmentVariables = environment,
+            ProcessGroup = _processGroup ??= ProcessGroupHelper.CreateProcessGroup(_logger),
         };
 
         // Fleet's own tools, from Fleet's MCP server under the process's FLEET_URL. Each is allowed up front (Fleet allows
@@ -1043,12 +1049,32 @@ internal sealed class ClaudeCodeHarnessSession : IHarnessSession
             await StopProcessAsync(process, "the session stopped").ConfigureAwait(false);
         }
 
+        CloseProcessGroup();
         _eventChannel.Writer.TryComplete();
         _status = HarnessSessionStatus.Stopped;
     }
 
     /// <inheritdoc />
     public Task DeleteAsync(CancellationToken ct) => StopAsync(ct);
+
+    /// <inheritdoc />
+    /// <remarks>Ends the claude process, with any turn or background work it runs, and what the agent left running.</remarks>
+    public async Task ArchiveAsync(CancellationToken ct)
+    {
+        ClaudeCodeProcessManager? process;
+        lock (_gate)
+        {
+            DisarmIdleTimer();
+            process = _process;
+        }
+
+        if (process is not null)
+            await StopProcessAsync(process, "the session was archived").ConfigureAwait(false);
+
+        CloseProcessGroup();
+    }
+
+    private void CloseProcessGroup() => Interlocked.Exchange(ref _processGroup, null)?.Dispose();
 
     /// <inheritdoc />
     public async ValueTask DisposeAsync()
@@ -1073,6 +1099,7 @@ internal sealed class ClaudeCodeHarnessSession : IHarnessSession
             await process.DisposeAsync().ConfigureAwait(false);
         }
 
+        CloseProcessGroup();
         lock (_gate)
             DisarmIdleTimer();
     }

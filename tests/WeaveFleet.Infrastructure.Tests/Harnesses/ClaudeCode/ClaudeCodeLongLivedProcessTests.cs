@@ -220,6 +220,28 @@ public sealed class ClaudeCodeLongLivedProcessTests : IAsyncDisposable
     }
 
     [Fact]
+    public async Task Archiving_the_session_ends_the_process_and_the_next_prompt_resumes()
+    {
+        if (OperatingSystem.IsWindows())
+            return;
+
+        var session = Start();
+        await PromptAsync("start lasting background");
+
+        await session.ArchiveAsync(CancellationToken.None);
+
+        session.ProcessId.ShouldBeNull();
+        session.Status.ShouldBe(HarnessSessionStatus.Idle);
+        _log.Messages.ShouldContain(m => m.Contains("the session was archived", StringComparison.Ordinal)
+            && m.Contains("task-1 (sleep 600)", StringComparison.Ordinal));
+
+        await PromptAsync("two");
+
+        Starts().ShouldBe(2);
+        ShouldHaveArgument(Arguments(1), "--resume", "cc-1");
+    }
+
+    [Fact]
     public async Task A_new_model_is_switched_to_on_the_running_process()
     {
         if (OperatingSystem.IsWindows())
