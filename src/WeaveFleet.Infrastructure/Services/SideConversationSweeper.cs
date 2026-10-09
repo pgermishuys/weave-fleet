@@ -4,6 +4,7 @@ using Microsoft.Extensions.Logging;
 using WeaveFleet.Application.Services;
 using WeaveFleet.Application.Sessions;
 using WeaveFleet.Domain.Repositories;
+using WeaveFleet.Infrastructure.Users;
 
 namespace WeaveFleet.Infrastructure.Services;
 

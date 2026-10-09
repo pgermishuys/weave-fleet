@@ -12,7 +12,7 @@ using Microsoft.AspNetCore.Builder;
 using Microsoft.AspNetCore.Routing;
 using WeaveFleet.Application.Configuration;
 using WeaveFleet.Application.Plugins;
-using WeaveFleet.Application.Services;
+using WeaveFleet.Application.Users;
 
 namespace WeaveFleet.Api.Tests.Auth;
 

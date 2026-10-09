@@ -20,6 +20,7 @@ using WeaveFleet.Infrastructure.Events;
 using WeaveFleet.Infrastructure.GitHub;
 using WeaveFleet.Infrastructure.Harnesses;
 using WeaveFleet.Infrastructure.Progress;
+using WeaveFleet.Infrastructure.Users;
 
 namespace WeaveFleet.Infrastructure.Services;
 

@@ -2,7 +2,7 @@ using System.Net;
 using WeaveFleet.Api.Auth;
 using WeaveFleet.Application.Configuration;
 using WeaveFleet.Application.Diagnostics;
-using WeaveFleet.Application.Services;
+using WeaveFleet.Application.Users;
 
 namespace WeaveFleet.Api.Endpoints;
 

@@ -1,5 +1,5 @@
 using WeaveFleet.Application.Git;
-using WeaveFleet.Application.Services;
+using WeaveFleet.Application.Users;
 using WeaveFleet.Application.Workspaces.Worktrees;
 using WeaveFleet.Domain.Common;
 using WeaveFleet.Domain.Entities;

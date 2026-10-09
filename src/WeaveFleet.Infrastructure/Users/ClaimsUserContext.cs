@@ -1,7 +1,7 @@
 using Microsoft.AspNetCore.Http;
-using WeaveFleet.Application.Services;
+using WeaveFleet.Application.Users;
 
-namespace WeaveFleet.Infrastructure.Services;
+namespace WeaveFleet.Infrastructure.Users;
 
 /// <summary>
 /// User context for authenticated (cloud) mode.

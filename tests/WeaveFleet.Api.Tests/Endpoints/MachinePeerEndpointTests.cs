@@ -14,6 +14,7 @@ using WeaveFleet.Application.Data;
 using WeaveFleet.Application.Devices;
 using WeaveFleet.Application.Services;
 using WeaveFleet.Application.Sessions;
+using WeaveFleet.Application.Users;
 using WeaveFleet.Domain.Harnesses;
 using WeaveFleet.Testing.Fakes;
 

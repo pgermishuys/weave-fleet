@@ -1,6 +1,6 @@
 using Shouldly;
 using WeaveFleet.Application.Configuration;
-using WeaveFleet.Application.Services;
+using WeaveFleet.Application.Users;
 
 namespace WeaveFleet.Application.Tests.Configuration;
 

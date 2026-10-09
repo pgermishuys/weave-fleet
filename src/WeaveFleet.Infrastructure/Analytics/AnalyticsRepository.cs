@@ -1,7 +1,7 @@
 using System.Data.Common;
 using WeaveFleet.Application.Analytics;
 using WeaveFleet.Application.Data;
-using WeaveFleet.Application.Services;
+using WeaveFleet.Application.Users;
 using WeaveFleet.Infrastructure.Data;
 
 namespace WeaveFleet.Infrastructure.Analytics;

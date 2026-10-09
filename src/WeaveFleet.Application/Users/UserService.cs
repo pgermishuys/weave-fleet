@@ -1,7 +1,8 @@
+using WeaveFleet.Application.Credentials;
 using WeaveFleet.Domain.Entities;
 using WeaveFleet.Domain.Repositories;
 
-namespace WeaveFleet.Application.Services;
+namespace WeaveFleet.Application.Users;
 
 /// <summary>
 /// Synchronizes authenticated principals into shadow <see cref="User"/> records.

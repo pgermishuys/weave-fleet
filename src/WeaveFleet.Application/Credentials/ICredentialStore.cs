@@ -1,6 +1,6 @@
 using WeaveFleet.Domain.Entities;
 
-namespace WeaveFleet.Application.Services;
+namespace WeaveFleet.Application.Credentials;
 
 /// <summary>
 /// Application-layer service for storing and retrieving user credentials.

@@ -2,7 +2,7 @@ using System.Security.Cryptography;
 using System.Text;
 using WeaveFleet.Application.Configuration;
 
-namespace WeaveFleet.Application.Services;
+namespace WeaveFleet.Application.Users;
 
 /// <summary>Where the local access token came from.</summary>
 public enum LocalTokenSource

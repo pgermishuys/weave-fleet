@@ -27,11 +27,12 @@ using WeaveFleet.Api.Telemetry;
 using WeaveFleet.Application.Configuration;
 using WeaveFleet.Application.Diagnostics;
 using WeaveFleet.Application.Services;
+using WeaveFleet.Application.Users;
 using WeaveFleet.Application.Workspaces;
 using WeaveFleet.Domain.Repositories;
 using WeaveFleet.Infrastructure;
 using WeaveFleet.Infrastructure.Data;
-using WeaveFleet.Infrastructure.Services;
+using WeaveFleet.Infrastructure.Users;
 
 // Suppress ILLink IL2026 for the top-level entry point: config binding uses simple POCOs;
 // telemetry and plugin endpoint registration are safe at runtime.

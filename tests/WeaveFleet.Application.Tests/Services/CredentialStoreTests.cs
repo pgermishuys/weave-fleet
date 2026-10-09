@@ -1,5 +1,6 @@
 using Shouldly;
-using WeaveFleet.Application.Services;
+using WeaveFleet.Application.Credentials;
+using WeaveFleet.Application.Users;
 using WeaveFleet.Domain.Entities;
 using WeaveFleet.Domain.Repositories;
 using WeaveFleet.Testing.Fakes;

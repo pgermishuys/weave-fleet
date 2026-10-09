@@ -5,7 +5,7 @@ using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging.Abstractions;
 using WeaveFleet.Application.Browser;
 using WeaveFleet.Application.Configuration;
-using WeaveFleet.Application.Services;
+using WeaveFleet.Application.Users;
 using WeaveFleet.Infrastructure.Browser;
 
 namespace WeaveFleet.Infrastructure.Tests.Browser;

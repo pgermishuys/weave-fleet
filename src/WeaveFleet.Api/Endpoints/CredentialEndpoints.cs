@@ -1,5 +1,5 @@
 using WeaveFleet.Api;
-using WeaveFleet.Application.Services;
+using WeaveFleet.Application.Credentials;
 
 namespace WeaveFleet.Api.Endpoints;
 

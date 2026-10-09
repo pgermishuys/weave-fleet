@@ -1,6 +1,6 @@
-using WeaveFleet.Application.Services;
+using WeaveFleet.Application.Users;
 
-namespace WeaveFleet.Infrastructure.Services;
+namespace WeaveFleet.Infrastructure.Users;
 
 /// <summary>
 /// User context for local (non-authenticated) mode.

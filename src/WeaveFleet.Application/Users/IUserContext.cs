@@ -1,4 +1,4 @@
-namespace WeaveFleet.Application.Services;
+namespace WeaveFleet.Application.Users;
 
 /// <summary>
 /// Provides identity information for the current request or execution context.

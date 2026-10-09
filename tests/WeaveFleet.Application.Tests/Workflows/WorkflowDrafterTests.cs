@@ -5,6 +5,7 @@ using Shouldly;
 using WeaveFleet.Application.Configuration;
 using WeaveFleet.Application.Harnesses;
 using WeaveFleet.Application.Services;
+using WeaveFleet.Application.Users;
 using WeaveFleet.Application.Workflows;
 using WeaveFleet.Application.Workspaces;
 using WeaveFleet.Domain.Common;

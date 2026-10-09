@@ -3,9 +3,9 @@ extern alias FakeLlm;
 using FakeLlm::FakeLlmServer;
 using Microsoft.Extensions.DependencyInjection;
 using WeaveFleet.Application.Services;
-using WeaveFleet.Infrastructure.Services;
 using WeaveFleet.Application.Sessions;
 using WeaveFleet.Domain.Repositories;
+using WeaveFleet.Infrastructure.Users;
 
 namespace WeaveFleet.IntegrationTests.Harnesses.OpenCode2;
 

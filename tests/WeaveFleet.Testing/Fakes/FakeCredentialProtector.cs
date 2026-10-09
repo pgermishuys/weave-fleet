@@ -1,4 +1,4 @@
-using WeaveFleet.Application.Services;
+using WeaveFleet.Application.Credentials;
 
 namespace WeaveFleet.Testing.Fakes;
 
