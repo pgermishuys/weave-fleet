@@ -3,6 +3,7 @@
  * the row summary on the "sessions" topic and the full detail on the session's own topic.
  */
 import { normalizeTodoItem, type TodoItem } from "@/lib/todo-utils";
+import { asRecord } from "@/lib/tools";
 
 /** Pushed on the "sessions" topic with a {@link SessionProgressSummary}. */
 export const SESSION_PROGRESS = "session_progress";
@@ -72,12 +73,6 @@ export interface SessionProgressDetail extends SessionProgressSummary {
   /** The plan the counts come from, when the session is working through one. */
   plan: SessionPlan | null;
   subagents: SessionSubagent[];
-}
-
-function asRecord(value: unknown): Record<string, unknown> | null {
-  return value !== null && typeof value === "object" && !Array.isArray(value)
-    ? (value as Record<string, unknown>)
-    : null;
 }
 
 function isCount(value: unknown): value is number {

@@ -6,6 +6,7 @@ import ConversationPage from "@/components/session/ConversationPage.vue";
 import BrowserSteps from "@/components/session/BrowserSteps.vue";
 import AgentTaskRow from "@/components/session/AgentTaskRow.vue";
 import type { ToolCardItem } from "@/components/session/activity-stream-tool-card";
+import { getTool } from "@/lib/tools";
 import type { VisualPayload } from "@/lib/visual-payload";
 
 /** A message's tool calls: a row per call in one box, then the pages the calls showed, outside it. */
@@ -25,7 +26,7 @@ const pagedTools = computed(() => (props.tools ?? []).filter((tool) => tool.page
 
 /** Calls that can take browser steps: OpenCode 2's Code Mode, and Fleet's own browser tools. */
 function usesBrowser(kind: string | undefined): boolean {
-  return kind === "execute" || kind === "fleet_browser_read" || kind === "fleet_browser_act";
+  return getTool(kind).usesBrowser;
 }
 
 function handleExpandVisual(payload: VisualPayload): void {

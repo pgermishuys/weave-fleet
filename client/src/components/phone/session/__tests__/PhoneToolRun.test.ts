@@ -62,10 +62,9 @@ describe("PhoneToolRun rows", () => {
   });
 
   it("draws an unknown tool by its capitalised name", () => {
-    const row = run([call("1", "todowrite", "completed", {})]).get("[data-testid='phone-step']");
+    const row = run([call("1", "frobnicate", "completed", {})]).get("[data-testid='phone-step']");
 
-    // Pinned as is today: the Wrench icon and "Todowrite".
-    expect(row.get(".ph-tool__l").text()).toBe("Todowrite");
+    expect(row.get(".ph-tool__l").text()).toBe("Frobnicate");
     expect(row.find("[aria-label='Done']").exists()).toBe(true);
   });
 

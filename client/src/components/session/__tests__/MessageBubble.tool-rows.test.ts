@@ -184,8 +184,8 @@ describe("MessageBubble tool rows: browser steps", () => {
     expect(bubble([tool({ id: "t1", kind: "execute", delegation })]).findAllComponents(BrowserSteps)).toHaveLength(0);
   });
 
-  it("matches the kind exactly: Execute in another case gets none", () => {
-    expect(bubble([tool({ id: "t1", kind: "Execute", callId: "c" })]).findAllComponents(BrowserSteps)).toHaveLength(0);
+  it("matches the kind in any case: Execute gets them too", () => {
+    expect(bubble([tool({ id: "t1", kind: "Execute", callId: "c" })]).findAllComponents(BrowserSteps)).toHaveLength(1);
   });
 });
 

@@ -3,6 +3,7 @@ import { backgroundWorkId, type BackgroundState } from "@/lib/background-work";
 import { isWorkRunning, type RunningWorkItem } from "@/lib/running-work";
 import { parseUnifiedDiff } from "@/lib/diff-parser";
 import { getToolLabel } from "@/lib/tool-labels";
+import { asRecord, getTool } from "@/lib/tools";
 import { pageAddress } from "@/lib/server-canvas";
 
 export interface DiffLine {
@@ -89,25 +90,10 @@ export function subagentTask(part: AccumulatedToolPart): string {
   return typeof description === "string" ? description.trim() : "";
 }
 
-/** The tools that run an agent in a child session: OpenCode's `task`, OpenCode 2's `subagent`. */
-const SUBAGENT_TOOLS = new Set(["task", "subagent"]);
-
 /** Whether a tool call ran a subagent, so its card links to the child session. Names are matched in any case. */
 export function isSubagentTool(toolName: string): boolean {
-  return SUBAGENT_TOOLS.has(toolName.toLowerCase());
+  return getTool(toolName).category === "subagent";
 }
-
-/**
- * Fleet's browser and page tools; their card reads "title · address" once the page answered, "title · size" for a
- * shot, "title · file" for a page, or "title · chapters" for a walkthrough.
- */
-const BROWSER_TOOLS = new Set(["fleet_app_start", "fleet_browser_open", "fleet_browser_screenshot", "fleet_page_show", "fleet_walkthrough_show"]);
-
-/**
- * Tools whose card title comes from Fleet's answer: "Messaged Update documentation" for fleet_message, "Read t3code
- * notes" for fleet_session_read, "Started Run the tests on mini" for fleet_session_start.
- */
-const TITLED_TOOLS = new Set([...BROWSER_TOOLS, "fleet_message", "fleet_session_read", "fleet_machine_list", "fleet_session_start"]);
 
 const tool_output_keys = ["output", "result", "content", "error", "message", "stdout", "stderr"] as const;
 const fallback_excluded_keys = new Set(["input", "status", "summary", "title", "diff", "diffLines", "patch"]);
@@ -251,7 +237,7 @@ export function toToolCardItem(
   const input = asRecord(state?.input);
   const output = getToolOutput(state);
   const summary = getStringValue(state?.summary);
-  const shownTitle = TITLED_TOOLS.has(part.tool) ? getStringValue(state?.title) : undefined;
+  const shownTitle = getTool(part.tool).titledFromAnswer ? getStringValue(state?.title) : undefined;
   const title = shownTitle ?? (getToolLabel(part.tool, input) || part.tool);
   const canvasId = getStringValue(asRecord(state?.metadata)?.canvasId);
   const status = workStatus(work) ?? backgroundStatus(part, finishedBackgroundWork) ?? formatToolStatus(state?.status);
@@ -266,7 +252,7 @@ export function toToolCardItem(
     diffLines: cardDiffLines(part),
     initiallyCollapsed: state?.status !== "error",
     preview: buildPreview(output, summary),
-    isPatternTool: part.tool === "glob" || part.tool === "grep",
+    isPatternTool: getTool(part.tool).patternLabel,
     canvasId,
     screenshot: toolScreenshot(part),
     page: toolPage(part),
@@ -419,12 +405,4 @@ function getStringValue(value: unknown): string | undefined {
 
 function getNumberValue(value: unknown): number | undefined {
   return typeof value === "number" && Number.isFinite(value) ? value : undefined;
-}
-
-function asRecord(value: unknown): Record<string, unknown> | null {
-  if (!value || typeof value !== "object" || Array.isArray(value)) {
-    return null;
-  }
-
-  return value as Record<string, unknown>;
 }

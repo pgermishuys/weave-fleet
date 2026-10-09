@@ -12,6 +12,7 @@
  * harness.
  */
 
+import { getTool, type ResolvedTool } from "@/lib/tools";
 import { toolDiffLines, toolDiffText, toolInput, toolStatus } from "@/components/session/activity-stream-tool-card";
 import type { AccumulatedMessage, AccumulatedToolPart, DelegationDto } from "@/lib/client-types";
 import { parseDiffLines, parseUnifiedDiff, type DiffLine } from "@/lib/diff-parser";
@@ -84,14 +85,12 @@ export interface SessionTurn {
   readOnly: boolean;
 }
 
-/** Tools that write a file, across harnesses: OpenCode lowercases, Claude Code does not. */
-const WRITE_TOOLS = new Set(["edit", "write", "patch", "applypatch", "multiedit", "notebookedit", "strreplaceeditor"]);
-const CREATE_TOOLS = new Set(["write", "notebookedit"]);
-const SHELL_TOOLS = new Set(["bash", "shell", "terminal"]);
-
-/** "apply_patch" → "applypatch", "MultiEdit" → "multiedit". */
-function normalizeToolName(tool: string): string {
-  return tool.toLowerCase().replace(/[^a-z0-9]/g, "");
+/**
+ * Whether a call runs a shell command. Code Mode's `execute` is a shell to the server, but its input is a script, not a
+ * command, so the Turns canvas leaves it out.
+ */
+function isShellCall(tool: ResolvedTool): boolean {
+  return tool.category === "shell" && tool.name !== "execute";
 }
 
 function stringField(input: Record<string, unknown> | null, ...keys: readonly string[]): string | undefined {
@@ -152,12 +151,12 @@ function linesOf(content: string): string[] {
 
 /** Every file a completed write call touched, with the lines it wrote to each. */
 function fileEditsOf(part: AccumulatedToolPart): readonly TurnFileEdit[] {
-  const tool = normalizeToolName(part.tool);
-  if (!WRITE_TOOLS.has(tool)) return [];
+  const tool = getTool(part.tool);
+  if (!tool.fileWrite) return [];
   // A call that failed or hasn't finished wrote nothing.
   if (toolStatus(part) !== "completed") return [];
 
-  const cacheKey = `${part.partId}|${part.callId}|${tool}`;
+  const cacheKey = `${part.partId}|${part.callId}|${tool.name}`;
   const cached = fileEditCache.get(cacheKey);
   if (cached) return cached;
 
@@ -172,7 +171,7 @@ function fileEditsOf(part: AccumulatedToolPart): readonly TurnFileEdit[] {
       path: declaredPath,
       additions,
       deletions,
-      created: CREATE_TOOLS.has(tool) && deletions === 0,
+      created: tool.fileWrite === "create" && deletions === 0,
       diff: attached,
     }]);
   }
@@ -206,7 +205,7 @@ function fileEditsOf(part: AccumulatedToolPart): readonly TurnFileEdit[] {
       path: declaredPath,
       additions: diff.length,
       deletions: 0,
-      created: CREATE_TOOLS.has(tool),
+      created: tool.fileWrite === "create",
       diff,
     }]);
   }
@@ -333,9 +332,7 @@ function toTurn(round: Round, number: number): SessionTurn {
       if (part.type !== "tool") continue;
       toolCount += 1;
 
-      const tool = normalizeToolName(part.tool);
-
-      if (SHELL_TOOLS.has(tool) && commands.length < 4) {
+      if (isShellCall(getTool(part.tool)) && commands.length < 4) {
         const input = toolInput(part);
         const label = stringField(input, "command", "description");
         if (label) commands.push({ label: firstLine(label, 48), ok: commandOutcome(toolStatus(part)) });

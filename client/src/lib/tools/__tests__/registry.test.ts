@@ -215,6 +215,14 @@ describe("same answers as the sites it will replace", () => {
     }
   });
 
+  it("labels the tools that take a file or folder by it, whichever field the harness used", () => {
+    expect(getTool("list").label({ path: "src" })).toBe("src");
+    expect(getTool("notebookedit").label({ notebook_path: "notebooks/demo.ipynb" })).toBe("notebooks/demo.ipynb");
+    expect(getTool("patch").label({ filePath: "src/a.ts" })).toBe("src/a.ts");
+    expect(getTool("lsp").label({ filePath: "src/a.ts" })).toBe("src/a.ts");
+    expect(getTool("list").label({})).toBe("list");
+  });
+
   it("draws every tool the icon map knows with the same icon and header", () => {
     const iconKnown = [
       "read", "write", "edit", "glob", "grep", "skill", "bash", "task", "webfetch", "question", "fleet_app_start",

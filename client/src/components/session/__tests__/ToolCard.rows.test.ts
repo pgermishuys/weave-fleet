@@ -156,8 +156,8 @@ describe("ToolCard label and detail", () => {
     ["task", "Task"],
     ["execute", "Code"],
     ["fleet_page_show", "Show page"],
-    // Pinned as is today: an unlisted tool gets its name with a capital and the Wrench; todowrite is "Todowrite".
-    ["todowrite", "Todowrite"],
+    // An unlisted tool gets its name with a capital and the Wrench.
+    ["todowrite", "Update todos"],
     ["mystery_tool", "Mystery_tool"],
   ])("labels a %s call %s", (kind, label) => {
     expect(card({ kind }).get(".tool-header__label").text()).toBe(label);
@@ -176,9 +176,13 @@ describe("ToolCard label and detail", () => {
   it("uses one icon for a tool it has no icon for, the same one tools sharing a mapping get", () => {
     const icon = (kind: string) => card({ kind }).get(".tool-header__icon").html();
 
-    // todowrite gets the same fallback Wrench as any unknown tool.
-    expect(icon("todowrite")).toBe(icon("mystery_tool"));
+    // todowrite has its own icon; an unknown tool gets the Wrench.
+    expect(icon("todowrite")).not.toBe(icon("mystery_tool"));
     expect(icon("todowrite")).not.toBe(icon("read"));
+    expect(icon("todoread")).not.toBe(icon("todowrite"));
+    expect(icon("notebookedit")).toBe(icon("edit"));
+    expect(icon("patch")).toBe(icon("edit"));
+    expect(icon("list")).not.toBe(icon("mystery_tool"));
     expect(icon("write")).toBe(icon("edit"));
     expect(icon("glob")).toBe(icon("grep"));
   });
