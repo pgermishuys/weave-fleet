@@ -21,6 +21,7 @@ using WeaveFleet.Application.Sessions.Catalog;
 using WeaveFleet.Application.Sessions.Compaction;
 using WeaveFleet.Application.Sessions.Creation;
 using WeaveFleet.Application.Sessions.Files;
+using WeaveFleet.Application.Sessions.Forking;
 using WeaveFleet.Application.Sessions.History;
 using WeaveFleet.Application.Sessions.Prompting;
 using WeaveFleet.Application.Sessions.Retention;
@@ -88,7 +89,8 @@ public sealed partial class SessionOrchestrator(
     SessionShellCommands? sessionShellCommands = null,
     SessionWork? sessionWork = null,
     SessionCreation? sessionCreation = null,
-    SessionRetention? sessionRetention = null) : ISessionActivator
+    SessionRetention? sessionRetention = null,
+    SessionForking? sessionForking = null) : ISessionActivator
 {
     private readonly DelegationService _delegationService = delegationService;
     private readonly SessionFiles _files = sessionFiles
@@ -107,6 +109,7 @@ public sealed partial class SessionOrchestrator(
     private SessionWork? _work;
     private SessionCreation? _creation;
     private SessionRetention? _retention;
+    private SessionForking? _forking;
 
     private SessionActivation Activation => _activation ??= sessionActivation
         ?? new SessionActivation(
@@ -201,6 +204,21 @@ public sealed partial class SessionOrchestrator(
             sessionNotifier,
             sessionScreenshots,
             sessionPages);
+
+    private SessionForking Forking => _forking ??= sessionForking
+        ?? new SessionForking(
+            workspaceService,
+            instanceService,
+            harnessRegistry,
+            instanceTracker,
+            sessionRepository,
+            projectRepository,
+            eventBroadcaster,
+            analyticsCollector,
+            credentialStore,
+            Activation,
+            NullLogger<SessionForking>.Instance,
+            _gitDiffService);
 
     private sealed class NoOpUserPreferenceRepository : IUserPreferenceRepository
     {
@@ -434,6 +452,15 @@ public sealed partial class SessionOrchestrator(
 
     public Task<Result<MessagePage>> GetSessionMessagesAsync(string id, MessageQuery? query = null, CancellationToken ct = default)
         => History.GetSessionMessagesAsync(id, query, ct);
+
+    // ── Fork (SessionForking) ──────────────────────────────────────────────────
+
+    /// <inheritdoc cref="SessionForking.ForkSessionAsync"/>
+    public Task<Result<CreateSessionResult>> ForkSessionAsync(string parentId, string? title = null, CancellationToken ct = default)
+        => Forking.ForkSessionAsync(parentId, title, ct);
+
+    private Task<Result<ForkedHarnessSession>> ForkHarnessSessionAsync(Session session, string forkSessionId, CancellationToken ct)
+        => Forking.ForkHarnessSessionAsync(session, forkSessionId, ct);
 
     // ── Archive, restore, delete (SessionRetention) ────────────────────────────
 
