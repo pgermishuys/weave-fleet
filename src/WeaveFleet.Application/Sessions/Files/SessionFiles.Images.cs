@@ -1,12 +1,12 @@
 using System.Collections.Frozen;
 using WeaveFleet.Domain.Common;
 
-namespace WeaveFleet.Application.Services;
+namespace WeaveFleet.Application.Sessions.Files;
 
 /// <summary>
 /// Images in the session's folder, which a file tab shows as a picture instead of opening in the editor.
 /// </summary>
-public sealed partial class SessionOrchestrator
+public sealed partial class SessionFiles
 {
     /// <summary>The image types a file tab shows, by extension, with the content type they're served as.</summary>
     public static readonly FrozenDictionary<string, string> ImageContentTypes = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase)
@@ -28,13 +28,13 @@ public sealed partial class SessionOrchestrator
     /// </summary>
     public async Task<Result<SessionImage>> ResolveSessionImageAsync(string sessionId, string? path)
     {
-        using var _ = BeginSessionScope(sessionId);
+        using var _ = logger.BeginSessionScope(sessionId);
         if (string.IsNullOrWhiteSpace(path))
             return FleetError.ValidationError("Session.File", "Path parameter is required.");
         if (!ImageContentTypes.TryGetValue(Path.GetExtension(path), out var contentType))
             return FleetError.ValidationError("Session.File", "Only images can be read this way.");
 
-        var sessionResult = await GetSessionAsync(sessionId);
+        var sessionResult = await sessionRepository.GetSessionAsync(sessionId);
         if (sessionResult.IsFailure)
             return sessionResult.Error;
 
