@@ -30,6 +30,9 @@ public sealed class TestHarnessSession : IHarnessSession
     private string? _lastQuestionMessageId;
     private JsonElement? _lastQuestionInput;
 
+    // The question tool calls waiting for an answer, by call ID: what Answer/RejectQuestionAsync accept.
+    private readonly ConcurrentDictionary<string, byte> _openQuestions = new(StringComparer.Ordinal);
+
     // The session's messages as a real harness would report them: the scenario's
     // pre-loaded messages, plus prompts sent and message events emitted since.
     // Parts carry no ID of their own, so their event IDs are tracked alongside.
@@ -212,6 +215,9 @@ public sealed class TestHarnessSession : IHarnessSession
     [UnconditionalSuppressMessage("AOT", "IL3050", Justification = "Test infrastructure only")]
     public async Task AnswerQuestionAsync(string requestId, IReadOnlyList<IReadOnlyList<string>> answers, CancellationToken ct)
     {
+        if (!_openQuestions.TryRemove(requestId, out _))
+            throw new KeyNotFoundException($"No question {requestId}.");
+
         LastAnswers = answers;
 
         // Emit a message.part.updated event that transitions the tool part to completed,
@@ -247,7 +253,9 @@ public sealed class TestHarnessSession : IHarnessSession
 
     /// <inheritdoc/>
     public Task RejectQuestionAsync(string requestId, CancellationToken ct)
-        => Task.CompletedTask;
+        => _openQuestions.TryRemove(requestId, out _)
+            ? Task.CompletedTask
+            : throw new KeyNotFoundException($"No question {requestId}.");
 
     /// <inheritdoc/>
     public Task<MessagePage> GetMessagesAsync(MessageQuery? query, CancellationToken ct)
@@ -331,6 +339,7 @@ public sealed class TestHarnessSession : IHarnessSession
 
                 // Track question tool context for AnswerQuestionAsync
                 TryTrackQuestionContext(scenarioEvent.Event);
+                TrackOpenQuestion(scenarioEvent.Event);
                 TrackMessageEvent(scenarioEvent.Event);
 
                 await _channel.Writer.WriteAsync(scenarioEvent.Event, ct).ConfigureAwait(false);
@@ -577,6 +586,7 @@ public sealed class TestHarnessSession : IHarnessSession
         // subscriber forwards it to WebSocket clients.
         await TryHandleDurableEventAsync(evt).ConfigureAwait(false);
         await TryHandleDelegationEventAsync(evt).ConfigureAwait(false);
+        TrackOpenQuestion(evt);
         TrackMessageEvent(evt);
         await _channel.Writer.WriteAsync(evt, ct).ConfigureAwait(false);
     }
@@ -934,5 +944,30 @@ public sealed class TestHarnessSession : IHarnessSession
 
         if (part.TryGetProperty("state", out var stateEl) && stateEl.TryGetProperty("input", out var inputEl))
             _lastQuestionInput = inputEl.Clone();
+    }
+
+    /// <summary>
+    /// Keeps <see cref="_openQuestions"/>: a question tool part that's pending or running waits for an answer under its
+    /// call ID, as the question card knows it; one in any other state no longer does.
+    /// </summary>
+    private void TrackOpenQuestion(HarnessEvent evt)
+    {
+        if (evt.Type != "message.part.updated" || evt.Payload is not { ValueKind: JsonValueKind.Object } payload
+            || !payload.TryGetProperty("part", out var part) || part.ValueKind != JsonValueKind.Object
+            || !part.TryGetProperty("tool", out var tool) || tool.ValueKind != JsonValueKind.String || tool.GetString() != "question"
+            || !part.TryGetProperty("callID", out var call) || call.ValueKind != JsonValueKind.String
+            || call.GetString() is not { Length: > 0 } callId)
+        {
+            return;
+        }
+
+        var status = part.TryGetProperty("state", out var state) && state.ValueKind == JsonValueKind.Object
+            && state.TryGetProperty("status", out var s) && s.ValueKind == JsonValueKind.String
+                ? s.GetString()
+                : null;
+        if (status is "pending" or "running")
+            _openQuestions[callId] = 0;
+        else
+            _openQuestions.TryRemove(callId, out _);
     }
 }

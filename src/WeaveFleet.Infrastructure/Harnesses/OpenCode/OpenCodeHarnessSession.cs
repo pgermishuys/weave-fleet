@@ -109,6 +109,9 @@ internal sealed partial class OpenCodeHarnessSession : IHarnessSession
     /// </summary>
     private readonly ConcurrentDictionary<string, string> _toolCallToQuestionId = new();
 
+    /// <summary>What every OpenCode question ID starts with (its <c>QuestionID</c> schema).</summary>
+    private const string QuestionIdPrefix = "que";
+
     // The session's permission level, the asks waiting on the user, and what they said not to ask again about.
     private readonly PermissionGate _permissions = new();
 
@@ -1111,10 +1114,16 @@ internal sealed partial class OpenCodeHarnessSession : IHarnessSession
     /// Resolves a request ID to an OpenCode question ID.
     /// The UI sends tool call IDs (e.g. <c>tooluse_...</c>) but OpenCode expects
     /// question IDs (e.g. <c>que_...</c>). If the ID is already a question ID or
-    /// no mapping exists, returns the original value unchanged.
+    /// no mapping exists, returns the original value unchanged. Any other ID is no question
+    /// OpenCode has (it refuses one with 400 before looking): <see cref="KeyNotFoundException"/>.
     /// </summary>
-    private string ResolveQuestionId(string requestId) =>
-        _toolCallToQuestionId.TryGetValue(requestId, out var questionId) ? questionId : requestId;
+    private string ResolveQuestionId(string requestId)
+    {
+        var questionId = _toolCallToQuestionId.TryGetValue(requestId, out var mapped) ? mapped : requestId;
+        return questionId.StartsWith(QuestionIdPrefix, StringComparison.Ordinal)
+            ? questionId
+            : throw new KeyNotFoundException($"Question '{requestId}' isn't waiting for an answer.");
+    }
 
     /// <summary>
     /// Extracts the tool-call-ID → question-ID mapping from a <c>question.asked</c> event.

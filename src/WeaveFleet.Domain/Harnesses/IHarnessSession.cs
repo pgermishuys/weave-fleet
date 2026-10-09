@@ -96,10 +96,16 @@ public interface IHarnessSession : IAsyncDisposable
     /// <summary>Abort the current agent operation.</summary>
     Task AbortAsync(CancellationToken ct);
 
-    /// <summary>Answer a pending question request from the agent.</summary>
+    /// <summary>
+    /// Answer a pending question request from the agent. Throws <see cref="KeyNotFoundException"/> when no such question
+    /// waits: it was answered or dismissed, or its turn ended.
+    /// </summary>
     Task AnswerQuestionAsync(string requestId, IReadOnlyList<IReadOnlyList<string>> answers, CancellationToken ct);
 
-    /// <summary>Reject (dismiss) a pending question request from the agent.</summary>
+    /// <summary>
+    /// Reject (dismiss) a pending question request from the agent. Throws <see cref="KeyNotFoundException"/> when no such
+    /// question waits.
+    /// </summary>
     Task RejectQuestionAsync(string requestId, CancellationToken ct);
 
     /// <summary>
