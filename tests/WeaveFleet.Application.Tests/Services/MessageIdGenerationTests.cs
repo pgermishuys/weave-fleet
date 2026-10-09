@@ -228,7 +228,6 @@ public sealed class MessageIdGenerationTests : IAsyncDisposable
             options,
             _builder.SmartLinkRepository,
             _builder.ActivityTracker,
-            Microsoft.Extensions.Logging.Abstractions.NullLogger<SessionOrchestrator>.Instance,
             sessionActivityWriteService: null,
             gitDiffService: null);
     }

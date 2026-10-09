@@ -5,12 +5,17 @@ using WeaveFleet.Application.Analytics;
 using WeaveFleet.Application.DTOs;
 using WeaveFleet.Application.Events;
 using WeaveFleet.Application.Harnesses;
-using WeaveFleet.Application.Sessions;
+using WeaveFleet.Application.Services;
+using WeaveFleet.Application.Sessions.Forking;
+using WeaveFleet.Application.Sessions.Prompting;
+using WeaveFleet.Application.Sessions.Retention;
+using WeaveFleet.Application.Workspaces;
 using WeaveFleet.Domain.Common;
 using WeaveFleet.Domain.Entities;
 using WeaveFleet.Domain.Harnesses;
+using WeaveFleet.Domain.Repositories;
 
-namespace WeaveFleet.Application.Services;
+namespace WeaveFleet.Application.Sessions.Side;
 
 /// <summary>What a side question started or went to: the side conversation, and the prompt Fleet sent it.</summary>
 public sealed record SideQuestionResult(Session SideConversation, PromptSessionResult Prompt);
@@ -20,15 +25,29 @@ public sealed record SideQuestionResult(Session SideConversation, PromptSessionR
 /// finished turn, so the session carries on undisturbed. The fork is a Fleet session of its own, hidden from every
 /// list, whose prompts carry <see cref="SideConversations.BoundaryInstruction"/>. A session has one at a time.
 /// </summary>
-public sealed partial class SessionOrchestrator
+public sealed partial class SessionSideConversations(
+    WorkspaceService workspaceService,
+    IHarnessRegistry harnessRegistry,
+    InstanceTracker instanceTracker,
+    ISessionRepository sessionRepository,
+    IProjectRepository projectRepository,
+    IEventBroadcaster eventBroadcaster,
+    IAnalyticsCollector analyticsCollector,
+    SessionPrompting prompting,
+    SessionForking forking,
+    SessionRetention retention,
+    ILogger<SessionSideConversations> logger)
 {
+    private const string _lifecycleStatusRunning = "running";
+    private const string _activityStatusIdle = "idle";
+
     // Static for the same reason as the activation locks: two questions sent at once must not make two forks.
     private static readonly ConcurrentDictionary<string, SemaphoreSlim> SideConversationLocks = new(StringComparer.Ordinal);
 
     /// <summary>The side conversation open on session <paramref name="sessionId"/>, or null when there is none.</summary>
     public async Task<Result<Session?>> GetSideConversationAsync(string sessionId)
     {
-        var session = await GetSessionAsync(sessionId).ConfigureAwait(false);
+        var session = await sessionRepository.GetSessionAsync(sessionId).ConfigureAwait(false);
         if (session.IsFailure)
             return session.Error;
 
@@ -46,13 +65,13 @@ public sealed partial class SessionOrchestrator
         string? correlationId,
         CancellationToken ct = default)
     {
-        using var _ = BeginSessionScope(sessionId);
+        using var _ = logger.BeginSessionScope(sessionId);
         if (string.IsNullOrWhiteSpace(question))
             return FleetError.ValidationError("Session.SideQuestion", "Type a question after /btw.");
         if (question.Length > SideConversations.MaxQuestionLength)
             return FleetError.ValidationError("Session.SideQuestion", $"The question is longer than {SideConversations.MaxQuestionLength} characters.");
 
-        var sessionResult = await GetSessionAsync(sessionId).ConfigureAwait(false);
+        var sessionResult = await sessionRepository.GetSessionAsync(sessionId).ConfigureAwait(false);
         if (sessionResult.IsFailure)
             return sessionResult.Error;
 
@@ -92,7 +111,7 @@ public sealed partial class SessionOrchestrator
                 foreach (var discarded in await sessionRepository.ListSideConversationsAsync(sessionId).ConfigureAwait(false))
                 {
                     if (discarded.SideDiscardedAt is not null)
-                        await DiscardSideConversationAsync(discarded, ct).ConfigureAwait(false);
+                        await retention.DiscardSideConversationAsync(discarded, ct).ConfigureAwait(false);
                 }
 
                 var started = await StartSideConversationAsync(session, question, ct).ConfigureAwait(false);
@@ -107,7 +126,7 @@ public sealed partial class SessionOrchestrator
         }
 
         // The side conversation's prompts go the way every prompt does; they carry the boundary (PromptSessionCoreAsync).
-        var prompt = await PromptSessionCoreAsync(
+        var prompt = await prompting.PromptSessionCoreAsync(
             side.Id, question, options, userMessageId: null, correlationId, saveUserMessage: false, rememberChoices: true, ct).ConfigureAwait(false);
         if (prompt.IsFailure)
             return prompt.Error;
@@ -123,8 +142,8 @@ public sealed partial class SessionOrchestrator
     /// </summary>
     public async Task<Result<Unit>> CloseSideConversationAsync(string sessionId, CancellationToken ct = default)
     {
-        using var _ = BeginSessionScope(sessionId);
-        var sessionResult = await GetSessionAsync(sessionId).ConfigureAwait(false);
+        using var _ = logger.BeginSessionScope(sessionId);
+        var sessionResult = await sessionRepository.GetSessionAsync(sessionId).ConfigureAwait(false);
         if (sessionResult.IsFailure)
             return sessionResult.Error;
 
@@ -143,8 +162,8 @@ public sealed partial class SessionOrchestrator
     /// </summary>
     public async Task<Result<Session>> RestoreSideConversationAsync(string sessionId, CancellationToken ct = default)
     {
-        using var _ = BeginSessionScope(sessionId);
-        var sessionResult = await GetSessionAsync(sessionId).ConfigureAwait(false);
+        using var _ = logger.BeginSessionScope(sessionId);
+        var sessionResult = await sessionRepository.GetSessionAsync(sessionId).ConfigureAwait(false);
         if (sessionResult.IsFailure)
             return sessionResult.Error;
 
@@ -177,7 +196,7 @@ public sealed partial class SessionOrchestrator
     /// </summary>
     public async Task<Result<(Session SideConversation, TimeSpan UndoLeft)?>> GetUndoableSideConversationAsync(string sessionId)
     {
-        var sessionResult = await GetSessionAsync(sessionId).ConfigureAwait(false);
+        var sessionResult = await sessionRepository.GetSessionAsync(sessionId).ConfigureAwait(false);
         if (sessionResult.IsFailure)
             return sessionResult.Error;
 
@@ -197,7 +216,7 @@ public sealed partial class SessionOrchestrator
     /// </summary>
     public async Task<Result<Session>> SetSideConversationSeenAsync(string sessionId, string? answerId)
     {
-        var sessionResult = await GetSessionAsync(sessionId).ConfigureAwait(false);
+        var sessionResult = await sessionRepository.GetSessionAsync(sessionId).ConfigureAwait(false);
         if (sessionResult.IsFailure)
             return sessionResult.Error;
 
@@ -216,8 +235,8 @@ public sealed partial class SessionOrchestrator
     /// </summary>
     public async Task<Result<Session>> SetSideConversationMinimizedAsync(string sessionId, bool minimized, CancellationToken ct = default)
     {
-        using var _ = BeginSessionScope(sessionId);
-        var sessionResult = await GetSessionAsync(sessionId).ConfigureAwait(false);
+        using var _ = logger.BeginSessionScope(sessionId);
+        var sessionResult = await sessionRepository.GetSessionAsync(sessionId).ConfigureAwait(false);
         if (sessionResult.IsFailure)
             return sessionResult.Error;
 
@@ -240,7 +259,7 @@ public sealed partial class SessionOrchestrator
         if (side is not { SideOfSessionId: not null, SideDiscardedAt: not null })
             return;
 
-        await DiscardSideConversationAsync(side, ct).ConfigureAwait(false);
+        await retention.DiscardSideConversationAsync(side, ct).ConfigureAwait(false);
     }
 
     /// <summary>
@@ -249,8 +268,8 @@ public sealed partial class SessionOrchestrator
     /// </summary>
     public async Task<Result<Session>> KeepSideConversationAsync(string sessionId, CancellationToken ct = default)
     {
-        using var _ = BeginSessionScope(sessionId);
-        var sessionResult = await GetSessionAsync(sessionId).ConfigureAwait(false);
+        using var _ = logger.BeginSessionScope(sessionId);
+        var sessionResult = await sessionRepository.GetSessionAsync(sessionId).ConfigureAwait(false);
         if (sessionResult.IsFailure)
             return sessionResult.Error;
 
@@ -313,7 +332,7 @@ public sealed partial class SessionOrchestrator
     private async Task<Result<Session>> StartSideConversationAsync(Session session, string question, CancellationToken ct)
     {
         var sideId = Guid.NewGuid().ToString();
-        var forked = await ForkHarnessSessionAsync(session, sideId, ct).ConfigureAwait(false);
+        var forked = await forking.ForkHarnessSessionAsync(session, sideId, ct).ConfigureAwait(false);
         if (forked.IsFailure)
             return forked.Error;
 
@@ -362,6 +381,27 @@ public sealed partial class SessionOrchestrator
         LogSideConversationStarted(side.Id, session.Id, fork.BoundaryMessageId);
         return side;
     }
+
+    private string HarnessDisplayName(Session session)
+        => harnessRegistry.GetByType(session.HarnessType)?.DisplayName ?? session.HarnessType;
+
+    private async Task<string?> ResolveProjectNameAsync(string? projectId)
+    {
+        if (projectId is null)
+            return null;
+
+        var projects = await projectRepository.ListAsync();
+        return projects.FirstOrDefault(p => p.Id == projectId)?.Name;
+    }
+
+    private async Task SafeDeleteAsync(IHarnessSession instance, CancellationToken ct)
+    {
+        try { await instance.DeleteAsync(ct); }
+        catch (Exception ex) { LogStopFailed(ex, instance.InstanceId); }
+    }
+
+    [LoggerMessage(Level = LogLevel.Warning, Message = "Failed to stop instance {InstanceId}")]
+    private partial void LogStopFailed(Exception ex, string instanceId);
 
     [LoggerMessage(Level = LogLevel.Information, Message = "Side conversation {SideSessionId} started on session {SessionId} after message {BoundaryMessageId}")]
     private partial void LogSideConversationStarted(string sideSessionId, string sessionId, string? boundaryMessageId);

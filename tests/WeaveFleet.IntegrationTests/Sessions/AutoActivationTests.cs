@@ -424,7 +424,6 @@ public sealed class AutoActivationTests
             options,
             builder.SmartLinkRepository,
             new SessionActivityTracker(),
-            NullLogger<SessionOrchestrator>.Instance,
             sessionActivityWriteService: null,
             gitDiffService: null);
     }

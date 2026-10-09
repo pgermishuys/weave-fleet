@@ -1937,7 +1937,6 @@ public sealed class SessionOrchestratorTests : IAsyncDisposable
             options,
             _builder.SmartLinkRepository,
             new SessionActivityTracker(),
-            Microsoft.Extensions.Logging.Abstractions.NullLogger<SessionOrchestrator>.Instance,
             sessionActivityWriteService: null,
             gitDiffService: null,
             harnessAvailability: new HarnessAvailabilityCache(

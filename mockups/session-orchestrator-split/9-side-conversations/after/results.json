@@ -1,0 +1,379 @@
+[
+  {
+    "step": "prompt (slow)",
+    "status": 200
+  },
+  {
+    "step": "status while streaming",
+    "status": "busy"
+  },
+  {
+    "step": "steer",
+    "status": 200
+  },
+  {
+    "step": "queue",
+    "status": 201,
+    "kept": {
+      "kind": "prompt"
+    }
+  },
+  {
+    "step": "queue list",
+    "status": 200,
+    "kept": {
+      "items": 1
+    }
+  },
+  {
+    "step": "reload mid-reply shows reply so far",
+    "status": "yes"
+  },
+  {
+    "step": "queue list after idle",
+    "status": 200,
+    "kept": {
+      "items": 0
+    }
+  },
+  {
+    "step": "queued prompt was sent",
+    "status": "yes"
+  },
+  {
+    "step": "steer was sent",
+    "status": "yes"
+  },
+  {
+    "step": "files browse",
+    "status": 200,
+    "kept": [
+      "docs",
+      "README.md"
+    ]
+  },
+  {
+    "step": "files read",
+    "status": 200,
+    "kept": {
+      "content": "Retry after 30 seconds.\n",
+      "isBinary": false
+    }
+  },
+  {
+    "step": "files write",
+    "status": 200,
+    "kept": {
+      "hasHash": true
+    }
+  },
+  {
+    "step": "files write stale",
+    "status": 409,
+    "kept": {
+      "content": "Retry after 60 seconds.\n",
+      "hash": "2c3bb3dd76e726ffa5199d52b2e9014ac9eda182d32dd0fa46be57e910be2c12"
+    }
+  },
+  {
+    "step": "files write traversal",
+    "status": 400,
+    "kept": {
+      "error": "Path traversal is not allowed."
+    }
+  },
+  {
+    "step": "files read traversal",
+    "status": 400,
+    "kept": {
+      "error": "Path traversal is not allowed."
+    }
+  },
+  {
+    "step": "files resolve",
+    "status": 200,
+    "kept": {
+      "files": [
+        {
+          "path": "docs/limits.md",
+          "relativePath": "docs/limits.md"
+        },
+        {
+          "path": "/tmp/fleet-orchestrator-split/harbor-api/README.md",
+          "relativePath": "README.md"
+        }
+      ]
+    }
+  },
+  {
+    "step": "files find",
+    "status": 200,
+    "kept": [
+      "docs/limits.md"
+    ]
+  },
+  {
+    "step": "files image",
+    "status": 200,
+    "kept": "image/png"
+  },
+  {
+    "step": "files image not an image",
+    "status": 400,
+    "kept": {
+      "error": "Only images can be read this way."
+    }
+  },
+  {
+    "step": "files tab shows the saved file",
+    "status": "yes"
+  },
+  {
+    "step": "models",
+    "status": 200,
+    "kept": [
+      "opencode",
+      "fakellm"
+    ]
+  },
+  {
+    "step": "commands",
+    "status": 200
+  },
+  {
+    "step": "agents",
+    "status": 200
+  },
+  {
+    "step": "messages",
+    "status": 200,
+    "kept": {
+      "count": 3
+    }
+  },
+  {
+    "step": "answer unknown question",
+    "status": 500
+  },
+  {
+    "step": "reject unknown question",
+    "status": 500
+  },
+  {
+    "step": "permission reply bad",
+    "status": 400,
+    "kept": {
+      "error": "Answer once, always or reject."
+    }
+  },
+  {
+    "step": "permission reply unknown",
+    "status": 404,
+    "kept": {
+      "error": "PermissionRequest with id 'per_none' was not found."
+    }
+  },
+  {
+    "step": "work stop unknown",
+    "status": 404,
+    "kept": {
+      "error": "Work with id 'w_none' was not found."
+    }
+  },
+  {
+    "step": "work output unknown",
+    "status": 404,
+    "kept": {
+      "error": "Work with id 'w_none' was not found."
+    }
+  },
+  {
+    "step": "shell",
+    "status": 202
+  },
+  {
+    "step": "shell empty",
+    "status": 400,
+    "kept": {
+      "error": "Type a command to run."
+    }
+  },
+  {
+    "step": "compact",
+    "status": 202
+  },
+  {
+    "step": "context after compact",
+    "status": 200,
+    "kept": "has context"
+  },
+  {
+    "step": "side ask",
+    "status": 200,
+    "kept": {
+      "title": "btw: What does a 429 mean?"
+    }
+  },
+  {
+    "step": "side get",
+    "status": 200,
+    "kept": {
+      "title": "btw: What does a 429 mean?",
+      "minimized": false
+    }
+  },
+  {
+    "step": "side minimize",
+    "status": 200,
+    "kept": {
+      "minimized": true
+    }
+  },
+  {
+    "step": "side seen",
+    "status": 200,
+    "kept": {
+      "title": "btw: What does a 429 mean?"
+    }
+  },
+  {
+    "step": "side close",
+    "status": 204
+  },
+  {
+    "step": "side get after close",
+    "status": 204
+  },
+  {
+    "step": "side discarded",
+    "status": 200,
+    "kept": {
+      "title": "btw: What does a 429 mean?",
+      "undoKeys": [
+        "sideConversation",
+        "undoRemainingMs"
+      ]
+    }
+  },
+  {
+    "step": "side restore",
+    "status": 200,
+    "kept": {
+      "title": "btw: What does a 429 mean?"
+    }
+  },
+  {
+    "step": "side keep",
+    "status": 200,
+    "kept": {
+      "title": "btw: What does a 429 mean?"
+    }
+  },
+  {
+    "step": "side get after keep",
+    "status": 204
+  },
+  {
+    "step": "fork",
+    "status": 200,
+    "kept": {
+      "title": "Rate limits, other approach",
+      "forkedFrom": true
+    }
+  },
+  {
+    "step": "fork has the copied conversation",
+    "status": "yes"
+  },
+  {
+    "step": "prompt the fork",
+    "status": 200
+  },
+  {
+    "step": "new in folder",
+    "status": 200,
+    "kept": {
+      "harness": "opencode",
+      "sameFolder": true
+    }
+  },
+  {
+    "step": "create with first prompt",
+    "status": 200,
+    "kept": {
+      "title": "Sync conflict notes"
+    }
+  },
+  {
+    "step": "first prompt was answered",
+    "status": "yes"
+  },
+  {
+    "step": "prompt B (slow)",
+    "status": 200
+  },
+  {
+    "step": "B busy before abort",
+    "status": "busy"
+  },
+  {
+    "step": "abort B",
+    "status": 200
+  },
+  {
+    "step": "archive",
+    "status": 204,
+    "kept": {
+      "retention": null
+    }
+  },
+  {
+    "step": "prompt archived",
+    "status": 400,
+    "kept": {
+      "error": "Archived sessions are read-only."
+    }
+  },
+  {
+    "step": "unarchive",
+    "status": 204,
+    "kept": {
+      "retention": null
+    }
+  },
+  {
+    "step": "delete",
+    "status": 204
+  },
+  {
+    "step": "get deleted",
+    "status": 404
+  },
+  {
+    "step": "delete new-in-folder",
+    "status": 204
+  },
+  {
+    "step": "missing session prompt",
+    "status": 404,
+    "kept": {
+      "error": "Session with id 'nope' was not found."
+    }
+  },
+  {
+    "step": "wake: status before",
+    "status": "idle"
+  },
+  {
+    "step": "wake: prompt after restart",
+    "status": 200
+  },
+  {
+    "step": "wake: reply arrived",
+    "status": "yes"
+  },
+  {
+    "step": "wake: idle after",
+    "status": "idle"
+  }
+]
