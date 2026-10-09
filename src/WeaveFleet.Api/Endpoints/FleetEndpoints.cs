@@ -3,6 +3,7 @@ using WeaveFleet.Application.Diagnostics;
 using WeaveFleet.Application.DTOs;
 using WeaveFleet.Application.Plugins;
 using WeaveFleet.Application.Services;
+using WeaveFleet.Application.Workspaces;
 using WeaveFleet.Infrastructure.Services;
 
 namespace WeaveFleet.Api.Endpoints;

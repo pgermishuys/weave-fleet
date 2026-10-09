@@ -1,7 +1,8 @@
 using WeaveFleet.Application.Harnesses;
 using WeaveFleet.Application.Services;
-using WeaveFleet.Application.Services.Worktrees;
 using WeaveFleet.Application.Skills;
+using WeaveFleet.Application.Workspaces;
+using WeaveFleet.Application.Workspaces.Worktrees;
 using WeaveFleet.Domain.Common;
 using WeaveFleet.Domain.Entities;
 using WeaveFleet.Domain.Harnesses;

@@ -1,5 +1,5 @@
 using Microsoft.Data.Sqlite;
-using WeaveFleet.Application.Services;
+using WeaveFleet.Application.Workspaces;
 using WeaveFleet.Infrastructure.Data.Repositories;
 
 namespace WeaveFleet.Infrastructure.Tests.Data.Repositories;

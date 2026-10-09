@@ -7,6 +7,7 @@ using WeaveFleet.Application.Data;
 using WeaveFleet.Application.Harnesses;
 using WeaveFleet.Application.Services;
 using WeaveFleet.Application.Workflows;
+using WeaveFleet.Application.Workspaces;
 using WeaveFleet.Domain.Entities;
 using WeaveFleet.Domain.Harnesses;
 using WeaveFleet.Domain.Repositories;

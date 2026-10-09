@@ -1,8 +1,7 @@
 using Microsoft.Extensions.Logging;
 using WeaveFleet.Application.Git;
-using WeaveFleet.Application.Services;
 
-namespace WeaveFleet.Application.Services;
+namespace WeaveFleet.Application.Workspaces;
 
 /// <summary>
 /// Provides filesystem directory listing for the UI's folder picker, constrained to allowed workspace roots.

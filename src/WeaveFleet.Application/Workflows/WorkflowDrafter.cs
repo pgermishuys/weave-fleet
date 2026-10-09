@@ -3,6 +3,7 @@ using System.Text.RegularExpressions;
 using Microsoft.Extensions.Logging;
 using WeaveFleet.Application.Harnesses;
 using WeaveFleet.Application.Services;
+using WeaveFleet.Application.Workspaces;
 using WeaveFleet.Domain.Common;
 using WeaveFleet.Domain.Harnesses;
 using WeaveFleet.Domain.Repositories;

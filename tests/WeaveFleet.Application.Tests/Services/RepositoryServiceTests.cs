@@ -2,6 +2,7 @@ using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging.Abstractions;
 using Shouldly;
 using WeaveFleet.Application.Services;
+using WeaveFleet.Application.Workspaces;
 using WeaveFleet.Domain.Entities;
 using WeaveFleet.Testing.Fakes;
 using WeaveFleet.Testing.Fakes.Repositories;

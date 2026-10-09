@@ -1,10 +1,11 @@
 using WeaveFleet.Application.Git;
-using WeaveFleet.Application.Services.Worktrees;
+using WeaveFleet.Application.Services;
+using WeaveFleet.Application.Workspaces.Worktrees;
 using WeaveFleet.Domain.Common;
 using WeaveFleet.Domain.Entities;
 using WeaveFleet.Domain.Repositories;
 
-namespace WeaveFleet.Application.Services;
+namespace WeaveFleet.Application.Workspaces;
 
 /// <summary>
 /// Manages user-configurable workspace roots for local browsing and repository discovery.

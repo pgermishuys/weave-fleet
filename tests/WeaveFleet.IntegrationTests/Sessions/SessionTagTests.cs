@@ -14,7 +14,7 @@ using WeaveFleet.Application.Configuration;
 using WeaveFleet.Application.Data;
 using WeaveFleet.Application.DTOs;
 using WeaveFleet.Application.Harnesses;
-using WeaveFleet.Application.Services;
+using WeaveFleet.Application.Workspaces;
 using WeaveFleet.Domain.Entities;
 using WeaveFleet.Domain.Harnesses;
 using WeaveFleet.Infrastructure;

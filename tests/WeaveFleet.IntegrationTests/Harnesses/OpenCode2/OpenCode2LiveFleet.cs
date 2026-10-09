@@ -6,6 +6,7 @@ using FakeLlm::FakeLlmServer;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging.Abstractions;
 using WeaveFleet.Application.Services;
+using WeaveFleet.Application.Workspaces;
 using WeaveFleet.Domain.Harnesses;
 using WeaveFleet.Infrastructure.Harnesses;
 using WeaveFleet.Infrastructure.Harnesses.OpenCode2;

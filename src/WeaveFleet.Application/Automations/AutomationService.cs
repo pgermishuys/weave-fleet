@@ -1,4 +1,5 @@
 using WeaveFleet.Application.Services;
+using WeaveFleet.Application.Workspaces;
 using WeaveFleet.Domain.Common;
 using WeaveFleet.Domain.Entities;
 using WeaveFleet.Domain.Repositories;

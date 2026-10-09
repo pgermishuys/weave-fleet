@@ -1,8 +1,9 @@
+using WeaveFleet.Application.Services;
 using WeaveFleet.Domain.Common;
 using WeaveFleet.Domain.Entities;
 using WeaveFleet.Domain.Repositories;
 
-namespace WeaveFleet.Application.Services;
+namespace WeaveFleet.Application.Workspaces;
 
 /// <summary>
 /// Encapsulates business logic for project management.

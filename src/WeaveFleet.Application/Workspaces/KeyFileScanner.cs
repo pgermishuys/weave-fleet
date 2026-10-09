@@ -1,7 +1,7 @@
 using System.Collections.Concurrent;
 using WeaveFleet.Application.Git;
 
-namespace WeaveFleet.Application.Services;
+namespace WeaveFleet.Application.Workspaces;
 
 /// <summary>
 /// Scans a workspace directory for key project files (solutions, project files, build files).

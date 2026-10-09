@@ -7,6 +7,7 @@ using WeaveFleet.Application.Harnesses;
 using WeaveFleet.Application.Memory;
 using WeaveFleet.Application.Services;
 using WeaveFleet.Application.SessionSources;
+using WeaveFleet.Application.Workspaces;
 using WeaveFleet.Domain.Harnesses;
 using WeaveFleet.Testing.Fakes;
 using WeaveFleet.Testing.Fakes.Repositories;

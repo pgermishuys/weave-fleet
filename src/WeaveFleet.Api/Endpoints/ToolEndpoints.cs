@@ -1,6 +1,7 @@
 using WeaveFleet.Application.Services;
 using WeaveFleet.Application.Skills;
 using WeaveFleet.Application.Tools;
+using WeaveFleet.Application.Workspaces;
 using WeaveFleet.Domain.Common;
 using WeaveFleet.Domain.Skills;
 using WeaveFleet.Domain.Tools;

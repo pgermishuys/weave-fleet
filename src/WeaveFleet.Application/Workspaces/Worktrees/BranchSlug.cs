@@ -1,7 +1,7 @@
 using System.Globalization;
 using System.Text;
 
-namespace WeaveFleet.Application.Services.Worktrees;
+namespace WeaveFleet.Application.Workspaces.Worktrees;
 
 /// <summary>
 /// Turns a message into the <c>{slug}</c> part of a worktree name. Ported from the composer's

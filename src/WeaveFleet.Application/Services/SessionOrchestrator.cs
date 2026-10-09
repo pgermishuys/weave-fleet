@@ -19,6 +19,7 @@ using WeaveFleet.Application.Sessions.Files;
 using WeaveFleet.Application.Sessions.Prompting;
 using WeaveFleet.Application.SessionSources;
 using WeaveFleet.Application.Terminals;
+using WeaveFleet.Application.Workspaces;
 using WeaveFleet.Domain.Common;
 using WeaveFleet.Domain.DTOs;
 using WeaveFleet.Domain.Entities;
