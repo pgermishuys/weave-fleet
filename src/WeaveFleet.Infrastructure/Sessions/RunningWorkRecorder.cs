@@ -3,6 +3,7 @@ using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging;
 using WeaveFleet.Application.Services;
 using WeaveFleet.Application.Sessions;
+using WeaveFleet.Application.Sessions.Creation;
 using WeaveFleet.Domain.Harnesses;
 using WeaveFleet.Infrastructure.Harnesses;
 using WeaveFleet.Infrastructure.Users;
@@ -13,7 +14,7 @@ namespace WeaveFleet.Infrastructure.Sessions;
 /// Takes the running-work events every harness sends (<see cref="EventTypes.WorkStarted"/>,
 /// <see cref="EventTypes.WorkUpdated"/>, <see cref="EventTypes.WorkEnded"/>) from the relay to
 /// <see cref="DelegationService"/>, which records them. Work with a child session gets a Fleet session of its own
-/// first (<see cref="SessionOrchestrator.EnsureDelegatedChildSessionAsync"/>), hidden under its parent.
+/// first (<see cref="SessionCreation.EnsureDelegatedChildSessionAsync"/>), hidden under its parent.
 /// </summary>
 /// <remarks>
 /// Each session's events are handled one at a time in the order its harness sent them, off the relay's pump: making a
@@ -107,14 +108,14 @@ public sealed partial class RunningWorkRecorder(IServiceScopeFactory scopeFactor
         if (report.ChildHarnessSessionId is not { Length: > 0 } childHarnessSessionId)
             return null;
 
-        if (services.GetService<SessionOrchestrator>() is not { } orchestrator)
+        if (services.GetService<SessionCreation>() is not { } creation)
             return null;
 
         // The work is still recorded when this fails; only the link to its child's activity is missing.
         var title = report.Label ?? report.Title ?? WorkKinds.Subagent;
         try
         {
-            var child = await orchestrator.EnsureDelegatedChildSessionAsync(fleetSessionId, childHarnessSessionId, title).ConfigureAwait(false);
+            var child = await creation.EnsureDelegatedChildSessionAsync(fleetSessionId, childHarnessSessionId, title).ConfigureAwait(false);
             if (child.IsSuccess)
                 return child.Value.Id;
 

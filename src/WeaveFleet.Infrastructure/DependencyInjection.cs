@@ -215,7 +215,7 @@ public static class DependencyInjection
         services.AddScoped<BuiltInSkillService>();
         services.AddSingleton<ISkillVersionStore>(sp => new WeaveFleet.Infrastructure.Skills.FileSkillVersionStore(sp.GetRequiredService<FleetOptions>()));
         services.AddScoped<SkillImprover>();
-        services.AddScoped<ISessionActivator>(sp => sp.GetRequiredService<SessionOrchestrator>());
+        services.AddScoped<ISessionActivator>(sp => sp.GetRequiredService<WeaveFleet.Application.Sessions.Activation.SessionActivation>());
         services.AddScoped<SessionCallbackService>();
         services.AddScoped<DelegationService>();
         services.AddScoped<SmartLinkService>();

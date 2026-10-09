@@ -5,7 +5,7 @@ namespace WeaveFleet.Application.Sessions;
 
 /// <summary>
 /// Interface for activating sessions on-demand.
-/// Breaks circular dependency between SessionOrchestrator and OpenCodeSessionMessageProxy.
+/// Breaks circular dependency between SessionActivation and OpenCodeSessionMessageProxy.
 /// </summary>
 public interface ISessionActivator
 {
