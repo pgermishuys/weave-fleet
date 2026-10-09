@@ -3,7 +3,7 @@ using Microsoft.Extensions.Logging;
 using WeaveFleet.Application.Users;
 using WeaveFleet.Domain.Events;
 
-namespace WeaveFleet.Application.Services;
+namespace WeaveFleet.Application.Sessions;
 
 /// <summary>
 /// Sends a session's next queued message (<see cref="PromptQueueService"/>) when its turn ends. The relay hands it

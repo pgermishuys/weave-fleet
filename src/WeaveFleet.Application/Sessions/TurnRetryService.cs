@@ -2,6 +2,7 @@ using System.Globalization;
 using System.Text.Json;
 using Microsoft.Extensions.Logging;
 using WeaveFleet.Application.Events;
+using WeaveFleet.Application.Services;
 using WeaveFleet.Application.Users;
 using WeaveFleet.Domain.Common;
 using WeaveFleet.Domain.Entities;
@@ -9,7 +10,7 @@ using WeaveFleet.Domain.Events;
 using WeaveFleet.Domain.Harnesses;
 using WeaveFleet.Domain.Repositories;
 
-namespace WeaveFleet.Application.Services;
+namespace WeaveFleet.Application.Sessions;
 
 /// <summary>A session's retry as clients show it: when it goes, which attempt, and why.</summary>
 public sealed record ScheduledRetryView(string DueAt, int Attempt, string Kind, string Reason, bool ProviderSaid)

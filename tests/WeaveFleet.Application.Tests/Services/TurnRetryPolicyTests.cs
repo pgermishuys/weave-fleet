@@ -1,6 +1,6 @@
 using System.Globalization;
 using Shouldly;
-using WeaveFleet.Application.Services;
+using WeaveFleet.Application.Sessions;
 using WeaveFleet.Domain.Events;
 
 namespace WeaveFleet.Application.Tests.Services;
