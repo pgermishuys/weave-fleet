@@ -144,11 +144,44 @@ public sealed class FakeHarnessSession : IHarnessSession
         return Task.CompletedTask;
     }
 
+    /// <summary>When true, answering or rejecting a question throws <see cref="NotSupportedException"/>.</summary>
+    public bool QuestionsNotSupported { get; set; }
+
+    /// <summary>The questions answered, in order, with their answers.</summary>
+    public List<(string RequestId, IReadOnlyList<IReadOnlyList<string>> Answers)> AnsweredQuestions { get; } = [];
+
+    /// <summary>The questions rejected, in order.</summary>
+    public List<string> RejectedQuestions { get; } = [];
+
     public Task AnswerQuestionAsync(string requestId, IReadOnlyList<IReadOnlyList<string>> answers, CancellationToken ct)
-        => Task.CompletedTask;
+    {
+        if (QuestionsNotSupported)
+            throw new NotSupportedException("This harness can't answer questions.");
+        AnsweredQuestions.Add((requestId, answers));
+        return Task.CompletedTask;
+    }
 
     public Task RejectQuestionAsync(string requestId, CancellationToken ct)
-        => Task.CompletedTask;
+    {
+        if (QuestionsNotSupported)
+            throw new NotSupportedException("This harness can't reject questions.");
+        RejectedQuestions.Add(requestId);
+        return Task.CompletedTask;
+    }
+
+    /// <summary>The asks <see cref="ReplyToPermissionAsync"/> knows; any other request id is <see cref="KeyNotFoundException"/>.</summary>
+    public HashSet<string> PendingPermissions { get; } = [];
+
+    /// <summary>The permission replies given, in order.</summary>
+    public List<(string RequestId, string Reply, string? Message)> PermissionReplies { get; } = [];
+
+    public Task ReplyToPermissionAsync(string requestId, string reply, string? message, CancellationToken ct)
+    {
+        if (!PendingPermissions.Remove(requestId))
+            throw new KeyNotFoundException(requestId);
+        PermissionReplies.Add((requestId, reply, message));
+        return Task.CompletedTask;
+    }
 
     public Task<MessagePage> GetMessagesAsync(MessageQuery? query, CancellationToken ct)
         => GetMessagesBehavior?.Invoke(query, ct)
@@ -255,14 +288,23 @@ public sealed class FakeHarnessSession : IHarnessSession
         return Task.CompletedTask;
     }
 
+    /// <summary>What <see cref="GetAgentsAsync"/> lists.</summary>
+    public IReadOnlyList<AgentInfo> Agents { get; set; } = [];
+
+    /// <summary>What <see cref="GetCommandsAsync"/> lists.</summary>
+    public IReadOnlyList<CommandInfo> Commands { get; set; } = [];
+
+    /// <summary>What <see cref="GetProvidersAsync"/> lists.</summary>
+    public IReadOnlyList<ProviderInfo> Providers { get; set; } = [];
+
     public Task<IReadOnlyList<AgentInfo>> GetAgentsAsync(CancellationToken ct)
-        => Task.FromResult<IReadOnlyList<AgentInfo>>([]);
+        => Task.FromResult(Agents);
 
     public Task<IReadOnlyList<CommandInfo>> GetCommandsAsync(CancellationToken ct)
-        => Task.FromResult<IReadOnlyList<CommandInfo>>([]);
+        => Task.FromResult(Commands);
 
     public Task<IReadOnlyList<ProviderInfo>> GetProvidersAsync(CancellationToken ct)
-        => Task.FromResult<IReadOnlyList<ProviderInfo>>([]);
+        => Task.FromResult(Providers);
 
     public ValueTask DisposeAsync() => ValueTask.CompletedTask;
 }
