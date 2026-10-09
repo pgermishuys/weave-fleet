@@ -1,10 +1,11 @@
 using WeaveFleet.Application.Configuration;
 using WeaveFleet.Application.Harnesses;
+using WeaveFleet.Application.Services;
 using WeaveFleet.Domain.Common;
 using WeaveFleet.Domain.Entities;
 using WeaveFleet.Domain.Repositories;
 
-namespace WeaveFleet.Application.Services;
+namespace WeaveFleet.Application.Harnesses;
 
 /// <summary>A profile as the API shows it, with how many sessions that aren't archived use it.</summary>
 public sealed record HarnessProfileView(

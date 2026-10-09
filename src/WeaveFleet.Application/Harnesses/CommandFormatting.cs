@@ -1,6 +1,6 @@
 using WeaveFleet.Domain.Harnesses;
 
-namespace WeaveFleet.Application.Services;
+namespace WeaveFleet.Application.Harnesses;
 
 /// <summary>
 /// Shared utility for formatting slash command prompts consistently across harness implementations.

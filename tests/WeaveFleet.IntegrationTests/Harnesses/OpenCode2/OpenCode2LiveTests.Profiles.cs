@@ -3,6 +3,7 @@ extern alias FakeLlm;
 using FakeLlm::FakeLlmServer;
 using Microsoft.Extensions.DependencyInjection;
 using WeaveFleet.Application.Configuration;
+using WeaveFleet.Application.Harnesses;
 using WeaveFleet.Application.Services;
 using WeaveFleet.Domain.Events;
 using WeaveFleet.Infrastructure.Harnesses.OpenCode2;

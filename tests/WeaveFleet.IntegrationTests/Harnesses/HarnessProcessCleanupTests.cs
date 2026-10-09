@@ -4,7 +4,7 @@ using Microsoft.AspNetCore.Mvc.Testing;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging.Abstractions;
 using WeaveFleet.Infrastructure.Harnesses;
-using WeaveFleet.Infrastructure.Services;
+using WeaveFleet.Infrastructure.Harnesses.OpenCode;
 
 namespace WeaveFleet.IntegrationTests.Harnesses;
 

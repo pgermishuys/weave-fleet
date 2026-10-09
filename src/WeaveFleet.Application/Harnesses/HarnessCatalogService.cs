@@ -1,13 +1,14 @@
 using Microsoft.Extensions.Logging;
 using WeaveFleet.Application.Configuration;
 using WeaveFleet.Application.Harnesses;
+using WeaveFleet.Application.Services;
 using WeaveFleet.Application.SessionSources;
 using WeaveFleet.Domain.Common;
 using WeaveFleet.Domain.Entities;
 using WeaveFleet.Domain.Harnesses;
 using WeaveFleet.Domain.Repositories;
 
-namespace WeaveFleet.Application.Services;
+namespace WeaveFleet.Application.Harnesses;
 
 /// <summary>
 /// The agents and models a harness offers in a folder before a session exists there, for the new-session and

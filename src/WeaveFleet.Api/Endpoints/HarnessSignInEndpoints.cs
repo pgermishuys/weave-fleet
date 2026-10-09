@@ -1,7 +1,6 @@
 using System.Text.Json;
 using System.Text.Json.Serialization;
 using WeaveFleet.Application.Harnesses;
-using WeaveFleet.Application.Services;
 
 namespace WeaveFleet.Api.Endpoints;
 

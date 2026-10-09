@@ -1,7 +1,7 @@
 using Microsoft.Extensions.Hosting;
 using WeaveFleet.Application.Harnesses;
 
-namespace WeaveFleet.Infrastructure.Services;
+namespace WeaveFleet.Infrastructure.Harnesses;
 
 /// <summary>
 /// Checks every harness once at startup, in the background, so the first harness list a page asks for is already

@@ -1,9 +1,10 @@
 using System.Collections.Concurrent;
 using System.Text.Json;
 using Microsoft.Extensions.Logging;
+using WeaveFleet.Application.Services;
 using WeaveFleet.Domain.Harnesses;
 
-namespace WeaveFleet.Application.Services;
+namespace WeaveFleet.Application.Harnesses;
 
 /// <summary>A harness's usage limits as clients get them: the <c>harness.usage</c> event and <c>GET /api/harnesses/usage</c>.</summary>
 /// <param name="HarnessType">The harness, e.g. <c>claude-code</c>.</param>

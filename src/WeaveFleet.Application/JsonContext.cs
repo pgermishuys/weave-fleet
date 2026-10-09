@@ -1,6 +1,7 @@
 using System.Text.Json;
 using System.Text.Json.Serialization;
 using WeaveFleet.Application.DTOs;
+using WeaveFleet.Application.Harnesses;
 using WeaveFleet.Application.Services;
 using WeaveFleet.Domain.DTOs;
 using WeaveFleet.Domain.Events;

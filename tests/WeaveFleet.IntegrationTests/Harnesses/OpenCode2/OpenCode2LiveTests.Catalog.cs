@@ -1,6 +1,5 @@
 using System.Text.Json;
 using WeaveFleet.Application.Harnesses;
-using WeaveFleet.Application.Services;
 using WeaveFleet.Infrastructure.Harnesses.OpenCode2;
 
 namespace WeaveFleet.IntegrationTests.Harnesses.OpenCode2;

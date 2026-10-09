@@ -4,7 +4,7 @@ using System.Text.Json;
 using System.Threading.Channels;
 using Microsoft.Extensions.Logging;
 using WeaveFleet.Application.Analytics;
-using WeaveFleet.Application.Services;
+using WeaveFleet.Application.Harnesses;
 using WeaveFleet.Domain.Harnesses;
 
 namespace WeaveFleet.Infrastructure.Harnesses.OpenCode2;

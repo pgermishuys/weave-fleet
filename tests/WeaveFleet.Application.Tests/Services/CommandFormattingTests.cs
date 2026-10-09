@@ -1,4 +1,4 @@
-using WeaveFleet.Application.Services;
+using WeaveFleet.Application.Harnesses;
 using WeaveFleet.Domain.Harnesses;
 
 namespace WeaveFleet.Application.Tests.Services;
