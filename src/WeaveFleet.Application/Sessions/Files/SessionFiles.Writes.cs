@@ -6,13 +6,13 @@ using Microsoft.Extensions.Logging;
 using WeaveFleet.Domain.Common;
 using WeaveFleet.Domain.Events;
 
-namespace WeaveFleet.Application.Services;
+namespace WeaveFleet.Application.Sessions.Files;
 
 /// <summary>
 /// Saving a file from the editor. A save carries the hash of the file as it was last read, so it
 /// never overwrites a change the agent made in between.
 /// </summary>
-public sealed partial class SessionOrchestrator
+public sealed partial class SessionFiles
 {
     /// <summary>Files larger than this open read-only, and a save may not grow a file past it.</summary>
     public const int MaxEditableFileBytes = 512 * 1024;
@@ -35,7 +35,7 @@ public sealed partial class SessionOrchestrator
         string? baseHash,
         CancellationToken ct = default)
     {
-        using var _ = BeginSessionScope(sessionId);
+        using var _ = logger.BeginSessionScope(sessionId);
         if (string.IsNullOrWhiteSpace(path))
             return FleetError.ValidationError("Session.File", "Path parameter is required.");
         if (content is null)
@@ -43,7 +43,7 @@ public sealed partial class SessionOrchestrator
         if (string.IsNullOrWhiteSpace(baseHash))
             return FleetError.ValidationError("Session.File", "The hash of the file as it was read is required.");
 
-        var sessionResult = await GetSessionAsync(sessionId);
+        var sessionResult = await sessionRepository.GetSessionAsync(sessionId);
         if (sessionResult.IsFailure)
             return sessionResult.Error;
 

@@ -179,6 +179,7 @@ public static class DependencyInjection
         services.AddScoped<InstanceService>();
         services.AddScoped<SessionSourceResolutionService>();
         services.AddScoped<GitDiffService>();
+        services.AddScoped<WeaveFleet.Application.Sessions.Files.SessionFiles>();
         services.AddScoped<SessionOrchestrator>();
         services.AddScoped<HarnessProfileService>();
         services.AddScoped<WeaveFleet.Application.Weave.WeaveConfigService>();

@@ -1,6 +1,7 @@
 using System.Text;
 using Shouldly;
 using WeaveFleet.Application.Services;
+using WeaveFleet.Application.Sessions.Files;
 using WeaveFleet.Domain.Entities;
 using WeaveFleet.Testing.Builders;
 using WeaveFleet.Testing.Fakes;
@@ -126,7 +127,7 @@ public sealed class SessionFileBrowseTests : IDisposable
     [Fact]
     public async Task reading_a_file_over_the_editable_size_gives_no_content_and_no_hash()
     {
-        await File.WriteAllTextAsync(Path.Combine(_directory, "big.log"), new string('x', 512 * 1024 + 1));
+        await File.WriteAllTextAsync(Path.Combine(_directory, "big.log"), new string('x', SessionFiles.MaxEditableFileBytes + 1));
 
         var result = await _sut.ReadSessionFileAsync(SessionId, "big.log");
 
