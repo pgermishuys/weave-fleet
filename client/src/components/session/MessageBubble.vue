@@ -1,13 +1,9 @@
 <script setup lang="ts">
 import { computed, ref, watch } from "vue";
 import { User, Bot, Copy, ChevronRight } from "lucide-vue-next";
-import ToolCard from "@/components/session/ToolCard.vue";
-import ToolScreenshot from "@/components/session/ToolScreenshot.vue";
-import ConversationPage from "@/components/session/ConversationPage.vue";
-import BrowserSteps from "@/components/session/BrowserSteps.vue";
+import MessageToolList from "@/components/session/MessageToolList.vue";
 import ImageLightbox from "@/components/session/ImageLightbox.vue";
-import AgentTaskRow from "@/components/session/AgentTaskRow.vue";
-import type { ToolCardDelegation, ToolCardPage, ToolCardScreenshot } from "@/components/session/activity-stream-tool-card";
+import type { ToolCardItem } from "@/components/session/activity-stream-tool-card";
 import QuestionCard from "@/components/session/QuestionCard.vue";
 import type { AccumulatedToolPart } from "@/lib/client-types";
 import type { SlashCommand } from "@/lib/domain-events";
@@ -22,35 +18,6 @@ import { formatSlashCommand } from "@/lib/slash-command-utils";
 import { useMachineTarget } from "@/lib/machine-target";
 import { useFileLinksStore } from "@/stores/file-links";
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
-
-interface ToolCardDiffLine {
-  type: "add" | "remove" | "context";
-  content: string;
-  oldLineNumber?: number;
-  newLineNumber?: number;
-}
-
-interface ToolCardItem {
-  id: string;
-  title: string;
-  kind?: string;
-  status?: string;
-  summary?: string;
-  output?: string;
-  diffLines?: ToolCardDiffLine[];
-  initiallyCollapsed?: boolean;
-  preview?: string;
-  isPatternTool?: boolean;
-  canvasId?: string;
-  delegation?: ToolCardDelegation;
-  screenshot?: ToolCardScreenshot;
-  /** A page the call showed in the conversation, drawn after the calls. */
-  page?: ToolCardPage;
-  /** Loaded one of Fleet's built-in skills, which the row offers to improve. */
-  improvable?: boolean;
-  /** The harness's id for the call, which browser steps name. */
-  callId?: string;
-}
 
 interface ImageAttachmentDisplay {
   url: string;
@@ -98,13 +65,6 @@ const showModel = computed(() => props.role === "assistant" && Boolean(props.mod
 
 // ── Question answer handler (only created when there are question parts) ──
 const questionAnswer = props.sessionId ? useQuestionAnswer(props.sessionId) : null;
-
-const pagedTools = computed(() => (props.tools ?? []).filter((tool) => tool.page && !tool.delegation));
-
-/** Calls that can take browser steps: OpenCode 2's Code Mode, and Fleet's own browser tools. */
-function usesBrowser(kind: string | undefined): boolean {
-  return kind === "execute" || kind === "fleet_browser_read" || kind === "fleet_browser_act";
-}
 
 function makeSubmitHandler(callId: string) {
   return async (answers: string[][]) => {
@@ -298,56 +258,12 @@ function handleExpandVisual(payload: VisualPayload): void {
             @close="lightboxUrl = null"
           />
 
-          <div
-            v-if="tools && tools.length > 0"
-            class="msg-tools"
-          >
-            <template
-              v-for="tool in tools"
-              :key="tool.id"
-            >
-              <AgentTaskRow
-                v-if="tool.delegation"
-                :delegation="tool.delegation"
-              />
-              <ToolCard
-                v-else
-                :id="tool.id"
-                :title="tool.title"
-                :kind="tool.kind"
-                :status="tool.status"
-                :summary="tool.summary"
-                :output="tool.output"
-                :diff-lines="tool.diffLines"
-                :initially-collapsed="tool.initiallyCollapsed"
-                :preview="tool.preview"
-                :is-pattern-tool="tool.isPatternTool"
-                :canvas-id="tool.canvasId"
-                :improvable="tool.improvable"
-                @expand-visual="handleExpandVisual"
-                @show-canvas="emit('show-canvas', $event)"
-                @improve="emit('improve-skill', tool.title, tool.id)"
-              />
-              <ToolScreenshot
-                v-if="tool.screenshot && !tool.delegation"
-                :screenshot="tool.screenshot"
-                :title="tool.title"
-              />
-              <BrowserSteps
-                v-if="sessionId && !tool.delegation && usesBrowser(tool.kind)"
-                :session-id="sessionId"
-                :call-id="tool.callId"
-                :running="tool.status === 'Running'"
-              />
-            </template>
-          </div>
-
-          <!-- Outside the calls' box, on the conversation's own background: the page is part of the answer. -->
-          <ConversationPage
-            v-for="tool in pagedTools"
-            :key="`page-${tool.id}`"
-            :page="tool.page!"
-            :title="tool.title"
+          <MessageToolList
+            :tools="tools"
+            :session-id="sessionId"
+            @expand-visual="handleExpandVisual"
+            @show-canvas="emit('show-canvas', $event)"
+            @improve-skill="(skill, toolId) => emit('improve-skill', skill, toolId)"
           />
 
           <QuestionCard
@@ -603,16 +519,6 @@ function handleExpandVisual(payload: VisualPayload): void {
   border-top: 1px solid var(--border);
   color: var(--text-secondary, var(--muted));
   font-size: 0.875rem;
-}
-
-.msg-tools {
-  display: flex;
-  flex-direction: column;
-  margin: 10px 0 4px;
-  padding: 4px;
-  border: 1px solid var(--border);
-  border-radius: var(--radius-card);
-  background: color-mix(in srgb, var(--text) 3%, transparent);
 }
 
 .msg-images {
