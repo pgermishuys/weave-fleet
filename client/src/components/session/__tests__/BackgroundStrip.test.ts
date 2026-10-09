@@ -21,6 +21,7 @@ vi.mock("@tanstack/vue-router", () => ({ useRouter: () => ({ navigate }) }));
 
 import BackgroundStrip from "@/components/session/BackgroundStrip.vue";
 import { _resetRunningWorkForTesting, publishRunningWork } from "@/composables/use-running-work";
+import { sessionCommands } from "@/lib/session-commands";
 import { toRunningWorkItem, type RunningWorkItem } from "@/lib/running-work";
 import { useSessionsStore } from "@/stores/sessions";
 
@@ -231,15 +232,16 @@ describe("BackgroundStrip", () => {
 
   it("jumps to a monitor's events in the conversation", async () => {
     publishRunningWork("s1", items(ccMonitor));
-    const listener = vi.fn();
-    window.addEventListener("weave:command-show-message", listener);
+    // The plumbing for hearing the request lives here only, so the expectations don't depend on it.
+    const showMessage = vi.fn();
+    const stop = sessionCommands.contribute("test", [{ sessionId: "s1", handlers: { "show-message": showMessage } }]);
     const wrapper = mountStrip();
     await flushPromises();
 
     await wrapper.get("[data-testid='background-work-events']").trigger("click");
-    window.removeEventListener("weave:command-show-message", listener);
+    stop();
 
-    expect((listener.mock.calls[0]![0] as CustomEvent).detail).toEqual({ sessionId: "s1", toolCallId: "call_monitor" });
+    expect(showMessage.mock.calls[0]![0]).toEqual({ toolCallId: "call_monitor" });
   });
 
   it("gives a subagent with no session of its own Details instead of Open, and says what it is doing", async () => {

@@ -1,17 +1,17 @@
 import { flushPromises, mount, type VueWrapper } from "@vue/test-utils";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import type { CommandId } from "@/lib/command-ids";
 import CommandPalette from "@/components/CommandPalette.vue";
-import type { Command } from "@/lib/command-registry";
+import { commandPoint, type Command } from "@/lib/command-registry";
 import { useCommandStore } from "@/stores/commands";
 
-function command(id: string, label: string, category: Command["category"], extra: Partial<Command> = {}): Command {
+function command(id: CommandId, label: string, category: Command["category"], extra: Partial<Command> = {}): Command {
   return { id, label, category, action: vi.fn(), ...extra };
 }
 
 /** The plumbing for putting commands in the palette lives here only, so the expectations don't depend on it. */
 function register(...commands: Command[]): void {
-  const store = useCommandStore();
-  for (const entry of commands) store.registerCommand(entry);
+  commandPoint.contribute("test", commands);
 }
 
 const text = () => document.body.textContent ?? "";
@@ -31,6 +31,7 @@ describe("CommandPalette", () => {
 
   beforeEach(() => {
     localStorage.clear();
+    commandPoint.clear();
     vi.stubGlobal("ResizeObserver", class { observe() {} unobserve() {} disconnect() {} });
     Element.prototype.scrollIntoView = vi.fn();
   });

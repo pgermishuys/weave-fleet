@@ -20,7 +20,7 @@ const isMac = typeof navigator !== "undefined" && navigator.platform.toUpperCase
 const open = computed(() => store.isOpen(props.sessionId));
 const running = computed(() => !open.value && store.terminalsFor(props.sessionId).length > 0);
 const shortcut = computed(() => {
-  const binding = keybindings.bindings["toggle-terminal"]?.globalShortcut;
+  const binding = keybindings.bindingFor("toggle-terminal")?.globalShortcut;
   return binding ? ` (${formatShortcut(binding, isMac)})` : "";
 });
 const label = computed(() => {

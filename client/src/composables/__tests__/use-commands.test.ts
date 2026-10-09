@@ -1,5 +1,5 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { mount, type VueWrapper } from "@vue/test-utils";
+import { mount } from "@vue/test-utils";
 import { defineComponent, nextTick } from "vue";
 import type { SessionListItem } from "@/api/client";
 
@@ -24,7 +24,9 @@ import { useCommandStore } from "@/stores/commands";
 import { useKeybindingsStore } from "@/stores/keybindings";
 import { useSessionsStore } from "@/stores/sessions";
 import { useThemeStore } from "@/stores/theme";
+import type { CommandId } from "@/lib/command-ids";
 import type { Command } from "@/lib/command-registry";
+import { sessionCommands, type SessionCommandName } from "@/lib/session-commands";
 
 function item(id: string, title: string): SessionListItem {
   return {
@@ -40,11 +42,10 @@ function item(id: string, title: string): SessionListItem {
  * Listens for a session command the way the conversation does, and records what it was asked.
  * The plumbing lives here only, so the expectations below don't depend on how a command reaches the conversation.
  */
-function listenFor(name: string): { calls: unknown[]; stop: () => void } {
-  const calls: unknown[] = [];
-  const handler = (event: Event) => calls.push((event as CustomEvent).detail);
-  window.addEventListener(`weave:command-${name}`, handler);
-  return { calls, stop: () => window.removeEventListener(`weave:command-${name}`, handler) };
+function listenFor(...names: SessionCommandName[]): { calls: Record<string, unknown[]>; stop: () => void } {
+  const calls: Record<string, unknown[]> = Object.fromEntries(names.map((name) => [name, []]));
+  const handlers = Object.fromEntries(names.map((name) => [name, () => calls[name]!.push({ sessionId: "s1" })]));
+  return { calls, stop: sessionCommands.contribute("test", [{ sessionId: "s1", handlers }]) };
 }
 
 function press(key: string, init: KeyboardEventInit = {}, target: EventTarget = document.body): KeyboardEvent {
@@ -54,7 +55,7 @@ function press(key: string, init: KeyboardEventInit = {}, target: EventTarget = 
 }
 
 describe("useCommands", () => {
-  let wrapper: VueWrapper;
+  let wrapper: { unmount: () => void };
   let commands: ReturnType<typeof useCommandStore>;
 
   async function start() {
@@ -62,7 +63,7 @@ describe("useCommands", () => {
     await nextTick();
   }
 
-  const byId = (id: string): Command => {
+  const byId = (id: CommandId): Command => {
     const command = commands.getCommand(id);
     if (!command) throw new Error(`no command ${id}`);
     return command;
@@ -296,20 +297,16 @@ describe("useCommands", () => {
 
   describe("what the session commands send to the conversation", () => {
     it("sends each one with the open session's id, and nothing while none is open", async () => {
-      const heard = {
-        "focus-prompt": listenFor("focus-prompt"),
-        "copy-session-id": listenFor("copy-session-id"),
-        "export-conversation": listenFor("export-conversation"),
-        "scroll-top": listenFor("scroll-top"),
-        "scroll-bottom": listenFor("scroll-bottom"),
-      };
+      const heard = listenFor("focus-prompt", "copy-session-id", "export-conversation", "scroll-top", "scroll-bottom");
       useSessionsStore().setSessions([item("s1", "First")]);
       await start();
 
       byId("focus-prompt").action();
       byId("copy-session-id").action();
       byId("export-conversation").action();
-      expect(Object.values(heard).map((entry) => entry.calls)).toEqual([[], [], [], [], []].map(() => []));
+      byId("scroll-to-top").action();
+      byId("scroll-to-bottom").action();
+      expect(Object.values(heard.calls).flat()).toEqual([]);
 
       useSessionsStore().setActiveSessionId("s1");
       byId("focus-prompt").action();
@@ -318,24 +315,28 @@ describe("useCommands", () => {
       byId("scroll-to-top").action();
       byId("scroll-to-bottom").action();
 
-      for (const [name, entry] of Object.entries(heard)) {
-        expect(entry.calls, name).toEqual([{ sessionId: "s1" }]);
-        entry.stop();
-      }
+      expect(heard.calls).toEqual({
+        "focus-prompt": [{ sessionId: "s1" }],
+        "copy-session-id": [{ sessionId: "s1" }],
+        "export-conversation": [{ sessionId: "s1" }],
+        "scroll-top": [{ sessionId: "s1" }],
+        "scroll-bottom": [{ sessionId: "s1" }],
+      });
+      heard.stop();
     });
 
-    it("scrolls even with no session open, naming none", async () => {
-      const top = listenFor("scroll-top");
+    it("scrolls nothing with no session open", async () => {
+      const heard = listenFor("scroll-top");
       await start();
 
       byId("scroll-to-top").action();
 
-      expect(top.calls).toEqual([{ sessionId: null }]);
-      top.stop();
+      expect(heard.calls["scroll-top"]).toEqual([]);
+      heard.stop();
     });
 
     it("sends a shortcut the same as the palette does", async () => {
-      const focus = listenFor("focus-prompt");
+      const heard = listenFor("focus-prompt");
       useSessionsStore().setSessions([item("s1", "First")]);
       useSessionsStore().setActiveSessionId("s1");
       await start();
@@ -344,9 +345,8 @@ describe("useCommands", () => {
 
       press("y", { ctrlKey: true });
 
-      expect(focus.calls).toEqual([{ sessionId: "s1" }]);
-      focus.stop();
+      expect(heard.calls["focus-prompt"]).toEqual([{ sessionId: "s1" }]);
+      heard.stop();
     });
   });
 });
-

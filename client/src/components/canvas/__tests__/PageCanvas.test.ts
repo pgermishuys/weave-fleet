@@ -3,6 +3,7 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 import PageCanvas from "@/components/canvas/PageCanvas.vue";
 import { useDraftState } from "@/composables/use-draft-state";
 import { forgetPageStates } from "@/lib/page-bridge";
+import { sessionCommands } from "@/lib/session-commands";
 import type { ShownPage } from "@/lib/server-canvas";
 
 vi.mock("@/lib/api-client", () => ({
@@ -92,16 +93,16 @@ describe("PageCanvas", () => {
     }
 
     it("puts a reply in the composer, and sends nothing", () => {
+      // The plumbing for hearing the request lives here only, so the expectations don't depend on it.
       const focus = vi.fn();
-      window.addEventListener("weave:command-focus-prompt", focus);
+      const stop = sessionCommands.contribute("test", [{ sessionId: "s-reply", handlers: { "focus-prompt": focus } }]);
       const wrapper = mountAttached("s-reply");
 
       post(frameWindow(wrapper), { type: "fleet:page-reply", text: "# Re: Plan\n## Decisions" });
 
       expect(useDraftState("s-reply", { agentId: "a", modelId: "m" }).draft.text).toBe("# Re: Plan\n## Decisions");
       expect(focus).toHaveBeenCalledTimes(1);
-      expect((focus.mock.calls[0][0] as CustomEvent).detail).toEqual({ sessionId: "s-reply" });
-      window.removeEventListener("weave:command-focus-prompt", focus);
+      stop();
       wrapper.unmount();
     });
 

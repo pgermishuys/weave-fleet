@@ -1,6 +1,7 @@
 import { defineStore } from "pinia";
 import { computed, shallowRef } from "vue";
-import type { Command, CommandCategory } from "@/lib/command-registry";
+import type { CommandId } from "@/lib/command-ids";
+import { commandPoint, type Command, type CommandCategory } from "@/lib/command-registry";
 
 const RECENT_COMMANDS_STORAGE_KEY = "weave-fleet-vue-ui.command-recent-ids";
 
@@ -44,13 +45,16 @@ const CATEGORY_ORDER: Record<CommandCategory, number> = {
   Fleet: 3,
 };
 
+/**
+ * What the palette shows and remembers. The commands themselves are a contribution point (`commandPoint`); this
+ * sorts them for the palette and holds the palette's own state.
+ */
 export const useCommandStore = defineStore("commands", () => {
-  const commandMap = shallowRef<Map<string, Command>>(new Map());
   const paletteOpen = shallowRef(false);
   const recentIds = shallowRef<string[]>(loadRecentCommandIds());
 
   const commands = computed<Command[]>(() => {
-    return [...commandMap.value.values()].sort((left, right) => {
+    return [...commandPoint.items.value].sort((left, right) => {
       const categoryDifference = CATEGORY_ORDER[left.category] - CATEGORY_ORDER[right.category];
 
       if (categoryDifference !== 0) {
@@ -70,30 +74,14 @@ export const useCommandStore = defineStore("commands", () => {
     paletteOpen.value = !paletteOpen.value;
   }
 
-  function getCommand(id: string): Command | undefined {
-    return commandMap.value.get(id);
+  function getCommand(id: CommandId): Command | undefined {
+    return commandPoint.get(id);
   }
 
   /** Runs a registered command the way its shortcut does: nothing happens while it's missing or disabled. */
-  function runCommand(id: string): void {
-    const command = commandMap.value.get(id);
+  function runCommand(id: CommandId): void {
+    const command = commandPoint.get(id);
     if (command && !command.disabled) command.action();
-  }
-
-  function registerCommand(command: Command): void {
-    const nextCommandMap = new Map(commandMap.value);
-    nextCommandMap.set(command.id, command);
-    commandMap.value = nextCommandMap;
-  }
-
-  function unregisterCommand(id: string): void {
-    if (!commandMap.value.has(id)) {
-      return;
-    }
-
-    const nextCommandMap = new Map(commandMap.value);
-    nextCommandMap.delete(id);
-    commandMap.value = nextCommandMap;
   }
 
   function recordUsage(id: string): void {
@@ -111,8 +99,6 @@ export const useCommandStore = defineStore("commands", () => {
     togglePalette,
     getCommand,
     runCommand,
-    registerCommand,
-    unregisterCommand,
     recordUsage,
   };
 });

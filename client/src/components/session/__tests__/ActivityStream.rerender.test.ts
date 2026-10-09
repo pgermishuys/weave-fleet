@@ -3,6 +3,7 @@ import { mount } from "@vue/test-utils";
 import { createPinia, setActivePinia } from "pinia";
 import { defineComponent, h, nextTick, onBeforeUpdate, shallowRef } from "vue";
 import type { AccumulatedMessage } from "@/lib/client-types";
+import { runSessionCommand } from "@/lib/session-commands";
 
 const { stream, rendered } = vi.hoisted(() => ({
   stream: { messages: null as unknown as import("vue").ShallowRef<readonly AccumulatedMessage[]> },
@@ -164,7 +165,7 @@ describe("ActivityStream opening a long conversation", () => {
     vi.stubGlobal("CSS", { escape: (value: string) => value });
     const { wrapper, shown } = await open();
 
-    window.dispatchEvent(new CustomEvent("weave:command-show-message", { detail: { sessionId: "s1", messageId: "m02" } }));
+    runSessionCommand("show-message", "s1", { messageId: "m02" });
     await nextTick();
     await nextTick();
 

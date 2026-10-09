@@ -2,6 +2,7 @@ import { mount } from "@vue/test-utils";
 import { describe, expect, it, vi } from "vitest";
 import { computed, shallowRef } from "vue";
 import type { AccumulatedMessage } from "@/lib/client-types";
+import { sessionCommands } from "@/lib/session-commands";
 import TurnsCanvas from "@/components/canvas/TurnsCanvas.vue";
 
 const messages = shallowRef<readonly AccumulatedMessage[]>([]);
@@ -44,15 +45,14 @@ describe("TurnsCanvas", () => {
       assistantMessage("a2", "Added it", 4),
     ];
     // The plumbing for hearing the request lives here only, so the expectations don't depend on it.
-    const heard: unknown[] = [];
-    const listener = (event: Event) => heard.push((event as CustomEvent).detail);
-    window.addEventListener("weave:command-show-message", listener);
+    const showMessage = vi.fn();
+    const stop = sessionCommands.contribute("test", [{ sessionId: "s1", handlers: { "show-message": showMessage } }]);
 
     const wrapper = mount(TurnsCanvas, { props: { sessionId: "s1" } });
     await wrapper.get(".turn__jump").trigger("click");
-    window.removeEventListener("weave:command-show-message", listener);
+    stop();
 
     // The newest round is open to begin with, so its button is the one on screen.
-    expect(heard).toEqual([{ sessionId: "s1", messageId: "u2" }]);
+    expect(showMessage.mock.calls).toEqual([[{ messageId: "u2" }]]);
   });
 });

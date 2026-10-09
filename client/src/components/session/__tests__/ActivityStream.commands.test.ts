@@ -1,8 +1,9 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { mount, type VueWrapper } from "@vue/test-utils";
+import { mount } from "@vue/test-utils";
 import { createPinia, setActivePinia } from "pinia";
 import { defineComponent, h, nextTick, shallowRef } from "vue";
 import type { AccumulatedMessage } from "@/lib/client-types";
+import { runSessionCommand, type SessionCommandName } from "@/lib/session-commands";
 
 const { stream } = vi.hoisted(() => ({
   stream: { messages: null as unknown as import("vue").ShallowRef<readonly AccumulatedMessage[]> },
@@ -64,8 +65,8 @@ vi.mock("@/components/session/MessageBubble.vue", () => ({
  * Fires one of the commands the conversation answers, the way the command palette, a shortcut or a canvas does.
  * The plumbing lives here only, so the expectations below don't depend on how a command reaches the stream.
  */
-async function fire(name: string, detail: Record<string, unknown>): Promise<void> {
-  window.dispatchEvent(new CustomEvent(`weave:command-${name}`, { detail }));
+async function fire(name: SessionCommandName, { sessionId, ...detail }: { sessionId: string; messageId?: string; toolCallId?: string }): Promise<void> {
+  (runSessionCommand as (...args: unknown[]) => void)(name, sessionId, ...(Object.keys(detail).length > 0 ? [detail] : []));
   await nextTick();
   await nextTick();
 }
@@ -87,7 +88,7 @@ function message(id: string, role: "user" | "assistant", text: string, callId?: 
 }
 
 describe("ActivityStream answering commands", () => {
-  let wrapper: VueWrapper;
+  let wrapper: { get(selector: string): { element: Element }; unmount(): void };
   let prompt: HTMLTextAreaElement;
 
   async function open(sessionId = "s1") {

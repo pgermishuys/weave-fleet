@@ -5,7 +5,7 @@ import DiffView from "@/components/session/DiffView.vue";
 import { useModels } from "@/composables/use-models";
 import { useSessionStream } from "@/composables/use-session-stream";
 import { useSidebarMobile } from "@/composables/use-sidebar-mobile";
-import { dispatchCommandEvent } from "@/lib/command-events";
+import { runSessionCommand } from "@/lib/session-commands";
 import { formatCost, formatDuration, formatTokens } from "@/lib/format-utils";
 import { deriveTurns, modelDisplayName, turnTotals, type SessionTurn, type TurnFile } from "@/lib/turns";
 
@@ -76,7 +76,7 @@ function promptOf(turn: SessionTurn): string {
 /** Scroll the conversation to where this round began. On a phone the sheet steps aside first. */
 function showInChat(turn: SessionTurn): void {
   hideRightPanel();
-  dispatchCommandEvent("weave:command-show-message", { sessionId: props.sessionId, messageId: turn.id });
+  runSessionCommand("show-message", props.sessionId, { messageId: turn.id });
 }
 </script>
 

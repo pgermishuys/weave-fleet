@@ -1,17 +1,18 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
-import type { Command } from "@/lib/command-registry";
+import { commandPoint, type Command } from "@/lib/command-registry";
 import { useCommandStore } from "@/stores/commands";
 
 /** The plumbing for putting a command in the palette lives here only, so the expectations don't depend on it. */
-function register(store: ReturnType<typeof useCommandStore>, command: Partial<Command> & Pick<Command, "id" | "label" | "category">): Command {
+function register(_store: ReturnType<typeof useCommandStore>, command: Partial<Command> & Pick<Command, "id" | "label" | "category">): Command {
   const full: Command = { action: vi.fn(), ...command };
-  store.registerCommand(full);
+  commandPoint.contribute("test", [full]);
   return full;
 }
 
 describe("command store", () => {
   beforeEach(() => {
     localStorage.clear();
+    commandPoint.clear();
   });
 
   it("lists commands by category (Session, Navigation, View, Fleet), then by label", () => {
@@ -42,12 +43,11 @@ describe("command store", () => {
     expect(store.getCommand("toggle-sidebar")?.label).toBe("Show sidebar");
   });
 
-  it("forgets a command once it is unregistered", () => {
+  it("forgets a command once it is withdrawn", () => {
     const store = useCommandStore();
     register(store, { id: "zoom-in", label: "Zoom in", category: "View" });
 
-    store.unregisterCommand("zoom-in");
-    store.unregisterCommand("zoom-out");
+    commandPoint.removeByOwner("test");
 
     expect(store.commands).toEqual([]);
     expect(store.getCommand("zoom-in")).toBeUndefined();
@@ -57,11 +57,11 @@ describe("command store", () => {
     const store = useCommandStore();
     const child: Command = { id: "nav-session-s1", label: "First", category: "Session", action: vi.fn() };
     register(store, { id: "nav-go-to-session", label: "Go to session…", category: "Session", subCommands: [child] });
-    register(store, { id: "nav-go-to-other", label: "Go to other…", category: "Session", getSubCommands: () => [child] });
+    register(store, { id: "go-to-file", label: "Go to other…", category: "Session", getSubCommands: () => [child] });
 
-    expect(store.commands.map((command) => command.id)).toEqual(["nav-go-to-other", "nav-go-to-session"]);
+    expect(store.commands.map((command) => command.id)).toEqual(["go-to-file", "nav-go-to-session"]);
     expect(store.getCommand("nav-go-to-session")?.subCommands).toEqual([child]);
-    expect(store.getCommand("nav-go-to-other")?.getSubCommands?.()).toEqual([child]);
+    expect(store.getCommand("go-to-file")?.getSubCommands?.()).toEqual([child]);
   });
 
   it("runs a registered command, and does nothing for a missing or disabled one", () => {
@@ -71,7 +71,7 @@ describe("command store", () => {
 
     store.runCommand("zoom-in");
     store.runCommand("zoom-out");
-    store.runCommand("missing");
+    store.runCommand("nav-board");
 
     expect(enabled.action).toHaveBeenCalledTimes(1);
     expect(disabled.action).not.toHaveBeenCalled();

@@ -4,7 +4,7 @@ import { ExternalLink, RotateCw, TriangleAlert } from "lucide-vue-next";
 import { appendDraftText } from "@/composables/use-draft-state";
 import { apiUrlOn } from "@/lib/api-client";
 import { useMachineTarget } from "@/lib/machine-target";
-import { dispatchCommandEvent } from "@/lib/command-events";
+import { runSessionCommand } from "@/lib/session-commands";
 import { keepPageState, pageStateMessage, readPageMessage } from "@/lib/page-bridge";
 import { pageFrameName, pageThemeMessage, usePageTheme } from "@/lib/page-theme";
 import { pageAddress, type ShownPage } from "@/lib/server-canvas";
@@ -61,7 +61,7 @@ function onMessage(event: MessageEvent): void {
       return;
     case "fleet:page-reply":
       appendDraftText(props.sessionId, message.text);
-      dispatchCommandEvent("weave:command-focus-prompt", { sessionId: props.sessionId });
+      runSessionCommand("focus-prompt", props.sessionId);
       return;
   }
 }

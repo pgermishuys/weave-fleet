@@ -5,6 +5,7 @@ import FileCanvasComponent from "@/components/canvas/FileCanvas.vue";
 import type { FileDiffItem } from "@/api/client";
 import { clearDiffBaseCache } from "@/composables/use-diff-base";
 import { useDraftState } from "@/composables/use-draft-state";
+import { sessionCommands } from "@/lib/session-commands";
 import { useCanvasesStore, type FileView } from "@/stores/canvases";
 import { useFileBuffersStore } from "@/stores/file-buffers";
 import { useGoToFileStore } from "@/stores/go-to-file";
@@ -354,8 +355,9 @@ describe("FileCanvas", () => {
 
   it("Add to message puts a line reference in the draft and focuses the composer", async () => {
     readSessionFileMock.mockResolvedValue(file("one\ntwo\nthree\nfour\n"));
+    // The plumbing for hearing the request lives here only, so the expectations don't depend on it.
     const focus = vi.fn();
-    window.addEventListener("weave:command-focus-prompt", focus);
+    const stop = sessionCommands.contribute("test", [{ sessionId: "s1", handlers: { "focus-prompt": focus } }]);
     const wrapper = await mountCanvas();
     const view = editor();
     // jsdom has no layout or contenteditable focus; the chip only needs a place and focus.
@@ -371,7 +373,7 @@ describe("FileCanvas", () => {
 
     expect(useDraftState("s1", { agentId: "a", modelId: "m" }).draft.text).toBe("@src/app.ts:2-3 ");
     expect(focus).toHaveBeenCalledTimes(1);
-    window.removeEventListener("weave:command-focus-prompt", focus);
+    stop();
     wrapper.unmount();
   });
 });
