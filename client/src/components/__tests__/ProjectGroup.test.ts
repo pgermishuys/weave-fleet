@@ -44,9 +44,13 @@ describe("ProjectGroup", () => {
           ConfirmDeleteProjectDialog: { template: "<div />" },
           InlineEdit: { template: "<div />" },
           SessionItem: {
-            props: ["session", "kindLabel", "runningCount", "hasChildren", "childrenExpanded", "active"],
+            props: {
+              session: Object, kindLabel: String, runningCount: Number, topLevel: Boolean, hasChildren: Boolean,
+              childrenExpanded: Boolean, active: Boolean,
+            },
             emits: ["toggleChildren"],
             template: `<div class='session-stub' :data-id='session.session.id' :data-kind='kindLabel' :data-running='runningCount'
+              :data-top-level='topLevel ? "true" : undefined'
               :data-expanded='hasChildren ? String(childrenExpanded) : undefined' @click="$emit('toggleChildren')">{{ session.session.title }}</div>`,
           },
         },
@@ -205,6 +209,19 @@ describe("ProjectGroup", () => {
         ["fork", "fork"],
         ["started", "started"],
       ]);
+    });
+
+    it("marks the rows at the top of the project, with or without children, so their titles line up", () => {
+      const sessions = [
+        listItem("parent", "Capture Claude Code subagents"),
+        listItem("fork", "Fork: emit jobs over SignalR", { forkedFromSessionId: "parent", spawnKind: "fork", sessionStatus: "waiting_input" }),
+        listItem("lone", "Fix Pi model switch"),
+      ];
+      const wrapper = mountWithLineage({ project: { ...createProjectGroup(), sessions, sessionCount: sessions.length } });
+
+      const topLevel = wrapper.findAll(".session-stub[data-top-level='true']").map((row) => row.attributes("data-id"));
+      expect(topLevel).toEqual(["parent", "lone"]);
+      expect(wrapper.get("[data-testid='session-children'] .session-stub").attributes("data-top-level")).toBeUndefined();
     });
 
     it("folds the children of a quiet parent until it's opened", async () => {

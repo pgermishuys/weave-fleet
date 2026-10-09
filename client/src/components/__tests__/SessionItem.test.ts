@@ -522,6 +522,15 @@ describe("SessionItem", () => {
 
       expect(mountWith({}).get("[data-testid='session-row']").attributes("aria-expanded")).toBeUndefined();
     });
+
+    it("keeps the caret's place on a top-level row with nothing under it, so its title lines up with a parent's", () => {
+      const lone = mountWith({ topLevel: true, hasChildren: false });
+      expect(lone.find("[data-testid='session-children-toggle']").exists()).toBe(false);
+      expect(lone.find(".session-caret-slot").exists()).toBe(true);
+
+      expect(mountWith({ topLevel: true, hasChildren: true }).find(".session-caret-slot").exists()).toBe(false);
+      expect(mountWith({ kindLabel: "fork" }).find(".session-caret-slot").exists()).toBe(false);
+    });
   });
 
   describe("pinning", () => {

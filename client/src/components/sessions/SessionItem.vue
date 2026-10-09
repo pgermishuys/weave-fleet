@@ -80,6 +80,8 @@ interface Props {
   kindLabel?: string;
   /** How much work its agent has running: the green chip. */
   runningCount?: number;
+  /** A row at the top of its project, not nested under another: it keeps the caret's place even with nothing under it. */
+  topLevel?: boolean;
   /** Whether it has children nested under it, and whether they show. */
   hasChildren?: boolean;
   childrenExpanded?: boolean;
@@ -659,6 +661,11 @@ function removeSessionFromStore(): void {
             >
               <ChevronRight />
             </span>
+            <span
+              v-else-if="topLevel"
+              class="session-caret-slot"
+              aria-hidden="true"
+            />
 
             <span class="session-copy">
               <span class="session-title">{{ displayTitle }}</span>
@@ -772,6 +779,11 @@ function removeSessionFromStore(): void {
           <span
             v-else
             class="session-glyph-slot"
+            aria-hidden="true"
+          />
+          <span
+            v-if="topLevel"
+            class="session-caret-slot"
             aria-hidden="true"
           />
 
@@ -1284,6 +1296,14 @@ function removeSessionFromStore(): void {
   margin-left: -4px;
   border-radius: 4px;
   color: var(--muted);
+}
+
+/* A top-level row with nothing under it keeps the caret's place, so every title in a project lines up. */
+.session-caret-slot {
+  width: 14px;
+  height: 14px;
+  margin-left: -4px;
+  flex-shrink: 0;
 }
 
 .session-caret:hover {

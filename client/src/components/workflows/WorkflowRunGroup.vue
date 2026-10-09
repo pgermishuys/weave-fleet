@@ -63,6 +63,10 @@ function openRun(): void {
         class="wf-group__icon"
         aria-hidden="true"
       />
+      <span
+        class="wf-group__caret-slot"
+        aria-hidden="true"
+      />
       <span class="wf-group__title">{{ title }}</span>
       <span
         v-if="status"
@@ -99,7 +103,7 @@ function openRun(): void {
 .wf-group__by {
   display: flex;
   min-width: 0;
-  padding: 0 10px 2px 30px;
+  padding: 0 10px 2px 49px;
 }
 
 .wf-group__head {
@@ -134,6 +138,14 @@ function openRun(): void {
   height: 13px;
   flex-shrink: 0;
   color: var(--accent);
+}
+
+/* The empty caret place a top-level session row keeps, so the run's title lines up with the sessions'. */
+.wf-group__caret-slot {
+  width: 14px;
+  height: 14px;
+  margin-left: -4px;
+  flex-shrink: 0;
 }
 
 .wf-group__title {
@@ -172,6 +184,6 @@ function openRun(): void {
 
 /* Steps sit under the run, indented past its icon. */
 .wf-group__step {
-  padding-left: 18px;
+  padding-left: 37px;
 }
 </style>
