@@ -276,7 +276,11 @@ public sealed class PreviewGatewayTests
     {
         await using var identity = await StartUpstreamAsync();
         var identityPort = new Uri(identity.Urls.Single()).Port;
-        var strangerPort = FreeLoopbackPort();
+        // Held for the whole test: a port freed straight away can be given to the app below, and a redirect to the
+        // app's own port rightly stays in the preview.
+        using var stranger = new TcpListener(IPAddress.Loopback, 0);
+        stranger.Start();
+        var strangerPort = ((IPEndPoint)stranger.LocalEndpoint).Port;
         await using var app = await StartRedirectingAsync(new Dictionary<string, string>
         {
             ["/login"] = $"http://localhost:{identityPort}/connect/authorize?client_id=shop#top",
