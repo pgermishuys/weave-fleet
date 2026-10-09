@@ -1,7 +1,7 @@
 using Shouldly;
 using WeaveFleet.Application.Configuration;
-using WeaveFleet.Application.Services;
 using WeaveFleet.Application.Sessions;
+using WeaveFleet.Application.Sessions.Creation;
 using WeaveFleet.Domain.Entities;
 using WeaveFleet.Testing.Builders;
 using WeaveFleet.Testing.Fakes;

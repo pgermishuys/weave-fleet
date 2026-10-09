@@ -4,7 +4,7 @@ using FakeLlm::FakeLlmServer;
 using Microsoft.Extensions.DependencyInjection;
 using WeaveFleet.Application.Configuration;
 using WeaveFleet.Application.Harnesses;
-using WeaveFleet.Application.Services;
+using WeaveFleet.Application.Sessions.Creation;
 using WeaveFleet.Domain.Events;
 using WeaveFleet.Infrastructure.Harnesses.OpenCode2;
 using WeaveFleet.Infrastructure.Users;

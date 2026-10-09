@@ -1,5 +1,4 @@
 using Dapper;
-using WeaveFleet.Application.Services;
 using WeaveFleet.Infrastructure.Analytics;
 
 namespace WeaveFleet.Infrastructure.Tests.Analytics;

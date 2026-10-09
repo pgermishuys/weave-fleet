@@ -3,7 +3,6 @@ using System.Text.Json;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging;
 using WeaveFleet.Application.Analytics;
-using WeaveFleet.Application.Services;
 using WeaveFleet.Application.Sessions.Creation;
 using WeaveFleet.Domain.Events;
 using WeaveFleet.Application.Workflows;

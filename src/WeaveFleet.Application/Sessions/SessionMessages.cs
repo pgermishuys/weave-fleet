@@ -5,7 +5,6 @@ using WeaveFleet.Application.Configuration;
 using WeaveFleet.Application.DTOs;
 using WeaveFleet.Application.Events;
 using WeaveFleet.Application.Machines;
-using WeaveFleet.Application.Services;
 using WeaveFleet.Application.Sessions.Prompting;
 using WeaveFleet.Application.Users;
 using WeaveFleet.Domain.Common;

@@ -8,7 +8,6 @@ using WeaveFleet.Application.DTOs;
 using WeaveFleet.Application.Events;
 using WeaveFleet.Application.Git;
 using WeaveFleet.Application.Harnesses;
-using WeaveFleet.Application.Services;
 using WeaveFleet.Application.Sessions.Activation;
 using WeaveFleet.Application.Sessions.Prompting;
 using WeaveFleet.Application.SessionSources;

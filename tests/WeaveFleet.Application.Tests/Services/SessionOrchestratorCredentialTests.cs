@@ -1,6 +1,7 @@
 using Shouldly;
 using WeaveFleet.Application.Harnesses;
-using WeaveFleet.Application.Services;
+using WeaveFleet.Application.Sessions;
+using WeaveFleet.Application.Sessions.Creation;
 using WeaveFleet.Application.Workspaces;
 using WeaveFleet.Domain.Entities;
 using WeaveFleet.Domain.Harnesses;

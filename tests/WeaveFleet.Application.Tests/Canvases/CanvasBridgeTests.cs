@@ -1,7 +1,6 @@
 using System.Text.Json.Nodes;
 using WeaveFleet.Application.Browser;
 using WeaveFleet.Application.Canvases;
-using WeaveFleet.Application.Services;
 using WeaveFleet.Application.Tests.Browser;
 using WeaveFleet.Domain.Entities;
 using WeaveFleet.Testing.Fakes.Repositories;

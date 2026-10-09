@@ -1,7 +1,6 @@
 using Shouldly;
 using WeaveFleet.Application.Browser;
 using WeaveFleet.Application.Pages;
-using WeaveFleet.Application.Services;
 using WeaveFleet.Application.Terminals;
 using WeaveFleet.Domain.Entities;
 using WeaveFleet.Testing.Builders;
