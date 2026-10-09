@@ -7,7 +7,7 @@ using WeaveFleet.Domain.Harnesses;
 using WeaveFleet.Infrastructure.Harnesses;
 using WeaveFleet.Infrastructure.Users;
 
-namespace WeaveFleet.Infrastructure.Services;
+namespace WeaveFleet.Infrastructure.Sessions;
 
 /// <summary>
 /// Takes the running-work events every harness sends (<see cref="EventTypes.WorkStarted"/>,

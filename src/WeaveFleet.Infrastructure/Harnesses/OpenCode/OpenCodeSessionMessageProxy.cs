@@ -11,8 +11,9 @@ using WeaveFleet.Domain.Entities;
 using WeaveFleet.Domain.Events;
 using WeaveFleet.Domain.Harnesses;
 using WeaveFleet.Domain.Repositories;
+using WeaveFleet.Infrastructure.Sessions;
 
-namespace WeaveFleet.Infrastructure.Services;
+namespace WeaveFleet.Infrastructure.Harnesses.OpenCode;
 
 /// <summary>
 /// Proxy for retrieving session messages from either the live harness (if available and it keeps the

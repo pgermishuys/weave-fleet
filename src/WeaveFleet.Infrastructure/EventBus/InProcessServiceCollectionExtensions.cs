@@ -2,7 +2,6 @@ using System.Threading.Channels;
 using Microsoft.Extensions.DependencyInjection;
 using WeaveFleet.Application.Automations;
 using WeaveFleet.Application.Events;
-using WeaveFleet.Infrastructure.Services;
 
 namespace WeaveFleet.Infrastructure.EventBus;
 

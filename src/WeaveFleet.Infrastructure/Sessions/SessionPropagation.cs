@@ -5,7 +5,7 @@ using WeaveFleet.Domain.Repositories;
 using WeaveFleet.Infrastructure;
 using Microsoft.Extensions.DependencyInjection;
 
-namespace WeaveFleet.Infrastructure.Services;
+namespace WeaveFleet.Infrastructure.Sessions;
 
 /// <summary>
 /// Shared helper for propagating derived busy/idle activity status to parent sessions when a

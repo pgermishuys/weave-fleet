@@ -5,7 +5,6 @@ using WeaveFleet.Application.Plugins;
 using WeaveFleet.Application.Sessions;
 using WeaveFleet.Application.Tools;
 using WeaveFleet.Application.Workspaces;
-using WeaveFleet.Infrastructure.Services;
 
 namespace WeaveFleet.Api.Endpoints;
 

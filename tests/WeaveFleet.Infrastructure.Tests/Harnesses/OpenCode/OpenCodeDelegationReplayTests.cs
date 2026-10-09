@@ -13,7 +13,7 @@ using WeaveFleet.Domain.Entities;
 using WeaveFleet.Domain.Harnesses;
 using WeaveFleet.Domain.Repositories;
 using WeaveFleet.Infrastructure.Harnesses.OpenCode;
-using WeaveFleet.Infrastructure.Services;
+using WeaveFleet.Infrastructure.Sessions;
 using WeaveFleet.Testing.Builders;
 using WeaveFleet.Testing.Fakes;
 using WeaveFleet.Testing.Fakes.Repositories;

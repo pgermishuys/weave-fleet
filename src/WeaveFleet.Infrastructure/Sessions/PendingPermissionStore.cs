@@ -2,7 +2,7 @@ using System.Collections.Concurrent;
 using WeaveFleet.Application.Sessions;
 using WeaveFleet.Domain.Harnesses;
 
-namespace WeaveFleet.Infrastructure.Services;
+namespace WeaveFleet.Infrastructure.Sessions;
 
 /// <summary>In-memory <see cref="IPendingPermissions"/>: an ask lives only as long as the harness that asked it.</summary>
 public sealed class PendingPermissionStore : IPendingPermissions

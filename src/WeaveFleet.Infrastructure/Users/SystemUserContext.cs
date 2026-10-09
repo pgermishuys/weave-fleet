@@ -1,5 +1,5 @@
 using WeaveFleet.Application.Users;
-using WeaveFleet.Infrastructure.Services;
+using WeaveFleet.Infrastructure.Events;
 
 namespace WeaveFleet.Infrastructure.Users;
 
