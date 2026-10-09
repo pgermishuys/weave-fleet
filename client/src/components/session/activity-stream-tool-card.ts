@@ -3,6 +3,7 @@ import { backgroundWorkId, type BackgroundState } from "@/lib/background-work";
 import { isWorkRunning, type RunningWorkItem } from "@/lib/running-work";
 import { parseUnifiedDiff } from "@/lib/diff-parser";
 import { getToolLabel } from "@/lib/tool-labels";
+import { pageAddress } from "@/lib/server-canvas";
 
 export interface DiffLine {
   type: "add" | "remove" | "context";
@@ -37,6 +38,16 @@ export interface ToolCardScreenshot {
   height: number;
 }
 
+/** A page the agent showed in the conversation, which Fleet keeps so the conversation can show it under the call. */
+export interface ToolCardPage {
+  /** Its address on the session's machine, `/pages/{id}/{entry}`. */
+  path: string;
+  /** Fleet's copy, which the conversation remembers the page's height by. */
+  id: string;
+  /** The file the agent showed, so a later show of the same file in the same turn can take this one's place. */
+  source: string;
+}
+
 export interface ToolCardItem {
   id: string;
   title: string;
@@ -53,6 +64,7 @@ export interface ToolCardItem {
   /** Set on a sub-agent call once its session exists; the row then opens that session. */
   delegation?: ToolCardDelegation;
   screenshot?: ToolCardScreenshot;
+  page?: ToolCardPage;
   /** The harness's id for the call, which browser steps name. */
   callId?: string;
   /** Loaded one of Fleet's built-in skills, which the row offers to improve. */
@@ -177,6 +189,41 @@ export function toolScreenshot(part: AccumulatedToolPart): ToolCardScreenshot | 
   };
 }
 
+/**
+ * The page the call showed in the conversation, from `metadata.page` ({ id, entry }), kept with the call like a
+ * screenshot, so it's there after a reload too.
+ */
+export function toolPage(part: AccumulatedToolPart): ToolCardPage | undefined {
+  const page = asRecord(asRecord(asRecord(part.state)?.metadata)?.page);
+  const id = getStringValue(page?.id);
+  const entry = getStringValue(page?.entry);
+  if (!id || !entry) return undefined;
+  return { path: pageAddress({ pageId: id, entry }), id, source: getStringValue(toolInput(part)?.path) ?? "" };
+}
+
+/**
+ * The messages with each page an agent showed again in the same turn left out: it fixed the page (Fleet's check found
+ * something) and showed it again, so only the last version is drawn. The calls themselves stay. Pages of earlier turns
+ * stay as they were, since each answer keeps the page it showed. A turn starts at each message of yours.
+ */
+export function withoutRedrawnPages<T extends { role: string; tools?: ToolCardItem[] }>(messages: T[]): T[] {
+  const redrawn = new Set<ToolCardItem>();
+  let lastInTurn = new Map<string, ToolCardItem>();
+  for (const message of messages) {
+    if (message.role === "user") lastInTurn = new Map();
+    for (const tool of message.tools ?? []) {
+      if (!tool.page?.source) continue;
+      const earlier = lastInTurn.get(tool.page.source);
+      if (earlier) redrawn.add(earlier);
+      lastInTurn.set(tool.page.source, tool);
+    }
+  }
+  if (redrawn.size === 0) return messages;
+  return messages.map((message) => message.tools?.some((tool) => redrawn.has(tool))
+    ? { ...message, tools: message.tools.map((tool) => (redrawn.has(tool) ? { ...tool, page: undefined } : tool)) }
+    : message);
+}
+
 /** Anything on the call's state or metadata that looks like a unified diff, as text. */
 export function toolDiffText(part: AccumulatedToolPart): string | undefined {
   const state = asRecord(part.state);
@@ -220,6 +267,7 @@ export function toToolCardItem(
     isPatternTool: part.tool === "glob" || part.tool === "grep",
     canvasId,
     screenshot: toolScreenshot(part),
+    page: toolPage(part),
     callId: part.callId,
   };
 }

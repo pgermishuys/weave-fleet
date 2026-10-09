@@ -29,7 +29,7 @@ import { modelDisplayName } from "@/lib/agent-model-choice";
 import { isDelegationWaiting, isStreamWorking } from "@/lib/domain-event-reducer";
 import { useSidebarMobile } from "@/composables/use-sidebar-mobile";
 import { clearSentPrompts, reconcileSentPrompts, useSendPrompt, useSentPrompts } from "@/composables/use-send-prompt";
-import { isSubagentTool, subagentKind, subagentTask, toToolCardItem } from "@/components/session/activity-stream-tool-card";
+import { isSubagentTool, subagentKind, subagentTask, toToolCardItem, withoutRedrawnPages } from "@/components/session/activity-stream-tool-card";
 import type { ToolCardItem } from "@/components/session/activity-stream-tool-card";
 import type { CommandEventName } from "@/lib/command-events";
 import type { AccumulatedMessage, AccumulatedPart, AccumulatedToolPart, AccumulatedFilePart, AccumulatedReasoningPart } from "@/lib/client-types";
@@ -484,14 +484,14 @@ const deliveredMessages = computed<ActivityMessage[]>(() => {
   // A compaction's summary written as a message of its own (OpenCode's) shows behind its divider, not as a reply.
   const compactions = foldCompactionSummaries(sessionMessages.value);
   // Preserve upstream order from sessionMessages (snapshot + live events)
-  return sessionMessages.value
+  return withoutRedrawnPages(sessionMessages.value
     .filter((message) => !compactions.hidden.has(message.messageId))
     .map((message) => {
       const derived = deriveActivityMessage(message, finished);
       const summary = compactions.summaries.get(message.messageId);
       return summary && derived.compaction ? { ...derived, compaction: { ...derived.compaction, summary } } : derived;
     })
-    .filter((message) => message.role === "user" || hasVisibleMessageContent(message));
+    .filter((message) => message.role === "user" || hasVisibleMessageContent(message)));
 });
 
 /** A message's view, built again only when what it was built from changed. */

@@ -6,7 +6,9 @@ import {
   MAX_REPLY_LENGTH,
   MAX_STATE_LENGTH,
   pageStateMessage,
+  MAX_PAGE_HEIGHT,
   readPageMessage,
+  readPageSize,
 } from "@/lib/page-bridge";
 
 describe("readPageMessage", () => {
@@ -57,5 +59,28 @@ describe("kept page state", () => {
     expect(keptPageState("pg_0")).toBeNull();
     expect(keptPageState("pg_1")).toBe(1);
     expect(keptPageState("pg_50")).toBe(50);
+  });
+});
+
+describe("readPageSize", () => {
+  const size = (params: unknown) => ({ jsonrpc: "2.0", method: "ui/notifications/size-changed", params });
+
+  it("reads the height a page reports, rounded up", () => {
+    expect(readPageSize(size({ height: 312.4 }))).toBe(313);
+    expect(readPageSize(size({ height: 0 }))).toBe(0);
+  });
+
+  it("caps a page that reports more than the tallest frame", () => {
+    expect(readPageSize(size({ height: 99_999 }))).toBe(MAX_PAGE_HEIGHT);
+  });
+
+  it("ignores anything else", () => {
+    expect(readPageSize({ type: "fleet:page-hello" })).toBeNull();
+    expect(readPageSize({ method: "ui/notifications/size-changed", params: { height: 10 } })).toBeNull();
+    expect(readPageSize(size({ height: "10" }))).toBeNull();
+    expect(readPageSize(size({ height: -1 }))).toBeNull();
+    expect(readPageSize(size({ height: Number.NaN }))).toBeNull();
+    expect(readPageSize(size(null))).toBeNull();
+    expect(readPageSize(null)).toBeNull();
   });
 });

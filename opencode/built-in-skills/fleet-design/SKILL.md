@@ -22,6 +22,11 @@ The user's words win, then the project's own design system, then your choices. B
 project's tokens or theme file, its main stylesheet, or design notes in AGENTS.md or CLAUDE.md. If the page is part of
 an existing app, or a mockup of one, use its colours, fonts, spacing and components. This skill only fills the gaps.
 
+A page you show in the conversation (`fleet_page_show` with placement `conversation`) is part of your answer, inside
+Fleet: it takes Fleet's theme, not a palette of its own. Style it with the `--fleet-*` variables the tool lists, which
+follow the user's theme, light or dark, give `html` and `body` no background and no side gutters, and skip the plan's
+colour and type lines. Sections 3 to 5 are for pages that stand on their own.
+
 ## 3. Plan before writing CSS
 
 Write a short plan first:

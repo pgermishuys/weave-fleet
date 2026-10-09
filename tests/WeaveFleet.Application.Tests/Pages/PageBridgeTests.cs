@@ -162,6 +162,74 @@ public sealed class PageBridgeTests : IDisposable
     }
 
     [Fact]
+    public async Task A_page_in_the_conversation_is_a_copy_named_in_the_metadata_and_opens_no_tab()
+    {
+        var file = Mockup("ci/times.html");
+
+        var shown = await _bridge.ShowAsync(Token, OpenCodeSessionId, file, "CI test times", PageBridge.InConversation);
+
+        shown.IsSuccess.ShouldBeTrue(shown.Error?.Message);
+        var copy = _pages.Copies.ShouldHaveSingleItem();
+        copy.SessionId.ShouldBe(SessionId);
+        (await _canvasRepository.ListBySessionIdAsync(SessionId)).ShouldBeEmpty();
+        shown.Value!.CanvasId.ShouldBeNull();
+        shown.Value.Page.ShouldBe(new PageReference(copy.PageId, "times.html"));
+        shown.Value.Title.ShouldBe("CI test times");
+        shown.Value.Output.ShouldStartWith($"Showing \"CI test times\" in the conversation, above your reply, from {file} (2 files, 38 KB copied from its folder).");
+        shown.Value.Output.ShouldContain("don't announce it, say where it is or repeat what it shows");
+        _checker.Urls.ShouldBe([$"{FixedFleetUrl.Url}/pages/{copy.PageId}/times.html"]);
+    }
+
+    [Fact]
+    public async Task Showing_a_file_in_the_conversation_again_keeps_the_page_the_last_answer_showed()
+    {
+        var file = Mockup("ci/times.html");
+        var first = await _bridge.ShowAsync(Token, OpenCodeSessionId, file, "CI test times", "conversation");
+
+        var again = await _bridge.ShowAsync(Token, OpenCodeSessionId, file, "CI test times", " Conversation ");
+
+        again.Value!.Page!.Id.ShouldNotBe(first.Value!.Page!.Id);
+        _pages.Copies.Select(copy => copy.PageId).Distinct().Count().ShouldBe(2);
+        _pages.Deleted.ShouldBeEmpty();
+    }
+
+    [Fact]
+    public async Task A_page_in_the_conversation_has_no_canvas_so_its_check_leaves_the_screenshot_out()
+    {
+        var clean = await _bridge.ShowAsync(Token, OpenCodeSessionId, Mockup("report.html"), "Results", PageBridge.InConversation);
+        _checker.Next = PageCheckOutcome.Fail("Fleet couldn't find Chrome or Edge on this machine.");
+        var unchecked_ = await _bridge.ShowAsync(Token, OpenCodeSessionId, Mockup("report.html"), "Results", PageBridge.InConversation);
+
+        clean.Value!.Output.ShouldEndWith("Fleet loaded the page at 1280 and 390 px wide: no script errors, every file loaded, nothing wider than the window.");
+        unchecked_.Value!.Output.ShouldEndWith("Fleet couldn't check the page: Fleet couldn't find Chrome or Edge on this machine.");
+        clean.Value.Output.ShouldNotContain("fleet_browser_screenshot");
+        unchecked_.Value.Output.ShouldNotContain("fleet_browser_screenshot");
+    }
+
+    [Theory]
+    [InlineData(null)]
+    [InlineData("")]
+    [InlineData("tab")]
+    [InlineData("Tab")]
+    public async Task No_placement_or_tab_shows_the_page_in_a_tab_as_before(string? placement)
+    {
+        var shown = await _bridge.ShowAsync(Token, OpenCodeSessionId, Mockup("options.html"), "Options", placement);
+
+        shown.Value!.CanvasId.ShouldNotBeNull();
+        shown.Value.Page.ShouldBeNull();
+    }
+
+    [Fact]
+    public async Task A_placement_Fleet_does_not_know_is_refused_before_anything_is_copied()
+    {
+        var shown = await _bridge.ShowAsync(Token, OpenCodeSessionId, Mockup("options.html"), "Options", "inline");
+
+        shown.Error!.Kind.ShouldBe(CanvasErrorKind.Invalid);
+        shown.Error.Message.ShouldBe(PageBridge.PlacementRequirement);
+        _pages.Copies.ShouldBeEmpty();
+    }
+
+    [Fact]
     public async Task A_relative_path_is_taken_from_the_session_folder()
     {
         var file = Path.Combine(_session.FullName, "mockups", "page.html");

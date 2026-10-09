@@ -14,6 +14,7 @@ namespace WeaveFleet.Api.Endpoints;
 /// sent with them. So these routes sit outside sign-in, and the page id, 128 random bits, is what it takes to open
 /// a page, as with previews. <c>no-referrer</c> keeps the address out of the requests a page makes to CDNs.
 /// </para>
+/// <para>Every HTML file gets Fleet's theme as <c>--fleet-*</c> CSS variables (<see cref="PageTheme"/>).</para>
 /// </summary>
 public static class PageEndpoints
 {
@@ -58,7 +59,10 @@ public static class PageEndpoints
         headers.CacheControl = "no-cache";
 
         var contentType = ContentTypes.TryGetContentType(file, out var known) ? known : "application/octet-stream";
-        return Results.File(file, contentType, enableRangeProcessing: true);
+        // An HTML file gets Fleet's theme at the top of its head (PageTheme), so the page can follow the user's theme.
+        return PageTheme.Themes(file)
+            ? Results.Bytes(PageTheme.Inject(File.ReadAllBytes(file)), contentType, enableRangeProcessing: true)
+            : Results.File(file, contentType, enableRangeProcessing: true);
     }
 }
 #pragma warning restore IL2026

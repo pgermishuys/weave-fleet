@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import type { AccumulatedToolPart } from "@/lib/client-types";
-import { isSubagentTool, toToolCardItem } from "@/components/session/activity-stream-tool-card";
+import { isSubagentTool, toToolCardItem, withoutRedrawnPages, type ToolCardItem } from "@/components/session/activity-stream-tool-card";
 import { toRunningWorkItem, type RunningWorkItem } from "@/lib/running-work";
 
 function work(extra: Record<string, unknown>): RunningWorkItem {
@@ -118,6 +118,45 @@ describe("toToolCardItem", () => {
     expect(shotWith({ sessionId: "ses-1", width: 1280, height: 800 })).toBeUndefined();
     expect(shotWith("shot_1")).toBeUndefined();
     expect(toToolCardItem(create_tool_part({ status: "running" }, "fleet_browser_screenshot")).screenshot).toBeUndefined();
+  });
+
+  it("points a page shown in the conversation at Fleet's copy, and gives other calls none", () => {
+    const shown = toToolCardItem(create_tool_part({
+      status: "completed",
+      input: { path: "/tmp/ci/times.html", placement: "conversation", title: "CI test times" },
+      title: "CI test times",
+      metadata: { canvasId: null, version: null, page: { id: "pg_0123456789abcdef0123456789abcdef", entry: "charts/times.html" } },
+    }, "fleet_page_show"));
+
+    expect(shown.page).toEqual({
+      path: "/pages/pg_0123456789abcdef0123456789abcdef/charts/times.html",
+      id: "pg_0123456789abcdef0123456789abcdef",
+      source: "/tmp/ci/times.html",
+    });
+    expect(shown.title).toBe("CI test times");
+
+    const inTab = toToolCardItem(create_tool_part({ status: "completed", metadata: { canvasId: "cv_1", version: 1 } }, "fleet_page_show"));
+    expect(inTab.page).toBeUndefined();
+    const halfPage = toToolCardItem(create_tool_part({ status: "completed", metadata: { page: { id: "pg_1" } } }, "fleet_page_show"));
+    expect(halfPage.page).toBeUndefined();
+  });
+
+  it("draws a page shown again in the same turn once, at its last show, and keeps earlier turns' pages", () => {
+    const page = (id: string, source: string): ToolCardItem => ({ id, title: id, page: { path: `/pages/${id}/p.html`, id, source } });
+    const messages = [
+      { role: "user", tools: [] },
+      { role: "assistant", tools: [page("first", "/tmp/a.html")] },
+      { role: "user", tools: [] },
+      { role: "assistant", tools: [page("broken", "/tmp/a.html"), page("other", "/tmp/b.html")] },
+      { role: "assistant", tools: [page("fixed", "/tmp/a.html")] },
+    ];
+
+    const drawn = withoutRedrawnPages(messages).flatMap((message) => (message.tools ?? []).filter((tool) => tool.page).map((tool) => tool.id));
+
+    expect(drawn).toEqual(["first", "other", "fixed"]);
+    expect(withoutRedrawnPages(messages)[3].tools?.map((tool) => tool.id)).toEqual(["broken", "other"]);
+    const untouched = messages.slice(0, 2);
+    expect(withoutRedrawnPages(untouched)).toBe(untouched);
   });
 
   it("uses_result_as_output_when_output_is_absent", () => {

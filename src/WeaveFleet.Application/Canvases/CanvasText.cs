@@ -176,7 +176,7 @@ public static class CanvasText
     private static string Plural(int count, string noun)
         => count == 1 ? $"{count} {noun}" : $"{count} {noun}{(noun.EndsWith('x') ? "es" : "s")}";
 
-    private static string Quote(string value) => "\"" + value.Replace("\"", "\\\"", StringComparison.Ordinal) + "\"";
+    internal static string Quote(string value) => "\"" + value.Replace("\"", "\\\"", StringComparison.Ordinal) + "\"";
 
     private static string OneLine(string value)
         => value.Replace("\r\n", " ", StringComparison.Ordinal).Replace('\n', ' ').Replace('\r', ' ');

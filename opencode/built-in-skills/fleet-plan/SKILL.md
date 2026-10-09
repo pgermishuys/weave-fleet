@@ -152,7 +152,7 @@ The user's words in a `doc-quote`, code, and the text on a UI mockup stay as the
 5. **Pack.** `bun <skill folder>/runtime/pack.mjs plan.html --root <repo>` (or `node`, if there is no bun). It reports
    errors and warnings by line or claim number. Fix them. It writes `plan.packed.html`, one file with the runtime and
    the cited code inside. Before you show it, read the list of files whose code is now in the page.
-6. **Show it** with `fleet_page_show`, the absolute path of `plan.packed.html`, and a title like “Plan: Scheduled
+6. **Show it** with `fleet_page_show`, placement `tab`, the absolute path of `plan.packed.html`, and a title like “Plan: Scheduled
    send”. Fix what Fleet's check reports and show it again.
 7. **Hand it over** with one line: “Four decisions. The defaults are what I would build.” Then stop.
 8. **Act on the answers** (next section). If they change the shape of the plan, update the page, pack it, show the

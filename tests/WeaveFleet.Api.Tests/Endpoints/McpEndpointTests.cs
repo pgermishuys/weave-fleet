@@ -12,6 +12,7 @@ using WeaveFleet.Application.Canvases;
 using WeaveFleet.Application.Data;
 using WeaveFleet.Application.FleetTools;
 using WeaveFleet.Application.Memory;
+using WeaveFleet.Application.Pages;
 using WeaveFleet.Application.Sessions;
 using WeaveFleet.Application.Users;
 using WeaveFleet.Domain.Repositories;
@@ -178,7 +179,7 @@ public sealed class McpEndpointTests : IAsyncLifetime
         ]);
         var page = tools.Single(tool => tool.GetProperty("name").GetString() == "fleet_page_show");
         page.GetProperty("description").GetString().ShouldBe(FleetToolCatalog.Find("fleet_page_show")!.Description);
-        page.GetProperty("inputSchema").GetProperty("required").EnumerateArray().Select(name => name.GetString()).ShouldBe(["path", "title"]);
+        page.GetProperty("inputSchema").GetProperty("required").EnumerateArray().Select(name => name.GetString()).ShouldBe(["path", "placement", "title"]);
     }
 
     [Fact]
@@ -247,6 +248,31 @@ public sealed class McpEndpointTests : IAsyncLifetime
         screenshot.EnumerateObject().Select(property => property.Name).ShouldBe(["sessionId", "id", "width", "height"]);
         screenshot.GetProperty("sessionId").GetString().ShouldBe(SessionId);
         screenshot.GetProperty("width").GetInt32().ShouldBe(1280);
+    }
+
+    [Fact]
+    public async Task A_page_shown_in_the_conversation_is_named_in_the_call_s_metadata_for_the_conversation()
+    {
+        var folder = Directory.CreateTempSubdirectory("fleet-mcp-page-");
+        try
+        {
+            var file = Path.Combine(folder.FullName, "times.html");
+            await File.WriteAllTextAsync(file, "<!doctype html><title>CI</title><p>Times</p>");
+
+            var result = await CallAsync("fleet_page_show", new { path = file, placement = "conversation", title = "CI test times" }, callId: "toolu_page");
+
+            result.GetProperty("isError").GetBoolean().ShouldBeFalse();
+            var record = _factory!.Services.GetRequiredService<FleetToolCallRecords>().Take("toolu_page").ShouldNotBeNull();
+            record.Title.ShouldBe("CI test times");
+            var page = record.Metadata.GetProperty("page");
+            page.EnumerateObject().Select(property => property.Name).ShouldBe(["id", "entry"]);
+            PageIds.IsValid(page.GetProperty("id").GetString()).ShouldBeTrue();
+            page.GetProperty("entry").GetString().ShouldBe("times.html");
+        }
+        finally
+        {
+            folder.Delete(recursive: true);
+        }
     }
 
     [Fact]

@@ -8,6 +8,7 @@ using WeaveFleet.Api.Tests.Infrastructure;
 using WeaveFleet.Application.Browser;
 using WeaveFleet.Application.Canvases;
 using WeaveFleet.Application.Data;
+using WeaveFleet.Application.Pages;
 using WeaveFleet.Application.Users;
 
 namespace WeaveFleet.Api.Tests.Endpoints;
@@ -94,6 +95,35 @@ public sealed class CanvasBridgeEndpointTests : IAsyncLifetime
         using var scope = _factory!.Services.CreateScope();
         (await scope.ServiceProvider.GetRequiredService<ISessionScreenshotStore>().ReadAsync(SessionId, screenshot.GetProperty("id").GetString()!))
             .ShouldBe(FakeScreenshotter.Png);
+    }
+
+    [Fact]
+    public async Task A_page_shown_in_the_conversation_is_named_in_the_metadata_and_served_with_fleet_s_theme()
+    {
+        var folder = Directory.CreateTempSubdirectory("fleet-conversation-page-");
+        try
+        {
+            var file = Path.Combine(folder.FullName, "times.html");
+            await File.WriteAllTextAsync(file, "<!doctype html><html><head><title>CI</title></head><body><p>Times</p></body></html>");
+
+            var response = await PostAsync("page-show", Token, new { harnessSessionId = HarnessSessionId, path = file, placement = "conversation", title = "CI test times" });
+
+            response.StatusCode.ShouldBe(HttpStatusCode.OK, await response.Content.ReadAsStringAsync());
+            var body = await response.Content.ReadFromJsonAsync<JsonElement>();
+            body.GetProperty("title").GetString().ShouldBe("CI test times");
+            var metadata = body.GetProperty("metadata");
+            metadata.GetProperty("canvasId").ValueKind.ShouldBe(JsonValueKind.Null);
+            var page = metadata.GetProperty("page");
+            page.EnumerateObject().Select(property => property.Name).ShouldBe(["id", "entry"]);
+            page.GetProperty("entry").GetString().ShouldBe("times.html");
+
+            var served = await (await _client!.GetAsync($"/pages/{page.GetProperty("id").GetString()}/times.html")).Content.ReadAsStringAsync();
+            served.ShouldBe("<!doctype html><html><head>" + PageTheme.Bootstrap + "<title>CI</title></head><body><p>Times</p></body></html>");
+        }
+        finally
+        {
+            folder.Delete(recursive: true);
+        }
     }
 
     [Fact]

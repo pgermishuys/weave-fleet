@@ -11,11 +11,12 @@ using WeaveFleet.Domain.Repositories;
 namespace WeaveFleet.Application.Pages;
 
 /// <summary>
-/// The agent's <c>fleet_page_show</c>: shows an HTML file it wrote in a page canvas. Fleet copies the page
-/// (<see cref="IPageStore"/>) and serves the copy itself, so nothing has to run. A file is shown in one tab:
-/// showing it again replaces the copy and the tab reloads. A project's page is refused, since it needs the
-/// project's server (<c>fleet_app_start</c>). Once the tab is up, Fleet loads the page (<see cref="IPageChecker"/>)
-/// and tells the agent what's wrong with it in words, so it doesn't need a screenshot to find out.
+/// The agent's <c>fleet_page_show</c>: shows an HTML file it wrote in a page canvas, or in the conversation. Fleet
+/// copies the page (<see cref="IPageStore"/>) and serves the copy itself, so nothing has to run. A file is shown in one
+/// tab: showing it again replaces the copy and the tab reloads. A page in the conversation is a copy of its own, kept
+/// with the call, so every answer keeps the page it showed. A project's page is refused, since it needs the project's
+/// server (<c>fleet_app_start</c>). Once the page is up, Fleet loads it (<see cref="IPageChecker"/>) and tells the agent
+/// what's wrong with it in words, so it doesn't need a screenshot to find out.
 /// </summary>
 public sealed class PageBridge(
     IEnumerable<IHarnessCanvasCallerResolver> callers,
@@ -28,6 +29,14 @@ public sealed class PageBridge(
 {
     public const string PathRequirement = "\"path\" must name an .html file you wrote, e.g. \"/tmp/mockups/settings/options.html\".";
 
+    /// <summary>In the conversation, above the agent's reply.</summary>
+    public const string InConversation = "conversation";
+
+    /// <summary>In a page tab beside the chat; what a call that names no placement gets.</summary>
+    public const string InTab = "tab";
+
+    public const string PlacementRequirement = "\"placement\" must be \"conversation\" or \"tab\".";
+
     private static readonly StringComparison PathComparison = OperatingSystem.IsWindows() ? StringComparison.OrdinalIgnoreCase : StringComparison.Ordinal;
 
     public Task<CanvasResult<CanvasToolOutput>> ShowAsync(
@@ -35,9 +44,13 @@ public sealed class PageBridge(
         string? harnessSessionId,
         string? path,
         string? title,
+        string? placement = null,
         CancellationToken ct = default)
         => RunAsync(bridgeToken, harnessSessionId, async sessionId =>
         {
+            if (!TryReadPlacement(placement, out var inConversation))
+                return Invalid(PlacementRequirement);
+
             var file = await ResolveFileAsync(sessionId, path);
             if (file is null)
                 return Invalid(PathRequirement);
@@ -57,6 +70,9 @@ public sealed class PageBridge(
             var warnings = PageRules.FindBrokenLinks(html)
                 .Select(link => $"{link} won't load: use a path relative to the page, inside its folder.")
                 .ToList();
+            if (inConversation)
+                return await ShowInConversationAsync(sessionId, file, BrowserPreviews.TitleOr(title, Path.GetFileNameWithoutExtension(file)), warnings, ct);
+
             var published = await PublishAsync(sessionId, file, file, BrowserPreviews.TitleOr(title, Path.GetFileNameWithoutExtension(file)), warnings, ct);
             if (!published.IsSuccess)
                 return CanvasResult.Fail<CanvasToolOutput>(published.Error);
@@ -72,6 +88,38 @@ public sealed class PageBridge(
 
             return CanvasResult.Ok(new CanvasToolOutput($"{canvas.Title} · {copy.Entry}", output.ToString(), canvas.Id, canvas.Version));
         }, ct);
+
+    /// <summary>
+    /// Shows <paramref name="file"/> in the conversation: a copy of its own, every time, so the page an answer showed
+    /// stays with that answer. The tool's metadata names the copy, which the conversation loads under the call.
+    /// </summary>
+    private async Task<CanvasResult<CanvasToolOutput>> ShowInConversationAsync(
+        string sessionId, string file, string title, IReadOnlyList<string> warnings, CancellationToken ct)
+    {
+        var copied = await pages.CopyAsync(sessionId, PageIds.New(), file, ct);
+        if (copied.Page is not { } copy)
+            return Invalid(copied.Problem ?? "Fleet couldn't copy the page.");
+
+        var output = new StringBuilder()
+            .Append("Showing ").Append(CanvasText.Quote(title)).Append(" in the conversation, above your reply, from ").Append(file)
+            .Append(" (").Append(CanvasText.PageSize(copy.Files, copy.Bytes)).Append(" copied from its folder).");
+        foreach (var warning in warnings)
+            output.Append("\nWarning: ").Append(warning);
+        output.Append("\nThe user sees the page: don't announce it, say where it is or repeat what it shows. Reply with only what it doesn't say.");
+        output.Append("\nThis copy stays as it is. Showing the file again adds a new page under your next answer.");
+        if (CheckText(await CheckAsync(copy, ct), inConversation: true) is { Length: > 0 } check)
+            output.Append('\n').Append(check);
+
+        return CanvasResult.Ok(new CanvasToolOutput(title, output.ToString(), Page: new PageReference(copy.PageId, copy.Entry)));
+    }
+
+    /// <summary>Where the call asked for the page: nothing, or "tab", is a tab, as before there was a choice.</summary>
+    private static bool TryReadPlacement(string? placement, out bool inConversation)
+    {
+        var value = placement?.Trim();
+        inConversation = string.Equals(value, InConversation, StringComparison.OrdinalIgnoreCase);
+        return inConversation || string.IsNullOrEmpty(value) || string.Equals(value, InTab, StringComparison.OrdinalIgnoreCase);
+    }
 
     /// <summary>
     /// Copies <paramref name="file"/> (and the web files in its folder) into a page and shows it in the session's page tab
@@ -115,7 +163,7 @@ public sealed class PageBridge(
         if (replaced is not null && replaced != pageId)
             await pages.DeleteAsync(sessionId, replaced, ct);
 
-        return CanvasResult.Ok(new PublishedPage(opened.Value.Canvas, copy, Updated: sameSource is not null, CheckText(await CheckAsync(copy, ct))));
+        return CanvasResult.Ok(new PublishedPage(opened.Value.Canvas, copy, Updated: sameSource is not null, CheckText(await CheckAsync(copy, ct), inConversation: false)));
     }
 
 
@@ -129,19 +177,22 @@ public sealed class PageBridge(
     /// <summary>
     /// What the check found, and whether the agent still needs to look. A screenshot costs over a thousand tokens and
     /// the user already sees the page, so a clean check is the end of it unless the look is what the page is for.
+    /// A page in the conversation has no canvas to take a screenshot of, so its text leaves the screenshot out.
     /// </summary>
-    private static string CheckText(PageCheckOutcome? check)
+    private static string CheckText(PageCheckOutcome? check, bool inConversation)
     {
         if (check is null || check.Problem is not null)
         {
-            var why = check?.Problem is { } problem ? $"Fleet couldn't check the page: {problem.TrimEnd().TrimEnd('.')}. " : string.Empty;
-            return why + "To look at the page yourself, use fleet_browser_screenshot with this canvas.";
+            var why = check?.Problem is { } problem ? $"Fleet couldn't check the page: {problem.TrimEnd().TrimEnd('.')}." : string.Empty;
+            return inConversation ? why : (why + " To look at the page yourself, use fleet_browser_screenshot with this canvas.").TrimStart();
         }
 
         if (check.Findings.Count == 0)
-            return $"Fleet loaded the page at {Widths}: no script errors, every file loaded, nothing wider than the window. "
-                   + "For a report, results or a document, that's enough: hand it over without a screenshot. "
-                   + "Use fleet_browser_screenshot with this canvas only when how the page looks is the point, such as a mockup or a design.";
+            return $"Fleet loaded the page at {Widths}: no script errors, every file loaded, nothing wider than the window."
+                   + (inConversation
+                       ? string.Empty
+                       : " For a report, results or a document, that's enough: hand it over without a screenshot. "
+                         + "Use fleet_browser_screenshot with this canvas only when how the page looks is the point, such as a mockup or a design.");
 
         var text = new StringBuilder("Fleet loaded the page at ").Append(Widths).Append(" and found:");
         foreach (var finding in check.Findings)

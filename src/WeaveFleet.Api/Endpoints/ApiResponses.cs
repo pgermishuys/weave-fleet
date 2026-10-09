@@ -346,7 +346,8 @@ public sealed record CanvasBridgeRequest(
     string? Command = null,
     string? Url = null,
     string? Path = null,
-    string? Viewport = null);
+    string? Viewport = null,
+    string? Placement = null);
 
 /// <summary>
 /// Body of a <c>fleet_message</c> call from a harness process: the harness's own id for the calling session, and the
@@ -401,10 +402,15 @@ public sealed record CanvasToolMetadata(
     int? Version,
     // A screenshot Fleet kept for the conversation. The harness stores metadata with the call and never shows it
     // to the model, so the tool row finds the picture again after a reload at no cost in tokens.
-    [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] CanvasToolScreenshotMetadata? Screenshot = null);
+    [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] CanvasToolScreenshotMetadata? Screenshot = null,
+    // A page shown in the conversation, which the conversation loads under the call, as it does a screenshot.
+    [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] CanvasToolPageMetadata? Page = null);
 
 /// <summary>Where the conversation fetches a screenshot: <c>GET /api/sessions/{SessionId}/screenshots/{Id}</c>.</summary>
 public sealed record CanvasToolScreenshotMetadata(string SessionId, string Id, int Width, int Height);
+
+/// <summary>Where the conversation loads a page shown in it: <c>/pages/{Id}/{Entry}</c>.</summary>
+public sealed record CanvasToolPageMetadata(string Id, string Entry);
 
 /// <summary>Ask for the preview proxy in front of a page on this machine.</summary>
 public sealed record BrowserProxyRequest(string? Url);

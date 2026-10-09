@@ -3,10 +3,11 @@ import { computed, ref, watch } from "vue";
 import { User, Bot, Copy, ChevronRight } from "lucide-vue-next";
 import ToolCard from "@/components/session/ToolCard.vue";
 import ToolScreenshot from "@/components/session/ToolScreenshot.vue";
+import ConversationPage from "@/components/session/ConversationPage.vue";
 import BrowserSteps from "@/components/session/BrowserSteps.vue";
 import ImageLightbox from "@/components/session/ImageLightbox.vue";
 import AgentTaskRow from "@/components/session/AgentTaskRow.vue";
-import type { ToolCardDelegation, ToolCardScreenshot } from "@/components/session/activity-stream-tool-card";
+import type { ToolCardDelegation, ToolCardPage, ToolCardScreenshot } from "@/components/session/activity-stream-tool-card";
 import QuestionCard from "@/components/session/QuestionCard.vue";
 import type { AccumulatedToolPart } from "@/lib/client-types";
 import type { SlashCommand } from "@/lib/domain-events";
@@ -43,6 +44,8 @@ interface ToolCardItem {
   canvasId?: string;
   delegation?: ToolCardDelegation;
   screenshot?: ToolCardScreenshot;
+  /** A page the call showed in the conversation, drawn after the calls. */
+  page?: ToolCardPage;
   /** Loaded one of Fleet's built-in skills, which the row offers to improve. */
   improvable?: boolean;
   /** The harness's id for the call, which browser steps name. */
@@ -95,6 +98,8 @@ const showModel = computed(() => props.role === "assistant" && Boolean(props.mod
 
 // ── Question answer handler (only created when there are question parts) ──
 const questionAnswer = props.sessionId ? useQuestionAnswer(props.sessionId) : null;
+
+const pagedTools = computed(() => (props.tools ?? []).filter((tool) => tool.page && !tool.delegation));
 
 /** Calls that can take browser steps: OpenCode 2's Code Mode, and Fleet's own browser tools. */
 function usesBrowser(kind: string | undefined): boolean {
@@ -336,6 +341,14 @@ function handleExpandVisual(payload: VisualPayload): void {
               />
             </template>
           </div>
+
+          <!-- Outside the calls' box, on the conversation's own background: the page is part of the answer. -->
+          <ConversationPage
+            v-for="tool in pagedTools"
+            :key="`page-${tool.id}`"
+            :page="tool.page!"
+            :title="tool.title"
+          />
 
           <QuestionCard
             v-for="qpart in questionParts ?? []"

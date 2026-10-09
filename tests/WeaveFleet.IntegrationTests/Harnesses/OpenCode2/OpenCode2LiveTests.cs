@@ -228,7 +228,7 @@ public sealed partial class OpenCode2LiveTests(OpenCode2LiveFleet fleet) : IClas
             LlmRequest.Starts(request, prompt) ? new ScriptedLlmResponse
             {
                 StopReason = "tool_calls",
-                ToolCalls = [new ScriptedToolCall("call_page", "fleet_page_show", JsonSerializer.Serialize(new { path = page, title = "Options" }))],
+                ToolCalls = [new ScriptedToolCall("call_page", "fleet_page_show", JsonSerializer.Serialize(new { path = page, placement = "tab", title = "Options" }))],
             }
             : !LlmRequest.Continues(request, prompt) ? null
             : LlmRequest.LastToolText(request)?.Contains("only serves files", StringComparison.Ordinal) == true ? new ScriptedLlmResponse { Text = "Shown." }
