@@ -1,10 +1,11 @@
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging;
+using WeaveFleet.Application.Services;
 using WeaveFleet.Application.Users;
 using WeaveFleet.Domain.Events;
 using WeaveFleet.Domain.Repositories;
 
-namespace WeaveFleet.Application.Services;
+namespace WeaveFleet.Application.Sessions;
 
 /// <summary>
 /// Keeps each failed turn's failure (<see cref="TurnFailed"/>) as a message of Fleet's, so the conversation still says

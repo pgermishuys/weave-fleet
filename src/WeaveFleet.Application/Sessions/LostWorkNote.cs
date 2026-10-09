@@ -1,7 +1,7 @@
 using WeaveFleet.Domain.Entities;
 using WeaveFleet.Domain.Harnesses;
 
-namespace WeaveFleet.Application.Services;
+namespace WeaveFleet.Application.Sessions;
 
 /// <summary>
 /// The one-time note a session's next prompt carries when work its agent left running was lost

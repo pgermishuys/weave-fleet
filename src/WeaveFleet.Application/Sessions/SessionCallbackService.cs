@@ -1,8 +1,9 @@
 using Microsoft.Extensions.Logging;
+using WeaveFleet.Application.Services;
 using WeaveFleet.Domain.Entities;
 using WeaveFleet.Domain.Repositories;
 
-namespace WeaveFleet.Application.Services;
+namespace WeaveFleet.Application.Sessions;
 
 /// <summary>
 /// Session completion callbacks (<c>onComplete</c> on <c>POST /api/sessions</c>): when the source session finishes,

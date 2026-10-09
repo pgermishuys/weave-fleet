@@ -5,7 +5,7 @@ using WeaveFleet.Application.Users;
 using WeaveFleet.Domain.Events;
 using WeaveFleet.Domain.Repositories;
 
-namespace WeaveFleet.Application.Services;
+namespace WeaveFleet.Application.Sessions;
 
 /// <summary>
 /// Drives <see cref="SessionCallbackService"/>. The relay hands it every event it translates: a session's first

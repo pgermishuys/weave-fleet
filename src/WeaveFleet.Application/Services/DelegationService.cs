@@ -3,6 +3,7 @@ using WeaveFleet.Application;
 using WeaveFleet.Application.DTOs;
 using WeaveFleet.Application.Events;
 using WeaveFleet.Application.Progress;
+using WeaveFleet.Application.Sessions;
 using WeaveFleet.Application.Users;
 using WeaveFleet.Domain.Entities;
 using WeaveFleet.Domain.Events;

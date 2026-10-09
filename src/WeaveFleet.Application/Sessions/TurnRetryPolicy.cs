@@ -1,6 +1,6 @@
 using WeaveFleet.Domain.Events;
 
-namespace WeaveFleet.Application.Services;
+namespace WeaveFleet.Application.Sessions;
 
 /// <summary>
 /// When Fleet tries a turn a model provider's limit stopped again (<see cref="TurnRetryService"/>): when the provider
