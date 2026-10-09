@@ -29,10 +29,3 @@ export interface Command {
   getSubCommands?: () => Command[];
 }
 
-export interface CommandRegistryValue {
-  commands: Command[];
-  paletteOpen: boolean;
-  setPaletteOpen: (open: boolean) => void;
-  registerCommand: (command: Command) => void;
-  unregisterCommand: (id: string) => void;
-}
