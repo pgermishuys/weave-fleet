@@ -1,7 +1,6 @@
 import { onMounted, onUnmounted } from "vue";
-import { onGlobalEvent } from "@/composables/use-signalr-socket";
+import { onDomainEvent } from "@/composables/on-domain-event";
 import { liveTarget } from "@/lib/machine-target";
-import type { DomainEvent } from "@/lib/domain-events";
 import { useSessionsStore } from "@/stores/sessions";
 
 /** The server's push after a turn's tokens are counted (AnalyticsWriterService.SessionTokensEventType). */
@@ -30,8 +29,7 @@ export function useSessionTokenUpdates(): void {
   let unsubscribe: (() => void) | null = null;
 
   onMounted(() => {
-    unsubscribe = onGlobalEvent(liveTarget(), "sessions", (event: DomainEvent) => {
-      if ((event.type as string) !== SESSION_TOKENS) return;
+    unsubscribe = onDomainEvent(liveTarget(), "sessions", SESSION_TOKENS, (event) => {
       const totals = parseSessionTokens(event.payload);
       if (!totals) return;
       sessionsStore.patchSession(totals.sessionId, { totalTokens: totals.totalTokens, totalCost: totals.totalCost });

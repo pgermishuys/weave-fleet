@@ -1,8 +1,7 @@
 import { onMounted, onUnmounted } from "vue";
 import { Lightbulb } from "lucide-vue-next";
-import { onGlobalEvent } from "@/composables/use-signalr-socket";
+import { onDomainEvent } from "@/composables/on-domain-event";
 import { liveTarget } from "@/lib/machine-target";
-import type { DomainEvent } from "@/lib/domain-events";
 import {
   addMemoryNote,
   forgetMemoryNote,
@@ -70,9 +69,8 @@ export function useMemoryNotices(): void {
   }
 
   onMounted(() => {
-    unsubscribe = onGlobalEvent(liveTarget(), "sessions", (event: DomainEvent) => {
-      if ((event.type as string) !== MEMORY_SAVED) return;
-      const saved = event.payload as unknown as MemorySavedPayload | undefined;
+    unsubscribe = onDomainEvent(liveTarget(), "sessions", MEMORY_SAVED, (event) => {
+      const saved: MemorySavedPayload | undefined = event.payload;
       if (!saved?.note?.id) return;
       show(saved);
     });

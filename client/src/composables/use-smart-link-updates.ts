@@ -1,8 +1,8 @@
 import { onMounted, onUnmounted } from "vue"
-import { onGlobalEvent, onReconnect } from "@/composables/use-signalr-socket"
+import { onDomainEvent } from "@/composables/on-domain-event"
+import { onReconnect } from "@/composables/use-signalr-socket"
 import { liveTarget } from "@/lib/machine-target"
 import { useSmartLinksStore } from "@/stores/smart-links"
-import type { DomainEvent } from "@/lib/domain-events"
 import type { SmartLinkWire } from "@/lib/smart-links"
 
 /** Event the server's smart link watcher pushes on the "sessions" topic when a link changes. */
@@ -20,9 +20,8 @@ export function useSmartLinkUpdates(): void {
 
   onMounted(() => {
     void store.ensureHeaderLinksLoaded()
-    unsubscribe = onGlobalEvent(liveTarget(), "sessions", (event: DomainEvent) => {
-      if ((event.type as string) !== SMART_LINK_UPDATED) return
-      const wire = event.payload as unknown as SmartLinkWire | undefined
+    unsubscribe = onDomainEvent(liveTarget(), "sessions", SMART_LINK_UPDATED, (event) => {
+      const wire: SmartLinkWire | undefined = event.payload
       if (!wire?.id || !wire.sessionId) return
 
       store.applyPushed(wire)

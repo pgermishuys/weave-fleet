@@ -1,3 +1,8 @@
+import type { MemorySavedPayload } from "@/lib/agent-memory";
+import type { SessionProgressDetail, SessionProgressSummary } from "@/lib/session-progress";
+import type { SmartLinkWire } from "@/lib/smart-links";
+import type { WorkflowRun } from "@/lib/workflows";
+
 export interface EventCursorMetadata {
   eventId?: number | null;
 }
@@ -643,6 +648,153 @@ export function isCanvasEvent(event: DomainEvent): event is CanvasEvent {
   return event.type === "canvas.updated" || event.type === "canvas.closed" || event.type === "canvas.focused";
 }
 
+// Events the server sends that no reducer reads. Subscribers read them with `onDomainEvent`
+// (composables/on-domain-event.ts), which hands the handler the payload typed. Payloads are camelCase, as the server
+// writes them.
+
+/** One session messaged another (`fleet_message`). Sent on the receiver's topic. */
+export interface SessionMessaged extends EventCursorMetadata {
+  type: "session.messaged";
+  payload: {
+    fromSessionId: string;
+    /** The machine the sender is on, when it's another machine. */
+    fromMachineId?: string | null;
+    toSessionId: string;
+    eventId?: number | null;
+    correlationId: string;
+  };
+}
+
+/** A session that was messaged with `notifyWhenDone` finished the turn and Fleet told the asker. Sent on the asker's topic. */
+export interface SessionReported extends EventCursorMetadata {
+  type: "session.reported";
+  payload: {
+    fromSessionId: string;
+    toSessionId: string;
+    /** How the turn ended: `finished` or `failed`. */
+    outcome: string;
+    correlationId: string;
+  };
+}
+
+/** The agent's todo list changed. Carries the whole list; an empty one means the agent cleared it. */
+export interface TodosReported extends EventCursorMetadata {
+  type: "todos.reported";
+  payload: {
+    sessionId: string;
+    items: { content: string; status: string; priority?: string | null }[];
+  };
+}
+
+/** The agent finished writing files with a tool: an edit, a new file, a patch. */
+export interface FilesWritten extends EventCursorMetadata {
+  type: "files.written";
+  payload: {
+    sessionId: string;
+    messageId?: string | null;
+    /** Absolute paths. */
+    paths: string[];
+  };
+}
+
+/** A harness's own `session.status` event, as it arrives when no domain event stands in for it. Nothing in the client reads it. */
+export interface SessionStatusReported extends EventCursorMetadata {
+  type: "session.status";
+  payload: Record<string, unknown>;
+}
+
+/** A session was created or forked. Sent on the `sessions` topic. */
+export interface SessionListCreated extends EventCursorMetadata {
+  type: "session_created";
+  payload: {
+    sessionId: string;
+    instanceId?: string | null;
+    workspaceId?: string | null;
+    title?: string | null;
+    projectId?: string | null;
+    parentSessionId?: string | null;
+    isHidden?: boolean | null;
+    forkedFromSessionId?: string | null;
+    spawnedBySessionId?: string | null;
+    spawnKind?: string | null;
+  };
+}
+
+/** A session was archived. Sent on the `sessions` topic. */
+export interface SessionListArchived extends EventCursorMetadata {
+  type: "session_archived";
+  payload: { sessionId: string; archivedAt: string };
+}
+
+/** A session was restored from the archive. Sent on the `sessions` topic. */
+export interface SessionListUnarchived extends EventCursorMetadata {
+  type: "session_unarchived";
+  payload: { sessionId: string };
+}
+
+/** A session was deleted. Sent on the `sessions` topic. */
+export interface SessionListDeleted extends EventCursorMetadata {
+  type: "session_deleted";
+  payload: { sessionId: string };
+}
+
+/** A session's progress summary changed, for its row. Sent on the `sessions` topic. */
+export interface SessionProgressChanged extends EventCursorMetadata {
+  type: "session_progress";
+  payload: SessionProgressSummary;
+}
+
+/** A session's progress, with its todos and plan. Sent on the session's topic. */
+export interface ProgressUpdated extends EventCursorMetadata {
+  type: "progress.updated";
+  payload: SessionProgressDetail;
+}
+
+/** A session's token and cost totals after a turn was counted. Sent on the `sessions` topic. */
+export interface SessionTokensCounted extends EventCursorMetadata {
+  type: "session_tokens";
+  payload: { sessionId: string; totalTokens: number; totalCost: number };
+}
+
+/** A pull request or other link of a session changed. Sent on the `sessions` topic. */
+export interface SmartLinkUpdated extends EventCursorMetadata {
+  type: "smart_link.updated";
+  payload: SmartLinkWire;
+}
+
+/** An agent saved a memory note. Sent on the `sessions` topic. */
+export interface MemorySaved extends EventCursorMetadata {
+  type: "memory.saved";
+  payload: MemorySavedPayload;
+}
+
+/** A workflow run changed. Sent on the `sessions` topic. */
+export interface WorkflowRunChanged extends EventCursorMetadata {
+  type: "workflow_run";
+  payload: WorkflowRun;
+}
+
+/** A harness's usage limits changed. Sent on the `sessions` topic. */
+export interface HarnessUsageChanged extends EventCursorMetadata {
+  type: "harness.usage";
+  payload: {
+    harnessType: string;
+    windows: { window: string; utilization?: number | null; resetsAt?: string | null; status?: string }[];
+  };
+}
+
+/** What a harness offers in a folder (agents, models, commands) changed while it ran. Sent on the `sessions` topic. */
+export interface HarnessCatalogChanged extends EventCursorMetadata {
+  type: "harness.catalog_changed";
+  payload: {
+    harnessType: string;
+    directory: string;
+    quickChat?: boolean;
+    profileIds?: string[];
+    sessionIds?: string[];
+  };
+}
+
 export type DomainEvent =
   | SessionStarted
   | SessionIdled
@@ -677,4 +829,21 @@ export type DomainEvent =
   | SessionQueueChanged
   | SessionRetryChanged
   | PermissionAsked
-  | PermissionReplied;
+  | PermissionReplied
+  | SessionMessaged
+  | SessionReported
+  | TodosReported
+  | FilesWritten
+  | SessionStatusReported
+  | SessionListCreated
+  | SessionListArchived
+  | SessionListUnarchived
+  | SessionListDeleted
+  | SessionProgressChanged
+  | ProgressUpdated
+  | SessionTokensCounted
+  | SmartLinkUpdated
+  | MemorySaved
+  | WorkflowRunChanged
+  | HarnessUsageChanged
+  | HarnessCatalogChanged;

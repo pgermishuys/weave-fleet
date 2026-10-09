@@ -1,6 +1,6 @@
 import { computed, onScopeDispose, toValue, watch, type ComputedRef, type MaybeRefOrGetter } from "vue";
-import { onGlobalEvent, onReconnect } from "@/composables/use-signalr-socket";
-import type { DomainEvent } from "@/lib/domain-events";
+import { onDomainEvent } from "@/composables/on-domain-event";
+import { onReconnect } from "@/composables/use-signalr-socket";
 import { PROGRESS_UPDATED, parseProgressDetail, type SessionProgressDetail } from "@/lib/session-progress";
 import type { TodoItem } from "@/lib/todo-utils";
 import { useSessionProgressStore } from "@/stores/session-progress";
@@ -27,8 +27,7 @@ export function useSessionProgress(sessionId: MaybeRefOrGetter<string>): {
       if (!next) return;
 
       void store.ensureLoaded(machine, next);
-      unsubscribe = onGlobalEvent(machine, `session:${next}`, (event: DomainEvent) => {
-        if ((event.type as string) !== PROGRESS_UPDATED) return;
+      unsubscribe = onDomainEvent(machine, `session:${next}`, PROGRESS_UPDATED, (event) => {
         const detail = parseProgressDetail(event.payload);
         if (detail?.sessionId === next) store.apply(detail);
       });
