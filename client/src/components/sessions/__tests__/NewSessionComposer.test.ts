@@ -1445,6 +1445,25 @@ describe("NewSessionComposer", () => {
       expect(view.get("[data-testid='new-session-folder-chip']").text()).toContain("weave-website");
     });
 
+    it("suggests nothing from GitHub when the account has no repositories, and filters by what is typed", async () => {
+      const view = await mountComposer();
+      await openFolderMenu(view);
+      await folderOption("Clone a repository").trigger("click");
+      await flushPromises();
+      expect(inDocument().findAll(".ns-folder-suggestion")).toHaveLength(0);
+      expect(mocks.refreshGitHubRepos).toHaveBeenCalledTimes(1);
+
+      gitHubRepos.value = [
+        { id: 2, full_name: "pgermishuys/weave-website", name: "weave-website" },
+        { id: 3, full_name: "pgermishuys/garden-notes", name: "garden-notes" },
+      ];
+      await flushPromises();
+      expect(inDocument().findAll(".ns-folder-suggestion")).toHaveLength(2);
+
+      await inDocument().get("[data-testid='new-session-clone-repository']").setValue("garden");
+      expect(inDocument().findAll(".ns-folder-suggestion").map((button) => button.text())).toEqual(["pgermishuys/garden-notes"]);
+    });
+
     it("isn't offered with a GitHub issue attached", async () => {
       useWorkspaceUiStore().setNewSessionInitialSource(createGitHubSessionSourcePreset({
         sourceType: "github-issue",
