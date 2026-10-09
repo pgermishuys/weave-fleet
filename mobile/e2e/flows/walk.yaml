@@ -136,6 +136,15 @@ appId: io.tryweave.fleet.experiment
 - tapOn:
     text: "Allow once"
     optional: true
+# The long-press menu belongs to SpringBoard; on iOS Maestro sees it but can't always tap it by text.
+- runFlow:
+    when:
+      platform: iOS
+      visible: "Deny"
+    commands:
+      - tapOn:
+          point: "35%,25%"
+          optional: true
 - waitForAnimationToEnd:
     timeout: 4000
 - launchApp:
