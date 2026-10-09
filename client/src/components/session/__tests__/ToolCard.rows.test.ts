@@ -196,7 +196,7 @@ describe("toToolCardItem, which feeds the ToolCard", () => {
   }
   const withState = (tool: string, state: Record<string, unknown>) => part({ tool, state });
 
-  it("keeps the fields the card shows and drops the raw input", () => {
+  it("keeps the fields the card shows, and the raw input", () => {
     const item = toToolCardItem(withState("read", { status: "completed", input: { filePath: "src/a.ts", offset: 5 }, output: "one\ntwo" }));
 
     expect(item).toMatchObject({
@@ -208,8 +208,11 @@ describe("toToolCardItem, which feeds the ToolCard", () => {
       callId: "call-1",
       isPatternTool: false,
     });
-    // Pinned as is today: the item carries no `input`; whatever wants it later must read the part again.
-    expect(Object.keys(item)).not.toContain("input");
+    expect(item.input).toEqual({ filePath: "src/a.ts", offset: 5 });
+  });
+
+  it("carries no input for a call that sent none", () => {
+    expect(toToolCardItem(withState("read", { status: "running" })).input).toBeUndefined();
   });
 
   it("starts every call collapsed except one that failed", () => {

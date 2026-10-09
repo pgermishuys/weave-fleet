@@ -69,6 +69,8 @@ export interface ToolCardItem {
   callId?: string;
   /** Loaded one of Fleet's built-in skills, which the row offers to improve. */
   improvable?: boolean;
+  /** What the harness passed the tool, as it sent it; undefined when the call carries none. */
+  input?: Record<string, unknown>;
 }
 
 /** The kind of sub-agent a call asked for: OpenCode names it `subagent_type`, OpenCode 2 `agent`. */
@@ -269,6 +271,7 @@ export function toToolCardItem(
     screenshot: toolScreenshot(part),
     page: toolPage(part),
     callId: part.callId,
+    input: input ?? undefined,
   };
 }
 
