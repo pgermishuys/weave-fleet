@@ -6,7 +6,6 @@ using WeaveFleet.Api.Auth;
 using WeaveFleet.Api.Endpoints;
 using WeaveFleet.Application.Events;
 using WeaveFleet.Application.Recaps;
-using WeaveFleet.Application.Services;
 using WeaveFleet.Application.Sessions;
 using WeaveFleet.Application.Users;
 using WeaveFleet.Domain.Events;

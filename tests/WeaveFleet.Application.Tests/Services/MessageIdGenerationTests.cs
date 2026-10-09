@@ -3,6 +3,7 @@ using System.Text.RegularExpressions;
 using Shouldly;
 using WeaveFleet.Application.Configuration;
 using WeaveFleet.Application.Services;
+using WeaveFleet.Application.Sessions;
 using WeaveFleet.Application.SessionSources;
 using WeaveFleet.Application.Workspaces;
 using WeaveFleet.Domain.Entities;

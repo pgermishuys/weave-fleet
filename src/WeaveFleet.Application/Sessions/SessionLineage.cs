@@ -2,7 +2,7 @@ using WeaveFleet.Domain.Common;
 using WeaveFleet.Domain.Entities;
 using WeaveFleet.Domain.Repositories;
 
-namespace WeaveFleet.Application.Services;
+namespace WeaveFleet.Application.Sessions;
 
 /// <summary>
 /// Which session came from which, as far as Fleet's rules care: how many agent-starts a session is below one the user

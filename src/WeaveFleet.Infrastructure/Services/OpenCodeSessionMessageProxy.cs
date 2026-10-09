@@ -6,7 +6,6 @@ using WeaveFleet.Infrastructure.Events;
 using WeaveFleet.Application;
 using WeaveFleet.Application.Events;
 using WeaveFleet.Application.Harnesses;
-using WeaveFleet.Application.Services;
 using WeaveFleet.Application.Sessions;
 using WeaveFleet.Domain.Entities;
 using WeaveFleet.Domain.Events;

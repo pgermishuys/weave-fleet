@@ -1,6 +1,6 @@
 using Shouldly;
 using WeaveFleet.Api.Endpoints;
-using WeaveFleet.Application.Services;
+using WeaveFleet.Application.Sessions;
 
 namespace WeaveFleet.Api.Tests.Desktop;
 

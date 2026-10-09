@@ -3,7 +3,7 @@ using WeaveFleet.Domain.DTOs;
 using WeaveFleet.Domain.Entities;
 using WeaveFleet.Domain.Harnesses;
 
-namespace WeaveFleet.Application.Services;
+namespace WeaveFleet.Application.Sessions;
 
 public sealed class SessionCapabilitiesResolver(
     InstanceTracker instanceTracker,

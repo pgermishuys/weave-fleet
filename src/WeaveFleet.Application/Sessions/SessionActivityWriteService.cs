@@ -3,7 +3,7 @@ using WeaveFleet.Application.Events;
 using WeaveFleet.Domain.Entities;
 using WeaveFleet.Domain.Repositories;
 
-namespace WeaveFleet.Application.Services;
+namespace WeaveFleet.Application.Sessions;
 
 /// <summary>
 /// Persists durable session activity and outbox rows in one database transaction.

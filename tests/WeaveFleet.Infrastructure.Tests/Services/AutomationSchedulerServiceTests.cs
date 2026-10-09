@@ -4,7 +4,7 @@ using Microsoft.Extensions.Logging.Abstractions;
 using WeaveFleet.Application.Automations;
 using WeaveFleet.Application.Configuration;
 using WeaveFleet.Application.Machines;
-using WeaveFleet.Application.Services;
+using WeaveFleet.Application.Sessions;
 using WeaveFleet.Domain.Entities;
 using WeaveFleet.Domain.Repositories;
 using WeaveFleet.Infrastructure.Automations;

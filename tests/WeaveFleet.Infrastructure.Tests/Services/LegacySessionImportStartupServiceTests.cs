@@ -2,7 +2,7 @@ using Dapper;
 using System.Reflection;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging;
-using WeaveFleet.Application.Services;
+using WeaveFleet.Application.Sessions;
 using WeaveFleet.Infrastructure.Services;
 using WeaveFleet.Infrastructure.Tests.Data;
 

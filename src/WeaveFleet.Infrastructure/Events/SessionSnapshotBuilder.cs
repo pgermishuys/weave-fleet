@@ -5,7 +5,7 @@ using System.Text.Json;
 using WeaveFleet.Application;
 using WeaveFleet.Application.Data;
 using WeaveFleet.Application.Events;
-using WeaveFleet.Application.Services;
+using WeaveFleet.Application.Sessions;
 using WeaveFleet.Application.Users;
 using WeaveFleet.Domain.Events;
 using WeaveFleet.Domain.Harnesses;

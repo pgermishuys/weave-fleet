@@ -1,6 +1,6 @@
 using System.Text.Json;
 using Microsoft.Extensions.Logging.Abstractions;
-using WeaveFleet.Application.Services;
+using WeaveFleet.Application.Sessions;
 using WeaveFleet.Domain.Events;
 using WeaveFleet.Domain.Harnesses;
 using WeaveFleet.Infrastructure.Data.Repositories;

@@ -1,7 +1,7 @@
 using Microsoft.Extensions.Logging.Abstractions;
 using Microsoft.Extensions.Time.Testing;
 using WeaveFleet.Application.Automations;
-using WeaveFleet.Application.Services;
+using WeaveFleet.Application.Sessions;
 using WeaveFleet.Application.Tests.Machines;
 using WeaveFleet.Domain.Entities;
 using WeaveFleet.Testing.Fakes.Repositories;

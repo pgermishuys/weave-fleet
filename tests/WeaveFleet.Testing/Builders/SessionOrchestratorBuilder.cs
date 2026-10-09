@@ -6,6 +6,7 @@ using WeaveFleet.Application.Git;
 using WeaveFleet.Application.Harnesses;
 using WeaveFleet.Application.Memory;
 using WeaveFleet.Application.Services;
+using WeaveFleet.Application.Sessions;
 using WeaveFleet.Application.SessionSources;
 using WeaveFleet.Application.Users;
 using WeaveFleet.Application.Workspaces;

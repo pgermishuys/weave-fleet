@@ -6,7 +6,7 @@ namespace WeaveFleet.Infrastructure.Harnesses;
 /// <summary>
 /// Builds Fleet's own context-window events (<see cref="EventTypes.ContextUsage"/>,
 /// <see cref="EventTypes.ContextCompaction"/>), which every adapter sends for its session's own model calls and
-/// compactions. The relay hands them to <see cref="Application.Services.SessionContextRecorder"/>; they never reach
+/// compactions. The relay hands them to <see cref="Application.Sessions.SessionContextRecorder"/>; they never reach
 /// the conversation.
 /// </summary>
 internal static class ContextEvents

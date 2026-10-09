@@ -26,7 +26,7 @@ using WeaveFleet.Api.Endpoints;
 using WeaveFleet.Api.Telemetry;
 using WeaveFleet.Application.Configuration;
 using WeaveFleet.Application.Diagnostics;
-using WeaveFleet.Application.Services;
+using WeaveFleet.Application.Sessions;
 using WeaveFleet.Application.Users;
 using WeaveFleet.Application.Workspaces;
 using WeaveFleet.Domain.Repositories;

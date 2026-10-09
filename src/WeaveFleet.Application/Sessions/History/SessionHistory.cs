@@ -1,6 +1,5 @@
 using Microsoft.Extensions.Logging;
 using WeaveFleet.Application.Configuration;
-using WeaveFleet.Application.Services;
 using WeaveFleet.Domain.Common;
 using WeaveFleet.Domain.Entities;
 using WeaveFleet.Domain.Harnesses;
