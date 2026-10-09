@@ -3,7 +3,7 @@ import { computed, nextTick, shallowRef, useTemplateRef } from "vue";
 import { ArrowUp } from "lucide-vue-next";
 import CommandText from "@/components/phone/CommandText.vue";
 import type { PermissionAsk } from "@/composables/use-session-permissions";
-import { dontAskAgain } from "@/lib/phone/asks";
+import { dontAskAgainWording } from "@/lib/tools";
 import { autogrow } from "@/lib/phone/keyboard";
 import type { PermissionReply } from "@/lib/push/answer";
 
@@ -18,7 +18,7 @@ const emit = defineEmits<{ (event: "answer", reply: PermissionReply, message?: s
 const denying = shallowRef(false);
 const instead = shallowRef("");
 const denyBox = useTemplateRef<HTMLElement>("denyBox");
-const always = computed(() => dontAskAgain(props.ask));
+const always = computed(() => dontAskAgainWording(props.ask));
 const diff = computed(() => props.ask.kind === "edit" && props.ask.detail
   ? props.ask.detail.split("\n").filter((line) => !/^(Index: |={3,}|-{3} |\+{3} )/.test(line))
   : null);

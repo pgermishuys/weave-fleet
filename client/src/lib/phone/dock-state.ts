@@ -5,7 +5,7 @@
  */
 import type { PermissionAsk } from "@/composables/use-session-permissions";
 import type { AccumulatedMessage, AccumulatedToolPart } from "@/lib/client-types";
-import { getQuestionInput, type QuestionInfo } from "@/lib/question-types";
+import { getQuestionInput, isQuestionPart, type QuestionInfo } from "@/lib/question-types";
 
 export interface PendingQuestion {
   requestId: string;
@@ -28,13 +28,13 @@ export function pendingQuestion(messages: readonly AccumulatedMessage[]): Pendin
   for (const message of messages) {
     for (const part of message.parts) {
       const status = part.type === "tool" ? (part.state as { status?: string } | null)?.status : undefined;
-      if (part.type === "tool" && part.tool === "question" && (status === "completed" || status === "error")) settled.add(part.callId);
+      if (part.type === "tool" && isQuestionPart(part) && (status === "completed" || status === "error")) settled.add(part.callId);
     }
   }
 
   for (const message of [...messages].reverse()) {
     for (const part of [...message.parts].reverse()) {
-      if (part.type !== "tool" || part.tool !== "question" || settled.has(part.callId)) continue;
+      if (part.type !== "tool" || !isQuestionPart(part) || settled.has(part.callId)) continue;
       const status = (part.state as { status?: string } | null)?.status;
       if (status !== "pending" && status !== "running") continue;
       const input = getQuestionInput(part as AccumulatedToolPart);

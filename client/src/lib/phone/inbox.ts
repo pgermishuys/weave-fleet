@@ -7,6 +7,7 @@ import type { PermissionAsk } from "@/composables/use-session-permissions";
 import { isTopLevel, sessionBucket, sessionUpdatedAt } from "@/lib/needs-you";
 import type { FeedStatus } from "@/lib/machine-feed";
 import type { QuestionInfo } from "@/lib/question-types";
+import { askPreviewWording } from "@/lib/tools";
 
 /** What a waiting session waits on, when the phone could find out. */
 export type InboxAsk =
@@ -116,19 +117,7 @@ export function askPreview(entry: InboxItem): { lead: string; detail: string | n
   if (!ask) return { lead: "Waiting on you", detail: null, code: false };
   if (ask.kind === "question") return { lead: "Asked:", detail: ask.question.question, code: false };
 
-  const what = ask.ask.title || ask.ask.tool;
-  switch (ask.ask.kind) {
-    case "shell":
-      return { lead: "Wants to run", detail: what, code: true };
-    case "edit":
-      return { lead: "Wants to edit", detail: what, code: true };
-    case "read":
-      return { lead: "Wants to read", detail: what, code: true };
-    case "web":
-      return { lead: "Wants to open", detail: what, code: true };
-    default:
-      return { lead: `Wants to use ${ask.ask.tool}`, detail: ask.ask.title ?? null, code: !!ask.ask.title };
-  }
+  return askPreviewWording(ask.ask);
 }
 
 /** "hangar", "hangar and falcon", "hangar, falcon and shuttle". */

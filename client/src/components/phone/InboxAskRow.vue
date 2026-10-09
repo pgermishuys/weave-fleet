@@ -7,7 +7,7 @@ import PermissionChoices from "@/components/phone/PermissionChoices.vue";
 import QuestionChoices from "@/components/phone/QuestionChoices.vue";
 import { showToast } from "@/composables/phone/use-phone-toast";
 import { collapse } from "@/lib/phone/animate";
-import { dontAskAgain, permissionTitle } from "@/lib/phone/asks";
+import { dontAskAgainWording, permissionHeading } from "@/lib/tools";
 import { haptic } from "@/lib/phone/haptics";
 import type { InboxItem } from "@/lib/phone/inbox";
 import { short } from "@/lib/phone/time";
@@ -38,7 +38,7 @@ const permission = computed(() => (props.item.ask?.kind === "permission" ? props
 const question = computed(() => (props.item.ask?.kind === "question" ? props.item.ask : null));
 const quickOptions = computed(() => (question.value && !question.value.question.multiple ? question.value.question.options.slice(0, 2) : []));
 const failed = computed(() => props.item.status === "error");
-const heading = computed(() => (failed.value ? "Stopped with an error" : permission.value ? permissionTitle(permission.value) : question.value ? "Question" : "Waiting on you"));
+const heading = computed(() => (failed.value ? "Stopped with an error" : permission.value ? permissionHeading(permission.value) : question.value ? "Question" : "Waiting on you"));
 const busy = computed(() => sent.value !== null);
 
 function fold(): void {
@@ -71,7 +71,7 @@ function answerPermission(reply: PermissionReply, message?: string): void {
   result.value = null;
   sent.value = reply;
   if (reply === "once") haptic("success");
-  if (reply === "always") showToast(`Won't ask again for ${dontAskAgain(permission.value ?? { kind: "other", tool: "this", always: [] }).code ?? "this"} in this session`);
+  if (reply === "always") showToast(`Won't ask again for ${dontAskAgainWording(permission.value ?? { kind: "other", tool: "this", always: [] }).code ?? "this"} in this session`);
   if (reply === "reject") showToast("Denied. The agent was told.");
   emit("permission", props.item, reply, message, finish);
   fold();
@@ -211,7 +211,7 @@ function openFromSheet(): void {
       ref="sheet"
       :open="sheet"
       :label="`Answer ${item.title}`"
-      :title="permission ? permissionTitle(permission) : 'Question'"
+      :title="permission ? permissionHeading(permission) : 'Question'"
       :subtitle="`${item.machineName} · ${item.title}`"
       :detents="['medium', 'large']"
       initial="medium"

@@ -1,4 +1,5 @@
 import type { AccumulatedToolPart } from "./client-types";
+import { getTool } from "./tools";
 
 // ── Question tool input schema (mirrors opencode's Question.Info) ─────────────
 
@@ -37,10 +38,10 @@ export interface QuestionAnswerRequest {
 
 /**
  * Returns true if the given tool part was emitted by the question tool.
- * Questions are regular tool parts with `tool === "question"`.
+ * Questions are regular tool parts; the tool registry knows which names are the question tool.
  */
 export function isQuestionPart(part: AccumulatedToolPart): boolean {
-  return part.tool === "question";
+  return getTool(part.tool).category === "question";
 }
 
 /**

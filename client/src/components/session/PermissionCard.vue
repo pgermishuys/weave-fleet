@@ -5,6 +5,7 @@ import { ShieldAlert } from "lucide-vue-next";
 import StatusGlyph from "@/components/sessions/StatusGlyph.vue";
 import { useSettingsNav } from "@/composables/use-settings-nav";
 import type { PermissionAsk, PermissionReply } from "@/composables/use-session-permissions";
+import { dontAskAgainWording, permissionHeading } from "@/lib/tools";
 
 const props = defineProps<{
   ask: PermissionAsk;
@@ -16,15 +17,7 @@ const { setActiveSection } = useSettingsNav();
 
 // ── What the agent wants ──────────────────────────────────────────────────────
 
-const heading = computed(() => {
-  switch (props.ask.kind) {
-    case "shell": return "Run a command";
-    case "edit": return "Edit a file";
-    case "web": return "Go online";
-    default:
-      return props.ask.tool === "external_directory" ? "Work outside the folder" : `Use ${props.ask.tool}`;
-  }
-});
+const heading = computed(() => permissionHeading(props.ask));
 
 interface DiffLine {
   text: string;
@@ -50,16 +43,7 @@ const removed = computed(() => diffLines.value.filter((line) => line.kind === "d
 const changes = computed(() => added.value + removed.value > 0);
 
 /** What "Don't ask again" covers, in words: the harness's pattern, or the whole kind of thing. */
-const alwaysLabel = computed(() => {
-  const patterns = props.ask.always.filter((pattern) => pattern !== "*");
-  if (patterns.length > 0) return { lead: "Don't ask again for", code: patterns.join(", ") };
-  switch (props.ask.kind) {
-    case "edit": return { lead: "Don't ask again for file edits", code: null };
-    case "shell": return { lead: "Don't ask again for commands", code: null };
-    case "web": return { lead: "Don't ask again for web access", code: null };
-    default: return { lead: "Don't ask again for", code: props.ask.tool };
-  }
-});
+const alwaysLabel = computed(() => dontAskAgainWording(props.ask));
 
 // ── Answering ─────────────────────────────────────────────────────────────────
 
