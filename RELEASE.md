@@ -65,6 +65,14 @@ It then publishes a GitHub Release containing:
 - 4 platform archives (`.tar.gz` on Unix, `.zip` on Windows)
 - desktop installers: `Fleet-<version>-linux-x86_64.AppImage`, `Fleet-<version>-linux-amd64.deb`,
   `Fleet-<version>-mac-arm64.dmg` (and `.zip`), `Fleet-<version>-win-x64-setup.exe`, `Fleet-<version>-win-arm64-setup.exe`
+- on the `fleet-releases` mirror only, a copy of each installer without the version, with its own `.sha256`, so
+  these links always get the newest one (`scripts/add-unversioned-installers.sh`; the update feeds keep pointing at the
+  versioned files):
+  - `https://github.com/pgermishuys/fleet-releases/releases/latest/download/Fleet-mac-arm64.dmg`
+  - `https://github.com/pgermishuys/fleet-releases/releases/latest/download/Fleet-win-x64-setup.exe`
+  - `https://github.com/pgermishuys/fleet-releases/releases/latest/download/Fleet-win-arm64-setup.exe`
+  - `https://github.com/pgermishuys/fleet-releases/releases/latest/download/Fleet-linux-x86_64.AppImage`
+  - `https://github.com/pgermishuys/fleet-releases/releases/latest/download/Fleet-linux-amd64.deb`
 - the desktop app's update feed: `latest.yml` (Windows, x64 and arm64 merged), `latest-mac.yml`, `latest-linux.yml`,
   and `.blockmap` files for smaller downloads
 - per-asset `.sha256` files
