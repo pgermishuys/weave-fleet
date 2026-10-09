@@ -1,14 +1,8 @@
-using System.Diagnostics;
-using System.Collections.Concurrent;
-using System.Text.Json;
-using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Logging.Abstractions;
-using WeaveFleet.Application;
 using WeaveFleet.Application.Analytics;
 using WeaveFleet.Application.Browser;
 using WeaveFleet.Application.Configuration;
 using WeaveFleet.Application.Credentials;
-using WeaveFleet.Application.Diagnostics;
 using WeaveFleet.Application.DTOs;
 using WeaveFleet.Application.Events;
 using WeaveFleet.Application.Git;
@@ -26,17 +20,16 @@ using WeaveFleet.Application.Sessions.History;
 using WeaveFleet.Application.Sessions.Prompting;
 using WeaveFleet.Application.Sessions.Retention;
 using WeaveFleet.Application.Sessions.Shell;
+using WeaveFleet.Application.Sessions.Side;
 using WeaveFleet.Application.Sessions.Work;
 using WeaveFleet.Application.SessionSources;
 using WeaveFleet.Application.Terminals;
 using WeaveFleet.Application.Users;
 using WeaveFleet.Application.Workspaces;
 using WeaveFleet.Domain.Common;
-using WeaveFleet.Domain.DTOs;
 using WeaveFleet.Domain.Entities;
 using WeaveFleet.Domain.Events;
 using WeaveFleet.Domain.Harnesses;
-using WeaveFleet.Domain.Identity;
 using WeaveFleet.Domain.Repositories;
 
 namespace WeaveFleet.Application.Services;
@@ -45,7 +38,7 @@ namespace WeaveFleet.Application.Services;
 /// High-level coordinator for session lifecycle operations.
 /// Bridges workspace creation, harness spawning, DB persistence, and harness communication.
 /// </summary>
-public sealed partial class SessionOrchestrator(
+public sealed class SessionOrchestrator(
     WorkspaceService workspaceService,
     InstanceService instanceService,
     SessionSourceResolutionService sessionSourceResolutionService,
@@ -66,7 +59,6 @@ public sealed partial class SessionOrchestrator(
     FleetOptions options,
     ISmartLinkRepository smartLinkRepository,
     SessionActivityTracker sessionActivityTracker,
-    ILogger<SessionOrchestrator> logger,
     SessionActivityWriteService? sessionActivityWriteService = null,
     GitDiffService? gitDiffService = null,
     ISessionTerminalCleanup? sessionTerminals = null,
@@ -90,7 +82,8 @@ public sealed partial class SessionOrchestrator(
     SessionWork? sessionWork = null,
     SessionCreation? sessionCreation = null,
     SessionRetention? sessionRetention = null,
-    SessionForking? sessionForking = null) : ISessionActivator
+    SessionForking? sessionForking = null,
+    SessionSideConversations? sessionSideConversations = null) : ISessionActivator
 {
     private readonly DelegationService _delegationService = delegationService;
     private readonly SessionFiles _files = sessionFiles
@@ -110,6 +103,7 @@ public sealed partial class SessionOrchestrator(
     private SessionCreation? _creation;
     private SessionRetention? _retention;
     private SessionForking? _forking;
+    private SessionSideConversations? _sideConversations;
 
     private SessionActivation Activation => _activation ??= sessionActivation
         ?? new SessionActivation(
@@ -220,6 +214,20 @@ public sealed partial class SessionOrchestrator(
             NullLogger<SessionForking>.Instance,
             _gitDiffService);
 
+    private SessionSideConversations SideConversations => _sideConversations ??= sessionSideConversations
+        ?? new SessionSideConversations(
+            workspaceService,
+            harnessRegistry,
+            instanceTracker,
+            sessionRepository,
+            projectRepository,
+            eventBroadcaster,
+            analyticsCollector,
+            Prompting,
+            Forking,
+            Retention,
+            NullLogger<SessionSideConversations>.Instance);
+
     private sealed class NoOpUserPreferenceRepository : IUserPreferenceRepository
     {
         public Task<string?> GetAsync(string key) => Task.FromResult<string?>(null);
@@ -249,8 +257,7 @@ public sealed partial class SessionOrchestrator(
         IUserPreferenceRepository userPreferenceRepository,
         IUserContext userContext,
         FleetOptions options,
-        ISmartLinkRepository smartLinkRepository,
-        ILogger<SessionOrchestrator> logger)
+        ISmartLinkRepository smartLinkRepository)
         : this(
             workspaceService,
             instanceService,
@@ -272,7 +279,6 @@ public sealed partial class SessionOrchestrator(
             options,
             smartLinkRepository,
             new SessionActivityTracker(),
-            logger,
             sessionActivityWriteService: null)
     {
     }
@@ -295,8 +301,7 @@ public sealed partial class SessionOrchestrator(
         ICredentialStore credentialStore,
         IUserContext userContext,
         FleetOptions options,
-        ISmartLinkRepository smartLinkRepository,
-        ILogger<SessionOrchestrator> logger)
+        ISmartLinkRepository smartLinkRepository)
         : this(
             workspaceService,
             instanceService,
@@ -318,13 +323,10 @@ public sealed partial class SessionOrchestrator(
             options,
             smartLinkRepository,
             new SessionActivityTracker(),
-            logger,
             sessionActivityWriteService: null)
     {
     }
 
-    private const string _lifecycleStatusRunning = "running";
-    private const string _activityStatusIdle = "idle";
 
     // ── Create (SessionCreation) ───────────────────────────────────────────────
 
@@ -387,17 +389,6 @@ public sealed partial class SessionOrchestrator(
         CancellationToken ct = default)
         => Prompting.PromptSessionOnceAsync(id, text, options, ct);
 
-    private Task<Result<PromptSessionResult>> PromptSessionCoreAsync(
-        string id,
-        string text,
-        PromptOptions? options,
-        string? userMessageId,
-        string? correlationId,
-        bool saveUserMessage,
-        bool rememberChoices,
-        CancellationToken ct)
-        => Prompting.PromptSessionCoreAsync(id, text, options, userMessageId, correlationId, saveUserMessage, rememberChoices, ct);
-
     public Task<Result<ContextEnvelope>> PreviewAddSourceToSessionAsync(
         string sessionId,
         SessionSourceSelection source,
@@ -453,14 +444,54 @@ public sealed partial class SessionOrchestrator(
     public Task<Result<MessagePage>> GetSessionMessagesAsync(string id, MessageQuery? query = null, CancellationToken ct = default)
         => History.GetSessionMessagesAsync(id, query, ct);
 
+    // ── Side conversations (SessionSideConversations) ──────────────────────────
+
+    /// <inheritdoc cref="SessionSideConversations.GetSideConversationAsync"/>
+    public Task<Result<Session?>> GetSideConversationAsync(string sessionId)
+        => SideConversations.GetSideConversationAsync(sessionId);
+
+    /// <inheritdoc cref="SessionSideConversations.AskSideQuestionAsync"/>
+    public Task<Result<SideQuestionResult>> AskSideQuestionAsync(
+        string sessionId,
+        string? question,
+        PromptOptions? options,
+        string? correlationId,
+        CancellationToken ct = default)
+        => SideConversations.AskSideQuestionAsync(sessionId, question, options, correlationId, ct);
+
+    /// <inheritdoc cref="SessionSideConversations.CloseSideConversationAsync"/>
+    public Task<Result<Unit>> CloseSideConversationAsync(string sessionId, CancellationToken ct = default)
+        => SideConversations.CloseSideConversationAsync(sessionId, ct);
+
+    /// <inheritdoc cref="SessionSideConversations.RestoreSideConversationAsync"/>
+    public Task<Result<Session>> RestoreSideConversationAsync(string sessionId, CancellationToken ct = default)
+        => SideConversations.RestoreSideConversationAsync(sessionId, ct);
+
+    /// <inheritdoc cref="SessionSideConversations.GetUndoableSideConversationAsync"/>
+    public Task<Result<(Session SideConversation, TimeSpan UndoLeft)?>> GetUndoableSideConversationAsync(string sessionId)
+        => SideConversations.GetUndoableSideConversationAsync(sessionId);
+
+    /// <inheritdoc cref="SessionSideConversations.SetSideConversationSeenAsync"/>
+    public Task<Result<Session>> SetSideConversationSeenAsync(string sessionId, string? answerId)
+        => SideConversations.SetSideConversationSeenAsync(sessionId, answerId);
+
+    /// <inheritdoc cref="SessionSideConversations.SetSideConversationMinimizedAsync"/>
+    public Task<Result<Session>> SetSideConversationMinimizedAsync(string sessionId, bool minimized, CancellationToken ct = default)
+        => SideConversations.SetSideConversationMinimizedAsync(sessionId, minimized, ct);
+
+    /// <inheritdoc cref="SessionSideConversations.DeleteDiscardedSideConversationAsync"/>
+    public Task DeleteDiscardedSideConversationAsync(string sideSessionId, CancellationToken ct = default)
+        => SideConversations.DeleteDiscardedSideConversationAsync(sideSessionId, ct);
+
+    /// <inheritdoc cref="SessionSideConversations.KeepSideConversationAsync"/>
+    public Task<Result<Session>> KeepSideConversationAsync(string sessionId, CancellationToken ct = default)
+        => SideConversations.KeepSideConversationAsync(sessionId, ct);
+
     // ── Fork (SessionForking) ──────────────────────────────────────────────────
 
     /// <inheritdoc cref="SessionForking.ForkSessionAsync"/>
     public Task<Result<CreateSessionResult>> ForkSessionAsync(string parentId, string? title = null, CancellationToken ct = default)
         => Forking.ForkSessionAsync(parentId, title, ct);
-
-    private Task<Result<ForkedHarnessSession>> ForkHarnessSessionAsync(Session session, string forkSessionId, CancellationToken ct)
-        => Forking.ForkHarnessSessionAsync(session, forkSessionId, ct);
 
     // ── Archive, restore, delete (SessionRetention) ────────────────────────────
 
@@ -473,9 +504,6 @@ public sealed partial class SessionOrchestrator(
 
     public Task<Result<Unit>> DeleteSessionAsync(string id, CancellationToken ct = default)
         => Retention.DeleteSessionAsync(id, ct);
-
-    private Task DiscardSideConversationAsync(Session side, CancellationToken ct)
-        => Retention.DiscardSideConversationAsync(side, ct);
 
     // ── Compaction, shell commands, work (SessionCompaction, SessionShellCommands, SessionWork) ──
 
@@ -494,9 +522,6 @@ public sealed partial class SessionOrchestrator(
     /// <inheritdoc cref="SessionWork.ReadWorkOutputAsync"/>
     public Task<Result<WorkOutput>> ReadWorkOutputAsync(string sessionId, string itemId, long offset, CancellationToken ct = default)
         => Work.ReadWorkOutputAsync(sessionId, itemId, offset, ct);
-
-    private string HarnessDisplayName(Session session)
-        => harnessRegistry.GetByType(session.HarnessType)?.DisplayName ?? session.HarnessType;
 
     // ── Files (SessionFiles) ───────────────────────────────────────────────────
 
@@ -534,51 +559,6 @@ public sealed partial class SessionOrchestrator(
     /// <inheritdoc />
     public Task<Result<IHarnessSession>> ActivateSessionAsync(string sessionId, CancellationToken ct = default)
         => Activation.ActivateSessionAsync(sessionId, ct);
-
-    private Task<Result<IHarnessSession>> GetOrActivateInstanceAsync(Session session, CancellationToken ct)
-        => Activation.GetOrActivateInstanceAsync(session, ct);
-
-    private Task<Result<HarnessProfile?>> ResolveSessionProfileAsync(string? profileId)
-        => Activation.ResolveSessionProfileAsync(profileId);
-
-    // ── Private helpers ────────────────────────────────────────────────────────
-
-    private async Task<Result<Session>> GetSessionAsync(string sessionId)
-    {
-        var session = await sessionRepository.GetByIdAsync(sessionId);
-        if (session is null)
-            return FleetError.NotFoundFor(nameof(Session), sessionId);
-
-        return session;
-    }
-
-    private async Task SafeDeleteAsync(IHarnessSession instance, CancellationToken ct)
-    {
-        try { await instance.DeleteAsync(ct); }
-        catch (Exception ex) { LogStopFailed(ex, instance.InstanceId); }
-    }
-
-    [LoggerMessage(Level = LogLevel.Warning, Message = "Failed to stop instance {InstanceId}")]
-    private partial void LogStopFailed(Exception ex, string instanceId);
-
-    [LoggerMessage(Level = LogLevel.Error,
-        Message = "Failed to retrieve messages for session {SessionId} — returning error result")]
-    private partial void LogGetMessagesFailed(Exception ex, string sessionId);
-
-    private async Task<string?> ResolveProjectNameAsync(string? projectId)
-    {
-        if (projectId is null)
-            return null;
-
-        var projects = await projectRepository.ListAsync();
-        return projects.FirstOrDefault(p => p.Id == projectId)?.Name;
-    }
-
-    private IDisposable? BeginSessionScope(string sessionId)
-    {
-        Activity.Current?.SetTag(FleetInstrumentation.SessionIdTag, sessionId);
-        return logger.BeginScope(new Dictionary<string, object> { [FleetInstrumentation.SessionIdTag] = sessionId });
-    }
 
 }
 
