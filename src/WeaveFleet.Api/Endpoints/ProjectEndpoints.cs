@@ -1,6 +1,6 @@
 using WeaveFleet.Api;
 using WeaveFleet.Application.DTOs;
-using WeaveFleet.Application.Services;
+using WeaveFleet.Application.Workspaces;
 using WeaveFleet.Domain.Repositories;
 
 namespace WeaveFleet.Api.Endpoints;

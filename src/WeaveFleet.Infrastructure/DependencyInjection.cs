@@ -22,6 +22,7 @@ using WeaveFleet.Application.SessionSources;
 using WeaveFleet.Application.Skills;
 using WeaveFleet.Application.Terminals;
 using WeaveFleet.Application.Tools;
+using WeaveFleet.Application.Workspaces;
 using WeaveFleet.Domain.Repositories;
 using WeaveFleet.Infrastructure.Analytics;
 using WeaveFleet.Infrastructure.Automations;
@@ -180,7 +181,7 @@ public static class DependencyInjection
         services.AddScoped<ProjectService>();
         services.AddScoped<SessionService>();
         services.AddScoped<WeaveFleet.Application.Progress.SessionProgressReader>();
-        services.AddScoped<WeaveFleet.Application.Services.Worktrees.WorktreeNamingService>();
+        services.AddScoped<WeaveFleet.Application.Workspaces.Worktrees.WorktreeNamingService>();
         services.AddScoped<WorkspaceService>();
         services.AddScoped<WorkspaceRootService>();
         services.AddScoped<InstanceService>();

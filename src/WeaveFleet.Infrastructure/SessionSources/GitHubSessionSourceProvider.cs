@@ -4,6 +4,7 @@ using System.Text.Json;
 using System.Text.Json.Nodes;
 using WeaveFleet.Application.Services;
 using WeaveFleet.Application.SessionSources;
+using WeaveFleet.Application.Workspaces;
 using WeaveFleet.Domain.Common;
 using WeaveFleet.Infrastructure.GitHub;
 

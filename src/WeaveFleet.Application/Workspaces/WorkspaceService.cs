@@ -2,13 +2,14 @@ using System.Text.RegularExpressions;
 using Microsoft.Extensions.Logging;
 using WeaveFleet.Application.Configuration;
 using WeaveFleet.Application.Git;
-using WeaveFleet.Application.Services.Worktrees;
+using WeaveFleet.Application.Services;
 using WeaveFleet.Application.SessionSources;
+using WeaveFleet.Application.Workspaces.Worktrees;
 using WeaveFleet.Domain.Common;
 using WeaveFleet.Domain.Entities;
 using WeaveFleet.Domain.Repositories;
 
-namespace WeaveFleet.Application.Services;
+namespace WeaveFleet.Application.Workspaces;
 
 /// <summary>
 /// Manages workspace lifecycle — creation with isolation strategies, cleanup, and metadata updates.

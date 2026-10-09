@@ -1,6 +1,6 @@
 using System.Text.Json;
-using WeaveFleet.Application.Services;
 using WeaveFleet.Application.SessionSources;
+using WeaveFleet.Application.Workspaces;
 using WeaveFleet.Domain.Common;
 
 namespace WeaveFleet.Infrastructure.SessionSources;

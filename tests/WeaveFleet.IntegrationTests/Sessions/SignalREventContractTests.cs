@@ -15,6 +15,7 @@ using WeaveFleet.Application.Data;
 using WeaveFleet.Application.Events;
 using WeaveFleet.Application.Harnesses;
 using WeaveFleet.Application.Services;
+using WeaveFleet.Application.Workspaces;
 using WeaveFleet.Domain.DTOs;
 using WeaveFleet.Domain.Events;
 using WeaveFleet.Domain.Harnesses;

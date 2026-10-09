@@ -1,6 +1,6 @@
 using System.Text.RegularExpressions;
 
-namespace WeaveFleet.Application.Services.Worktrees;
+namespace WeaveFleet.Application.Workspaces.Worktrees;
 
 /// <summary>
 /// Resolves the worktree naming templates. Pure: the same inputs always give the same names, so

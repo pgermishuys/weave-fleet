@@ -4,7 +4,7 @@ using Microsoft.Extensions.Logging;
 using WeaveFleet.Domain.Common;
 using WeaveFleet.Domain.Repositories;
 
-namespace WeaveFleet.Application.Services.Worktrees;
+namespace WeaveFleet.Application.Workspaces.Worktrees;
 
 /// <summary>
 /// The worktree naming templates in force: Fleet's defaults, then the user's settings, then the

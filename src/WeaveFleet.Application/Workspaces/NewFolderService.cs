@@ -3,9 +3,10 @@ using System.Text.RegularExpressions;
 using Microsoft.Extensions.Logging;
 using WeaveFleet.Application.Configuration;
 using WeaveFleet.Application.Git;
+using WeaveFleet.Application.Services;
 using WeaveFleet.Domain.Common;
 
-namespace WeaveFleet.Application.Services;
+namespace WeaveFleet.Application.Workspaces;
 
 /// <summary>
 /// Makes a folder to start a session in, from the new-session Folder menu: an empty folder, a git

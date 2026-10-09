@@ -6,6 +6,7 @@ using WeaveFleet.Application.Git;
 using WeaveFleet.Application.Harnesses;
 using WeaveFleet.Application.Services;
 using WeaveFleet.Application.SessionSources;
+using WeaveFleet.Application.Workspaces;
 using WeaveFleet.Domain.Common;
 using WeaveFleet.Domain.Entities;
 using WeaveFleet.Domain.Harnesses;
@@ -1902,11 +1903,11 @@ public sealed class SessionOrchestratorTests : IAsyncDisposable
         var userContext = new TestUserContext("user-1");
         var options = new FleetOptions();
         var workspaceRootService = new WorkspaceRootService(_builder.WorkspaceRootRepository, userContext);
-        var workspaceService = new WeaveFleet.Application.Services.WorkspaceService(
+        var workspaceService = new WeaveFleet.Application.Workspaces.WorkspaceService(
             _builder.WorkspaceRepository,
             userContext,
             options,
-            Microsoft.Extensions.Logging.Abstractions.NullLogger<WeaveFleet.Application.Services.WorkspaceService>.Instance);
+            Microsoft.Extensions.Logging.Abstractions.NullLogger<WeaveFleet.Application.Workspaces.WorkspaceService>.Instance);
         var instanceService = new InstanceService(_builder.InstanceRepository, _builder.SessionRepository, userContext);
         var sessionSourceResolutionService = new SessionSourceResolutionService([
             new LocalDirectorySessionSourceProvider(workspaceRootService),

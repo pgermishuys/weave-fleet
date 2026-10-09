@@ -1,6 +1,6 @@
 using System.Text.Json.Nodes;
 using Shouldly;
-using WeaveFleet.Application.Services.Worktrees;
+using WeaveFleet.Application.Workspaces.Worktrees;
 
 namespace WeaveFleet.Application.Tests.Services.Worktrees;
 

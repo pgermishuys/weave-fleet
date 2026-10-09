@@ -4,7 +4,7 @@ using Microsoft.Extensions.Logging;
 using WeaveFleet.Application.Git;
 using WeaveFleet.Domain.Common;
 
-namespace WeaveFleet.Application.Services;
+namespace WeaveFleet.Application.Workspaces;
 
 /// <summary>
 /// Scans workspace roots for git repositories and provides repository metadata.

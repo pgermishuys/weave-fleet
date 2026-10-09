@@ -4,7 +4,7 @@ using System.Text.Json;
 using Microsoft.Extensions.DependencyInjection;
 using WeaveFleet.Api.Endpoints;
 using WeaveFleet.Api.Tests.Infrastructure;
-using WeaveFleet.Application.Services;
+using WeaveFleet.Application.Workspaces;
 
 namespace WeaveFleet.Api.Tests.Endpoints;
 

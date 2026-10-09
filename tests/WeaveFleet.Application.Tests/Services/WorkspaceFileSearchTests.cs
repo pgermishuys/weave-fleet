@@ -1,6 +1,6 @@
 using Microsoft.Extensions.Time.Testing;
 using Shouldly;
-using WeaveFleet.Application.Services;
+using WeaveFleet.Application.Workspaces;
 using WeaveFleet.Testing.Fixtures;
 
 namespace WeaveFleet.Application.Tests.Services;

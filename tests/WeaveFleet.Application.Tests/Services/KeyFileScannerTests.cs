@@ -1,5 +1,5 @@
 using Shouldly;
-using WeaveFleet.Application.Services;
+using WeaveFleet.Application.Workspaces;
 
 namespace WeaveFleet.Application.Tests.Services;
 

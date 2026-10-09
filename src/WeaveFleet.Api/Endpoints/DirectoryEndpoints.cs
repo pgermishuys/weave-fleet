@@ -1,7 +1,7 @@
 using System.Text;
 using System.Text.Json;
 using System.Threading.Channels;
-using WeaveFleet.Application.Services;
+using WeaveFleet.Application.Workspaces;
 
 namespace WeaveFleet.Api.Endpoints;
 

@@ -27,6 +27,7 @@ using WeaveFleet.Api.Telemetry;
 using WeaveFleet.Application.Configuration;
 using WeaveFleet.Application.Diagnostics;
 using WeaveFleet.Application.Services;
+using WeaveFleet.Application.Workspaces;
 using WeaveFleet.Domain.Repositories;
 using WeaveFleet.Infrastructure;
 using WeaveFleet.Infrastructure.Data;
@@ -162,8 +163,8 @@ builder.AddFleetTelemetry();
 builder.AddFleetDiagnosticLogging();
 builder.Services.AddSingleton<WeaveFleet.Application.Services.ToolDetector>();
 builder.Services.AddSingleton<WeaveFleet.Api.Browser.PreviewGateway>();
-builder.Services.AddSingleton(_ => WeaveFleet.Application.Services.KeyFileConfig.Load());
-builder.Services.AddSingleton<WeaveFleet.Application.Services.KeyFileScanner>();
+builder.Services.AddSingleton(_ => WeaveFleet.Application.Workspaces.KeyFileConfig.Load());
+builder.Services.AddSingleton<WeaveFleet.Application.Workspaces.KeyFileScanner>();
 builder.Services.AddSingleton<WeaveFleet.Application.Services.ILocalFleetUrl, WeaveFleet.Api.LocalFleetUrl>();
 if (fleetOptions.Desktop.Enabled)
 {

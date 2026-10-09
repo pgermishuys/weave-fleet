@@ -1,5 +1,5 @@
-using WeaveFleet.Application.Services;
-using WeaveFleet.Application.Services.Worktrees;
+using WeaveFleet.Application.Workspaces;
+using WeaveFleet.Application.Workspaces.Worktrees;
 
 namespace WeaveFleet.Api.Endpoints;
 

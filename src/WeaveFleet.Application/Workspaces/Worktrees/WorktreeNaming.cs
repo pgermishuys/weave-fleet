@@ -1,6 +1,6 @@
 using WeaveFleet.Domain.Common;
 
-namespace WeaveFleet.Application.Services.Worktrees;
+namespace WeaveFleet.Application.Workspaces.Worktrees;
 
 /// <summary>The templates that name a new worktree's branch and folder.</summary>
 public sealed record WorktreeNaming
