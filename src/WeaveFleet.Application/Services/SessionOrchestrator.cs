@@ -18,9 +18,12 @@ using WeaveFleet.Application.Sessions;
 using WeaveFleet.Application.Sessions.Activation;
 using WeaveFleet.Application.Sessions.Asks;
 using WeaveFleet.Application.Sessions.Catalog;
+using WeaveFleet.Application.Sessions.Compaction;
 using WeaveFleet.Application.Sessions.Files;
 using WeaveFleet.Application.Sessions.History;
 using WeaveFleet.Application.Sessions.Prompting;
+using WeaveFleet.Application.Sessions.Shell;
+using WeaveFleet.Application.Sessions.Work;
 using WeaveFleet.Application.SessionSources;
 using WeaveFleet.Application.Terminals;
 using WeaveFleet.Application.Users;
@@ -28,6 +31,7 @@ using WeaveFleet.Application.Workspaces;
 using WeaveFleet.Domain.Common;
 using WeaveFleet.Domain.DTOs;
 using WeaveFleet.Domain.Entities;
+using WeaveFleet.Domain.Events;
 using WeaveFleet.Domain.Harnesses;
 using WeaveFleet.Domain.Identity;
 using WeaveFleet.Domain.Repositories;
@@ -77,7 +81,10 @@ public sealed partial class SessionOrchestrator(
     SessionPrompting? sessionPrompting = null,
     SessionAsks? sessionAsks = null,
     SessionCatalog? sessionCatalog = null,
-    SessionHistory? sessionHistory = null) : ISessionActivator
+    SessionHistory? sessionHistory = null,
+    SessionCompaction? sessionCompaction = null,
+    SessionShellCommands? sessionShellCommands = null,
+    SessionWork? sessionWork = null) : ISessionActivator
 {
     private readonly DelegationService _delegationService = delegationService;
     private readonly SessionFiles _files = sessionFiles
@@ -92,6 +99,9 @@ public sealed partial class SessionOrchestrator(
     private SessionAsks? _asks;
     private SessionCatalog? _catalog;
     private SessionHistory? _history;
+    private SessionCompaction? _compaction;
+    private SessionShellCommands? _shellCommands;
+    private SessionWork? _work;
 
     private SessionActivation Activation => _activation ??= sessionActivation
         ?? new SessionActivation(
@@ -132,6 +142,15 @@ public sealed partial class SessionOrchestrator(
 
     private SessionHistory History => _history ??= sessionHistory
         ?? new SessionHistory(sessionRepository, sessionMessageProxy, options, NullLogger<SessionHistory>.Instance);
+
+    private SessionCompaction Compaction => _compaction ??= sessionCompaction
+        ?? new SessionCompaction(sessionRepository, harnessRegistry, sessionActivityTracker, Activation, NullLogger<SessionCompaction>.Instance);
+
+    private SessionShellCommands ShellCommands => _shellCommands ??= sessionShellCommands
+        ?? new SessionShellCommands(sessionRepository, harnessRegistry, Activation, NullLogger<SessionShellCommands>.Instance);
+
+    private SessionWork Work => _work ??= sessionWork
+        ?? new SessionWork(sessionRepository, instanceTracker, _delegationService);
 
     private sealed class NoOpUserPreferenceRepository : IUserPreferenceRepository
     {
@@ -1357,6 +1376,27 @@ public sealed partial class SessionOrchestrator(
 
     private static bool HasModel(string? providerId, string? modelId)
         => !string.IsNullOrWhiteSpace(providerId) && !string.IsNullOrWhiteSpace(modelId);
+
+    // ── Compaction, shell commands, work (SessionCompaction, SessionShellCommands, SessionWork) ──
+
+    /// <inheritdoc cref="SessionCompaction.CompactAsync"/>
+    public Task<Result<Unit>> CompactAsync(string id, CancellationToken ct = default)
+        => Compaction.CompactAsync(id, ct);
+
+    /// <inheritdoc cref="SessionShellCommands.RunShellCommandAsync"/>
+    public Task<Result<Unit>> RunShellCommandAsync(string id, string? command, CancellationToken ct = default)
+        => ShellCommands.RunShellCommandAsync(id, command, ct);
+
+    /// <inheritdoc cref="SessionWork.StopWorkAsync"/>
+    public Task<Result<RunningWorkItem>> StopWorkAsync(string sessionId, string itemId, CancellationToken ct = default)
+        => Work.StopWorkAsync(sessionId, itemId, ct);
+
+    /// <inheritdoc cref="SessionWork.ReadWorkOutputAsync"/>
+    public Task<Result<WorkOutput>> ReadWorkOutputAsync(string sessionId, string itemId, long offset, CancellationToken ct = default)
+        => Work.ReadWorkOutputAsync(sessionId, itemId, offset, ct);
+
+    private string HarnessDisplayName(Session session)
+        => harnessRegistry.GetByType(session.HarnessType)?.DisplayName ?? session.HarnessType;
 
     // ── Files (SessionFiles) ───────────────────────────────────────────────────
 

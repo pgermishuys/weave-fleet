@@ -1,14 +1,24 @@
 using Microsoft.Extensions.Logging;
+using WeaveFleet.Application.Harnesses;
+using WeaveFleet.Application.Services;
+using WeaveFleet.Application.Sessions.Activation;
+using WeaveFleet.Application.Sessions.Prompting;
 using WeaveFleet.Domain.Common;
 using WeaveFleet.Domain.Harnesses;
+using WeaveFleet.Domain.Repositories;
 
-namespace WeaveFleet.Application.Services;
+namespace WeaveFleet.Application.Sessions.Compaction;
 
 /// <summary>
 /// Compact now: the harness summarises the session's conversation so the agent can carry on in a smaller context.
 /// Gated as a prompt is (the caller's own session, not archived), and only between turns.
 /// </summary>
-public sealed partial class SessionOrchestrator
+public sealed partial class SessionCompaction(
+    ISessionRepository sessionRepository,
+    IHarnessRegistry harnessRegistry,
+    SessionActivityTracker sessionActivityTracker,
+    SessionActivation activation,
+    ILogger<SessionCompaction> logger)
 {
     /// <summary>
     /// Asks the session's harness to compact its context. Returns once the harness has taken the request; the
@@ -16,8 +26,8 @@ public sealed partial class SessionOrchestrator
     /// </summary>
     public async Task<Result<Unit>> CompactAsync(string id, CancellationToken ct = default)
     {
-        using var _ = BeginSessionScope(id);
-        var sessionResult = await GetSessionAsync(id);
+        using var _ = logger.BeginSessionScope(id);
+        var sessionResult = await sessionRepository.GetSessionAsync(id);
         if (sessionResult.IsFailure)
             return sessionResult.Error;
 
@@ -31,16 +41,16 @@ public sealed partial class SessionOrchestrator
         if (SessionActivityTracker.IsInTurn(sessionActivityTracker.GetEffectiveActivityStatus(id)))
             return new FleetError("General.Conflict", "Wait for the agent to finish its turn, then compact.");
 
-        var instanceResult = await GetOrActivateInstanceAsync(session, ct).ConfigureAwait(false);
+        var instanceResult = await activation.GetOrActivateInstanceAsync(session, ct).ConfigureAwait(false);
         if (instanceResult.IsFailure)
             return instanceResult.Error;
 
         try
         {
             // The compaction's end arrives as events, so the subscription has to be up before it starts.
-            await EnsureEventSubscriptionReadyAsync(instanceResult.Value, id, ct).ConfigureAwait(false);
+            await activation.EnsureEventSubscriptionReadyAsync(instanceResult.Value, id, ct).ConfigureAwait(false);
 
-            var choices = WithSessionChoices(options: null, session);
+            var choices = SessionPrompting.WithSessionChoices(options: null, session);
             await instanceResult.Value.CompactAsync(
                 new CompactOptions { ProviderId = choices?.ProviderId, ModelId = choices?.ModelId },
                 ct).ConfigureAwait(false);
