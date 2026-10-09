@@ -7,6 +7,7 @@ import { clearDiffBaseCache } from "@/composables/use-diff-base";
 import { useDraftState } from "@/composables/use-draft-state";
 import { useCanvasesStore, type FileView } from "@/stores/canvases";
 import { useFileBuffersStore } from "@/stores/file-buffers";
+import { useGoToFileStore } from "@/stores/go-to-file";
 
 const FileCanvas = FileCanvasComponent as unknown as DefineComponent<{ sessionId: string; path: string; view: FileView }>;
 
@@ -105,6 +106,36 @@ describe("FileCanvas", () => {
     expect(editor().state.doc.toString()).toBe("const one = 1;\n");
     expect(wrapper.find('[data-testid="file-state"]').exists()).toBe(false);
     expect(wrapper.get(".file-canvas__crumb-file").text()).toBe("app.ts");
+    wrapper.unmount();
+  });
+
+  it("opens at the line a message named, with the cursor there", async () => {
+    readSessionFileMock.mockResolvedValue(file("one\ntwo\nthree\nfour\n"));
+    useGoToFileStore().focusOnOpen = { sessionId: "s1", path: "src/app.ts", line: 3 };
+    const wrapper = await mountCanvas();
+
+    const view = editor();
+    expect(view.state.selection.main.head).toBe(view.state.doc.line(3).from);
+    expect(useGoToFileStore().focusOnOpen).toBeNull();
+    wrapper.unmount();
+  });
+
+  it("moves an open file to another line a message named, or its last line when past the end", async () => {
+    readSessionFileMock.mockResolvedValue(file("one\ntwo\nthree\nfour"));
+    const wrapper = await mountCanvas();
+    const view = editor();
+
+    useGoToFileStore().focusOnOpen = { sessionId: "s1", path: "src/app.ts", line: 2 };
+    await flushPromises();
+    expect(view.state.selection.main.head).toBe(view.state.doc.line(2).from);
+
+    useGoToFileStore().focusOnOpen = { sessionId: "s1", path: "src/app.ts", line: 40 };
+    await flushPromises();
+    expect(view.state.selection.main.head).toBe(view.state.doc.line(4).from);
+
+    useGoToFileStore().focusOnOpen = { sessionId: "s1", path: "src/other.ts", line: 1 };
+    await flushPromises();
+    expect(view.state.selection.main.head).toBe(view.state.doc.line(4).from);
     wrapper.unmount();
   });
 

@@ -136,9 +136,16 @@ async function attach(): Promise<void> {
   focusIfPicked();
 }
 
-/** A file picked in Go to file takes the keyboard straight away. */
+/** A file picked in Go to file, or opened at a line from a message, takes the keyboard straight away. */
 function focusIfPicked(): void {
-  if (editor && goToFile.takeFocus(props.sessionId, props.path)) editor.focus();
+  const picked = editor ? goToFile.takeFocus(props.sessionId, props.path) : null;
+  if (!editor || !picked) return;
+  if (picked.line) {
+    const doc = editor.state.doc;
+    const line = doc.line(Math.min(picked.line, doc.lines));
+    editor.dispatch({ selection: { anchor: line.from }, effects: EditorView.scrollIntoView(line.from, { y: "center" }) });
+  }
+  editor.focus();
 }
 
 /** The merge view the editor should show: Compare while comparing, Diff in Diff, else none. */
@@ -161,6 +168,8 @@ watch([view, comparing, () => conflict.value?.hash, gitBase], () => {
   refreshStripe();
 });
 watch(gitBase, refreshStripe);
+// A file that's open already, opened again at a line. After the render, so a kept-alive tab is back on the page.
+watch(() => goToFile.focusOnOpen, focusIfPicked, { flush: "post" });
 watch(() => info.value?.status, (status) => {
   if (status === "ready") void attach();
 });

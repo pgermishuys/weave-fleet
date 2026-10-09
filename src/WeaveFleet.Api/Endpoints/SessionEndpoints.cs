@@ -1011,6 +1011,19 @@ public static class SessionEndpoints
         .Produces(400)
         .WithName("GetSessionImage");
 
+        // POST /api/sessions/{id}/files/resolve — which paths named in a reply are files in the session's folder.
+        group.MapPost("/{id}/files/resolve", async (string id, ResolveSessionFilesRequest req, SessionOrchestrator orchestrator, CancellationToken ct) =>
+        {
+            var result = await orchestrator.ResolveSessionFilesAsync(id, req.Paths ?? [], ct);
+            return result.Match(
+                files => Results.Ok(new ResolveSessionFilesResponse(
+                    files.Select(f => new ResolvedSessionFileDto(f.Path, f.RelativePath)).ToList())),
+                err => err.ToSessionApiResult());
+        })
+        .Produces<ResolveSessionFilesResponse>(200)
+        .Produces(404)
+        .WithName("ResolveSessionFiles");
+
         // PUT /api/sessions/{id}/files/content — save a file from the editor. 409 when the file changed since it was read.
         group.MapPut("/{id}/files/content", async (string id, WriteSessionFileRequest req, SessionOrchestrator orchestrator, CancellationToken ct) =>
         {
@@ -1643,6 +1656,16 @@ internal sealed record ReadSessionFileResponse(
     bool IsBinary,
     bool IsTruncated,
     string? Hash);
+
+// ── Resolve file types ─────────────────────────────────────────────────────────
+
+internal sealed record ResolveSessionFilesRequest(IReadOnlyList<string>? Paths);
+
+internal sealed record ResolveSessionFilesResponse(IReadOnlyList<ResolvedSessionFileDto> Files);
+
+/// <param name="Path">The path as it was asked for.</param>
+/// <param name="RelativePath">The file's path from the session's folder, with <c>/</c> between names.</param>
+internal sealed record ResolvedSessionFileDto(string Path, string RelativePath);
 
 // ── Write file types ───────────────────────────────────────────────────────────
 

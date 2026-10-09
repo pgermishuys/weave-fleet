@@ -15,6 +15,7 @@ import shell from "highlight.js/lib/languages/shell";
 import typescript from "highlight.js/lib/languages/typescript";
 import xml from "highlight.js/lib/languages/xml";
 import yaml from "highlight.js/lib/languages/yaml";
+import { bareFileNamesAreText, fileReferences } from "@/lib/file-references";
 
 hljs.registerLanguage("bash", bash);
 hljs.registerLanguage("csharp", csharp);
@@ -107,5 +108,5 @@ export function createMarkdownRenderer(): MarkdownIt {
 
       return `<pre class="hljs"><code>${escapeHtml(code)}</code></pre>`;
     },
-  }).use(taskLists);
+  }).use(taskLists).use(bareFileNamesAreText).use(fileReferences);
 }

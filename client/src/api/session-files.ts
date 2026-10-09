@@ -92,3 +92,27 @@ export async function writeSessionFile(
 
   return { saved: true, hash: data.hash };
 }
+
+/**
+ * Which of `paths` are files in the session's folder, as paths from the folder. Paths that are missing, outside the
+ * folder or not files are left out.
+ *
+ * @returns Each file found, keyed by the path as it was asked for
+ * @throws Error if the request fails
+ */
+export async function resolveSessionFiles(
+  machine: MachineTarget,
+  sessionId: string,
+  paths: readonly string[],
+): Promise<Map<string, string>> {
+  const { data, error, response } = await machine.api.POST("/api/sessions/{id}/files/resolve", {
+    params: { path: { id: sessionId } },
+    body: { paths: [...paths] },
+  });
+
+  if (error || !data) {
+    throw new Error(`Failed to resolve files: ${response.status} ${response.statusText}`);
+  }
+
+  return new Map(data.files.map((file) => [file.path, file.relativePath]));
+}
