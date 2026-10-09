@@ -5,7 +5,7 @@ using Microsoft.AspNetCore.Mvc.Testing;
 using Microsoft.AspNetCore.TestHost;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Hosting;
-using WeaveFleet.Infrastructure.Services;
+using WeaveFleet.Infrastructure.Harnesses.OpenCode;
 
 namespace WeaveFleet.IntegrationTests.Harnesses.OpenCode;
 

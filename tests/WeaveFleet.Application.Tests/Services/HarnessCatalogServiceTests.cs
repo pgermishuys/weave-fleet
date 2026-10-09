@@ -1,6 +1,6 @@
 using Microsoft.Extensions.Logging.Abstractions;
 using WeaveFleet.Application.Configuration;
-using WeaveFleet.Application.Services;
+using WeaveFleet.Application.Harnesses;
 using WeaveFleet.Domain.Entities;
 using WeaveFleet.Domain.Harnesses;
 using WeaveFleet.Testing.Fakes;

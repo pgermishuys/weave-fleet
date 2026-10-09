@@ -2,9 +2,10 @@ using System.Text.Json;
 using Microsoft.Extensions.Logging;
 using WeaveFleet.Application.Configuration;
 using WeaveFleet.Application.Harnesses;
+using WeaveFleet.Application.Services;
 using WeaveFleet.Domain.Common;
 
-namespace WeaveFleet.Application.Services;
+namespace WeaveFleet.Application.Harnesses;
 
 /// <summary>
 /// Signs the user in to a harness's providers from Settings, through the harness's own sign-in
