@@ -136,29 +136,6 @@ public sealed partial class SessionOrchestrator
     }
 
     /// <summary>
-    /// Starts a new, empty session in session <paramref name="sessionId"/>'s folder, on the same harness and profile: what
-    /// Fork did before it copied the conversation. Any harness can.
-    /// </summary>
-    public async Task<Result<CreateSessionResult>> StartSessionInFolderOfAsync(string sessionId, CancellationToken ct = default)
-    {
-        var session = await sessionRepository.GetByIdAsync(sessionId).ConfigureAwait(false);
-        if (session is null)
-            return FleetError.NotFoundFor(nameof(Session), sessionId);
-
-        return await CreateSessionAsync(new CreateSessionRequest
-        {
-            Directory = session.Directory,
-            ProjectId = session.ProjectId,
-            HarnessType = session.HarnessType,
-            // The session's profile, including none: without the id it would get the default.
-            HarnessProfileId = session.HarnessProfileId ?? HarnessProfileService.NoProfile,
-            IsolationStrategy = "existing",
-            // The folder is a session's, not one the caller named (see the cloud-mode check).
-            IsInternalRequest = true,
-        }, ct).ConfigureAwait(false);
-    }
-
-    /// <summary>
     /// Forks <paramref name="session"/>'s harness session at its last finished turn and attaches the copy as Fleet session
     /// <paramref name="forkSessionId"/>, on the harness process the session runs on. The instance isn't registered with
     /// the tracker: the caller does that once the Fleet session is saved.
