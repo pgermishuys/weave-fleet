@@ -29,8 +29,10 @@ public sealed class RemoteAutomationRunsTests : IAsyncDisposable
             Id = "s1", InstanceId = "inst-1", Title = "Mine", Status = "active", Directory = "/tmp",
             CreatedAt = "2026-01-01", RetentionStatus = "active", HarnessType = "opencode",
         });
+        _builder.Build();
         _sut = new AutomationExecutionService(
-            _builder.Build(),
+            _builder.Creation,
+            _builder.Prompting,
             _builder.SessionRepository,
             NullLogger<AutomationExecutionService>.Instance,
             _atlas.Runs);

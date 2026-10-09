@@ -4,6 +4,7 @@ using Microsoft.Extensions.Logging;
 using WeaveFleet.Application.Events;
 using WeaveFleet.Application.Machines;
 using WeaveFleet.Application.Services;
+using WeaveFleet.Application.Sessions.Prompting;
 using WeaveFleet.Application.Users;
 using WeaveFleet.Domain.Events;
 using WeaveFleet.Domain.Harnesses;
@@ -303,7 +304,7 @@ public sealed class SessionUpdateSender(
     SessionMessagesFeature feature,
     ISessionRepository sessions,
     ISessionMessageProxy messages,
-    SessionOrchestrator orchestrator,
+    SessionPrompting prompting,
     IEventBroadcaster broadcaster,
     RemoteSessions remote) : ISessionUpdateSender
 {
@@ -371,7 +372,7 @@ public sealed class SessionUpdateSender(
         if (!await feature.IsEnabledAsync().ConfigureAwait(false))
             return false;
 
-        var sent = await orchestrator.PromptSessionWithReceiptAsync(
+        var sent = await prompting.PromptSessionWithReceiptAsync(
                 update.AskerId,
                 update.Text,
                 options: null,

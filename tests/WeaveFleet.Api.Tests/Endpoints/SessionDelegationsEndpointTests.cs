@@ -30,10 +30,11 @@ public sealed class SessionDelegationsEndpointTests
         });
 
         var builder = new SessionOrchestratorBuilder();
+        builder.Build();
         var sessionService = new SessionService(
             sessionRepo,
             new InMemoryProjectRepository(),
-            builder.Build(),
+            builder.Retention,
             builder.ActivityTracker);
 
         var delegationRepo = new InMemoryDelegationRepository();
@@ -65,10 +66,11 @@ public sealed class SessionDelegationsEndpointTests
     public async Task GetSessionDelegations_WhenSessionMissing_ReturnsNotFound()
     {
         var builder = new SessionOrchestratorBuilder();
+        builder.Build();
         var sessionService = new SessionService(
             new InMemorySessionRepository(),
             new InMemoryProjectRepository(),
-            builder.Build(),
+            builder.Retention,
             builder.ActivityTracker);
 
         var delegationService = new DelegationService(

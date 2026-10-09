@@ -51,7 +51,8 @@ public sealed class MachineHandoffBridgeTests : IDisposable
             Id = Sender, Title = "Fix login flake", Status = "active", Directory = "/tmp", CreatedAt = "2026-10-08",
             RetentionStatus = "active", HarnessType = "opencode",
         });
-        var sessions = new SessionService(builder.SessionRepository, builder.ProjectRepository, builder.Build(), builder.ActivityTracker);
+        builder.Build();
+        var sessions = new SessionService(builder.SessionRepository, builder.ProjectRepository, builder.Retention, builder.ActivityTracker);
         var options = new FleetOptions();
         _watches = new SessionUpdates(
             new SessionActivityTracker(),

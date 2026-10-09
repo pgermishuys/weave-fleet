@@ -6,6 +6,7 @@ using WeaveFleet.Application.DTOs;
 using WeaveFleet.Application.Events;
 using WeaveFleet.Application.Machines;
 using WeaveFleet.Application.Services;
+using WeaveFleet.Application.Sessions.Prompting;
 using WeaveFleet.Application.Users;
 using WeaveFleet.Domain.Common;
 using WeaveFleet.Domain.Events;
@@ -89,7 +90,7 @@ public sealed record SessionMessageMachine(string Id, string Name);
 /// and <c>session.messaged</c> on the receiver's topic. The sender is whoever the caller says; each caller has
 /// checked it first: the bridge from the calling process, a peer request from the machine token it came with.
 /// </summary>
-public sealed class SessionMessageDelivery(SessionOrchestrator orchestrator, IEventBroadcaster broadcaster)
+public sealed class SessionMessageDelivery(SessionPrompting prompting, IEventBroadcaster broadcaster)
 {
     public async Task<Result<PromptSessionResult>> DeliverAsync(
         string fromSessionId,
@@ -100,7 +101,7 @@ public sealed class SessionMessageDelivery(SessionOrchestrator orchestrator, IEv
         string userId,
         CancellationToken ct)
     {
-        var sent = await orchestrator.PromptSessionWithReceiptAsync(
+        var sent = await prompting.PromptSessionWithReceiptAsync(
                 toSessionId,
                 SessionMessages.Wrap(fromSessionId, fromTitle, text.Trim(), fromMachine),
                 options: null,

@@ -47,16 +47,21 @@ public sealed class PromptQueueServiceTests : IAsyncDisposable
 
     private void Idle() => _builder.ActivityTracker.Update("s1", ActivityStatuses.Idle, "user-1");
 
-    private PromptQueueService Build() => new(
-        _builder.Build(),
-        _builder.SessionRepository,
-        _queue,
-        _builder.EventBroadcaster,
-        _builder.ActivityTracker,
-        _builder.HarnessRegistry,
-        _user,
-        new TurnRetryScheduler(TestServiceScopeFactory.CreateEmpty(), TimeProvider.System, NullLogger<TurnRetryScheduler>.Instance),
-        NullLogger<PromptQueueService>.Instance);
+    private PromptQueueService Build()
+    {
+        _builder.Build();
+        return new(
+            _builder.Prompting,
+            _builder.ShellCommands,
+            _builder.SessionRepository,
+            _queue,
+            _builder.EventBroadcaster,
+            _builder.ActivityTracker,
+            _builder.HarnessRegistry,
+            _user,
+            new TurnRetryScheduler(TestServiceScopeFactory.CreateEmpty(), TimeProvider.System, NullLogger<TurnRetryScheduler>.Instance),
+            NullLogger<PromptQueueService>.Instance);
+    }
 
     private static async Task<string> QueueAsync(PromptQueueService service, string text, string kind = QueuedPromptKinds.Prompt, string? command = null)
         => (await service.EnqueueAsync("s1", new QueuePromptRequest(text, kind, Command: command, Agent: "reviewer", ProviderId: "p", ModelId: "m", Effort: "high"))).Value.Id;

@@ -43,7 +43,8 @@ public sealed class WorkflowStepSessionsTests : IAsyncDisposable
             new Project { Id = "scratch-1", Name = "Scratch", Type = "scratch", Position = 0, CreatedAt = "2026-01-01", UpdatedAt = "2026-01-01" },
             new Project { Id = "proj-1", Name = "Dependencies", Type = "standard", Position = 1, CreatedAt = "2026-01-01", UpdatedAt = "2026-01-01" },
             new Project { Id = "proj-2", Name = "Other", Type = "standard", Position = 2, CreatedAt = "2026-01-01", UpdatedAt = "2026-01-01" });
-        _sut = new WorkflowStepSessions(_builder.Build(), new FakeSessionMessageProxy(), _builder.SessionRepository, _builder.ProjectRepository);
+        _builder.Build();
+        _sut = new WorkflowStepSessions(_builder.Creation, _builder.Prompting, new FakeSessionMessageProxy(), _builder.SessionRepository, _builder.ProjectRepository);
     }
 
     private static WorkflowAgentStep Step(string id = "plan") => new(

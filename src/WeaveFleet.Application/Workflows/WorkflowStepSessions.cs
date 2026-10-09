@@ -1,5 +1,7 @@
 using System.Text.Json;
 using WeaveFleet.Application.Services;
+using WeaveFleet.Application.Sessions.Creation;
+using WeaveFleet.Application.Sessions.Prompting;
 using WeaveFleet.Application.SessionSources;
 using WeaveFleet.Application.Sessions;
 using WeaveFleet.Domain.Entities;
@@ -13,7 +15,8 @@ namespace WeaveFleet.Application.Workflows;
 /// base branch, named by Settings → Worktree naming from the run's request, and every later step works in it.
 /// </summary>
 public sealed class WorkflowStepSessions(
-    SessionOrchestrator orchestrator,
+    SessionCreation creation,
+    SessionPrompting prompting,
     ISessionMessageProxy messages,
     ISessionRepository sessions,
     IProjectRepository projects) : IWorkflowStepSessions
@@ -21,7 +24,7 @@ public sealed class WorkflowStepSessions(
     public async Task<WorkflowStepSession> StartAsync(WorkflowRun run, WorkflowAgentStep agentStep, string prompt, WorkflowModelChoice model, bool userFinishes, CancellationToken ct)
     {
         var (providerId, modelId) = model.Split();
-        var created = await orchestrator.CreateSessionAsync(new CreateSessionRequest
+        var created = await creation.CreateSessionAsync(new CreateSessionRequest
         {
             Title = $"{run.Title} · {agentStep.Title}",
             HarnessType = run.HarnessType,
@@ -42,7 +45,7 @@ public sealed class WorkflowStepSessions(
             return WorkflowStepSession.Failed(created.Error.Description);
 
         var session = created.Value.Session;
-        var sent = await orchestrator.PromptSessionWithReceiptAsync(
+        var sent = await prompting.PromptSessionWithReceiptAsync(
                 session.Id,
                 prompt,
                 new PromptOptions { Agent = agentStep.Agent, ProviderId = providerId, ModelId = modelId, Effort = model.Effort },
@@ -58,7 +61,7 @@ public sealed class WorkflowStepSessions(
 
     public async Task<WorkflowPromptSent> PromptAsync(string sessionId, string text, CancellationToken ct)
     {
-        var sent = await orchestrator.PromptSessionWithReceiptAsync(sessionId, text, options: null, userMessageId: null, correlationId: null, ct)
+        var sent = await prompting.PromptSessionWithReceiptAsync(sessionId, text, options: null, userMessageId: null, correlationId: null, ct)
             .ConfigureAwait(false);
         return sent.IsFailure
             ? new WorkflowPromptSent(null, sent.Error.Description)

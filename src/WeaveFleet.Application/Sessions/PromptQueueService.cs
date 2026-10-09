@@ -3,6 +3,8 @@ using Microsoft.Extensions.Logging;
 using WeaveFleet.Application.Events;
 using WeaveFleet.Application.Harnesses;
 using WeaveFleet.Application.Services;
+using WeaveFleet.Application.Sessions.Prompting;
+using WeaveFleet.Application.Sessions.Shell;
 using WeaveFleet.Application.Users;
 using WeaveFleet.Domain.Common;
 using WeaveFleet.Domain.Entities;
@@ -39,7 +41,8 @@ public sealed record SessionQueueChanged(string SessionId, IReadOnlyList<QueuedP
 /// <see cref="ChangedEvent"/> on the session's topic, so every open client shows the same queue.
 /// </summary>
 public sealed partial class PromptQueueService(
-    SessionOrchestrator orchestrator,
+    SessionPrompting prompting,
+    SessionShellCommands shellCommands,
     ISessionRepository sessions,
     IQueuedPromptRepository queue,
     IEventBroadcaster broadcaster,
@@ -187,7 +190,7 @@ public sealed partial class PromptQueueService(
 
     private Task<Result<Unit>> SendAsync(QueuedPrompt item, PromptDelivery delivery, CancellationToken ct) => item.Kind switch
     {
-        QueuedPromptKinds.Command => orchestrator.CommandSessionAsync(
+        QueuedPromptKinds.Command => prompting.CommandSessionAsync(
             item.SessionId,
             new CommandOptions
             {
@@ -198,8 +201,8 @@ public sealed partial class PromptQueueService(
                 ModelId = item.ModelId,
             },
             ct),
-        QueuedPromptKinds.Shell => orchestrator.RunShellCommandAsync(item.SessionId, item.Text.TrimStart().TrimStart('!').Trim(), ct),
-        _ => orchestrator.PromptSessionAsync(
+        QueuedPromptKinds.Shell => shellCommands.RunShellCommandAsync(item.SessionId, item.Text.TrimStart().TrimStart('!').Trim(), ct),
+        _ => prompting.PromptSessionAsync(
             item.SessionId,
             item.Text,
             new PromptOptions

@@ -26,11 +26,12 @@ public sealed class RemoteSessionUpdatesTests : IDisposable
     {
         var builder = new SessionOrchestratorBuilder().WithUserContext(new TestUserContext("user-1"));
         var preferences = new InMemoryUserPreferenceRepository();
+        builder.Build();
         _sender = new SessionUpdateSender(
             new SessionMessagesFeature(new FleetOptions(), preferences),
             builder.SessionRepository,
             new FakeSessionMessageProxy(),
-            builder.Build(),
+            builder.Prompting,
             builder.EventBroadcaster,
             new RemoteSessions(_atlas.Service, _atlas));
 
