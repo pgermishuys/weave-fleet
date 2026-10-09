@@ -2,6 +2,7 @@ using Shouldly;
 using WeaveFleet.Application.Configuration;
 using WeaveFleet.Application.Sessions;
 using WeaveFleet.Application.Sessions.Creation;
+using WeaveFleet.Domain.Common;
 using WeaveFleet.Domain.Entities;
 using WeaveFleet.Testing.Builders;
 using WeaveFleet.Testing.Fakes;
@@ -10,7 +11,8 @@ namespace WeaveFleet.Application.Tests.Services;
 
 /// <summary>
 /// What <see cref="SessionOrchestrator.CreateSessionAsync"/> refuses: a caller's folder in cloud mode, an agent too far
-/// down a chain of agent-started sessions, and a completion callback to a session that isn't there.
+/// down a chain of agent-started sessions, and a completion callback to a session that isn't there or isn't the
+/// caller's, each before anything is created.
 /// </summary>
 public sealed class SessionOrchestratorCreateGuardTests : IDisposable
 {
@@ -93,7 +95,7 @@ public sealed class SessionOrchestratorCreateGuardTests : IDisposable
     }
 
     [Fact]
-    public async Task a_callback_to_a_session_that_is_not_there_fails_the_create_after_the_session_was_made()
+    public async Task a_callback_to_a_session_that_is_not_there_is_refused_before_anything_is_created()
     {
         var sut = _builder.Build();
 
@@ -102,10 +104,36 @@ public sealed class SessionOrchestratorCreateGuardTests : IDisposable
             Directory = _directory, Title = "With callback", OnCompleteTargetSessionId = "sess-gone", OnCompleteTargetInstanceId = "inst-gone",
         });
 
-        result.Error.Code.ShouldEndWith(".NotFound");
-        // As it is today: the session and its harness already exist when the target is checked.
-        _builder.SessionRepository.InsertedSessions.ShouldHaveSingleItem().Title.ShouldBe("With callback");
-        _runtime.SpawnCalls.ShouldHaveSingleItem();
+        result.Error.ShouldBe(FleetError.NotFoundFor(nameof(Session), "sess-gone"));
+        ShouldHaveCreatedNothing();
+    }
+
+    [Fact]
+    public async Task a_callback_to_another_users_session_is_refused_before_anything_is_created()
+    {
+        _builder.SessionRepository.Seed(new Session
+        {
+            Id = "sess-theirs", InstanceId = "inst-theirs", Title = "Theirs", Status = "active", Directory = _directory,
+            CreatedAt = "2026-01-01", RetentionStatus = "active", HarnessType = "opencode", UserId = "user-2",
+        });
+        var sut = _builder.Build();
+
+        var result = await sut.CreateSessionAsync(new CreateSessionRequest
+        {
+            Directory = _directory, Title = "With callback", OnCompleteTargetSessionId = "sess-theirs", OnCompleteTargetInstanceId = "inst-theirs",
+        });
+
+        result.Error.ShouldBe(FleetError.Unauthorized);
+        ShouldHaveCreatedNothing();
+    }
+
+    private void ShouldHaveCreatedNothing()
+    {
+        _builder.WorkspaceRepository.InsertedWorkspaces.ShouldBeEmpty();
+        _runtime.SpawnCalls.ShouldBeEmpty();
+        _builder.InstanceRepository.All.ShouldBeEmpty();
+        _builder.SessionRepository.InsertedSessions.ShouldBeEmpty();
         _builder.SessionCallbackRepository.All.ShouldBeEmpty();
+        _builder.EventBroadcaster.Broadcasts.ShouldBeEmpty();
     }
 }
