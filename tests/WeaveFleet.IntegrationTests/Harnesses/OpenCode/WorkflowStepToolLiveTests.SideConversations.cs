@@ -1,5 +1,4 @@
 using Microsoft.Extensions.DependencyInjection;
-using WeaveFleet.Application.Services;
 using WeaveFleet.Application.Sessions;
 using WeaveFleet.Domain.Common;
 using WeaveFleet.Domain.Harnesses;

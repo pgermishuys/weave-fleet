@@ -1,6 +1,5 @@
 using System.Text.Json;
 using WeaveFleet.Application.Analytics;
-using WeaveFleet.Application.Services;
 using WeaveFleet.Domain.Events;
 using WeaveFleet.Domain.Harnesses;
 using WeaveFleet.Infrastructure.Events;

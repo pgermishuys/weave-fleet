@@ -1,6 +1,6 @@
 using System.Text;
 using Shouldly;
-using WeaveFleet.Application.Services;
+using WeaveFleet.Application.Sessions;
 using WeaveFleet.Domain.Entities;
 using WeaveFleet.Domain.Events;
 using WeaveFleet.Testing.Builders;

@@ -7,7 +7,6 @@ using WeaveFleet.Application.Canvases;
 using WeaveFleet.Application.DTOs;
 using WeaveFleet.Application.Git;
 using WeaveFleet.Application.Progress;
-using WeaveFleet.Application.Services;
 using WeaveFleet.Application.Sessions;
 using WeaveFleet.Application.Sessions.Asks;
 using WeaveFleet.Application.Sessions.Catalog;

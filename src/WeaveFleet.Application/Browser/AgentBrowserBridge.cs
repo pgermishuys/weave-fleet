@@ -1,7 +1,6 @@
 using System.Globalization;
 using System.Text;
 using WeaveFleet.Application.Canvases;
-using WeaveFleet.Application.Services;
 
 namespace WeaveFleet.Application.Browser;
 

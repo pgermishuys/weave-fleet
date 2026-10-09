@@ -2,7 +2,6 @@ using System.Text.Json;
 using Microsoft.Extensions.Logging;
 using WeaveFleet.Application.Events;
 using WeaveFleet.Application.Harnesses;
-using WeaveFleet.Application.Services;
 using WeaveFleet.Application.Sessions.Prompting;
 using WeaveFleet.Application.Sessions.Shell;
 using WeaveFleet.Application.Users;

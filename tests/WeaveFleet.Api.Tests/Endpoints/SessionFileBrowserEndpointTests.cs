@@ -6,7 +6,6 @@ using Shouldly;
 using WeaveFleet.Api.Endpoints;
 using WeaveFleet.Api.Tests.Infrastructure;
 using WeaveFleet.Application.DTOs;
-using WeaveFleet.Application.Services;
 using WeaveFleet.Domain.Entities;
 using WeaveFleet.Domain.Repositories;
 using WeaveFleet.Testing.Builders;

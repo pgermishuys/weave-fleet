@@ -1,5 +1,5 @@
 using Shouldly;
-using WeaveFleet.Application.Services;
+using WeaveFleet.Application.Sessions.Creation;
 using WeaveFleet.Application.SessionSources;
 using WeaveFleet.Application.Users;
 using WeaveFleet.Application.Workspaces;

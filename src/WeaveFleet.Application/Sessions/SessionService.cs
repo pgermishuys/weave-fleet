@@ -1,6 +1,5 @@
 using System.Diagnostics;
 using WeaveFleet.Application.Diagnostics;
-using WeaveFleet.Application.Services;
 using WeaveFleet.Application.Sessions.Retention;
 using WeaveFleet.Domain.Common;
 using WeaveFleet.Domain.Entities;
