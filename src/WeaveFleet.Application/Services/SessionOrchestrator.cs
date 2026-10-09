@@ -15,7 +15,10 @@ using WeaveFleet.Application.Harnesses;
 using WeaveFleet.Application.Recaps;
 using WeaveFleet.Application.Sessions;
 using WeaveFleet.Application.Sessions.Activation;
+using WeaveFleet.Application.Sessions.Asks;
+using WeaveFleet.Application.Sessions.Catalog;
 using WeaveFleet.Application.Sessions.Files;
+using WeaveFleet.Application.Sessions.History;
 using WeaveFleet.Application.Sessions.Prompting;
 using WeaveFleet.Application.SessionSources;
 using WeaveFleet.Application.Terminals;
@@ -68,7 +71,10 @@ public sealed partial class SessionOrchestrator(
     HarnessAvailabilityCache? harnessAvailability = null,
     SessionFiles? sessionFiles = null,
     SessionActivation? sessionActivation = null,
-    SessionPrompting? sessionPrompting = null) : ISessionActivator
+    SessionPrompting? sessionPrompting = null,
+    SessionAsks? sessionAsks = null,
+    SessionCatalog? sessionCatalog = null,
+    SessionHistory? sessionHistory = null) : ISessionActivator
 {
     private readonly DelegationService _delegationService = delegationService;
     private readonly SessionFiles _files = sessionFiles
@@ -80,6 +86,9 @@ public sealed partial class SessionOrchestrator(
     // gets them built from the orchestrator's own dependencies, once, so they share one activation.
     private SessionActivation? _activation;
     private SessionPrompting? _prompting;
+    private SessionAsks? _asks;
+    private SessionCatalog? _catalog;
+    private SessionHistory? _history;
 
     private SessionActivation Activation => _activation ??= sessionActivation
         ?? new SessionActivation(
@@ -111,6 +120,15 @@ public sealed partial class SessionOrchestrator(
             messageRepository,
             sessionRecaps,
             agentMemory);
+
+    private SessionAsks Asks => _asks ??= sessionAsks
+        ?? new SessionAsks(sessionRepository, instanceTracker, Activation, NullLogger<SessionAsks>.Instance);
+
+    private SessionCatalog Catalog => _catalog ??= sessionCatalog
+        ?? new SessionCatalog(sessionRepository, Activation, NullLogger<SessionCatalog>.Instance);
+
+    private SessionHistory History => _history ??= sessionHistory
+        ?? new SessionHistory(sessionRepository, sessionMessageProxy, options, NullLogger<SessionHistory>.Instance);
 
     private sealed class NoOpUserPreferenceRepository : IUserPreferenceRepository
     {
@@ -880,96 +898,38 @@ public sealed partial class SessionOrchestrator(
     internal static PromptOptions? WithSessionChoices(PromptOptions? options, Session session)
         => SessionPrompting.WithSessionChoices(options, session);
 
-    public async Task<Result<Unit>> AnswerQuestionAsync(
+    // ── Asks (SessionAsks), catalog (SessionCatalog), history (SessionHistory) ──
+
+    public Task<Result<Unit>> AnswerQuestionAsync(
         string id,
         string requestId,
         IReadOnlyList<IReadOnlyList<string>> answers,
         CancellationToken ct = default)
-    {
-        using var _ = BeginSessionScope(id);
-        var sessionResult = await GetSessionAsync(id);
-        if (sessionResult.IsFailure)
-            return sessionResult.Error;
+        => Asks.AnswerQuestionAsync(id, requestId, answers, ct);
 
-        var instanceResult = await GetOrActivateInstanceAsync(sessionResult.Value, ct).ConfigureAwait(false);
-        if (instanceResult.IsFailure)
-            return instanceResult.Error;
+    public Task<Result<Unit>> RejectQuestionAsync(string id, string requestId, CancellationToken ct = default)
+        => Asks.RejectQuestionAsync(id, requestId, ct);
 
-        try
-        {
-            await instanceResult.Value.AnswerQuestionAsync(requestId, answers, ct);
-        }
-        catch (NotSupportedException ex)
-        {
-            return new FleetError("Session.QuestionNotSupported", ex.Message);
-        }
-
-        return Unit.Value;
-    }
-
-    public async Task<Result<Unit>> RejectQuestionAsync(
+    /// <inheritdoc cref="SessionAsks.ReplyToPermissionAsync"/>
+    public Task<Result<Unit>> ReplyToPermissionAsync(
         string id,
         string requestId,
+        string reply,
+        string? message,
         CancellationToken ct = default)
-    {
-        using var _ = BeginSessionScope(id);
-        var sessionResult = await GetSessionAsync(id);
-        if (sessionResult.IsFailure)
-            return sessionResult.Error;
+        => Asks.ReplyToPermissionAsync(id, requestId, reply, message, ct);
 
-        var instanceResult = await GetOrActivateInstanceAsync(sessionResult.Value, ct).ConfigureAwait(false);
-        if (instanceResult.IsFailure)
-            return instanceResult.Error;
+    public Task<Result<IReadOnlyList<ProviderInfo>>> GetSessionModelsAsync(string sessionId, CancellationToken ct = default)
+        => Catalog.GetSessionModelsAsync(sessionId, ct);
 
-        try
-        {
-            await instanceResult.Value.RejectQuestionAsync(requestId, ct);
-        }
-        catch (NotSupportedException ex)
-        {
-            return new FleetError("Session.QuestionNotSupported", ex.Message);
-        }
+    public Task<Result<IReadOnlyList<CommandInfo>>> GetSessionCommandsAsync(string sessionId, CancellationToken ct = default)
+        => Catalog.GetSessionCommandsAsync(sessionId, ct);
 
-        return Unit.Value;
-    }
+    public Task<Result<IReadOnlyList<AgentInfo>>> GetSessionAgentsAsync(string sessionId, CancellationToken ct = default)
+        => Catalog.GetSessionAgentsAsync(sessionId, ct);
 
-    // ── Messages / Diffs ───────────────────────────────────────────────────────
-
-    public async Task<Result<MessagePage>> GetSessionMessagesAsync(
-        string id,
-        MessageQuery? query = null,
-        CancellationToken ct = default)
-    {
-        using var _ = BeginSessionScope(id);
-        // Validate session exists
-        var session = await sessionRepository.GetByIdAsync(id);
-        if (session is null)
-            return FleetError.NotFoundFor(nameof(Session), id);
-
-        return await GetPersistedMessagesAsync(id, query, ct);
-    }
-
-    private async Task<Result<MessagePage>> GetPersistedMessagesAsync(
-        string sessionId,
-        MessageQuery? query,
-        CancellationToken ct)
-    {
-        var limit = query?.Limit ?? options.HistoryMessagePageSize;
-        var before = query?.Before;
-
-        try
-        {
-            // Delegate to the proxy, which will fetch from opencode if available,
-            // or fall back to persisted messages if the harness is unavailable.
-            return await sessionMessageProxy.GetMessagesAsync(sessionId, limit, before, ct);
-        }
-        catch (Exception ex)
-        {
-            LogProxyMessageFetchFailed(ex, sessionId);
-            // Return empty result on failure (503-equivalent behavior)
-            return Result.Success(new MessagePage([], false));
-        }
-    }
+    public Task<Result<MessagePage>> GetSessionMessagesAsync(string id, MessageQuery? query = null, CancellationToken ct = default)
+        => History.GetSessionMessagesAsync(id, query, ct);
 
     private static string? BuildCreateSessionInitialPrompt(
         string? initialPrompt,
@@ -1395,59 +1355,6 @@ public sealed partial class SessionOrchestrator(
     private static bool HasModel(string? providerId, string? modelId)
         => !string.IsNullOrWhiteSpace(providerId) && !string.IsNullOrWhiteSpace(modelId);
 
-    // ── Session-scoped capabilities ────────────────────────────────────────────
-
-    public async Task<Result<IReadOnlyList<ProviderInfo>>> GetSessionModelsAsync(
-        string sessionId,
-        CancellationToken ct = default)
-    {
-        using var _ = BeginSessionScope(sessionId);
-        var sessionResult = await GetSessionAsync(sessionId);
-        if (sessionResult.IsFailure)
-            return sessionResult.Error;
-
-        var instanceResult = await GetOrActivateInstanceAsync(sessionResult.Value, ct).ConfigureAwait(false);
-        if (instanceResult.IsFailure)
-            return instanceResult.Error;
-
-        var providers = await instanceResult.Value.GetProvidersAsync(ct);
-        return Result.Success(providers);
-    }
-
-    public async Task<Result<IReadOnlyList<CommandInfo>>> GetSessionCommandsAsync(
-        string sessionId,
-        CancellationToken ct = default)
-    {
-        using var _ = BeginSessionScope(sessionId);
-        var sessionResult = await GetSessionAsync(sessionId);
-        if (sessionResult.IsFailure)
-            return sessionResult.Error;
-
-        var instanceResult = await GetOrActivateInstanceAsync(sessionResult.Value, ct).ConfigureAwait(false);
-        if (instanceResult.IsFailure)
-            return instanceResult.Error;
-
-        var commands = await instanceResult.Value.GetCommandsAsync(ct);
-        return Result.Success(commands);
-    }
-
-    public async Task<Result<IReadOnlyList<AgentInfo>>> GetSessionAgentsAsync(
-        string sessionId,
-        CancellationToken ct = default)
-    {
-        using var _ = BeginSessionScope(sessionId);
-        var sessionResult = await GetSessionAsync(sessionId);
-        if (sessionResult.IsFailure)
-            return sessionResult.Error;
-
-        var instanceResult = await GetOrActivateInstanceAsync(sessionResult.Value, ct).ConfigureAwait(false);
-        if (instanceResult.IsFailure)
-            return instanceResult.Error;
-
-        var agents = await instanceResult.Value.GetAgentsAsync(ct);
-        return Result.Success(agents);
-    }
-
     // ── Files (SessionFiles) ───────────────────────────────────────────────────
 
     public Task<Result<IReadOnlyList<string>>> FindSessionFilesAsync(string sessionId, string query, CancellationToken ct = default)
@@ -1519,40 +1426,6 @@ public sealed partial class SessionOrchestrator(
         if (profile is null || profile.HarnessType != harness.Type)
             return FleetError.ValidationError("Session.Profile", $"There's no {harness.DisplayName} profile with id '{requestedId}'.");
         return profile;
-    }
-
-    /// <summary>
-    /// Answers the agent's ask <paramref name="requestId"/> in session <paramref name="id"/>, the session whose harness
-    /// asked. Only a running harness has asks: one that isn't running has nothing waiting.
-    /// </summary>
-    public async Task<Result<Unit>> ReplyToPermissionAsync(
-        string id,
-        string requestId,
-        string reply,
-        string? message,
-        CancellationToken ct = default)
-    {
-        using var _ = BeginSessionScope(id);
-        if (!PermissionReplies.IsAnswer(reply))
-            return FleetError.ValidationError("Permission.Reply", "Answer once, always or reject.");
-
-        var sessionResult = await GetSessionAsync(id);
-        if (sessionResult.IsFailure)
-            return sessionResult.Error;
-
-        if (instanceTracker.Get(sessionResult.Value.InstanceId) is not { } instance)
-            return FleetError.NotFoundFor("PermissionRequest", requestId);
-
-        try
-        {
-            await instance.ReplyToPermissionAsync(requestId, reply, message, ct).ConfigureAwait(false);
-        }
-        catch (KeyNotFoundException)
-        {
-            return FleetError.NotFoundFor("PermissionRequest", requestId);
-        }
-
-        return Unit.Value;
     }
 
     private async Task<Result<Session>> GetSessionAsync(string sessionId)
@@ -1627,10 +1500,6 @@ public sealed partial class SessionOrchestrator(
     [LoggerMessage(Level = LogLevel.Warning,
         Message = "Session {SessionId} was created but its first message could not be sent: {Reason}")]
     private partial void LogInitialPromptFailed(string sessionId, string reason);
-
-    [LoggerMessage(Level = LogLevel.Warning,
-        Message = "Failed to fetch messages for session {SessionId} via proxy — returning empty result")]
-    private partial void LogProxyMessageFetchFailed(Exception ex, string sessionId);
 
     private async Task<string?> ResolveProjectNameAsync(string? projectId)
     {
