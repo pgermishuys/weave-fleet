@@ -200,6 +200,44 @@ jobs:
         shell: powershell
         run: ./scripts/test-launchers.ps1
 
+  # ── Windows-only process tests ───────────────────────────────────────────
+  # The other .NET tests run on Linux only. A process the agent leaves running must outlive an idle stop and end
+  # with the session's Job Object, which only Windows has.
+  windows-processes:
+    name: Windows processes
+    runs-on: windows-latest
+    timeout-minutes: 15
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup .NET
+        uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: '10.0.x'
+
+      - name: Run the leftover-process test
+        shell: bash
+        run: >
+          dotnet test tests/WeaveFleet.Infrastructure.Tests
+          --configuration Release
+          --filter "FullyQualifiedName~ClaudeCodeProcessManagerTests.What_the_agent_left_running"
+          --logger "trx;LogFileName=windows-processes.trx"
+          --results-directory test-results/
+          -p:SkipFrontendBuild=true
+
+      # dotnet test exits 0 when nothing runs.
+      - name: Fail if no test ran
+        shell: bash
+        run: |
+          total=$(grep -ho '<Counters total="[0-9]*"' test-results/windows-processes.trx | grep -o '[0-9]*' || echo 0)
+          echo "Tests run: ${total}"
+          if [ "${total:-0}" -eq 0 ]; then
+            echo "::error::The leftover-process test didn't run."
+            exit 1
+          fi
+
   # ── Desktop app ──────────────────────────────────────────────────────────
   desktop:
     name: Desktop
