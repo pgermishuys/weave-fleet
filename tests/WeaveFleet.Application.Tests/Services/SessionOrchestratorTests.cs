@@ -2,6 +2,7 @@ using System.Text.Json;
 using Shouldly;
 using WeaveFleet.Application.Configuration;
 using WeaveFleet.Application.DTOs;
+using WeaveFleet.Application.Git;
 using WeaveFleet.Application.Harnesses;
 using WeaveFleet.Application.Services;
 using WeaveFleet.Application.SessionSources;

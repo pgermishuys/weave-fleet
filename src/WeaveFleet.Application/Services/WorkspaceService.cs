@@ -1,6 +1,7 @@
 using System.Text.RegularExpressions;
 using Microsoft.Extensions.Logging;
 using WeaveFleet.Application.Configuration;
+using WeaveFleet.Application.Git;
 using WeaveFleet.Application.Services.Worktrees;
 using WeaveFleet.Application.SessionSources;
 using WeaveFleet.Domain.Common;

@@ -1,4 +1,4 @@
-namespace WeaveFleet.Application.Services;
+namespace WeaveFleet.Application.Git;
 
 /// <summary>
 /// Recognises git checkouts on disk without running git.

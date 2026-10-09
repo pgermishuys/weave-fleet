@@ -5,6 +5,7 @@ using WeaveFleet.Api;
 using WeaveFleet.Application.Browser;
 using WeaveFleet.Application.Canvases;
 using WeaveFleet.Application.DTOs;
+using WeaveFleet.Application.Git;
 using WeaveFleet.Application.Progress;
 using WeaveFleet.Application.Services;
 using WeaveFleet.Application.Sessions;
@@ -1188,7 +1189,7 @@ public static class SessionEndpoints
             ? new SessionDiffBase("branch", diffBase.MainBranch, diffBase.Ref)
             : new SessionDiffBase("session", Branch: null, Commit: null);
 
-    private static FileDiffSummary ToFileDiffSummary(WeaveFleet.Application.Services.FileDiffSummary diff) =>
+    private static FileDiffSummary ToFileDiffSummary(WeaveFleet.Application.Git.FileDiffSummary diff) =>
         new(
             file: diff.Path,
             status: diff.Status ?? (diff.IsUntracked ? "added" : "modified"),
@@ -1198,7 +1199,7 @@ public static class SessionEndpoints
             IsBinary = diff.IsBinary
         };
 
-    private static FileDiffSummary ToFileDiffSummary(WeaveFleet.Application.Services.FileDiffContent diff) =>
+    private static FileDiffSummary ToFileDiffSummary(WeaveFleet.Application.Git.FileDiffContent diff) =>
         new(
             File: diff.Path,
             Status: diff.Status,

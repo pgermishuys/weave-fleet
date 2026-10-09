@@ -1,5 +1,5 @@
 using Microsoft.Extensions.Logging;
-using WeaveFleet.Application.Services;
+using WeaveFleet.Application.Git;
 using WeaveFleet.Application.Skills;
 using WeaveFleet.Domain.Common;
 using WeaveFleet.Domain.Skills;

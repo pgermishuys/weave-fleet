@@ -1,7 +1,7 @@
 using System.Globalization;
 using System.Text;
 
-namespace WeaveFleet.Application.Services;
+namespace WeaveFleet.Application.Git;
 
 public sealed class GitDiffService
 {

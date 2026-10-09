@@ -1,6 +1,6 @@
 using System.Diagnostics;
 using Shouldly;
-using WeaveFleet.Application.Services;
+using WeaveFleet.Application.Git;
 
 namespace WeaveFleet.Application.Tests.Services;
 

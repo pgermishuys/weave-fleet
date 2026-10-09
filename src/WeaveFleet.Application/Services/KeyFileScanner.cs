@@ -1,4 +1,5 @@
 using System.Collections.Concurrent;
+using WeaveFleet.Application.Git;
 
 namespace WeaveFleet.Application.Services;
 

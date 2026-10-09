@@ -2,6 +2,7 @@ using System.Text;
 using System.Text.RegularExpressions;
 using Microsoft.Extensions.Logging;
 using WeaveFleet.Application.Configuration;
+using WeaveFleet.Application.Git;
 using WeaveFleet.Domain.Common;
 
 namespace WeaveFleet.Application.Services;

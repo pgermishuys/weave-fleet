@@ -1,4 +1,5 @@
 using Microsoft.Extensions.Logging;
+using WeaveFleet.Application.Git;
 using WeaveFleet.Application.Services;
 
 namespace WeaveFleet.Application.Services;

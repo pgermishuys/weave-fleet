@@ -1,6 +1,6 @@
 using WeaveFleet.Domain.Entities;
 
-namespace WeaveFleet.Application.Services;
+namespace WeaveFleet.Application.Git;
 
 /// <summary>
 /// Where a session's changes are read and what they're compared with: the Changes tab's diff, and the walkthrough's.
