@@ -363,38 +363,9 @@ public sealed partial class SessionOrchestrator
         return side;
     }
 
-    /// <summary>
-    /// Deletes a side conversation: its harness session (after stopping a turn it's in) and its Fleet session. The
-    /// folder is its session's, so unlike <see cref="DeleteSessionAsync"/> nothing on disk is touched.
-    /// </summary>
-    private async Task DiscardSideConversationAsync(Session side, CancellationToken ct)
-    {
-        var instance = instanceTracker.Get(side.InstanceId);
-        if (instance is not null)
-        {
-            if (SessionActivityTracker.IsInTurn(sessionActivityTracker.GetEffectiveActivityStatus(side.Id)))
-            {
-                try { await instance.AbortAsync(ct).ConfigureAwait(false); }
-                catch (Exception ex) when (ex is not OperationCanceledException) { LogStopFailed(ex, side.InstanceId); }
-            }
-
-            await SafeDeleteAsync(instance, ct).ConfigureAwait(false);
-            instanceTracker.Remove(side.InstanceId);
-        }
-
-        sessionRecaps?.Forget(side.Id);
-        sessionNotifier?.Forget(side.Id);
-        await instanceService.UpdateInstanceStatusAsync(side.InstanceId, "stopped", DateTime.UtcNow.ToString("O")).ConfigureAwait(false);
-        await sessionRepository.DeleteAsync(side.Id).ConfigureAwait(false);
-        LogSideConversationClosed(side.Id, side.SideOfSessionId ?? string.Empty);
-    }
-
     [LoggerMessage(Level = LogLevel.Information, Message = "Side conversation {SideSessionId} started on session {SessionId} after message {BoundaryMessageId}")]
     private partial void LogSideConversationStarted(string sideSessionId, string sessionId, string? boundaryMessageId);
 
     [LoggerMessage(Level = LogLevel.Information, Message = "Side conversation {SideSessionId} of session {SessionId} discarded; deleted once its undo window has passed")]
     private partial void LogSideConversationDiscarded(string sideSessionId, string sessionId);
-
-    [LoggerMessage(Level = LogLevel.Information, Message = "Side conversation {SideSessionId} of session {SessionId} closed")]
-    private partial void LogSideConversationClosed(string sideSessionId, string sessionId);
 }
