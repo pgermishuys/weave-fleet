@@ -45,6 +45,8 @@ vi.mock("@/plugins/builtin/github/composables/use-github-bookmarks", async () =>
 });
 
 import BoardSourceConfig from "@/components/board/BoardSourceConfig.vue";
+import githubPluginManifest from "@/plugins/builtin/github";
+import { clearPlugins, registerPlugin } from "@/plugins/registry";
 
 let mockSources: BoardSource[];
 
@@ -67,6 +69,8 @@ function createSourceFixture(overrides: Partial<BoardSource> = {}): BoardSource 
 
 describe("BoardSourceConfig", () => {
   beforeEach(() => {
+    clearPlugins();
+    registerPlugin(githubPluginManifest);
     mockSources = [];
 
     boardApiMocks.listBoardSources.mockReset();
@@ -155,5 +159,58 @@ describe("BoardSourceConfig", () => {
     });
 
     expect(wrapper.text()).toContain("Assignee: @me");
+  });
+
+  it("offers no way to add a source when no plugin contributes a board source", async () => {
+    clearPlugins();
+    mockSources.push(createSourceFixture());
+    const wrapper = mount(BoardSourceConfig, { props: { boardId: "board-1" } });
+    await flushPromises();
+
+    expect(wrapper.find('[data-testid="board-source-form"]').exists()).toBe(false);
+    expect(wrapper.text()).not.toContain("GitHub");
+    expect(wrapper.text()).not.toContain("Bookmark a repository");
+    // What is already configured still lists, and can be removed.
+    expect(wrapper.findAll('[data-testid="board-source-item"]')).toHaveLength(1);
+    expect(wrapper.find('[data-testid="board-source-remove"]').exists()).toBe(true);
+  });
+
+  it("lists the bookmarked repositories by name in the repository select", async () => {
+    bookmarkState.bookmarks.value = [
+      { fullName: "acme/zebra", owner: "acme", name: "zebra" },
+      { fullName: "acme/anvil", owner: "acme", name: "anvil" },
+    ];
+    const wrapper = mount(BoardSourceConfig, { props: { boardId: "board-1" } });
+    await flushPromises();
+
+    const options = wrapper.get('[data-testid="board-source-repo-select"]').findAll("option").map((option) => option.text());
+    expect(options).toEqual(["Select a repository", "acme/anvil", "acme/zebra"]);
+    expect(wrapper.text()).not.toContain("Bookmark a repository in the GitHub panel");
+  });
+
+  it("points at the GitHub panel when there are no bookmarks, and says so while they load", async () => {
+    bookmarkState.bookmarks.value = [];
+    const wrapper = mount(BoardSourceConfig, { props: { boardId: "board-1" } });
+    await flushPromises();
+
+    expect(wrapper.text()).toContain("Bookmark a repository in the GitHub panel to add it as a board source.");
+
+    bookmarkState.isLoading.value = true;
+    await flushPromises();
+    expect(wrapper.text()).not.toContain("Bookmark a repository in the GitHub panel");
+    expect(wrapper.get('[data-testid="board-source-repo-select"]').text()).toContain("Loading bookmarks…");
+    expect(wrapper.get('[data-testid="board-source-repo-select"]').attributes("disabled")).toBeDefined();
+  });
+
+  it("shows a bookmark error with a retry that refreshes the bookmarks", async () => {
+    bookmarkState.error.value = "Failed to fetch bookmarks from server.";
+    const wrapper = mount(BoardSourceConfig, { props: { boardId: "board-1" } });
+    await flushPromises();
+
+    expect(wrapper.get('[role="alert"]').text()).toContain("Failed to fetch bookmarks from server.");
+    const retry = wrapper.findAll("button").find((button) => button.text() === "Retry bookmarks");
+    expect(retry).toBeDefined();
+    await retry!.trigger("click");
+    expect(bookmarkState.refresh).toHaveBeenCalledTimes(1);
   });
 });

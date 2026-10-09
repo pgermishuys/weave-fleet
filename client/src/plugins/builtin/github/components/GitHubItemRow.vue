@@ -6,7 +6,7 @@ import CheckIcon from "@/components/github/CheckIcon.vue";
 import DiffStat from "@/components/github/DiffStat.vue";
 import GitHubItemIcon from "@/components/github/GitHubItemIcon.vue";
 import GitHubLabel from "@/components/github/GitHubLabel.vue";
-import GitHubSessionChip from "@/components/github/GitHubSessionChip.vue";
+import GitHubSessionChip from "@/plugins/builtin/github/components/GitHubSessionChip.vue";
 import ReviewerAvatar from "@/components/github/ReviewerAvatar.vue";
 import { formatRelativeTime } from "@/lib/format-utils";
 import { itemPrFacts, type GitHubItemSummary } from "@/lib/github-items";

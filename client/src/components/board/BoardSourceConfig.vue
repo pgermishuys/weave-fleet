@@ -2,7 +2,7 @@
 import type { BoardSource } from "@/lib/board-api";
 import { computed, ref, shallowRef, watch } from "vue";
 import { createBoardSource, deleteBoardSource, listBoardSources } from "@/lib/board-api";
-import { useGitHubBookmarks } from "@/plugins/builtin/github/composables/use-github-bookmarks";
+import { getBoardSources } from "@/plugins/slots";
 import { Button } from "@/components/ui/button";
 
 interface Props {
@@ -40,12 +40,19 @@ const selectedRepository = shallowRef("");
 const labelFilter = shallowRef("");
 const assignedToMe = shallowRef(false);
 
+// Plugins say where a board can sync from; with none contributing, there is nothing to add a source from.
+const boardSource = getBoardSources()[0] ?? null;
 const {
-  bookmarks,
+  repositories: bookmarks,
   error: bookmarksError,
   isLoading: isLoadingBookmarks,
   refresh: refreshBookmarks,
-} = useGitHubBookmarks();
+} = boardSource?.useRepositories() ?? {
+  repositories: shallowRef([]),
+  error: shallowRef<string | null>(null),
+  isLoading: shallowRef(false),
+  refresh: async () => {},
+};
 
 const hasBoard = computed(() => props.boardId !== null);
 
@@ -208,7 +215,7 @@ function toErrorMessage(error: unknown, fallback: string): string {
 }
 
 async function handleAddSource(): Promise<void> {
-  if (!props.boardId || !canSubmit.value) {
+  if (!props.boardId || !boardSource || !canSubmit.value) {
     return;
   }
 
@@ -223,7 +230,7 @@ async function handleAddSource(): Promise<void> {
     };
 
     const createdSource = await createBoardSource(props.boardId, {
-      providerType: "github",
+      providerType: boardSource.id,
       config: JSON.stringify(config),
     });
 
@@ -269,8 +276,11 @@ async function handleRemoveSource(sourceId: string): Promise<void> {
         <h2 class="board-source-config__title">
           Sync board cards from bookmarked repositories
         </h2>
-        <p class="board-source-config__description">
-          Add GitHub issue sources from your bookmarks, optionally narrowing sync to matching labels.
+        <p
+          v-if="boardSource"
+          class="board-source-config__description"
+        >
+          {{ boardSource.description }}
         </p>
       </div>
     </div>
@@ -302,6 +312,7 @@ async function handleRemoveSource(sourceId: string): Promise<void> {
 
     <template v-else>
       <form
+        v-if="boardSource"
         class="board-source-config__form"
         data-testid="board-source-form"
         @submit.prevent="handleAddSource"
@@ -365,13 +376,13 @@ async function handleRemoveSource(sourceId: string): Promise<void> {
       </form>
 
       <p
-        v-if="bookmarkedRepoOptions.length === 0 && !isLoadingBookmarks"
+        v-if="boardSource && bookmarkedRepoOptions.length === 0 && !isLoadingBookmarks"
         class="board-source-config__helper"
       >
-        Bookmark a repository in the GitHub panel to add it as a board source.
+        {{ boardSource.emptyHint }}
       </p>
       <p
-        v-else-if="isDuplicateSource"
+        v-else-if="boardSource && isDuplicateSource"
         class="board-source-config__helper"
       >
         This repository and label filter is already configured.

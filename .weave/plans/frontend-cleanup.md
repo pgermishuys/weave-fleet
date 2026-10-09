@@ -64,8 +64,11 @@ You are the orchestrator, on Opus. Do not do the lanes' work yourself.
   deleting.
 - Core code importing GitHub plugin internals (`@/plugins/builtin/github/...`): `GitHubRepoPage.vue:18,25,26`,
   `GitHubBrowserPage.vue:21,22`, `FolderPicker.vue:54`, `AddRepositoryDialog.vue:13,14`, `BoardSourceConfig.vue:5`,
-  `lib/github-items.ts:7`. Move the shared composables/types into core (e.g. `composables/github/`, `lib/github/`) so
-  the plugin depends on core, not the other way round.
+  `lib/github-items.ts:7`. Decision (user): GitHub is an add-on, a plugin. The plugin owns everything GitHub (its
+  screens, composables, types) and fills seams core offers (`repositorySources`, `boardSources` contribution points);
+  core never imports the plugin. `src/routes` and `main.ts` are the composition root, the only core places that may
+  name a plugin (an ESLint `no-restricted-imports` rule enforces it). Not "move GitHub into core": that was tried
+  and rejected.
 
 ### Bugs to fix along the way
 - `Composer.vue:341-358` adds a `window` listener for `weave:session-state-changed`, which nothing dispatches (client or
@@ -149,7 +152,9 @@ Sizes: S small, M normal, L large. Dependencies in brackets.
 ### Wave 2
 - **B2 Migrate the tool sites (M) [B1, E1].** Every site reads `lib/tools/`; delete the local sets and switches.
   Desktop and phone both. Permission wording from one place. Can be two PRs (desktop, phone) if the diff is large.
-- **A3 GitHub internals into core (S) [A2].** Move the shared GitHub composables/types out of the plugin folder.
+- **A3 The GitHub plugin owns GitHub (S) [A2].** Move the GitHub screens into the plugin (route files stay as thin
+  shells); FolderPicker and the board read `repositorySources` / `boardSources` contribution points the plugin fills;
+  lint forbids core importing `@/plugins/builtin/*` outside `routes/` and `main.ts`.
 - **D2 Commands and keybindings on the primitive (M) [D1].** Typed command ids; replace the `weave:command-*` window
   bus with commands whose handler ActivityStream registers while mounted.
 - **E2 One tool-row component (M) [E1, B1].** Move `MessageBubble.vue` 302–351 (+ `pagedTools`) into a

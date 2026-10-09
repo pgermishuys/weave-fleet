@@ -3,18 +3,18 @@ import { computed, onMounted, shallowRef, watch } from "vue";
 import { useRouter } from "@tanstack/vue-router";
 import { CircleDot, ExternalLink, GitPullRequest, LoaderCircle, RefreshCw, Search, TriangleAlert } from "lucide-vue-next";
 import type { SessionListItem } from "@/api/client";
-import GitHubItemRow from "@/components/github/GitHubItemRow.vue";
+import GitHubItemRow from "@/plugins/builtin/github/components/GitHubItemRow.vue";
 import { useGitHubSearch } from "@/composables/use-github-search";
 import { useGitHubSessions } from "@/composables/use-github-sessions";
 import { useGitHubWork } from "@/composables/use-github-work";
 import {
   fetchGitHubItemsByNumber,
-  issueFilterQuery,
   itemResourceId,
   itemRoute,
   itemSessionPreset,
   type GitHubItemSummary,
 } from "@/lib/github-items";
+import { issueFilterQuery } from "@/plugins/builtin/github/lib/issue-filter-query";
 import IssueFilterBar from "@/plugins/builtin/github/components/IssueFilterBar.vue";
 import {
   DEFAULT_ISSUE_FILTER,

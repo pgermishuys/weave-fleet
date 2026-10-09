@@ -33,7 +33,7 @@ vi.mock("@/plugins/builtin/github/composables/use-github-bookmarks", async () =>
   return { useGitHubBookmarks: () => ({ bookmarks: shallowRef([{ fullName: "acme/rocket", owner: "acme", name: "rocket" }]) }) };
 });
 
-import GitHubBrowserPage from "@/components/pages/GitHubBrowserPage.vue";
+import GitHubBrowserPage from "@/plugins/builtin/github/pages/GitHubBrowserPage.vue";
 
 const json = (body: unknown, status = 200) =>
   new Response(JSON.stringify(body), { status, headers: { "Content-Type": "application/json" } });

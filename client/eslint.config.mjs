@@ -27,6 +27,27 @@ const eslintConfig = defineConfig([
     },
   },
   {
+    // Plugins own what they add; core reads what they contribute (src/plugins/registry.ts, slots.ts) and never
+    // imports one. Only the composition root (src/routes, src/main.ts) may name a plugin. Tests of a plugin may too.
+    // The two later `no-restricted-imports` blocks below replace this one for the files they list, so a file
+    // listed there is not covered: keep plugin imports out of them.
+    files: ["src/**/*.{ts,vue}"],
+    ignores: ["src/plugins/**", "src/routes/**", "src/main.ts", "src/**/__tests__/**", "src/**/*.test.ts"],
+    rules: {
+      "no-restricted-imports": [
+        "error",
+        {
+          patterns: [
+            {
+              group: ["@/plugins/builtin/*", "**/plugins/builtin/*"],
+              message: "Core doesn't import a plugin. Read what it contributes through `@/plugins/slots`.",
+            },
+          ],
+        },
+      ],
+    },
+  },
+  {
     files: ["src/components/ui/**/*.vue"],
     rules: {
       "vue/multi-word-component-names": "off",
@@ -35,7 +56,7 @@ const eslintConfig = defineConfig([
   },
   {
     files: [
-      "src/components/pages/GitHubWorkItemDetailPage.vue",
+      "src/plugins/builtin/github/pages/GitHubWorkItemDetailPage.vue",
       "src/components/session/MessageBubble.vue",
     ],
     rules: {

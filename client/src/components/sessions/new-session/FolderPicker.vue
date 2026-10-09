@@ -51,7 +51,7 @@ import {
 } from "@/lib/new-folder";
 import { tildePath } from "@/lib/new-session-plan";
 import type { NewSessionFolder } from "@/lib/new-session-request";
-import { useGitHubRepos } from "@/plugins/builtin/github/composables/use-github-repos";
+import { getRepositorySources } from "@/plugins/slots";
 
 const props = withDefaults(defineProps<{
   folder: NewSessionFolder | null;
@@ -147,7 +147,8 @@ const createdPaths = shallowRef<ReadonlySet<string>>(new Set());
 const firstBranch = shallowRef<string | null>(null);
 /** The machine's home folder, which the folder box writes as `~`; null until known. */
 const home = shallowRef<string | null>(null);
-const gitHubRepos = useGitHubRepos({ autoLoad: false });
+/** Repositories that plugins offer for Clone; with no plugin offering any, the view suggests nothing. */
+const repositoryLists = getRepositorySources().map((source) => ({ icon: source.icon, list: source.useRepositories() }));
 
 function baseName(path: string): string {
   return path.split(/[/\\]/).filter(Boolean).pop() ?? path;
@@ -836,7 +837,7 @@ function showClone(): void {
   cloneText.value = cloneFromQuery.value ? query.value.trim() : "";
   cloneLocation.value = newFolderRoot.value ?? OTHER_LOCATION;
   cloneParent.value = "";
-  void gitHubRepos.refresh();
+  for (const { list } of repositoryLists) void list.refresh();
   view.value = "clone";
   void nextTick(() => cloneRepositoryInput.value?.focus());
 }
@@ -862,8 +863,8 @@ const cloneSuggestions = computed(() => {
   }
   const local = new Set(props.repositories.map((repository) => repository.name.toLowerCase()));
   const needle = cloneText.value.trim().toLowerCase();
-  return gitHubRepos.repos.value
-    .filter((repo) => !local.has(repo.name.toLowerCase()) && (!needle || repo.full_name.toLowerCase().includes(needle)))
+  return repositoryLists.flatMap(({ icon, list }) => list.repos.value.map((repo) => ({ ...repo, icon })))
+    .filter((repo) => !local.has(repo.name.toLowerCase()) && (!needle || repo.fullName.toLowerCase().includes(needle)))
     .slice(0, 5);
 });
 
@@ -1511,10 +1512,13 @@ const isNew = computed(() => currentPath.value !== null && createdPaths.value.ha
             :key="repo.id"
             type="button"
             class="ns-folder-suggestion"
-            @click="cloneText = repo.full_name"
+            @click="cloneText = repo.fullName"
           >
-            <Github aria-hidden="true" />
-            <span>{{ repo.full_name }}</span>
+            <component
+              :is="repo.icon"
+              aria-hidden="true"
+            />
+            <span>{{ repo.fullName }}</span>
           </button>
         </div>
         <div class="ns-field">
