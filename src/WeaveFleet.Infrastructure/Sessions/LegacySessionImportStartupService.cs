@@ -6,7 +6,7 @@ using WeaveFleet.Application.Data;
 using WeaveFleet.Application.Sessions;
 using WeaveFleet.Infrastructure.Users;
 
-namespace WeaveFleet.Infrastructure.Services;
+namespace WeaveFleet.Infrastructure.Sessions;
 
 /// <summary>
 /// Performs the one-time startup auto-import of legacy local sessions into a fresh database.

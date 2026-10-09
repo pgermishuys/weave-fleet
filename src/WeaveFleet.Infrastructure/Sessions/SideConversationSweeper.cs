@@ -6,7 +6,7 @@ using WeaveFleet.Application.Sessions;
 using WeaveFleet.Domain.Repositories;
 using WeaveFleet.Infrastructure.Users;
 
-namespace WeaveFleet.Infrastructure.Services;
+namespace WeaveFleet.Infrastructure.Sessions;
 
 /// <summary>
 /// Deletes side conversations (<c>/btw</c>) whose undo window has passed since they were discarded: the fork in the

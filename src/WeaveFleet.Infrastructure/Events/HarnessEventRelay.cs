@@ -19,9 +19,10 @@ using WeaveFleet.Infrastructure.Events;
 using WeaveFleet.Infrastructure.GitHub;
 using WeaveFleet.Infrastructure.Harnesses;
 using WeaveFleet.Infrastructure.Progress;
+using WeaveFleet.Infrastructure.Sessions;
 using WeaveFleet.Infrastructure.Users;
 
-namespace WeaveFleet.Infrastructure.Services;
+namespace WeaveFleet.Infrastructure.Events;
 
 /// <summary>
 /// Parsed activity status with optional retry metadata.

@@ -1,6 +1,6 @@
 using Dapper;
 using Microsoft.Data.Sqlite;
-using WeaveFleet.Infrastructure.Services;
+using WeaveFleet.Infrastructure.Sessions;
 using WeaveFleet.Infrastructure.Tests.Data;
 
 namespace WeaveFleet.Infrastructure.Tests.Services;

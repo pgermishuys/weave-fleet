@@ -9,7 +9,6 @@ using WeaveFleet.Domain.Repositories;
 using WeaveFleet.Infrastructure.Data.Repositories;
 using WeaveFleet.Infrastructure.Events;
 using WeaveFleet.Infrastructure.Progress;
-using WeaveFleet.Infrastructure.Services;
 using WeaveFleet.Infrastructure.Tests.Data;
 using WeaveFleet.Infrastructure.Tests.Data.Repositories;
 using WeaveFleet.Testing.Fakes;

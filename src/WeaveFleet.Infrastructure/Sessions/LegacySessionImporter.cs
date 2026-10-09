@@ -8,7 +8,7 @@ using WeaveFleet.Application.Sessions;
 using WeaveFleet.Application.Users;
 using WeaveFleet.Infrastructure.Data;
 
-namespace WeaveFleet.Infrastructure.Services;
+namespace WeaveFleet.Infrastructure.Sessions;
 
 public sealed class LegacySessionImporter : ILegacySessionImporter
 {

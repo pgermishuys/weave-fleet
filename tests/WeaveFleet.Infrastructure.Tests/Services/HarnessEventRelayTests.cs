@@ -8,7 +8,6 @@ using WeaveFleet.Domain.Harnesses;
 using WeaveFleet.Domain.Repositories;
 using WeaveFleet.Infrastructure.EventBus;
 using WeaveFleet.Infrastructure.Events;
-using WeaveFleet.Infrastructure.Services;
 using WeaveFleet.Infrastructure.Tests.Data.Repositories;
 using WeaveFleet.Testing.Fakes;
 using WeaveFleet.Testing.Fakes.Repositories;

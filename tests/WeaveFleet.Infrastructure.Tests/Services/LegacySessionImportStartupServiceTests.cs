@@ -3,7 +3,7 @@ using System.Reflection;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging;
 using WeaveFleet.Application.Sessions;
-using WeaveFleet.Infrastructure.Services;
+using WeaveFleet.Infrastructure.Sessions;
 using WeaveFleet.Infrastructure.Tests.Data;
 
 namespace WeaveFleet.Infrastructure.Tests.Services;

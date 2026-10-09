@@ -1,8 +1,9 @@
 using Microsoft.Extensions.Hosting;
 using Microsoft.Extensions.Logging;
 using WeaveFleet.Application.Sessions;
+using WeaveFleet.Infrastructure.Events;
 
-namespace WeaveFleet.Infrastructure.Services;
+namespace WeaveFleet.Infrastructure.Sessions;
 
 /// <summary>
 /// Hosted service that gracefully stops all tracked harness instances on shutdown.

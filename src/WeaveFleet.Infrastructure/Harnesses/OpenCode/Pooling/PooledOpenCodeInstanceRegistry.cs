@@ -10,7 +10,6 @@ using WeaveFleet.Application.Diagnostics;
 using WeaveFleet.Application.Events;
 using WeaveFleet.Application.Sessions;
 using WeaveFleet.Domain.Repositories;
-using WeaveFleet.Infrastructure.Services;
 
 namespace WeaveFleet.Infrastructure.Harnesses.OpenCode.Pooling;
 

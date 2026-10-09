@@ -2,7 +2,7 @@ using WeaveFleet.Domain.Entities;
 using WeaveFleet.Domain.Events;
 using WeaveFleet.Domain.Harnesses;
 
-namespace WeaveFleet.Infrastructure.Services;
+namespace WeaveFleet.Infrastructure.Sessions;
 
 /// <summary>
 /// Tool calls a turn left behind. A call is only ever running inside a turn, so when a session isn't in one, a call

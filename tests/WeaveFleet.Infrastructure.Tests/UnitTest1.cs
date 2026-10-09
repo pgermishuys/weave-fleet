@@ -4,7 +4,7 @@ using WeaveFleet.Application.Configuration;
 using WeaveFleet.Application.Sessions;
 using WeaveFleet.Application.Users;
 using WeaveFleet.Infrastructure;
-using WeaveFleet.Infrastructure.Services;
+using WeaveFleet.Infrastructure.Sessions;
 
 namespace WeaveFleet.Infrastructure.Tests;
 

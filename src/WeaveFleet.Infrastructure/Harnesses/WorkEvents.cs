@@ -6,7 +6,7 @@ namespace WeaveFleet.Infrastructure.Harnesses;
 /// <summary>
 /// Builds Fleet's own running-work events (<see cref="EventTypes.WorkStarted"/>, <see cref="EventTypes.WorkUpdated"/>,
 /// <see cref="EventTypes.WorkEnded"/>), which every adapter sends for the work its agent leaves running. The relay hands
-/// them to <see cref="Services.RunningWorkRecorder"/>; they never reach the conversation.
+/// them to <see cref="Sessions.RunningWorkRecorder"/>; they never reach the conversation.
 /// </summary>
 internal static class WorkEvents
 {
