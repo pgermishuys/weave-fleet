@@ -1,8 +1,8 @@
 using System.Text.Json.Nodes;
 using WeaveFleet.Application.Browser;
 using WeaveFleet.Application.Canvases;
+using WeaveFleet.Application.Configuration;
 using WeaveFleet.Application.Pages;
-using WeaveFleet.Application.Services;
 using WeaveFleet.Application.Tests.Canvases;
 using WeaveFleet.Domain.Entities;
 using WeaveFleet.Testing.Fakes.Repositories;

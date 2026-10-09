@@ -1,6 +1,6 @@
 using System.Text.Json.Nodes;
 
-namespace WeaveFleet.Application.Services;
+namespace WeaveFleet.Application.Plugins;
 
 /// <summary>
 /// Transitional persistence abstraction for integration-shaped config data.

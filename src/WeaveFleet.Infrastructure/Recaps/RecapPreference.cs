@@ -4,7 +4,7 @@ using WeaveFleet.Application.Sessions;
 using WeaveFleet.Domain.Repositories;
 using WeaveFleet.Infrastructure.Users;
 
-namespace WeaveFleet.Infrastructure.Services;
+namespace WeaveFleet.Infrastructure.Recaps;
 
 /// <summary>
 /// Reads the "Session recap" setting for a session's owner. Off unless they turned it on: each recap is

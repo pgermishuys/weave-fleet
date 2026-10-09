@@ -12,7 +12,6 @@ using WeaveFleet.Api.Tests.Infrastructure;
 using WeaveFleet.Application.Credentials;
 using WeaveFleet.Application.Data;
 using WeaveFleet.Application.Plugins;
-using WeaveFleet.Application.Services;
 using WeaveFleet.Domain.Repositories;
 using WeaveFleet.Infrastructure.GitHub;
 using WeaveFleet.Infrastructure.Plugins;

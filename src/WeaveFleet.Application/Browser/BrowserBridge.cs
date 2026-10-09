@@ -1,7 +1,7 @@
 using System.Text;
 using WeaveFleet.Application.Canvases;
+using WeaveFleet.Application.Configuration;
 using WeaveFleet.Application.Pages;
-using WeaveFleet.Application.Services;
 using WeaveFleet.Application.Users;
 
 namespace WeaveFleet.Application.Browser;
