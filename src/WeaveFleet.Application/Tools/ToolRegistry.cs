@@ -1,7 +1,7 @@
 using System.Diagnostics;
 using System.Runtime.InteropServices;
 
-namespace WeaveFleet.Application.Services;
+namespace WeaveFleet.Application.Tools;
 
 public sealed record ToolDefinition(
     string Id,

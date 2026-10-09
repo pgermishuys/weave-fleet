@@ -2,7 +2,7 @@ using System.Diagnostics;
 using System.Runtime.InteropServices;
 using Microsoft.Extensions.Logging;
 
-namespace WeaveFleet.Application.Services;
+namespace WeaveFleet.Application.Tools;
 
 /// <summary>
 /// Detects which tools from the registry are installed on the current system.

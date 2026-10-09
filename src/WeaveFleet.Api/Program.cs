@@ -162,7 +162,7 @@ if (string.Equals(harnessMode, "test", StringComparison.OrdinalIgnoreCase))
 }
 builder.AddFleetTelemetry();
 builder.AddFleetDiagnosticLogging();
-builder.Services.AddSingleton<WeaveFleet.Application.Services.ToolDetector>();
+builder.Services.AddSingleton<WeaveFleet.Application.Tools.ToolDetector>();
 builder.Services.AddSingleton<WeaveFleet.Api.Browser.PreviewGateway>();
 builder.Services.AddSingleton(_ => WeaveFleet.Application.Workspaces.KeyFileConfig.Load());
 builder.Services.AddSingleton<WeaveFleet.Application.Workspaces.KeyFileScanner>();
