@@ -26,12 +26,12 @@ const label = computed(() => (props.draft.isStarting ? "Starting…" : "Draft"))
       :aria-current="active ? 'true' : undefined"
       @click="emit('open')"
     >
-      <PencilLine
-        class="draft-row__icon"
-        aria-hidden="true"
-      />
       <span
         class="draft-row__caret-slot"
+        aria-hidden="true"
+      />
+      <PencilLine
+        class="draft-row__icon"
         aria-hidden="true"
       />
       <span
@@ -58,7 +58,7 @@ const label = computed(() => (props.draft.isStarting ? "Starting…" : "Draft"))
   display: flex;
   align-items: center;
   gap: 9px;
-  padding: 0 10px;
+  padding: 0 10px 0 6px;
   cursor: pointer;
   border: 0;
   border-radius: var(--radius-btn);
@@ -97,7 +97,7 @@ const label = computed(() => (props.draft.isStarting ? "Starting…" : "Draft"))
 .draft-row__caret-slot {
   width: 14px;
   height: 14px;
-  margin-left: -4px;
+  margin-right: -4px;
   flex-shrink: 0;
 }
 

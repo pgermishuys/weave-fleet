@@ -616,6 +616,7 @@ function removeSessionFromStore(): void {
             class="session-item"
             :class="{
               active,
+              'session-item--top': topLevel,
               'session-item--selected': isSelected,
               'session-item--has-action': (canArchive || canRestore || canPin) && !isSelecting,
               'session-item--has-two-actions': canArchive && canPin && !isSelecting,
@@ -630,6 +631,23 @@ function removeSessionFromStore(): void {
             @dblclick="startRename"
             @keydown="handleRowKeydown"
           >
+            <span
+              v-if="hasChildren"
+              class="session-caret"
+              :class="{ 'session-caret--open': childrenExpanded }"
+              :title="childrenExpanded ? 'Hide what it started' : 'Show what it started'"
+              aria-hidden="true"
+              data-testid="session-children-toggle"
+              @click.stop="emit('toggleChildren')"
+            >
+              <ChevronRight />
+            </span>
+            <span
+              v-else-if="topLevel"
+              class="session-caret-slot"
+              aria-hidden="true"
+            />
+
             <span
               v-if="isSelecting"
               class="session-check"
@@ -647,23 +665,6 @@ function removeSessionFromStore(): void {
             <span
               v-else
               class="session-glyph-slot"
-              aria-hidden="true"
-            />
-
-            <span
-              v-if="hasChildren"
-              class="session-caret"
-              :class="{ 'session-caret--open': childrenExpanded }"
-              :title="childrenExpanded ? 'Hide what it started' : 'Show what it started'"
-              aria-hidden="true"
-              data-testid="session-children-toggle"
-              @click.stop="emit('toggleChildren')"
-            >
-              <ChevronRight />
-            </span>
-            <span
-              v-else-if="topLevel"
-              class="session-caret-slot"
               aria-hidden="true"
             />
 
@@ -768,8 +769,13 @@ function removeSessionFromStore(): void {
         <div
           v-else
           class="session-item session-item--editing"
-          :class="{ active }"
+          :class="{ active, 'session-item--top': topLevel }"
         >
+          <span
+            v-if="topLevel"
+            class="session-caret-slot"
+            aria-hidden="true"
+          />
           <StatusGlyph
             v-if="isLive"
             :status="session.sessionStatus"
@@ -779,11 +785,6 @@ function removeSessionFromStore(): void {
           <span
             v-else
             class="session-glyph-slot"
-            aria-hidden="true"
-          />
-          <span
-            v-if="topLevel"
-            class="session-caret-slot"
             aria-hidden="true"
           />
 
@@ -1185,6 +1186,11 @@ function removeSessionFromStore(): void {
   color: var(--text);
 }
 
+/* A row at the top of its project leads with the fold caret, under the project's chevron, then its status dot. */
+.session-item--top {
+  padding-left: 6px;
+}
+
 .session-item--editing:hover {
   background: transparent;
 }
@@ -1293,7 +1299,7 @@ function removeSessionFromStore(): void {
   place-items: center;
   width: 14px;
   height: 14px;
-  margin-left: -4px;
+  margin-right: -4px;
   border-radius: 4px;
   color: var(--muted);
 }
@@ -1302,7 +1308,7 @@ function removeSessionFromStore(): void {
 .session-caret-slot {
   width: 14px;
   height: 14px;
-  margin-left: -4px;
+  margin-right: -4px;
   flex-shrink: 0;
 }
 

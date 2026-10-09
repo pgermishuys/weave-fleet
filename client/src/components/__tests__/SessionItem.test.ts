@@ -531,6 +531,16 @@ describe("SessionItem", () => {
       expect(mountWith({ topLevel: true, hasChildren: true }).find(".session-caret-slot").exists()).toBe(false);
       expect(mountWith({ kindLabel: "fork" }).find(".session-caret-slot").exists()).toBe(false);
     });
+
+    it("leads a top-level row with the caret, so the status dot sits beside the title", () => {
+      const leading = (props: Record<string, unknown>) => [...mountWith(props).get("[data-testid='session-row']").element.children]
+        .slice(0, 3).map((el) => el.className.split(" ")[0].replace(/^(status-glyph|session-glyph-slot)$/, "dot"));
+
+      expect(leading({ topLevel: true, hasChildren: true })).toEqual(["session-caret", "dot", "session-copy"]);
+      expect(leading({ topLevel: true })).toEqual(["session-caret-slot", "dot", "session-copy"]);
+      expect(mountWith({ topLevel: true }).get("[data-testid='session-row']").classes()).toContain("session-item--top");
+      expect(mountWith({ kindLabel: "fork" }).get("[data-testid='session-row']").classes()).not.toContain("session-item--top");
+    });
   });
 
   describe("pinning", () => {
