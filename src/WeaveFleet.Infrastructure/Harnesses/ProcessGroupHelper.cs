@@ -71,20 +71,27 @@ internal static class ProcessGroupHelper
 
     /// <summary>
     /// Takes charge of <paramref name="process"/>, just started, so it doesn't outlive Fleet.
-    /// On Windows: creates a Job Object with <c>JOB_OBJECT_LIMIT_KILL_ON_JOB_CLOSE</c> and assigns the process to it.
+    /// On Windows: assigns the process to <paramref name="group"/>, or to a Job Object of its own with
+    /// <c>JOB_OBJECT_LIMIT_KILL_ON_JOB_CLOSE</c>.
     /// On Linux and macOS: tracks it, and records it on disk, until it exits (see the class summary).
     /// </summary>
+    /// <param name="group">
+    /// A Job Object from <see cref="CreateProcessGroup"/> that outlives the process, so what the process starts and
+    /// leaves running ends with the group, not with the process. Null for a job of the process's own.
+    /// </param>
     /// <returns>
-    /// On Windows: a <see cref="SafeHandle"/> for the Job Object that must be kept alive.
-    /// On Unix: <c>null</c>.
+    /// On Windows: a <see cref="SafeHandle"/> for the Job Object that must be kept alive (<paramref name="group"/> when
+    /// given). On Unix: <c>null</c>.
     /// </returns>
-    internal static SafeHandle? AssignToProcessGroup(Process process, ILogger? logger = null)
+    internal static SafeHandle? AssignToProcessGroup(Process process, ILogger? logger = null, SafeHandle? group = null)
     {
         ArgumentNullException.ThrowIfNull(process);
 
         if (OperatingSystem.IsWindows())
         {
-            return AssignToJobObject(process, logger);
+            var job = group ?? CreateJobObject(logger);
+            AssignToJobObject(job, process, logger);
+            return job;
         }
 
         if (ProcessIdentity.IsSupported)
@@ -94,6 +101,14 @@ internal static class ProcessGroupHelper
 
         return null;
     }
+
+    /// <summary>
+    /// A Job Object with <c>JOB_OBJECT_LIMIT_KILL_ON_JOB_CLOSE</c> for several processes in turn
+    /// (<see cref="AssignToProcessGroup"/>): disposing it kills every process still in it. Null on Linux and macOS, where
+    /// there is no such thing.
+    /// </summary>
+    internal static SafeHandle? CreateProcessGroup(ILogger? logger = null)
+        => OperatingSystem.IsWindows() ? CreateJobObject(logger) : null;
 
     /// <summary>Kills <paramref name="process"/> and its children, straight away.</summary>
     internal static void KillProcessGroup(Process process, ILogger? logger = null)
@@ -184,7 +199,7 @@ internal static class ProcessGroupHelper
     }
 
     [SupportedOSPlatform("windows")]
-    private static SafeFileHandle AssignToJobObject(Process process, ILogger? logger)
+    private static SafeFileHandle CreateJobObject(ILogger? logger)
     {
         var jobHandle = Windows.CreateJobObject(IntPtr.Zero, null);
         if (jobHandle.IsInvalid)
@@ -226,6 +241,15 @@ internal static class ProcessGroupHelper
             Marshal.FreeHGlobal(infoPtr);
         }
 
+        return jobHandle;
+    }
+
+    [SupportedOSPlatform("windows")]
+    private static void AssignToJobObject(SafeHandle jobHandle, Process process, ILogger? logger)
+    {
+        if (jobHandle.IsInvalid)
+            return; // CreateJobObject failed, and said so.
+
         bool assigned = Windows.AssignProcessToJobObject(jobHandle, process.SafeHandle);
         if (!assigned)
         {
@@ -239,8 +263,6 @@ internal static class ProcessGroupHelper
             if (logger is not null)
                 LogJobObjectAssigned(logger, process.Id, null);
         }
-
-        return jobHandle;
     }
 
     private static bool HasExited(Process process)

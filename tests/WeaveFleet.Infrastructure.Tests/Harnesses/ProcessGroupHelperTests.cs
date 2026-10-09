@@ -204,6 +204,32 @@ public sealed class ProcessGroupHelperTests
         }
     }
 
+    [Fact]
+    public void A_process_given_a_group_joins_it_and_Linux_and_macOS_have_none()
+    {
+        using var group = ProcessGroupHelper.CreateProcessGroup();
+        using var process = OperatingSystem.IsWindows() ? SpawnWindowsSleepProcess() : SpawnSleepProcess();
+        try
+        {
+            var handle = ProcessGroupHelper.AssignToProcessGroup(process, group: group);
+
+            if (OperatingSystem.IsWindows())
+            {
+                group.ShouldNotBeNull();
+                handle.ShouldBeSameAs(group);
+            }
+            else
+            {
+                group.ShouldBeNull();
+                handle.ShouldBeNull();
+            }
+        }
+        finally
+        {
+            SafeKill(process);
+        }
+    }
+
     // -----------------------------------------------------------------------
     // Helpers
     // -----------------------------------------------------------------------
