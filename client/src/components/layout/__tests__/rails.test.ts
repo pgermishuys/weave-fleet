@@ -41,7 +41,7 @@ vi.mock("@/plugins/builtin/github/GitHubPanel.vue", panel("github"));
 vi.mock("@/plugins/builtin/github/GitHubSettings.vue", panel("github-settings"));
 vi.mock("@/plugins/builtin/marketplace/MarketplacePanel.vue", panel("marketplace"));
 
-function railLabels(wrapper: ReturnType<typeof mount>): string[] {
+function railLabels(wrapper: { findAll: (selector: string) => { attributes: (name: string) => string | undefined }[] }): string[] {
   return wrapper.findAll("nav.rail-nav button.rail-item").map((button) => button.attributes("aria-label") ?? "");
 }
 

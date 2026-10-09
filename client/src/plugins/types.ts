@@ -32,7 +32,10 @@ export interface FleetPluginSidebarItem {
   viewId: FleetPluginViewId;
   label: string;
   icon: Component;
-  defaultPath: string;
+  /** The route the rail opens; leave it out for a rail that only switches the side panel. */
+  defaultPath?: string;
+  /** Where the icon sits in the icon rail. Defaults to the plugin group in the middle. */
+  placement?: "plugin" | "bottom";
   order?: number;
 }
 

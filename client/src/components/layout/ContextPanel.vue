@@ -1,141 +1,21 @@
-<!-- eslint-disable vue/one-component-per-file -->
 <script setup lang="ts">
 import type { Component } from "vue";
-import type { SidebarRail } from "@/stores/sidebar";
-import { computed, defineComponent, h, shallowRef } from "vue";
+import { computed, shallowRef } from "vue";
 import { storeToRefs } from "pinia";
-import BoardControlsPanel from "@/components/board/BoardControlsPanel.vue";
-import { useBoardFeature } from "@/composables/use-board-feature";
 import SessionsPanel from "@/components/sessions/SessionsPanel.vue";
-import SettingsNavPanel from "@/components/settings/SettingsNavPanel.vue";
-import AutomationsNavPanel from "@/components/automations/AutomationsNavPanel.vue";
-import WorkflowsNavPanel from "@/components/workflows/WorkflowsNavPanel.vue";
-import { useSettingsNav } from "@/composables/use-settings-nav";
-import { useAutomationsNav } from "@/composables/use-automations-nav";
-import { getSidebarPanels } from "@/plugins/slots";
+import "@/components/layout/core-rails";
+import { getRail } from "@/lib/rails";
 import { useSidebarStore } from "@/stores/sidebar";
-
-type PluginRailId =
-  | "github"
-  | "marketplace"
-  | "settings";
-
-type ContextPanelKey = SidebarRail | PluginRailId;
-
-interface PluginPanelDefinition {
-  id: PluginRailId;
-  title: string;
-}
-
-const SettingsContextPanel = defineComponent({
-  name: "SettingsContextPanel",
-  setup() {
-    const { activeSection, setActiveSection } = useSettingsNav();
-
-    return () =>
-      h(SettingsNavPanel, {
-        modelValue: activeSection.value,
-        "onUpdate:modelValue": setActiveSection,
-      });
-  },
-});
-
-const AutomationsContextPanel = defineComponent({
-  name: "AutomationsContextPanel",
-  setup() {
-    const { activeAutomationId, setActiveAutomation, startCreate } = useAutomationsNav();
-
-    return () =>
-      h(AutomationsNavPanel, {
-        modelValue: activeAutomationId.value,
-        "onUpdate:modelValue": setActiveAutomation,
-        onCreate: startCreate,
-      });
-  },
-});
-
-function createPlaceholderPanel(
-  eyebrow: string,
-  title: string,
-  description: string,
-): Component {
-  return defineComponent({
-    name: `${title.replace(/\s+/g, "")}Panel`,
-    setup() {
-      return () =>
-        h("section", { class: "context-panel__content" }, [
-          h("p", { class: "context-panel__eyebrow" }, eyebrow),
-          h("h2", { class: "context-panel__title" }, title),
-          h("p", { class: "context-panel__description" }, description),
-        ]);
-    },
-  });
-}
-
-const pluginPanelRegistry = [
-  { id: "github", title: "GitHub" },
-  { id: "marketplace", title: "Plugins" },
-  { id: "settings", title: "Settings" },
-] as const satisfies readonly PluginPanelDefinition[];
-
-const pluginPanels = Object.fromEntries(
-  pluginPanelRegistry.map(({ id, title }) => [
-    id,
-    id === "settings"
-      ? SettingsContextPanel
-      : createPlaceholderPanel(
-          "Plugin",
-          `${title} Panel`,
-          `${title} integration controls will appear here.`,
-        ),
-  ]),
-) as Record<PluginRailId, Component>;
-
-const registeredPluginPanels = computed<Record<PluginRailId, Component>>(() => {
-  const registeredEntries = getSidebarPanels()
-    .filter((panel): panel is typeof panel & { viewId: PluginRailId } => panel.viewId in pluginPanels)
-    .map((panel) => [panel.viewId, panel.component] as const);
-
-  return {
-    ...pluginPanels,
-    ...Object.fromEntries(registeredEntries),
-  };
-});
-
-const { isBoardFeatureEnabled } = useBoardFeature();
-
-const panelComponents = computed<Record<ContextPanelKey, Component>>(() => ({
-  sessions: SessionsPanel,
-  // Its filters are for the board itself; with Board off the page only says how to turn it on.
-  board: isBoardFeatureEnabled.value ? BoardControlsPanel : SessionsPanel,
-  analytics: SessionsPanel,
-  automations: AutomationsContextPanel,
-  workflows: WorkflowsNavPanel,
-  ...registeredPluginPanels.value,
-}));
-
-function isContextPanelKey(value: string, panels: Record<ContextPanelKey, Component>): value is ContextPanelKey {
-  return value in panels;
-}
 
 const sidebarStore = useSidebarStore();
 const { activeRail } = storeToRefs(sidebarStore);
 
-const activePanel = computed<Component>(() => {
-  const rail = activeRail.value as string;
+// A rail nobody has contributed (an id left over from a plugin that is gone) shows the sessions list.
+const activeDefinition = computed(() => getRail(activeRail.value));
 
-  if (isContextPanelKey(rail, panelComponents.value)) {
-    return panelComponents.value[rail];
-  }
+const activePanel = computed<Component>(() => activeDefinition.value?.panel ?? SessionsPanel);
 
-  return SessionsPanel;
-});
-
-const activePanelKey = computed(() => {
-  const rail = activeRail.value as string;
-
-  return isContextPanelKey(rail, panelComponents.value) ? rail : "sessions";
-});
+const activePanelKey = computed(() => activeDefinition.value?.id ?? "sessions");
 
 const props = defineProps<{
   /** Fill the container instead of the resizable width (the phone menu drawer). */

@@ -1,16 +1,9 @@
 import { defineStore } from "pinia";
 import { computed, shallowRef } from "vue";
+import type { SidebarRail } from "@/lib/rails";
 import { useSessionsStore } from "@/stores/sessions";
 
-export type SidebarRail =
-  | "board"
-  | "sessions"
-  | "analytics"
-  | "automations"
-  | "workflows"
-  | "github"
-  | "marketplace"
-  | "settings";
+export type { SidebarRail } from "@/lib/rails";
 
 const LEFT_PANEL_STORAGE_KEY = "weave:left-collapsed";
 const RIGHT_PANEL_STORAGE_KEY = "weave:right-collapsed";

@@ -1,3 +1,4 @@
+import { Puzzle } from "lucide-vue-next";
 import type { FleetPluginManifest } from "@/plugins/types";
 import MarketplacePanel from "./MarketplacePanel.vue";
 
@@ -10,6 +11,15 @@ export const marketplacePluginManifest = {
     hasBackend: false,
   },
   contributions: {
+    sidebarItems: [
+      {
+        viewId: "marketplace",
+        label: "Plugins",
+        icon: Puzzle,
+        placement: "bottom",
+        order: 0,
+      },
+    ],
     sidebarPanels: [
       {
         viewId: "marketplace",

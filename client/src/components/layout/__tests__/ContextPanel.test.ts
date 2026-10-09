@@ -41,7 +41,22 @@ describe("ContextPanel plugin panels", () => {
     expect(wrapper.find("[data-testid=real-github-panel]").exists()).toBe(true);
   });
 
-  it("shows a placeholder for a plugin rail nobody has registered", () => {
+  // Core no longer names the GitHub rail: a rail exists once a plugin contributes it, so one nobody has
+  // registered is an unknown rail and shows the sessions list.
+  it("shows the sessions list for a plugin rail nobody has registered", () => {
+    openGitHubRail();
+
+    const wrapper = mount(ContextPanel);
+
+    expect(wrapper.find("[data-testid=real-github-panel]").exists()).toBe(false);
+    expect(wrapper.text()).toContain("sessions");
+  });
+
+  it("shows a placeholder for a plugin rail whose plugin has an icon but no panel", () => {
+    runtime.registerPlugin({
+      descriptor: githubPlugin.descriptor,
+      contributions: { sidebarItems: [{ viewId: "github", label: "GitHub", icon: GitHubStub, defaultPath: "/github" }] },
+    });
     openGitHubRail();
 
     const wrapper = mount(ContextPanel);

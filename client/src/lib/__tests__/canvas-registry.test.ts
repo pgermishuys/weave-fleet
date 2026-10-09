@@ -1,19 +1,18 @@
 import { createPinia, setActivePinia } from "pinia";
 import { beforeEach, describe, expect, it } from "vitest";
-import { canvasIcon, canvasTitle, CANVAS_TYPES, PICKABLE_CANVAS_KINDS, fileIcon } from "@/lib/canvas-registry";
+import { canvasIcon, canvasTitle, canvasType, canvasTypes, PICKABLE_CANVAS_KINDS, fileIcon } from "@/lib/canvas-registry";
 import { getVisualRenderer } from "@/lib/visual-renderer-registry";
 import { useCanvasesStore, type CanvasInstance } from "@/stores/canvases";
 
 describe("canvas kinds", () => {
   it("has these kinds, each with its own label", () => {
-    expect(Object.keys(CANVAS_TYPES)).toEqual([
+    expect(canvasTypes.items.value.map((type) => type.kind)).toEqual([
       "changes", "files", "context", "progress", "turns", "agents", "visual", "browser", "page", "file",
     ]);
-    expect(Object.values(CANVAS_TYPES).map((type) => type.label)).toEqual([
+    expect(canvasTypes.items.value.map((type) => type.label)).toEqual([
       "Changes", "Files", "Context", "Progress", "Turns", "Agents", "Diagram", "Browser", "Page", "File",
     ]);
-    for (const [kind, type] of Object.entries(CANVAS_TYPES)) {
-      expect(type.kind).toBe(kind);
+    for (const type of canvasTypes.items.value) {
       expect(type.component).toBeTruthy();
       expect(type.icon).toBeTruthy();
     }
@@ -34,9 +33,9 @@ describe("canvas kinds", () => {
 
   it("icons a canvas by its file, payload or kind", () => {
     const base = { id: "x", kind: "files" } as CanvasInstance;
-    expect(canvasIcon(base)).toBe(CANVAS_TYPES.files.icon);
+    expect(canvasIcon(base)).toBe(canvasType("files").icon);
     expect(canvasIcon({ ...base, kind: "file", file: { path: "a.json", preview: false, view: "edit" } })).toBe(fileIcon("a.json"));
-    expect(canvasIcon({ ...base, kind: "visual", payload: { $type: "html", content: "<p/>" } })).not.toBe(CANVAS_TYPES.visual.icon);
+    expect(canvasIcon({ ...base, kind: "visual", payload: { $type: "html", content: "<p/>" } })).not.toBe(canvasType("visual").icon);
   });
 
   it("throws for a kind nobody registered", () => {
