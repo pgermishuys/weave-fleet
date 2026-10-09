@@ -2,7 +2,7 @@ using Microsoft.Extensions.Hosting;
 using Microsoft.Extensions.Logging;
 using WeaveFleet.Application.Configuration;
 
-namespace WeaveFleet.Infrastructure.Services;
+namespace WeaveFleet.Infrastructure.EventBus;
 
 public sealed partial class OutboxDispatchBackgroundService(
     InProcessOutboxDispatcher dispatcher,

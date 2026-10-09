@@ -1,7 +1,7 @@
 using System.Text.Json;
 using WeaveFleet.Domain.Events;
 
-namespace WeaveFleet.Application.Services;
+namespace WeaveFleet.Application.Events;
 
 /// <summary>A broadcast event published to subscribers.</summary>
 public sealed record BroadcastEvent(

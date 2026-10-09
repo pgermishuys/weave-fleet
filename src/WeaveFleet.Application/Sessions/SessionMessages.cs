@@ -3,6 +3,7 @@ using System.Text.Json;
 using WeaveFleet.Application.Canvases;
 using WeaveFleet.Application.Configuration;
 using WeaveFleet.Application.DTOs;
+using WeaveFleet.Application.Events;
 using WeaveFleet.Application.Machines;
 using WeaveFleet.Application.Services;
 using WeaveFleet.Application.Users;

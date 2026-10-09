@@ -1,12 +1,12 @@
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging.Abstractions;
 using System.Text.Json;
+using WeaveFleet.Application.Events;
 using WeaveFleet.Application.Services;
 using WeaveFleet.Domain.Entities;
 using WeaveFleet.Domain.Events;
 using WeaveFleet.Domain.Harnesses;
 using WeaveFleet.Infrastructure.EventBus;
-using WeaveFleet.Infrastructure.Services;
 using WeaveFleet.Infrastructure.Tests.Data;
 using WeaveFleet.Testing.Fakes.Repositories;
 

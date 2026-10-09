@@ -1,7 +1,7 @@
 using System.Collections.Concurrent;
 using System.Text.Json;
 using Microsoft.Extensions.Logging;
-using WeaveFleet.Application.Services;
+using WeaveFleet.Application.Events;
 using WeaveFleet.Domain.Harnesses;
 
 namespace WeaveFleet.Application.Harnesses;

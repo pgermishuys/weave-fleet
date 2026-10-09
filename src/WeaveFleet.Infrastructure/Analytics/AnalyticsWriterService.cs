@@ -9,7 +9,7 @@ using WeaveFleet.Application.Analytics;
 using WeaveFleet.Application.Configuration;
 using WeaveFleet.Application.Data;
 using WeaveFleet.Application.Diagnostics;
-using WeaveFleet.Application.Services;
+using WeaveFleet.Application.Events;
 using WeaveFleet.Domain.Repositories;
 using WeaveFleet.Infrastructure.Data;
 

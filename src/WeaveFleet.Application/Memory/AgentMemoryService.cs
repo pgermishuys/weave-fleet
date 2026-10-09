@@ -1,7 +1,7 @@
 using System.Security.Cryptography;
 using System.Text.Json;
 using Microsoft.Extensions.Logging;
-using WeaveFleet.Application.Services;
+using WeaveFleet.Application.Events;
 using WeaveFleet.Application.Users;
 using WeaveFleet.Domain.Common;
 using WeaveFleet.Domain.Entities;

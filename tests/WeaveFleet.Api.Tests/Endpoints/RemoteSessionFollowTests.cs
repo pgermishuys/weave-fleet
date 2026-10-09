@@ -9,13 +9,14 @@ using WeaveFleet.Api.Tests.Auth;
 using WeaveFleet.Api.Tests.Infrastructure;
 using WeaveFleet.Application.Configuration;
 using WeaveFleet.Application.Data;
+using WeaveFleet.Application.Events;
 using WeaveFleet.Application.Machines;
 using WeaveFleet.Application.Services;
 using WeaveFleet.Application.Sessions;
 using WeaveFleet.Application.Users;
 using WeaveFleet.Domain.Events;
 using WeaveFleet.Domain.Harnesses;
-using WeaveFleet.Infrastructure.Services;
+using WeaveFleet.Infrastructure.EventBus;
 using WeaveFleet.Infrastructure.Machines;
 using WeaveFleet.Testing.Fakes;
 

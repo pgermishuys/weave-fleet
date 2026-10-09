@@ -4,7 +4,7 @@ using Microsoft.Extensions.Logging;
 using WeaveFleet.Application.Configuration;
 using WeaveFleet.Domain.Repositories;
 
-namespace WeaveFleet.Infrastructure.Services;
+namespace WeaveFleet.Infrastructure.EventBus;
 
 public sealed partial class OutboxCleanupBackgroundService(
     IServiceScopeFactory scopeFactory,

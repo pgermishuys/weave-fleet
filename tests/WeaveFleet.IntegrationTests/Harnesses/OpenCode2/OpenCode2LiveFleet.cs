@@ -5,6 +5,7 @@ using System.Text.Json;
 using FakeLlm::FakeLlmServer;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging.Abstractions;
+using WeaveFleet.Application.Events;
 using WeaveFleet.Application.Services;
 using WeaveFleet.Application.Workspaces;
 using WeaveFleet.Domain.Harnesses;

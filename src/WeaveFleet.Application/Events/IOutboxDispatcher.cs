@@ -1,4 +1,4 @@
-namespace WeaveFleet.Application.Services;
+namespace WeaveFleet.Application.Events;
 
 /// <summary>
 /// Outward-facing abstraction for waking or dispatching the committed outbox.

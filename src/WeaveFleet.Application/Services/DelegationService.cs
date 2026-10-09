@@ -1,6 +1,7 @@
 using System.Text.Json;
 using WeaveFleet.Application;
 using WeaveFleet.Application.DTOs;
+using WeaveFleet.Application.Events;
 using WeaveFleet.Application.Progress;
 using WeaveFleet.Application.Users;
 using WeaveFleet.Domain.Entities;
