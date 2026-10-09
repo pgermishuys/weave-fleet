@@ -1,5 +1,6 @@
 using Microsoft.Extensions.Logging.Abstractions;
 using Microsoft.Extensions.Time.Testing;
+using WeaveFleet.Application.Automations;
 using WeaveFleet.Application.Services;
 using WeaveFleet.Application.Tests.Machines;
 using WeaveFleet.Domain.Entities;

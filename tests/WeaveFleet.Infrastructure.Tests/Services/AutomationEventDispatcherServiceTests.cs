@@ -1,10 +1,10 @@
 using System.Threading.Channels;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging.Abstractions;
-using WeaveFleet.Application.Services;
+using WeaveFleet.Application.Automations;
 using WeaveFleet.Domain.Entities;
 using WeaveFleet.Domain.Repositories;
-using WeaveFleet.Infrastructure.Services;
+using WeaveFleet.Infrastructure.Automations;
 
 namespace WeaveFleet.Infrastructure.Tests.Services;
 

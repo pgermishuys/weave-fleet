@@ -1,8 +1,9 @@
+using WeaveFleet.Application.Services;
 using WeaveFleet.Domain.Common;
 using WeaveFleet.Domain.Entities;
 using WeaveFleet.Domain.Repositories;
 
-namespace WeaveFleet.Application.Services;
+namespace WeaveFleet.Application.Automations;
 
 /// <summary>What an automation's run goes to.</summary>
 public static class AutomationTargets

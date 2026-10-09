@@ -1,6 +1,6 @@
 using Microsoft.Extensions.Logging.Abstractions;
 using Shouldly;
-using WeaveFleet.Application.Services;
+using WeaveFleet.Application.Automations;
 using WeaveFleet.Domain.Entities;
 using WeaveFleet.Domain.Repositories;
 

@@ -1,6 +1,6 @@
 using Microsoft.Extensions.DependencyInjection;
 using WeaveFleet.Api.Contracts;
-using WeaveFleet.Application.Services;
+using WeaveFleet.Application.Automations;
 using WeaveFleet.Domain.Common;
 using WeaveFleet.Domain.Entities;
 using WeaveFleet.Domain.Repositories;
