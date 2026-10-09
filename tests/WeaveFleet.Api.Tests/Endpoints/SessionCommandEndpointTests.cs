@@ -7,7 +7,7 @@ using Dapper;
 using Microsoft.Extensions.DependencyInjection;
 using WeaveFleet.Api.Tests.Infrastructure;
 using WeaveFleet.Application.Data;
-using WeaveFleet.Application.Services;
+using WeaveFleet.Application.Sessions;
 using WeaveFleet.Domain.Harnesses;
 
 namespace WeaveFleet.Api.Tests.Endpoints;

@@ -5,7 +5,7 @@ using WeaveFleet.Application.Users;
 using WeaveFleet.Domain.Events;
 using WeaveFleet.Domain.Harnesses;
 
-namespace WeaveFleet.Application.Services;
+namespace WeaveFleet.Application.Sessions;
 
 /// <summary>
 /// Takes what every harness reports about its session's context window from the relay to

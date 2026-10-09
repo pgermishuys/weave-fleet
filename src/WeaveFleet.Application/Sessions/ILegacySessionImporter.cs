@@ -1,4 +1,4 @@
-namespace WeaveFleet.Application.Services;
+namespace WeaveFleet.Application.Sessions;
 
 public interface ILegacySessionImporter
 {

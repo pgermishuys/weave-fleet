@@ -6,7 +6,6 @@ using Shouldly;
 using WeaveFleet.Application.Canvases;
 using WeaveFleet.Application.Configuration;
 using WeaveFleet.Application.Machines;
-using WeaveFleet.Application.Services;
 using WeaveFleet.Application.Sessions;
 using WeaveFleet.Application.Users;
 using WeaveFleet.Domain.Entities;

@@ -1,6 +1,6 @@
 using System.Text.Json;
 using WeaveFleet.Application.Canvases;
-using WeaveFleet.Application.Services;
+using WeaveFleet.Application.Sessions;
 using WeaveFleet.Domain.Entities;
 
 namespace WeaveFleet.Api.Endpoints;

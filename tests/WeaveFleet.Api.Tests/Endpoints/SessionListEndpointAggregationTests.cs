@@ -234,7 +234,7 @@ public sealed class SessionListEndpointAggregationTests : IAsyncLifetime, IDispo
     {
         // Claude Code's api_retry, as the relay records it: a page opened mid-retry reads it from here.
         using var scope = _factory!.Services.CreateScope();
-        var activityTracker = scope.ServiceProvider.GetRequiredService<Application.Services.SessionActivityTracker>();
+        var activityTracker = scope.ServiceProvider.GetRequiredService<Application.Sessions.SessionActivityTracker>();
         var next = DateTimeOffset.UtcNow.AddSeconds(12);
         activityTracker.Update("session-standalone", "retry", _userId, retryAttempt: 3, retryMessage: "API overloaded (529)", retryNext: next, retryMax: 10);
 
@@ -262,7 +262,7 @@ public sealed class SessionListEndpointAggregationTests : IAsyncLifetime, IDispo
     {
         // Register the child as busy in the activity tracker
         using var scope = _factory!.Services.CreateScope();
-        var activityTracker = scope.ServiceProvider.GetRequiredService<Application.Services.SessionActivityTracker>();
+        var activityTracker = scope.ServiceProvider.GetRequiredService<Application.Sessions.SessionActivityTracker>();
         activityTracker.Update("session-child", "busy", _userId);
 
         var response = await _client!.GetAsync("/api/sessions");
@@ -316,7 +316,7 @@ public sealed class SessionListEndpointAggregationTests : IAsyncLifetime, IDispo
                 });
         }
 
-        var activityTracker = scope.ServiceProvider.GetRequiredService<Application.Services.SessionActivityTracker>();
+        var activityTracker = scope.ServiceProvider.GetRequiredService<Application.Sessions.SessionActivityTracker>();
         activityTracker.Update("session-child", "busy", _userId);
 
         var sessions = await _client!.GetFromJsonAsync<JsonElement[]>("/api/sessions", JsonSerializerOptions.Web);

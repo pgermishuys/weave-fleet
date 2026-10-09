@@ -5,7 +5,7 @@ using Microsoft.Extensions.Logging.Abstractions;
 using Shouldly;
 using WeaveFleet.Application.Configuration;
 using WeaveFleet.Application.Data;
-using WeaveFleet.Application.Services;
+using WeaveFleet.Application.Sessions;
 using WeaveFleet.Domain.Harnesses;
 using WeaveFleet.Domain.Repositories;
 using WeaveFleet.Infrastructure.Harnesses.ClaudeCode;

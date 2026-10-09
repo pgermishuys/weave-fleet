@@ -8,7 +8,7 @@ using WeaveFleet.Domain.Events;
 using WeaveFleet.Domain.Harnesses;
 using WeaveFleet.Domain.Identity;
 
-namespace WeaveFleet.Application.Services;
+namespace WeaveFleet.Application.Sessions;
 
 /// <summary>
 /// Converts between <see cref="HarnessMessage"/> and <see cref="PersistedMessage"/>,

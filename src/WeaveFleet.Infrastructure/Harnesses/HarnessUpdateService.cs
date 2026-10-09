@@ -5,7 +5,7 @@ using System.Text.Json;
 using System.Text.RegularExpressions;
 using Microsoft.Extensions.Logging;
 using WeaveFleet.Application.Harnesses;
-using WeaveFleet.Application.Services;
+using WeaveFleet.Application.Sessions;
 using WeaveFleet.Application.Terminals;
 using WeaveFleet.Domain.Common;
 using WeaveFleet.Domain.Harnesses;

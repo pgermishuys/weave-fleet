@@ -2,7 +2,7 @@ using System.Text;
 using System.Text.Json;
 using Microsoft.Extensions.DependencyInjection;
 using WeaveFleet.Application.Data;
-using WeaveFleet.Application.Services;
+using WeaveFleet.Application.Sessions;
 using WeaveFleet.Domain.Repositories;
 
 namespace WeaveFleet.IntegrationTests.Sessions;

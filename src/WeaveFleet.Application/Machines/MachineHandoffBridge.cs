@@ -1,7 +1,6 @@
 using System.Text;
 using WeaveFleet.Application.Canvases;
 using WeaveFleet.Application.Configuration;
-using WeaveFleet.Application.Services;
 using WeaveFleet.Application.Sessions;
 using WeaveFleet.Application.Users;
 using WeaveFleet.Domain.Entities;

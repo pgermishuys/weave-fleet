@@ -6,7 +6,6 @@ using WeaveFleet.Application.Credentials;
 using WeaveFleet.Application.Diagnostics;
 using WeaveFleet.Application.Events;
 using WeaveFleet.Application.Harnesses;
-using WeaveFleet.Application.Services;
 using WeaveFleet.Application.Workspaces;
 using WeaveFleet.Domain.Common;
 using WeaveFleet.Domain.DTOs;

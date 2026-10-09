@@ -1,6 +1,6 @@
 using System.Collections.Concurrent;
 using Shouldly;
-using WeaveFleet.Application.Services;
+using WeaveFleet.Application.Sessions;
 using WeaveFleet.Domain.Harnesses;
 
 namespace WeaveFleet.Application.Tests.Services;

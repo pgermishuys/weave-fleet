@@ -1,6 +1,6 @@
 using System.Text.Json;
 using WeaveFleet.Application.Events;
-using WeaveFleet.Application.Services;
+using WeaveFleet.Application.Sessions;
 using WeaveFleet.Domain.Repositories;
 using WeaveFleet.Infrastructure;
 using Microsoft.Extensions.DependencyInjection;

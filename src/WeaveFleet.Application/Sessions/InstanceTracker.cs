@@ -2,7 +2,7 @@ using System.Collections.Concurrent;
 using System.Collections.ObjectModel;
 using WeaveFleet.Domain.Harnesses;
 
-namespace WeaveFleet.Application.Services;
+namespace WeaveFleet.Application.Sessions;
 
 /// <summary>
 /// In-memory registry of live <see cref="IHarnessSession"/> objects, keyed by instance id.

@@ -4,6 +4,7 @@ using FakeLlm::FakeLlmServer;
 using Microsoft.Extensions.DependencyInjection;
 using WeaveFleet.Application.Harnesses;
 using WeaveFleet.Application.Services;
+using WeaveFleet.Application.Sessions;
 using WeaveFleet.Application.Workflows;
 using WeaveFleet.Domain.Entities;
 using WeaveFleet.Domain.Repositories;

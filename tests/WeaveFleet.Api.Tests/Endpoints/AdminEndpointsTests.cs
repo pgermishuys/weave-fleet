@@ -6,7 +6,7 @@ using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.DependencyInjection.Extensions;
 using WeaveFleet.Api.Tests.Infrastructure;
 using WeaveFleet.Application.Data;
-using WeaveFleet.Application.Services;
+using WeaveFleet.Application.Sessions;
 using WeaveFleet.Infrastructure.Harnesses.OpenCode.Pooling;
 
 namespace WeaveFleet.Api.Tests.Endpoints;

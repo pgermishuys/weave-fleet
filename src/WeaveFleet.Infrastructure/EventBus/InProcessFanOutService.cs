@@ -8,7 +8,7 @@ using Microsoft.Extensions.Logging;
 using WeaveFleet.Application.Diagnostics;
 using WeaveFleet.Application.Events;
 using WeaveFleet.Application.Harnesses;
-using WeaveFleet.Application.Services;
+using WeaveFleet.Application.Sessions;
 using WeaveFleet.Domain.Events;
 using WeaveFleet.Domain.Harnesses;
 using WeaveFleet.Domain.Repositories;

@@ -2,7 +2,7 @@ using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging.Abstractions;
 using System.Text.Json;
 using WeaveFleet.Application.Events;
-using WeaveFleet.Application.Services;
+using WeaveFleet.Application.Sessions;
 using WeaveFleet.Domain.Entities;
 using WeaveFleet.Domain.Events;
 using WeaveFleet.Domain.Harnesses;

@@ -4,7 +4,7 @@ using Microsoft.Extensions.Logging.Abstractions;
 using Shouldly;
 using WeaveFleet.Application.Configuration;
 using WeaveFleet.Application.Harnesses;
-using WeaveFleet.Application.Services;
+using WeaveFleet.Application.Sessions;
 using WeaveFleet.Application.Users;
 using WeaveFleet.Application.Workflows;
 using WeaveFleet.Application.Workspaces;

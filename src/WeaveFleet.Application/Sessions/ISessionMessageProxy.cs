@@ -1,7 +1,7 @@
 using WeaveFleet.Domain.Events;
 using WeaveFleet.Domain.Harnesses;
 
-namespace WeaveFleet.Application.Services;
+namespace WeaveFleet.Application.Sessions;
 
 /// <summary>
 /// Proxy for retrieving session messages from either the live harness (if available)

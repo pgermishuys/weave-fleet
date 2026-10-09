@@ -1,6 +1,6 @@
 using System.Security.Claims;
 using WeaveFleet.Application.Configuration;
-using WeaveFleet.Application.Services;
+using WeaveFleet.Application.Sessions;
 using WeaveFleet.Infrastructure.Harnesses.OpenCode.Pooling;
 
 namespace WeaveFleet.Api.Endpoints;

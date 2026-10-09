@@ -1,7 +1,7 @@
 extern alias FakeLlm;
 
 using FakeLlm::FakeLlmServer;
-using WeaveFleet.Application.Services;
+using WeaveFleet.Application.Sessions;
 using WeaveFleet.Domain.Harnesses;
 using WeaveFleet.Infrastructure.Harnesses.OpenCode2;
 

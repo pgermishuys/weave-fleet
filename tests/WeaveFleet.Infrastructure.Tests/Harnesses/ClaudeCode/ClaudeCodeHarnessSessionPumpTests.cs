@@ -6,7 +6,7 @@ using Microsoft.Extensions.Time.Testing;
 using Shouldly;
 using WeaveFleet.Application.Configuration;
 using WeaveFleet.Application.Data;
-using WeaveFleet.Application.Services;
+using WeaveFleet.Application.Sessions;
 using WeaveFleet.Domain.Events;
 using WeaveFleet.Domain.Harnesses;
 using WeaveFleet.Infrastructure.Events;

@@ -1,7 +1,7 @@
 using Microsoft.Extensions.Logging.Abstractions;
 using Shouldly;
 using WeaveFleet.Application.Configuration;
-using WeaveFleet.Application.Services;
+using WeaveFleet.Application.Sessions;
 using WeaveFleet.Application.SessionSources;
 using WeaveFleet.Domain.Entities;
 using WeaveFleet.Testing.Builders;

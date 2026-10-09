@@ -2,7 +2,7 @@ using System.Text.Json;
 using Microsoft.AspNetCore.SignalR.Client;
 using Microsoft.Extensions.DependencyInjection;
 using WeaveFleet.Application.Events;
-using WeaveFleet.Application.Services;
+using WeaveFleet.Application.Sessions;
 using WeaveFleet.Domain.Entities;
 using WeaveFleet.Domain.Repositories;
 using WeaveFleet.Infrastructure.EventBus;

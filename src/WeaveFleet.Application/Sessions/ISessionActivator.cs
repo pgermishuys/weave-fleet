@@ -1,7 +1,7 @@
 using WeaveFleet.Domain.Common;
 using WeaveFleet.Domain.Harnesses;
 
-namespace WeaveFleet.Application.Services;
+namespace WeaveFleet.Application.Sessions;
 
 /// <summary>
 /// Interface for activating sessions on-demand.

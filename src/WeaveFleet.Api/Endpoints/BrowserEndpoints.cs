@@ -1,7 +1,7 @@
 using WeaveFleet.Api.Browser;
 using WeaveFleet.Application.Browser;
 using WeaveFleet.Application.Canvases;
-using WeaveFleet.Application.Services;
+using WeaveFleet.Application.Sessions;
 
 namespace WeaveFleet.Api.Endpoints;
 

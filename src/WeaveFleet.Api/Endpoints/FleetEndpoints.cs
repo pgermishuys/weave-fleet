@@ -2,7 +2,7 @@ using WeaveFleet.Api;
 using WeaveFleet.Application.Diagnostics;
 using WeaveFleet.Application.DTOs;
 using WeaveFleet.Application.Plugins;
-using WeaveFleet.Application.Services;
+using WeaveFleet.Application.Sessions;
 using WeaveFleet.Application.Tools;
 using WeaveFleet.Application.Workspaces;
 using WeaveFleet.Infrastructure.Services;

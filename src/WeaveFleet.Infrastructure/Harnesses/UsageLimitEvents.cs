@@ -6,7 +6,7 @@ namespace WeaveFleet.Infrastructure.Harnesses;
 /// <summary>
 /// Builds Fleet's usage-limit event (<see cref="EventTypes.HarnessUsage"/>), which an adapter sends when its harness
 /// says how much of its account's limits are used. The relay hands it to
-/// <see cref="Application.Services.HarnessUsageLimits"/>; it never reaches the conversation.
+/// <see cref="Application.Harnesses.HarnessUsageLimits"/>; it never reaches the conversation.
 /// </summary>
 internal static class UsageLimitEvents
 {

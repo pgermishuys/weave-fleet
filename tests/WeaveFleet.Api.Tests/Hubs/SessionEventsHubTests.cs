@@ -4,7 +4,7 @@ using Microsoft.Extensions.DependencyInjection;
 using WeaveFleet.Api.Hubs;
 using WeaveFleet.Api.Tests.Infrastructure;
 using WeaveFleet.Application.Events;
-using WeaveFleet.Application.Services;
+using WeaveFleet.Application.Sessions;
 using WeaveFleet.Domain.Entities;
 using WeaveFleet.Domain.Events;
 using WeaveFleet.Domain.Harnesses;

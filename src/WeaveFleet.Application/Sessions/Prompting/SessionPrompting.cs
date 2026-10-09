@@ -7,7 +7,6 @@ using WeaveFleet.Application.Events;
 using WeaveFleet.Application.Harnesses;
 using WeaveFleet.Application.Memory;
 using WeaveFleet.Application.Recaps;
-using WeaveFleet.Application.Services;
 using WeaveFleet.Application.Sessions.Activation;
 using WeaveFleet.Application.SessionSources;
 using WeaveFleet.Application.Users;
