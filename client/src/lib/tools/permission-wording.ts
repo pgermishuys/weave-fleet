@@ -2,7 +2,12 @@
  * How an agent's permission ask is worded, in one place: the heading, what "Don't ask again" covers, and the inbox's
  * one-line preview. The kinds are the server's (`Permissions.Classify`): read, edit, shell, web, other.
  */
+import { getTool, type ToolCategory } from "./registry";
+
 export type PermissionKindName = "read" | "edit" | "shell" | "web" | "other";
+
+/** Tools the server classifies as reads that read nothing: their asks keep the tool's name. */
+const NOT_FILE_READS: ReadonlySet<ToolCategory> = new Set(["plan", "subagent", "skill", "fleet", "question"]);
 
 interface Ask {
   kind: PermissionKindName | string;
@@ -16,7 +21,8 @@ export function permissionHeading(ask: Pick<Ask, "kind" | "tool">): string {
   switch (ask.kind) {
     case "shell": return "Run a command";
     case "edit": return "Edit a file";
-    case "read": return "Read a file";
+    // The server calls todowrite, task, skill and fleet_* asks reads too; those keep the tool's own name.
+    case "read": return NOT_FILE_READS.has(getTool(ask.tool).category) ? `Use ${ask.tool}` : "Read a file";
     case "web": return "Go online";
     default: return ask.tool === "external_directory" ? "Work outside the folder" : `Use ${ask.tool}`;
   }

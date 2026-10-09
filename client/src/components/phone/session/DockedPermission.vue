@@ -5,7 +5,7 @@ import BottomSheet from "@/components/phone/BottomSheet.vue";
 import CommandText from "@/components/phone/CommandText.vue";
 import PermissionChoices from "@/components/phone/PermissionChoices.vue";
 import type { PermissionAsk } from "@/composables/use-session-permissions";
-import { dontAskAgain, permissionTitle } from "@/lib/phone/asks";
+import { dontAskAgainWording, permissionHeading } from "@/lib/tools";
 import { haptic } from "@/lib/phone/haptics";
 import type { PermissionReply } from "@/lib/push/answer";
 
@@ -34,7 +34,7 @@ async function onAnswer(reply: PermissionReply, message?: string): Promise<void>
   if (reply === "once") haptic("success");
   try {
     await props.answer(props.ask, reply, message);
-    emit("answered", reply === "reject" ? "Denied. The agent was told." : reply === "always" ? `Won't ask again for ${dontAskAgain(props.ask).code ?? props.ask.tool} in this session` : "Allowed once");
+    emit("answered", reply === "reject" ? "Denied. The agent was told." : reply === "always" ? `Won't ask again for ${dontAskAgainWording(props.ask).code ?? props.ask.tool} in this session` : "Allowed once");
   } catch (failure) {
     sent.value = null;
     error.value = failure instanceof Error ? failure.message : String(failure);
@@ -52,7 +52,7 @@ async function onAnswer(reply: PermissionReply, message?: string): Promise<void>
         class="ph-pcard__icon"
         aria-hidden="true"
       />
-      <span class="ph-pcard__title">{{ permissionTitle(ask) }}</span>
+      <span class="ph-pcard__title">{{ permissionHeading(ask) }}</span>
       <button
         type="button"
         class="ph-later"
@@ -104,8 +104,8 @@ async function onAnswer(reply: PermissionReply, message?: string): Promise<void>
     <BottomSheet
       ref="sheet"
       :open="more"
-      :label="permissionTitle(ask)"
-      :title="permissionTitle(ask)"
+      :label="permissionHeading(ask)"
+      :title="permissionHeading(ask)"
       :subtitle="`${machineName} · ${sessionTitle}`"
       :detents="['medium', 'large']"
       initial="medium"

@@ -8,9 +8,10 @@ import { toolDiffLines, toolDiffText } from "@/components/session/activity-strea
 import type { AccumulatedMessage, AccumulatedToolPart } from "@/lib/client-types";
 import { parseDiffLines } from "@/lib/diff-parser";
 import { getToolDisplayLabel } from "@/lib/tool-icons";
-import { getQuestionInput } from "@/lib/question-types";
+import { getQuestionInput, isQuestionPart } from "@/lib/question-types";
 import { toShellCommandView, type ShellCommandView } from "@/lib/shell-commands";
 import { getToolLabel } from "@/lib/tool-labels";
+import { asRecord, getTool, parseToolInput, type ToolCategory } from "@/lib/tools";
 
 export type PhoneBlock =
   | { kind: "user"; key: string; messageId: string; text: string; createdAt?: number; images: number; steered: boolean }
@@ -33,23 +34,21 @@ export interface FoldedStep {
 
 export type StepCategory = "read" | "edit" | "run" | "search" | "other";
 
-const SUBAGENT_TOOLS = new Set(["task", "subagent"]);
-const READ_TOOLS = new Set(["read", "list", "ls", "webfetch", "fetch"]);
-const EDIT_TOOLS = new Set(["edit", "write", "patch", "multiedit", "apply_patch"]);
-const RUN_TOOLS = new Set(["bash", "shell"]);
-const SEARCH_TOOLS = new Set(["grep", "glob", "search", "codesearch", "websearch"]);
-
-function asRecord(value: unknown): Record<string, unknown> | null {
-  return value !== null && typeof value === "object" && !Array.isArray(value) ? (value as Record<string, unknown>) : null;
-}
+/** The phone groups work in five buckets; the registry's categories land in them here. Web fetches read as files. */
+const BUCKETS: Partial<Record<ToolCategory, StepCategory>> = {
+  read: "read",
+  web: "read",
+  edit: "edit",
+  shell: "run",
+  search: "search",
+};
 
 export function stepCategory(tool: string): StepCategory {
-  const name = tool.toLowerCase();
-  if (READ_TOOLS.has(name)) return "read";
-  if (EDIT_TOOLS.has(name)) return "edit";
-  if (RUN_TOOLS.has(name)) return "run";
-  if (SEARCH_TOOLS.has(name)) return "search";
-  return "other";
+  const resolved = getTool(tool);
+  // A tool the registry has no entry for (a server-only name such as bashoutput) stays "other", as it always was.
+  // `execute` runs a Code Mode script, not a command: it has been "other" on the phone and stays so.
+  if (!resolved.known || resolved.name === "execute") return "other";
+  return BUCKETS[resolved.category] ?? "other";
 }
 
 function statusOf(part: AccumulatedToolPart): FoldedStep["status"] {
@@ -166,13 +165,13 @@ export function foldMessages(messages: readonly AccumulatedMessage[]): PhoneBloc
         flush();
         blocks.push({ kind: "text", key: `t:${message.messageId}:${index}`, messageId: message.messageId, text: part.text, createdAt: message.createdAt });
       } else if (part.type === "tool") {
-        if (part.tool === "question") {
+        if (isQuestionPart(part)) {
           const question = questionBlock(part);
           if (question) {
             flush();
             blocks.push(question);
           }
-        } else if (SUBAGENT_TOOLS.has(part.tool.toLowerCase())) {
+        } else if (getTool(part.tool).category === "subagent") {
           flush();
           blocks.push(subagentBlock(part));
         } else {
@@ -207,8 +206,6 @@ export interface StepRow {
   dels: number;
 }
 
-const PATTERN_TOOLS = new Set(["grep", "glob"]);
-
 function lineStats(part: AccumulatedToolPart, input: Record<string, unknown> | null): { adds: number; dels: number } | null {
   const lines = toolDiffLines(part);
   if (lines.length) return { adds: lines.filter((l) => l.type === "add").length, dels: lines.filter((l) => l.type === "remove").length };
@@ -227,12 +224,11 @@ function lineStats(part: AccumulatedToolPart, input: Record<string, unknown> | n
 
 export function stepRow(step: FoldedStep): StepRow {
   const input = asRecord(asRecord(step.part.state)?.input);
-  const name = step.tool.toLowerCase();
-  const path = typeof input?.filePath === "string" && input.filePath ? input.filePath : typeof input?.path === "string" ? input.path : "";
-  const pattern = PATTERN_TOOLS.has(name) && typeof input?.pattern === "string" && input.pattern !== "";
-  const detail = step.category === "run" && typeof input?.command === "string" ? input.command
-    : pattern ? String(input?.pattern)
-      : path || step.label;
+  const fields = parseToolInput(input);
+  const pattern = getTool(step.tool).patternLabel && fields.pattern !== undefined;
+  const detail = step.category === "run" && fields.command !== undefined ? fields.command
+    : pattern ? String(fields.pattern)
+      : fields.filePath ?? step.label;
   const base = { label: getToolDisplayLabel(step.tool), detail, pattern, adds: 0, dels: 0 };
   if (step.status === "running" || step.status === "pending") return { ...base, result: "running" };
   if (step.status === "error") return { ...base, result: "failed" };

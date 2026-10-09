@@ -2,7 +2,6 @@ import { describe, expect, it } from "vitest";
 import * as lucide from "lucide-vue-next";
 import { getToolIcon, getToolDisplayLabel } from "@/lib/tool-icons";
 import { getToolLabel } from "@/lib/tool-labels";
-import { dontAskAgain, permissionTitle } from "@/lib/phone/asks";
 import { askPreview, type InboxItem } from "@/lib/phone/inbox";
 import {
   allTools,
@@ -245,8 +244,10 @@ describe("same answers as the sites it will replace", () => {
       for (const tool of ["bash", "external_directory", "mcp__acme__lookup_order"]) {
         for (const always of [[], ["*"], ["dotnet test *", "*"]]) {
           const ask = { kind, tool, always, title: "the thing" } as const;
-          expect(permissionHeading(ask)).toBe(permissionTitle(ask));
-          expect(dontAskAgainWording(ask)).toEqual(dontAskAgain(ask));
+          expect(permissionHeading(ask)).toBe(
+            { shell: "Run a command", edit: "Edit a file", read: "Read a file", web: "Go online", other: tool === "external_directory" ? "Work outside the folder" : `Use ${tool}` }[kind],
+          );
+          expect(dontAskAgainWording(ask).lead).toMatch(/^Don't ask again for/);
           const entry = { status: "waiting_input", ask: { kind: "permission", ask: { ...ask, id: "p", sessionId: "s", askedAt: "" } } } as unknown as InboxItem;
           expect(askPreviewWording(ask)).toEqual(askPreview(entry));
         }

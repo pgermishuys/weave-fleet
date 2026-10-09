@@ -141,20 +141,20 @@ const TODAY: Record<string, Row> = {
   "todowrite": {label: ["todowrite", "todowrite"], icon: "Wrench", heading: "Todowrite", turns: {shell: false, file: false, created: false}, fold: {category: "other", subagent: false, pattern: false}, card: {subagent: false, pattern: false, titledFromAnswer: false}, prShell: false, question: {part: false, pending: false}, lineage: "Todowrite"},
   "todoread": {label: ["todoread", "todoread"], icon: "Wrench", heading: "Todoread", turns: {shell: false, file: false, created: false}, fold: {category: "other", subagent: false, pattern: false}, card: {subagent: false, pattern: false, titledFromAnswer: false}, prShell: false, question: {part: false, pending: false}, lineage: "Todoread"},
   "codesearch": {label: ["codesearch", "codesearch"], icon: "Wrench", heading: "Codesearch", turns: {shell: false, file: false, created: false}, fold: {category: "search", subagent: false, pattern: false}, card: {subagent: false, pattern: false, titledFromAnswer: false}, prShell: false, question: {part: false, pending: false}, lineage: "Codesearch"},
-  "lsp": {label: ["lsp", "lsp"], icon: "Wrench", heading: "Lsp", turns: {shell: false, file: false, created: false}, fold: {category: "other", subagent: false, pattern: false}, card: {subagent: false, pattern: false, titledFromAnswer: false}, prShell: false, question: {part: false, pending: false}, lineage: "Lsp"},
+  "lsp": {label: ["lsp", "lsp"], icon: "Wrench", heading: "Lsp", turns: {shell: false, file: false, created: false}, fold: {category: "read", subagent: false, pattern: false}, card: {subagent: false, pattern: false, titledFromAnswer: false}, prShell: false, question: {part: false, pending: false}, lineage: "Lsp"},
   "multiedit": {label: ["multiedit", "multiedit"], icon: "Wrench", heading: "Multiedit", turns: {shell: false, file: true, created: false}, fold: {category: "edit", subagent: false, pattern: false}, card: {subagent: false, pattern: false, titledFromAnswer: false}, prShell: false, question: {part: false, pending: false}, lineage: "Multiedit"},
-  "notebookedit": {label: ["notebookedit", "notebookedit"], icon: "Wrench", heading: "Notebookedit", turns: {shell: false, file: true, created: true}, fold: {category: "other", subagent: false, pattern: false}, card: {subagent: false, pattern: false, titledFromAnswer: false}, prShell: false, question: {part: false, pending: false}, lineage: "Notebookedit"},
-  "strreplaceeditor": {label: ["strreplaceeditor", "strreplaceeditor"], icon: "Wrench", heading: "Strreplaceeditor", turns: {shell: false, file: true, created: false}, fold: {category: "other", subagent: false, pattern: false}, card: {subagent: false, pattern: false, titledFromAnswer: false}, prShell: false, question: {part: false, pending: false}, lineage: "Strreplaceeditor"},
-  "terminal": {label: ["terminal", "terminal"], icon: "Wrench", heading: "Terminal", turns: {shell: true, file: false, created: false}, fold: {category: "other", subagent: false, pattern: false}, card: {subagent: false, pattern: false, titledFromAnswer: false}, prShell: false, question: {part: false, pending: false}, lineage: "Terminal"},
+  "notebookedit": {label: ["notebookedit", "notebookedit"], icon: "Wrench", heading: "Notebookedit", turns: {shell: false, file: true, created: true}, fold: {category: "edit", subagent: false, pattern: false}, card: {subagent: false, pattern: false, titledFromAnswer: false}, prShell: false, question: {part: false, pending: false}, lineage: "Notebookedit"},
+  "strreplaceeditor": {label: ["strreplaceeditor", "strreplaceeditor"], icon: "Wrench", heading: "Strreplaceeditor", turns: {shell: false, file: true, created: false}, fold: {category: "edit", subagent: false, pattern: false}, card: {subagent: false, pattern: false, titledFromAnswer: false}, prShell: false, question: {part: false, pending: false}, lineage: "Strreplaceeditor"},
+  "terminal": {label: ["terminal", "terminal"], icon: "Wrench", heading: "Terminal", turns: {shell: true, file: false, created: false}, fold: {category: "run", subagent: false, pattern: false}, card: {subagent: false, pattern: false, titledFromAnswer: false}, prShell: false, question: {part: false, pending: false}, lineage: "Terminal"},
   "Read": {label: ["Read", "Read"], icon: "Wrench", heading: "Read", turns: {shell: false, file: false, created: false}, fold: {category: "read", subagent: false, pattern: false}, card: {subagent: false, pattern: false, titledFromAnswer: false}, prShell: false, question: {part: false, pending: false}, lineage: "Read"},
   "Edit": {label: ["Edit", "Edit"], icon: "Wrench", heading: "Edit", turns: {shell: false, file: true, created: false}, fold: {category: "edit", subagent: false, pattern: false}, card: {subagent: false, pattern: false, titledFromAnswer: false}, prShell: false, question: {part: false, pending: false}, lineage: "Edit"},
   "MultiEdit": {label: ["MultiEdit", "MultiEdit"], icon: "Wrench", heading: "MultiEdit", turns: {shell: false, file: true, created: false}, fold: {category: "edit", subagent: false, pattern: false}, card: {subagent: false, pattern: false, titledFromAnswer: false}, prShell: false, question: {part: false, pending: false}, lineage: "MultiEdit"},
-  "NotebookEdit": {label: ["NotebookEdit", "NotebookEdit"], icon: "Wrench", heading: "NotebookEdit", turns: {shell: false, file: true, created: true}, fold: {category: "other", subagent: false, pattern: false}, card: {subagent: false, pattern: false, titledFromAnswer: false}, prShell: false, question: {part: false, pending: false}, lineage: "NotebookEdit"},
+  "NotebookEdit": {label: ["NotebookEdit", "NotebookEdit"], icon: "Wrench", heading: "NotebookEdit", turns: {shell: false, file: true, created: true}, fold: {category: "edit", subagent: false, pattern: false}, card: {subagent: false, pattern: false, titledFromAnswer: false}, prShell: false, question: {part: false, pending: false}, lineage: "NotebookEdit"},
   "Bash": {label: ["Bash", "Bash"], icon: "Wrench", heading: "Bash", turns: {shell: true, file: false, created: false}, fold: {category: "run", subagent: false, pattern: false}, card: {subagent: false, pattern: false, titledFromAnswer: false}, prShell: true, question: {part: false, pending: false}, lineage: "Bash"},
   "Task": {label: ["Task", "Task"], icon: "Wrench", heading: "Task", turns: {shell: false, file: false, created: false}, fold: {category: "other", subagent: true, pattern: false}, card: {subagent: true, pattern: false, titledFromAnswer: false}, prShell: false, question: {part: false, pending: false}, lineage: "Task"},
   "TodoWrite": {label: ["TodoWrite", "TodoWrite"], icon: "Wrench", heading: "TodoWrite", turns: {shell: false, file: false, created: false}, fold: {category: "other", subagent: false, pattern: false}, card: {subagent: false, pattern: false, titledFromAnswer: false}, prShell: false, question: {part: false, pending: false}, lineage: "TodoWrite"},
   "WebFetch": {label: ["WebFetch", "WebFetch"], icon: "Wrench", heading: "WebFetch", turns: {shell: false, file: false, created: false}, fold: {category: "read", subagent: false, pattern: false}, card: {subagent: false, pattern: false, titledFromAnswer: false}, prShell: false, question: {part: false, pending: false}, lineage: "WebFetch"},
-  "Agent": {label: ["Agent", "Agent"], icon: "Wrench", heading: "Agent", turns: {shell: false, file: false, created: false}, fold: {category: "other", subagent: false, pattern: false}, card: {subagent: false, pattern: false, titledFromAnswer: false}, prShell: false, question: {part: false, pending: false}, lineage: "Agent"},
+  "Agent": {label: ["Agent", "Agent"], icon: "Wrench", heading: "Agent", turns: {shell: false, file: false, created: false}, fold: {category: "other", subagent: true, pattern: false}, card: {subagent: false, pattern: false, titledFromAnswer: false}, prShell: false, question: {part: false, pending: false}, lineage: "Agent"},
   "LS": {label: ["LS", "LS"], icon: "Wrench", heading: "LS", turns: {shell: false, file: false, created: false}, fold: {category: "read", subagent: false, pattern: false}, card: {subagent: false, pattern: false, titledFromAnswer: false}, prShell: false, question: {part: false, pending: false}, lineage: "LS"},
   "shell": {label: ["shell", "Check the panel"], icon: "Terminal", heading: "Shell", turns: {shell: true, file: false, created: false}, fold: {category: "run", subagent: false, pattern: false}, card: {subagent: false, pattern: false, titledFromAnswer: false}, prShell: true, question: {part: false, pending: false}, lineage: "Shell"},
   "execute": {label: ["execute", "await page.open()"], icon: "Code", heading: "Code", turns: {shell: false, file: false, created: false}, fold: {category: "other", subagent: false, pattern: false}, card: {subagent: false, pattern: false, titledFromAnswer: false}, prShell: false, question: {part: false, pending: false}, lineage: "Execute"},
@@ -201,11 +201,11 @@ describe("how the client classifies tools today", () => {
       expect(TODAY.subagent.label[1]).toBe("explore · Check the panel");
     });
 
-    it("edit-like tools: icons know only edit and write, turns knows six names, fold-steps knows five", () => {
-      // turns.ts counts these as file writes; fold-steps.ts files them under 'other'.
+    it("edit-like tools: icons know only edit and write, turns knows six names, fold-steps now agrees with it", () => {
+      // turns.ts counts these as file writes; fold-steps used to file them under 'other' and now says edit (the registry).
       for (const name of ["notebookedit", "strreplaceeditor"]) {
         expect(TODAY[name].turns.file).toBe(true);
-        expect(TODAY[name].fold.category).toBe("other");
+        expect(TODAY[name].fold.category).toBe("edit");
       }
       // multiedit, patch and apply_patch are edits in both, yet nothing gives them a label or icon of their own.
       for (const name of ["multiedit", "patch", "apply_patch"]) {
@@ -219,9 +219,9 @@ describe("how the client classifies tools today", () => {
       expect(TODAY.edit.turns.created).toBe(false);
     });
 
-    it("shell-like tools: `terminal` is a shell for turns only, `execute` is Code for icons and nothing for the others (the server counts it as a shell)", () => {
+    it("shell-like tools: `terminal` is a shell for turns and now fold-steps, `execute` is Code for icons and nothing for the others (the server counts it as a shell)", () => {
       expect(TODAY.terminal.turns.shell).toBe(true);
-      expect(TODAY.terminal.fold.category).toBe("other");
+      expect(TODAY.terminal.fold.category).toBe("run");
       expect(TODAY.execute.icon).toBe("Code");
       expect(TODAY.execute.turns.shell).toBe(false);
       expect(TODAY.execute.fold.category).toBe("other");
@@ -242,8 +242,9 @@ describe("how the client classifies tools today", () => {
       expect(TODAY.websearch.icon).toBe("Search");
       expect(TODAY.codesearch.fold.category).toBe("search");
       expect(TODAY.codesearch.icon).toBe("Wrench");
-      // lsp, skill, question, todo* and the fleet tools are 'other' here; the server calls them all reads.
-      for (const name of ["lsp", "skill", "question", "todoread", "fleet_message"]) expect(TODAY[name].fold.category).toBe("other");
+      // lsp is a read now (the registry); skill, question, todo* and the fleet tools stay 'other' in fold-steps.
+      expect(TODAY.lsp.fold.category).toBe("read");
+      for (const name of ["skill", "question", "todoread", "fleet_message"]) expect(TODAY[name].fold.category).toBe("other");
     });
 
     it("case: fold-steps, the subagent checks, pr-utils and turns lowercase the name; labels, icons and the pattern/question checks match it exactly", () => {
@@ -257,8 +258,9 @@ describe("how the client classifies tools today", () => {
       // Exact: the label, the icon and the heading ('Wrench' and the raw name for Claude Code's own casing).
       expect(TODAY.Read.icon).toBe("Wrench");
       expect(TODAY.Bash.label).toEqual(["Bash", "Bash"]);
-      // `Agent` is the Claude Code subagent tool; the server renames it to task, so no client site knows it.
-      expect(TODAY.Agent.fold.subagent).toBe(false);
+      // `Agent` is the Claude Code subagent tool; the registry makes it an alias of task, so fold-steps now knows it
+      // (the desktop's tool card still does not, until it moves onto the registry).
+      expect(TODAY.Agent.fold.subagent).toBe(true);
       expect(TODAY.Agent.card.subagent).toBe(false);
     });
 
