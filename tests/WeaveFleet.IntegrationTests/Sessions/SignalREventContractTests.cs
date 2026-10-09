@@ -175,8 +175,10 @@ public sealed class SignalREventContractTests : IAsyncLifetime, IDisposable
         await _hub.InvokeAsync<JsonElement>("SubscribeToSessionAsync", sessionId);
 
         // Creating a session announces it on the sessions topic from the outbox, which can send it after create
-        // returns. Wait for it, so only what the harness's events caused is checked below.
+        // returns, and the relay announces it idle when its pump starts (ResyncActivityStatusAsync), in either
+        // order and late on a busy machine. Wait for both, so only what the harness's events caused is checked below.
         await WaitForWorkEventAsync("session_created", "sessions");
+        await WaitForWorkEventAsync("activity_status", "sessions");
         var beforeWork = Received().Count;
 
         // What an adapter sends for a shell it moved to the background, then for its end: Fleet's own work.* events.
