@@ -32,7 +32,8 @@ import {
 import { storeToRefs } from "pinia";
 import { clearDraftText } from "@/composables/use-draft-state";
 import type { Command } from "@/lib/command-registry";
-import { dispatchCommandEvent } from "@/lib/command-events";
+import { commandPoint } from "@/lib/command-registry";
+import { runSessionCommand } from "@/lib/session-commands";
 import { matchesKeyboardShortcut, useKeyboardShortcut } from "@/composables/use-keyboard-shortcut";
 import { useAbortSession, useForkSession, useNewSessionInFolder } from "@/composables/use-session-actions";
 import { useMachinesStore } from "@/stores/machines";
@@ -74,6 +75,9 @@ function getCurrentSessionId(pathname: string, activeSessionId: string | null): 
   return activeSessionId;
 }
 
+/** Owns the commands `useCommands` contributes. */
+const COMMANDS_OWNER = "app";
+
 export function useCommands() {
   const commandStore = useCommandStore();
   const keybindingsStore = useKeybindingsStore();
@@ -97,7 +101,7 @@ export function useCommands() {
     select: (location) => location.pathname,
   });
 
-  const { bindings } = storeToRefs(keybindingsStore);
+  const { bindingFor } = keybindingsStore;
   const { sessions, activeSessionId, retentionStatus } = storeToRefs(sessionsStore);
   const { currentTheme } = storeToRefs(themeStore);
 
@@ -237,7 +241,7 @@ export function useCommands() {
       return;
     }
 
-    dispatchCommandEvent("weave:command-focus-prompt", { sessionId: activeSessionId.value });
+    runSessionCommand("focus-prompt", activeSessionId.value);
   }
 
   function copyCurrentSessionId(): void {
@@ -245,7 +249,7 @@ export function useCommands() {
       return;
     }
 
-    dispatchCommandEvent("weave:command-copy-session-id", { sessionId: activeSessionId.value });
+    runSessionCommand("copy-session-id", activeSessionId.value);
   }
 
   function exportCurrentConversation(): void {
@@ -253,15 +257,15 @@ export function useCommands() {
       return;
     }
 
-    dispatchCommandEvent("weave:command-export-conversation", { sessionId: activeSessionId.value });
+    runSessionCommand("export-conversation", activeSessionId.value);
   }
 
   function scrollActivityToTop(): void {
-    dispatchCommandEvent("weave:command-scroll-top", { sessionId: activeSessionId.value });
+    runSessionCommand("scroll-top", activeSessionId.value);
   }
 
   function scrollActivityToBottom(): void {
-    dispatchCommandEvent("weave:command-scroll-bottom", { sessionId: activeSessionId.value });
+    runSessionCommand("scroll-bottom", activeSessionId.value);
   }
 
   function clearConversationDraft(): void {
@@ -325,7 +329,7 @@ export function useCommands() {
         description: "Open the sessions workspace.",
         icon: MessageSquare,
         category: "Navigation",
-        paletteHotkey: bindings.value["nav-fleet"]?.paletteHotkey ?? undefined,
+        paletteHotkey: bindingFor("nav-fleet")?.paletteHotkey ?? undefined,
         keywords: ["home", "fleet", "dashboard", "sessions"],
         action: () => navigateToRoute("/"),
       },
@@ -353,7 +357,7 @@ export function useCommands() {
         description: "Open workspace settings.",
         icon: Settings,
         category: "Navigation",
-        paletteHotkey: bindings.value["nav-settings"]?.paletteHotkey ?? undefined,
+        paletteHotkey: bindingFor("nav-settings")?.paletteHotkey ?? undefined,
         keywords: ["preferences", "config", "settings"],
         action: () => navigateToRoute("/settings"),
       },
@@ -363,8 +367,8 @@ export function useCommands() {
         description: "Create and open a new session.",
         icon: Plus,
         category: "Session",
-        paletteHotkey: bindings.value["new-session"]?.paletteHotkey ?? undefined,
-        globalShortcut: bindings.value["new-session"]?.globalShortcut ?? undefined,
+        paletteHotkey: bindingFor("new-session")?.paletteHotkey ?? undefined,
+        globalShortcut: bindingFor("new-session")?.globalShortcut ?? undefined,
         keywords: ["create", "spawn", "start"],
         action: handleNewSession,
       },
@@ -374,8 +378,8 @@ export function useCommands() {
         description: "Reload the current sessions list.",
         icon: RefreshCcw,
         category: "Session",
-        paletteHotkey: bindings.value["refresh-sessions"]?.paletteHotkey ?? undefined,
-        globalShortcut: bindings.value["refresh-sessions"]?.globalShortcut ?? undefined,
+        paletteHotkey: bindingFor("refresh-sessions")?.paletteHotkey ?? undefined,
+        globalShortcut: bindingFor("refresh-sessions")?.globalShortcut ?? undefined,
         keywords: ["reload", "sync", "refresh"],
         action: () => {
           void refreshSessions().catch(() => {});
@@ -387,8 +391,8 @@ export function useCommands() {
         description: fileSessionId.value ? "Open a file from this session by name." : "Open a session to find its files.",
         icon: FileSearch,
         category: "Session",
-        paletteHotkey: bindings.value["go-to-file"]?.paletteHotkey ?? undefined,
-        globalShortcut: bindings.value["go-to-file"]?.globalShortcut ?? undefined,
+        paletteHotkey: bindingFor("go-to-file")?.paletteHotkey ?? undefined,
+        globalShortcut: bindingFor("go-to-file")?.globalShortcut ?? undefined,
         // Works from the editor and the composer too.
         allowInEditable: true,
         keywords: ["file", "open", "find", "quick open", "editor"],
@@ -403,8 +407,8 @@ export function useCommands() {
         description: activeSessionId.value ? "Focus the active session prompt." : "Open a session to focus the prompt.",
         icon: Focus,
         category: "Session",
-        paletteHotkey: bindings.value["focus-prompt"]?.paletteHotkey ?? undefined,
-        globalShortcut: bindings.value["focus-prompt"]?.globalShortcut ?? undefined,
+        paletteHotkey: bindingFor("focus-prompt")?.paletteHotkey ?? undefined,
+        globalShortcut: bindingFor("focus-prompt")?.globalShortcut ?? undefined,
         keywords: ["prompt", "composer", "input", "message"],
         disabled: activeSessionId.value === null,
         action: focusPrompt,
@@ -447,7 +451,7 @@ export function useCommands() {
         description: nextSession ? `Switch to ${nextSession.session.title}.` : "A second session is required.",
         icon: ChevronRight,
         category: "Session",
-        globalShortcut: bindings.value["nav-next-session"]?.globalShortcut ?? undefined,
+        globalShortcut: bindingFor("nav-next-session")?.globalShortcut ?? undefined,
         keywords: ["forward", "right", "next"],
         disabled: nextSession === null,
         action: () => {
@@ -462,7 +466,7 @@ export function useCommands() {
         description: previousSession ? `Switch to ${previousSession.session.title}.` : "A second session is required.",
         icon: ChevronLeft,
         category: "Session",
-        globalShortcut: bindings.value["nav-prev-session"]?.globalShortcut ?? undefined,
+        globalShortcut: bindingFor("nav-prev-session")?.globalShortcut ?? undefined,
         keywords: ["back", "left", "previous"],
         disabled: previousSession === null,
         action: () => {
@@ -477,8 +481,8 @@ export function useCommands() {
         description: activeSessionId.value ? "Abort the active session." : "No active session selected.",
         icon: SquareDashedBottom,
         category: "Session",
-        paletteHotkey: bindings.value["interrupt-session"]?.paletteHotkey ?? undefined,
-        globalShortcut: bindings.value["interrupt-session"]?.globalShortcut ?? undefined,
+        paletteHotkey: bindingFor("interrupt-session")?.paletteHotkey ?? undefined,
+        globalShortcut: bindingFor("interrupt-session")?.globalShortcut ?? undefined,
         keywords: ["abort", "stop", "interrupt", "cancel"],
         disabled: activeSessionId.value === null,
         action: () => {
@@ -491,8 +495,8 @@ export function useCommands() {
         description: activeSessionId.value ? "Copy the active session ID." : "No active session selected.",
         icon: Copy,
         category: "Session",
-        paletteHotkey: bindings.value["copy-session-id"]?.paletteHotkey ?? undefined,
-        globalShortcut: bindings.value["copy-session-id"]?.globalShortcut ?? undefined,
+        paletteHotkey: bindingFor("copy-session-id")?.paletteHotkey ?? undefined,
+        globalShortcut: bindingFor("copy-session-id")?.globalShortcut ?? undefined,
         keywords: ["copy", "session", "id"],
         disabled: activeSessionId.value === null,
         action: copyCurrentSessionId,
@@ -505,8 +509,8 @@ export function useCommands() {
           : "No active session selected.",
         icon: GitBranchPlus,
         category: "Session",
-        paletteHotkey: bindings.value["fork-session"]?.paletteHotkey ?? undefined,
-        globalShortcut: bindings.value["fork-session"]?.globalShortcut ?? undefined,
+        paletteHotkey: bindingFor("fork-session")?.paletteHotkey ?? undefined,
+        globalShortcut: bindingFor("fork-session")?.globalShortcut ?? undefined,
         keywords: ["fork", "branch", "duplicate", "copy", "session"],
         disabled: activeSessionId.value === null || activeForkDisabledReason.value !== null,
         action: () => {
@@ -521,8 +525,8 @@ export function useCommands() {
           : "No active session selected.",
         icon: FolderPlus,
         category: "Session",
-        paletteHotkey: bindings.value["new-session-in-folder"]?.paletteHotkey ?? undefined,
-        globalShortcut: bindings.value["new-session-in-folder"]?.globalShortcut ?? undefined,
+        paletteHotkey: bindingFor("new-session-in-folder")?.paletteHotkey ?? undefined,
+        globalShortcut: bindingFor("new-session-in-folder")?.globalShortcut ?? undefined,
         keywords: ["new", "session", "folder", "same", "empty"],
         disabled: activeSessionId.value === null,
         action: () => {
@@ -535,8 +539,8 @@ export function useCommands() {
         description: activeSessionId.value ? "Download the active conversation as JSON." : "No active session selected.",
         icon: Download,
         category: "Session",
-        paletteHotkey: bindings.value["export-conversation"]?.paletteHotkey ?? undefined,
-        globalShortcut: bindings.value["export-conversation"]?.globalShortcut ?? undefined,
+        paletteHotkey: bindingFor("export-conversation")?.paletteHotkey ?? undefined,
+        globalShortcut: bindingFor("export-conversation")?.globalShortcut ?? undefined,
         keywords: ["export", "download", "conversation", "json"],
         disabled: activeSessionId.value === null,
         action: exportCurrentConversation,
@@ -547,8 +551,8 @@ export function useCommands() {
         description: "Scroll the activity stream to the top.",
         icon: ScrollText,
         category: "Session",
-        paletteHotkey: bindings.value["scroll-to-top"]?.paletteHotkey ?? undefined,
-        globalShortcut: bindings.value["scroll-to-top"]?.globalShortcut ?? undefined,
+        paletteHotkey: bindingFor("scroll-to-top")?.paletteHotkey ?? undefined,
+        globalShortcut: bindingFor("scroll-to-top")?.globalShortcut ?? undefined,
         keywords: ["scroll", "top", "history"],
         disabled: activeSessionId.value === null,
         action: scrollActivityToTop,
@@ -559,8 +563,8 @@ export function useCommands() {
         description: "Scroll the activity stream to the latest message.",
         icon: ScrollText,
         category: "Session",
-        paletteHotkey: bindings.value["scroll-to-bottom"]?.paletteHotkey ?? undefined,
-        globalShortcut: bindings.value["scroll-to-bottom"]?.globalShortcut ?? undefined,
+        paletteHotkey: bindingFor("scroll-to-bottom")?.paletteHotkey ?? undefined,
+        globalShortcut: bindingFor("scroll-to-bottom")?.globalShortcut ?? undefined,
         keywords: ["scroll", "bottom", "latest"],
         disabled: activeSessionId.value === null,
         action: scrollActivityToBottom,
@@ -571,8 +575,8 @@ export function useCommands() {
         description: activeSessionId.value ? "Clear the current composer draft." : "No active session selected.",
         icon: Eraser,
         category: "Session",
-        paletteHotkey: bindings.value["clear-conversation"]?.paletteHotkey ?? undefined,
-        globalShortcut: bindings.value["clear-conversation"]?.globalShortcut ?? undefined,
+        paletteHotkey: bindingFor("clear-conversation")?.paletteHotkey ?? undefined,
+        globalShortcut: bindingFor("clear-conversation")?.globalShortcut ?? undefined,
         keywords: ["clear", "draft", "composer", "conversation"],
         disabled: activeSessionId.value === null,
         action: clearConversationDraft,
@@ -587,8 +591,8 @@ export function useCommands() {
           : (sidebarStore.panelCollapsed ? "Expand the left context panel." : "Collapse the left context panel."),
         icon: isMobileNav.value ? Menu : PanelLeftClose,
         category: "View",
-        paletteHotkey: bindings.value["toggle-sidebar"]?.paletteHotkey ?? undefined,
-        globalShortcut: bindings.value["toggle-sidebar"]?.globalShortcut ?? undefined,
+        paletteHotkey: bindingFor("toggle-sidebar")?.paletteHotkey ?? undefined,
+        globalShortcut: bindingFor("toggle-sidebar")?.globalShortcut ?? undefined,
         keywords: ["panel", "menu", "collapse", "expand", "sidebar"],
         action: toggleSidebar,
       },
@@ -598,7 +602,7 @@ export function useCommands() {
         description: isRightPanelVisible.value ? "Collapse the right detail panel." : "Expand the right detail panel.",
         icon: PanelRightClose,
         category: "View",
-        globalShortcut: bindings.value["toggle-right-panel"]?.globalShortcut ?? undefined,
+        globalShortcut: bindingFor("toggle-right-panel")?.globalShortcut ?? undefined,
         keywords: ["panel", "details", "todo", "collapse", "expand", "right"],
         action: toggleRightPanel,
       },
@@ -610,8 +614,8 @@ export function useCommands() {
           : "Open a session to use its terminal.",
         icon: SquareTerminal,
         category: "View",
-        paletteHotkey: bindings.value["toggle-terminal"]?.paletteHotkey ?? undefined,
-        globalShortcut: bindings.value["toggle-terminal"]?.globalShortcut ?? undefined,
+        paletteHotkey: bindingFor("toggle-terminal")?.paletteHotkey ?? undefined,
+        globalShortcut: bindingFor("toggle-terminal")?.globalShortcut ?? undefined,
         allowInEditable: true,
         keywords: ["terminal", "shell", "console", "drawer"],
         disabled: terminalSessionId.value === null,
@@ -627,8 +631,8 @@ export function useCommands() {
           : "Show inline diff rendering in tool cards.",
         icon: LayoutGrid,
         category: "View",
-        paletteHotkey: bindings.value["toggle-diff-view"]?.paletteHotkey ?? undefined,
-        globalShortcut: bindings.value["toggle-diff-view"]?.globalShortcut ?? undefined,
+        paletteHotkey: bindingFor("toggle-diff-view")?.paletteHotkey ?? undefined,
+        globalShortcut: bindingFor("toggle-diff-view")?.globalShortcut ?? undefined,
         keywords: ["diff", "patch", "changes", "inline"],
         action: () => workspaceUiStore.toggleInlineToolDiffs(),
       },
@@ -640,8 +644,8 @@ export function useCommands() {
           : "Toggle the sessions filter back to active only.",
         icon: MessageSquare,
         category: "View",
-        paletteHotkey: bindings.value["toggle-activity-filter"]?.paletteHotkey ?? undefined,
-        globalShortcut: bindings.value["toggle-activity-filter"]?.globalShortcut ?? undefined,
+        paletteHotkey: bindingFor("toggle-activity-filter")?.paletteHotkey ?? undefined,
+        globalShortcut: bindingFor("toggle-activity-filter")?.globalShortcut ?? undefined,
         keywords: ["filter", "activity", "sessions", "retention"],
         action: toggleActivityFilter,
       },
@@ -651,7 +655,7 @@ export function useCommands() {
         description: `Current theme: ${currentTheme.value}.`,
         icon: MoonStar,
         category: "View",
-        globalShortcut: bindings.value["cycle-theme"]?.globalShortcut ?? undefined,
+        globalShortcut: bindingFor("cycle-theme")?.globalShortcut ?? undefined,
         keywords: ["theme", "appearance", "dark", "light"],
         action: cycleTheme,
       },
@@ -661,8 +665,8 @@ export function useCommands() {
         description: `Current theme: ${themeStore.resolvedTheme.label}.`,
         icon: MoonStar,
         category: "View",
-        paletteHotkey: bindings.value["toggle-dark-light"]?.paletteHotkey ?? undefined,
-        globalShortcut: bindings.value["toggle-dark-light"]?.globalShortcut ?? undefined,
+        paletteHotkey: bindingFor("toggle-dark-light")?.paletteHotkey ?? undefined,
+        globalShortcut: bindingFor("toggle-dark-light")?.globalShortcut ?? undefined,
         keywords: ["theme", "dark", "light", "toggle"],
         action: () => themeStore.toggleTheme(),
       },
@@ -672,7 +676,7 @@ export function useCommands() {
         description: "Enter or exit fullscreen mode.",
         icon: Maximize2,
         category: "View",
-        globalShortcut: bindings.value["toggle-fullscreen"]?.globalShortcut ?? undefined,
+        globalShortcut: bindingFor("toggle-fullscreen")?.globalShortcut ?? undefined,
         keywords: ["fullscreen", "maximize", "screen"],
         action: toggleFullscreen,
       },
@@ -682,7 +686,7 @@ export function useCommands() {
         description: "Increase the interface scale.",
         icon: ZoomIn,
         category: "View",
-        globalShortcut: bindings.value["zoom-in"]?.globalShortcut ?? undefined,
+        globalShortcut: bindingFor("zoom-in")?.globalShortcut ?? undefined,
         keywords: ["bigger", "larger", "increase", "font"],
         action: () => zoomDocument(10),
       },
@@ -692,7 +696,7 @@ export function useCommands() {
         description: "Decrease the interface scale.",
         icon: ZoomOut,
         category: "View",
-        globalShortcut: bindings.value["zoom-out"]?.globalShortcut ?? undefined,
+        globalShortcut: bindingFor("zoom-out")?.globalShortcut ?? undefined,
         keywords: ["smaller", "decrease", "font"],
         action: () => zoomDocument(-10),
       },
@@ -722,24 +726,13 @@ export function useCommands() {
     allowInEditable: true,
   });
 
-  let managedCommandIds: string[] = [];
+  let withdrawCommands: (() => void) | null = null;
 
   watch(
     availableCommands,
     (nextCommands) => {
-      const nextCommandIds = nextCommands.map((command) => command.id);
-
-      for (const commandId of managedCommandIds) {
-        if (!nextCommandIds.includes(commandId)) {
-          commandStore.unregisterCommand(commandId);
-        }
-      }
-
-      for (const command of nextCommands) {
-        commandStore.registerCommand(command);
-      }
-
-      managedCommandIds = nextCommandIds;
+      withdrawCommands?.();
+      withdrawCommands = commandPoint.contribute(COMMANDS_OWNER, nextCommands);
     },
     { immediate: true },
   );
@@ -799,11 +792,8 @@ export function useCommands() {
     document.removeEventListener("keydown", handleGlobalKeyDown);
     }
 
-    for (const commandId of managedCommandIds) {
-      commandStore.unregisterCommand(commandId);
-    }
-
-    managedCommandIds = [];
+    withdrawCommands?.();
+    withdrawCommands = null;
   });
 
   return {

@@ -5,6 +5,7 @@ import NoticeChips from "@/components/notices/NoticeChips.vue";
 import RunningWorkCounter from "@/components/layout/RunningWorkCounter.vue";
 import UsageLimitChip from "@/components/layout/UsageLimitChip.vue";
 import { useAppShellStore } from "@/stores/app-shell";
+import type { CommandId } from "@/lib/command-ids";
 import { useCommandStore } from "@/stores/commands";
 import { useSessionsStore } from "@/stores/sessions";
 import { useTerminalsStore } from "@/stores/terminals";
@@ -28,7 +29,7 @@ const activeSession = computed(() =>
  * Each hint is a button that runs the same command as its shortcut. A command that isn't there (yet) or is disabled
  * leaves its button disabled, with the command's own reason as the title.
  */
-function commandHint(id: string, shortcut: string) {
+function commandHint(id: CommandId, shortcut: string) {
   return computed(() => {
     const command = commandStore.getCommand(id);
     if (!command) return { disabled: true, label: "", title: "Not available yet" };

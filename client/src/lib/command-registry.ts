@@ -1,4 +1,6 @@
 import type { Component } from "vue";
+import type { CommandId } from "@/lib/command-ids";
+import { defineContributionPoint } from "@/lib/contributions";
 
 export type CommandCategory = "Session" | "Navigation" | "View" | "Fleet";
 
@@ -11,7 +13,7 @@ export interface GlobalShortcut {
 }
 
 export interface Command {
-  id: string;
+  id: CommandId;
   label: string;
   description?: string;
   icon?: Component;
@@ -29,3 +31,11 @@ export interface Command {
   getSubCommands?: () => Command[];
 }
 
+/**
+ * Every command the palette lists and a shortcut can run. Fleet's own commands are contributed by `useCommands`;
+ * ids are unique, and a later contribution with the same id replaces the earlier one.
+ */
+export const commandPoint = defineContributionPoint<Command, CommandId>({
+  name: "commands",
+  idOf: (command) => command.id,
+});

@@ -5,7 +5,7 @@ import TerminalView from "@/components/terminal/TerminalView.vue";
 import type { SelectedLines } from "@/components/terminal/TerminalView.vue";
 import { addDraftTerminalContext } from "@/composables/use-draft-terminal-context";
 import { closeTerminalTab, openNewTerminal } from "@/composables/use-session-terminals";
-import { dispatchCommandEvent } from "@/lib/command-events";
+import { runSessionCommand } from "@/lib/session-commands";
 import { useMachineTarget } from "@/lib/machine-target";
 import type { TerminalSummary } from "@/lib/terminal-api";
 import { DEFAULT_DRAWER_HEIGHT, MIN_DRAWER_HEIGHT, useTerminalsStore } from "@/stores/terminals";
@@ -109,7 +109,7 @@ function onEnded(terminal: TerminalSummary): void {
 /** Selected lines go into this session's draft as a chip, and the composer takes focus. */
 function onAttach(terminal: TerminalSummary, lines: SelectedLines): void {
   addDraftTerminalContext(props.sessionId, { terminalId: terminal.id, label: terminal.title, ...lines });
-  dispatchCommandEvent("weave:command-focus-prompt", { sessionId: props.sessionId });
+  runSessionCommand("focus-prompt", props.sessionId);
 }
 
 function hide(): void {

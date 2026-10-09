@@ -19,7 +19,7 @@ import {
 import { Button } from "@/components/ui/button";
 import WorkOutput from "@/components/session/WorkOutput.vue";
 import { stopWork } from "@/composables/use-running-work";
-import { dispatchCommandEvent } from "@/lib/command-events";
+import { runSessionCommand } from "@/lib/session-commands";
 import { useMachineTarget } from "@/lib/machine-target";
 import {
   formatAgo,
@@ -116,7 +116,7 @@ function openChild(event: MouseEvent): void {
 /** A monitor's events are in the conversation, after the call that set it. */
 function showEvents(): void {
   if (!props.item.toolCallId) return;
-  dispatchCommandEvent("weave:command-show-message", { sessionId: props.item.sessionId, toolCallId: props.item.toolCallId });
+  runSessionCommand("show-message", props.item.sessionId, { toolCallId: props.item.toolCallId });
 }
 
 async function stop(): Promise<void> {

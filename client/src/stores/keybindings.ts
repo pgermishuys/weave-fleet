@@ -1,7 +1,8 @@
 import { defineStore } from "pinia";
 import { computed, shallowRef } from "vue";
 import type { GlobalShortcut } from "@/lib/command-registry";
-import { DEFAULT_KEYBINDINGS, type KeyBinding, type KeyBindingsConfig } from "@/lib/keybinding-types";
+import type { CommandId } from "@/lib/command-ids";
+import { keybindingPoint, type KeyBinding, type KeyBindingsConfig } from "@/lib/keybinding-types";
 import {
   detectGlobalConflict,
   detectPaletteConflict,
@@ -88,9 +89,17 @@ export function getBoardModeToggleShortcut(bindings: KeyBindingsConfig): GlobalS
 export const useKeybindingsStore = defineStore("keybindings", () => {
   const userOverrides = shallowRef<Partial<KeyBindingsConfig>>(readStoredOverrides());
 
+  /** What each command is bound to: what was contributed, with the user's own changes on top. */
   const bindings = computed<KeyBindingsConfig>(() => {
-    return mergeWithDefaults(userOverrides.value, DEFAULT_KEYBINDINGS);
+    const contributed: KeyBindingsConfig = {};
+    for (const { id, ...binding } of keybindingPoint.items.value) contributed[id] = binding;
+    return mergeWithDefaults(userOverrides.value, contributed);
   });
+
+  /** One command's binding. Taking a command id means a misspelled one is a type error. */
+  function bindingFor(commandId: CommandId): KeyBinding | undefined {
+    return bindings.value[commandId];
+  }
 
   const hasCustomBindings = computed(() => Object.keys(userOverrides.value).length > 0);
 
@@ -137,6 +146,7 @@ export const useKeybindingsStore = defineStore("keybindings", () => {
 
   return {
     bindings,
+    bindingFor,
     userOverrides,
     hasCustomBindings,
     updateBinding,

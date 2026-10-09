@@ -1,4 +1,6 @@
 import type { GlobalShortcut } from "@/lib/command-registry";
+import type { CommandId } from "@/lib/command-ids";
+import { defineContributionPoint } from "@/lib/contributions";
 
 export interface KeyBinding {
   paletteHotkey: string | null;
@@ -7,7 +9,7 @@ export interface KeyBinding {
 
 export type KeyBindingsConfig = Record<string, KeyBinding>;
 
-export const DEFAULT_KEYBINDINGS: KeyBindingsConfig = {
+export const DEFAULT_KEYBINDINGS: Partial<Record<CommandId, KeyBinding>> = {
   // Navigation
   "nav-fleet":          { paletteHotkey: "f", globalShortcut: null },
   "nav-settings":       { paletteHotkey: "s", globalShortcut: null },
@@ -40,3 +42,22 @@ export const DEFAULT_KEYBINDINGS: KeyBindingsConfig = {
   "zoom-out":           { paletteHotkey: null, globalShortcut: { key: "-", platformModifier: true } },
   "toggle-dark-light":  { paletteHotkey: null, globalShortcut: null },
 };
+
+export interface KeyBindingContribution extends KeyBinding {
+  id: CommandId;
+}
+
+/**
+ * The keys each command has before the user changes anything. Fleet's own are contributed here; ids are unique, and
+ * a later contribution with the same id replaces the earlier one. What the user rebinds sits on top of this, in
+ * the keybindings store.
+ */
+export const keybindingPoint = defineContributionPoint<KeyBindingContribution, CommandId>({
+  name: "keybindings",
+  idOf: (binding) => binding.id,
+});
+
+keybindingPoint.contribute(
+  "fleet",
+  (Object.entries(DEFAULT_KEYBINDINGS) as [CommandId, KeyBinding][]).map(([id, binding]) => ({ id, ...binding })),
+);

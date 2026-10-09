@@ -31,7 +31,7 @@ import { useSidebarMobile } from "@/composables/use-sidebar-mobile";
 import { clearSentPrompts, reconcileSentPrompts, useSendPrompt, useSentPrompts } from "@/composables/use-send-prompt";
 import { isSubagentTool, subagentKind, subagentTask, toToolCardItem, withoutRedrawnPages } from "@/components/session/activity-stream-tool-card";
 import type { ToolCardItem } from "@/components/session/activity-stream-tool-card";
-import type { CommandEventName } from "@/lib/command-events";
+import { sessionCommands } from "@/lib/session-commands";
 import type { AccumulatedMessage, AccumulatedPart, AccumulatedToolPart, AccumulatedFilePart, AccumulatedReasoningPart } from "@/lib/client-types";
 import type { SlashCommand, TurnError } from "@/lib/domain-events";
 import { parseVisualPayload, type VisualPayload } from "@/lib/visual-payload";
@@ -878,23 +878,11 @@ function scrollToTop(): void {
   element.scrollTo({ top: 0, behavior: "smooth" });
 }
 
-function handleCopySessionIdCommand(event: Event): void {
-  const customEvent = event as CustomEvent<{ sessionId?: string }>;
-
-  if (customEvent.detail?.sessionId !== props.sessionId) {
-    return;
-  }
-
+function handleCopySessionIdCommand(): void {
   void navigator.clipboard?.writeText(props.sessionId).catch(() => {});
 }
 
-function handleFocusPromptCommand(event: Event): void {
-  const customEvent = event as CustomEvent<{ sessionId?: string }>;
-
-  if (customEvent.detail?.sessionId !== props.sessionId) {
-    return;
-  }
-
+function handleFocusPromptCommand(): void {
   const promptInput = document.querySelector('[data-testid="prompt-input"]');
 
   if (promptInput instanceof HTMLTextAreaElement || promptInput instanceof HTMLInputElement) {
@@ -902,13 +890,7 @@ function handleFocusPromptCommand(event: Event): void {
   }
 }
 
-function handleExportConversationCommand(event: Event): void {
-  const customEvent = event as CustomEvent<{ sessionId?: string }>;
-
-  if (customEvent.detail?.sessionId !== props.sessionId) {
-    return;
-  }
-
+function handleExportConversationCommand(): void {
   const title = (selectedSession.value?.session.title ?? props.sessionId)
     .replace(/[^a-z0-9-_]+/gi, "-")
     .replace(/^-+|-+$/g, "");
@@ -930,15 +912,17 @@ function handleExportConversationCommand(event: Event): void {
   URL.revokeObjectURL(url);
 }
 
-function registerWindowCommandListener(
-  eventName: CommandEventName,
-  handler: (event: Event) => void,
-): () => void {
-  window.addEventListener(eventName, handler);
+function handleShowMessageCommand(detail: { messageId?: string; toolCallId?: string }): void {
+  const toolCallId = detail.toolCallId;
+  const messageId = detail.messageId ?? (toolCallId
+    ? stream.messages.value.find((message) => message.parts.some((part) => part.type === "tool" && part.callId === toolCallId))?.messageId
+    : undefined);
 
-  return () => {
-    window.removeEventListener(eventName, handler);
-  };
+  if (!messageId) {
+    return;
+  }
+
+  void nextTick(() => showMessage(messageId));
 }
 
 function scheduleScrollToBottom(): void {
@@ -990,40 +974,25 @@ onMounted(() => {
     });
   }
 
-  cleanupCallbacks.push(registerWindowCommandListener("weave:command-scroll-top", (event: Event) => {
-    const customEvent = event as CustomEvent<{ sessionId?: string }>;
-
-    if (customEvent.detail?.sessionId !== props.sessionId) {
-      return;
-    }
-
-    scrollToTop();
-  }));
-  cleanupCallbacks.push(registerWindowCommandListener("weave:command-scroll-bottom", ((event: Event) => {
-    const customEvent = event as CustomEvent<{ sessionId?: string }>;
-
-    if (customEvent.detail?.sessionId !== props.sessionId) {
-      return;
-    }
-
-    scrollToBottom();
-  })));
-  cleanupCallbacks.push(registerWindowCommandListener("weave:command-show-message", ((event: Event) => {
-    const customEvent = event as CustomEvent<{ sessionId?: string; messageId?: string; toolCallId?: string }>;
-    const toolCallId = customEvent.detail?.toolCallId;
-    const messageId = customEvent.detail?.messageId ?? (toolCallId
-      ? stream.messages.value.find((message) => message.parts.some((part) => part.type === "tool" && part.callId === toolCallId))?.messageId
-      : undefined);
-
-    if (customEvent.detail?.sessionId !== props.sessionId || !messageId) {
-      return;
-    }
-
-    void nextTick(() => showMessage(messageId));
-  })));
-  cleanupCallbacks.push(registerWindowCommandListener("weave:command-focus-prompt", handleFocusPromptCommand));
-  cleanupCallbacks.push(registerWindowCommandListener("weave:command-copy-session-id", handleCopySessionIdCommand));
-  cleanupCallbacks.push(registerWindowCommandListener("weave:command-export-conversation", handleExportConversationCommand));
+  // This conversation answers the session commands for its session for as long as it is mounted.
+  const stopCommands = watch(
+    () => props.sessionId,
+    (sessionId, _previous, onCleanup) => {
+      onCleanup(sessionCommands.contribute(`conversation:${sessionId}`, [{
+        sessionId,
+        handlers: {
+          "scroll-top": scrollToTop,
+          "scroll-bottom": scrollToBottom,
+          "show-message": handleShowMessageCommand,
+          "focus-prompt": handleFocusPromptCommand,
+          "copy-session-id": handleCopySessionIdCommand,
+          "export-conversation": handleExportConversationCommand,
+        },
+      }]));
+    },
+    { immediate: true },
+  );
+  cleanupCallbacks.push(stopCommands);
 });
 
 onUnmounted(() => {

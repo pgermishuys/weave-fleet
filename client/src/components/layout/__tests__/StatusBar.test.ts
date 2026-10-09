@@ -1,8 +1,9 @@
 import { mount } from "@vue/test-utils";
-import { beforeEach, describe, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import type { SessionListItem } from "@/api/client";
 import StatusBar from "@/components/layout/StatusBar.vue";
-import type { Command } from "@/lib/command-registry";
+import type { CommandId } from "@/lib/command-ids";
+import { commandPoint, type Command } from "@/lib/command-registry";
 import { useAppShellStore } from "@/stores/app-shell";
 import { useCommandStore } from "@/stores/commands";
 import { useSessionsStore } from "@/stores/sessions";
@@ -12,9 +13,9 @@ import { useTerminalsStore } from "@/stores/terminals";
 vi.mock("@/api/client", () => ({ api: { GET: vi.fn(async () => ({ data: [], response: { ok: true, status: 200 } })) } }));
 
 /** Stands in for the command useCommands registers, which is what the keyboard shortcut runs too. */
-function registerCommand(id: string, overrides: Partial<Command> = {}): Command {
+function registerCommand(id: CommandId, overrides: Partial<Command> = {}): Command {
   const command: Command = { id, label: id, category: "View", action: vi.fn(), ...overrides };
-  useCommandStore().registerCommand(command);
+  commandPoint.contribute("test", [command]);
   return command;
 }
 
@@ -31,14 +32,31 @@ function enableTerminals(enabled: boolean): void {
   appShell.setConfig({ ...appShell.config, terminalEnabled: enabled });
 }
 
+/**
+ * The commands are shared by the whole app, so a bar left mounted would still react to the next test's commands.
+ * Every bar a test mounts is unmounted after it.
+ */
+const mounted: Array<{ unmount: () => void }> = [];
+
+function mountBar() {
+  const wrapper = mount(StatusBar);
+  mounted.push(wrapper);
+  return wrapper;
+}
+
 describe("StatusBar hints", () => {
   beforeEach(() => {
     globalThis.localStorage?.clear();
+    commandPoint.clear();
+  });
+
+  afterEach(() => {
+    for (const wrapper of mounted.splice(0)) wrapper.unmount();
   });
 
   it("opens and closes the command palette the way Ctrl K does", async () => {
     const commands = useCommandStore();
-    const wrapper = mount(StatusBar);
+    const wrapper = mountBar();
     const button = wrapper.get("[data-testid=status-hint-palette]");
 
     await button.trigger("click");
@@ -51,7 +69,7 @@ describe("StatusBar hints", () => {
   it("runs the previous and next session commands from their own buttons", async () => {
     const previous = registerCommand("nav-prev-session", { label: "Previous session" });
     const next = registerCommand("nav-next-session", { label: "Next session" });
-    const wrapper = mount(StatusBar);
+    const wrapper = mountBar();
     const previousButton = wrapper.get("[data-testid=status-hint-prev-session]");
     const nextButton = wrapper.get("[data-testid=status-hint-next-session]");
 
@@ -69,7 +87,7 @@ describe("StatusBar hints", () => {
   it("disables previous and next with the command's reason when there's no other session", () => {
     registerCommand("nav-prev-session", { disabled: true, description: "A second session is required." });
     registerCommand("nav-next-session", { disabled: true, description: "A second session is required." });
-    const wrapper = mount(StatusBar);
+    const wrapper = mountBar();
     const previousButton = wrapper.get("[data-testid=status-hint-prev-session]");
 
     expect(previousButton.attributes("disabled")).toBeDefined();
@@ -78,7 +96,7 @@ describe("StatusBar hints", () => {
 
   it("runs the sidebar command and names what it will do", async () => {
     const sidebar = registerCommand("toggle-sidebar", { label: "Hide sidebar" });
-    const wrapper = mount(StatusBar);
+    const wrapper = mountBar();
     const button = wrapper.get("[data-testid=status-hint-sidebar]");
 
     expect(button.attributes("aria-label")).toBe("Hide sidebar");
@@ -90,7 +108,7 @@ describe("StatusBar hints", () => {
   it("interrupts only while the session is working", async () => {
     const interrupt = registerCommand("interrupt-session");
     openSession("idle");
-    const wrapper = mount(StatusBar);
+    const wrapper = mountBar();
     const button = wrapper.get("[data-testid=status-hint-interrupt]");
 
     expect(button.attributes("disabled")).toBeDefined();
@@ -108,7 +126,7 @@ describe("StatusBar hints", () => {
 
   it("keeps Interrupt in place, disabled, when no session is open", () => {
     registerCommand("interrupt-session", { disabled: true });
-    const wrapper = mount(StatusBar);
+    const wrapper = mountBar();
     const button = wrapper.get("[data-testid=status-hint-interrupt]");
 
     expect(button.attributes("disabled")).toBeDefined();
@@ -118,7 +136,7 @@ describe("StatusBar hints", () => {
   it("shows the terminal button only when terminals are on, and runs the terminal command", async () => {
     const terminal = registerCommand("toggle-terminal", { label: "Show terminal" });
     enableTerminals(false);
-    const wrapper = mount(StatusBar);
+    const wrapper = mountBar();
     expect(wrapper.find("[data-testid=status-hint-terminal]").exists()).toBe(false);
 
     enableTerminals(true);
@@ -131,7 +149,7 @@ describe("StatusBar hints", () => {
   it("hides the terminal from the terminal's own hints, and leaves the rest as text", async () => {
     const terminal = registerCommand("toggle-terminal", { label: "Hide terminal" });
     useTerminalsStore().setFocused(true);
-    const wrapper = mount(StatusBar);
+    const wrapper = mountBar();
     const hints = wrapper.get("[data-testid=terminal-keyboard-hint]");
 
     expect(hints.findAll("button")).toHaveLength(1);
@@ -143,7 +161,7 @@ describe("StatusBar hints", () => {
   it("doesn't take the keyboard when a hint is clicked", () => {
     registerCommand("interrupt-session");
     openSession("busy");
-    const wrapper = mount(StatusBar);
+    const wrapper = mountBar();
 
     for (const button of wrapper.findAll("button")) {
       const press = new MouseEvent("mousedown", { bubbles: true, cancelable: true });
@@ -156,12 +174,12 @@ describe("StatusBar hints", () => {
 describe("command store", () => {
   it("runs a command unless it's missing or disabled", () => {
     const commands = useCommandStore();
-    const enabled = registerCommand("a");
-    const disabled = registerCommand("b", { disabled: true });
+    const enabled = registerCommand("zoom-in");
+    const disabled = registerCommand("zoom-out", { disabled: true });
 
-    commands.runCommand("a");
-    commands.runCommand("b");
-    commands.runCommand("missing");
+    commands.runCommand("zoom-in");
+    commands.runCommand("zoom-out");
+    commands.runCommand("zoom-in-more" as CommandId);
 
     expect(enabled.action).toHaveBeenCalledTimes(1);
     expect(disabled.action).not.toHaveBeenCalled();

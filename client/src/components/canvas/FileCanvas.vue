@@ -9,7 +9,7 @@ import { useCanvasAnnotate } from "@/composables/use-canvas-annotation";
 import { useSessionImage } from "@/composables/use-session-image";
 import { appendDraftReference } from "@/composables/use-draft-state";
 import type { AnnotationAnchor } from "@/lib/annotation-types";
-import { dispatchCommandEvent } from "@/lib/command-events";
+import { runSessionCommand } from "@/lib/session-commands";
 import { baseText } from "@/lib/code-editor/agent-lines";
 import { finishCompare, openBuffer, saveBuffer, useDiskVersion } from "@/lib/code-editor/buffers";
 import { useMachineTarget } from "@/lib/machine-target";
@@ -341,7 +341,7 @@ function addToMessage(): void {
   if (!chip.value) return;
   appendDraftReference(props.sessionId, chip.value.reference);
   hideChip();
-  dispatchCommandEvent("weave:command-focus-prompt", { sessionId: props.sessionId });
+  runSessionCommand("focus-prompt", props.sessionId);
 }
 </script>
 
