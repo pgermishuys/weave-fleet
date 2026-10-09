@@ -20,10 +20,16 @@ vi.mock("@/api/session-files", () => ({
   writeSessionFile: writeSessionFileMock,
 }));
 
-// A changed file's base comes from /diffs/file; answer it from the diff list below.
+// A changed file's base comes from /diffs/file; answer it from the diff list below. Images come from
+// /files/image, answered from `images`.
+const images = vi.hoisted(() => new Map<string, Uint8Array<ArrayBuffer> | string>());
 vi.mock("@/lib/api-client", () => ({
   apiFetchOn: vi.fn(async (_machine: unknown, url: string) => {
     const path = new URL(url, "http://fleet").searchParams.get("path");
+    if (url.includes("/files/image")) {
+      const image = path ? images.get(path) : undefined;
+      return image ? new Response(image, { status: 200 }) : new Response(null, { status: 404 });
+    }
     const item = sharedDiffs.diffs.value.find((diff) => diff.file === path);
     return item ? new Response(JSON.stringify(item), { status: 200 }) : new Response(null, { status: 404 });
   }),
@@ -224,10 +230,62 @@ describe("FileCanvas", () => {
   });
 
   it("says why a binary file can't be opened", async () => {
-    readSessionFileMock.mockResolvedValue({ path: "logo.png", content: null, hash: "h", isBinary: true, isTruncated: false });
-    const wrapper = await mountCanvas("logo.png");
+    readSessionFileMock.mockResolvedValue({ path: "font.woff2", content: null, hash: "h", isBinary: true, isTruncated: false });
+    const wrapper = await mountCanvas("font.woff2");
     expect(wrapper.get('[data-testid="file-unavailable"]').text()).toContain("binary or not UTF-8");
     wrapper.unmount();
+  });
+
+  describe("images", () => {
+    const createObjectURL = URL.createObjectURL;
+    const revokeObjectURL = URL.revokeObjectURL;
+
+    beforeEach(() => {
+      images.clear();
+      URL.createObjectURL = vi.fn(() => "blob:picture");
+      URL.revokeObjectURL = vi.fn();
+    });
+
+    afterEach(() => {
+      URL.createObjectURL = createObjectURL;
+      URL.revokeObjectURL = revokeObjectURL;
+    });
+
+    it("shows an image as a picture with its pixel size and file size, never in the editor, however large", async () => {
+      images.set("docs/map.png", new Uint8Array(600 * 1024));
+      const wrapper = await mountCanvas("docs/map.png");
+
+      expect(readSessionFileMock).not.toHaveBeenCalled();
+      expect(wrapper.find('[data-testid="file-unavailable"]').exists()).toBe(false);
+      expect(wrapper.find('[data-testid="file-view-edit"]').exists()).toBe(false);
+      const img = wrapper.get('[data-testid="file-image"] img');
+      expect(img.attributes("src")).toBe("blob:picture");
+      expect(img.attributes("alt")).toBe("map.png");
+
+      Object.defineProperty(img.element, "naturalWidth", { value: 1440 });
+      Object.defineProperty(img.element, "naturalHeight", { value: 900 });
+      await img.trigger("load");
+      expect(wrapper.get('[data-testid="image-meta"]').text()).toBe("1440 × 900 · 600 KB");
+      wrapper.unmount();
+    });
+
+    it("shows an SVG as a picture too, with its size alone when it has no pixel size", async () => {
+      images.set("logo.svg", "<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 4 4'/>");
+      const wrapper = await mountCanvas("logo.svg");
+
+      expect(readSessionFileMock).not.toHaveBeenCalled();
+      await wrapper.get('[data-testid="file-image"] img').trigger("load");
+      expect(wrapper.get('[data-testid="image-meta"]').text()).toBe("59 B");
+      wrapper.unmount();
+    });
+
+    it("says so when the image is no longer there", async () => {
+      const wrapper = await mountCanvas("docs/gone.png");
+
+      expect(wrapper.get('[data-testid="file-unavailable"]').text()).toBe("This file isn't in the session's folder any more.");
+      expect(wrapper.find('[data-testid="file-image"]').exists()).toBe(false);
+      wrapper.unmount();
+    });
   });
 
   it("Markdown opens rendered from the buffer, annotatable, with Source and Diff beside it", async () => {

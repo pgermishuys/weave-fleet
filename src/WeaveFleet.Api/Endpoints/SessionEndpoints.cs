@@ -990,6 +990,27 @@ public static class SessionEndpoints
         .Produces(400)
         .WithName("ReadSessionFile");
 
+        // GET /api/sessions/{id}/files/image?path= — an image in the session's folder, for a file tab to show as a picture.
+        // The sandbox keeps an SVG's scripts from running as Fleet when the address is opened on its own.
+        group.MapGet("/{id}/files/image", async (string id, [FromQuery] string? path, SessionOrchestrator orchestrator, HttpContext http) =>
+        {
+            var result = await orchestrator.ResolveSessionImageAsync(id, path);
+            return result.Match(
+                image =>
+                {
+                    var headers = http.Response.Headers;
+                    headers.ContentSecurityPolicy = "sandbox";
+                    headers.XContentTypeOptions = "nosniff";
+                    headers.CacheControl = "no-cache";
+                    return Results.File(image.FullPath, image.ContentType, lastModified: File.GetLastWriteTimeUtc(image.FullPath));
+                },
+                err => err.ToSessionApiResult());
+        })
+        .Produces(200)
+        .Produces(404)
+        .Produces(400)
+        .WithName("GetSessionImage");
+
         // PUT /api/sessions/{id}/files/content — save a file from the editor. 409 when the file changed since it was read.
         group.MapPut("/{id}/files/content", async (string id, WriteSessionFileRequest req, SessionOrchestrator orchestrator, CancellationToken ct) =>
         {

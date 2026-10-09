@@ -298,6 +298,33 @@ public sealed class SessionFileBrowserEndpointTests : IAsyncDisposable
         missing.StatusCode.ShouldBe(HttpStatusCode.NotFound);
     }
 
+    [Fact]
+    public async Task image_endpoint_serves_an_image_of_any_size_sandboxed_and_refuses_other_files()
+    {
+        var bytes = new byte[600 * 1024];
+        bytes[0] = 0x89;
+        Directory.CreateDirectory(Path.Combine(_tempDirectory.Path, "docs"));
+        await File.WriteAllBytesAsync(Path.Combine(_tempDirectory.Path, "docs", "map.png"), bytes);
+        await File.WriteAllTextAsync(Path.Combine(_tempDirectory.Path, "notes.txt"), "notes");
+
+        var createResponse = await _client.PostAsJsonAsync("/api/sessions", new
+        {
+            directory = _tempDirectory.Path,
+            title = "Image Test"
+        });
+        var sessionId = (await createResponse.Content.ReadFromJsonAsync<CreateSessionApiResponse>())!.Session.Id;
+
+        var image = await _client.GetAsync($"/api/sessions/{sessionId}/files/image?path=docs/map.png");
+        image.StatusCode.ShouldBe(HttpStatusCode.OK);
+        image.Content.Headers.ContentType?.MediaType.ShouldBe("image/png");
+        image.Headers.GetValues("Content-Security-Policy").ShouldBe(["sandbox"]);
+        (await image.Content.ReadAsByteArrayAsync()).ShouldBe(bytes);
+
+        (await _client.GetAsync($"/api/sessions/{sessionId}/files/image?path=notes.txt")).StatusCode.ShouldBe(HttpStatusCode.BadRequest);
+        (await _client.GetAsync($"/api/sessions/{sessionId}/files/image?path=../outside.png")).StatusCode.ShouldBe(HttpStatusCode.BadRequest);
+        (await _client.GetAsync($"/api/sessions/{sessionId}/files/image?path=gone.png")).StatusCode.ShouldBe(HttpStatusCode.NotFound);
+    }
+
     private sealed class TempDirectory : IDisposable
     {
         public TempDirectory()
