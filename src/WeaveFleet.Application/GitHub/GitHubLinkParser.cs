@@ -1,7 +1,7 @@
 using System.Globalization;
 using System.Text.RegularExpressions;
 
-namespace WeaveFleet.Application.Services;
+namespace WeaveFleet.Application.GitHub;
 
 /// <summary>A GitHub pull request or issue identified by owner, repository and number.</summary>
 public sealed record GitHubLinkReference(string Owner, string Repo, int Number, string ResourceType)

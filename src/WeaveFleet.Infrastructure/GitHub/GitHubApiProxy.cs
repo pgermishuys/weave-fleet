@@ -6,7 +6,7 @@ using System.Security.Cryptography;
 using System.Text;
 using System.Text.Json.Nodes;
 
-namespace WeaveFleet.Infrastructure.Services;
+namespace WeaveFleet.Infrastructure.GitHub;
 
 /// <summary>Result of a conditional GitHub API request.</summary>
 /// <param name="StatusCode">The HTTP status, reported as 200 when the cached body was reused.</param>

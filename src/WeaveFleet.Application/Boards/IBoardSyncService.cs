@@ -1,6 +1,6 @@
 using WeaveFleet.Domain.Common;
 
-namespace WeaveFleet.Application.Services;
+namespace WeaveFleet.Application.Boards;
 
 public interface IBoardSyncService
 {

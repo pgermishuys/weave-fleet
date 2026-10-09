@@ -1,4 +1,4 @@
-using WeaveFleet.Application.Services;
+using WeaveFleet.Application.GitHub;
 
 namespace WeaveFleet.Application.Tests.Services;
 

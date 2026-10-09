@@ -1,13 +1,15 @@
 using System.Globalization;
 using System.Text.Json;
 using System.Text.Json.Nodes;
+using WeaveFleet.Application.Boards;
 using WeaveFleet.Application.Services;
 using WeaveFleet.Application.SessionSources;
 using WeaveFleet.Domain.Common;
 using WeaveFleet.Domain.Entities;
 using WeaveFleet.Domain.Repositories;
+using WeaveFleet.Infrastructure.GitHub;
 
-namespace WeaveFleet.Infrastructure.Services;
+namespace WeaveFleet.Infrastructure.Boards;
 
 public sealed class BoardSyncService(
     IBoardRepository boardRepository,

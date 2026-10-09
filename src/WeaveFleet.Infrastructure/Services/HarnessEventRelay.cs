@@ -16,6 +16,7 @@ using WeaveFleet.Domain.Events;
 using WeaveFleet.Domain.Harnesses;
 using WeaveFleet.Domain.Repositories;
 using WeaveFleet.Infrastructure.Events;
+using WeaveFleet.Infrastructure.GitHub;
 using WeaveFleet.Infrastructure.Harnesses;
 using WeaveFleet.Infrastructure.Progress;
 

@@ -1,7 +1,7 @@
 using System.Text.Json;
 using WeaveFleet.Domain.Entities;
 using WeaveFleet.Domain.Harnesses;
-using WeaveFleet.Infrastructure.Services;
+using WeaveFleet.Infrastructure.GitHub;
 
 namespace WeaveFleet.Infrastructure.Tests.Services;
 
