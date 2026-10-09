@@ -329,6 +329,52 @@ public sealed class TestHarnessSessionTests
         events[0].Type.ShouldBe("custom.event");
     }
 
+    // ── Questions ────────────────────────────────────────────────────────────
+
+    [Fact]
+    public async Task A_question_the_harness_did_not_ask_is_not_found()
+    {
+        var instance = new TestHarnessSession("sess-1", new TestScenarioBuilder().Build());
+
+        await Should.ThrowAsync<KeyNotFoundException>(() => instance.AnswerQuestionAsync("call-gone", [["Yes"]], CancellationToken.None));
+        await Should.ThrowAsync<KeyNotFoundException>(() => instance.RejectQuestionAsync("call-gone", CancellationToken.None));
+        instance.LastAnswers.ShouldBeNull();
+    }
+
+    [Fact]
+    public async Task A_pushed_question_is_answered_once()
+    {
+        var instance = new TestHarnessSession("sess-1", new TestScenarioBuilder().Build());
+        await instance.PushEventAsync(MakeEvent("message.part.updated", new
+        {
+            sessionID = "sess-1",
+            part = new { type = "tool", id = "call-q", callID = "call-q", tool = "question", messageID = "msg-q", state = new { status = "running" } },
+        }));
+
+        await instance.AnswerQuestionAsync("call-q", [["Yes"]], CancellationToken.None);
+
+        instance.LastAnswers.ShouldNotBeNull().ShouldHaveSingleItem().ShouldBe(["Yes"]);
+        await Should.ThrowAsync<KeyNotFoundException>(() => instance.AnswerQuestionAsync("call-q", [["No"]], CancellationToken.None));
+    }
+
+    [Fact]
+    public async Task A_scenario_question_is_dismissed_once()
+    {
+        const string sessionId = "sess-q";
+        var scenario = new TestScenarioBuilder()
+            .WithQuestionToolResponse(sessionId, "msg-q", "call-q", new { questions = Array.Empty<object>() })
+            .Build();
+        var instance = new TestHarnessSession(sessionId, scenario);
+        using var cts = new CancellationTokenSource(TimeSpan.FromSeconds(5));
+
+        var asked = CollectEventsAsync(instance, expectedCount: 5, cts.Token);
+        await instance.SendPromptAsync("Ask me", null, cts.Token);
+        await asked;
+
+        await instance.RejectQuestionAsync("call-q", CancellationToken.None);
+        await Should.ThrowAsync<KeyNotFoundException>(() => instance.RejectQuestionAsync("call-q", CancellationToken.None));
+    }
+
     // ── Helpers ──────────────────────────────────────────────────────────────
 
     private static async Task<List<HarnessEvent>> CollectEventsAsync(

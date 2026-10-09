@@ -39,6 +39,10 @@ public sealed class SessionAsks(
         {
             return new FleetError("Session.QuestionNotSupported", ex.Message);
         }
+        catch (KeyNotFoundException)
+        {
+            return FleetError.NotFoundFor("QuestionRequest", requestId);
+        }
 
         return Unit.Value;
     }
@@ -64,6 +68,10 @@ public sealed class SessionAsks(
         catch (NotSupportedException ex)
         {
             return new FleetError("Session.QuestionNotSupported", ex.Message);
+        }
+        catch (KeyNotFoundException)
+        {
+            return FleetError.NotFoundFor("QuestionRequest", requestId);
         }
 
         return Unit.Value;

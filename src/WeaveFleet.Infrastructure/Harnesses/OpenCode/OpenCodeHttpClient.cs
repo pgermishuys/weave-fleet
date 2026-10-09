@@ -519,7 +519,10 @@ internal sealed class OpenCodeHttpClient
         return response.IsSuccessStatusCode;
     }
 
-    /// <summary>POST /question/{requestId}/reply?directory={directory}</summary>
+    /// <summary>
+    /// POST /question/{requestId}/reply?directory={directory}. Throws <see cref="KeyNotFoundException"/> when OpenCode has
+    /// no such question waiting.
+    /// </summary>
     public async Task AnswerQuestionAsync(
         string requestId,
         IReadOnlyList<IReadOnlyList<string>> answers,
@@ -528,15 +531,34 @@ internal sealed class OpenCodeHttpClient
     {
         var url = BuildUrl($"/question/{Uri.EscapeDataString(requestId)}/reply", directory);
         var body = new OpenCodeQuestionReplyRequest { Answers = answers };
-        await PostVoidAsync(url, body, OpenCodeJsonContext.Default.OpenCodeQuestionReplyRequest, ct).ConfigureAwait(false);
+        await PostQuestionAsync(requestId, url, body, OpenCodeJsonContext.Default.OpenCodeQuestionReplyRequest, ct).ConfigureAwait(false);
     }
 
-    /// <summary>POST /question/{requestId}/reject?directory={directory}</summary>
+    /// <summary>
+    /// POST /question/{requestId}/reject?directory={directory}. Throws <see cref="KeyNotFoundException"/> when OpenCode has
+    /// no such question waiting.
+    /// </summary>
     public async Task RejectQuestionAsync(string requestId, string directory, CancellationToken ct)
     {
         var url = BuildUrl($"/question/{Uri.EscapeDataString(requestId)}/reject", directory);
         var body = new OpenCodeQuestionRejectRequest();
-        await PostVoidAsync(url, body, OpenCodeJsonContext.Default.OpenCodeQuestionRejectRequest, ct).ConfigureAwait(false);
+        await PostQuestionAsync(requestId, url, body, OpenCodeJsonContext.Default.OpenCodeQuestionRejectRequest, ct).ConfigureAwait(false);
+    }
+
+    /// <summary>
+    /// OpenCode answers 404 (<c>QuestionNotFoundError</c>) for a question it has no pending request for: answered,
+    /// dismissed, or its turn ended. Any other failure stays an error.
+    /// </summary>
+    private async Task PostQuestionAsync<TReq>(string requestId, string url, TReq body, JsonTypeInfo<TReq> reqTypeInfo, CancellationToken ct)
+    {
+        try
+        {
+            await PostVoidAsync(url, body, reqTypeInfo, ct).ConfigureAwait(false);
+        }
+        catch (HttpRequestException ex) when (ex.StatusCode == System.Net.HttpStatusCode.NotFound)
+        {
+            throw new KeyNotFoundException($"Question '{requestId}' isn't waiting for an answer.", ex);
+        }
     }
 
     /// <summary>GET /permission?directory={directory}: the asks waiting in the folder, every session's, as OpenCode sends them.</summary>

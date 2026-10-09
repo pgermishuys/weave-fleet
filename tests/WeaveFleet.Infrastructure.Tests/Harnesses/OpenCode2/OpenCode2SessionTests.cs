@@ -177,8 +177,19 @@ public sealed class OpenCode2SessionTests
         await using var server = Server(new StubHandler(_ => Json("""{"data":[]}""")));
         await using var session = NewSession(server);
 
-        var ex = await Should.ThrowAsync<InvalidOperationException>(() => session.AnswerQuestionAsync(Call, [["A"]], CancellationToken.None));
+        var ex = await Should.ThrowAsync<KeyNotFoundException>(() => session.AnswerQuestionAsync(Call, [["A"]], CancellationToken.None));
         ex.Message.ShouldBe("OpenCode 2 has no open question for this answer any more.");
+    }
+
+    [Fact]
+    public async Task Dismissing_a_question_that_is_gone_says_so()
+    {
+        var api = new StubHandler(_ => Json("""{"data":[]}"""));
+        await using var server = Server(api);
+        await using var session = NewSession(server);
+
+        await Should.ThrowAsync<KeyNotFoundException>(() => session.RejectQuestionAsync(Call, CancellationToken.None));
+        api.Requests.ShouldAllBe(r => r.Method == HttpMethod.Get);
     }
 
     [Fact]

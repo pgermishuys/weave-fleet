@@ -1037,7 +1037,7 @@ internal sealed partial class OpenCode2HarnessSession : IHarnessSession, IOpenCo
 
         foreach (var form in await server.Client.GetFormsAsync(ResumeToken, ct).ConfigureAwait(false))
             RememberQuestion(form);
-        return Lookup() ?? throw new InvalidOperationException("OpenCode 2 has no open question for this answer any more.");
+        return Lookup() ?? throw new KeyNotFoundException("OpenCode 2 has no open question for this answer any more.");
 
         OpenCode2Form? Lookup()
             => _questions.TryGetValue(requestId, out var byCall) ? byCall
