@@ -1,16 +1,13 @@
-import { computed, defineAsyncComponent, shallowRef, type Component, type ComputedRef } from "vue";
-import { clearPlugins, getPlugins, registerPlugin as registerPluginInRegistry, registerPlugins as registerPluginsInRegistry } from "./registry";
-import { getSessionSourceContributions, type RegisteredSessionSourceContribution } from "./slots";
-import type { FleetPluginDescriptor, FleetPluginManifest, FleetPluginRenderProps, FleetPluginStatus } from "./types";
+import { computed, shallowRef, type ComputedRef } from "vue";
+import { clearPlugins, pluginManifests, registerPlugin, registerPlugins } from "./registry";
+import type { FleetPluginDescriptor, FleetPluginManifest, FleetPluginStatus } from "./types";
 
 export interface PluginRuntimeComposable {
   manifests: ComputedRef<readonly FleetPluginManifest[]>;
   descriptors: ComputedRef<readonly FleetPluginDescriptor[]>;
   statuses: ComputedRef<readonly FleetPluginStatus[]>;
-  sessionSources: ComputedRef<readonly RegisteredSessionSourceContribution[]>;
   isLoading: ComputedRef<boolean>;
   error: ComputedRef<string | undefined>;
-  refresh: () => void;
   registerPlugin: (manifest: FleetPluginManifest) => void;
   registerPlugins: (manifests: readonly FleetPluginManifest[]) => void;
   clear: () => void;
@@ -20,24 +17,16 @@ export interface PluginRuntimeComposable {
   getStatus: (pluginId: string) => FleetPluginStatus | undefined;
 }
 
-export type FleetPluginAsyncComponentModule = {
-  default: Component<FleetPluginRenderProps>;
-};
-
-export type FleetPluginAsyncComponentLoader = () => Promise<
-  Component<FleetPluginRenderProps> | FleetPluginAsyncComponentModule
->;
-
-const manifestsState = shallowRef<readonly FleetPluginManifest[]>(getPlugins());
+// The plugins themselves live in the reactive registry; only what the server says about them is state here.
 const statusesState = shallowRef<readonly FleetPluginStatus[]>([]);
 const isLoadingState = shallowRef(false);
 const errorState = shallowRef<string | undefined>(undefined);
 
-const descriptors = computed<readonly FleetPluginDescriptor[]>(() =>
-  manifestsState.value.map((manifest) => manifest.descriptor)
-);
+const manifests = pluginManifests.items;
 
-const manifests = computed<readonly FleetPluginManifest[]>(() => manifestsState.value);
+const descriptors = computed<readonly FleetPluginDescriptor[]>(() =>
+  manifests.value.map((manifest) => manifest.descriptor)
+);
 
 const statuses = computed<readonly FleetPluginStatus[]>(() => statusesState.value);
 
@@ -45,33 +34,8 @@ const isLoading = computed<boolean>(() => isLoadingState.value);
 
 const error = computed<string | undefined>(() => errorState.value);
 
-const sessionSources = computed<readonly RegisteredSessionSourceContribution[]>(() =>
-  getSessionSourceContributions(manifestsState.value)
-);
-
-function isAsyncComponentModule(
-  loaded: Component<FleetPluginRenderProps> | FleetPluginAsyncComponentModule
-): loaded is FleetPluginAsyncComponentModule {
-  return typeof loaded === "object" && loaded !== null && "default" in loaded;
-}
-
-function refresh(): void {
-  manifestsState.value = getPlugins();
-}
-
-function registerPlugin(manifest: FleetPluginManifest): void {
-  registerPluginInRegistry(manifest);
-  refresh();
-}
-
-function registerPlugins(manifests: readonly FleetPluginManifest[]): void {
-  registerPluginsInRegistry(manifests);
-  refresh();
-}
-
 function clear(): void {
   clearPlugins();
-  manifestsState.value = [];
   statusesState.value = [];
   isLoadingState.value = false;
   errorState.value = undefined;
@@ -97,10 +61,8 @@ const runtime: PluginRuntimeComposable = {
   manifests,
   descriptors,
   statuses,
-  sessionSources,
   isLoading,
   error,
-  refresh,
   registerPlugin,
   registerPlugins,
   clear,
@@ -112,12 +74,4 @@ const runtime: PluginRuntimeComposable = {
 
 export function usePluginRuntime(): PluginRuntimeComposable {
   return runtime;
-}
-
-export function defineAsyncPluginComponent(loader: FleetPluginAsyncComponentLoader): Component<FleetPluginRenderProps> {
-  return defineAsyncComponent(async () => {
-    const loaded = await loader();
-
-    return isAsyncComponentModule(loaded) ? loaded.default : loaded;
-  });
 }

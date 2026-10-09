@@ -1,5 +1,5 @@
 import { computed, defineComponent, h } from "vue";
-import { beforeEach, describe, expect, it } from "vitest";
+import { beforeEach, describe, expect, it, vi } from "vitest";
 import { usePluginRuntime } from "@/plugins/composable";
 import {
   getConfigPage,
@@ -105,6 +105,15 @@ describe("plugin runtime", () => {
     expect(getConfigPage("missing")).toBeUndefined();
   });
 
+  it("updates computeds that read a slot when a plugin registers", () => {
+    const viewIds = computed(() => getSidebarPanels().map((p) => p.viewId));
+    expect(viewIds.value).toEqual([]);
+
+    runtime.registerPlugin(manifest("late", { sidebarPanels: [{ viewId: "late", component: Stub("Late") }] }));
+
+    expect(viewIds.value).toEqual(["late"]);
+  });
+
   it("lets a plugin register without any contributions", () => {
     runtime.registerPlugin({ descriptor: manifest("bare").descriptor });
 
@@ -115,6 +124,7 @@ describe("plugin runtime", () => {
 
   describe("duplicate plugin ids", () => {
     it("replaces the earlier plugin, keeps its place in the list and drops its contributions", () => {
+      vi.spyOn(console, "warn").mockImplementation(() => {});
       runtime.registerPlugins([
         manifest("dup", { sidebarPanels: [{ viewId: "old", component: Stub("Old"), order: 1 }] }),
         manifest("other"),

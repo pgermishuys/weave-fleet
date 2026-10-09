@@ -49,8 +49,8 @@ describe("ContextPanel plugin panels", () => {
     expect(wrapper.text()).toContain("GitHub Panel");
   });
 
-  // Known bug: ContextPanel reads the plugin Map directly, so a panel registered after mount never appears.
-  it.fails("swaps the placeholder for the real panel when the plugin registers after mount", async () => {
+  // A panel that registers after the app mounted still replaces the placeholder (it used to need a reload).
+  it("swaps the placeholder for the real panel when the plugin registers after mount", async () => {
     openGitHubRail();
     const wrapper = mount(ContextPanel);
     expect(wrapper.find("[data-testid=real-github-panel]").exists()).toBe(false);

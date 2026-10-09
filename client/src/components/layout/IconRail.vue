@@ -65,7 +65,7 @@ const pathname = useLocation({
   select: (location) => location.pathname,
 });
 
-const pluginSidebarViews = computed(() => getSidebarViews(pluginRuntime.manifests.value));
+const pluginSidebarViews = computed(() => getSidebarViews());
 // Preserve plugin rail badge wiring for future use, but keep it hidden for now.
 const showPluginRailBadges = false;
 

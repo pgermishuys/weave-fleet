@@ -37,7 +37,7 @@ const pluginSections = computed<readonly DecoratedSettingsSection[]>(() => {
     pluginRuntime.descriptors.value.map((descriptor) => [descriptor.id, descriptor.displayName]),
   );
 
-  return getSettingsSections(pluginRuntime.manifests.value).map((section) => ({
+  return getSettingsSections().map((section) => ({
     ...section,
     displayName: descriptorsById.get(section.pluginId) ?? section.title,
   }));
