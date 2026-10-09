@@ -28,24 +28,48 @@ export interface UseAnalyticsFiltersResult {
 
 const STORAGE_KEY = "weave:analytics:filters";
 
-function getDefaultFilters(): AnalyticsFilters {
-  const today = new Date();
-  const thirtyDaysAgo = new Date(today);
-  thirtyDaysAgo.setDate(today.getDate() - 30);
+/** A day as the date pickers send it. The server reads it as a UTC day, so today is the UTC day as well. */
+function toIso(value: Date): string {
+  return value.toISOString().split("T")[0];
+}
 
-  const toIso = (value: Date) => value.toISOString().split("T")[0];
+function addDays(day: string, days: number): string {
+  const date = new Date(`${day}T00:00:00Z`);
+  date.setUTCDate(date.getUTCDate() + days);
+  return toIso(date);
+}
+
+function getDefaultFilters(): AnalyticsFilters {
+  const today = toIso(new Date());
 
   return {
-    from: toIso(thirtyDaysAgo),
-    to: toIso(today),
+    from: addDays(today, -30),
+    to: today,
     projectId: "",
   };
 }
 
-const DEFAULT_FILTERS = getDefaultFilters();
+/**
+ * A range saved on an earlier day, moved to end today and kept the same length, so Analytics doesn't open on the
+ * numbers from the day the range was picked. A range with no end already runs to today.
+ */
+function endingToday(filters: AnalyticsFilters): AnalyticsFilters {
+  const today = toIso(new Date());
+  if (!filters.to || filters.to === today) return filters;
+
+  const days = Math.round((Date.parse(today) - Date.parse(filters.to)) / 86_400_000);
+  return { ...filters, from: filters.from && addDays(filters.from, days), to: today };
+}
 
 export function useAnalyticsFilters(): UseAnalyticsFiltersResult {
-  const [filters, setFilters] = usePersistedState<AnalyticsFilters>(STORAGE_KEY, DEFAULT_FILTERS);
+  const [filters, setFilters] = usePersistedState<AnalyticsFilters>(STORAGE_KEY, getDefaultFilters());
+  // Set the state as well as saving it, so the first fetch already asks for the range ending today.
+  const opened = endingToday(filters.value);
+  if (opened !== filters.value) {
+    filters.value = opened;
+    setFilters(opened);
+  }
+
   const from = computed(() => filters.value.from || undefined);
   const to = computed(() => filters.value.to || undefined);
   const { summary, refetch } = useAnalyticsSummary({ from, to });
