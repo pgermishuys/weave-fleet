@@ -91,6 +91,18 @@ public sealed partial class SessionCreation(
             return SessionLineage.TooDeep(depth);
         }
 
+        // A completion callback's target: there and the caller's, checked before anything is created so a refused
+        // create leaves nothing behind.
+        if (request.OnCompleteTargetSessionId is not null && request.OnCompleteTargetInstanceId is not null)
+        {
+            var targetSession = await sessionRepository.GetByIdAsync(request.OnCompleteTargetSessionId);
+            if (targetSession is null)
+                return FleetError.NotFoundFor(nameof(Session), request.OnCompleteTargetSessionId);
+
+            if (!string.Equals(targetSession.UserId, userContext.UserId, StringComparison.Ordinal))
+                return FleetError.Unauthorized;
+        }
+
         var sourceResolutionResult = await sessionSourceResolutionService.ResolveCreateRequestAsync(request, ct);
         if (sourceResolutionResult.IsFailure)
             return sourceResolutionResult.Error;
@@ -351,19 +363,11 @@ public sealed partial class SessionCreation(
         });
         LogSessionCreated(session.Id, workspace.Id, harnessInstance.InstanceId);
 
-        // 4. Register callback (optional). Before the first message is sent: a turn that ends quickly must find it,
-        // or only the poll would fire it.
+        // 4. Register callback (optional; its target was checked at the top). Before the first message is sent: a turn
+        // that ends quickly must find it, or only the poll would fire it.
         var callbackRegistered = false;
         if (request.OnCompleteTargetSessionId is not null && request.OnCompleteTargetInstanceId is not null)
         {
-            // Ownership guard: target session must belong to the same user
-            var targetSession = await sessionRepository.GetByIdAsync(request.OnCompleteTargetSessionId);
-            if (targetSession is null)
-                return FleetError.NotFoundFor(nameof(Session), request.OnCompleteTargetSessionId);
-
-            if (!string.Equals(targetSession.UserId, userContext.UserId, StringComparison.Ordinal))
-                return FleetError.Unauthorized;
-
             var callback = new SessionCallback
             {
                 Id = Guid.NewGuid().ToString(),
