@@ -2,7 +2,7 @@
 import { computed, onMounted, shallowRef, watch } from "vue";
 import { useLocation, useRouter } from "@tanstack/vue-router";
 import { FolderGit2, Inbox, Plus, Settings, X } from "lucide-vue-next";
-import AddRepositoryDialog from "@/components/github/AddRepositoryDialog.vue";
+import AddRepositoryDialog from "@/plugins/builtin/github/components/AddRepositoryDialog.vue";
 import ReviewerAvatar from "@/components/github/ReviewerAvatar.vue";
 import { useGitHubWork } from "@/composables/use-github-work";
 import { needsYou } from "@/lib/github-items";

@@ -1,6 +1,6 @@
 import { createFileRoute } from "@tanstack/vue-router";
 import { defineComponent } from "vue";
-import GitHubWorkItemDetailPage from "@/components/pages/GitHubWorkItemDetailPage.vue";
+import GitHubWorkItemDetailPage from "@/plugins/builtin/github/pages/GitHubWorkItemDetailPage.vue";
 
 const GitHubIssueDetailRouteComponent = defineComponent({
   name: "GitHubIssueDetailRouteComponent",

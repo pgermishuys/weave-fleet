@@ -35,7 +35,7 @@ const eslintConfig = defineConfig([
   },
   {
     files: [
-      "src/components/pages/GitHubWorkItemDetailPage.vue",
+      "src/plugins/builtin/github/pages/GitHubWorkItemDetailPage.vue",
       "src/components/session/MessageBubble.vue",
     ],
     rules: {

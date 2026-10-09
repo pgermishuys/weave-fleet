@@ -1,6 +1,6 @@
 import { flushPromises, mount } from "@vue/test-utils";
 import { beforeEach, describe, expect, it, vi } from "vitest";
-import GitHubRepoPage from "@/components/pages/GitHubRepoPage.vue";
+import GitHubRepoPage from "@/plugins/builtin/github/pages/GitHubRepoPage.vue";
 import { _resetGitHubWorkForTesting } from "@/composables/use-github-work";
 import type { SmartLinkWire } from "@/lib/smart-links";
 

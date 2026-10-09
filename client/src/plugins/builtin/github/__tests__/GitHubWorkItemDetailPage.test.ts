@@ -2,7 +2,7 @@ import { flushPromises, mount } from "@vue/test-utils";
 import { nextTick } from "vue";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import type { SessionListItem } from "@/api/client";
-import GitHubWorkItemDetailPage from "@/components/pages/GitHubWorkItemDetailPage.vue";
+import GitHubWorkItemDetailPage from "@/plugins/builtin/github/pages/GitHubWorkItemDetailPage.vue";
 import type { SmartLinkWire } from "@/lib/smart-links";
 import { useSessionsStore } from "@/stores/sessions";
 import { useSidebarStore } from "@/stores/sidebar";
