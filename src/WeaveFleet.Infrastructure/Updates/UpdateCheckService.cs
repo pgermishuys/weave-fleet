@@ -6,9 +6,9 @@ using Microsoft.Extensions.Hosting;
 using Microsoft.Extensions.Logging;
 using WeaveFleet.Application.Configuration;
 using WeaveFleet.Application.Diagnostics;
-using WeaveFleet.Application.Services;
+using WeaveFleet.Application.Updates;
 
-namespace WeaveFleet.Infrastructure.Services;
+namespace WeaveFleet.Infrastructure.Updates;
 
 /// <summary>
 /// Hosted service that checks for a newer Fleet release on startup and periodically

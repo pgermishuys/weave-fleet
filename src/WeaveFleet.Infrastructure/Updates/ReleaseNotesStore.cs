@@ -3,7 +3,7 @@ using System.Text.Json.Serialization;
 using Microsoft.Extensions.Logging;
 using WeaveFleet.Application.Configuration;
 
-namespace WeaveFleet.Infrastructure.Services;
+namespace WeaveFleet.Infrastructure.Updates;
 
 /// <summary>One Fleet release's notes, as Settings → System shows them.</summary>
 public sealed record ReleaseNote(string Version, string? PublishedAt, string Body, string Url);

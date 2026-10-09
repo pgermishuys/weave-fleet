@@ -1,7 +1,7 @@
 using Microsoft.Extensions.Hosting;
 using Microsoft.Extensions.Logging;
 
-namespace WeaveFleet.Infrastructure.Services;
+namespace WeaveFleet.Infrastructure.Updates;
 
 /// <summary>
 /// Self-heals the launcher script on startup if running in installed layout.

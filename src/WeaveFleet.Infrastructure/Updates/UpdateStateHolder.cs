@@ -1,6 +1,6 @@
-using WeaveFleet.Application.Services;
+using WeaveFleet.Application.Updates;
 
-namespace WeaveFleet.Infrastructure.Services;
+namespace WeaveFleet.Infrastructure.Updates;
 
 /// <summary>
 /// Thread-safe singleton that holds the current update state and raises a change event

@@ -1,6 +1,6 @@
 using WeaveFleet.Application.Diagnostics;
-using WeaveFleet.Application.Services;
-using WeaveFleet.Infrastructure.Services;
+using WeaveFleet.Application.Updates;
+using WeaveFleet.Infrastructure.Updates;
 
 namespace WeaveFleet.Api.Endpoints;
 

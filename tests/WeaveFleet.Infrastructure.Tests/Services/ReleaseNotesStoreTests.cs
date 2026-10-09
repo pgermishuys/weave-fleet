@@ -3,7 +3,7 @@ using System.Text.Json.Nodes;
 using Microsoft.Extensions.Logging.Abstractions;
 using Microsoft.Extensions.Time.Testing;
 using WeaveFleet.Application.Configuration;
-using WeaveFleet.Infrastructure.Services;
+using WeaveFleet.Infrastructure.Updates;
 
 namespace WeaveFleet.Infrastructure.Tests.Services;
 

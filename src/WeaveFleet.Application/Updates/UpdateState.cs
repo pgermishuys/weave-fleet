@@ -1,4 +1,4 @@
-namespace WeaveFleet.Application.Services;
+namespace WeaveFleet.Application.Updates;
 
 /// <summary>The lifecycle status of an in-app update check or download.</summary>
 public enum UpdateStatus

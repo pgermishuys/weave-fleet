@@ -50,6 +50,7 @@ using WeaveFleet.Infrastructure.SessionSources;
 using WeaveFleet.Infrastructure.Skills;
 using WeaveFleet.Infrastructure.Terminals;
 using WeaveFleet.Infrastructure.Tools;
+using WeaveFleet.Infrastructure.Updates;
 using WeaveFleet.Infrastructure.Users;
 
 namespace WeaveFleet.Infrastructure;
