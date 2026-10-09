@@ -108,7 +108,12 @@ public sealed class AutomationMachineTests : IDisposable
         tokenAuthEnabled: true,
         simulateLocalhostRequest: true,
         host: "0.0.0.0",
-        configureTestServices: services => services.AddSingleton(_ => _falconSessions.Build()));
+        configureTestServices: services =>
+        {
+            // Sessions on falcon go to in-memory fakes: the orchestrator, and the creation the sessions endpoint uses.
+            services.AddSingleton(_falconSessions.Build());
+            services.AddSingleton(_falconSessions.Creation);
+        });
 
     private static ApiWebApplicationFactory Hangar(HttpMessageHandler route) => new(
         authEnabled: false,
