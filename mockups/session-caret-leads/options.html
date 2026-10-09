@@ -1,0 +1,322 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Session list indentation: options</title>
+<link rel="stylesheet" href="https://rsms.me/inter/inter.css">
+<style>
+/* Fleet's own dark theme (client/src/assets/main.css) */
+:root {
+  --panel-bg: #141418;
+  --main-bg: #0d0d10;
+  --card-bg: #1b1b20;
+  --border: rgba(255, 255, 255, 0.075);
+  --text: #e8e8ec;
+  --muted: #8e8e9a;
+  --accent: #6366f1;
+  --running: #22c55e;
+  --idle: #f59e0b;
+  --status-waiting: var(--idle);
+  --radius-btn: 8px;
+  --transition: 150ms ease-out;
+  --guide: rgba(99, 102, 241, 0.55);
+}
+@media (prefers-color-scheme: light) {
+  :root {
+    --panel-bg: #FFFFFF;
+    --main-bg: #F3F2EF;
+    --card-bg: #ffffff;
+    --border: rgba(26, 25, 24, 0.09);
+    --text: #1A1918;
+    --muted: #6E6A65;
+    --accent: #5B6EC7;
+    --running: #16a34a;
+    --idle: #d97706;
+    --guide: rgba(91, 110, 199, 0.6);
+  }
+}
+
+* { box-sizing: border-box; }
+body {
+  margin: 0;
+  padding: 24px;
+  background: var(--main-bg);
+  color: var(--text);
+  font-family: "Inter Variable", "Inter", system-ui, -apple-system, sans-serif;
+  font-size: 13px;
+}
+h1 { font-size: 17px; font-weight: 600; margin: 0 0 6px; }
+.lede { color: var(--muted); margin: 0 0 16px; max-width: 70ch; line-height: 1.5; }
+.toolbar { display: flex; gap: 14px; align-items: center; margin-bottom: 18px; color: var(--muted); }
+.toolbar label { display: inline-flex; gap: 6px; align-items: center; cursor: pointer; }
+
+.grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
+  gap: 16px;
+}
+.option { min-width: 0; }
+.option h2 { font-size: 13px; font-weight: 600; margin: 0 0 2px; }
+.option h2 small { color: var(--muted); font-weight: 500; margin-left: 6px; }
+.option .sub { color: var(--muted); font-size: 12px; margin: 0 0 10px; min-height: 4.05em; line-height: 1.35; }
+.option ul { margin: 10px 0 0; padding-left: 16px; color: var(--muted); font-size: 12px; line-height: 1.5; }
+.option ul .pro::marker { content: "+  "; color: var(--running); }
+.option ul .con::marker { content: "−  "; color: var(--idle); }
+
+.sidebar {
+  background: var(--panel-bg);
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  padding: 8px 6px;
+  position: relative;
+}
+
+/* ---- Project header (ProjectGroup.vue) ---- */
+.project + .project { margin-top: 10px; }
+.project-header {
+  width: 100%; min-height: 26px; display: flex; align-items: center; gap: 6px;
+  padding: 0 10px 0 6px; border: 0; border-radius: var(--radius-btn); background: transparent;
+  color: var(--muted); font: inherit; text-align: left; cursor: pointer;
+}
+.project-header:hover { background: color-mix(in srgb, var(--text) 5%, transparent); color: var(--text); }
+.project-chevron { width: 13px; height: 13px; flex-shrink: 0; color: color-mix(in srgb, var(--muted) 70%, transparent); }
+.project.collapsed .project-chevron { transform: rotate(-90deg); }
+.project-title { flex: 1; min-width: 0; font-size: 12px; font-weight: 600; line-height: 1.3; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.project-count { font-size: 12px; font-weight: 500; color: color-mix(in srgb, var(--muted) 70%, transparent); font-variant-numeric: tabular-nums; }
+.project-content { padding-top: 2px; }
+.project.collapsed .project-content { display: none; }
+.family + .family { margin-top: 1px; }
+
+/* ---- Session row (SessionItem.vue) ---- */
+.row {
+  width: 100%; min-width: 0; min-height: 32px; display: flex; align-items: center; gap: 9px;
+  padding: 0 10px; border: 0; border-radius: var(--radius-btn); background: transparent;
+  color: color-mix(in srgb, var(--text) 86%, transparent); font: inherit; text-align: left; cursor: pointer;
+  transition: background var(--transition), color var(--transition);
+}
+.row:hover { background: color-mix(in srgb, var(--text) 5%, transparent); color: var(--text); }
+.row.active { background: color-mix(in srgb, var(--text) 9%, transparent); color: var(--text); font-weight: 500; }
+.row:focus-visible { outline: 2px solid var(--accent); outline-offset: -2px; }
+.row.dim-1 { color: color-mix(in srgb, var(--text) 55%, transparent); }
+.row.dim-1 .meta { opacity: 0.75; }
+.children .row { min-height: 28px; }
+
+.title { flex: 1 1 auto; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; line-height: 1.3; }
+.meta { flex-shrink: 0; font-size: 12px; line-height: 1.3; color: color-mix(in srgb, var(--muted) 80%, transparent); font-variant-numeric: tabular-nums; white-space: nowrap; }
+.meta.attention { padding: 1px 7px; border-radius: var(--radius-btn); background: color-mix(in srgb, var(--status-waiting) 14%, transparent); color: var(--status-waiting); }
+.kind { flex-shrink: 0; color: var(--muted); font-size: 10.5px; font-weight: 600; letter-spacing: 0.04em; text-transform: uppercase; }
+.chip { display: inline-flex; flex-shrink: 0; align-items: center; gap: 3px; height: 18px; padding: 0 6px; border-radius: 999px; background: color-mix(in srgb, var(--running) 14%, transparent); color: var(--running); font-size: 11px; font-weight: 600; font-variant-numeric: tabular-nums; }
+.chip svg { width: 11px; height: 11px; }
+
+.glyph-slot { width: 8px; height: 8px; flex-shrink: 0; }
+.glyph { width: 8px; height: 8px; flex-shrink: 0; display: block; }
+.quad { display: grid; grid-template-columns: repeat(2, 3px); grid-auto-rows: 3px; gap: 2px; color: var(--text); }
+.quad i { display: block; border-radius: 50%; background: currentColor; animation: quad 800ms steps(1, end) infinite; }
+@keyframes quad { 0% { opacity: 0.16; } 25%, 100% { opacity: 1; } }
+@media (prefers-reduced-motion: reduce) { .quad i { animation: none; } .quad i:first-child { opacity: 0.16; } }
+
+.caret {
+  display: inline-grid; flex-shrink: 0; place-items: center; width: 14px; height: 14px;
+  border-radius: 4px; color: var(--muted);
+}
+.caret:hover { color: var(--text); }
+.caret svg { width: 14px; height: 14px; transition: transform var(--transition); }
+.open > .row .caret svg { transform: rotate(90deg); }
+.caret-slot { width: 14px; height: 14px; flex-shrink: 0; }
+
+.children { display: none; flex-direction: column; gap: 1px; border-left: 1px solid var(--border); }
+.family.open > .children { display: flex; }
+
+/* ---- Now (main today) ---- */
+.opt-now .caret, .opt-now .caret-slot { margin-left: -4px; }
+.opt-now .children { margin: 1px 0 2px 13px; padding-left: 10px; }
+
+/* ---- A: caret leads, dot next to the title ---- */
+.opt-a .top > .row { padding-left: 6px; }
+.opt-a .top > .row .lead-caret { width: 13px; margin-right: -3px; }
+.opt-a .top > .row .lead-caret svg { width: 13px; height: 13px; }
+.opt-a .children { margin: 1px 0 2px 28px; padding-left: 3px; }
+
+/* ---- B: caret sits in the dot's place ---- */
+.opt-b .lead { position: relative; width: 8px; height: 8px; flex-shrink: 0; }
+.opt-b .lead .caret { position: absolute; left: -3px; top: -3px; opacity: 0; }
+.opt-b .lead .glyph { position: absolute; inset: 0; }
+.opt-b .lead.no-status .caret { opacity: 1; }
+.opt-b .row:hover .lead .caret, .opt-b .row:focus-visible .lead .caret, .force-hover .opt-b [data-hoverdemo] .lead .caret { opacity: 1; }
+.opt-b .row:hover .lead .glyph, .opt-b .row:focus-visible .lead .glyph, .force-hover .opt-b [data-hoverdemo] .lead .glyph { opacity: 0; }
+.force-hover .opt-b [data-hoverdemo] { background: color-mix(in srgb, var(--text) 5%, transparent); }
+.opt-b .children { margin: 1px 0 2px 13px; padding-left: 3px; }
+
+/* ---- C: fold control on the right ---- */
+.opt-c .fold {
+  display: inline-flex; flex-shrink: 0; align-items: center; gap: 1px; height: 18px; padding: 0 4px 0 6px;
+  border-radius: 999px; background: color-mix(in srgb, var(--text) 7%, transparent); color: var(--muted);
+  font-size: 11px; font-weight: 600; font-variant-numeric: tabular-nums;
+}
+.opt-c .fold:hover { color: var(--text); background: color-mix(in srgb, var(--text) 12%, transparent); }
+.opt-c .fold svg { width: 12px; height: 12px; transition: transform var(--transition); }
+.opt-c .open > .row .fold svg { transform: rotate(90deg); }
+.opt-c .children { margin: 1px 0 2px 13px; padding-left: 3px; }
+
+/* ---- Guides: where the dot and the title start ---- */
+.guides .sidebar::before, .guides .sidebar::after {
+  content: ""; position: absolute; top: 0; bottom: 0; width: 1px; background: var(--guide); pointer-events: none;
+}
+.guides .opt-now .sidebar::before { left: calc(6px + 10px); }
+.guides .opt-now .sidebar::after  { left: calc(6px + 46px); }
+.guides .opt-a .sidebar::before   { left: calc(6px + 25px); }
+.guides .opt-a .sidebar::after    { left: calc(6px + 42px); }
+.guides .opt-b .sidebar::before,
+.guides .opt-c .sidebar::before   { left: calc(6px + 10px); }
+.guides .opt-b .sidebar::after,
+.guides .opt-c .sidebar::after    { left: calc(6px + 27px); }
+
+.gap-note { font-size: 11.5px; color: var(--muted); margin-top: 8px; font-variant-numeric: tabular-nums; }
+.gap-note b { color: var(--text); font-weight: 600; }
+
+@media (max-width: 420px) {
+  body { padding: 16px; }
+}
+</style>
+</head>
+<body>
+  <h1>Session list: where the dot, the fold caret and the title go</h1>
+  <p class="lede">
+    Same sessions in every column. <b>Now</b> is main after #432: every top-level row keeps a caret's space between
+    the status dot and the title, so a lone working session's dot sits 36&nbsp;px left of its title, and children
+    start only 5&nbsp;px past their parent's title. Click a caret (or the count in C) to fold and unfold.
+  </p>
+  <div class="toolbar">
+    <label><input type="checkbox" id="guides"> Show where dots and titles start</label>
+    <label><input type="checkbox" id="hover"> Hover the working parent (for B)</label>
+  </div>
+
+  <div class="grid" id="grid"></div>
+
+<script>
+const ICON = {
+  right: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m9 18 6-6-6-6"/></svg>',
+  down: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m6 9 6 6 6-6"/></svg>',
+  loader: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.25" stroke-linecap="round" stroke-linejoin="round"><path d="M21 12a9 9 0 1 1-6.219-8.56"/></svg>',
+};
+
+const PROJECTS = [
+  { name: "Model Router", count: 4, collapsed: true, rows: [] },
+  { name: "Harbor", count: 16, rows: [
+    { t: "Tidy the release notes generator", st: "active" },
+    { t: "Map the billing service", meta: "16h", open: true, active: true, kids: [
+      { t: "Move handlers into feature folders", st: "active", run: 1, kind: "Started" },
+      { t: "Split the invoice builder into steps", st: "active", kind: "Started" },
+    ] },
+    { t: "Rework the search index", st: "active", hoverDemo: true, kids: [
+      { t: "Benchmark the tokenizer", kind: "Fork" },
+    ] },
+    { t: "Offline mode for the phone app", meta: "16h" },
+    { t: "Ask before deleting old builds", st: "waiting_input", meta: "Needs you", attention: true },
+    { t: "Inline chart previews", meta: "18h" },
+    { t: "Retry webhooks with backoff, and log every attempt so support can see them", meta: "1d", dim: 1 },
+    { t: "Pricing page copy", meta: "1d", dim: 1 },
+  ] },
+];
+
+const OPTIONS = [
+  { id: "now", name: "Now", tag: "main, after #432",
+    sub: "Dot, then a caret (or its empty space), then the title.",
+    gap: ["36 px", "+5 px"],
+    notes: [["con", "Lone and working rows look broken: the dot floats far from its title."], ["con", "Children barely step in; they read as siblings."]] },
+  { id: "a", name: "A · Caret leads", tag: "tree style",
+    sub: "Caret moves to the far left, under the project's chevron. The dot sits beside the title on every row.",
+    gap: ["17 px", "+17 px"],
+    notes: [["pro", "Dot always hugs its title; titles still line up."], ["pro", "Reads like a file tree: chevron, then the thing. Sessions nest under the project."], ["con", "Rows with nothing to fold keep an empty 19 px on the left."]] },
+  { id: "b", name: "B · Caret in the dot's place", tag: "most compact",
+    sub: "A parent shows its caret where the dot goes. If it's working, the dot shows and turns into the caret on hover.",
+    gap: ["17 px", "+17 px"],
+    notes: [["pro", "No extra column: titles line up with no empty space anywhere."], ["pro", "Notion-style; nothing moves when a session gains children."], ["con", "A working parent's fold control only shows on hover or focus."], ["con", "Session titles sit level with the project's name again."]] },
+  { id: "c", name: "C · Count on the right", tag: "no left caret",
+    sub: "Nothing to the left but the dot. A parent gets a small count you click to fold, beside the time.",
+    gap: ["17 px", "+17 px"],
+    notes: [["pro", "Left edge is just dots and titles; says how many it started."], ["con", "Another chip beside the green running count: easy to mix up."], ["con", "Right side is already busy (time, PR badge, pin/archive on hover)."]] },
+];
+
+function glyph(st) {
+  if (st === "active") return '<span class="glyph quad" role="img" aria-label="Working"><i style="animation-delay:-800ms"></i><i style="animation-delay:-600ms"></i><i style="animation-delay:-200ms"></i><i style="animation-delay:-400ms"></i></span>';
+  if (st === "waiting_input") return '<svg class="glyph" viewBox="0 0 8 8" role="img" aria-label="Waiting for input"><polygon points="4,0.5 7.5,4 4,7.5 0.5,4" fill="var(--status-waiting)"/></svg>';
+  return '<span class="glyph-slot" aria-hidden="true"></span>';
+}
+
+function caret() {
+  return `<span class="caret" data-toggle title="Show what it started">${ICON.right}</span>`;
+}
+
+function tail(r) {
+  let h = "";
+  if (r.run) h += `<span class="chip">${ICON.loader}${r.run}</span>`;
+  if (r.kind) h += `<span class="kind">${r.kind}</span>`;
+  else if (r.meta) h += `<span class="meta${r.attention ? " attention" : ""}">${r.meta}</span>`;
+  return h;
+}
+
+function row(opt, r, top) {
+  const parent = top && r.kids && r.kids.length;
+  const cls = ["row", r.active ? "active" : "", r.dim ? `dim-${r.dim}` : ""].join(" ");
+  const attrs = r.hoverDemo ? " data-hoverdemo" : "";
+  let lead = "";
+  let after = "";
+  if (opt === "now") {
+    lead = glyph(r.st) + (parent ? caret() : top ? '<span class="caret-slot"></span>' : "");
+  } else if (opt === "a") {
+    lead = top
+      ? (parent ? caret().replace('class="caret"', 'class="caret lead-caret"') : '<span class="caret-slot lead-caret"></span>') + glyph(r.st)
+      : glyph(r.st);
+  } else if (opt === "b") {
+    if (parent) {
+      const status = r.st ? glyph(r.st) : "";
+      lead = `<span class="lead${r.st ? "" : " no-status"}">${status}${caret()}</span>`;
+    } else {
+      lead = glyph(r.st);
+    }
+  } else if (opt === "c") {
+    lead = glyph(r.st);
+    if (parent) after = `<span class="fold" data-toggle title="Show what it started">${r.kids.length}${ICON.right}</span>`;
+  }
+  return `<button type="button" class="${cls}"${attrs}>${lead}<span class="title">${r.t}</span>${after}${tail(r)}</button>`;
+}
+
+function family(opt, r) {
+  const kids = (r.kids || []).map((k) => `<div class="child">${row(opt, k, false)}</div>`).join("");
+  return `<div class="family top${r.open ? " open" : ""}">${row(opt, r, true)}${kids ? `<div class="children" role="group">${kids}</div>` : ""}</div>`;
+}
+
+function sidebar(opt) {
+  return PROJECTS.map((p) => `
+    <section class="project${p.collapsed ? " collapsed" : ""}">
+      <button type="button" class="project-header" data-project>
+        <svg class="project-chevron" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m6 9 6 6 6-6"/></svg>
+        <span class="project-title">${p.name}</span>
+        <span class="project-count">${p.count}</span>
+      </button>
+      <div class="project-content">${p.rows.map((r) => family(opt, r)).join("")}</div>
+    </section>`).join("");
+}
+
+document.getElementById("grid").innerHTML = OPTIONS.map((o) => `
+  <article class="option opt-${o.id}">
+    <h2>${o.name}<small>${o.tag}</small></h2>
+    <p class="sub">${o.sub}</p>
+    <div class="sidebar">${sidebar(o.id)}</div>
+    <div class="gap-note">Dot → title: <b>${o.gap[0]}</b> · child title past parent's: <b>${o.gap[1]}</b></div>
+    <ul>${o.notes.map(([k, t]) => `<li class="${k}">${t}</li>`).join("")}</ul>
+  </article>`).join("");
+
+document.addEventListener("click", (e) => {
+  const toggle = e.target.closest("[data-toggle]");
+  if (toggle) { e.stopPropagation(); toggle.closest(".family").classList.toggle("open"); return; }
+  const header = e.target.closest("[data-project]");
+  if (header) header.closest(".project").classList.toggle("collapsed");
+});
+document.getElementById("guides").addEventListener("change", (e) => document.body.classList.toggle("guides", e.target.checked));
+document.getElementById("hover").addEventListener("change", (e) => document.body.classList.toggle("force-hover", e.target.checked));
+</script>
+</body>
+</html>
