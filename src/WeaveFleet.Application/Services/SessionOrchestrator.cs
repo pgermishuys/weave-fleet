@@ -15,6 +15,7 @@ using WeaveFleet.Application.Recaps;
 using WeaveFleet.Application.Sessions;
 using WeaveFleet.Application.Sessions.Activation;
 using WeaveFleet.Application.Sessions.Files;
+using WeaveFleet.Application.Sessions.Prompting;
 using WeaveFleet.Application.SessionSources;
 using WeaveFleet.Application.Terminals;
 using WeaveFleet.Domain.Common;
@@ -65,12 +66,21 @@ public sealed partial class SessionOrchestrator(
     WeaveFleet.Application.Memory.AgentMemoryService? agentMemory = null,
     HarnessAvailabilityCache? harnessAvailability = null,
     SessionFiles? sessionFiles = null,
-    SessionActivation? sessionActivation = null) : ISessionActivator
+    SessionActivation? sessionActivation = null,
+    SessionPrompting? sessionPrompting = null) : ISessionActivator
 {
     private readonly DelegationService _delegationService = delegationService;
     private readonly SessionFiles _files = sessionFiles
         ?? new SessionFiles(sessionRepository, eventBroadcaster, NullLogger<SessionFiles>.Instance);
-    private readonly SessionActivation _activation = sessionActivation
+    private readonly GitDiffService _gitDiffService = gitDiffService ?? new GitDiffService();
+    private static readonly ConcurrentDictionary<string, SemaphoreSlim> DelegatedChildLocks = new(StringComparer.Ordinal);
+
+    // The services the facade delegates to. DI passes them in; a caller that constructs the orchestrator itself (tests)
+    // gets them built from the orchestrator's own dependencies, once, so they share one activation.
+    private SessionActivation? _activation;
+    private SessionPrompting? _prompting;
+
+    private SessionActivation Activation => _activation ??= sessionActivation
         ?? new SessionActivation(
             workspaceService,
             instanceService,
@@ -84,8 +94,22 @@ public sealed partial class SessionOrchestrator(
             NullLogger<SessionActivation>.Instance,
             harnessProfiles,
             sessionNotifier);
-    private readonly GitDiffService _gitDiffService = gitDiffService ?? new GitDiffService();
-    private static readonly ConcurrentDictionary<string, SemaphoreSlim> DelegatedChildLocks = new(StringComparer.Ordinal);
+
+    private SessionPrompting Prompting => _prompting ??= sessionPrompting
+        ?? new SessionPrompting(
+            sessionRepository,
+            harnessRegistry,
+            Activation,
+            sessionActivityTracker,
+            _delegationService,
+            sessionSourceResolutionService,
+            sessionSourceUsageRepository,
+            eventBroadcaster,
+            userContext,
+            NullLogger<SessionPrompting>.Instance,
+            messageRepository,
+            sessionRecaps,
+            agentMemory);
 
     private sealed class NoOpUserPreferenceRepository : IUserPreferenceRepository
     {
@@ -772,60 +796,50 @@ public sealed partial class SessionOrchestrator(
         return session;
     }
 
-    // ── Prompt / Abort ─────────────────────────────────────────────────────────
+    // ── Prompt / Abort (SessionPrompting) ──────────────────────────────────────
 
-    public async Task<Result<Unit>> PromptSessionAsync(
+    public Task<Result<Unit>> PromptSessionAsync(
         string id,
         string text,
         PromptOptions? options = null,
         CancellationToken ct = default)
-        => await PromptSessionAsync(id, text, options, userMessageId: null, correlationId: null, ct).ConfigureAwait(false);
+        => Prompting.PromptSessionAsync(id, text, options, ct);
 
-    public async Task<Result<Unit>> PromptSessionAsync(
+    public Task<Result<Unit>> PromptSessionAsync(
         string id,
         string text,
         PromptOptions? options,
         string? userMessageId,
         CancellationToken ct)
-        => await PromptSessionAsync(id, text, options, userMessageId, correlationId: null, ct).ConfigureAwait(false);
+        => Prompting.PromptSessionAsync(id, text, options, userMessageId, ct);
 
-    public async Task<Result<Unit>> PromptSessionAsync(
-        string id,
-        string text,
-        PromptOptions? options,
-        string? userMessageId,
-        string? correlationId,
-        CancellationToken ct)
-    {
-        var result = await PromptSessionCoreAsync(id, text, options, userMessageId, correlationId, saveUserMessage: false, rememberChoices: true, ct).ConfigureAwait(false);
-        return result.IsSuccess ? Unit.Value : result.Error;
-    }
-
-    public async Task<Result<PromptSessionResult>> PromptSessionWithReceiptAsync(
+    public Task<Result<Unit>> PromptSessionAsync(
         string id,
         string text,
         PromptOptions? options,
         string? userMessageId,
         string? correlationId,
         CancellationToken ct)
-        => await PromptSessionCoreAsync(id, text, options, userMessageId, correlationId, saveUserMessage: false, rememberChoices: true, ct).ConfigureAwait(false);
+        => Prompting.PromptSessionAsync(id, text, options, userMessageId, correlationId, ct);
 
-    /// <summary>
-    /// Prompts a session with an agent or model for this prompt only; later prompts that name none still get the
-    /// session's own. Automations prompt existing sessions this way, so a run on a cheaper model doesn't change
-    /// the model the session's owner picked.
-    /// </summary>
-    public async Task<Result<Unit>> PromptSessionOnceAsync(
+    public Task<Result<PromptSessionResult>> PromptSessionWithReceiptAsync(
+        string id,
+        string text,
+        PromptOptions? options,
+        string? userMessageId,
+        string? correlationId,
+        CancellationToken ct)
+        => Prompting.PromptSessionWithReceiptAsync(id, text, options, userMessageId, correlationId, ct);
+
+    /// <inheritdoc cref="SessionPrompting.PromptSessionOnceAsync"/>
+    public Task<Result<Unit>> PromptSessionOnceAsync(
         string id,
         string text,
         PromptOptions? options,
         CancellationToken ct = default)
-    {
-        var result = await PromptSessionCoreAsync(id, text, options, userMessageId: null, correlationId: null, saveUserMessage: false, rememberChoices: false, ct).ConfigureAwait(false);
-        return result.IsSuccess ? Unit.Value : result.Error;
-    }
+        => Prompting.PromptSessionOnceAsync(id, text, options, ct);
 
-    private async Task<Result<PromptSessionResult>> PromptSessionCoreAsync(
+    private Task<Result<PromptSessionResult>> PromptSessionCoreAsync(
         string id,
         string text,
         PromptOptions? options,
@@ -834,262 +848,36 @@ public sealed partial class SessionOrchestrator(
         bool saveUserMessage,
         bool rememberChoices,
         CancellationToken ct)
-    {
-        using var promptActivity = FleetInstrumentation.ActivitySource.StartActivity(
-            "fleet.prompt_session",
-            ActivityKind.Internal);
-        promptActivity?.SetTag(FleetInstrumentation.SessionIdTag, id);
+        => Prompting.PromptSessionCoreAsync(id, text, options, userMessageId, correlationId, saveUserMessage, rememberChoices, ct);
 
-        // Store trace context so the async relay pump can link response events back to this prompt.
-        if (promptActivity is not null)
-            sessionActivityTracker.SetPromptTraceContext(id, promptActivity.Context);
-
-        using var _ = BeginSessionScope(id);
-        var sessionResult = await GetSessionAsync(id);
-        if (sessionResult.IsFailure)
-            return sessionResult.Error;
-
-        if (string.Equals(sessionResult.Value.RetentionStatus, "archived", StringComparison.Ordinal))
-            return FleetError.ValidationError("Session.RetentionStatus", "Archived sessions are read-only.");
-
-        // A harness that can't pass images on would drop them without a word.
-        if (options?.Attachments is { Count: > 0 }
-            && harnessRegistry.GetByType(sessionResult.Value.HarnessType)?.Capabilities.SupportsImageAttachments != true)
-        {
-            return FleetError.ValidationError("Prompt.Attachments", "This session's harness can't take images. Send the prompt without them.");
-        }
-
-        var delivery = SteeringDelivery(options?.Delivery, sessionResult.Value, out var steeringError);
-        if (steeringError is not null)
-            return steeringError;
-        if (options is not null && delivery != options.Delivery)
-            options = options with { Delivery = delivery };
-
-        // What the caller named is remembered below; what it left out comes from the session.
-        var requestedOptions = rememberChoices ? options : null;
-        options = WithSessionChoices(options, sessionResult.Value);
-
-        var instanceResult = await GetOrActivateInstanceAsync(sessionResult.Value, ct).ConfigureAwait(false);
-        if (instanceResult.IsFailure)
-            return instanceResult.Error;
-
-        await ApplyPermissionsAsync(sessionResult.Value, instanceResult.Value, ct).ConfigureAwait(false);
-
-        try
-        {
-            // Generate ascending message ID for the user prompt.
-            var generatedMessageId = AscendingMessageId.New();
-            
-            // Broadcast user message for optimistic UI update.
-            // The harness echo is suppressed in HarnessEventPersistenceService to avoid duplicates.
-            var effectiveCorrelationId = string.IsNullOrWhiteSpace(correlationId)
-                ? Guid.NewGuid().ToString()
-                : correlationId;
-            var userMsg = MessagePersistenceService.CreateUserPromptMessage(
-                text,
-                DateTimeOffset.UtcNow,
-                options?.Agent,
-                generatedMessageId,
-                options?.Attachments) with { Steered = delivery == PromptDelivery.Steer };
-
-            await BroadcastUserMessageAsync(id, userMsg, effectiveCorrelationId, ct).ConfigureAwait(false);
-
-            // Ensure the event subscription is established before sending the prompt.
-            // This prevents early events from being lost during activation/resume.
-            await EnsureEventSubscriptionReadyAsync(instanceResult.Value, id, ct).ConfigureAwait(false);
-
-            // With memory on, write what the session's folder reads before the model sees the prompt: OpenCode reads that
-            // file at a session's first model request. A harness that doesn't read the file (Claude Code) takes the notes
-            // with the prompt instead; with Fleet's tools it saves notes as OpenCode does, and without them only reads them.
-            var memoryNotes = agentMemory is null
-                ? null
-                : await agentMemory.PrepareSessionAsync(
-                    sessionResult.Value.UserId,
-                    sessionResult.Value.Directory,
-                    canSave: harnessRegistry.GetByType(sessionResult.Value.HarnessType)?.Capabilities.SupportsFleetTools == true,
-                    ct).ConfigureAwait(false);
-
-            // A session's instructions keep the notes it started with, so a change since then goes with this prompt, in
-            // the notes the harness gives the model unseen. Only the harnesses that pass those notes on are told.
-            var modelNotes = SideConversations.ModelNotesFor(sessionResult.Value);
-            if (agentMemory is not null
-                && harnessRegistry.GetByType(sessionResult.Value.HarnessType)?.Capabilities.SupportsSideConversations == true
-                && await agentMemory.ChangesForAsync(sessionResult.Value, ct).ConfigureAwait(false) is { } memoryChanges)
-                modelNotes = [.. modelNotes ?? [], memoryChanges];
-
-            // Work the agent left running that was lost (Fleet or its harness process restarted) won't report back: the
-            // first prompt after says which, once, to a harness that passes Fleet's notes on.
-            var lostWork = harnessRegistry.GetByType(sessionResult.Value.HarnessType)?.Capabilities.TakesModelNotes == true
-                ? await _delegationService.GetUnreportedLostWorkAsync(id).ConfigureAwait(false)
-                : [];
-            if (LostWorkNote.For(lostWork) is { } lostWorkNote)
-                modelNotes = [.. modelNotes ?? [], lostWorkNote];
-
-            // Pass the generated message ID through to the harness, with any notes the session's prompts carry.
-            var promptOptionsWithMessageId = options is null
-                ? new PromptOptions { MessageId = generatedMessageId, ModelNotes = modelNotes, MemoryNotes = memoryNotes }
-                : options with { MessageId = generatedMessageId, ModelNotes = modelNotes, MemoryNotes = memoryNotes };
-
-            await instanceResult.Value.SendPromptAsync(text, promptOptionsWithMessageId, ct);
-            if (lostWork.Count > 0)
-                await _delegationService.MarkLostWorkReportedAsync(lostWork).ConfigureAwait(false);
-
-            // Your reply is what a recap waits for: it clears the current one and counts toward the next. A side
-            // conversation gets none: it's only ever seen beside its session.
-            if (sessionRecaps is not null && sessionResult.Value.SideOfSessionId is null)
-                await sessionRecaps.OnPromptSentAsync(id, sessionResult.Value.UserId, ct).ConfigureAwait(false);
-
-            // Saved under the id the harness was given, so the snapshot can tell when the harness has its own copy.
-            if (saveUserMessage && messageRepository is not null)
-                await messageRepository.UpsertAsync(MessagePersistenceService.ToPersistedMessage(id, userMsg)).ConfigureAwait(false);
-
-            // Remember an agent or model the prompt named, so later prompts that name none (after a refresh,
-            // from an automation, or with "Default" picked) keep it rather than drop to the harness's default.
-            // A model is only remembered as a pair; the API resolves the pair before it gets here.
-            if (HasModel(requestedOptions?.ProviderId, requestedOptions?.ModelId)
-                && (requestedOptions!.ProviderId != sessionResult.Value.SelectedProviderId
-                    || requestedOptions.ModelId != sessionResult.Value.SelectedModelId))
-            {
-                await sessionRepository.UpdateSelectedModelAsync(id, requestedOptions.ProviderId!, requestedOptions.ModelId!);
-            }
-
-            if (requestedOptions?.Agent is { Length: > 0 } agent
-                && !string.Equals(agent, sessionResult.Value.SelectedAgent, StringComparison.Ordinal))
-            {
-                await sessionRepository.UpdateSelectedAgentAsync(id, agent);
-            }
-
-            return new PromptSessionResult(EventId: null, effectiveCorrelationId, generatedMessageId);
-        }
-        catch (InvalidOperationException ex)
-        {
-            LogPromptFailed(ex, id);
-            return new FleetError("Session.PromptFailed", ex.Message);
-        }
-        catch (Exception ex)
-        {
-            LogPromptUnexpectedFailure(ex, id);
-            return FleetError.Unexpected;
-        }
-    }
-
-    public async Task<Result<ContextEnvelope>> PreviewAddSourceToSessionAsync(
+    public Task<Result<ContextEnvelope>> PreviewAddSourceToSessionAsync(
         string sessionId,
         SessionSourceSelection source,
         CancellationToken ct = default)
-    {
-        using var _ = BeginSessionScope(sessionId);
-        var session = await sessionRepository.GetByIdAsync(sessionId);
-        if (session is null)
-            return FleetError.NotFoundFor(nameof(Session), sessionId);
+        => Prompting.PreviewAddSourceToSessionAsync(sessionId, source, ct);
 
-        if (string.Equals(session.RetentionStatus, "archived", StringComparison.Ordinal))
-        {
-            return FleetError.ValidationError(
-                "Session.RetentionStatus",
-                "Archived sessions are read-only.");
-        }
-
-        var resolutionResult = await sessionSourceResolutionService.ResolveForSessionActionAsync(
-            sessionId,
-            source,
-            SessionSourceActions.AddToSession,
-            ct);
-        if (resolutionResult.IsFailure)
-            return resolutionResult.Error;
-
-        var envelope = resolutionResult.Value.Input.ContextEnvelope;
-        if (envelope is null)
-        {
-            return FleetError.ValidationError(
-                "SessionSource.ContextEnvelope",
-                "The selected session source did not resolve any previewable context.");
-        }
-
-        return envelope;
-    }
-
-    public async Task<Result<Unit>> AddSourceToSessionAsync(
+    public Task<Result<Unit>> AddSourceToSessionAsync(
         string sessionId,
         SessionSourceSelection source,
         bool confirm,
         CancellationToken ct = default)
-    {
-        using var _ = BeginSessionScope(sessionId);
-        if (!confirm)
-        {
-            return FleetError.ValidationError(
-                "SessionSource.Confirm",
-                "Source context must be explicitly confirmed before it can be added to a session.");
-        }
+        => Prompting.AddSourceToSessionAsync(sessionId, source, confirm, ct);
 
-        var session = await sessionRepository.GetByIdAsync(sessionId);
-        if (session is null)
-            return FleetError.NotFoundFor(nameof(Session), sessionId);
+    public Task<Result<Unit>> AbortSessionAsync(string id, CancellationToken ct = default)
+        => Prompting.AbortSessionAsync(id, ct);
 
-        if (string.Equals(session.RetentionStatus, "archived", StringComparison.Ordinal))
-        {
-            return FleetError.ValidationError(
-                "Session.RetentionStatus",
-                "Archived sessions are read-only.");
-        }
+    public Task<Result<Unit>> CommandSessionAsync(
+        string id,
+        CommandOptions options,
+        CancellationToken ct = default)
+        => Prompting.CommandSessionAsync(id, options, ct);
 
-        var resolutionResult = await sessionSourceResolutionService.ResolveForSessionActionAsync(
-            sessionId,
-            source,
-            SessionSourceActions.AddToSession,
-            ct);
-        if (resolutionResult.IsFailure)
-            return resolutionResult.Error;
+    private Task BroadcastUserMessageAsync(string sessionId, HarnessMessage message, CancellationToken ct)
+        => Prompting.BroadcastUserMessageAsync(sessionId, message, ct);
 
-        var envelope = resolutionResult.Value.Input.ContextEnvelope;
-        if (envelope is null)
-        {
-            return FleetError.ValidationError(
-                "SessionSource.ContextEnvelope",
-                "The selected session source did not resolve any context.");
-        }
-
-        var prompt = $"[Source: {envelope.OriginLabel}]\n\n{envelope.Content}";
-        var promptResult = await PromptSessionAsync(sessionId, prompt, null, ct);
-        if (promptResult.IsFailure)
-            return promptResult.Error;
-
-        await sessionSourceUsageRepository.InsertAsync(new SessionSourceUsage
-        {
-            Id = Guid.NewGuid().ToString(),
-            SessionId = sessionId,
-            WorkspaceId = session.WorkspaceId,
-            ProviderId = resolutionResult.Value.Input.Provenance.ProviderId,
-            SourceType = resolutionResult.Value.Input.Provenance.SourceType,
-            ActionId = resolutionResult.Value.Input.Provenance.ActionId,
-            ResourceId = resolutionResult.Value.Input.Provenance.ResourceId,
-            ResourceUrl = resolutionResult.Value.Input.Provenance.ResourceUrl,
-            Title = resolutionResult.Value.Input.Provenance.Title,
-            Summary = resolutionResult.Value.Input.Provenance.Summary,
-            CreatedAt = DateTime.UtcNow.ToString("O")
-        });
-
-        return Unit.Value;
-    }
-
-    public async Task<Result<Unit>> AbortSessionAsync(string id, CancellationToken ct = default)
-    {
-        using var _ = BeginSessionScope(id);
-        var sessionResult = await GetSessionAsync(id);
-        if (sessionResult.IsFailure)
-            return sessionResult.Error;
-
-        if (string.Equals(sessionResult.Value.RetentionStatus, "archived", StringComparison.Ordinal))
-            return FleetError.ValidationError("Session.RetentionStatus", "Archived sessions are read-only.");
-
-        var instanceResult = await GetOrActivateInstanceAsync(sessionResult.Value, ct).ConfigureAwait(false);
-        if (instanceResult.IsFailure)
-            return instanceResult.Error;
-
-        await instanceResult.Value.AbortAsync(ct);
-        return Unit.Value;
-    }
+    /// <inheritdoc cref="SessionPrompting.WithSessionChoices"/>
+    internal static PromptOptions? WithSessionChoices(PromptOptions? options, Session session)
+        => SessionPrompting.WithSessionChoices(options, session);
 
     public async Task<Result<Unit>> AnswerQuestionAsync(
         string id,
@@ -1144,41 +932,6 @@ public sealed partial class SessionOrchestrator(
         return Unit.Value;
     }
 
-    public async Task<Result<Unit>> CommandSessionAsync(
-        string id,
-        CommandOptions options,
-        CancellationToken ct = default)
-    {
-        using var _ = BeginSessionScope(id);
-        var sessionResult = await GetSessionAsync(id);
-        if (sessionResult.IsFailure)
-            return sessionResult.Error;
-
-        if (string.Equals(sessionResult.Value.RetentionStatus, "archived", StringComparison.Ordinal))
-            return FleetError.ValidationError("Session.RetentionStatus", "Archived sessions are read-only.");
-
-        var instanceResult = await GetOrActivateInstanceAsync(sessionResult.Value, ct).ConfigureAwait(false);
-        if (instanceResult.IsFailure)
-            return instanceResult.Error;
-
-        await ApplyPermissionsAsync(sessionResult.Value, instanceResult.Value, ct).ConfigureAwait(false);
-
-        // Shown straight away as "/name arguments", under an id that sorts where it was sent. A harness that takes the
-        // id stores the command's message under it; one that doesn't says which id it chose.
-        options = options with { MessageId = AscendingMessageId.New() };
-        var userMsg = MessagePersistenceService.CreateUserCommandMessage(options, DateTimeOffset.UtcNow);
-        await BroadcastUserMessageAsync(id, userMsg, ct).ConfigureAwait(false);
-
-        var harnessMessageId = await instanceResult.Value.SendCommandAsync(options, ct);
-
-        // The harness's message holds what it made of the command (OpenCode's whole template). Remembering the command
-        // under that message's id lets the conversation show "/name arguments" there too, after a reload.
-        if (harnessMessageId is not null && messageRepository is not null && userMsg.Command is { } command)
-            await messageRepository.SaveCommandAsync(id, harnessMessageId, command).ConfigureAwait(false);
-
-        return Unit.Value;
-    }
-
     // ── Messages / Diffs ───────────────────────────────────────────────────────
 
     public async Task<Result<MessagePage>> GetSessionMessagesAsync(
@@ -1215,90 +968,6 @@ public sealed partial class SessionOrchestrator(
             // Return empty result on failure (503-equivalent behavior)
             return Result.Success(new MessagePage([], false));
         }
-    }
-
-    private async Task BroadcastUserMessageAsync(
-        string sessionId,
-        HarnessMessage message,
-        CancellationToken ct)
-    {
-        if (message.Role is not "user")
-            return;
-
-        var parts = new List<JsonElement>(message.Parts.Count);
-        for (var index = 0; index < message.Parts.Count; index++)
-        {
-            var partPayload = MessagePersistenceService.BuildCommittedMessagePartPayload(
-                message.Id,
-                sessionId,
-                message.Parts[index],
-                index);
-            if (partPayload.HasValue)
-                parts.Add(partPayload.Value);
-        }
-
-        var payload = JsonSerializer.SerializeToElement(new CommittedMessage(
-            new CommittedMessageInfo(
-                message.Id,
-                message.Role,
-                sessionId,
-                message.Agent,
-                message.ModelId,
-                new CommittedMessageTime(message.Timestamp.ToUnixTimeMilliseconds()),
-                message.Steered ? true : null,
-                message.Command),
-            parts),
-            ApplicationJsonContext.Default.CommittedMessage);
-
-        await eventBroadcaster.BroadcastAsync(
-            $"session:{sessionId}",
-            EventTypes.MessageUpdated,
-            payload,
-            userContext.UserId,
-            ct).ConfigureAwait(false);
-    }
-
-    private async Task BroadcastUserMessageAsync(
-        string sessionId,
-        HarnessMessage message,
-        string correlationId,
-        CancellationToken ct)
-    {
-        if (message.Role is not "user")
-            return;
-
-        var parts = new List<JsonElement>(message.Parts.Count);
-        for (var index = 0; index < message.Parts.Count; index++)
-        {
-            var partPayload = MessagePersistenceService.BuildCommittedMessagePartPayload(
-                message.Id,
-                sessionId,
-                message.Parts[index],
-                index);
-            if (partPayload.HasValue)
-                parts.Add(partPayload.Value);
-        }
-
-        var payload = JsonSerializer.SerializeToElement(new CommittedUserPromptMessage(
-            new CommittedMessageInfo(
-                message.Id,
-                message.Role,
-                sessionId,
-                message.Agent,
-                message.ModelId,
-                new CommittedMessageTime(message.Timestamp.ToUnixTimeMilliseconds()),
-                message.Steered ? true : null,
-                message.Command),
-            parts,
-            correlationId),
-            ApplicationJsonContext.Default.CommittedUserPromptMessage);
-
-        await eventBroadcaster.BroadcastAsync(
-            $"session:{sessionId}",
-            EventTypes.MessageUpdated,
-            payload,
-            userContext.UserId,
-            ct).ConfigureAwait(false);
     }
 
     private static string? BuildCreateSessionInitialPrompt(
@@ -1725,49 +1394,6 @@ public sealed partial class SessionOrchestrator(
     private static bool HasModel(string? providerId, string? modelId)
         => !string.IsNullOrWhiteSpace(providerId) && !string.IsNullOrWhiteSpace(modelId);
 
-    /// <summary>
-    /// How a prompt goes in: a steer needs a harness that can take one, and only steers a turn that is running. When the
-    /// turn ended before the prompt got here, the prompt starts a turn of its own, the way a queued one does, and isn't
-    /// shown as having gone in mid-turn.
-    /// </summary>
-    private PromptDelivery? SteeringDelivery(PromptDelivery? requested, Session session, out FleetError? error)
-    {
-        error = null;
-        if (requested != PromptDelivery.Steer)
-            return requested;
-
-        if (harnessRegistry.GetByType(session.HarnessType)?.Capabilities.SupportsSteering != true)
-        {
-            error = FleetError.ValidationError(
-                "Prompt.Delivery",
-                "This session's harness can't take a message while it works. Queue it instead: it's sent when the turn ends.");
-            return requested;
-        }
-
-        return sessionActivityTracker.Get(session.Id)?.ActivityStatus
-            is ActivityStatuses.Busy or ActivityStatuses.Retry or ActivityStatuses.Delegating
-            ? PromptDelivery.Steer
-            : PromptDelivery.Queue;
-    }
-
-    /// <summary>
-    /// A prompt that names no agent or model gets the session's: the ones it started with or was last given. So
-    /// "Default" in a session means what that session runs on, for people and automations alike.
-    /// </summary>
-    internal static PromptOptions? WithSessionChoices(PromptOptions? options, Session session)
-    {
-        var agent = string.IsNullOrWhiteSpace(options?.Agent) ? session.SelectedAgent : options.Agent;
-        var namesModel = HasModel(options?.ProviderId, options?.ModelId);
-        var useSessionModel = !namesModel && HasModel(session.SelectedProviderId, session.SelectedModelId);
-        if (agent == options?.Agent && !useSessionModel)
-            return options;
-
-        var withChoices = (options ?? new PromptOptions()) with { Agent = agent };
-        return useSessionModel
-            ? withChoices with { ProviderId = session.SelectedProviderId, ModelId = session.SelectedModelId }
-            : withChoices;
-    }
-
     // ── Session-scoped capabilities ────────────────────────────────────────────
 
     public async Task<Result<IReadOnlyList<ProviderInfo>>> GetSessionModelsAsync(
@@ -1856,19 +1482,19 @@ public sealed partial class SessionOrchestrator(
 
     /// <inheritdoc />
     public Task<Result<IHarnessSession>> ActivateSessionAsync(string sessionId, CancellationToken ct = default)
-        => _activation.ActivateSessionAsync(sessionId, ct);
+        => Activation.ActivateSessionAsync(sessionId, ct);
 
     private Task<Result<IHarnessSession>> GetOrActivateInstanceAsync(Session session, CancellationToken ct)
-        => _activation.GetOrActivateInstanceAsync(session, ct);
+        => Activation.GetOrActivateInstanceAsync(session, ct);
 
     private Task<Result<HarnessProfile?>> ResolveSessionProfileAsync(string? profileId)
-        => _activation.ResolveSessionProfileAsync(profileId);
+        => Activation.ResolveSessionProfileAsync(profileId);
 
     private Task ApplyPermissionsAsync(Session session, IHarnessSession instance, CancellationToken ct)
-        => _activation.ApplyPermissionsAsync(session, instance, ct);
+        => Activation.ApplyPermissionsAsync(session, instance, ct);
 
     private Task EnsureEventSubscriptionReadyAsync(IHarnessSession instance, string sessionId, CancellationToken ct)
-        => _activation.EnsureEventSubscriptionReadyAsync(instance, sessionId, ct);
+        => Activation.EnsureEventSubscriptionReadyAsync(instance, sessionId, ct);
 
     // ── Private helpers ────────────────────────────────────────────────────────
 
@@ -1998,16 +1624,8 @@ public sealed partial class SessionOrchestrator(
     private partial void LogGetMessagesFailed(Exception ex, string sessionId);
 
     [LoggerMessage(Level = LogLevel.Warning,
-        Message = "Failed to send prompt to session {SessionId}")]
-    private partial void LogPromptFailed(Exception ex, string sessionId);
-
-    [LoggerMessage(Level = LogLevel.Warning,
         Message = "Session {SessionId} was created but its first message could not be sent: {Reason}")]
     private partial void LogInitialPromptFailed(string sessionId, string reason);
-
-    [LoggerMessage(Level = LogLevel.Error,
-        Message = "Unexpected failure sending prompt to session {SessionId}")]
-    private partial void LogPromptUnexpectedFailure(Exception ex, string sessionId);
 
     [LoggerMessage(Level = LogLevel.Warning,
         Message = "Failed to fetch messages for session {SessionId} via proxy — returning empty result")]
