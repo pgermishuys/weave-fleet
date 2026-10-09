@@ -102,7 +102,7 @@ No build step and no animation library; SVG and a little JavaScript are enough.
 
 ## 5. Show it and check it
 
-Show it with **`fleet_page_show`** and the page's path. Fleet copies the folder, serves the copy and shows it in a
+Show it with **`fleet_page_show`**, placement `tab` and the page's path. Fleet copies the folder, serves the copy and shows it in a
 page canvas beside the chat; there's no server to start. After you fix the page, show it again: the user's tab
 reloads. Keep links relative and the page's files in its folder. The page runs sandboxed, so it can't use
 `localStorage`. Each time it shows the page, Fleet checks it for script errors, files that didn't load and sideways

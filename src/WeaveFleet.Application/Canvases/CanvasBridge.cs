@@ -14,7 +14,7 @@ public sealed record CanvasToolAttachment(string Mime, string FileName, byte[] C
 /// <summary>
 /// What a canvas tool hands back to the agent: a title for the tool card, the text the model reads, the
 /// canvas it was about, if any, and any file that goes with it. <see cref="Screenshot"/> is Fleet's own copy
-/// of a screenshot, which the conversation shows the user.
+/// of a screenshot, and <see cref="Page"/> a page shown in the conversation: the conversation shows either under the call.
 /// </summary>
 public sealed record CanvasToolOutput(
     string Title,
@@ -22,7 +22,8 @@ public sealed record CanvasToolOutput(
     string? CanvasId = null,
     int? Version = null,
     IReadOnlyList<CanvasToolAttachment>? Attachments = null,
-    ScreenshotReference? Screenshot = null);
+    ScreenshotReference? Screenshot = null,
+    Pages.PageReference? Page = null);
 
 /// <summary>
 /// The agent's canvas tools (<c>fleet_canvas_*</c>) for calls that arrive from a harness process. Each call

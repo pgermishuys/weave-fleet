@@ -284,7 +284,7 @@ internal sealed partial class OpenCode2BrowserAttachments
         {
             if (services.GetService<PageBridge>() is not { } pages)
                 return OpenCode2BrowserJson.Failure(AgentBrowserFailures.Unsupported, "Fleet can't show files here. Use fleet_page_show.");
-            var shown = await pages.ShowAsync(server.BridgeToken, HarnessSessionId, path, title: null, ct).ConfigureAwait(false);
+            var shown = await pages.ShowAsync(server.BridgeToken, HarnessSessionId, path, title: null, ct: ct).ConfigureAwait(false);
             return shown.IsSuccess
                 ? OpenCode2BrowserJson.Success(new JsonObject { ["path"] = path ?? string.Empty })
                 : OpenCode2BrowserJson.Failure(AgentBrowserFailures.Failed, shown.Error.Message + " Fleet shows HTML pages; for other files, tell the user the path.");

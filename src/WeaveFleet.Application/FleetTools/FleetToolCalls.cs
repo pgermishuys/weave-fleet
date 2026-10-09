@@ -96,7 +96,7 @@ public sealed class FleetToolCalls(
             "fleet_canvas_read" => canvases.ReadAsync(token, session, String(args, "canvasId"), ct),
             "fleet_canvas_patch" => canvases.PatchAsync(token, session, String(args, "canvasId"), Node(args, "ops"), ct),
             "fleet_canvas_focus" => canvases.FocusAsync(token, session, String(args, "canvasId"), ct),
-            "fleet_page_show" => pages.ShowAsync(token, session, String(args, "path"), String(args, "title"), ct),
+            "fleet_page_show" => pages.ShowAsync(token, session, String(args, "path"), String(args, "title"), NonEmpty(args, "placement"), ct),
             "fleet_walkthrough_show" => walkthroughs.ShowAsync(token, session, String(args, "title"), Element(args, "guide"), ct),
             "fleet_app_start" => browser.AppStartAsync(token, session, String(args, "command"), String(args, "title"), ct),
             "fleet_browser_open" => browser.BrowserOpenAsync(token, session, String(args, "url"), String(args, "title"), ct),
@@ -181,7 +181,7 @@ public sealed class FleetToolCalls(
         return JsonNode.Parse(value.GetRawText());
     }
 
-    /// <summary>The metadata the OpenCode plugins keep with the call: <c>{canvasId, version, screenshot?}</c>.</summary>
+    /// <summary>The metadata the OpenCode plugins keep with the call: <c>{canvasId, version, screenshot?, page?}</c>.</summary>
     private static JsonElement Metadata(CanvasToolOutput output)
     {
         var buffer = new ArrayBufferWriter<byte>();
@@ -203,6 +203,14 @@ public sealed class FleetToolCalls(
                 json.WriteString("id", shot.Id);
                 json.WriteNumber("width", shot.Width);
                 json.WriteNumber("height", shot.Height);
+                json.WriteEndObject();
+            }
+
+            if (output.Page is { } page)
+            {
+                json.WriteStartObject("page");
+                json.WriteString("id", page.Id);
+                json.WriteString("entry", page.Entry);
                 json.WriteEndObject();
             }
 

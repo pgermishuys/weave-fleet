@@ -1,11 +1,12 @@
 <script setup lang="ts">
-import { computed, onBeforeUnmount, onMounted, ref } from "vue";
+import { computed, onBeforeUnmount, onMounted, ref, watch } from "vue";
 import { ExternalLink, RotateCw, TriangleAlert } from "lucide-vue-next";
 import { appendDraftText } from "@/composables/use-draft-state";
 import { apiUrlOn } from "@/lib/api-client";
 import { useMachineTarget } from "@/lib/machine-target";
 import { dispatchCommandEvent } from "@/lib/command-events";
 import { keepPageState, pageStateMessage, readPageMessage } from "@/lib/page-bridge";
+import { pageFrameName, pageThemeMessage, usePageTheme } from "@/lib/page-theme";
 import { pageAddress, type ShownPage } from "@/lib/server-canvas";
 
 /**
@@ -15,6 +16,7 @@ import { pageAddress, type ShownPage } from "@/lib/server-canvas";
  * The frame's sandbox matches the one Fleet serves the page with: scripts run, but the page gets an opaque
  * origin, so it can't reach Fleet's cookies or API. Its one way out is a few postMessages to this canvas
  * (lib/page-bridge): text for the composer, which the user then sends, and state that Fleet keeps for the page.
+ * The page gets Fleet's theme as `--fleet-*` variables (lib/page-theme), from the frame's name and then by message.
  */
 const props = defineProps<{
   sessionId: string;
@@ -29,6 +31,15 @@ const frame = ref<HTMLIFrameElement | null>(null);
 const address = computed(() => apiUrlOn(machine.connection, pageAddress(props.page)));
 const frameKey = computed(() => `${props.page.pageId}:${props.page.shownAt}:${reloads.value}`);
 const fileName = computed(() => props.page.source.split(/[\\/]/).pop() || props.page.entry);
+const theme = usePageTheme();
+// The page reads its frame's name when it loads; a change of theme while it's open goes by message.
+const frameName = computed(() => pageFrameName("tab", theme.value));
+
+function sendTheme(): void {
+  frame.value?.contentWindow?.postMessage(pageThemeMessage(theme.value), "*");
+}
+
+watch(theme, sendTheme);
 
 function openOutside(): void {
   window.open(address.value, "_blank", "noopener");
@@ -119,10 +130,12 @@ onBeforeUnmount(() => window.removeEventListener("message", onMessage));
         ref="frame"
         :key="frameKey"
         :src="address"
+        :name="frameName"
         :title="page.title"
         class="page-canvas__frame"
         sandbox="allow-scripts allow-forms allow-popups allow-popups-to-escape-sandbox allow-modals allow-downloads"
         referrerpolicy="no-referrer"
+        @load="sendTheme"
       />
     </div>
   </section>

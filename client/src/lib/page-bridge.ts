@@ -75,3 +75,19 @@ export function pageStateMessage(pageId: string): PageStateMessage {
 export function forgetPageStates(): void {
   keptStates.clear();
 }
+
+/** The tallest a page in the conversation grows; past it, the page scrolls inside its frame. */
+export const MAX_PAGE_HEIGHT = 2000;
+
+/**
+ * The height in a page's size report, or null for anything else. Fleet's script in every page sends it as MCP Apps
+ * do: `{ jsonrpc: "2.0", method: "ui/notifications/size-changed", params: { height } }`.
+ */
+export function readPageSize(data: unknown): number | null {
+  if (data === null || typeof data !== "object") return null;
+  const message = data as Record<string, unknown>;
+  if (message.jsonrpc !== "2.0" || message.method !== "ui/notifications/size-changed") return null;
+  const params = message.params;
+  const height = params !== null && typeof params === "object" ? (params as Record<string, unknown>).height : undefined;
+  return typeof height === "number" && Number.isFinite(height) && height >= 0 ? Math.min(Math.ceil(height), MAX_PAGE_HEIGHT) : null;
+}

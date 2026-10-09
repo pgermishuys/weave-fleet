@@ -317,7 +317,7 @@ public sealed partial class FleetCanvasPluginLiveTests
         llm.Queue.Enqueue(new ScriptedLlmResponse
         {
             StopReason = "tool_calls",
-            ToolCalls = [new ScriptedToolCall("call_page", "fleet_page_show", JsonSerializer.Serialize(new { path = page, title = "Options" }))],
+            ToolCalls = [new ScriptedToolCall("call_page", "fleet_page_show", JsonSerializer.Serialize(new { path = page, placement = "tab", title = "Options" }))],
         });
         llm.Queue.Enqueue(new ScriptedLlmResponse
         {

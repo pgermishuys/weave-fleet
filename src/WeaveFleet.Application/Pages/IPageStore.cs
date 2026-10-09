@@ -46,3 +46,9 @@ public static partial class PageIds
     [GeneratedRegex("^pg_[0-9a-f]{32}$")]
     private static partial Regex Pattern();
 }
+
+/// <summary>
+/// A page shown in the conversation (<c>fleet_page_show</c> with placement <c>conversation</c>): the conversation
+/// loads <c>/pages/{Id}/{Entry}</c> under the call.
+/// </summary>
+public sealed record PageReference(string Id, string Entry);

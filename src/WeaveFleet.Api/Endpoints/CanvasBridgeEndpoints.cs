@@ -75,7 +75,7 @@ public static class CanvasBridgeEndpoints
             .WithName("CanvasBridgeBrowserAct");
 
         group.MapPost("/page-show", async (CanvasBridgeRequest request, HttpContext http, PageBridge bridge, CancellationToken ct)
-            => ToResult(await bridge.ShowAsync(BridgeToken(http), request.HarnessSessionId, request.Path, request.Title, ct)))
+            => ToResult(await bridge.ShowAsync(BridgeToken(http), request.HarnessSessionId, request.Path, request.Title, request.Placement, ct)))
             .WithName("CanvasBridgePageShow");
 
         group.MapPost("/walkthrough-show", async (WalkthroughBridgeRequest request, HttpContext http, WalkthroughBridge bridge, CancellationToken ct)
@@ -154,7 +154,8 @@ public static class CanvasBridgeEndpoints
             var screenshot = output.Screenshot is { } shot
                 ? new CanvasToolScreenshotMetadata(shot.SessionId, shot.Id, shot.Width, shot.Height)
                 : null;
-            return Results.Ok(new CanvasToolResponse(output.Title, output.Output, new CanvasToolMetadata(output.CanvasId, output.Version, screenshot), attachments));
+            var page = output.Page is { } shown ? new CanvasToolPageMetadata(shown.Id, shown.Entry) : null;
+            return Results.Ok(new CanvasToolResponse(output.Title, output.Output, new CanvasToolMetadata(output.CanvasId, output.Version, screenshot, page), attachments));
         }
 
         var error = new ErrorResponse(result.Error.Message);

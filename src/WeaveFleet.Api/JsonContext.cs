@@ -203,6 +203,7 @@ internal sealed record ErrorResponse(string Error);
 [JsonSerializable(typeof(CanvasToolResponse))]
 [JsonSerializable(typeof(List<CanvasToolAttachmentResponse>))]
 [JsonSerializable(typeof(CanvasToolScreenshotMetadata))]
+[JsonSerializable(typeof(CanvasToolPageMetadata))]
 [JsonSerializable(typeof(BrowserProxyRequest))]
 [JsonSerializable(typeof(BrowserProxyResponse))]
 [JsonSerializable(typeof(AgentBrowserResponse))]

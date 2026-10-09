@@ -98,7 +98,7 @@
     },
     {
       "name": "fleet_page_show",
-      "description": "Show the user an HTML page you wrote (a mockup, prototype, before-and-after or explainer) in a page canvas beside the chat. Use it when the user asks to see something, or when a page is clearly the best way to answer them. Don't open one for your own notes, or when you're working on a task delegated by another agent: your result goes to that agent, not to the user. Pass the .html file's absolute path. Fleet copies the file and the web files in its folder (CSS, scripts, images, fonts) and serves the copy itself, so there's no server to start. Showing the same file again updates the same tab, and the user's tab reloads, so show it again after every edit you want them to see. Each time, Fleet checks the page at desktop and phone width and tells you about script errors, files that didn't load and anything wider than the window. Use relative links, and keep the page's files in its folder: paths starting with / or ../ don't load. Pages run sandboxed: localStorage isn't available. Not for the project's own app, or anything that needs a build or a dev server: use fleet_app_start. Not for a page already running at a localhost address: use fleet_browser_open. Not for diagrams of boxes and arrows or sequences: use fleet_canvas_open.",
+      "description": "Show the user an HTML page you wrote, in the conversation or in a page tab beside the chat. Use it when the user asks to see something, or when a page is clearly the best way to answer them. Don't show one for your own notes, or when you're working on a task delegated by another agent: your result goes to that agent, not to the user. placement \"conversation\" puts the page in the conversation, above your reply, as part of your answer: a chart, a table, a comparison, a small diagram. Show it before you write the reply, and don't announce or repeat it there. Each call adds a new page, sized to fit its content. placement \"tab\" is for a page the user works in or looks at large: a mockup, prototype, before-and-after or explainer. Showing the same file again updates the same tab, and the user's tab reloads, so show it again after every edit you want them to see. Pass the .html file's absolute path. Fleet copies the file and the web files in its folder (CSS, scripts, images, fonts) and serves the copy itself, so there's no server to start. Each time, Fleet checks the page at desktop and phone width and tells you about script errors, files that didn't load and anything wider than the window. Pages get Fleet's theme as CSS variables, which follow the user's theme: --fleet-bg, --fleet-surface, --fleet-text, --fleet-muted, --fleet-border, --fleet-accent, --fleet-accent-surface, --fleet-accent-text, --fleet-success, --fleet-warning, --fleet-danger, --fleet-info, --fleet-chart-1 to --fleet-chart-5 (chart series, in order), --fleet-radius, --fleet-font-size, --fleet-font-sans, --fleet-font-mono. A page in the conversation already has Fleet's text colour and font on the conversation's background: style it with these variables, give html and body no background, leave out an outer card, border or title banner, give charts fixed pixel heights, and don't size anything by the window's height (100vh). Use relative links, and keep the page's files in its folder: paths starting with / or ../ don't load. Pages run sandboxed: localStorage isn't available. Not for the project's own app, or anything that needs a build or a dev server: use fleet_app_start. Not for a page already running at a localhost address: use fleet_browser_open. Not for diagrams of boxes and arrows or sequences: use fleet_canvas_open.",
       "inputSchema": {
         "type": "object",
         "properties": {
@@ -106,13 +106,22 @@
             "type": "string",
             "description": "Absolute path of the .html file, e.g. \"/tmp/mockups/settings/options.html\"."
           },
+          "placement": {
+            "type": "string",
+            "enum": [
+              "conversation",
+              "tab"
+            ],
+            "description": "conversation: in the conversation above your reply, for an answer such as a chart, table or comparison. tab: in a tab beside the chat, for a mockup, prototype or anything the user works in or looks at large."
+          },
           "title": {
             "type": "string",
-            "description": "Short title for the canvas tab, e.g. \"Settings options\"."
+            "description": "Short title for the page, e.g. \"Settings options\"."
           }
         },
         "required": [
           "path",
+          "placement",
           "title"
         ]
       }

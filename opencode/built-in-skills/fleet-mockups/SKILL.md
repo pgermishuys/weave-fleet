@@ -17,7 +17,7 @@ a web page and show it beside the chat, so the user can click through it.
 
 ## 2. Show it
 
-Call **`fleet_page_show`** with the page's absolute path. Fleet copies the page and the web files in its folder,
+Call **`fleet_page_show`** with the page's absolute path and placement `tab`. Fleet copies the page and the web files in its folder,
 serves the copy itself and shows it in a page canvas beside the chat. There's no server to start: don't run
 `python -m http.server` or `npx serve`, and don't use `fleet_app_start` for a mockup.
 

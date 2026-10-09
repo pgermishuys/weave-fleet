@@ -72,6 +72,16 @@ public sealed class PageEndpointTests : IAsyncLifetime
     }
 
     [Fact]
+    public async Task An_html_file_gets_fleet_s_theme_first_and_the_page_s_other_files_are_served_as_they_are()
+    {
+        var page = await (await _client!.GetAsync($"/pages/{_pageId}/options.html")).Content.ReadAsStringAsync();
+        var css = await (await _client.GetAsync($"/pages/{_pageId}/css/site.css")).Content.ReadAsStringAsync();
+
+        page.ShouldBe(PageTheme.Bootstrap + "<link rel=\"stylesheet\" href=\"css/site.css\"><p>Options</p>");
+        css.ShouldBe("p { color: teal }");
+    }
+
+    [Fact]
     public async Task The_page_s_folder_serves_the_page_and_its_bare_address_gets_the_slash()
     {
         (await (await _client!.GetAsync($"/pages/{_pageId}/")).Content.ReadAsStringAsync()).ShouldContain("<p>Options</p>");
