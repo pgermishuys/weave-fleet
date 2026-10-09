@@ -7,6 +7,19 @@ using WeaveFleet.Application.Harnesses;
 using WeaveFleet.Application.Memory;
 using WeaveFleet.Application.Services;
 using WeaveFleet.Application.Sessions;
+using WeaveFleet.Application.Sessions.Activation;
+using WeaveFleet.Application.Sessions.Asks;
+using WeaveFleet.Application.Sessions.Catalog;
+using WeaveFleet.Application.Sessions.Compaction;
+using WeaveFleet.Application.Sessions.Creation;
+using WeaveFleet.Application.Sessions.Files;
+using WeaveFleet.Application.Sessions.Forking;
+using WeaveFleet.Application.Sessions.History;
+using WeaveFleet.Application.Sessions.Prompting;
+using WeaveFleet.Application.Sessions.Retention;
+using WeaveFleet.Application.Sessions.Shell;
+using WeaveFleet.Application.Sessions.Side;
+using WeaveFleet.Application.Sessions.Work;
 using WeaveFleet.Application.SessionSources;
 using WeaveFleet.Application.Terminals;
 using WeaveFleet.Application.Users;
@@ -46,6 +59,22 @@ public sealed class SessionOrchestratorBuilder
     public SessionActivityTracker ActivityTracker { get; } = new();
     public FakeSessionMessageProxy SessionMessageProxy { get; } = new();
     public InMemoryHarnessProfileRepository HarnessProfileRepository { get; }
+
+    // ── The session services Build() made, for tests (and DI overrides) that use them directly ──
+
+    public SessionActivation Activation { get; private set; } = null!;
+    public SessionPrompting Prompting { get; private set; } = null!;
+    public SessionAsks Asks { get; private set; } = null!;
+    public SessionCatalog Catalog { get; private set; } = null!;
+    public SessionHistory History { get; private set; } = null!;
+    public SessionCompaction Compaction { get; private set; } = null!;
+    public SessionShellCommands ShellCommands { get; private set; } = null!;
+    public SessionWork Work { get; private set; } = null!;
+    public SessionCreation Creation { get; private set; } = null!;
+    public SessionRetention Retention { get; private set; } = null!;
+    public SessionForking Forking { get; private set; } = null!;
+    public SessionSideConversations SideConversations { get; private set; } = null!;
+    public SessionFiles Files { get; private set; } = null!;
 
     public SessionOrchestratorBuilder()
     {
@@ -161,6 +190,43 @@ public sealed class SessionOrchestratorBuilder
             return new MessagePage(messages, hasMore);
         };
 
+        var harnessAvailability = new HarnessAvailabilityCache(
+            HarnessRegistry, TimeProvider.System, NullLogger<HarnessAvailabilityCache>.Instance);
+        var gitDiffService = _gitDiffService ?? new GitDiffService();
+
+        Activation = new SessionActivation(
+            workspaceService, instanceService, HarnessRegistry, InstanceTracker, SessionRepository, ProjectRepository,
+            EventBroadcaster, CredentialStore, UserPreferenceRepository, NullLogger<SessionActivation>.Instance,
+            HarnessProfileRepository);
+        Prompting = new SessionPrompting(
+            SessionRepository, HarnessRegistry, Activation, ActivityTracker, delegationService, sessionSourceResolutionService,
+            SessionSourceUsageRepository, EventBroadcaster, _userContext, NullLogger<SessionPrompting>.Instance,
+            MessageRepository, agentMemory: _agentMemory);
+        Asks = new SessionAsks(SessionRepository, InstanceTracker, Activation, NullLogger<SessionAsks>.Instance);
+        Catalog = new SessionCatalog(SessionRepository, Activation, NullLogger<SessionCatalog>.Instance);
+        History = new SessionHistory(SessionRepository, SessionMessageProxy, _options, NullLogger<SessionHistory>.Instance);
+        Compaction = new SessionCompaction(SessionRepository, HarnessRegistry, ActivityTracker, Activation, NullLogger<SessionCompaction>.Instance);
+        ShellCommands = new SessionShellCommands(SessionRepository, HarnessRegistry, Activation, NullLogger<SessionShellCommands>.Instance);
+        Work = new SessionWork(SessionRepository, InstanceTracker, delegationService);
+        Creation = new SessionCreation(
+            _options, workspaceService, instanceService, sessionSourceResolutionService, HarnessRegistry, InstanceTracker,
+            SessionRepository, SessionSourceUsageRepository, SessionCallbackRepository, ProjectRepository, EventBroadcaster,
+            AnalyticsCollector, CredentialStore, UserPreferenceRepository, _userContext, Activation, Prompting,
+            NullLogger<SessionCreation>.Instance, gitDiffService: gitDiffService, harnessProfiles: HarnessProfileRepository,
+            harnessAvailability: harnessAvailability);
+        Retention = new SessionRetention(
+            workspaceService, instanceService, InstanceTracker, SessionRepository, DelegationRepository, SmartLinkRepository,
+            EventBroadcaster, AnalyticsCollector, ActivityTracker, NullLogger<SessionRetention>.Instance,
+            sessionTerminals: _sessionTerminals, sessionApps: _sessionApps, sessionScreenshots: _sessionScreenshots,
+            sessionPages: _sessionPages);
+        Forking = new SessionForking(
+            workspaceService, instanceService, HarnessRegistry, InstanceTracker, SessionRepository, ProjectRepository,
+            EventBroadcaster, AnalyticsCollector, CredentialStore, Activation, NullLogger<SessionForking>.Instance, gitDiffService);
+        SideConversations = new SessionSideConversations(
+            workspaceService, HarnessRegistry, InstanceTracker, SessionRepository, ProjectRepository, EventBroadcaster,
+            AnalyticsCollector, Prompting, Forking, Retention, NullLogger<SessionSideConversations>.Instance);
+        Files = new SessionFiles(SessionRepository, EventBroadcaster, NullLogger<SessionFiles>.Instance);
+
         return new SessionOrchestrator(
             workspaceService,
             instanceService,
@@ -183,7 +249,7 @@ public sealed class SessionOrchestratorBuilder
             SmartLinkRepository,
             ActivityTracker,
             sessionActivityWriteService: null,
-            gitDiffService: _gitDiffService,
+            gitDiffService: gitDiffService,
             sessionApps: _sessionApps,
             messageRepository: MessageRepository,
             harnessProfiles: HarnessProfileRepository,
@@ -191,7 +257,19 @@ public sealed class SessionOrchestratorBuilder
             sessionTerminals: _sessionTerminals,
             sessionPages: _sessionPages,
             agentMemory: _agentMemory,
-            harnessAvailability: new HarnessAvailabilityCache(
-                HarnessRegistry, TimeProvider.System, NullLogger<HarnessAvailabilityCache>.Instance));
+            harnessAvailability: harnessAvailability,
+            sessionFiles: Files,
+            sessionActivation: Activation,
+            sessionPrompting: Prompting,
+            sessionAsks: Asks,
+            sessionCatalog: Catalog,
+            sessionHistory: History,
+            sessionCompaction: Compaction,
+            sessionShellCommands: ShellCommands,
+            sessionWork: Work,
+            sessionCreation: Creation,
+            sessionRetention: Retention,
+            sessionForking: Forking,
+            sessionSideConversations: SideConversations);
     }
 }

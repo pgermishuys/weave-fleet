@@ -28,36 +28,36 @@ public sealed class SessionFileBrowserEndpointTests : IAsyncDisposable
             authEnabled: false,
             configureTestServices: services =>
             {
-                // Replace SessionOrchestrator with a configured one
-                services.AddSingleton<SessionOrchestrator>(sp =>
-                {
-                    var builder = new SessionOrchestratorBuilder()
-                        .WithUserContext(new TestUserContext("test-user"));
+                // The endpoints these tests call use the session services; replace them with ones over in-memory fakes.
+                var builder = new SessionOrchestratorBuilder()
+                    .WithUserContext(new TestUserContext("test-user"));
 
-                    builder.WorkspaceRootRepository.Seed(
-                        new WorkspaceRoot
-                        {
-                            Id = "root-1",
-                            Path = Path.GetTempPath(),
-                            CreatedAt = DateTime.UtcNow.ToString("O")
-                        }
-                    );
-
-                    builder.ProjectRepository.Seed(new Project
+                builder.WorkspaceRootRepository.Seed(
+                    new WorkspaceRoot
                     {
-                        Id = "scratch-1",
-                        Name = "Scratch",
-                        Type = "scratch",
-                        Position = 0,
-                        CreatedAt = "2026-01-01",
-                        UpdatedAt = "2026-01-01"
-                    });
+                        Id = "root-1",
+                        Path = Path.GetTempPath(),
+                        CreatedAt = DateTime.UtcNow.ToString("O")
+                    }
+                );
 
-                    var runtime = builder.RegisterHarness("opencode", "OpenCode");
-                    runtime.DefaultSession = new FakeHarnessSession("inst-1");
-
-                    return builder.Build();
+                builder.ProjectRepository.Seed(new Project
+                {
+                    Id = "scratch-1",
+                    Name = "Scratch",
+                    Type = "scratch",
+                    Position = 0,
+                    CreatedAt = "2026-01-01",
+                    UpdatedAt = "2026-01-01"
                 });
+
+                var runtime = builder.RegisterHarness("opencode", "OpenCode");
+                runtime.DefaultSession = new FakeHarnessSession("inst-1");
+
+                var orchestrator = builder.Build();
+                services.AddSingleton(orchestrator);
+                services.AddSingleton(builder.Creation);
+                services.AddSingleton(builder.Files);
             });
 
         _client = _factory.CreateClient();

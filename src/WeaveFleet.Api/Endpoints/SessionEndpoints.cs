@@ -9,6 +9,17 @@ using WeaveFleet.Application.Git;
 using WeaveFleet.Application.Progress;
 using WeaveFleet.Application.Services;
 using WeaveFleet.Application.Sessions;
+using WeaveFleet.Application.Sessions.Asks;
+using WeaveFleet.Application.Sessions.Catalog;
+using WeaveFleet.Application.Sessions.Compaction;
+using WeaveFleet.Application.Sessions.Creation;
+using WeaveFleet.Application.Sessions.Files;
+using WeaveFleet.Application.Sessions.Forking;
+using WeaveFleet.Application.Sessions.History;
+using WeaveFleet.Application.Sessions.Prompting;
+using WeaveFleet.Application.Sessions.Shell;
+using WeaveFleet.Application.Sessions.Side;
+using WeaveFleet.Application.Sessions.Work;
 using WeaveFleet.Application.SessionSources;
 using WeaveFleet.Application.Users;
 using WeaveFleet.Domain.Entities;
@@ -226,9 +237,9 @@ public static class SessionEndpoints
         .WithName("GetSessionWork");
 
         // POST /api/sessions/{id}/work/{workId}/stop — stops one piece of running work; workId is the item's id.
-        group.MapPost("/{id}/work/{workId}/stop", async (string id, string workId, SessionOrchestrator orchestrator, CancellationToken ct) =>
+        group.MapPost("/{id}/work/{workId}/stop", async (string id, string workId, SessionWork sessionWork, CancellationToken ct) =>
         {
-            var result = await orchestrator.StopWorkAsync(id, workId, ct);
+            var result = await sessionWork.StopWorkAsync(id, workId, ct);
             return result.Match(Results.Ok, error => error.ToSessionApiResult());
         })
         .Produces<WeaveFleet.Domain.Events.RunningWorkItem>(200)
@@ -238,9 +249,9 @@ public static class SessionEndpoints
         .WithName("StopSessionWork");
 
         // GET /api/sessions/{id}/work/{workId}/output?offset= — a page of its output from byte offset.
-        group.MapGet("/{id}/work/{workId}/output", async (string id, string workId, SessionOrchestrator orchestrator, CancellationToken ct, long offset = 0) =>
+        group.MapGet("/{id}/work/{workId}/output", async (string id, string workId, SessionWork sessionWork, CancellationToken ct, long offset = 0) =>
         {
-            var result = await orchestrator.ReadWorkOutputAsync(id, workId, offset, ct);
+            var result = await sessionWork.ReadWorkOutputAsync(id, workId, offset, ct);
             return result.Match(
                 output => Results.Ok(new WorkOutputResponse(output.Text, output.NextOffset, output.Size, output.Truncated)),
                 error => error.ToSessionApiResult());
@@ -251,10 +262,10 @@ public static class SessionEndpoints
         .Produces(409)
         .WithName("GetSessionWorkOutput");
 
-        // POST /api/sessions — create session via orchestrator
+        // POST /api/sessions — create session (SessionCreation)
         group.MapPost("/", async (
             CreateSessionApiRequest req,
-            SessionOrchestrator orchestrator,
+            SessionCreation sessionCreation,
             HttpContext http,
             SessionMessagesFeature sessionMessages,
             IUserContext userContext) =>
@@ -271,7 +282,7 @@ public static class SessionEndpoints
                 return Results.BadRequest(new ErrorResponse("Model must include both providerID and modelID."));
             }
 
-            var result = await orchestrator.CreateSessionAsync(new CreateSessionRequest
+            var result = await sessionCreation.CreateSessionAsync(new CreateSessionRequest
             {
                 Directory = req.Directory,
                 Title = req.Title,
@@ -300,9 +311,9 @@ public static class SessionEndpoints
         })
         .WithName("CreateSession");
 
-        group.MapPost("/{id}/source-preview", async (string id, PreviewSessionSourceApiRequest req, SessionOrchestrator orchestrator) =>
+        group.MapPost("/{id}/source-preview", async (string id, PreviewSessionSourceApiRequest req, SessionPrompting sessionPrompting) =>
         {
-            var result = await orchestrator.PreviewAddSourceToSessionAsync(id, req.Source);
+            var result = await sessionPrompting.PreviewAddSourceToSessionAsync(id, req.Source);
             return result.Match(
                 envelope => Results.Ok(new PreviewSessionResponse(
                     new SessionPreviewEnvelope(
@@ -314,15 +325,15 @@ public static class SessionEndpoints
         })
         .WithName("PreviewSessionSource");
 
-        group.MapPost("/{id}/sources", async (string id, AddSessionSourceApiRequest req, SessionOrchestrator orchestrator) =>
+        group.MapPost("/{id}/sources", async (string id, AddSessionSourceApiRequest req, SessionPrompting sessionPrompting) =>
         {
-            var result = await orchestrator.AddSourceToSessionAsync(id, req.Source, req.Confirm);
+            var result = await sessionPrompting.AddSourceToSessionAsync(id, req.Source, req.Confirm);
             return result.Match(_ => Results.Ok(), err => err.ToSessionApiResult());
         })
         .WithName("AddSessionSource");
 
         // POST /api/sessions/{id}/prompt
-        group.MapPost("/{id}/prompt", async (string id, SendPromptApiRequest req, SessionOrchestrator orchestrator, SessionService sessionService, InstanceTracker tracker, HttpContext http, SessionMessagesFeature sessionMessages, SessionReferenceExpander references, CancellationToken ct) =>
+        group.MapPost("/{id}/prompt", async (string id, SendPromptApiRequest req, SessionPrompting sessionPrompting, SessionService sessionService, InstanceTracker tracker, HttpContext http, SessionMessagesFeature sessionMessages, SessionReferenceExpander references, CancellationToken ct) =>
         {
             // With messages on, agents message sessions through fleet_message, which says who sent it; this path
             // would make the text look like the user's.
@@ -343,7 +354,7 @@ public static class SessionEndpoints
 
             var attachments = req.Attachments?.Select(a => new HarnessAttachment(a.Mime, a.Filename ?? "image.png", a.Data)).ToList();
             var options = new PromptOptions { Agent = req.Agent, ProviderId = modelResolution.ProviderId, ModelId = modelResolution.ModelId, Attachments = attachments, Effort = req.Effort, Delivery = delivery };
-            var result = await orchestrator.PromptSessionWithReceiptAsync(id, text.Value, options, req.UserMessageId, req.CorrelationId, ct);
+            var result = await sessionPrompting.PromptSessionWithReceiptAsync(id, text.Value, options, req.UserMessageId, req.CorrelationId, ct);
             return result.Match(r => Results.Ok(new SendPromptApiResponse(r.EventId, r.CorrelationId)), err => err.ToSessionApiResult());
         })
         .WithName("PromptSession");
@@ -437,9 +448,9 @@ public static class SessionEndpoints
         .WithName("SendSessionRetryNow");
 
         // POST /api/sessions/{id}/abort
-        group.MapPost("/{id}/abort", async (string id, SessionOrchestrator orchestrator) =>
+        group.MapPost("/{id}/abort", async (string id, SessionPrompting sessionPrompting) =>
         {
-            var result = await orchestrator.AbortSessionAsync(id);
+            var result = await sessionPrompting.AbortSessionAsync(id);
             return result.Match(_ => Results.Ok(), err => err.ToSessionApiResult());
         })
         .WithName("AbortSession");
@@ -449,9 +460,9 @@ public static class SessionEndpoints
             string id,
             string requestId,
             QuestionAnswerApiRequest request,
-            SessionOrchestrator orchestrator) =>
+            SessionAsks sessionAsks) =>
         {
-            var result = await orchestrator.AnswerQuestionAsync(id, requestId, request.Answers);
+            var result = await sessionAsks.AnswerQuestionAsync(id, requestId, request.Answers);
             return result.Match(_ => Results.Ok(), err => err.ToSessionApiResult());
         })
         .WithName("AnswerQuestion");
@@ -460,9 +471,9 @@ public static class SessionEndpoints
         group.MapPost("/{id}/questions/{requestId}/reject", async (
             string id,
             string requestId,
-            SessionOrchestrator orchestrator) =>
+            SessionAsks sessionAsks) =>
         {
-            var result = await orchestrator.RejectQuestionAsync(id, requestId);
+            var result = await sessionAsks.RejectQuestionAsync(id, requestId);
             return result.Match(_ => Results.Ok(), err => err.ToSessionApiResult());
         })
         .WithName("RejectQuestion");
@@ -479,18 +490,18 @@ public static class SessionEndpoints
             string id,
             string requestId,
             PermissionReplyApiRequest request,
-            SessionOrchestrator orchestrator,
+            SessionAsks sessionAsks,
             CancellationToken ct) =>
         {
-            var result = await orchestrator.ReplyToPermissionAsync(id, requestId, request.Reply, request.Message, ct);
+            var result = await sessionAsks.ReplyToPermissionAsync(id, requestId, request.Reply, request.Message, ct);
             return result.Match(_ => Results.NoContent(), err => err.ToSessionApiResult());
         })
         .WithName("ReplyToPermission");
 
         // POST /api/sessions/{id}/fork
-        group.MapPost("/{id}/fork", async (string id, ForkSessionApiRequest req, SessionOrchestrator orchestrator) =>
+        group.MapPost("/{id}/fork", async (string id, ForkSessionApiRequest req, SessionForking sessionForking) =>
         {
-            var result = await orchestrator.ForkSessionAsync(id, req.Title);
+            var result = await sessionForking.ForkSessionAsync(id, req.Title);
             return result.Match(
                 r => Results.Ok(new ForkSessionApiResponse(
                     r.InstanceId,
@@ -502,9 +513,9 @@ public static class SessionEndpoints
         .WithName("ForkSession");
 
         // POST /api/sessions/{id}/new-in-folder — a new, empty session in its folder, on the same harness and profile
-        group.MapPost("/{id}/new-in-folder", async (string id, SessionOrchestrator orchestrator, CancellationToken ct) =>
+        group.MapPost("/{id}/new-in-folder", async (string id, SessionCreation sessionCreation, CancellationToken ct) =>
         {
-            var result = await orchestrator.StartSessionInFolderOfAsync(id, ct);
+            var result = await sessionCreation.StartSessionInFolderOfAsync(id, ct);
             return result.Match(
                 r => Results.Ok(new CreateSessionApiResponse(r.InstanceId, r.WorkspaceId, r.Session, r.Branch)),
                 err => err.ToSessionApiResult());
@@ -512,12 +523,12 @@ public static class SessionEndpoints
         .WithName("StartSessionInFolder");
 
         // GET /api/sessions/{id}/messages?limit=N&before=CURSOR
-        group.MapGet("/{id}/messages", async (string id, int? limit, string? before, SessionOrchestrator orchestrator) =>
+        group.MapGet("/{id}/messages", async (string id, int? limit, string? before, SessionHistory sessionHistory) =>
         {
             var query = (limit is not null || before is not null)
                 ? new MessageQuery(limit, before)
                 : null;
-            var result = await orchestrator.GetSessionMessagesAsync(id, query);
+            var result = await sessionHistory.GetSessionMessagesAsync(id, query);
             return result.Match(
                 page =>
                 {
@@ -650,7 +661,7 @@ public static class SessionEndpoints
         .WithName("GetSessionStatus");
 
         // POST /api/sessions/{id}/command
-        group.MapPost("/{id}/command", async (string id, SendCommandApiRequest req, SessionOrchestrator orchestrator, SessionService sessionService, InstanceTracker tracker, CancellationToken ct) =>
+        group.MapPost("/{id}/command", async (string id, SendCommandApiRequest req, SessionPrompting sessionPrompting, SessionService sessionService, InstanceTracker tracker, CancellationToken ct) =>
         {
             var modelResolution = await ResolveSessionModelAsync(id, req.Model, sessionService, tracker, ct);
             if (modelResolution.ErrorResult is not null)
@@ -671,22 +682,22 @@ public static class SessionEndpoints
 
             // Fire-and-forget: dispatch the command without awaiting the LLM turn.
             // Use CancellationToken.None so client disconnects don't cancel the command.
-            _ = orchestrator.CommandSessionAsync(id, options, CancellationToken.None);
+            _ = sessionPrompting.CommandSessionAsync(id, options, CancellationToken.None);
 
             return Results.Accepted();
         })
         .WithName("SendSessionCommand");
 
         // POST /api/sessions/{id}/shell — run a shell command the user typed (!git status) in the session's folder.
-        // Gated as a prompt is (sign-in, the caller's own session, not archived); the orchestrator checks the rest.
+        // Gated as a prompt is (sign-in, the caller's own session, not archived); SessionShellCommands checks the rest.
         // 202 once the harness has taken it: the command and its output arrive in the conversation as events.
-        group.MapPost("/{id}/shell", async (string id, RunShellCommandApiRequest req, SessionOrchestrator orchestrator, HttpContext http, CancellationToken ct) =>
+        group.MapPost("/{id}/shell", async (string id, RunShellCommandApiRequest req, SessionShellCommands sessionShellCommands, HttpContext http, CancellationToken ct) =>
         {
             // The block reads as the user's; an agent runs commands with its own shell tool.
             if (http.IsAgentRequest())
                 return Results.Json(new ErrorResponse("Agents run commands with their own shell tool."), ApiJsonContext.Default.ErrorResponse, statusCode: StatusCodes.Status403Forbidden);
 
-            var result = await orchestrator.RunShellCommandAsync(id, req.Command, ct);
+            var result = await sessionShellCommands.RunShellCommandAsync(id, req.Command, ct);
             return result.Match(_ => Results.Accepted(), err => err.ToSessionApiResult());
         })
         .WithName("RunSessionShellCommand");
@@ -708,21 +719,21 @@ public static class SessionEndpoints
 
         // POST /api/sessions/{id}/compact — Compact now: the harness summarises the conversation so far. 202 once the
         // harness has taken it; the compaction's progress and end arrive as context.updated.
-        group.MapPost("/{id}/compact", async (string id, SessionOrchestrator orchestrator, HttpContext http, CancellationToken ct) =>
+        group.MapPost("/{id}/compact", async (string id, SessionCompaction sessionCompaction, HttpContext http, CancellationToken ct) =>
         {
             // The user's choice: an agent can't throw away its own conversation from under itself.
             if (http.IsAgentRequest())
                 return Results.Json(new ErrorResponse("Agents can't compact a session's context."), ApiJsonContext.Default.ErrorResponse, statusCode: StatusCodes.Status403Forbidden);
 
-            var result = await orchestrator.CompactAsync(id, ct);
+            var result = await sessionCompaction.CompactAsync(id, ct);
             return result.Match(_ => Results.Accepted(), err => err.ToSessionApiResult());
         })
         .WithName("CompactSession");
 
         // GET /api/sessions/{id}/side — the side conversation open on the session (/btw), or 204 when there is none.
-        group.MapGet("/{id}/side", async (string id, SessionOrchestrator orchestrator) =>
+        group.MapGet("/{id}/side", async (string id, SessionSideConversations sideConversations) =>
         {
-            var result = await orchestrator.GetSideConversationAsync(id);
+            var result = await sideConversations.GetSideConversationAsync(id);
             return result.Match(
                 side => side is null ? Results.NoContent() : Results.Ok(SideConversationResponse.Of(side)),
                 err => err.ToSessionApiResult());
@@ -733,7 +744,7 @@ public static class SessionEndpoints
         // POST /api/sessions/{id}/side — ask a side question (/btw): in the open side conversation, or a new fork of the
         // session at its last finished turn. The session itself isn't prompted. The answer arrives as the side
         // conversation's events (topic session:{sideConversation.sessionId}).
-        group.MapPost("/{id}/side", async (string id, SideQuestionApiRequest req, SessionOrchestrator orchestrator, SessionService sessionService, InstanceTracker tracker, HttpContext http, CancellationToken ct) =>
+        group.MapPost("/{id}/side", async (string id, SideQuestionApiRequest req, SessionSideConversations sideConversations, SessionService sessionService, InstanceTracker tracker, HttpContext http, CancellationToken ct) =>
         {
             // A side question is the user's aside; agents talk to sessions with fleet_message.
             if (http.IsAgentRequest())
@@ -747,7 +758,7 @@ public static class SessionEndpoints
             var options = req.Agent is not null || req.Model is not null || req.Effort is not null
                 ? new PromptOptions { Agent = req.Agent, ProviderId = modelResolution.ProviderId, ModelId = modelResolution.ModelId, Effort = req.Effort }
                 : null;
-            var result = await orchestrator.AskSideQuestionAsync(id, req.Text, options, req.CorrelationId, ct);
+            var result = await sideConversations.AskSideQuestionAsync(id, req.Text, options, req.CorrelationId, ct);
             return result.Match(
                 r => Results.Ok(new SideQuestionApiResponse(SideConversationResponse.Of(r.SideConversation), r.Prompt.CorrelationId, r.Prompt.MessageId)),
                 err => err.ToSessionApiResult());
@@ -757,17 +768,17 @@ public static class SessionEndpoints
 
         // DELETE /api/sessions/{id}/side — discard the side conversation: gone at once, its fork deleted once the undo
         // window has passed (POST .../side/restore brings it back until then). 204 when there was none too.
-        group.MapDelete("/{id}/side", async (string id, SessionOrchestrator orchestrator, CancellationToken ct) =>
+        group.MapDelete("/{id}/side", async (string id, SessionSideConversations sideConversations, CancellationToken ct) =>
         {
-            var result = await orchestrator.CloseSideConversationAsync(id, ct);
+            var result = await sideConversations.CloseSideConversationAsync(id, ct);
             return result.Match(_ => Results.NoContent(), err => err.ToSessionApiResult());
         })
         .WithName("CloseSideConversation");
 
         // POST /api/sessions/{id}/side/restore — Undo a discard, within its window: the side conversation comes back as it was.
-        group.MapPost("/{id}/side/restore", async (string id, SessionOrchestrator orchestrator, CancellationToken ct) =>
+        group.MapPost("/{id}/side/restore", async (string id, SessionSideConversations sideConversations, CancellationToken ct) =>
         {
-            var result = await orchestrator.RestoreSideConversationAsync(id, ct);
+            var result = await sideConversations.RestoreSideConversationAsync(id, ct);
             return result.Match(side => Results.Ok(SideConversationResponse.Of(side)), err => err.ToSessionApiResult());
         })
         .Produces<SideConversationResponse>(200)
@@ -775,9 +786,9 @@ public static class SessionEndpoints
 
         // GET /api/sessions/{id}/side/discarded — the side conversation discarded moments ago that Undo can still bring
         // back, with how long Undo is still offered; 204 when there's none. A reload shows Undo again from this.
-        group.MapGet("/{id}/side/discarded", async (string id, SessionOrchestrator orchestrator) =>
+        group.MapGet("/{id}/side/discarded", async (string id, SessionSideConversations sideConversations) =>
         {
-            var result = await orchestrator.GetUndoableSideConversationAsync(id);
+            var result = await sideConversations.GetUndoableSideConversationAsync(id);
             return result.Match(
                 undoable => undoable is { } found
                     ? Results.Ok(new UndoableSideConversationResponse(SideConversationResponse.Of(found.SideConversation), (long)found.UndoLeft.TotalMilliseconds))
@@ -788,27 +799,27 @@ public static class SessionEndpoints
         .WithName("GetUndoableSideConversation");
 
         // PUT /api/sessions/{id}/side/seen — the newest answer the user has seen with the side conversation open.
-        group.MapPut("/{id}/side/seen", async (string id, SideSeenApiRequest req, SessionOrchestrator orchestrator) =>
+        group.MapPut("/{id}/side/seen", async (string id, SideSeenApiRequest req, SessionSideConversations sideConversations) =>
         {
-            var result = await orchestrator.SetSideConversationSeenAsync(id, req.AnswerId);
+            var result = await sideConversations.SetSideConversationSeenAsync(id, req.AnswerId);
             return result.Match(side => Results.Ok(SideConversationResponse.Of(side)), err => err.ToSessionApiResult());
         })
         .Produces<SideConversationResponse>(200)
         .WithName("SetSideConversationSeen");
 
         // PUT /api/sessions/{id}/side/minimized — fold the side conversation into its tab on the composer, or open it.
-        group.MapPut("/{id}/side/minimized", async (string id, SideMinimizedApiRequest req, SessionOrchestrator orchestrator, CancellationToken ct) =>
+        group.MapPut("/{id}/side/minimized", async (string id, SideMinimizedApiRequest req, SessionSideConversations sideConversations, CancellationToken ct) =>
         {
-            var result = await orchestrator.SetSideConversationMinimizedAsync(id, req.Minimized, ct);
+            var result = await sideConversations.SetSideConversationMinimizedAsync(id, req.Minimized, ct);
             return result.Match(side => Results.Ok(SideConversationResponse.Of(side)), err => err.ToSessionApiResult());
         })
         .Produces<SideConversationResponse>(200)
         .WithName("SetSideConversationMinimized");
 
         // POST /api/sessions/{id}/side/keep — keep the side conversation as a session of its own, listed like any other.
-        group.MapPost("/{id}/side/keep", async (string id, SessionOrchestrator orchestrator, CancellationToken ct) =>
+        group.MapPost("/{id}/side/keep", async (string id, SessionSideConversations sideConversations, CancellationToken ct) =>
         {
-            var result = await orchestrator.KeepSideConversationAsync(id, ct);
+            var result = await sideConversations.KeepSideConversationAsync(id, ct);
             return result.Match(side => Results.Ok(SideConversationResponse.Of(side)), err => err.ToSessionApiResult());
         })
         .Produces<SideConversationResponse>(200)
@@ -897,9 +908,9 @@ public static class SessionEndpoints
         .WithName("UpdateSessionTags");
 
         // GET /api/sessions/{id}/models — session-scoped model list
-        group.MapGet("/{id}/models", async (string id, SessionOrchestrator orchestrator, CancellationToken ct) =>
+        group.MapGet("/{id}/models", async (string id, SessionCatalog sessionCatalog, CancellationToken ct) =>
         {
-            var result = await orchestrator.GetSessionModelsAsync(id, ct);
+            var result = await sessionCatalog.GetSessionModelsAsync(id, ct);
             return result.Match(
                 providers =>
                 {
@@ -914,9 +925,9 @@ public static class SessionEndpoints
         .WithName("GetSessionModels");
 
         // GET /api/sessions/{id}/commands — session-scoped commands list
-        group.MapGet("/{id}/commands", async (string id, SessionOrchestrator orchestrator, CancellationToken ct) =>
+        group.MapGet("/{id}/commands", async (string id, SessionCatalog sessionCatalog, CancellationToken ct) =>
         {
-            var result = await orchestrator.GetSessionCommandsAsync(id, ct);
+            var result = await sessionCatalog.GetSessionCommandsAsync(id, ct);
             return result.Match(
                 commands =>
                 {
@@ -928,9 +939,9 @@ public static class SessionEndpoints
         .WithName("GetSessionCommands");
 
         // GET /api/sessions/{id}/agents — session-scoped agents list
-        group.MapGet("/{id}/agents", async (string id, SessionOrchestrator orchestrator, CancellationToken ct) =>
+        group.MapGet("/{id}/agents", async (string id, SessionCatalog sessionCatalog, CancellationToken ct) =>
         {
-            var result = await orchestrator.GetSessionAgentsAsync(id, ct);
+            var result = await sessionCatalog.GetSessionAgentsAsync(id, ct);
             return result.Match(
                 agents =>
                 {
@@ -950,9 +961,9 @@ public static class SessionEndpoints
 
         // GET /api/sessions/{id}/find/files?q= — files and folders for composer @ references.
         // An empty q, or one ending in "/", lists that folder; anything else searches. Folders end in "/".
-        group.MapGet("/{id}/find/files", async (string id, string? q, SessionOrchestrator orchestrator, CancellationToken ct) =>
+        group.MapGet("/{id}/find/files", async (string id, string? q, SessionFiles sessionFiles, CancellationToken ct) =>
         {
-            var result = await orchestrator.FindSessionFilesAsync(id, q ?? string.Empty, ct);
+            var result = await sessionFiles.FindSessionFilesAsync(id, q ?? string.Empty, ct);
             return result.Match(
                 files => Results.Ok(new InstanceFilesResponse(id, files.ToArray())),
                 err => err.ToSessionApiResult());
@@ -960,9 +971,9 @@ public static class SessionEndpoints
         .WithName("FindSessionFiles");
 
         // GET /api/sessions/{id}/files/browse?path= — session directory browser
-        group.MapGet("/{id}/files/browse", async (string id, [FromQuery] string? path, SessionOrchestrator orchestrator, CancellationToken ct) =>
+        group.MapGet("/{id}/files/browse", async (string id, [FromQuery] string? path, SessionFiles sessionFiles, CancellationToken ct) =>
         {
-            var result = await orchestrator.BrowseSessionDirectoryAsync(id, path, ct);
+            var result = await sessionFiles.BrowseSessionDirectoryAsync(id, path, ct);
             return result.Match(
                 browseResult => Results.Ok(new BrowseSessionDirectoryResponse(
                     browseResult.Entries.Select(e => new BrowseEntryDto(e.Name, e.RelativePath, e.IsDirectory)).ToList(),
@@ -975,9 +986,9 @@ public static class SessionEndpoints
         .WithName("BrowseSessionDirectory");
 
         // GET /api/sessions/{id}/files/content?path= — read session file content
-        group.MapGet("/{id}/files/content", async (string id, [FromQuery] string? path, SessionOrchestrator orchestrator, CancellationToken ct) =>
+        group.MapGet("/{id}/files/content", async (string id, [FromQuery] string? path, SessionFiles sessionFiles, CancellationToken ct) =>
         {
-            var result = await orchestrator.ReadSessionFileAsync(id, path, ct);
+            var result = await sessionFiles.ReadSessionFileAsync(id, path, ct);
             return result.Match(
                 fileResult => Results.Ok(new ReadSessionFileResponse(
                     fileResult.Path,
@@ -994,9 +1005,9 @@ public static class SessionEndpoints
 
         // GET /api/sessions/{id}/files/image?path= — an image in the session's folder, for a file tab to show as a picture.
         // The sandbox keeps an SVG's scripts from running as Fleet when the address is opened on its own.
-        group.MapGet("/{id}/files/image", async (string id, [FromQuery] string? path, SessionOrchestrator orchestrator, HttpContext http) =>
+        group.MapGet("/{id}/files/image", async (string id, [FromQuery] string? path, SessionFiles sessionFiles, HttpContext http) =>
         {
-            var result = await orchestrator.ResolveSessionImageAsync(id, path);
+            var result = await sessionFiles.ResolveSessionImageAsync(id, path);
             return result.Match(
                 image =>
                 {
@@ -1014,9 +1025,9 @@ public static class SessionEndpoints
         .WithName("GetSessionImage");
 
         // POST /api/sessions/{id}/files/resolve — which paths named in a reply are files in the session's folder.
-        group.MapPost("/{id}/files/resolve", async (string id, ResolveSessionFilesRequest req, SessionOrchestrator orchestrator, CancellationToken ct) =>
+        group.MapPost("/{id}/files/resolve", async (string id, ResolveSessionFilesRequest req, SessionFiles sessionFiles, CancellationToken ct) =>
         {
-            var result = await orchestrator.ResolveSessionFilesAsync(id, req.Paths ?? [], ct);
+            var result = await sessionFiles.ResolveSessionFilesAsync(id, req.Paths ?? [], ct);
             return result.Match(
                 files => Results.Ok(new ResolveSessionFilesResponse(
                     files.Select(f => new ResolvedSessionFileDto(f.Path, f.RelativePath)).ToList())),
@@ -1027,9 +1038,9 @@ public static class SessionEndpoints
         .WithName("ResolveSessionFiles");
 
         // PUT /api/sessions/{id}/files/content — save a file from the editor. 409 when the file changed since it was read.
-        group.MapPut("/{id}/files/content", async (string id, WriteSessionFileRequest req, SessionOrchestrator orchestrator, CancellationToken ct) =>
+        group.MapPut("/{id}/files/content", async (string id, WriteSessionFileRequest req, SessionFiles sessionFiles, CancellationToken ct) =>
         {
-            var result = await orchestrator.WriteSessionFileAsync(id, req.Path, req.Content, req.BaseHash, ct);
+            var result = await sessionFiles.WriteSessionFileAsync(id, req.Path, req.Content, req.BaseHash, ct);
             return result.Match(
                 write => write.Saved
                     ? Results.Ok(new WriteSessionFileResponse(write.Hash))
@@ -1318,7 +1329,7 @@ public static class SessionEndpoints
         InstanceTracker tracker,
         CancellationToken ct)
     {
-        // No model in the request: SessionOrchestrator gives the prompt the session's own.
+        // No model in the request: SessionPrompting gives the prompt the session's own.
         if (model is null)
             return ModelResolutionResult.Empty;
 
