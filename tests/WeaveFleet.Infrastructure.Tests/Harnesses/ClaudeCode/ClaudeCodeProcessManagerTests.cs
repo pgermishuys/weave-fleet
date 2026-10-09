@@ -56,11 +56,14 @@ public sealed class ClaudeCodeProcessManagerTests : IDisposable
         string claude;
         if (OperatingSystem.IsWindows())
         {
+            // cmd moves the pid file into place once PowerShell has returned: while PowerShell still runs, the server is
+            // its child, and stopping claude's tree would take the server too.
             claude = Path.Combine(_folder, "claude.cmd");
             await File.WriteAllTextAsync(claude,
                 "@echo off\r\n"
                 + "powershell -NoProfile -Command \"(Start-Process ping -ArgumentList '-n','300','127.0.0.1' -WindowStyle Hidden -PassThru).Id"
-                + $" | Set-Content -Path '{pidFile}.tmp'; Move-Item '{pidFile}.tmp' '{pidFile}'\"\r\n"
+                + $" | Set-Content -Path '{pidFile}.tmp'\"\r\n"
+                + $"move /y \"{pidFile}.tmp\" \"{pidFile}\" > nul\r\n"
                 + "more > nul\r\n");
         }
         else
