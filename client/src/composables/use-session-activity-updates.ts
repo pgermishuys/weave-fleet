@@ -3,45 +3,8 @@ import { onGlobalEvent } from "@/composables/use-signalr-socket"
 import { liveTarget } from "@/lib/machine-target"
 import { useSessionsStore } from "@/stores/sessions"
 import type { DomainEvent } from "@/lib/domain-events"
+import { deriveSessionStatus } from "@/lib/session-status"
 import { toScheduledRetry } from "@/lib/turn-retry"
-
-/**
- * Maps activityStatus to sessionStatus following the server's DeriveSessionStatus logic.
- * Only maps activity-driven states; lifecycle states like "stopped", "completed", "error", "disconnected"
- * are preserved and not clobbered by activity events.
- * 
- * Server mapping (SessionEndpoints.DeriveSessionStatus):
- * - If session.Status is "stopped" or "completed" → preserve it (lifecycle state)
- * - Otherwise:
- *   - activityStatus "idle" → sessionStatus "idle"
- *   - activityStatus "waiting_input" → sessionStatus "waiting_input"
- *   - activityStatus "busy"/"delegating"/"retry" → sessionStatus "active"
- */
-function deriveSessionStatus(activityStatus: string, currentSessionStatus?: string): string {
-  // Preserve lifecycle states — don't clobber them with activity-driven states
-  if (currentSessionStatus === "stopped" || 
-      currentSessionStatus === "completed" || 
-      currentSessionStatus === "error" || 
-      currentSessionStatus === "disconnected") {
-    return currentSessionStatus
-  }
-
-  // Map activity status to session status
-  switch (activityStatus) {
-    case "idle":
-      return "idle"
-    // A session stopped on a question needs the user, so it gets its own status rather than "active".
-    case "waiting_input":
-      return "waiting_input"
-    case "busy":
-    case "delegating":
-    case "retry":
-      return "active"
-    default:
-      // Unknown activity status — default to active to be safe
-      return "active"
-  }
-}
 
 /**
  * Subscribes to global "sessions" topic to receive activity_status events

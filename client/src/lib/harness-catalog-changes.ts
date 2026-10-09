@@ -1,6 +1,5 @@
 import { getCurrentScope, onScopeDispose, shallowRef, toValue, type MaybeRefOrGetter, type Ref } from "vue";
-import { onGlobalEvent } from "@/composables/use-signalr-socket";
-import type { DomainEvent } from "@/lib/domain-events";
+import { onDomainEvent } from "@/composables/on-domain-event";
 import type { MachineTarget } from "@/lib/machine-target";
 
 /**
@@ -59,8 +58,7 @@ export function isCatalogChangeFor(
 
 /** Calls `handler` for every catalog change `machine` pushes until the returned function is called. */
 export function listenForCatalogChanges(machine: MachineTarget, handler: (change: HarnessCatalogChange) => void): () => void {
-  return onGlobalEvent(machine, "sessions", (event: DomainEvent) => {
-    if ((event.type as string) !== HARNESS_CATALOG_CHANGED) return;
+  return onDomainEvent(machine, "sessions", HARNESS_CATALOG_CHANGED, (event) => {
     const change = parseCatalogChange(event.payload);
     if (change) handler(change);
   });

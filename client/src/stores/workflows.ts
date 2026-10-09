@@ -1,10 +1,9 @@
 import { defineStore } from "pinia";
 import { computed, shallowRef } from "vue";
-import { onGlobalEvent } from "@/composables/use-signalr-socket";
+import { onDomainEvent } from "@/composables/on-domain-event";
 import { liveTarget } from "@/lib/machine-target";
 import { apiFetch, apiFetchOn } from "@/lib/api-client";
 import { extractApiError } from "@/lib/api-error";
-import type { DomainEvent } from "@/lib/domain-events";
 import type { MachineConnection } from "@/lib/machines";
 import type { DraftedWorkflow, WorkflowCheck, WorkflowDraft, WorkflowFile } from "@/lib/workflow-draft";
 import {
@@ -103,8 +102,7 @@ export const useWorkflowsStore = defineStore("workflows", () => {
   }
 
   function listen(): void {
-    stopListening ??= onGlobalEvent(liveTarget(), "sessions", (event: DomainEvent) => {
-      if ((event.type as string) !== WORKFLOW_RUN_EVENT) return;
+    stopListening ??= onDomainEvent(liveTarget(), "sessions", WORKFLOW_RUN_EVENT, (event) => {
       if (isWorkflowRun(event.payload)) upsert(event.payload);
     });
   }

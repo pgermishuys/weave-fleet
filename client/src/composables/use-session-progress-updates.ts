@@ -1,7 +1,6 @@
 import { onMounted, onUnmounted } from "vue";
-import { onGlobalEvent } from "@/composables/use-signalr-socket";
+import { onDomainEvent } from "@/composables/on-domain-event";
 import { liveTarget } from "@/lib/machine-target";
-import type { DomainEvent } from "@/lib/domain-events";
 import { SESSION_PROGRESS, parseProgressSummary } from "@/lib/session-progress";
 import { useSessionProgressStore } from "@/stores/session-progress";
 import { useSessionsStore } from "@/stores/sessions";
@@ -16,8 +15,7 @@ export function useSessionProgressUpdates(): void {
   let unsubscribe: (() => void) | null = null;
 
   onMounted(() => {
-    unsubscribe = onGlobalEvent(liveTarget(), "sessions", (event: DomainEvent) => {
-      if ((event.type as string) !== SESSION_PROGRESS) return;
+    unsubscribe = onDomainEvent(liveTarget(), "sessions", SESSION_PROGRESS, (event) => {
       const summary = parseProgressSummary(event.payload);
       if (!summary) return;
 
