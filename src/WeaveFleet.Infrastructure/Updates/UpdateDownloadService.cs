@@ -2,9 +2,9 @@ using System.Security.Cryptography;
 using System.Text.Json;
 using System.Text.Json.Serialization;
 using Microsoft.Extensions.Logging;
-using WeaveFleet.Application.Services;
+using WeaveFleet.Application.Updates;
 
-namespace WeaveFleet.Infrastructure.Services;
+namespace WeaveFleet.Infrastructure.Updates;
 
 /// <summary>
 /// Downloads and validates a Fleet release archive to a staging directory.

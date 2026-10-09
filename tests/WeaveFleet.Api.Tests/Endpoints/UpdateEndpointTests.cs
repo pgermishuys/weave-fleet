@@ -3,8 +3,8 @@ using System.Net.Http.Json;
 using System.Text.Json;
 using Microsoft.Extensions.DependencyInjection;
 using WeaveFleet.Api.Tests.Infrastructure;
-using WeaveFleet.Application.Services;
-using WeaveFleet.Infrastructure.Services;
+using WeaveFleet.Application.Updates;
+using WeaveFleet.Infrastructure.Updates;
 
 namespace WeaveFleet.Api.Tests.Endpoints;
 

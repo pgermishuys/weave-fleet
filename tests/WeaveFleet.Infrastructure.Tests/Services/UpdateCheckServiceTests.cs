@@ -1,7 +1,7 @@
 using Microsoft.Extensions.Logging.Abstractions;
 using WeaveFleet.Application.Configuration;
-using WeaveFleet.Application.Services;
-using WeaveFleet.Infrastructure.Services;
+using WeaveFleet.Application.Updates;
+using WeaveFleet.Infrastructure.Updates;
 
 namespace WeaveFleet.Infrastructure.Tests.Services;
 
