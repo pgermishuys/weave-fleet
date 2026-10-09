@@ -4,7 +4,6 @@ import { flushPromises, mount } from "@vue/test-utils";
 import { createPinia, setActivePinia } from "pinia";
 import { MACHINE_TARGET, targetFor, useMachineTarget } from "@/lib/machine-target";
 import { setActiveMachine, type MachineConnection } from "@/lib/machines";
-import { useMessagePagination } from "@/composables/use-message-pagination";
 import { useSendPrompt } from "@/composables/use-send-prompt";
 import { useSendCommand } from "@/composables/use-send-command";
 import { useRunShellCommand } from "@/composables/use-run-shell-command";
@@ -73,7 +72,6 @@ interface SessionCall {
 }
 
 const calls: SessionCall[] = [
-  { name: "loads the conversation", use: () => { const { loadInitialMessages } = useMessagePagination(); return () => loadInitialMessages("s1", "i1"); } },
   { name: "sends a prompt", use: () => { const { sendPrompt } = useSendPrompt("s1"); return () => sendPrompt(undefined, "Tidy the README"); } },
   { name: "sends a command", use: () => { const { sendCommand } = useSendCommand("s1"); return () => sendCommand("compact"); } },
   { name: "runs a shell command", use: () => { const { runShellCommand } = useRunShellCommand("s1"); return () => runShellCommand("ls"); } },

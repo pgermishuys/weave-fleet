@@ -338,25 +338,6 @@ watch(
   { immediate: true },
 );
 
-if (typeof window !== "undefined") {
-  window.addEventListener("weave:session-state-changed", (event: Event) => {
-    const customEvent = event as CustomEvent<{ sessionId?: string; patch?: { retentionStatus?: string | null; lifecycleStatus?: string | null } }>;
-    if (customEvent.detail?.sessionId !== props.sessionId) {
-      return;
-    }
-
-    const retentionStatus = customEvent.detail.patch?.retentionStatus;
-    if (retentionStatus === "archived") {
-      localDisabledOverride.value = true;
-      return;
-    }
-
-    if (retentionStatus === "active" && canSend.value) {
-      localDisabledOverride.value = null;
-    }
-  });
-}
-
 function syncDisabledStateFromPage(): void {
   if (typeof document === "undefined") {
     return;
