@@ -147,6 +147,9 @@ public sealed class FakeHarnessSession : IHarnessSession
     /// <summary>When true, answering or rejecting a question throws <see cref="NotSupportedException"/>.</summary>
     public bool QuestionsNotSupported { get; set; }
 
+    /// <summary>When true, answering or rejecting a question throws <see cref="KeyNotFoundException"/>: none waits.</summary>
+    public bool QuestionsUnknown { get; set; }
+
     /// <summary>The questions answered, in order, with their answers.</summary>
     public List<(string RequestId, IReadOnlyList<IReadOnlyList<string>> Answers)> AnsweredQuestions { get; } = [];
 
@@ -157,6 +160,8 @@ public sealed class FakeHarnessSession : IHarnessSession
     {
         if (QuestionsNotSupported)
             throw new NotSupportedException("This harness can't answer questions.");
+        if (QuestionsUnknown)
+            throw new KeyNotFoundException(requestId);
         AnsweredQuestions.Add((requestId, answers));
         return Task.CompletedTask;
     }
@@ -165,6 +170,8 @@ public sealed class FakeHarnessSession : IHarnessSession
     {
         if (QuestionsNotSupported)
             throw new NotSupportedException("This harness can't reject questions.");
+        if (QuestionsUnknown)
+            throw new KeyNotFoundException(requestId);
         RejectedQuestions.Add(requestId);
         return Task.CompletedTask;
     }

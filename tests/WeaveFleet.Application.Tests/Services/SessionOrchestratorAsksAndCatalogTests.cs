@@ -81,6 +81,16 @@ public sealed class SessionOrchestratorAsksAndCatalogTests : IAsyncDisposable
     }
 
     [Fact]
+    public async Task a_question_the_harness_does_not_have_is_not_found()
+    {
+        _running.QuestionsUnknown = true;
+        var sut = Build();
+
+        (await sut.AnswerQuestionAsync(SessionId, "que_gone", [["Yes"]])).Error.Code.ShouldBe("QuestionRequest.NotFound");
+        (await sut.RejectQuestionAsync(SessionId, "que_gone")).Error.Code.ShouldBe("QuestionRequest.NotFound");
+    }
+
+    [Fact]
     public async Task questions_on_a_missing_session_are_not_found()
     {
         var sut = Build();
