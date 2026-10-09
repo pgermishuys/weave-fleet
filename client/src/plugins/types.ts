@@ -1,7 +1,4 @@
-import type { AnyRoute } from "@tanstack/router-core";
-import type { RouteOptions } from "@tanstack/vue-router";
-import type { Component, VNodeChild } from "vue";
-import type { ContextSource } from "@/integrations/types";
+import type { Component } from "vue";
 
 export type FleetPluginTrustLevel = "built-in";
 
@@ -45,30 +42,6 @@ export interface FleetPluginSidebarPanel {
   order?: number;
 }
 
-type TanStackPluginRouteDefinition = RouteOptions<
-  unknown,
-  AnyRoute,
-  string,
-  string,
-  string,
-  string,
-  unknown,
-  Record<string, string>,
-  Record<string, never>,
-  undefined,
-  Record<string, never>,
-  unknown,
-  unknown,
-  unknown,
-  unknown,
-  undefined
->;
-
-export type FleetPluginRoute = TanStackPluginRouteDefinition & {
-  pluginId: string;
-  viewId?: FleetPluginViewId;
-};
-
 export interface FleetPluginSettingsSection {
   id: string;
   title: string;
@@ -83,62 +56,14 @@ export interface FleetPluginConfigPage {
   icon?: Component;
 }
 
-export interface FleetPluginStartupHook {
-  id: string;
-  component: Component;
-  order?: number;
-}
-
-export interface FleetPluginContextResolver {
-  id: string;
-  resolveContext: (url: string) => Promise<ContextSource | null>;
-}
-
-export interface FleetPluginSessionSourceKey {
-  providerId: string;
-  sourceType: string;
-}
-
-export interface FleetPluginSessionSourceFormProps {
-  providerId: string;
-  sourceType: string;
-}
-
-export interface FleetPluginSessionSourceContribution {
-  id: string;
-  sourceKey: FleetPluginSessionSourceKey;
-  label?: string;
-  description?: string;
-  icon?: Component;
-  order?: number;
-  formComponent?: Component;
-}
-
 export interface FleetPluginContributions {
   sidebarItems?: readonly FleetPluginSidebarItem[];
   sidebarPanels?: readonly FleetPluginSidebarPanel[];
-  routes?: readonly FleetPluginRoute[];
   settingsSections?: readonly FleetPluginSettingsSection[];
   configPage?: FleetPluginConfigPage;
-  startupHooks?: readonly FleetPluginStartupHook[];
-  contextResolvers?: readonly FleetPluginContextResolver[];
-  sessionSources?: readonly FleetPluginSessionSourceContribution[];
 }
 
 export interface FleetPluginManifest {
   descriptor: FleetPluginDescriptor;
   contributions?: FleetPluginContributions;
 }
-
-export type FleetBuiltInPluginModule = {
-  readonly manifest: FleetPluginManifest;
-};
-
-export interface FleetPluginRenderProps {
-  descriptor: FleetPluginDescriptor;
-  status?: FleetPluginStatus;
-}
-
-export type FleetPluginRenderable =
-  | VNodeChild
-  | Component;

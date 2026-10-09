@@ -37,7 +37,7 @@ const configPage = computed(() => {
     return undefined;
   }
 
-  return getConfigPage(pluginId.value, pluginRuntime.manifests.value);
+  return getConfigPage(pluginId.value);
 });
 
 const descriptor = computed(() => manifest.value?.descriptor);
