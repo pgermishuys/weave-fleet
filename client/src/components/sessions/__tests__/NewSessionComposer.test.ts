@@ -19,6 +19,8 @@ import { useWorkspaceUiStore } from "@/stores/workspace-ui";
 import { useSettingsNav } from "@/composables/use-settings-nav";
 import { useAppShellStore } from "@/stores/app-shell";
 import { useHarnessSetupStore } from "@/stores/harness-setup";
+import githubPluginManifest from "@/plugins/builtin/github";
+import { clearPlugins, registerPlugin } from "@/plugins/registry";
 
 const mocks = vi.hoisted(() => ({
   navigate: vi.fn(),
@@ -275,6 +277,8 @@ function lastCreateCall(): [string | undefined, Record<string, unknown>] {
 
 beforeEach(() => {
   localStorage.clear();
+  clearPlugins();
+  registerPlugin(githubPluginManifest);
   // Sent prompts are kept per session id outside Pinia, and every test creates session-1.
   clearSentPrompts("session-1");
   mocks.navigate.mockReset().mockResolvedValue(undefined);
@@ -1462,6 +1466,20 @@ describe("NewSessionComposer", () => {
 
       await inDocument().get("[data-testid='new-session-clone-repository']").setValue("garden");
       expect(inDocument().findAll(".ns-folder-suggestion").map((button) => button.text())).toEqual(["pgermishuys/garden-notes"]);
+    });
+
+    it("suggests nothing when no plugin contributes a repository source", async () => {
+      clearPlugins();
+      gitHubRepos.value = [{ id: 2, full_name: "pgermishuys/weave-website", name: "weave-website" }];
+      const view = await mountComposer();
+
+      await openFolderMenu(view);
+      await folderOption("Clone a repository").trigger("click");
+      await flushPromises();
+
+      expect(mocks.refreshGitHubRepos).not.toHaveBeenCalled();
+      expect(inDocument().findAll(".ns-folder-suggestion")).toHaveLength(0);
+      expect(inDocument().find("[data-testid='new-session-clone-repository']").exists()).toBe(true);
     });
 
     it("isn't offered with a GitHub issue attached", async () => {

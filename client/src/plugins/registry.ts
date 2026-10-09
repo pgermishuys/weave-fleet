@@ -1,7 +1,9 @@
 import { defineContributionPoint } from "@/lib/contributions";
 import type {
+  FleetPluginBoardSource,
   FleetPluginConfigPage,
   FleetPluginManifest,
+  FleetPluginRepositorySource,
   FleetPluginSettingsSection,
   FleetPluginSidebarItem,
   FleetPluginSidebarPanel,
@@ -40,6 +42,16 @@ export const configPages = defineContributionPoint<RegisteredConfigPage>({
   idOf: (page) => page.pluginId,
 });
 
+export const repositorySources = defineContributionPoint<FleetPluginRepositorySource>({
+  name: "plugin repository sources",
+  idOf: (source) => source.id,
+});
+
+export const boardSources = defineContributionPoint<FleetPluginBoardSource>({
+  name: "plugin board sources",
+  idOf: (source) => source.id,
+});
+
 const withPluginId = <T extends object>(pluginId: string, items: readonly T[] | undefined) =>
   (items ?? []).map((item) => ({ ...item, pluginId }));
 
@@ -57,6 +69,8 @@ export function registerPlugin(manifest: FleetPluginManifest): void {
   if (contributions?.configPage) {
     configPages.contribute(pluginId, withPluginId(pluginId, [contributions.configPage]));
   }
+  repositorySources.contribute(pluginId, contributions?.repositorySources ?? []);
+  boardSources.contribute(pluginId, contributions?.boardSources ?? []);
 }
 
 export function registerPlugins(manifests: readonly FleetPluginManifest[]): void {
@@ -66,13 +80,13 @@ export function registerPlugins(manifests: readonly FleetPluginManifest[]): void
 }
 
 function removePlugin(pluginId: string): void {
-  for (const point of [sidebarItems, sidebarPanels, settingsSections, configPages]) {
+  for (const point of [sidebarItems, sidebarPanels, settingsSections, configPages, repositorySources, boardSources]) {
     point.removeByOwner(pluginId);
   }
 }
 
 export function clearPlugins(): void {
-  for (const point of [pluginManifests, sidebarItems, sidebarPanels, settingsSections, configPages]) {
+  for (const point of [pluginManifests, sidebarItems, sidebarPanels, settingsSections, configPages, repositorySources, boardSources]) {
     point.clear();
   }
 }

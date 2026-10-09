@@ -2,7 +2,9 @@ import { computed, defineComponent, h } from "vue";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { usePluginRuntime } from "@/plugins/composable";
 import {
+  getBoardSources,
   getConfigPage,
+  getRepositorySources,
   getSettingsSections,
   getSidebarPanels,
   getSidebarViews,
@@ -112,6 +114,31 @@ describe("plugin runtime", () => {
     runtime.registerPlugin(manifest("late", { sidebarPanels: [{ viewId: "late", component: Stub("Late") }] }));
 
     expect(viewIds.value).toEqual(["late"]);
+  });
+
+  it("reads repository sources and board sources that plugins contribute, and drops them with the plugin", () => {
+    runtime.registerPlugin(manifest("repos", {
+      repositorySources: [{ id: "repos", icon: Stub("Icon"), useRepositories: () => ({ repos: computed(() => []), refresh: async () => {} }) }],
+      boardSources: [{
+        id: "repos",
+        description: "From repos",
+        emptyHint: "Nothing yet",
+        useRepositories: () => ({
+          repositories: computed(() => []),
+          error: computed(() => null),
+          isLoading: computed(() => false),
+          refresh: async () => {},
+        }),
+      }],
+    }));
+
+    expect(getRepositorySources().map((source) => source.id)).toEqual(["repos"]);
+    expect(getBoardSources().map((source) => source.description)).toEqual(["From repos"]);
+
+    runtime.registerPlugin(manifest("repos"));
+
+    expect(getRepositorySources()).toEqual([]);
+    expect(getBoardSources()).toEqual([]);
   });
 
   it("lets a plugin register without any contributions", () => {

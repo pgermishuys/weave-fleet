@@ -85,6 +85,8 @@ vi.mock("@/plugins/builtin/github/composables/use-github-bookmarks", async () =>
 });
 
 import KanbanBoard from "@/components/board/KanbanBoard.vue";
+import githubPluginManifest from "@/plugins/builtin/github";
+import { clearPlugins, registerPlugin } from "@/plugins/registry";
 import { useBoardStore } from "@/stores/board";
 import { useSidebarStore } from "@/stores/sidebar";
 import { nextTick } from "vue";
@@ -321,6 +323,8 @@ async function dragCardToLane(wrapper: VueWrapper, sourceColumnIndex: number, ta
 
 describe("KanbanBoard", () => {
   beforeEach(() => {
+    clearPlugins();
+    registerPlugin(githubPluginManifest);
     mockState = {
       boards: [createBoardFixture()],
       lanes: [createLaneFixture({ id: "lane-backlog", name: "Backlog", isInbox: true })],

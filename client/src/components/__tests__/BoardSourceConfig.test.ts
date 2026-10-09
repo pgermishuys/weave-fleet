@@ -45,6 +45,8 @@ vi.mock("@/plugins/builtin/github/composables/use-github-bookmarks", async () =>
 });
 
 import BoardSourceConfig from "@/components/board/BoardSourceConfig.vue";
+import githubPluginManifest from "@/plugins/builtin/github";
+import { clearPlugins, registerPlugin } from "@/plugins/registry";
 
 let mockSources: BoardSource[];
 
@@ -67,6 +69,8 @@ function createSourceFixture(overrides: Partial<BoardSource> = {}): BoardSource 
 
 describe("BoardSourceConfig", () => {
   beforeEach(() => {
+    clearPlugins();
+    registerPlugin(githubPluginManifest);
     mockSources = [];
 
     boardApiMocks.listBoardSources.mockReset();
@@ -155,6 +159,20 @@ describe("BoardSourceConfig", () => {
     });
 
     expect(wrapper.text()).toContain("Assignee: @me");
+  });
+
+  it("offers no way to add a source when no plugin contributes a board source", async () => {
+    clearPlugins();
+    mockSources.push(createSourceFixture());
+    const wrapper = mount(BoardSourceConfig, { props: { boardId: "board-1" } });
+    await flushPromises();
+
+    expect(wrapper.find('[data-testid="board-source-form"]').exists()).toBe(false);
+    expect(wrapper.text()).not.toContain("GitHub");
+    expect(wrapper.text()).not.toContain("Bookmark a repository");
+    // What is already configured still lists, and can be removed.
+    expect(wrapper.findAll('[data-testid="board-source-item"]')).toHaveLength(1);
+    expect(wrapper.find('[data-testid="board-source-remove"]').exists()).toBe(true);
   });
 
   it("lists the bookmarked repositories by name in the repository select", async () => {

@@ -1,5 +1,6 @@
 import { Github } from "lucide-vue-next";
 import type { FleetPluginManifest } from "@/plugins/types";
+import { githubBoardSource, githubRepositorySource } from "./contributions";
 import GitHubPanel from "./GitHubPanel.vue";
 import GitHubSettings from "./GitHubSettings.vue";
 
@@ -33,6 +34,8 @@ export const githubPluginManifest = {
       component: GitHubSettings,
       icon: Github,
     },
+    repositorySources: [githubRepositorySource],
+    boardSources: [githubBoardSource],
   },
 } as const satisfies FleetPluginManifest;
 

@@ -1,5 +1,8 @@
+import type { FleetPluginBoardSource, FleetPluginRepositorySource } from "./types";
 import {
+  boardSources,
   configPages,
+  repositorySources,
   settingsSections,
   sidebarItems,
   sidebarPanels,
@@ -33,4 +36,12 @@ export function getSettingsSections(): readonly RegisteredSettingsSection[] {
 
 export function getConfigPage(pluginId: string): RegisteredConfigPage | undefined {
   return configPages.get(pluginId);
+}
+
+export function getRepositorySources(): readonly FleetPluginRepositorySource[] {
+  return repositorySources.items.value;
+}
+
+export function getBoardSources(): readonly FleetPluginBoardSource[] {
+  return boardSources.items.value;
 }
