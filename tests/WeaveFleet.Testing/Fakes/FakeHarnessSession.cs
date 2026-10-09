@@ -193,6 +193,15 @@ public sealed class FakeHarnessSession : IHarnessSession
     public Task<IOffTheRecordConversation?> StartOffTheRecordAsync(CancellationToken ct)
         => Task.FromResult(OffTheRecordConversation);
 
+    /// <summary>The policies <see cref="ApplyPermissionsAsync"/> was given, in order.</summary>
+    public List<PermissionPolicy> AppliedPermissions { get; } = [];
+
+    public Task ApplyPermissionsAsync(PermissionPolicy policy, CancellationToken ct)
+    {
+        AppliedPermissions.Add(policy);
+        return Task.CompletedTask;
+    }
+
     /// <summary>What <see cref="ForkConversationAsync"/> returns; null (the default) means "can't".</summary>
     public ConversationFork? ConversationFork { get; set; }
 
