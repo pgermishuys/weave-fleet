@@ -4,6 +4,7 @@ using System.Text.Json;
 using System.Text.Json.Nodes;
 using System.Text.RegularExpressions;
 using WeaveFleet.Application.Canvases;
+using WeaveFleet.Application.Git;
 using WeaveFleet.Application.Pages;
 using WeaveFleet.Application.Services;
 using WeaveFleet.Domain.Repositories;

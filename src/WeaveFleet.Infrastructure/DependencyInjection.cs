@@ -9,6 +9,7 @@ using WeaveFleet.Application.Canvases;
 using WeaveFleet.Application.Configuration;
 using WeaveFleet.Application.Data;
 using WeaveFleet.Application.Events;
+using WeaveFleet.Application.Git;
 using WeaveFleet.Application.Harnesses;
 using WeaveFleet.Application.Pages;
 using WeaveFleet.Application.Plugins;

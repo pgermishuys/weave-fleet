@@ -5,7 +5,7 @@ using System.Text.Json;
 using Dapper;
 using Microsoft.Extensions.DependencyInjection;
 using WeaveFleet.Application.Data;
-using WeaveFleet.Application.Services;
+using WeaveFleet.Application.Git;
 using WeaveFleet.Api.Tests.Infrastructure;
 
 namespace WeaveFleet.Api.Tests.Endpoints;

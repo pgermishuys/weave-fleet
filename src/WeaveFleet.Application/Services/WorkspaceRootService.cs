@@ -1,3 +1,4 @@
+using WeaveFleet.Application.Git;
 using WeaveFleet.Application.Services.Worktrees;
 using WeaveFleet.Domain.Common;
 using WeaveFleet.Domain.Entities;

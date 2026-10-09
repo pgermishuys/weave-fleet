@@ -1,4 +1,4 @@
-using WeaveFleet.Application.Services;
+using WeaveFleet.Application.Git;
 using WeaveFleet.Domain.Repositories;
 
 namespace WeaveFleet.Application.Memory;

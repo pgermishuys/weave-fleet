@@ -1,7 +1,7 @@
 using System.Diagnostics;
 using System.Globalization;
 
-namespace WeaveFleet.Application.Services;
+namespace WeaveFleet.Application.Git;
 
 /// <summary>
 /// Runs git the way Fleet does: no shell, never waiting on a prompt nobody can see, never for longer than the caller

@@ -1,6 +1,7 @@
 using System.Collections.Concurrent;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging;
+using WeaveFleet.Application.Git;
 using WeaveFleet.Domain.Common;
 
 namespace WeaveFleet.Application.Services;

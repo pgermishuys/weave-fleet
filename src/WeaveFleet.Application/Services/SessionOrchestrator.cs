@@ -10,6 +10,7 @@ using WeaveFleet.Application.Configuration;
 using WeaveFleet.Application.Diagnostics;
 using WeaveFleet.Application.DTOs;
 using WeaveFleet.Application.Events;
+using WeaveFleet.Application.Git;
 using WeaveFleet.Application.Harnesses;
 using WeaveFleet.Application.Recaps;
 using WeaveFleet.Application.Sessions;
