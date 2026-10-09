@@ -40,7 +40,9 @@ import { diagLog } from "@/lib/message-diagnostics";
 import { useSessionsStore } from "@/stores/sessions";
 import { useMachinesStore } from "@/stores/machines";
 import { dispatchSessionUpsert } from "@/lib/session-sync";
-import { useCanvasesStore } from "@/stores/canvases";
+import { hasRenderedView, useCanvasesStore } from "@/stores/canvases";
+import { useFileLinksStore } from "@/stores/file-links";
+import { useGoToFileStore } from "@/stores/go-to-file";
 import { focusServerCanvas } from "@/composables/use-server-canvases";
 import { useAgentBrowser } from "@/composables/use-agent-browser";
 import { mergeMessagesByTimestamp } from "@/lib/merge-messages";
@@ -133,6 +135,8 @@ const problemReport = useProblemReportStore();
 const workflowRun = computed(() => workflowsStore.runForSession(props.sessionId));
 const { sessions } = storeToRefs(sessionsStore);
 const canvasesStore = useCanvasesStore();
+const goToFile = useGoToFileStore();
+const fileLinks = useFileLinksStore();
 /** Fleet's built-in skills: a row that loaded one offers Improve. Loaded once, the first time a session shows. */
 const builtInSkills = useBuiltInSkillsStore();
 const themeStore = useThemeStore();
@@ -640,6 +644,10 @@ watch(
 );
 
 const isStreaming = computed(() => isStreamWorking(sessionStatus.value));
+// Paths a message named that weren't files are asked about again when a turn ends: the agent may have made them.
+watch(isStreaming, (working) => {
+  if (!working) fileLinks.forgetMissing(props.sessionId);
+});
 
 /** The thinking block the model is writing right now: the last part of the newest message, while the turn runs. */
 const liveReasoningPartId = computed<string | null>(() => {
@@ -797,6 +805,14 @@ function handleJumpToLatest(): void {
 /** A session chip in a message of yours: opens the session it names. */
 function openReferencedSession(sessionId: string): void {
   void router.navigate({ to: "/sessions/$id", params: { id: sessionId }, search: { instanceId: undefined, parentSessionId: undefined } });
+}
+
+/** A file a message names opens in a tab beside the conversation; opened at a line, the editor takes the keyboard there. */
+function openReferencedFile(path: string, line: number | undefined, keep: boolean): void {
+  if (line) goToFile.focusOnOpen = { sessionId: props.sessionId, path, line };
+  // The line is in the source, so Markdown and HTML show their source rather than the rendered page.
+  canvasesStore.openFile(props.sessionId, path, { keep, view: line && hasRenderedView(path) ? "edit" : undefined });
+  showRightPanel();
 }
 
 /**
@@ -1445,6 +1461,7 @@ function handleImproveSkill(skill: string, toolId: string): void {
           :command="message.command"
           :session-references="message.sessionReferences"
           @open-session="openReferencedSession"
+          @open-file="openReferencedFile"
           @expand-visual="handleExpandVisual"
           @show-canvas="handleShowCanvas"
           @improve-skill="handleImproveSkill"

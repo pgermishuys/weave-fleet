@@ -1912,6 +1912,53 @@ public sealed partial class SessionOrchestrator(
         }
     }
 
+    /// <summary>The most paths one resolve looks at; a reply names far fewer.</summary>
+    public const int MaxResolvedPaths = 200;
+
+    /// <summary>
+    /// The paths that are files in the session's folder, each with its path from the folder. Paths named in a reply
+    /// come here so only real files become links. Relative and absolute paths both work, with either separator;
+    /// anything outside the folder, missing, or not a file is left out.
+    /// </summary>
+    public async Task<Result<IReadOnlyList<ResolvedSessionFile>>> ResolveSessionFilesAsync(
+        string sessionId,
+        IReadOnlyList<string> paths,
+        CancellationToken ct = default)
+    {
+        using var _ = BeginSessionScope(sessionId);
+        var sessionResult = await GetSessionAsync(sessionId);
+        if (sessionResult.IsFailure)
+            return sessionResult.Error;
+
+        var resolved = new List<ResolvedSessionFile>();
+        var sessionDirectory = sessionResult.Value.Directory;
+        if (!Directory.Exists(sessionDirectory))
+            return Result.Success<IReadOnlyList<ResolvedSessionFile>>(resolved);
+
+        var sessionDirectoryFullPath = Path.GetFullPath(sessionDirectory);
+        foreach (var path in paths.Where(p => !string.IsNullOrWhiteSpace(p)).Distinct(StringComparer.Ordinal).Take(MaxResolvedPaths))
+        {
+            ct.ThrowIfCancellationRequested();
+            try
+            {
+                var normalizedPath = path.Replace('\\', Path.DirectorySeparatorChar).Replace('/', Path.DirectorySeparatorChar);
+                var targetFilePath = Path.GetFullPath(Path.Combine(sessionDirectoryFullPath, normalizedPath));
+                if (!IsSameOrChildPath(targetFilePath, sessionDirectoryFullPath) || !File.Exists(targetFilePath))
+                    continue;
+
+                var relativePath = Path.GetRelativePath(sessionDirectoryFullPath, targetFilePath)
+                    .Replace(Path.DirectorySeparatorChar, '/');
+                resolved.Add(new ResolvedSessionFile(path, relativePath));
+            }
+            catch (Exception ex) when (ex is ArgumentException or NotSupportedException or PathTooLongException)
+            {
+                // Not a path this system can read, so not a file in the folder.
+            }
+        }
+
+        return Result.Success<IReadOnlyList<ResolvedSessionFile>>(resolved);
+    }
+
     // ── ISessionActivator ──────────────────────────────────────────────────────
 
     /// <inheritdoc />
@@ -2514,6 +2561,10 @@ public sealed record BrowseDirectoryResult(IReadOnlyList<BrowseEntry> Entries, s
 
 /// <summary>Represents a file or directory entry in a browsed directory.</summary>
 public sealed record BrowseEntry(string Name, string RelativePath, bool IsDirectory);
+
+/// <summary>A path as a reply named it, and the file it is in the session's folder.</summary>
+/// <param name="RelativePath">From the session's folder, with <c>/</c> between names.</param>
+public sealed record ResolvedSessionFile(string Path, string RelativePath);
 
 /// <summary>Result of reading a session file.</summary>
 /// <param name="Hash">SHA-256 of the file's bytes as lowercase hex; null when the file was too large to read.</param>

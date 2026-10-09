@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { computed, ref } from "vue";
+import { computed, ref, watch } from "vue";
 import { User, Bot, Copy, ChevronRight } from "lucide-vue-next";
 import ToolCard from "@/components/session/ToolCard.vue";
 import ToolScreenshot from "@/components/session/ToolScreenshot.vue";
@@ -13,10 +13,13 @@ import type { SlashCommand } from "@/lib/domain-events";
 import type { VisualPayload } from "@/lib/visual-payload";
 import { useQuestionAnswer } from "@/composables/use-question-answer";
 import { useRelativeTime } from "@/composables/use-relative-time";
+import type { FileReferenceEnv } from "@/lib/file-references";
 import { formatRelativeTime, formatAbsoluteTimestamp } from "@/lib/format-utils";
 import { sharedMarkdownRenderer } from "@/lib/markdown-renderer";
 import { withSessionReferenceChips, type SessionReference } from "@/lib/session-references";
 import { formatSlashCommand } from "@/lib/slash-command-utils";
+import { useMachineTarget } from "@/lib/machine-target";
+import { useFileLinksStore } from "@/stores/file-links";
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
 
 interface ToolCardDiffLine {
@@ -77,6 +80,8 @@ const emit = defineEmits<{
   "improve-skill": [skill: string, toolId: string];
   /** A session chip was clicked. */
   "open-session": [sessionId: string];
+  /** A file the message names was clicked: its path from the session's folder, its line, and whether to keep the tab. */
+  "open-file": [path: string, line: number | undefined, keep: boolean];
 }>();
 
 const lightboxUrl = ref<string | null>(null);
@@ -112,17 +117,50 @@ function makeDismissHandler(callId: string) {
 
 const markdownRenderer = sharedMarkdownRenderer();
 
-const bodyHtml = computed(() => {
-  const html = markdownRenderer.render(props.body);
-  return props.sessionReferences?.length ? withSessionReferenceChips(html, props.sessionReferences) : html;
-});
+const fileLinks = useFileLinksStore();
+const machine = useMachineTarget();
 
-/** A click on a session chip opens the session in the app, not as a page load. */
+const rendered = computed(() => {
+  const sessionId = props.sessionId;
+  const env: FileReferenceEnv = sessionId ? { fileRefs: [], resolveFileRef: (path) => fileLinks.resolve(sessionId, path) } : {};
+  const html = markdownRenderer.render(props.body, env);
+  return {
+    html: props.sessionReferences?.length ? withSessionReferenceChips(html, props.sessionReferences) : html,
+    fileRefs: env.fileRefs ?? [],
+  };
+});
+const bodyHtml = computed(() => rendered.value.html);
+
+// The paths the message names become links once the server says they're files in the session's folder.
+watch(() => rendered.value.fileRefs, (paths) => {
+  if (props.sessionId && paths.length > 0) fileLinks.request(machine, props.sessionId, paths);
+}, { immediate: true });
+
+/** A click on a file or a session chip opens it in the app, not as a page load. */
 function handleBodyClick(event: MouseEvent): void {
+  const file = (event.target as Element | null)?.closest?.("[data-file-path]");
+  if (file) {
+    openFile(event, file);
+    return;
+  }
   const chip = (event.target as Element | null)?.closest?.("[data-session-ref]");
   if (!chip || event.metaKey || event.ctrlKey || event.shiftKey || event.button !== 0) return;
   event.preventDefault();
   emit("open-session", chip.getAttribute("data-session-ref") ?? "");
+}
+
+function handleBodyKeydown(event: KeyboardEvent): void {
+  const file = event.key === "Enter" ? (event.target as Element | null)?.closest?.("[data-file-path]") : null;
+  if (file) openFile(event, file);
+}
+
+/** A file the message names opens in a tab: a click is a preview, Ctrl/Cmd-click keeps it. A drag that selected text isn't a click. */
+function openFile(event: MouseEvent | KeyboardEvent, file: Element): void {
+  if (event.shiftKey || event.altKey || ("button" in event && event.button !== 0)) return;
+  if (!(window.getSelection()?.isCollapsed ?? true)) return;
+  event.preventDefault();
+  const line = Number(file.getAttribute("data-file-line")) || undefined;
+  emit("open-file", file.getAttribute("data-file-path") ?? "", line, event.metaKey || event.ctrlKey);
 }
 
 const commandLine = computed(() => props.command ? formatSlashCommand(props.command) : "");
@@ -226,6 +264,7 @@ function handleExpandVisual(payload: VisualPayload): void {
             v-else-if="body"
             class="msg-body__content md-content"
             @click="handleBodyClick"
+            @keydown="handleBodyKeydown"
             v-html="bodyHtml"
           />
 
@@ -488,6 +527,20 @@ function handleExpandVisual(payload: VisualPayload): void {
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
+}
+
+/* A file the message names: a click opens it in a tab, at the line. */
+.msg-body__content :deep(code.file-ref) {
+  cursor: pointer;
+  text-decoration: underline dotted color-mix(in srgb, var(--accent) 70%, transparent);
+  text-underline-offset: 3px;
+}
+
+.msg-body__content :deep(code.file-ref:hover),
+.msg-body__content :deep(code.file-ref:focus-visible) {
+  color: var(--accent);
+  background: var(--accent-dim);
+  text-decoration-style: solid;
 }
 
 /* A slash command shows as you sent it; what it expanded to stays behind "Show prompt". */
