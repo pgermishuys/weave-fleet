@@ -7,6 +7,7 @@ using WeaveFleet.Application.Harnesses;
 using WeaveFleet.Application.Memory;
 using WeaveFleet.Application.Services;
 using WeaveFleet.Application.SessionSources;
+using WeaveFleet.Application.Terminals;
 using WeaveFleet.Application.Users;
 using WeaveFleet.Application.Workspaces;
 using WeaveFleet.Domain.Harnesses;
@@ -57,6 +58,8 @@ public sealed class SessionOrchestratorBuilder
     private GitDiffService? _gitDiffService;
     private ISessionAppCleanup? _sessionApps;
     private ISessionScreenshotStore? _sessionScreenshots;
+    private ISessionTerminalCleanup? _sessionTerminals;
+    private WeaveFleet.Application.Pages.IPageStore? _sessionPages;
     private AgentMemoryService? _agentMemory;
     private readonly List<ISessionSourceProvider> _additionalSourceProviders = [];
 
@@ -88,6 +91,18 @@ public sealed class SessionOrchestratorBuilder
     public SessionOrchestratorBuilder WithSessionApps(ISessionAppCleanup sessionApps)
     {
         _sessionApps = sessionApps;
+        return this;
+    }
+
+    public SessionOrchestratorBuilder WithSessionTerminals(ISessionTerminalCleanup sessionTerminals)
+    {
+        _sessionTerminals = sessionTerminals;
+        return this;
+    }
+
+    public SessionOrchestratorBuilder WithSessionPages(WeaveFleet.Application.Pages.IPageStore sessionPages)
+    {
+        _sessionPages = sessionPages;
         return this;
     }
 
@@ -173,6 +188,8 @@ public sealed class SessionOrchestratorBuilder
             messageRepository: MessageRepository,
             harnessProfiles: HarnessProfileRepository,
             sessionScreenshots: _sessionScreenshots,
+            sessionTerminals: _sessionTerminals,
+            sessionPages: _sessionPages,
             agentMemory: _agentMemory,
             harnessAvailability: new HarnessAvailabilityCache(
                 HarnessRegistry, TimeProvider.System, NullLogger<HarnessAvailabilityCache>.Instance));
