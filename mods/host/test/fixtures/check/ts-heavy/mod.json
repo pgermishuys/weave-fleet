@@ -1,0 +1,6 @@
+{
+  "name": "ts-heavy",
+  "version": "0.0.1",
+  "description": "Every TypeScript form the strip must blank",
+  "hooks": "mod.ts"
+}
