@@ -109,7 +109,7 @@ describe("categories", () => {
     question: ["question"],
     plan: ["todowrite", "TodoWrite", "todoread"],
     skill: ["skill"],
-    fleet: ["fleet_app_start", "fleet_message", "fleet_memory_save", "fleet_canvas_open"],
+    fleet: ["fleet_app_start", "fleet_message", "fleet_memory_save", "fleet_mod_write", "fleet_mod_list", "fleet_canvas_open"],
     other: ["frobnicate", "mcp__acme__lookup_order", ""],
   };
 
@@ -197,7 +197,8 @@ describe("same answers as the sites it will replace", () => {
   const known = [
     "bash", "shell", "read", "edit", "write", "glob", "grep", "fleet_app_start", "fleet_browser_open", "fleet_page_show",
     "fleet_walkthrough_show", "fleet_browser_screenshot", "fleet_browser_read", "fleet_browser_act", "fleet_memory_save",
-    "fleet_memory_forget", "webfetch", "skill", "websearch", "subagent", "question", "execute",
+    "fleet_memory_forget", "fleet_mod_write", "fleet_mod_check", "fleet_mod_reload", "fleet_mod_test", "fleet_mod_keep",
+    "fleet_mod_list", "webfetch", "skill", "websearch", "subagent", "question", "execute",
   ];
 
   it("labels every known tool as tool-labels does", () => {
@@ -228,7 +229,8 @@ describe("same answers as the sites it will replace", () => {
       "read", "write", "edit", "glob", "grep", "skill", "bash", "task", "webfetch", "question", "fleet_app_start",
       "fleet_browser_open", "fleet_browser_screenshot", "fleet_browser_read", "fleet_browser_act", "fleet_page_show",
       "fleet_walkthrough_show", "fleet_message", "fleet_session_read", "fleet_machine_list", "fleet_session_start",
-      "fleet_memory_save", "fleet_memory_forget", "fleet_step_done", "shell", "subagent", "websearch", "execute",
+      "fleet_memory_save", "fleet_memory_forget", "fleet_mod_write", "fleet_mod_check", "fleet_mod_reload", "fleet_mod_test",
+      "fleet_mod_keep", "fleet_mod_list", "fleet_step_done", "shell", "subagent", "websearch", "execute",
     ];
     for (const name of iconKnown) {
       expect([name, getTool(name).icon]).toEqual([name, getToolIcon(name)]);
