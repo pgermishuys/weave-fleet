@@ -1,13 +1,7 @@
 <script setup lang="ts">
 import { computed, shallowRef, watch } from "vue";
 import { LoaderCircle } from "lucide-vue-next";
-import {
-  Dialog,
-  DialogContent,
-  DialogDescription,
-  DialogHeader,
-  DialogTitle,
-} from "@/components/ui/dialog";
+import ModDialogShell from "@/components/mods/review/ModDialogShell.vue";
 import type { ModFile } from "@/lib/mods/kept";
 import { sharedMarkdownRenderer } from "@/lib/markdown-renderer";
 
@@ -20,6 +14,8 @@ const props = defineProps<{
   /** E.g. "test-chips · draft" or "test-chips · v2". */
   title: string;
   load: () => Promise<ModFile[]>;
+  /** On the phone it's a sheet. */
+  phone?: boolean;
 }>();
 
 defineEmits<{ "update:open": [value: boolean] }>();
@@ -69,82 +65,73 @@ watch(() => props.open, async (isOpen) => {
 </script>
 
 <template>
-  <Dialog
+  <ModDialogShell
     :open="open"
+    :label="title"
+    description="Read-only. This is exactly what runs."
+    :phone="phone"
+    content-class="mod-code-dialog max-w-3xl"
+    testid="mod-code-dialog"
     @update:open="(value) => $emit('update:open', value)"
   >
-    <DialogContent
-      class="mod-code-dialog flex max-h-[88dvh] w-[calc(100vw-1rem)] max-w-3xl flex-col gap-3 overflow-hidden"
-      data-testid="mod-code-dialog"
+    <div
+      v-if="!files && !error"
+      class="flex items-center gap-2 text-sm text-muted"
+      data-testid="mod-code-loading"
     >
-      <DialogHeader>
-        <DialogTitle class="font-mono">
-          {{ title }}
-        </DialogTitle>
-        <DialogDescription>
-          Read-only. This is exactly what runs.
-        </DialogDescription>
-      </DialogHeader>
+      <LoaderCircle
+        class="h-4 w-4 animate-spin"
+        aria-hidden="true"
+      />
+      Loading the code…
+    </div>
 
+    <p
+      v-else-if="error"
+      class="text-sm text-error"
+      role="alert"
+      data-testid="mod-code-error"
+    >
+      {{ error }}
+    </p>
+
+    <p
+      v-else-if="ordered.length === 0"
+      class="text-sm text-muted"
+      data-testid="mod-code-empty"
+    >
+      This mod has no files yet.
+    </p>
+
+    <template v-else>
       <div
-        v-if="!files && !error"
-        class="flex items-center gap-2 text-sm text-muted"
-        data-testid="mod-code-loading"
+        class="mod-code-dialog__tabs"
+        role="tablist"
+        aria-label="Files"
       >
-        <LoaderCircle
-          class="h-4 w-4 animate-spin"
-          aria-hidden="true"
-        />
-        Loading the code…
-      </div>
-
-      <p
-        v-else-if="error"
-        class="text-sm text-error"
-        role="alert"
-        data-testid="mod-code-error"
-      >
-        {{ error }}
-      </p>
-
-      <p
-        v-else-if="ordered.length === 0"
-        class="text-sm text-muted"
-        data-testid="mod-code-empty"
-      >
-        This mod has no files yet.
-      </p>
-
-      <template v-else>
-        <div
-          class="mod-code-dialog__tabs"
-          role="tablist"
-          aria-label="Files"
+        <button
+          v-for="file in ordered"
+          :key="file.path"
+          type="button"
+          role="tab"
+          class="mod-code-dialog__tab"
+          :aria-selected="file.path === current?.path"
+          data-testid="mod-code-file"
+          @click="selected = file.path"
         >
-          <button
-            v-for="file in ordered"
-            :key="file.path"
-            type="button"
-            role="tab"
-            class="mod-code-dialog__tab"
-            :aria-selected="file.path === current?.path"
-            data-testid="mod-code-file"
-            @click="selected = file.path"
-          >
-            {{ file.path }}
-          </button>
-        </div>
-        <!-- eslint-disable vue/no-v-html -->
-        <div
-          class="mod-code-dialog__body md-content"
-          role="tabpanel"
-          data-testid="mod-code-body"
-          v-html="html"
-        />
-        <!-- eslint-enable vue/no-v-html -->
-      </template>
-    </DialogContent>
-  </Dialog>
+          {{ file.path }}
+        </button>
+      </div>
+      <!-- eslint-disable vue/no-v-html -->
+      <div
+        class="mod-code-dialog__body md-content"
+        role="tabpanel"
+        data-testid="mod-code-body"
+        v-html="html"
+      />
+      <!-- eslint-enable vue/no-v-html -->
+    </template>
+  </ModDialogShell>
 </template>
 
 <style scoped>
@@ -183,8 +170,8 @@ watch(() => props.open, async (isOpen) => {
 
 .mod-code-dialog__body {
   min-width: 0;
-  min-height: 0;
-  overflow: auto;
+  margin-top: 8px;
+  overflow-x: auto;
 }
 
 .mod-code-dialog__body :deep(pre) {

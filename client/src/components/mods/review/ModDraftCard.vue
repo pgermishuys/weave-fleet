@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { computed, shallowRef, watch } from "vue";
 import { LoaderCircle } from "lucide-vue-next";
-import { Button } from "@/components/ui/button";
+import ModActionButton from "@/components/mods/review/ModActionButton.vue";
 import ModCodeDialog from "@/components/mods/review/ModCodeDialog.vue";
 import ModReviewDialog from "@/components/mods/review/ModReviewDialog.vue";
 import ModDraftMark from "@/components/mods/ModDraftMark.vue";
@@ -15,7 +15,7 @@ import { useModsStore } from "@/stores/mods";
  * A draft the agent wrote, in the conversation: where it runs, and the ways to keep it, read it or stop it. The static
  * check runs only when the user asks (Check again, or the review), because each run can start the mod host.
  */
-const props = defineProps<{ draft: ModDraft }>();
+const props = defineProps<{ draft: ModDraft; phone?: boolean }>();
 
 const store = useModsStore();
 const machines = useMachinesStore();
@@ -35,7 +35,7 @@ const problem = computed(() => {
   if (checked.value) return checked.value;
   const found = props.draft.problem;
   if (!found) return null;
-  return { text: `Check: ${found.message}${found.line === undefined ? "" : ` (line ${found.line})`}`, failed: true };
+  return { text: `Check: ${found.message}${found.line == null ? "" : ` (line ${found.line})`}`, failed: true };
 });
 const status = computed(() => {
   if (props.draft.off?.by === "strikes") return "Turned off after three failures";
@@ -77,7 +77,7 @@ async function recheck(): Promise<void> {
     }
     const { error } = checkProblems(report);
     checked.value = error
-      ? { text: `Check: ${error.message}${error.line === undefined ? "" : ` (line ${error.line})`}`, failed: true }
+      ? { text: `Check: ${error.message}${error.line == null ? "" : ` (line ${error.line})`}`, failed: true }
       : { text: "No problems found", failed: false };
   } catch (caught) {
     if (props.draft === snapshot) checked.value = { text: messageOf(caught, "Couldn't check the draft."), failed: false };
@@ -92,6 +92,7 @@ const loadFiles = () => fetchDraftFiles(props.draft.sessionId, props.draft.name,
 <template>
   <div
     class="mod-draft-card"
+    :class="{ 'mod-draft-card--phone': phone }"
     data-testid="mod-draft-card"
   >
     <div
@@ -110,13 +111,15 @@ const loadFiles = () => fetchDraftFiles(props.draft.sessionId, props.draft.name,
           {{ request.note }}
         </p>
       </div>
-      <Button
+      <ModActionButton
+        :phone="phone"
         size="sm"
+        variant="primary"
         data-testid="mod-draft-review"
         @click="reviewOpen = true"
       >
         Review…
-      </Button>
+      </ModActionButton>
     </div>
 
     <div class="mod-draft-card__head">
@@ -167,23 +170,27 @@ const loadFiles = () => fetchDraftFiles(props.draft.sessionId, props.draft.name,
     </p>
 
     <div class="mod-draft-card__actions">
-      <Button
+      <ModActionButton
+        :phone="phone"
         size="sm"
+        variant="primary"
         :disabled="stillWriting"
         data-testid="mod-draft-keep"
         @click="reviewOpen = true"
       >
         Keep…
-      </Button>
-      <Button
+      </ModActionButton>
+      <ModActionButton
+        :phone="phone"
         size="sm"
         variant="outline"
         data-testid="mod-draft-code"
         @click="codeOpen = true"
       >
         Show code
-      </Button>
-      <Button
+      </ModActionButton>
+      <ModActionButton
+        :phone="phone"
         size="sm"
         variant="outline"
         :disabled="toggling"
@@ -196,7 +203,7 @@ const loadFiles = () => fetchDraftFiles(props.draft.sessionId, props.draft.name,
           aria-hidden="true"
         />
         {{ isOff ? "Turn on again" : "Turn off" }}
-      </Button>
+      </ModActionButton>
       <button
         type="button"
         class="mod-draft-card__recheck"
@@ -212,10 +219,12 @@ const loadFiles = () => fetchDraftFiles(props.draft.sessionId, props.draft.name,
       v-model:open="reviewOpen"
       :session-id="draft.sessionId"
       :draft="draft"
+      :phone="phone"
     />
     <ModCodeDialog
       v-model:open="codeOpen"
       :title="`${draft.name} · draft`"
+      :phone="phone"
       :load="loadFiles"
     />
   </div>
@@ -229,7 +238,7 @@ const loadFiles = () => fetchDraftFiles(props.draft.sessionId, props.draft.name,
   margin: 8px 0;
   padding: 10px 12px;
   border: 1px solid var(--border);
-  border-radius: 8px;
+  border-radius: var(--radius-card);
   background: var(--surface, transparent);
   font-size: 13px;
 }
@@ -241,7 +250,7 @@ const loadFiles = () => fetchDraftFiles(props.draft.sessionId, props.draft.name,
   gap: 12px;
   margin: -2px -4px 4px;
   padding: 8px 10px;
-  border-radius: 6px;
+  border-radius: var(--radius-btn);
   background: color-mix(in srgb, var(--accent) 12%, transparent);
 }
 
@@ -312,16 +321,17 @@ const loadFiles = () => fetchDraftFiles(props.draft.sessionId, props.draft.name,
   outline-offset: 1px;
 }
 
-@media (max-width: 480px) {
-  .mod-draft-card__actions > button,
-  .mod-draft-card__request > button {
-    flex: 1 1 100%;
-    min-height: 40px;
-  }
+/* Phone: the buttons stay in one wrapping row, the card stays short. */
+.mod-draft-card--phone .mod-draft-card__actions {
+  gap: 6px;
+}
 
-  .mod-draft-card__request {
-    flex-direction: column;
-    align-items: stretch;
-  }
+.mod-draft-card--phone .mod-draft-card__recheck {
+  min-height: 36px;
+  padding: 0 6px;
+}
+
+.mod-draft-card--phone .mod-draft-card__request {
+  flex-wrap: wrap;
 }
 </style>

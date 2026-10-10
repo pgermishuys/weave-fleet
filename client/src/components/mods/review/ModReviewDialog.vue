@@ -1,15 +1,9 @@
 <script setup lang="ts">
 import { computed, shallowRef, watch } from "vue";
 import { LoaderCircle } from "lucide-vue-next";
-import { Button } from "@/components/ui/button";
-import {
-  Dialog,
-  DialogContent,
-  DialogDescription,
-  DialogHeader,
-  DialogTitle,
-} from "@/components/ui/dialog";
+import ModActionButton from "@/components/mods/review/ModActionButton.vue";
 import ModCodeDialog from "@/components/mods/review/ModCodeDialog.vue";
+import ModDialogShell from "@/components/mods/review/ModDialogShell.vue";
 import { checkProblems, summarizeCheck } from "@/lib/mods/check-summary";
 import type { ModCheckReport, ModDraft } from "@/lib/mods/kept";
 import { checkDraft, fetchDraftFiles } from "@/lib/mods/kept-api";
@@ -24,6 +18,8 @@ import { useSessionsStore } from "@/stores/sessions";
 const props = defineProps<{
   sessionId: string;
   draft: ModDraft;
+  /** On the phone it's a sheet, with the phone's buttons. */
+  phone?: boolean;
 }>();
 
 const open = defineModel<boolean>("open", { required: true });
@@ -125,20 +121,23 @@ const loadFiles = () => fetchDraftFiles(props.sessionId, props.draft.name, machi
 </script>
 
 <template>
-  <Dialog v-model:open="open">
-    <DialogContent
-      class="max-h-[88dvh] w-[calc(100vw-1rem)] overflow-y-auto sm:max-w-xl"
-      data-testid="mod-review-dialog"
-    >
-      <DialogHeader>
-        <DialogTitle>
-          Keep <span class="font-mono">{{ draft.name }}</span>?
-        </DialogTitle>
-        <DialogDescription data-testid="mod-review-meta">
-          {{ meta }}
-        </DialogDescription>
-      </DialogHeader>
+  <ModDialogShell
+    v-model:open="open"
+    :label="`Keep ${draft.name}?`"
+    :description="meta"
+    :phone="phone"
+    content-class="sm:max-w-xl"
+    testid="mod-review-dialog"
+  >
+    <template #title>
+      Keep <span class="font-mono">{{ draft.name }}</span>?
+    </template>
 
+    <div data-testid="mod-review-body">
+      <span
+        class="sr-only"
+        data-testid="mod-review-meta"
+      >{{ meta }}</span>
       <div
         v-if="loading"
         class="flex items-center gap-2 text-sm text-muted"
@@ -163,7 +162,7 @@ const loadFiles = () => fetchDraftFiles(props.sessionId, props.draft.name, machi
         <template v-else>
           <p
             v-if="problems.error"
-            class="text-sm text-error"
+            class="mb-2 text-sm text-error"
             role="alert"
             data-testid="mod-review-error"
           >
@@ -171,7 +170,7 @@ const loadFiles = () => fetchDraftFiles(props.sessionId, props.draft.name, machi
           </p>
           <p
             v-if="problems.warnings > 0"
-            class="text-sm text-muted"
+            class="mb-2 text-sm text-muted"
             data-testid="mod-review-warnings"
           >
             {{ problems.warnings }} {{ problems.warnings === 1 ? "warning" : "warnings" }}:
@@ -187,13 +186,16 @@ const loadFiles = () => fetchDraftFiles(props.sessionId, props.draft.name, machi
               data-testid="mod-review-row"
             >
               <dt>{{ labelOf(row.key) }}</dt>
-              <dd>{{ row.text }}</dd>
+              <dd>
+                {{ row.text }}
+                <code v-if="row.code">{{ row.code }}</code>
+              </dd>
             </div>
           </dl>
         </template>
       </template>
 
-      <label class="block space-y-1">
+      <label class="mt-3 block space-y-1">
         <span class="text-sm text-muted">Why keep it? (optional)</span>
         <textarea
           v-model="note"
@@ -206,15 +208,22 @@ const loadFiles = () => fetchDraftFiles(props.sessionId, props.draft.name, machi
 
       <p
         v-if="refused"
-        class="text-sm text-error"
+        class="mt-2 text-sm text-error"
         role="alert"
         data-testid="mod-review-refused"
       >
         {{ refused }}
       </p>
+    </div>
 
-      <div class="mod-review__actions">
-        <Button
+    <template #foot>
+      <div
+        class="mod-review__actions"
+        data-testid="mod-review-foot"
+      >
+        <ModActionButton
+          :phone="phone"
+          variant="primary"
           :disabled="!canKeep"
           data-testid="mod-review-keep"
           @click="keep"
@@ -225,34 +234,37 @@ const loadFiles = () => fetchDraftFiles(props.sessionId, props.draft.name, machi
             aria-hidden="true"
           />
           Keep for all my sessions
-        </Button>
-        <Button
+        </ModActionButton>
+        <ModActionButton
+          :phone="phone"
           variant="outline"
           data-testid="mod-review-code"
           @click="codeOpen = true"
         >
           Show code
-        </Button>
-        <Button
+        </ModActionButton>
+        <ModActionButton
+          :phone="phone"
           variant="ghost"
           :disabled="busy !== null"
           data-testid="mod-review-decline"
           @click="decline"
         >
           {{ request ? "Discard" : "Cancel" }}
-        </Button>
+        </ModActionButton>
       </div>
       <p
         v-if="request"
-        class="text-xs text-muted"
+        class="mod-review__hint"
       >
         Discard tells the agent you didn't keep it. The draft stays on in this session.
       </p>
-    </DialogContent>
-  </Dialog>
+    </template>
+  </ModDialogShell>
   <ModCodeDialog
     v-model:open="codeOpen"
     :title="`${draft.name} · draft`"
+    :phone="phone"
     :load="loadFiles"
   />
 </template>
@@ -262,7 +274,8 @@ const loadFiles = () => fetchDraftFiles(props.sessionId, props.draft.name, machi
   display: grid;
   margin: 0;
   border: 1px solid var(--border);
-  border-radius: 8px;
+  border-radius: var(--radius-card);
+  overflow: hidden;
 }
 
 .mod-review__row {
@@ -295,7 +308,7 @@ const loadFiles = () => fetchDraftFiles(props.sessionId, props.draft.name, machi
   resize: vertical;
   padding: 6px 10px;
   border: 1px solid var(--border);
-  border-radius: 6px;
+  border-radius: var(--radius-btn);
   background: transparent;
   font-size: 13px;
 }
@@ -311,11 +324,19 @@ const loadFiles = () => fetchDraftFiles(props.sessionId, props.draft.name, machi
   gap: 8px;
 }
 
-@media (max-width: 480px) {
-  .mod-review__actions > * {
-    flex: 1 1 100%;
-  }
+.mod-review__hint {
+  margin: 8px 0 0;
+  color: var(--muted);
+  font-size: 12px;
+}
 
+.mod-review__row code {
+  display: block;
+  font-size: 12px;
+  overflow-wrap: anywhere;
+}
+
+@media (max-width: 480px) {
   .mod-review__row {
     grid-template-columns: 1fr;
     gap: 2px;

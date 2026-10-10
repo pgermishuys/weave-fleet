@@ -11,6 +11,8 @@ const props = defineProps<{
   sessionId: string;
   /** The session's messages: a finished `fleet_mod_*` call means the agent wrote a draft, so the list is read again. */
   messages?: readonly AccumulatedMessage[];
+  /** On the phone: its own buttons and sheets. */
+  phone?: boolean;
 }>();
 
 const store = useModsStore();
@@ -54,6 +56,7 @@ watch(finishedModCalls, (now, before) => {
       v-for="draft in drafts"
       :key="draft.name"
       :draft="draft"
+      :phone="phone"
     />
   </div>
 </template>

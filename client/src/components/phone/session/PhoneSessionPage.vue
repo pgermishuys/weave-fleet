@@ -474,6 +474,7 @@ onUnmounted(() => {
           />
 
           <ModDraftCards
+            phone
             :session-id="sessionId"
             :messages="stream.messages.value"
           />
