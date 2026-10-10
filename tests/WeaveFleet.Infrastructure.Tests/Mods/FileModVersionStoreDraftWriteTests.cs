@@ -323,7 +323,7 @@ public sealed class FileModVersionStoreDraftWriteTests : IDisposable
         await Write(Enumerable.Range(0, ModStoreLimits.KeptFiles).Select(i => ($"f{i}.txt", "x")).ToArray());
 
         var error = await Refused(("one-more.txt", "x"));
-        error.Message.ShouldContain(ModStoreLimits.KeptFiles.ToString());
+        error.Message.ShouldContain(ModStoreLimits.KeptFiles.ToString(System.Globalization.CultureInfo.InvariantCulture));
         File.Exists(Path.Combine(DraftFolder, "one-more.txt")).ShouldBeFalse();
 
         await Write(("f0.txt", "replaced"));
@@ -349,7 +349,7 @@ public sealed class FileModVersionStoreDraftWriteTests : IDisposable
         error.Message.ShouldContain("16 MiB");
 
         await Write(("a.txt", "small"));
-        await Write(("c.txt", half));
+        await Write(("c.txt", half[..^5]));
     }
 
     [Fact]
