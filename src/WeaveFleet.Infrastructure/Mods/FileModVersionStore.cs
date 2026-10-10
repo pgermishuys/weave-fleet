@@ -351,7 +351,185 @@ public sealed class FileModVersionStore(string root) : IModVersionStore, IDispos
     }
 
     public Task<ModDraft> WriteDraftFilesAsync(string userId, string sessionId, string name, IReadOnlyList<ModFile> files, CancellationToken ct = default)
-        => throw new NotImplementedException();
+    {
+        ThrowIfInvalid(name);
+        ThrowIfInvalidSession(sessionId);
+        ArgumentNullException.ThrowIfNull(files);
+
+        // Everything that needs no disk is checked first, so a bad path costs nothing and names itself.
+        var comparison = OperatingSystem.IsWindows() ? StringComparer.OrdinalIgnoreCase : StringComparer.Ordinal;
+        var seen = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
+        var encoded = new List<(string Path, byte[] Bytes)>(files.Count);
+        foreach (var file in files)
+        {
+            if (WritePathProblem(file.Path) is { } problem)
+                throw new ModStoreException(problem);
+            if (seen.TryGetValue(file.Path, out var first))
+                throw new ModStoreException(first == file.Path
+                    ? $"\"{file.Path}\" is in this call twice: send each file once."
+                    : $"\"{file.Path}\" and \"{first}\" are the same file on some systems (they differ only in letter case): use one name.");
+            seen[file.Path] = file.Path;
+
+            try
+            {
+                encoded.Add((file.Path, StrictUtf8.GetBytes(file.Content)));
+            }
+            catch (EncoderFallbackException)
+            {
+                throw new ModStoreException($"The content of \"{file.Path}\" isn't valid text (it holds a lone surrogate): fix it and send it again.");
+            }
+        }
+
+        return LockedAsync(SessionLock(userId, sessionId), () =>
+        {
+            var draft = DraftFolder(userId, sessionId, name);
+            if (!IsClean(draft))
+                throw new ModStoreException("This draft's folder is, or sits behind, a symbolic link, which Fleet doesn't follow.");
+            if (File.Exists(draft))
+                throw new ModStoreException("This draft's folder is a file, not a folder.");
+
+            var replaced = new HashSet<string>(encoded.Select(f => f.Path), comparison);
+            var targets = new List<(string Full, string Directory, byte[] Bytes)>();
+            foreach (var (path, bytes) in encoded)
+            {
+                var current = draft;
+                var parts = path.Split('/');
+                for (var i = 0; i < parts.Length - 1; i++)
+                {
+                    current = Path.Combine(current, parts[i]);
+                    if (IsLink(current))
+                        throw new ModStoreException($"\"{string.Join('/', parts[..(i + 1)])}\" is a symbolic link, which Fleet doesn't follow: write elsewhere.");
+                    if (File.Exists(current))
+                        throw new ModStoreException($"\"{string.Join('/', parts[..(i + 1)])}\" is a file, so \"{path}\" can't go inside it: use another folder name.");
+                }
+
+                var full = Path.Combine(current, parts[^1]);
+                if (IsLink(full))
+                    throw new ModStoreException($"\"{path}\" is a symbolic link, which Fleet doesn't follow: write elsewhere.");
+                if (Directory.Exists(full))
+                    throw new ModStoreException($"\"{path}\" is a folder: write a file with another name.");
+                targets.Add((full, current, bytes));
+            }
+
+            // What stays plus what's new, against the limits Keep applies; a link or a special file that stays is refused too.
+            var count = encoded.Count;
+            long total = encoded.Sum(f => (long)f.Bytes.Length);
+            if (Directory.Exists(draft))
+            {
+                foreach (var entry in WalkTree(draft))
+                {
+                    if (entry.IsDirectory)
+                        continue;
+                    var problem = SafeFile.Open(entry.FullPath, ModStoreLimits.KeptBytes, out var stream);
+                    using (stream)
+                    {
+                        if (replaced.Contains(entry.Relative))
+                        {
+                            if (problem is FileProblem.Link or FileProblem.NotRegular or FileProblem.Unsupported)
+                                throw Refused(problem, entry.Relative);
+                            continue;
+                        }
+
+                        if (problem != FileProblem.None)
+                            throw Refused(problem, entry.Relative);
+                        count++;
+                        total += stream!.Length;
+                    }
+                }
+            }
+
+            if (count > ModStoreLimits.KeptFiles)
+                throw new ModStoreException($"That would leave the draft with {count} files; a mod keeps at most {ModStoreLimits.KeptFiles}.");
+            if (total > ModStoreLimits.KeptBytes)
+                throw new ModStoreException("That would leave the draft over 16 MiB; a mod keeps at most 16 MiB in all.");
+
+            var temporaries = new List<string>();
+            try
+            {
+                foreach (var (full, directory, bytes) in targets)
+                {
+                    Directory.CreateDirectory(directory);
+                    // A link swapped in for a folder since the check is caught here, and the rename below replaces a link
+                    // at the file's own name instead of following it.
+                    RequireClean(directory);
+                    var temporary = Path.Combine(directory, $".{Guid.NewGuid():N}.tmp");
+                    temporaries.Add(temporary);
+                    using (var output = new FileStream(temporary, FileMode.CreateNew, FileAccess.Write, FileShare.None))
+                        output.Write(bytes);
+                    RequireClean(directory);
+                    File.Move(temporary, full, overwrite: true);
+                }
+            }
+            catch (Exception e) when (e is IOException or UnauthorizedAccessException)
+            {
+                throw new ModStoreException($"The draft's files couldn't be written: {e.Message}");
+            }
+            finally
+            {
+                foreach (var temporary in temporaries)
+                    TryDeleteFile(temporary);
+            }
+
+            return new ModDraft(sessionId, name, draft, ReadDraftOff(userId, sessionId).GetValueOrDefault(name), ParseManifest(draft));
+        }, ct);
+    }
+
+    private static void TryDeleteFile(string path)
+    {
+        try
+        {
+            File.Delete(path);
+        }
+        catch (Exception e) when (e is IOException or UnauthorizedAccessException)
+        {
+        }
+    }
+
+    private const int MaxWritePathLength = 260;
+
+    private static readonly HashSet<string> ReservedDeviceNames = new(StringComparer.OrdinalIgnoreCase)
+    {
+        "con", "prn", "aux", "nul",
+        "com1", "com2", "com3", "com4", "com5", "com6", "com7", "com8", "com9",
+        "lpt1", "lpt2", "lpt3", "lpt4", "lpt5", "lpt6", "lpt7", "lpt8", "lpt9",
+    };
+
+    /// <summary>
+    /// Why <paramref name="path"/> can't be a file of a mod (worded for the agent), or null when it can: relative,
+    /// <c>/</c>-separated, and nameable on every system.
+    /// </summary>
+    private static string? WritePathProblem(string path)
+    {
+        if (string.IsNullOrWhiteSpace(path))
+            return "A file's path is empty: give each file a path inside the mod, like mod.ts.";
+        var shown = string.Concat((path.Length > 80 ? path[..80] + "..." : path).Select(c => char.IsControl(c) ? '?' : c));
+        if (path.Length > MaxWritePathLength)
+            return $"\"{shown}\" is too long: a path is at most {MaxWritePathLength} characters.";
+        if (path.Any(char.IsControl))
+            return $"\"{shown}\" has a control character in it: use plain characters in file names.";
+        if (path.Contains('\\'))
+            return $"\"{shown}\" has a backslash: separate folders with / instead.";
+        if (path[0] == '/' || (path.Length >= 2 && path[1] == ':' && char.IsAsciiLetter(path[0])))
+            return $"\"{shown}\" is absolute: use a path inside the mod's folder, like mod.ts.";
+
+        foreach (var segment in path.Split('/'))
+        {
+            if (segment.Length == 0)
+                return $"\"{shown}\" has an empty part (a doubled or trailing /): use a path like pages/index.html.";
+            if (segment is "." or "..")
+                return $"\"{shown}\" leaves the mod's folder: use a path inside it, like mod.ts.";
+            if (segment.IndexOfAny([':', '*', '?', '"', '<', '>', '|']) >= 0)
+                return $"\"{shown}\" has a character that Windows can't use in a file name (one of : * ? \" < > |): rename it.";
+            if (segment[^1] is '.' or ' ')
+                return $"\"{shown}\" has a part ending in a dot or a space, which Windows can't use: rename it.";
+            var dot = segment.IndexOf('.');
+            var stem = (dot < 0 ? segment : segment[..dot]).TrimEnd(' ');
+            if (ReservedDeviceNames.Contains(stem))
+                return $"\"{shown}\" uses \"{stem}\", a name Windows reserves for a device: rename it.";
+        }
+
+        return null;
+    }
 
     public Task<IReadOnlyList<ModFile>?> ReadDraftFilesAsync(string userId, string sessionId, string name, CancellationToken ct = default)
     {
