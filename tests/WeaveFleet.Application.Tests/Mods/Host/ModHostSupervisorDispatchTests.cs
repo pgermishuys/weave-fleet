@@ -162,7 +162,12 @@ public sealed class ModHostSupervisorDispatchTests : ModHostSupervisorTestBase
 
         result.ShouldBe(ModDispatchResult.NotDispatched);
         await ModHostTests.Eventually(() => Supervisor.GetStatus().State == ModHostStates.Restarting, "the crash was seen");
-        (await Dispatch("turn.complete", S1).Within()).ShouldBe(ModDispatchResult.NotDispatched);
+
+        // One that arrives while the host is restarting waits for it.
+        Factory.OnDispatch = null;
+        var waiting = Dispatch("turn.complete", S1);
+        await RestartedAfterAsync(TimeSpan.FromMilliseconds(500), starts: 2);
+        (await waiting.Within()).Dispatched.ShouldBeTrue();
     }
 
     [Fact]

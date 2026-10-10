@@ -9,5 +9,15 @@ namespace WeaveFleet.Application.Mods.Host;
 /// </summary>
 public sealed class HostModChecker(IModHost host, IUserContext user) : IModChecker
 {
-    public Task<JsonElement?> CheckAsync(string folder, CancellationToken ct = default) => throw new NotImplementedException($"{host}{user}");
+    public async Task<JsonElement?> CheckAsync(string folder, CancellationToken ct = default)
+    {
+        try
+        {
+            return await host.CheckAsync(user.UserId, folder, ct).ConfigureAwait(false);
+        }
+        catch (ModHostNotReadyException e)
+        {
+            throw new ModStoreException($"The mod runtime isn't ready yet: {e.Message}");
+        }
+    }
 }
