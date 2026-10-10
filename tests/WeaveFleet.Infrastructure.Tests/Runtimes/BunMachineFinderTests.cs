@@ -151,6 +151,7 @@ public sealed class BunMachineFinderTests : IDisposable
     [Fact]
     public async Task Finds_bun_in_each_system_folder()
     {
+        if (OperatingSystem.IsWindows()) return; // Homebrew's folders are searched on Linux and macOS only.
         var a = Bun("sys-a");
         var b = Bun("sys-b");
 
@@ -175,7 +176,8 @@ public sealed class BunMachineFinderTests : IDisposable
 
         var paths = await Paths(Finder(Join(Folder("p1"), Folder("p2")), system: [Folder("sys")]));
 
-        paths.ShouldBe([first, second, home, system]);
+        // Windows has no system folders to search (see On_Windows_the_home_folder_is_searched_and_the_system_folders_are_not).
+        paths.ShouldBe(OperatingSystem.IsWindows() ? [first, second, home] : [first, second, home, system]);
     }
 
     [Fact]
