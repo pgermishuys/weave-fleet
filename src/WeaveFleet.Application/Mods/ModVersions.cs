@@ -182,6 +182,13 @@ public interface IModVersionStore
     /// <summary>A draft's files, text only; null when the draft doesn't exist.</summary>
     Task<IReadOnlyList<ModFile>?> ReadDraftFilesAsync(string userId, string sessionId, string name, CancellationToken ct = default);
 
+    /// <summary>
+    /// Runs <paramref name="check"/> on a staged copy of the draft, made the way Keep makes one (regular files only, no
+    /// links, within the limits), and deletes the copy afterwards, so a checker never reads the live draft. Holds no lock
+    /// while the check runs. Throws <see cref="ModStoreException"/> when there's no such draft or it can't be copied.
+    /// </summary>
+    Task<JsonElement?> CheckDraftAsync(string userId, string sessionId, string name, ModKeepCheck check, CancellationToken ct = default);
+
     // ── $.store: per user, per mod, shared by a draft and its kept mod ──
 
     Task<JsonElement?> GetValueAsync(string userId, string name, string key, CancellationToken ct = default);

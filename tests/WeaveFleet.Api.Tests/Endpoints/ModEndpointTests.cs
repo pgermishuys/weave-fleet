@@ -508,4 +508,21 @@ public sealed class ModEndpointTests : IAsyncDisposable
 
         response.StatusCode.ShouldBe(HttpStatusCode.NotFound);
     }
+
+    [Fact]
+    public async Task Turning_the_switch_off_and_on_ends_safe_mode()
+    {
+        await TurnOnAsync();
+        (await _client.PutAsJsonAsync("/api/mods/safe-mode", new { on = true })).EnsureSuccessStatusCode();
+
+        // Still on: writing the same value isn't a turn from off to on.
+        await TurnOnAsync();
+        (await ListAsync()).GetProperty("safeMode").GetBoolean().ShouldBeTrue();
+
+        (await _client.PutAsJsonAsync("/api/preferences/Mods", new { value = "false" })).EnsureSuccessStatusCode();
+        await TurnOnAsync();
+
+        (await ListAsync()).GetProperty("safeMode").GetBoolean().ShouldBeFalse();
+        (await _client.PutAsJsonAsync("/api/mods/safe-mode", new { on = false })).EnsureSuccessStatusCode();
+    }
 }

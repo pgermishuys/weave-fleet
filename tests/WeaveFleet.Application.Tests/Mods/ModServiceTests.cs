@@ -301,7 +301,7 @@ public sealed class ModServiceTests
     }
 
     [Fact]
-    public async Task Checking_a_draft_runs_the_checker_on_its_folder()
+    public async Task Checking_a_draft_runs_the_checker_on_a_staged_copy_not_the_draft()
     {
         _store.SeedDraft(User, SessionId, Chips);
         _checker.Report = Json("""{"ok":true}""");
@@ -309,7 +309,8 @@ public sealed class ModServiceTests
         var check = (await _service.CheckDraftAsync(SessionId, Chips)).Value;
 
         check.Check!.Value.GetProperty("ok").GetBoolean().ShouldBeTrue();
-        _checker.Checked.ShouldBe([_store.DraftFolder(User, SessionId, Chips)]);
+        _checker.Checked.ShouldBe([InMemoryModVersionStore.StagedFolder(User, SessionId, Chips)]);
+        _checker.Checked.ShouldNotContain(_store.DraftFolder(User, SessionId, Chips));
         _events.Broadcasts.ShouldBeEmpty();
     }
 
@@ -561,5 +562,27 @@ public sealed class ModServiceTests
         (await other.ListAsync()).SafeMode.ShouldBeFalse();
         _safeMode.IsOn("other-user").ShouldBeFalse();
         _events.Broadcasts.ShouldHaveSingleItem().UserId.ShouldBe(User);
+    }
+
+    [Fact]
+    public async Task Turning_the_switch_on_ends_the_users_safe_mode_and_says_so()
+    {
+        _safeMode.Set(User, true);
+        _safeMode.Set("other-user", true);
+
+        await _service.SwitchedOnAsync();
+
+        _safeMode.IsOn(User).ShouldBeFalse();
+        _safeMode.IsOn("other-user").ShouldBeTrue();
+        ChangedOnce().Reason.ShouldBe("safe-mode");
+    }
+
+    [Fact]
+    public async Task Turning_the_switch_on_outside_safe_mode_changes_nothing()
+    {
+        await _service.SwitchedOnAsync();
+
+        _safeMode.IsOn(User).ShouldBeFalse();
+        _events.Broadcasts.ShouldBeEmpty();
     }
 }

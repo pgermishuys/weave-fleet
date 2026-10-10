@@ -1,3 +1,4 @@
+using WeaveFleet.Application.Mods;
 using WeaveFleet.Domain.Repositories;
 
 namespace WeaveFleet.Api.Endpoints;
@@ -18,9 +19,16 @@ public static class PreferencesEndpoints
         .Produces<IReadOnlyDictionary<string, string>>(StatusCodes.Status200OK)
         .WithName("GetPreferences");
 
-        group.MapPut("/{key}", async (string key, SetPreferenceRequest req, IUserPreferenceRepository repo) =>
+        group.MapPut("/{key}", async (string key, SetPreferenceRequest req, IUserPreferenceRepository repo, HttpContext http) =>
         {
+            // Turning the Mods switch from off to on turns mods back on, so it ends "Start without mods".
+            var mods = key == ModsFeature.PreferenceKey ? http.RequestServices.GetRequiredService<ModsFeature>() : null;
+            var modsWasOn = mods is not null && await mods.IsSwitchedOnAsync();
+
             await repo.SetAsync(key, req.Value);
+
+            if (mods is not null && !modsWasOn && await mods.IsSwitchedOnAsync())
+                await http.RequestServices.GetRequiredService<ModService>().SwitchedOnAsync(http.RequestAborted);
             return Results.NoContent();
         })
         .WithName("SetPreference");

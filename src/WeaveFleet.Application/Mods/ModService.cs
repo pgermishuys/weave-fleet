@@ -147,7 +147,18 @@ public sealed class ModService(
     public async Task<Result<ModCheckView>> CheckDraftAsync(string sessionId, string name, CancellationToken ct = default)
     {
         var found = await FindDraftAsync(sessionId, name, ct).ConfigureAwait(false);
-        return found.IsFailure ? found.Error : new ModCheckView(await checker.CheckAsync(found.Value.Folder, ct).ConfigureAwait(false));
+        if (found.IsFailure)
+            return found.Error;
+
+        try
+        {
+            // On a staged copy, as Keep does: the checker never reads the live draft, which the agent may be writing.
+            return new ModCheckView(await store.CheckDraftAsync(UserId, sessionId, name, checker.CheckAsync, ct).ConfigureAwait(false));
+        }
+        catch (ModStoreException e)
+        {
+            return FleetError.ValidationError("Check", e.Message);
+        }
     }
 
     public async Task<Result<ModDraftView>> SetDraftOnAsync(string sessionId, string name, bool on, CancellationToken ct = default)
@@ -198,6 +209,15 @@ public sealed class ModService(
         safeMode.Set(UserId, on);
         await RaiseAsync("safe-mode", name: null, sessionId: null, ct).ConfigureAwait(false);
         return await ListAsync(ct).ConfigureAwait(false);
+    }
+
+    /// <summary>The user turned the Mods switch from off to on: that turns mods back on, so it ends safe mode.</summary>
+    public async Task SwitchedOnAsync(CancellationToken ct = default)
+    {
+        if (!safeMode.IsOn(UserId))
+            return;
+        safeMode.Set(UserId, false);
+        await RaiseAsync("safe-mode", name: null, sessionId: null, ct).ConfigureAwait(false);
     }
 
     // ── Helpers ─────────────────────────────────────────────────────────

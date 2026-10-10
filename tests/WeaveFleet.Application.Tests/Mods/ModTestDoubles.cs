@@ -138,6 +138,15 @@ internal sealed class InMemoryModVersionStore : IModVersionStore
     public Task<IReadOnlyList<ModFile>?> ReadDraftFilesAsync(string userId, string sessionId, string name, CancellationToken ct = default)
         => Task.FromResult<IReadOnlyList<ModFile>?>(_drafts.ContainsKey((userId, sessionId, name)) ? _files.GetValueOrDefault(DraftFolder(userId, sessionId, name)) : null);
 
+    public async Task<JsonElement?> CheckDraftAsync(string userId, string sessionId, string name, ModKeepCheck check, CancellationToken ct = default)
+    {
+        if (!_drafts.ContainsKey((userId, sessionId, name)))
+            throw new ModStoreException($"There is no draft of {name} to check.");
+        var staged = StagedFolder(userId, sessionId, name);
+        Staged.Add(staged);
+        return await check(staged, ct);
+    }
+
     public Task<JsonElement?> GetValueAsync(string userId, string name, string key, CancellationToken ct = default) => Task.FromResult<JsonElement?>(null);
     public Task SetValueAsync(string userId, string name, string key, JsonElement value, CancellationToken ct = default) => Task.CompletedTask;
     public Task DeleteValueAsync(string userId, string name, string key, CancellationToken ct = default) => Task.CompletedTask;
