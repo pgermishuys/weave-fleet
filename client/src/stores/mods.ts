@@ -5,7 +5,9 @@ import { liveTarget, type MachineTarget } from "@/lib/machine-target";
 import type { KeptMod, ModDraft, ModsSwitch, ModsView } from "@/lib/mods/kept";
 import * as modsApi from "@/lib/mods/kept-api";
 import { ModsRequestError } from "@/lib/mods/kept-api";
+import { MODS_PREFERENCE_KEY } from "@/lib/mods";
 import { useMachinesStore } from "@/stores/machines";
+import { usePreferencesStore } from "@/stores/preferences";
 
 /** Why a kept mod (rather than a draft or safe mode) changed. */
 const KEPT_REASONS = new Set(["kept", "version", "undone", "on", "off", "strikes"]);
@@ -23,7 +25,13 @@ export const useModsStore = defineStore("mods", () => {
   const inflight = new Map<string, Promise<void>>();
 
   const safeMode = computed(() => kept.value?.safeMode ?? modsSwitch.value?.safeMode ?? false);
-  const isSwitchedOn = computed(() => modsSwitch.value?.on ?? false);
+  const preferences = usePreferencesStore();
+  // The user's choice in Features wins as soon as it's made (no event says the switch moved); until they choose, the
+  // server's answer, which falls back to Fleet's own option.
+  const isSwitchedOn = computed(() => {
+    const chosen = preferences.get(MODS_PREFERENCE_KEY, "");
+    return chosen === "" ? modsSwitch.value?.on ?? false : chosen === "true";
+  });
 
   function draftsFor(sessionId: string): ModDraft[] {
     return drafts.value[sessionId] ?? [];

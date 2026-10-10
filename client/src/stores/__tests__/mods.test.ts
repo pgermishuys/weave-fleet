@@ -40,6 +40,8 @@ vi.mock("@/stores/machines", () => ({
 
 import { ModsRequestError } from "@/lib/mods/kept-api";
 import { useModsStore } from "@/stores/mods";
+import { usePreferencesStore } from "@/stores/preferences";
+import { MODS_PREFERENCE_KEY } from "@/lib/mods";
 
 const mod = (name: string, overrides: Partial<KeptMod> = {}): KeptMod => ({
   name,
@@ -88,6 +90,20 @@ describe("loading", () => {
     expect(store.isSwitchedOn).toBe(true);
     expect(store.kept?.mods.map((m) => m.name)).toEqual(["test-chips"]);
     expect(store.draftsFor("s1").map((d) => d.name)).toEqual(["context-gauge"]);
+  });
+
+  it("follows the user's Mods choice as soon as it's made, and the server's answer until then", async () => {
+    api.fetchModsSwitch.mockResolvedValue({ on: false, safeMode: false });
+    const store = useModsStore();
+    const preferences = usePreferencesStore();
+    await store.loadSwitch();
+    expect(store.isSwitchedOn).toBe(false);
+
+    // Turning Mods on in Features shows Settings → Mods and the draft cards without a reload.
+    preferences.preferences = { [MODS_PREFERENCE_KEY]: "true" };
+    expect(store.isSwitchedOn).toBe(true);
+    preferences.preferences = { [MODS_PREFERENCE_KEY]: "false" };
+    expect(store.isSwitchedOn).toBe(false);
   });
 
   it("draftsFor is empty for unknown sessions", () => {
