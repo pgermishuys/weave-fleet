@@ -4,6 +4,7 @@ import { onDomainEvent } from "@/composables/on-domain-event";
 import { apiFetch } from "@/lib/api-client";
 import { liveTarget } from "@/lib/machine-target";
 import { MODS_RUNTIME_EVENT, type ModsRuntimeJob, type ModsRuntimeView } from "@/lib/mods-runtime";
+import { usePreferencesStore } from "@/stores/preferences";
 
 const RUNTIME = "/api/features/mods/runtime";
 
@@ -51,9 +52,17 @@ export const useModsRuntimeStore = defineStore("mods-runtime", () => {
     if (next?.phase !== "downloading") void load();
   }
 
-  /** Follows the pushed events, once. */
+  /** Follows the pushed events, once. A failed first install turns the switch off on the server: show that too. */
   function listen(): void {
-    stopListening ??= onDomainEvent(liveTarget(), "sessions", MODS_RUNTIME_EVENT, (event) => applyEvent(event.payload));
+    if (stopListening) return;
+    const offRuntime = onDomainEvent(liveTarget(), "sessions", MODS_RUNTIME_EVENT, (event) => applyEvent(event.payload));
+    const offSwitch = onDomainEvent(liveTarget(), "sessions", "mods.changed", (event) => {
+      if (event.payload?.reason === "switch") void usePreferencesStore().refresh();
+    });
+    stopListening = () => {
+      offRuntime();
+      offSwitch();
+    };
   }
 
   return {
