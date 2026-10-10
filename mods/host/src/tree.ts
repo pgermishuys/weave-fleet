@@ -137,7 +137,8 @@ const options: Check = (name, v) => {
 
 const query: Check = (name, v) => {
   if (!isRecord(v) || Object.values(v).some((x) => typeof x !== "string")) return `${name} must be an object of strings`;
-  return Buffer.byteLength(JSON.stringify(v)) <= 4096 ? null : `${name} is over 4 KiB`;
+  // What reaches the page's address: the URL-encoded query string.
+  return Buffer.byteLength(new URLSearchParams(v as Record<string, string>).toString()) <= 4096 ? null : `${name} is over 4 KiB as a query string`;
 };
 
 const SPECS: Record<string, Spec> = {
@@ -177,6 +178,17 @@ const SPECS: Record<string, Spec> = {
 const KEYED = new Set(["Button", "Input", "Select", "Page"]);
 const CALLBACKS: HandleKind[] = ["onPress", "onSubmit", "onInput", "onSelect"];
 const INLINE = new Set(["Text", "Pill", "Icon", "Button", "Fleet", "Box"]);
+/** Props drawn as text, in the order they count towards the text budget (children come after an element's own). */
+const TEXT_PROPS: Record<string, string[]> = {
+  Pill: ["label"],
+  Icon: ["label"],
+  Button: ["label"],
+  Input: ["label", "placeholder", "submitLabel", "value"],
+  Select: ["label"],
+  Markdown: ["text"],
+  Code: ["source"],
+  Page: ["title"],
+};
 
 // ─── The walk ──────────────────────────────────────────────────────────────────────────────────────────────────────
 
@@ -239,7 +251,7 @@ function visit(ctx: Ctx, node: unknown, depth: number, path: string): WireElemen
   if (!isRecord(node) || typeof node.type !== "string") fail(path, `not an element (got ${show(node)})`);
   const el = node as Record<string, unknown>;
   const type = el.type as string;
-  if (type !== "Fleet" && !(type in SPECS)) fail(path, `unknown element type ${show(type)}`);
+  if (type !== "Fleet" && !Object.hasOwn(SPECS, type)) fail(path, `unknown element type ${show(type)}`);
   if (ctx.path.has(el)) fail(path, "the tree contains itself");
   if (++ctx.nodes > ctx.limits.treeNodes) fail(path, `tree has more than ${ctx.limits.treeNodes} elements`);
   if (depth > ctx.limits.treeDepth) fail(path, `tree is deeper than ${ctx.limits.treeDepth} levels`);
@@ -269,8 +281,8 @@ function visit(ctx: Ctx, node: unknown, depth: number, path: string): WireElemen
   for (const name of Object.keys(props)) {
     const v = props[name];
     if (v === undefined) continue;
-    const check = spec.props[name];
-    if (!check) fail(path, `${name} isn't a prop of ${type}`);
+    const check = Object.hasOwn(spec.props, name) ? spec.props[name] : undefined;
+    if (!check) return fail(path, `${name} isn't a prop of ${type}`);
     const problem = check(name, v);
     if (problem) fail(path, problem);
     if (CALLBACKS.includes(name as HandleKind)) callbacks.push([name as HandleKind, v as never]);
@@ -284,17 +296,18 @@ function visit(ctx: Ctx, node: unknown, depth: number, path: string): WireElemen
     if (ctx.keys.has(k)) fail(path, `key "${k}" is used twice in the tree`);
     ctx.keys.add(k);
   }
-  if (type === "Pill" || type === "Icon") {
-    // nothing further
-  } else if (type === "Markdown") {
-    wireProps.text = takeText(ctx, wireProps.text as string);
-  } else if (type === "Code") {
-    wireProps.source = takeText(ctx, wireProps.source as string);
-  } else if (type === "Page") {
-    if (!ctx.opts.pageExists(owner, props.path as string)) fail(path, `path ${show(props.path)} isn't an .html file in the mod's folder`);
+  for (const name of TEXT_PROPS[type] ?? []) {
+    if (typeof wireProps[name] === "string") wireProps[name] = takeText(ctx, wireProps[name] as string);
   }
-  if (ctx.inline && type === "Box" && props.flexDirection !== "row") {
-    fail(path, `Box at ${ctx.opts.site} must have flexDirection "row"`);
+  if (type === "Select") {
+    wireProps.options = (wireProps.options as { value: string; label: string }[]).map((o) => ({ value: o.value, label: takeText(ctx, o.label) }));
+  }
+  if (type === "Page" && !ctx.opts.pageExists(owner, props.path as string)) {
+    fail(path, `path ${show(props.path)} isn't an .html file in the mod's folder`);
+  }
+  // A Box is a row unless it says column.
+  if (ctx.inline && type === "Box" && props.flexDirection === "column") {
+    fail(path, `Box at ${ctx.opts.site} must be a row`);
   }
 
   if (container) {
@@ -309,6 +322,8 @@ function visit(ctx: Ctx, node: unknown, depth: number, path: string): WireElemen
     ctx.path.delete(el);
     return { type, props: wireProps, children: kids } as WireElement;
   }
+  // Fleet serves a Page from its owner's folder: the owner comes from the host's record, never from the mod.
+  if (type === "Page") return { type, props: wireProps, mod: owner } as WireElement;
   if (callbacks.length === 0 && !(type === "Button" || type === "Input" || type === "Select")) {
     return { type, props: wireProps } as WireElement;
   }

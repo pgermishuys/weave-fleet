@@ -74,8 +74,9 @@ export async function dispatch(rt: Runtime, params: DispatchParams) {
       throw new RpcError(ErrorCodes.invalidParams, "unknown or expired handle");
     }
     control = handle;
+    // Who drew the control and which one it is come from the handle, not from what Fleet sent.
     const { handle: _dropped, ...rest } = e;
-    hookE = rest;
+    hookE = { ...rest, mod: handle.owner.slice(0, handle.owner.indexOf("@")), element: handle.key };
   }
 
   const chainMods: LoadedMod[] = [];
