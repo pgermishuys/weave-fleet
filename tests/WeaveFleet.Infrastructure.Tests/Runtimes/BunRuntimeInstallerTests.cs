@@ -699,6 +699,43 @@ public sealed class BunRuntimeInstallerTests : IDisposable
     }
 
     [Fact]
+    public async Task A_configured_bun_runs_through_the_real_probe_and_bun_upgrade_is_noticed()
+    {
+        if (OperatingSystem.IsWindows())
+            return;
+
+        var folder = Path.Combine(_home, ".bun", "bin");
+        Directory.CreateDirectory(folder);
+        var bun = Path.Combine(folder, "bun");
+        WriteScript(bun, "1.4.5");
+        var installer = new BunRuntimeInstaller(
+            new FleetOptions { Harness = { BunPath = bun } },
+            new FakeHttpClientFactory(),
+            NullLogger<BunRuntimeInstaller>.Instance)
+        {
+            Home = _home,
+            DownloadBase = _server.BaseUri,
+        };
+
+        (await installer.FindAsync(BunRelease.Pinned, CancellationToken.None))
+            .ShouldBe(new BunLocation(bun, BunSources.Configured, "1.4.5"));
+
+        // bun upgrade writes a new binary in place.
+        WriteScript(bun, "1.4.6");
+        File.SetLastWriteTimeUtc(bun, DateTime.UtcNow.AddMinutes(1));
+
+        (await installer.FindAsync(BunRelease.Pinned, CancellationToken.None))!.Version.ShouldBe("1.4.6");
+        _server.Requests.ShouldBeEmpty();
+    }
+
+    private static void WriteScript(string path, string version)
+    {
+        File.WriteAllText(path, $"#!/bin/sh\necho {version}\n");
+        if (!OperatingSystem.IsWindows())
+            File.SetUnixFileMode(path, UnixFileMode.UserRead | UnixFileMode.UserWrite | UnixFileMode.UserExecute);
+    }
+
+    [Fact]
     public async Task Probes_a_configured_bun_once_for_repeated_finds()
     {
         var release = Publish();
