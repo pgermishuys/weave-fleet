@@ -17,12 +17,12 @@ public sealed class BunPathSettingTests : IAsyncLifetime
     private SqliteConnection _keeper = null!;
     private IDbConnectionFactory _factory = null!;
 
-    public async ValueTask InitializeAsync() => (_keeper, _factory) = await TestDbHelper.CreateSharedDbAsync();
+    public async Task InitializeAsync() => (_keeper, _factory) = await TestDbHelper.CreateSharedDbAsync();
 
-    public ValueTask DisposeAsync()
+    public Task DisposeAsync()
     {
         _keeper.Dispose();
-        return ValueTask.CompletedTask;
+        return Task.CompletedTask;
     }
 
     [Fact]

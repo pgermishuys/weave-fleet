@@ -97,6 +97,13 @@ public sealed class ApiWebApplicationFactory(
             return watcher;
         }));
 
+        // Fleet installs the Bun mods run on by itself shortly after start when Mods are on. Tests never reach the network.
+        builder.ConfigureTestServices(services =>
+        {
+            foreach (var hosted in services.Where(d => d.ImplementationType == typeof(WeaveFleet.Application.Mods.ModsRuntimeHostedService)).ToList())
+                services.Remove(hosted);
+        });
+
         if (configureTestServices is not null)
         {
             builder.ConfigureTestServices(configureTestServices);
