@@ -43,7 +43,7 @@ internal static class BunPaths
     /// <summary>
     /// Why Fleet shouldn't run the Bun at <paramref name="path"/>, as a sentence; <see langword="null"/> when it's fine.
     /// On Linux and macOS a Bun is refused when the file, or any folder from its parent up to <c>/</c>, can be written by
-    /// its group or by others (a folder with the sticky bit, like <c>/tmp</c>, is allowed; the file never is), or belongs to
+    /// others, or by a group that has anyone besides this user in it (a folder with the sticky bit, like <c>/tmp</c>, is allowed; the file never is), or belongs to
     /// someone other than this user or root: another local user could have planted it. Windows is not checked here:
     /// its folder permissions are ACLs, which this doesn't read.
     /// </summary>
@@ -74,7 +74,6 @@ internal static class BunPaths
 
     private static string? Problem(string path, bool isFile, uint me)
     {
-        const UnixFileMode OthersCanWrite = UnixFileMode.GroupWrite | UnixFileMode.OtherWrite;
         try
         {
             if (OperatingSystem.IsWindows())
@@ -82,11 +81,16 @@ internal static class BunPaths
 
             var mode = File.GetUnixFileMode(path);
             var sticky = !isFile && (mode & UnixFileMode.StickyBit) != 0;
-            if ((mode & OthersCanWrite) != 0 && !sticky)
+            if ((mode & UnixFileMode.OtherWrite) != 0 && !sticky)
                 return $"{path} can be changed by other users.";
 
             if (UnixFileStatus.Stat(path) is not { } identity)
                 return $"Fleet couldn't check who owns {path}.";
+
+            // Group write is fine when the group is only this user's: Ubuntu-style private groups with umask 002
+            // make every folder the user creates (such as ~/.bun/bin) group-writable.
+            if ((mode & UnixFileMode.GroupWrite) != 0 && !sticky && !UnixFileStatus.IsPrivateGroup(identity.Gid))
+                return $"{path} can be changed by other users.";
 
             if (identity.Uid != me && identity.Uid != 0)
                 return $"{path} is owned by another user.";
