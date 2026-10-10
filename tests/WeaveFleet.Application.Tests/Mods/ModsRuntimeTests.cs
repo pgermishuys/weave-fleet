@@ -78,7 +78,27 @@ public sealed class ModsRuntimeTests
         await runtime.WhenIdle;
         await runtime.Sent;
 
-        Sent().Select(p => (p.Job!.Phase, p.Job.BytesReceived)).ShouldBe([("downloading", 0L), ("downloading", 4000L), ("succeeded", 4000L)]);
+        Sent().Select(p => (p.Job!.Phase, p.Job.BytesReceived)).ShouldBe([("downloading", 0L), ("downloading", 3000L), ("succeeded", 4000L)]);
+    }
+
+    [Fact]
+    public async Task A_download_that_pauses_still_shows_how_far_it_got()
+    {
+        var gate = _bun.Hold();
+        var runtime = NewRuntime();
+        await runtime.StartInstallAsync(Alice, CancellationToken.None);
+        await gate.Started.Task;
+
+        gate.Report(Job("downloading", 12_000_000)); // Inside the 250 ms after the first event, then nothing more arrives.
+        await runtime.Sent;
+        Sent().Last().Job!.BytesReceived.ShouldBe(0);
+
+        _clock.Advance(TimeSpan.FromMilliseconds(250));
+        await runtime.Sent;
+
+        Sent().Last().Job!.BytesReceived.ShouldBe(12_000_000);
+        gate.Release();
+        await runtime.WhenIdle;
     }
 
     [Fact]
