@@ -17,7 +17,7 @@ public sealed class BunManifestReleasesTests : IDisposable
 
     private readonly string _home = Path.Combine(Path.GetTempPath(), $"fleet-bun-manifest-{Guid.NewGuid():N}");
     private readonly BunReleaseServer _server = new();
-    private readonly FakeTimeProvider _time = new(new DateTimeOffset(2026, 10, 10, 9, 0, 0, TimeSpan.Zero));
+    private readonly SignallingTimeProvider _time = new(new DateTimeOffset(2026, 10, 10, 9, 0, 0, TimeSpan.Zero));
     private readonly List<BunManifestReleases> _started = [];
 
     public BunManifestReleasesTests() => Directory.CreateDirectory(_home);
@@ -50,61 +50,69 @@ public sealed class BunManifestReleasesTests : IDisposable
     public async Task It_fetches_once_five_seconds_after_start_and_then_every_interval()
     {
         Serve(Manifest(Bump(Pin.Version)));
-        var service = Create(bunPath: "/usr/bin/bun", intervalHours: 4);
+        await Start(Create(bunPath: "/usr/bin/bun", intervalHours: 4));
+        await Timers(1);
 
-        await Start(service);
         _time.Advance(TimeSpan.FromSeconds(4.9));
         await Quiet();
         _server.Requests.ShouldBeEmpty();
 
         _time.Advance(TimeSpan.FromSeconds(0.1));
         await Requests(1);
+        await Timers(2);
 
-        await AdvanceBy(TimeSpan.FromHours(3));
+        _time.Advance(TimeSpan.FromHours(3));
+        await Quiet();
         _server.Requests.Count.ShouldBe(1);
 
-        await AdvanceUntilRequests(2, TimeSpan.FromHours(6));
+        _time.Advance(TimeSpan.FromHours(1));
+        await Requests(2);
+        await Timers(3);
     }
 
     [Fact]
     public async Task With_check_on_startup_off_the_first_fetch_waits_for_the_interval()
     {
         Serve(Manifest(Bump(Pin.Version)));
-        var service = Create(bunPath: "/usr/bin/bun", checkOnStartup: false, intervalHours: 2);
+        await Start(Create(bunPath: "/usr/bin/bun", checkOnStartup: false, intervalHours: 2));
+        await Timers(1);
 
-        await Start(service);
-        _time.Advance(TimeSpan.FromSeconds(10));
+        _time.Advance(TimeSpan.FromSeconds(5));
+        await Timers(2);
         await Quiet();
         _server.Requests.ShouldBeEmpty();
 
-        await AdvanceUntilRequests(1, TimeSpan.FromHours(3));
+        _time.Advance(TimeSpan.FromHours(2));
+        await Requests(1);
     }
 
     [Fact]
     public async Task An_interval_of_zero_means_no_periodic_fetch()
     {
         Serve(Manifest(Bump(Pin.Version)));
-        var service = Create(bunPath: "/usr/bin/bun", intervalHours: 0);
+        await Start(Create(bunPath: "/usr/bin/bun", intervalHours: 0));
+        await Timers(1);
 
-        await Start(service);
         _time.Advance(TimeSpan.FromSeconds(5));
         await Requests(1);
 
-        await AdvanceBy(TimeSpan.FromHours(100));
+        _time.Advance(TimeSpan.FromHours(100));
         await Quiet();
         _server.Requests.Count.ShouldBe(1);
+        _time.Created.ShouldBe(1);
     }
 
     [Fact]
     public async Task A_dev_layout_never_fetches_on_its_schedule()
     {
         Serve(Manifest(Bump(Pin.Version)));
-        var service = Create(bunPath: "/usr/bin/bun", installedLayout: false);
+        await Start(Create(bunPath: "/usr/bin/bun", installedLayout: false));
 
-        await Start(service);
-        await AdvanceBy(TimeSpan.FromHours(10));
+        await Quiet();
+        _time.Advance(TimeSpan.FromHours(10));
         await Quiet();
 
+        _time.Created.ShouldBe(0);
         _server.Requests.ShouldBeEmpty();
     }
 
@@ -123,10 +131,13 @@ public sealed class BunManifestReleasesTests : IDisposable
     public async Task When_fleet_has_no_bun_to_look_after_the_schedule_makes_no_request()
     {
         Serve(Manifest(Bump(Pin.Version)));
-        var service = Create();
+        await Start(Create());
+        await Timers(1);
 
-        await Start(service);
-        await AdvanceBy(TimeSpan.FromHours(9));
+        _time.Advance(TimeSpan.FromSeconds(5));
+        await Timers(2);
+        _time.Advance(TimeSpan.FromHours(4));
+        await Timers(3);
         await Quiet();
 
         _server.Requests.ShouldBeEmpty();
@@ -137,10 +148,12 @@ public sealed class BunManifestReleasesTests : IDisposable
     {
         Serve(Manifest(Bump(Pin.Version)));
         await Start(Create(bunPath: "/usr/bin/bun"));
+        await Timers(1);
 
         _time.Advance(TimeSpan.FromSeconds(5));
 
         await Requests(1);
+        await Timers(2);
     }
 
     [Fact]
@@ -149,10 +162,12 @@ public sealed class BunManifestReleasesTests : IDisposable
         Serve(Manifest(Bump(Pin.Version)));
         Directory.CreateDirectory(Path.Combine(Root, "1.4.1"));
         await Start(Create());
+        await Timers(1);
 
         _time.Advance(TimeSpan.FromSeconds(5));
 
         await Requests(1);
+        await Timers(2);
     }
 
     [Fact]
@@ -161,10 +176,12 @@ public sealed class BunManifestReleasesTests : IDisposable
         Serve(Manifest(Bump(Pin.Version)));
         WriteCache(Manifest(Bump(Pin.Version)));
         await Start(Create());
+        await Timers(1);
 
         _time.Advance(TimeSpan.FromSeconds(5));
 
         await Requests(1);
+        await Timers(2);
     }
 
     [Fact]
@@ -540,9 +557,6 @@ public sealed class BunManifestReleasesTests : IDisposable
     {
         _started.Add(service);
         await service.StartAsync(CancellationToken.None);
-
-        // The schedule may begin on another thread; give it time to set its first timer before the clock moves.
-        await Task.Delay(300);
     }
 
     private void Serve(byte[] body) => _server.Serve(ManifestPath, body);
@@ -608,30 +622,35 @@ public sealed class BunManifestReleasesTests : IDisposable
         }
     }
 
-    /// <summary>Moves the clock on in steps, pausing between them, so the schedule's timers exist before time passes them.</summary>
-    private async Task AdvanceBy(TimeSpan total)
+    /// <summary>Waits until the schedule has made at least <paramref name="count"/> timers, which says where it is.</summary>
+    private async Task Timers(int count)
     {
-        var step = TimeSpan.FromMinutes(10);
-        for (var elapsed = TimeSpan.Zero; elapsed < total; elapsed += step)
+        var deadline = DateTime.UtcNow.AddSeconds(20);
+        while (_time.Created < count)
         {
-            _time.Advance(step);
-            await Task.Delay(2);
-        }
-    }
+            if (DateTime.UtcNow > deadline)
+                throw new TimeoutException($"Expected the schedule to have made {count} timers, saw {_time.Created}.");
 
-    private async Task AdvanceUntilRequests(int count, TimeSpan atMost)
-    {
-        var step = TimeSpan.FromMinutes(10);
-        for (var elapsed = TimeSpan.Zero; elapsed < atMost && _server.Requests.Count < count; elapsed += step)
-        {
-            _time.Advance(step);
-            await Task.Delay(5);
+            await Task.Delay(10);
         }
-
-        await Requests(count);
     }
 
     private static Task Quiet() => Task.Delay(250);
+
+    /// <summary>A fake clock that counts the timers made on it, so a test knows when the schedule is waiting.</summary>
+    private sealed class SignallingTimeProvider(DateTimeOffset start) : FakeTimeProvider(start)
+    {
+        private int _created;
+
+        public int Created => Volatile.Read(ref _created);
+
+        public override ITimer CreateTimer(TimerCallback callback, object? state, TimeSpan dueTime, TimeSpan period)
+        {
+            var timer = base.CreateTimer(callback, state, dueTime, period);
+            Interlocked.Increment(ref _created);
+            return timer;
+        }
+    }
 
     private sealed class HttpClientFactoryStub : IHttpClientFactory
     {
