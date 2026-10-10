@@ -418,6 +418,22 @@ public sealed class SignalREventContractTests : IAsyncLifetime, IDisposable
     }
 
     [Fact]
+    public async Task A_change_to_the_users_mods_reaches_their_clients_as_mods_changed()
+    {
+        await _hub.InvokeAsync("SubscribeToSessionsTopicAsync");
+        await WaitForBroadcasterSubscriberAsync();
+
+        // "Start without mods" is a change every client refetches /api/mods for, like Keep, Undo and on/off.
+        using (var scope = _server.Services.CreateScope())
+            await scope.ServiceProvider.GetRequiredService<WeaveFleet.Application.Mods.ModService>().SetSafeModeAsync(true);
+
+        var received = await WaitForWorkEventAsync("mods.changed", "sessions");
+        var props = received.Data.GetProperty("properties");
+        props.GetProperty("reason").GetString().ShouldBe("safe-mode");
+        (props.TryGetProperty("name", out var name) ? name.ValueKind : JsonValueKind.Null).ShouldBe(JsonValueKind.Null);
+    }
+
+    [Fact]
     public async Task A_session_notification_carries_its_kind_request_and_machine()
     {
         await _hub.InvokeAsync("SubscribeToSessionsTopicAsync");

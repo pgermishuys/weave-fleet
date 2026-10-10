@@ -146,6 +146,7 @@ internal sealed record QuickChatSourceInput;
 [JsonSerializable(typeof(SessionNotificationPayload))]
 [JsonSerializable(typeof(TerminalPayload))]
 [JsonSerializable(typeof(AppUpdatedPayload))]
+[JsonSerializable(typeof(ModsChangedPayload))]
 [JsonSerializable(typeof(FilesChangedPayload))]
 [JsonSerializable(typeof(WeaveFleet.Application.Harnesses.HarnessCatalogChangedPayload))]
 [JsonSerializable(typeof(WeaveFleet.Application.Memory.MemorySavedPayload))]

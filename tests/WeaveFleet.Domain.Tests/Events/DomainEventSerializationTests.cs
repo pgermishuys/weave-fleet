@@ -294,6 +294,16 @@ public sealed class DomainEventSerializationTests
                 },
             });
 
+            cases.Add("mods.changed", new ModsChanged
+            {
+                Payload = new ModsChangedPayload
+                {
+                    Name = "test-chips",
+                    Reason = "kept",
+                    SessionId = "session-1",
+                },
+            });
+
             return cases;
         }
     }

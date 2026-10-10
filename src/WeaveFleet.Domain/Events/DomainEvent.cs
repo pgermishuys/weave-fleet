@@ -33,4 +33,5 @@ namespace WeaveFleet.Domain.Events;
 [JsonDerivedType(typeof(TerminalClosed), "terminal.closed")]
 [JsonDerivedType(typeof(AppUpdated), "app.updated")]
 [JsonDerivedType(typeof(BrowserStepped), "browser.step")]
+[JsonDerivedType(typeof(ModsChanged), "mods.changed")]
 public abstract record DomainEvent;

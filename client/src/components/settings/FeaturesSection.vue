@@ -1,9 +1,11 @@
 <script setup lang="ts">
-import { computed, shallowRef } from "vue";
+import { computed, onMounted, shallowRef } from "vue";
 import { LoaderCircle } from "lucide-vue-next";
+import { apiFetch } from "@/lib/api-client";
 import { useBoardFeature } from "@/composables/use-board-feature";
 import { SESSION_RECAP_PREFERENCE_KEY } from "@/composables/use-session-recap";
 import { RETRY_AFTER_LIMITS_PREFERENCE_KEY } from "@/composables/use-session-retry";
+import { MODS_PREFERENCE_KEY } from "@/lib/mods";
 import { SESSION_MESSAGES_PREFERENCE_KEY } from "@/lib/session-messages";
 import { AGENT_HANDOFF_PREFERENCE_KEY, LIVE_MACHINES_PREFERENCE_KEY } from "@/lib/machines";
 import {
@@ -121,6 +123,35 @@ async function toggleLiveMachines(): Promise<void> {
     await preferencesStore.set(LIVE_MACHINES_PREFERENCE_KEY, isLiveMachinesEnabled.value ? "false" : "true");
   } finally {
     isSavingLiveMachines.value = false;
+  }
+}
+
+// What the server does when the user hasn't chosen: it falls back to Fleet's own option, so ask it.
+const serverModsOn = shallowRef(false);
+
+onMounted(async () => {
+  try {
+    const response = await apiFetch("/api/features/mods");
+    if (!response.ok) return;
+    const body = (await response.json()) as { on?: boolean };
+    serverModsOn.value = body.on === true;
+  } catch {
+    // Keep showing off: the same as before the server answers.
+  }
+});
+
+const isModsEnabled = computed(() => {
+  const chosen = preferencesStore.get(MODS_PREFERENCE_KEY, "");
+  return chosen === "" ? serverModsOn.value : chosen === "true";
+});
+const isSavingMods = shallowRef(false);
+
+async function toggleMods(): Promise<void> {
+  isSavingMods.value = true;
+  try {
+    await preferencesStore.set(MODS_PREFERENCE_KEY, isModsEnabled.value ? "false" : "true");
+  } finally {
+    isSavingMods.value = false;
   }
 }
 
@@ -448,6 +479,44 @@ async function toggleBoardFeature(): Promise<void> {
           <span
             class="pointer-events-none inline-block h-5 w-5 rounded-full bg-white shadow ring-0 transition duration-200 ease-in-out"
             :class="isAgentHandoffEnabled && isSessionMessagesEnabled ? 'translate-x-5' : 'translate-x-0'"
+          />
+        </button>
+      </div>
+    </div>
+    <div class="mt-3 flex items-start justify-between gap-4 rounded-card border border-border bg-main-bg p-4">
+      <div>
+        <p class="flex items-center gap-2 text-sm font-medium text-text">
+          Mods
+          <span class="rounded-full border border-border px-2 py-px text-[0.7rem] font-medium uppercase tracking-wide text-muted">
+            Experimental
+          </span>
+        </p>
+        <p class="mt-1 text-xs text-muted">
+          Agents can write small add-ons that draw in Fleet: counts on tool rows, a band above the composer, a status-bar chip. You review each one before it's kept.
+        </p>
+      </div>
+
+      <div class="flex items-center gap-2">
+        <LoaderCircle
+          v-if="isSavingMods"
+          :size="16"
+          class="animate-spin text-muted"
+          aria-hidden="true"
+        />
+        <button
+          type="button"
+          role="switch"
+          :aria-checked="isModsEnabled"
+          :disabled="preferencesStore.isLoading || isSavingMods"
+          aria-label="Enable Mods"
+          data-testid="mods-switch"
+          class="relative inline-flex h-6 w-11 shrink-0 cursor-pointer rounded-full border-2 border-transparent transition-colors duration-200 ease-in-out focus:outline-none focus:ring-2 focus:ring-accent focus:ring-offset-2 focus:ring-offset-main-bg disabled:cursor-not-allowed disabled:opacity-60"
+          :class="isModsEnabled ? 'bg-accent' : 'bg-border'"
+          @click="toggleMods"
+        >
+          <span
+            class="pointer-events-none inline-block h-5 w-5 rounded-full bg-white shadow ring-0 transition duration-200 ease-in-out"
+            :class="isModsEnabled ? 'translate-x-5' : 'translate-x-0'"
           />
         </button>
       </div>
