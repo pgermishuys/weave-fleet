@@ -46,6 +46,8 @@ public sealed class ModHostServiceTests : IDisposable
         await _service.StartAsync(CancellationToken.None).Within();
         _events.PublishModsChanged(Other);
         await _factory.NextStart();
+        // The factory is called before the supervisor marks itself running; this waits for that reconcile to finish.
+        await _service.EnsureAsync(Other).Within();
         _factory.Launches.Single().UserKey.ShouldBe(KeyOf(Other));
         _service.GetStatus(Other).State.ShouldBe(ModHostStates.Running);
         _service.GetStatus(Local).State.ShouldBe(ModHostStates.Stopped);
