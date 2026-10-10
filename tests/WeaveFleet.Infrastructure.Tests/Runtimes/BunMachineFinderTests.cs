@@ -7,7 +7,8 @@ namespace WeaveFleet.Infrastructure.Tests.Runtimes;
 
 public sealed class BunMachineFinderTests : IDisposable
 {
-    private readonly string _root = Path.Combine(SafeBase(), $"fleet-find-{Guid.NewGuid():N}");
+    // The real path (macOS's temp folder is under /var, a link to /private/var), so messages name the folders as created.
+    private readonly string _root = Path.Combine(BunPaths.Canonical(SafeBase()), $"fleet-find-{Guid.NewGuid():N}");
     private readonly ConcurrentDictionary<string, BunProbeResult> _answers = new();
     private readonly ConcurrentQueue<string> _probed = new();
 
