@@ -36,12 +36,17 @@ function badge(release: ReleaseNote): { label: string; tone: "accent" | "muted" 
 }
 
 const rendered = computed(() => {
-  const html = new Map<string, string>();
+  const notes = new Map<string, { html: string; internal: number }>();
   for (const release of [...range.value.open, ...range.value.folded]) {
-    html.set(release.version, sanitizeHtml(markdown.render(releaseNotesMarkdown(parseReleaseNotes(release.body)))));
+    const parsed = parseReleaseNotes(release.body);
+    notes.set(release.version, { html: sanitizeHtml(markdown.render(releaseNotesMarkdown(parsed))), internal: parsed.internal });
   }
-  return html;
+  return notes;
 });
+
+function internalLine(count: number): string {
+  return count === 1 ? "And 1 behind-the-scenes change." : `And ${count} behind-the-scenes changes.`;
+}
 
 function formatDate(iso: string | null): string {
   if (!iso) return "";
@@ -72,6 +77,13 @@ async function goToRequest(): Promise<void> {
   const row = target.version
     ? Array.from(card.value?.querySelectorAll<HTMLDetailsElement>("details[data-version]") ?? []).find((el) => el.dataset.version === target.version)
     : undefined;
+  if (target.since && target.version) {
+    // From "What's new since …": every version the update brought is open, not only the newest.
+    for (const el of card.value?.querySelectorAll<HTMLDetailsElement>("details[data-version]") ?? []) {
+      const version = el.dataset.version ?? "";
+      if (compareVersions(version, target.since) > 0 && compareVersions(version, target.version) <= 0) el.open = true;
+    }
+  }
   if (row) {
     row.open = true;
     flashed.value = null;
@@ -176,9 +188,21 @@ onMounted(async () => {
         <div
           class="whats-new__notes md-content"
           @click="openLink"
-          v-html="rendered.get(release.version)"
+          v-html="rendered.get(release.version)?.html"
         />
         <!-- eslint-enable vue/no-v-html -->
+        <p
+          v-if="rendered.get(release.version)?.internal"
+          class="whats-new__internal"
+          data-testid="whats-new-internal"
+        >
+          {{ internalLine(rendered.get(release.version)?.internal ?? 0) }}
+          <a
+            :href="release.url"
+            target="_blank"
+            rel="noopener noreferrer"
+          >All the notes on GitHub</a>
+        </p>
       </details>
     </div>
   </section>
@@ -268,6 +292,31 @@ onMounted(async () => {
   color: var(--accent);
 }
 
+/* The part of Fleet a change is about ("Claude Code"): a quiet label before it. */
+.whats-new__notes :deep(li > em:first-child) {
+  margin-right: 4px;
+  font-size: 12px;
+  font-style: normal;
+  color: var(--muted);
+}
+
+.whats-new__internal {
+  margin: -8px 0 0;
+  padding: 0 0 16px 24px;
+  font-size: 12px;
+  color: var(--muted);
+}
+
+.whats-new__internal a {
+  color: inherit;
+  text-decoration: underline;
+  text-underline-offset: 2px;
+}
+
+.whats-new__internal a:hover {
+  color: var(--text);
+}
+
 .whats-new__version--flash {
   animation: whats-new-flash 1.6s ease-out;
 }
@@ -288,7 +337,32 @@ onMounted(async () => {
     transition: none;
   }
 
-  .whats-new__version--flash {
+  /* The part of Fleet a change is about ("Claude Code"): a quiet label before it. */
+.whats-new__notes :deep(li > em:first-child) {
+  margin-right: 4px;
+  font-size: 12px;
+  font-style: normal;
+  color: var(--muted);
+}
+
+.whats-new__internal {
+  margin: -8px 0 0;
+  padding: 0 0 16px 24px;
+  font-size: 12px;
+  color: var(--muted);
+}
+
+.whats-new__internal a {
+  color: inherit;
+  text-decoration: underline;
+  text-underline-offset: 2px;
+}
+
+.whats-new__internal a:hover {
+  color: var(--text);
+}
+
+.whats-new__version--flash {
     animation: none;
   }
 }

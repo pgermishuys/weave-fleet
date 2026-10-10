@@ -9,6 +9,15 @@ export interface NoticeAction {
   run: () => void | Promise<void>;
 }
 
+/** One line of a card's list: a change in What's new. */
+export interface NoticeItem {
+  text: string;
+  /** A quiet label before the text: the part of Fleet it's about. */
+  label?: string;
+  /** fixed marks the line green; highlight and new use the accent. */
+  kind?: "highlight" | "new" | "fixed";
+}
+
 /** What a notice's card shows. */
 export interface NoticeContent {
   title: string;
@@ -17,6 +26,10 @@ export interface NoticeContent {
   /** warn tints the icon amber, for a notice that asks before something stops work. */
   tone?: "accent" | "warn";
   actions?: NoticeAction[];
+  /** A short list under the body, which makes the card wider: What's new after an update. */
+  items?: NoticeItem[];
+  /** A line under the list ("+2 more fixes"). */
+  more?: string;
   /** A link after the body, opened in the browser, or, with `run`, handled in Fleet (the card then settles). */
   link?: { label: string; href: string; run?: () => void };
 }
