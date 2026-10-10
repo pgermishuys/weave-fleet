@@ -856,12 +856,12 @@ internal sealed partial class ModHostSupervisor : IModHostCalls, IAsyncDisposabl
     }
 
     /// <summary>
-    /// The host didn't answer: blames the mod it last said was running for this dispatch, else a lone mod in the chain,
-    /// else the outermost; kills the host, whose exit restarts it. Only the first timeout on a host does this.
+    /// The host didn't answer: blames the mod it last said was running since this dispatch was sent, else a lone mod in
+    /// the chain, else the outermost; kills the host, whose exit restarts it. Only the first timeout on a host does this.
     /// </summary>
     /// <remarks>
-    /// "For this dispatch" is the session and event, announced after the dispatch was sent; or the session's
-    /// <c>session.start</c>, which the host runs first, inside the dispatch, for a mod that hasn't started there yet.
+    /// The host runs one hook at a time, so a hook that never yields is the last one it announced, whatever its session
+    /// or event: the dispatch that timed out first may only have been waiting behind it.
     /// </remarks>
     private void Hung(HostRun run, string @event, string sessionId, IReadOnlyList<string> chain, long sentAfter)
     {
@@ -869,13 +869,7 @@ internal sealed partial class ModHostSupervisor : IModHostCalls, IAsyncDisposabl
             return;
         run.Hung = true;
 
-        string? named = null;
-        var latest = sentAfter;
-        foreach (var key in new[] { (sessionId, @event), (sessionId, "session.start") })
-        {
-            if (run.Running.TryGetValue(key, out var said) && said.Sequence > latest)
-                (named, latest) = (said.Mod, said.Sequence);
-        }
+        var named = run.LastRunning is { } said && said.Sequence > sentAfter ? said.Mod : null;
         var struck = named ?? (chain.Count > 0 ? chain[0] : null);
         var suspects = chain.ToList();
         if (named is not null && !suspects.Contains(named, StringComparer.Ordinal))
@@ -1183,8 +1177,7 @@ internal sealed partial class ModHostSupervisor : IModHostCalls, IAsyncDisposabl
             switch (method)
             {
                 case "running":
-                    if (Text(parameters, "event") is { } running && sessionId is not null && _run is { } run)
-                        run.Running[(sessionId, running)] = (modId, run.NextRunning());
+                    _run?.Announced(modId);
                     break;
                 case "invalidate":
                     _deps.Signals.Invalidated(UserId, modId, sessionId);
@@ -1255,6 +1248,8 @@ internal sealed partial class ModHostSupervisor : IModHostCalls, IAsyncDisposabl
     /// <param name="StagedFolder">A draft's staged copy (its generation folder), deleted when it's replaced or unloaded.</param>
     private sealed record LoadedMod(ModRoute Route, string? StagedFolder);
 
+    private sealed record RunningNotice(string Mod, long Sequence);
+
     /// <summary>One host process, from start to exit.</summary>
     private sealed class HostRun(IModHostConnection connection, BunLocation bun, DateTimeOffset startedAt)
     {
@@ -1273,16 +1268,16 @@ internal sealed partial class ModHostSupervisor : IModHostCalls, IAsyncDisposabl
         /// <summary>It stopped answering and Fleet killed it.</summary>
         public volatile bool Hung;
 
-        /// <summary>
-        /// The mod the host last said was running, per session and event (the <c>running</c> notification), numbered in
-        /// the order they came.
-        /// </summary>
-        public ConcurrentDictionary<(string SessionId, string Event), (string Mod, long Sequence)> Running { get; } = new();
+        private RunningNotice? _lastRunning;
+
+        /// <summary>The mod the host last said was running (the <c>running</c> notification), numbered in the order they came.</summary>
+        public RunningNotice? LastRunning => Volatile.Read(ref _lastRunning);
 
         /// <summary>How many <c>running</c> notifications have come: a dispatch counts only those after it was sent.</summary>
         public long RunningCount => Interlocked.Read(ref _runningCount);
 
-        public long NextRunning() => Interlocked.Increment(ref _runningCount);
+        /// <summary>The host said <paramref name="modId"/> is running. Cheap: it comes before every hook of a busy chain.</summary>
+        public void Announced(string modId) => Volatile.Write(ref _lastRunning, new RunningNotice(modId, Interlocked.Increment(ref _runningCount)));
 
         /// <summary>True for the first dispatch to time out on this host only.</summary>
         public bool ClaimHang() => Interlocked.Exchange(ref _hangClaimed, 1) == 0;

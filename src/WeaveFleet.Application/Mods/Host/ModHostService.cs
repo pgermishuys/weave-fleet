@@ -74,16 +74,39 @@ public sealed partial class ModHostService : IModHost, IHostedService, IAsyncDis
 
     internal ModHostSupervisor? SupervisorOf(string userId) => _supervisors.GetValueOrDefault(userId);
 
+    /// <summary>
+    /// The user's supervisor. The first time Fleet sees a user, their host is brought in line in the background, once
+    /// per Fleet process: a signed-in user's mods run after a restart without waiting for a change.
+    /// </summary>
     private ModHostSupervisor For(string userId)
     {
         if (_supervisors.TryGetValue(userId, out var supervisor))
             return supervisor;
+        var created = false;
         lock (_sync)
-            return _supervisors.GetOrAdd(userId, id => new ModHostSupervisor(id, _deps));
+        {
+            supervisor = _supervisors.GetOrAdd(userId, id =>
+            {
+                created = true;
+                return new ModHostSupervisor(id, _deps);
+            });
+        }
+        if (created)
+            Reconcile(supervisor);
+        return supervisor;
+    }
+
+    /// <summary>A call that answers from what's there now, and only makes sure a new user's host is on its way.</summary>
+    private ModHostSupervisor? Seen(string userId)
+    {
+        var supervisor = SupervisorOf(userId);
+        if (supervisor is null && !_stopped)
+            For(userId);
+        return supervisor;
     }
 
     public ModHostStatus GetStatus(string userId)
-        => SupervisorOf(userId)?.GetStatus() ?? ModHostStatus.StoppedWith(null);
+        => Seen(userId)?.GetStatus() ?? ModHostStatus.StoppedWith(null);
 
     public Task EnsureAsync(string userId, CancellationToken ct = default)
         => _stopped ? Task.CompletedTask : For(userId).EnsureAsync(ct);
@@ -93,16 +116,20 @@ public sealed partial class ModHostService : IModHost, IHostedService, IAsyncDis
             ? Task.FromException<JsonElement>(new ModHostNotReadyException("Fleet is shutting down."))
             : For(userId).CheckAsync(folder, ct);
 
-    /// <summary>Never starts a host: a user without one gets <see cref="ModDispatchResult.NotDispatched"/>.</summary>
+    /// <summary>Never starts a host itself: a user without one gets <see cref="ModDispatchResult.NotDispatched"/>.</summary>
     public Task<ModDispatchResult> DispatchAsync(string userId, ModDispatchRequest request, CancellationToken ct = default)
-        => SupervisorOf(userId)?.DispatchAsync(request, ct) ?? Task.FromResult(ModDispatchResult.NotDispatched);
+        => Seen(userId)?.DispatchAsync(request, ct) ?? Task.FromResult(ModDispatchResult.NotDispatched);
 
     public Task ForgetSessionAsync(string userId, string sessionId, CancellationToken ct = default)
-        => SupervisorOf(userId)?.ForgetSessionAsync(sessionId, ct) ?? Task.CompletedTask;
+        => Seen(userId)?.ForgetSessionAsync(sessionId, ct) ?? Task.CompletedTask;
 
-    public ModLoadProblem? GetLoadProblem(string userId, string modId) => SupervisorOf(userId)?.GetLoadProblem(modId);
+    public ModLoadProblem? GetLoadProblem(string userId, string modId) => Seen(userId)?.GetLoadProblem(modId);
 
-    public IReadOnlyList<ModLogLine> GetLog(string userId, string modId) => _deps.Log.Read(userId, modId);
+    public IReadOnlyList<ModLogLine> GetLog(string userId, string modId)
+    {
+        Seen(userId);
+        return _deps.Log.Read(userId, modId);
+    }
 
     // ── Hosting ─────────────────────────────────────────────────────────
 
@@ -111,6 +138,7 @@ public sealed partial class ModHostService : IModHost, IHostedService, IAsyncDis
     {
         _listening = Task.Run(() => ListenAsync(_stopping.Token), CancellationToken.None);
         _poll = _deps.Time.CreateTimer(_ => Poll(), null, PollInterval, PollInterval);
+        // Also when a call saw the user before Fleet finished starting.
         foreach (var userId in _startupUsers)
             Reconcile(For(userId));
         return Task.CompletedTask;
