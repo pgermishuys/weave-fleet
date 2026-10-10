@@ -22,7 +22,20 @@ public sealed record ModView(
 
 /// <summary>A mod the agent is writing in a session.</summary>
 /// <param name="Kept">The active version of the kept mod of the same name; null when none is kept.</param>
-public sealed record ModDraftView(string SessionId, string Name, string? Description, string? Version, ModOff? Off, int? Kept);
+/// <param name="KeepRequest">The agent's ask to keep the draft, while the user hasn't answered; null when there is none.</param>
+/// <param name="Problem">Why the draft last failed to load, from the mod host; null when it loaded or never tried.</param>
+public sealed record ModDraftView(
+    string SessionId,
+    string Name,
+    string? Description,
+    string? Version,
+    ModOff? Off,
+    int? Kept,
+    ModKeepRequestView? KeepRequest = null,
+    ModDraftProblemView? Problem = null);
+
+/// <summary>The first error of a draft's failed load: its code, message and line when the check gave one.</summary>
+public sealed record ModDraftProblemView(string Code, string Message, int? Line);
 
 /// <summary>A version's or a draft's files, for Show code.</summary>
 public sealed record ModFilesView(IReadOnlyList<ModFile> Files);
@@ -41,7 +54,9 @@ public sealed class ModService(
     IUserContext user,
     ModsSafeMode safeMode,
     ISessionRepository sessions,
-    TimeProvider clock)
+    TimeProvider clock,
+    IModDraftRunner runner,
+    ModKeepRequests keepRequests)
 {
     public const int MaxNoteLength = 2000;
 
@@ -161,9 +176,76 @@ public sealed class ModService(
         }
     }
 
+    /// <summary>Writes the files into the session's draft, creating the draft when it's new. A file sent replaces the one there.</summary>
+    public async Task<Result<ModDraftView>> WriteDraftAsync(string sessionId, string name, IReadOnlyList<ModFile> files, CancellationToken ct = default)
+    {
+        if (!ModNames.IsValidSessionId(sessionId))
+            return FleetError.NotFoundFor("Session", sessionId);
+        if (!ModNames.IsValid(name))
+            return FleetError.ValidationError("Name", $"{name} isn't a mod name.");
+        if (files.Count == 0)
+            return FleetError.ValidationError("Files", "Send at least one file.");
+
+        ModDraft draft;
+        try
+        {
+            draft = await store.WriteDraftFilesAsync(UserId, sessionId, name, files, ct).ConfigureAwait(false);
+        }
+        catch (Exception e) when (e is ModStoreException or ModStoreFullException)
+        {
+            return FleetError.ValidationError("ModDraft", e.Message);
+        }
+
+        await RaiseAsync("draft-written", name, sessionId, ct).ConfigureAwait(false);
+        return await ToViewAsync(draft, ct).ConfigureAwait(false);
+    }
+
+    /// <summary>Turning a draft off ends the agent's ask to keep it, as a decline.</summary>
     public async Task<Result<ModDraftView>> SetDraftOnAsync(string sessionId, string name, bool on, CancellationToken ct = default)
-        => await ChangeDraftAsync(sessionId, name, on ? "draft-on" : "draft-off",
+    {
+        var result = await ChangeDraftAsync(sessionId, name, on ? "draft-on" : "draft-off",
             () => store.SetDraftOffAsync(UserId, sessionId, name, on ? null : new ModOff(ModOffBy.User, clock.GetUtcNow()), ct), ct).ConfigureAwait(false);
+        if (result.IsSuccess && !on)
+            keepRequests.Resolve(UserId, sessionId, name, new ModKeepDecision(ModKeepOutcome.Declined));
+        return result;
+    }
+
+    /// <summary>
+    /// The agent asks the user to keep the draft; the card shows it until they answer. The caller waits on the returned
+    /// request. A new request replaces the one before it.
+    /// </summary>
+    public async Task<Result<ModKeepRequest>> RequestKeepAsync(string sessionId, string name, string? note, CancellationToken ct = default)
+    {
+        if (note is { Length: > MaxNoteLength })
+            return FleetError.ValidationError("Note", $"The note is at most {MaxNoteLength} characters.");
+        var found = await FindDraftAsync(sessionId, name, ct).ConfigureAwait(false);
+        if (found.IsFailure)
+            return found.Error;
+
+        var request = keepRequests.Request(UserId, sessionId, name, string.IsNullOrWhiteSpace(note) ? null : note);
+        await RaiseAsync("keep-requested", name, sessionId, ct).ConfigureAwait(false);
+        return request;
+    }
+
+    /// <summary>The user declines the agent's ask to keep the draft. The draft stays in its session, on.</summary>
+    public async Task<Result<ModDraftView>> DeclineKeepAsync(string sessionId, string name, CancellationToken ct = default)
+    {
+        var found = await FindDraftAsync(sessionId, name, ct).ConfigureAwait(false);
+        if (found.IsFailure)
+            return found.Error;
+
+        keepRequests.Resolve(UserId, sessionId, name, new ModKeepDecision(ModKeepOutcome.Declined));
+        await RaiseAsync("keep-declined", name, sessionId, ct).ConfigureAwait(false);
+        return await ToViewAsync(found.Value, ct).ConfigureAwait(false);
+    }
+
+    /// <summary>The mod's log from the mod host: the session's draft when <paramref name="sessionId"/> is given, the kept mod otherwise.</summary>
+    public Result<IReadOnlyList<ModDraftLogLine>> ReadLog(string name, string? sessionId)
+    {
+        if (!ModNames.IsValid(name) || (sessionId is not null && !ModNames.IsValidSessionId(sessionId)))
+            return FleetError.NotFoundFor(Mod, name);
+        return runner.Log(UserId, name, sessionId).ToList();
+    }
 
     /// <summary>Three failures in a row in a draft: the draft is turned off in its session.</summary>
     public async Task<Result<ModDraftView>> RecordDraftStrikesAsync(string sessionId, string name, string error, CancellationToken ct = default)
@@ -184,19 +266,21 @@ public sealed class ModService(
             return found.Error;
 
         var title = (await sessions.GetByIdAsync(sessionId).ConfigureAwait(false))?.Title;
+        ModVersion version;
         // The store checks its own staged copy, so a draft that changes meanwhile isn't what gets checked.
         ModKeepCheck keepCheck = check is { } given
             ? (_, _) => Task.FromResult<JsonElement?>(given)
             : (staged, token) => checker.CheckAsync(staged, token);
         try
         {
-            await store.KeepAsync(UserId, sessionId, name, new ModKeepSource(title, note), keepCheck, ct).ConfigureAwait(false);
+            version = await store.KeepAsync(UserId, sessionId, name, new ModKeepSource(title, note), keepCheck, ct).ConfigureAwait(false);
         }
         catch (ModStoreException e)
         {
             return FleetError.ValidationError("Keep", e.Message);
         }
 
+        keepRequests.Resolve(UserId, sessionId, name, new ModKeepDecision(ModKeepOutcome.Kept, version.Number));
         await RaiseAsync("kept", name, sessionId, ct).ConfigureAwait(false);
         return await ToViewAsync(await store.GetAsync(UserId, name, ct).ConfigureAwait(false), ct).ConfigureAwait(false);
     }
@@ -297,7 +381,37 @@ public sealed class ModService(
     {
         var manifest = draft.Manifest;
         var kept = await store.GetAsync(UserId, draft.Name, ct).ConfigureAwait(false);
-        return new ModDraftView(draft.SessionId, draft.Name, manifest?.Description, manifest?.Version, draft.Off, kept.Active);
+        return new ModDraftView(
+            draft.SessionId,
+            draft.Name,
+            manifest?.Description,
+            manifest?.Version,
+            draft.Off,
+            kept.Active,
+            keepRequests.Get(UserId, draft.SessionId, draft.Name),
+            ProblemOf(runner.LoadProblem(UserId, draft.SessionId, draft.Name)));
+    }
+
+    /// <summary>The first error of the failed load's report, or a plain <c>load</c> problem with the host's message.</summary>
+    private static ModDraftProblemView? ProblemOf(ModDraftProblem? problem)
+    {
+        if (problem is null)
+            return null;
+
+        if (problem.Report is { ValueKind: JsonValueKind.Object } report
+            && report.TryGetProperty("errors", out var errors)
+            && errors is { ValueKind: JsonValueKind.Array }
+            && errors.GetArrayLength() > 0
+            && errors[0] is { ValueKind: JsonValueKind.Object } first
+            && first.TryGetProperty("message", out var message)
+            && message.ValueKind == JsonValueKind.String)
+        {
+            var code = first.TryGetProperty("code", out var c) && c.ValueKind == JsonValueKind.String ? c.GetString()! : "load";
+            int? line = first.TryGetProperty("line", out var l) && l.ValueKind == JsonValueKind.Number && l.TryGetInt32(out var n) ? n : null;
+            return new ModDraftProblemView(code, message.GetString()!, line);
+        }
+
+        return new ModDraftProblemView("load", problem.Message, null);
     }
 
     private async Task RaiseAsync(string reason, string? name, string? sessionId, CancellationToken ct)

@@ -6,6 +6,7 @@ using WeaveFleet.Application.Browser;
 using WeaveFleet.Application.Canvases;
 using WeaveFleet.Application.Machines;
 using WeaveFleet.Application.Memory;
+using WeaveFleet.Application.Mods;
 using WeaveFleet.Application.Pages;
 using WeaveFleet.Application.Sessions;
 using WeaveFleet.Application.Walkthroughs;
@@ -36,7 +37,8 @@ public sealed class FleetToolCalls(
     SessionMessageBridge messages,
     MachineHandoffBridge handoff,
     AgentMemoryBridge memory,
-    WorkflowStepBridge steps)
+    WorkflowStepBridge steps,
+    ModBridge mods)
 {
     /// <summary>The tools the process with <paramref name="bridgeToken"/> has; null when Fleet can't place it.</summary>
     public async Task<IReadOnlyList<FleetToolDefinition>?> ListAsync(string bridgeToken, CancellationToken ct = default)
@@ -129,6 +131,12 @@ public sealed class FleetToolCalls(
             "fleet_memory_save" => memory.SaveAsync(token, session, String(args, "list"), String(args, "text"), String(args, "kind"), String(args, "replaces"), ct),
             "fleet_memory_forget" => memory.ForgetAsync(token, session, String(args, "id"), ct),
             "fleet_step_done" => steps.DoneAsync(token, session, String(args, "outcome"), String(args, "summary"), ct),
+            "fleet_mod_write" => mods.WriteAsync(token, session, String(args, "name"), Files(args), ct),
+            "fleet_mod_check" => mods.CheckAsync(token, session, String(args, "name"), ct),
+            "fleet_mod_reload" => mods.ReloadAsync(token, session, String(args, "name"), ct),
+            "fleet_mod_test" => mods.TestAsync(token, session, String(args, "name"), String(args, "event"), Object(args, "e"), ct),
+            "fleet_mod_keep" => mods.KeepAsync(token, session, String(args, "name"), NonEmpty(args, "note"), ct),
+            "fleet_mod_list" => mods.ListAsync(token, session, ct),
             _ => Task.FromResult(CanvasResult.Fail<CanvasToolOutput>(CanvasErrorKind.Invalid, $"Fleet has no tool {name}.")),
         };
     }
@@ -161,6 +169,46 @@ public sealed class FleetToolCalls(
     /// <summary>An object or list argument as the bridge takes it; a model that sent it as JSON text gets it read.</summary>
     private static JsonElement Element(JsonElement args, string name)
         => args.ValueKind == JsonValueKind.Object && args.TryGetProperty(name, out var value) ? value : default;
+
+    /// <summary>An object argument, which some models send as JSON text; undefined when it's missing, anything else as it came.</summary>
+    private static JsonElement Object(JsonElement args, string name)
+    {
+        var value = Element(args, name);
+        if (value.ValueKind != JsonValueKind.String)
+            return value;
+        try
+        {
+            using var document = JsonDocument.Parse(value.GetString()!);
+            return document.RootElement.Clone();
+        }
+        catch (JsonException)
+        {
+            return value;
+        }
+    }
+
+    /// <summary>
+    /// The <c>files</c> argument as <c>{path, content}</c> entries, from a list or JSON text; null when it's missing or isn't a
+    /// list. An entry without both is passed with an empty path, which the tool refuses.
+    /// </summary>
+    private static List<ModFile>? Files(JsonElement args)
+    {
+        var list = Object(args, "files");
+        if (list.ValueKind != JsonValueKind.Array)
+            return null;
+
+        var files = new List<ModFile>();
+        foreach (var entry in list.EnumerateArray())
+        {
+            files.Add(entry.ValueKind == JsonValueKind.Object
+                && entry.TryGetProperty("path", out var path) && path.ValueKind == JsonValueKind.String
+                && entry.TryGetProperty("content", out var content) && content.ValueKind == JsonValueKind.String
+                    ? new ModFile(path.GetString()!, content.GetString()!)
+                    : new ModFile("", ""));
+        }
+
+        return files;
+    }
 
     private static JsonNode? Node(JsonElement args, string name)
     {

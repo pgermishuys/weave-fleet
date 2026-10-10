@@ -3,6 +3,7 @@ using WeaveFleet.Application.Browser;
 using WeaveFleet.Application.Canvases;
 using WeaveFleet.Application.Machines;
 using WeaveFleet.Application.Memory;
+using WeaveFleet.Application.Mods;
 using WeaveFleet.Application.Pages;
 using WeaveFleet.Application.Sessions;
 using WeaveFleet.Application.Walkthroughs;
@@ -140,6 +141,42 @@ public static class CanvasBridgeEndpoints
             => ToResult(await bridge.ForgetAsync(BridgeToken(http), request.HarnessSessionId, request.Id, ct)))
             .WithName("MemoryBridgeForget");
 
+        // fleet_mod_write / _check / _reload / _test / _keep / _list: the agent's draft mods in its own session. Configured
+        // statement by statement, like the groups above that end in a filter lambda: a chain ending in one broke the AOT build.
+        var mods = app.MapGroup($"{PathPrefix}/mods");
+        mods.AllowAnonymous();
+        mods.WithTags("ModBridge");
+        mods.AddEndpointFilter(LoopbackOnlyAsync);
+
+        mods.MapPost("/write", async (ModBridgeRequest request, HttpContext http, ModBridge bridge, CancellationToken ct)
+            => ToResult(await bridge.WriteAsync(
+                BridgeToken(http),
+                request.HarnessSessionId,
+                request.Name,
+                request.Files?.Select(f => f.Path is { } path && f.Content is { } content ? new ModFile(path, content) : new ModFile("", "")).ToList(),
+                ct)))
+            .WithName("ModBridgeWrite");
+
+        mods.MapPost("/check", async (ModBridgeRequest request, HttpContext http, ModBridge bridge, CancellationToken ct)
+            => ToResult(await bridge.CheckAsync(BridgeToken(http), request.HarnessSessionId, request.Name, ct)))
+            .WithName("ModBridgeCheck");
+
+        mods.MapPost("/reload", async (ModBridgeRequest request, HttpContext http, ModBridge bridge, CancellationToken ct)
+            => ToResult(await bridge.ReloadAsync(BridgeToken(http), request.HarnessSessionId, request.Name, ct)))
+            .WithName("ModBridgeReload");
+
+        mods.MapPost("/test", async (ModBridgeRequest request, HttpContext http, ModBridge bridge, CancellationToken ct)
+            => ToResult(await bridge.TestAsync(BridgeToken(http), request.HarnessSessionId, request.Name, request.Event, request.E ?? default, ct)))
+            .WithName("ModBridgeTest");
+
+        mods.MapPost("/keep", async (ModBridgeRequest request, HttpContext http, ModBridge bridge, CancellationToken ct)
+            => ToResult(await bridge.KeepAsync(BridgeToken(http), request.HarnessSessionId, request.Name, request.Note, ct)))
+            .WithName("ModBridgeKeep");
+
+        mods.MapPost("/list", async (ModBridgeRequest request, HttpContext http, ModBridge bridge, CancellationToken ct)
+            => ToResult(await bridge.ListAsync(BridgeToken(http), request.HarnessSessionId, ct)))
+            .WithName("ModBridgeList");
+
         return app;
     }
 
@@ -167,6 +204,11 @@ public static class CanvasBridgeEndpoints
             _ => Results.UnprocessableEntity(error),
         };
     }
+
+    private static async ValueTask<object?> LoopbackOnlyAsync(EndpointFilterInvocationContext context, EndpointFilterDelegate next)
+        => IsLoopback(context.HttpContext.Connection.RemoteIpAddress)
+            ? await next(context)
+            : UnknownCaller();
 
     private static IResult UnknownCaller() => Results.NotFound(new ErrorResponse(CanvasBridge.UnknownCallerMessage));
 

@@ -182,6 +182,7 @@ internal sealed record ErrorResponse(string Error);
 [JsonSerializable(typeof(SessionReferenceDto[]))]
 [JsonSerializable(typeof(WorkflowStepBridgeRequest))]
 [JsonSerializable(typeof(MemoryBridgeRequest))]
+[JsonSerializable(typeof(ModBridgeRequest))]
 // Workflows
 [JsonSerializable(typeof(WeaveFleet.Application.Workflows.WorkflowLibraryDto))]
 [JsonSerializable(typeof(WeaveFleet.Application.Workflows.WorkflowRunDto))]
@@ -494,6 +495,8 @@ internal sealed record ErrorResponse(string Error);
 [JsonSerializable(typeof(List<WeaveFleet.Application.Mods.ModDraftView>))]
 [JsonSerializable(typeof(WeaveFleet.Application.Mods.ModFilesView))]
 [JsonSerializable(typeof(WeaveFleet.Application.Mods.ModCheckView))]
+[JsonSerializable(typeof(IReadOnlyList<WeaveFleet.Application.Mods.ModDraftLogLine>))]
+[JsonSerializable(typeof(List<WeaveFleet.Application.Mods.ModDraftLogLine>))]
 [JsonSerializable(typeof(WeaveFleet.Api.Endpoints.UseModVersionRequest))]
 [JsonSerializable(typeof(WeaveFleet.Api.Endpoints.SetModsSafeModeRequest))]
 [JsonSerializable(typeof(WeaveFleet.Api.Endpoints.KeepModRequest))]

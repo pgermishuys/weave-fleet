@@ -364,6 +364,21 @@ public sealed record MemoryBridgeRequest(
     string? Replaces = null,
     string? Id = null);
 
+/// <summary>A file the agent writes into a draft mod: its path inside the mod's folder and its text.</summary>
+public sealed record ModBridgeFile(string? Path, string? Content);
+
+/// <summary>
+/// What the <c>fleet_mod_*</c> tools post: the harness's id for the calling session and the tool's arguments. <c>E</c> is
+/// the sample event's fields for <c>fleet_mod_test</c>.
+/// </summary>
+public sealed record ModBridgeRequest(
+    string? HarnessSessionId,
+    string? Name = null,
+    IReadOnlyList<ModBridgeFile>? Files = null,
+    string? Event = null,
+    JsonElement? E = null,
+    string? Note = null);
+
 /// <summary><c>fleet_message</c> from the harness process. <c>Machine</c> names another machine the session is on (agent hand-off).</summary>
 public sealed record SessionMessageBridgeRequest(string? HarnessSessionId, string? SessionId = null, string? Text = null, bool NotifyWhenDone = false, string? Machine = null);
 

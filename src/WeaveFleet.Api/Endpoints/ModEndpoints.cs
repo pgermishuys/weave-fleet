@@ -38,6 +38,12 @@ public static class ModEndpoints
             .WithName("GetMod")
             .Produces<ModView>();
 
+        // GET /api/mods/{name}/log[?session={id}] — the mod's log from the mod host, oldest first; a draft's when a session is given.
+        mods.MapGet("/{name}/log", (string name, string? session, ModService service)
+                => service.ReadLog(name, session).ToApiResult())
+            .WithName("GetModLog")
+            .Produces<IReadOnlyList<ModDraftLogLine>>();
+
         mods.MapGet("/{name}/versions/{version:int}/files", async (string name, int version, ModService service, CancellationToken ct)
                 => (await service.ReadVersionFilesAsync(name, version, ct)).ToApiResult())
             .WithName("GetModVersionFiles")
@@ -104,6 +110,15 @@ public static class ModEndpoints
                 => (await service.SetDraftOnAsync(sessionId, name, on: true, ct)).ToApiResult())
             .WithName("TurnModDraftOn")
             .Produces<ModDraftView>();
+
+        // DELETE /api/sessions/{sessionId}/mods/drafts/{name}/keep-request — the user declines the agent's ask to keep it.
+        drafts.MapDelete("/drafts/{name}/keep-request", async (string sessionId, string name, ModService service, CancellationToken ct) =>
+            {
+                var declined = await service.DeclineKeepAsync(sessionId, name, ct);
+                return declined.IsSuccess ? (IResult)Results.NoContent() : declined.ToApiResult();
+            })
+            .WithName("DeclineModKeepRequest")
+            .Produces(StatusCodes.Status204NoContent);
 
         // ── The switch, as the server sees it ────────────────────────────────
         // Not gated: Settings asks while the switch is off, to show what the server would do without a stored choice.
