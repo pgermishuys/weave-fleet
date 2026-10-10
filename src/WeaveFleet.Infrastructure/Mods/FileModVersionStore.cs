@@ -102,6 +102,9 @@ public sealed class FileModVersionStore(string root) : IModVersionStore, IDispos
 
             Directory.Delete(draft, recursive: true);
             WriteDraftOff(userId, sessionId, name, null);
+            var session = SessionDrafts(userId, sessionId);
+            if (!Directory.EnumerateFileSystemEntries(session).Any())
+                Directory.Delete(session);
             return version;
         }, ct);
     }

@@ -104,6 +104,8 @@ public sealed class FileModVersionStoreTests : IDisposable
         var draft = Draft(code: "// one\n");
         await _store.KeepAsync(User, Session, Name, NoSource);
         Directory.Exists(draft).ShouldBeFalse();
+        // The session's drafts folder goes too when that was its last draft.
+        Directory.Exists(Path.GetDirectoryName(draft)).ShouldBeFalse();
 
         Draft(code: "// two\n");
         var second = await _store.KeepAsync(User, Session, Name, NoSource);
