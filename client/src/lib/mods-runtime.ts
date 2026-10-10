@@ -89,6 +89,15 @@ export function elapsedText(startedAt: string | null | undefined, now: number): 
   return `${hours} ${hours === 1 ? "hour" : "hours"}`;
 }
 
+/** What a running install's heading says: the first install, an update, or a security fix. */
+export function progressTitle(job: ModsRuntimeJob): string {
+  if (job.phase === "verifying") return "Checking the download";
+  if (job.phase === "extracting") return `Unpacking Bun ${job.version}`;
+  if (job.kind === "security") return `Security fix: updating to Bun ${job.version}`;
+  if (job.kind === "update") return `Updating to Bun ${job.version}`;
+  return `Downloading Bun ${job.version}`;
+}
+
 /** The short cause inside a failure message, for a notice: "Fleet couldn't download it: the connection timed out." */
 export function failureCause(job: ModsRuntimeJob): string {
   const message = job.message ?? "";

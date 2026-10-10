@@ -13,10 +13,13 @@ import {
   notificationPermission,
   requestNotificationPermission,
 } from "@/composables/use-session-notifications";
+import ModsRuntimePanel from "@/components/settings/mods/ModsRuntimePanel.vue";
 import { useMachinesStore } from "@/stores/machines";
+import { useModsRuntimeStore } from "@/stores/mods-runtime";
 import { usePreferencesStore } from "@/stores/preferences";
 
 const preferencesStore = usePreferencesStore();
+const modsRuntime = useModsRuntimeStore();
 const machines = useMachinesStore();
 preferencesStore.ensureLoaded();
 const { isBoardFeatureEnabled, setBoardFeatureEnabled } = useBoardFeature();
@@ -130,6 +133,7 @@ async function toggleLiveMachines(): Promise<void> {
 const serverModsOn = shallowRef(false);
 
 onMounted(async () => {
+  void modsRuntime.load();
   try {
     const response = await apiFetch("/api/features/mods");
     if (!response.ok) return;
@@ -146,7 +150,19 @@ const isModsEnabled = computed(() => {
 });
 const isSavingMods = shallowRef(false);
 
+const isConfirmingMods = computed(() => modsRuntime.panel === "confirm" || modsRuntime.panel === "own-bun");
+
 async function toggleMods(): Promise<void> {
+  // The switch stays off while Fleet says what it will install: the user answers there. Flipping it again cancels.
+  if (isConfirmingMods.value) {
+    modsRuntime.panel = "none";
+    return;
+  }
+  const runtime = modsRuntime.view;
+  if (!isModsEnabled.value && runtime && !runtime.bun && !runtime.configuredPath) {
+    void modsRuntime.openConfirm();
+    return;
+  }
   isSavingMods.value = true;
   try {
     await preferencesStore.set(MODS_PREFERENCE_KEY, isModsEnabled.value ? "false" : "true");
@@ -484,7 +500,7 @@ async function toggleBoardFeature(): Promise<void> {
       </div>
     </div>
     <div class="mt-3 flex items-start justify-between gap-4 rounded-card border border-border bg-main-bg p-4">
-      <div>
+      <div class="min-w-0 flex-1">
         <p class="flex items-center gap-2 text-sm font-medium text-text">
           Mods
           <span class="rounded-full border border-border px-2 py-px text-[0.7rem] font-medium uppercase tracking-wide text-muted">
@@ -494,6 +510,7 @@ async function toggleBoardFeature(): Promise<void> {
         <p class="mt-1 text-xs text-muted">
           Agents can write small add-ons that draw in Fleet: counts on tool rows, a band above the composer, a status-bar chip. You review each one before it's kept.
         </p>
+        <ModsRuntimePanel :enabled="isModsEnabled" />
       </div>
 
       <div class="flex items-center gap-2">
@@ -511,7 +528,10 @@ async function toggleBoardFeature(): Promise<void> {
           aria-label="Enable Mods"
           data-testid="mods-switch"
           class="relative inline-flex h-6 w-11 shrink-0 cursor-pointer rounded-full border-2 border-transparent transition-colors duration-200 ease-in-out focus:outline-none focus:ring-2 focus:ring-accent focus:ring-offset-2 focus:ring-offset-main-bg disabled:cursor-not-allowed disabled:opacity-60"
-          :class="isModsEnabled ? 'bg-accent' : 'bg-border'"
+          :class="[
+            isModsEnabled ? 'bg-accent' : 'bg-border',
+            isConfirmingMods ? 'ring-2 ring-accent ring-offset-2 ring-offset-main-bg' : '',
+          ]"
           @click="toggleMods"
         >
           <span

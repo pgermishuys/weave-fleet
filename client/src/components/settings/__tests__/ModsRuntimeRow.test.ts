@@ -297,7 +297,7 @@ describe("Mods row: turning Mods on", () => {
     await flushPromises();
 
     expect(putMock).toHaveBeenCalled();
-    expect(stateOf(wrapper)).not.toBe("confirm");
+    expect(wrapper.find("[data-state='confirm']").exists()).toBe(false);
   });
 });
 
@@ -498,7 +498,7 @@ describe("Mods row: failed", () => {
 
       expect(stateOf(wrapper)).toBe("own-bun");
       const input = panel(wrapper).get("input");
-      expect(panel(wrapper).get(`label[for='${input.attributes("id")}']`).exists()).toBe(true);
+      expect(panel(wrapper).find(`label[for='${input.attributes("id")}']`).exists()).toBe(true);
       expect(input.attributes("aria-describedby")).toContain("hint");
       expect(panel(wrapper).text()).toContain("Install Bun 1.4 or later yourself, then give Fleet the full path to it.");
       expect(panel(wrapper).text()).toContain("The path must start at the root, like /opt/tools/bun/bin/bun or C:\\Tools\\bun\\bun.exe.");
@@ -660,7 +660,7 @@ describe("Mods row: on, off and updates", () => {
     expect(stateOf(wrapper)).toBe("progress");
     expect(panel(wrapper).get("h4").text()).toBe("Security fix: updating to Bun 1.4.3");
     expect(panel(wrapper).get("h4").classes()).toContain("text-idle");
-    expect(panel(wrapper).get("[role='progressbar']").classes().join(" ")).toContain("idle");
+    expect(panel(wrapper).get("[role='progressbar'] > div").classes()).toContain("bg-idle");
     expect(panel(wrapper).text()).toContain("Bun 1.4.2 has a security problem that 1.4.3 fixes, so Fleet is installing it now. Mods keep running meanwhile.");
     expect(panel(wrapper).text()).toContain("9 of 35 MB");
   });

@@ -1,4 +1,5 @@
 import type { MemorySavedPayload } from "@/lib/agent-memory";
+import type { ModsRuntimeJob } from "@/lib/mods-runtime";
 import type { SessionProgressDetail, SessionProgressSummary } from "@/lib/session-progress";
 import type { SmartLinkWire } from "@/lib/smart-links";
 import type { WorkflowRun } from "@/lib/workflows";
@@ -805,6 +806,15 @@ export interface ModsChanged extends EventCursorMetadata {
   };
 }
 
+/** The Bun mods run on changed: an install made progress, finished or failed, or the user's own Bun changed. Sent on the `sessions` topic to everyone. */
+export interface ModsRuntime extends EventCursorMetadata {
+  type: "mods.runtime";
+  payload: {
+    job?: ModsRuntimeJob | null;
+    reason: "job" | "bun-path" | "installed" | "release";
+  };
+}
+
 export type DomainEvent =
   | SessionStarted
   | SessionIdled
@@ -857,4 +867,5 @@ export type DomainEvent =
   | WorkflowRunChanged
   | HarnessUsageChanged
   | HarnessCatalogChanged
-  | ModsChanged;
+  | ModsChanged
+  | ModsRuntime;

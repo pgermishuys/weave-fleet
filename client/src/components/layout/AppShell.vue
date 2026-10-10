@@ -36,6 +36,7 @@ import { useSessionProgressUpdates } from "@/composables/use-session-progress-up
 import { useSessionTokenUpdates } from "@/composables/use-session-token-updates";
 import { useSmartLinkUpdates } from "@/composables/use-smart-link-updates";
 import { useMemoryNotices } from "@/composables/use-memory-notices";
+import { useModsRuntimeNotices } from "@/composables/use-mods-runtime-notices";
 import { useUpdateNotices } from "@/composables/use-update-notices";
 import { useSidebarMobile } from "@/composables/use-sidebar-mobile";
 import { useVisualViewport } from "@/composables/use-visual-viewport";
@@ -54,6 +55,7 @@ useSessionProgressUpdates();
 useSessionTokenUpdates();
 useSmartLinkUpdates();
 useMemoryNotices();
+useModsRuntimeNotices();
 useUpdateNotices();
 useVisualViewport();
 useKeyboardScroll();
