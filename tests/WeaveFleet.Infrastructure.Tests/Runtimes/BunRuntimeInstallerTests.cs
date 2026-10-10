@@ -204,7 +204,7 @@ public sealed class BunRuntimeInstallerTests : IDisposable
     {
         var release = Publish();
         await NewInstaller(release, "linux-x64").EnsureAsync(release, null, CancellationToken.None);
-        var configured = Path.Combine(_home, "my-bun");
+        var configured = Path.Combine(_home, "my-bun.exe");
         await File.WriteAllTextAsync(configured, Script("1.4.5"));
         var installer = NewInstaller(release, "linux-x64", bunPath: configured, probe: Prints("1.4.5"));
 
@@ -217,7 +217,7 @@ public sealed class BunRuntimeInstallerTests : IDisposable
     public async Task A_configured_path_that_is_missing_is_an_error_and_nothing_downloads()
     {
         var release = Publish();
-        var missing = Path.Combine(_home, "no-such-bun");
+        var missing = Path.Combine(_home, "no-such-bun.exe");
         var installer = NewInstaller(release, "linux-x64", bunPath: missing);
 
         (await installer.FindAsync(release, CancellationToken.None)).ShouldBeNull();
@@ -650,7 +650,7 @@ public sealed class BunRuntimeInstallerTests : IDisposable
 
     // -- the configured Bun ---------------------------------------------------------------------------------------
 
-    private async Task<string> ConfiguredFileAsync(string name = "my-bun")
+    private async Task<string> ConfiguredFileAsync(string name = "my-bun.exe")
     {
         var path = Path.Combine(_home, name);
         await File.WriteAllTextAsync(path, Script("1.4.5"));
@@ -1025,7 +1025,7 @@ public sealed class BunRuntimeInstallerTests : IDisposable
     public async Task A_configured_path_that_is_a_folder_says_so()
     {
         var release = Publish();
-        var folder = Path.Combine(_home, "a-folder");
+        var folder = Path.Combine(_home, "a-folder.exe");
         Directory.CreateDirectory(folder);
         var installer = NewInstaller(release, bunPath: folder);
 
@@ -1036,10 +1036,12 @@ public sealed class BunRuntimeInstallerTests : IDisposable
     }
 
     [Theory]
-    [InlineData("/tools/bun")]
-    [InlineData("/tools/bun.cmd")]
-    public async Task On_Windows_a_configured_bun_must_end_in_exe(string configured)
+    [InlineData("bun")]
+    [InlineData("bun.cmd")]
+    public async Task On_Windows_a_configured_bun_must_end_in_exe(string fileName)
     {
+        // Fully qualified on this host, so the .exe rule is the one that fires, not the absolute-path rule.
+        var configured = Path.Combine(Path.GetTempPath(), "tools", fileName);
         // Windows rules, tested on any machine through the seam.
         var installer = new BunRuntimeInstaller(
             new FleetOptions { Harness = { BunPath = configured } },

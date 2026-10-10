@@ -91,9 +91,12 @@ public sealed class BunMachineFinderTests : IDisposable
         return path;
     }
 
-    private static string FileName(bool windows = false) => windows ? "bun.exe" : "bun";
+    /// <summary>What the finder looks for on this host: bun.exe on Windows, bun elsewhere.</summary>
+    private static readonly bool Host = OperatingSystem.IsWindows();
 
-    private string Bun(string folder, bool windows = false, string? version = "1.4.5")
+    private static string FileName(bool? windows = null) => windows ?? Host ? "bun.exe" : "bun";
+
+    private string Bun(string folder, bool? windows = null, string? version = "1.4.5")
     {
         var path = Path.Combine(Folder(folder), FileName(windows));
         File.WriteAllText(path, "not a real bun");
@@ -106,12 +109,12 @@ public sealed class BunMachineFinderTests : IDisposable
 
     private BunMachineFinder Finder(
         string? pathEnv = null,
-        bool windows = false,
+        bool? windows = null,
         IReadOnlyList<string>? system = null) => new()
     {
         Home = Path.Combine(_root, "home"),
         PathEnv = pathEnv,
-        IsWindows = windows,
+        IsWindows = windows ?? Host,
         SystemDirectories = system ?? [],
         Probe = (path, _) =>
         {
@@ -529,6 +532,7 @@ public sealed class BunMachineFinderTests : IDisposable
     [Fact]
     public async Task A_bun_the_check_says_another_user_owns_is_not_run()
     {
+        if (OperatingSystem.IsWindows()) return; // Windows skips the owner check by design.
         var bun = Bun("a");
         var finder = new BunMachineFinder
         {
