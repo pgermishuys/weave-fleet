@@ -1,4 +1,3 @@
-using System.Buffers.Binary;
 using System.Runtime.InteropServices;
 using System.Security.Cryptography;
 using Microsoft.Win32.SafeHandles;
@@ -38,6 +37,8 @@ internal enum FileProblem
 /// </summary>
 internal static partial class SafeFile
 {
+    // SystemNative_FStat normalises the mode bits on every OS (PAL_S_IFMT 0xF000, IFIFO 0x1000, IFCHR 0x2000,
+    // IFDIR 0x4000, IFREG 0x8000, IFLNK 0xA000, IFSOCK 0xC000).
     private const int FormatMask = 0xF000;
     private const int RegularFile = 0x8000;
 
@@ -46,15 +47,30 @@ internal static partial class SafeFile
     private const int ElinuxLoop = 40;
     private const int EmacLoop = 62;
 
+    // The whole FileStatus is 17 fields (about 160 bytes today). We hand the native side far more room than that, so a
+    // field appended at the end by a later .NET can never write past our buffer.
     private const int StatBufferBytes = 256;
 
-    // Linux x64 (glibc and musl), Linux arm64, and macOS (64-bit inode struct stat). Fleet ships no other Unix.
+    // Linux x64 (glibc and musl), Linux arm64, and macOS. Fleet ships no other Unix.
     private static readonly UnixLayout? Layout = UnixLayout.ForThisSystem();
 
-    private static bool _useFxstat;
+    /// <summary>
+    /// The leading fields of dotnet/runtime release/10.0 <c>src/native/libs/System.Native/pal_io.h</c> <c>FileStatus</c>, the only ones we read:
+    /// <c>int32_t Flags; int32_t Mode; uint32_t Uid; uint32_t Gid; int64_t Size;</c> (then times, Dev, RDev, Ino, UserFlags).
+    /// Its layout is the same on every OS and CPU; fields are only ever appended. The BCL's own copy is Interop.Stat.cs.
+    /// </summary>
+    [StructLayout(LayoutKind.Sequential)]
+    private struct FileStatusHead
+    {
+        public int Flags;
+        public int Mode;
+        public uint Uid;
+        public uint Gid;
+        public long Size;
+    }
 
-    /// <summary>Flags and <c>struct stat</c> offsets, which differ by OS and CPU.</summary>
-    private sealed record UnixLayout(int OpenFlags, int ModeOffset, int ModeBytes, int SizeOffset, int LoopError, bool Mac, int FxstatVersion)
+    /// <summary>The <c>open</c> flags and the "too many links" error, which differ by OS and CPU. Nothing else does.</summary>
+    private sealed record UnixLayout(int OpenFlags, int LoopError)
     {
         private const int OpenReadOnly = 0;
         private const int NonBlock = 0x800;
@@ -65,27 +81,23 @@ internal static partial class SafeFile
             var arm = RuntimeInformation.ProcessArchitecture == Architecture.Arm64;
             var x64 = RuntimeInformation.ProcessArchitecture == Architecture.X64;
             if (OperatingSystem.IsLinux() && x64)
-                return new UnixLayout(OpenReadOnly | NonBlock | 0x20000 | CloseOnExec, 24, 4, 48, ElinuxLoop, false, 1);
+                return new UnixLayout(OpenReadOnly | NonBlock | 0x20000 | CloseOnExec, ElinuxLoop);
             if (OperatingSystem.IsLinux() && arm)
-                return new UnixLayout(OpenReadOnly | NonBlock | 0x8000 | CloseOnExec, 16, 4, 48, ElinuxLoop, false, 0);
+                return new UnixLayout(OpenReadOnly | NonBlock | 0x8000 | CloseOnExec, ElinuxLoop);
             if (OperatingSystem.IsMacOS() && (x64 || arm))
-                return new UnixLayout(OpenReadOnly | 0x4 | 0x100 | 0x1000000, 4, 2, 96, EmacLoop, true, 0);
+                return new UnixLayout(OpenReadOnly | 0x4 | 0x100 | 0x1000000, EmacLoop);
             return null;
         }
     }
 
+    // open stays on libc: SystemNative_Open takes PAL flags (pal_io.h PAL_O_RDONLY/CLOEXEC/CREAT/EXCL/TRUNC/SYNC/NOFOLLOW)
+    // and has no O_NONBLOCK, which is what stops a named pipe from blocking the open.
     [LibraryImport("libc", EntryPoint = "open", SetLastError = true, StringMarshalling = StringMarshalling.Utf8)]
     private static partial int NativeOpen(string path, int flags);
 
-    [LibraryImport("libc", EntryPoint = "fstat", SetLastError = true)]
-    private static partial int NativeFstat(int fd, Span<byte> buffer);
-
-    [LibraryImport("libc", EntryPoint = "fstat$INODE64", SetLastError = true)]
-    private static partial int NativeFstatInode64(int fd, Span<byte> buffer);
-
-    // glibc before 2.33 has no fstat symbol, only this one.
-    [LibraryImport("libc", EntryPoint = "__fxstat", SetLastError = true)]
-    private static partial int NativeFxstat(int version, int fd, Span<byte> buffer);
+    // int32_t SystemNative_FStat(intptr_t fd, FileStatus* output); returns 0, or -1 with errno set.
+    [LibraryImport("libSystem.Native", EntryPoint = "SystemNative_FStat", SetLastError = true)]
+    private static partial int NativeFStat(nint fd, Span<byte> output);
 
     /// <summary>
     /// Opens <paramref name="path"/> for reading when it is a regular file of at most <paramref name="maxBytes"/> (by the size
@@ -160,21 +172,19 @@ internal static partial class SafeFile
         }
     }
 
-    /// <summary>Unix only: the type bits and the size of an open file, as fstat reports them.</summary>
+    /// <summary>Unix only: the file type bits and the size of an open file, as <c>fstat</c> reports them.</summary>
     internal static bool TryFStat(int fd, out int mode, out long size)
     {
         mode = 0;
         size = 0;
-        if (Layout is not { } layout)
-            return false;
         Span<byte> buffer = stackalloc byte[StatBufferBytes];
         buffer.Clear();
-        if (Fstat(layout, fd, buffer) != 0)
+        if (NativeFStat(fd, buffer) != 0)
             return false;
-        mode = layout.ModeBytes == 2
-            ? BinaryPrimitives.ReadUInt16LittleEndian(buffer[layout.ModeOffset..])
-            : (int)BinaryPrimitives.ReadUInt32LittleEndian(buffer[layout.ModeOffset..]);
-        size = BinaryPrimitives.ReadInt64LittleEndian(buffer[layout.SizeOffset..]);
+
+        var head = MemoryMarshal.Read<FileStatusHead>(buffer);
+        mode = head.Mode;
+        size = head.Size;
         return true;
     }
 
@@ -229,17 +239,12 @@ internal static partial class SafeFile
         var handle = new SafeFileHandle(fd, ownsHandle: true);
         try
         {
-            Span<byte> buffer = stackalloc byte[StatBufferBytes];
-            buffer.Clear();
-            if (Fstat(layout, fd, buffer) != 0)
+            if (!TryFStat(fd, out var mode, out var size))
                 return Marshal.GetLastPInvokeError() == Eacces ? FileProblem.Unreadable : FileProblem.NotRegular;
 
-            var mode = layout.ModeBytes == 2
-                ? BinaryPrimitives.ReadUInt16LittleEndian(buffer[layout.ModeOffset..])
-                : BinaryPrimitives.ReadUInt32LittleEndian(buffer[layout.ModeOffset..]);
             if ((mode & FormatMask) != RegularFile)
                 return FileProblem.NotRegular;
-            if (BinaryPrimitives.ReadInt64LittleEndian(buffer[layout.SizeOffset..]) > maxBytes)
+            if (size > maxBytes)
                 return FileProblem.TooLarge;
 
             stream = new FileStream(handle, FileAccess.Read, bufferSize: 1, isAsync: false);
@@ -250,25 +255,5 @@ internal static partial class SafeFile
             if (stream is null)
                 handle.Dispose();
         }
-    }
-
-    private static int Fstat(UnixLayout layout, int fd, Span<byte> buffer)
-    {
-        if (layout.Mac)
-            return RuntimeInformation.ProcessArchitecture == Architecture.X64 ? NativeFstatInode64(fd, buffer) : NativeFstat(fd, buffer);
-
-        if (!_useFxstat)
-        {
-            try
-            {
-                return NativeFstat(fd, buffer);
-            }
-            catch (EntryPointNotFoundException)
-            {
-                _useFxstat = true;
-            }
-        }
-
-        return NativeFxstat(layout.FxstatVersion, fd, buffer);
     }
 }
