@@ -35,6 +35,11 @@ internal sealed class InMemoryModVersionStore : IModVersionStore
         _files[draft.Folder] = [new ModFile("mod.json", "{}"), new ModFile("mod.ts", "// draft")];
     }
 
+    public Task<IReadOnlyList<string>> ListDraftSessionsAsync(string userId, CancellationToken ct = default)
+        => Task.FromResult<IReadOnlyList<string>>(_drafts.Keys.Where(k => k.User == userId).Select(k => k.Session).Distinct().Order(StringComparer.Ordinal).ToList());
+
+    public string HostFolder(string userId) => Path.Combine(Path.GetTempPath(), "fleet-mods-tests", userId, ".host");
+
     public Task<IReadOnlyList<ModHistory>> ListAsync(string userId, CancellationToken ct = default)
         => Task.FromResult<IReadOnlyList<ModHistory>>(_histories.Where(h => h.Key.User == userId).Select(h => h.Value).OrderBy(h => h.Name, StringComparer.Ordinal).ToList());
 

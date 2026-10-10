@@ -189,6 +189,15 @@ public interface IModVersionStore
     /// </summary>
     Task<JsonElement?> CheckDraftAsync(string userId, string sessionId, string name, ModKeepCheck check, CancellationToken ct = default);
 
+    /// <summary>The sessions that have a <c>drafts/{sessionId}/</c> folder, sorted ordinally. Links and folders that aren't valid session ids are skipped.</summary>
+    Task<IReadOnlyList<string>> ListDraftSessionsAsync(string userId, CancellationToken ct = default);
+
+    /// <summary>
+    /// The user's folder for the mod host's own files (<c>{user16}/.host/</c>, whether or not it exists yet): its working
+    /// folder. Never a mod's name, so it never collides with a kept mod.
+    /// </summary>
+    string HostFolder(string userId);
+
     // ── $.store: per user, per mod, shared by a draft and its kept mod ──
 
     Task<JsonElement?> GetValueAsync(string userId, string name, string key, CancellationToken ct = default);
