@@ -14,12 +14,17 @@ import { useThemeStore } from "@/stores/theme";
 import { useWorkspaceUiStore } from "@/stores/workspace-ui";
 import { installModsTestApi } from "@/lib/mods/test-api";
 import { restoreActiveMachine } from "@/lib/machines";
+import { startWithoutModsFromAddress } from "@/lib/mods/safe-mode-start";
 import { startServiceWorker } from "@/composables/use-service-worker";
 import { captureInstallPrompt } from "@/lib/phone/install-prompt";
 import { router } from "./router";
 
 // Decide which machine this page works in before anything asks a server for something.
 restoreActiveMachine();
+
+// `?mods=off` stops the user's mods before the app mounts, the router loads or anything subscribes, so a mod that
+// breaks the page can still be switched off by opening Fleet this way. It never waits long and never throws.
+await startWithoutModsFromAddress();
 
 const app = createApp(App);
 const pluginRuntime = usePluginRuntime();
