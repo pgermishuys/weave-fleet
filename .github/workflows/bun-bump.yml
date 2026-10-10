@@ -1,0 +1,105 @@
+name: Bun bump
+
+# Opens a PR when oven-sh/bun has a newer release. The checksums come from the release's SHASUMS256.txt.asc,
+# verified against Bun's signing key pinned in bun/bun-release-signing-key.asc (see scripts/bun-bump.sh).
+# The job never marks a version unsafe: a person decides oldestSafe and note in the PR.
+#
+# Needs the BUN_BUMP_TOKEN secret: a fine-grained token scoped to this repository only, with Contents: read and write,
+# Pull requests: read and write, and Metadata: read (no "workflows" permission). PRs opened with the default
+# GITHUB_TOKEN don't trigger CI, and the bump PR must run the mod host's tests on the new Bun. Without the secret the job
+# succeeds and does nothing.
+
+on:
+  schedule:
+    - cron: '23 6 * * *'
+  workflow_dispatch:
+    inputs:
+      version:
+        description: 'Bun version to bump to (X.Y.Z). Empty means the latest release.'
+        required: false
+        type: string
+
+permissions:
+  contents: read
+
+concurrency:
+  group: bun-bump
+  cancel-in-progress: false
+
+jobs:
+  bump:
+    name: Bump Bun
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    env:
+      BUN_BUMP_TOKEN: ${{ secrets.BUN_BUMP_TOKEN }}
+
+    steps:
+      - name: Check for the token
+        id: token
+        shell: bash
+        run: |
+          if [ -z "$BUN_BUMP_TOKEN" ]; then
+            echo "::notice::BUN_BUMP_TOKEN isn't set, so no Bun bump PR is opened. Add a fine-grained token for this repository (Contents and Pull requests: read and write) as the BUN_BUMP_TOKEN secret to turn this on."
+            echo "enabled=false" >> "$GITHUB_OUTPUT"
+          else
+            echo "enabled=true" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Checkout
+        if: steps.token.outputs.enabled == 'true'
+        uses: actions/checkout@v4
+        with:
+          token: ${{ env.BUN_BUMP_TOKEN }}
+
+      - name: Setup Bun
+        if: steps.token.outputs.enabled == 'true'
+        uses: oven-sh/setup-bun@v2
+        with:
+          bun-version-file: .bun-version
+
+      - name: Bump
+        id: bump
+        if: steps.token.outputs.enabled == 'true'
+        shell: bash
+        env:
+          GH_TOKEN: ${{ env.BUN_BUMP_TOKEN }}
+          INPUT_VERSION: ${{ inputs.version }}
+        run: scripts/bun-bump.sh "$INPUT_VERSION"
+
+      - name: Open the PR
+        if: steps.token.outputs.enabled == 'true' && steps.bump.outputs.bumped == 'true'
+        shell: bash
+        env:
+          GH_TOKEN: ${{ env.BUN_BUMP_TOKEN }}
+          VERSION: ${{ steps.bump.outputs.version }}
+          PREVIOUS: ${{ steps.bump.outputs.previous }}
+        run: |
+          branch="bun-bump/v${VERSION}"
+          existing="$(gh pr list --head "$branch" --state all --json number --jq 'length')"
+          if [ "$existing" != "0" ]; then
+            echo "::notice::A PR from $branch already exists; not opening another."
+            exit 0
+          fi
+
+          git config user.name "weave-fleet-bot"
+          git config user.email "weave-fleet-bot@users.noreply.github.com"
+          git checkout -b "$branch"
+          git add -A
+          git commit -m "build: bump Bun to ${VERSION}"
+          git push origin "$branch"
+
+          cat > pr-body.md <<EOF
+          Bumps Bun from ${PREVIOUS} to ${VERSION}.
+
+          Changes, made by \`scripts/bun-bump.sh\`:
+          - \`bun/bun.json\`: \`version\`, and each asset's \`sha256\` and \`size\`. The sha256 values come from the release's \`SHASUMS256.txt\`, verified against Bun's signing key (\`bun/bun-release-signing-key.asc\`). Sizes come from the release API.
+          - \`.bun-version\`, which CI uses to install Bun.
+          - The \`SHASUMS256\` test fixture, replaced by the verified file for ${VERSION}.
+          - \`mods/host/package.json\` \`@types/bun\` and \`bun.lock\`, if \`@types/bun\` ${VERSION} is on npm yet.
+
+          **A person must decide \`oldestSafe\` and \`note\` before merging.** This job keeps \`oldestSafe\` as it was and clears \`note\`. It never marks a version unsafe: if ${VERSION} fixes a security problem, raise \`oldestSafe\` here.
+
+          Merging to main publishes \`bun/bun.json\` to fleet-releases, and running Fleets pick it up within hours.
+          EOF
+          gh pr create --base main --head "$branch" --title "build: bump Bun to ${VERSION}" --body-file pr-body.md
