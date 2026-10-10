@@ -1632,4 +1632,242 @@ public sealed class FileModVersionStoreTests : IDisposable
         linkError.Message.ShouldContain("link", Case.Insensitive);
         Directory.GetFileSystemEntries(Path.Combine(UserFolder(), Name)).ShouldBeEmpty();
     }
+
+    // ── Staged copies sit in a folder named after the mod ───────────────
+
+    private static void ShouldBeStagedAs(string? staged, string modFolder)
+    {
+        Path.GetFileName(staged!).ShouldBe(Name);
+        var outer = Path.GetDirectoryName(staged!)!;
+        Path.GetFileName(outer).ShouldEndWith(".tmp");
+        Path.GetDirectoryName(outer).ShouldBe(modFolder);
+    }
+
+    [Fact]
+    public async Task Keep_hands_the_check_a_folder_named_after_the_mod_inside_a_tmp_folder()
+    {
+        Draft();
+        string? staged = null;
+
+        await Keep(check: (copy, _) =>
+        {
+            staged = copy;
+            File.Exists(Path.Combine(copy, "mod.json")).ShouldBeTrue();
+            return Task.FromResult<JsonElement?>(null);
+        });
+
+        ShouldBeStagedAs(staged, Path.Combine(UserFolder(), Name));
+        File.Exists(Path.Combine(_store.VersionFolder(User, Name, 1), "mod.json")).ShouldBeTrue();
+        Directory.GetFileSystemEntries(Path.Combine(UserFolder(), Name)).Select(Path.GetFileName).Order().ShouldBe(["v1", "versions.json"]);
+    }
+
+    [Fact]
+    public async Task CheckDraft_hands_the_check_a_folder_named_after_the_mod_inside_a_tmp_folder()
+    {
+        Draft();
+        string? staged = null;
+
+        await _store.CheckDraftAsync(User, Session, Name, (copy, _) =>
+        {
+            staged = copy;
+            File.Exists(Path.Combine(copy, "mod.json")).ShouldBeTrue();
+            return Task.FromResult<JsonElement?>(null);
+        });
+
+        ShouldBeStagedAs(staged, Path.Combine(UserFolder(), Name));
+        Directory.GetFileSystemEntries(Path.Combine(UserFolder(), Name)).ShouldBeEmpty();
+    }
+
+    [Fact]
+    public async Task No_tmp_folder_is_left_after_a_refused_check_or_a_check_that_throws()
+    {
+        Draft();
+        var mod = Path.Combine(UserFolder(), Name);
+
+        await Should.ThrowAsync<ModStoreException>(() => Keep(check: Report("""{"ok":false,"errors":[{"message":"no"}]}""")));
+        Directory.GetFileSystemEntries(mod).ShouldBeEmpty();
+        await Should.ThrowAsync<InvalidOperationException>(() => Keep(check: (_, _) => throw new InvalidOperationException("boom")));
+        Directory.GetFileSystemEntries(mod).ShouldBeEmpty();
+        await Should.ThrowAsync<InvalidOperationException>(
+            () => _store.CheckDraftAsync(User, Session, Name, (_, _) => throw new InvalidOperationException("boom")));
+        Directory.GetFileSystemEntries(mod).ShouldBeEmpty();
+    }
+
+    [Fact]
+    public async Task Keep_removes_a_nested_staging_folder_a_crash_left_behind()
+    {
+        Draft();
+        var mod = Path.Combine(UserFolder(), Name);
+        var leftover = Path.Combine(mod, "keep.0123456789abcdef.tmp", Name);
+        Directory.CreateDirectory(Path.Combine(leftover, "deep"));
+        File.WriteAllText(Path.Combine(leftover, "deep", "x.txt"), "x");
+        Directory.SetLastWriteTimeUtc(Path.GetDirectoryName(leftover)!, DateTime.UtcNow.AddHours(-2));
+
+        await Keep();
+
+        Directory.GetFileSystemEntries(mod).Select(Path.GetFileName).Order().ShouldBe(["v1", "versions.json"]);
+    }
+
+    [Fact]
+    public async Task A_draft_changed_while_checked_is_still_refused_with_the_nested_layout()
+    {
+        var folder = Draft();
+
+        var error = await Should.ThrowAsync<ModStoreException>(() => Keep(check: (_, _) =>
+        {
+            File.WriteAllText(Path.Combine(folder, "mod.ts"), "// changed\n");
+            return Task.FromResult<JsonElement?>(null);
+        }));
+
+        error.Message.ShouldContain("changed");
+        Directory.GetFileSystemEntries(Path.Combine(UserFolder(), Name)).ShouldBeEmpty();
+    }
+
+    // ── Listing draft sessions ──────────────────────────────────────────
+
+    [Fact]
+    public async Task No_draft_sessions_when_there_are_no_drafts()
+    {
+        (await _store.ListDraftSessionsAsync(User)).ShouldBeEmpty();
+    }
+
+    [Fact]
+    public async Task Draft_sessions_are_listed_in_ordinal_order()
+    {
+        Draft("ses_b");
+        Draft("ses_a");
+        Draft("ses_C");
+
+        (await _store.ListDraftSessionsAsync(User)).ShouldBe(["ses_C", "ses_a", "ses_b"]);
+    }
+
+    [Fact]
+    public async Task Draft_sessions_skip_files_and_names_that_are_not_session_ids()
+    {
+        Draft("ses_a");
+        var drafts = _store.DraftsRoot(User);
+        File.WriteAllText(Path.Combine(drafts, "ses_file"), "x");
+        Directory.CreateDirectory(Path.Combine(drafts, "not a session"));
+        Directory.CreateDirectory(Path.Combine(drafts, "..x"));
+
+        (await _store.ListDraftSessionsAsync(User)).ShouldBe(["ses_a"]);
+    }
+
+    [Trait("Category", "ModsFileSafety")]
+    [Fact]
+    public async Task Draft_sessions_skip_a_linked_session_folder()
+    {
+        if (OperatingSystem.IsWindows())
+            return;
+        Draft("ses_a");
+        Directory.CreateSymbolicLink(Path.Combine(_store.DraftsRoot(User), "ses_link"), Outside());
+
+        (await _store.ListDraftSessionsAsync(User)).ShouldBe(["ses_a"]);
+    }
+
+    [Fact]
+    public async Task The_host_folder_is_neither_a_kept_mod_nor_a_draft_session()
+    {
+        Draft("ses_a");
+        await Keep("ses_a");
+        var host = _store.HostFolder(User);
+        Directory.CreateDirectory(Path.Combine(host, "sub", "deeper"));
+        File.WriteAllText(Path.Combine(host, "mod.json"), Manifest);
+        File.WriteAllText(Path.Combine(host, "sub", "versions.json"), "{}");
+        Directory.CreateDirectory(Path.Combine(host, "ses_hidden", Name));
+
+        (await _store.ListAsync(User)).Select(h => h.Name).ShouldBe([Name]);
+        (await _store.ListDraftSessionsAsync(User)).ShouldBeEmpty();
+    }
+
+    // ── Staging a draft for the mod host ────────────────────────────────
+
+    private string Destination() => Path.Combine(_root, "stage", Guid.NewGuid().ToString("N"), "out");
+
+    [Fact]
+    public async Task StageDraft_copies_files_and_folders_byte_for_byte()
+    {
+        var folder = Draft(code: "// staged\n");
+        Directory.CreateDirectory(Path.Combine(folder, "pages", "deep"));
+        byte[] bytes = [0, 1, 2, 255, 254, 10, 13];
+        File.WriteAllBytes(Path.Combine(folder, "pages", "deep", "blob.bin"), bytes);
+        Directory.CreateDirectory(Path.Combine(folder, "empty"));
+        var destination = Destination();
+
+        await _store.StageDraftAsync(User, Session, Name, destination);
+
+        File.ReadAllText(Path.Combine(destination, "mod.ts")).ShouldBe("// staged\n");
+        File.ReadAllText(Path.Combine(destination, "mod.json")).ShouldBe(Manifest);
+        File.ReadAllBytes(Path.Combine(destination, "pages", "deep", "blob.bin")).ShouldBe(bytes);
+        Directory.Exists(Path.Combine(destination, "empty")).ShouldBeTrue();
+        Directory.Exists(folder).ShouldBeTrue();
+    }
+
+    [Fact]
+    public async Task StageDraft_refuses_a_destination_that_exists_and_leaves_it_alone()
+    {
+        Draft();
+        var destination = Destination();
+        Directory.CreateDirectory(destination);
+        File.WriteAllText(Path.Combine(destination, "mine.txt"), "mine");
+
+        await Should.ThrowAsync<ModStoreException>(() => _store.StageDraftAsync(User, Session, Name, destination));
+
+        File.ReadAllText(Path.Combine(destination, "mine.txt")).ShouldBe("mine");
+        Directory.GetFileSystemEntries(destination).Length.ShouldBe(1);
+    }
+
+    [Fact]
+    public async Task StageDraft_without_a_draft_throws_and_writes_nothing()
+    {
+        var destination = Destination();
+
+        await Should.ThrowAsync<ModStoreException>(() => _store.StageDraftAsync(User, Session, Name, destination));
+
+        Directory.Exists(destination).ShouldBeFalse();
+    }
+
+    [Fact]
+    public async Task StageDraft_validates_the_names()
+    {
+        await Should.ThrowAsync<ModStoreException>(() => _store.StageDraftAsync(User, Session, "Bad Name", Destination()));
+        await Should.ThrowAsync<ModStoreException>(() => _store.StageDraftAsync(User, "../x", Name, Destination()));
+    }
+
+    [Trait("Category", "ModsFileSafety")]
+    [Fact]
+    public async Task StageDraft_refuses_a_draft_holding_a_link_to_a_file_or_a_folder()
+    {
+        if (OperatingSystem.IsWindows())
+            return;
+        var folder = Draft();
+        var outside = Outside();
+        var destination = Destination();
+
+        File.CreateSymbolicLink(Path.Combine(folder, "file-link"), Path.Combine(outside, "secret.txt"));
+        var fileError = await Should.ThrowAsync<ModStoreException>(() => _store.StageDraftAsync(User, Session, Name, destination));
+        File.Delete(Path.Combine(folder, "file-link"));
+        Directory.CreateSymbolicLink(Path.Combine(folder, "folder-link"), outside);
+        var folderError = await Should.ThrowAsync<ModStoreException>(() => _store.StageDraftAsync(User, Session, Name, destination));
+
+        fileError.Message.ShouldContain("link", Case.Insensitive);
+        folderError.Message.ShouldContain("link", Case.Insensitive);
+        Directory.Exists(destination).ShouldBeFalse();
+        File.ReadAllText(Path.Combine(outside, "secret.txt")).ShouldBe("outside");
+    }
+
+    [Trait("Category", "ModsFileSafety")]
+    [Fact]
+    public async Task StageDraft_refuses_a_named_pipe_without_blocking_and_leaves_nothing()
+    {
+        if (OperatingSystem.IsWindows())
+            return;
+        var folder = Draft();
+        MakeFifo(Path.Combine(folder, "pipe"));
+        var destination = Destination();
+
+        await Should.ThrowAsync<ModStoreException>(() => _store.StageDraftAsync(User, Session, Name, destination).WaitAsync(Patience));
+
+        Directory.Exists(destination).ShouldBeFalse();
+    }
 }
