@@ -6,6 +6,12 @@ import type { KeptMod, ModsView } from "@/lib/mods/kept";
 const files = vi.hoisted(() => ({ fetchModVersionFiles: vi.fn() }));
 vi.mock("@/lib/mods/kept-api", () => files);
 
+const log = vi.hoisted(() => ({ fetchModLog: vi.fn() }));
+vi.mock("@/lib/mods/mod-log", () => log);
+
+const router = vi.hoisted(() => ({ navigate: vi.fn() }));
+vi.mock("@tanstack/vue-router", () => ({ useRouter: () => router }));
+
 const store = vi.hoisted(() => ({
   state: null as unknown as {
     kept: unknown;
@@ -32,12 +38,6 @@ const CodeDialogStub = defineComponent({
   emits: ["update:open"],
   render() {
     return h("div", { "data-testid": "code-dialog", "data-open": String(this.open) }, this.title);
-  },
-});
-const RouterLinkStub = defineComponent({
-  props: { to: String },
-  render() {
-    return h("a", { href: this.to }, this.$slots.default?.());
   },
 });
 
@@ -86,7 +86,7 @@ function setKept(mods: KeptMod[], safeMode = false) {
 }
 
 async function mountSection() {
-  const wrapper = mount(ModsSection, { global: { stubs: { ModCodeDialog: CodeDialogStub, RouterLink: RouterLinkStub } } });
+  const wrapper = mount(ModsSection, { global: { stubs: { ModCodeDialog: CodeDialogStub } } });
   await flushPromises();
   return wrapper;
 }
@@ -119,6 +119,8 @@ describe("ModsSection", () => {
     expect(row.text()).toContain("kept");
     expect(row.text()).toContain("Make test output readable");
     expect(row.get("a").attributes("href")).toBe("/sessions/s-2");
+    await row.get("a").trigger("click");
+    expect(router.navigate).toHaveBeenCalledWith(expect.objectContaining({ to: "/sessions/$id", params: { id: "s-2" } }));
     expect(wrapper.findAll("[data-testid^=mod-row-]")).toHaveLength(3);
     expect(wrapper.get("[data-testid=mod-row-context-gauge]").find("a").exists()).toBe(false);
   });
@@ -127,7 +129,7 @@ describe("ModsSection", () => {
     store.state.kept = null;
     let reject!: (error: Error) => void;
     store.state.loadKept.mockReturnValueOnce(new Promise((_, r) => (reject = r)));
-    const wrapper = mount(ModsSection, { global: { stubs: { ModCodeDialog: CodeDialogStub, RouterLink: RouterLinkStub } } });
+    const wrapper = mount(ModsSection, { global: { stubs: { ModCodeDialog: CodeDialogStub } } });
     await flushPromises();
     expect(wrapper.find("[data-testid=mods-loading]").exists()).toBe(true);
     reject(new Error("Mods are off."));
@@ -279,11 +281,46 @@ describe("ModsSection", () => {
     });
   });
 
-  it("keeps the log in a collapsed slot that says it is waiting for the runtime", async () => {
-    const wrapper = await mountSection();
-    const log = wrapper.get("[data-testid=mod-log-test-chips]");
-    expect(log.element.tagName).toBe("DETAILS");
-    expect(log.attributes("open")).toBeUndefined();
-    expect(log.text()).toContain("The mod's log shows here once the mod runtime is running.");
+  describe("log", () => {
+    async function openLog(name = "test-chips") {
+      const wrapper = await mountSection();
+      const details = wrapper.get(`[data-testid=mod-log-${name}]`);
+      (details.element as HTMLDetailsElement).open = true;
+      await details.trigger("toggle");
+      await flushPromises();
+      return wrapper;
+    }
+
+    it("is collapsed and fetches nothing until opened", async () => {
+      const wrapper = await mountSection();
+      expect(wrapper.get("[data-testid=mod-log-test-chips]").attributes("open")).toBeUndefined();
+      expect(log.fetchModLog).not.toHaveBeenCalled();
+    });
+
+    it("fetches once when expanded and shows the lines with their levels", async () => {
+      log.fetchModLog.mockResolvedValue([
+        { at: "2026-10-09T09:00:00Z", level: "info", text: "loaded" },
+        { at: "2026-10-09T09:00:01Z", level: "error", text: "boom" },
+      ]);
+      const wrapper = await openLog();
+      expect(log.fetchModLog).toHaveBeenCalledTimes(1);
+      expect(log.fetchModLog).toHaveBeenCalledWith("test-chips");
+      expect(wrapper.get("[data-level=error]").text()).toContain("boom");
+      expect(wrapper.get("[data-level=info]").text()).toContain("loaded");
+    });
+
+    it("says the runtime isn't running when the server has no log", async () => {
+      log.fetchModLog.mockResolvedValue(null);
+      const wrapper = await openLog();
+      expect(wrapper.get("[data-testid=mod-log-test-chips]").text()).toContain("The mod's log shows here once the mod runtime is running.");
+    });
+
+    it("Refresh fetches again", async () => {
+      log.fetchModLog.mockResolvedValue([]);
+      const wrapper = await openLog();
+      await wrapper.get("[data-testid=mod-log-refresh-test-chips]").trigger("click");
+      await flushPromises();
+      expect(log.fetchModLog).toHaveBeenCalledTimes(2);
+    });
   });
 });
