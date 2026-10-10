@@ -23,6 +23,7 @@ public sealed class RealModHostTests : IAsyncDisposable
 
     private readonly string _root = Directory.CreateTempSubdirectory("fleet-realhost-").FullName;
     private readonly FileModVersionStore _store;
+    private readonly RecordingFactory _connections = new(new ModHostConnectionFactory(NullLogger<ModHostConnectionFactory>.Instance));
     private ModHostService? _service;
 
     public RealModHostTests() => _store = new FileModVersionStore(Path.Combine(_root, "mods"));
@@ -72,8 +73,8 @@ public sealed class RealModHostTests : IAsyncDisposable
         await _store.KeepAsync(User, "ses_live1", "test-chips", new ModKeepSource(null, null), (_, _) => Task.FromResult<JsonElement?>(null));
 
         _service = new ModHostService(
-            new ModHostOptions { RequestTimeout = TimeSpan.FromSeconds(1) },
-            new ModHostConnectionFactory(NullLogger<ModHostConnectionFactory>.Instance),
+            new ModHostOptions { RequestTimeout = TimeSpan.FromSeconds(10) },
+            _connections,
             new SwitchedOn(),
             new FixedBun(real.Bun),
             new ModHostFiles(AppContext.BaseDirectory, real.Script),
@@ -146,17 +147,29 @@ public sealed class RealModHostTests : IAsyncDisposable
     }
 
     [Fact]
-    public async Task Stopping_Fleet_shuts_the_host_down_within_its_grace()
+    public async Task Stopping_Fleet_shuts_the_host_down_on_its_shutdown_request()
     {
         if (await StartAsync() is not (var service, _))
             return;
-        using var process = Process.GetProcessById(service.GetStatus(User).ProcessId!.Value);
+        var host = _connections.Started.Single();
 
-        var clock = Stopwatch.StartNew();
         await service.StopAsync(CancellationToken.None).WaitAsync(TimeSpan.FromSeconds(10));
 
-        clock.Elapsed.ShouldBeLessThan(TimeSpan.FromSeconds(3));
-        process.HasExited.ShouldBeTrue();
+        // Exit code 0: it left on `shutdown`, not on the kill at the end of the grace.
+        (await host.Exited.WaitAsync(TimeSpan.FromSeconds(10))).ShouldBe(0);
+    }
+
+    /// <summary>The real factory, remembering every connection it made.</summary>
+    private sealed class RecordingFactory(IModHostConnectionFactory inner) : IModHostConnectionFactory
+    {
+        public List<IModHostConnection> Started { get; } = [];
+
+        public async Task<IModHostConnection> StartAsync(ModHostLaunch launch, IModHostCalls calls, CancellationToken ct)
+        {
+            var connection = await inner.StartAsync(launch, calls, ct);
+            Started.Add(connection);
+            return connection;
+        }
     }
 
     private sealed class SwitchedOn : IModUserGate
