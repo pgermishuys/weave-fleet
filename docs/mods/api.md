@@ -220,15 +220,23 @@ A module **doesn't load** when:
   `Reflect`, `Proxy`, `WebAssembly`, `SharedArrayBuffer`, `Atomics`
 - it reaches `$` other than as `$.ns.method(…)`: aliasing it, `$[name]`, destructuring, spreading, storing it, or
   passing it to a function whose parameter isn't also named `$`
-- it reads `.constructor`, `.__proto__` or `.prototype` of anything, or uses `with`
+- it reads `.constructor`, `.__proto__` or `.prototype` of anything (or the old `__lookupGetter__` family), reaches
+  them through `Object` (`Object.getOwnPropertyDescriptor(x, "constructor")`, `defineProperty`, `create` with such a
+  key), calls `Object.getPrototypeOf`, `setPrototypeOf` or `getOwnPropertyDescriptors`, or uses `with`
 - `on` is called outside `register`, with a non-literal event name or a non-literal matcher, or for an event Stage 1
   doesn't have
 - a `$.state` key isn't a string literal
 - it has more than 2,000 nested scopes or is over 512 KiB
 
-The check is a review aid that makes "`$` is the only way out" true in practice. It is not a sandbox: the host runs
-with the user's permissions, as Claude Code's mods do. Fleet starts the host with an empty environment (no Fleet
-tokens) and its working folder in the mods data folder.
+The check reads what a mod names; it can't see what a mod builds at run time (a key made of two strings, say). So
+before any mod is imported, the host also locks its own JavaScript realm down (SES's `lockdown`): every built-in object
+and prototype is frozen, so no mod can change `Object.prototype` or `Promise` under the host or another mod; the
+constructor of every kind of function is inert, so no string can be turned into code; and the realm's own `Function`
+and `eval` are gone. Together they make "`$` is the only way out" hold for code that only computes and draws.
+
+It is still not a sandbox: every mod runs in the host's process, as the same user, with the user's permissions, as
+Claude Code's mods do, and a hook that never yields blocks every other mod until Fleet restarts the host. Fleet starts
+the host with an empty environment (no Fleet tokens) and its working folder in the mods data folder.
 
 ## Order and failure
 
