@@ -32,6 +32,10 @@ describe("reflection that reaches a constructor or a prototype is refused", () =
       expect(r.report.errors[0]!.message).toContain(fn);
     }
   });
+  test("Object.getOwnPropertySymbols is refused: symbol keys are the host's (review 2)", async () => {
+    const r = await check({ source: reg(`  const keys = Object.getOwnPropertySymbols({});`) });
+    expect(r.report.errors.map((e) => [e.code, e.line, e.column])).toEqual([["prototype", 2, 23]]);
+  });
   test("the legacy accessors (__lookupGetter__ and friends) are refused", async () => {
     for (const name of ["__lookupGetter__", "__lookupSetter__", "__defineGetter__", "__defineSetter__"]) {
       const r = await check({ source: reg(`  ({}).${name}("x");`) });

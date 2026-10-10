@@ -1,0 +1,6 @@
+{
+  "name": "hang-hook",
+  "version": "0.1.0",
+  "description": "A hook that never yields",
+  "hooks": "./mod.js"
+}

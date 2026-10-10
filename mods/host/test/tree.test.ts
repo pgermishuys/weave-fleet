@@ -1,5 +1,5 @@
 import { describe, expect, test } from "bun:test";
-import { OWNER, createElements, toWire, type WireOptions } from "../src/tree";
+import { createElements, ownerOf, toWire, type WireOptions } from "../src/tree";
 
 const A = createElements("mod-a");
 const B = createElements("mod-b");
@@ -43,9 +43,11 @@ describe("factories", () => {
     const e: any = A.Pill({ tone: "good", label: "x" });
     expect(Object.keys(e)).toEqual(["type", "props"]);
   });
-  test("elements carry their owner, are frozen, and the owner stays out of JSON", () => {
+  test("the host knows each element's owner, which isn't on the element; elements are frozen", () => {
     const e: any = A.Pill({ tone: "good", label: "x" });
-    expect(e[OWNER]).toBe("mod-a");
+    expect(ownerOf(e)).toBe("mod-a");
+    expect(Object.getOwnPropertySymbols(e)).toEqual([]);
+    expect(ownerOf({ ...e })).toBeUndefined();
     expect(Object.isFrozen(e)).toBe(true);
     expect(JSON.stringify(e)).toBe('{"type":"Pill","props":{"tone":"good","label":"x"}}');
   });

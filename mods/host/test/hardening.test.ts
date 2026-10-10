@@ -8,6 +8,7 @@ import { join } from "node:path";
 import { createHost } from "../src/host";
 import { fakeCheck } from "./helpers/fake-check";
 import { FakePeer } from "./helpers/fake-peer";
+import { setup } from "./helpers/harness";
 
 const ESCAPES = join(import.meta.dir, "fixtures/escape");
 const HOST_DIR = join(import.meta.dir, "..");
@@ -161,5 +162,69 @@ describe("the real host over stdio", () => {
     const r = lines.find((l) => l.id === 3);
     expect(r.result.failures).toHaveLength(1);
     expect(r.result.failures[0].kind).toBe("throw");
+  });
+});
+
+describe("review 2: one mod can't act as another", () => {
+  const band = { component: "ComposerBand", sessionId: "ses_test1", requestId: "ses_test1", props: { isWorking: false } };
+  const victim = `on("ui.render", { component: "ComposerBand" }, ($, e) => $.ui.resolve(e).Text({ children: ["victim"] }));`;
+
+  test("a mod that copies the owner tag off a factory element doesn't make its Button the victim's", async () => {
+    // Loaded past the check (which now refuses getOwnPropertySymbols) to prove the host doesn't trust the tag.
+    const s = setup({}, fakeCheck);
+    await s.load("victim", victim);
+    await s.load("attacker", `on("ui.render", { component: "ComposerBand" }, ($, e) => {
+      const sym = Object.getOwnPropertySymbols($.ui.resolve(e).Text({}))[0];
+      const btn = { type: "Button", props: { key: "k1", label: "click", onPress: () => { throw new Error("sabotage"); } } };
+      if (sym) btn[sym] = "victim@v1";
+      return btn;
+    });`);
+    const r = await s.render(["attacker@v1", "victim@v1"], band);
+    expect(r.drawnBy).toEqual(["attacker@v1"]);
+    const press = { sessionId: "ses_test1", mod: "attacker", element: "k1", component: "ComposerBand", requestId: "ses_test1", surface: "desktop", handle: r.result.handles.onPress };
+    for (let i = 0; i < 3; i++) await s.dispatch("ui.press", ["attacker@v1", "victim@v1"], press);
+    const failed = s.peer.notes("failed");
+    expect(failed.map((f: any) => f.mod)).toEqual(["attacker@v1", "attacker@v1", "attacker@v1"]);
+    expect((await s.render(["victim@v1"], band)).drawnBy).toEqual(["victim@v1"]);
+  });
+
+  test("copying another mod's element (spread from next) doesn't carry its owner", async () => {
+    const s = setup();
+    await s.load("outer", `on("ui.render", { component: "ComposerBand" }, async ($, e, next) => {
+      const inner = await next(e);
+      return { ...inner, type: "Button", props: { key: "k2", label: "go", onPress: () => {} } };
+    });`);
+    await s.load("inner", `on("ui.render", { component: "ComposerBand" }, ($, e) => $.ui.resolve(e).Pill({ tone: "good", label: "inner" }));`);
+    const r = await s.render(["outer@v1", "inner@v1"], band);
+    expect(r.drawnBy).toEqual(["outer@v1"]);
+  });
+});
+
+describe("review 2: stack traces are no channel between mods", () => {
+  test("Error.prepareStackTrace, stackTraceLimit and captureStackTrace can't be changed", () => {
+    expect(() => {
+      (Error as any).prepareStackTrace = () => "LEAK";
+    }).toThrow();
+    expect(() => {
+      (Error as any).stackTraceLimit = 1;
+    }).toThrow();
+    expect(() => {
+      (Error as any).captureStackTrace = () => {};
+    }).toThrow();
+    expect(new Error("x").stack).toContain("Error: x");
+    const o: { stack?: string } = {};
+    Error.captureStackTrace(o);
+    expect(typeof o.stack).toBe("string");
+  });
+
+  test("one mod setting Error.prepareStackTrace doesn't change another mod's stacks", async () => {
+    const s = setup({}, fakeCheck);
+    await s.load("stack-a", `on("session.start", ($, e, next) => { Error["prepare" + "StackTrace"] = () => "LEAKMARKER"; return next(e); });`);
+    await s.load("stack-b", `on("session.start", ($, e, next) => { $.ui.log("B: " + new Error("x").stack); return next(e); });`);
+    const r = await s.dispatch("session.start", ["stack-a@v1", "stack-b@v1"], { sessionId: "ses_test1", reason: "start" });
+    expect(r.failures.map((f: any) => f.mod)).toEqual(["stack-a@v1"]);
+    const logs = s.peer.notes("log").map((l: any) => l.text);
+    expect(logs.join("\n")).not.toContain("LEAKMARKER");
+    expect(logs.some((t: string) => t.startsWith("B: Error: x"))).toBe(true);
   });
 });
