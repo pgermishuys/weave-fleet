@@ -34,7 +34,9 @@ const emit = defineEmits<{ "update:open": [value: boolean] }>();
     :subtitle="description"
     @close="emit('update:open', false)"
   >
-    <slot />
+    <div class="mod-dialog-shell__phone-body">
+      <slot />
+    </div>
     <template
       v-if="$slots.foot"
       #foot
@@ -73,3 +75,12 @@ const emit = defineEmits<{ "update:open": [value: boolean] }>();
     </DialogContent>
   </Dialog>
 </template>
+
+<style scoped>
+/* The phone sheet's body leaves side padding to its content; line it up with the sheet's title. */
+.mod-dialog-shell__phone-body {
+  display: grid;
+  gap: 12px;
+  padding: 0 18px;
+}
+</style>
