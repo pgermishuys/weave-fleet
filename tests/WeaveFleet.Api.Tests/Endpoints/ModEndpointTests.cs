@@ -451,7 +451,7 @@ public sealed class ModEndpointTests : IAsyncDisposable
         var response = await _client.PutAsync("/api/mods/safe-mode", body);
 
         response.StatusCode.ShouldBe(HttpStatusCode.BadRequest);
-        (await response.Content.ReadFromJsonAsync<JsonElement>()).GetProperty("error").GetString().ShouldContain("on");
+        (await response.Content.ReadFromJsonAsync<JsonElement>()).GetProperty("error").GetString()!.ShouldContain("on");
         (await ListAsync()).GetProperty("safeMode").GetBoolean().ShouldBeFalse();
     }
 
