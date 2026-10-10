@@ -230,6 +230,12 @@ public sealed class HarnessOptions
     public string ResolvedProcessRecordsDirectory => string.IsNullOrWhiteSpace(ProcessRecordsDirectory)
         ? Path.Combine(FleetPaths.DefaultAppDataDirectory, "harness-processes")
         : ProcessRecordsDirectory;
+
+    /// <summary>
+    /// The Bun the mod host runs on. When set, Fleet uses it and never downloads one; when it doesn't exist, mods
+    /// can't start. Default: "" (the Bun Fleet installs under <c>~/.weave/runtimes/bun/{version}/</c>).
+    /// </summary>
+    public string BunPath { get; set; } = "";
 }
 
 /// <summary>Transactional outbox polling and retention configuration.</summary>
