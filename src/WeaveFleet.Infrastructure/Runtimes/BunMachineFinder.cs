@@ -15,6 +15,9 @@ internal sealed class BunMachineFinder
     /// <summary>Test seam: the <c>PATH</c> value to search.</summary>
     public string? PathEnv { get; init; } = Environment.GetEnvironmentVariable("PATH");
 
+    /// <summary>Test seam: the fixed folders searched after <c>~/.bun/bin</c>, except on Windows.</summary>
+    internal IReadOnlyList<string> SystemDirectories { get; init; } = ["/opt/homebrew/bin", "/usr/local/bin"];
+
     /// <summary>Test seam: whether to look the way Windows does.</summary>
     public bool IsWindows { get; init; } = OperatingSystem.IsWindows();
 
