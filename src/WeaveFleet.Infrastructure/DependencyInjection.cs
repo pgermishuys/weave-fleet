@@ -125,6 +125,16 @@ public static class DependencyInjection
     }
 
     /// <summary>
+    /// Starts the mod host service with Fleet: it follows <c>mods.changed</c>, polls running hosts, brings the local
+    /// user's host up in the background, and shuts every host down when Fleet stops.
+    /// </summary>
+    public static IServiceCollection AddModHostStartupService(this IServiceCollection services)
+    {
+        services.AddHostedService(sp => sp.GetRequiredService<WeaveFleet.Application.Mods.Host.ModHostService>());
+        return services;
+    }
+
+    /// <summary>
     /// Adds the startup service that moves skills and tools installed by older Fleet versions to
     /// where OpenCode reads them. Local mode only. Register before the bundled skills service.
     /// </summary>
@@ -214,7 +224,22 @@ public static class DependencyInjection
         services.AddScoped<BuiltInSkillService>();
         services.AddSingleton<ISkillVersionStore>(sp => new WeaveFleet.Infrastructure.Skills.FileSkillVersionStore(sp.GetRequiredService<FleetOptions>()));
         services.AddSingleton<WeaveFleet.Application.Mods.IModVersionStore>(sp => new WeaveFleet.Infrastructure.Mods.FileModVersionStore(sp.GetRequiredService<FleetOptions>()));
-        services.AddSingleton<WeaveFleet.Application.Mods.IModChecker, WeaveFleet.Application.Mods.NoModChecker>();
+        // The mod host: one Bun process per user, started when a mod should run (docs/mods/api.md, "The protocol").
+        // The static check is the host's, so Keep and /check show its report.
+        services.AddScoped<WeaveFleet.Application.Mods.IModChecker, WeaveFleet.Application.Mods.Host.HostModChecker>();
+        services.AddSingleton<WeaveFleet.Application.Mods.Host.ModHostService>();
+        services.AddSingleton<WeaveFleet.Application.Mods.Host.IModHost>(sp => sp.GetRequiredService<WeaveFleet.Application.Mods.Host.ModHostService>());
+        services.AddSingleton<WeaveFleet.Application.Mods.Host.ModLogBook>();
+        services.AddSingleton<WeaveFleet.Application.Mods.Host.IModHostConnectionFactory, WeaveFleet.Infrastructure.Mods.Host.ModHostConnectionFactory>();
+        services.AddSingleton<WeaveFleet.Application.Mods.Host.IModUserGate, WeaveFleet.Application.Mods.Host.ScopedModUserGate>();
+        services.AddSingleton<WeaveFleet.Application.Mods.Host.IModStrikeRecorder, WeaveFleet.Application.Mods.Host.ScopedModStrikeRecorder>();
+        services.AddSingleton<WeaveFleet.Application.Mods.Host.IModHostBun, WeaveFleet.Application.Mods.Host.BunModHostBun>();
+        services.AddSingleton<WeaveFleet.Application.Mods.Host.IModHostFiles>(new WeaveFleet.Infrastructure.Mods.Host.ModHostFiles(AppContext.BaseDirectory));
+        services.AddSingleton<WeaveFleet.Application.Mods.Host.IModDraftWatcher>(sp => new WeaveFleet.Infrastructure.Mods.Host.FileModDraftWatcher(
+            sp.GetRequiredService<TimeProvider>(), sp.GetRequiredService<ILogger<WeaveFleet.Infrastructure.Mods.Host.FileModDraftWatcher>>()));
+        // M6 draws what the host asks for; until then $.ui calls are logged and nothing listens for redraws.
+        services.TryAddSingleton<WeaveFleet.Application.Mods.Host.IModHostUi, WeaveFleet.Application.Mods.Host.LoggingModHostUi>();
+        services.TryAddSingleton<WeaveFleet.Application.Mods.Host.IModHostSignals, WeaveFleet.Application.Mods.Host.NoModHostSignals>();
         services.AddScoped<SkillImprover>();
         services.AddScoped<ISessionActivator>(sp => sp.GetRequiredService<WeaveFleet.Application.Sessions.Activation.SessionActivation>());
         services.AddScoped<SessionCallbackService>();

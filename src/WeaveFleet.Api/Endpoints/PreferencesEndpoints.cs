@@ -1,4 +1,6 @@
 using WeaveFleet.Application.Mods;
+using WeaveFleet.Application.Mods.Host;
+using WeaveFleet.Application.Users;
 using WeaveFleet.Domain.Repositories;
 
 namespace WeaveFleet.Api.Endpoints;
@@ -29,6 +31,16 @@ public static class PreferencesEndpoints
 
             if (mods is not null && !modsWasOn && await mods.IsSwitchedOnAsync())
                 await http.RequestServices.GetRequiredService<ModService>().SwitchedOnAsync(http.RequestAborted);
+
+            // The mod host follows the switch: started when mods should run, stopped when they shouldn't. In the
+            // background, since stopping a host can take its two seconds of grace.
+            if (mods is not null)
+            {
+                var host = http.RequestServices.GetRequiredService<IModHost>();
+                var userId = http.RequestServices.GetRequiredService<IUserContext>().UserId;
+                _ = Task.Run(() => host.EnsureAsync(userId, CancellationToken.None));
+            }
+
             return Results.NoContent();
         })
         .WithName("SetPreference");

@@ -97,6 +97,14 @@ public sealed class ApiWebApplicationFactory(
             return watcher;
         }));
 
+        // Nor do they run Bun: the mod host never finds one, and Keep and /check run without a report as before M2.
+        // The live tests against the real host are in Infrastructure.Tests (Category=ModHostLive).
+        builder.ConfigureTestServices(services =>
+        {
+            services.AddScoped<WeaveFleet.Application.Mods.IModChecker, WeaveFleet.Application.Mods.NoModChecker>();
+            services.AddSingleton<WeaveFleet.Application.Mods.Host.IModHostBun, NoModHostBun>();
+        });
+
         if (configureTestServices is not null)
         {
             builder.ConfigureTestServices(configureTestServices);
@@ -223,4 +231,12 @@ public sealed class ApiWebApplicationFactory(
             };
         }
     }
+}
+
+/// <summary>No Bun on a test machine, as far as the mod host knows.</summary>
+internal sealed class NoModHostBun : WeaveFleet.Application.Mods.Host.IModHostBun
+{
+    public Task<WeaveFleet.Application.Runtimes.BunLocation?> FindAsync(CancellationToken ct) => Task.FromResult<WeaveFleet.Application.Runtimes.BunLocation?>(null);
+
+    public Task PruneAsync(IReadOnlyCollection<string> inUse, CancellationToken ct) => Task.CompletedTask;
 }
