@@ -94,6 +94,20 @@ describe("Mods row: turning Mods on", () => {
     expect(buttons(panel(wrapper))).toEqual(["Turn on and install", "Cancel"]);
   });
 
+  it("2 confirm: a click before Fleet has said whether Bun is there still asks first", async () => {
+    let answer: (response: Response) => void = () => {};
+    server.overrides[`GET ${RUNTIME}`] = () => new Response(null, { status: 503 });
+    const wrapper = await mountRow(makeView());
+    server.overrides[`GET ${RUNTIME}`] = () => new Promise<Response>((resolve) => (answer = resolve)) as unknown as Response;
+
+    await toggle(wrapper).trigger("click");
+    answer(json(makeView()));
+    await flushPromises();
+
+    expect(stateOf(wrapper)).toBe("confirm");
+    expect(putMock).not.toHaveBeenCalled();
+  });
+
   it("2 confirm: Cancel folds the row back to step 1", async () => {
     const wrapper = await mountRow(makeView());
     await toggle(wrapper).trigger("click");
