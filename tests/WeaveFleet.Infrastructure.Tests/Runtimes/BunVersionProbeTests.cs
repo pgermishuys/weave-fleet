@@ -30,7 +30,7 @@ public sealed class BunVersionProbeTests : IDisposable
         Directory.CreateDirectory(directory);
         var path = Path.Combine(directory, "bun");
         File.WriteAllText(path, "#!/bin/sh\n" + body + "\n");
-        if (executable)
+        if (executable && !OperatingSystem.IsWindows())
             File.SetUnixFileMode(path, UnixFileMode.UserRead | UnixFileMode.UserWrite | UnixFileMode.UserExecute);
         return path;
     }

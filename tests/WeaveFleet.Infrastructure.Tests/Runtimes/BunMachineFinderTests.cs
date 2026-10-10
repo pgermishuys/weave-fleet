@@ -209,7 +209,7 @@ public sealed class BunMachineFinderTests : IDisposable
             Probe = async (path, _) =>
             {
                 // The first answers last: results must still come back in search order.
-                await Task.Delay(path == a ? 150 : 0);
+                await Task.Delay(path == a ? 150 : 0, CancellationToken.None);
                 return new BunProbeResult(BunVersion.Parse("1.5.0"), null);
             },
         };
@@ -305,6 +305,8 @@ public sealed class BunMachineFinderTests : IDisposable
         var link = Path.Combine(Folder("a"), "bun");
         File.CreateSymbolicLink(link, target);
 
+        _answers[link] = new BunProbeResult(BunVersion.Parse("1.4.5"), null);
+
         var candidate = await Finder().CheckAsync(link, CancellationToken.None);
 
         candidate.ShouldBe(new BunCandidate(link, target, "1.4.5", BunCandidateStatuses.Usable, null));
@@ -362,7 +364,8 @@ public sealed class BunMachineFinderTests : IDisposable
     {
         var path = Path.Combine(Folder(folder), "bun");
         File.WriteAllText(path, "#!/bin/sh\n" + body + "\n");
-        File.SetUnixFileMode(path, UnixFileMode.UserRead | UnixFileMode.UserWrite | UnixFileMode.UserExecute);
+        if (!OperatingSystem.IsWindows())
+            File.SetUnixFileMode(path, UnixFileMode.UserRead | UnixFileMode.UserWrite | UnixFileMode.UserExecute);
         return path;
     }
 }
