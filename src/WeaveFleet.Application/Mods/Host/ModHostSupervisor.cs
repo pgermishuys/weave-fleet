@@ -769,8 +769,8 @@ internal sealed partial class ModHostSupervisor : IModHostCalls, IAsyncDisposabl
     private async Task<ModDispatchResult> SendAsync(HostRun run, string @event, string sessionId, JsonElement e, IReadOnlyList<string> chain, string? surface, CancellationToken ct)
     {
         _seen.TryAdd(sessionId, 0);
-        // What the host says is running belongs to this dispatch from here on.
-        run.Running.TryRemove((sessionId, @event), out _);
+        // Only what the host says is running from here on can be this dispatch's.
+        var sentAfter = run.RunningCount;
         ModWireDispatchResult answer;
         try
         {
@@ -782,7 +782,7 @@ internal sealed partial class ModHostSupervisor : IModHostCalls, IAsyncDisposabl
         }
         catch (TimeoutException)
         {
-            Hung(run, @event, sessionId, chain);
+            Hung(run, @event, sessionId, chain, sentAfter);
             return ModDispatchResult.NotDispatched;
         }
         catch (ModHostRpcException error) when (error.Code == ModHostErrorCodes.InvalidParams)
@@ -859,13 +859,23 @@ internal sealed partial class ModHostSupervisor : IModHostCalls, IAsyncDisposabl
     /// The host didn't answer: blames the mod it last said was running for this dispatch, else a lone mod in the chain,
     /// else the outermost; kills the host, whose exit restarts it. Only the first timeout on a host does this.
     /// </summary>
-    private void Hung(HostRun run, string @event, string sessionId, IReadOnlyList<string> chain)
+    /// <remarks>
+    /// "For this dispatch" is the session and event, announced after the dispatch was sent; or the session's
+    /// <c>session.start</c>, which the host runs first, inside the dispatch, for a mod that hasn't started there yet.
+    /// </remarks>
+    private void Hung(HostRun run, string @event, string sessionId, IReadOnlyList<string> chain, long sentAfter)
     {
         if (!run.ClaimHang())
             return;
         run.Hung = true;
 
-        run.Running.TryGetValue((sessionId, @event), out var named);
+        string? named = null;
+        var latest = sentAfter;
+        foreach (var key in new[] { (sessionId, @event), (sessionId, "session.start") })
+        {
+            if (run.Running.TryGetValue(key, out var said) && said.Sequence > latest)
+                (named, latest) = (said.Mod, said.Sequence);
+        }
         var struck = named ?? (chain.Count > 0 ? chain[0] : null);
         var suspects = chain.ToList();
         if (named is not null && !suspects.Contains(named, StringComparer.Ordinal))
@@ -1174,7 +1184,7 @@ internal sealed partial class ModHostSupervisor : IModHostCalls, IAsyncDisposabl
             {
                 case "running":
                     if (Text(parameters, "event") is { } running && sessionId is not null && _run is { } run)
-                        run.Running[(sessionId, running)] = modId;
+                        run.Running[(sessionId, running)] = (modId, run.NextRunning());
                     break;
                 case "invalidate":
                     _deps.Signals.Invalidated(UserId, modId, sessionId);
@@ -1249,6 +1259,7 @@ internal sealed partial class ModHostSupervisor : IModHostCalls, IAsyncDisposabl
     private sealed class HostRun(IModHostConnection connection, BunLocation bun, DateTimeOffset startedAt)
     {
         private int _hangClaimed;
+        private long _runningCount;
 
         public IModHostConnection Connection { get; } = connection;
 
@@ -1262,8 +1273,16 @@ internal sealed partial class ModHostSupervisor : IModHostCalls, IAsyncDisposabl
         /// <summary>It stopped answering and Fleet killed it.</summary>
         public volatile bool Hung;
 
-        /// <summary>The mod the host last said was running, per session and event (the <c>running</c> notification).</summary>
-        public ConcurrentDictionary<(string SessionId, string Event), string> Running { get; } = new();
+        /// <summary>
+        /// The mod the host last said was running, per session and event (the <c>running</c> notification), numbered in
+        /// the order they came.
+        /// </summary>
+        public ConcurrentDictionary<(string SessionId, string Event), (string Mod, long Sequence)> Running { get; } = new();
+
+        /// <summary>How many <c>running</c> notifications have come: a dispatch counts only those after it was sent.</summary>
+        public long RunningCount => Interlocked.Read(ref _runningCount);
+
+        public long NextRunning() => Interlocked.Increment(ref _runningCount);
 
         /// <summary>True for the first dispatch to time out on this host only.</summary>
         public bool ClaimHang() => Interlocked.Exchange(ref _hangClaimed, 1) == 0;
