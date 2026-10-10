@@ -8,7 +8,7 @@ using WeaveFleet.Application.Mods.Host;
 
 namespace WeaveFleet.Application.Tests.Mods.Host;
 
-public sealed class ModHostSupervisorTests
+public sealed class ModHostSupervisorTests : IDisposable
 {
     private const string User = "test-user";
     private static readonly ModOff UserOff = new(ModOffBy.User, DateTimeOffset.UnixEpoch);
@@ -22,7 +22,9 @@ public sealed class ModHostSupervisorTests
     private readonly ModHostSupervisor _supervisor;
 
     public ModHostSupervisorTests()
-        => _supervisor = new ModHostSupervisor(User, new ModHostDependencies(new ModHostOptions(), _factory, _gate, _bun, _files, _store, _time, NullLogger.Instance));
+        => _supervisor = new ModHostSupervisor(User, new ModHostDependencies(new ModHostOptions(), _factory, _gate, _bun, _files, _store, new FakeStrikes(), new FakeUi(), (_, _, _) => Task.FromResult<Domain.Entities.Session?>(null), _time, NullLogger.Instance));
+
+    public void Dispose() => _store.DeleteFolders();
 
     private void Keep(ModOff? off = null)
         => _store.SeedHistory(User, new ModHistory("test-chips", 1, off, [new ModVersion(1, DateTimeOffset.UnixEpoch, "0.1.0", "abc", null, null, null, null)]));
@@ -217,6 +219,17 @@ public sealed class ModHostSupervisorTests
     }
 
     [Fact]
+    public async Task A_request_whose_pipe_closes_is_not_ready_for_the_caller()
+    {
+        var connection = await StartedAsync();
+        connection.OnRequest = () => Task.FromException<JsonElement>(new ModHostClosedException("The mod host closed its connection."));
+
+        var failure = await Should.ThrowAsync<ModHostNotReadyException>(_supervisor.RequestAsync("ping", default).Within());
+
+        failure.Message.ShouldBe("The mod host stopped; Fleet is restarting it.");
+    }
+
+    [Fact]
     public async Task A_request_answers_with_the_hosts_result_and_one_while_stopped_is_not_ready()
     {
         await Should.ThrowAsync<ModHostNotReadyException>(_supervisor.RequestAsync("ping", default).Within());
@@ -246,7 +259,7 @@ public sealed class ModHostSupervisorTests
     }
 
     [Fact]
-    public async Task The_hosts_own_calls_are_answered_as_unknown_for_now()
+    public async Task An_unknown_call_is_refused_and_a_notification_never_throws()
     {
         var calls = (IModHostCalls)_supervisor;
         var failure = await Should.ThrowAsync<ModHostRpcException>(calls.HandleRequestAsync("ui.set", default, CancellationToken.None).Within());
