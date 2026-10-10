@@ -29,7 +29,8 @@ public static class ModCheckText
         return text.ToString();
     }
 
-    private static string FormatHook(JsonElement hook)
+    /// <summary>One hook (<c>CheckReportHook</c>) as the <c>hooks:</c> line shows it: <c>ui.render "ToolUse" { props: … }</c>.</summary>
+    public static string FormatHook(JsonElement hook)
     {
         var name = Text(hook, "event");
         if (!hook.TryGetProperty("matcher", out var matcher))

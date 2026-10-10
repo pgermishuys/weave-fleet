@@ -348,32 +348,11 @@ public sealed class ModBridge(
             output.Append(CultureInfo.InvariantCulture, $"\n{line.At.ToUniversalTime().ToString("HH:mm:ss", CultureInfo.InvariantCulture)} {line.Level} {line.Text}");
     }
 
-    /// <summary>What <c>register</c> registered, one hook a line: strings as they are, <c>{event, matcher}</c> objects as the check shows them.</summary>
+    /// <summary>What <c>register</c> registered, one hook a line, as the check report shows them.</summary>
     private static List<string> FormatHooks(JsonElement hooks)
-    {
-        if (hooks.ValueKind != JsonValueKind.Array)
-            return hooks.ValueKind is JsonValueKind.Undefined or JsonValueKind.Null ? [] : [hooks.GetRawText()];
-
-        var lines = new List<string>();
-        foreach (var hook in hooks.EnumerateArray())
-        {
-            if (hook.ValueKind == JsonValueKind.String)
-            {
-                lines.Add(hook.GetString()!);
-            }
-            else if (hook.ValueKind == JsonValueKind.Object && hook.TryGetProperty("event", out var name) && name.ValueKind == JsonValueKind.String)
-            {
-                var matcher = hook.TryGetProperty("matcher", out var m) && m.ValueKind != JsonValueKind.Null ? $" {m.GetRawText()}" : "";
-                lines.Add($"{name.GetString()}{matcher}");
-            }
-            else
-            {
-                lines.Add(hook.GetRawText());
-            }
-        }
-
-        return lines;
-    }
+        => hooks.ValueKind == JsonValueKind.Array
+            ? [.. hooks.EnumerateArray().Select(hook => hook.ValueKind == JsonValueKind.Object ? ModCheckText.FormatHook(hook) : hook.GetRawText())]
+            : [];
 
     private static string Indented(JsonElement element)
     {

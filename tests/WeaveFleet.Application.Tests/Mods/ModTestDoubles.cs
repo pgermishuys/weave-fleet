@@ -187,7 +187,7 @@ internal sealed class FakeModDraftRunner : IModDraftRunner
     private readonly List<ModDraftLogLine> _log = [];
 
     public string? NotReady { get; set; }
-    public ModDraftLoad Load { get; set; } = new(true, null, null, JsonDocument.Parse("""["ui.render ToolUse"]""").RootElement.Clone());
+    public ModDraftLoad Load { get; set; } = new(true, null, null, JsonDocument.Parse("""[{"event":"session.start"},{"event":"ui.render","matcher":{"component":"ToolUse","props":{"tool":"bash"}}}]""").RootElement.Clone());
     public ModDraftTestRun Run { get; set; } = new(true, JsonDocument.Parse("""{"type":"Pill"}""").RootElement.Clone(), ["test-chips"], []);
     public ModDraftProblem? Problem { get; set; }
 

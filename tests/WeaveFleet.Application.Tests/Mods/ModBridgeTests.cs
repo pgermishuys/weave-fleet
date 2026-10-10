@@ -290,7 +290,7 @@ public sealed class ModBridgeTests
         var result = await Call("reload");
 
         result.Value!.Title.ShouldBe($"Reloaded {Chips}");
-        result.Value!.Output.ShouldBe($"{Chips} loaded in this session.\nHooks:\n  ui.render ToolUse");
+        result.Value!.Output.ShouldBe($"{Chips} loaded in this session.\nHooks:\n  session.start\n  ui.render \"ToolUse\" {{ props: {{ tool: \"bash\" }} }}");
         _runner.Reloaded.ShouldHaveSingleItem().ShouldBe((Owner, SessionId, Chips));
     }
 
