@@ -301,8 +301,17 @@ jobs:
         with:
           dotnet-version: '10.0.x'
 
+      # A pinned real Bun, so the Bun probe tests run through CheckAsync (and the stat helper) on every platform.
+      - name: Setup Bun
+        id: bun
+        uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: '1.4.2'
+
       - name: Run the mod store's file-safety tests
         shell: bash
+        env:
+          FLEET_TEST_REAL_BUN: ${{ steps.bun.outputs.bun-path }}
         run: >
           dotnet test tests/WeaveFleet.Infrastructure.Tests
           --configuration Release
