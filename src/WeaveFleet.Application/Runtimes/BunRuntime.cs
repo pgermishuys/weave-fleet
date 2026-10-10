@@ -29,6 +29,9 @@ public static class BunCandidateStatuses
 
     /// <summary>It didn't run, didn't answer in time, or didn't print a version.</summary>
     public const string NotWorking = "not-working";
+
+    /// <summary>Fleet didn't run it: it, or a folder above it, can be changed by other users (or Fleet couldn't tell), so it may not be the Bun it looks like.</summary>
+    public const string NotChecked = "not-checked";
 }
 
 /// <summary>

@@ -55,6 +55,9 @@ internal sealed partial class BunRuntimeInstaller(
     /// <summary>Test seam: the wait before the second try of the final move; each later wait doubles.</summary>
     internal TimeSpan MoveRetryDelay { get; init; } = TimeSpan.FromMilliseconds(100);
 
+    /// <summary>Test seam: whether to hold a configured path to Windows' rules (it must end in <c>.exe</c>).</summary>
+    internal bool IsWindows { get; init; } = OperatingSystem.IsWindows();
+
     /// <summary>Test seam: learns a Bun's version.</summary>
     internal Func<string, CancellationToken, Task<BunProbeResult>> Probe { get; init; } =
         (path, ct) => BunVersionProbe.RunAsync(path, BunVersionProbe.DefaultTimeout, ct);
@@ -142,6 +145,7 @@ internal sealed partial class BunRuntimeInstaller(
                 return [];
 
             var newest = installed.Max(bun => bun.Version);
+            // Links are followed on both sides, so a home reached through a symlink still matches the Bun in use.
             var protectedPaths = inUse.Select(NormalisePath).OfType<string>().ToList();
             var comparison = OperatingSystem.IsWindows() || OperatingSystem.IsMacOS()
                 ? StringComparison.OrdinalIgnoreCase
@@ -154,7 +158,7 @@ internal sealed partial class BunRuntimeInstaller(
                 if (!BunVersion.TryParse(name, out var version) || version >= newest)
                     continue;
 
-                var prefix = Path.GetFullPath(folder).TrimEnd(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar) + Path.DirectorySeparatorChar;
+                var prefix = BunPaths.Canonical(folder).TrimEnd(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar) + Path.DirectorySeparatorChar;
                 if (protectedPaths.Any(path => path.StartsWith(prefix, comparison)))
                     continue;
 
@@ -215,6 +219,12 @@ internal sealed partial class BunRuntimeInstaller(
         if (!Path.IsPathFullyQualified(configured))
             return (null, $"Fleet:Harness:BunPath must be an absolute path; it's {configured}.");
 
+        if (IsWindows && !configured.EndsWith(".exe", StringComparison.OrdinalIgnoreCase))
+            return (null, $"Fleet:Harness:BunPath is {configured}, which must end in .exe: point it at bun.exe.");
+
+        if (Directory.Exists(configured))
+            return (null, $"Fleet:Harness:BunPath is {configured}, which is a folder, not the bun program.");
+
         var key = ProbeKeyOf(configured);
         if (key is null)
             return (null, $"Fleet:Harness:BunPath is {configured}, which doesn't exist.");
@@ -258,7 +268,9 @@ internal sealed partial class BunRuntimeInstaller(
             if (!file.Exists)
                 return null;
 
-            return new ProbeKey(Path.GetFullPath(path), target?.FullName, file.Length, file.LastWriteTimeUtc);
+            // The device and inode tell a replacement of the same size and time from the file probed before.
+            var identity = UnixFileStatus.Stat(file.FullName);
+            return new ProbeKey(Path.GetFullPath(path), target?.FullName, file.Length, file.LastWriteTimeUtc, identity?.Device, identity?.Inode);
         }
         catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
         {
@@ -270,7 +282,7 @@ internal sealed partial class BunRuntimeInstaller(
     {
         try
         {
-            return Path.GetFullPath(path);
+            return BunPaths.Canonical(path);
         }
         catch (Exception ex) when (ex is ArgumentException or NotSupportedException or PathTooLongException)
         {
@@ -626,7 +638,7 @@ internal sealed partial class BunRuntimeInstaller(
     private sealed record InstalledBun(string Name, BunVersion Version, BunLocation Location);
 
     /// <summary>What a probed file looked like, so a changed one is probed again.</summary>
-    private sealed record ProbeKey(string Path, string? ResolvedPath, long Length, DateTime LastWriteUtc);
+    private sealed record ProbeKey(string Path, string? ResolvedPath, long Length, DateTime LastWriteUtc, ulong? Device, ulong? Inode);
 
     /// <summary>A failure with a message fit to show the user.</summary>
     private sealed class InstallFailure(string message) : Exception(message);

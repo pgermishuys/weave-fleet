@@ -25,6 +25,12 @@ internal sealed class BunMachineFinder
     public Func<string, CancellationToken, Task<BunProbeResult>> Probe { get; init; } =
         (path, ct) => BunVersionProbe.RunAsync(path, BunVersionProbe.DefaultTimeout, ct);
 
+    /// <summary>
+    /// Test seam: why a Bun must not be run (the reason, as a sentence), or <see langword="null"/> when it may be. The
+    /// default refuses a Bun that others can change; see <see cref="BunPaths.WhyNotSafeToRun"/>.
+    /// </summary>
+    public Func<string, string?> WhyNotSafeToRun { get; init; } = BunPaths.WhyNotSafeToRun;
+
     /// <summary>Every Bun found, in search order, each with its version and status.</summary>
     public async Task<IReadOnlyList<BunCandidate>> FindAsync(CancellationToken ct)
     {
@@ -38,7 +44,7 @@ internal sealed class BunMachineFinder
             if (path is null || !IsFile(path))
                 continue;
 
-            var resolved = Canonical(path);
+            var resolved = BunPaths.Canonical(path);
             if (seen.Add(resolved))
                 found.Add((path, resolved));
         }
@@ -58,10 +64,12 @@ internal sealed class BunMachineFinder
         }
 
         var full = Path.GetFullPath(path);
+        if (Directory.Exists(full))
+            return NotWorking(full, full, $"{full} is a folder, not the bun program.");
         if (!IsFile(full))
             return NotWorking(full, full, $"There's no file at {full}.");
 
-        return await ClassifyAsync(full, Canonical(full), ct).ConfigureAwait(false);
+        return await ClassifyAsync(full, BunPaths.Canonical(full), ct).ConfigureAwait(false);
     }
 
     /// <summary>The file name to look for: <c>.exe</c> only on Windows, never a <c>.cmd</c> or <c>.bat</c> shim.</summary>
@@ -103,6 +111,9 @@ internal sealed class BunMachineFinder
 
     private async Task<BunCandidate> ClassifyAsync(string path, string resolved, CancellationToken ct)
     {
+        if (!IsWindows && WhyNotSafeToRun(resolved) is { } unsafeReason)
+            return new BunCandidate(path, resolved, null, BunCandidateStatuses.NotChecked, unsafeReason);
+
         var probe = await Probe(path, ct).ConfigureAwait(false);
         if (probe.Version is not { } version)
             return NotWorking(path, resolved, probe.Error ?? "Bun didn't say what version it is.");
@@ -149,42 +160,5 @@ internal sealed class BunMachineFinder
         {
             return null;
         }
-    }
-
-    /// <summary>
-    /// The path with every link followed, in the file and in each folder above it, so two paths to one file compare equal.
-    /// A path that can't be resolved (a loop, a vanished link) is returned as it is.
-    /// </summary>
-    private static string Canonical(string path, int depth = 0)
-    {
-        const int MaxDepth = 16;
-        var full = Path.GetFullPath(path);
-        if (depth > MaxDepth)
-            return full;
-
-        var root = Path.GetPathRoot(full) ?? "";
-        var current = root;
-        foreach (var segment in full[root.Length..].Split(Path.DirectorySeparatorChar, StringSplitOptions.RemoveEmptyEntries))
-        {
-            current = Path.Combine(current, segment);
-            try
-            {
-                var info = new FileInfo(current);
-                if (info.LinkTarget is null)
-                    continue;
-
-                if (info.ResolveLinkTarget(returnFinalTarget: true) is { } target)
-                    current = Canonical(target.FullName, depth + 1);
-            }
-            catch (IOException)
-            {
-                // Can't follow it; keep the path as it is.
-            }
-            catch (UnauthorizedAccessException)
-            {
-            }
-        }
-
-        return current;
     }
 }

@@ -20,6 +20,9 @@ internal static class BunVersionProbe
     /// <summary>How long <c>--version</c> may take before Fleet gives up on it.</summary>
     public static readonly TimeSpan DefaultTimeout = TimeSpan.FromSeconds(5);
 
+    /// <summary>How long stdout gets to finish once the Bun has exited, before what was read so far is used.</summary>
+    private static readonly TimeSpan OutputGrace = TimeSpan.FromMilliseconds(250);
+
     /// <summary>The most stdout read; a Bun that prints more is not printing a version.</summary>
     private const int MaxOutputBytes = 4096;
 
@@ -34,10 +37,51 @@ internal static class BunVersionProbe
     {
         ct.ThrowIfCancellationRequested();
 
+        if (!OperatingSystem.IsWindows() && HasNoExecuteBit(executablePath))
+            return Failed($"Bun at {executablePath} isn't executable (chmod +x {executablePath}).");
+
+        // An empty folder of its own, so a Bun run from anywhere never finds files next to it, or Fleet's, to read.
+        var workingFolder = Path.Combine(Path.GetTempPath(), $"fleet-bun-probe-{Guid.NewGuid():N}");
+        try
+        {
+            Directory.CreateDirectory(workingFolder);
+            return await RunInAsync(executablePath, workingFolder, timeout, ct).ConfigureAwait(false);
+        }
+        finally
+        {
+            try
+            {
+                Directory.Delete(workingFolder, recursive: true);
+            }
+            catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
+            {
+                // Best effort: it's empty and in the temp folder.
+            }
+        }
+    }
+
+    private static bool HasNoExecuteBit(string path)
+    {
+        try
+        {
+            if (OperatingSystem.IsWindows())
+                return false;
+
+            const UnixFileMode Execute = UnixFileMode.UserExecute | UnixFileMode.GroupExecute | UnixFileMode.OtherExecute;
+            return File.Exists(path) && (File.GetUnixFileMode(path) & Execute) == 0;
+        }
+        catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
+        {
+            return false;
+        }
+    }
+
+    private static async Task<BunProbeResult> RunInAsync(string executablePath, string workingFolder, TimeSpan timeout, CancellationToken ct)
+    {
         var psi = new ProcessStartInfo
         {
             FileName = executablePath,
-            WorkingDirectory = Path.GetDirectoryName(executablePath) ?? "",
+            WorkingDirectory = workingFolder,
             UseShellExecute = false,
             RedirectStandardInput = true,
             RedirectStandardOutput = true,
@@ -73,22 +117,30 @@ internal static class BunVersionProbe
             using var limit = CancellationTokenSource.CreateLinkedTokenSource(ct);
             limit.CancelAfter(timeout);
 
+            var output = new OutputReader(process);
+            Task? stdout = null;
+            Task? stderr = null;
             try
             {
                 process.StandardInput.Close();
-                var stdout = ReadVersionOutputAsync(process, limit.Token);
-                var stderr = DiscardAsync(process.StandardError.BaseStream, limit.Token);
+                stdout = output.ReadAsync(limit.Token);
+                stderr = DiscardAsync(process.StandardError.BaseStream, limit.Token);
 
                 await process.WaitForExitAsync(limit.Token).ConfigureAwait(false);
-                var output = await stdout.ConfigureAwait(false);
-                await stderr.ConfigureAwait(false);
 
-                if (output.TooMuch)
+                // A Bun can print its version and exit while a child it started still holds stdout open, so the pipe
+                // never closes. Give the output a moment to finish, then use what was read and kill what's left.
+                // Known limit: a child that double-forked out of the process tree escapes the kill and can outlive the probe.
+                await Task.WhenAny(stdout, Task.Delay(OutputGrace, limit.Token)).ConfigureAwait(false);
+                var (bytes, tooMuch) = output.Snapshot();
+                Kill(process);
+
+                if (tooMuch)
                     return Failed("Bun printed far more than a version number.");
                 if (process.ExitCode != 0)
                     return Failed($"Bun exited with code {process.ExitCode}.");
 
-                var text = Encoding.UTF8.GetString(output.Bytes).TrimEnd();
+                var text = Encoding.UTF8.GetString(bytes).TrimEnd();
                 return BunVersion.TryParse(text, out var version)
                     ? new BunProbeResult(version, null)
                     : Failed(text.Length == 0
@@ -101,29 +153,68 @@ internal static class BunVersionProbe
                 ct.ThrowIfCancellationRequested();
                 return Failed($"Bun didn't answer within {timeout.TotalSeconds.ToString("0.##", CultureInfo.InvariantCulture)} seconds.");
             }
+            finally
+            {
+                // End both readers without waiting on a pipe a stray child might still hold.
+                await limit.CancelAsync().ConfigureAwait(false);
+                var readers = new[] { stdout, stderr }.OfType<Task>().ToArray();
+                try
+                {
+                    await Task.WhenAny(Task.WhenAll(readers), Task.Delay(OutputGrace, CancellationToken.None)).ConfigureAwait(false);
+                }
+                catch (Exception ex) when (ex is OperationCanceledException or IOException or ObjectDisposedException)
+                {
+                    // The readers were stopped on purpose.
+                }
+
+                foreach (var reader in readers)
+                    _ = reader.Exception;
+            }
         }
     }
 
     private static BunProbeResult Failed(string error) => new(null, error);
 
-    /// <summary>Reads stdout up to <see cref="MaxOutputBytes"/>; one byte more kills the process so it can't flood.</summary>
-    private static async Task<(byte[] Bytes, bool TooMuch)> ReadVersionOutputAsync(Process process, CancellationToken ct)
+    /// <summary>Reads stdout up to <see cref="MaxOutputBytes"/>, keeping what it has so far where another thread can take it.</summary>
+    private sealed class OutputReader(Process process)
     {
-        var stream = process.StandardOutput.BaseStream;
-        var buffer = new byte[MaxOutputBytes + 1];
-        var length = 0;
-        while (true)
-        {
-            var read = await stream.ReadAsync(buffer.AsMemory(length), ct).ConfigureAwait(false);
-            if (read == 0)
-                return (buffer[..length], false);
+        private readonly object _lock = new();
+        private readonly byte[] _buffer = new byte[MaxOutputBytes + 1];
+        private int _length;
+        private bool _tooMuch;
 
-            length += read;
-            if (length > MaxOutputBytes)
+        /// <summary>Reads until the pipe closes; one byte over the limit kills the process so it can't flood.</summary>
+        public async Task ReadAsync(CancellationToken ct)
+        {
+            var stream = process.StandardOutput.BaseStream;
+            var chunk = new byte[1024];
+            while (true)
             {
-                Kill(process);
-                return ([], true);
+                var read = await stream.ReadAsync(chunk, ct).ConfigureAwait(false);
+                if (read == 0)
+                    return;
+
+                lock (_lock)
+                {
+                    var room = Math.Min(read, _buffer.Length - _length);
+                    Array.Copy(chunk, 0, _buffer, _length, room);
+                    _length += room;
+                    _tooMuch = _length > MaxOutputBytes;
+                }
+
+                if (_tooMuch)
+                {
+                    Kill(process);
+                    return;
+                }
             }
+        }
+
+        /// <summary>What has been read so far.</summary>
+        public (byte[] Bytes, bool TooMuch) Snapshot()
+        {
+            lock (_lock)
+                return (_tooMuch ? [] : _buffer[.._length], _tooMuch);
         }
     }
 
