@@ -34,11 +34,11 @@ public sealed class ScopedModStrikeRecorder(IServiceScopeFactory scopes) : IModS
     }
 }
 
-/// <summary>The Bun the host runs on, from <see cref="IBunRuntime"/>: found, never installed here.</summary>
-public sealed class BunModHostBun(IBunRuntime bun) : IModHostBun
+/// <summary>The Bun the host runs on, from <see cref="IBunRuntime"/>, judged against the release Fleet wants: found, never installed here.</summary>
+public sealed class BunModHostBun(IBunRuntime bun, IBunReleases releases) : IModHostBun
 {
-    public Task<BunLocation?> FindAsync(CancellationToken ct) => Task.FromResult(bun.Find());
+    public Task<BunLocation?> FindAsync(CancellationToken ct) => bun.FindAsync(releases.Current, ct);
 
-    // Fleet keeps one installed version until the runtime can hold several (M4b); there's nothing older to prune yet.
-    public Task PruneAsync(IReadOnlyCollection<string> inUse, CancellationToken ct) => Task.CompletedTask;
+    public async Task PruneAsync(IReadOnlyCollection<string> inUse, CancellationToken ct)
+        => await bun.PruneAsync(inUse, ct).ConfigureAwait(false);
 }

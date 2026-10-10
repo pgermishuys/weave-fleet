@@ -262,7 +262,7 @@ public sealed class RealModHostServiceTests : IAsyncDisposable
 
     private sealed class FixedBun(string path) : IModHostBun
     {
-        public Task<BunLocation?> FindAsync(CancellationToken ct) => Task.FromResult<BunLocation?>(new BunLocation(path, BunSources.Configured, null));
+        public Task<BunLocation?> FindAsync(CancellationToken ct) => Task.FromResult<BunLocation?>(new BunLocation(path, BunSources.Configured, "1.4.2"));
 
         public Task PruneAsync(IReadOnlyCollection<string> inUse, CancellationToken ct) => Task.CompletedTask;
     }
