@@ -121,6 +121,7 @@ if (!isTestHost)
     builder.Services.AddLegacySessionImportStartupService();
     builder.Services.AddLegacyInstallMigrationStartupService();
     builder.Services.AddBundledSkillsStartupService();
+    builder.Services.AddModHostStartupService();
     builder.Services.AddOpenCodeWarmupStartupService();
     builder.Services.AddHarnessAvailabilityStartupService();
 }
