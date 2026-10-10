@@ -38,18 +38,12 @@ public sealed class BunManifestFileTests
         release.Assets.ShouldBe(BunRelease.Pinned.Assets);
     }
 
+    // The sha256 values are checked against the release's verified SHASUMS256.txt in the Infrastructure tests
+    // (BunReleaseTests). Nothing here names a version, so the bump job's PRs pass without editing tests.
     [Fact]
-    public void The_pinned_release_is_still_1_4_2_with_the_same_shas_and_sizes()
+    public void Every_pinned_asset_has_a_plausible_size()
     {
-        BunRelease.Pinned.Version.ShouldBe("1.4.2");
-        BunRelease.Pinned.Assets.ToDictionary(asset => asset.Rid, asset => (asset.Sha256, asset.Size)).ShouldBe(new Dictionary<string, (string, long?)>
-        {
-            ["linux-x64"] = ("c678040f14fe0440eb839d37cbd0ce4c051a32da72806ac97de6a6aab6bf728f", 36646949),
-            ["linux-arm64"] = ("54328bbc2d9c8e0c9f892c544d66c57a83b84139e34909e5ee81758f1ac8fda7", 36602920),
-            ["osx-x64"] = ("bad5bbd6cf14d0980d115f5954c9ff904df619d5e994d2da1ffccd3f316300b0", 28440543),
-            ["osx-arm64"] = ("90987a3a16d7db556d886ac3d551e7b6d3edf0a1cf43acaed622e8676be1d12f", 25377591),
-            ["win-x64"] = ("78c221c2376f79731ccf4e4af0b3bb46d81fefa3296c5abee09ad8a1b21e68c6", 39807490),
-            ["win-arm64"] = ("a7a16b876a305fd1029c66dbd27007b4f6112ae896532f675878731a21e50cfd", 36330062),
-        });
+        BunRelease.Pinned.Assets.Select(asset => asset.Rid).ShouldBe(BunManifest.AssetNames.Keys);
+        BunRelease.Pinned.Assets.ShouldAllBe(asset => asset.Size > 1024 * 1024);
     }
 }
