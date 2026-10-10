@@ -134,15 +134,62 @@ public sealed class ModHostServiceTests : IAsyncLifetime
     }
 
     [Fact]
-    public async Task A_dispatch_for_a_user_without_a_host_starts_nothing()
+    public async Task A_dispatch_for_a_user_seen_for_the_first_time_isnt_dispatched_but_brings_their_host_up()
     {
         Rig.Keep(Chips);
+        var service = Service();
 
-        var result = await Service().DispatchAsync(User, new ModDispatchRequest("turn.complete", "ses_test1", ModHostTests.Json("{}"))).Within();
+        var result = await service.DispatchAsync(User, new ModDispatchRequest("turn.complete", "ses_test1", ModHostTests.Json("{}"))).Within();
 
         result.ShouldBe(ModDispatchResult.NotDispatched);
+        await ModHostTests.Eventually(() => service.GetStatus(User).State == ModHostStates.Running, "the user's host is running");
+        service.GetStatus(User).Loaded.ShouldBe(["test-chips@v1"]);
+        (await service.DispatchAsync(User, new ModDispatchRequest("turn.complete", "ses_test1", ModHostTests.Json("{}"))).Within()).Dispatched.ShouldBeTrue();
+    }
+
+    [Theory]
+    [InlineData("status")]
+    [InlineData("problem")]
+    [InlineData("log")]
+    [InlineData("forget")]
+    public async Task Any_call_for_a_user_seen_for_the_first_time_brings_their_host_up(string call)
+    {
+        Rig.Keep(Chips);
+        var service = Service();
+
+        switch (call)
+        {
+            case "status":
+                service.GetStatus(User).ShouldBe(ModHostStatus.StoppedWith(null));
+                break;
+            case "problem":
+                service.GetLoadProblem(User, "test-chips@v1").ShouldBeNull();
+                break;
+            case "log":
+                service.GetLog(User, "test-chips@v1").ShouldBeEmpty();
+                break;
+            default:
+                await service.ForgetSessionAsync(User, "ses_test1").Within();
+                break;
+        }
+
+        await ModHostTests.Eventually(() => service.GetStatus(User).State == ModHostStates.Running, "the user's host is running");
+    }
+
+    [Fact]
+    public async Task A_user_is_brought_in_line_once_on_first_sight_not_on_every_call()
+    {
+        var service = Service();
+
+        for (var i = 0; i < 5; i++)
+            service.GetStatus(Other);
+
+        await ModHostTests.Eventually(() => Rig.Gate.Asked(Other) == 1, "the first sight reconciled");
+        service.GetStatus(Other);
+        await service.DispatchAsync(Other, new ModDispatchRequest("turn.complete", "ses_test1", ModHostTests.Json("{}"))).Within();
+        await Task.Delay(50);
+        Rig.Gate.Asked(Other).ShouldBe(1);
         Rig.Factory.Launches.ShouldBeEmpty();
-        Service().GetStatus(User).ShouldBe(ModHostStatus.StoppedWith(null));
     }
 
     [Fact]

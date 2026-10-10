@@ -346,7 +346,7 @@ public sealed class ModHostSupervisorDispatchTests : ModHostSupervisorTestBase
     }
 
     [Fact]
-    public async Task A_hang_strikes_the_mod_the_host_said_was_running()
+    public async Task A_hang_strikes_the_mod_the_host_last_said_was_running()
     {
         Rig.Keep(Chips);
         Rig.Keep(Demo);
@@ -355,7 +355,6 @@ public sealed class ModHostSupervisorDispatchTests : ModHostSupervisorTestBase
         {
             connection.Calls.HandleNotification("running", ModHostTests.Json($$"""{ "mod": "{{Kept(Demo, 1)}}", "event": "turn.complete", "sessionId": "ses_test1" }"""));
             connection.Calls.HandleNotification("running", ModHostTests.Json($$"""{ "mod": "{{Kept(Chips, 1)}}", "event": "turn.complete", "sessionId": "ses_test1" }"""));
-            connection.Calls.HandleNotification("running", ModHostTests.Json($$"""{ "mod": "{{Kept(Demo, 1)}}", "event": "ui.render", "sessionId": "ses_test1" }"""));
             throw new TimeoutException();
         };
 
@@ -364,6 +363,47 @@ public sealed class ModHostSupervisorDispatchTests : ModHostSupervisorTestBase
         Supervisor.StrikesOf(Kept(Chips, 1)).ShouldBe(1);
         Supervisor.StrikesOf(Kept(Demo, 1)).ShouldBe(0);
         const string line = "The mod host didn't answer within 15 s while running turn.complete; Fleet restarted it. Suspects: demo-mod@v1, test-chips@v1; struck: test-chips@v1.";
+        Rig.Log.Read(User, Kept(Chips, 1)).ShouldHaveSingleItem().Text.ShouldBe(line);
+        Rig.Log.Read(User, Kept(Demo, 1)).ShouldHaveSingleItem().Text.ShouldBe(line);
+    }
+
+    [Fact]
+    public async Task A_hang_in_another_sessions_dispatch_strikes_the_mod_that_dispatch_announced()
+    {
+        Factory.Hooks[Chips] = [new("turn.complete", null)];
+        Factory.Hooks[Demo] = [new("ui.render", null)];
+        Rig.Keep(Chips);
+        Rig.Keep(Demo);
+        Rig.Session(S2);
+        await StartedAsync();
+        var yAnnounced = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+        var released = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+        Factory.OnDispatch = async (connection, d, _) =>
+        {
+            if (d.SessionId == S1)
+            {
+                // X: test-chips' hook is waiting on a $ call when the host stops answering.
+                connection.Calls.HandleNotification("running", ModHostTests.Json($$"""{ "mod": "{{Kept(Chips, 1)}}", "event": "turn.complete", "sessionId": "ses_test1" }"""));
+                await yAnnounced.Task;
+                throw new TimeoutException();
+            }
+            // Y: demo-mod's hook starts after X's and never yields.
+            connection.Calls.HandleNotification("running", ModHostTests.Json($$"""{ "mod": "{{Kept(Demo, 1)}}", "event": "ui.render", "sessionId": "ses_test2" }"""));
+            yAnnounced.SetResult();
+            await released.Task;
+            throw new TimeoutException();
+        };
+
+        var x = Dispatch("turn.complete", S1);
+        await ModHostTests.Eventually(() => Factory.Current.Dispatches.Count == 1, "X was sent");
+        var y = Dispatch("ui.render", S2, """{ "component": "StatusChip" }""");
+        (await x.Within()).ShouldBe(ModDispatchResult.NotDispatched);
+        released.SetResult();
+        (await y.Within()).ShouldBe(ModDispatchResult.NotDispatched);
+
+        Supervisor.StrikesOf(Kept(Demo, 1)).ShouldBe(1);
+        Supervisor.StrikesOf(Kept(Chips, 1)).ShouldBe(0);
+        const string line = "The mod host didn't answer within 15 s while running turn.complete; Fleet restarted it. Suspects: test-chips@v1, demo-mod@v1; struck: demo-mod@v1.";
         Rig.Log.Read(User, Kept(Chips, 1)).ShouldHaveSingleItem().Text.ShouldBe(line);
         Rig.Log.Read(User, Kept(Demo, 1)).ShouldHaveSingleItem().Text.ShouldBe(line);
     }

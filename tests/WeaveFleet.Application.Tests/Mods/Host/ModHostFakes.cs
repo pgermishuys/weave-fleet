@@ -205,7 +205,16 @@ internal sealed class FakeModUserGate : IModUserGate
 
     public bool SafeMode { get; set; }
 
-    public Task<bool> IsSwitchedOnAsync(string userId, CancellationToken ct) => Task.FromResult(SwitchedOn);
+    private readonly ConcurrentDictionary<string, int> _asked = new(StringComparer.Ordinal);
+
+    /// <summary>How many times the switch was read for <paramref name="userId"/>: once per reconcile or check.</summary>
+    public int Asked(string userId) => _asked.GetValueOrDefault(userId);
+
+    public Task<bool> IsSwitchedOnAsync(string userId, CancellationToken ct)
+    {
+        _asked.AddOrUpdate(userId, 1, (_, n) => n + 1);
+        return Task.FromResult(SwitchedOn);
+    }
 
     public bool IsSafeMode(string userId) => SafeMode;
 }
