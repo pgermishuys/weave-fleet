@@ -7,7 +7,7 @@ using WeaveFleet.Application.Mods.Host;
 
 namespace WeaveFleet.Application.Tests.Mods.Host;
 
-public sealed class ModHostServiceTests
+public sealed class ModHostServiceTests : IDisposable
 {
     private const string Local = "local-user";
     private const string Other = "test-other";
@@ -21,6 +21,8 @@ public sealed class ModHostServiceTests
     public ModHostServiceTests()
         => _service = new ModHostService(new ModHostOptions(), _factory, new FakeGate(), new FakeBun(), new FakeFiles(), _store, _events, _time, NullLogger<ModHostService>.Instance);
 
+    public void Dispose() => _service.DisposeAsync().AsTask().Within().GetAwaiter().GetResult();
+
     private void Keep(string user)
         => _store.SeedHistory(user, new ModHistory("test-chips", 1, null, [new ModVersion(1, DateTimeOffset.UnixEpoch, "0.1.0", "abc", null, null, null, null)]));
 
@@ -33,7 +35,7 @@ public sealed class ModHostServiceTests
         _factory.Hold = new(TaskCreationOptions.RunContinuationsAsynchronously);
         await _service.StartAsync(CancellationToken.None).Within();
         _factory.Hold.SetResult();
-        await _factory.NextStart().Within();
+        await _factory.NextStart();
         _factory.Launches.Single().UserKey.ShouldBe(KeyOf(Local));
     }
 
@@ -43,7 +45,7 @@ public sealed class ModHostServiceTests
         Keep(Other);
         await _service.StartAsync(CancellationToken.None).Within();
         _events.PublishModsChanged(Other);
-        await _factory.NextStart().Within();
+        await _factory.NextStart();
         _factory.Launches.Single().UserKey.ShouldBe(KeyOf(Other));
         _service.GetStatus(Other).State.ShouldBe(ModHostStates.Running);
         _service.GetStatus(Local).State.ShouldBe(ModHostStates.Stopped);
@@ -56,8 +58,8 @@ public sealed class ModHostServiceTests
         Keep(Other);
         await _service.StartAsync(CancellationToken.None).Within();
         _events.PublishModsChanged(Other);
-        var first = await _factory.NextStart().Within();
-        var second = await _factory.NextStart().Within();
+        var first = await _factory.NextStart();
+        var second = await _factory.NextStart();
 
         await _service.StopAsync(CancellationToken.None).Within();
         first.Shutdowns.Count.ShouldBe(1);
@@ -74,7 +76,7 @@ public sealed class ModHostServiceTests
     {
         Keep(Local);
         await _service.StartAsync(CancellationToken.None).Within();
-        var connection = await _factory.NextStart().Within();
+        var connection = await _factory.NextStart();
         var restarting = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
         _service.SupervisorOf(Local)!.Changed += s =>
         {
@@ -94,7 +96,7 @@ public sealed class ModHostServiceTests
     {
         Keep(Local);
         await _service.StartAsync(CancellationToken.None).Within();
-        var connection = await _factory.NextStart().Within();
+        var connection = await _factory.NextStart();
 
         await _service.StopAsync(CancellationToken.None).Within();
         await _service.StopAsync(CancellationToken.None).Within();

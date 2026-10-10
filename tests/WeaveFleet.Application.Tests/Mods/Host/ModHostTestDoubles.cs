@@ -22,20 +22,14 @@ internal sealed class FakeConnection(int processId) : IModHostConnection
     private readonly TaskCompletionSource<int> _exited = new(TaskCreationOptions.RunContinuationsAsynchronously);
 
     public int ProcessId => processId;
-
     public ModHostInitializeResult Host { get; } = new(1, "host-1", "bun-1");
-
     public Task<int> Exited => _exited.Task;
-
     public Func<Task<JsonElement>> OnRequest { get; set; } = () => Task.FromResult(default(JsonElement));
 
     /// <summary>When false, <see cref="Kill"/> leaves the process "running", to count how often Fleet kills it.</summary>
     public bool KillEndsProcess { get; set; } = true;
-
     public List<TimeSpan> Shutdowns { get; } = [];
-
     public int Kills { get; private set; }
-
     public int Disposals { get; private set; }
 
     public void Crash(int code = 1) => _exited.TrySetResult(code);
@@ -68,16 +62,14 @@ internal sealed class FakeFactory : IModHostConnectionFactory
     private readonly Channel<FakeConnection> _started = Channel.CreateUnbounded<FakeConnection>();
 
     public List<ModHostLaunch> Launches { get; } = [];
-
     public List<FakeConnection> Connections { get; } = [];
-
     public Exception? Fail { get; set; }
 
     /// <summary>When set, a start waits for it, so a test can hold the host in <c>starting</c>.</summary>
     public TaskCompletionSource? Hold { get; set; }
 
-    /// <summary>Completes when the next host has started (hosts started earlier and not yet read count).</summary>
-    public Task<FakeConnection> NextStart() => _started.Reader.ReadAsync().AsTask();
+    /// <summary>Completes with the next host started (ones started earlier and not yet read count).</summary>
+    public Task<FakeConnection> NextStart() => _started.Reader.ReadAsync().AsTask().Within();
 
     public async Task<IModHostConnection> StartAsync(ModHostLaunch launch, IModHostCalls calls, CancellationToken ct)
     {
@@ -96,7 +88,6 @@ internal sealed class FakeFactory : IModHostConnectionFactory
 internal sealed class FakeGate : IModUserGate
 {
     public bool On { get; set; } = true;
-
     public bool Safe { get; set; }
 
     public Task<bool> IsSwitchedOnAsync(string userId, CancellationToken ct) => Task.FromResult(On);
@@ -114,7 +105,6 @@ internal sealed class FakeBun : IModHostBun
 internal sealed class FakeFiles : IModHostFiles
 {
     public string? HostScript { get; set; } = "/app/mods-host/host.js";
-
     public string FleetVersion => "9.9.9";
 }
 
@@ -133,10 +123,7 @@ internal sealed class ChannelBroadcaster : IEventBroadcaster
     }
 
     public Task BroadcastAsync(string topic, string type, JsonElement payload, string? userId, CancellationToken ct) => throw new NotSupportedException();
-
     public Task BroadcastAsync(string topic, string type, JsonElement payload, long? eventId, string? userId, CancellationToken ct) => throw new NotSupportedException();
-
     public Task BroadcastAsync(string topic, string type, JsonElement payload, DomainEvent? domainEvent, string? userId, CancellationToken ct) => throw new NotSupportedException();
-
     public Task BroadcastAsync(string topic, string type, JsonElement payload, long? eventId, DomainEvent? domainEvent, string? userId, CancellationToken ct) => throw new NotSupportedException();
 }
