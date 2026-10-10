@@ -1,42 +1,27 @@
 <script setup lang="ts">
-import { computed, nextTick, onMounted, onUnmounted, ref, shallowRef, watch } from "vue";
+import { computed, nextTick, onMounted, onUnmounted, ref, watch } from "vue";
 import { ArrowUpRight, Bot, Bug, CornerDownRight, RotateCw, TerminalSquare, TriangleAlert, Workflow } from "lucide-vue-next";
-import { parsePeerMessage, parsePeerUpdate, type PeerOutcome, type PeerSender } from "@/lib/session-messages";
-import { parseSessionReferences, type SessionReference } from "@/lib/session-references";
 import { useMachineTarget } from "@/lib/machine-target";
-import {
-  backgroundWorkId,
-  finishedBackgroundWork,
-  parseBackgroundNotice,
-  type BackgroundNotice,
-  type BackgroundState,
-} from "@/lib/background-work";
-import { toRunningWorkItems, type RunningWorkItem } from "@/lib/running-work";
 import { useRouter } from "@tanstack/vue-router";
-import { storeToRefs } from "pinia";
+import type { PeerSender } from "@/lib/session-messages";
 import MessageBubble from "@/components/session/MessageBubble.vue";
 import ReasoningBlock from "@/components/session/ReasoningBlock.vue";
 import ShellCommandBlock from "@/components/session/ShellCommandBlock.vue";
 import CompactionDivider from "@/components/session/CompactionDivider.vue";
-import { compactionOf, foldCompactionSummaries, type CompactionView } from "@/lib/compaction";
 import { sessionRetry } from "@/lib/session-row-status";
 import WorkingIndicator from "@/components/session/WorkingIndicator.vue";
 import PermissionCard from "@/components/session/PermissionCard.vue";
 import { useSessionPermissions } from "@/composables/use-session-permissions";
 import { useSessionStream } from "@/composables/use-session-stream";
 import { useModels } from "@/composables/use-models";
-import { modelDisplayName } from "@/lib/agent-model-choice";
-import { isDelegationWaiting, isStreamWorking } from "@/lib/domain-event-reducer";
+import { useActivityMessages } from "@/composables/use-activity-messages";
+import { hasRenderableAssistantContent, messageBody } from "@/lib/activity-messages";
+import { isStreamWorking } from "@/lib/domain-event-reducer";
 import { useSidebarMobile } from "@/composables/use-sidebar-mobile";
 import { clearSentPrompts, reconcileSentPrompts, useSendPrompt, useSentPrompts } from "@/composables/use-send-prompt";
-import { getTool } from "@/lib/tools";
-import { isSubagentTool, subagentKind, subagentTask, toToolCardItem, withoutRedrawnPages } from "@/components/session/activity-stream-tool-card";
 import type { ToolCardItem } from "@/components/session/activity-stream-tool-card";
 import { sessionCommands } from "@/lib/session-commands";
-import type { AccumulatedMessage, AccumulatedPart, AccumulatedToolPart, AccumulatedFilePart, AccumulatedReasoningPart } from "@/lib/client-types";
-import type { SlashCommand, TurnError } from "@/lib/domain-events";
 import { parseVisualPayload, type VisualPayload } from "@/lib/visual-payload";
-import { isQuestionPart } from "@/lib/question-types";
 import { diagLog } from "@/lib/message-diagnostics";
 import { useSessionsStore } from "@/stores/sessions";
 import { useMachinesStore } from "@/stores/machines";
@@ -46,11 +31,7 @@ import { useFileLinksStore } from "@/stores/file-links";
 import { useGoToFileStore } from "@/stores/go-to-file";
 import { focusServerCanvas } from "@/composables/use-server-canvases";
 import { useAgentBrowser } from "@/composables/use-agent-browser";
-import { mergeMessagesByTimestamp } from "@/lib/merge-messages";
-import { workflowMessageKey, workflowMessageLabel } from "@/lib/workflows";
-import { useWorkflowsStore } from "@/stores/workflows";
 import { useProblemReportStore } from "@/stores/problem-report";
-import { toShellCommandView, type ShellCommandView } from "@/lib/shell-commands";
 import { messagesAfter } from "@/lib/side-conversation";
 import { splitTurnErrorMessage } from "@/lib/turn-error";
 import { limitTitle } from "@/lib/turn-retry";
@@ -59,52 +40,6 @@ import TurnFailureRetry from "@/components/session/TurnFailureRetry.vue";
 import ImproveSkillDialog from "@/components/skills/ImproveSkillDialog.vue";
 import { improveTurn, type ImproveTurn } from "@/lib/skill-versions";
 import { useBuiltInSkillsStore } from "@/stores/built-in-skills";
-import { useThemeStore } from "@/stores/theme";
-
-interface ImageAttachmentDisplay {
-  url: string;
-  filename: string;
-}
-
-interface ActivityMessage {
-  id: string;
-  author: string;
-  modelName?: string;
-  senderKey: string;
-  role: AccumulatedMessage["role"];
-  createdAt?: number;
-  body: string;
-  images: ImageAttachmentDisplay[];
-  tools?: ToolCardItem[];
-  questionParts?: AccumulatedToolPart[];
-  reasoningParts?: AccumulatedReasoningPart[];
-  optimisticStatus?: "pending" | "confirmed" | "needs_retry";
-  clusterPosition: "single" | "first" | "middle" | "last";
-  showIdentity: boolean;
-  /** Set when the turn that produced this message failed. */
-  turnError?: TurnError;
-  /** Set when another Fleet session sent this message with fleet_message, or Fleet sent an update about one. */
-  peer?: PeerSender;
-  /** Set when this is Fleet's update that a session this one messaged is done. */
-  peerOutcome?: PeerOutcome;
-  /** Set when this is the notice that work the agent moved into the background finished. */
-  background?: BackgroundNotice;
-  /**
-   * Set on what Fleet sent into a workflow step's session: "Workflow · step 2 of 6" (and "· you finish this step") on
-   * the prompt the step started with, "Fleet · you pressed Move on" on the wrap-up.
-   */
-  workflowStep?: string;
-  /** Set on a prompt the user sent into a running turn (steered): the agent read it at its next step. */
-  steered?: boolean;
-  /** Sessions the user referenced with `@` in this message: their tokens show as chips. */
-  sessionReferences?: SessionReference[];
-  /** Set on a shell command the user ran from the composer: the command and what it printed. */
-  shell?: ShellCommandView;
-  /** The slash command a message of yours came from; its body is then what the harness made of the command. */
-  command?: SlashCommand;
-  /** Set when this is where the harness compacted the conversation: it shows as a divider. */
-  compaction?: CompactionView;
-}
 
 const props = defineProps<{
   sessionId: string;
@@ -129,18 +64,12 @@ const emit = defineEmits<{
 
 const router = useRouter();
 const sessionsStore = useSessionsStore();
-const workflowsStore = useWorkflowsStore();
-
-/** The run this session is a step of, which says which of its messages Fleet sent. */
 const problemReport = useProblemReportStore();
-const workflowRun = computed(() => workflowsStore.runForSession(props.sessionId));
-const { sessions } = storeToRefs(sessionsStore);
 const canvasesStore = useCanvasesStore();
 const goToFile = useGoToFileStore();
 const fileLinks = useFileLinksStore();
 /** Fleet's built-in skills: a row that loaded one offers Improve. Loaded once, the first time a session shows. */
 const builtInSkills = useBuiltInSkillsStore();
-const themeStore = useThemeStore();
 builtInSkills.ensureLoaded();
 const { showRightPanel } = useSidebarMobile();
 
@@ -279,234 +208,15 @@ watch(
   { immediate: true },
 );
 
-// A streamed token replaces only the message it belongs to; every other message keeps its object. What's derived
-// from a message is kept with it, so an unchanged message hands its bubble the same props and the bubble doesn't
-// re-render. Rebuilding every message on every token took most of the frame in a long conversation.
-const bodies = new WeakMap<AccumulatedMessage, string>();
-
-function messageBody(message: AccumulatedMessage): string {
-  let body = bodies.get(message);
-  if (body === undefined) {
-    body = renderMessageBody(message.parts);
-    bodies.set(message, body);
-  }
-  return body;
-}
-
-/**
- * The session's work (`@/lib/running-work`) by the call that started it: what the stream says (running, and what ended
- * lately), and older work, loaded when a notice needs it. A call's card reads its state from here for every harness.
- */
-const olderWork = shallowRef<readonly RunningWorkItem[]>([]);
-const workByCall = computed<ReadonlyMap<string, RunningWorkItem>>((previous) => {
-  const byCall = new Map<string, RunningWorkItem>();
-  for (const item of [...olderWork.value, ...stream.runningWork.value]) {
-    if (item.toolCallId) byCall.set(item.toolCallId, item);
-  }
-  return previous && sameEntries(previous, byCall) ? previous : byCall;
+const { messages, deliveredMessages } = useActivityMessages({
+  sessionId: () => props.sessionId,
+  sessionMessages,
+  delegations,
+  runningWork: stream.runningWork,
+  sentPrompts,
+  models,
+  machine,
 });
-
-/** The call each piece of OpenCode 2's background work came from, by its handle (the shell id, the child session). */
-const backgroundCalls = computed<ReadonlyMap<string, string>>((previous) => {
-  const calls = new Map<string, string>();
-  for (const message of sessionMessages.value) {
-    for (const part of message.parts) {
-      const handle = part.type === "tool" ? backgroundWorkId(part.state) : null;
-      if (handle && part.type === "tool" && part.callId) calls.set(handle, part.callId);
-    }
-  }
-  return previous && sameEntries(previous, calls) ? previous : calls;
-});
-
-/** How the background work ended by its notices alone, by handle. */
-const backgroundNotices = computed<Map<string, BackgroundState>>((previous) => {
-  const next = finishedBackgroundWork(sessionMessages.value.map(messageBody));
-  return previous && sameEntries(previous, next) ? previous : next;
-});
-
-/**
- * How work an agent moved into the background ended, by handle. A backgrounded call's own card can't say: OpenCode 2
- * leaves the call finished and running, and only the notice later in the conversation says the work is done. Work
- * Fleet stopped ended stopped, whatever the notice says: OpenCode 2 reports a shell it was told to remove as an error
- * (`Shell.NotFoundError`).
- */
-const finishedBackground = computed<Map<string, BackgroundState>>((previous) => {
-  const next = new Map(backgroundNotices.value);
-  for (const [handle, callId] of backgroundCalls.value) {
-    if (workByCall.value.get(callId)?.endedReason === "cancelled") next.set(handle, "cancelled");
-  }
-  return previous && sameEntries(previous, next) ? previous : next;
-});
-
-// Ended work drops out of the stream after a while. A notice that says its work failed is checked against all of the
-// session's work once, so work Fleet stopped still reads stopped when the conversation is opened later.
-let olderWorkLoadedFor: string | null = null;
-watch(
-  () => [...backgroundNotices.value].some(([handle, state]) => {
-    const callId = backgroundCalls.value.get(handle);
-    return state === "error" && callId !== undefined && !workByCall.value.has(callId);
-  }),
-  async (needed) => {
-    const sessionId = props.sessionId;
-    if (!needed || olderWorkLoadedFor === sessionId) return;
-    olderWorkLoadedFor = sessionId;
-    try {
-      const { data, response } = await machine.api.GET("/api/sessions/{id}/work", {
-        params: { path: { id: sessionId }, query: { all: true } },
-      });
-      if (response.ok && sessionId === props.sessionId) olderWork.value = toRunningWorkItems(data);
-    } catch (loadError) {
-      console.warn(`Failed to load the work of session ${sessionId}:`, loadError);
-    }
-  },
-  { immediate: true },
-);
-
-interface DerivedMessage {
-  /** Everything besides the message itself that the derived message was built from. */
-  inputs: readonly unknown[];
-  message: ActivityMessage;
-}
-
-const derivedMessages = new WeakMap<AccumulatedMessage, DerivedMessage>();
-
-/** What a message's view reads besides the message: only what its own parts need, so the rest can't invalidate it. */
-function derivationInputs(message: AccumulatedMessage, finished: ReadonlyMap<string, BackgroundState>): unknown[] {
-  const inputs: unknown[] = [];
-  if (message.role === "user") {
-    inputs.push(workflowMessageKey(workflowRun.value, props.sessionId));
-  }
-  if (message.modelID) {
-    inputs.push(models.value);
-  }
-
-  const toolParts = message.parts.filter((part): part is AccumulatedToolPart => part.type === "tool");
-  if (toolParts.length > 0) {
-    inputs.push(finished);
-    for (const part of toolParts) inputs.push(workByCall.value.get(part.callId) ?? null);
-  }
-
-  // A notice of background work: how it ended can change after it arrives (Fleet stopped it).
-  const body = messageBody(message);
-  if (body.startsWith("<shell ") || body.startsWith("<subagent ")) {
-    inputs.push(finished);
-  }
-
-  if (toolParts.some((part) => getTool(part.tool).category === "skill")) {
-    inputs.push(builtInSkills.skills);
-  }
-
-  if (toolParts.some((part) => isSubagentTool(part.tool))) {
-    inputs.push(delegations.value, sessions.value, props.sessionId);
-  }
-
-  return inputs;
-}
-
-function toActivityMessage(message: AccumulatedMessage, finished: ReadonlyMap<string, BackgroundState>): ActivityMessage {
-  if (message.role === "shell") {
-    return toShellActivityMessage(message);
-  }
-
-  const author = getDisplayAuthor(message);
-  const rawBody = messageBody(message);
-  // A notice comes from the harness, not the user or the agent: Fleet gives it its own role, which the client
-  // reads as an assistant-side message.
-  const background = withEnd(parseBackgroundNotice(rawBody), finished);
-  const peerMessage = message.role === "user" && !background ? parsePeerMessage(rawBody) : null;
-  const peerUpdate = message.role === "user" && !peerMessage && !background ? parsePeerUpdate(rawBody) : null;
-  const fromPeer = peerMessage ?? peerUpdate;
-  // A message with @ sessions carries Fleet's block for the agent after what the user typed.
-  const referenced = message.role === "user" && !fromPeer && !background ? parseSessionReferences(rawBody) : null;
-
-  return {
-    id: message.messageId,
-    author,
-    modelName: modelDisplayName(message.modelID, models.value),
-    senderKey: getSenderKey(message.role, message.agent),
-    role: message.role,
-    createdAt: message.createdAt,
-    body: background ? background.text : fromPeer ? fromPeer.text : referenced ? referenced.text : rawBody,
-    sessionReferences: referenced?.references.length ? referenced.references : undefined,
-    peer: fromPeer?.peer,
-    peerOutcome: peerUpdate?.outcome,
-    background: background ?? undefined,
-    workflowStep: message.role === "user" ? workflowMessageLabel(workflowRun.value, props.sessionId, message.messageId, rawBody) ?? undefined : undefined,
-    steered: message.role === "user" && message.steered ? true : undefined,
-    images: message.parts
-      .filter((part): part is AccumulatedFilePart => part.type === "file" && part.mime.startsWith("image/"))
-      .map((part) => ({ url: part.url, filename: part.filename?.trim() || "image" })),
-    tools: message.parts
-      .filter((part): part is AccumulatedToolPart => part.type === "tool" && !isQuestionPart(part as AccumulatedToolPart))
-      .map((part) => withImprove(withDelegation(toToolCardItem(part, finished, workByCall.value.get(part.callId)), part), part)),
-    questionParts: message.parts
-      .filter((part): part is AccumulatedToolPart => part.type === "tool" && isQuestionPart(part as AccumulatedToolPart)),
-    reasoningParts: message.parts
-      .filter((part): part is AccumulatedReasoningPart => part.type === "reasoning"),
-    clusterPosition: "single" as const,
-    showIdentity: true,
-    turnError: message.turnError,
-    command: message.role === "user" ? message.command : undefined,
-    compaction: compactionOf(message),
-  } satisfies ActivityMessage;
-}
-
-/**
- * A notice with how its work really ended. Work Fleet stopped reads stopped; the error the harness reported for it is
- * the stop's doing (a removed shell is "not found"), not the work's, so it isn't shown.
- */
-function withEnd(notice: BackgroundNotice | null, finished: ReadonlyMap<string, BackgroundState>): BackgroundNotice | null {
-  const state = notice ? finished.get(notice.id) : undefined;
-  if (!notice || !state || state === notice.state) return notice;
-  return { ...notice, state, text: notice.state === "error" ? "" : notice.text };
-}
-
-/** A shell command the user ran: its own block, on the user's side, not a bubble or a tool card of the agent's. */
-function toShellActivityMessage(message: AccumulatedMessage): ActivityMessage {
-  return {
-    id: message.messageId,
-    author: "You",
-    senderKey: "shell",
-    role: "shell",
-    createdAt: message.createdAt,
-    body: "",
-    images: [],
-    tools: [],
-    questionParts: [],
-    reasoningParts: [],
-    clusterPosition: "single",
-    showIdentity: true,
-    shell: toShellCommandView(message) ?? undefined,
-  };
-}
-
-const deliveredMessages = computed<ActivityMessage[]>(() => {
-  const finished = finishedBackground.value;
-  // A compaction's summary written as a message of its own (OpenCode's) shows behind its divider, not as a reply.
-  const compactions = foldCompactionSummaries(sessionMessages.value);
-  // Preserve upstream order from sessionMessages (snapshot + live events)
-  return withoutRedrawnPages(sessionMessages.value
-    .filter((message) => !compactions.hidden.has(message.messageId))
-    .map((message) => {
-      const derived = deriveActivityMessage(message, finished);
-      const summary = compactions.summaries.get(message.messageId);
-      return summary && derived.compaction ? { ...derived, compaction: { ...derived.compaction, summary } } : derived;
-    })
-    .filter((message) => message.role === "user" || hasVisibleMessageContent(message)));
-});
-
-/** A message's view, built again only when what it was built from changed. */
-function deriveActivityMessage(message: AccumulatedMessage, finished: ReadonlyMap<string, BackgroundState>): ActivityMessage {
-  const inputs = derivationInputs(message, finished);
-  const cached = derivedMessages.get(message);
-  if (cached && sameItems(cached.inputs, inputs)) {
-    return cached.message;
-  }
-
-  const derived = toActivityMessage(message, finished);
-  derivedMessages.set(message, { inputs, message: derived });
-  return derived;
-}
 
 // The header names the model that answers next. A session that was never given one explicitly has only
 // the stream to go on, and the stream is open here — so it puts the last answer's model in the store.
@@ -529,63 +239,6 @@ watch(
   },
   { immediate: true },
 );
-
-const optimisticMessages = computed<ActivityMessage[]>(() => {
-  return sentPrompts.value.map((prompt): ActivityMessage => ({
-    id: `optimistic-${prompt.id}`,
-    author: "You",
-    modelName: undefined,
-    senderKey: "user",
-    role: "user",
-    createdAt: prompt.createdAt,
-    body: prompt.body,
-    images: prompt.images,
-    tools: [],
-    questionParts: [],
-    reasoningParts: [],
-    optimisticStatus: prompt.status,
-    clusterPosition: "single",
-    showIdentity: true,
-    steered: prompt.steered,
-    sessionReferences: prompt.sessionReferences,
-  }));
-});
-
-const clusteredMessages = new WeakMap<ActivityMessage, ActivityMessage>();
-
-const messages = computed<ActivityMessage[]>(() => {
-  const deliveredIds = new Set(deliveredMessages.value.map((message) => message.id));
-  const pendingOptimisticMessages = optimisticMessages.value.filter((message) => {
-    const deliveredId = message.id.startsWith("optimistic-")
-      ? message.id.slice("optimistic-".length)
-      : message.id;
-    return !deliveredIds.has(deliveredId);
-  });
-  
-  // Stable merge by createdAt timestamp
-  const baseMessages = mergeMessagesByTimestamp(
-    deliveredMessages.value,
-    pendingOptimisticMessages,
-  );
-
-  return baseMessages.map((message, index) => {
-    const previousMessage = baseMessages[index - 1];
-    const nextMessage = baseMessages[index + 1];
-    const groupedWithPrevious = isSameSender(previousMessage, message);
-    const groupedWithNext = isSameSender(message, nextMessage);
-    const showIdentity = !groupedWithPrevious;
-    const clusterPosition = getClusterPosition(groupedWithPrevious, groupedWithNext);
-
-    const cached = clusteredMessages.get(message);
-    if (cached && cached.showIdentity === showIdentity && cached.clusterPosition === clusterPosition) {
-      return cached;
-    }
-
-    const clustered = { ...message, showIdentity, clusterPosition } satisfies ActivityMessage;
-    clusteredMessages.set(message, clustered);
-    return clustered;
-  });
-});
 
 // --- Visual canvases ---
 interface ConversationVisual {
@@ -1063,193 +716,6 @@ watch(
     scrollToBottom();
   },
 );
-
-/** A call that loaded one of Fleet's built-in skills offers Improve on its row. */
-function withImprove(item: ToolCardItem, part: AccumulatedToolPart): ToolCardItem {
-  return getTool(part.tool).category === "skill" && builtInSkills.isBuiltIn(item.title) ? { ...item, improvable: true } : item;
-}
-
-/** Points a sub-agent call's row at the session it started, once that session exists. */
-function withDelegation(item: ToolCardItem, part: AccumulatedToolPart): ToolCardItem {
-  if (!isSubagentTool(part.tool)) {
-    return item;
-  }
-
-  const delegation = delegations.value.find((candidate) =>
-    (candidate.parentToolCallId === part.callId || candidate.parentToolCallId === part.partId)
-    && candidate.childSessionId);
-  if (!delegation?.childSessionId) {
-    return item;
-  }
-
-  const childSession = sessionsStore.sessionById(delegation.childSessionId);
-  const childInstanceId = childSession?.instanceId ?? delegation.childSessionId;
-  return {
-    ...item,
-    delegation: {
-      href: `/sessions/${delegation.childSessionId}?instanceId=${childInstanceId}&parentSessionId=${props.sessionId}`,
-      childSessionId: delegation.childSessionId,
-      childInstanceId,
-      parentSessionId: props.sessionId,
-      agent: subagentKind(part),
-      task: subagentTask(part) || delegation.title,
-      status: delegation.status,
-      needsInput: isDelegationWaiting(delegation),
-      background: delegation.background === true,
-    },
-  };
-}
-
-function getDisplayAuthor(message: AccumulatedMessage): string {
-  if (message.role === "user") {
-    return "You";
-  }
-
-  return formatAgentDisplayName(message.agent ?? "Assistant");
-}
-
-function getSenderKey(role: AccumulatedMessage["role"], author?: string | null): string {
-  if (role === "user") {
-    return "user";
-  }
-
-  return normalizeIdentity(author ?? "Assistant");
-}
-
-function getClusterPosition(
-  groupedWithPrevious: boolean,
-  groupedWithNext: boolean,
-): ActivityMessage["clusterPosition"] {
-  if (groupedWithPrevious && groupedWithNext) {
-    return "middle";
-  }
-
-  if (groupedWithPrevious) {
-    return "last";
-  }
-
-  if (groupedWithNext) {
-    return "first";
-  }
-
-  return "single";
-}
-
-function isSameSender(previous: ActivityMessage | undefined, next: ActivityMessage | undefined): boolean {
-  if (!previous || !next) {
-    return false;
-  }
-
-  return previous.role === next.role && previous.senderKey === next.senderKey;
-}
-
-function formatAgentDisplayName(author: string): string {
-  const normalizedAuthor = author.replace(/[_-]+/g, " ").replace(/\s+/g, " ").trim();
-
-  if (!normalizedAuthor) {
-    return "Assistant";
-  }
-
-  if (normalizedAuthor.toLowerCase() !== normalizedAuthor) {
-    return normalizedAuthor;
-  }
-
-  return normalizedAuthor.replace(/(^|[\s(])([a-z])/g, (_match, prefix: string, character: string) => {
-    return `${prefix}${character.toUpperCase()}`;
-  });
-}
-
-function normalizeIdentity(value: string): string {
-  return value.replace(/[_-]+/g, " ").replace(/\s+/g, " ").trim().toLowerCase();
-}
-
-function hasVisibleMessageContent(message: ActivityMessage): boolean {
-  return message.body.trim().length > 0
-    // Thinking on its own is a message too, so the folded line follows it while the model is still thinking.
-    || (themeStore.thinking !== "hidden"
-      && (message.reasoningParts?.some((part) => part.text.trim() || part.summary?.trim()) ?? false))
-    || message.images.length > 0
-    || (message.tools?.length ?? 0) > 0
-    || (message.questionParts?.length ?? 0) > 0
-    || message.shell != null
-    || message.compaction != null
-    || message.background != null
-    // A turn can fail before it produces anything; the failure is the content.
-    || message.turnError != null;
-}
-
-function hasRenderableAssistantContent(message: AccumulatedMessage): boolean {
-  if (message.role !== "assistant") {
-    return false;
-  }
-
-  return message.parts.some((part) => {
-    if (part.type === "tool") {
-      return true;
-    }
-
-    if (part.type === "file") {
-      return Boolean(part.filename?.trim() || part.url);
-    }
-
-    if (part.type === "text") {
-      return part.text.trim().length > 0;
-    }
-
-    if (part.type === "reasoning") {
-      return ((part.summary ?? part.text) || "").trim().length > 0;
-    }
-
-    return false;
-  });
-}
-
-function sameItems(left: readonly unknown[], right: readonly unknown[]): boolean {
-  return left.length === right.length && left.every((item, index) => item === right[index]);
-}
-
-function sameEntries<K, V>(left: ReadonlyMap<K, V>, right: ReadonlyMap<K, V>): boolean {
-  if (left.size !== right.size) {
-    return false;
-  }
-
-  for (const [key, value] of left) {
-    if (right.get(key) !== value) {
-      return false;
-    }
-  }
-
-  return true;
-}
-
-function renderMessageBody(parts: readonly AccumulatedPart[]): string {
-  const bodyParts = parts
-    .map((part) => renderMessagePart(part))
-    .filter((part): part is string => part !== null);
-
-  return bodyParts.join("\n\n");
-}
-
-function renderMessagePart(part: AccumulatedPart): string | null {
-  if (part.type === "text") {
-    return part.text;
-  }
-
-  if (part.type === "reasoning") {
-    // Reasoning is now rendered separately, not in the markdown body
-    return null;
-  }
-
-  if (part.type === "file") {
-    if (part.mime.startsWith("image/")) {
-      return null; // Images are rendered as thumbnails, not inline text
-    }
-    const label = part.filename?.trim() || "Attached file";
-    return part.url ? `[${label}](${part.url})` : label;
-  }
-
-  return null;
-}
 
 function handleExpandVisual(payload: VisualPayload): void {
   canvasesStore.openVisual(props.sessionId, payload);
