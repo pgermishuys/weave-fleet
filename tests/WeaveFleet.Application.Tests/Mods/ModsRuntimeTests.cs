@@ -24,8 +24,8 @@ public sealed class ModsRuntimeTests
     private readonly FakeTimeProvider _clock = new(new DateTimeOffset(2026, 10, 10, 9, 0, 0, TimeSpan.Zero));
     private readonly BunRelease _release = new("1.4.2", [new BunAsset(BunRelease.CurrentRid(), "bun.zip", new string('a', 64)) { Size = 36_646_949 }]);
 
-    private ModsRuntime NewRuntime() => new(
-        _bun, new FixedReleases(_release), _events, TestServiceScopeFactory.Create(services => services.AddScoped<IUserPreferenceRepository>(_ => _preferences)), _scope, new FleetOptions(), _clock, NullLogger<ModsRuntime>.Instance)
+    private ModsRuntime NewRuntime(IUserPreferenceRepository? preferences = null) => new(
+        _bun, new FixedReleases(_release), _events, TestServiceScopeFactory.Create(services => services.AddScoped<IUserPreferenceRepository>(_ => preferences ?? _preferences)), _scope, new FleetOptions(), _clock, NullLogger<ModsRuntime>.Instance)
     {
         Home = "/home/alice",
     };
@@ -115,6 +115,35 @@ public sealed class ModsRuntimeTests
     }
 
     [Fact]
+    public async Task Clients_hear_an_install_failed_only_once_the_switch_is_off_and_a_Retry_can_start_a_new_install()
+    {
+        _preferences.Seed("Mods", "true");
+        _bun.Fail = (BunInstallFailures.Blocked, "github.com answered 403 Forbidden.");
+        var switchingOff = new GatedPreferences(_preferences);
+        var runtime = NewRuntime(switchingOff);
+
+        await runtime.StartInstallAsync(Alice, CancellationToken.None);
+        await switchingOff.Entered.Task;
+        await runtime.Sent;
+
+        Sent().ShouldNotContain(p => p.Job!.Phase == BunInstallPhases.Failed);
+        (await runtime.StartInstallAsync(Alice, CancellationToken.None)).ShouldBeTrue(); // Still this install: joins it.
+        _bun.Ensured.ShouldBe(1);
+
+        switchingOff.Release.SetResult();
+        await runtime.WhenIdle;
+        await runtime.Sent;
+
+        Sent().Last().Job!.Phase.ShouldBe(BunInstallPhases.Failed);
+        _events.Broadcasts.FindIndex(b => b.Type == "mods.changed")
+            .ShouldBeLessThan(_events.Broadcasts.FindLastIndex(b => b.Type == "mods.runtime"));
+        _bun.Fail = null;
+        (await runtime.StartInstallAsync(Alice, CancellationToken.None)).ShouldBeTrue();
+        await runtime.WhenIdle;
+        _bun.Ensured.ShouldBe(2);
+    }
+
+    [Fact]
     public async Task A_failure_that_leaves_a_usable_bun_keeps_the_switch()
     {
         _preferences.Seed("Mods", "true");
@@ -144,6 +173,23 @@ public sealed class ModsRuntimeTests
         (await _preferences.GetAsync("Mods")).ShouldBe("false");
         _scope.Users.ShouldBe([Alice]);
         (await runtime.CancelAsync(CancellationToken.None)).ShouldBeFalse();
+    }
+
+    /// <summary>Holds each write until the test releases it, so the test can look at what was sent meanwhile.</summary>
+    private sealed class GatedPreferences(IUserPreferenceRepository inner) : IUserPreferenceRepository
+    {
+        public TaskCompletionSource Entered { get; } = new(TaskCreationOptions.RunContinuationsAsynchronously);
+        public TaskCompletionSource Release { get; } = new(TaskCreationOptions.RunContinuationsAsynchronously);
+
+        public Task<string?> GetAsync(string key) => inner.GetAsync(key);
+        public Task<IReadOnlyDictionary<string, string>> GetAllAsync() => inner.GetAllAsync();
+
+        public async Task SetAsync(string key, string value)
+        {
+            Entered.TrySetResult();
+            await Release.Task;
+            await inner.SetAsync(key, value);
+        }
     }
 
     private sealed class FixedReleases(BunRelease current) : IBunReleases
