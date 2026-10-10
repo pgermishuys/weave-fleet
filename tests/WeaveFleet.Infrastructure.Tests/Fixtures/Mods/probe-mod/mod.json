@@ -1,0 +1,6 @@
+{
+  "name": "probe-mod",
+  "version": "0.1.0",
+  "description": "Counts session starts in $.store and shows them with the session's title",
+  "hooks": "./mod.ts"
+}

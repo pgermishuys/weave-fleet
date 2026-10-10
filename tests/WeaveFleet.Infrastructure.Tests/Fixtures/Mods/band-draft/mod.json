@@ -1,0 +1,6 @@
+{
+  "name": "band-draft",
+  "version": "0.1.0",
+  "description": "Draws a line of text above the composer",
+  "hooks": "./mod.ts"
+}
