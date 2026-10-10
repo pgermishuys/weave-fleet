@@ -45,10 +45,17 @@ public sealed record ModHistory(string Name, int? Active, ModOff? Off, IReadOnly
 /// <summary>A mod the agent is writing in one session: <c>drafts/{sessionId}/{name}/</c>.</summary>
 /// <param name="Folder">The draft's folder, holding <c>mod.json</c>.</param>
 /// <param name="Off">Null when the draft is on in its session.</param>
-public sealed record ModDraft(string SessionId, string Name, string Folder, ModOff? Off);
+/// <param name="Manifest">Its <c>mod.json</c>; null while it's missing or invalid (the agent is still writing it).</param>
+public sealed record ModDraft(string SessionId, string Name, string Folder, ModOff? Off, ModManifest? Manifest);
 
 /// <summary>Where a kept version came from.</summary>
-public sealed record ModKeepSource(string? SessionTitle, string? Note, JsonElement? Check);
+public sealed record ModKeepSource(string? SessionTitle, string? Note);
+
+/// <summary>
+/// Runs the static check on the copy Keep is about to make a version of, and returns the <c>CheckReport</c> (null when no
+/// checker ran). Keep refuses a report that isn't ok (<see cref="ModChecks.Refusal"/>).
+/// </summary>
+public delegate Task<JsonElement?> ModKeepCheck(string stagedFolder, CancellationToken ct);
 
 /// <summary>What a mod's <c>mod.json</c> says (<c>docs/mods/api.md</c>, "A mod on disk").</summary>
 /// <param name="Hooks">The hooks module, relative to <c>mod.json</c>.</param>
@@ -70,6 +77,43 @@ public static class ModStoreLimits
 
     /// <summary>Show code skips files larger than this, and anything that isn't UTF-8 text.</summary>
     public const int ShownFileBytes = 512 * 1024;
+
+    /// <summary>Show code shows at most this many files of a version or a draft…</summary>
+    public const int ShownFiles = 200;
+
+    /// <summary>…and at most this much text in total.</summary>
+    public const int ShownBytes = 4 * 1024 * 1024;
+
+    /// <summary>Keep refuses a draft with more files than this…</summary>
+    public const int KeptFiles = 500;
+
+    /// <summary>…or more bytes than this.</summary>
+    public const long KeptBytes = 16L * 1024 * 1024;
+}
+
+/// <summary>What a check report says about keeping a mod.</summary>
+public static class ModChecks
+{
+    /// <summary>Why Keep refuses: the first error's message when the report says <c>"ok": false</c>; null when it doesn't.</summary>
+    public static string? Refusal(JsonElement? report)
+    {
+        if (report is not { ValueKind: JsonValueKind.Object } body
+            || !body.TryGetProperty("ok", out var ok)
+            || ok.ValueKind != JsonValueKind.False)
+            return null;
+
+        if (body.TryGetProperty("errors", out var errors)
+            && errors is { ValueKind: JsonValueKind.Array }
+            && errors.GetArrayLength() > 0
+            && errors[0].ValueKind == JsonValueKind.Object
+            && errors[0].TryGetProperty("message", out var message)
+            && message.ValueKind == JsonValueKind.String)
+        {
+            return $"The check found a problem: {message.GetString()}";
+        }
+
+        return "The check found a problem.";
+    }
 }
 
 /// <summary>
@@ -85,28 +129,40 @@ public interface IModVersionStore
     Task<ModHistory> GetAsync(string userId, string name, CancellationToken ct = default);
 
     /// <summary>
-    /// Copies the session's draft into the next <c>v{n}/</c>, makes it active, turns the mod on and removes the draft.
-    /// Throws <see cref="ModStoreException"/> when there's no such draft or its <c>mod.json</c> is missing, invalid, names
-    /// another mod or a hooks module that isn't in the folder.
+    /// Copies the session's draft into a staging folder (regular files only, within the limits), reads the manifest and
+    /// hashes the module from that copy, runs <paramref name="check"/> on it, then moves it to the next <c>v{n}/</c>, makes
+    /// it active, turns the mod on and removes the draft (best effort: the version stands if that fails). Throws
+    /// <see cref="ModStoreException"/> when there's no such draft, the copy isn't a mod (manifest, hooks path, links,
+    /// special files, limits), or the check refuses it.
     /// </summary>
-    Task<ModVersion> KeepAsync(string userId, string sessionId, string name, ModKeepSource source, CancellationToken ct = default);
+    Task<ModVersion> KeepAsync(string userId, string sessionId, string name, ModKeepSource source, ModKeepCheck check, CancellationToken ct = default);
 
-    /// <summary>Makes <paramref name="number"/> the active version. Throws <see cref="ModStoreException"/> when it doesn't exist.</summary>
-    Task SetActiveAsync(string userId, string name, int number, CancellationToken ct = default);
+    /// <summary>
+    /// Makes <paramref name="number"/> the active version and turns the mod on, in one step. Throws
+    /// <see cref="ModStoreException"/> when the mod or the version doesn't exist.
+    /// </summary>
+    Task<ModHistory> UseVersionAsync(string userId, string name, int number, CancellationToken ct = default);
+
+    /// <summary>
+    /// In one step: on a version after the first, makes the previous version active and turns the mod on; on the first,
+    /// turns the mod off (<c>by: "user"</c>, at <paramref name="at"/>) and leaves it active. Nothing is deleted. Throws
+    /// <see cref="ModStoreException"/> when there's nothing to undo (the first version, already off) or no such mod.
+    /// </summary>
+    Task<ModHistory> UndoAsync(string userId, string name, DateTimeOffset at, CancellationToken ct = default);
 
     /// <summary>Turns a kept mod off (<paramref name="off"/>) or on (null).</summary>
-    Task SetOffAsync(string userId, string name, ModOff? off, CancellationToken ct = default);
+    Task<ModHistory> SetOffAsync(string userId, string name, ModOff? off, CancellationToken ct = default);
 
     /// <summary>The folder of a kept version, holding its <c>mod.json</c>.</summary>
     string VersionFolder(string userId, string name, int number);
 
-    /// <summary>
-    /// The <c>mod.json</c> in <paramref name="folder"/> (a version's or a draft's); null when it's missing, isn't JSON, or
-    /// lacks a field. Doesn't check the name or the hooks path; Keep does.
-    /// </summary>
-    Task<ModManifest?> ReadManifestAsync(string folder, CancellationToken ct = default);
+    /// <summary>A kept version's <c>mod.json</c>; null when the version isn't in the index or its manifest is unreadable.</summary>
+    Task<ModManifest?> ReadVersionManifestAsync(string userId, string name, int number, CancellationToken ct = default);
 
-    /// <summary>A version's files, text only; null when the version doesn't exist.</summary>
+    /// <summary>
+    /// A version's files, text only, within <see cref="ModStoreLimits.ShownFiles"/> and <see cref="ModStoreLimits.ShownBytes"/>;
+    /// null when the version isn't in the index.
+    /// </summary>
     Task<IReadOnlyList<ModFile>?> ReadVersionFilesAsync(string userId, string name, int number, CancellationToken ct = default);
 
     // ── Drafts ──────────────────────────────────────────────────────────
@@ -130,7 +186,10 @@ public interface IModVersionStore
 
     Task<JsonElement?> GetValueAsync(string userId, string name, string key, CancellationToken ct = default);
 
-    /// <summary>Throws <see cref="ModStoreFullException"/> when the store would pass <see cref="ModStoreLimits.StoreBytes"/>.</summary>
+    /// <summary>
+    /// Throws <see cref="ModStoreFullException"/> when the store, as UTF-8 JSON without escaping beyond JSON's own, would
+    /// pass <see cref="ModStoreLimits.StoreBytes"/>; <see cref="ArgumentException"/> for a key <see cref="ModNames.IsValidStoreKey"/> refuses.
+    /// </summary>
     Task SetValueAsync(string userId, string name, string key, JsonElement value, CancellationToken ct = default);
 
     Task DeleteValueAsync(string userId, string name, string key, CancellationToken ct = default);
@@ -158,16 +217,29 @@ public sealed class NoModChecker : IModChecker
 /// <summary>Mod names, as <c>mod.json</c> and the folders use them.</summary>
 public static class ModNames
 {
+    private static readonly HashSet<string> WindowsDevices = new(StringComparer.Ordinal)
+    {
+        "con", "prn", "aux", "nul",
+        "com1", "com2", "com3", "com4", "com5", "com6", "com7", "com8", "com9",
+        "lpt1", "lpt2", "lpt3", "lpt4", "lpt5", "lpt6", "lpt7", "lpt8", "lpt9",
+    };
+
     /// <summary>
-    /// Lowercase letters, digits and <c>-</c>, 1 to 64, starting with a letter; <c>fleet-</c> is Fleet's, and
-    /// <c>drafts</c> is the drafts folder beside the kept mods.
+    /// Lowercase letters, digits and <c>-</c>, 1 to 64, starting with a letter; <c>fleet-</c> is Fleet's, <c>drafts</c>
+    /// is the drafts folder beside the kept mods, and Windows' device names (<c>con</c>, <c>nul</c>, <c>com1</c>…) can't
+    /// name a folder there.
     /// </summary>
     public static bool IsValid(string? name)
         => name is { Length: > 0 and <= 64 }
            && name[0] is >= 'a' and <= 'z'
            && name.All(c => c is >= 'a' and <= 'z' or >= '0' and <= '9' or '-')
            && !name.StartsWith("fleet-", StringComparison.Ordinal)
-           && name != "drafts";
+           && name != "drafts"
+           && !WindowsDevices.Contains(name);
+
+    /// <summary><c>$.store</c> keys, as the contract's Limits say: letters, digits, <c>_</c>, <c>-</c> and <c>.</c>, 1 to 64.</summary>
+    public static bool IsValidStoreKey(string? key)
+        => key is { Length: > 0 and <= 64 } && key.All(c => char.IsAsciiLetterOrDigit(c) || c is '_' or '-' or '.');
 
     /// <summary>Session ids name a folder too: letters, digits, <c>-</c> and <c>_</c>, up to 128.</summary>
     public static bool IsValidSessionId(string? sessionId)
