@@ -226,7 +226,7 @@ const useVersion = (number: number) => run(`use-${number}`, () => store.activate
         :data-testid="`mod-version-${mod.name}-${version.number}`"
       >
         <span class="font-mono text-xs font-semibold">v{{ version.number }}</span>
-        <div class="min-w-0 space-y-1">
+        <div class="grid min-w-0 gap-1.5">
           <p class="m-0 text-xs text-muted">
             <span class="font-mono">{{ version.version }}</span>
             · <span :title="exactly(version.createdAt)">{{ when(version.createdAt) }}</span>
@@ -240,7 +240,7 @@ const useVersion = (number: number) => run(`use-${number}`, () => store.activate
           >
             “{{ version.note }}”
           </p>
-          <div class="flex flex-wrap items-center gap-x-4 gap-y-1 text-xs">
+          <div class="mt-0.5 flex flex-wrap items-center gap-x-4 gap-y-1.5 text-xs">
             <span
               v-if="version.number === mod.active"
               class="mod-badge"
@@ -280,7 +280,7 @@ const useVersion = (number: number) => run(`use-${number}`, () => store.activate
       <summary class="cursor-pointer text-muted">
         Log
       </summary>
-      <div class="mt-2 space-y-2">
+      <div class="mt-2 grid gap-2">
         <p
           v-if="logError"
           class="m-0 text-error"
@@ -318,7 +318,13 @@ const useVersion = (number: number) => run(`use-${number}`, () => store.activate
 
 <style scoped>
 .mod-row {
-  padding: 14px 16px;
+  padding: 14px 12px;
+}
+
+@media (min-width: 640px) {
+  .mod-row {
+    padding: 14px 16px;
+  }
 }
 
 .mod-row + .mod-row {
@@ -362,9 +368,9 @@ const useVersion = (number: number) => run(`use-${number}`, () => store.activate
 
 .mod-history__row {
   display: grid;
-  grid-template-columns: 36px minmax(0, 1fr);
+  grid-template-columns: 30px minmax(0, 1fr);
   gap: 10px;
-  padding: 10px 12px;
+  padding: 12px;
 }
 
 .mod-history__row + .mod-history__row {
@@ -372,7 +378,7 @@ const useVersion = (number: number) => run(`use-${number}`, () => store.activate
 }
 
 .mod-badge {
-  padding: 0 7px;
+  padding: 1px 8px;
   border-radius: 999px;
   background: var(--accent-dim);
   color: var(--accent);

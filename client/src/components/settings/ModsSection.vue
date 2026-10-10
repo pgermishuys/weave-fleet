@@ -46,7 +46,7 @@ onMounted(load);
 
 <template>
   <section
-    class="rounded-card border border-border bg-card-bg p-6 shadow-sm"
+    class="rounded-card border border-border bg-card-bg p-4 shadow-sm sm:p-6"
     data-testid="mods-section"
   >
     <h2 class="text-lg font-semibold text-text">
