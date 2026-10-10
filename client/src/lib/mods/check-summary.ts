@@ -75,10 +75,6 @@ function describeRender(matcher: unknown): string {
   return raw(matcher);
 }
 
-function hasHook(report: ModCheckReport, event: string): boolean {
-  return report.hooks.some((hook) => hook.event === event);
-}
-
 function drawsToolRows(hook: ModCheckHook): boolean {
   if (hook.event !== "ui.render") return false;
   const components = isRecord(hook.matcher) ? words(hook.matcher.component) : null;
