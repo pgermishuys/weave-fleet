@@ -25,6 +25,7 @@ const SESSION_READ_PATH = "/api/bridge/session/read"
 const SESSION_START_PATH = "/api/bridge/session/start"
 const MACHINE_LIST_PATH = "/api/bridge/session/machines"
 const STEP_DONE_PATH = "/api/bridge/workflow/step-done"
+const MODS_PATH = "/api/bridge/mods/"
 
 // Agent hand-off: set only in processes started with it on (and so with messages between sessions on). It adds the
 // hand-off tools and a machine on fleet_message and fleet_session_read; without it they're as they always were.
@@ -677,6 +678,94 @@ export const FleetCanvasPlugin = async (input: { directory?: string }) => ({
             },
             execute: (args: { outcome: string; summary: string }, context: ToolContext) =>
               callFleet("step-done", context, { outcome: args.outcome, summary: args.summary }, STEP_DONE_PATH),
+          },
+        }
+      : {}),
+
+    // Only in processes started with Mods on. A draft is the agent's own mod for this session; Fleet runs the checks.
+    ...(process.env.FLEET_MODS === "1"
+      ? {
+          fleet_mod_write: {
+            description: [
+              "Write files into this session's draft mod, creating the draft if it's new.",
+              "Paths are relative to the mod's folder (mod.json, the hooks module, any pages).",
+              "A file you send replaces the one there; files you don't send stay.",
+              "Returns the static check. A draft runs only in this session, and Fleet reloads it when you write.",
+            ].join(" "),
+            args: {
+              name: {
+                type: "string",
+                description: "The mod's name, as in its mod.json: lowercase letters, digits and -, starting with a letter.",
+              },
+              files: {
+                type: "array",
+                items: { type: "object" },
+                description: "The files to write, each {path, content}. Paths use / and stay inside the mod's folder.",
+              },
+            },
+            execute: (args: { name: string; files: unknown }, context: ToolContext) =>
+              callFleet("write", context, { name: args.name, files: args.files }, MODS_PATH + "write"),
+          },
+          fleet_mod_check: {
+            description: [
+              "Run the static check on a draft mod: its hooks, $ calls, state keys and pages, and any errors with line and column.",
+              "Also shows why it last failed to load and its latest log lines.",
+            ].join(" "),
+            args: { name: { type: "string", description: "The draft's name." } },
+            execute: (args: { name: string }, context: ToolContext) => callFleet("check", context, { name: args.name }, MODS_PATH + "check"),
+          },
+          fleet_mod_reload: {
+            description: [
+              "Load a draft mod again in this session now, and say whether it loaded and what it registered.",
+              "Use it after a fix, or to turn a draft back on after three failures turned it off.",
+            ].join(" "),
+            args: { name: { type: "string", description: "The draft's name." } },
+            execute: (args: { name: string }, context: ToolContext) => callFleet("reload", context, { name: args.name }, MODS_PATH + "reload"),
+          },
+          fleet_mod_test: {
+            description: [
+              "Send a sample event through this session's mods, the draft included, and show what comes back:",
+              "the tree drawn, or the failure, with the draft's log lines. Nothing is drawn on screen.",
+            ].join(" "),
+            args: {
+              name: { type: "string", description: "The draft's name." },
+              event: {
+                type: "string",
+                enum: ["ui.render", "session.start", "turn.complete", "ui.press", "ui.input", "ui.select"],
+                description: "The event to send.",
+              },
+              e: {
+                type: "object",
+                description: [
+                  "The event's fields; Fleet fills in sessionId.",
+                  "ui.render: {component, props}, e.g. {component: \"ToolUse\", props: {tool: \"bash\", status: \"completed\", input: {command: \"dotnet test\"}, output: \"Passed: 3\"}}.",
+                  "A control event: {handle, value?}, with a handle from a tree a test returned.",
+                ].join(" "),
+              },
+            },
+            execute: (args: { name: string; event: string; e: unknown }, context: ToolContext) =>
+              callFleet("test", context, { name: args.name, event: args.event, e: args.e }, MODS_PATH + "test"),
+          },
+          fleet_mod_keep: {
+            description: [
+              "Ask the user to keep a draft mod for all their sessions.",
+              "Fleet shows them what it touches and they decide; you can't keep it yourself.",
+              "Waits up to a minute for their answer.",
+            ].join(" "),
+            args: {
+              name: { type: "string", description: "The draft's name." },
+              note: {
+                type: "string",
+                description: "Why it's worth keeping, in a sentence the user reads in the review, or an empty string.",
+              },
+            },
+            execute: (args: { name: string; note: string }, context: ToolContext) =>
+              callFleet("keep", context, { name: args.name, note: args.note }, MODS_PATH + "keep"),
+          },
+          fleet_mod_list: {
+            description: "List this session's draft mods, whether each is loaded or why not, and the mods the user has kept.",
+            args: {},
+            execute: (_args: Record<string, never>, context: ToolContext) => callFleet("list", context, {}, MODS_PATH + "list"),
           },
         }
       : {}),
