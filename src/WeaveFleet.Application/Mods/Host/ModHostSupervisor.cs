@@ -217,6 +217,11 @@ internal sealed partial class ModHostSupervisor(string userId, ModHostDependenci
             }
             throw new ModHostNotReadyException($"The mod host didn't answer within {Options.RequestTimeout.TotalSeconds:0.#} s; Fleet is restarting it.");
         }
+        catch (ModHostClosedException)
+        {
+            // The process is gone: its exit takes the crash path, which restarts it.
+            throw new ModHostNotReadyException("The mod host stopped; Fleet is restarting it.");
+        }
     }
 
     private async Task ReconcileAsync(CancellationToken ct)
