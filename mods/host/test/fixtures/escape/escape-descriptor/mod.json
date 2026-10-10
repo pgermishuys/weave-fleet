@@ -1,0 +1,6 @@
+{
+  "name": "escape-descriptor",
+  "version": "0.1.0",
+  "description": "Tries to escape the host (review of PR #486)",
+  "hooks": "./mod.ts"
+}

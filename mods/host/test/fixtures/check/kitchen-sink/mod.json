@@ -1,0 +1,6 @@
+{
+  "name": "kitchen-sink",
+  "version": "1.2.3",
+  "description": "Uses every allowed $ call, some state keys and a page",
+  "hooks": "mod.js"
+}

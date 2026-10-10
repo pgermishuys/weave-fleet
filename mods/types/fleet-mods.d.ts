@@ -235,7 +235,7 @@ declare module "fleet-mods" {
 
   interface ControlEvent {
     readonly sessionId: string;
-    /** The mod that drew the control. */
+    /** The name of the mod that drew the control. The host fills it (and `element`) from the control's handle. */
     readonly mod: string;
     /** The control's `key`. */
     readonly element: string;
@@ -362,6 +362,7 @@ declare module "fleet-mods" {
 
   export interface BoxProps {
     key?: string;
+    /** `row` when absent. */
     flexDirection?: "row" | "column";
     gap?: Space;
     padding?: Space;
@@ -469,7 +470,7 @@ declare module "fleet-mods" {
     /** An `.html` file inside the mod's folder, relative to `mod.json`. */
     path: string;
     title: string;
-    /** Added to the page's address as a query string, for the page to read. 4 KiB at most. */
+    /** Added to the page's address as a query string, for the page to read. 4 KiB at most, URL-encoded. */
     query?: Readonly<Record<string, string>>;
   }
 
@@ -658,7 +659,9 @@ declare module "fleet-mods/protocol" {
    */
   export type WireElement =
     | { type: "Box" | "Text"; props: Record<string, Json>; children: (WireElement | string)[] }
-    | { type: "Pill" | "Icon" | "Markdown" | "Code" | "Page"; props: Record<string, Json> }
+    | { type: "Pill" | "Icon" | "Markdown" | "Code"; props: Record<string, Json> }
+    /** `mod`: the id of the mod whose folder `path` is in, from the host's record of who made the element. */
+    | { type: "Page"; props: Record<string, Json>; mod: ModId }
     | { type: "Button" | "Input" | "Select"; props: Record<string, Json>; handles: Partial<Record<"onPress" | "onSubmit" | "onInput" | "onSelect", string>> }
     | { type: "Fleet" };
 }

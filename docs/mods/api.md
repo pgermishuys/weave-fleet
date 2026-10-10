@@ -96,7 +96,7 @@ export const register: Register = (on, options) => {
 | `session.start` | Once per mod per session, before the mod's first other event in it, and again after the mod reloads | `sessionId`, `reason` (`start` or `reload`) | `next(e)` |
 | `turn.complete` | A turn ended: finished, stopped by the user (`isAborted`) or failed (`isFailed`) | `sessionId`, `turnId`, `isAborted`, `isFailed`, `failure?`, `agent?`, `model?`, `usage?` (`input`, `output`, `cacheRead`, `cacheWrite`), `cost?` | `next(e)` (watch only) |
 | `ui.render` | Fleet is about to draw a [render site](#render-sites) the mod hooked | `component`, `sessionId`, `requestId`, `props` | A tree, `null` to draw nothing, or `next(e)` |
-| `ui.press` | A `Button` the mod drew is pressed | `sessionId`, `mod`, `element` (the key), `component`, `requestId`, `surface` | `next(e)`, or `{ element }` to swallow the press |
+| `ui.press` | A `Button` the mod drew is pressed | `sessionId`, `mod` (the name of the mod that drew it), `element` (the key), `component`, `requestId`, `surface` | `next(e)`, or `{ element }` to swallow the press |
 | `ui.input` | An `Input` changes (`kind: "change"`, at most 4 a second) or is submitted (`kind: "submit"`) | as `ui.press`, plus `kind`, `value` | `next({ ...e, value })`, or `{ element, value }` to swallow it |
 | `ui.select` | A `Select` changes | as `ui.press`, plus `value` | `next({ ...e, value })`, or `{ element, value }` to swallow it |
 
@@ -171,7 +171,7 @@ script in Fleet's page. Callbacks stay in the host; the tree that reaches Fleet 
 
 | Element | Props | Notes |
 | :- | :- | :- |
-| `Box` | `key`, `flexDirection` (`row`/`column`), `gap`, `padding`, `paddingX`, `paddingY`, `alignItems`, `justifyContent`, `flexWrap`, `flexGrow` (0/1), `width` (a percentage), `borderStyle` (`round`, `single`, `dashed`, `quote`), `borderColor`, `background` (`subtle`, `tint`), `children` | Spacing in Fleet's steps (1 = 4 px): 0, 1, 2, 3, 4, 6, 8. No fixed sizes, so it fits the phone. |
+| `Box` | `key`, `flexDirection` (`row`, the default, or `column`), `gap`, `padding`, `paddingX`, `paddingY`, `alignItems`, `justifyContent`, `flexWrap`, `flexGrow` (0/1), `width` (a percentage), `borderStyle` (`round`, `single`, `dashed`, `quote`), `borderColor`, `background` (`subtle`, `tint`), `children` | Spacing in Fleet's steps (1 = 4 px): 0, 1, 2, 3, 4, 6, 8. No fixed sizes, so it fits the phone. |
 | `Text` | `color`, `bold`, `italic`, `strikethrough`, `code` (monospace), `dimColor`, `wrap` (`wrap`/`truncate`), `children` | Children are strings, numbers and `Text`. |
 | `Pill` | `tone` (`good`, `warn`, `bad`, `neutral`, `accent`), `label`, `icon?` | Fleet's status pill. |
 | `Icon` | `name`, `color?`, `label?` | A fixed set of names Fleet maps to its icons: `check`, `x`, `alert`, `info`, `circle`, `dot`, `clock`, `loader`, `play`, `skip`, `test`, `bug`, `terminal`, `file`, `folder`, `git-branch`, `search`, `sparkles`, `zap`, `gauge`, `arrow-right`, `chevron-right`, `external-link`, `copy`, `eye`, `eye-off`. |
@@ -180,7 +180,7 @@ script in Fleet's page. Callbacks stay in the host; the tree that reaches Fleet 
 | `Select` | `key`, `label?`, `options` (1–200 `{ value, label }`, values unique), `value?`, `onSelect` | |
 | `Markdown` | `text`, `key?`, `dimColor?` | Fleet's conversation Markdown. Links open in a new tab. |
 | `Code` | `source`, `language?`, `path?`, `startLine?`, `format?` (`source`/`diff`), `wrap?` | |
-| `Page` | `key`, `path`, `title`, `query?` | An `.html` file in the mod's folder, drawn sandboxed like a conversation page (`ConversationPage.vue`): opaque origin, Fleet's theme as `--fleet-*` variables, sized to fit. `query` becomes its query string. It can't call back into the mod in Stage 1. |
+| `Page` | `key`, `path`, `title`, `query?` | An `.html` file in the mod's folder, drawn sandboxed like a conversation page (`ConversationPage.vue`): opaque origin, Fleet's theme as `--fleet-*` variables, sized to fit. `query` becomes its query string: at most 4 KiB URL-encoded. It can't call back into the mod in Stage 1. |
 
 **Colours by role only**: `text`, `muted`, `accent`, `good`, `warn`, `bad`. No hex, no named colours, so trees follow
 the theme.
@@ -191,7 +191,10 @@ digits, `_`, `-` and `.`, up to 64.
 **Invalid trees.** An element or prop not listed here, a missing key, a duplicate key, a non-inline element at an
 inline site, or a tree over the [limits](#limits) makes the whole tree invalid. Fleet draws the site as if the mod
 weren't there and counts a failure (`kind: "throw"`, with the reason, which the mod's log and the agent tools show).
-Text past 100,000 characters per tree is cut rather than refused.
+Text past 100,000 characters per tree is cut rather than refused. What counts is everything drawn as text, in tree order
+(an element's own text before its children's): child strings and numbers, `Markdown` `text`, `Code` `source`, the `label`
+of `Pill`, `Icon`, `Button`, `Input` and `Select`, each `Select` option's `label`, `Input` `placeholder`, `submitLabel`
+and `value`, and `Page` `title`. The string that crosses the limit is cut there; every later one is emptied.
 
 ## The static check
 
@@ -220,15 +223,23 @@ A module **doesn't load** when:
   `Reflect`, `Proxy`, `WebAssembly`, `SharedArrayBuffer`, `Atomics`
 - it reaches `$` other than as `$.ns.method(…)`: aliasing it, `$[name]`, destructuring, spreading, storing it, or
   passing it to a function whose parameter isn't also named `$`
-- it reads `.constructor`, `.__proto__` or `.prototype` of anything, or uses `with`
+- it reads `.constructor`, `.__proto__` or `.prototype` of anything (or the old `__lookupGetter__` family), reaches
+  them through `Object` (`Object.getOwnPropertyDescriptor(x, "constructor")`, `defineProperty`, `create` with such a
+  key), calls `Object.getPrototypeOf`, `setPrototypeOf` or `getOwnPropertyDescriptors`, or uses `with`
 - `on` is called outside `register`, with a non-literal event name or a non-literal matcher, or for an event Stage 1
   doesn't have
 - a `$.state` key isn't a string literal
 - it has more than 2,000 nested scopes or is over 512 KiB
 
-The check is a review aid that makes "`$` is the only way out" true in practice. It is not a sandbox: the host runs
-with the user's permissions, as Claude Code's mods do. Fleet starts the host with an empty environment (no Fleet
-tokens) and its working folder in the mods data folder.
+The check reads what a mod names; it can't see what a mod builds at run time (a key made of two strings, say). So
+before any mod is imported, the host also locks its own JavaScript realm down (SES's `lockdown`): every built-in object
+and prototype is frozen, so no mod can change `Object.prototype` or `Promise` under the host or another mod; the
+constructor of every kind of function is inert, so no string can be turned into code; and the realm's own `Function`
+and `eval` are gone. Together they make "`$` is the only way out" hold for code that only computes and draws.
+
+It is still not a sandbox: every mod runs in the host's process, as the same user, with the user's permissions, as
+Claude Code's mods do, and a hook that never yields blocks every other mod until Fleet restarts the host. Fleet starts
+the host with an empty environment (no Fleet tokens) and its working folder in the mods data folder.
 
 ## Order and failure
 
@@ -337,7 +348,9 @@ ends in that callback.
 `failed` (a timer or callback failure: `mod`, `event`, `kind`, `message`, `strikes`, `sessionId?`).
 
 **Trees on the wire** are `WireElement`s: children flattened, and each callback replaced by a `handles` entry
-(`{ "onPress": "h17" }`) that the host keeps until the site is drawn again or the session is forgotten.
+(`{ "onPress": "h17" }`) that the host keeps until the site is drawn again or the session is forgotten. A `Page`
+carries `mod`, the id of the mod whose folder it comes from (it may be an inner mod's, under another mod's `Box`): the
+host takes it from its own record of who made each element, never from the mod.
 
 **Versioning.** `protocol: 1` is this page. A change either side can't ignore bumps it, and the host refuses another
 value.
@@ -353,8 +366,8 @@ These shapes are for M5 and M6; mods don't see them.
 - **`mods.changed`**: a mod was kept, undone, turned on or off, or failed three times. Clients refetch `/api/mods`.
 - **`POST /api/sessions/{id}/mods/render`** `{ site, requestIds }`: the client shows rows Fleet hasn't rendered for
   this session yet (after a reload). Answers arrive as `mod.ui` events.
-- **`POST /api/sessions/{id}/mods/action`** `{ mod, handle, kind: "press" | "input" | "submit" | "select", value?,
-  surface }`: a control was used.
+- **`POST /api/sessions/{id}/mods/action`** `{ handle, kind: "press" | "input" | "submit" | "select", value?, surface }`:
+  a control was used. The host knows each handle's mod and key, and fills `mod` and `element` in the event itself.
 - `$.ui.toast` reaches the browser as a notice through the existing notices path.
 
 ## Limits
