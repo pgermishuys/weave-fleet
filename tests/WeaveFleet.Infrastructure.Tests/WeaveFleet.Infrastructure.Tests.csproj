@@ -31,6 +31,7 @@
     <Content Include="Fixtures\Pi\**" CopyToOutputDirectory="PreserveNewest" />
     <Content Include="Fixtures\ClaudeCode\**" CopyToOutputDirectory="PreserveNewest" />
     <Content Include="Fixtures\OpenCode2\**" CopyToOutputDirectory="PreserveNewest" />
+    <Content Include="Fixtures\Bun\**" CopyToOutputDirectory="PreserveNewest" />
   </ItemGroup>
 
 </Project>

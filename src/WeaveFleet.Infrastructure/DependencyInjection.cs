@@ -539,6 +539,7 @@ public static class DependencyInjection
             sp.GetRequiredService<SessionActivityTracker>(),
             sp.GetRequiredService<IHttpClientFactory>(),
             sp.GetRequiredService<ILogger<HarnessUpdateService>>()));
+        services.AddSingleton<WeaveFleet.Application.Runtimes.IBunRuntime, WeaveFleet.Infrastructure.Runtimes.BunRuntimeInstaller>();
 
         // OpenCode harness — singleton to match HarnessRegistry lifetime.
         // PortAllocator is a standalone singleton seeded from FleetOptions.
