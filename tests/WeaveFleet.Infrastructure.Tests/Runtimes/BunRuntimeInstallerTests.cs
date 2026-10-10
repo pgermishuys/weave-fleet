@@ -995,6 +995,7 @@ public sealed class BunRuntimeInstallerTests : IDisposable
     }
 
     [Fact]
+    [Trait("Category", "ModsFileSafety")]
     public async Task A_replacement_with_the_same_size_and_time_is_probed_again()
     {
         if (OperatingSystem.IsWindows()) return;

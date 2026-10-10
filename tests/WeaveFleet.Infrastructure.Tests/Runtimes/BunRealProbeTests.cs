@@ -8,6 +8,7 @@ namespace WeaveFleet.Infrastructure.Tests.Runtimes;
 /// on Windows, bun.exe has to start with nothing but <c>SystemRoot</c> and <c>windir</c>. CI's Windows job installs
 /// Bun and passes its path in <c>FLEET_TEST_REAL_BUN</c>; without it these tests do nothing.
 /// </summary>
+[Trait("Category", "ModsFileSafety")]
 public sealed class BunRealProbeTests
 {
     private static string? RealBun =>

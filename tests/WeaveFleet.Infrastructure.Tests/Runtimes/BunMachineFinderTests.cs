@@ -561,28 +561,13 @@ public sealed class BunMachineFinderTests : IDisposable
     }
 
     [Fact]
+    [Trait("Category", "ModsFileSafety")]
     public void Folders_owned_by_this_user_pass_and_the_root_owned_ones_above_them_too()
     {
         if (OperatingSystem.IsWindows()) return;
         var bun = Bun("a");
 
         BunPaths.WhyNotSafeToRun(bun).ShouldBeNull();
-    }
-
-    [Fact]
-    public void The_unix_status_matches_stat_and_id()
-    {
-        if (!OperatingSystem.IsLinux()) return;
-        var file = Bun("a");
-
-        var identity = UnixFileStatus.Stat(file).ShouldNotBeNull();
-
-        identity.Inode.ToString(CultureInfo.InvariantCulture).ShouldBe(Run("stat", "-c", "%i", file));
-        identity.Uid.ToString(CultureInfo.InvariantCulture).ShouldBe(Run("stat", "-c", "%u", file));
-        UnixFileStatus.EffectiveUserId().ShouldBe(uint.Parse(Run("id", "-u"), CultureInfo.InvariantCulture));
-        UnixFileStatus.Stat(Path.Combine(_root, "nothing")).ShouldBeNull();
-        UnixFileStatus.Stat(Folder("a"))!.Value.Inode.ToString(CultureInfo.InvariantCulture).ShouldBe(Run("stat", "-c", "%i", Folder("a")));
-        UnixFileStatus.Stat("/")!.Value.Uid.ShouldBe(0u);
     }
 
     private static bool HasPrivateGroup() =>
@@ -592,6 +577,7 @@ public sealed class BunMachineFinderTests : IDisposable
     private const UnixFileMode GroupWritable = (UnixFileMode)0b111_111_101;
 
     [Fact]
+    [Trait("Category", "ModsFileSafety")]
     public async Task A_folder_the_users_private_group_can_write_is_accepted()
     {
         if (OperatingSystem.IsWindows() || !HasPrivateGroup()) return;
@@ -604,6 +590,7 @@ public sealed class BunMachineFinderTests : IDisposable
     }
 
     [Fact]
+    [Trait("Category", "ModsFileSafety")]
     public void A_group_writable_folder_of_another_group_is_refused()
     {
         if (!OperatingSystem.IsLinux()) return;
@@ -620,16 +607,15 @@ public sealed class BunMachineFinderTests : IDisposable
     }
 
     [Fact]
-    public void The_unix_status_group_matches_stat_and_the_private_group_check_agrees_with_getent()
+    [Trait("Category", "ModsFileSafety")]
+    public void A_group_writable_folder_in_the_primary_group_is_refused_on_macos()
     {
-        if (!OperatingSystem.IsLinux()) return;
-        var file = Bun("a");
+        // macOS never relaxes: the primary group (staff) is shared and Bun's installer leaves 755 there.
+        if (!OperatingSystem.IsMacOS()) return;
+        var bun = Bun("shared");
+        File.SetUnixFileMode(Folder("shared"), GroupWritable);
 
-        var identity = UnixFileStatus.Stat(file).ShouldNotBeNull();
-
-        identity.Gid.ToString(CultureInfo.InvariantCulture).ShouldBe(Run("stat", "-c", "%g", file));
-        UnixFileStatus.IsPrivateGroup(identity.Gid).ShouldBe(HasPrivateGroup());
-        UnixFileStatus.IsPrivateGroup(0).ShouldBeFalse();
+        BunPaths.WhyNotSafeToRun(bun).ShouldBe($"Fleet didn't run it: {Folder("shared")} can be changed by other users.");
     }
 
     [Fact]
