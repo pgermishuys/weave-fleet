@@ -1,5 +1,4 @@
 using System.Collections.Concurrent;
-using System.Formats.Tar;
 using System.Globalization;
 using System.Security.Cryptography;
 using System.Text;
@@ -21,9 +20,13 @@ namespace WeaveFleet.Infrastructure.Mods;
 /// </list>
 /// Locking is per user and mod, so a slow call on one mod never holds up another user's or another mod's: one lock
 /// (<c>{user16}/{name}</c>) covers a mod's index, versions and store, and one (<c>{user16}/drafts/{session}</c>) a session's
-/// drafts and <c>off.json</c>. Keep takes the mod's lock, then the session's, always in that order.
-/// Nothing from <c>{user16}</c> down is ever followed through a link, and only regular files are read or copied: a named
-/// pipe or a device in a draft is refused (Keep) or skipped (Show code), and is never opened.
+/// drafts and <c>off.json</c>. Keep takes the mod's lock, then the session's, always in that order. The static check runs
+/// on a staged copy with no lock held: Keep stages, lets go, checks, then takes both locks again and commits only if the
+/// draft is still what was checked.
+/// Nothing from <c>{user16}</c> down is ever followed through a link, and every file under a draft or a version is read
+/// through <see cref="SafeFile"/>, which opens it without being able to wait (<c>O_NONBLOCK</c>, <c>O_NOFOLLOW</c>) and
+/// checks that the open handle is a regular file of a size that fits before reading: a named pipe, a device, or a file
+/// that is too big or can't be read is refused with a reason (Keep) or skipped (Show code).
 /// </summary>
 public sealed class FileModVersionStore(string root) : IModVersionStore, IDisposable
 {
@@ -33,6 +36,9 @@ public sealed class FileModVersionStore(string root) : IModVersionStore, IDispos
     private const string DraftsFolder = "drafts";
     private const string OffFile = "off.json";
     private const int MaxManifestBytes = 64 * 1024;
+    private const int MaxIndexBytes = 16 * 1024 * 1024;
+    private const int MaxOffBytes = 1024 * 1024;
+    private static readonly TimeSpan StagingGrace = TimeSpan.FromHours(1);
 
     private static readonly string[] ModuleExtensions = [".js", ".mjs", ".ts", ".mts"];
     private static readonly UTF8Encoding StrictUtf8 = new(false, throwOnInvalidBytes: true);
@@ -86,86 +92,130 @@ public sealed class FileModVersionStore(string root) : IModVersionStore, IDispos
         ThrowIfInvalidSession(sessionId);
         ArgumentNullException.ThrowIfNull(check);
 
-        var modLock = Lock(ModLock(userId, name));
-        await modLock.WaitAsync(ct).ConfigureAwait(false);
-        try
-        {
-            var sessionLock = Lock(SessionLock(userId, sessionId));
-            await sessionLock.WaitAsync(ct).ConfigureAwait(false);
-            try
-            {
-                return await KeepLockedAsync(userId, sessionId, name, source, check, ct).ConfigureAwait(false);
-            }
-            finally
-            {
-                sessionLock.Release();
-            }
-        }
-        finally
-        {
-            modLock.Release();
-        }
-    }
-
-    private async Task<ModVersion> KeepLockedAsync(string userId, string sessionId, string name, ModKeepSource source, ModKeepCheck check, CancellationToken ct)
-    {
         var draft = DraftFolder(userId, sessionId, name);
         var modFolder = ModFolder(userId, name);
-        if (!IsClean(draft) || !IsClean(modFolder))
-            throw new ModStoreException("The draft or the mod's folder is, or sits behind, a symbolic link, which can't be kept.");
-        if (!Directory.Exists(draft))
-            throw new ModStoreException($"There's no draft of {name} in this session.");
-
-        Directory.CreateDirectory(modFolder);
-        DeleteLeftoverStaging(modFolder);
-
-        var history = ReadIndex(userId, name);
-        var number = NextNumber(modFolder, history);
-        var staged = Path.Combine(modFolder, $"v{number}.{Guid.NewGuid():N}.tmp");
+        var staged = Path.Combine(modFolder, $"keep.{Guid.NewGuid():N}.tmp");
         var moved = false;
-        string sha256;
-        ModManifest manifest;
-        JsonElement? report;
         try
         {
-            CopyDraft(draft, staged);
-            (manifest, sha256) = ValidateCopy(staged, name);
-            report = await check(staged, ct).ConfigureAwait(false);
+            var (manifest, sha256, stagedTree) = await LockedBothAsync(userId, sessionId, name, () =>
+            {
+                RequireDraft(draft, modFolder, name);
+                Directory.CreateDirectory(modFolder);
+                DeleteLeftoverStaging(modFolder);
+                CopyDraft(draft, staged);
+                var (copied, hash) = ValidateCopy(staged, name);
+                return (copied, hash, TreeHash(staged));
+            }, ct).ConfigureAwait(false);
+
+            // No lock is held while the check runs: it can take the mod host seconds.
+            var report = await check(staged, ct).ConfigureAwait(false);
             if (ModChecks.Refusal(report) is { } refusal)
                 throw new ModStoreException(refusal);
 
-            Directory.Move(staged, Path.Combine(modFolder, $"v{number}"));
-            moved = true;
+            return await LockedBothAsync(userId, sessionId, name, () =>
+            {
+                if (!IsClean(draft) || !IsClean(modFolder) || !Directory.Exists(draft) || TreeHash(staged) != stagedTree || !DraftIsStill(draft, stagedTree))
+                    throw new ModStoreException("The draft changed while it was being checked; check it again.");
+
+                var history = ReadIndex(userId, name);
+                var number = NextNumber(modFolder, history);
+                var kept = Path.Combine(modFolder, $"v{number}");
+                Directory.Move(staged, kept);
+                moved = true;
+
+                var version = new ModVersion(
+                    number,
+                    DateTimeOffset.UtcNow,
+                    manifest.Version,
+                    sha256,
+                    sessionId,
+                    Trimmed(source.SessionTitle),
+                    Trimmed(source.Note),
+                    report);
+                try
+                {
+                    WriteIndex(userId, new ModHistory(name, number, null, [.. history.Versions, version]));
+                }
+                catch
+                {
+                    TryDelete(kept);
+                    throw;
+                }
+
+                MakeReadOnly(kept);
+                RemoveDraft(userId, sessionId, name, draft);
+                return version;
+            }, ct).ConfigureAwait(false);
         }
         finally
         {
             if (!moved)
                 TryDelete(staged);
         }
+    }
 
-        var version = new ModVersion(
-            number,
-            DateTimeOffset.UtcNow,
-            manifest.Version,
-            sha256,
-            sessionId,
-            Trimmed(source.SessionTitle),
-            Trimmed(source.Note),
-            report);
-        var kept = Path.Combine(modFolder, $"v{number}");
+    public async Task<JsonElement?> CheckDraftAsync(string userId, string sessionId, string name, ModKeepCheck check, CancellationToken ct = default)
+    {
+        ThrowIfInvalid(name);
+        ThrowIfInvalidSession(sessionId);
+        ArgumentNullException.ThrowIfNull(check);
+
+        var draft = DraftFolder(userId, sessionId, name);
+        var modFolder = ModFolder(userId, name);
+        var staged = Path.Combine(modFolder, $"check.{Guid.NewGuid():N}.tmp");
         try
         {
-            WriteIndex(userId, new ModHistory(name, number, null, [.. history.Versions, version]));
-        }
-        catch
-        {
-            TryDelete(kept);
-            throw;
-        }
+            await LockedAsync(SessionLock(userId, sessionId), () =>
+            {
+                RequireDraft(draft, modFolder, name);
+                Directory.CreateDirectory(modFolder);
+                CopyDraft(draft, staged);
+                return true;
+            }, ct).ConfigureAwait(false);
 
-        MakeReadOnly(kept);
-        RemoveDraft(userId, sessionId, name, draft);
-        return version;
+            return await check(staged, ct).ConfigureAwait(false);
+        }
+        finally
+        {
+            TryDelete(staged);
+        }
+    }
+
+    private void RequireDraft(string draft, string modFolder, string name)
+    {
+        if (!IsClean(draft) || !IsClean(modFolder))
+            throw new ModStoreException("The draft or the mod's folder is, or sits behind, a symbolic link, which can't be kept.");
+        if (!Directory.Exists(draft))
+            throw new ModStoreException($"There's no draft of {name} in this session.");
+    }
+
+    /// <summary>True when the live draft still has the tree that was checked; a draft that can no longer be walked has changed.</summary>
+    private static bool DraftIsStill(string draft, string checkedTree)
+    {
+        try
+        {
+            return TreeHash(draft) == checkedTree;
+        }
+        catch (ModStoreException)
+        {
+            return false;
+        }
+    }
+
+    /// <summary>Takes the mod's lock, then the session's, and runs <paramref name="action"/> under both.</summary>
+    private async Task<T> LockedBothAsync<T>(string userId, string sessionId, string name, Func<T> action, CancellationToken ct)
+    {
+        var modLock = Lock(ModLock(userId, name));
+        await modLock.WaitAsync(ct).ConfigureAwait(false);
+        try
+        {
+            return await LockedAsync(SessionLock(userId, sessionId), action, ct).ConfigureAwait(false);
+        }
+        finally
+        {
+            modLock.Release();
+        }
     }
 
     public Task<ModHistory> UseVersionAsync(string userId, string name, int number, CancellationToken ct = default)
@@ -361,11 +411,11 @@ public sealed class FileModVersionStore(string root) : IModVersionStore, IDispos
             return ModHistory.Empty(name);
 
         ModIndex? file = null;
-        if (IsRegularFile(path))
+        if (TryRead(path, MaxIndexBytes, out var bytes))
         {
             try
             {
-                file = JsonSerializer.Deserialize(File.ReadAllText(path), ModIndexJsonContext.Default.ModIndex);
+                file = JsonSerializer.Deserialize(bytes, ModIndexJsonContext.Default.ModIndex);
             }
             catch (JsonException)
             {
@@ -373,47 +423,68 @@ public sealed class FileModVersionStore(string root) : IModVersionStore, IDispos
         }
 
         if (file?.Versions is null)
-            return RebuildIndex(userId, name, path);
+            return RebuildIndex(userId, name, path, [], null, null);
 
         var versions = file.Versions
             .Where(v => v is { Number: > 0, Version: not null, Sha256: not null })
+            .GroupBy(v => v.Number)
+            .Select(group => group.First())
             .OrderBy(v => v.Number)
             .ToList();
-        var active = file.Active is { } number && versions.Any(v => v.Number == number)
-            ? number
-            : versions.Count == 0 ? (int?)null : versions[^1].Number;
+        var listed = versions.Select(v => v.Number).ToHashSet();
+        var droppedAnEntry = versions.Count < file.Versions.Count;
+        var activeIsUnknown = file.Active is { } wanted && !listed.Contains(wanted);
+        if (droppedAnEntry || activeIsUnknown || VersionsOnDisk(ModFolder(userId, name), listed).Count > 0)
+            return RebuildIndex(userId, name, path, versions, file.Off, file.Active);
+
+        var active = file.Active is { } number ? number : versions.Count == 0 ? (int?)null : versions[^1].Number;
         return new ModHistory(name, active, file.Off, versions);
     }
 
     /// <summary>
-    /// A broken <c>versions.json</c> is moved aside and rebuilt from the <c>v{n}</c> folders, which each hold their
-    /// <c>mod.json</c>: the history is never overwritten. What the index alone knew (session, note, check) is gone from the
-    /// rebuilt copy, but not from the file that was moved aside.
+    /// A <c>versions.json</c> that can't be used (not JSON, or JSON that lists fewer versions than the <c>v{n}</c> folders
+    /// hold, drops an entry, or names an active version it doesn't list) is moved aside and rebuilt: the history is never
+    /// overwritten. The entries that were fine stay as they were; the rest are rebuilt from their folders, each of which
+    /// holds its <c>mod.json</c>, so what the index alone knew (session, note, check) is gone from those, but not from the
+    /// file that was moved aside.
     /// </summary>
-    private ModHistory RebuildIndex(string userId, string name, string path)
+    private ModHistory RebuildIndex(string userId, string name, string path, List<ModVersion> valid, ModOff? off, int? active)
     {
         File.Move(path, $"{path}.broken-{DateTime.UtcNow:yyyyMMddHHmmss}", overwrite: true);
 
-        var modFolder = ModFolder(userId, name);
-        var versions = new List<ModVersion>();
+        var versions = valid.Concat(VersionsOnDisk(ModFolder(userId, name), valid.Select(v => v.Number).ToHashSet())).OrderBy(v => v.Number).ToList();
+        if (versions.Count == 0)
+            return ModHistory.Empty(name);
+
+        var current = active is { } wanted && versions.Any(v => v.Number == wanted) ? wanted : versions[^1].Number;
+        return WriteIndex(userId, new ModHistory(name, current, off, versions));
+    }
+
+    /// <summary>
+    /// The versions whose <c>v{n}</c> folders hold a mod (a manifest and its hooks file) and are not in
+    /// <paramref name="listed"/>. A staging folder (<c>v{n}.{guid}.tmp</c>) is not a version.
+    /// </summary>
+    private List<ModVersion> VersionsOnDisk(string modFolder, HashSet<int> listed)
+    {
+        var found = new List<ModVersion>();
+        if (!IsClean(modFolder) || !Directory.Exists(modFolder))
+            return found;
+
         foreach (var folder in Directory.EnumerateDirectories(modFolder))
         {
-            var folderName = Path.GetFileName(folder);
-            if (!TryVersionNumber(folderName, out var number) || !IsClean(folder))
+            if (!TryVersionNumber(Path.GetFileName(folder), out var number) || listed.Contains(number) || !IsClean(folder))
                 continue;
-            if (ParseManifest(folder) is not { } manifest || ModuleIn(folder, manifest.Hooks) is not { } module)
+            if (ParseManifest(folder) is not { } manifest
+                || ModuleIn(folder, manifest.Hooks) is not { } module
+                || SafeFile.Hash(module, ModStoreLimits.KeptBytes, out var sha256, out _) != FileProblem.None)
                 continue;
 
             var info = new DirectoryInfo(folder);
             var created = info.CreationTimeUtc.Year > 2000 ? info.CreationTimeUtc : info.LastWriteTimeUtc;
-            versions.Add(new ModVersion(number, new DateTimeOffset(created, TimeSpan.Zero), manifest.Version, Sha256Of(module), null, null, null, null));
+            found.Add(new ModVersion(number, new DateTimeOffset(created, TimeSpan.Zero), manifest.Version, sha256, null, null, null, null));
         }
 
-        if (versions.Count == 0)
-            return ModHistory.Empty(name);
-
-        versions.Sort((a, b) => a.Number.CompareTo(b.Number));
-        return WriteIndex(userId, new ModHistory(name, versions[^1].Number, null, versions));
+        return found;
     }
 
     private ModHistory WriteIndex(string userId, ModHistory history)
@@ -450,68 +521,139 @@ public sealed class FileModVersionStore(string root) : IModVersionStore, IDispos
 
     // Keep
 
-    /// <summary>What a crash between the copy and the move leaves: <c>v{n}.{guid}.tmp</c> folders. Gone on the next Keep.</summary>
-    private static void DeleteLeftoverStaging(string modFolder)
-    {
-        foreach (var folder in Directory.EnumerateDirectories(modFolder, "v*.tmp"))
-            TryDelete(folder);
-    }
-
-    private sealed class Tally
-    {
-        public int Files;
-        public int Directories;
-        public long Bytes;
-    }
+    private const string UnsupportedMessage = "Fleet can't tell what a mod's files are on this system, so it can't read them safely.";
 
     /// <summary>
-    /// Copies the draft to <paramref name="target"/> by walking it: links and anything but regular files and folders are
-    /// refused, and the walk stops as soon as the file count or the bytes pass their limit. Nothing is followed.
+    /// What a crash between the copy and the move leaves: <c>*.tmp</c> staging folders. Only those older than an hour go:
+    /// a newer one may be another Keep's or check's copy, still in use.
+    /// </summary>
+    private static void DeleteLeftoverStaging(string modFolder)
+    {
+        foreach (var folder in Directory.EnumerateDirectories(modFolder, "*.tmp"))
+        {
+            if (DateTime.UtcNow - Directory.GetLastWriteTimeUtc(folder) > StagingGrace)
+                TryDelete(folder);
+        }
+    }
+
+    /// <summary>The file's bytes when it is a regular file within the cap; false when it isn't or can't be read.</summary>
+    private static bool TryRead(string path, long maxBytes, out byte[] data)
+    {
+        var problem = SafeFile.ReadAll(path, maxBytes, out data);
+        return problem == FileProblem.None
+            ? true
+            : problem == FileProblem.Unsupported ? throw new ModStoreException(UnsupportedMessage) : false;
+    }
+
+    private readonly record struct TreeEntry(string Relative, string FullPath, bool IsDirectory);
+
+    /// <summary>
+    /// A draft's folders and files, parents first and each folder's entries in ordinal order, with paths relative to it using
+    /// <c>/</c>. A link anywhere is refused, and so is a tree with more than <see cref="ModStoreLimits.KeptFiles"/> entries
+    /// (the walk stops there). Nothing is followed or opened.
+    /// </summary>
+    private static IEnumerable<TreeEntry> WalkTree(string folder)
+    {
+        var count = 0;
+        return Walk(new DirectoryInfo(folder), "");
+
+        IEnumerable<TreeEntry> Walk(DirectoryInfo directory, string prefix)
+        {
+            foreach (var entry in directory.EnumerateFileSystemInfos().OrderBy(e => e.Name, StringComparer.Ordinal))
+            {
+                var relative = $"{prefix}{entry.Name}";
+                if (IsLink(entry.FullName))
+                    throw new ModStoreException($"The draft contains a symbolic link ('{relative}'), which can't be kept.");
+                if (++count > ModStoreLimits.KeptFiles)
+                    throw new ModStoreException($"The draft has more than {ModStoreLimits.KeptFiles} files; a mod keeps at most {ModStoreLimits.KeptFiles}.");
+
+                if (entry is DirectoryInfo child)
+                {
+                    yield return new TreeEntry(relative, child.FullName, true);
+                    foreach (var inner in Walk(child, $"{relative}/"))
+                        yield return inner;
+                }
+                else
+                {
+                    yield return new TreeEntry(relative, entry.FullName, false);
+                }
+            }
+        }
+    }
+
+    /// <summary>The refusal for a file of the draft that <see cref="SafeFile"/> wouldn't open, naming the file and why.</summary>
+    private static ModStoreException Refused(FileProblem problem, string relative) => problem switch
+    {
+        FileProblem.Missing => new($"The draft's file '{relative}' went away while it was being read."),
+        FileProblem.Link => new($"The draft contains a symbolic link ('{relative}'), which can't be kept."),
+        FileProblem.NotRegular => new($"The draft's file '{relative}' isn't a regular file (a folder, a named pipe or a device), so it can't be kept."),
+        FileProblem.Unreadable => new($"The draft's file '{relative}' can't be read."),
+        FileProblem.TooLarge => new($"The draft's file '{relative}' is too large; a mod keeps at most 16 MiB in all."),
+        _ => new(UnsupportedMessage),
+    };
+
+    /// <summary>
+    /// Copies the draft to <paramref name="target"/> by walking it: links are refused, every file goes through
+    /// <see cref="SafeFile"/> (a named pipe, a device, an unreadable or too-large file is refused by name), and the copy
+    /// stops as soon as the file count or the bytes pass their limit.
     /// </summary>
     private static void CopyDraft(string draft, string target)
     {
-        var tally = new Tally();
+        long copied = 0;
         Directory.CreateDirectory(target);
-        Copy(new DirectoryInfo(draft), target);
-
-        void Copy(DirectoryInfo source, string to)
+        foreach (var entry in WalkTree(draft))
         {
-            foreach (var entry in source.EnumerateFileSystemInfos())
+            var destination = Path.Combine(target, entry.Relative);
+            if (entry.IsDirectory)
             {
-                if (IsLink(entry.FullName))
-                    throw new ModStoreException($"The draft contains a symbolic link ('{entry.Name}'), which can't be kept.");
+                Directory.CreateDirectory(destination);
+                continue;
+            }
 
-                var destination = Path.Combine(to, entry.Name);
-                if (entry is DirectoryInfo directory)
-                {
-                    if (++tally.Directories > ModStoreLimits.KeptFiles)
-                        throw TooMany();
-                    Directory.CreateDirectory(destination);
-                    Copy(directory, destination);
-                    continue;
-                }
+            var problem = SafeFile.Open(entry.FullPath, ModStoreLimits.KeptBytes - copied, out var input);
+            if (problem != FileProblem.None)
+                throw Refused(problem, entry.Relative);
 
-                if (!IsRegularFile(entry.FullName))
-                    throw new ModStoreException($"The draft contains something that isn't a regular file ('{entry.Name}'), which can't be kept.");
-                if (++tally.Files > ModStoreLimits.KeptFiles)
-                    throw TooMany();
-
-                using var input = new FileStream(entry.FullName, FileMode.Open, FileAccess.Read, FileShare.ReadWrite);
-                using var output = new FileStream(destination, FileMode.CreateNew, FileAccess.Write, FileShare.None);
+            using (input)
+            using (var output = new FileStream(destination, FileMode.CreateNew, FileAccess.Write, FileShare.None))
+            {
                 var buffer = new byte[81920];
                 int read;
-                while ((read = input.Read(buffer, 0, buffer.Length)) > 0)
+                while ((read = input!.Read(buffer, 0, buffer.Length)) > 0)
                 {
-                    tally.Bytes += read;
-                    if (tally.Bytes > ModStoreLimits.KeptBytes)
-                        throw new ModStoreException("The draft is larger than 16 MiB; a mod keeps at most 16 MiB.");
+                    copied += read;
+                    if (copied > ModStoreLimits.KeptBytes)
+                        throw Refused(FileProblem.TooLarge, entry.Relative);
                     output.Write(buffer, 0, read);
                 }
             }
         }
+    }
 
-        static ModStoreException TooMany()
-            => new($"The draft has more than {ModStoreLimits.KeptFiles} files; a mod keeps at most {ModStoreLimits.KeptFiles}.");
+    /// <summary>
+    /// One hash of a whole tree: its folders and files in order, each file with its SHA-256. Two trees with the same hash
+    /// hold the same paths and bytes. Throws <see cref="ModStoreException"/> as <see cref="CopyDraft"/> does.
+    /// </summary>
+    private static string TreeHash(string folder)
+    {
+        using var hash = IncrementalHash.CreateHash(HashAlgorithmName.SHA256);
+        long total = 0;
+        foreach (var entry in WalkTree(folder))
+        {
+            var line = entry.IsDirectory ? $"d {entry.Relative}\n" : null;
+            if (!entry.IsDirectory)
+            {
+                var problem = SafeFile.Hash(entry.FullPath, ModStoreLimits.KeptBytes - total, out var sha256, out var length);
+                if (problem != FileProblem.None)
+                    throw Refused(problem, entry.Relative);
+                total += length;
+                line = $"f {entry.Relative}\0{sha256}\n";
+            }
+
+            hash.AppendData(Encoding.UTF8.GetBytes(line!));
+        }
+
+        return Convert.ToHexStringLower(hash.GetHashAndReset());
     }
 
     /// <summary>Reads and checks the manifest of the staged copy, and returns it with the SHA-256 of its hooks module.</summary>
@@ -544,13 +686,17 @@ public sealed class FileModVersionStore(string root) : IModVersionStore, IDispos
 
         if (!ModuleExtensions.Contains(Path.GetExtension(module), StringComparer.OrdinalIgnoreCase))
             throw new ModStoreException("mod.json's hooks must be a .js, .mjs, .ts or .mts file.");
-        if (!IsRegularFile(module))
-            throw new ModStoreException($"mod.json's hooks file '{hooks}' isn't in the draft.");
 
-        return (manifest, Sha256Of(module));
+        var problem = SafeFile.Hash(module, ModStoreLimits.KeptBytes, out var sha256, out _);
+        if (problem == FileProblem.Missing)
+            throw new ModStoreException($"mod.json's hooks file '{hooks}' isn't in the draft.");
+        if (problem != FileProblem.None)
+            throw Refused(problem, hooks);
+
+        return (manifest, sha256);
     }
 
-    /// <summary>The hooks module of a kept folder when it's a regular file inside it; null otherwise.</summary>
+    /// <summary>The hooks module of a kept folder when its path is inside the folder; null otherwise.</summary>
     private static string? ModuleIn(string folder, string hooks)
     {
         try
@@ -559,18 +705,12 @@ public sealed class FileModVersionStore(string root) : IModVersionStore, IDispos
                 return null;
             var full = Path.GetFullPath(Path.Combine(folder, hooks));
             var prefix = Path.GetFullPath(folder).TrimEnd(Path.DirectorySeparatorChar) + Path.DirectorySeparatorChar;
-            return full.StartsWith(prefix, StringComparison.Ordinal) && IsRegularFile(full) ? full : null;
+            return full.StartsWith(prefix, StringComparison.Ordinal) ? full : null;
         }
         catch (ArgumentException)
         {
             return null;
         }
-    }
-
-    private static string Sha256Of(string path)
-    {
-        using var stream = new FileStream(path, FileMode.Open, FileAccess.Read, FileShare.ReadWrite);
-        return Convert.ToHexStringLower(SHA256.HashData(stream));
     }
 
     /// <summary>Makes a kept version's files read-only where the OS allows it. Folders stay traversable.</summary>
@@ -630,10 +770,10 @@ public sealed class FileModVersionStore(string root) : IModVersionStore, IDispos
         var path = Path.Combine(folder, ManifestFile);
         try
         {
-            if (!File.Exists(path) || !IsRegularFile(path) || new FileInfo(path).Length > MaxManifestBytes)
+            if (!File.Exists(path) || !TryRead(path, MaxManifestBytes, out var bytes))
                 return null;
 
-            using var document = JsonDocument.Parse(File.ReadAllBytes(path));
+            using var document = JsonDocument.Parse(bytes);
             if (document.RootElement.ValueKind != JsonValueKind.Object)
                 return null;
             var root = document.RootElement;
@@ -682,17 +822,17 @@ public sealed class FileModVersionStore(string root) : IModVersionStore, IDispos
                     continue;
                 }
 
-                if (!IsRegularFile(entry.FullName) || ((FileInfo)entry).Length > ModStoreLimits.ShownFileBytes)
+                // Not a regular file, too large, unreadable or gone: Show code skips it and goes on.
+                if (!TryRead(entry.FullName, ModStoreLimits.ShownFileBytes, out var data))
                     continue;
 
                 string text;
                 try
                 {
-                    text = StrictUtf8.GetString(File.ReadAllBytes(entry.FullName));
+                    text = StrictUtf8.GetString(data);
                 }
-                catch (Exception e) when (e is DecoderFallbackException or IOException or UnauthorizedAccessException)
+                catch (DecoderFallbackException)
                 {
-                    // Not text, or gone: Show code skips it.
                     continue;
                 }
 
@@ -712,12 +852,12 @@ public sealed class FileModVersionStore(string root) : IModVersionStore, IDispos
     private Dictionary<string, ModOff> ReadDraftOff(string userId, string sessionId)
     {
         var path = Path.Combine(SessionDrafts(userId, sessionId), OffFile);
-        if (!IsClean(path) || !File.Exists(path) || !IsRegularFile(path))
+        if (!IsClean(path) || !File.Exists(path) || !TryRead(path, MaxOffBytes, out var bytes))
             return [];
 
         try
         {
-            return JsonSerializer.Deserialize(File.ReadAllText(path), ModIndexJsonContext.Default.DictionaryStringModOff) ?? [];
+            return JsonSerializer.Deserialize(bytes, ModIndexJsonContext.Default.DictionaryStringModOff) ?? [];
         }
         catch (JsonException)
         {
@@ -750,11 +890,11 @@ public sealed class FileModVersionStore(string root) : IModVersionStore, IDispos
         if (!IsClean(path) || !File.Exists(path))
             return [];
 
-        if (IsRegularFile(path))
+        if (TryRead(path, 2L * ModStoreLimits.StoreBytes, out var bytes))
         {
             try
             {
-                var store = JsonSerializer.Deserialize(File.ReadAllBytes(path), StoreJson.DictionaryStringJsonElement);
+                var store = JsonSerializer.Deserialize(bytes, StoreJson.DictionaryStringJsonElement);
                 if (store is not null)
                     return store;
             }
@@ -865,71 +1005,6 @@ public sealed class FileModVersionStore(string root) : IModVersionStore, IDispos
         {
             return false;
         }
-    }
-
-    /// <summary>
-    /// True for a regular file only: not a link, a folder, a named pipe, a socket or a device. .NET reports a named pipe
-    /// as an ordinary file and opening one waits for a writer, so the type is read without opening: on Unix by asking
-    /// <see cref="TarWriter"/> to describe the path (it does an <c>lstat</c> and writes the type into the header, and we stop
-    /// after that header); on Windows from the attributes.
-    /// </summary>
-    private static bool IsRegularFile(string path)
-    {
-        try
-        {
-            var info = new FileInfo(path);
-            if (info.LinkTarget is not null)
-                return false;
-            if (OperatingSystem.IsWindows())
-                return info.Exists && (info.Attributes & (FileAttributes.Directory | FileAttributes.ReparsePoint | FileAttributes.Device)) == 0;
-
-            var probe = new TarHeaderProbe();
-            try
-            {
-                new TarWriter(probe, TarEntryFormat.Ustar, leaveOpen: true).WriteEntry(Path.GetFullPath(path), "x");
-            }
-            catch (TarHeaderProbe.Done)
-            {
-            }
-
-            // A header for the entry "x", and its type flag: '0' (or NUL) is a regular file.
-            return probe.Header is { Length: >= 157 } header && header[0] == (byte)'x' && header[1] == 0 && header[156] is (byte)'0' or 0;
-        }
-        catch (Exception)
-        {
-            return false;
-        }
-    }
-
-    /// <summary>Takes the first 512 bytes <see cref="TarWriter"/> writes (the header) and stops it there.</summary>
-    private sealed class TarHeaderProbe : Stream
-    {
-        private readonly List<byte> _header = [];
-
-        public sealed class Done : Exception;
-
-        public byte[] Header => [.. _header];
-
-        public override void Write(ReadOnlySpan<byte> buffer)
-        {
-            if (_header.Count >= 512)
-                throw new Done();
-            _header.AddRange(buffer.ToArray());
-            if (_header.Count >= 512)
-                throw new Done();
-        }
-
-        public override void Write(byte[] buffer, int offset, int count) => Write(buffer.AsSpan(offset, count));
-
-        public override bool CanRead => false;
-        public override bool CanSeek => false;
-        public override bool CanWrite => true;
-        public override long Length => throw new NotSupportedException();
-        public override long Position { get => throw new NotSupportedException(); set => throw new NotSupportedException(); }
-        public override void Flush() { }
-        public override int Read(byte[] buffer, int offset, int count) => throw new NotSupportedException();
-        public override long Seek(long offset, SeekOrigin origin) => throw new NotSupportedException();
-        public override void SetLength(long value) => throw new NotSupportedException();
     }
 
     /// <summary>Deletes a folder (or just the link when it is one), ignoring a failure: a staging folder is only a leftover.</summary>

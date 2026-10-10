@@ -822,7 +822,7 @@ public sealed class FileModVersionStoreTests : IDisposable
     // ── Keep copies first, then checks the copy ─────────────────────────
 
     [Fact]
-    public async Task Keep_keeps_what_it_copied_when_the_draft_changes_during_the_check()
+    public async Task Keep_checks_a_copy_and_keeps_that_copy()
     {
         var folder = Draft(code: "// copied\n");
         string? staged = null;
@@ -831,8 +831,7 @@ public sealed class FileModVersionStoreTests : IDisposable
         var version = await Keep(check: (stagedFolder, _) =>
         {
             staged = stagedFolder;
-            sawCopy = File.ReadAllText(Path.Combine(stagedFolder, "mod.ts")) == "// copied\n";
-            File.WriteAllText(Path.Combine(folder, "mod.ts"), "// changed by the agent\n");
+            sawCopy = stagedFolder != folder && File.ReadAllText(Path.Combine(stagedFolder, "mod.ts")) == "// copied\n";
             return Task.FromResult<JsonElement?>(null);
         });
 
@@ -842,20 +841,6 @@ public sealed class FileModVersionStoreTests : IDisposable
         File.ReadAllText(Path.Combine(_store.VersionFolder(User, Name, 1), "mod.ts")).ShouldBe("// copied\n");
         version.Sha256.ShouldBe(Convert.ToHexStringLower(SHA256.HashData(Encoding.UTF8.GetBytes("// copied\n"))));
         (await _store.GetAsync(User, Name)).Versions.Single().Sha256.ShouldBe(version.Sha256);
-    }
-
-    [Fact]
-    public async Task Keep_reads_the_manifest_from_the_copy()
-    {
-        var folder = Draft();
-
-        var version = await Keep(check: (_, _) =>
-        {
-            File.WriteAllText(Path.Combine(folder, "mod.json"), Manifest.Replace("0.1.0", "9.9.9"));
-            return Task.FromResult<JsonElement?>(null);
-        });
-
-        version.Version.ShouldBe("0.1.0");
     }
 
     [Fact]
@@ -1061,6 +1046,7 @@ public sealed class FileModVersionStoreTests : IDisposable
         var index = System.Text.Json.Nodes.JsonNode.Parse(File.ReadAllText(path))!.AsObject();
         index["versions"]!.AsArray().RemoveAt(1);
         File.WriteAllText(path, index.ToJsonString());
+        Remove(Path.Combine(UserFolder(), Name, "v2"));
 
         (await _store.GetAsync(User, Name)).Versions.Select(v => v.Number).ShouldBe([1, 3]);
         (await _store.UndoAsync(User, Name, DateTimeOffset.UtcNow)).Active.ShouldBe(1);
@@ -1183,8 +1169,7 @@ public sealed class FileModVersionStoreTests : IDisposable
         await KeepVersions(1);
         var orphan = Path.Combine(UserFolder(), Name, "v7");
         Directory.CreateDirectory(orphan);
-        File.WriteAllText(Path.Combine(orphan, "mod.json"), Manifest);
-        File.WriteAllText(Path.Combine(orphan, "mod.ts"), "// orphan\n");
+        File.WriteAllText(Path.Combine(orphan, "notes.txt"), "not a mod");
 
         (await _store.ReadVersionFilesAsync(User, Name, 7)).ShouldBeNull();
         (await _store.ReadVersionFilesAsync(User, Name, 1))!.Count.ShouldBe(2);
@@ -1232,12 +1217,10 @@ public sealed class FileModVersionStoreTests : IDisposable
 
     // ── Honest messages ─────────────────────────────────────────────────
 
-    private static bool CanIgnoreFileModes => OperatingSystem.IsWindows() || Environment.IsPrivilegedProcess;
-
     [Fact]
     public async Task Keep_says_a_file_it_cannot_read_cannot_be_read_and_names_it()
     {
-        if (CanIgnoreFileModes)
+        if (OperatingSystem.IsWindows() || Environment.IsPrivilegedProcess)
             return;
         var folder = Draft();
         Directory.CreateDirectory(Path.Combine(folder, "lib"));
@@ -1255,7 +1238,7 @@ public sealed class FileModVersionStoreTests : IDisposable
     [Fact]
     public async Task Show_code_skips_a_file_it_cannot_read_and_keeps_going()
     {
-        if (CanIgnoreFileModes)
+        if (OperatingSystem.IsWindows() || Environment.IsPrivilegedProcess)
             return;
         var folder = Draft();
         File.WriteAllText(Path.Combine(folder, "a-locked.ts"), "x");
@@ -1397,7 +1380,7 @@ public sealed class FileModVersionStoreTests : IDisposable
         history.Versions[0].Note.ShouldBe("first");
         history.Versions[0].SessionId.ShouldBe("ses_x");
         history.Versions[0].Sha256.ShouldBe("aa");
-        history.Versions[0].CreatedAt.ShouldBe(DateTimeOffset.Parse("2026-01-01T00:00:00Z"));
+        history.Versions[0].CreatedAt.ShouldBe(DateTimeOffset.Parse("2026-01-01T00:00:00Z", System.Globalization.CultureInfo.InvariantCulture));
         history.Versions[1].SessionId.ShouldBeNull();
         history.Active.ShouldBe(1);
         history.Off.ShouldNotBeNull().By.ShouldBe(ModOffBy.User);
@@ -1498,7 +1481,7 @@ public sealed class FileModVersionStoreTests : IDisposable
 
         var version = await Keep(check: async (_, _) =>
         {
-            await Task.Delay(100);
+            await Task.Delay(100, CancellationToken.None);
             return null;
         });
 
