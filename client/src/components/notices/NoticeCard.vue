@@ -280,7 +280,7 @@ onUnmounted(() => {
       :key="open.id"
       ref="card"
       class="notice"
-      :class="{ 'notice--warn': open.tone === 'warn' }"
+      :class="{ 'notice--warn': open.tone === 'warn', 'notice--list': open.items?.length }"
       role="status"
       aria-live="polite"
       :data-notice-id="open.id"
@@ -328,6 +328,33 @@ onUnmounted(() => {
           <X aria-hidden="true" />
         </button>
       </div>
+      <ul
+        v-if="open.items?.length"
+        class="notice__items"
+        data-testid="notice-items"
+      >
+        <li
+          v-for="(item, index) in open.items"
+          :key="index"
+          class="notice__item"
+        >
+          <span
+            class="notice__item-dot"
+            :class="{ 'notice__item-dot--fixed': item.kind === 'fixed' }"
+            aria-hidden="true"
+          />
+          <span><span
+            v-if="item.label"
+            class="notice__item-label"
+          >{{ item.label }}</span>{{ item.text }}</span>
+        </li>
+      </ul>
+      <p
+        v-if="open.items?.length && open.more"
+        class="notice__more"
+      >
+        {{ open.more }}
+      </p>
       <span
         v-if="open.countdown && !pinned"
         class="notice__countdown"
@@ -381,6 +408,11 @@ onUnmounted(() => {
   color: var(--text);
   box-shadow: 0 1px 0 color-mix(in srgb, var(--text) 4%, transparent) inset, 0 16px 36px -16px rgba(0, 0, 0, 0.4);
   transform-origin: right bottom;
+}
+
+/* A card with a list to read (What's new) gets more room. */
+.notice--list {
+  width: 340px;
 }
 
 .notice__top {
@@ -470,6 +502,49 @@ onUnmounted(() => {
 
 .notice__link:hover {
   color: var(--text);
+}
+
+.notice__items {
+  display: grid;
+  gap: 7px;
+  margin: 10px 0 0;
+  padding: 0 0 0 36px;
+  list-style: none;
+}
+
+.notice__item {
+  display: grid;
+  grid-template-columns: 5px 1fr;
+  gap: 8px;
+  align-items: baseline;
+  font-size: 12.5px;
+  line-height: 1.4;
+  overflow-wrap: anywhere;
+}
+
+.notice__item-dot {
+  width: 5px;
+  height: 5px;
+  border-radius: 50%;
+  background: var(--accent);
+  transform: translateY(-1px);
+}
+
+.notice__item-dot--fixed {
+  background: var(--running);
+}
+
+.notice__item-label {
+  margin-right: 4px;
+  font-size: 11.5px;
+  color: var(--muted);
+}
+
+.notice__more {
+  margin: 8px 0 0;
+  padding-left: 36px;
+  font-size: 12px;
+  color: var(--muted);
 }
 
 /* The time left to act (Undo), draining left to right; it pauses while the card is held. */

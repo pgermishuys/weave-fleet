@@ -63,7 +63,7 @@ describe("What's new in Settings → System", () => {
     ]);
     const notes = wrapper.find("[data-version='0.47.0'] .whats-new__notes");
     expect(notes.find("h4").text()).toBe("New");
-    expect(notes.find("li").text()).toBe("What's new in Fleet #395");
+    expect(notes.find("li").text()).toBe("Settings What's new in Fleet #395");
     expect(wrapper.find("[data-version='0.46.0'] h4").text()).toBe("Fixed");
   });
 

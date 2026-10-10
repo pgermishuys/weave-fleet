@@ -47,6 +47,12 @@ GitHub Releases is the primary public distribution channel. The supported instal
 
 5. **Wait for the `Release` GitHub Actions workflow** to finish.
 6. **Verify the GitHub Release** and release-hosted installer endpoints.
+7. **Optional: write a highlight.** Edit the release on `pgermishuys/weave-fleet` and put a sentence or two above
+   "What's Changed", saying what's worth knowing about this version. The `Release notes` workflow copies the edit to
+   the `fleet-releases` mirror. Fleet's What's new card (shown once after an update) leads with the first line of it,
+   and Settings → System → What's new shows all of it. A known issue goes there too: lines starting "Known issue" are
+   shown in Settings but never used as the highlight. Without a highlight, the card lists the first new and fixed
+   changes. Tests, refactors, docs, CI and other behind-the-scenes changes are only counted, never listed.
 
 ## What the workflow publishes
 
