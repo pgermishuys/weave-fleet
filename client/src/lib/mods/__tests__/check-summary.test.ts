@@ -63,9 +63,17 @@ describe("summarizeCheck", () => {
     expect(text(r, "draws")).toContain("matching /^git/i");
   });
 
+  it("words a matcher with only component, one line per site and never a backtick", () => {
+    const r = report({ hooks: [{ event: "ui.render", matcher: { component: ["ComposerBand", "StatusChip", "Pane"] } }] });
+    const draws = summarizeCheck(r).filter((row) => row.key.startsWith("draws")).map((row) => row.text);
+    expect(draws).toEqual(["A band above the composer", "A chip in the status bar", "A pane it opens"]);
+    expect(summarizeCheck(r).every((row) => !row.text.includes("`"))).toBe(true);
+  });
+
   it("falls back to compact JSON for a shape it doesn't know", () => {
     const r = report({ hooks: [{ event: "ui.render", matcher: { component: "Mystery" } }] });
-    expect(text(r, "draws")).toContain('{"component":"Mystery"}');
+    expect(text(r, "draws")).not.toContain("`");
+    expect(summarizeCheck(r).find((row) => row.key === "draws")?.code).toBe('{"component":"Mystery"}');
   });
 
   it("lists what it listens to in one row, and omits it when nothing", () => {
@@ -131,6 +139,13 @@ describe("checkProblems", () => {
       error: { message: "Call on() inside register", line: 12, column: 3, where: "12:3" },
       warnings: 1,
     });
+  });
+
+  it("treats a null line or column as no position", () => {
+    const r = report({ errors: [{ line: null as unknown as undefined, column: null as unknown as undefined, code: "x", message: "Bad" }] });
+    expect(checkProblems(r).error?.where).toBeNull();
+    const lineOnly = report({ errors: [{ line: 5, column: null as unknown as undefined, code: "x", message: "Bad" }] });
+    expect(checkProblems(lineOnly).error?.where).toBe("5");
   });
 
   it("copes with no report and no position", () => {

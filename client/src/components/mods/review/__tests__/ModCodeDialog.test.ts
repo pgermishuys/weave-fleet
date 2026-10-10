@@ -14,6 +14,15 @@ vi.mock("@/components/ui/dialog", () => {
   };
 });
 
+vi.mock("@/components/phone/BottomSheet.vue", () => ({
+  default: defineComponent({
+    name: "BottomSheetStub",
+    props: { open: Boolean, label: String, title: String },
+    emits: ["close"],
+    setup: (props, { slots }) => () => (props.open ? h("div", { "data-testid": "sheet" }, slots.default?.()) : null),
+  }),
+}));
+
 import ModCodeDialog from "@/components/mods/review/ModCodeDialog.vue";
 
 const files: ModFile[] = [
@@ -77,5 +86,12 @@ describe("ModCodeDialog", () => {
     const wrapper = mountDialog(vi.fn().mockResolvedValue([{ path: "hooks.ts", content: "const s = ```x```;" }]));
     await flushPromises();
     expect(wrapper.find("[data-testid=mod-code-body]").text()).toContain("```x```");
+  });
+
+  it("is a sheet on the phone", async () => {
+    const wrapper = mount(ModCodeDialog, { props: { open: true, title: "test-chips · v2", phone: true, load: vi.fn().mockResolvedValue(files) } });
+    await flushPromises();
+    expect(wrapper.find("[data-testid=sheet]").exists()).toBe(true);
+    expect(wrapper.findAll("[data-testid=mod-code-file]")).toHaveLength(3);
   });
 });

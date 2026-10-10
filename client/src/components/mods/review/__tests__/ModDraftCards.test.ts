@@ -1,6 +1,7 @@
 import { flushPromises, mount } from "@vue/test-utils";
 import { defineComponent, h, nextTick, reactive } from "vue";
 import { beforeEach, describe, expect, it, vi } from "vitest";
+import type { AccumulatedMessage } from "@/lib/client-types";
 import type { ModDraft } from "@/lib/mods/kept";
 
 const { store } = vi.hoisted(() => ({
@@ -16,7 +17,7 @@ const { store } = vi.hoisted(() => ({
 
 vi.mock("@/stores/mods", () => ({ useModsStore: () => store }));
 vi.mock("@/components/mods/review/ModDraftCard.vue", () => ({
-  default: defineComponent({ name: "ModDraftCard", props: ["draft"], setup: (p) => () => h("div", { "data-testid": "card" }, (p.draft as ModDraft).name) }),
+  default: defineComponent({ name: "ModDraftCard", props: ["draft", "phone"], setup: (p) => () => h("div", { "data-testid": "card", "data-phone": String(p.phone) }, (p.draft as ModDraft).name) }),
 }));
 
 import ModDraftCards from "@/components/mods/review/ModDraftCards.vue";
@@ -25,7 +26,7 @@ function draft(name: string): ModDraft {
   return { sessionId: "s1", name, description: "d", version: "1", off: null, kept: null };
 }
 
-function tool(tool: string, status = "completed", partId = tool + status) {
+function tool(tool: string, status = "completed", partId = tool + status): AccumulatedMessage {
   return { messageId: "m" + partId, sessionId: "s1", role: "assistant", parts: [{ partId, type: "tool", tool, callId: partId, state: { status } }] };
 }
 
@@ -44,6 +45,12 @@ describe("ModDraftCards", () => {
     await flushPromises();
     expect(wrapper.findAll("[data-testid=card]").map((card) => card.text())).toEqual(["test-chips", "context-gauge"]);
     expect(store.loadDrafts).toHaveBeenCalledWith("s1");
+  });
+
+  it("tells the cards when they're on the phone", async () => {
+    const wrapper = mount(ModDraftCards, { props: { sessionId: "s1", phone: true } });
+    await flushPromises();
+    expect(wrapper.find("[data-testid=card]").attributes("data-phone")).toBe("true");
   });
 
   it("renders nothing with the Mods switch off, and doesn't load drafts", async () => {

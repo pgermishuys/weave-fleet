@@ -20,10 +20,10 @@ vi.mock("@/stores/machines", () => ({
   useMachinesStore: () => ({ sessionTarget: () => ({ connection: null }) }),
 }));
 vi.mock("@/components/mods/review/ModReviewDialog.vue", () => ({
-  default: defineComponent({ name: "ModReviewDialog", props: ["open", "sessionId", "draft"], setup: (p) => () => h("div", { "data-testid": "review", "data-open": String(p.open) }) }),
+  default: defineComponent({ name: "ModReviewDialog", props: ["open", "sessionId", "draft", "phone"], setup: (p) => () => h("div", { "data-testid": "review", "data-open": String(p.open), "data-phone": String(p.phone) }) }),
 }));
 vi.mock("@/components/mods/review/ModCodeDialog.vue", () => ({
-  default: defineComponent({ name: "ModCodeDialog", props: ["open", "title", "load"], setup: (p) => () => h("div", { "data-testid": "code", "data-open": String(p.open), "data-title": p.title }) }),
+  default: defineComponent({ name: "ModCodeDialog", props: ["open", "title", "load", "phone"], setup: (p) => () => h("div", { "data-testid": "code", "data-open": String(p.open), "data-title": p.title, "data-phone": String(p.phone) }) }),
 }));
 
 import { ModsRequestError } from "@/lib/mods/kept-api";
@@ -40,8 +40,8 @@ function report(overrides: Partial<ModCheckReport> = {}): ModCheckReport {
   };
 }
 
-function mountCard(value: ModDraft) {
-  return mount(ModDraftCard, { props: { draft: value } });
+function mountCard(value: ModDraft, phone = false) {
+  return mount(ModDraftCard, { props: { draft: value, phone } });
 }
 
 beforeEach(() => {
@@ -199,5 +199,27 @@ describe("ModDraftCard", () => {
     await wrapper.setProps({ draft: draft({ keepRequest: null }) });
     expect(wrapper.find("[data-testid=mod-draft-request]").exists()).toBe(false);
     expect(mountCard(draft()).find("[data-testid=mod-draft-request]").exists()).toBe(false);
+  });
+
+  it("shows no line number for a null line", () => {
+    const wrapper = mountCard(draft({ problem: { code: "x", message: "Bad manifest", line: null } }));
+    expect(wrapper.find("[data-testid=mod-draft-check]").text()).toBe("Check: Bad manifest");
+  });
+
+  describe("on the phone", () => {
+    it("draws the phone's own buttons in a row, never the desktop ones", () => {
+      const wrapper = mountCard(draft(), true);
+      const keep = wrapper.find("[data-testid=mod-draft-keep]");
+      expect(keep.classes()).toEqual(expect.arrayContaining(["ph-btn", "ph-btn--sm", "ph-btn--primary"]));
+      expect(wrapper.find("[data-testid=mod-draft-code]").classes()).toEqual(expect.arrayContaining(["ph-btn", "ph-btn--outline"]));
+      expect(wrapper.find("[data-testid=mod-draft-toggle]").classes()).toEqual(expect.arrayContaining(["ph-btn", "ph-btn--outline"]));
+      expect(wrapper.find("[data-slot=button]").exists()).toBe(false);
+    });
+
+    it("passes phone on to the dialogs", () => {
+      const wrapper = mountCard(draft(), true);
+      expect(wrapper.find("[data-testid=review]").attributes("data-phone")).toBe("true");
+      expect(wrapper.find("[data-testid=code]").attributes("data-phone")).toBe("true");
+    });
   });
 });

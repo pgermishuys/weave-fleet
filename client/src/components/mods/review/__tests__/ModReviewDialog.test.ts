@@ -30,6 +30,14 @@ vi.mock("@/stores/machines", () => ({
 vi.mock("@/stores/sessions", () => ({
   useSessionsStore: () => ({ sessionById: (id: string) => (id === "s1" ? { session: { title: "Make test output readable" } } : undefined) }),
 }));
+vi.mock("@/components/phone/BottomSheet.vue", () => ({
+  default: defineComponent({
+    name: "BottomSheetStub",
+    props: { open: Boolean, label: String, title: String },
+    emits: ["close"],
+    setup: (props, { slots }) => () => (props.open ? h("div", { "data-testid": "sheet", "data-label": props.label }, [slots.default?.(), h("div", { "data-testid": "sheet-foot" }, slots.foot?.())]) : null),
+  }),
+}));
 vi.mock("@/components/mods/review/ModCodeDialog.vue", () => ({
   default: defineComponent({ name: "ModCodeDialog", props: ["open", "title", "load"], setup: (p) => () => h("div", { "data-testid": "code", "data-open": String(p.open) }) }),
 }));
@@ -60,8 +68,8 @@ const busy: ModCheckReport = {
   state: ["count", "open"], pages: ["panel.html"],
 };
 
-function mountDialog(value: ModDraft = draft()) {
-  return mount(ModReviewDialog, { props: { open: true, sessionId: "s1", draft: value } });
+function mountDialog(value: ModDraft = draft(), phone = false) {
+  return mount(ModReviewDialog, { props: { open: true, sessionId: "s1", draft: value, phone } });
 }
 
 const rows = (wrapper: ReturnType<typeof mountDialog>) =>
@@ -165,6 +173,23 @@ describe("ModReviewDialog", () => {
     expect(wrapper.emitted("update:open")).toBeUndefined();
   });
 
+  it("shows a code row for a matcher it can't put in words, as code and not as a string", async () => {
+    checkDraftMock.mockResolvedValue({ ...testChips, hooks: [{ event: "ui.render", matcher: { component: "Mystery" } }] });
+    const wrapper = mountDialog();
+    await flushPromises();
+    expect(wrapper.find("[data-testid=mod-review-row] code").text()).toBe('{"component":"Mystery"}');
+    expect(wrapper.find("[data-testid=mod-review-row]").text()).not.toContain("`");
+  });
+
+  it("keeps the actions in a footer outside the scrolling body", async () => {
+    const wrapper = mountDialog();
+    await flushPromises();
+    const foot = wrapper.find("[data-testid=mod-review-foot]");
+    expect(foot.find("[data-testid=mod-review-keep]").exists()).toBe(true);
+    expect(foot.find("[data-testid=mod-review-decline]").exists()).toBe(true);
+    expect(wrapper.find("[data-testid=mod-review-body]").find("[data-testid=mod-review-keep]").exists()).toBe(false);
+  });
+
   it("opens Show code", async () => {
     const wrapper = mountDialog();
     await flushPromises();
@@ -215,6 +240,28 @@ describe("ModReviewDialog", () => {
       await flushPromises();
       expect(wrapper.find("[data-testid=mod-review-refused]").text()).toBe("That draft is gone.");
       expect(wrapper.emitted("update:open")).toBeUndefined();
+    });
+  });
+
+  describe("on the phone", () => {
+    it("is a sheet with the phone's buttons in its footer", async () => {
+      const wrapper = mountDialog(draft(), true);
+      await flushPromises();
+      expect(wrapper.find("[data-testid=sheet]").exists()).toBe(true);
+      const foot = wrapper.find("[data-testid=sheet-foot]");
+      const keep = foot.find("[data-testid=mod-review-keep]");
+      expect(keep.classes()).toEqual(expect.arrayContaining(["ph-btn", "ph-btn--primary"]));
+      expect(foot.find("[data-testid=mod-review-code]").classes()).toContain("ph-btn--outline");
+      expect(foot.find("[data-testid=mod-review-decline]").exists()).toBe(true);
+      expect(wrapper.find("[data-slot=button]").exists()).toBe(false);
+    });
+
+    it("keeps working: Keep calls the store", async () => {
+      const wrapper = mountDialog(draft(), true);
+      await flushPromises();
+      await wrapper.find("[data-testid=mod-review-keep]").trigger("click");
+      await flushPromises();
+      expect(store.keep).toHaveBeenCalledWith("s1", "test-chips", "");
     });
   });
 });
