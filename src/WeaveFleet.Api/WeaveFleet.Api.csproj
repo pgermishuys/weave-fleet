@@ -9,6 +9,8 @@
     <PublishAot Condition="'$(Configuration)' == 'Release'">true</PublishAot>
     <!-- Dapper 2.x does not have full AOT annotations; suppress aggregate trim/AOT warnings -->
     <NoWarn>$(NoWarn);IL2104;IL3053;IL2026;IL3050</NoWarn>
+    <!-- -p:FleetModsDebug=true compiles the mod host's debug routes (ModHostDebugEndpoints) for live checks; no release has them. -->
+    <DefineConstants Condition="'$(FleetModsDebug)' == 'true'">$(DefineConstants);FLEET_MODS_DEBUG</DefineConstants>
   </PropertyGroup>
 
   <ItemGroup>
