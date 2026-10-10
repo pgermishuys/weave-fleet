@@ -35,6 +35,24 @@ internal sealed class InMemoryModVersionStore : IModVersionStore
         _files[draft.Folder] = [new ModFile("mod.json", "{}"), new ModFile("mod.ts", "// draft")];
     }
 
+    public Task<IReadOnlyList<string>> ListDraftSessionsAsync(string userId, CancellationToken ct = default)
+        => Task.FromResult<IReadOnlyList<string>>(_drafts.Keys.Where(k => k.User == userId).Select(k => k.Session).Distinct().Order(StringComparer.Ordinal).ToList());
+
+    public string DraftsRoot(string userId) => $"/mods/{userId}/drafts";
+
+    public string HostFolder(string userId) => $"/mods/{userId}/.host";
+
+    /// <summary>The drafts <see cref="StageDraftAsync"/> copied, as (session, name, destination), in order.</summary>
+    public List<(string Session, string Name, string Destination)> StagedDrafts { get; } = [];
+
+    public Task StageDraftAsync(string userId, string sessionId, string name, string destination, CancellationToken ct = default)
+    {
+        if (!_drafts.ContainsKey((userId, sessionId, name)))
+            throw new ModStoreException($"There is no draft of {name}.");
+        StagedDrafts.Add((sessionId, name, destination));
+        return Task.CompletedTask;
+    }
+
     public Task<IReadOnlyList<ModHistory>> ListAsync(string userId, CancellationToken ct = default)
         => Task.FromResult<IReadOnlyList<ModHistory>>(_histories.Where(h => h.Key.User == userId).Select(h => h.Value).OrderBy(h => h.Name, StringComparer.Ordinal).ToList());
 

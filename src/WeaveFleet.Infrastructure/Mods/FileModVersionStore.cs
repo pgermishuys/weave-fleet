@@ -360,6 +360,14 @@ public sealed class FileModVersionStore(string root) : IModVersionStore, IDispos
 
     // $.store
 
+    public Task<IReadOnlyList<string>> ListDraftSessionsAsync(string userId, CancellationToken ct = default) => throw new NotImplementedException();
+
+    public string DraftsRoot(string userId) => Path.Combine(UserFolder(userId), DraftsFolder);
+
+    public string HostFolder(string userId) => Path.Combine(UserFolder(userId), ".host");
+
+    public Task StageDraftAsync(string userId, string sessionId, string name, string destination, CancellationToken ct = default) => throw new NotImplementedException();
+
     public Task<JsonElement?> GetValueAsync(string userId, string name, string key, CancellationToken ct = default)
         => LockedAsync(ModLock(userId, name), () =>
             ModNames.IsValid(name) && ReadStore(userId, name, out _).TryGetValue(key, out var value) ? (JsonElement?)value : null, ct);
