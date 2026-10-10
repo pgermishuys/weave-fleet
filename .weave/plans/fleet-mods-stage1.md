@@ -257,3 +257,13 @@ branch `feat/mods-host-client-reference` (7bcb39b0, closed PR #491), with review
 - **A busy host outlives Fleet on Linux** (an idle one exits when its stdin closes): `prctl(PR_SET_PDEATHSIG)` or
   `setpriv --pdeathsig`. Check the Windows Job Object path at the same time.
 - **Inherited file descriptors** from the parent shell reach the host.
+- **A failed restart is never retried**: after a restart that ends not ready, nothing tries again until the next
+  `mods.changed` or switch change. Retry on a timer.
+- **The race between `EnsureAsync` and stopping**: a reconcile that starts a host while Fleet is stopping (`StopAsync`)
+  can leave one running. Check under the gate, after the start, whether a stop came in meanwhile.
+- **`ModHostProcess.Exited` waits for stderr** to be read to its end, so a grandchild holding the pipe open delays the
+  exit and the restart. Complete it on the process exiting, and drain stderr separately.
+- **`PreferencesEndpoints`'s fire-and-forget `EnsureAsync`** drops exceptions without logging them. Log them.
+- **`ModHostFiles` walks up to a folder with `WeaveFleet.slnx`** to find `mods/host/dist/host.js` in every build. Do that
+  only in Development.
+- **`ModHostRpc.OnLine` never disposes its `JsonDocument`**: dispose it, cloning what outlives the line.
