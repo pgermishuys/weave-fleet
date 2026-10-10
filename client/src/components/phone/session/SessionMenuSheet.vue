@@ -1,7 +1,8 @@
 <script setup lang="ts">
 import { nextTick, shallowRef, useTemplateRef, watch } from "vue";
-import { Archive, Diff, File, GitFork, Laptop, MessageCircle, Pencil, Square, Terminal } from "lucide-vue-next";
+import { Archive, Diff, File, GitFork, Laptop, MessageCircle, Pencil, PanelsTopLeft, Square, Terminal } from "lucide-vue-next";
 import BottomSheet from "@/components/phone/BottomSheet.vue";
+import ModDraftMark from "@/components/mods/ModDraftMark.vue";
 
 /** The session's ⋯ menu, a floating sheet drawn as the desktop's dropdown menu: what its side panels and header actions do. */
 export type MenuAction = "changes" | "files" | "side" | "fork" | "rename" | "computer" | "terminal" | "archive" | "stop";
@@ -17,8 +18,10 @@ const props = defineProps<{
   canFork: boolean;
   /** Whether the session's machine has a page to open it on (a node has none). */
   canOpenOnComputer: boolean;
+  /** Panes mods opened in this session: each is a menu item that opens its sheet. */
+  panes?: readonly { id: string; title: string; draft: boolean }[];
 }>();
-const emit = defineEmits<{ (event: "pick", action: MenuAction): void; (event: "rename", title: string): void; (event: "close"): void }>();
+const emit = defineEmits<{ (event: "pick", action: MenuAction): void; (event: "rename", title: string): void; (event: "pane", id: string): void; (event: "close"): void }>();
 
 const renaming = shallowRef(false);
 const newTitle = shallowRef("");
@@ -130,6 +133,19 @@ async function pick(action: MenuAction): Promise<void> {
         <Terminal aria-hidden="true" />
         <span>Run a command</span>
         <span class="ph-mi__hint">!</span>
+      </button>
+      <button
+        v-for="pane in panes ?? []"
+        :key="pane.id"
+        type="button"
+        class="ph-mi"
+        role="menuitem"
+        data-testid="menu-pane"
+        @click="emit('pane', pane.id)"
+      >
+        <PanelsTopLeft aria-hidden="true" />
+        <span>{{ pane.title }}</span>
+        <ModDraftMark v-if="pane.draft" />
       </button>
       <hr>
       <button

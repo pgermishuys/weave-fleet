@@ -11,6 +11,7 @@ import ModelSelector from "@/components/session/ModelSelector.vue";
 import EffortToggle from "@/components/session/EffortToggle.vue";
 import QueuedMessages from "@/components/session/QueuedMessages.vue";
 import BackgroundStrip from "@/components/session/BackgroundStrip.vue";
+import ModComposerBand from "@/components/mods/ModComposerBand.vue";
 import { Button } from "@/components/ui/button";
 import { useAgents } from "@/composables/use-agents";
 import { useAbortSession } from "@/composables/use-session-actions";
@@ -959,6 +960,11 @@ function handleKeydown(event: KeyboardEvent): void {
     </div>
 
     <BackgroundStrip :session-id="sessionId" />
+
+    <ModComposerBand
+      :session-id="sessionId"
+      surface="desktop"
+    />
 
     <QueuedMessages
       v-if="queue.length > 0"

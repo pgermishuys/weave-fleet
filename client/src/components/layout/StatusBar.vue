@@ -1,6 +1,8 @@
 <script setup lang="ts">
 import { computed } from "vue";
 import { storeToRefs } from "pinia";
+import { useLocation, useRouter } from "@tanstack/vue-router";
+import ModStatusChip from "@/components/mods/ModStatusChip.vue";
 import NoticeChips from "@/components/notices/NoticeChips.vue";
 import RunningWorkCounter from "@/components/layout/RunningWorkCounter.vue";
 import UsageLimitChip from "@/components/layout/UsageLimitChip.vue";
@@ -67,6 +69,15 @@ const modelBadge = computed(() => {
   const harnessType = activeSession.value?.harnessType;
   // Mock model badge - in real implementation this would come from session metadata
   return harnessType || "claude-opus-4";
+});
+
+// A mod's chip is for the session on screen. The active session id stays set after you leave the session view, so
+// the route says whether one is on screen (without a router there is nothing to say, so the id decides).
+const router = useRouter({ warn: false });
+const pathname = router ? useLocation({ select: (location) => location.pathname }) : null;
+const sessionOnScreen = computed(() => {
+  if (!pathname) return true;
+  return /^\/sessions\/(?!new(\/|$))[^/]+/.test(pathname.value);
 });
 
 const tokenCount = computed(() => {
@@ -215,6 +226,11 @@ const tokenCount = computed(() => {
 
       <!-- On the right, under the corner a notice card settles from. -->
       <NoticeChips />
+
+      <ModStatusChip
+        v-if="activeSession && sessionOnScreen"
+        :session-id="activeSession.session.id"
+      />
 
       <!-- Session status lives on the session's row in the sidebar, not here. -->
       <div

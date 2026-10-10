@@ -12,11 +12,13 @@ import {
   Network,
   PanelsTopLeft,
   Paperclip,
+  Puzzle,
   Workflow,
 } from "lucide-vue-next";
 import BrowserCanvas from "@/components/canvas/BrowserCanvas.vue";
 import AgentsCanvas from "@/components/canvas/AgentsCanvas.vue";
 import ChangesCanvas from "@/components/canvas/ChangesCanvas.vue";
+import ModPaneCanvas from "@/components/canvas/ModPaneCanvas.vue";
 import PageCanvas from "@/components/canvas/PageCanvas.vue";
 import FilesCanvas from "@/components/canvas/FilesCanvas.vue";
 import ProgressCanvas from "@/components/canvas/ProgressCanvas.vue";
@@ -66,6 +68,7 @@ canvasTypes.contribute("core", [
   { kind: "browser", label: "Browser", icon: Globe, component: BrowserCanvas },
   { kind: "page", label: "Page", icon: PanelsTopLeft, component: PageCanvas },
   { kind: "file", label: "File", icon: File, component: FileCanvas },
+  { kind: "mod", label: "Mod", icon: Puzzle, component: ModPaneCanvas },
 ].map((type, index) => ({ ...type, order: index })));
 
 /** The definition of a canvas kind. A kind nobody contributed has no definition, and asking for it throws. */
@@ -106,6 +109,7 @@ export function canvasTitle(canvas: CanvasInstance): string {
   if (canvas.file) return fileName(canvas.file.path);
   if (canvas.browser) return canvas.browser.title;
   if (canvas.page) return canvas.page.title;
+  if (canvas.modPane) return canvas.modPane.title;
   return canvas.payload ? visualCanvasTitle(canvas.payload) : canvasType(canvas.kind).label;
 }
 

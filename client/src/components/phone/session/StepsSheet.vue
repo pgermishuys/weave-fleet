@@ -1,15 +1,19 @@
 <script setup lang="ts">
-import { computed, shallowRef, watch } from "vue";
+import { computed, shallowRef, watch, type Component } from "vue";
 import { ChevronLeft, X } from "lucide-vue-next";
 import BottomSheet from "@/components/phone/BottomSheet.vue";
 import PhoneToolRun from "@/components/phone/session/PhoneToolRun.vue";
+import ModTree from "@/components/mods/ModTree.vue";
 import { stepDetail, stepRow, type FoldedStep } from "@/lib/phone/fold-steps";
+import { toolRowViewId, toolRowViews } from "@/lib/mods/points";
+import { useResolvedModView } from "@/lib/mods/resolve";
+import type { ModAction } from "@/lib/mods/types";
 
 /**
  * Steps, read-only: a list of them ("3 more steps"), or one step opened — an edit as its diff, a command with what it
  * printed. A step opened from the list has Back to it.
  */
-const props = defineProps<{ open: boolean; steps: readonly FoldedStep[]; focus?: FoldedStep | null }>();
+const props = defineProps<{ open: boolean; steps: readonly FoldedStep[]; focus?: FoldedStep | null; sessionId?: string }>();
 const emit = defineEmits<{ (event: "close"): void }>();
 
 const picked = shallowRef<FoldedStep | null>(null);
@@ -20,6 +24,25 @@ watch(() => props.open, (open) => {
 const fromList = computed(() => !props.focus);
 const row = computed(() => (picked.value ? stepRow(picked.value) : null));
 const detail = computed(() => (picked.value ? stepDetail(picked.value) : null));
+
+// A mod's tree for the opened step's result replaces Fleet's detail; the `fleet` slot is Fleet's own, drawn straight
+// into the body when no mod draws.
+const resultView = useResolvedModView(
+  toolRowViews,
+  () => (props.sessionId && picked.value ? toolRowViewId("ToolResult", props.sessionId, picked.value.part.callId) : undefined),
+  "ToolResult",
+);
+const FleetDetail: Component = (_props, { slots }) => slots.fleet?.();
+const resultBind = computed(() => {
+  const view = resultView.value;
+  if (!view.draws) return {};
+  return {
+    tree: view.tree,
+    site: "ToolResult",
+    sessionId: props.sessionId,
+    onAction: (action: ModAction) => view.view.onAction?.(action, "phone"),
+  };
+});
 const subtitle = computed(() => {
   if (!row.value) return "";
   return row.value.pattern || picked.value?.category === "run" ? row.value.detail : row.value.detail.split("/").pop() ?? "";
@@ -65,31 +88,40 @@ const subtitle = computed(() => {
         v-if="!picked"
         :parts="[{ kind: 'steps', key: 'sheet', steps: [...steps], summary: '', running: false, failed: 0 }]"
         all
+        :session-id="sessionId"
         @open="(step) => (picked = step)"
       />
-      <div
-        v-else-if="detail?.kind === 'diff'"
-        class="ph-cmd ss__diff"
-        data-testid="phone-step-detail"
+      <component
+        :is="resultView.draws ? ModTree : FleetDetail"
+        v-else
+        v-bind="resultBind"
       >
-        <div class="ss__file">
-          {{ detail.file }} <span class="ph-add">+{{ detail.adds }}</span> <span class="ph-del">−{{ detail.dels }}</span>
-        </div>
-        <div class="ss__lines">
-          <span
-            v-for="(line, index) in detail.lines"
-            :key="index"
-            class="ss__line"
-            :class="`ss__line--${line.kind}`"
-          >{{ line.text || " " }}</span>
-        </div>
-      </div>
-      <pre
-        v-else-if="detail"
-        class="ph-cmd ss__out"
-        data-testid="phone-step-detail"
-      ><template v-if="detail.command"><span class="ph-cmd__p">$ </span>{{ detail.command }}
+        <template #fleet>
+          <div
+            v-if="detail?.kind === 'diff'"
+            class="ph-cmd ss__diff"
+            data-testid="phone-step-detail"
+          >
+            <div class="ss__file">
+              {{ detail.file }} <span class="ph-add">+{{ detail.adds }}</span> <span class="ph-del">−{{ detail.dels }}</span>
+            </div>
+            <div class="ss__lines">
+              <span
+                v-for="(line, index) in detail.lines"
+                :key="index"
+                class="ss__line"
+                :class="`ss__line--${line.kind}`"
+              >{{ line.text || " " }}</span>
+            </div>
+          </div>
+          <pre
+            v-else-if="detail"
+            class="ph-cmd ss__out"
+            data-testid="phone-step-detail"
+          ><template v-if="detail.command"><span class="ph-cmd__p">$ </span>{{ detail.command }}
 </template><span class="ss__result">{{ detail.text }}</span></pre>
+        </template>
+      </component>
     </div>
   </BottomSheet>
 </template>

@@ -24,6 +24,9 @@ import PhoneRetryLine from "@/components/phone/session/PhoneRetryLine.vue";
 import DockedPermission from "@/components/phone/session/DockedPermission.vue";
 import DockedQuestion from "@/components/phone/session/DockedQuestion.vue";
 import PhoneComposer from "@/components/phone/session/PhoneComposer.vue";
+import ModComposerBand from "@/components/mods/ModComposerBand.vue";
+import ModPaneSheet from "@/components/phone/session/ModPaneSheet.vue";
+import { isDraftView, modPanes, modPaneViewId } from "@/lib/mods/points";
 import { harnessCapabilities } from "@/composables/use-composer-actions";
 import { useDeskPresence } from "@/composables/use-desk-presence";
 import { useMachineReachability } from "@/composables/phone/use-machine-reachability";
@@ -210,7 +213,7 @@ watch(() => stream.isLoading.value, (loading) => {
 }, { immediate: true });
 
 // The ⋯ menu and what it opens.
-const sheet = shallowRef<"menu" | "changes" | "files" | "side" | "terminal" | null>(null);
+const sheet = shallowRef<"menu" | "changes" | "files" | "side" | "terminal" | "pane" | null>(null);
 const { harnesses } = useHarnesses();
 const caps = computed(() => harnessCapabilities(session.value?.harnessType, harnesses.value));
 const { diffs, base: diffsBase, isLoading: diffsLoading, fetchDiffs } = useDiffs(sessionId);
@@ -228,6 +231,20 @@ const homeName = computed(() => readCredentialsSync()?.homeMachineName ?? "your 
 const computerLink = computed(() => machineWebApp.value
   ? `${machine.connection?.baseUrl ?? window.location.origin}/sessions/${encodeURIComponent(sessionId.value)}`
   : null);
+
+// Panes mods opened here: the menu lists them, a pick opens its sheet. A pane is identified by its id in `modPanes`
+// (session, mod and pane), so two mods can use the same pane id.
+const openPaneId = shallowRef<string | null>(null);
+const sessionPanes = computed(() => modPanes.items.value
+  .filter((pane) => pane.sessionId === sessionId.value)
+  .map((pane) => ({ id: modPaneViewId(pane.sessionId, pane.mod, pane.paneId), title: pane.title, draft: isDraftView(pane) })));
+function openPane(id: string): void {
+  openPaneId.value = id;
+  sheet.value = "pane";
+}
+watch(sessionPanes, (panes) => {
+  if (sheet.value === "pane" && !panes.some((pane) => pane.id === openPaneId.value)) sheet.value = null;
+});
 
 async function onMenu(action: MenuAction): Promise<void> {
   switch (action) {
@@ -419,6 +436,7 @@ onUnmounted(() => {
               v-else-if="block.kind === 'tools'"
               :parts="block.parts"
               :waiting-calls="waitingCalls"
+              :session-id="sessionId"
               @open="(step, run) => (stepsOpen = { steps: run, focus: step })"
               @more="(rest) => (stepsOpen = { steps: rest, focus: null })"
               @child="openChild"
@@ -524,6 +542,10 @@ onUnmounted(() => {
             @later="putOff(dock.pending.requestId)"
           />
         </Transition>
+        <ModComposerBand
+          :session-id="sessionId"
+          surface="phone"
+        />
         <PhoneComposer
           :key="sessionId"
           :session-id="sessionId"
@@ -545,7 +567,9 @@ onUnmounted(() => {
       :supports-shell="caps.supportsShell"
       :can-fork="session?.capabilities?.canFork ?? true"
       :can-open-on-computer="computerLink !== null"
+      :panes="sessionPanes"
       @pick="onMenu"
+      @pane="openPane"
       @rename="onRename"
       @close="sheet = null"
     />
@@ -560,6 +584,12 @@ onUnmounted(() => {
     <FilesSheet
       :open="sheet === 'files'"
       :session-id="sessionId"
+      @close="sheet = null"
+    />
+    <ModPaneSheet
+      :open="sheet === 'pane'"
+      :session-id="sessionId"
+      :view-id="openPaneId"
       @close="sheet = null"
     />
     <SideConversationSheet
@@ -584,6 +614,7 @@ onUnmounted(() => {
       :open="stepsOpen !== null"
       :steps="stepsOpen?.steps ?? []"
       :focus="stepsOpen?.focus ?? null"
+      :session-id="sessionId"
       @close="stepsOpen = null"
     />
     <PlanSheet
