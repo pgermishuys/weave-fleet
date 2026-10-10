@@ -234,7 +234,8 @@ jobs:
 
   # ── Windows-only process tests ───────────────────────────────────────────
   # The other .NET tests run on Linux only. A process the agent leaves running must outlive an idle stop and end
-  # with the session's Job Object, which only Windows has.
+  # with the session's Job Object, which only Windows has. The mod runtime tests run here too: Fleet starts bun.exe
+  # with a cleared environment, which only a real Windows start can prove.
   windows-processes:
     name: Windows processes
     runs-on: windows-latest
@@ -249,13 +250,21 @@ jobs:
         with:
           dotnet-version: '10.0.x'
 
+      - name: Setup Bun
+        id: bun
+        uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: '1.4.2'
+
       # Also the mod store's file-safety tests, for SafeFile's Windows path (attributes, no FIFOs).
-      - name: Run the leftover-process test
+      - name: Run the leftover-process, file-safety and mod runtime tests
         shell: bash
+        env:
+          FLEET_TEST_REAL_BUN: ${{ steps.bun.outputs.bun-path }}
         run: >
           dotnet test tests/WeaveFleet.Infrastructure.Tests
           --configuration Release
-          --filter "FullyQualifiedName~ClaudeCodeProcessManagerTests.What_the_agent_left_running|Category=ModsFileSafety"
+          --filter "FullyQualifiedName~ClaudeCodeProcessManagerTests.What_the_agent_left_running|Category=ModsFileSafety|FullyQualifiedName~Runtimes"
           --logger "trx;LogFileName=windows-processes.trx"
           --results-directory test-results/
           -p:SkipFrontendBuild=true
@@ -267,7 +276,7 @@ jobs:
           total=$(grep -ho '<Counters total="[0-9]*"' test-results/windows-processes.trx | grep -o '[0-9]*' || echo 0)
           echo "Tests run: ${total}"
           if [ "${total:-0}" -eq 0 ]; then
-            echo "::error::The leftover-process test didn't run."
+            echo "::error::The leftover-process and mod runtime tests didn't run."
             exit 1
           fi
 
