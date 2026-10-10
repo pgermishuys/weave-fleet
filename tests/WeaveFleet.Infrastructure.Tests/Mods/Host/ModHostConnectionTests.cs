@@ -53,7 +53,21 @@ public sealed class ModHostConnectionTests : IDisposable
         var e = await Should.ThrowAsync<ModHostNotReadyException>(StartAsync($"echo $$ > '{pid}'\nread line\necho '{other}'\nread rest"));
 
         e.Message.ShouldContain("protocol 2");
-        Directory.Exists($"/proc/{File.ReadAllText(pid).Trim()}").ShouldBeFalse();
+        await GoneAsync(int.Parse(File.ReadAllText(pid).Trim(), System.Globalization.CultureInfo.InvariantCulture));
+    }
+
+    /// <summary>Waits for the process to exit (it may have already): on its exit, not on a clock.</summary>
+    private static async Task GoneAsync(int pid)
+    {
+        try
+        {
+            using var process = System.Diagnostics.Process.GetProcessById(pid);
+            await process.WaitForExitAsync().WaitAsync(TimeSpan.FromSeconds(30));
+        }
+        catch (ArgumentException)
+        {
+            // Already gone.
+        }
     }
 
     [Fact]
