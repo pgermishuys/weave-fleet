@@ -112,6 +112,14 @@ jobs:
         with:
           xcode-version: '16.2'
 
+      - name: Build mod host
+        shell: bash
+        working-directory: mods/host
+        run: |
+          bun install --frozen-lockfile
+          bun run build
+          test -s dist/host.js
+
       - name: Publish AOT server
         shell: bash
         run: |
@@ -119,6 +127,10 @@ jobs:
             --configuration Release \
             --runtime "${{ matrix.rid }}" \
             --output "${{ github.workspace }}/artifacts/publish/${{ matrix.rid }}"
+
+      - name: Check the server has the mod host
+        shell: bash
+        run: test -s "${{ github.workspace }}/artifacts/publish/${{ matrix.rid }}/mods-host/host.js"
 
       - name: Install desktop dependencies
         run: bun install --frozen-lockfile

@@ -55,4 +55,34 @@
     <Copy SourceFiles="@(FrontendFiles)" DestinationFolder="$(MSBuildThisFileDirectory)wwwroot\%(RecursiveDir)" SkipUnchangedFiles="true" />
   </Target>
 
+  <!-- Build the mod host (mods/host, Bun + TypeScript) into mods/host/dist/host.js, and ship it as mods-host/host.js in the
+       build and publish output. Skipped when the file is already newer than its sources. Debug builds and test runs don't
+       need Bun: with no bun on PATH (or at $(BunPath)) nothing is built, and the host is only shipped if it already exists.
+       Pass -p:SkipModsHost=true to leave the host alone altogether. -->
+  <PropertyGroup>
+    <ModsHostDir>$(MSBuildThisFileDirectory)..\..\mods\host\</ModsHostDir>
+    <BunExe Condition="'$(BunPath)' != ''">$(BunPath)</BunExe>
+    <BunExe Condition="'$(BunExe)' == ''">bun</BunExe>
+  </PropertyGroup>
+
+  <Target Name="BuildModsHost" BeforeTargets="AssignTargetPaths" Condition="'$(SkipModsHost)' != 'true' And '$(DesignTimeBuild)' != 'true'"
+          Inputs="$(ModsHostDir)package.json;$(ModsHostDir)bun.lock;@(ModsHostSource)" Outputs="$(ModsHostDir)dist\host.js">
+    <Exec Command="&quot;$(BunExe)&quot; --version" IgnoreExitCode="true" IgnoreStandardErrorWarningFormat="true" StandardOutputImportance="low" StandardErrorImportance="low" ContinueOnError="true">
+      <Output TaskParameter="ExitCode" PropertyName="BunProbeExitCode" />
+    </Exec>
+    <Exec Condition="'$(BunProbeExitCode)' == '0'" Command="&quot;$(BunExe)&quot; install --frozen-lockfile" WorkingDirectory="$(ModsHostDir)" StandardOutputImportance="low" />
+    <Exec Condition="'$(BunProbeExitCode)' == '0'" Command="&quot;$(BunExe)&quot; run build" WorkingDirectory="$(ModsHostDir)" StandardOutputImportance="low" />
+  </Target>
+
+  <Target Name="IncludeModsHost" AfterTargets="BuildModsHost" BeforeTargets="AssignTargetPaths" Condition="'$(DesignTimeBuild)' != 'true'">
+    <ItemGroup Condition="Exists('$(ModsHostDir)dist\host.js')">
+      <None Include="$(ModsHostDir)dist\host.js" Link="mods-host\host.js" CopyToOutputDirectory="PreserveNewest" CopyToPublishDirectory="PreserveNewest" />
+    </ItemGroup>
+  </Target>
+
+  <Target Name="RequireModsHostForPublish" BeforeTargets="PrepareForPublish" Condition="'$(Configuration)' == 'Release' And '$(SkipModsHost)' != 'true'">
+    <Error Condition="!Exists('$(ModsHostDir)dist\host.js')"
+           Text="mods/host/dist/host.js is missing: run `bun install --frozen-lockfile &amp;&amp; bun run build` in mods/host, or pass -p:SkipModsHost=true." />
+  </Target>
+
 </Project>

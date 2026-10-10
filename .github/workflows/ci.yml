@@ -500,6 +500,19 @@ jobs:
           key: nuget-aot-${{ runner.os }}-${{ hashFiles('**/*.csproj', 'Directory.Packages.props') }}
           restore-keys: nuget-aot-${{ runner.os }}-
 
+      # Pinned to the Bun Fleet downloads for mods (BunRuntimeInstaller), same as the mod host job.
+      - name: Setup Bun
+        uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: '1.4.2'
+
+      - name: Build mod host
+        run: |
+          bun install --frozen-lockfile
+          bun run build
+          test -s dist/host.js
+        working-directory: mods/host
+
       - name: AOT publish (linux-x64)
         run: |
           dotnet publish src/WeaveFleet.Api/WeaveFleet.Api.csproj \
@@ -507,6 +520,18 @@ jobs:
             --runtime linux-x64 \
             --output artifacts/publish/linux-x64 \
             -p:SkipFrontendBuild=true
+
+      - name: Check the publish output and package have the mod host
+        shell: bash
+        run: |
+          test -s artifacts/publish/linux-x64/mods-host/host.js
+          package_dir="$(mktemp -d)"
+          bash ./scripts/package.sh \
+            --publish-dir artifacts/publish/linux-x64 \
+            --rid linux-x64 \
+            --output-dir "$package_dir" \
+            --version 0.0.0-ci
+          tar -tzf "$package_dir/fleet-v0.0.0-ci-linux-x64.tar.gz" | grep -qx "fleet-v0.0.0-ci-linux-x64/app/mods-host/host.js"
 
       - name: Smoke test AOT binary
         shell: bash
