@@ -213,6 +213,8 @@ public static class DependencyInjection
         services.AddSingleton<IBuiltInSkillCatalog, WeaveFleet.Infrastructure.Harnesses.OpenCode.OpenCodeBuiltInSkillCatalog>();
         services.AddScoped<BuiltInSkillService>();
         services.AddSingleton<ISkillVersionStore>(sp => new WeaveFleet.Infrastructure.Skills.FileSkillVersionStore(sp.GetRequiredService<FleetOptions>()));
+        services.AddSingleton<WeaveFleet.Application.Mods.IModVersionStore>(sp => new WeaveFleet.Infrastructure.Mods.FileModVersionStore(sp.GetRequiredService<FleetOptions>()));
+        services.AddSingleton<WeaveFleet.Application.Mods.IModChecker, WeaveFleet.Application.Mods.NoModChecker>();
         services.AddScoped<SkillImprover>();
         services.AddScoped<ISessionActivator>(sp => sp.GetRequiredService<WeaveFleet.Application.Sessions.Activation.SessionActivation>());
         services.AddScoped<SessionCallbackService>();

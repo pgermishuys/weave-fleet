@@ -372,7 +372,7 @@ public sealed class FileModVersionStoreTests : IDisposable
         var draftFiles = await _store.ReadDraftFilesAsync(User, Session, Name);
 
         draftFiles!.Select(f => f.Path).ShouldBe(["mod.json", "mod.ts", "pages/deep/a.html"]);
-        draftFiles[2].Content.ShouldBe("<p>hi</p>");
+        draftFiles![2].Content.ShouldBe("<p>hi</p>");
 
         File.Delete(Path.Combine(folder, "link.txt"));
         await _store.KeepAsync(User, Session, Name, NoSource);
