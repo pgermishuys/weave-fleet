@@ -10,7 +10,22 @@ public sealed class ClaudeCodeProcessManagerTests : IDisposable
 {
     private readonly string _folder = Directory.CreateTempSubdirectory("fleet-claude-args-").FullName;
 
-    public void Dispose() => Directory.Delete(_folder, recursive: true);
+    public void Dispose()
+    {
+        // On Windows a process that is still ending holds its working directory; give it a moment.
+        for (var attempt = 0; ; attempt++)
+        {
+            try
+            {
+                Directory.Delete(_folder, recursive: true);
+                return;
+            }
+            catch (IOException) when (attempt < 50)
+            {
+                Thread.Sleep(200);
+            }
+        }
+    }
 
     [Fact]
     public async Task Memory_notes_go_to_claude_as_an_appended_system_prompt()
@@ -76,9 +91,10 @@ public sealed class ClaudeCodeProcessManagerTests : IDisposable
 
         var group = ProcessGroupHelper.CreateProcessGroup();
         Process? server = null;
+        ClaudeCodeProcessManager? manager = null;
         try
         {
-            var manager = new ClaudeCodeProcessManager(NullLogger<ClaudeCodeProcessManager>.Instance);
+            manager = new ClaudeCodeProcessManager(NullLogger<ClaudeCodeProcessManager>.Instance);
             await manager.StartAsync(new ClaudeCodeProcessOptions
             {
                 BinaryPath = claude,
@@ -86,8 +102,10 @@ public sealed class ClaudeCodeProcessManagerTests : IDisposable
                 PermissionMode = "bypassPermissions",
                 ProcessGroup = group,
             }, CancellationToken.None);
-            for (var i = 0; i < 100 && !File.Exists(pidFile); i++)
+            // PowerShell can take well over 10 s to start on a busy runner.
+            for (var i = 0; i < 600 && !File.Exists(pidFile); i++)
                 await Task.Delay(100);
+            File.Exists(pidFile).ShouldBeTrue("the stand-in claude never wrote the pid file");
             server = Process.GetProcessById(int.Parse((await File.ReadAllTextAsync(pidFile)).Trim(), System.Globalization.CultureInfo.InvariantCulture));
 
             // An idle stop: claude and what still runs under it end; the server doesn't.
@@ -103,6 +121,9 @@ public sealed class ClaudeCodeProcessManagerTests : IDisposable
         finally
         {
             group?.Dispose();
+            // Also when the test failed early: claude must not outlive the test holding its folder.
+            if (manager is not null)
+                await manager.DisposeAsync();
             if (server is { HasExited: false })
                 server.Kill();
             server?.Dispose();
