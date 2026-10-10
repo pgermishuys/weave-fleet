@@ -323,8 +323,9 @@ temporary file, then move it), as in `FileSkillVersionStore`.
 ## The protocol
 
 Fleet starts one host process when the Mods switch is on, Start without mods isn't set, and at least one mod is kept
-and on or drafted. It runs `{bun} {fleet}/mods-host/host.js --stdio` with the Bun Fleet installed (see M4), restarts it
-with backoff when it dies, and stops it on shutdown.
+and on or drafted. It runs `{bun} {fleet}/mods-host/host.js --stdio`, where `{bun}` is the user's own Bun when they chose one
+(`Fleet:Harness:BunPath`) and otherwise the Bun Fleet installed under `~/.weave/runtimes/bun/{version}/`. It restarts
+the host with backoff when it dies, and stops it on shutdown.
 
 JSON-RPC 2.0 over stdin/stdout, one JSON object per line, UTF-8, 8 MiB per line at most. Both sides send requests,
 responses and notifications. The host's stderr goes to Fleet's log. The types are the `fleet-mods/protocol` module.
