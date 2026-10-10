@@ -383,6 +383,26 @@ public sealed class ModHostSupervisorDispatchTests : ModHostSupervisorTestBase
     }
 
     [Fact]
+    public async Task A_hang_in_the_session_start_the_host_runs_first_strikes_that_mod()
+    {
+        Rig.Keep(Chips);
+        Rig.Keep(Demo);
+        await StartedAsync();
+        // The host starts each mod in the session before the event, announcing those hooks as session.start.
+        Factory.OnDispatch = (connection, _, _) =>
+        {
+            connection.Calls.HandleNotification("running", ModHostTests.Json($$"""{ "mod": "{{Kept(Demo, 1)}}", "event": "session.start", "sessionId": "ses_test1" }"""));
+            connection.Calls.HandleNotification("running", ModHostTests.Json($$"""{ "mod": "{{Kept(Chips, 1)}}", "event": "session.start", "sessionId": "ses_test1" }"""));
+            throw new TimeoutException();
+        };
+
+        await Dispatch("turn.complete", S1).Within();
+
+        Supervisor.StrikesOf(Kept(Chips, 1)).ShouldBe(1);
+        Supervisor.StrikesOf(Kept(Demo, 1)).ShouldBe(0);
+    }
+
+    [Fact]
     public async Task A_hang_in_a_control_callback_strikes_the_callbacks_owner()
     {
         Factory.Hooks[Chips] = [new("ui.render", null)];
