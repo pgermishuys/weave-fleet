@@ -1,3 +1,4 @@
+using System.Collections.Concurrent;
 using System.Text.Json;
 using WeaveFleet.Application.Mods;
 
@@ -10,6 +11,8 @@ internal sealed class InMemoryModVersionStore : IModVersionStore
     private readonly Dictionary<(string User, string Session, string Name), ModDraft> _drafts = [];
     private readonly Dictionary<string, ModManifest> _manifests = [];
     private readonly Dictionary<string, List<ModFile>> _files = [];
+    private readonly ConcurrentDictionary<(string User, string Name, string Key), JsonElement> _values = new();
+    private readonly string _root = Path.Combine(Path.GetTempPath(), "fleet-mods-tests", Guid.NewGuid().ToString("n"));
 
     /// <summary>Calls that changed something, in order, so a test can see that a refused operation wrote nothing.</summary>
     public List<string> Writes { get; } = [];
@@ -38,7 +41,31 @@ internal sealed class InMemoryModVersionStore : IModVersionStore
     public Task<IReadOnlyList<string>> ListDraftSessionsAsync(string userId, CancellationToken ct = default)
         => Task.FromResult<IReadOnlyList<string>>(_drafts.Keys.Where(k => k.User == userId).Select(k => k.Session).Distinct().Order(StringComparer.Ordinal).ToList());
 
-    public string HostFolder(string userId) => Path.Combine(Path.GetTempPath(), "fleet-mods-tests", userId, ".host");
+    public string HostFolder(string userId) => Path.Combine(_root, userId, ".host");
+
+    /// <summary>Removes every folder this store made (the staged drafts).</summary>
+    public void DeleteFolders()
+    {
+        if (Directory.Exists(_root))
+            Directory.Delete(_root, recursive: true);
+    }
+
+    /// <summary>When set, <see cref="StageDraftAsync"/> refuses with it.</summary>
+    public string? StageRefusal { get; set; }
+
+    /// <summary>The drafts <see cref="StageDraftAsync"/> copied, as (session, name, destination), in order.</summary>
+    public List<(string Session, string Name, string Destination)> StagedDrafts { get; } = [];
+
+    public Task StageDraftAsync(string userId, string sessionId, string name, string destination, CancellationToken ct = default)
+    {
+        if (!_drafts.ContainsKey((userId, sessionId, name)))
+            throw new ModStoreException($"There is no draft of {name}.");
+        if (StageRefusal is { } refusal)
+            throw new ModStoreException(refusal);
+        Directory.CreateDirectory(destination);
+        StagedDrafts.Add((sessionId, name, destination));
+        return Task.CompletedTask;
+    }
 
     public Task<IReadOnlyList<ModHistory>> ListAsync(string userId, CancellationToken ct = default)
         => Task.FromResult<IReadOnlyList<ModHistory>>(_histories.Where(h => h.Key.User == userId).Select(h => h.Value).OrderBy(h => h.Name, StringComparer.Ordinal).ToList());
@@ -47,7 +74,7 @@ internal sealed class InMemoryModVersionStore : IModVersionStore
         => Task.FromResult(_histories.GetValueOrDefault((userId, name)) ?? ModHistory.Empty(name));
 
     /// <summary>Where Keep stages the copy it checks: never the draft's own folder.</summary>
-    public static string StagedFolder(string userId, string sessionId, string name) => $"/mods/{userId}/{name}/v.staging-{sessionId}.tmp";
+    public static string StagedFolder(string userId, string sessionId, string name) => $"/mods/{userId}/{name}/keep.staging-{sessionId}.tmp/{name}";
 
     public async Task<ModVersion> KeepAsync(string userId, string sessionId, string name, ModKeepSource source, ModKeepCheck check, CancellationToken ct = default)
     {
@@ -152,10 +179,25 @@ internal sealed class InMemoryModVersionStore : IModVersionStore
         return await check(staged, ct);
     }
 
-    public Task<JsonElement?> GetValueAsync(string userId, string name, string key, CancellationToken ct = default) => Task.FromResult<JsonElement?>(null);
-    public Task SetValueAsync(string userId, string name, string key, JsonElement value, CancellationToken ct = default) => Task.CompletedTask;
-    public Task DeleteValueAsync(string userId, string name, string key, CancellationToken ct = default) => Task.CompletedTask;
-    public Task<IReadOnlyList<string>> KeysAsync(string userId, string name, CancellationToken ct = default) => Task.FromResult<IReadOnlyList<string>>([]);
+    public Task<JsonElement?> GetValueAsync(string userId, string name, string key, CancellationToken ct = default)
+        => Task.FromResult<JsonElement?>(_values.TryGetValue((userId, name, key), out var value) ? value : null);
+
+    public Task SetValueAsync(string userId, string name, string key, JsonElement value, CancellationToken ct = default)
+    {
+        if (!ModNames.IsValidStoreKey(key))
+            throw new ArgumentException($"{key} isn't a store key.", nameof(key));
+        _values[(userId, name, key)] = value.Clone();
+        return Task.CompletedTask;
+    }
+
+    public Task DeleteValueAsync(string userId, string name, string key, CancellationToken ct = default)
+    {
+        _values.TryRemove((userId, name, key), out _);
+        return Task.CompletedTask;
+    }
+
+    public Task<IReadOnlyList<string>> KeysAsync(string userId, string name, CancellationToken ct = default)
+        => Task.FromResult<IReadOnlyList<string>>(_values.Keys.Where(k => k.User == userId && k.Name == name).Select(k => k.Key).Order(StringComparer.Ordinal).ToList());
 }
 
 /// <summary>Answers with a fixed report and remembers which folders it was asked about.</summary>
