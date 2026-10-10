@@ -77,6 +77,33 @@ describe("FeaturesSection", () => {
       expect(toggle.attributes("aria-checked")).toBe("false");
     });
 
+    it("shows the server's value when the preference isn't set", async () => {
+      vi.stubGlobal("fetch", vi.fn(async () => new Response(JSON.stringify({ on: true, safeMode: false }), { status: 200 })));
+      const wrapper = await mountSection();
+
+      expect(wrapper.get("[data-testid='mods-switch']").attributes("aria-checked")).toBe("true");
+    });
+
+    it("shows the preference when it is set, whatever the server says", async () => {
+      vi.stubGlobal("fetch", vi.fn(async () => new Response(JSON.stringify({ on: true, safeMode: false }), { status: 200 })));
+      getMock.mockResolvedValue({ data: { Mods: "false" } });
+      putMock.mockResolvedValue({});
+      const wrapper = mount(FeaturesSection);
+      await flushPromises();
+
+      expect(wrapper.get("[data-testid='mods-switch']").attributes("aria-checked")).toBe("false");
+    });
+
+    it("saves the opposite of the server's value when toggled without a preference", async () => {
+      vi.stubGlobal("fetch", vi.fn(async () => new Response(JSON.stringify({ on: true, safeMode: false }), { status: 200 })));
+      const wrapper = await mountSection();
+
+      await wrapper.get("[data-testid='mods-switch']").trigger("click");
+      await flushPromises();
+
+      expect(putMock).toHaveBeenLastCalledWith("/api/preferences/{key}", { params: { path: { key: "Mods" } }, body: { value: "false" } });
+    });
+
     it("is disabled while preferences load", async () => {
       getMock.mockReturnValue(new Promise(() => {}));
       const wrapper = mount(FeaturesSection);

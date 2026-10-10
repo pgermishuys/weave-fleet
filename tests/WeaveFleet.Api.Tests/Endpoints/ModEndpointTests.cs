@@ -219,6 +219,66 @@ public sealed class ModEndpointTests : IAsyncDisposable
     }
 
     [Fact]
+    public async Task Keep_takes_a_note_in_a_json_body()
+    {
+        await TurnOnAsync();
+        WriteDraft();
+        using var body = new StringContent("""{"note":"x"}""", Encoding.UTF8, "application/json");
+
+        var response = await _client.PostAsync(Draft("/keep"), body);
+
+        response.StatusCode.ShouldBe(HttpStatusCode.OK);
+        (await response.Content.ReadFromJsonAsync<JsonElement>()).GetProperty("versions")[0].GetProperty("note").GetString().ShouldBe("x");
+    }
+
+    [Fact]
+    public async Task Keep_takes_an_empty_json_body()
+    {
+        await TurnOnAsync();
+        WriteDraft();
+        using var body = new StringContent("", Encoding.UTF8, "application/json");
+
+        (await _client.PostAsync(Draft("/keep"), body)).StatusCode.ShouldBe(HttpStatusCode.OK);
+    }
+
+    [Fact]
+    public async Task Keep_answers_415_to_a_body_that_isnt_json()
+    {
+        await TurnOnAsync();
+        WriteDraft();
+        using var body = new StringContent("""{"note":"x"}""", Encoding.UTF8, "text/plain");
+
+        (await _client.PostAsync(Draft("/keep"), body)).StatusCode.ShouldBe(HttpStatusCode.UnsupportedMediaType);
+    }
+
+    [Theory]
+    [InlineData("""{"note":"x","extra":1}""")]
+    [InlineData("{ not json")]
+    public async Task Keep_answers_400_to_an_unknown_member_or_bad_json(string json)
+    {
+        await TurnOnAsync();
+        WriteDraft();
+        using var body = new StringContent(json, Encoding.UTF8, "application/json");
+
+        (await _client.PostAsync(Draft("/keep"), body)).StatusCode.ShouldBe(HttpStatusCode.BadRequest);
+    }
+
+    [Fact]
+    public async Task Keep_reads_a_chunked_body()
+    {
+        await TurnOnAsync();
+        WriteDraft();
+        using var stream = new MemoryStream(Encoding.UTF8.GetBytes("""{"note":"chunked"}"""));
+        using var body = new StreamContent(stream);
+        body.Headers.ContentType = new("application/json");
+
+        var response = await _client.PostAsync(Draft("/keep"), body);
+
+        response.StatusCode.ShouldBe(HttpStatusCode.OK);
+        (await response.Content.ReadFromJsonAsync<JsonElement>()).GetProperty("versions")[0].GetProperty("note").GetString().ShouldBe("chunked");
+    }
+
+    [Fact]
     public async Task Keep_refuses_a_note_over_2000_characters_with_400()
     {
         await TurnOnAsync();
@@ -310,6 +370,47 @@ public sealed class ModEndpointTests : IAsyncDisposable
     }
 
     [Fact]
+    public async Task Undo_on_a_later_version_goes_back_one_and_turns_the_mod_on()
+    {
+        await TurnOnAsync();
+        await KeepAsync();
+        WriteDraft(version: "0.2.0");
+        (await _client.PostAsync(Draft("/keep"), null)).EnsureSuccessStatusCode();
+        (await _client.PostAsync($"/api/mods/{_name}/off", null)).EnsureSuccessStatusCode();
+
+        var undone = await _client.PostAsync($"/api/mods/{_name}/undo", null);
+
+        undone.StatusCode.ShouldBe(HttpStatusCode.OK);
+        var mod = await undone.Content.ReadFromJsonAsync<JsonElement>();
+        mod.GetProperty("active").GetInt32().ShouldBe(1);
+        mod.GetProperty("off").ValueKind.ShouldBe(JsonValueKind.Null);
+    }
+
+    [Fact]
+    public async Task Undo_on_v1_turns_it_off_and_keeps_v1_active()
+    {
+        await TurnOnAsync();
+        await KeepAsync();
+
+        var off = await (await _client.PostAsync($"/api/mods/{_name}/undo", null)).Content.ReadFromJsonAsync<JsonElement>();
+
+        off.GetProperty("active").GetInt32().ShouldBe(1);
+        off.GetProperty("off").GetProperty("by").GetString().ShouldBe("user");
+    }
+
+    [Fact]
+    public async Task Using_a_version_turns_a_mod_the_user_turned_off_back_on()
+    {
+        await TurnOnAsync();
+        await KeepAsync();
+        (await _client.PostAsync($"/api/mods/{_name}/off", null)).EnsureSuccessStatusCode();
+
+        var used = await (await _client.PutAsJsonAsync($"/api/mods/{_name}/active", new { version = 1 })).Content.ReadFromJsonAsync<JsonElement>();
+
+        used.GetProperty("off").ValueKind.ShouldBe(JsonValueKind.Null);
+    }
+
+    [Fact]
     public async Task The_active_body_rejects_unknown_members()
     {
         await TurnOnAsync();
@@ -337,6 +438,40 @@ public sealed class ModEndpointTests : IAsyncDisposable
 
         var cleared = await _client.PutAsJsonAsync("/api/mods/safe-mode", new { on = false });
         (await cleared.Content.ReadFromJsonAsync<JsonElement>()).GetProperty("safeMode").GetBoolean().ShouldBeFalse();
+    }
+
+    [Theory]
+    [InlineData("{}")]
+    [InlineData("""{"on":null}""")]
+    public async Task Safe_mode_needs_on_and_names_it(string json)
+    {
+        await TurnOnAsync();
+        using var body = new StringContent(json, Encoding.UTF8, "application/json");
+
+        var response = await _client.PutAsync("/api/mods/safe-mode", body);
+
+        response.StatusCode.ShouldBe(HttpStatusCode.BadRequest);
+        (await response.Content.ReadFromJsonAsync<JsonElement>()).GetProperty("error").GetString().ShouldContain("on");
+        (await ListAsync()).GetProperty("safeMode").GetBoolean().ShouldBeFalse();
+    }
+
+    // ── The switch as the server sees it ────────────────────────────────
+
+    [Fact]
+    public async Task The_effective_switch_follows_the_preference_and_is_not_gated()
+    {
+        var before = await _client.GetAsync("/api/features/mods");
+        before.StatusCode.ShouldBe(HttpStatusCode.OK);
+        (await before.Content.ReadFromJsonAsync<JsonElement>()).GetProperty("on").GetBoolean().ShouldBeFalse();
+
+        await TurnOnAsync();
+        (await _client.PutAsJsonAsync("/api/mods/safe-mode", new { on = true })).EnsureSuccessStatusCode();
+
+        var after = await _client.GetFromJsonAsync<JsonElement>("/api/features/mods");
+        after.GetProperty("on").GetBoolean().ShouldBeTrue();
+        after.GetProperty("safeMode").GetBoolean().ShouldBeTrue();
+
+        (await _client.PutAsJsonAsync("/api/mods/safe-mode", new { on = false })).EnsureSuccessStatusCode();
     }
 
     // ── Names ───────────────────────────────────────────────────────────

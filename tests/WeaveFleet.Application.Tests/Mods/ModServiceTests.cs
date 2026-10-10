@@ -2,6 +2,7 @@ using System.Text.Json;
 using WeaveFleet.Application.Mods;
 using WeaveFleet.Domain.Entities;
 using WeaveFleet.Domain.Events;
+using WeaveFleet.Testing.Fakes;
 using WeaveFleet.Testing.Fakes.Repositories;
 
 namespace WeaveFleet.Application.Tests.Mods;
@@ -66,7 +67,7 @@ public sealed class ModServiceTests
     [Fact]
     public async Task List_reports_safe_mode()
     {
-        _safeMode.Set(true);
+        _safeMode.Set(User, true);
 
         (await _service.ListAsync()).SafeMode.ShouldBeTrue();
     }
@@ -196,6 +197,62 @@ public sealed class ModServiceTests
 
         _events.Broadcasts.Select(b => ((ModsChanged)b.DomainEvent!).Payload.Reason).ShouldBe(["undone", "undone", "undone"]);
         (await _store.GetAsync(User, Chips)).Versions.Count.ShouldBe(3);
+    }
+
+    [Fact]
+    public async Task Undo_on_a_later_version_makes_the_previous_one_active_and_turns_the_mod_on()
+    {
+        SeedChips(count: 3, active: 3, off: new ModOff(ModOffBy.Strikes, DateTimeOffset.UnixEpoch, "boom"));
+
+        var mod = (await _service.UndoAsync(Chips)).Value;
+
+        (mod.Active, mod.Off).ShouldBe((2, null));
+    }
+
+    [Fact]
+    public async Task Undo_on_an_off_mod_at_v3_goes_to_v2_and_turns_it_on()
+    {
+        SeedChips(count: 3, off: new ModOff(ModOffBy.User, DateTimeOffset.UnixEpoch));
+
+        var mod = (await _service.UndoAsync(Chips)).Value;
+
+        (mod.Active, mod.Off).ShouldBe((2, null));
+    }
+
+    [Fact]
+    public async Task Undo_on_v1_turns_the_mod_off_by_the_user_and_keeps_v1_active()
+    {
+        SeedChips(count: 1);
+
+        var mod = (await _service.UndoAsync(Chips)).Value;
+
+        mod.Active.ShouldBe(1);
+        mod.Off.ShouldNotBeNull().By.ShouldBe(ModOffBy.User);
+        ChangedOnce().ShouldBe(("undone", Chips, null));
+    }
+
+    [Fact]
+    public async Task Undo_on_an_off_mod_at_v1_is_refused_and_raises_nothing()
+    {
+        SeedChips(count: 1, off: new ModOff(ModOffBy.User, DateTimeOffset.UnixEpoch));
+
+        var result = await _service.UndoAsync(Chips);
+
+        result.IsFailure.ShouldBeTrue();
+        result.Error.Code.ShouldStartWith("Validation.");
+        result.Error.Description.ShouldBe("Nothing to undo");
+        _store.Writes.ShouldBeEmpty();
+        _events.Broadcasts.ShouldBeEmpty();
+    }
+
+    [Fact]
+    public async Task Using_a_version_clears_a_strikes_off()
+    {
+        SeedChips(count: 2, off: new ModOff(ModOffBy.Strikes, DateTimeOffset.UnixEpoch, "boom"));
+
+        var mod = (await _service.UseVersionAsync(Chips, 1)).Value;
+
+        (mod.Active, mod.Off).ShouldBe((1, null));
     }
 
     [Fact]
@@ -332,6 +389,20 @@ public sealed class ModServiceTests
 
         mod.Versions.Single().Check!.Value.GetProperty("from").GetString().ShouldBe("caller");
         _checker.Checked.ShouldBeEmpty();
+        _store.Staged.ShouldHaveSingleItem();
+    }
+
+    [Fact]
+    public async Task Keep_checks_the_stores_staged_copy_not_the_live_draft()
+    {
+        _store.SeedDraft(User, SessionId, Chips);
+        _checker.Report = Json("""{"ok":true}""");
+
+        await _service.KeepAsync(SessionId, Chips, null);
+
+        var staged = _store.Staged.ShouldHaveSingleItem();
+        staged.ShouldNotBe(_store.DraftFolder(User, SessionId, Chips));
+        _checker.Checked.ShouldBe([staged]);
     }
 
     [Fact]
@@ -470,12 +541,25 @@ public sealed class ModServiceTests
     {
         var on = await _service.SetSafeModeAsync(true);
         on.SafeMode.ShouldBeTrue();
-        _safeMode.IsOn.ShouldBeTrue();
+        _safeMode.IsOn(User).ShouldBeTrue();
         ChangedOnce().Reason.ShouldBe("safe-mode");
 
         var off = await _service.SetSafeModeAsync(false);
         off.SafeMode.ShouldBeFalse();
-        _safeMode.IsOn.ShouldBeFalse();
+        _safeMode.IsOn(User).ShouldBeFalse();
         _events.Broadcasts.Count.ShouldBe(2);
+    }
+
+    [Fact]
+    public async Task Safe_mode_is_the_current_users_only()
+    {
+        var other = new ModService(_store, _checker, _events, new TestUserContext("other-user"), _safeMode, _sessions, TimeProvider.System);
+
+        await _service.SetSafeModeAsync(true);
+
+        (await _service.ListAsync()).SafeMode.ShouldBeTrue();
+        (await other.ListAsync()).SafeMode.ShouldBeFalse();
+        _safeMode.IsOn("other-user").ShouldBeFalse();
+        _events.Broadcasts.ShouldHaveSingleItem().UserId.ShouldBe(User);
     }
 }

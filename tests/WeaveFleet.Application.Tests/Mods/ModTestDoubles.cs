@@ -14,6 +14,9 @@ internal sealed class InMemoryModVersionStore : IModVersionStore
     /// <summary>Calls that changed something, in order, so a test can see that a refused operation wrote nothing.</summary>
     public List<string> Writes { get; } = [];
 
+    /// <summary>The staged copies <see cref="KeepAsync"/> handed to the check callback, in order.</summary>
+    public List<string> Staged { get; } = [];
+
     /// <summary>The manifest and files <see cref="VersionFolder"/> shows for a kept version.</summary>
     public void SeedVersion(string user, string name, int number, string version = "0.1.0", string description = "Shows chips")
     {
@@ -26,10 +29,9 @@ internal sealed class InMemoryModVersionStore : IModVersionStore
 
     public void SeedDraft(string user, string session, string name, ModOff? off = null, bool withManifest = true)
     {
-        var draft = new ModDraft(session, name, DraftFolder(user, session, name), off);
+        var manifest = withManifest ? new ModManifest(name, "0.1.0", "Shows chips", "mod.ts") : null;
+        var draft = new ModDraft(session, name, DraftFolder(user, session, name), off, manifest);
         _drafts[(user, session, name)] = draft;
-        if (withManifest)
-            _manifests[draft.Folder] = new ModManifest(name, "0.1.0", "Shows chips", "mod.ts");
         _files[draft.Folder] = [new ModFile("mod.json", "{}"), new ModFile("mod.ts", "// draft")];
     }
 
@@ -39,43 +41,80 @@ internal sealed class InMemoryModVersionStore : IModVersionStore
     public Task<ModHistory> GetAsync(string userId, string name, CancellationToken ct = default)
         => Task.FromResult(_histories.GetValueOrDefault((userId, name)) ?? ModHistory.Empty(name));
 
-    public Task<ModVersion> KeepAsync(string userId, string sessionId, string name, ModKeepSource source, CancellationToken ct = default)
+    /// <summary>Where Keep stages the copy it checks: never the draft's own folder.</summary>
+    public static string StagedFolder(string userId, string sessionId, string name) => $"/mods/{userId}/{name}/v.staging-{sessionId}.tmp";
+
+    public async Task<ModVersion> KeepAsync(string userId, string sessionId, string name, ModKeepSource source, ModKeepCheck check, CancellationToken ct = default)
     {
-        if (!_drafts.TryGetValue((userId, sessionId, name), out var draft) || !_manifests.TryGetValue(draft.Folder, out var manifest))
+        if (!_drafts.TryGetValue((userId, sessionId, name), out var draft) || draft.Manifest is not { } manifest)
             throw new ModStoreException($"There is no draft of {name} to keep.");
+
+        var staged = StagedFolder(userId, sessionId, name);
+        Staged.Add(staged);
+        var report = await check(staged, ct);
+        if (ModChecks.Refusal(report) is { } refusal)
+            throw new ModStoreException(refusal);
 
         var history = _histories.GetValueOrDefault((userId, name)) ?? ModHistory.Empty(name);
         var number = history.Versions.Count == 0 ? 1 : history.Versions.Max(v => v.Number) + 1;
-        var version = new ModVersion(number, new DateTimeOffset(2026, 10, 10, 9, 0, 0, TimeSpan.Zero), manifest.Version, "sha", sessionId, source.SessionTitle, source.Note, source.Check);
+        var version = new ModVersion(number, new DateTimeOffset(2026, 10, 10, 9, 0, 0, TimeSpan.Zero), manifest.Version, "sha", sessionId, source.SessionTitle, source.Note, report);
         SeedVersion(userId, name, number, manifest.Version, manifest.Description);
         _histories[(userId, name)] = history with { Active = number, Off = null, Versions = [.. history.Versions, version] };
         _drafts.Remove((userId, sessionId, name));
         Writes.Add($"keep {name} v{number}");
-        return Task.FromResult(version);
+        return version;
     }
 
-    public Task SetActiveAsync(string userId, string name, int number, CancellationToken ct = default)
+    public Task<ModHistory> UseVersionAsync(string userId, string name, int number, CancellationToken ct = default)
     {
-        var history = _histories.GetValueOrDefault((userId, name)) ?? ModHistory.Empty(name);
+        var history = Existing(userId, name);
         if (history.Versions.All(v => v.Number != number))
             throw new ModStoreException($"{name} has no version {number}.");
-        _histories[(userId, name)] = history with { Active = number };
-        Writes.Add($"active {name} {number}");
-        return Task.CompletedTask;
+
+        var next = history with { Active = number, Off = null };
+        _histories[(userId, name)] = next;
+        Writes.Add($"use {name} {number}");
+        return Task.FromResult(next);
     }
 
-    public Task SetOffAsync(string userId, string name, ModOff? off, CancellationToken ct = default)
+    public Task<ModHistory> UndoAsync(string userId, string name, DateTimeOffset at, CancellationToken ct = default)
     {
-        var history = _histories.GetValueOrDefault((userId, name)) ?? ModHistory.Empty(name);
-        _histories[(userId, name)] = history with { Off = off };
-        Writes.Add($"off {name} {off?.By ?? "on"}");
-        return Task.CompletedTask;
+        var history = Existing(userId, name);
+        var active = history.Active ?? throw new ModStoreException($"There is no mod called {name}.");
+        var previous = history.Versions.Where(v => v.Number < active).OrderByDescending(v => v.Number).FirstOrDefault();
+
+        ModHistory next;
+        if (previous is not null)
+            next = history with { Active = previous.Number, Off = null };
+        else if (history.Off is not null)
+            throw new ModStoreException("Nothing to undo");
+        else
+            next = history with { Off = new ModOff(ModOffBy.User, at) };
+
+        _histories[(userId, name)] = next;
+        Writes.Add($"undo {name}");
+        return Task.FromResult(next);
     }
+
+    public Task<ModHistory> SetOffAsync(string userId, string name, ModOff? off, CancellationToken ct = default)
+    {
+        var next = (_histories.GetValueOrDefault((userId, name)) ?? ModHistory.Empty(name)) with { Off = off };
+        _histories[(userId, name)] = next;
+        Writes.Add($"off {name} {off?.By ?? "on"}");
+        return Task.FromResult(next);
+    }
+
+    private ModHistory Existing(string userId, string name)
+        => _histories.GetValueOrDefault((userId, name)) is { Versions.Count: > 0 } history
+            ? history
+            : throw new ModStoreException($"There is no mod called {name}.");
 
     public string VersionFolder(string userId, string name, int number) => $"/mods/{userId}/{name}/v{number}";
 
-    public Task<ModManifest?> ReadManifestAsync(string folder, CancellationToken ct = default)
-        => Task.FromResult(_manifests.GetValueOrDefault(folder));
+    public Task<ModManifest?> ReadVersionManifestAsync(string userId, string name, int number, CancellationToken ct = default)
+        => Task.FromResult(_histories.GetValueOrDefault((userId, name))?.Versions.Any(v => v.Number == number) == true
+            ? _manifests.GetValueOrDefault(VersionFolder(userId, name, number))
+            : null);
 
     public Task<IReadOnlyList<ModFile>?> ReadVersionFilesAsync(string userId, string name, int number, CancellationToken ct = default)
         => Task.FromResult<IReadOnlyList<ModFile>?>(_files.GetValueOrDefault(VersionFolder(userId, name, number)));
