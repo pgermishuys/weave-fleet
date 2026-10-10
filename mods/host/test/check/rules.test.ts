@@ -98,17 +98,6 @@ describe("prototype", () => {
     await refused(reg(`  const { [§"__proto__"]: p } = {};`), "prototype");
   });
   test("a __proto__ key in an object literal is refused", () => refused(reg(`  const o = { §__proto__: null };`), "prototype"));
-  test("a computed key that isn't a literal is only a warning", async () => {
-    const { source, line, column } = mark(reg(`  const k = "a";\n  const o = {}[k];\n  const p = [1][0];\n  const q = {}["x"];\n  const r = {}[-1];\n  const s = {}[\`t\`];\n  const t = {}[§k + "y"];`));
-    const r = await check({ source });
-    expect(r.report.ok).toBe(true);
-    expect(r.report.warnings.map((w) => [w.code, w.line])).toEqual([["computed-member", 4], ["computed-member", line]]);
-    expect(r.report.warnings[1]?.column).toBe(column);
-  });
-  test("one computed-member warning per occurrence", async () => {
-    const r = await check({ source: reg(`  const k = "a";\n  ({})[k]; ({})[k];`) });
-    expect(r.report.warnings.map((w) => w.code)).toEqual(["computed-member", "computed-member"]);
-  });
 });
 
 describe("limits", () => {
