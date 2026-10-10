@@ -157,6 +157,29 @@ public sealed class OpenCodeHarnessPreparationTests
         environmentVariables.ContainsKey(WeaveFleet.Application.Walkthroughs.WalkthroughBridge.EnvironmentVariable).ShouldBeFalse();
     }
 
+    [Theory]
+    [InlineData(null, false, false)]
+    [InlineData("false", false, false)]
+    [InlineData("true", false, true)]
+    // Safe mode stops drafts from loading; the tools stay, so the process is the same.
+    [InlineData("true", true, true)]
+    public async Task PrepareRuntimeAsync_gives_the_process_the_mod_tools_only_with_Mods_switched_on(string? preference, bool safeMode, bool expected)
+    {
+        var preferences = new InMemoryUserPreferenceRepository();
+        if (preference is not null)
+            preferences.Seed(WeaveFleet.Application.Mods.ModsFeature.PreferenceKey, preference);
+        var safe = new WeaveFleet.Application.Mods.ModsSafeMode();
+        safe.Set("user-1", safeMode);
+        var harness = CreateHarness(preferences, modsSafeMode: safe);
+
+        var result = await harness.PrepareRuntimeAsync(CreateContextWithNullModel(), CancellationToken.None);
+
+        var environmentVariables = GetEnvironmentVariables(result.ShouldBeOfType<RuntimePreparation.Ready>().Artifacts);
+        environmentVariables.ContainsKey(WeaveFleet.Application.Mods.ModsFeature.EnvironmentVariable).ShouldBe(expected);
+        if (expected)
+            environmentVariables[WeaveFleet.Application.Mods.ModsFeature.EnvironmentVariable].ShouldBe("1");
+    }
+
     [Fact]
     public async Task PrepareRuntimeAsync_gives_fleet_walkthrough_its_page_tool()
     {
@@ -263,7 +286,8 @@ public sealed class OpenCodeHarnessPreparationTests
     }
 
     private static OpenCodeHarnessRuntime CreateHarness(
-        IUserPreferenceRepository preferences, FleetOptions? options = null, ISkillVersionStore? store = null)
+        IUserPreferenceRepository preferences, FleetOptions? options = null, ISkillVersionStore? store = null,
+        WeaveFleet.Application.Mods.ModsSafeMode? modsSafeMode = null)
     {
         return new OpenCodeHarnessRuntime(
             httpClientFactory: new TestHttpClientFactory(),
@@ -272,6 +296,10 @@ public sealed class OpenCodeHarnessPreparationTests
             scopeFactory: TestServiceScopeFactory.Create(services =>
             {
                 services.AddSingleton(preferences);
+                services.AddSingleton(options ?? new FleetOptions());
+                services.AddSingleton(modsSafeMode ?? new WeaveFleet.Application.Mods.ModsSafeMode());
+                services.AddSingleton<WeaveFleet.Application.Users.IUserContext>(new TestUserContext("user-1"));
+                services.AddSingleton<WeaveFleet.Application.Mods.ModsFeature>();
                 if (store is not null)
                     services.AddSingleton(store);
             }),
