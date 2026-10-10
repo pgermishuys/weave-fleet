@@ -224,7 +224,9 @@ internal sealed partial class ModHostSupervisor(string userId, ModHostDependenci
     private void Set(string state, string? reason, IModHostConnection? connection = null, string? bunPath = null)
     {
         var status = new ModHostStatus(state, reason, connection?.ProcessId, bunPath, connection?.Host.HostVersion, _restarts);
-        Volatile.Write(ref _status, status);
+        var previous = Interlocked.Exchange(ref _status, status);
+        if (previous.State != state || previous.Reason != reason)
+            LogState(_userKey, state, status.ProcessId, reason);
         Changed?.Invoke(status);
     }
 
@@ -236,6 +238,9 @@ internal sealed partial class ModHostSupervisor(string userId, ModHostDependenci
     void IModHostCalls.HandleNotification(string method, JsonElement parameters)
     {
     }
+
+    [LoggerMessage(Level = LogLevel.Information, Message = "The mod host for {UserKey} is {State} (pid {ProcessId}): {Reason}")]
+    private partial void LogState(string userKey, string state, int? processId, string? reason);
 
     [LoggerMessage(Level = LogLevel.Warning, Message = "The mod host for {UserKey} exited with code {Code}; restarting in {Seconds} s")]
     private partial void LogHostExited(string userKey, int code, double seconds);
