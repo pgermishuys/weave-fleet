@@ -110,6 +110,8 @@ public sealed partial class ModsRuntime(
 
             var install = new Install(release, clock.GetUtcNow(), userId);
             _running = install;
+            // The job is this install's from now on, so the answer to the request that started it already shows it.
+            OnProgress(install, new BunInstallJob(BunInstallPhases.Downloading, release.Version, null, 0, release.AssetFor(BunRelease.CurrentRid())?.Size));
             install.Task = Task.Run(() => RunAsync(install), CancellationToken.None);
             return true;
         }
