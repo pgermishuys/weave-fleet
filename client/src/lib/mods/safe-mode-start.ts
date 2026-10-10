@@ -3,7 +3,7 @@
  * can still be stopped by opening Fleet this way. Safe mode is per user and held by the server; this only asks for it.
  */
 
-import { apiFetch } from "@/lib/api-client";
+import { apiFetchOn } from "@/lib/api-client";
 import { MODS_OFF_QUERY, MODS_OFF_VALUE } from "@/lib/mods/kept";
 
 /** The request waits here when the server couldn't take it yet (not signed in, offline); the next start in this tab retries. */
@@ -38,7 +38,8 @@ export async function applyPendingStartWithoutMods(): Promise<void> {
   const abort = new AbortController();
   const timer = setTimeout(() => abort.abort(), START_WITHOUT_MODS_TIMEOUT_MS);
   try {
-    const response = await apiFetch("/api/mods/safe-mode", {
+    // The address is the home Fleet's, so it is the home server's mods this stops, whichever machine the page restores.
+    const response = await apiFetchOn(null, "/api/mods/safe-mode", {
       method: "PUT",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ on: true }),

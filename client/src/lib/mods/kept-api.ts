@@ -32,7 +32,9 @@ async function request<T>(machine: MachineConnection | null, path: string, init?
     }
     throw new ModsRequestError(message, response.status);
   }
-  return (await response.json()) as T;
+  // A 204 has no body.
+  const text = await response.text();
+  return (text ? JSON.parse(text) : undefined) as T;
 }
 
 const send = (method: string, body?: unknown): RequestInit =>
@@ -108,3 +110,17 @@ export function keepDraft(
 
 export const setDraftOn = (sessionId: string, name: string, on: boolean, machine: MachineConnection | null = null) =>
   request<ModDraft>(machine, `${draftPath(sessionId, name)}/${on ? "on" : "off"}`, send("POST"));
+
+/** Drops the agent's "keep this?" request on a draft. 404 counts as done: it may already be gone. */
+export async function dismissKeepRequest(
+  sessionId: string,
+  name: string,
+  machine: MachineConnection | null = null,
+): Promise<void> {
+  try {
+    await request<unknown>(machine, `${draftPath(sessionId, name)}/keep-request`, send("DELETE"));
+  } catch (error) {
+    if (error instanceof ModsRequestError && error.status === 404) return;
+    throw error;
+  }
+}

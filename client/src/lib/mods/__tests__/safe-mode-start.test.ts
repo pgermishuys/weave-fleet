@@ -1,7 +1,7 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 const { apiFetchMock } = vi.hoisted(() => ({ apiFetchMock: vi.fn() }));
-vi.mock("@/lib/api-client", () => ({ apiFetch: apiFetchMock }));
+vi.mock("@/lib/api-client", () => ({ apiFetchOn: apiFetchMock }));
 
 import {
   applyPendingStartWithoutMods,
@@ -53,7 +53,8 @@ describe("start without mods, early", () => {
     await startWithoutModsFromAddress();
 
     expect(apiFetchMock).toHaveBeenCalledTimes(1);
-    const [path, init] = apiFetchMock.mock.calls[0] as [string, RequestInit];
+    const [machine, path, init] = apiFetchMock.mock.calls[0] as [unknown, string, RequestInit];
+    expect(machine).toBeNull();
     expect(path).toBe("/api/mods/safe-mode");
     expect(init.method).toBe("PUT");
     expect(JSON.parse(init.body as string)).toEqual({ on: true });
@@ -116,7 +117,7 @@ describe("start without mods, early", () => {
 
   it("stops waiting after a few seconds, so a slow server never blocks the app, and keeps the request", async () => {
     vi.useFakeTimers();
-    apiFetchMock.mockImplementation((_path: string, init: RequestInit) =>
+    apiFetchMock.mockImplementation((_machine: unknown, _path: string, init: RequestInit) =>
       new Promise((_resolve, reject) => {
         init.signal?.addEventListener("abort", () => reject(new DOMException("Aborted", "AbortError")));
       }));
