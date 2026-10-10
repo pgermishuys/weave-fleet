@@ -158,6 +158,8 @@ async function toggleMods(): Promise<void> {
     modsRuntime.confirming = false;
     return;
   }
+  // Clicked before Fleet said whether Bun is there: ask now, rather than turn Mods on without it.
+  if (!isModsEnabled.value && !modsRuntime.view) await modsRuntime.load();
   const runtime = modsRuntime.view;
   if (!isModsEnabled.value && runtime && !runtime.bun && !runtime.configuredPath) {
     modsRuntime.confirming = true;
