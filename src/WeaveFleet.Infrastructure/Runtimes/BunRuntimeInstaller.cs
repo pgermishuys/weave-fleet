@@ -34,6 +34,7 @@ internal sealed partial class BunRuntimeInstaller(
     private readonly ConcurrentDictionary<string, (ProbeKey Key, BunVersion Version)> _probed = new();
     private BunInstallJob? _job;
     private BunMachineFinder? _finder;
+    private Uri? _downloadBase;
 
     /// <summary>Test seam: the user's home folder.</summary>
     internal string Home { get; init; } = ExecutableResolver.HomeDirectory() ?? Environment.CurrentDirectory;
@@ -42,7 +43,11 @@ internal sealed partial class BunRuntimeInstaller(
     internal string Rid { get; init; } = BunRelease.CurrentRid();
 
     /// <summary>Test seam: where releases are downloaded from.</summary>
-    internal Uri DownloadBase { get; init; } = BunRelease.GitHubDownloads;
+    internal Uri DownloadBase
+    {
+        get => _downloadBase ??= ResolveDownloadBase();
+        init => _downloadBase = value;
+    }
 
     /// <summary>Test seam: how long a download may go without a byte before it fails.</summary>
     internal TimeSpan StallTimeout { get; init; } = TimeSpan.FromSeconds(60);
@@ -68,6 +73,14 @@ internal sealed partial class BunRuntimeInstaller(
     {
         get => _finder ??= new BunMachineFinder { Home = Home, Probe = Probe };
         init => _finder = value;
+    }
+
+    private Uri ResolveDownloadBase()
+    {
+        var resolved = BunRelease.ResolveDownloadBase(options.Harness.BunDownloadBase, out var invalid);
+        if (invalid)
+            LogInvalidDownloadBase(options.Harness.BunDownloadBase);
+        return resolved;
     }
 
     /// <inheritdoc />
@@ -335,14 +348,14 @@ internal sealed partial class BunRuntimeInstaller(
         long received = 0;
         long? total = null;
 
-        void Set(string phase, string? message) =>
-            Publish(progress, new BunInstallJob(phase, version, message, received, total));
+        void Set(string phase, string? message, string? reason = null) =>
+            Publish(progress, new BunInstallJob(phase, version, message, received, total, reason));
 
         if (release.AssetFor(Rid) is not { } asset)
         {
-            var message = $"Fleet has no Bun build for {Rid}. Install Bun and set Fleet:Harness:BunPath to it.";
+            const string message = "Fleet has no Bun build for this computer. Install Bun yourself and point Fleet at it.";
             LogNoBuild(Rid);
-            Set(BunInstallPhases.Failed, message);
+            Set(BunInstallPhases.Failed, message, BunInstallFailures.NoBuild);
             return new FleetError(ErrorCode, message);
         }
 
@@ -369,7 +382,9 @@ internal sealed partial class BunRuntimeInstaller(
             if (!string.Equals(actual, asset.Sha256, StringComparison.OrdinalIgnoreCase))
             {
                 LogChecksumMismatch(asset.FileName);
-                throw new InstallFailure($"The Bun {version} download didn't match its checksum, so Fleet deleted it.");
+                throw new InstallFailure(BunInstallFailures.Checksum,
+                    $"The download didn't match Bun {version}'s checksum, so Fleet deleted it. " +
+                    "Try again; if it happens again, something between you and GitHub is changing files.");
             }
 
             Set(BunInstallPhases.Extracting, Working);
@@ -383,20 +398,20 @@ internal sealed partial class BunRuntimeInstaller(
         catch (OperationCanceledException) when (ct.IsCancellationRequested)
         {
             LogCancelled(version);
-            Set(BunInstallPhases.Failed, "The install was cancelled.");
+            Set(BunInstallPhases.Failed, "The install was cancelled.", BunInstallFailures.Cancelled);
             throw;
         }
         catch (InstallFailure failure)
         {
             LogFailed(version, failure.Message);
-            Set(BunInstallPhases.Failed, failure.Message);
+            Set(BunInstallPhases.Failed, failure.Message, failure.Reason);
             return new FleetError(ErrorCode, failure.Message);
         }
         catch (Exception ex)
         {
             LogInstallException(ex, version);
             var message = $"Couldn't install Bun {version}: {ex.Message}";
-            Set(BunInstallPhases.Failed, message);
+            Set(BunInstallPhases.Failed, message, BunInstallFailures.Other);
             return new FleetError(ErrorCode, message);
         }
         finally
@@ -409,6 +424,7 @@ internal sealed partial class BunRuntimeInstaller(
         BunRelease release, BunAsset asset, string destination, Action<long, long?> report, CancellationToken ct)
     {
         var version = release.Version;
+        var host = DownloadBase.Host;
         using var client = httpClientFactory.CreateClient();
         client.Timeout = Timeout.InfiniteTimeSpan;
         using var stall = CancellationTokenSource.CreateLinkedTokenSource(ct);
@@ -416,14 +432,16 @@ internal sealed partial class BunRuntimeInstaller(
 
         long received = 0;
         long? total = null;
+        long? declared = null;
         try
         {
             var url = release.DownloadUrl(DownloadBase, asset);
             using var response = await client.GetAsync(url, HttpCompletionOption.ResponseHeadersRead, stall.Token).ConfigureAwait(false);
             if (!response.IsSuccessStatusCode)
-                throw new InstallFailure($"Couldn't download Bun {version}: the server answered {(int)response.StatusCode} {response.ReasonPhrase}.");
+                throw DescribeStatus(host, response);
 
-            total = response.Content.Headers.ContentLength;
+            declared = response.Content.Headers.ContentLength;
+            total = declared ?? asset.Size;
             report(0, total);
 
             await using var body = await response.Content.ReadAsStreamAsync(stall.Token).ConfigureAwait(false);
@@ -450,21 +468,68 @@ internal sealed partial class BunRuntimeInstaller(
         catch (OperationCanceledException) when (!ct.IsCancellationRequested)
         {
             LogStalled(version);
-            throw new InstallFailure($"Couldn't download Bun {version}: nothing arrived for {StallTimeout.TotalSeconds.ToString("0.###", CultureInfo.InvariantCulture)} seconds.");
+            throw received == 0
+                ? new InstallFailure(BunInstallFailures.Offline, Unreachable(host, "the connection timed out."))
+                : Stopped(received, total);
         }
-        catch (Exception ex) when (ex is IOException or HttpRequestException)
+        catch (HttpRequestException ex)
         {
-            throw Stopped(version, received, total, ex);
+            var (reason, message) = DescribeRequestFailure(ex, host, received, total);
+            throw new InstallFailure(reason, message);
+        }
+        catch (IOException)
+        {
+            throw Stopped(received, total);
         }
 
-        if (total is { } expected && received < expected)
-            throw Stopped(version, received, total, null);
+        if (declared is { } expected && received < expected)
+            throw Stopped(received, total);
     }
 
-    private static InstallFailure Stopped(string version, long received, long? total, Exception? cause) =>
-        new(total is { } length
-            ? $"Couldn't download Bun {version}: the download stopped after {received} of {length} bytes."
-            : $"Couldn't download Bun {version}: {cause?.Message ?? $"the download stopped after {received} bytes."}");
+    private static InstallFailure DescribeStatus(string host, HttpResponseMessage response)
+    {
+        var status = (int)response.StatusCode;
+        var reason = response.ReasonPhrase ?? response.StatusCode.ToString();
+        if (status is 403 or 407)
+        {
+            return new InstallFailure(BunInstallFailures.Blocked,
+                $"{host} answered {status} {reason}, so a proxy or firewall is probably blocking downloads from GitHub.");
+        }
+
+        return new InstallFailure(BunInstallFailures.Other, $"{host} answered {status} {reason}.");
+    }
+
+    /// <summary>What a failed request means to the user: the reason, and a sentence saying so.</summary>
+    internal static (string Reason, string Message) DescribeRequestFailure(HttpRequestException error, string host, long received, long? total)
+    {
+        if (received > 0)
+        {
+            var stopped = Stopped(received, total);
+            return (stopped.Reason, stopped.Message);
+        }
+
+        return error.HttpRequestError switch
+        {
+            HttpRequestError.NameResolutionError =>
+                (BunInstallFailures.Offline, Unreachable(host, $"it couldn't find {host} (DNS).")),
+            HttpRequestError.ConnectionError =>
+                (BunInstallFailures.Offline, Unreachable(host, "the connection was refused.")),
+            HttpRequestError.SecureConnectionError or HttpRequestError.ProxyTunnelError =>
+                (BunInstallFailures.Blocked, $"{host}'s secure connection was interrupted, so a proxy or firewall is probably blocking downloads from GitHub."),
+            _ => (BunInstallFailures.Offline, Unreachable(host, "the connection failed.")),
+        };
+    }
+
+    private static string Unreachable(string host, string why) =>
+        $"Fleet couldn't reach {host}: {why} Check that this computer is online, then try again.";
+
+    private static InstallFailure Stopped(long received, long? total) =>
+        new(BunInstallFailures.Stopped, total is { } length
+            ? $"The download stopped after {Megabytes(received)} of {Megabytes(length)} MB. Try again."
+            : $"The download stopped after {Megabytes(received)} MB. Try again.");
+
+    private static string Megabytes(long bytes) =>
+        Math.Round(bytes / 1_000_000d, MidpointRounding.AwayFromZero).ToString("0", CultureInfo.InvariantCulture);
 
     private static async Task<string> Sha256Async(string path, CancellationToken ct)
     {
@@ -482,13 +547,13 @@ internal sealed partial class BunRuntimeInstaller(
         catch (InvalidDataException ex)
         {
             LogUnsafeArchive(version, ex.Message);
-            throw new InstallFailure($"The Bun {version} archive has an entry Fleet won't unpack: {ex.Message}");
+            throw new InstallFailure(BunInstallFailures.Other, $"The Bun {version} archive has an entry Fleet won't unpack: {ex.Message}");
         }
 
         var folder = Path.Combine(staging, asset.Folder);
         var executable = Path.Combine(folder, asset.ExecutableName);
         if (!File.Exists(executable))
-            throw new InstallFailure($"The Bun {version} archive has no {asset.Folder}/{asset.ExecutableName}.");
+            throw new InstallFailure(BunInstallFailures.Other, $"The Bun {version} archive has no {asset.Folder}/{asset.ExecutableName}.");
 
         if (!OperatingSystem.IsWindows())
         {
@@ -644,7 +709,14 @@ internal sealed partial class BunRuntimeInstaller(
     private sealed record ProbeKey(string Path, string? ResolvedPath, long Length, DateTime LastWriteUtc, ulong? Device, ulong? Inode);
 
     /// <summary>A failure with a message fit to show the user.</summary>
-    private sealed class InstallFailure(string message) : Exception(message);
+    private sealed class InstallFailure(string reason, string message) : Exception(message)
+    {
+        /// <summary>One of <see cref="BunInstallFailures"/>.</summary>
+        public string Reason { get; } = reason;
+    }
+
+    [LoggerMessage(Level = LogLevel.Warning, Message = "Fleet:Harness:BunDownloadBase is {Configured}, which isn't an http or https address; downloading from GitHub instead.")]
+    private partial void LogInvalidDownloadBase(string configured);
 
     [LoggerMessage(Level = LogLevel.Information, Message = "Installing Bun {Version} for {Rid}.")]
     private partial void LogInstallStarting(string version, string rid);
