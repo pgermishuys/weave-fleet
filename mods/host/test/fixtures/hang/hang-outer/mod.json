@@ -1,0 +1,6 @@
+{
+  "name": "hang-outer",
+  "version": "0.1.0",
+  "description": "A hook that calls next, in front of a mod that never yields",
+  "hooks": "./mod.js"
+}

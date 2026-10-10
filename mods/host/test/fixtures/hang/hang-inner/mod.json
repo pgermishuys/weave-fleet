@@ -1,0 +1,6 @@
+{
+  "name": "hang-inner",
+  "version": "0.1.0",
+  "description": "A hook that never yields, behind another mod",
+  "hooks": "./mod.js"
+}
