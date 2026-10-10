@@ -72,18 +72,45 @@ public static class BunInstallPhases
     public const string Failed = "failed";
 }
 
+/// <summary>Why an install failed. Sent to the client as <c>reason</c>; <see langword="null"/> unless the install failed.</summary>
+public static class BunInstallFailures
+{
+    /// <summary>Fleet couldn't reach the download server: no DNS answer, a refused connection, or nothing arrived.</summary>
+    public const string Offline = "offline";
+
+    /// <summary>The server or something in between refused: a 403 or 407 answer, or a failed secure connection.</summary>
+    public const string Blocked = "blocked";
+
+    /// <summary>The download began and then stopped, or ended short.</summary>
+    public const string Stopped = "stopped";
+
+    /// <summary>The download didn't match the release's sha256 and was deleted.</summary>
+    public const string Checksum = "checksum";
+
+    /// <summary>The release has no Bun build for this computer.</summary>
+    public const string NoBuild = "no-build";
+
+    /// <summary>The user cancelled the install.</summary>
+    public const string Cancelled = "cancelled";
+
+    /// <summary>Anything else: another status, an archive that wouldn't unpack, a folder that wouldn't move.</summary>
+    public const string Other = "other";
+}
+
 /// <summary>Fleet installing the mod runtime, kept until the next install starts.</summary>
 /// <param name="Phase">One of <see cref="BunInstallPhases"/>.</param>
 /// <param name="Version">The Bun version being installed.</param>
 /// <param name="Message">What's happening or what happened, in a sentence.</param>
 /// <param name="BytesReceived">How much of the archive has downloaded.</param>
 /// <param name="BytesTotal">The archive's size, when the server said.</param>
+/// <param name="Reason">One of <see cref="BunInstallFailures"/> when <paramref name="Phase"/> is <see cref="BunInstallPhases.Failed"/>; otherwise <see langword="null"/>.</param>
 public sealed record BunInstallJob(
     string Phase,
     string Version,
     string? Message,
     long BytesReceived,
-    long? BytesTotal);
+    long? BytesTotal,
+    string? Reason = null);
 
 /// <summary>
 /// The Bun the mod host runs on: the user's own (the configured path, which they may have picked from the Buns Fleet

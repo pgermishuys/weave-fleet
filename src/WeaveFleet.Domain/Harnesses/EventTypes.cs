@@ -83,6 +83,13 @@ public static class EventTypes
     /// </summary>
     public const string ModsChanged = "mods.changed";
 
+    /// <summary>
+    /// The runtime mods run on (Bun) is installing, finished installing, failed, or the user's own Bun changed. Fleet's
+    /// own event on the <c>sessions</c> topic, with a <c>ModsRuntimePayload</c>; clients refetch
+    /// <c>/api/features/mods/runtime</c> unless it is download progress.
+    /// </summary>
+    public const string ModsRuntime = "mods.runtime";
+
     /// <summary>Returns <c>true</c> for <see cref="ContextUsage"/> and <see cref="ContextCompaction"/>.</summary>
     public static bool IsContextEvent(string type) => type is ContextUsage or ContextCompaction;
 
