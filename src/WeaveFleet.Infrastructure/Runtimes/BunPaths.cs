@@ -1,3 +1,5 @@
+using WeaveFleet.Infrastructure.IO;
+
 namespace WeaveFleet.Infrastructure.Runtimes;
 
 /// <summary>Path helpers shared by the Bun finder and installer.</summary>
@@ -53,7 +55,7 @@ internal static class BunPaths
             return null;
 
         var canonical = Canonical(path);
-        var me = UnixFileStatus.EffectiveUserId();
+        var me = NativeFileStatus.EffectiveUserId();
         if (me is null)
             return $"Fleet didn't run it: Fleet couldn't check who can change {canonical}.";
 
@@ -72,6 +74,17 @@ internal static class BunPaths
         return null;
     }
 
+    /// <summary>
+    /// Group write is fine on Linux when the group is only this user's: Ubuntu-style private groups with umask 002 make
+    /// every folder the user creates (such as ~/.bun/bin) group-writable. On macOS nothing is relaxed: the primary group
+    /// there is <c>staff</c>, shared with other users, Bun's installer leaves 755, and /etc/group isn't where macOS
+    /// keeps its groups, so group write is refused.
+    /// </summary>
+    private static bool GroupWriteIsOnlyMine(uint gid) =>
+        OperatingSystem.IsLinux()
+        && NativeFileStatus.EffectiveGroupId() is { } effective
+        && PrivateGroup.Is(gid, effective, Environment.UserName);
+
     private static string? Problem(string path, bool isFile, uint me)
     {
         try
@@ -84,15 +97,13 @@ internal static class BunPaths
             if ((mode & UnixFileMode.OtherWrite) != 0 && !sticky)
                 return $"{path} can be changed by other users.";
 
-            if (UnixFileStatus.Stat(path) is not { } identity)
+            if (!NativeFileStatus.TryStat(path, out var status))
                 return $"Fleet couldn't check who owns {path}.";
 
-            // Group write is fine when the group is only this user's: Ubuntu-style private groups with umask 002
-            // make every folder the user creates (such as ~/.bun/bin) group-writable.
-            if ((mode & UnixFileMode.GroupWrite) != 0 && !sticky && !UnixFileStatus.IsPrivateGroup(identity.Gid))
+            if ((mode & UnixFileMode.GroupWrite) != 0 && !sticky && !GroupWriteIsOnlyMine(status.Gid))
                 return $"{path} can be changed by other users.";
 
-            if (identity.Uid != me && identity.Uid != 0)
+            if (status.Uid != me && status.Uid != 0)
                 return $"{path} is owned by another user.";
 
             return null;

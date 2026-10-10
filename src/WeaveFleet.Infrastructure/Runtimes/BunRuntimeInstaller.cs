@@ -8,6 +8,7 @@ using WeaveFleet.Application.Configuration;
 using WeaveFleet.Application.Runtimes;
 using WeaveFleet.Domain.Common;
 using WeaveFleet.Infrastructure.Harnesses;
+using WeaveFleet.Infrastructure.IO;
 
 namespace WeaveFleet.Infrastructure.Runtimes;
 
@@ -269,8 +270,10 @@ internal sealed partial class BunRuntimeInstaller(
                 return null;
 
             // The device and inode tell a replacement of the same size and time from the file probed before.
-            var identity = UnixFileStatus.Stat(file.FullName);
-            return new ProbeKey(Path.GetFullPath(path), target?.FullName, file.Length, file.LastWriteTimeUtc, identity?.Device, identity?.Inode);
+            ulong? device = null, inode = null;
+            if (NativeFileStatus.TryStat(file.FullName, out var status))
+                (device, inode) = (status.Dev, status.Ino);
+            return new ProbeKey(Path.GetFullPath(path), target?.FullName, file.Length, file.LastWriteTimeUtc, device, inode);
         }
         catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
         {
