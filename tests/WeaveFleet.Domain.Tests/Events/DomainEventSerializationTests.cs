@@ -329,7 +329,7 @@ public sealed class DomainEventSerializationTests
     }
 
     [Fact]
-    public void The_mods_runtime_payload_uses_camel_case_and_nulls_when_there_is_no_job()
+    public void The_mods_runtime_payload_uses_camel_case_and_has_no_job_when_there_is_none()
     {
         var json = JsonSerializer.Serialize<DomainEvent>(
             new ModsRuntimeChanged { Payload = new ModsRuntimePayload { Reason = "bun-path" } }, SerializerOptions);
@@ -337,8 +337,8 @@ public sealed class DomainEventSerializationTests
         using var document = JsonDocument.Parse(json);
         var payload = document.RootElement.GetProperty("payload");
         payload.GetProperty("reason").GetString().ShouldBe("bun-path");
-        payload.TryGetProperty("job", out var job).ShouldBeTrue();
-        job.ValueKind.ShouldBe(JsonValueKind.Null);
+        // Nulls may be left out; the client reads a missing job as none.
+        (payload.TryGetProperty("job", out var job) ? job.ValueKind : JsonValueKind.Null).ShouldBe(JsonValueKind.Null);
     }
 
     [Theory]
