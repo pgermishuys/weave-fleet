@@ -34,6 +34,16 @@ public sealed class BunReleaseTests
         asset.ExecutableName.ShouldBe(executable);
     }
 
+    [Theory]
+    [InlineData("linux-x64", 36646949L)]
+    [InlineData("linux-arm64", 36602920L)]
+    [InlineData("osx-x64", 28440543L)]
+    [InlineData("osx-arm64", 25377591L)]
+    [InlineData("win-x64", 39807490L)]
+    [InlineData("win-arm64", 36330062L)]
+    public void Each_pinned_asset_knows_its_size(string rid, long size)
+        => BunRelease.Pinned.AssetFor(rid)!.Size.ShouldBe(size);
+
     [Fact]
     public void A_platform_without_a_build_has_no_asset()
         => BunRelease.Pinned.AssetFor("linux-musl-x64").ShouldBeNull();
@@ -46,6 +56,16 @@ public sealed class BunReleaseTests
 
         release.DownloadUrl(BunRelease.GitHubDownloads, asset).ToString()
             .ShouldBe($"https://github.com/oven-sh/bun/releases/download/bun-v{release.Version}/bun-linux-x64-baseline.zip");
+    }
+
+    [Theory]
+    [InlineData("", "https://github.com/oven-sh/bun/releases/download/", false)]
+    [InlineData("https://mirror.example/bun", "https://mirror.example/bun/", false)]
+    [InlineData("ftp://mirror.example/bun", "https://github.com/oven-sh/bun/releases/download/", true)]
+    public void The_download_base_comes_from_configuration_or_falls_back_to_github(string configured, string expected, bool invalid)
+    {
+        BunRelease.ResolveDownloadBase(configured, out var wasInvalid).ToString().ShouldBe(expected);
+        wasInvalid.ShouldBe(invalid);
     }
 
     [Fact]
