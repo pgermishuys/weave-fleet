@@ -236,8 +236,10 @@ public sealed class ModHostLoadingTests : IDisposable
         await Dispatch("ui.render", "ses_test1");
         var loadAnswer = _factory.Answers["load"];
         var hold = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+        var loading = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
         _factory.Answers["load"] = async p =>
         {
+            loading.TrySetResult();
             await hold.Task;
             return await loadAnswer(p);
         };
@@ -247,6 +249,7 @@ public sealed class ModHostLoadingTests : IDisposable
         _time.Advance(TimeSpan.FromSeconds(0.5));
         var restarted = await _factory.NextStart();
         var render = Dispatch("ui.render", "ses_test1");
+        await loading.Task.Within();
         restarted.Methods.ShouldBe(["load"]);
         hold.SetResult();
         (await render).Dispatched.ShouldBeTrue();
