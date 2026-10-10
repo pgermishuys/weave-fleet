@@ -81,6 +81,13 @@ export interface ModDraft {
   off: ModOff | null;
   /** The active version of the kept mod of the same name, which the draft stands in for in its session. */
   kept: number | null;
+  /** The agent asked the user to keep it (`fleet_mod_keep`), with its note; cleared by Keep, Discard or Turn off. */
+  keepRequest?: ModKeepRequest | null;
+}
+
+export interface ModKeepRequest {
+  note: string | null;
+  at: string;
 }
 
 /** A file of a version or a draft, for Show code. `path` is relative to the mod's folder, with `/`. */

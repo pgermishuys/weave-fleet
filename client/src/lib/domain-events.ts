@@ -800,7 +800,8 @@ export interface ModsChanged extends EventCursorMetadata {
   type: "mods.changed";
   payload: {
     name?: string | null;
-    reason: "kept" | "version" | "undone" | "on" | "off" | "strikes" | "draft-off" | "draft-on" | "safe-mode";
+    reason: "kept" | "version" | "undone" | "on" | "off" | "strikes" | "draft-off" | "draft-on" | "safe-mode"
+      | "draft-written" | "keep-requested";
     sessionId?: string | null;
   };
 }
