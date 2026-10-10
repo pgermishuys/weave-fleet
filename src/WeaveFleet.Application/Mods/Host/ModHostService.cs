@@ -31,6 +31,8 @@ public sealed partial class ModHostService : IModHost, IHostedService, IAsyncDis
     private ITimer? _poll;
     private Task? _listening;
     private volatile bool _stopped;
+    private Task? _stop;
+    private int _disposed;
 
     public ModHostService(
         IModHostConnectionFactory connections,
@@ -184,8 +186,17 @@ public sealed partial class ModHostService : IModHost, IHostedService, IAsyncDis
             _ = Task.Run(() => supervisor.EnsureAsync(), CancellationToken.None);
     }
 
-    /// <summary>Every host gets <c>shutdown</c> at once (each is killed after its grace); nothing restarts after.</summary>
-    public async Task StopAsync(CancellationToken cancellationToken)
+    /// <summary>
+    /// Every host gets <c>shutdown</c> at once (each is killed after its grace); nothing restarts after. Runs once: later
+    /// calls, and the container disposing this once per registration it handed it out under, wait for that run.
+    /// </summary>
+    public Task StopAsync(CancellationToken cancellationToken)
+    {
+        lock (_sync)
+            return _stop ??= StopOnceAsync(cancellationToken);
+    }
+
+    private async Task StopOnceAsync(CancellationToken cancellationToken)
     {
         _stopped = true;
         await _stopping.CancelAsync().ConfigureAwait(false);
@@ -199,6 +210,8 @@ public sealed partial class ModHostService : IModHost, IHostedService, IAsyncDis
     public async ValueTask DisposeAsync()
     {
         await StopAsync(CancellationToken.None).ConfigureAwait(false);
+        if (Interlocked.Exchange(ref _disposed, 1) == 1)
+            return;
         foreach (var supervisor in _supervisors.Values)
             await supervisor.DisposeAsync().ConfigureAwait(false);
         _stopping.Dispose();
