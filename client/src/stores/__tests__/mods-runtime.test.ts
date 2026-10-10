@@ -25,8 +25,8 @@ const view = (current: ModsRuntimeJob | null = null) => ({ bun: null, job: curre
 let calls: string[];
 let answer: ModsRuntimeView;
 
-function emit(payload: { job: ModsRuntimeJob | null }): void {
-  for (const handler of [...handlers]) handler({ type: "mods.runtime", payload });
+function emit(payload: { job: ModsRuntimeJob | null }, type = "mods.runtime"): void {
+  for (const handler of [...handlers]) handler({ type, payload });
 }
 
 describe("mods runtime store", () => {
@@ -38,7 +38,9 @@ describe("mods runtime store", () => {
     vi.stubGlobal(
       "fetch",
       vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
-        calls.push(`${(init?.method ?? "GET").toUpperCase()} ${new URL(String(input), "http://localhost").pathname}`);
+        const request = input instanceof Request ? input : null;
+        const method = (init?.method ?? request?.method ?? "GET").toUpperCase();
+        calls.push(`${method} ${new URL(request?.url ?? String(input), "http://localhost").pathname}`);
         return new Response(JSON.stringify(answer));
       }),
     );
@@ -72,6 +74,16 @@ describe("mods runtime store", () => {
 
     expect(calls).toEqual([`GET ${RUNTIME}`]);
     expect(store.view?.job?.phase).toBe("verifying");
+  });
+
+  it("reads the preferences again when the server turned the switch off after a failed install", async () => {
+    const store = useModsRuntimeStore();
+    store.listen();
+
+    emit({ reason: "switch" } as never, "mods.changed");
+    await flushPromises();
+
+    expect(calls).toContain("GET /api/preferences");
   });
 
   it("install() and cancel() post, and take the view the server answers", async () => {
