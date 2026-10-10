@@ -21,7 +21,7 @@ const props = defineProps<{
   /** A full address to draw, in place of `page.path` on the session's machine (a mod's page is served by the mod host). */
   src?: string;
   /**
-   * A page that must stay inside its frame (a mod's): no "open in a new tab", and popups it opens keep the sandbox.
+   * A page that must stay inside its frame (a mod's): no "open in a new tab", and it gets no popups at all (a popup could open any site).
    * On Fleet's own origin its HTML would otherwise run outside the sandbox, until the server that serves it sends a
    * `Content-Security-Policy: sandbox` header of its own.
    */
@@ -38,7 +38,7 @@ const fullFrame = useTemplateRef<HTMLIFrameElement>("fullFrame");
 const closeButton = useTemplateRef<HTMLButtonElement>("closeButton");
 
 const SANDBOX = "allow-scripts allow-forms allow-popups allow-popups-to-escape-sandbox allow-modals allow-downloads";
-const CONTAINED_SANDBOX = "allow-scripts allow-forms allow-popups allow-modals allow-downloads";
+const CONTAINED_SANDBOX = "allow-scripts allow-forms allow-modals allow-downloads";
 const sandbox = computed(() => (props.contained ? CONTAINED_SANDBOX : SANDBOX));
 const address = computed(() => props.src ?? apiUrlOn(machine.connection, props.page.path));
 // Read once: the page reads its frame's name when it loads, and later changes go by message.

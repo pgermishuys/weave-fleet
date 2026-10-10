@@ -146,6 +146,8 @@ function isDraftModPane(canvas: CanvasInstance): boolean {
   return !!view && isDraftView(view);
 }
 
+const hasDraftTab = computed(() => canvases.value.some(isDraftModPane));
+
 function isUnsaved(canvas: CanvasInstance): boolean {
   return !!canvas.file && fileBuffers.isDirty(props.sessionId, canvas.file.path);
 }
@@ -303,6 +305,7 @@ const activeProps = computed(() => {
           'canvas-tabs--fade-start': fadeStart,
           'canvas-tabs--fade-end': fadeEnd,
           'canvas-tabs--dragging': draggingTabs,
+          'canvas-tabs--draft': hasDraftTab,
         }"
         role="tablist"
         aria-label="Canvases"
@@ -545,9 +548,13 @@ const activeProps = computed(() => {
   gap: 2px;
   min-width: 0;
   overflow-x: auto;
-  /* Bringing the active tab into view leaves room for the fade, so it doesn't cut the tab before it. */
-  scroll-padding-inline: 24px;
   scrollbar-width: none;
+}
+
+/* Bringing the active tab into view leaves room for the fade, so it doesn't cut the tab before it. Only while a Draft
+   mark widens a tab: with no mods the strip is main's. */
+.canvas-tabs--draft {
+  scroll-padding-inline: 24px;
 }
 
 .canvas-tabs::-webkit-scrollbar {

@@ -22,7 +22,10 @@ export interface ModPageUrlInput {
  * A mod's id on the wire: its name, then `@v` and a version for a kept mod or `@draft:` and the session for a draft.
  * The contract leaves the exact shape to the host; this is the one the client accepts.
  */
-export const MOD_ID_PATTERN = /^[a-z][a-z0-9-]{0,63}@(?:v[1-9][0-9]*|draft:[A-Za-z0-9_-]{1,128})$/;
+/** Fleet's session ids: letters, digits, `_` and `-`, 1 to 128 of them. So never `.`, `..` or anything with a slash. */
+export const MOD_SESSION_ID_PATTERN = /^[A-Za-z0-9_-]{1,128}$/;
+const SESSION_ID_PART = MOD_SESSION_ID_PATTERN.source.slice(1, -1);
+export const MOD_ID_PATTERN = new RegExp(`^[a-z][a-z0-9-]{0,63}@(?:v[1-9][0-9]*|draft:${SESSION_ID_PART})$`);
 const CONTROL = /[\u0000-\u001f\u007f]/;
 
 function pathSegments(path: string): string[] | null {
@@ -34,7 +37,7 @@ function pathSegments(path: string): string[] | null {
 
 /** The page's address, or null when the mod, session, path or query can't make a safe one. */
 export function modPageUrl({ apiUrl, sessionId, mod, path, query }: ModPageUrlInput): string | null {
-  if (!sessionId || !MOD_ID_PATTERN.test(mod)) return null;
+  if (!MOD_SESSION_ID_PATTERN.test(sessionId) || !MOD_ID_PATTERN.test(mod)) return null;
   const segments = pathSegments(path);
   if (!segments) return null;
 

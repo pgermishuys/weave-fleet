@@ -11,8 +11,13 @@ export function openModPane(view: ModPaneView): void {
   useCanvasesStore().openModPane(view.sessionId, { paneId: view.paneId, title: view.title, mod: view.mod });
 }
 
-/** Replace an open pane's view and its tab's title, without opening it or changing the active tab. */
+/**
+ * Replace an open pane's view and its tab's title, without opening it or changing the active tab. A pane whose tab is
+ * closed (or was never opened) is left alone: its view was dropped with the tab and must not come back.
+ */
 export function updateModPane(view: ModPaneView): void {
+  const id = modPaneCanvasId(view.mod, view.paneId);
+  if (!useCanvasesStore().sessionCanvases(view.sessionId).canvases.some((canvas) => canvas.id === id)) return;
   setView(view);
   useCanvasesStore().updateModPane(view.sessionId, { paneId: view.paneId, title: view.title, mod: view.mod });
 }

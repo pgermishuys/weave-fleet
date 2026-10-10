@@ -76,4 +76,17 @@ provide(MOD_TREE, {
   gap: 6px;
   vertical-align: middle;
 }
+
+/* Where there is little room, a row of items wraps onto the next line instead of squeezing each into an ellipsis.
+   Every row Box at any depth wraps (a column keeps its own direction), and an item doesn't shrink below its content
+   while wrapping is possible: only a lone item wider than the whole line ellipsizes (max-width, then its label). */
+.mod-tree--inline :deep(.mod-box[style*="flex-direction: row"]) {
+  flex-wrap: wrap;
+}
+
+.mod-tree--inline :deep(.mod-pill),
+.mod-tree--inline :deep(.mod-button) {
+  flex-shrink: 0;
+  max-width: 100%;
+}
 </style>

@@ -179,6 +179,7 @@ function handleExpandVisual(): void {
   >
     <summary
       class="tool-header"
+      :class="{ 'tool-header--mod': useView.draws }"
       data-testid="tool-card-header"
     >
       <component :is="toolIcon" class="tool-header__icon" />
@@ -414,7 +415,19 @@ function handleExpandVisual(): void {
   justify-content: flex-end;
   gap: 4px 6px;
   min-width: 0;
+  /* Never more than 60% of the row: the title keeps the rest (and at least its minimum, below). */
+  max-width: 60%;
   margin-left: auto;
+}
+
+/* With a mod drawing on the line the command keeps a floor of 30% of the row (12 characters at most), ellipsizing
+   inside it, so a long pill can't squeeze it to nothing. Rows no mod draws on keep today's CSS. */
+.tool-header--mod .tool-header__detail,
+.tool-header--mod .tool-header__pattern {
+  min-width: min(30%, 12ch);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 .tool-header__mod :deep(.mod-tree) {

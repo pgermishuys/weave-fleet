@@ -4,6 +4,7 @@
 import { join } from "node:path";
 import type { CheckReport } from "fleet-mods/protocol";
 import { checkMod } from "./check";
+import { parseModId } from "./ids";
 import type { HostLimits } from "./limits";
 import { ErrorCodes, RpcError } from "./rpc";
 import { forgetSession, createRuntime, stopModWork } from "./runtime/runtime";
@@ -37,7 +38,6 @@ export interface Host {
 }
 
 const bad = (message: string) => new RpcError(ErrorCodes.invalidParams, message);
-const ID = /^([a-z][a-z0-9-]*)@(?:v(\d+)|draft:(.+))$/;
 const sleep = (ms: number) => new Promise<void>((r) => setTimeout(r, ms));
 /** The share of `shutdownMs` the host waits for running work; the rest is headroom to exit within the limit. */
 const SHUTDOWN_WAIT_SHARE = 0.9;
@@ -53,17 +53,17 @@ function parseLoad(p: any): { id: string; name: string; version: number | "draft
   if (typeof p !== "object" || p === null) throw bad("load takes an object");
   const { id, name, version, sessionId, root } = p;
   if (typeof id !== "string" || typeof name !== "string" || typeof root !== "string") throw bad("load needs id, name and root");
-  const m = ID.exec(id);
-  if (!m) throw bad(`id ${JSON.stringify(id)} is neither name@v<n> nor name@draft:<sessionId>`);
-  if (m[1] !== name) throw bad(`id ${id} doesn't match the name ${name}`);
-  if (m[2] !== undefined) {
-    if (version !== Number(m[2])) throw bad(`id ${id} doesn't match version ${JSON.stringify(version)}`);
+  const parsed = parseModId(id);
+  if (!parsed) throw bad(`id ${JSON.stringify(id)} is neither name@v<n> nor name@draft:<sessionId>`);
+  if (parsed.name !== name) throw bad(`id ${id} doesn't match the name ${name}`);
+  if ("version" in parsed) {
+    if (version !== parsed.version) throw bad(`id ${id} doesn't match version ${JSON.stringify(version)}`);
     if (sessionId !== undefined) throw bad("a kept version takes no sessionId");
-    return { id, name, version: Number(m[2]), root };
+    return { id, name, version: parsed.version, root };
   }
   if (version !== "draft") throw bad(`id ${id} is a draft, so version must be "draft"`);
-  if (sessionId !== m[3]) throw bad(`id ${id} doesn't match sessionId ${JSON.stringify(sessionId)}`);
-  return { id, name, version: "draft", sessionId: m[3], root };
+  if (sessionId !== parsed.draft) throw bad(`id ${id} doesn't match sessionId ${JSON.stringify(sessionId)}`);
+  return { id, name, version: "draft", sessionId: parsed.draft, root };
 }
 
 /** Wires the host's methods onto `options.peer`. */
