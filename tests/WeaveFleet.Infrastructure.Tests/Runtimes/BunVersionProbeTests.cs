@@ -121,11 +121,44 @@ public sealed class BunVersionProbeTests : IDisposable
     public async Task A_file_that_is_not_executable_is_an_error_not_a_throw()
     {
         if (OperatingSystem.IsWindows()) return;
-        var result = await Run(Script("echo 1.4.5", executable: false));
+        var path = Script("echo 1.4.5", executable: false);
+        var result = await Run(path);
 
         result.Version.ShouldBeNull();
         result.Error.ShouldNotBeNull();
-        result.Error.ShouldContain("couldn't start");
+        result.Error.ShouldBe($"Bun at {path} isn't executable (chmod +x {path}).");
+    }
+
+    [Theory]
+    [InlineData("echo 1.4.5; (sleep 30 &) ; exit 0")]
+    [InlineData("sleep 30 & echo 1.4.5")]
+    public async Task A_version_printed_before_a_child_keeps_stdout_open_is_still_read(string body)
+    {
+        if (OperatingSystem.IsWindows()) return;
+        var watch = Stopwatch.StartNew();
+        var result = await Run(Script(body), TimeSpan.FromSeconds(5));
+
+        result.Error.ShouldBeNull();
+        result.Version.ShouldBe(new BunVersion(1, 4, 5, null));
+        watch.Elapsed.ShouldBeLessThan(TimeSpan.FromSeconds(3));
+    }
+
+    [Fact]
+    public async Task The_probe_runs_in_an_empty_temporary_folder_that_is_deleted_afterwards()
+    {
+        if (OperatingSystem.IsWindows()) return;
+        var record = Path.Combine(_dir, "cwd.txt");
+        var path = Script($"pwd > '{record}'; ls -A . >> '{record}'; echo 1.4.5", folder: "bunfolder");
+        File.WriteAllText(Path.Combine(_dir, "bunfolder", "neighbour.txt"), "x");
+
+        var result = await Run(path);
+
+        result.Error.ShouldBeNull();
+        var lines = await File.ReadAllLinesAsync(record);
+        lines.Length.ShouldBe(1, "the folder holds nothing, not even the bun's neighbours");
+        lines[0].ShouldNotBe(Path.Combine(_dir, "bunfolder"));
+        lines[0].ShouldStartWith(Path.GetTempPath().TrimEnd('/'));
+        Directory.Exists(lines[0]).ShouldBeFalse();
     }
 
     [Fact]

@@ -1,4 +1,5 @@
 using System.Collections.Concurrent;
+using System.Globalization;
 using WeaveFleet.Application.Runtimes;
 using WeaveFleet.Infrastructure.Runtimes;
 
@@ -6,11 +7,17 @@ namespace WeaveFleet.Infrastructure.Tests.Runtimes;
 
 public sealed class BunMachineFinderTests : IDisposable
 {
-    private readonly string _root = Path.Combine(Path.GetTempPath(), $"fleet-find-{Guid.NewGuid():N}");
+    private readonly string _root = Path.Combine(SafeBase(), $"fleet-find-{Guid.NewGuid():N}");
     private readonly ConcurrentDictionary<string, BunProbeResult> _answers = new();
     private readonly ConcurrentQueue<string> _probed = new();
 
-    public BunMachineFinderTests() => Directory.CreateDirectory(_root);
+    public BunMachineFinderTests()
+    {
+        if (OperatingSystem.IsWindows())
+            Directory.CreateDirectory(_root);
+        else
+            Directory.CreateDirectory(_root, Private);
+    }
 
     public void Dispose()
     {
@@ -24,10 +31,63 @@ public sealed class BunMachineFinderTests : IDisposable
         }
     }
 
+    /// <summary>
+    /// A folder whose whole path passes Fleet's own "others can't change it" check, so the tests run the real check.
+    /// The temp folder when it does; otherwise a sticky system one (a developer's TMPDIR can be group-writable).
+    /// </summary>
+    private static string SafeBase()
+    {
+        foreach (var candidate in new[] { Path.GetTempPath(), "/dev/shm", "/var/tmp", "/tmp" })
+        {
+            if (!Directory.Exists(candidate))
+                continue;
+            if (OperatingSystem.IsWindows())
+                return candidate;
+
+            var trial = Path.Combine(candidate, $"fleet-safe-{Guid.NewGuid():N}");
+            try
+            {
+                Directory.CreateDirectory(trial, Private);
+                var file = Path.Combine(trial, "bun");
+                File.WriteAllText(file, "x");
+                File.SetUnixFileMode(file, Private);
+                if (BunPaths.WhyNotSafeToRun(file) is null)
+                    return candidate;
+            }
+            catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
+            {
+                // Try the next one.
+            }
+            finally
+            {
+                try { Directory.Delete(trial, recursive: true); } catch (IOException) { }
+            }
+        }
+
+        return Path.GetTempPath();
+    }
+
+    /// <summary>Owner-only-writable, whatever the umask: a developer's umask 002 would make new folders group-writable.</summary>
+    private const UnixFileMode Private = (UnixFileMode)0b111_101_101;
+
     private string Folder(string name)
     {
         var path = Path.Combine(_root, name);
-        Directory.CreateDirectory(path);
+        if (OperatingSystem.IsWindows())
+        {
+            Directory.CreateDirectory(path);
+            return path;
+        }
+
+        // One folder at a time: the mode only applies to the last one a call creates.
+        var current = _root;
+        foreach (var segment in Path.GetRelativePath(_root, path).Split(Path.DirectorySeparatorChar))
+        {
+            current = Path.Combine(current, segment);
+            if (!Directory.Exists(current))
+                Directory.CreateDirectory(current, Private);
+        }
+
         return path;
     }
 
@@ -37,6 +97,8 @@ public sealed class BunMachineFinderTests : IDisposable
     {
         var path = Path.Combine(Folder(folder), FileName(windows));
         File.WriteAllText(path, "not a real bun");
+        if (!OperatingSystem.IsWindows())
+            File.SetUnixFileMode(path, Private);
         if (version is not null)
             _answers[path] = new BunProbeResult(BunVersion.Parse(version), null);
         return path;
@@ -285,14 +347,14 @@ public sealed class BunMachineFinderTests : IDisposable
     }
 
     [Fact]
-    public async Task CheckAsync_reports_a_folder_as_no_file()
+    public async Task CheckAsync_reports_a_folder_as_a_folder()
     {
         var folder = Folder("a");
 
         var candidate = await Finder().CheckAsync(folder, CancellationToken.None);
 
         candidate.Status.ShouldBe(BunCandidateStatuses.NotWorking);
-        candidate.Message.ShouldBe($"There's no file at {folder}.");
+        candidate.Message.ShouldBe($"{folder} is a folder, not the bun program.");
         _probed.ShouldBeEmpty();
     }
 
@@ -369,6 +431,160 @@ public sealed class BunMachineFinderTests : IDisposable
 
         candidate.Status.ShouldBe(BunCandidateStatuses.Usable);
         candidate.Version.ShouldBe("1.4.9");
+    }
+
+    // -- bun in a place others can write to --------------------------------------------------------------------------
+
+    private const UnixFileMode Open = (UnixFileMode)0b111_111_111;
+
+    [Fact]
+    public async Task A_bun_in_a_folder_others_can_write_is_listed_but_not_run()
+    {
+        if (OperatingSystem.IsWindows()) return;
+        var bun = Bun("open");
+        File.SetUnixFileMode(Folder("open"), Open);
+
+        var found = await Finder(Join(Folder("open"))).FindAsync(CancellationToken.None);
+
+        var only = found.ShouldHaveSingleItem();
+        only.Status.ShouldBe(BunCandidateStatuses.NotChecked);
+        only.Version.ShouldBeNull();
+        only.Message.ShouldBe($"Fleet didn't run it: {Folder("open")} can be changed by other users.");
+        _probed.ShouldBeEmpty();
+    }
+
+    [Fact]
+    public async Task A_bun_in_a_sticky_world_writable_folder_is_run()
+    {
+        if (OperatingSystem.IsWindows()) return;
+        var bun = Bun("sticky");
+        File.SetUnixFileMode(Folder("sticky"), Open | UnixFileMode.StickyBit);
+
+        var found = await Finder(Join(Folder("sticky"))).FindAsync(CancellationToken.None);
+
+        found.ShouldHaveSingleItem().Status.ShouldBe(BunCandidateStatuses.Usable);
+        _probed.ShouldBe([bun]);
+    }
+
+    [Theory]
+    [InlineData(0b110_110_110)]
+    [InlineData(0b111_111_111)]
+    [InlineData(0b111_111_101)]
+    [InlineData(0b111_101_111)]
+    public async Task A_bun_file_that_group_or_others_can_write_is_not_run(int mode)
+    {
+        if (OperatingSystem.IsWindows()) return;
+        var bun = Bun("a");
+        File.SetUnixFileMode(bun, (UnixFileMode)mode);
+
+        var candidate = await Finder().CheckAsync(bun, CancellationToken.None);
+
+        candidate.Status.ShouldBe(BunCandidateStatuses.NotChecked);
+        candidate.Message.ShouldBe($"Fleet didn't run it: {bun} can be changed by other users.");
+        _probed.ShouldBeEmpty();
+    }
+
+    [Fact]
+    public async Task A_bun_file_in_a_sticky_folder_is_still_refused_when_the_file_is_writable()
+    {
+        if (OperatingSystem.IsWindows()) return;
+        var bun = Bun("sticky");
+        File.SetUnixFileMode(Folder("sticky"), Open | UnixFileMode.StickyBit);
+        File.SetUnixFileMode(bun, Open);
+
+        (await Finder().CheckAsync(bun, CancellationToken.None)).Status.ShouldBe(BunCandidateStatuses.NotChecked);
+        _probed.ShouldBeEmpty();
+    }
+
+    [Fact]
+    public async Task A_folder_two_levels_up_that_others_can_write_stops_the_run()
+    {
+        if (OperatingSystem.IsWindows()) return;
+        var bun = Bun(Path.Combine("top", "middle", "bottom"));
+        File.SetUnixFileMode(Folder("top"), Open);
+
+        var candidate = await Finder().CheckAsync(bun, CancellationToken.None);
+
+        candidate.Status.ShouldBe(BunCandidateStatuses.NotChecked);
+        candidate.Message.ShouldBe($"Fleet didn't run it: {Folder("top")} can be changed by other users.");
+        _probed.ShouldBeEmpty();
+    }
+
+    [Fact]
+    public async Task A_link_in_a_safe_folder_to_a_bun_in_an_open_folder_is_judged_by_where_it_leads()
+    {
+        if (OperatingSystem.IsWindows()) return;
+        var target = Bun("open");
+        File.SetUnixFileMode(Folder("open"), Open);
+        var link = Path.Combine(Folder("safe"), "bun");
+        File.CreateSymbolicLink(link, target);
+
+        var candidate = await Finder().CheckAsync(link, CancellationToken.None);
+
+        candidate.Status.ShouldBe(BunCandidateStatuses.NotChecked);
+        candidate.Path.ShouldBe(link);
+        candidate.ResolvedPath.ShouldBe(target);
+        _probed.ShouldBeEmpty();
+    }
+
+    [Fact]
+    public async Task A_bun_the_check_says_another_user_owns_is_not_run()
+    {
+        var bun = Bun("a");
+        var finder = new BunMachineFinder
+        {
+            Home = _root,
+            PathEnv = Folder("a"),
+            SystemDirectories = [],
+            WhyNotSafeToRun = path => $"Fleet didn't run it: {path} is owned by another user.",
+            Probe = (path, _) =>
+            {
+                _probed.Enqueue(path);
+                return Task.FromResult(new BunProbeResult(BunVersion.Parse("1.4.5"), null));
+            },
+        };
+
+        var found = await finder.FindAsync(CancellationToken.None);
+
+        found.ShouldHaveSingleItem().Status.ShouldBe(BunCandidateStatuses.NotChecked);
+        (await finder.CheckAsync(bun, CancellationToken.None)).Message.ShouldBe($"Fleet didn't run it: {bun} is owned by another user.");
+        _probed.ShouldBeEmpty();
+    }
+
+    [Fact]
+    public void Folders_owned_by_this_user_pass_and_the_root_owned_ones_above_them_too()
+    {
+        if (OperatingSystem.IsWindows()) return;
+        var bun = Bun("a");
+
+        BunPaths.WhyNotSafeToRun(bun).ShouldBeNull();
+    }
+
+    [Fact]
+    public void The_unix_status_matches_stat_and_id()
+    {
+        if (!OperatingSystem.IsLinux()) return;
+        var file = Bun("a");
+
+        var identity = UnixFileStatus.Stat(file).ShouldNotBeNull();
+
+        identity.Inode.ToString(CultureInfo.InvariantCulture).ShouldBe(Run("stat", "-c", "%i", file));
+        identity.Uid.ToString(CultureInfo.InvariantCulture).ShouldBe(Run("stat", "-c", "%u", file));
+        UnixFileStatus.EffectiveUserId().ShouldBe(uint.Parse(Run("id", "-u"), CultureInfo.InvariantCulture));
+        UnixFileStatus.Stat(Path.Combine(_root, "nothing")).ShouldBeNull();
+        UnixFileStatus.Stat(Folder("a"))!.Value.Inode.ToString(CultureInfo.InvariantCulture).ShouldBe(Run("stat", "-c", "%i", Folder("a")));
+        UnixFileStatus.Stat("/")!.Value.Uid.ShouldBe(0u);
+    }
+
+    private static string Run(string program, params string[] args)
+    {
+        var psi = new System.Diagnostics.ProcessStartInfo(program) { RedirectStandardOutput = true };
+        foreach (var arg in args)
+            psi.ArgumentList.Add(arg);
+        using var process = System.Diagnostics.Process.Start(psi)!;
+        var text = process.StandardOutput.ReadToEnd().Trim();
+        process.WaitForExit();
+        return text;
     }
 
     private string WriteScript(string folder, string body)

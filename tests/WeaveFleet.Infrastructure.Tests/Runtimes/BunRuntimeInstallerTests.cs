@@ -943,6 +943,120 @@ public sealed class BunRuntimeInstallerTests : IDisposable
             "Fleet installs Bun 1.4.3 to replace it.");
     }
 
+    // -- review round 1 -----------------------------------------------------------------------------------------
+
+    [Fact]
+    public async Task Prune_keeps_the_one_in_use_when_home_is_reached_through_a_link_and_inUse_uses_the_real_path()
+    {
+        if (OperatingSystem.IsWindows()) return;
+        var real = Path.Combine(_home, "real-home");
+        var linked = Path.Combine(_home, "linked-home");
+        Directory.CreateSymbolicLink(linked, real);
+        var root = Path.Combine(real, ".weave", "runtimes", "bun");
+        Directory.CreateDirectory(Path.Combine(root, "1.4.1"));
+        Directory.CreateDirectory(Path.Combine(root, "1.4.4"));
+        foreach (var version in new[] { "1.4.1", "1.4.4" })
+            PlantIn(root, version);
+        var installer = NewInstaller(Publish("1.4.4"), home: linked);
+
+        var deleted = await installer.PruneAsync([Path.Combine(real, ".weave", "runtimes", "bun", "1.4.1", "bun")], CancellationToken.None);
+
+        deleted.ShouldBeEmpty();
+        Directory.Exists(Path.Combine(root, "1.4.1")).ShouldBeTrue();
+    }
+
+    [Fact]
+    public async Task Prune_keeps_the_one_in_use_when_home_is_real_and_inUse_goes_through_a_link()
+    {
+        if (OperatingSystem.IsWindows()) return;
+        var real = Path.Combine(_home, "real-home");
+        var linked = Path.Combine(_home, "linked-home");
+        Directory.CreateSymbolicLink(linked, real);
+        var root = Path.Combine(real, ".weave", "runtimes", "bun");
+        foreach (var version in new[] { "1.4.1", "1.4.4" })
+            PlantIn(root, version);
+        var installer = NewInstaller(Publish("1.4.4"), home: real);
+
+        var deleted = await installer.PruneAsync([Path.Combine(linked, ".weave", "runtimes", "bun", "1.4.1", "bun")], CancellationToken.None);
+
+        deleted.ShouldBeEmpty();
+        Directory.Exists(Path.Combine(root, "1.4.1")).ShouldBeTrue();
+    }
+
+    private static void PlantIn(string root, string version)
+    {
+        var folder = Path.Combine(root, version);
+        Directory.CreateDirectory(folder);
+        File.WriteAllText(Path.Combine(folder, "bun"), "x");
+        File.WriteAllText(
+            Path.Combine(folder, "install.json"),
+            $"{{ \"version\": \"{version}\", \"rid\": \"linux-x64\", \"assetFileName\": \"bun.zip\", " +
+            $"\"sha256\": \"{new string('0', 64)}\", \"installedAt\": \"2026-10-01T00:00:00+00:00\" }}");
+    }
+
+    [Fact]
+    public async Task A_replacement_with_the_same_size_and_time_is_probed_again()
+    {
+        if (OperatingSystem.IsWindows()) return;
+        var release = Publish();
+        var configured = await ConfiguredFileAsync();
+        var stamp = File.GetLastWriteTimeUtc(configured);
+        var probed = 0;
+        var installer = NewInstaller(release, bunPath: configured, probe: (_, _) =>
+        {
+            probed++;
+            return Task.FromResult(new BunProbeResult(BunVersion.Parse("1.4.5"), null));
+        });
+
+        (await installer.FindAsync(release, CancellationToken.None)).ShouldNotBeNull();
+        (await installer.FindAsync(release, CancellationToken.None)).ShouldNotBeNull();
+        probed.ShouldBe(1);
+
+        var replacement = Path.Combine(_home, "replacement");
+        await File.WriteAllTextAsync(replacement, Script("1.4.5"));
+        File.SetLastWriteTimeUtc(replacement, stamp);
+        File.Move(replacement, configured, overwrite: true);
+
+        (await installer.FindAsync(release, CancellationToken.None)).ShouldNotBeNull();
+        probed.ShouldBe(2);
+    }
+
+    [Fact]
+    public async Task A_configured_path_that_is_a_folder_says_so()
+    {
+        var release = Publish();
+        var folder = Path.Combine(_home, "a-folder");
+        Directory.CreateDirectory(folder);
+        var installer = NewInstaller(release, bunPath: folder);
+
+        var result = await installer.EnsureAsync(release, null, CancellationToken.None);
+
+        result.Error.Description.ShouldBe($"Fleet:Harness:BunPath is {folder}, which is a folder, not the bun program.");
+        _server.Requests.ShouldBeEmpty();
+    }
+
+    [Theory]
+    [InlineData("/tools/bun")]
+    [InlineData("/tools/bun.cmd")]
+    public async Task On_Windows_a_configured_bun_must_end_in_exe(string configured)
+    {
+        // Windows rules, tested on any machine through the seam.
+        var installer = new BunRuntimeInstaller(
+            new FleetOptions { Harness = { BunPath = configured } },
+            new FakeHttpClientFactory(),
+            NullLogger<BunRuntimeInstaller>.Instance)
+        {
+            Home = _home,
+            IsWindows = true,
+            Probe = Fails("Not expected to run."),
+        };
+
+        var result = await installer.EnsureAsync(BunRelease.Pinned, null, CancellationToken.None);
+
+        result.IsSuccess.ShouldBeFalse();
+        result.Error.Description.ShouldBe($"Fleet:Harness:BunPath is {configured}, which must end in .exe: point it at bun.exe.");
+    }
+
     // -- helpers ------------------------------------------------------------------------------------------------
 
     private static Func<string, CancellationToken, Task<BunProbeResult>> Prints(string version) =>
@@ -958,13 +1072,14 @@ public sealed class BunRuntimeInstallerTests : IDisposable
         Func<string, CancellationToken, Task<BunProbeResult>>? probe = null,
         TimeSpan? stall = null,
         Action<string, string>? move = null,
-        Action<string, string>? rename = null) =>
+        Action<string, string>? rename = null,
+        string? home = null) =>
         new(
             new FleetOptions { Harness = { BunPath = bunPath ?? "" } },
             new FakeHttpClientFactory(),
             NullLogger<BunRuntimeInstaller>.Instance)
         {
-            Home = _home,
+            Home = home ?? _home,
             Rid = rid,
             DownloadBase = _server.BaseUri,
             Probe = probe ?? Fails("Not expected to run."),
