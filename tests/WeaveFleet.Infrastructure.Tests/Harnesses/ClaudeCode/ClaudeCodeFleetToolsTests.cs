@@ -86,13 +86,26 @@ public sealed class ClaudeCodeFleetToolsTests
     [Fact]
     public void A_process_may_use_every_tool_it_gets_without_asking_but_starting_an_app()
     {
-        var all = new FleetToolSwitches(SessionMessages: true, Memory: true, WorkflowStep: true, Browser: true, Walkthrough: true, AgentHandoff: true);
+        var all = new FleetToolSwitches(SessionMessages: true, Memory: true, WorkflowStep: true, Browser: true, Walkthrough: true, AgentHandoff: true, Mods: true);
 
         var allowed = ClaudeCodeFleetTools.AllowedWithoutAsking(all).ToList();
 
         allowed.Count.ShouldBe(FleetToolCatalog.All.Count - 1);
         allowed.ShouldNotContain("mcp__fleet__fleet_app_start");
         allowed.ShouldAllBe(name => name.StartsWith("mcp__fleet__fleet_", StringComparison.Ordinal));
+    }
+
+    [Fact]
+    public void The_mod_tools_are_listed_only_with_Mods_on()
+    {
+        string[] modTools = ["fleet_mod_write", "fleet_mod_check", "fleet_mod_reload", "fleet_mod_test", "fleet_mod_keep", "fleet_mod_list"];
+        var off = new FleetToolSwitches(SessionMessages: true, Memory: true, WorkflowStep: true, Browser: true, Walkthrough: true, AgentHandoff: true);
+
+        FleetToolCatalog.For(off).Select(tool => tool.Name).ShouldNotContain(name => modTools.Contains(name));
+        FleetToolCatalog.For(off with { Mods = true }).Select(tool => tool.Name).ShouldBeSubsetOf(FleetToolCatalog.All.Select(tool => tool.Name));
+        FleetToolCatalog.For(off with { Mods = true }).Select(tool => tool.Name).Where(modTools.Contains).ShouldBe(modTools);
+        ClaudeCodeFleetTools.AllowedWithoutAsking(off with { Mods = true }).ShouldContain("mcp__fleet__fleet_mod_write");
+        ClaudeCodeFleetTools.AllowedWithoutAsking(off).ShouldNotContain("mcp__fleet__fleet_mod_write");
     }
 
     // ── Placing an MCP call ─────────────────────────────────────────────────────

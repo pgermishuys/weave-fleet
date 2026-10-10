@@ -3,6 +3,7 @@ using System.Text;
 using System.Text.Json.Nodes;
 using WeaveFleet.Application.FleetTools;
 using WeaveFleet.Application.Machines;
+using WeaveFleet.Application.Mods;
 using WeaveFleet.Application.Sessions;
 using WeaveFleet.Infrastructure.Harnesses.OpenCode;
 using WeaveFleet.Infrastructure.Harnesses.OpenCode2;
@@ -13,6 +14,7 @@ namespace WeaveFleet.Infrastructure.Tests.Harnesses;
 /// Agent hand-off adds two tools and a <c>machine</c> on <c>fleet_message</c> and <c>fleet_session_read</c>, in all three
 /// places a model gets Fleet's tools: both OpenCode plugins and the catalog Claude Code reads over MCP. With it off, each
 /// offers exactly what it did before: the tools with it on, less those additions, and nothing else changed.
+/// Mods work the same way: the six <c>fleet_mod_*</c> tools are there only with <c>FLEET_MODS=1</c>.
 /// The plugins are run in Node as OpenCode loads them (the .NET test job has Node 22).
 /// </summary>
 public sealed class AgentHandoffToolsTests
@@ -74,6 +76,26 @@ public sealed class AgentHandoffToolsTests
         JsonNode.DeepEquals(Without(on, AddedTools), off).ShouldBeTrue();
     }
 
+    private static readonly string[] ModTools = ["fleet_mod_write", "fleet_mod_check", "fleet_mod_reload", "fleet_mod_test", "fleet_mod_keep", "fleet_mod_list"];
+
+    [Theory]
+    [InlineData("fleet-canvas.ts", "opencode")]
+    [InlineData("index.mjs", "opencode2")]
+    public async Task The_mod_tools_are_in_a_plugin_only_with_FLEET_MODS_on(string fileName, string kind)
+    {
+        var plugin = kind == "opencode"
+            ? Encoding.UTF8.GetString(OpenCodeFleetPlugin.ReadEmbedded())
+            : Encoding.UTF8.GetString(OpenCode2FleetFiles.Read(OpenCode2FleetFiles.PluginResource));
+        var off = await RunAsync(plugin, fileName, kind, handoff: false, mods: false);
+        var on = await RunAsync(plugin, fileName, kind, handoff: false, mods: true);
+
+        Names(off).ShouldNotContain(name => ModTools.Contains(name));
+        Names(on).Where(ModTools.Contains).ShouldBe(ModTools);
+        // Added at the end, after the tools every process gets, and nothing else changes.
+        Names(on).Take(Names(off).Count).ShouldBe(Names(off));
+        JsonNode.DeepEquals(Without(on, ModTools), off).ShouldBeTrue();
+    }
+
     private static FleetToolSwitches Switches(bool handoff)
         => new(SessionMessages: true, Memory: true, WorkflowStep: true, Browser: true, Walkthrough: true, AgentHandoff: handoff);
 
@@ -88,7 +110,7 @@ public sealed class AgentHandoffToolsTests
     /// Loads the plugin in Node, with messages between sessions on and hand-off on or off, and returns its tools as OpenCode
     /// would see them: <c>{name, description, args}</c> for OpenCode, <c>{name, description, input}</c> for OpenCode 2.
     /// </summary>
-    private static async Task<JsonArray> RunAsync(string source, string fileName, string kind, bool handoff)
+    private static async Task<JsonArray> RunAsync(string source, string fileName, string kind, bool handoff, bool mods = false)
     {
         var folder = Directory.CreateTempSubdirectory("fleet-plugin-tools-").FullName;
         try
@@ -109,6 +131,10 @@ public sealed class AgentHandoffToolsTests
                 start.Environment[AgentHandoff.EnvironmentVariable] = "1";
             else
                 start.Environment.Remove(AgentHandoff.EnvironmentVariable);
+            if (mods)
+                start.Environment[ModsFeature.EnvironmentVariable] = "1";
+            else
+                start.Environment.Remove(ModsFeature.EnvironmentVariable);
 
             Process process;
             try

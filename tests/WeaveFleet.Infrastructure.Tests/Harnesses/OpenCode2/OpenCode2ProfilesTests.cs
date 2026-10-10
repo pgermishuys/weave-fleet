@@ -329,6 +329,21 @@ public sealed class OpenCode2ProfilesTests : IDisposable
     }
 
     [Fact]
+    public async Task An_idle_server_started_with_Mods_off_is_replaced_by_one_with_Mods_on()
+    {
+        await using var servers = Servers([]);
+        var key = OpenCode2ServerKey.For("local-user", null);
+        var before = await servers.GetAsync(key, OpenCode2ServerSetup.None, CancellationToken.None);
+        var withMods = OpenCode2ServerSetup.None with { Mods = true };
+
+        var after = await servers.GetAsync(key, withMods, CancellationToken.None);
+
+        after.ShouldNotBeSameAs(before);
+        after.Setup.ShouldBe(withMods);
+        before.IsRunning.ShouldBeFalse();
+    }
+
+    [Fact]
     public async Task After_an_update_a_server_with_a_background_shell_running_is_kept_until_it_has_finished()
     {
         var shells = new Dictionary<string, string[]> { ["/work"] = [OpenCode2Fixtures.Shell("running")] };
