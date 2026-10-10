@@ -21,6 +21,38 @@ public static class BunSources
 /// <param name="Version">The version, when Fleet installed it; <see langword="null"/> for a Bun found elsewhere.</param>
 public sealed record BunLocation(string ExecutablePath, string Source, string? Version);
 
+/// <summary>How a Bun Fleet found on the machine stands. Sent to the client as <c>status</c>.</summary>
+public static class BunCandidateStatuses
+{
+    /// <summary>It runs and is <see cref="BunRelease.MinimumVersion"/> or later, so the user can pick it.</summary>
+    public const string Usable = "usable";
+
+    /// <summary>It runs, but it's older than <see cref="BunRelease.MinimumVersion"/>.</summary>
+    public const string TooOld = "too-old";
+
+    /// <summary>It didn't run, didn't answer in time, or didn't print a version.</summary>
+    public const string NotWorking = "not-working";
+}
+
+/// <summary>
+/// A Bun Fleet found on the machine (on <c>PATH</c>, in <c>~/.bun/bin</c>, in Homebrew's folders) or the user typed.
+/// Fleet only offers it: it's used once the user picks it, which saves <see cref="Path"/> as the configured path.
+/// </summary>
+/// <param name="Path">Where it was found, absolute. The path to save: it stays right after <c>bun upgrade</c> or
+/// <c>brew upgrade</c>, where <paramref name="ResolvedPath"/> may not.</param>
+/// <param name="ResolvedPath">The same file with every link followed; two candidates never share one.</param>
+/// <param name="Version">What <c>bun --version</c> printed; <see langword="null"/> when it's not working.</param>
+/// <param name="Status">One of <see cref="BunCandidateStatuses"/>.</param>
+/// <param name="Message">Why it's too old or not working, in a sentence; <see langword="null"/> when usable.</param>
+public sealed record BunCandidate(string Path, string ResolvedPath, string? Version, string Status, string? Message);
+
+/// <summary>Whether a Bun is safe to keep running, judged against the release Fleet wants.</summary>
+/// <param name="Safe">It's <see cref="BunRelease.OldestSafe"/> or later.</param>
+/// <param name="UpdateAvailable">It's Fleet's own Bun and the release is newer, so Fleet will download the release.
+/// Always <see langword="false"/> for the user's own Bun: Fleet never updates or replaces it.</param>
+/// <param name="Message">What to tell the user when it isn't safe, in a sentence or two; <see langword="null"/> when it is.</param>
+public sealed record BunSafety(bool Safe, bool UpdateAvailable, string? Message);
+
 /// <summary>Where installing the mod runtime stands. Sent to the client as <c>phase</c>.</summary>
 public static class BunInstallPhases
 {
