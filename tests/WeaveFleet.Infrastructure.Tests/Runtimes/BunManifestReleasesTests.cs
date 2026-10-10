@@ -540,6 +540,9 @@ public sealed class BunManifestReleasesTests : IDisposable
     {
         _started.Add(service);
         await service.StartAsync(CancellationToken.None);
+
+        // The schedule may begin on another thread; give it time to set its first timer before the clock moves.
+        await Task.Delay(300);
     }
 
     private void Serve(byte[] body) => _server.Serve(ManifestPath, body);

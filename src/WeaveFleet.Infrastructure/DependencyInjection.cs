@@ -26,6 +26,7 @@ using WeaveFleet.Application.Users;
 using WeaveFleet.Application.Workspaces;
 using WeaveFleet.Domain.Repositories;
 using WeaveFleet.Infrastructure.Analytics;
+using WeaveFleet.Infrastructure.Runtimes;
 using WeaveFleet.Infrastructure.Automations;
 using WeaveFleet.Infrastructure.Boards;
 using WeaveFleet.Infrastructure.Browser;
@@ -108,6 +109,20 @@ public static class DependencyInjection
     public static IServiceCollection AddHarnessAvailabilityStartupService(this IServiceCollection services)
     {
         services.AddHostedService<HarnessAvailabilityWarmupHostedService>();
+        return services;
+    }
+
+    /// <summary>
+    /// Fleet's Bun: the release it wants (the manifest on its update schedule, else the one built in) and the installer
+    /// that downloads it. One <see cref="BunManifestReleases"/> serves both the interface and the schedule.
+    /// </summary>
+    internal static IServiceCollection AddBunRuntime(this IServiceCollection services)
+    {
+        services.TryAddSingleton(TimeProvider.System);
+        services.AddSingleton<BunManifestReleases>();
+        services.AddSingleton<WeaveFleet.Application.Runtimes.IBunReleases>(sp => sp.GetRequiredService<BunManifestReleases>());
+        services.AddHostedService(sp => sp.GetRequiredService<BunManifestReleases>());
+        services.AddSingleton<WeaveFleet.Application.Runtimes.IBunRuntime, BunRuntimeInstaller>();
         return services;
     }
 
@@ -545,8 +560,7 @@ public static class DependencyInjection
             sp.GetRequiredService<SessionActivityTracker>(),
             sp.GetRequiredService<IHttpClientFactory>(),
             sp.GetRequiredService<ILogger<HarnessUpdateService>>()));
-        services.AddSingleton<WeaveFleet.Application.Runtimes.IBunReleases, WeaveFleet.Infrastructure.Runtimes.PinnedBunReleases>();
-        services.AddSingleton<WeaveFleet.Application.Runtimes.IBunRuntime, WeaveFleet.Infrastructure.Runtimes.BunRuntimeInstaller>();
+        services.AddBunRuntime();
 
         // OpenCode harness — singleton to match HarnessRegistry lifetime.
         // PortAllocator is a standalone singleton seeded from FleetOptions.

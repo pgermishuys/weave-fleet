@@ -407,6 +407,12 @@ public sealed class UpdateOptions
 
     /// <summary>Interval in hours between periodic update checks while running. Default: 4. Set to 0 to disable.</summary>
     public int CheckIntervalHours { get; set; } = 4;
+
+    /// <summary>
+    /// Where Fleet reads its Bun manifest (<c>bun.json</c>: the Bun it recommends and the oldest safe version). Empty
+    /// uses <c>bun.json</c> on the main branch of <see cref="GitHubRepo"/> at raw.githubusercontent.com. Default: empty.
+    /// </summary>
+    public string BunManifestUrl { get; set; } = "";
 }
 
 /// <summary>Settings for a Fleet the desktop app started.</summary>

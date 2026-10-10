@@ -21,6 +21,7 @@ namespace WeaveFleet.Infrastructure.Runtimes;
 internal sealed partial class BunRuntimeInstaller(
     FleetOptions options,
     IHttpClientFactory httpClientFactory,
+    IBunReleases releases,
     ILogger<BunRuntimeInstaller> logger) : IBunRuntime, IDisposable
 {
     private const string ErrorCode = "Mods.Runtime";
@@ -146,6 +147,8 @@ internal sealed partial class BunRuntimeInstaller(
                 return [];
 
             var newest = installed.Max(bun => bun.Version);
+            // The release Fleet wants stays even when it's older than the newest installed (a manifest rolled back).
+            var wanted = BunVersion.TryParse(releases.Current.Version, out var wantedVersion) ? wantedVersion : newest;
             // Links are followed on both sides, so a home reached through a symlink still matches the Bun in use.
             var protectedPaths = inUse.Select(NormalisePath).OfType<string>().ToList();
             var comparison = OperatingSystem.IsWindows() || OperatingSystem.IsMacOS()
@@ -156,7 +159,7 @@ internal sealed partial class BunRuntimeInstaller(
             foreach (var folder in Directory.EnumerateDirectories(Root))
             {
                 var name = Path.GetFileName(folder);
-                if (!BunVersion.TryParse(name, out var version) || version >= newest)
+                if (!BunVersion.TryParse(name, out var version) || version >= newest || version == wanted)
                     continue;
 
                 var prefix = BunPaths.Canonical(folder).TrimEnd(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar) + Path.DirectorySeparatorChar;
