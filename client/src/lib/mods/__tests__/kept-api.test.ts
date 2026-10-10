@@ -121,13 +121,12 @@ describe("requests", () => {
   it("keepDraft sends the note, or no body when it is empty", async () => {
     apiFetchOnMock.mockImplementation(async () => json({ name: "test-chips" }));
     await keepDraft("s1", "test-chips", "show failing names");
-    let [, path, init] = lastCall();
+    const [, path, init] = lastCall();
     expect(path).toBe("/api/sessions/s1/mods/drafts/test-chips/keep");
     expect(init?.method).toBe("POST");
     expect(JSON.parse(init?.body as string)).toEqual({ note: "show failing names" });
     await keepDraft("s1", "test-chips", "  ");
-    [, , init] = lastCall();
-    expect(init?.body).toBeUndefined();
+    expect(lastCall()[2]?.body).toBeUndefined();
   });
 
   it("setDraftOn picks on or off", async () => {

@@ -157,7 +157,7 @@ describe("actions", () => {
     api.setDraftOn.mockResolvedValue(off);
     await store.setDraftOn("s1", "a", false);
     expect(api.setDraftOn).toHaveBeenCalledWith("s1", "a", false, null);
-    expect(store.draftsFor("s1")).toEqual([off, draft("s1", "b")]);
+    expect(store.draftsFor("s1")).toEqual([{ ...off, keepRequest: null }, draft("s1", "b")]);
   });
 
   it("dismissKeepRequest clears that draft's request and reloads the drafts", async () => {
