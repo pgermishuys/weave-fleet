@@ -1,0 +1,306 @@
+import { realpathSync, statSync } from "node:fs";
+import { isAbsolute, relative, resolve } from "node:path";
+import type { RenderComponent } from "fleet-mods";
+import { toWire } from "../tree";
+import { createBudget, type Budget } from "./budget";
+import { contextFor, inMod } from "./context";
+import { createDollar, type DollarScope } from "./dollar";
+import type { HandleEntry } from "./handles";
+import { frozenCopy } from "./freeze";
+import { WATCH_ONLY, type ActiveCall, type EventName, type HookFailureReport, type HookReg, type LoadedMod, type Runtime } from "./types";
+
+/** What a chain step resolves to. `nullBy` names the mod that answered `null` at ui.render. */
+export interface Out {
+  v: unknown;
+  nullBy?: string;
+}
+
+export interface HookRef {
+  mod: LoadedMod;
+  reg: HookReg;
+}
+
+/** One dispatch being run. */
+export interface Dispatch {
+  rt: Runtime;
+  event: EventName;
+  sessionId: string;
+  hooks: HookRef[];
+  failures: HookFailureReport[];
+  /** ui.render: the site being drawn. */
+  component?: RenderComponent;
+  /** ui.press/input/select: the callback the chain ends in. */
+  control?: HandleEntry;
+}
+
+const FLEET = Object.freeze({ type: "Fleet" });
+const messageOf = (e: unknown) => (e instanceof Error ? e.message : String(e));
+const isObject = (v: unknown): v is Record<string, unknown> => typeof v === "object" && v !== null && !Array.isArray(v);
+
+/** Does `path` name an .html file inside `owner`'s folder (after following links)? */
+export function pageExists(rt: Runtime, owner: string, path: string): boolean {
+  const root = rt.mods.get(owner)?.root;
+  if (!root || !/\.html?$/i.test(path) || isAbsolute(path)) return false;
+  try {
+    const realRoot = realpathSync(root);
+    const full = realpathSync(resolve(root, path));
+    const rel = relative(realRoot, full);
+    return rel !== "" && !rel.startsWith("..") && !isAbsolute(rel) && statSync(full).isFile();
+  } catch {
+    return false;
+  }
+}
+
+/** Why `v` isn't an answer the event takes, or null. */
+function problemWith(d: Dispatch, mod: LoadedMod, v: unknown): string | null {
+  switch (d.event) {
+    case "ui.render": {
+      if (v === undefined) return "the hook returned nothing; return a tree, null or await next(e)";
+      const w = toWire(v, {
+        site: d.component!,
+        defaultOwner: mod.id,
+        pageExists: (o, p) => pageExists(d.rt, o, p),
+        allocHandle: () => "h0",
+        limits: d.rt.limits,
+      });
+      return w.ok ? null : w.reason;
+    }
+    case "ui.press":
+      return isObject(v) && typeof v.element === "string" ? null : "ui.press takes next(e) or { element }";
+    case "ui.input":
+    case "ui.select":
+      return isObject(v) && typeof v.element === "string" && typeof v.value === "string" ? null : `${d.event} takes next(e) or { element, value }`;
+    default:
+      return null;
+  }
+}
+
+// ─── next ─────────────────────────────────────────────────────────────────────────────────────────────────────────
+
+interface NextState {
+  called: boolean;
+  resolved: boolean;
+  value?: Out;
+  /** The latest call to next, settled or not. */
+  last?: Promise<Out>;
+  over: boolean;
+}
+
+type Rest = (e: any) => Promise<Out>;
+
+function makeNext(st: NextState, rest: Rest, budget: Budget, signal: AbortSignal, event: EventName, ms: number) {
+  const next = (e2: unknown) => {
+    if (st.over) return Promise.reject(new Error("the dispatch is over"));
+    let copy: unknown;
+    try {
+      copy = frozenCopy(e2);
+    } catch (err) {
+      return Promise.reject(err);
+    }
+    st.called = true;
+    budget.pause();
+    const p = rest(copy)
+      .then((out) => {
+        st.resolved = true;
+        st.value = out;
+        return out;
+      })
+      .finally(() => budget.resume());
+    st.last = p;
+    return p.then((o) => o.v);
+  };
+  Object.defineProperties(next, {
+    signal: { value: signal },
+    event: { value: event },
+    budget: {
+      value: Object.freeze({
+        ms,
+        get remainingMs() {
+          return budget.remainingMs;
+        },
+      }),
+    },
+  });
+  return next;
+}
+
+// ─── Running one handler ──────────────────────────────────────────────────────────────────────────────────────────
+
+type Outcome = { value: unknown } | { error: unknown } | { timeout: true };
+
+/** Runs `call` under the budget `makeBudget` builds: resolves with its outcome, or `timeout` when the budget runs out first. */
+function execute(ac: AbortController, makeBudget: (expire: () => void) => Budget, call: () => unknown): { done: Promise<Outcome>; budget: Budget } {
+  let settle!: (o: Outcome) => void;
+  const done = new Promise<Outcome>((r) => (settle = r));
+  const budget = makeBudget(() => {
+    ac.abort();
+    settle({ timeout: true });
+  });
+  try {
+    Promise.resolve(call()).then(
+      (value) => settle({ value }),
+      (error) => settle({ error }),
+    );
+  } catch (error) {
+    settle({ error });
+  }
+  return { done, budget };
+}
+
+function nullAttribution(mod: LoadedMod, value: unknown, st: NextState): string | undefined {
+  if (value !== null) return undefined;
+  return st.resolved && st.value?.v === null && st.value.nullBy ? st.value.nullBy : mod.id;
+}
+
+/** Calls one hook with the rest of the chain behind it. Never rejects. */
+async function callHook(d: Dispatch, ref: HookRef, e: any, rest: Rest): Promise<Out> {
+  const { rt } = d;
+  const { mod, reg } = ref;
+  const sid = d.sessionId;
+  const ac = new AbortController();
+  const active: ActiveCall = { modId: mod.id, sessionId: sid, abort: () => ac.abort() };
+  rt.calls.add(active);
+  const scope: DollarScope = { rendering: d.event === "ui.render", budget: null };
+  const $ = createDollar(rt, mod, sid, d.event, scope);
+  const ctx = contextFor(rt, mod.id, sid, d.event);
+  const st: NextState = { called: false, resolved: false, over: false };
+  const hookMs = rt.limits.hookMs;
+
+  try {
+    let next!: ReturnType<typeof makeNext>;
+    const run = execute(
+      ac,
+      (expire) => {
+        const b = createBudget(hookMs, expire, rt.now);
+        scope.budget = b;
+        next = makeNext(st, rest, b, ac.signal, d.event, hookMs);
+        return b;
+      },
+      () => inMod(ctx, () => reg.hook($, e, next)),
+    );
+    const outcome = await run.done;
+    run.budget.finish();
+    st.over = true;
+
+    let failure: { kind: "throw" | "timeout"; message: string } | null = null;
+    if ("timeout" in outcome) failure = { kind: "timeout", message: `the hook used more than its ${hookMs} ms` };
+    else if ("error" in outcome) failure = { kind: "throw", message: messageOf(outcome.error) };
+    else {
+      const problem = problemWith(d, mod, outcome.value);
+      if (problem) failure = { kind: "throw", message: problem };
+    }
+
+    if (!failure) {
+      if (rt.strikes.has(mod.id)) rt.strikes.set(mod.id, 0);
+      const value = (outcome as { value: unknown }).value;
+      if (WATCH_ONLY.has(d.event)) {
+        if (st.last) await st.last;
+        return st.resolved ? st.value! : await rest(e);
+      }
+      return { v: value, nullBy: nullAttribution(mod, value, st) };
+    }
+
+    if (reg.catchHandler) {
+      const answered = await runCatch(d, ref, e, rest, st, failure, scope, $, ctx);
+      if (answered) return answered;
+    }
+
+    if (st.last) await st.last.catch(() => {});
+    const strikes = (rt.strikes.get(mod.id) ?? 0) + 1;
+    rt.strikes.set(mod.id, strikes);
+    d.failures.push({ mod: mod.id, event: d.event, kind: failure.kind, message: failure.message, strikes });
+    if (strikes >= rt.limits.strikes) rt.unloadMod(mod.id);
+    return st.resolved ? st.value! : await rest(e);
+  } finally {
+    scope.rendering = false;
+    scope.budget = null;
+    rt.calls.delete(active);
+  }
+}
+
+/** Runs the hook's `.catch` handler. Returns its answer, or null when it has none. */
+async function runCatch(
+  d: Dispatch,
+  ref: HookRef,
+  e: any,
+  rest: Rest,
+  hookSt: NextState,
+  failure: { kind: "throw" | "timeout"; message: string },
+  scope: DollarScope,
+  $: any,
+  ctx: ReturnType<typeof contextFor>,
+): Promise<Out | null> {
+  const { rt } = d;
+  const { mod, reg } = ref;
+  const catchMs = rt.limits.catchMs;
+  const ac = new AbortController();
+  const st: NextState = { called: false, resolved: false, over: false };
+  let replay: Promise<Out> | undefined;
+
+  let catchNext!: ReturnType<typeof makeNext> & { error?: unknown; called?: boolean };
+  const catchRest: Rest = async (e2) => {
+    if (hookSt.called) {
+      if (hookSt.last) await hookSt.last.catch(() => {});
+      if (hookSt.resolved) return hookSt.value!;
+    }
+    replay ??= rest(e2);
+    return replay;
+  };
+
+  const run = execute(
+    ac,
+    (expire) => {
+      const b = createBudget(catchMs, expire, rt.now);
+      scope.budget = b;
+      catchNext = makeNext(st, catchRest, b, ac.signal, d.event, catchMs);
+      Object.defineProperties(catchNext, {
+        error: { value: Object.freeze({ kind: failure.kind, message: failure.message }) },
+        called: { get: () => hookSt.called },
+      });
+      return b;
+    },
+    () => inMod(ctx, () => reg.catchHandler!($, e, catchNext)),
+  );
+  const outcome = await run.done;
+  run.budget.finish();
+  st.over = true;
+  if (!("value" in outcome)) return null;
+  if (problemWith(d, mod, outcome.value) !== null) return null;
+  return { v: outcome.value, nullBy: nullAttribution(mod, outcome.value, hookSt) };
+}
+
+// ─── The chain ────────────────────────────────────────────────────────────────────────────────────────────────────
+
+/** Runs the chain from hook `i` with `e`. */
+export function runFrom(d: Dispatch, i: number, e: any): Promise<Out> {
+  let j = i;
+  while (j < d.hooks.length && d.hooks[j]!.mod.dead) j++;
+  if (j >= d.hooks.length) return endOfChain(d, e);
+  return callHook(d, d.hooks[j]!, e, (e2) => runFrom(d, j + 1, e2));
+}
+
+/** What Fleet does when no hook is left to answer. */
+async function endOfChain(d: Dispatch, e: any): Promise<Out> {
+  switch (d.event) {
+    case "ui.render":
+      return { v: FLEET };
+    case "session.start":
+    case "turn.complete":
+      return { v: e };
+  }
+  const h = d.control!;
+  const { rt } = d;
+  const ctx = contextFor(rt, h.owner, d.sessionId, d.event);
+  let timer: ReturnType<typeof setTimeout> | undefined;
+  const timeout = new Promise<"timeout">((r) => (timer = setTimeout(() => r("timeout"), rt.limits.hookMs)));
+  try {
+    const args = h.kind === "onPress" ? [] : [e.value];
+    const winner = await Promise.race([Promise.resolve(inMod(ctx, () => h.fn(...args))).then(() => "done" as const), timeout]);
+    if (winner === "timeout") rt.fail(h.owner, d.sessionId, d.event, "timeout", `the callback used more than its ${rt.limits.hookMs} ms`);
+  } catch (err) {
+    rt.fail(h.owner, d.sessionId, d.event, "throw", messageOf(err));
+  } finally {
+    clearTimeout(timer);
+  }
+  return { v: d.event === "ui.press" ? { element: e.element } : { element: e.element, value: e.value } };
+}
