@@ -469,9 +469,8 @@ public sealed class BunMachineFinderTests : IDisposable
     [Theory]
     [InlineData(0b110_110_110)]
     [InlineData(0b111_111_111)]
-    [InlineData(0b111_111_101)]
     [InlineData(0b111_101_111)]
-    public async Task A_bun_file_that_group_or_others_can_write_is_not_run(int mode)
+    public async Task A_bun_file_that_others_can_write_is_not_run(int mode)
     {
         if (OperatingSystem.IsWindows()) return;
         var bun = Bun("a");
@@ -574,6 +573,63 @@ public sealed class BunMachineFinderTests : IDisposable
         UnixFileStatus.Stat(Path.Combine(_root, "nothing")).ShouldBeNull();
         UnixFileStatus.Stat(Folder("a"))!.Value.Inode.ToString(CultureInfo.InvariantCulture).ShouldBe(Run("stat", "-c", "%i", Folder("a")));
         UnixFileStatus.Stat("/")!.Value.Uid.ShouldBe(0u);
+    }
+
+    private static bool HasPrivateGroup() =>
+        OperatingSystem.IsLinux() && Run("id", "-gn") == Run("id", "-un")
+        && Run("getent", "group", Run("id", "-gn")).Split(':')[^1].Length == 0;
+
+    private const UnixFileMode GroupWritable = (UnixFileMode)0b111_111_101;
+
+    [Fact]
+    public async Task A_folder_the_users_private_group_can_write_is_accepted()
+    {
+        if (OperatingSystem.IsWindows() || !HasPrivateGroup()) return;
+        var bun = Bun("shared");
+        File.SetUnixFileMode(Folder("shared"), GroupWritable);
+        File.SetUnixFileMode(bun, GroupWritable);
+
+        BunPaths.WhyNotSafeToRun(bun).ShouldBeNull();
+        (await Finder().CheckAsync(bun, CancellationToken.None)).Status.ShouldBe(BunCandidateStatuses.Usable);
+    }
+
+    [Fact]
+    public void A_group_writable_folder_of_another_group_is_refused()
+    {
+        if (!OperatingSystem.IsLinux()) return;
+        var own = Run("id", "-g");
+        var other = Run("id", "-G").Split(' ').FirstOrDefault(g => g != own && g != "0");
+        if (other is null) return;
+        var bun = Bun("shared");
+        if (System.Diagnostics.Process.Start("chgrp", [other, Folder("shared")]) is not { } chgrp) return;
+        chgrp.WaitForExit();
+        if (chgrp.ExitCode != 0) return;
+        File.SetUnixFileMode(Folder("shared"), GroupWritable);
+
+        BunPaths.WhyNotSafeToRun(bun).ShouldBe($"Fleet didn't run it: {Folder("shared")} can be changed by other users.");
+    }
+
+    [Fact]
+    public void The_unix_status_group_matches_stat_and_the_private_group_check_agrees_with_getent()
+    {
+        if (!OperatingSystem.IsLinux()) return;
+        var file = Bun("a");
+
+        var identity = UnixFileStatus.Stat(file).ShouldNotBeNull();
+
+        identity.Gid.ToString(CultureInfo.InvariantCulture).ShouldBe(Run("stat", "-c", "%g", file));
+        UnixFileStatus.IsPrivateGroup(identity.Gid).ShouldBe(HasPrivateGroup());
+        UnixFileStatus.IsPrivateGroup(0).ShouldBeFalse();
+    }
+
+    [Fact]
+    public void The_real_bun_in_the_users_home_passes_the_whole_check()
+    {
+        if (OperatingSystem.IsWindows()) return;
+        var bun = Path.Combine(Environment.GetEnvironmentVariable("HOME") ?? "/nonexistent", ".bun", "bin", "bun");
+        if (!File.Exists(bun)) return;
+
+        BunPaths.WhyNotSafeToRun(bun).ShouldBeNull();
     }
 
     private static string Run(string program, params string[] args)
