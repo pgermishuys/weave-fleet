@@ -304,8 +304,41 @@ public sealed class DomainEventSerializationTests
                 },
             });
 
+            cases.Add("mods.runtime", new ModsRuntimeChanged
+            {
+                Payload = new ModsRuntimePayload
+                {
+                    Reason = "job",
+                    Job = new ModsRuntimeJob
+                    {
+                        Phase = "downloading",
+                        Kind = "install",
+                        Version = "1.4.2",
+                        Message = "Installing the mod runtime…",
+                        Reason = null,
+                        BytesReceived = 12_000_000,
+                        BytesTotal = 36_646_949,
+                        StartedAt = new DateTimeOffset(2026, 10, 10, 9, 0, 0, TimeSpan.Zero),
+                        From = null,
+                    },
+                },
+            });
+
             return cases;
         }
+    }
+
+    [Fact]
+    public void The_mods_runtime_payload_uses_camel_case_and_nulls_when_there_is_no_job()
+    {
+        var json = JsonSerializer.Serialize<DomainEvent>(
+            new ModsRuntimeChanged { Payload = new ModsRuntimePayload { Reason = "bun-path" } }, SerializerOptions);
+
+        using var document = JsonDocument.Parse(json);
+        var payload = document.RootElement.GetProperty("payload");
+        payload.GetProperty("reason").GetString().ShouldBe("bun-path");
+        payload.TryGetProperty("job", out var job).ShouldBeTrue();
+        job.ValueKind.ShouldBe(JsonValueKind.Null);
     }
 
     [Theory]

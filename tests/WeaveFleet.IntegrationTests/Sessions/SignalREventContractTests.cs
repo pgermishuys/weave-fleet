@@ -434,6 +434,52 @@ public sealed class SignalREventContractTests : IAsyncLifetime, IDisposable
     }
 
     [Fact]
+    public async Task A_mods_runtime_event_carries_the_job_and_why_it_was_raised()
+    {
+        await _hub.InvokeAsync("SubscribeToSessionsTopicAsync");
+        await WaitForBroadcasterSubscriberAsync();
+        var broadcaster = _server.Services.GetRequiredService<WeaveFleet.Application.Events.IEventBroadcaster>();
+        var payload = new WeaveFleet.Domain.Events.ModsRuntimePayload
+        {
+            Reason = "job",
+            Job = new WeaveFleet.Domain.Events.ModsRuntimeJob
+            {
+                Phase = "failed",
+                Kind = "security",
+                Version = "1.4.3",
+                Message = "Fleet couldn't reach github.com: the connection timed out.",
+                Reason = "offline",
+                BytesReceived = 0,
+                BytesTotal = 36_646_949,
+                StartedAt = new DateTimeOffset(2026, 10, 10, 9, 0, 0, TimeSpan.Zero),
+                From = "1.4.2",
+            },
+        };
+
+        await broadcaster.BroadcastAsync(
+            "sessions",
+            "mods.runtime",
+            JsonSerializer.SerializeToElement(payload, new JsonSerializerOptions(JsonSerializerDefaults.Web)),
+            new WeaveFleet.Domain.Events.ModsRuntimeChanged { Payload = payload },
+            userId: null,
+            ct: CancellationToken.None);
+
+        var received = await WaitForWorkEventAsync("mods.runtime", "sessions");
+        var props = received.Data.GetProperty("properties");
+        props.GetProperty("reason").GetString().ShouldBe("job");
+        var job = props.GetProperty("job");
+        job.GetProperty("phase").GetString().ShouldBe("failed");
+        job.GetProperty("kind").GetString().ShouldBe("security");
+        job.GetProperty("version").GetString().ShouldBe("1.4.3");
+        job.GetProperty("message").GetString().ShouldBe("Fleet couldn't reach github.com: the connection timed out.");
+        job.GetProperty("reason").GetString().ShouldBe("offline");
+        job.GetProperty("bytesReceived").GetInt64().ShouldBe(0);
+        job.GetProperty("bytesTotal").GetInt64().ShouldBe(36_646_949);
+        job.GetProperty("startedAt").GetDateTimeOffset().ShouldBe(new DateTimeOffset(2026, 10, 10, 9, 0, 0, TimeSpan.Zero));
+        job.GetProperty("from").GetString().ShouldBe("1.4.2");
+    }
+
+    [Fact]
     public async Task A_session_notification_carries_its_kind_request_and_machine()
     {
         await _hub.InvokeAsync("SubscribeToSessionsTopicAsync");
