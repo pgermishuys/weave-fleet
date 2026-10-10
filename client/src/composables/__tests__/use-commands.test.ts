@@ -22,6 +22,8 @@ vi.mock("@/api/client", () => ({ api: { GET: vi.fn(async () => ({ data: [], resp
 import { useCommands } from "@/composables/use-commands";
 import { useCommandStore } from "@/stores/commands";
 import { useKeybindingsStore } from "@/stores/keybindings";
+import { useNoticesStore } from "@/stores/notices";
+import { useModsStore } from "@/stores/mods";
 import { useSessionsStore } from "@/stores/sessions";
 import { useThemeStore } from "@/stores/theme";
 import type { CommandId } from "@/lib/command-ids";
@@ -347,6 +349,49 @@ describe("useCommands", () => {
 
       expect(heard.calls["focus-prompt"]).toEqual([{ sessionId: "s1" }]);
       heard.stop();
+    });
+  });
+  describe("start without mods", () => {
+    const withMods = (state: { on: boolean; safeMode: boolean } | null) => {
+      useModsStore().modsSwitch = state;
+      return vi.spyOn(useModsStore(), "setSafeMode").mockResolvedValue({} as never);
+    };
+
+    it("isn't listed while the Mods switch is off or unread", async () => {
+      withMods({ on: false, safeMode: false });
+      await start();
+
+      expect(commands.getCommand("start-without-mods")).toBeUndefined();
+    });
+
+    it("starts without mods from the palette while the switch is on", async () => {
+      const setSafeMode = withMods({ on: true, safeMode: false });
+      await start();
+
+      expect(byId("start-without-mods").label).toBe("Start without mods");
+      expect(byId("start-without-mods").category).toBe("Fleet");
+      byId("start-without-mods").action();
+
+      expect(setSafeMode).toHaveBeenCalledWith(true);
+    });
+
+    it("turns mods back on when they're stopped", async () => {
+      const setSafeMode = withMods({ on: true, safeMode: true });
+      await start();
+
+      expect(byId("start-without-mods").label).toBe("Turn mods back on");
+      byId("start-without-mods").action();
+
+      expect(setSafeMode).toHaveBeenCalledWith(false);
+    });
+
+    it("says so in a notice when the server refuses", async () => {
+      const setSafeMode = withMods({ on: true, safeMode: false });
+      setSafeMode.mockRejectedValue(new Error("Mods are off."));
+      await start();
+
+      byId("start-without-mods").action();
+      await vi.waitFor(() => expect(useNoticesStore().notices.map((notice) => notice.body)).toContain("Mods are off."));
     });
   });
 });

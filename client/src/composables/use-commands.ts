@@ -20,6 +20,7 @@ import {
   PanelLeftClose,
   PanelRightClose,
   Plus,
+  PowerOff,
   Puzzle,
   RefreshCcw,
   ScrollText,
@@ -50,6 +51,7 @@ import { useTerminalsStore } from "@/stores/terminals";
 import { useThemeStore, type ThemeSelection } from "@/stores/theme";
 import { useWorkspaceUiStore } from "@/stores/workspace-ui";
 import { useProblemReportStore } from "@/stores/problem-report";
+import { useStartWithoutMods } from "@/composables/use-start-without-mods";
 
 function isEditableTarget(target: EventTarget | null): boolean {
   return target instanceof HTMLInputElement
@@ -84,6 +86,7 @@ export function useCommands() {
   const sessionsStore = useSessionsStore();
   const sidebarStore = useSidebarStore();
   const problemReport = useProblemReportStore();
+  const startWithoutMods = useStartWithoutMods();
   const themeStore = useThemeStore();
   const workspaceUiStore = useWorkspaceUiStore();
   const appShellStore = useAppShellStore();
@@ -718,6 +721,20 @@ export function useCommands() {
         keywords: ["bug", "issue", "feedback", "help", "report"],
         action: () => void problemReport.show({ from: "palette" }),
       },
+      // Only with the Mods switch on: it flips between stopping the user's mods and starting them again.
+      ...(startWithoutMods.available.value
+        ? [{
+          id: "start-without-mods" as const,
+          label: startWithoutMods.label.value,
+          description: startWithoutMods.label.value === "Start without mods"
+            ? "Stop your mods until Fleet restarts or you turn them back on."
+            : "Start your mods again.",
+          icon: PowerOff,
+          category: "Fleet" as const,
+          keywords: ["mods", "safe mode", "disable", "stop", "extensions"],
+          action: () => void startWithoutMods.toggle(),
+        }]
+        : []),
     ];
   });
 

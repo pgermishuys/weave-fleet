@@ -2,7 +2,7 @@
 import type { PluginConnectionStatus, FleetPluginStatus } from "@/plugins/types";
 import { computed, onMounted, onUnmounted, watch } from "vue";
 import { useLocation, useRouter } from "@tanstack/vue-router";
-import { Bug, CircleHelp, Smartphone, Sparkles } from "lucide-vue-next";
+import { Bug, CircleHelp, PowerOff, Smartphone, Sparkles } from "lucide-vue-next";
 import { useIsMobileNav } from "@/composables/use-media-query";
 import { storeToRefs } from "pinia";
 import weaveLogo from "@/assets/weave_logo.png";
@@ -16,6 +16,7 @@ import { useWorkflowsFeature } from "@/composables/use-workflows-feature";
 import { useWorkflowsStore } from "@/stores/workflows";
 import { useSidebarStore } from "@/stores/sidebar";
 import { useProblemReportStore } from "@/stores/problem-report";
+import { useStartWithoutMods } from "@/composables/use-start-without-mods";
 import { useWhatsNew } from "@/composables/use-whats-new";
 import {
   DropdownMenu,
@@ -38,6 +39,7 @@ useBoardFeature(); // starts loading the preferences the Board rail's switch rea
 const { isWorkflowsEnabled } = useWorkflowsFeature();
 const workflowsStore = useWorkflowsStore();
 const problemReport = useProblemReportStore();
+const startWithoutMods = useStartWithoutMods();
 const { openWhatsNew } = useWhatsNew();
 // On a phone, the phone view: what needs you on every machine.
 const isMobileNav = useIsMobileNav();
@@ -304,6 +306,14 @@ function handleSelect(item: RailItem): void {
             >
               <Bug class="size-3.5" />
               Report a problem…
+            </DropdownMenuItem>
+            <DropdownMenuItem
+              v-if="startWithoutMods.available.value"
+              data-testid="rail-start-without-mods"
+              @select="startWithoutMods.toggle()"
+            >
+              <PowerOff class="size-3.5" />
+              {{ startWithoutMods.label.value }}
             </DropdownMenuItem>
             <DropdownMenuSeparator />
             <DropdownMenuItem
