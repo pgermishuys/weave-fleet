@@ -62,6 +62,9 @@ public static class EndpointExtensions
         apiScope.MapSkillEndpoints();
         apiScope.MapBuiltInSkillEndpoints();
         apiScope.MapModEndpoints();
+#if FLEET_MODS_DEBUG
+        apiScope.MapModHostDebugEndpoints();
+#endif
         apiScope.MapMemoryEndpoints();
         apiScope.MapReportEndpoints();
         apiScope.MapWorkflowEndpoints();
