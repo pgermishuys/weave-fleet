@@ -5,21 +5,18 @@ namespace WeaveFleet.Application.Runtimes;
 /// <summary>Where the Bun Fleet runs came from. Sent to the client as <c>source</c>.</summary>
 public static class BunSources
 {
-    /// <summary>The path in <c>Fleet:Harness:BunPath</c>.</summary>
+    /// <summary>The user's own Bun: the path in <c>Fleet:Harness:BunPath</c>, set by hand or picked from the Buns Fleet found.</summary>
     public const string Configured = "configured";
 
     /// <summary>The Bun Fleet installed under <c>~/.weave/runtimes/bun/{version}/</c>.</summary>
     public const string Installed = "installed";
-
-    /// <summary><c>bun</c> on <c>PATH</c>. Only looked for in Development.</summary>
-    public const string Path = "path";
 }
 
 /// <summary>A Bun Fleet can run.</summary>
 /// <param name="ExecutablePath">The absolute path of the <c>bun</c> executable.</param>
 /// <param name="Source">One of <see cref="BunSources"/>.</param>
-/// <param name="Version">The version, when Fleet installed it; <see langword="null"/> for a Bun found elsewhere.</param>
-public sealed record BunLocation(string ExecutablePath, string Source, string? Version);
+/// <param name="Version">The version: the folder's name for Fleet's own Bun, what <c>--version</c> printed for the configured one.</param>
+public sealed record BunLocation(string ExecutablePath, string Source, string Version);
 
 /// <summary>How a Bun Fleet found on the machine stands. Sent to the client as <c>status</c>.</summary>
 public static class BunCandidateStatuses
@@ -86,29 +83,56 @@ public sealed record BunInstallJob(
     long? BytesTotal);
 
 /// <summary>
-/// The Bun the mod host runs on. Fleet doesn't ship Bun: the first time the host needs it, Fleet downloads a pinned
-/// version, checks its sha256 and installs it under <c>~/.weave/runtimes/bun/{version}/</c>.
+/// The Bun the mod host runs on: the user's own (the configured path, which they may have picked from the Buns Fleet
+/// found on the machine), or the one Fleet installs under <c>~/.weave/runtimes/bun/{version}/</c> from the release
+/// it wants (<see cref="IBunReleases"/>). Fleet never runs a Bun the user didn't choose, and never updates or replaces
+/// the user's own.
 /// </summary>
 public interface IBunRuntime
 {
-    /// <summary>The Bun version Fleet installs.</summary>
-    string Version { get; }
-
     /// <summary>The install running now or the last one, for the client to show; <see langword="null"/> before the first.</summary>
     BunInstallJob? Job { get; }
 
     /// <summary>
-    /// The Bun to run, without downloading anything: the configured path, then the installed runtime, then <c>bun</c>
-    /// on <c>PATH</c> in Development. <see langword="null"/> when there's none, or the configured path doesn't exist.
+    /// The Bun to run, without downloading anything. With a configured path: that Bun, when the path is absolute,
+    /// exists, runs and is <see cref="BunRelease.MinimumVersion"/> or later; otherwise <see langword="null"/>.
+    /// Without one: <paramref name="release"/>'s version when it's installed, otherwise the newest installed version,
+    /// so mods keep running while a newer one downloads. Never looks on <c>PATH</c>.
     /// </summary>
-    BunLocation? Find();
+    Task<BunLocation?> FindAsync(BunRelease release, CancellationToken ct);
 
     /// <summary>
-    /// Finds Bun as <see cref="Find"/> does, or installs the pinned version when there's none. One install runs at a
-    /// time; a caller arriving during one waits for it. A configured path that doesn't exist is an error, and nothing
-    /// is downloaded. Cancelling stops the download and deletes what it wrote.
+    /// With a configured path: that Bun as <see cref="FindAsync"/> finds it, or an error saying why it can't run;
+    /// nothing is downloaded. Without one: <paramref name="release"/>'s version, installing it when it isn't
+    /// installed. One install runs at a time; a caller arriving during one waits for it. Cancelling stops the
+    /// download and deletes what it wrote.
     /// </summary>
+    /// <param name="release">The release to install.</param>
     /// <param name="progress">Told each change to <see cref="Job"/> while this call installs.</param>
     /// <param name="ct">Cancels the install.</param>
-    Task<Result<BunLocation>> EnsureAsync(IProgress<BunInstallJob>? progress, CancellationToken ct);
+    Task<Result<BunLocation>> EnsureAsync(BunRelease release, IProgress<BunInstallJob>? progress, CancellationToken ct);
+
+    /// <summary>
+    /// Every Bun on the machine Fleet could offer the user: <c>bun</c> on <c>PATH</c>, then <c>~/.bun/bin</c>,
+    /// <c>/opt/homebrew/bin</c> and <c>/usr/local/bin</c> (<c>bun.exe</c> on <c>PATH</c> and in
+    /// <c>%USERPROFILE%\.bun\bin</c> on Windows), each once, with its version. Runs each one's
+    /// <c>--version</c>. Finding one never makes Fleet use it.
+    /// </summary>
+    Task<IReadOnlyList<BunCandidate>> FindOnMachineAsync(CancellationToken ct);
+
+    /// <summary>Checks a path the user typed the way <see cref="FindOnMachineAsync"/> checks what it finds. It must be absolute.</summary>
+    Task<BunCandidate> CheckAsync(string path, CancellationToken ct);
+
+    /// <summary>Fleet's installed Buns, newest first.</summary>
+    IReadOnlyList<BunLocation> Installed();
+
+    /// <summary>
+    /// Deletes installed versions older than the newest, except any holding a path in <paramref name="inUse"/>
+    /// (the Bun a running mod host started from). For the host supervisor to call once the host has moved to a newer
+    /// version. Returns the versions it deleted; one it can't delete (a file in use) stays for a later prune.
+    /// </summary>
+    Task<IReadOnlyList<string>> PruneAsync(IReadOnlyCollection<string> inUse, CancellationToken ct);
+
+    /// <summary>Whether <paramref name="location"/> is safe to keep running, judged against <paramref name="release"/>.</summary>
+    BunSafety SafetyOf(BunLocation location, BunRelease release);
 }

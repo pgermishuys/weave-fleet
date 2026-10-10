@@ -80,7 +80,7 @@ public sealed class BunRuntimeInstallerTests : IDisposable
         var wrong = release with { Assets = [.. release.Assets.Select(a => a with { Sha256 = new string('0', 64) })] };
         var installer = NewInstaller(wrong, "linux-x64");
 
-        var result = await installer.EnsureAsync(release, null, CancellationToken.None);
+        var result = await installer.EnsureAsync(wrong, null, CancellationToken.None);
 
         result.Error.Code.ShouldBe("Mods.Runtime");
         result.Error.Description.ShouldBe("The Bun 1.4.2 download didn't match its checksum, so Fleet deleted it.");
