@@ -8,6 +8,7 @@ const api = vi.hoisted(() => ({
   fetchMods: vi.fn(),
   fetchDrafts: vi.fn(),
   keepDraft: vi.fn(),
+  dismissKeepRequest: vi.fn(),
   setDraftOn: vi.fn(),
   activateModVersion: vi.fn(),
   undoMod: vi.fn(),
@@ -159,6 +160,34 @@ describe("actions", () => {
     expect(store.draftsFor("s1")).toEqual([off, draft("s1", "b")]);
   });
 
+  it("dismissKeepRequest clears that draft's request and reloads the drafts", async () => {
+    const asked = { note: "keep it", at: "2026-10-10T10:00:00Z" };
+    api.fetchDrafts.mockResolvedValue([draft("s1", "a", { keepRequest: asked })]);
+    const store = useModsStore();
+    await store.loadDrafts("s1");
+    api.dismissKeepRequest.mockResolvedValue(undefined);
+    api.fetchDrafts.mockResolvedValue([draft("s1", "a", { keepRequest: null })]);
+    await store.dismissKeepRequest("s1", "a");
+    expect(api.dismissKeepRequest).toHaveBeenCalledWith("s1", "a", null);
+    expect(store.draftsFor("s1")[0]?.keepRequest).toBeNull();
+    expect(api.fetchDrafts).toHaveBeenCalledTimes(2);
+  });
+
+  it("keep and turning a draft off clear its keep request locally", async () => {
+    const asked = { note: "keep it", at: "2026-10-10T10:00:00Z" };
+    api.fetchDrafts.mockResolvedValue([draft("s1", "a", { keepRequest: asked }), draft("s1", "b", { keepRequest: asked })]);
+    const store = useModsStore();
+    await store.loadDrafts("s1");
+    api.setDraftOn.mockResolvedValue(draft("s1", "a", { keepRequest: asked }));
+    await store.setDraftOn("s1", "a", false);
+    expect(store.draftsFor("s1")[0]?.keepRequest).toBeNull();
+    expect(store.draftsFor("s1")[1]?.keepRequest).toEqual(asked);
+    api.keepDraft.mockResolvedValue(mod("b"));
+    api.fetchDrafts.mockImplementation(() => new Promise(() => {}));
+    void store.keep("s1", "b", "");
+    await vi.waitFor(() => expect(store.draftsFor("s1")[1]?.keepRequest).toBeNull());
+  });
+
   it("activateVersion, undo and setOn replace the mod in kept", async () => {
     api.fetchMods.mockResolvedValue(view([mod("a"), mod("b")]));
     const store = useModsStore();
@@ -226,6 +255,16 @@ describe("mods.changed", () => {
     await useModsStore().loadKept();
     emit("home", { reason, name: "a" });
     await vi.waitFor(() => expect(api.fetchMods).toHaveBeenCalledTimes(2));
+  });
+
+  it.each(["draft-written", "keep-requested"])("reloads a tracked session's drafts on %s", async (reason) => {
+    api.fetchDrafts.mockResolvedValue([]);
+    await useModsStore().loadDrafts("s1");
+    emit("home", { reason, sessionId: "other", name: "a" });
+    expect(api.fetchDrafts).toHaveBeenCalledTimes(1);
+    emit("home", { reason, sessionId: "s1", name: "a" });
+    await vi.waitFor(() => expect(api.fetchDrafts).toHaveBeenCalledTimes(2));
+    expect(api.fetchMods).not.toHaveBeenCalled();
   });
 
   it("ignores kept changes until kept was loaded", async () => {

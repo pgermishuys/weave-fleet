@@ -7,6 +7,7 @@ vi.mock("@/lib/api-client", () => ({ apiFetchOn: apiFetchOnMock }));
 import {
   activateModVersion,
   checkDraft,
+  dismissKeepRequest,
   fetchDraftFiles,
   fetchDrafts,
   fetchModVersionFiles,
@@ -136,6 +137,23 @@ describe("requests", () => {
     expect(lastCall()[1]).toBe("/api/sessions/s1/mods/drafts/test-chips/off");
     await setDraftOn("s1", "test-chips", true);
     expect(lastCall()[1]).toBe("/api/sessions/s1/mods/drafts/test-chips/on");
+  });
+});
+
+describe("dismissKeepRequest", () => {
+  it("DELETEs the keep request", async () => {
+    apiFetchOnMock.mockImplementation(async () => new Response(null, { status: 204 }));
+    await expect(dismissKeepRequest("s1", "test-chips", machine)).resolves.toBeUndefined();
+    expect(lastCall()[0]).toBe(machine);
+    expect(lastCall()[1]).toBe("/api/sessions/s1/mods/drafts/test-chips/keep-request");
+    expect(lastCall()[2]?.method).toBe("DELETE");
+  });
+
+  it("treats 404 as done and throws other failures", async () => {
+    apiFetchOnMock.mockImplementationOnce(async () => json({ error: "gone" }, 404));
+    await expect(dismissKeepRequest("s1", "test-chips")).resolves.toBeUndefined();
+    apiFetchOnMock.mockImplementationOnce(async () => json({ error: "bad" }, 400));
+    await expect(dismissKeepRequest("s1", "test-chips")).rejects.toBeInstanceOf(ModsRequestError);
   });
 });
 
