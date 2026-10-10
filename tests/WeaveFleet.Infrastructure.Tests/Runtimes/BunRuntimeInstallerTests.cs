@@ -5,6 +5,7 @@ using Microsoft.Extensions.Logging.Abstractions;
 using WeaveFleet.Application.Configuration;
 using WeaveFleet.Application.Runtimes;
 using WeaveFleet.Infrastructure.Runtimes;
+using WeaveFleet.Testing.Fakes;
 
 namespace WeaveFleet.Infrastructure.Tests.Runtimes;
 
@@ -146,6 +147,7 @@ public sealed class BunRuntimeInstallerTests : IDisposable
         var release = Publish();
         var installer = new BunRuntimeInstaller(
             new FleetOptions { Harness = { BunDownloadBase = _server.BaseUri.ToString().TrimEnd('/') } },
+            new FakeBunPathSetting(),
             new FakeHttpClientFactory(),
             NullLogger<BunRuntimeInstaller>.Instance)
         {
@@ -165,6 +167,7 @@ public sealed class BunRuntimeInstallerTests : IDisposable
     {
         var installer = new BunRuntimeInstaller(
             new FleetOptions { Harness = { BunDownloadBase = "ftp://nope" } },
+            new FakeBunPathSetting(),
             new FakeHttpClientFactory(),
             NullLogger<BunRuntimeInstaller>.Instance);
 
@@ -826,12 +829,14 @@ public sealed class BunRuntimeInstallerTests : IDisposable
         var bun = Path.Combine(folder, "bun");
         WriteScript(bun, "1.4.5");
         var installer = new BunRuntimeInstaller(
-            new FleetOptions { Harness = { BunPath = bun } },
+            new FleetOptions(),
+            new FakeBunPathSetting(bun),
             new FakeHttpClientFactory(),
             NullLogger<BunRuntimeInstaller>.Instance)
         {
             Home = _home,
             DownloadBase = _server.BaseUri,
+            WhyNotSafeToRun = _ => null,
         };
 
         (await installer.FindAsync(BunRelease.Pinned, CancellationToken.None))
@@ -1162,7 +1167,8 @@ public sealed class BunRuntimeInstallerTests : IDisposable
         var configured = Path.Combine(Path.GetTempPath(), "tools", fileName);
         // Windows rules, tested on any machine through the seam.
         var installer = new BunRuntimeInstaller(
-            new FleetOptions { Harness = { BunPath = configured } },
+            new FleetOptions(),
+            new FakeBunPathSetting(configured),
             new FakeHttpClientFactory(),
             NullLogger<BunRuntimeInstaller>.Instance)
         {
@@ -1175,6 +1181,145 @@ public sealed class BunRuntimeInstallerTests : IDisposable
 
         result.IsSuccess.ShouldBeFalse();
         result.Error.Description.ShouldBe($"Fleet:Harness:BunPath is {configured}, which must end in .exe: point it at bun.exe.");
+    }
+
+    // -- the user's own Bun ---------------------------------------------------------------------------------------
+
+    [Fact]
+    public async Task A_users_saved_bun_is_what_their_mods_run_on()
+    {
+        var release = Publish();
+        var own = await ConfiguredFileAsync();
+        var setting = new FakeBunPathSetting();
+        setting.Seed("alice", own);
+        var installer = NewInstaller(release, setting: setting, probe: Prints("1.4.7"));
+
+        (await installer.FindForUserAsync(release, "alice", CancellationToken.None))
+            .ShouldBe(new BunLocation(own, BunSources.Configured, "1.4.7"));
+        _server.Requests.ShouldBeEmpty();
+    }
+
+    [Fact]
+    public async Task Another_user_without_a_saved_bun_gets_fleets_own()
+    {
+        var release = Publish();
+        await NewInstaller(release).EnsureAsync(release, null, CancellationToken.None);
+        var setting = new FakeBunPathSetting();
+        setting.Seed("alice", await ConfiguredFileAsync());
+        var installer = NewInstaller(release, setting: setting, probe: Prints("1.4.7"));
+
+        var bob = await installer.FindForUserAsync(release, "bob", CancellationToken.None);
+
+        bob!.Source.ShouldBe(BunSources.Installed);
+        bob.Version.ShouldBe("1.4.2");
+    }
+
+    [Fact]
+    public async Task A_saved_bun_does_not_change_the_machines_bun()
+    {
+        var release = Publish();
+        var setting = new FakeBunPathSetting();
+        setting.Seed("alice", await ConfiguredFileAsync());
+        var installer = NewInstaller(release, setting: setting, probe: Prints("1.4.7"));
+
+        (await installer.FindAsync(release, CancellationToken.None)).ShouldBeNull();
+        var ensured = await installer.EnsureAsync(release, null, CancellationToken.None);
+
+        ensured.Value.Source.ShouldBe(BunSources.Installed);
+    }
+
+    [Fact]
+    public async Task Configuration_wins_over_a_users_saved_bun()
+    {
+        var release = Publish();
+        var fromConfiguration = await ConfiguredFileAsync();
+        var setting = new FakeBunPathSetting(fromConfiguration);
+        setting.Seed("alice", Path.Combine(_home, "other-bun"));
+        var installer = NewInstaller(release, setting: setting, probe: Prints("1.4.9"));
+
+        var found = await installer.FindForUserAsync(release, "alice", CancellationToken.None);
+
+        found.ShouldBe(new BunLocation(fromConfiguration, BunSources.Configured, "1.4.9"));
+    }
+
+    [Fact]
+    public async Task A_saved_bun_that_is_gone_finds_nothing_and_does_not_fall_back_to_fleets_own()
+    {
+        var release = Publish();
+        await NewInstaller(release).EnsureAsync(release, null, CancellationToken.None);
+        var setting = new FakeBunPathSetting();
+        setting.Seed("alice", Path.Combine(_home, "gone", "bun"));
+        var installer = NewInstaller(release, setting: setting);
+
+        (await installer.FindForUserAsync(release, "alice", CancellationToken.None)).ShouldBeNull();
+    }
+
+    [Fact]
+    public async Task A_configured_bun_is_not_run_when_the_safety_check_refuses_it()
+    {
+        var release = Publish();
+        var configured = await ConfiguredFileAsync();
+        var probed = 0;
+        var installer = NewInstaller(
+            release, bunPath: configured,
+            probe: (_, _) => { probed++; return Task.FromResult(new BunProbeResult(BunVersion.Parse("1.4.5"), null)); },
+            safety: path => $"Fleet didn't run it: {path} is owned by another user.");
+
+        (await installer.FindAsync(release, CancellationToken.None)).ShouldBeNull();
+        var result = await installer.EnsureAsync(release, null, CancellationToken.None);
+
+        result.Error.Description.ShouldBe(
+            $"Fleet:Harness:BunPath is {configured}. Fleet didn't run it: {configured} is owned by another user.");
+        probed.ShouldBe(0);
+        _server.Requests.ShouldBeEmpty();
+    }
+
+    [Fact]
+    public async Task A_users_saved_bun_is_not_run_when_the_safety_check_refuses_it()
+    {
+        var release = Publish();
+        var own = await ConfiguredFileAsync();
+        var setting = new FakeBunPathSetting();
+        setting.Seed("alice", own);
+        var probed = 0;
+        var installer = NewInstaller(
+            release, setting: setting,
+            probe: (_, _) => { probed++; return Task.FromResult(new BunProbeResult(BunVersion.Parse("1.4.5"), null)); },
+            safety: path => $"Fleet didn't run it: {path} is owned by another user.");
+
+        (await installer.FindForUserAsync(release, "alice", CancellationToken.None)).ShouldBeNull();
+        probed.ShouldBe(0);
+    }
+
+    [Fact]
+    [Trait("Category", "ModsFileSafety")]
+    public async Task A_world_writable_configured_bun_is_refused_by_the_real_check()
+    {
+        if (OperatingSystem.IsWindows()) return;
+        var release = Publish();
+        var configured = await ConfiguredFileAsync();
+        File.SetUnixFileMode(configured, (UnixFileMode)0b111_111_111);
+        var installer = NewInstaller(release, bunPath: configured, probe: Prints("1.4.5"), safety: BunPaths.WhyNotSafeToRun);
+
+        var result = await installer.EnsureAsync(release, null, CancellationToken.None);
+
+        result.IsFailure.ShouldBeTrue();
+        result.Error.Description.ShouldContain("can be changed by other users");
+    }
+
+    [Fact]
+    [Trait("Category", "ModsFileSafety")]
+    public async Task A_world_writable_folder_above_a_users_bun_is_refused_by_the_real_check()
+    {
+        if (OperatingSystem.IsWindows()) return;
+        var release = Publish();
+        var own = await ConfiguredFileAsync();
+        File.SetUnixFileMode(Path.GetDirectoryName(own)!, (UnixFileMode)0b111_111_111);
+        var setting = new FakeBunPathSetting();
+        setting.Seed("alice", own);
+        var installer = NewInstaller(release, setting: setting, probe: Prints("1.4.5"), safety: BunPaths.WhyNotSafeToRun);
+
+        (await installer.FindForUserAsync(release, "alice", CancellationToken.None)).ShouldBeNull();
     }
 
     // -- helpers ------------------------------------------------------------------------------------------------
@@ -1203,9 +1348,12 @@ public sealed class BunRuntimeInstallerTests : IDisposable
         Action<string, string>? move = null,
         Action<string, string>? rename = null,
         string? home = null,
-        Uri? downloadBase = null) =>
+        Uri? downloadBase = null,
+        FakeBunPathSetting? setting = null,
+        Func<string, string?>? safety = null) =>
         new(
-            new FleetOptions { Harness = { BunPath = bunPath ?? "" } },
+            new FleetOptions(),
+            setting ?? new FakeBunPathSetting(bunPath),
             new FakeHttpClientFactory(),
             NullLogger<BunRuntimeInstaller>.Instance)
         {
@@ -1217,6 +1365,7 @@ public sealed class BunRuntimeInstallerTests : IDisposable
             MoveRetryDelay = TimeSpan.FromMilliseconds(1),
             MoveDirectory = move ?? Directory.Move,
             RenameDirectory = rename ?? Directory.Move,
+            WhyNotSafeToRun = safety ?? (_ => null),
         };
 
     /// <summary>Serves a fake archive for every pinned platform and returns a release whose checksums match them.</summary>
