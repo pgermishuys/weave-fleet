@@ -1,4 +1,5 @@
 using WeaveFleet.Application.Runtimes;
+using WeaveFleet.Infrastructure.Runtimes;
 
 namespace WeaveFleet.Infrastructure.Tests.Runtimes;
 
@@ -45,14 +46,35 @@ public sealed class BunReleaseTests
         => BunRelease.Pinned.AssetFor(rid)!.Size.ShouldBe(size);
 
     [Fact]
-    public void The_pinned_source_never_announces_a_new_release()
+    public async Task The_pinned_source_never_announces_a_new_release()
     {
         var raised = 0;
         var releases = new PinnedBunReleases();
         releases.Changed += (_, _) => raised++;
 
         releases.Current.ShouldBe(BunRelease.Pinned);
+        await ((IBunReleases)releases).RefreshAsync(CancellationToken.None);
+        releases.Current.ShouldBe(BunRelease.Pinned);
         raised.ShouldBe(0);
+    }
+
+    [Theory]
+    [InlineData("1.4.2", "1.4.0", "1.4.3", "1.4.0", true, false)]
+    [InlineData("1.4.2", "1.4.0", "1.4.2", "1.4.0", false, false)]
+    [InlineData("1.4.2", "1.4.0", "1.4.2", "1.4.2", false, true)]
+    [InlineData("1.4.2", "1.4.0", "1.4.10", "1.4.3", true, true)]
+    [InlineData("1.4.3", "1.4.0", "1.4.2", "1.4.0", false, false)]
+    public void A_release_change_says_whether_it_is_newer_or_needs_a_safer_bun(
+        string before, string safeBefore, string after, string safeAfter, bool newer, bool safer)
+    {
+        var args = new BunReleaseChangedEventArgs(
+            new BunRelease(before, []) { OldestSafe = safeBefore },
+            new BunRelease(after, []) { OldestSafe = safeAfter });
+
+        args.NewerVersion.ShouldBe(newer);
+        args.SaferRequired.ShouldBe(safer);
+        args.Previous.Version.ShouldBe(before);
+        args.Current.Version.ShouldBe(after);
     }
 
     [Fact]
