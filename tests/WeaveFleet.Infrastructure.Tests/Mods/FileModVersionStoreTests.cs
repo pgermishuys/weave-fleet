@@ -1632,4 +1632,61 @@ public sealed class FileModVersionStoreTests : IDisposable
         linkError.Message.ShouldContain("link", Case.Insensitive);
         Directory.GetFileSystemEntries(Path.Combine(UserFolder(), Name)).ShouldBeEmpty();
     }
+
+    // ── Listing draft sessions ──────────────────────────────────────────
+
+    [Fact]
+    public async Task No_draft_sessions_when_there_are_no_drafts()
+    {
+        (await _store.ListDraftSessionsAsync(User)).ShouldBeEmpty();
+    }
+
+    [Fact]
+    public async Task Draft_sessions_are_listed_in_ordinal_order()
+    {
+        Draft("ses_b");
+        Draft("ses_a");
+        Draft("ses_C");
+
+        (await _store.ListDraftSessionsAsync(User)).ShouldBe(["ses_C", "ses_a", "ses_b"]);
+    }
+
+    [Fact]
+    public async Task Draft_sessions_skip_files_and_names_that_are_not_session_ids()
+    {
+        Draft("ses_a");
+        var drafts = Path.Combine(UserFolder(), "drafts");
+        File.WriteAllText(Path.Combine(drafts, "ses_file"), "x");
+        Directory.CreateDirectory(Path.Combine(drafts, "not a session"));
+        Directory.CreateDirectory(Path.Combine(drafts, "..x"));
+
+        (await _store.ListDraftSessionsAsync(User)).ShouldBe(["ses_a"]);
+    }
+
+    [Trait("Category", "ModsFileSafety")]
+    [Fact]
+    public async Task Draft_sessions_skip_a_linked_session_folder()
+    {
+        if (OperatingSystem.IsWindows())
+            return;
+        Draft("ses_a");
+        Directory.CreateSymbolicLink(Path.Combine(Path.Combine(UserFolder(), "drafts"), "ses_link"), Outside());
+
+        (await _store.ListDraftSessionsAsync(User)).ShouldBe(["ses_a"]);
+    }
+
+    [Fact]
+    public async Task The_host_folder_is_neither_a_kept_mod_nor_a_draft_session()
+    {
+        Draft("ses_a");
+        await Keep("ses_a");
+        var host = _store.HostFolder(User);
+        Directory.CreateDirectory(Path.Combine(host, "sub", "deeper"));
+        File.WriteAllText(Path.Combine(host, "mod.json"), Manifest);
+        File.WriteAllText(Path.Combine(host, "sub", "versions.json"), "{}");
+        Directory.CreateDirectory(Path.Combine(host, "ses_hidden", Name));
+
+        (await _store.ListAsync(User)).Select(h => h.Name).ShouldBe([Name]);
+        (await _store.ListDraftSessionsAsync(User)).ShouldBeEmpty();
+    }
 }

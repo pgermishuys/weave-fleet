@@ -1,0 +1,6 @@
+{
+  "name": "test-chips",
+  "version": "0.1.0",
+  "description": "Draws test runs as passed, failed and skipped counts",
+  "hooks": "./mod.ts"
+}

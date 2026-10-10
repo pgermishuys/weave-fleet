@@ -124,6 +124,13 @@ public static class DependencyInjection
         return services;
     }
 
+    /// <summary>Starts the mod host service with Fleet: it follows <c>mods.changed</c> and shuts every host down when Fleet stops.</summary>
+    public static IServiceCollection AddModHostStartupService(this IServiceCollection services)
+    {
+        services.AddHostedService(sp => sp.GetRequiredService<WeaveFleet.Application.Mods.Host.ModHostService>());
+        return services;
+    }
+
     /// <summary>
     /// Adds the startup service that moves skills and tools installed by older Fleet versions to
     /// where OpenCode reads them. Local mode only. Register before the bundled skills service.
@@ -215,6 +222,14 @@ public static class DependencyInjection
         services.AddSingleton<ISkillVersionStore>(sp => new WeaveFleet.Infrastructure.Skills.FileSkillVersionStore(sp.GetRequiredService<FleetOptions>()));
         services.AddSingleton<WeaveFleet.Application.Mods.IModVersionStore>(sp => new WeaveFleet.Infrastructure.Mods.FileModVersionStore(sp.GetRequiredService<FleetOptions>()));
         services.AddSingleton<WeaveFleet.Application.Mods.IModChecker, WeaveFleet.Application.Mods.NoModChecker>();
+        // The mod host: one Bun process per user, started when one of their mods should run (docs/mods/api.md, "The protocol").
+        services.AddSingleton(new WeaveFleet.Application.Mods.Host.ModHostOptions());
+        services.AddSingleton<WeaveFleet.Application.Mods.Host.ModHostService>();
+        services.AddSingleton<WeaveFleet.Application.Mods.Host.IModHost>(sp => sp.GetRequiredService<WeaveFleet.Application.Mods.Host.ModHostService>());
+        services.AddSingleton<WeaveFleet.Application.Mods.Host.IModHostConnectionFactory, WeaveFleet.Infrastructure.Mods.Host.ModHostConnectionFactory>();
+        services.AddSingleton<WeaveFleet.Application.Mods.Host.IModUserGate, WeaveFleet.Application.Mods.Host.ScopedModUserGate>();
+        services.AddSingleton<WeaveFleet.Application.Mods.Host.IModHostBun, WeaveFleet.Application.Mods.Host.BunModHostBun>();
+        services.AddSingleton<WeaveFleet.Application.Mods.Host.IModHostFiles>(new WeaveFleet.Infrastructure.Mods.Host.ModHostFiles(AppContext.BaseDirectory));
         services.AddScoped<SkillImprover>();
         services.AddScoped<ISessionActivator>(sp => sp.GetRequiredService<WeaveFleet.Application.Sessions.Activation.SessionActivation>());
         services.AddScoped<SessionCallbackService>();
