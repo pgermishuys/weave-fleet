@@ -102,14 +102,16 @@ export async function dispatch(rt: Runtime, params: DispatchParams) {
     return { result: hookE, failures: d.failures };
   }
 
+  // A control event always is: its callback belongs to the mod that drew the control, which needn't be in the chain.
+  const announce = chainMods.length > 1 || control !== undefined;
   const generation = generationOf(rt, sessionId);
   for (const m of chainMods) {
     if (generationOf(rt, sessionId) !== generation) break;
-    failures.push(...(await ensureStarted(rt, m, sessionId, chainMods.length > 1)));
+    failures.push(...(await ensureStarted(rt, m, sessionId, announce)));
   }
 
   const live = chainMods.filter((m) => !m.dead);
-  const d = newDispatch(rt, event, sessionId, hooksFor(live, event, hookE), chainMods.length > 1);
+  const d = newDispatch(rt, event, sessionId, hooksFor(live, event, hookE), announce);
   d.generation = generation;
   d.control = control;
   if (event === "ui.render") {

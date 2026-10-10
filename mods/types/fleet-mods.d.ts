@@ -619,8 +619,8 @@ declare module "fleet-mods/protocol" {
     /** A failure outside a dispatch (a timer or a callback threw). Same counting as HookFailureReport. */
     failed(params: HookFailureReport & { sessionId?: string }): void;
     /**
-     * Sent just before each hook, `.catch` handler and control callback runs, but only when the dispatch's chain has more
-     * than one mod. A hook that never yields can't be seen from outside; when a dispatch isn't answered within 15 s,
+     * Sent just before each hook, `.catch` handler and control callback runs, when the dispatch's chain has more than one
+     * mod, and always for `ui.press`/`ui.input`/`ui.select` (the callback's mod needn't be in the chain). A hook that never yields can't be seen from outside; when a dispatch isn't answered within 15 s,
      * Fleet blames the mod of the last `running` it got.
      */
     running(params: { mod: ModId; event: EventName; sessionId: string }): void;

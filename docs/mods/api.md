@@ -353,8 +353,8 @@ ends in that callback.
 
 **Host → Fleet (notifications).** `invalidate` (`mod`, `sessionId?`), `log` (`mod`, `sessionId?`, `level`, `text`),
 `failed` (a timer or callback failure: `mod`, `event`, `kind`, `message`, `strikes`, `sessionId?`), `running` (`mod`,
-`event`, `sessionId`: sent before each hook, `.catch` and control callback runs, only when the chain has more than one
-mod, so Fleet knows whom to strike if the dispatch never answers).
+`event`, `sessionId`: sent before each hook, `.catch` and control callback runs, when the chain has more than one mod
+and always for `ui.press`/`ui.input`/`ui.select`, so Fleet knows whom to strike if the dispatch never answers).
 
 **Trees on the wire** are `WireElement`s: children flattened, and each callback replaced by a `handles` entry
 (`{ "onPress": "h17" }`) that the host keeps until the site is drawn again or the session is forgotten. A `Page`

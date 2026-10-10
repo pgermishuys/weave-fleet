@@ -63,6 +63,22 @@ describe("the running notification", () => {
     expect(orderOf(s)).toEqual(["running test-spy@v1 ui.press", "running test-btn@v1 ui.press", "log pressed"]);
   });
 
+  test("a press is always announced: Fleet's chain holds only the mods hooking ui.press, not the one whose callback ends it", async () => {
+    const s = setup();
+    await s.load("test-btn", BUTTON);
+    await s.load("test-spy", `on("ui.press", ($, e, next) => next(e));`);
+    const h = (await s.render(["test-btn@v1"], band)).result.handles.onPress;
+    const e = { sessionId: "ses_test1", mod: "test-btn@v1", element: "go", component: "ComposerBand", requestId: "ses_test1", surface: "desktop", handle: h };
+    s.peer.notifications.length = 0;
+    await s.dispatch("ui.press", ["test-spy@v1"], e);
+    expect(orderOf(s)).toEqual(["running test-spy@v1 ui.press", "running test-btn@v1 ui.press", "log pressed"]);
+
+    const h2 = (await s.render(["test-btn@v1"], band)).result.handles.onPress;
+    s.peer.notifications.length = 0;
+    await s.dispatch("ui.press", [], { ...e, handle: h2 });
+    expect(orderOf(s)).toEqual(["running test-btn@v1 ui.press", "log pressed"]);
+  });
+
   test("the implicit session.start run before an event is announced when the chain has several mods", async () => {
     const s = setup();
     await s.load("test-a", `on("session.start", ($, e, next) => next(e));\non("turn.complete", ($, e, next) => next(e));`);
