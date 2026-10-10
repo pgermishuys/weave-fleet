@@ -1,4 +1,5 @@
 import type { AccumulatedMessage, AccumulatedToolPart } from "@/lib/client-types";
+import { asRecord } from "@/lib/tools";
 
 /**
  * Shell commands the user runs from the composer (`!git status`). The server gives each one a message of role
@@ -43,8 +44,9 @@ export interface ShellCommandView {
   truncated: boolean;
 }
 
-function asRecord(value: unknown): Record<string, unknown> | undefined {
-  return value && typeof value === "object" && !Array.isArray(value) ? value as Record<string, unknown> : undefined;
+/** The shared `asRecord`, with `undefined` for "not a record" since this file reads with `?.` throughout. */
+function recordOrUndefined(value: unknown): Record<string, unknown> | undefined {
+  return asRecord(value) ?? undefined;
 }
 
 function outputText(output: unknown): string {
@@ -58,9 +60,9 @@ export function toShellCommandView(message: AccumulatedMessage): ShellCommandVie
   const part = message.parts.find((candidate): candidate is AccumulatedToolPart => candidate.type === "tool");
   if (!part) return null;
 
-  const state = asRecord(part.state);
-  const input = asRecord(state?.input);
-  const metadata = asRecord(state?.metadata);
+  const state = recordOrUndefined(part.state);
+  const input = recordOrUndefined(state?.input);
+  const metadata = recordOrUndefined(state?.metadata);
   const exit = typeof metadata?.exit === "number" ? metadata.exit : undefined;
   const status = typeof metadata?.status === "string" ? metadata.status : undefined;
 

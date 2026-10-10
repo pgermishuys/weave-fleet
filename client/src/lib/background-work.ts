@@ -1,3 +1,5 @@
+import { asRecord } from "@/lib/tools";
+
 /**
  * Work OpenCode 2 moved into the background. A `shell` or `subagent` call made with `background: true` — or any call
  * backgrounded through `POST /api/session/{id}/background` — returns at once with a handle while its work goes on, so
@@ -85,7 +87,3 @@ export function finishedBackgroundWork(bodies: Iterable<string>): Map<string, Ba
   return finished;
 }
 
-function asRecord(value: unknown): Record<string, unknown> | null {
-  if (!value || typeof value !== "object" || Array.isArray(value)) return null;
-  return value as Record<string, unknown>;
-}

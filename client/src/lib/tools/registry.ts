@@ -158,8 +158,8 @@ function todoLabel(input: LabelInput, fallback: string): string {
 const DESCRIPTORS: readonly ToolDescriptor[] = [
   // Reading and searching
   { name: "read", category: "read", permissionKind: "read", heading: "Read", icon: FileText, label: fileLabel },
-  { name: "list", aliases: ["ls"], category: "read", permissionKind: "read", heading: "List", icon: Folder },
-  { name: "lsp", category: "read", permissionKind: "read", heading: "Lsp", icon: Wrench },
+  { name: "list", aliases: ["ls"], category: "read", permissionKind: "read", heading: "List", icon: Folder, label: fileLabel },
+  { name: "lsp", category: "read", permissionKind: "read", heading: "Lsp", icon: Wrench, label: fileLabel },
   { name: "glob", category: "search", permissionKind: "read", heading: "Glob", icon: Search, label: patternLabel, patternLabel: true },
   { name: "grep", category: "search", permissionKind: "read", heading: "Grep", icon: Search, label: patternLabel, patternLabel: true },
   { name: "codesearch", aliases: ["search"], category: "search", permissionKind: "read", heading: "Codesearch", icon: Search },
@@ -167,8 +167,8 @@ const DESCRIPTORS: readonly ToolDescriptor[] = [
   // Writing
   { name: "edit", aliases: ["multiedit", "strreplaceeditor"], category: "edit", permissionKind: "edit", heading: "Edit", icon: Pencil, label: fileLabel, fileWrite: "modify" },
   { name: "write", category: "edit", permissionKind: "edit", heading: "Write", icon: Pencil, label: fileLabel, fileWrite: "create" },
-  { name: "notebookedit", category: "edit", permissionKind: "edit", heading: "Notebook Edit", icon: Pencil, fileWrite: "create" },
-  { name: "patch", aliases: ["apply_patch"], category: "edit", permissionKind: "edit", heading: "Patch", icon: Pencil, fileWrite: "modify" },
+  { name: "notebookedit", category: "edit", permissionKind: "edit", heading: "Notebook Edit", icon: Pencil, label: fileLabel, fileWrite: "create" },
+  { name: "patch", aliases: ["apply_patch"], category: "edit", permissionKind: "edit", heading: "Patch", icon: Pencil, label: fileLabel, fileWrite: "modify" },
 
   // Running
   { name: "bash", category: "shell", permissionKind: "shell", heading: "Bash", icon: Terminal, label: shellLabel },

@@ -29,6 +29,7 @@ import { modelDisplayName } from "@/lib/agent-model-choice";
 import { isDelegationWaiting, isStreamWorking } from "@/lib/domain-event-reducer";
 import { useSidebarMobile } from "@/composables/use-sidebar-mobile";
 import { clearSentPrompts, reconcileSentPrompts, useSendPrompt, useSentPrompts } from "@/composables/use-send-prompt";
+import { getTool } from "@/lib/tools";
 import { isSubagentTool, subagentKind, subagentTask, toToolCardItem, withoutRedrawnPages } from "@/components/session/activity-stream-tool-card";
 import type { ToolCardItem } from "@/components/session/activity-stream-tool-card";
 import { sessionCommands } from "@/lib/session-commands";
@@ -391,7 +392,7 @@ function derivationInputs(message: AccumulatedMessage, finished: ReadonlyMap<str
     inputs.push(finished);
   }
 
-  if (toolParts.some((part) => part.tool === "skill")) {
+  if (toolParts.some((part) => getTool(part.tool).category === "skill")) {
     inputs.push(builtInSkills.skills);
   }
 
@@ -1065,7 +1066,7 @@ watch(
 
 /** A call that loaded one of Fleet's built-in skills offers Improve on its row. */
 function withImprove(item: ToolCardItem, part: AccumulatedToolPart): ToolCardItem {
-  return part.tool === "skill" && builtInSkills.isBuiltIn(item.title) ? { ...item, improvable: true } : item;
+  return getTool(part.tool).category === "skill" && builtInSkills.isBuiltIn(item.title) ? { ...item, improvable: true } : item;
 }
 
 /** Points a sub-agent call's row at the session it started, once that session exists. */

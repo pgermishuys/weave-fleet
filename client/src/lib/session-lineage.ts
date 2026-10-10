@@ -9,6 +9,7 @@
  * The user can move a fork or a started session out of its parent (`lineageDetachedAt`): it keeps where it came from, but
  * stands on its own, as if the user had started it. A subagent's session can't be moved out: it's part of its parent's turn.
  */
+import { getTool } from "@/lib/tools";
 import type { SessionListItem } from "@/api/client";
 import type { AccumulatedMessage } from "@/lib/client-types";
 import { isWorkRunning, workFailed, type RunningWorkItem } from "@/lib/running-work";
@@ -339,8 +340,7 @@ export function summarizeAgentActivity(messages: readonly AccumulatedMessage[]):
 
 /** `read` → `Read`, `mcp__fleet__fleet_page_show` → `fleet_page_show`. */
 function toolDisplayName(tool: string): string {
-  const name = tool.split("__").at(-1) || tool;
-  return name.charAt(0).toUpperCase() + name.slice(1);
+  return getTool(tool).displayName;
 }
 
 /** The last non-empty line of a work item's output. */

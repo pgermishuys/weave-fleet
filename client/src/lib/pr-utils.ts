@@ -4,6 +4,7 @@
  */
 
 import type { AccumulatedMessage } from "@/lib/client-types";
+import { getTool } from "@/lib/tools";
 
 // ─── Types ─────────────────────────────────────────────────────────────────
 
@@ -18,8 +19,8 @@ export interface PrReference {
 
 /** Case-insensitive match for the shell tool: `bash` in OpenCode, `shell` in OpenCode 2. */
 export function isBashTool(toolName: string): boolean {
-  const name = toolName.toLowerCase();
-  return name === "bash" || name === "shell";
+  const tool = getTool(toolName);
+  return tool.name === "bash" || tool.name === "shell";
 }
 
 /** Regex that matches GitHub PR URLs. */

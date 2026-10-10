@@ -1,3 +1,5 @@
+import { asRecord } from "@/lib/tools";
+
 const TODO_STATUSES = ["pending", "in_progress", "completed", "cancelled"] as const;
 const TODO_PRIORITIES = ["high", "medium", "low"] as const;
 
@@ -5,14 +7,6 @@ export interface TodoItem {
   content: string;
   status: (typeof TODO_STATUSES)[number];
   priority: (typeof TODO_PRIORITIES)[number];
-}
-
-function asRecord(value: unknown): Record<string, unknown> | null {
-  if (value === null || typeof value !== "object" || Array.isArray(value)) {
-    return null;
-  }
-
-  return value as Record<string, unknown>;
 }
 
 function isTodoStatus(value: unknown): value is TodoItem["status"] {
