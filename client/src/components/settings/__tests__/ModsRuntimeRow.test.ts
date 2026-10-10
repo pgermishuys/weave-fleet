@@ -351,7 +351,7 @@ describe("Mods row: installing", () => {
   it("3c unpacking: Check is done, Unpack is current", async () => {
     const wrapper = await mountRow(makeView({ job: job({ phase: "extracting", bytesReceived: 35_300_000 }) }), "true");
 
-    expect(panel(wrapper).text()).toContain("Unpacking Bun 1.4.2");
+    expect(panel(wrapper).text()).toContain("Unpacking");
     const steps = panel(wrapper).findAll("[data-testid^='mods-step-']");
     expect(steps.map((step) => step.attributes("data-status"))).toEqual(["done", "done", "current"]);
   });
@@ -411,6 +411,26 @@ describe("Mods row: failed", () => {
     phase: "failed",
     reason: "offline",
     message: "Fleet couldn't reach github.com: the connection timed out. Check that this computer is online, then try again.",
+  });
+
+  it("a first install that failed in the background, with the switch on, still says why and offers Retry", async () => {
+    const wrapper = await mountRow(makeView({ job: offline }), "true");
+
+    expect(stateOf(wrapper)).toBe("failed");
+    expect(panel(wrapper).text()).toContain("Couldn't download Bun");
+  });
+
+  it("a failed install is old news once a Bun is set: switched off, the row says Bun stays", async () => {
+    const wrapper = await mountRow(
+      makeView({
+        job: offline,
+        bun: { path: "/opt/tools/bun/bin/bun", displayPath: "/opt/tools/bun/bin/bun", source: "configured", version: "1.4.5", safe: true },
+        installedSize: 80_000_000,
+      }),
+      "false",
+    );
+
+    expect(stateOf(wrapper)).toBe("off-again");
   });
 
   it("5a offline: red heading, the reason, the blocked-GitHub hint, Retry and Use my own Bun…", async () => {

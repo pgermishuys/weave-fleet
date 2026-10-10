@@ -53,7 +53,8 @@ const state = computed<State | null>(() => {
   const job = current.job;
   if (jobRunning(job) && (job.kind === "install" || props.enabled)) return "progress";
   if (job?.phase === "failed" && job.reason !== "cancelled") {
-    if (job.kind === "install" && !props.enabled) return "failed";
+    // Mods can't run without a Bun, so a failed first install shows why, whichever way the switch is.
+    if (job.kind === "install" && !current.bun) return "failed";
     if (job.kind === "security" && props.enabled && current.bun) return "security-failed";
   }
   if (props.enabled) {

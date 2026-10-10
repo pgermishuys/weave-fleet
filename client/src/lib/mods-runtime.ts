@@ -92,7 +92,7 @@ export function elapsedText(startedAt: string | null | undefined, now: number): 
 /** What a running install's heading says: the first install, an update, or a security fix. */
 export function progressTitle(job: ModsRuntimeJob): string {
   if (job.phase === "verifying") return "Checking the download";
-  if (job.phase === "extracting") return `Unpacking Bun ${job.version}`;
+  if (job.phase === "extracting") return "Unpacking";
   if (job.kind === "security") return `Security fix: updating to Bun ${job.version}`;
   if (job.kind === "update") return `Updating to Bun ${job.version}`;
   return `Downloading Bun ${job.version}`;
