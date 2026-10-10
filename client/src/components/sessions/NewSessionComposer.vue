@@ -42,7 +42,6 @@ import {
   resolveNewWorktreeBranch,
   type NewSessionFolder,
 } from "@/lib/new-session-request";
-import { projectFolder } from "@/lib/project-folder";
 import { NO_PROFILE } from "@/api/client";
 import { useAppShellStore } from "@/stores/app-shell";
 import { useHarnessProfilesStore } from "@/stores/harness-profiles";
@@ -138,8 +137,6 @@ if (search.value.projectId || !restored) {
 if (restored && folder.value) {
   hasChosenFolder.value = true;
 }
-// Opened from a project: the folder its sessions use goes in once the repositories are known, over the draft's.
-let projectToApply: string | null = search.value.projectId ?? null;
 // A GitHub "start session" hands its issue over through the store; the draft keeps it from here.
 if (newSessionInitialSource.value) {
   gitHubPreset.value = newSessionInitialSource.value;
@@ -488,11 +485,7 @@ function setFolder(next: NewSessionFolder, chosen: boolean): void {
 }
 
 function applyInitialFolder(): void {
-  if (!areRepositoriesReady.value) {
-    return;
-  }
-
-  if (applyProjectFolder() || hasChosenFolder.value) {
+  if (!areRepositoriesReady.value || hasChosenFolder.value) {
     return;
   }
 
@@ -508,33 +501,6 @@ function applyInitialFolder(): void {
   if (initial && !(initial.kind === "directory" && isCloudMode.value)) {
     setFolder(initial, false);
   }
-}
-
-/**
- * Moves to the folder of the project the page was opened from, once the repositories are known. False when its
- * sessions have none: the folder stays as it was.
- */
-function applyProjectFolder(): boolean {
-  const fromProjectId = projectToApply;
-  if (!fromProjectId || !areRepositoriesReady.value) {
-    return false;
-  }
-  projectToApply = null;
-  // A GitHub item's repository decides; another machine's folders aren't the ones this sidebar's sessions ran in.
-  if (gitHubPreset.value || !target.isLive) {
-    return false;
-  }
-  const next = projectFolder(sessionsStore.sessions, fromProjectId, repositories.value);
-  if (!next || (next.kind === "directory" && isCloudMode.value)) {
-    return false;
-  }
-  // Already there: the draft keeps its worktree and branch.
-  const current = folder.value;
-  const isThere = current?.kind === next.kind && "path" in current && "path" in next && current.path === next.path;
-  if (!isThere) {
-    setFolder(next, false);
-  }
-  return true;
 }
 
 function removeGitHubPreset(): void {
@@ -704,10 +670,6 @@ watch(newSessionInitialSource, (preset) => {
 
 watch(() => search.value.projectId, (nextProjectId) => {
   projectId.value = nextProjectId ?? null;
-  if (nextProjectId) {
-    projectToApply = nextProjectId;
-    applyProjectFolder();
-  }
   focusMessage();
 });
 
