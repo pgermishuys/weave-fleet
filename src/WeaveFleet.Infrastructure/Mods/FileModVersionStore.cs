@@ -350,6 +350,9 @@ public sealed class FileModVersionStore(string root) : IModVersionStore, IDispos
         }, ct);
     }
 
+    public Task<ModDraft> WriteDraftFilesAsync(string userId, string sessionId, string name, IReadOnlyList<ModFile> files, CancellationToken ct = default)
+        => throw new NotImplementedException();
+
     public Task<IReadOnlyList<ModFile>?> ReadDraftFilesAsync(string userId, string sessionId, string name, CancellationToken ct = default)
     {
         if (!ModNames.IsValid(name) || !ModNames.IsValidSessionId(sessionId))

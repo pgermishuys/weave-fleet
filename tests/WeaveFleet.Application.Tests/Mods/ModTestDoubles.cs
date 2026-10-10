@@ -138,6 +138,9 @@ internal sealed class InMemoryModVersionStore : IModVersionStore
     public Task<IReadOnlyList<ModFile>?> ReadDraftFilesAsync(string userId, string sessionId, string name, CancellationToken ct = default)
         => Task.FromResult<IReadOnlyList<ModFile>?>(_drafts.ContainsKey((userId, sessionId, name)) ? _files.GetValueOrDefault(DraftFolder(userId, sessionId, name)) : null);
 
+    public Task<ModDraft> WriteDraftFilesAsync(string userId, string sessionId, string name, IReadOnlyList<ModFile> files, CancellationToken ct = default)
+        => throw new NotImplementedException();
+
     public async Task<JsonElement?> CheckDraftAsync(string userId, string sessionId, string name, ModKeepCheck check, CancellationToken ct = default)
     {
         if (!_drafts.ContainsKey((userId, sessionId, name)))

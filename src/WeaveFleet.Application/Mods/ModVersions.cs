@@ -189,6 +189,16 @@ public interface IModVersionStore
     /// </summary>
     Task<JsonElement?> CheckDraftAsync(string userId, string sessionId, string name, ModKeepCheck check, CancellationToken ct = default);
 
+    /// <summary>
+    /// Writes or replaces <paramref name="files"/> in the session's draft of <paramref name="name"/>, creating the draft's
+    /// folder when it's new; files not named stay as they are. All or nothing: every path is checked before anything is
+    /// written. Throws <see cref="ModStoreException"/>, with a message for the agent, when a path isn't a relative path
+    /// inside the folder (<c>/</c>-separated, no <c>..</c>, nothing absolute), when anything on the way to a file is a link
+    /// or isn't a regular file or folder, or when the draft would pass <see cref="ModStoreLimits.KeptFiles"/> or
+    /// <see cref="ModStoreLimits.KeptBytes"/>, the limits Keep applies.
+    /// </summary>
+    Task<ModDraft> WriteDraftFilesAsync(string userId, string sessionId, string name, IReadOnlyList<ModFile> files, CancellationToken ct = default);
+
     // ── $.store: per user, per mod, shared by a draft and its kept mod ──
 
     Task<JsonElement?> GetValueAsync(string userId, string name, string key, CancellationToken ct = default);
