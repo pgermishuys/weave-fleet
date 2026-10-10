@@ -7,4 +7,10 @@ internal sealed class PinnedBunReleases : IBunReleases
 {
     /// <inheritdoc />
     public BunRelease Current => BunRelease.Pinned;
+
+    /// <inheritdoc />
+    public event Action<BunReleaseChange>? Changed { add { } remove { } }
+
+    /// <inheritdoc />
+    public Task RefreshAsync(CancellationToken ct) => Task.CompletedTask;
 }

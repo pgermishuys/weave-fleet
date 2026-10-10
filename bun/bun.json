@@ -1,0 +1,14 @@
+{
+  "schema": 1,
+  "version": "1.4.2",
+  "oldestSafe": "1.4.0",
+  "note": null,
+  "assets": {
+    "linux-x64": { "name": "bun-linux-x64-baseline.zip", "sha256": "c678040f14fe0440eb839d37cbd0ce4c051a32da72806ac97de6a6aab6bf728f" },
+    "linux-arm64": { "name": "bun-linux-aarch64.zip", "sha256": "54328bbc2d9c8e0c9f892c544d66c57a83b84139e34909e5ee81758f1ac8fda7" },
+    "osx-x64": { "name": "bun-darwin-x64-baseline.zip", "sha256": "bad5bbd6cf14d0980d115f5954c9ff904df619d5e994d2da1ffccd3f316300b0" },
+    "osx-arm64": { "name": "bun-darwin-aarch64.zip", "sha256": "90987a3a16d7db556d886ac3d551e7b6d3edf0a1cf43acaed622e8676be1d12f" },
+    "win-x64": { "name": "bun-windows-x64-baseline.zip", "sha256": "78c221c2376f79731ccf4e4af0b3bb46d81fefa3296c5abee09ad8a1b21e68c6" },
+    "win-arm64": { "name": "bun-windows-aarch64.zip", "sha256": "a7a16b876a305fd1029c66dbd27007b4f6112ae896532f675878731a21e50cfd" }
+  }
+}

@@ -79,4 +79,28 @@ public interface IBunReleases
 {
     /// <summary>The release to install and to judge installed and configured Buns against.</summary>
     BunRelease Current { get; }
+
+    /// <summary>
+    /// Raised after <see cref="Current"/> changes: a manifest named a newer Bun, a higher oldest safe version, or both.
+    /// For the host supervisor to download the new Bun and move the host, or to take the security path.
+    /// </summary>
+    event Action<BunReleaseChange>? Changed;
+
+    /// <summary>
+    /// Reads the manifest now rather than waiting for the schedule, e.g. when the user turns Mods on. Never throws for
+    /// a manifest that can't be read: <see cref="Current"/> stays as it was.
+    /// </summary>
+    Task RefreshAsync(CancellationToken ct);
+}
+
+/// <summary>How the release Fleet wants changed.</summary>
+/// <param name="Previous">The release before.</param>
+/// <param name="Current">The release now.</param>
+public sealed record BunReleaseChange(BunRelease Previous, BunRelease Current)
+{
+    /// <summary>The recommended Bun is newer than before.</summary>
+    public bool NewerVersion => BunVersion.Parse(Current.Version) > BunVersion.Parse(Previous.Version);
+
+    /// <summary>The oldest safe version went up: a Bun below it now needs the security path.</summary>
+    public bool SaferRequired => BunVersion.Parse(Current.OldestSafe) > BunVersion.Parse(Previous.OldestSafe);
 }
