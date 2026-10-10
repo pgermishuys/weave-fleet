@@ -20,6 +20,7 @@ namespace WeaveFleet.Infrastructure.Runtimes;
 /// </summary>
 internal sealed partial class BunRuntimeInstaller(
     FleetOptions options,
+    IBunPathSetting setting,
     IHttpClientFactory httpClientFactory,
     ILogger<BunRuntimeInstaller> logger) : IBunRuntime, IDisposable
 {
@@ -64,6 +65,12 @@ internal sealed partial class BunRuntimeInstaller(
     /// <summary>Test seam: whether to hold a configured path to Windows' rules (it must end in <c>.exe</c>).</summary>
     internal bool IsWindows { get; init; } = OperatingSystem.IsWindows();
 
+    /// <summary>
+    /// Test seam: why a configured or saved Bun must not be run (the reason, as a sentence), or <see langword="null"/>
+    /// when it may be. The default refuses a Bun others can change; see <see cref="BunPaths.WhyNotSafeToRun"/>.
+    /// </summary>
+    internal Func<string, string?> WhyNotSafeToRun { get; init; } = BunPaths.WhyNotSafeToRun;
+
     /// <summary>Test seam: learns a Bun's version.</summary>
     internal Func<string, CancellationToken, Task<BunProbeResult>> Probe { get; init; } =
         (path, ct) => BunVersionProbe.RunAsync(path, BunVersionProbe.DefaultTimeout, ct);
@@ -71,7 +78,7 @@ internal sealed partial class BunRuntimeInstaller(
     /// <summary>Test seam: finds the Buns on the machine.</summary>
     internal BunMachineFinder Finder
     {
-        get => _finder ??= new BunMachineFinder { Home = Home, Probe = Probe };
+        get => _finder ??= new BunMachineFinder { Home = Home, Probe = Probe, WhyNotSafeToRun = WhyNotSafeToRun };
         init => _finder = value;
     }
 
@@ -102,9 +109,27 @@ internal sealed partial class BunRuntimeInstaller(
     /// <inheritdoc />
     public async Task<BunLocation?> FindAsync(BunRelease release, CancellationToken ct)
     {
-        if (!string.IsNullOrWhiteSpace(options.Harness.BunPath))
-            return (await CheckConfiguredAsync(options.Harness.BunPath, ct).ConfigureAwait(false)).Location;
+        if (setting.FromConfiguration is { } configured)
+            return (await CheckConfiguredAsync(configured, fromConfiguration: true, ct).ConfigureAwait(false)).Location;
 
+        return FindOwn(release);
+    }
+
+    /// <inheritdoc />
+    public async Task<BunLocation?> FindForUserAsync(BunRelease release, string userId, CancellationToken ct)
+    {
+        if (await setting.GetAsync(userId, ct).ConfigureAwait(false) is { } path)
+        {
+            var check = await CheckConfiguredAsync(path, setting.FromConfiguration is not null, ct).ConfigureAwait(false);
+            return check.Location;
+        }
+
+        return FindOwn(release);
+    }
+
+    /// <summary>Fleet's own Bun: the release's when it's installed, else the newest installed one.</summary>
+    private BunLocation? FindOwn(BunRelease release)
+    {
         var installed = ScanInstalled(release);
         var wanted = installed.FirstOrDefault(bun => bun.Name == release.Version);
         if (wanted is not null)
@@ -118,9 +143,9 @@ internal sealed partial class BunRuntimeInstaller(
     /// <inheritdoc />
     public async Task<Result<BunLocation>> EnsureAsync(BunRelease release, IProgress<BunInstallJob>? progress, CancellationToken ct)
     {
-        if (!string.IsNullOrWhiteSpace(options.Harness.BunPath))
+        if (setting.FromConfiguration is { } configured)
         {
-            var (location, error) = await CheckConfiguredAsync(options.Harness.BunPath, ct).ConfigureAwait(false);
+            var (location, error) = await CheckConfiguredAsync(configured, fromConfiguration: true, ct).ConfigureAwait(false);
             return location is not null ? location : new FleetError(ErrorCode, error!);
         }
 
@@ -227,21 +252,41 @@ internal sealed partial class BunRuntimeInstaller(
         return new BunSafety(false, updateAvailable, message);
     }
 
-    /// <summary>The configured Bun when it can be used, otherwise why not.</summary>
-    private async Task<(BunLocation? Location, string? Error)> CheckConfiguredAsync(string configured, CancellationToken ct)
+    /// <summary>
+    /// The configured or saved Bun when it can be used, otherwise why not. The messages name
+    /// <c>Fleet:Harness:BunPath</c> when <paramref name="fromConfiguration"/>, and "Your Bun at {path}" otherwise.
+    /// </summary>
+    private async Task<(BunLocation? Location, string? Error)> CheckConfiguredAsync(string configured, bool fromConfiguration, CancellationToken ct)
     {
+        var subject = fromConfiguration ? $"Fleet:Harness:BunPath is {configured}" : $"Your Bun at {configured}";
         if (!Path.IsPathFullyQualified(configured))
-            return (null, $"Fleet:Harness:BunPath must be an absolute path; it's {configured}.");
+        {
+            return (null, fromConfiguration
+                ? $"Fleet:Harness:BunPath must be an absolute path; it's {configured}."
+                : $"Your Bun at {configured} must be an absolute path.");
+        }
 
         if (IsWindows && !configured.EndsWith(".exe", StringComparison.OrdinalIgnoreCase))
-            return (null, $"Fleet:Harness:BunPath is {configured}, which must end in .exe: point it at bun.exe.");
+        {
+            return (null, fromConfiguration
+                ? $"{subject}, which must end in .exe: point it at bun.exe."
+                : $"{subject} must end in .exe: point it at bun.exe.");
+        }
 
         if (Directory.Exists(configured))
-            return (null, $"Fleet:Harness:BunPath is {configured}, which is a folder, not the bun program.");
+        {
+            return (null, fromConfiguration
+                ? $"{subject}, which is a folder, not the bun program."
+                : $"{subject} is a folder, not the bun program.");
+        }
 
         var key = ProbeKeyOf(configured);
         if (key is null)
-            return (null, $"Fleet:Harness:BunPath is {configured}, which doesn't exist.");
+            return (null, fromConfiguration ? $"{subject}, which doesn't exist." : $"{subject} doesn't exist.");
+
+        // The same rule found Buns get: not one another user could have planted.
+        if (!IsWindows && WhyNotSafeToRun(configured) is { } unsafeReason)
+            return (null, $"{subject}. {unsafeReason}");
 
         BunVersion version;
         if (_probed.TryGetValue(configured, out var cached) && cached.Key == key)
@@ -252,7 +297,7 @@ internal sealed partial class BunRuntimeInstaller(
         {
             var probe = await Probe(configured, ct).ConfigureAwait(false);
             if (probe.Version is not { } probed)
-                return (null, $"Fleet:Harness:BunPath is {configured}, which didn't run: {probe.Error}");
+                return (null, fromConfiguration ? $"{subject}, which didn't run: {probe.Error}" : $"{subject} didn't run: {probe.Error}");
 
             // Only a Bun that ran is remembered, so a slow start or a Bun still being written is looked at again.
             _probed[configured] = (key, probed);

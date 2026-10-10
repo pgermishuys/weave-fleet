@@ -124,12 +124,20 @@ public interface IBunRuntime
     BunInstallJob? Job { get; }
 
     /// <summary>
-    /// The Bun to run, without downloading anything. With a configured path: that Bun, when the path is absolute,
+    /// The machine's Bun, without downloading anything. With <c>Fleet:Harness:BunPath</c> configured: that Bun, when the path is absolute,
     /// exists, runs and is <see cref="BunRelease.MinimumVersion"/> or later; otherwise <see langword="null"/>.
     /// Without one: <paramref name="release"/>'s version when it's installed, otherwise the newest installed version,
     /// so mods keep running while a newer one downloads. Never looks on <c>PATH</c>.
     /// </summary>
     Task<BunLocation?> FindAsync(BunRelease release, CancellationToken ct);
+
+    /// <summary>
+    /// The Bun <paramref name="userId"/>'s mod host runs on, without downloading anything: <c>Fleet:Harness:BunPath</c>
+    /// when configuration sets it, else the path the user saved, each checked as <see cref="FindAsync"/> checks a
+    /// configured path (absolute, not changeable by others, runs, new enough); a path that fails the check finds
+    /// nothing and doesn't fall back to Fleet's own. With no path at all: Fleet's own Bun, as <see cref="FindAsync"/>.
+    /// </summary>
+    Task<BunLocation?> FindForUserAsync(BunRelease release, string userId, CancellationToken ct);
 
     /// <summary>
     /// With a configured path: that Bun as <see cref="FindAsync"/> finds it, or an error saying why it can't run;
