@@ -23,10 +23,14 @@ import { useFileBuffersStore } from "@/stores/file-buffers";
  * changes them, and the user can only close them.
  */
 
-export type CanvasKind = "changes" | "files" | "context" | "progress" | "turns" | "agents" | "visual" | "browser" | "page" | "file";
+/** The canvas kinds Fleet's own code names; they are contributed in `lib/canvas-registry.ts`. */
+export type CoreCanvasKind = "changes" | "files" | "context" | "progress" | "turns" | "agents" | "visual" | "browser" | "page" | "file";
+
+// A kind is any string, so a contribution can add one; `string & {}` keeps the core ids in editor completions.
+export type CanvasKind = CoreCanvasKind | (string & {});
 
 /** Canvases that exist once per session and open from the + menu or on their own. */
-export type BuiltInCanvasKind = Exclude<CanvasKind, "visual" | "browser" | "page" | "file">;
+export type BuiltInCanvasKind = Exclude<CoreCanvasKind, "visual" | "browser" | "page" | "file">;
 
 /**
  * How a file tab shows its file. Code files have Edit and Diff; Markdown and HTML also have

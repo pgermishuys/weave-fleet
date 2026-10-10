@@ -23,6 +23,7 @@ import ProgressCanvas from "@/components/canvas/ProgressCanvas.vue";
 import TurnsCanvas from "@/components/canvas/TurnsCanvas.vue";
 import VisualCanvas from "@/components/canvas/VisualCanvas.vue";
 import SessionContextCanvas from "@/components/session-context/SessionContextCanvas.vue";
+import { defineContributionPoint } from "@/lib/contributions";
 import type { CanvasInstance, CanvasKind } from "@/stores/canvases";
 import { visualCanvasTitle } from "@/stores/canvases";
 import type { VisualPayload } from "@/lib/visual-payload";
@@ -41,23 +42,38 @@ export interface CanvasTypeDefinition {
   label: string;
   icon: Component;
   component: Component;
+  /** Lists the kinds in this order. */
+  order?: number;
 }
 
 // The editor is its own chunk (CodeMirror and its languages), loaded when the first file opens.
 const FileCanvas = defineAsyncComponent(() => import("@/components/canvas/FileCanvas.vue").then((module) => module.default));
 
-export const CANVAS_TYPES: Record<CanvasKind, CanvasTypeDefinition> = {
-  changes: { kind: "changes", label: "Changes", icon: GitCompare, component: ChangesCanvas },
-  files: { kind: "files", label: "Files", icon: FolderTree, component: FilesCanvas },
-  context: { kind: "context", label: "Context", icon: Paperclip, component: SessionContextCanvas },
-  progress: { kind: "progress", label: "Progress", icon: ListChecks, component: ProgressCanvas },
-  turns: { kind: "turns", label: "Turns", icon: History, component: TurnsCanvas },
-  agents: { kind: "agents", label: "Agents", icon: Network, component: AgentsCanvas },
-  visual: { kind: "visual", label: "Diagram", icon: Workflow, component: VisualCanvas },
-  browser: { kind: "browser", label: "Browser", icon: Globe, component: BrowserCanvas },
-  page: { kind: "page", label: "Page", icon: PanelsTopLeft, component: PageCanvas },
-  file: { kind: "file", label: "File", icon: File, component: FileCanvas },
-};
+/** Every kind of canvas the right panel can show, and what each one is called, looks like and renders as. */
+export const canvasTypes = defineContributionPoint<CanvasTypeDefinition, CanvasKind>({
+  name: "canvas kinds",
+  idOf: (type) => type.kind,
+});
+
+canvasTypes.contribute("core", [
+  { kind: "changes", label: "Changes", icon: GitCompare, component: ChangesCanvas },
+  { kind: "files", label: "Files", icon: FolderTree, component: FilesCanvas },
+  { kind: "context", label: "Context", icon: Paperclip, component: SessionContextCanvas },
+  { kind: "progress", label: "Progress", icon: ListChecks, component: ProgressCanvas },
+  { kind: "turns", label: "Turns", icon: History, component: TurnsCanvas },
+  { kind: "agents", label: "Agents", icon: Network, component: AgentsCanvas },
+  { kind: "visual", label: "Diagram", icon: Workflow, component: VisualCanvas },
+  { kind: "browser", label: "Browser", icon: Globe, component: BrowserCanvas },
+  { kind: "page", label: "Page", icon: PanelsTopLeft, component: PageCanvas },
+  { kind: "file", label: "File", icon: File, component: FileCanvas },
+].map((type, index) => ({ ...type, order: index })));
+
+/** The definition of a canvas kind. A kind nobody contributed has no definition, and asking for it throws. */
+export function canvasType(kind: CanvasKind): CanvasTypeDefinition {
+  const type = canvasTypes.get(kind);
+  if (!type) throw new TypeError(`No canvas kind "${kind}" is registered.`);
+  return type;
+}
 
 /** Built-in canvases a person can open from the + menu. */
 export const PICKABLE_CANVAS_KINDS = ["context", "progress", "changes", "files", "turns", "agents"] as const;
@@ -90,10 +106,10 @@ export function canvasTitle(canvas: CanvasInstance): string {
   if (canvas.file) return fileName(canvas.file.path);
   if (canvas.browser) return canvas.browser.title;
   if (canvas.page) return canvas.page.title;
-  return canvas.payload ? visualCanvasTitle(canvas.payload) : CANVAS_TYPES[canvas.kind].label;
+  return canvas.payload ? visualCanvasTitle(canvas.payload) : canvasType(canvas.kind).label;
 }
 
 export function canvasIcon(canvas: CanvasInstance): Component {
   if (canvas.file) return fileIcon(canvas.file.path);
-  return canvas.payload ? visualIcon(canvas.payload) : CANVAS_TYPES[canvas.kind].icon;
+  return canvas.payload ? visualIcon(canvas.payload) : canvasType(canvas.kind).icon;
 }

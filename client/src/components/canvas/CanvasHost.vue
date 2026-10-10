@@ -17,7 +17,7 @@ import { useDragScroll } from "@/composables/use-drag-scroll";
 import { closeServerCanvas } from "@/composables/use-server-canvases";
 import { useMachineTarget } from "@/lib/machine-target";
 import {
-  CANVAS_TYPES,
+  canvasType,
   PICKABLE_CANVAS_KINDS,
   canvasIcon,
   canvasTitle,
@@ -410,10 +410,10 @@ const activeProps = computed(() => {
             @select="openBuiltIn(kind)"
           >
             <component
-              :is="CANVAS_TYPES[kind].icon"
+              :is="canvasType(kind).icon"
               aria-hidden="true"
             />
-            <span>{{ CANVAS_TYPES[kind].label }}</span>
+            <span>{{ canvasType(kind).label }}</span>
             <span
               v-if="openIds.has(kind)"
               class="canvas-picker__hint"
@@ -495,7 +495,7 @@ const activeProps = computed(() => {
     <div class="canvas-host__body">
       <KeepAlive :max="8">
         <component
-          :is="CANVAS_TYPES[activeCanvas.kind].component"
+          :is="canvasType(activeCanvas.kind).component"
           :id="panelId(activeCanvas)"
           :key="activeCanvas.id"
           v-bind="activeProps"

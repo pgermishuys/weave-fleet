@@ -1,17 +1,16 @@
 <script setup lang="ts">
-import type { Component } from "vue";
-import type { SidebarRail } from "@/stores/sidebar";
 import type { PluginConnectionStatus, FleetPluginStatus } from "@/plugins/types";
 import { computed, onMounted, onUnmounted, watch } from "vue";
 import { useLocation, useRouter } from "@tanstack/vue-router";
-import { BarChart3, Bug, CircleHelp, LayoutGrid, MessageSquare, Puzzle, Settings, Smartphone, Sparkles, Workflow, Zap } from "lucide-vue-next";
+import { Bug, CircleHelp, Smartphone, Sparkles } from "lucide-vue-next";
 import { useIsMobileNav } from "@/composables/use-media-query";
 import { storeToRefs } from "pinia";
 import weaveLogo from "@/assets/weave_logo.png";
 import { api } from "@/api/client";
 import type { PluginCatalogResponse } from "@/api/client";
 import { usePluginRuntime } from "@/plugins/composable";
-import { getSidebarViews } from "@/plugins/slots";
+import "@/components/layout/core-rails";
+import { isSidebarRail, rails, type RailDefinition } from "@/lib/rails";
 import { useBoardFeature } from "@/composables/use-board-feature";
 import { useWorkflowsFeature } from "@/composables/use-workflows-feature";
 import { useWorkflowsStore } from "@/stores/workflows";
@@ -26,35 +25,16 @@ import {
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
 
-type RailItemId = SidebarRail | string;
-
-interface RailItem {
-  id: RailItemId;
-  label: string;
-  icon: Component;
-  to?: string;
+interface RailItem extends RailDefinition {
   status?: PluginConnectionStatus;
   badge?: number;
 }
-
-const ALL_TOP_ITEMS: readonly RailItem[] = [
-  { id: "board", label: "Board", icon: LayoutGrid, to: "/board" },
-  { id: "sessions", label: "Sessions", icon: MessageSquare, to: "/" },
-];
-
-const ALL_BOTTOM_ITEMS: readonly RailItem[] = [
-  { id: "marketplace", label: "Plugins", icon: Puzzle },
-  { id: "workflows", label: "Workflows", icon: Workflow, to: "/workflows" },
-  { id: "automations", label: "Automations", icon: Zap, to: "/automations" },
-  { id: "analytics", label: "Analytics", icon: BarChart3, to: "/analytics" },
-  { id: "settings", label: "Settings", icon: Settings, to: "/settings" },
-];
 
 const sidebarStore = useSidebarStore();
 const { activeRail } = storeToRefs(sidebarStore);
 const router = useRouter();
 const pluginRuntime = usePluginRuntime();
-const { isBoardFeatureEnabled } = useBoardFeature();
+useBoardFeature(); // starts loading the preferences the Board rail's switch reads
 const { isWorkflowsEnabled } = useWorkflowsFeature();
 const workflowsStore = useWorkflowsStore();
 const problemReport = useProblemReportStore();
@@ -65,41 +45,35 @@ const pathname = useLocation({
   select: (location) => location.pathname,
 });
 
-const pluginSidebarViews = computed(() => getSidebarViews());
 // Preserve plugin rail badge wiring for future use, but keep it hidden for now.
 const showPluginRailBadges = false;
 
-const pluginItems = computed<readonly RailItem[]>(() => {
-  return pluginSidebarViews.value.map((item) => {
-    const pluginStatus = pluginRuntime.getStatus(item.pluginId);
-    const badge = showPluginRailBadges
-      ? getStatusBadgeCount(pluginStatus?.actions?.length ?? 0)
-      : undefined;
+const visibleRails = computed<readonly RailItem[]>(() =>
+  rails.value
+    .filter((rail) => rail.icon && (!rail.enabled || rail.enabled()))
+    .map((rail) => {
+      if (!rail.pluginId) return rail;
 
-    return {
-      id: item.viewId,
-      label: item.label,
-      icon: item.icon,
-      to: item.defaultPath,
-      status: pluginStatus?.status ?? "disconnected",
-      badge,
-    };
-  });
-});
+      const pluginStatus = pluginRuntime.getStatus(rail.pluginId);
+      const badge = showPluginRailBadges
+        ? getStatusBadgeCount(pluginStatus?.actions?.length ?? 0)
+        : undefined;
+
+      return { ...rail, status: pluginStatus?.status ?? "disconnected", badge };
+    }));
+
+const topItems = computed(() => visibleRails.value.filter((rail) => rail.placement === "top"));
+
+const pluginItems = computed(() => visibleRails.value.filter((rail) => rail.placement === "plugin"));
+
+const bottomItems = computed(() => visibleRails.value.filter((rail) => rail.placement === "bottom"));
 
 // Workflows exist only while they're switched on in Settings.
-const bottomItems = computed<readonly RailItem[]>(() =>
-  ALL_BOTTOM_ITEMS.filter((item) => item.id !== "workflows" || isWorkflowsEnabled.value));
-
 watch(isWorkflowsEnabled, (enabled) => {
   if (enabled) void workflowsStore.ensureLoaded();
 }, { immediate: true });
 
-const topItems = computed<readonly RailItem[]>(() => {
-  return ALL_TOP_ITEMS.filter((item) => item.id !== "board" || isBoardFeatureEnabled.value);
-});
-
-const currentRouteRail = computed<RailItemId | null>(() => {
+const currentRouteRail = computed<string | null>(() => {
   if (pathname.value === "/board") {
     return "board";
   }
@@ -135,13 +109,13 @@ const currentRouteRail = computed<RailItemId | null>(() => {
     return "sessions";
   }
 
-  const matchingPluginView = pluginSidebarViews.value.find((item) => {
-    return pathname.value === item.defaultPath
-      || pathname.value.startsWith(`${item.defaultPath}/`);
+  const matchingPluginRail = rails.value.find((rail) => {
+    return rail.pluginId && rail.to
+      && (pathname.value === rail.to || pathname.value.startsWith(`${rail.to}/`));
   });
 
-  if (matchingPluginView) {
-    return matchingPluginView.viewId;
+  if (matchingPluginRail) {
+    return matchingPluginRail.id;
   }
 
   return null;
@@ -174,10 +148,6 @@ onUnmounted(() => {
 
 function getStatusBadgeCount(count: number): number | undefined {
   return count > 0 ? count : undefined;
-}
-
-function isSidebarRail(value: RailItemId): value is SidebarRail {
-  return ["board", "sessions", "analytics", "automations", "workflows", "github", "marketplace", "settings"].includes(value);
 }
 
 async function loadPluginStatuses(): Promise<void> {
