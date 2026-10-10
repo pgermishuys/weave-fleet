@@ -19,7 +19,7 @@ describe("Page paths at render time", () => {
     await loadWith(s, "page-ok", drawPage("notes.html"), { "notes.html": "<p>notes</p>" });
     const r = await s.render(["page-ok@v1"], pane);
     expect(r.failures).toEqual([]);
-    expect(r.result).toEqual({ type: "Page", props: { key: "p", path: "notes.html", title: "Notes" } });
+    expect(r.result).toEqual({ type: "Page", props: { key: "p", path: "notes.html", title: "Notes" }, mod: "page-ok@v1" });
   });
 
   test("a Page naming a file that isn't there is a throw failure", async () => {
@@ -49,7 +49,7 @@ describe("Page paths at render time", () => {
     await loadWith(s, "page-inner", `on("ui.render", async ($, e, next) => ({ type: "Page", props: { key: "p", path: "p.html", title: "t" } }));`, { "p.html": "<p>x</p>" });
     const r = await s.render(["page-outer@v1", "page-inner@v1"], pane);
     expect(r.failures).toEqual([]);
-    expect(r.result.children).toEqual([{ type: "Page", props: { key: "p", path: "p.html", title: "t" } }]);
+    expect(r.result.children).toEqual([{ type: "Page", props: { key: "p", path: "p.html", title: "t" }, mod: "page-inner@v1" }]);
     expect(r.drawnBy).toEqual(["page-outer@v1", "page-inner@v1"]);
   });
 

@@ -114,7 +114,7 @@ describe("happy paths", () => {
     expect(tree(A.Markdown({ text: "# hi", key: "m", dimColor: true })).props).toEqual({ text: "# hi", key: "m", dimColor: true });
     expect(tree(A.Code({ source: "x", language: "ts", path: "a.ts", startLine: 3, format: "diff", wrap: "wrap" })).props.startLine).toBe(3);
     expect(tree(A.Page({ key: "p", path: "ui/a.html", title: "T", query: { a: "1" } }))).toEqual({
-      type: "Page", props: { key: "p", path: "ui/a.html", title: "T", query: { a: "1" } },
+      type: "Page", props: { key: "p", path: "ui/a.html", title: "T", query: { a: "1" } }, mod: "mod-a",
     });
   });
   test("undefined props are absent", () => {
@@ -284,8 +284,7 @@ describe("inline sites", () => {
       expect(wire({ type: "Fleet" }, { site }).ok).toBe(true);
     });
     test(`${site} refuses a column Box, Markdown, Input, Select, Code, Page`, () => {
-      expect(reason(A.Box({ flexDirection: "column", children: [pill] }), { site })).toContain(`flexDirection "row"`);
-      expect(reason(A.Box({ children: [pill] }), { site })).toContain(`flexDirection "row"`);
+      expect(reason(A.Box({ flexDirection: "column", children: [pill] }), { site })).toContain("must be a row");
       expect(reason(A.Markdown({ text: "x" }), { site })).toBe(`Markdown: Markdown isn't allowed at ${site}, which takes inline elements only`);
       expect(reason(A.Input({ key: "i" }), { site })).toContain("inline");
       expect(reason(row([pill, A.Markdown({ text: "x" })]), { site })).toContain("Box > Markdown[1]");
@@ -437,5 +436,60 @@ describe("test-chips trees", () => {
       { type: "Fleet" },
     ]);
     expect(r.drawnBy).toEqual(["mod-a"]);
+  });
+});
+
+describe("review 2 addendum (agreeing with the client's renderer)", () => {
+  test("names that live on Object.prototype are unknown props and unknown elements, refused cleanly", () => {
+    for (const name of ["isPrototypeOf", "hasOwnProperty", "__proto__", "constructor", "toString", "valueOf"]) {
+      const props: Record<string, unknown> = { tone: "good", label: "x" };
+      Object.defineProperty(props, name, { value: () => {}, enumerable: true });
+      expect(reason({ type: "Pill", props })).toBe(`Pill: ${name} isn't a prop of Pill`);
+      expect(reason({ type: name, props: {} })).toBe(`${name}: unknown element type ${JSON.stringify(name)}`);
+    }
+  });
+
+  test("every drawn label counts towards the text budget, in tree order, and is cut past it", () => {
+    const t = tree(
+      A.Box({
+        children: [
+          A.Pill({ tone: "good", label: "ab" }),
+          A.Icon({ name: "check", label: "cd" }),
+          A.Button({ key: "b", label: "ef", onPress: noop }),
+          A.Input({ key: "i", label: "gh", placeholder: "ij", submitLabel: "kl", value: "mn" }),
+          A.Select({ key: "s", label: "op", options: [{ value: "v1", label: "qr" }, { value: "v2", label: "st" }], onSelect: noop }),
+          A.Page({ key: "p", path: "p.html", title: "uv" }),
+          "wx",
+        ],
+      }),
+      { limits: { treeTextChars: 19 } },
+    );
+    const [pill, icon, button, input, select, page, text] = t.children;
+    expect([pill.props.label, icon.props.label, button.props.label]).toEqual(["ab", "cd", "ef"]);
+    expect([input.props.label, input.props.placeholder, input.props.submitLabel, input.props.value]).toEqual(["gh", "ij", "kl", "mn"]);
+    expect([select.props.label, select.props.options[0].label, select.props.options[1].label]).toEqual(["op", "qr", "s"]);
+    expect(select.props.options.map((o: any) => o.value)).toEqual(["v1", "v2"]);
+    expect([page.props.title, text]).toEqual(["", ""]);
+  });
+
+  test("a Page query is measured as the URL-encoded query string, at most 4 KiB", () => {
+    const fits = "a".repeat(4096 - "q=".length);
+    expect(wire(A.Page({ key: "p", path: "p.html", title: "t", query: { q: fits } })).ok).toBe(true);
+    // 1,400 spaces are 1,400 bytes of JSON but 4,200 once encoded (%20 each, or + in a form: either is over 4 KiB of address).
+    expect(reason(A.Page({ key: "p", path: "p.html", title: "t", query: { q: " é".repeat(700) } }))).toContain("4 KiB");
+    expect(reason(A.Page({ key: "p", path: "p.html", title: "t", query: { q: fits + "a" } }))).toContain("4 KiB");
+  });
+
+  test("a Page on the wire names the mod whose folder it comes from, from the host's own record", () => {
+    const inner = B.Page({ key: "p", path: "p.html", title: "t" });
+    const t = tree(A.Box({ children: [inner, { type: "Page", props: { key: "q", path: "q.html", title: "u" } }] }));
+    expect(t.children[0].mod).toBe("mod-b");
+    expect(t.children[1].mod).toBe("mod-a");
+    expect(t.children[0].props.mod).toBeUndefined();
+  });
+
+  test("a Box with no flexDirection is a row, so it may hold inline elements at an inline site", () => {
+    expect(wire(A.Box({ children: [A.Pill({ tone: "good", label: "x" })] }), { site: "ToolUse" }).ok).toBe(true);
+    expect(reason(A.Box({ flexDirection: "column", children: [] }), { site: "StatusChip" })).toContain("row");
   });
 });

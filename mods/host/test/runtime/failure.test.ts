@@ -166,7 +166,7 @@ describe(".catch", () => {
 
   test("a handler's answer is checked like a hook's: an invalid tree is no answer", async () => {
     const s = setup();
-    await s.load("test-catch-bad", `on("ui.render", () => { throw new Error("first"); }).catch(($, e) => $.ui.resolve(e).Box({ children: [] }));`);
+    await s.load("test-catch-bad", `on("ui.render", () => { throw new Error("first"); }).catch(($, e) => $.ui.resolve(e).Box({ flexDirection: "column", children: [] }));`);
     const r = await s.render(["test-catch-bad@v1"], chip);
     expect(r.failures).toHaveLength(1);
   });

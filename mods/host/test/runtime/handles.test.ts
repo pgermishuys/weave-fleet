@@ -217,3 +217,16 @@ describe("hand-written elements", () => {
     expect(err.code).toBe(-32602);
   });
 });
+
+describe("the host fills the control event from the handle (review 2 addendum)", () => {
+  test("hooks see the drawing mod's name and the control's key, whatever Fleet sent (Fleet's action carries no mod)", async () => {
+    const s = setup();
+    await s.load("test-drawn", BUTTON);
+    await s.load("test-watch", `on("ui.press", ($, e, next) => { $.ui.log("saw " + e.mod + " " + e.element); return next(e); });`);
+    const h = (await s.render(["test-drawn@v1"], band)).result.handles.onPress;
+    const { mod: _mod, element: _element, ...withoutMod } = control("ui.press", "", h);
+    await s.dispatch("ui.press", ["test-watch@v1"], withoutMod);
+    await s.dispatch("ui.press", ["test-watch@v1"], control("ui.press", "someone-else", h, { element: "wrong" }));
+    expect(logs(s).filter((l) => l.startsWith("saw"))).toEqual(["saw test-drawn go", "saw test-drawn go"]);
+  });
+});
