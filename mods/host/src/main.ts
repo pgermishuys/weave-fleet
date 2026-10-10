@@ -1,6 +1,7 @@
 /**
  * Entry point: `bun src/main.ts --stdio`. JSON-RPC lines on stdin and stdout; everything else goes to stderr.
  */
+import { hardenRealm } from "./harden";
 import { createHost } from "./host";
 import { RpcPeer } from "./rpc";
 
@@ -16,6 +17,9 @@ for (const m of ["log", "info", "debug", "warn", "error"] as const) console[m] =
 process.on("unhandledRejection", (reason) => toStderr("unhandled rejection:", reason));
 process.on("uncaughtException", (error) => toStderr("uncaught exception:", error));
 
+// Before any mod can run: freeze the intrinsics and take away every way to turn a string into code.
+hardenRealm();
+
 const log = (message: string) => void process.stderr.write(`[mods-host] ${message}\n`);
 const peer = new RpcPeer({
   input: Bun.stdin.stream() as unknown as AsyncIterable<Uint8Array>,
@@ -23,6 +27,8 @@ const peer = new RpcPeer({
   log,
 });
 const host = createHost({ peer, log });
+// The host has routed mod console calls to their logs; no mod may reroute another's.
+Object.freeze(console);
 
 await peer.run();
 host.close();

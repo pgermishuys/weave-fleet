@@ -62,6 +62,10 @@ const DOLLAR_METHODS = new Set([
 ]);
 
 const PROTOTYPE_NAMES = new Set(["constructor", "__proto__", "prototype"]);
+/** The old accessor methods: they read and write any property, `constructor` included, by a string. */
+const LEGACY_ACCESSORS = new Set(["__lookupGetter__", "__lookupSetter__", "__defineGetter__", "__defineSetter__"]);
+/** `Object` methods that only walk prototypes: a mod that draws never needs them. */
+const PROTOTYPE_WALKERS = new Set(["getPrototypeOf", "setPrototypeOf", "getOwnPropertyDescriptors"]);
 const isFunction = (node: N) =>
   node?.type === "FunctionDeclaration" || node?.type === "FunctionExpression" || node?.type === "ArrowFunctionExpression";
 
@@ -72,7 +76,6 @@ function literalText(node: N): string | undefined {
   return undefined;
 }
 
-const isLiteralKey = (node: N) => (node?.type === "Literal" && !node.regex) || literalText(node) !== undefined;
 
 const pos = (node: N) => ({ line: node.loc.start.line as number, column: (node.loc.start.column as number) + 1 });
 
@@ -226,10 +229,8 @@ export function analyzeModule(ast: N, root: string, limits: Pick<HostLimits, "mo
         break;
       case "MemberExpression": {
         const name = node.computed ? literalText(node.property) : node.property.type === "Identifier" ? node.property.name : undefined;
-        if (name !== undefined && PROTOTYPE_NAMES.has(name)) {
+        if (name !== undefined && (PROTOTYPE_NAMES.has(name) || LEGACY_ACCESSORS.has(name))) {
           fail("prototype", `.${name} isn't allowed: it reaches the prototype chain`, node.property);
-        } else if (node.computed && !isLiteralKey(node.property) && !isSignedNumber(node.property)) {
-          warn("computed-member", "computed member access: the key isn't a literal", node.property);
         }
         break;
       }
@@ -249,6 +250,7 @@ export function analyzeModule(ast: N, root: string, limits: Pick<HostLimits, "mo
         break;
       case "CallExpression": {
         const callee = node.callee;
+        if (isObjectMethod(callee)) reflection(node, callee.property.name);
         const isPage =
           (callee.type === "Identifier" && callee.name === "Page") ||
           (callee.type === "MemberExpression" && !callee.computed && callee.property.type === "Identifier" && callee.property.name === "Page");
@@ -268,8 +270,26 @@ export function analyzeModule(ast: N, root: string, limits: Pick<HostLimits, "mo
     }
   }
 
-  function isSignedNumber(node: N): boolean {
-    return node.type === "UnaryExpression" && (node.operator === "-" || node.operator === "+") && node.argument.type === "Literal";
+  function isObjectMethod(callee: N): boolean {
+    return callee.type === "MemberExpression" && !callee.computed && callee.object.type === "Identifier" && callee.object.name === "Object" && callee.property.type === "Identifier";
+  }
+
+  /** `Object.getOwnPropertyDescriptor(fp, "constructor")` and the like reach what `.constructor` would. */
+  function reflection(call: N, method: string): void {
+    if (PROTOTYPE_WALKERS.has(method)) {
+      fail("prototype", `Object.${method} isn't allowed: it reaches the prototype chain`, call.callee.property);
+      return;
+    }
+    for (const arg of call.arguments) {
+      const text = literalText(arg);
+      if (text !== undefined && PROTOTYPE_NAMES.has(text)) fail("prototype", `Object.${method} with "${text}" isn't allowed: it reaches the prototype chain`, arg);
+      if (arg.type !== "ObjectExpression") continue;
+      for (const prop of arg.properties) {
+        if (prop.type !== "Property") continue;
+        const key = prop.computed ? literalText(prop.key) : prop.key.type === "Identifier" ? prop.key.name : literalText(prop.key);
+        if (key !== undefined && PROTOTYPE_NAMES.has(key)) fail("prototype", `Object.${method} with a "${key}" key isn't allowed: it reaches the prototype chain`, prop.key);
+      }
+    }
   }
 
   // ── Globals, require, arguments ─────────────────────────────────────────────────────────────────────────────────
