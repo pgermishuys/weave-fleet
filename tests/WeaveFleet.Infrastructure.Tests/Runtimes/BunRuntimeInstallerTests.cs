@@ -349,8 +349,12 @@ public sealed class BunRuntimeInstallerTests : IDisposable
             await File.WriteAllTextAsync(Path.Combine(directory, "partial"), "x");
         }
 
-        Directory.SetLastWriteTimeUtc(old, DateTime.UtcNow.AddHours(-2));
-        Directory.SetLastWriteTimeUtc(oldDownload, DateTime.UtcNow.AddHours(-2));
+        foreach (var directory in new[] { old, oldDownload })
+        {
+            File.SetLastWriteTimeUtc(Path.Combine(directory, "partial"), DateTime.UtcNow.AddHours(-2));
+            Directory.SetLastWriteTimeUtc(directory, DateTime.UtcNow.AddHours(-2));
+        }
+
         var installer = NewInstaller(release, "linux-x64");
 
         await installer.EnsureAsync(null, CancellationToken.None);

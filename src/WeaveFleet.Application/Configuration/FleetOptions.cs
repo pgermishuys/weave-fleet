@@ -232,8 +232,8 @@ public sealed class HarnessOptions
         : ProcessRecordsDirectory;
 
     /// <summary>
-    /// The Bun the mod host runs on. When set, Fleet uses it and never downloads one; when it doesn't exist, mods
-    /// can't start. Default: "" (the Bun Fleet installs under <c>~/.weave/runtimes/bun/{version}/</c>).
+    /// The Bun the mod host runs on. Must be an absolute path. When set, Fleet uses it and never downloads one; when
+    /// it's relative or doesn't exist, mods can't start. Default: "" (the Bun Fleet installs under <c>~/.weave/runtimes/bun/{version}/</c>).
     /// </summary>
     public string BunPath { get; set; } = "";
 }

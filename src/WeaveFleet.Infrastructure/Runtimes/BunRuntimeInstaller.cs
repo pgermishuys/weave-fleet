@@ -25,6 +25,7 @@ internal sealed partial class BunRuntimeInstaller(
     private const string ErrorCode = "Mods.Runtime";
     private const string Working = "Installing the mod runtime…";
     private const string ManifestFileName = "install.json";
+    private const int MoveAttempts = 5;
     private const long ProgressStepBytes = 1024 * 1024;
     private static readonly TimeSpan StaleAfter = TimeSpan.FromHours(1);
 
@@ -46,6 +47,12 @@ internal sealed partial class BunRuntimeInstaller(
 
     /// <summary>Test seam: how long a download may go without a byte before it fails.</summary>
     internal TimeSpan StallTimeout { get; init; } = TimeSpan.FromSeconds(60);
+
+    /// <summary>Test seam: moves the unpacked folder into place.</summary>
+    internal Action<string, string> MoveDirectory { get; init; } = Directory.Move;
+
+    /// <summary>Test seam: the wait before the second try of the final move; each later wait doubles.</summary>
+    internal TimeSpan MoveRetryDelay { get; init; } = TimeSpan.FromMilliseconds(100);
 
     /// <summary>Test seam: finds <c>bun</c> on <c>PATH</c>.</summary>
     internal Func<string?> FindOnPath
@@ -75,15 +82,17 @@ internal sealed partial class BunRuntimeInstaller(
     {
         if (!string.IsNullOrWhiteSpace(options.Harness.BunPath))
         {
-            var configured = Path.GetFullPath(options.Harness.BunPath);
-            return File.Exists(configured) ? new BunLocation(configured, BunSources.Configured, null) : null;
+            var configured = options.Harness.BunPath;
+            return Path.IsPathFullyQualified(configured) && File.Exists(configured)
+                ? new BunLocation(configured, BunSources.Configured, null)
+                : null;
         }
 
         if (Release.AssetFor(Rid) is { } asset && IsInstalled(InstallFolder, asset))
             return new BunLocation(Path.Combine(InstallFolder, asset.ExecutableName), BunSources.Installed, Release.Version);
 
         if (environment.IsDevelopment() && FindOnPath() is { } onPath)
-            return new BunLocation(onPath, BunSources.Path, null);
+            return new BunLocation(Path.GetFullPath(onPath), BunSources.Path, null);
 
         return null;
     }
@@ -91,8 +100,13 @@ internal sealed partial class BunRuntimeInstaller(
     /// <inheritdoc />
     public async Task<Result<BunLocation>> EnsureAsync(IProgress<BunInstallJob>? progress, CancellationToken ct)
     {
-        if (!string.IsNullOrWhiteSpace(options.Harness.BunPath) && Find() is null)
-            return new FleetError(ErrorCode, $"Fleet:Harness:BunPath is {Path.GetFullPath(options.Harness.BunPath)}, which doesn't exist.");
+        var configured = options.Harness.BunPath;
+        if (!string.IsNullOrWhiteSpace(configured) && Find() is null)
+        {
+            return new FleetError(ErrorCode, Path.IsPathFullyQualified(configured)
+                ? $"Fleet:Harness:BunPath is {configured}, which doesn't exist."
+                : $"Fleet:Harness:BunPath must be an absolute path; it's {configured}.");
+        }
 
         if (Find() is { } found)
             return found;
@@ -156,7 +170,7 @@ internal sealed partial class BunRuntimeInstaller(
 
             Set(BunInstallPhases.Extracting, Working);
             await Task.Run(() => Unpack(asset, archive, stagingDirectory, actual, version, ct), ct).ConfigureAwait(false);
-            Place(asset, Path.Combine(stagingDirectory, asset.Folder));
+            await PlaceAsync(asset, Path.Combine(stagingDirectory, asset.Folder), ct).ConfigureAwait(false);
 
             LogInstalled(version, InstallFolder);
             Set(BunInstallPhases.Succeeded, $"Installed Bun {version}.");
@@ -287,23 +301,48 @@ internal sealed partial class BunRuntimeInstaller(
     }
 
     /// <summary>Moves the unpacked folder to <c>{root}/{version}</c>, keeping an install another Fleet finished first.</summary>
-    private void Place(BunAsset asset, string unpacked)
+    private async Task PlaceAsync(BunAsset asset, string unpacked, CancellationToken ct)
     {
         var target = InstallFolder;
         if (Directory.Exists(target))
         {
             if (IsInstalled(target, asset))
                 return;
-            Directory.Delete(target, recursive: true);
+
+            // Renaming first is atomic, so another Fleet never sees a half-deleted folder; a later sweep catches a leftover.
+            var aside = Path.Combine(Root, $".staging-{Guid.NewGuid():N}");
+            try
+            {
+                Directory.Move(target, aside);
+                TryDelete(aside);
+            }
+            catch (IOException) when (!Directory.Exists(target))
+            {
+                // Another Fleet removed it first.
+            }
         }
 
-        try
+        // Antivirus scanning a fresh bun.exe can make the move fail for a moment (access denied), so try a few times.
+        var delay = MoveRetryDelay;
+        for (var attempt = 1; ; attempt++)
         {
-            Directory.Move(unpacked, target);
-        }
-        catch (IOException) when (IsInstalled(target, asset))
-        {
-            // Another Fleet installed the same version between the check and the move.
+            try
+            {
+                MoveDirectory(unpacked, target);
+                return;
+            }
+            catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
+            {
+                if (IsInstalled(target, asset))
+                    return; // Another Fleet installed the same version between the check and the move.
+
+                if (attempt >= MoveAttempts)
+                    throw;
+
+                LogMoveRetry(ex, attempt, MoveAttempts);
+                await Task.Delay(delay, ct).ConfigureAwait(false);
+                delay *= 2;
+            }
         }
     }
 
@@ -338,10 +377,30 @@ internal sealed partial class BunRuntimeInstaller(
         {
             foreach (var directory in Directory.EnumerateDirectories(Root, pattern))
             {
-                if (Directory.GetLastWriteTimeUtc(directory) < cutoff)
+                if (NewestWrite(directory) < cutoff)
                     TryDelete(directory);
             }
         }
+    }
+
+    /// <summary>A folder's own time doesn't change while a file inside grows, so look at the files too.</summary>
+    private static DateTime NewestWrite(string directory)
+    {
+        var newest = Directory.GetLastWriteTimeUtc(directory);
+        try
+        {
+            foreach (var entry in new DirectoryInfo(directory).EnumerateFileSystemInfos("*", SearchOption.AllDirectories))
+            {
+                if (entry.LastWriteTimeUtc > newest)
+                    newest = entry.LastWriteTimeUtc;
+            }
+        }
+        catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
+        {
+            // Can't look inside: go by the folder's own time.
+        }
+
+        return newest;
     }
 
     private static void Cleanup(string downloadDirectory, string stagingDirectory)
@@ -374,6 +433,9 @@ internal sealed partial class BunRuntimeInstaller(
 
     [LoggerMessage(Level = LogLevel.Information, Message = "Installing Bun {Version} for {Rid}.")]
     private partial void LogInstallStarting(string version, string rid);
+
+    [LoggerMessage(Level = LogLevel.Warning, Message = "Moving Bun into place failed (try {Attempt} of {Attempts}); trying again.")]
+    private partial void LogMoveRetry(Exception ex, int attempt, int attempts);
 
     [LoggerMessage(Level = LogLevel.Information, Message = "Installed Bun {Version} at {Folder}.")]
     private partial void LogInstalled(string version, string folder);
