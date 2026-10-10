@@ -185,3 +185,23 @@ not merge, check a PR isn't merged before pushing), plus for server work:
   `WorkflowRepoFiles`/`WorkflowCatalog`), Suggest to Fleet through Report a problem.
 - **Later:** harness bridges for tool calls and the system prompt (OpenCode and OpenCode 2 plugins first, then a Fleet
   mod for Claude Code, then a Fleet extension for Pi).
+
+## Decisions and changes during Stage 1
+
+- **10 Oct 2026, contract approved** (PR #481) as written: all five render sites stay in Stage 1.
+- **How the work runs.** Each PR runs in a new Fleet session whose orchestrator and reviewer is Opus, delegating to
+  Sonnet or Haiku subagents, whichever is strongest for the piece. The lane session opens its PR as a draft with
+  screenshots and messages the Stage 1 session; the Stage 1 session reviews, then marks it ready and merges when green.
+- **Wave 1 order changed.** `ModsFeature` (the `Mods` switch) moves from M2 to M3, since M3's endpoints are gated by it.
+  M2 (host client and supervisor) waits for M3 and M4, because it reads the store to decide whether to start the host
+  and the installer to find Bun. Stage 0's E3 (#480) and E5 (#482) merged, so M5 runs in Wave 1. Wave 1 is M1, M3, M4,
+  M5; M2 follows.
+- **Heavy jobs share three slots.** `dotnet build`/`dotnet test`, full vitest runs and `bun run build` go through a
+  machine-wide three-slot lock (`~/.cache/fleet-mods-stage1/heavy.sh`) so lanes in different sessions don't overload
+  the 7 GB machine.
+- **Client default (M5):** when a mod draws `ToolUse`, Fleet drops the row's preview line (`└ … (22 lines)`).
+- **Gaps found in the mockups, for a contract revision before they're needed:** `$.session.usage()` (context gauge);
+  `turn.complete` returning `{ text }` (a line under the answer, a sixth site); changed files on `turn.complete`
+  (tests-after-edits); `ui.message` from a `Page` back to its mod. Not in Stage 1 unless a lane needs one.
+- Mockups used to evaluate the feature (not in the repo): `~/.cache/fleet-mods-stage1/` (`report/`, `testchips-mockup/`,
+  `stage2-mockup/`, `sites-mockup/`).
