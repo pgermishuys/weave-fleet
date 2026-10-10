@@ -64,6 +64,7 @@ public sealed class ModsRuntimeTests
         var gate = _bun.Hold();
         var runtime = NewRuntime();
         await runtime.StartInstallAsync(Alice, CancellationToken.None);
+        runtime.Job.ShouldNotBeNull().Phase.ShouldBe("downloading"); // The answer to the request already shows it.
         await gate.Started.Task;
 
         gate.Report(Job("downloading", 1000));
@@ -77,7 +78,7 @@ public sealed class ModsRuntimeTests
         await runtime.WhenIdle;
         await runtime.Sent;
 
-        Sent().Select(p => (p.Job!.Phase, p.Job.BytesReceived)).ShouldBe([("downloading", 1000L), ("downloading", 4000L), ("succeeded", 4000L)]);
+        Sent().Select(p => (p.Job!.Phase, p.Job.BytesReceived)).ShouldBe([("downloading", 0L), ("downloading", 4000L), ("succeeded", 4000L)]);
     }
 
     [Fact]
