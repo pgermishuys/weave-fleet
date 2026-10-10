@@ -11,6 +11,9 @@ internal sealed class InMemoryModVersionStore : IModVersionStore
     private readonly Dictionary<string, ModManifest> _manifests = [];
     private readonly Dictionary<string, List<ModFile>> _files = [];
 
+    // The mod host reads the store from its own tasks while a test writes to it: what the host reads is locked.
+    private readonly Lock _sync = new();
+
     /// <summary>Calls that changed something, in order, so a test can see that a refused operation wrote nothing.</summary>
     public List<string> Writes { get; } = [];
 
@@ -25,36 +28,77 @@ internal sealed class InMemoryModVersionStore : IModVersionStore
         _files[folder] = [new ModFile("mod.json", "{}"), new ModFile("mod.ts", $"// v{number}")];
     }
 
-    public void SeedHistory(string user, ModHistory history) => _histories[(user, history.Name)] = history;
+    public void SeedHistory(string user, ModHistory history)
+    {
+        lock (_sync)
+            _histories[(user, history.Name)] = history;
+    }
 
     public void SeedDraft(string user, string session, string name, ModOff? off = null, bool withManifest = true)
     {
         var manifest = withManifest ? new ModManifest(name, "0.1.0", "Shows chips", "mod.ts") : null;
         var draft = new ModDraft(session, name, DraftFolder(user, session, name), off, manifest);
-        _drafts[(user, session, name)] = draft;
-        _files[draft.Folder] = [new ModFile("mod.json", "{}"), new ModFile("mod.ts", "// draft")];
+        lock (_sync)
+        {
+            _drafts[(user, session, name)] = draft;
+            _files[draft.Folder] = [new ModFile("mod.json", "{}"), new ModFile("mod.ts", "// draft")];
+        }
+    }
+
+    /// <summary>Deletes the session's draft folder, as the agent might.</summary>
+    public void RemoveDraft(string user, string session, string name)
+    {
+        lock (_sync)
+            _drafts.Remove((user, session, name));
     }
 
     public Task<IReadOnlyList<string>> ListDraftSessionsAsync(string userId, CancellationToken ct = default)
-        => Task.FromResult<IReadOnlyList<string>>(_drafts.Keys.Where(k => k.User == userId).Select(k => k.Session).Distinct().Order(StringComparer.Ordinal).ToList());
+    {
+        lock (_sync)
+            return Task.FromResult<IReadOnlyList<string>>(_drafts.Keys.Where(k => k.User == userId).Select(k => k.Session).Distinct().Order(StringComparer.Ordinal).ToList());
+    }
 
     public string DraftsRoot(string userId) => $"/mods/{userId}/drafts";
 
-    public string HostFolder(string userId) => $"/mods/{userId}/.host";
+    /// <summary>
+    /// A real folder to put <see cref="HostFolder"/> under, for tests that look at the staged copies on disk; null keeps
+    /// the made-up path, and staging writes nothing.
+    /// </summary>
+    public string? HostRoot { get; init; }
+
+    public string HostFolder(string userId) => HostRoot is { } root ? Path.Combine(root, userId, ".host") : $"/mods/{userId}/.host";
 
     /// <summary>The drafts <see cref="StageDraftAsync"/> copied, as (session, name, destination), in order.</summary>
     public List<(string Session, string Name, string Destination)> StagedDrafts { get; } = [];
 
+    /// <summary>Makes <see cref="StageDraftAsync"/> refuse with this message, as the real store does for a draft it can't copy.</summary>
+    public string? StageRefusal { get; set; }
+
     public Task StageDraftAsync(string userId, string sessionId, string name, string destination, CancellationToken ct = default)
     {
-        if (!_drafts.ContainsKey((userId, sessionId, name)))
-            throw new ModStoreException($"There is no draft of {name}.");
-        StagedDrafts.Add((sessionId, name, destination));
+        lock (_sync)
+        {
+            if (!_drafts.ContainsKey((userId, sessionId, name)))
+                throw new ModStoreException($"There is no draft of {name}.");
+            if (StageRefusal is { } refusal)
+                throw new ModStoreException(refusal);
+            if (HostRoot is not null)
+            {
+                if (Directory.Exists(destination))
+                    throw new ModStoreException($"{destination} already exists.");
+                Directory.CreateDirectory(destination);
+                File.WriteAllText(Path.Combine(destination, "mod.json"), "{}");
+            }
+            StagedDrafts.Add((sessionId, name, destination));
+        }
         return Task.CompletedTask;
     }
 
     public Task<IReadOnlyList<ModHistory>> ListAsync(string userId, CancellationToken ct = default)
-        => Task.FromResult<IReadOnlyList<ModHistory>>(_histories.Where(h => h.Key.User == userId).Select(h => h.Value).OrderBy(h => h.Name, StringComparer.Ordinal).ToList());
+    {
+        lock (_sync)
+            return Task.FromResult<IReadOnlyList<ModHistory>>(_histories.Where(h => h.Key.User == userId).Select(h => h.Value).OrderBy(h => h.Name, StringComparer.Ordinal).ToList());
+    }
 
     public Task<ModHistory> GetAsync(string userId, string name, CancellationToken ct = default)
         => Task.FromResult(_histories.GetValueOrDefault((userId, name)) ?? ModHistory.Empty(name));
@@ -90,12 +134,19 @@ internal sealed class InMemoryModVersionStore : IModVersionStore
             throw new ModStoreException($"{name} has no version {number}.");
 
         var next = history with { Active = number, Off = null };
-        _histories[(userId, name)] = next;
+        lock (_sync)
+            _histories[(userId, name)] = next;
         Writes.Add($"use {name} {number}");
         return Task.FromResult(next);
     }
 
     public Task<ModHistory> UndoAsync(string userId, string name, DateTimeOffset at, CancellationToken ct = default)
+    {
+        lock (_sync)
+            return Undo(userId, name, at);
+    }
+
+    private Task<ModHistory> Undo(string userId, string name, DateTimeOffset at)
     {
         var history = Existing(userId, name);
         var active = history.Active ?? throw new ModStoreException($"There is no mod called {name}.");
@@ -116,9 +167,13 @@ internal sealed class InMemoryModVersionStore : IModVersionStore
 
     public Task<ModHistory> SetOffAsync(string userId, string name, ModOff? off, CancellationToken ct = default)
     {
-        var next = (_histories.GetValueOrDefault((userId, name)) ?? ModHistory.Empty(name)) with { Off = off };
-        _histories[(userId, name)] = next;
-        Writes.Add($"off {name} {off?.By ?? "on"}");
+        ModHistory next;
+        lock (_sync)
+        {
+            next = (_histories.GetValueOrDefault((userId, name)) ?? ModHistory.Empty(name)) with { Off = off };
+            _histories[(userId, name)] = next;
+            Writes.Add($"off {name} {off?.By ?? "on"}");
+        }
         return Task.FromResult(next);
     }
 
@@ -138,7 +193,10 @@ internal sealed class InMemoryModVersionStore : IModVersionStore
         => Task.FromResult<IReadOnlyList<ModFile>?>(_files.GetValueOrDefault(VersionFolder(userId, name, number)));
 
     public Task<IReadOnlyList<ModDraft>> ListDraftsAsync(string userId, string sessionId, CancellationToken ct = default)
-        => Task.FromResult<IReadOnlyList<ModDraft>>(_drafts.Where(d => d.Key.User == userId && d.Key.Session == sessionId).Select(d => d.Value).OrderBy(d => d.Name, StringComparer.Ordinal).ToList());
+    {
+        lock (_sync)
+            return Task.FromResult<IReadOnlyList<ModDraft>>(_drafts.Where(d => d.Key.User == userId && d.Key.Session == sessionId).Select(d => d.Value).OrderBy(d => d.Name, StringComparer.Ordinal).ToList());
+    }
 
     public Task<ModDraft?> GetDraftAsync(string userId, string sessionId, string name, CancellationToken ct = default)
         => Task.FromResult(_drafts.GetValueOrDefault((userId, sessionId, name)));
@@ -147,9 +205,12 @@ internal sealed class InMemoryModVersionStore : IModVersionStore
 
     public Task SetDraftOffAsync(string userId, string sessionId, string name, ModOff? off, CancellationToken ct = default)
     {
-        if (_drafts.TryGetValue((userId, sessionId, name), out var draft))
-            _drafts[(userId, sessionId, name)] = draft with { Off = off };
-        Writes.Add($"draft-off {sessionId}/{name} {off?.By ?? "on"}");
+        lock (_sync)
+        {
+            if (_drafts.TryGetValue((userId, sessionId, name), out var draft))
+                _drafts[(userId, sessionId, name)] = draft with { Off = off };
+            Writes.Add($"draft-off {sessionId}/{name} {off?.By ?? "on"}");
+        }
         return Task.CompletedTask;
     }
 
@@ -165,10 +226,42 @@ internal sealed class InMemoryModVersionStore : IModVersionStore
         return await check(staged, ct);
     }
 
-    public Task<JsonElement?> GetValueAsync(string userId, string name, string key, CancellationToken ct = default) => Task.FromResult<JsonElement?>(null);
-    public Task SetValueAsync(string userId, string name, string key, JsonElement value, CancellationToken ct = default) => Task.CompletedTask;
-    public Task DeleteValueAsync(string userId, string name, string key, CancellationToken ct = default) => Task.CompletedTask;
-    public Task<IReadOnlyList<string>> KeysAsync(string userId, string name, CancellationToken ct = default) => Task.FromResult<IReadOnlyList<string>>([]);
+    // ── $.store ─────────────────────────────────────────────────────────
+
+    private readonly Dictionary<(string User, string Name, string Key), JsonElement> _values = [];
+
+    /// <summary>Makes every <see cref="SetValueAsync"/> refuse, as a full store does.</summary>
+    public bool StoreFull { get; set; }
+
+    public Task<JsonElement?> GetValueAsync(string userId, string name, string key, CancellationToken ct = default)
+    {
+        lock (_sync)
+            return Task.FromResult<JsonElement?>(_values.TryGetValue((userId, name, key), out var value) ? value : null);
+    }
+
+    public Task SetValueAsync(string userId, string name, string key, JsonElement value, CancellationToken ct = default)
+    {
+        if (!ModNames.IsValidStoreKey(key))
+            throw new ArgumentException($"\"{key}\" isn't a store key.", nameof(key));
+        if (StoreFull)
+            throw new ModStoreFullException($"The store of {name} is full.");
+        lock (_sync)
+            _values[(userId, name, key)] = value.Clone();
+        return Task.CompletedTask;
+    }
+
+    public Task DeleteValueAsync(string userId, string name, string key, CancellationToken ct = default)
+    {
+        lock (_sync)
+            _values.Remove((userId, name, key));
+        return Task.CompletedTask;
+    }
+
+    public Task<IReadOnlyList<string>> KeysAsync(string userId, string name, CancellationToken ct = default)
+    {
+        lock (_sync)
+            return Task.FromResult<IReadOnlyList<string>>(_values.Keys.Where(k => k.User == userId && k.Name == name).Select(k => k.Key).Order(StringComparer.Ordinal).ToList());
+    }
 }
 
 /// <summary>Answers with a fixed report and remembers which folders it was asked about.</summary>
