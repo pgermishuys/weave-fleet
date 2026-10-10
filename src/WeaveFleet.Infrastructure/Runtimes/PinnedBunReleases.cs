@@ -9,7 +9,7 @@ internal sealed class PinnedBunReleases : IBunReleases
     public BunRelease Current => BunRelease.Pinned;
 
     /// <inheritdoc />
-    public event Action<BunReleaseChange>? Changed { add { } remove { } }
+    public event EventHandler<BunReleaseChangedEventArgs>? Changed { add { } remove { } }
 
     /// <inheritdoc />
     public Task RefreshAsync(CancellationToken ct) => Task.CompletedTask;
