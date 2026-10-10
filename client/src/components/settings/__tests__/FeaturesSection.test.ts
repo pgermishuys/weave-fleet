@@ -46,4 +46,43 @@ describe("FeaturesSection", () => {
     expect(putMock).toHaveBeenCalledWith("/api/preferences/{key}", { params: { path: { key: "LiveMachines" } }, body: { value: "true" } });
     expect(toggle.attributes("aria-checked")).toBe("true");
   });
+
+  describe("Mods", () => {
+    const description = "Agents can write small add-ons that draw in Fleet: counts on tool rows, a band above the composer, a status-bar chip. You review each one before it's kept.";
+
+    it("is off by default, labelled Experimental, with its description", async () => {
+      const wrapper = await mountSection();
+      const toggle = wrapper.get("[data-testid='mods-switch']");
+
+      expect(toggle.attributes("aria-checked")).toBe("false");
+      expect(toggle.attributes("role")).toBe("switch");
+      const row = toggle.element.closest("div.rounded-card") as HTMLElement;
+      expect(row.textContent).toContain("Mods");
+      expect(row.textContent).toContain("Experimental");
+      expect(row.textContent).toContain(description);
+    });
+
+    it("saves Mods true, then false", async () => {
+      const wrapper = await mountSection();
+      const toggle = wrapper.get("[data-testid='mods-switch']");
+
+      await toggle.trigger("click");
+      await flushPromises();
+      expect(putMock).toHaveBeenLastCalledWith("/api/preferences/{key}", { params: { path: { key: "Mods" } }, body: { value: "true" } });
+      expect(toggle.attributes("aria-checked")).toBe("true");
+
+      await toggle.trigger("click");
+      await flushPromises();
+      expect(putMock).toHaveBeenLastCalledWith("/api/preferences/{key}", { params: { path: { key: "Mods" } }, body: { value: "false" } });
+      expect(toggle.attributes("aria-checked")).toBe("false");
+    });
+
+    it("is disabled while preferences load", async () => {
+      getMock.mockReturnValue(new Promise(() => {}));
+      const wrapper = mount(FeaturesSection);
+      await flushPromises();
+
+      expect(wrapper.get("[data-testid='mods-switch']").attributes("disabled")).toBeDefined();
+    });
+  });
 });
