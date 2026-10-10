@@ -231,6 +231,24 @@ public sealed class ModHostServiceTests : IAsyncLifetime
     }
 
     [Fact]
+    public async Task Stopping_and_disposing_more_than_once_is_harmless()
+    {
+        // The container disposes the one instance once per registration it was handed out under (the service, IModHost
+        // and the hosted service), after the host has stopped it.
+        Rig.Keep(Chips);
+        var service = Service();
+        await StartedAsync(service);
+        await service.EnsureAsync(User).Within();
+
+        await service.StopAsync(CancellationToken.None).Within();
+        await service.DisposeAsync().AsTask().Within();
+        await service.DisposeAsync().AsTask().Within();
+        await service.StopAsync(CancellationToken.None).Within();
+
+        Rig.Factory.Started.Count.ShouldBe(1);
+    }
+
+    [Fact]
     public async Task Draft_sessions_are_looked_up_as_their_user_in_a_scope_of_their_own()
     {
         Rig.Draft("ses_test1", "demo-mod");
