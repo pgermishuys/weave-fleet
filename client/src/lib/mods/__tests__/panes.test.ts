@@ -4,7 +4,7 @@ import { canvasTitle, canvasTypes } from "@/lib/canvas-registry";
 import { closeModPane, openModPane, updateModPane } from "@/lib/mods/panes";
 import { modPanes, modPaneViewId, type ModPaneView } from "@/lib/mods/points";
 import { installModsTestApi } from "@/lib/mods/test-api";
-import { useCanvasesStore } from "@/stores/canvases";
+import { modPaneCanvasId, useCanvasesStore } from "@/stores/canvases";
 
 const view = (title = "Test runs", mod = "ci-mod"): ModPaneView => ({
   sessionId: "s1",
@@ -66,10 +66,20 @@ describe("mod panes", () => {
     expect(modPanes.get(modPaneViewId("s1", "ci-mod", "runs"))?.title).toBe("Renamed");
   });
 
-  it("updating a pane that is not open as a tab keeps its view but opens nothing", () => {
+  it("updating a pane whose tab was closed does nothing: no view comes back and no tab opens", () => {
+    openModPane(view());
+    const store = useCanvasesStore();
+    store.close("s1", modPaneCanvasId("ci-mod", "runs"));
+    expect(modPanes.items.value).toHaveLength(0);
+    updateModPane(view("Late"));
+    expect(modPanes.items.value).toHaveLength(0);
+    expect(modCanvases()).toHaveLength(0);
+  });
+
+  it("updating a pane that was never opened does nothing", () => {
     updateModPane(view());
     expect(modCanvases()).toHaveLength(0);
-    expect(modPanes.get(modPaneViewId("s1", "ci-mod", "runs"))).toBeDefined();
+    expect(modPanes.items.value).toHaveLength(0);
   });
 
   it("two mods with the same pane id get two tabs and two views", () => {

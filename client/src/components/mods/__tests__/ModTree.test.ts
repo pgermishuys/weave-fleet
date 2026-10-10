@@ -620,3 +620,35 @@ describe("Page", () => {
     expect(wrapper.find("iframe").exists()).toBe(false);
   });
 });
+
+describe("inline sites wrap", () => {
+  const source = readFileSync(`${process.cwd()}/src/components/mods/ModTree.vue`, "utf8");
+  const style = source.slice(source.indexOf("<style"));
+  const nested = box({ flexDirection: "row" }, box({ flexDirection: "row" }, leaf("Pill", { label: "a" }), leaf("Pill", { label: "b" })));
+
+  it("styles every row Box under the inline root to wrap, items not to shrink, and keeps max-width and the label ellipsis", () => {
+    expect(/\.mod-tree--inline :deep\(\.mod-box\[style\*="flex-direction: row"\]\) \{\s*flex-wrap: wrap;/.test(style)).toBe(true);
+    const items = /\.mod-tree--inline :deep\(\.mod-pill\),\s*\.mod-tree--inline :deep\(\.mod-button\) \{([^}]*)\}/.exec(style)![1];
+    expect(items).toContain("flex-shrink: 0");
+    expect(items).toContain("max-width: 100%");
+    expect(cssRule("ModPill", ".mod-pill__label")["text-overflow"]).toBe("ellipsis");
+    expect(cssRule("ModButton", ".mod-button__label")["text-overflow"]).toBe("ellipsis");
+  });
+
+  it.each(["ToolUse", "StatusChip"] as const)("at %s a nested row Box is under the inline rule and sets no wrap of its own", (site) => {
+    const wrapper = show(nested, { site });
+    expect(wrapper.find(".mod-tree").classes()).toContain("mod-tree--inline");
+    for (const el of wrapper.findAll(".mod-box")) {
+      expect(el.attributes("style")).toContain("flex-direction: row");
+      expect(el.attributes("style")).not.toContain("flex-wrap");
+    }
+  });
+
+  it("at Pane the rule doesn't apply, and a Box wraps only when its own flexWrap says so", () => {
+    const wrapper = show(box({ flexDirection: "row", flexWrap: "wrap" }, box({ flexDirection: "row" }, leaf("Pill", { label: "a" }))), { site: "Pane" });
+    expect(wrapper.find(".mod-tree").classes()).not.toContain("mod-tree--inline");
+    const [outer, inner] = wrapper.findAll(".mod-box");
+    expect(outer.attributes("style")).toContain("flex-wrap: wrap");
+    expect(inner.attributes("style")).not.toContain("flex-wrap");
+  });
+});

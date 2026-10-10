@@ -1,5 +1,6 @@
 import { mount } from "@vue/test-utils";
 import { beforeEach, describe, expect, it, vi } from "vitest";
+import { readFileSync } from "node:fs";
 import { createPinia, setActivePinia } from "pinia";
 import { defineComponent, h, nextTick } from "vue";
 import * as failures from "@/lib/mods/failures";
@@ -42,6 +43,27 @@ function contribute(site: "ToolUse" | "ToolResult", tree: unknown, extra: Partia
 const BASH = { ...CASES["bash with output and preview"], callId: "call-1" };
 const EDIT = { ...CASES["edit with diff stats"], callId: "call-1" };
 const mount_ = (props: Record<string, unknown>) => card(props);
+
+describe("ToolCard keeps the command when a mod draws the line", () => {
+  beforeEach(() => toolRowViews.clear());
+  const source = readFileSync(`${process.cwd()}/src/components/session/ToolCard.vue`, "utf8");
+  const style = source.slice(source.indexOf("<style"));
+  const rule = (selector: string) => new RegExp(`\\n${selector.replace(/[.[\]]/g, "\\$&")} \\{([^}]*)\\}`).exec(style)?.[1] ?? "";
+
+  it("caps the mod slot at 60% and floors the title at min(30%, 12ch)", () => {
+    expect(rule(".tool-header__mod")).toContain("max-width: 60%");
+    const floor = /\n\.tool-header--mod \.tool-header__detail,\s*\n\.tool-header--mod \.tool-header__pattern \{([^}]*)\}/.exec(style)![1];
+    expect(floor).toContain("min-width: min(30%, 12ch)");
+    expect(floor).toContain("text-overflow: ellipsis");
+  });
+
+  it("marks the header only when a mod draws, and leaves today's rules for plain titles alone", () => {
+    expect(rule(".tool-header__detail")).not.toContain("12ch");
+    expect(card({ ...BASH }).find(".tool-header").classes()).toEqual(["tool-header"]);
+    contribute("ToolUse", row(text("ok")));
+    expect(card({ ...BASH }).find(".tool-header").classes()).toContain("tool-header--mod");
+  });
+});
 
 describe("ToolCard with a ToolUse tree", () => {
   beforeEach(() => toolRowViews.clear());

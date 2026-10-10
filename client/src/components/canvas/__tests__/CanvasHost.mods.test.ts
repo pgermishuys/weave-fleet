@@ -1,3 +1,4 @@
+import { readFileSync } from "node:fs";
 import { closeModPane, openModPane, updateModPane } from "@/lib/mods/panes";
 import { modPanes, type ModPaneView } from "@/lib/mods/points";
 import { flushPromises, mount } from "@vue/test-utils";
@@ -36,6 +37,30 @@ const pane = (draft = false, paneId = "runs", title = "Test runs", mod = "ci-mod
   mod,
   tree: { type: "Text", props: {}, children: ["3 passing"] } as never,
   mods: [{ name: "ci-mod", draft }] as never,
+});
+
+describe("CanvasHost tab strip scroll padding", () => {
+  beforeEach(() => {
+    setActivePinia(createPinia());
+    globalThis.localStorage?.clear();
+    modPanes.clear();
+  });
+  afterEach(() => modPanes.clear());
+
+  it("has no scroll padding without a draft pane (main's strip), and gains it with one", async () => {
+    const source = readFileSync(`${process.cwd()}/src/components/canvas/CanvasHost.vue`, "utf8");
+    const base = /\n\.canvas-tabs \{([^}]*)\}/.exec(source)![1];
+    expect(base).not.toContain("scroll-padding");
+    expect(/\n\.canvas-tabs--draft \{[^}]*scroll-padding-inline: 24px/.test(source)).toBe(true);
+
+    const wrapper = mountHost();
+    openModPane(pane(false));
+    await flushPromises();
+    expect(wrapper.find(".canvas-tabs").classes()).not.toContain("canvas-tabs--draft");
+    openModPane(pane(true, "d", "Draft pane"));
+    await flushPromises();
+    expect(wrapper.find(".canvas-tabs").classes()).toContain("canvas-tabs--draft");
+  });
 });
 
 describe("CanvasHost tabs", () => {

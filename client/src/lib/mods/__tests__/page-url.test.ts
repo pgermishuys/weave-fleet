@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { modPageUrl } from "@/lib/mods/page-url";
+import { MOD_ID_PATTERN, MOD_SESSION_ID_PATTERN, modPageUrl } from "@/lib/mods/page-url";
 
 const apiUrl = (path: string) => `http://fleet.test:5000${path}`;
 const url = (path: string, query?: Record<string, string>, over: Partial<Parameters<typeof modPageUrl>[0]> = {}) =>
@@ -26,9 +26,22 @@ describe("modPageUrl", () => {
     expect(parsed.hash).toBe("");
   });
 
-  it("encodes the session id", () => {
-    expect(url("a.html", undefined, { sessionId: "a/b?c" })).toContain("/api/sessions/a%2Fb%3Fc/mods/");
+  it("refuses a session id outside Fleet's charset", () => {
+    for (const sessionId of [".", "..", "", "a/b", "a.b", "a?c", "a".repeat(129)]) {
+      expect(url("a.html", undefined, { sessionId })).toBeNull();
+    }
+    expect(url("a.html", undefined, { sessionId: "3f2b8c1e-5d4a-4e9b-8a77-0c1d2e3f4a5b" })).toContain("/api/sessions/3f2b8c1e-");
+    expect(url("a.html", undefined, { sessionId: "ses_ABC-123" })).toContain("/api/sessions/ses_ABC-123/mods/");
+    expect(url("a.html", undefined, { sessionId: "a".repeat(128) })).not.toBeNull();
   });
+
+  it("builds the mod id's draft part from the same session-id rule", () => {
+    expect(MOD_SESSION_ID_PATTERN.test("a.b")).toBe(false);
+    expect(MOD_ID_PATTERN.test("m@draft:ses_ABC-123")).toBe(true);
+    expect(MOD_ID_PATTERN.test(`m@draft:${"a".repeat(129)}`)).toBe(false);
+    expect(MOD_ID_PATTERN.test("m@draft:a.b")).toBe(false);
+  });
+
 
   it("builds the query with URLSearchParams", () => {
     const built = url("a.html", { "a&b": "c=d", "q r": "é/#" })!;

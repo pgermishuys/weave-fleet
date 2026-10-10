@@ -37,14 +37,16 @@ describe("ConversationPage", () => {
   it("offers to open the page in a new tab, and does not when it is contained", () => {
     const view = bubble([pageTool]);
     expect(view.find("[aria-label='Open in a new tab']").exists()).toBe(true);
-    expect(view.get("iframe").attributes("sandbox")).toContain("allow-popups-to-escape-sandbox");
+    expect(view.get("iframe").attributes("sandbox")).toBe(
+      "allow-scripts allow-forms allow-popups allow-popups-to-escape-sandbox allow-modals allow-downloads",
+    );
 
     const contained = mount(ConversationPage, {
       props: { page: pageTool.page!, title: "Mod page", src: "http://fleet.test/p.html", contained: true },
     });
     expect(contained.find("[aria-label='Open in a new tab']").exists()).toBe(false);
     expect(contained.find("[data-testid='conversation-page-expand']").exists()).toBe(true);
-    expect(contained.get("iframe").attributes("sandbox")).not.toContain("allow-popups-to-escape-sandbox");
+    expect(contained.get("iframe").attributes("sandbox")).toBe("allow-scripts allow-forms allow-modals allow-downloads");
     contained.unmount();
   });
 
