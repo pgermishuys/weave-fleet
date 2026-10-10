@@ -8,6 +8,11 @@ import { useModsStore } from "@/stores/mods";
  * Says mods are stopped while safe mode is on ("Start without mods", `?mods=off`), and turns them back on.
  * Nothing at all otherwise, so it takes no room from the panels below.
  */
+const props = defineProps<{
+  /** On the phone the button wears the phone's own classes: phone.css resets bare buttons, beating utilities. */
+  phone?: boolean;
+}>();
+
 const mods = useModsStore();
 const shown = computed(() => mods.isSwitchedOn && mods.safeMode);
 const pending = shallowRef(false);
@@ -34,6 +39,7 @@ async function turnBackOn(): Promise<void> {
   <div
     v-if="shown"
     class="mods-safe-banner"
+    :class="{ 'mods-safe-banner--phone': props.phone }"
     role="status"
     data-testid="mods-safe-mode-banner"
   >
@@ -51,7 +57,18 @@ async function turnBackOn(): Promise<void> {
         data-testid="mods-safe-mode-error"
       >{{ error }}</span>
     </div>
+    <button
+      v-if="props.phone"
+      type="button"
+      class="ph-btn ph-btn--sm ph-btn--outline"
+      :disabled="pending"
+      data-testid="mods-safe-mode-turn-on"
+      @click="turnBackOn"
+    >
+      {{ pending ? "Turning on…" : "Turn mods back on" }}
+    </button>
     <Button
+      v-else
       type="button"
       size="sm"
       variant="outline"
@@ -75,6 +92,16 @@ async function turnBackOn(): Promise<void> {
   background: var(--panel-bg);
   color: var(--foreground);
   font-size: 0.8125rem;
+}
+
+.mods-safe-banner--phone {
+  align-items: flex-start;
+  padding: 10px 12px;
+  font-size: 14px;
+}
+
+.mods-safe-banner--phone .mods-safe-banner__text {
+  flex-direction: column;
 }
 
 .mods-safe-banner__icon {

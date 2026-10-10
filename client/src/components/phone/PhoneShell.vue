@@ -18,6 +18,10 @@ usePhoneEnv();
     class="phone-shell ph-app"
     data-testid="phone-shell"
   >
+    <!-- In flow: it pushes the page down while mods are stopped, and takes no room otherwise. -->
+    <div class="ph-mods-banner">
+      <ModsSafeModeBanner phone />
+    </div>
     <div class="ph-stage">
       <slot />
     </div>
@@ -25,25 +29,30 @@ usePhoneEnv();
       id="ph-overlays"
       class="ph-overlays"
     >
-      <!-- Floats over the top of the page, and takes no room unless mods are stopped. -->
-      <div class="ph-mods-banner">
-        <ModsSafeModeBanner />
-      </div>
       <PhoneToastHost />
     </div>
   </div>
 </template>
 
 <style scoped>
+/* A column, so the banner above the stage makes room instead of covering the page's header. */
+.phone-shell {
+  display: flex;
+  flex-direction: column;
+}
+
+.phone-shell .ph-stage {
+  position: relative;
+  inset: auto;
+  min-height: 0;
+  flex: 1;
+}
+
 .ph-mods-banner {
-  position: absolute;
-  top: max(8px, env(safe-area-inset-top));
-  right: 8px;
-  left: 8px;
-  overflow: hidden;
-  border: 1px solid var(--border);
-  border-radius: 12px;
-  pointer-events: auto;
+  flex-shrink: 0;
+  padding-top: env(safe-area-inset-top);
+  border-bottom: 1px solid var(--border);
+  background: var(--ph-chrome);
 }
 
 .ph-mods-banner:empty {

@@ -73,3 +73,17 @@ describe("ModsSafeModeBanner", () => {
     expect(wrapper.get("[data-testid=mods-safe-mode-turn-on]").attributes("disabled")).toBeUndefined();
   });
 });
+
+describe("ModsSafeModeBanner on the phone", () => {
+  it("uses the phone's button classes, not the desktop Button", () => {
+    const pinia = createPinia();
+    setActivePinia(pinia);
+    useModsStore().modsSwitch = { on: true, safeMode: true };
+    const wrapper = mount(ModsSafeModeBanner, { props: { phone: true }, global: { plugins: [pinia] } });
+
+    const button = wrapper.get("[data-testid=mods-safe-mode-turn-on]");
+    expect(button.classes()).toEqual(expect.arrayContaining(["ph-btn", "ph-btn--sm", "ph-btn--outline"]));
+    expect(button.text()).toBe("Turn mods back on");
+    expect(wrapper.get("[data-testid=mods-safe-mode-banner]").classes()).toContain("mods-safe-banner--phone");
+  });
+});
