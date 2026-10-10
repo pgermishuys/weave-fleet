@@ -683,14 +683,12 @@ public sealed class FileModVersionStoreTests : IDisposable
         await _store.SetDraftOffAsync(User, "ses_other", "other-mod", null).WaitAsync(Patience);
         (await _store.ListDraftsAsync(User, "ses_other").WaitAsync(Patience)).ShouldBeEmpty();
 
-        // The same mod waits its turn.
-        var same = _store.GetAsync(User, Name);
-        await Task.Delay(300);
-        same.IsCompleted.ShouldBeFalse();
+        // The same mod isn't held either: the check runs outside the locks.
+        (await _store.GetAsync(User, Name).WaitAsync(Patience)).Versions.ShouldBeEmpty();
 
         release.SetResult();
         (await keeping.WaitAsync(Patience)).Number.ShouldBe(1);
-        (await same.WaitAsync(Patience)).Versions.Count.ShouldBe(1);
+        (await _store.GetAsync(User, Name).WaitAsync(Patience)).Versions.Count.ShouldBe(1);
     }
 
     // ── No links from the user's folder down ────────────────────────────
@@ -839,7 +837,6 @@ public sealed class FileModVersionStoreTests : IDisposable
         });
 
         sawCopy.ShouldBeTrue();
-        Path.GetFileName(staged!).ShouldStartWith("v1.");
         Path.GetFileName(staged!).ShouldEndWith(".tmp");
         Directory.Exists(staged!).ShouldBeFalse();
         File.ReadAllText(Path.Combine(_store.VersionFolder(User, Name, 1), "mod.ts")).ShouldBe("// copied\n");
@@ -904,7 +901,9 @@ public sealed class FileModVersionStoreTests : IDisposable
         var mod = Path.Combine(UserFolder(), Name);
         Directory.CreateDirectory(Path.Combine(mod, "v3.0123456789abcdef.tmp", "deep"));
         File.WriteAllText(Path.Combine(mod, "v3.0123456789abcdef.tmp", "deep", "x.txt"), "x");
-        Directory.CreateDirectory(Path.Combine(mod, "v1.fedcba.tmp"));
+        Directory.CreateDirectory(Path.Combine(mod, "keep.fedcba.tmp"));
+        foreach (var leftover in Directory.GetDirectories(mod))
+            Directory.SetLastWriteTimeUtc(leftover, DateTime.UtcNow.AddHours(-2));
 
         var version = await Keep();
 
@@ -1229,5 +1228,412 @@ public sealed class FileModVersionStoreTests : IDisposable
         files.Sum(f => (long)Encoding.UTF8.GetByteCount(f.Content)).ShouldBeLessThanOrEqualTo(ModStoreLimits.ShownBytes);
         files.Count.ShouldBeLessThan(14);
         files.Count.ShouldBeGreaterThan(5);
+    }
+
+    // ── Honest messages ─────────────────────────────────────────────────
+
+    private static bool CanIgnoreFileModes => OperatingSystem.IsWindows() || Environment.IsPrivilegedProcess;
+
+    [Fact]
+    public async Task Keep_says_a_file_it_cannot_read_cannot_be_read_and_names_it()
+    {
+        if (CanIgnoreFileModes)
+            return;
+        var folder = Draft();
+        Directory.CreateDirectory(Path.Combine(folder, "lib"));
+        var secret = Path.Combine(folder, "lib", "locked.ts");
+        File.WriteAllText(secret, "x");
+        File.SetUnixFileMode(secret, 0);
+
+        var error = await Should.ThrowAsync<ModStoreException>(() => Keep().WaitAsync(Patience));
+
+        error.Message.ShouldContain("lib/locked.ts");
+        error.Message.ShouldContain("can't be read", Case.Insensitive);
+        error.Message.ShouldNotContain("regular", Case.Insensitive);
+    }
+
+    [Fact]
+    public async Task Show_code_skips_a_file_it_cannot_read_and_keeps_going()
+    {
+        if (CanIgnoreFileModes)
+            return;
+        var folder = Draft();
+        File.WriteAllText(Path.Combine(folder, "a-locked.ts"), "x");
+        File.WriteAllText(Path.Combine(folder, "z-after.ts"), "after");
+        File.SetUnixFileMode(Path.Combine(folder, "a-locked.ts"), 0);
+
+        var files = await _store.ReadDraftFilesAsync(User, Session, Name).WaitAsync(Patience);
+
+        files!.Select(f => f.Path).ShouldBe(["mod.json", "mod.ts", "z-after.ts"]);
+    }
+
+    [Fact]
+    public async Task Keep_says_a_huge_file_is_too_large_without_reading_it()
+    {
+        var folder = Draft();
+        using (var big = new FileStream(Path.Combine(folder, "big.bin"), FileMode.Create))
+            big.SetLength(5L * 1024 * 1024 * 1024);
+
+        var watch = Stopwatch.StartNew();
+        var error = await Should.ThrowAsync<ModStoreException>(() => Keep().WaitAsync(Patience));
+        var files = await _store.ReadDraftFilesAsync(User, Session, Name).WaitAsync(Patience);
+
+        watch.Elapsed.ShouldBeLessThan(TimeSpan.FromSeconds(5));
+        error.Message.ShouldContain("big.bin");
+        error.Message.ShouldContain("too large", Case.Insensitive);
+        error.Message.ShouldNotContain("regular", Case.Insensitive);
+        files!.Select(f => f.Path).ShouldBe(["mod.json", "mod.ts"]);
+    }
+
+    [Fact]
+    public async Task Keep_says_a_named_pipe_is_not_a_regular_file_and_names_it()
+    {
+        if (OperatingSystem.IsWindows())
+            return;
+        var folder = Draft();
+        MakeFifo(Path.Combine(folder, "pipe"));
+
+        var error = await Should.ThrowAsync<ModStoreException>(() => Keep().WaitAsync(Patience));
+
+        error.Message.ShouldContain("pipe");
+        error.Message.ShouldContain("isn't a regular file");
+    }
+
+    [Fact]
+    public async Task Keep_refuses_a_directory_where_the_hooks_file_should_be()
+    {
+        var folder = Draft(manifest: """{"name":"test-chips","version":"0.1.0","description":"d","hooks":"hooks.ts"}""");
+        Directory.CreateDirectory(Path.Combine(folder, "hooks.ts"));
+
+        await Should.ThrowAsync<ModStoreException>(() => Keep().WaitAsync(Patience));
+    }
+
+    [Fact]
+    public async Task A_name_swapped_between_a_file_and_a_named_pipe_never_hangs_Show_code_or_Keep()
+    {
+        if (OperatingSystem.IsWindows())
+            return;
+        var folder = Draft();
+        var target = Path.Combine(folder, "a.ts");
+        var regular = Path.Combine(folder, ".r");
+        var pipe = Path.Combine(folder, ".f");
+        File.WriteAllText(regular, "x");
+        MakeFifo(pipe);
+        using var stop = new CancellationTokenSource();
+        var swapper = Task.Run(() =>
+        {
+            while (!stop.IsCancellationRequested)
+            {
+                try
+                {
+                    File.Move(regular, target, overwrite: true);
+                    File.Move(target, regular, overwrite: true);
+                    File.Move(pipe, target, overwrite: true);
+                    File.Move(target, pipe, overwrite: true);
+                }
+                catch (IOException)
+                {
+                }
+            }
+        });
+
+        try
+        {
+            for (var i = 0; i < 300; i++)
+            {
+                (await _store.ReadDraftFilesAsync(User, Session, Name).WaitAsync(Patience)).ShouldNotBeNull();
+                try
+                {
+                    await Keep(check: (_, _) => throw new ModStoreException("stop here")).WaitAsync(Patience);
+                }
+                catch (ModStoreException)
+                {
+                }
+            }
+        }
+        finally
+        {
+            stop.Cancel();
+            await swapper.WaitAsync(Patience);
+        }
+    }
+
+    // ── A broken index with valid JSON ──────────────────────────────────
+
+    [Theory]
+    [InlineData("""{"versions":[]}""")]
+    [InlineData("""{"name":"test-chips","active":2,"versions":[{"number":1,"createdAt":"2026-01-01T00:00:00Z","version":"0.1.0","sha256":"aa"},{"number":2,"createdAt":"2026-01-01T00:00:00Z","version":"0.1.0"}]}""")]
+    [InlineData("""{"name":"test-chips","active":9,"versions":[{"number":1,"createdAt":"2026-01-01T00:00:00Z","version":"0.1.0","sha256":"aa"},{"number":2,"createdAt":"2026-01-01T00:00:00Z","version":"0.1.0","sha256":"bb"}]}""")]
+    public async Task An_index_that_parses_but_does_not_match_the_folders_is_moved_aside_and_rebuilt(string broken)
+    {
+        await KeepVersions(2);
+        var mod = Path.Combine(UserFolder(), Name);
+        File.WriteAllText(Path.Combine(mod, "versions.json"), broken);
+
+        Draft(code: "// 3\n");
+        var version = await Keep();
+
+        version.Number.ShouldBe(3);
+        var history = await _store.GetAsync(User, Name);
+        history.Versions.Select(v => v.Number).ShouldBe([1, 2, 3]);
+        history.Active.ShouldBe(3);
+        File.ReadAllText(Directory.GetFiles(mod, "versions.json.broken-*").ShouldHaveSingleItem()).ShouldBe(broken);
+    }
+
+    [Fact]
+    public async Task A_rebuild_keeps_the_valid_entries_as_they_were_and_the_off_state()
+    {
+        await KeepVersions(2);
+        var mod = Path.Combine(UserFolder(), Name);
+        var index = Path.Combine(mod, "versions.json");
+        File.WriteAllText(index, """
+            {"name":"test-chips","active":1,"off":{"by":"user","at":"2026-02-02T00:00:00Z"},
+             "versions":[{"number":1,"createdAt":"2026-01-01T00:00:00Z","version":"0.1.0","sha256":"aa","sessionId":"ses_x","note":"first"}]}
+            """);
+
+        var history = await _store.GetAsync(User, Name);
+
+        history.Versions.Select(v => v.Number).ShouldBe([1, 2]);
+        history.Versions[0].Note.ShouldBe("first");
+        history.Versions[0].SessionId.ShouldBe("ses_x");
+        history.Versions[0].Sha256.ShouldBe("aa");
+        history.Versions[0].CreatedAt.ShouldBe(DateTimeOffset.Parse("2026-01-01T00:00:00Z"));
+        history.Versions[1].SessionId.ShouldBeNull();
+        history.Active.ShouldBe(1);
+        history.Off.ShouldNotBeNull().By.ShouldBe(ModOffBy.User);
+        Directory.GetFiles(mod, "versions.json.broken-*").ShouldHaveSingleItem();
+        // Read again: the rebuilt index is consistent, so nothing more is moved aside.
+        await _store.GetAsync(User, Name);
+        Directory.GetFiles(mod, "versions.json.broken-*").ShouldHaveSingleItem();
+    }
+
+    [Fact]
+    public async Task A_staging_folder_is_not_a_version_and_a_folder_that_cannot_be_rebuilt_does_not_loop()
+    {
+        await KeepVersions(1);
+        var mod = Path.Combine(UserFolder(), Name);
+        Directory.CreateDirectory(Path.Combine(mod, "v2.0123456789abcdef.tmp"));
+        Directory.CreateDirectory(Path.Combine(mod, "v3"));
+
+        await _store.GetAsync(User, Name);
+        await _store.GetAsync(User, Name);
+
+        Directory.GetFiles(mod, "versions.json.broken-*").ShouldBeEmpty();
+        (await _store.GetAsync(User, Name)).Versions.Select(v => v.Number).ShouldBe([1]);
+    }
+
+    // ── The check runs outside the locks ────────────────────────────────
+
+    [Fact]
+    public async Task While_Keep_checks_the_session_and_the_mod_are_free()
+    {
+        Draft();
+        var entered = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+        var release = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+        var keeping = Keep(check: async (_, _) =>
+        {
+            entered.SetResult();
+            await release.Task;
+            return null;
+        });
+        await entered.Task.WaitAsync(Patience);
+
+        try
+        {
+            (await _store.ListDraftsAsync(User, Session).WaitAsync(Patience)).Count.ShouldBe(1);
+            (await _store.ReadDraftFilesAsync(User, Session, Name).WaitAsync(Patience))!.Count.ShouldBe(2);
+            (await _store.KeysAsync(User, Name).WaitAsync(Patience)).ShouldBeEmpty();
+        }
+        finally
+        {
+            release.SetResult();
+        }
+
+        (await keeping.WaitAsync(Patience)).Number.ShouldBe(1);
+    }
+
+    [Fact]
+    public async Task A_draft_changed_during_the_check_is_refused_and_leaves_no_copy()
+    {
+        var folder = Draft();
+
+        var error = await Should.ThrowAsync<ModStoreException>(() => Keep(check: (_, _) =>
+        {
+            File.WriteAllText(Path.Combine(folder, "mod.ts"), "// changed\n");
+            return Task.FromResult<JsonElement?>(null);
+        }));
+
+        error.Message.ShouldBe("The draft changed while it was being checked; check it again.");
+        (await _store.GetAsync(User, Name)).Versions.ShouldBeEmpty();
+        Directory.GetFileSystemEntries(Path.Combine(UserFolder(), Name)).ShouldBeEmpty();
+        Directory.Exists(folder).ShouldBeTrue();
+        (await Keep()).Number.ShouldBe(1);
+    }
+
+    [Fact]
+    public async Task A_file_added_or_a_draft_removed_during_the_check_is_refused()
+    {
+        var folder = Draft();
+        await Should.ThrowAsync<ModStoreException>(() => Keep(check: (_, _) =>
+        {
+            File.WriteAllText(Path.Combine(folder, "extra.txt"), "x");
+            return Task.FromResult<JsonElement?>(null);
+        }));
+        File.Delete(Path.Combine(folder, "extra.txt"));
+
+        var error = await Should.ThrowAsync<ModStoreException>(() => Keep(check: (_, _) =>
+        {
+            Directory.Delete(folder, recursive: true);
+            return Task.FromResult<JsonElement?>(null);
+        }));
+
+        error.Message.ShouldContain("changed");
+        (await _store.GetAsync(User, Name)).Versions.ShouldBeEmpty();
+    }
+
+    [Fact]
+    public async Task A_draft_that_does_not_change_is_kept_after_a_slow_check()
+    {
+        Draft();
+
+        var version = await Keep(check: async (_, _) =>
+        {
+            await Task.Delay(100);
+            return null;
+        });
+
+        version.Number.ShouldBe(1);
+        Directory.Exists(_store.DraftFolder(User, Session, Name)).ShouldBeFalse();
+    }
+
+    [Fact]
+    public async Task Another_session_can_keep_the_same_mod_while_a_check_runs_and_the_numbers_follow_the_commits()
+    {
+        Draft();
+        Draft(session: "ses_beta", code: "// beta\n");
+        var entered = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+        var release = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+        var first = Keep(check: async (_, _) =>
+        {
+            entered.SetResult();
+            await release.Task;
+            return null;
+        });
+        await entered.Task.WaitAsync(Patience);
+
+        (await Keep(session: "ses_beta").WaitAsync(Patience)).Number.ShouldBe(1);
+        release.SetResult();
+
+        (await first.WaitAsync(Patience)).Number.ShouldBe(2);
+        (await _store.GetAsync(User, Name)).Versions.Select(v => v.Number).ShouldBe([1, 2]);
+    }
+
+    [Fact]
+    public async Task Keep_leaves_alone_a_staging_folder_younger_than_an_hour()
+    {
+        Draft();
+        var mod = Path.Combine(UserFolder(), Name);
+        var inFlight = Path.Combine(mod, "check.0123456789abcdef.tmp");
+        Directory.CreateDirectory(inFlight);
+        File.WriteAllText(Path.Combine(inFlight, "mod.ts"), "x");
+
+        await Keep();
+
+        File.Exists(Path.Combine(inFlight, "mod.ts")).ShouldBeTrue();
+    }
+
+    // ── CheckDraftAsync ─────────────────────────────────────────────────
+
+    [Fact]
+    public async Task Check_runs_on_a_copy_of_the_draft_and_deletes_it_afterwards()
+    {
+        var folder = Draft(code: "// live\n");
+        string? staged = null;
+        string? seen = null;
+
+        var report = await _store.CheckDraftAsync(User, Session, Name, (copy, _) =>
+        {
+            staged = copy;
+            seen = File.ReadAllText(Path.Combine(copy, "mod.ts"));
+            File.WriteAllText(Path.Combine(copy, "mod.ts"), "// the checker scribbled\n");
+            return Task.FromResult<JsonElement?>(Json("""{"ok":true}"""));
+        });
+
+        report!.Value.GetProperty("ok").GetBoolean().ShouldBeTrue();
+        seen.ShouldBe("// live\n");
+        staged.ShouldNotBe(folder);
+        Directory.Exists(staged!).ShouldBeFalse();
+        File.ReadAllText(Path.Combine(folder, "mod.ts")).ShouldBe("// live\n");
+        (await _store.GetAsync(User, Name)).Versions.ShouldBeEmpty();
+    }
+
+    [Fact]
+    public async Task Check_holds_no_lock_while_it_runs()
+    {
+        Draft();
+        var entered = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+        var release = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+        var checking = _store.CheckDraftAsync(User, Session, Name, async (_, _) =>
+        {
+            entered.SetResult();
+            await release.Task;
+            return null;
+        });
+        await entered.Task.WaitAsync(Patience);
+
+        try
+        {
+            (await _store.ListDraftsAsync(User, Session).WaitAsync(Patience)).Count.ShouldBe(1);
+            (await _store.ReadDraftFilesAsync(User, Session, Name).WaitAsync(Patience))!.Count.ShouldBe(2);
+            (await _store.KeysAsync(User, Name).WaitAsync(Patience)).ShouldBeEmpty();
+        }
+        finally
+        {
+            release.SetResult();
+        }
+
+        await checking.WaitAsync(Patience);
+    }
+
+    [Fact]
+    public async Task Check_without_a_draft_throws()
+    {
+        await Should.ThrowAsync<ModStoreException>(() => _store.CheckDraftAsync(User, Session, Name, NoCheck));
+    }
+
+    [Fact]
+    public async Task Check_deletes_its_copy_when_the_checker_throws()
+    {
+        Draft();
+
+        await Should.ThrowAsync<InvalidOperationException>(
+            () => _store.CheckDraftAsync(User, Session, Name, (_, _) => throw new InvalidOperationException("boom")));
+
+        Directory.GetFileSystemEntries(Path.Combine(UserFolder(), Name)).ShouldBeEmpty();
+    }
+
+    [Fact]
+    public async Task Check_never_hands_the_checker_a_named_pipe_or_a_link()
+    {
+        if (OperatingSystem.IsWindows())
+            return;
+        var folder = Draft();
+        MakeFifo(Path.Combine(folder, "pipe"));
+        var called = false;
+        ModKeepCheck check = (_, _) =>
+        {
+            called = true;
+            return Task.FromResult<JsonElement?>(null);
+        };
+
+        var error = await Should.ThrowAsync<ModStoreException>(() => _store.CheckDraftAsync(User, Session, Name, check).WaitAsync(Patience));
+        File.Delete(Path.Combine(folder, "pipe"));
+        File.CreateSymbolicLink(Path.Combine(folder, "link.ts"), Path.Combine(folder, "mod.ts"));
+        var linkError = await Should.ThrowAsync<ModStoreException>(() => _store.CheckDraftAsync(User, Session, Name, check).WaitAsync(Patience));
+
+        called.ShouldBeFalse();
+        error.Message.ShouldContain("pipe");
+        linkError.Message.ShouldContain("link", Case.Insensitive);
+        Directory.GetFileSystemEntries(Path.Combine(UserFolder(), Name)).ShouldBeEmpty();
     }
 }
