@@ -846,7 +846,7 @@ public sealed class FileModVersionStoreTests : IDisposable
         });
 
         sawCopy.ShouldBeTrue();
-        Path.GetFileName(staged!).ShouldEndWith(".tmp");
+        Path.GetFileName(Path.GetDirectoryName(staged!)!).ShouldEndWith(".tmp");
         Directory.Exists(staged!).ShouldBeFalse();
         File.ReadAllText(Path.Combine(_store.VersionFolder(User, Name, 1), "mod.ts")).ShouldBe("// copied\n");
         version.Sha256.ShouldBe(Convert.ToHexStringLower(SHA256.HashData(Encoding.UTF8.GetBytes("// copied\n"))));
@@ -1830,8 +1830,8 @@ public sealed class FileModVersionStoreTests : IDisposable
     [Fact]
     public async Task StageDraft_validates_the_names()
     {
-        await Should.ThrowAsync<ModStoreException>(() => _store.StageDraftAsync(User, Session, "Bad Name", Destination()));
-        await Should.ThrowAsync<ModStoreException>(() => _store.StageDraftAsync(User, "../x", Name, Destination()));
+        await Should.ThrowAsync<ArgumentException>(() => _store.StageDraftAsync(User, Session, "Bad Name", Destination()));
+        await Should.ThrowAsync<ArgumentException>(() => _store.StageDraftAsync(User, "../x", Name, Destination()));
     }
 
     [Trait("Category", "ModsFileSafety")]

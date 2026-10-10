@@ -60,7 +60,7 @@ internal sealed class InMemoryModVersionStore : IModVersionStore
         => Task.FromResult(_histories.GetValueOrDefault((userId, name)) ?? ModHistory.Empty(name));
 
     /// <summary>Where Keep stages the copy it checks: never the draft's own folder.</summary>
-    public static string StagedFolder(string userId, string sessionId, string name) => $"/mods/{userId}/{name}/v.staging-{sessionId}.tmp";
+    public static string StagedFolder(string userId, string sessionId, string name) => $"/mods/{userId}/{name}/keep.staging-{sessionId}.tmp/{name}";
 
     public async Task<ModVersion> KeepAsync(string userId, string sessionId, string name, ModKeepSource source, ModKeepCheck check, CancellationToken ct = default)
     {

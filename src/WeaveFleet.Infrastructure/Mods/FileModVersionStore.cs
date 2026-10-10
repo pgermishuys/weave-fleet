@@ -94,8 +94,10 @@ public sealed class FileModVersionStore(string root) : IModVersionStore, IDispos
 
         var draft = DraftFolder(userId, sessionId, name);
         var modFolder = ModFolder(userId, name);
-        var staged = Path.Combine(modFolder, $"keep.{Guid.NewGuid():N}.tmp");
-        var moved = false;
+        // The check wants a folder named after the mod, so the copy sits in one inside the .tmp folder, and the .tmp
+        // folder is always removed afterwards.
+        var stagingFolder = Path.Combine(modFolder, $"keep.{Guid.NewGuid():N}.tmp");
+        var staged = Path.Combine(stagingFolder, name);
         try
         {
             var (manifest, sha256, stagedTree) = await LockedBothAsync(userId, sessionId, name, () =>
@@ -122,7 +124,6 @@ public sealed class FileModVersionStore(string root) : IModVersionStore, IDispos
                 var number = NextNumber(modFolder, history);
                 var kept = Path.Combine(modFolder, $"v{number}");
                 Directory.Move(staged, kept);
-                moved = true;
 
                 var version = new ModVersion(
                     number,
@@ -150,8 +151,7 @@ public sealed class FileModVersionStore(string root) : IModVersionStore, IDispos
         }
         finally
         {
-            if (!moved)
-                TryDelete(staged);
+            TryDelete(stagingFolder);
         }
     }
 
@@ -163,7 +163,8 @@ public sealed class FileModVersionStore(string root) : IModVersionStore, IDispos
 
         var draft = DraftFolder(userId, sessionId, name);
         var modFolder = ModFolder(userId, name);
-        var staged = Path.Combine(modFolder, $"check.{Guid.NewGuid():N}.tmp");
+        var stagingFolder = Path.Combine(modFolder, $"check.{Guid.NewGuid():N}.tmp");
+        var staged = Path.Combine(stagingFolder, name);
         try
         {
             await LockedAsync(SessionLock(userId, sessionId), () =>
@@ -178,7 +179,7 @@ public sealed class FileModVersionStore(string root) : IModVersionStore, IDispos
         }
         finally
         {
-            TryDelete(staged);
+            TryDelete(stagingFolder);
         }
     }
 
@@ -360,13 +361,58 @@ public sealed class FileModVersionStore(string root) : IModVersionStore, IDispos
 
     // $.store
 
-    public Task<IReadOnlyList<string>> ListDraftSessionsAsync(string userId, CancellationToken ct = default) => throw new NotImplementedException();
+    public Task<IReadOnlyList<string>> ListDraftSessionsAsync(string userId, CancellationToken ct = default)
+    {
+        var root = DraftsRoot(userId);
+        if (!IsClean(root) || !Directory.Exists(root))
+            return Task.FromResult<IReadOnlyList<string>>([]);
+
+        IReadOnlyList<string> sessions = Directory.EnumerateDirectories(root)
+            .Where(folder => !IsLink(folder))
+            .Select(Path.GetFileName)
+            .OfType<string>()
+            .Where(ModNames.IsValidSessionId)
+            .Order(StringComparer.Ordinal)
+            .ToList();
+        return Task.FromResult(sessions);
+    }
 
     public string DraftsRoot(string userId) => Path.Combine(UserFolder(userId), DraftsFolder);
 
     public string HostFolder(string userId) => Path.Combine(UserFolder(userId), ".host");
 
-    public Task StageDraftAsync(string userId, string sessionId, string name, string destination, CancellationToken ct = default) => throw new NotImplementedException();
+    public Task StageDraftAsync(string userId, string sessionId, string name, string destination, CancellationToken ct = default)
+    {
+        ThrowIfInvalid(name);
+        ThrowIfInvalidSession(sessionId);
+        ArgumentException.ThrowIfNullOrEmpty(destination);
+
+        var draft = DraftFolder(userId, sessionId, name);
+        return LockedAsync(SessionLock(userId, sessionId), () =>
+        {
+            RequireDraft(draft, ModFolder(userId, name), name);
+            if (Directory.Exists(destination) || File.Exists(destination) || IsLink(destination))
+                throw new ModStoreException("The place to stage the draft already exists.");
+
+            try
+            {
+                if (Path.GetDirectoryName(Path.GetFullPath(destination)) is { Length: > 0 } parent)
+                    Directory.CreateDirectory(parent);
+                CopyDraft(draft, destination);
+            }
+            catch (Exception e)
+            {
+                TryDelete(destination);
+                if (e is ModStoreException)
+                    throw;
+                if (e is IOException or UnauthorizedAccessException or ArgumentException or NotSupportedException)
+                    throw new ModStoreException($"The draft couldn't be staged: {e.Message}");
+                throw;
+            }
+
+            return true;
+        }, ct);
+    }
 
     public Task<JsonElement?> GetValueAsync(string userId, string name, string key, CancellationToken ct = default)
         => LockedAsync(ModLock(userId, name), () =>
