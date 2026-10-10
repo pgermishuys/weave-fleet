@@ -58,7 +58,7 @@ public sealed class ModService(
         var mods = new List<ModView>();
         foreach (var history in histories.Where(h => h.Versions.Count > 0))
             mods.Add(await ToViewAsync(history, ct).ConfigureAwait(false));
-        return new ModsView(safeMode.IsOn, mods);
+        return new ModsView(safeMode.IsOn(UserId), mods);
     }
 
     public async Task<Result<ModView>> GetAsync(string name, CancellationToken ct = default)
@@ -85,35 +85,21 @@ public sealed class ModService(
         if (found.Value.Versions.All(v => v.Number != number))
             return FleetError.NotFoundFor("ModVersion", $"{name} v{number}");
 
-        return await ChangeAsync(name, "version", sessionId: null, async () =>
-        {
-            await store.SetActiveAsync(UserId, name, number, ct).ConfigureAwait(false);
-            if (found.Value.Off is not null)
-                await store.SetOffAsync(UserId, name, null, ct).ConfigureAwait(false);
-        }, ct).ConfigureAwait(false);
+        return await ChangeAsync(name, "version", sessionId: null, () => store.UseVersionAsync(UserId, name, number, ct), ct).ConfigureAwait(false);
     }
 
     /// <summary>
-    /// Makes the version before the active one active. On the first version it turns the mod off instead, leaving the
-    /// active number as it was. Nothing is deleted.
+    /// On a version after the first: makes the previous version active and turns the mod on. On the first: turns the mod
+    /// off, leaving it active. Nothing is deleted.
     /// </summary>
     public async Task<Result<ModView>> UndoAsync(string name, CancellationToken ct = default)
     {
+        // The read is for the NotFound answer only; the store decides and writes in one step.
         var found = await FindAsync(name, ct).ConfigureAwait(false);
         if (found.IsFailure)
             return found.Error;
 
-        var history = found.Value;
-        if (history.Active is not { } active)
-            return FleetError.NotFoundFor(Mod, name);
-
-        var previous = history.Versions.Where(v => v.Number < active).OrderByDescending(v => v.Number).FirstOrDefault();
-        if (previous is null && history.Off is not null)
-            return FleetError.ValidationError("Undo", "Nothing to undo");
-
-        return await ChangeAsync(name, "undone", sessionId: null, () => previous is not null
-            ? store.SetActiveAsync(UserId, name, previous.Number, ct)
-            : store.SetOffAsync(UserId, name, new ModOff(ModOffBy.User, clock.GetUtcNow()), ct), ct).ConfigureAwait(false);
+        return await ChangeAsync(name, "undone", sessionId: null, () => store.UndoAsync(UserId, name, clock.GetUtcNow(), ct), ct).ConfigureAwait(false);
     }
 
     public async Task<Result<ModView>> SetOnAsync(string name, bool on, CancellationToken ct = default)
@@ -186,14 +172,14 @@ public sealed class ModService(
         if (found.IsFailure)
             return found.Error;
 
-        var report = check ?? await checker.CheckAsync(found.Value.Folder, ct).ConfigureAwait(false);
-        if (FirstError(report) is { } refusal)
-            return FleetError.ValidationError("Check", refusal);
-
         var title = (await sessions.GetByIdAsync(sessionId).ConfigureAwait(false))?.Title;
+        // The store checks its own staged copy, so a draft that changes meanwhile isn't what gets checked.
+        ModKeepCheck keepCheck = check is { } given
+            ? (_, _) => Task.FromResult<JsonElement?>(given)
+            : (staged, token) => checker.CheckAsync(staged, token);
         try
         {
-            await store.KeepAsync(UserId, sessionId, name, new ModKeepSource(title, note, report), ct).ConfigureAwait(false);
+            await store.KeepAsync(UserId, sessionId, name, new ModKeepSource(title, note), keepCheck, ct).ConfigureAwait(false);
         }
         catch (ModStoreException e)
         {
@@ -206,10 +192,10 @@ public sealed class ModService(
 
     // ── Safe mode ───────────────────────────────────────────────────────
 
-    /// <summary>"Start without mods": no mod runs until Fleet restarts or this is turned off.</summary>
+    /// <summary>"Start without mods" for the current user: none of their mods run until Fleet restarts or this is turned off.</summary>
     public async Task<ModsView> SetSafeModeAsync(bool on, CancellationToken ct = default)
     {
-        safeMode.Set(on);
+        safeMode.Set(UserId, on);
         await RaiseAsync("safe-mode", name: null, sessionId: null, ct).ConfigureAwait(false);
         return await ListAsync(ct).ConfigureAwait(false);
     }
@@ -236,11 +222,12 @@ public sealed class ModService(
     }
 
     /// <summary>Runs a write on a kept mod; when the store took it, raises the event and answers with the mod as it is now.</summary>
-    private async Task<Result<ModView>> ChangeAsync(string name, string reason, string? sessionId, Func<Task> write, CancellationToken ct)
+    private async Task<Result<ModView>> ChangeAsync(string name, string reason, string? sessionId, Func<Task<ModHistory>> write, CancellationToken ct)
     {
+        ModHistory history;
         try
         {
-            await write().ConfigureAwait(false);
+            history = await write().ConfigureAwait(false);
         }
         catch (ModStoreException e)
         {
@@ -248,7 +235,7 @@ public sealed class ModService(
         }
 
         await RaiseAsync(reason, name, sessionId, ct).ConfigureAwait(false);
-        return await ToViewAsync(await store.GetAsync(UserId, name, ct).ConfigureAwait(false), ct).ConfigureAwait(false);
+        return await ToViewAsync(history, ct).ConfigureAwait(false);
     }
 
     private async Task<Result<ModDraftView>> ChangeDraftAsync(string sessionId, string name, string reason, Func<Task> write, CancellationToken ct)
@@ -275,7 +262,7 @@ public sealed class ModService(
     {
         ModManifest? manifest = null;
         if (history.Active is { } active)
-            manifest = await store.ReadManifestAsync(store.VersionFolder(UserId, history.Name, active), ct).ConfigureAwait(false);
+            manifest = await store.ReadVersionManifestAsync(UserId, history.Name, active, ct).ConfigureAwait(false);
 
         return new ModView(
             history.Name,
@@ -288,30 +275,9 @@ public sealed class ModService(
 
     private async Task<ModDraftView> ToViewAsync(ModDraft draft, CancellationToken ct)
     {
-        var manifest = await store.ReadManifestAsync(draft.Folder, ct).ConfigureAwait(false);
+        var manifest = draft.Manifest;
         var kept = await store.GetAsync(UserId, draft.Name, ct).ConfigureAwait(false);
         return new ModDraftView(draft.SessionId, draft.Name, manifest?.Description, manifest?.Version, draft.Off, kept.Active);
-    }
-
-    /// <summary>What stops a Keep: the first error's message when the report says <c>"ok": false</c>; null when it doesn't.</summary>
-    private static string? FirstError(JsonElement? report)
-    {
-        if (report is not { ValueKind: JsonValueKind.Object } body
-            || !body.TryGetProperty("ok", out var ok)
-            || ok.ValueKind != JsonValueKind.False)
-            return null;
-
-        if (body.TryGetProperty("errors", out var errors)
-            && errors is { ValueKind: JsonValueKind.Array }
-            && errors.GetArrayLength() > 0
-            && errors[0].ValueKind == JsonValueKind.Object
-            && errors[0].TryGetProperty("message", out var message)
-            && message.ValueKind == JsonValueKind.String)
-        {
-            return $"The check found a problem: {message.GetString()}";
-        }
-
-        return "The check found a problem.";
     }
 
     private async Task RaiseAsync(string reason, string? name, string? sessionId, CancellationToken ct)

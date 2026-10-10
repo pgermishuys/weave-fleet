@@ -50,7 +50,7 @@ test-chips/
 
 | Field | Required | |
 | :- | :- | :- |
-| `name` | Yes | Lowercase letters, digits and `-`, 1 to 64, starting with a letter. Matches the folder. `fleet-` is reserved. |
+| `name` | Yes | Lowercase letters, digits and `-`, 1 to 64, starting with a letter. Matches the folder. `fleet-` and `drafts` are reserved, and so are Windows' device names (`con`, `prn`, `aux`, `nul`, `com1`–`com9`, `lpt1`–`lpt9`). |
 | `version` | Yes | The author's version string. Fleet numbers kept versions itself (`v1`, `v2`…); this one is shown beside it. |
 | `description` | Yes | One line, 200 characters at most. Settings → Mods and the review dialog show it. |
 | `hooks` | Yes | Path to the hooks module, relative to `mod.json`, inside the folder. `.js`, `.mjs`, `.ts` or `.mts`. |
@@ -270,10 +270,15 @@ dispatch, then restarts the host and strikes the mod that was running. All mods 
 - **Keep** copies the draft into a new immutable version (`v1`, then `v2`…), makes it the active version, removes the
   draft and loads the version for every session of the user on this machine. Before Keep, Fleet shows the
   [check report](#the-static-check).
-- **Undo** makes the previous version active. Undo on `v1` turns the mod off. Versions are never deleted by Undo.
+- **Undo** is one step, whatever state the mod is in. On `vN` with N above 1, the previous version becomes active and
+  the mod is turned on (the same as using that version), so Undo right after a bad version works even when three
+  failures turned the mod off. On `v1`, the mod is turned off with `by: "user"`; `active` stays 1, and turning it on
+  later runs `v1`. Nothing is deleted. Undo on a mod that is already off at `v1` is refused ("Nothing to undo").
 - **Turn off** stops a mod at once, with no turn: a draft for its session, a kept mod everywhere.
-- **Start without mods** (a menu item, and `?mods=off` on any Fleet address) stops the host and keeps it stopped until
-  Fleet restarts or the user turns mods back on. It is a server-side flag, so no mod runs anywhere while it's set.
+- **Start without mods** (a menu item, and `?mods=off` on any Fleet address) stops the host's mods for that user and
+  keeps them stopped until Fleet restarts or the user turns mods back on (`PUT /api/mods/safe-mode {"on":false}`;
+  turning the Mods switch off and on again clears it too). It is per user and held in memory: other users' mods keep
+  running, and only the user's own clients hear about it.
 - **The Mods switch** (Settings → Experimental, off by default) gates all of it. With it off, nothing changes, no host
   runs and no Bun is downloaded.
 
@@ -382,7 +387,7 @@ These shapes are for M5 and M6; mods don't see them.
 | Elements per tree | 2,000 |
 | Tree depth | 32 |
 | A tree as JSON | 256 KiB; larger is invalid |
-| `$.store` per mod per user | 4 MiB of JSON |
+| `$.store` per mod per user | 4 MiB of UTF-8 JSON (characters aren't escaped beyond JSON's own) |
 | `$.state` per mod per session | 1 MiB of JSON |
 | `$.ui.invalidate` redraws | 10 a second per mod per session; calls in between coalesce |
 | `$.clock.every` | 100 ms at least; 20 timers per mod per session |
@@ -390,7 +395,7 @@ These shapes are for M5 and M6; mods don't see them.
 | `$.ui.toast` text | 500 characters |
 | Tool row `input` / `output` | 64 KiB of JSON / the last 256 KiB |
 | A hooks module | 512 KiB, 2,000 nested scopes |
-| Keys and pane ids | Letters, digits, `_`, `-` (and `.` for keys), up to 64 |
+| Keys and pane ids | Letters, digits, `_`, `-` (and `.` for keys), up to 64; `$.store` keys follow this too |
 
 ## Worked example: test-chips
 

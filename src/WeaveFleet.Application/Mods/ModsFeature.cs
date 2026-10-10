@@ -1,10 +1,12 @@
+using System.Collections.Concurrent;
 using WeaveFleet.Application.Configuration;
+using WeaveFleet.Application.Users;
 using WeaveFleet.Domain.Repositories;
 
 namespace WeaveFleet.Application.Mods;
 
 /// <summary>Whether Mods are on for the current user (Settings → Experimental), and whether any may run.</summary>
-public sealed class ModsFeature(FleetOptions options, IUserPreferenceRepository preferences, ModsSafeMode safeMode)
+public sealed class ModsFeature(FleetOptions options, IUserPreferenceRepository preferences, ModsSafeMode safeMode, IUserContext user)
 {
     public const string PreferenceKey = "Mods";
 
@@ -20,18 +22,24 @@ public sealed class ModsFeature(FleetOptions options, IUserPreferenceRepository 
     }
 
     /// <summary>Switched on and not in safe mode: what the mod host checks before it runs any mod.</summary>
-    public async Task<bool> IsEnabledAsync() => !safeMode.IsOn && await IsSwitchedOnAsync().ConfigureAwait(false);
+    public async Task<bool> IsEnabledAsync() => !safeMode.IsOn(user.UserId) && await IsSwitchedOnAsync().ConfigureAwait(false);
 }
 
 /// <summary>
-/// "Start without mods": while it's set, no mod runs anywhere. Held in memory, so it lasts until Fleet restarts or the
-/// user turns mods back on.
+/// "Start without mods", per user: while it's set for a user, none of their mods run; other users' mods still do. Held in
+/// memory, so it lasts until Fleet restarts or the user turns mods back on.
 /// </summary>
 public sealed class ModsSafeMode
 {
-    private volatile bool _on;
+    private readonly ConcurrentDictionary<string, bool> _users = new(StringComparer.Ordinal);
 
-    public bool IsOn => _on;
+    public bool IsOn(string userId) => _users.ContainsKey(userId);
 
-    public void Set(bool on) => _on = on;
+    public void Set(string userId, bool on)
+    {
+        if (on)
+            _users[userId] = true;
+        else
+            _users.TryRemove(userId, out _);
+    }
 }

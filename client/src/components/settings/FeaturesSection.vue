@@ -1,6 +1,7 @@
 <script setup lang="ts">
-import { computed, shallowRef } from "vue";
+import { computed, onMounted, shallowRef } from "vue";
 import { LoaderCircle } from "lucide-vue-next";
+import { apiFetch } from "@/lib/api-client";
 import { useBoardFeature } from "@/composables/use-board-feature";
 import { SESSION_RECAP_PREFERENCE_KEY } from "@/composables/use-session-recap";
 import { RETRY_AFTER_LIMITS_PREFERENCE_KEY } from "@/composables/use-session-retry";
@@ -125,9 +126,24 @@ async function toggleLiveMachines(): Promise<void> {
   }
 }
 
-const isModsEnabled = computed(
-  () => preferencesStore.get(MODS_PREFERENCE_KEY, "false") === "true",
-);
+// What the server does when the user hasn't chosen: it falls back to Fleet's own option, so ask it.
+const serverModsOn = shallowRef(false);
+
+onMounted(async () => {
+  try {
+    const response = await apiFetch("/api/features/mods");
+    if (!response.ok) return;
+    const body = (await response.json()) as { on?: boolean };
+    serverModsOn.value = body.on === true;
+  } catch {
+    // Keep showing off: the same as before the server answers.
+  }
+});
+
+const isModsEnabled = computed(() => {
+  const chosen = preferencesStore.get(MODS_PREFERENCE_KEY, "");
+  return chosen === "" ? serverModsOn.value : chosen === "true";
+});
 const isSavingMods = shallowRef(false);
 
 async function toggleMods(): Promise<void> {

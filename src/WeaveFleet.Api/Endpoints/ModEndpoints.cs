@@ -1,6 +1,7 @@
 using System.Text.Json;
 using System.Text.Json.Serialization;
 using WeaveFleet.Application.Mods;
+using WeaveFleet.Application.Users;
 
 namespace WeaveFleet.Api.Endpoints;
 
@@ -26,7 +27,9 @@ public static class ModEndpoints
 
         // PUT /api/mods/safe-mode  { "on": true } — "Start without mods": nothing runs until Fleet restarts or this is false.
         mods.MapPut("/safe-mode", async (SetModsSafeModeRequest request, ModService service, CancellationToken ct)
-                => Results.Ok(await service.SetSafeModeAsync(request.On, ct)))
+                => request.On is { } on
+                    ? Results.Ok(await service.SetSafeModeAsync(on, ct))
+                    : Results.BadRequest(new ApiErrorResponse("\"on\" is required: true to start without mods, false to run them.")))
             .WithName("SetModsSafeMode")
             .Produces<ModsView>();
 
@@ -85,22 +88,10 @@ public static class ModEndpoints
             .Produces<ModCheckView>();
 
         // POST /api/sessions/{sessionId}/mods/drafts/{name}/keep  { "note": "show failing names" } — the body is optional.
-        drafts.MapPost("/drafts/{name}/keep", async (string sessionId, string name, HttpContext http, ModService service, CancellationToken ct) =>
-        {
-            KeepModRequest? request;
-            try
-            {
-                request = http.Request.ContentLength is null or 0
-                    ? null
-                    : await JsonSerializer.DeserializeAsync(http.Request.Body, ApiJsonContext.Default.KeepModRequest, ct);
-            }
-            catch (JsonException)
-            {
-                return Results.BadRequest(new ApiErrorResponse("The request body isn't valid."));
-            }
-
-            return (await service.KeepAsync(sessionId, name, request?.Note, check: null, ct)).ToApiResult();
-        })
+        // The body is an optional parameter, so an empty one is fine and a wrong content type (415), an unknown member or
+        // bad JSON (400) get the standard answers.
+        drafts.MapPost("/drafts/{name}/keep", async (string sessionId, string name, KeepModRequest? request, ModService service, CancellationToken ct)
+                => (await service.KeepAsync(sessionId, name, request?.Note, check: null, ct)).ToApiResult())
             .WithName("KeepModDraft")
             .Produces<ModView>();
 
@@ -113,6 +104,15 @@ public static class ModEndpoints
                 => (await service.SetDraftOnAsync(sessionId, name, on: true, ct)).ToApiResult())
             .WithName("TurnModDraftOn")
             .Produces<ModDraftView>();
+
+        // ── The switch, as the server sees it ────────────────────────────────
+        // Not gated: Settings asks while the switch is off, to show what the server would do without a stored choice.
+        var features = app.MapGroup("/api/features").WithTags("Mods");
+
+        features.MapGet("/mods", async (ModsFeature feature, ModsSafeMode safeMode, IUserContext user)
+                => Results.Ok(new ModsSwitchView(await feature.IsSwitchedOnAsync(), safeMode.IsOn(user.UserId))))
+            .WithName("GetModsSwitch")
+            .Produces<ModsSwitchView>();
 
         return app;
     }
@@ -128,7 +128,10 @@ public static class ModEndpoints
 internal sealed record UseModVersionRequest(int Version);
 
 [JsonUnmappedMemberHandling(JsonUnmappedMemberHandling.Disallow)]
-internal sealed record SetModsSafeModeRequest(bool On);
+internal sealed record SetModsSafeModeRequest(bool? On);
+
+/// <summary>What Settings shows for the Mods switch: the server's effective value for the current user.</summary>
+internal sealed record ModsSwitchView(bool On, bool SafeMode);
 
 [JsonUnmappedMemberHandling(JsonUnmappedMemberHandling.Disallow)]
 internal sealed record KeepModRequest(string? Note = null);
