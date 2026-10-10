@@ -397,7 +397,8 @@ internal sealed partial class BunRuntimeInstaller(
         }
         catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
         {
-            // Can't look inside: go by the folder's own time.
+            // Can't look inside: it may be in use, so keep it.
+            return DateTime.MaxValue;
         }
 
         return newest;
