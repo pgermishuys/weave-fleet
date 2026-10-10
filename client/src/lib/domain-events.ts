@@ -800,8 +800,40 @@ export interface ModsChanged extends EventCursorMetadata {
   type: "mods.changed";
   payload: {
     name?: string | null;
-    reason: "kept" | "version" | "undone" | "on" | "off" | "strikes" | "draft-off" | "draft-on" | "safe-mode";
+    reason: "kept" | "version" | "undone" | "on" | "off" | "strikes" | "draft-off" | "draft-on" | "safe-mode" | "switch";
     sessionId?: string | null;
+  };
+}
+
+/** Why an install of the mod runtime (Bun) failed. */
+export type ModsRuntimeFailure = "offline" | "blocked" | "stopped" | "checksum" | "no-build" | "cancelled" | "other";
+
+/** Fleet installing the Bun mods run on: the one running now, or the last one since Fleet started. */
+export interface ModsRuntimeJob {
+  phase: "downloading" | "verifying" | "extracting" | "succeeded" | "failed";
+  /** `install`: no Bun of Fleet's yet. `update`: a newer release. `security`: the Bun in use has a security fix pending. */
+  kind: "install" | "update" | "security";
+  version: string;
+  message?: string | null;
+  /** Set when `phase` is `failed`. */
+  reason?: ModsRuntimeFailure | null;
+  bytesReceived: number;
+  bytesTotal?: number | null;
+  startedAt: string;
+  /** The version mods keep running on during an update or security install. */
+  from?: string | null;
+}
+
+/**
+ * The Bun mods run on is installing, installed, failed, or the user's own Bun changed. Sent on the `sessions` topic.
+ * The install is machine-wide, so it reaches every user; a `bun-path` change reaches only the user who made it.
+ * Refetch `/api/features/mods/runtime` on any event that isn't `downloading` progress.
+ */
+export interface ModsRuntime extends EventCursorMetadata {
+  type: "mods.runtime";
+  payload: {
+    job?: ModsRuntimeJob | null;
+    reason: "job" | "installed" | "bun-path" | "release";
   };
 }
 
@@ -857,4 +889,5 @@ export type DomainEvent =
   | WorkflowRunChanged
   | HarnessUsageChanged
   | HarnessCatalogChanged
-  | ModsChanged;
+  | ModsChanged
+  | ModsRuntime;
