@@ -39,6 +39,15 @@ export interface Host {
 const bad = (message: string) => new RpcError(ErrorCodes.invalidParams, message);
 const ID = /^([a-z][a-z0-9-]*)@(?:v(\d+)|draft:(.+))$/;
 const sleep = (ms: number) => new Promise<void>((r) => setTimeout(r, ms));
+/** The share of `shutdownMs` the host waits for running work; the rest is headroom to exit within the limit. */
+const SHUTDOWN_WAIT_SHARE = 0.9;
+
+/** Resolves when `work` has settled or `ms` have passed, whichever is first. */
+async function settledWithin(work: Promise<unknown>[], ms: number): Promise<void> {
+  let timer: ReturnType<typeof setTimeout> | undefined;
+  await Promise.race([Promise.allSettled(work), new Promise<void>((r) => (timer = setTimeout(r, ms)))]);
+  clearTimeout(timer);
+}
 
 function parseLoad(p: any): { id: string; name: string; version: number | "draft"; sessionId?: string; root: string } {
   if (typeof p !== "object" || p === null) throw bad("load takes an object");
@@ -65,24 +74,35 @@ export function createHost(options: HostOptions): Host {
   const log = options.log ?? ((m: string) => void process.stderr.write(`${m}\n`));
   const rt: Runtime = createRuntime({ peer, limits: options.limits, log, now: options.now ?? Date.now });
   installConsole();
-  let pendingReloads = 0;
+  /** Requests received and not yet answered: shutdown lets them finish. */
+  const received = new Set<Promise<unknown>>();
+  const handle = (method: string, handler: (params: any) => unknown) =>
+    peer.handle(method, (p) => {
+      const result = handler(p);
+      if (result instanceof Promise) {
+        received.add(result);
+        const done = () => void received.delete(result);
+        result.then(done, done);
+      }
+      return result;
+    });
 
   const fail = (name: string, report: CheckReport, code: string, message: string): never => {
     const withError: CheckReport = { ...report, ok: false, errors: [...report.errors, { code, message }] };
     throw new RpcError(ErrorCodes.notLoaded, `${name} doesn't load: ${message}`, withError);
   };
 
-  peer.handle("initialize", (p) => {
+  handle("initialize", (p) => {
     if (p?.protocol !== PROTOCOL) throw new RpcError(ErrorCodes.protocol, `protocol ${JSON.stringify(p?.protocol)} isn't supported`, { supported: [PROTOCOL] });
     return { protocol: PROTOCOL, hostVersion: HOST_VERSION, bunVersion: Bun.version };
   });
 
-  peer.handle("check", async (p) => {
+  handle("check", async (p) => {
     if (typeof p?.root !== "string") throw bad("check needs a root");
     return (await check(p.root, typeof p.manifest === "string" ? p.manifest : undefined, rt.limits)).report;
   });
 
-  peer.handle("load", async (p) => {
+  handle("load", async (p) => {
     const spec = parseLoad(p);
     const checked = await check(spec.root, join(spec.root, "mod.json"), rt.limits);
     const report = checked.report;
@@ -101,9 +121,9 @@ export function createHost(options: HostOptions): Host {
     const old = rt.mods.get(spec.id);
     if (old) {
       old.dead = true;
-      mod.prevStarted = new Set(old.starts.keys());
+      // Sessions the old module started, and those it was still to restart after its own reload.
+      mod.prevStarted = new Set([...old.starts.keys(), ...old.prevStarted]);
       stopModWork(rt, spec.id);
-      rt.strikes.delete(spec.id);
     }
     rt.mods.set(spec.id, mod);
     if (mod.prevStarted.size > 0) scheduleReloadStarts(mod);
@@ -112,8 +132,8 @@ export function createHost(options: HostOptions): Host {
 
   /** After `load` has answered: the new module starts the sessions the old one had. */
   function scheduleReloadStarts(mod: LoadedMod): void {
-    pendingReloads++;
-    setTimeout(async () => {
+    const run = (async () => {
+      await sleep(0);
       try {
         for (const sid of [...mod.prevStarted]) {
           if (rt.mods.get(mod.id) !== mod) break;
@@ -121,20 +141,20 @@ export function createHost(options: HostOptions): Host {
         }
       } catch (e) {
         log(`reload start of ${mod.id} failed: ${e instanceof Error ? e.message : String(e)}`);
-      } finally {
-        pendingReloads--;
       }
-    }, 0);
+    })();
+    rt.background.add(run);
+    void run.then(() => rt.background.delete(run));
   }
 
-  peer.handle("unload", (p) => {
+  handle("unload", (p) => {
     if (typeof p?.id === "string") rt.unloadMod(p.id);
     return {};
   });
 
-  peer.handle("dispatch", (p) => dispatch(rt, p));
+  handle("dispatch", (p) => dispatch(rt, p));
 
-  peer.handle("forget", (p) => {
+  handle("forget", (p) => {
     if (typeof p?.sessionId !== "string") throw bad("forget needs a sessionId");
     forgetSession(rt, p.sessionId);
     return {};
@@ -145,18 +165,28 @@ export function createHost(options: HostOptions): Host {
     rt.invalidator.stopAll();
   }
 
+  // Lets every request already received, and the reload starts, finish (their timers still run) until a deadline
+  // counted from this request's arrival, so the host exits within shutdownMs; then stops timers and exits.
   peer.handle("shutdown", () => {
-    setTimeout(async () => {
+    const deadline = performance.now() + rt.limits.shutdownMs * SHUTDOWN_WAIT_SHARE;
+    void (async () => {
+      await sleep(0);
+      for (;;) {
+        const work = [...received, ...rt.background];
+        const left = deadline - performance.now();
+        if (work.length === 0 || left <= 0) break;
+        await settledWithin(work, left);
+      }
       stopTimers();
-      await Promise.race([Promise.allSettled([...rt.inflight, ...rt.background]), sleep(rt.limits.shutdownMs)]);
+      await sleep(0);
       exit(0);
-    }, 0);
+    })();
     return {};
   });
 
   return {
     async idle() {
-      while (pendingReloads > 0 || rt.background.size > 0) await sleep(1);
+      while (rt.background.size > 0) await sleep(1);
     },
     loaded: () => [...rt.mods.keys()],
     close: stopTimers,

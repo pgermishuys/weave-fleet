@@ -1,4 +1,5 @@
 import type { CheckReportHook } from "fleet-mods/protocol-shared";
+import { ownerKey } from "./budget";
 import { contextFor, inMod } from "./context";
 import { matcherToJson } from "./match";
 import { EVENTS, type EventName, type HookFn, type HookReg, type LoadedMod, type Runtime } from "./types";
@@ -40,6 +41,7 @@ export async function instantiate(rt: Runtime, spec: LoadSpec, js: string): Prom
     dead: false,
     starts: new Map(),
     prevStarted: new Set(),
+    strikes: 0,
   };
   const ctx = contextFor(rt, spec.id);
 
@@ -82,7 +84,7 @@ export async function instantiate(rt: Runtime, spec: LoadSpec, js: string): Prom
   };
 
   try {
-    inMod(ctx, () => (register as (on: unknown, options: unknown) => unknown)(on, Object.freeze({})));
+    rt.meter.run(ownerKey(spec.id, ""), () => inMod(ctx, () => (register as (on: unknown, options: unknown) => unknown)(on, Object.freeze({}))));
   } catch (e) {
     throw new LoadProblem("register", e instanceof Error ? e.message : String(e));
   } finally {

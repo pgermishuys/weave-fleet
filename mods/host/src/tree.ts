@@ -58,6 +58,8 @@ export interface WireOptions {
   site: RenderComponent;
   /** Owner of elements that carry no OWNER tag (a mod that wrote element data by hand): the hook's mod. */
   defaultOwner: ModId;
+  /** Owner of an element with no OWNER tag, when known (the mod whose hook returned it); else `defaultOwner`. */
+  ownerOf?: (element: object) => ModId | undefined;
   /** True when `path` names an `.html` file that exists inside `owner`'s folder. */
   pageExists: (owner: ModId, path: string) => boolean;
   /** Called once per callback in the tree, in tree order; returns the handle (`h17`) sent in its place. */
@@ -251,7 +253,7 @@ function visit(ctx: Ctx, node: unknown, depth: number, path: string): WireElemen
   const props = rawProps as Record<string, unknown>;
   const spec = SPECS[type];
 
-  const owner = typeof (el as any)[OWNER] === "string" ? ((el as any)[OWNER] as ModId) : ctx.opts.defaultOwner;
+  const owner = typeof (el as any)[OWNER] === "string" ? ((el as any)[OWNER] as ModId) : (ctx.opts.ownerOf?.(el) ?? ctx.opts.defaultOwner);
   if (!ctx.owners.includes(owner)) ctx.owners.push(owner);
 
   const wireProps: Record<string, Json> = {};

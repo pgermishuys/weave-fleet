@@ -1,6 +1,7 @@
 import type { EventName, Json, Surface } from "fleet-mods/protocol-shared";
 import type { HookFailureReport } from "fleet-mods/protocol";
 import type { HostLimits } from "../limits";
+import type { Meter } from "./budget";
 import type { Clock } from "./clock";
 import type { Handles } from "./handles";
 import type { Invalidator } from "./invalidate";
@@ -46,6 +47,8 @@ export interface LoadedMod {
   starts: Map<string, Promise<HookFailureReport[]>>;
   /** Sessions the module this one replaced had started: their session.start says "reload". */
   prevStarted: Set<string>;
+  /** Failures in a row, not answered by `.catch`. A reload or a fresh load starts a new module at 0. */
+  strikes: number;
 }
 
 /** Where a piece of mod code is running, for `console` and for `$`. */
@@ -69,18 +72,21 @@ export interface Runtime {
   log: (message: string) => void;
   now: () => number;
   mods: Map<ModId, LoadedMod>;
-  strikes: Map<ModId, number>;
   state: StateStore;
   invalidator: Invalidator;
   clock: Clock;
   handles: Handles;
+  /** Budgets, and the time mod code takes, so one mod's busy code isn't charged to another's budget. */
+  meter: Meter;
   calls: Set<ActiveCall>;
-  /** Dispatches running now. */
-  inflight: Set<Promise<unknown>>;
+  /** Per session, how many times it was forgotten: a `$` or dispatch from an older generation is stale. */
+  generations: Map<string, number>;
   /** Work that follows an answer (reload starts). */
   background: Set<Promise<unknown>>;
   /** A failure outside a dispatch (a timer, a callback): notify Fleet, count a strike, unload at the limit. */
-  fail(modId: ModId, sessionId: string, event: EventName, kind: "throw" | "timeout", message: string): void;
+  fail(mod: LoadedMod, sessionId: string, event: EventName, kind: "throw" | "timeout", message: string): void;
+  /** Counts a strike for `mod` and unloads it at the limit. Returns the count, or null when `mod` isn't the loaded module. */
+  strike(mod: LoadedMod): number | null;
   /** Stops and forgets a module. */
   unloadMod(id: ModId): void;
 }

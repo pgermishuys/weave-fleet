@@ -1,5 +1,6 @@
 import { RpcError, ErrorCodes } from "../rpc";
-import { runFrom, pageExists, type Dispatch, type HookRef } from "./chain";
+import { isStale, runFrom, pageExists, type Dispatch, type HookRef } from "./chain";
+import { generationOf } from "./runtime";
 import { frozenCopy } from "./freeze";
 import { matches } from "./match";
 import { toWire } from "../tree";
@@ -30,7 +31,7 @@ function hooksFor(mods: LoadedMod[], event: EventName, e: unknown): HookRef[] {
 }
 
 function newDispatch(rt: Runtime, event: EventName, sessionId: string, hooks: HookRef[]): Dispatch {
-  return { rt, event, sessionId, hooks, failures: [] };
+  return { rt, event, sessionId, hooks, failures: [], owners: new WeakMap(), generation: generationOf(rt, sessionId) };
 }
 
 /**
@@ -56,15 +57,7 @@ export async function ensureStarted(rt: Runtime, mod: LoadedMod, sessionId: stri
 }
 
 /** `dispatch`: runs the chain for one event and answers `{ result, drawnBy?, failures }`. */
-export function dispatch(rt: Runtime, params: DispatchParams) {
-  const p = run(rt, params);
-  rt.inflight.add(p);
-  const done = () => void rt.inflight.delete(p);
-  p.then(done, done);
-  return p;
-}
-
-async function run(rt: Runtime, params: DispatchParams) {
+export async function dispatch(rt: Runtime, params: DispatchParams) {
   if (!isObject(params)) throw bad("dispatch takes an object");
   const { event, sessionId, e, mods } = params;
   if (!(EVENTS as readonly string[]).includes(event as string)) throw bad(`unknown event ${JSON.stringify(event)}`);
@@ -107,22 +100,34 @@ async function run(rt: Runtime, params: DispatchParams) {
     return { result: hookE, failures: d.failures };
   }
 
-  for (const m of chainMods) failures.push(...(await ensureStarted(rt, m, sessionId)));
+  const generation = generationOf(rt, sessionId);
+  for (const m of chainMods) {
+    if (generationOf(rt, sessionId) !== generation) break;
+    failures.push(...(await ensureStarted(rt, m, sessionId)));
+  }
 
   const live = chainMods.filter((m) => !m.dead);
   const d = newDispatch(rt, event, sessionId, hooksFor(live, event, hookE));
+  d.generation = generation;
   d.control = control;
-  if (event === "ui.render") d.component = hookE.component as RenderComponent;
+  if (event === "ui.render") {
+    d.component = hookE.component as RenderComponent;
+    d.site = `${d.component}\u0000${hookE.requestId}`;
+    for (const m of live) rt.state.resetSite(m.name, sessionId, d.site);
+  }
   const out = await runFrom(d, 0, frozenCopy(hookE));
   failures.push(...d.failures);
 
   if (event !== "ui.render") return { result: out.v, failures };
+  // Forgotten while it ran: Fleet no longer draws the session, so no handles are kept for it.
+  if (isStale(d)) return { result: { type: "Fleet" }, failures };
 
-  const site = `${d.component}\u0000${hookE.requestId}`;
+  const site = d.site!;
   const previous = rt.handles.ofSite(sessionId, site);
   const wire = toWire(out.v, {
     site: d.component!,
-    defaultOwner: chainMods[0]?.id ?? "",
+    defaultOwner: out.by ?? "",
+    ownerOf: (el) => d.owners.get(el),
     pageExists: (o, p) => pageExists(rt, o, p),
     allocHandle: (c) => rt.handles.alloc({ ...c, sessionId, site }),
     limits: rt.limits,

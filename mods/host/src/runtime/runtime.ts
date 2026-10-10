@@ -1,9 +1,10 @@
 import { LIMITS, type HostLimits } from "../limits";
+import { createMeter } from "./budget";
 import { createClock } from "./clock";
 import { createHandles } from "./handles";
 import { createInvalidator } from "./invalidate";
 import { createStateStore } from "./state";
-import type { EventName, ModId, Peer, Runtime } from "./types";
+import type { EventName, LoadedMod, ModId, Peer, Runtime } from "./types";
 
 export interface RuntimeOptions {
   peer: Peer;
@@ -23,21 +24,25 @@ export function createRuntime(options: RuntimeOptions): Runtime {
     log: options.log,
     now: options.now,
     mods: new Map(),
-    strikes: new Map(),
     state: createStateStore(() => limits.stateBytes),
     invalidator: createInvalidator(peer, () => limits.invalidatePerSecond, options.now),
     clock: createClock(() => limits),
     handles: createHandles(),
+    meter: createMeter(options.now),
     calls: new Set(),
-    inflight: new Set(),
+    generations: new Map(),
     background: new Set(),
 
-    fail(modId: ModId, sessionId: string, event: EventName, kind, message) {
-      if (!rt.mods.has(modId)) return;
-      const strikes = (rt.strikes.get(modId) ?? 0) + 1;
-      rt.strikes.set(modId, strikes);
-      peer.notify("failed", { mod: modId, event, kind, message, strikes, sessionId });
-      if (strikes >= limits.strikes) rt.unloadMod(modId);
+    fail(mod: LoadedMod, sessionId: string, event: EventName, kind, message) {
+      const strikes = rt.strike(mod);
+      if (strikes !== null) peer.notify("failed", { mod: mod.id, event, kind, message, strikes, sessionId });
+    },
+
+    strike(mod: LoadedMod) {
+      if (rt.mods.get(mod.id) !== mod || mod.dead) return null;
+      const strikes = ++mod.strikes;
+      if (strikes >= limits.strikes) rt.unloadMod(mod.id);
+      return strikes;
     },
 
     unloadMod(id: ModId) {
@@ -47,8 +52,8 @@ export function createRuntime(options: RuntimeOptions): Runtime {
         rt.mods.delete(id);
       }
       stopModWork(rt, id);
-      rt.state.dropMod(id);
-      rt.strikes.delete(id);
+      // $.state stays: it is the name's, per session, and only `forget` (or the host stopping) drops it, so Keep and
+      // Undo keep it whatever order Fleet loads and unloads the versions in.
     },
   };
   return rt;
@@ -62,8 +67,12 @@ export function stopModWork(rt: Runtime, id: ModId): void {
   rt.invalidator.dropMod(id);
 }
 
+/** The session's generation: a `$` or dispatch that captured an older one outlived a `forget`. */
+export const generationOf = (rt: Runtime, sessionId: string): number => rt.generations.get(sessionId) ?? 0;
+
 /** `forget`: everything the host holds for a session. */
 export function forgetSession(rt: Runtime, sessionId: string): void {
+  rt.generations.set(sessionId, generationOf(rt, sessionId) + 1);
   for (const c of [...rt.calls]) if (c.sessionId === sessionId) c.abort();
   rt.state.dropSession(sessionId);
   rt.clock.stopSession(sessionId);

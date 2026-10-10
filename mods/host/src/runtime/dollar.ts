@@ -1,14 +1,19 @@
 import type { Fleet } from "fleet-mods";
-import type { Budget } from "./budget";
-import { capLine, contextFor, inMod } from "./context";
+import { ownerKey, type Budget } from "./budget";
+import { capLine, contextFor, inMod, modContext } from "./context";
 import { createElements } from "../tree";
 import { toJsonText } from "./freeze";
-import type { EventName, LoadedMod, Runtime } from "./types";
+import { generationOf } from "./runtime";
+import type { EventName, LoadedMod, ModContext, Runtime } from "./types";
 
 /** What a `$` needs to know about the call it was made for; the chain updates it as the call goes on. */
 export interface DollarScope {
-  /** A ui.render hook is running: reads subscribe, writes throw. */
+  /** A ui.render hook is running: code in `context` (the hook and its awaits, not its timers or callbacks) is the render. */
   rendering: boolean;
+  /** The context the hook runs in. */
+  context: ModContext;
+  /** ui.render: the site being drawn, which the render's reads subscribe. */
+  site?: string;
   /** The budget to pause while a `$` call waits. */
   budget: Budget | null;
 }
@@ -19,6 +24,14 @@ const PANE_ID = /^[A-Za-z0-9_-]{1,64}$/;
 export function createDollar(rt: Runtime, mod: LoadedMod, sessionId: string, event: EventName, scope: DollarScope): Fleet {
   const ctx = contextFor(rt, mod.id, sessionId, event);
   const context = { mod: mod.id, sessionId };
+  const generation = generationOf(rt, sessionId);
+  /** Is this code the render itself? Reads subscribe and writes throw only there. */
+  const rendering = () => scope.rendering && modContext.getStore() === scope.context;
+  /** The session was forgotten after this `$` was made: it may not leave state or timers behind for it. */
+  const stale = () => generationOf(rt, sessionId) !== generation;
+  const live = () => {
+    if (stale()) throw new Error("the session was forgotten");
+  };
 
   /** Awaits a promise from Fleet with the hook's budget paused. */
   const waiting = async <T>(p: () => Promise<T>): Promise<T> => {
@@ -36,8 +49,8 @@ export function createDollar(rt: Runtime, mod: LoadedMod, sessionId: string, eve
   const owner = {
     mod: mod.id,
     session: sessionId,
-    run: <T>(fn: () => T) => inMod(ctx, fn),
-    failed: (e: unknown) => rt.fail(mod.id, sessionId, event, "throw", e instanceof Error ? e.message : String(e)),
+    run: <T>(fn: () => T) => rt.meter.run(ownerKey(mod.id, sessionId), () => inMod(ctx, fn)),
+    failed: (e: unknown) => rt.fail(mod, sessionId, event, "throw", e instanceof Error ? e.message : String(e)),
     alive: () => !mod.dead,
   };
 
@@ -47,7 +60,7 @@ export function createDollar(rt: Runtime, mod: LoadedMod, sessionId: string, eve
       resolve: () => createElements(mod.id),
       invalidate(name: unknown) {
         if (name !== "ui.render") throw new TypeError('$.ui.invalidate takes "ui.render"');
-        rt.invalidator.request(mod.id, sessionId);
+        if (!stale()) rt.invalidator.request(mod.id, sessionId);
       },
       async open(pane) {
         if (!pane || typeof pane.id !== "string" || !PANE_ID.test(pane.id)) throw new TypeError("a pane id is 1 to 64 letters, digits, _ or -");
@@ -58,9 +71,15 @@ export function createDollar(rt: Runtime, mod: LoadedMod, sessionId: string, eve
         await ask("ui.close", { id: pane.id });
       },
       toast(text, options) {
+        if (options !== undefined && (typeof options !== "object" || options === null)) throw new TypeError("toast options must be an object");
+        const { timeoutMs, tone } = options ?? {};
+        if (timeoutMs !== undefined && !(typeof timeoutMs === "number" && Number.isFinite(timeoutMs) && timeoutMs > 0)) {
+          throw new TypeError("toast timeoutMs must be a positive number of milliseconds");
+        }
+        if (tone !== undefined && tone !== "accent" && tone !== "warn") throw new TypeError('toast tone must be "accent" or "warn"');
         const params: Record<string, unknown> = { ...context, text: String(text).slice(0, rt.limits.toastChars) };
-        if (options?.timeoutMs !== undefined) params.timeoutMs = options.timeoutMs;
-        if (options?.tone !== undefined) params.tone = options.tone;
+        if (timeoutMs !== undefined) params.timeoutMs = timeoutMs;
+        if (tone !== undefined) params.tone = tone;
         rt.peer.request("ui.toast", params, { timeoutMs: rt.limits.fleetRequestMs }).catch((e) => rt.log(`ui.toast failed for ${mod.id}: ${e instanceof Error ? e.message : String(e)}`));
       },
       log(text, options) {
@@ -70,11 +89,13 @@ export function createDollar(rt: Runtime, mod: LoadedMod, sessionId: string, eve
     },
     state: {
       get(key) {
-        return rt.state.get(mod.id, sessionId, String(key), scope.rendering) as never;
+        if (stale()) return undefined;
+        return rt.state.get(mod.name, sessionId, String(key), rendering() ? scope.site : undefined) as never;
       },
       set(key, value) {
-        if (scope.rendering) throw new Error("a ui.render hook can't write $.state");
-        if (rt.state.set(mod.id, sessionId, String(key), value)) rt.invalidator.request(mod.id, sessionId);
+        live();
+        if (rendering()) throw new Error("a ui.render hook can't write $.state");
+        if (rt.state.set(mod.name, sessionId, String(key), value)) rt.invalidator.request(mod.id, sessionId);
       },
     },
     store: {
@@ -102,8 +123,8 @@ export function createDollar(rt: Runtime, mod: LoadedMod, sessionId: string, eve
     },
     clock: {
       now: () => rt.now(),
-      after: (ms, fn) => rt.clock.after(owner, ms, fn),
-      every: (ms, fn) => rt.clock.every(owner, ms, fn),
+      after: (ms, fn) => (live(), rt.clock.after(owner, ms, fn)),
+      every: (ms, fn) => (live(), rt.clock.every(owner, ms, fn)),
     },
   };
   for (const part of Object.values($)) Object.freeze(part);
