@@ -1,5 +1,7 @@
 using System.Security.Cryptography;
 using System.Text;
+using System.Text.Json;
+using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging.Abstractions;
 using Microsoft.Extensions.Time.Testing;
 using WeaveFleet.Application.Mods;
@@ -19,9 +21,15 @@ public sealed class ModHostServiceTests : IDisposable
     private readonly ModHostService _service;
 
     public ModHostServiceTests()
-        => _service = new ModHostService(new ModHostOptions(), _factory, new FakeGate(), new FakeBun(), new FakeFiles(), _store, _events, _time, NullLogger<ModHostService>.Instance);
+        => _service = new ModHostService(
+            new ModHostOptions(), _factory, new FakeGate(), new FakeBun(), new FakeFiles(), _store, new FakeStrikes(), new FakeUi(),
+            new ServiceCollection().BuildServiceProvider().GetRequiredService<IServiceScopeFactory>(), new NoUserScope(), _events, _time, NullLogger<ModHostService>.Instance);
 
-    public void Dispose() => _service.DisposeAsync().AsTask().Within().GetAwaiter().GetResult();
+    public void Dispose()
+    {
+        _service.DisposeAsync().AsTask().Within().GetAwaiter().GetResult();
+        _store.DeleteFolders();
+    }
 
     private void Keep(string user)
         => _store.SeedHistory(user, new ModHistory("test-chips", 1, null, [new ModVersion(1, DateTimeOffset.UnixEpoch, "0.1.0", "abc", null, null, null, null)]));
@@ -105,5 +113,34 @@ public sealed class ModHostServiceTests : IDisposable
         await _service.DisposeAsync().AsTask().Within();
         await _service.DisposeAsync().AsTask().Within();
         connection.Shutdowns.Count.ShouldBe(1);
+    }
+
+    [Fact]
+    public async Task Mods_changed_clears_the_users_load_problems_and_each_call_goes_to_the_users_host()
+    {
+        Keep(Other);
+        _factory.Answers["load"] = _ => Task.FromException<JsonElement>(new ModHostRpcException(ModHostErrorCodes.NotLoaded, "test-chips doesn't load"));
+        await _service.EnsureAsync(Other).Within();
+        var connection = await _factory.NextStart();
+        _service.GetLoadProblem(Other, "test-chips@v1")!.Message.ShouldBe("test-chips doesn't load");
+        _service.GetLoadProblem(Local, "test-chips@v1").ShouldBeNull();
+        (await _service.DispatchAsync(Local, new ModDispatchRequest("ui.press", "ses_test1", default)).Within()).ShouldBe(ModDispatchResult.NotDispatched);
+
+        var retried = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+        _factory.Answers["load"] = _ =>
+        {
+            retried.TrySetResult();
+            return Task.FromResult(JsonSerializer.SerializeToElement(new { hooks = Array.Empty<object>() }));
+        };
+        await _service.StartAsync(CancellationToken.None).Within();
+        _events.PublishModsChanged(Other);
+        await retried.Task.Within();
+        _service.GetLoadProblem(Other, "test-chips@v1").ShouldBeNull();
+
+        await _service.ForgetSessionAsync(Other, "ses_test1").Within();
+        connection.Sent("forget").Length.ShouldBe(1);
+        _factory.Answers["check"] = _ => Task.FromResult(JsonSerializer.SerializeToElement(new { ok = true }));
+        (await _service.CheckAsync(Local, "/work/demo-mod").Within()).GetProperty("ok").GetBoolean().ShouldBeTrue();
+        (await _factory.NextStart()).Methods.ShouldBe(["check"]);
     }
 }

@@ -13,8 +13,31 @@ public interface IModHost
     /// <summary>Where the user's host stands.</summary>
     ModHostStatus GetStatus(string userId);
 
-    /// <summary>Starts or stops the user's host to match the Mods switch, safe mode and the store.</summary>
+    /// <summary>Starts or stops the user's host to match the Mods switch, safe mode and the store, and loads or unloads mods to match.</summary>
     Task EnsureAsync(string userId, CancellationToken ct = default);
+
+    /// <summary>
+    /// Runs one event through the chain for the session (<see cref="ModRouting.ChainFor"/>). Answers
+    /// <see cref="ModDispatchResult.NotDispatched"/> without crossing the pipe when no mod hooks it (control events always
+    /// cross), when the host isn't running, or when it didn't answer in time (it's then restarted).
+    /// </summary>
+    Task<ModDispatchResult> DispatchAsync(string userId, ModDispatchRequest request, CancellationToken ct = default);
+
+    /// <summary>
+    /// The static check of <paramref name="folder"/> (a staged copy): the <c>CheckReport</c>. Starts the host for it if the
+    /// switch is on (a host up only for checks loads no mod). Throws <see cref="ModHostNotReadyException"/> when no host
+    /// can run or it didn't answer in time.
+    /// </summary>
+    Task<JsonElement> CheckAsync(string userId, string folder, CancellationToken ct = default);
+
+    /// <summary>Stages the session's draft again and reloads it: what saving a draft does, called by the agent's tools.</summary>
+    Task ReloadDraftAsync(string userId, string sessionId, string name, CancellationToken ct = default);
+
+    /// <summary>The session is archived or gone: the host drops its <c>$.state</c>, timers and handles.</summary>
+    Task ForgetSessionAsync(string userId, string sessionId, CancellationToken ct = default);
+
+    /// <summary>Why the host last refused to load <paramref name="modId"/>; null when it loaded.</summary>
+    ModLoadProblem? GetLoadProblem(string userId, string modId);
 }
 
 /// <summary>The host's states. Sent to clients as <c>state</c>.</summary>

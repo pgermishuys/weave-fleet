@@ -1,10 +1,12 @@
 using System.Diagnostics;
 using System.Text.Json;
+using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging.Abstractions;
 using Shouldly;
 using WeaveFleet.Application.Mods;
 using WeaveFleet.Application.Mods.Host;
 using WeaveFleet.Application.Runtimes;
+using WeaveFleet.Application.Users;
 using WeaveFleet.Infrastructure.Mods;
 using WeaveFleet.Infrastructure.Mods.Host;
 using WeaveFleet.Testing.Fakes;
@@ -79,6 +81,10 @@ public sealed class RealModHostTests : IAsyncDisposable
             new FixedBun(real.Bun),
             new ModHostFiles(AppContext.BaseDirectory, real.Script),
             _store,
+            new NoStrikes(),
+            new NoModHostUi(),
+            new ServiceCollection().BuildServiceProvider().GetRequiredService<IServiceScopeFactory>(),
+            new NoUserScope(),
             new FakeEventBroadcaster(),
             TimeProvider.System,
             NullLogger<ModHostService>.Instance);
@@ -147,6 +153,19 @@ public sealed class RealModHostTests : IAsyncDisposable
     }
 
     [Fact]
+    public async Task A_kept_mod_loads_and_draws_a_dotnet_test_row_and_an_unhooked_event_never_crosses()
+    {
+        if (await StartAsync() is not (var service, _))
+            return;
+        service.GetLoadProblem(User, "test-chips@v1").ShouldBeNull();
+        var e = Json("""{ "sessionId": "ses_live1", "component": "ToolUse", "props": { "tool": "bash", "input": { "command": "dotnet test" }, "output": "Failed!  - Failed: 2, Passed: 212, Skipped: 4, Total: 218" } }""");
+        var drawn = await service.DispatchAsync(User, new ModDispatchRequest("ui.render", "ses_live1", e)).WaitAsync(TimeSpan.FromSeconds(10));
+        drawn.DrawnBy.ShouldBe(["test-chips@v1"]);
+        drawn.Result!.Value.GetProperty("children").EnumerateArray().Select(c => c.GetProperty("props").GetProperty("label").GetString()).ShouldBe(["212 passed", "2 failed", "4 skipped"]);
+        (await service.DispatchAsync(User, new ModDispatchRequest("turn.complete", "ses_live1", e)).WaitAsync(TimeSpan.FromSeconds(10))).Dispatched.ShouldBeFalse();
+    }
+
+    [Fact]
     public async Task Stopping_Fleet_shuts_the_host_down_on_its_shutdown_request()
     {
         if (await StartAsync() is not (var service, _))
@@ -177,6 +196,18 @@ public sealed class RealModHostTests : IAsyncDisposable
         public Task<bool> IsSwitchedOnAsync(string userId, CancellationToken ct) => Task.FromResult(true);
 
         public bool IsSafeMode(string userId) => false;
+    }
+
+    private sealed class NoStrikes : IModStrikeRecorder
+    {
+        public Task RecordKeptAsync(string userId, string name, string message, CancellationToken ct) => Task.CompletedTask;
+
+        public Task RecordDraftAsync(string userId, string sessionId, string name, string message, CancellationToken ct) => Task.CompletedTask;
+    }
+
+    private sealed class NoUserScope : IBackgroundUserScope
+    {
+        public IDisposable Begin(string userId) => new CancellationTokenSource();
     }
 
     private sealed class FixedBun(string path) : IModHostBun
