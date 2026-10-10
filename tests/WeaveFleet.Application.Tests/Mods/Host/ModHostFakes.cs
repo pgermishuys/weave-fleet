@@ -492,14 +492,20 @@ internal sealed class ModHostRig : IAsyncDisposable
 
     public async ValueTask DisposeAsync()
     {
-        if (_supervisor is not null)
-            await _supervisor.ShutdownAsync().WaitAsync(TimeSpan.FromSeconds(5));
         try
         {
-            Directory.Delete(Root, recursive: true);
+            if (_supervisor is not null)
+                await _supervisor.ShutdownAsync().WaitAsync(TimeSpan.FromSeconds(5));
         }
-        catch (IOException)
+        finally
         {
+            try
+            {
+                Directory.Delete(Root, recursive: true);
+            }
+            catch (IOException)
+            {
+            }
         }
     }
 }
