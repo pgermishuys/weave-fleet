@@ -141,6 +141,37 @@ public sealed class BunRuntimeInstallerTests : IDisposable
     }
 
     [Fact]
+    public async Task Downloads_from_the_configured_download_base()
+    {
+        var release = Publish();
+        var installer = new BunRuntimeInstaller(
+            new FleetOptions { Harness = { BunDownloadBase = _server.BaseUri.ToString().TrimEnd('/') } },
+            new FakeHttpClientFactory(),
+            NullLogger<BunRuntimeInstaller>.Instance)
+        {
+            Home = _home,
+            Rid = "linux-x64",
+        };
+
+        var result = await installer.EnsureAsync(release, null, CancellationToken.None);
+
+        result.IsSuccess.ShouldBeTrue(result.IsFailure ? result.Error.Description : "");
+        _server.Requests.ShouldBe(["/bun-v1.4.2/bun-linux-x64-baseline.zip"]);
+        installer.DownloadBase.ShouldBe(_server.BaseUri);
+    }
+
+    [Fact]
+    public void An_invalid_download_base_falls_back_to_github()
+    {
+        var installer = new BunRuntimeInstaller(
+            new FleetOptions { Harness = { BunDownloadBase = "ftp://nope" } },
+            new FakeHttpClientFactory(),
+            NullLogger<BunRuntimeInstaller>.Instance);
+
+        installer.DownloadBase.ShouldBe(BunRelease.GitHubDownloads);
+    }
+
+    [Fact]
     public async Task Says_the_connection_was_refused_when_nothing_listens()
     {
         var release = Publish();

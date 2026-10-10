@@ -69,6 +69,20 @@ public sealed class BunReleaseTests
             .ShouldBe($"https://github.com/oven-sh/bun/releases/download/bun-v{release.Version}/bun-linux-x64-baseline.zip");
     }
 
+    [Theory]
+    [InlineData("", "https://github.com/oven-sh/bun/releases/download/", false)]
+    [InlineData("   ", "https://github.com/oven-sh/bun/releases/download/", false)]
+    [InlineData("https://mirror.example/bun", "https://mirror.example/bun/", false)]
+    [InlineData("http://127.0.0.1:3471/", "http://127.0.0.1:3471/", false)]
+    [InlineData("ftp://mirror.example/bun", "https://github.com/oven-sh/bun/releases/download/", true)]
+    [InlineData("not a url", "https://github.com/oven-sh/bun/releases/download/", true)]
+    [InlineData("/relative/path", "https://github.com/oven-sh/bun/releases/download/", true)]
+    public void The_download_base_comes_from_configuration_or_falls_back_to_github(string configured, string expected, bool invalid)
+    {
+        BunRelease.ResolveDownloadBase(configured, out var wasInvalid).ToString().ShouldBe(expected);
+        wasInvalid.ShouldBe(invalid);
+    }
+
     [Fact]
     public void The_current_platform_is_named_as_dotnet_names_it()
         => BunRelease.CurrentRid().ShouldMatch("^(linux|osx|win)-(x64|arm64|[a-z0-9]+)$");
