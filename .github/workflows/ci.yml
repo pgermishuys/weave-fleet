@@ -187,7 +187,7 @@ jobs:
       - name: Setup Bun
         uses: oven-sh/setup-bun@v2
         with:
-          bun-version: '1.4.2'
+          bun-version-file: .bun-version
 
       - name: Install dependencies
         run: bun install --frozen-lockfile
@@ -254,7 +254,7 @@ jobs:
         id: bun
         uses: oven-sh/setup-bun@v2
         with:
-          bun-version: '1.4.2'
+          bun-version-file: .bun-version
 
       # Also the mod store's file-safety tests, for SafeFile's Windows path (attributes, no FIFOs).
       - name: Run the leftover-process, file-safety and mod runtime tests
@@ -306,7 +306,7 @@ jobs:
         id: bun
         uses: oven-sh/setup-bun@v2
         with:
-          bun-version: '1.4.2'
+          bun-version-file: .bun-version
 
       - name: Run the mod store's file-safety tests
         shell: bash
