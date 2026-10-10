@@ -15,6 +15,7 @@ using WeaveFleet.Application.FleetTools;
 using WeaveFleet.Application.Harnesses;
 using WeaveFleet.Application.Machines;
 using WeaveFleet.Application.Memory;
+using WeaveFleet.Application.Mods;
 using WeaveFleet.Application.Sessions;
 using WeaveFleet.Application.Skills;
 using WeaveFleet.Application.Weave;
@@ -417,6 +418,10 @@ public sealed class OpenCodeHarnessRuntime : IHarnessRuntime, IDisposable, IAsyn
         if (await IsAgentHandoffEnabledAsync(context.UserId).ConfigureAwait(false))
             envVars[AgentHandoff.EnvironmentVariable] = "1";
 
+        // Mods add the agent's draft tools; on and off never share a process. Safe mode doesn't count: the tools stay and say why a draft won't load.
+        if (await IsModsSwitchedOnAsync(context.UserId).ConfigureAwait(false))
+            envVars[ModsFeature.EnvironmentVariable] = "1";
+
         // Workflows add the step tool to the process, and every session on it that isn't a step has it denied. Like
         // messages, sessions with it on and off never share a process.
         if (await IsWorkflowsEnabledAsync(context.UserId).ConfigureAwait(false))
@@ -469,6 +474,14 @@ public sealed class OpenCodeHarnessRuntime : IHarnessRuntime, IDisposable, IAsyn
         using var scope = _scopeFactory.CreateScope();
         return scope.ServiceProvider.GetService<SessionMessagesFeature>() is { } feature
             && await feature.IsEnabledAsync().ConfigureAwait(false);
+    }
+
+    private async Task<bool> IsModsSwitchedOnAsync(string userId)
+    {
+        using var userScope = BackgroundUserContext.BeginScope(userId);
+        using var scope = _scopeFactory.CreateScope();
+        return scope.ServiceProvider.GetService<ModsFeature>() is { } feature
+            && await feature.IsSwitchedOnAsync().ConfigureAwait(false);
     }
 
     private async Task<bool> IsAgentHandoffEnabledAsync(string userId)

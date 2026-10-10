@@ -510,6 +510,132 @@
           "summary"
         ]
       }
+    },
+    {
+      "name": "fleet_mod_write",
+      "description": "Write files into this session's draft mod, creating the draft if it's new. Paths are relative to the mod's folder (mod.json, the hooks module, any pages). A file you send replaces the one there; files you don't send stay. Returns the static check. A draft runs only in this session, and Fleet reloads it when you write.",
+      "requires": "mods",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "name": {
+            "type": "string",
+            "description": "The mod's name, as in its mod.json: lowercase letters, digits and -, starting with a letter."
+          },
+          "files": {
+            "type": "array",
+            "items": {
+              "type": "object"
+            },
+            "description": "The files to write, each {path, content}. Paths use / and stay inside the mod's folder."
+          }
+        },
+        "required": [
+          "name",
+          "files"
+        ]
+      }
+    },
+    {
+      "name": "fleet_mod_check",
+      "description": "Run the static check on a draft mod: its hooks, $ calls, state keys and pages, and any errors with line and column. Also shows why it last failed to load and its latest log lines.",
+      "requires": "mods",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "name": {
+            "type": "string",
+            "description": "The draft's name."
+          }
+        },
+        "required": [
+          "name"
+        ]
+      }
+    },
+    {
+      "name": "fleet_mod_reload",
+      "description": "Load a draft mod again in this session now, and say whether it loaded and what it registered. Use it after a fix, or to turn a draft back on after three failures turned it off.",
+      "requires": "mods",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "name": {
+            "type": "string",
+            "description": "The draft's name."
+          }
+        },
+        "required": [
+          "name"
+        ]
+      }
+    },
+    {
+      "name": "fleet_mod_test",
+      "description": "Send a sample event through this session's mods, the draft included, and show what comes back: the tree drawn, or the failure, with the draft's log lines. Nothing is drawn on screen.",
+      "requires": "mods",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "name": {
+            "type": "string",
+            "description": "The draft's name."
+          },
+          "event": {
+            "type": "string",
+            "enum": [
+              "ui.render",
+              "session.start",
+              "turn.complete",
+              "ui.press",
+              "ui.input",
+              "ui.select"
+            ],
+            "description": "The event to send."
+          },
+          "e": {
+            "type": "object",
+            "description": "The event's fields; Fleet fills in sessionId. ui.render: {component, props}, e.g. {component: \"ToolUse\", props: {tool: \"bash\", status: \"completed\", input: {command: \"dotnet test\"}, output: \"Passed: 3\"}}. A control event: {handle, value?}, with a handle from a tree a test returned."
+          }
+        },
+        "required": [
+          "name",
+          "event",
+          "e"
+        ]
+      }
+    },
+    {
+      "name": "fleet_mod_keep",
+      "description": "Ask the user to keep a draft mod for all their sessions. Fleet shows them what it touches and they decide; you can't keep it yourself. Waits up to a minute for their answer.",
+      "requires": "mods",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "name": {
+            "type": "string",
+            "description": "The draft's name."
+          },
+          "note": {
+            "type": "string",
+            "description": "Why it's worth keeping, in a sentence the user reads in the review, or an empty string."
+          }
+        },
+        "required": [
+          "name",
+          "note"
+        ]
+      }
+    },
+    {
+      "name": "fleet_mod_list",
+      "description": "List this session's draft mods, whether each is loaded or why not, and the mods the user has kept.",
+      "requires": "mods",
+      "inputSchema": {
+        "type": "object",
+        "properties": {},
+        "required": []
+      }
     }
   ]
 }

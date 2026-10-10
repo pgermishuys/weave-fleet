@@ -10,6 +10,7 @@ using WeaveFleet.Application.FleetTools;
 using WeaveFleet.Application.Harnesses;
 using WeaveFleet.Application.Machines;
 using WeaveFleet.Application.Memory;
+using WeaveFleet.Application.Mods;
 using WeaveFleet.Application.Sessions;
 using WeaveFleet.Application.Skills;
 using WeaveFleet.Application.Terminals;
@@ -594,7 +595,7 @@ public sealed partial class OpenCode2HarnessRuntime : IHarnessRuntime, IAsyncDis
     private async Task<OpenCode2ServerSetup> GetSetupAsync(string ownerUserId, OpenCode2Profile? profile)
     {
         var fleetUrl = ResolveLocalFleetUrl();
-        var (builtInSkills, sessionMessages, workflows, memoryFolder, agentHandoff) = await ReadOwnerSettingsAsync(ownerUserId).ConfigureAwait(false);
+        var (builtInSkills, sessionMessages, workflows, memoryFolder, agentHandoff, mods) = await ReadOwnerSettingsAsync(ownerUserId).ConfigureAwait(false);
 
         string? plugin = null;
         List<string> skills = [];
@@ -623,7 +624,8 @@ public sealed partial class OpenCode2HarnessRuntime : IHarnessRuntime, IAsyncDis
             WeaveConfigFolder: await _weave.GetConfigFolderAsync(ownerUserId).ConfigureAwait(false),
             MemoryFolder: plugin is not null ? memoryFolder : null,
             Walkthrough: plugin is not null && builtInSkills.Names.Contains(FleetToolSwitches.WalkthroughSkill),
-            AgentHandoff: agentHandoff && plugin is not null);
+            AgentHandoff: agentHandoff && plugin is not null,
+            Mods: mods && plugin is not null);
     }
 
     /// <inheritdoc />
@@ -634,7 +636,7 @@ public sealed partial class OpenCode2HarnessRuntime : IHarnessRuntime, IAsyncDis
     /// </remarks>
     public async Task BuiltInSkillsChangedAsync(string ownerUserId, CancellationToken ct)
     {
-        var (builtInSkills, _, _, _, _) = await ReadOwnerSettingsAsync(ownerUserId).ConfigureAwait(false);
+        var (builtInSkills, _, _, _, _, _) = await ReadOwnerSettingsAsync(ownerUserId).ConfigureAwait(false);
         SyncBuiltInSkills(ownerUserId, builtInSkills);
     }
 
@@ -660,7 +662,7 @@ public sealed partial class OpenCode2HarnessRuntime : IHarnessRuntime, IAsyncDis
     /// The built-in skills the owner turned on that this Fleet ships, in name order, whether messages between sessions
     /// and workflows are on, and the folder with the owner's memory notes when memory is on.
     /// </summary>
-    private async Task<(OwnerSkills BuiltInSkills, bool SessionMessages, bool Workflows, string? MemoryFolder, bool AgentHandoff)> ReadOwnerSettingsAsync(string ownerUserId)
+    private async Task<(OwnerSkills BuiltInSkills, bool SessionMessages, bool Workflows, string? MemoryFolder, bool AgentHandoff, bool Mods)> ReadOwnerSettingsAsync(string ownerUserId)
     {
         using var userScope = BackgroundUserContext.BeginScope(ownerUserId);
         using var scope = _scopeFactory.CreateScope();
@@ -679,7 +681,9 @@ public sealed partial class OpenCode2HarnessRuntime : IHarnessRuntime, IAsyncDis
             : null;
         var agentHandoff = scope.ServiceProvider.GetService<AgentHandoffFeature>() is { } handoffFeature
             && await handoffFeature.IsEnabledAsync().ConfigureAwait(false);
-        return (builtInSkills, sessionMessages, workflows, memoryFolder, agentHandoff);
+        var mods = scope.ServiceProvider.GetService<ModsFeature>() is { } modsFeature
+            && await modsFeature.IsSwitchedOnAsync().ConfigureAwait(false);
+        return (builtInSkills, sessionMessages, workflows, memoryFolder, agentHandoff, mods);
     }
 
     /// <summary>
@@ -752,6 +756,8 @@ public sealed partial class OpenCode2HarnessRuntime : IHarnessRuntime, IAsyncDis
             environment[WalkthroughBridge.EnvironmentVariable] = "1";
         if (setup.AgentHandoff)
             environment[AgentHandoff.EnvironmentVariable] = "1";
+        if (setup.Mods)
+            environment[ModsFeature.EnvironmentVariable] = "1";
         if (setup.WeaveConfigFolder is { } weaveFolder)
             environment[WeaveEnvironment.GlobalConfigDir] = weaveFolder;
         if (setup.MemoryFolder is { } memoryFolder)
