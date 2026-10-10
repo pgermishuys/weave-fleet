@@ -2,7 +2,7 @@ import { describe, expect, test } from "bun:test";
 import { createHost } from "../../src/host";
 import { RpcError } from "../../src/rpc";
 import { HOST_VERSION } from "../../src/version";
-import { checkUsed } from "../helpers/check";
+import { check, checkUsed } from "../helpers/check";
 import { fakeCheck } from "../helpers/fake-check";
 import { FakePeer } from "../helpers/fake-peer";
 import { renderE, setup, sleep, until, writeMod } from "../helpers/harness";
@@ -238,14 +238,47 @@ describe("shutdown", () => {
     await sleep(250);
     expect(s.peer.notes("log")).toHaveLength(0);
   });
-  test("waits for an in-flight dispatch up to shutdownMs", async () => {
-    const s = setup({ shutdownMs: 80, hookMs: 5000 });
-    await s.load("test-slow", `on("ui.render", async ($, e, next) => { await new Promise((r) => $.clock.after(400, r)); return next(e); });`);
-    void s.render(["test-slow@v1"]);
+  test("waits for an in-flight dispatch to finish, $.clock waits and all, before it stops timers and exits", async () => {
+    const s = setup({ shutdownMs: 1000, hookMs: 5000 });
+    await s.load("test-slow", `on("turn.complete", async ($, e, next) => { await new Promise((r) => $.clock.after(100, r)); $.ui.log("finished"); return next(e); });`);
+    let answered = false;
+    void s.dispatch("turn.complete", ["test-slow@v1"], { sessionId: "ses_test1", turnId: "t", isAborted: false, isFailed: false }).then(() => (answered = true));
     await sleep(20);
     const t = Date.now();
     await s.peer.call("shutdown", {});
     await until(() => s.exits.length > 0, "exit");
+    // Timers stop only after the wait, so the hook's $.clock.after could fire and the dispatch answer.
+    expect(s.peer.notes("log").map((l) => l.text)).toEqual(["finished"]);
+    expect(answered).toBe(true);
+    expect(Date.now() - t).toBeLessThan(500);
+  });
+  test("gives up on work still running 90% of shutdownMs after the request arrived", async () => {
+    const s = setup({ shutdownMs: 300, hookMs: 5000 });
+    await s.load("test-stuck", `on("ui.render", async ($, e, next) => { await new Promise((r) => $.clock.after(2000, r)); return next(e); });`);
+    void s.render(["test-stuck@v1"]);
+    await sleep(20);
+    const t = Date.now();
+    await s.peer.call("shutdown", {});
+    await until(() => s.exits.length > 0, "exit");
+    expect(Date.now() - t).toBeGreaterThanOrEqual(260);
     expect(Date.now() - t).toBeLessThan(300);
+  });
+  test("waits for a load received before the shutdown", async () => {
+    let releaseCheck!: () => void;
+    const held = new Promise<void>((r) => (releaseCheck = r));
+    const s = setup({ shutdownMs: 1000 }, async (...args) => {
+      await held;
+      return check(...args);
+    });
+    const root = writeMod("test-late-load", UI);
+    let loaded: unknown;
+    const load = s.peer.call("load", { id: "test-late-load@v1", name: "test-late-load", version: 1, root }).then((r) => (loaded = r));
+    await s.peer.call("shutdown", {});
+    await sleep(30);
+    expect(s.exits).toEqual([]);
+    releaseCheck();
+    await load;
+    await until(() => s.exits.length > 0, "exit");
+    expect(loaded).toMatchObject({ check: { ok: true } });
   });
 });

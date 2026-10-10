@@ -107,4 +107,20 @@ describe("session.start", () => {
     await sleep(30);
     expect(logs(s)).toEqual(["start ses_test1 reload"]);
   });
+
+  test("two quick reloads both start every session with reason reload, even ones the middle module hadn't reached", async () => {
+    const s = setup({ hookMs: 300 });
+    const body = `on("session.start", async ($, e, next) => { $.ui.log(e.sessionId + ":" + e.reason); await new Promise((r) => $.clock.after(50, r)); return next(e); });`;
+    await s.load("test-dr", body);
+    await s.dispatch("session.start", ["test-dr@v1"], { sessionId: "ses_1", reason: "start" }, "ses_1");
+    await s.dispatch("session.start", ["test-dr@v1"], { sessionId: "ses_2", reason: "start" }, "ses_2");
+    await s.load("test-dr", body);
+    await sleep(10);
+    s.peer.notifications.length = 0;
+    await s.load("test-dr", body);
+    await s.host.idle();
+    await s.dispatch("turn.complete", ["test-dr@v1"], { sessionId: "ses_2", turnId: "t", isAborted: false, isFailed: false }, "ses_2");
+    expect(logs(s).sort()).toEqual(["ses_1:reload", "ses_2:reload"]);
+    expect(s.peer.notes("failed")).toEqual([]);
+  });
 });

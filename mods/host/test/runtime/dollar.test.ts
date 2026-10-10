@@ -72,11 +72,51 @@ describe("$.state", () => {
     await s.dispatch("turn.complete", ["test-sub@v1"], turn);
     expect(s.peer.notes("invalidate")).toEqual([{ mod: "test-sub@v1", sessionId: "ses_test1" }]);
   });
+  test("a key a site's render stopped reading no longer redraws it", async () => {
+    const s = setup();
+    await s.load(
+      "test-unsub",
+      `on("ui.render", ($, e) => { if (!$.state.get("stop")) $.state.get("k"); return null; });
+       on("turn.complete", ($, e, next) => { if (e.turnId === "stop") $.state.set("stop", 1); else $.state.set("k", 1); return next(e); });`,
+    );
+    await s.render(["test-unsub@v1"], band);
+    await s.dispatch("turn.complete", ["test-unsub@v1"], { ...turn, turnId: "stop" });
+    await s.render(["test-unsub@v1"], band);
+    await sleep(120);
+    const before = s.peer.notes("invalidate").length;
+    await s.dispatch("turn.complete", ["test-unsub@v1"], turn);
+    await sleep(120);
+    expect(s.peer.notes("invalidate").length - before).toBe(0);
+  });
+  test("a key read at one site still redraws after another site renders without reading it", async () => {
+    const s = setup();
+    await s.load(
+      "test-sites",
+      `on("ui.render", ($, e) => { if (e.component === "StatusChip") $.state.get("k"); return null; });
+       on("turn.complete", ($, e, next) => { $.state.set("k", 1); return next(e); });`,
+    );
+    await s.render(["test-sites@v1"], renderE("StatusChip", "ses_test1", {}));
+    await s.render(["test-sites@v1"], band);
+    await s.dispatch("turn.complete", ["test-sites@v1"], turn);
+    expect(s.peer.notes("invalidate")).toEqual([{ mod: "test-sites@v1", sessionId: "ses_test1" }]);
+  });
   test("a write to a key nobody read in render sends nothing", async () => {
     const s = setup();
     await s.load("test-nosub", `on("turn.complete", ($, e, next) => { $.state.set("other", 1); return next(e); });`);
     await s.dispatch("turn.complete", ["test-nosub@v1"], turn);
     expect(s.peer.notes("invalidate")).toEqual([]);
+  });
+  test("a timer started in a render that fires while the render is still running can write $.state", async () => {
+    const s = setup();
+    s.peer.answers["store.get"] = async () => {
+      await sleep(50);
+      return {};
+    };
+    await s.load("test-mid", `on("ui.render", async ($, e) => { $.clock.after(5, () => { $.state.set("k", 1); $.ui.log("wrote " + $.state.get("k")); }); await $.store.get("slow"); try { $.state.set("k", 2); } catch (err) { $.ui.log(err.message); } return null; });`);
+    const r = await s.render(["test-mid@v1"], band);
+    expect(r.failures).toEqual([]);
+    expect(s.peer.notes("failed")).toEqual([]);
+    expect(logs(s)).toEqual(["wrote 1", "a ui.render hook can't write $.state"]);
   });
   test("a write from a timer invalidates the subscribed mod in that session", async () => {
     const s = setup();
@@ -93,15 +133,37 @@ describe("$.state", () => {
     await s.dispatch("turn.complete", ["test-forget@v1"], turn);
     expect(logs(s)).toEqual(["n=undefined", "n=undefined"]);
   });
-  test("unload drops the mod's state", async () => {
+  test("Keep keeps the state: a draft's state is the kept version's once the draft is unloaded", async () => {
+    const s = setup();
+    const body = `on("turn.complete", ($, e, next) => { $.ui.log($.mod.version + " n=" + $.state.get("n")); $.state.set("n", 1); return next(e); });`;
+    await s.load("test-keep", body, { version: "draft", sessionId: "ses_test1" });
+    await s.dispatch("turn.complete", ["test-keep@draft:ses_test1"], turn);
+    await s.load("test-keep", body, { version: 1 });
+    await s.peer.call("unload", { id: "test-keep@draft:ses_test1" });
+    await s.dispatch("turn.complete", ["test-keep@v1"], turn);
+    expect(logs(s)).toEqual(["draft n=undefined", "1 n=1"]);
+  });
+  test("Undo keeps the state: the previous version sees what the undone one wrote", async () => {
+    const s = setup();
+    const body = `on("turn.complete", ($, e, next) => { $.ui.log($.mod.version + " n=" + $.state.get("n")); $.state.set("n", $.mod.version); return next(e); });`;
+    await s.load("test-undo", body, { version: 1 });
+    await s.load("test-undo", body, { version: 2 });
+    await s.dispatch("turn.complete", ["test-undo@v2"], turn);
+    await s.peer.call("unload", { id: "test-undo@v2" });
+    await s.dispatch("turn.complete", ["test-undo@v1"], turn);
+    expect(logs(s)).toEqual(["2 n=undefined", "1 n=2"]);
+  });
+  test("state outlives an unload, so Fleet may unload and load versions in any order; forget drops it", async () => {
     const s = setup();
     const body = `on("turn.complete", ($, e, next) => { $.ui.log("n=" + $.state.get("n")); $.state.set("n", 1); return next(e); });`;
     await s.load("test-unl", body);
     await s.dispatch("turn.complete", ["test-unl@v1"], turn);
     await s.peer.call("unload", { id: "test-unl@v1" });
-    await s.load("test-unl", body);
-    await s.dispatch("turn.complete", ["test-unl@v1"], turn);
-    expect(logs(s)).toEqual(["n=undefined", "n=undefined"]);
+    await s.load("test-unl", body, { version: 2 });
+    await s.dispatch("turn.complete", ["test-unl@v2"], turn);
+    await s.peer.call("forget", { sessionId: turn.sessionId });
+    await s.dispatch("turn.complete", ["test-unl@v2"], turn);
+    expect(logs(s)).toEqual(["n=undefined", "n=1", "n=undefined"]);
   });
 });
 
@@ -134,9 +196,20 @@ describe("$.ui.invalidate", () => {
     const s = setup({ invalidatePerSecond: 10 });
     await s.load("test-drop", `on("turn.complete", ($, e, next) => { $.ui.invalidate("ui.render"); $.ui.invalidate("ui.render"); return next(e); });`);
     await s.dispatch("turn.complete", ["test-drop@v1"], turn);
+    await s.dispatch("turn.complete", ["test-drop@v1"], { ...turn, sessionId: "ses_test2" }, "ses_test2");
+    expect(s.peer.notes("invalidate")).toHaveLength(2);
     await s.peer.call("forget", { sessionId: "ses_test1" });
     await sleep(160);
-    expect(s.peer.notes("invalidate")).toHaveLength(1);
+    expect(s.peer.notes("invalidate")).toEqual([
+      { mod: "test-drop@v1", sessionId: "ses_test1" },
+      { mod: "test-drop@v1", sessionId: "ses_test2" },
+      { mod: "test-drop@v1", sessionId: "ses_test2" },
+    ]);
+    await s.dispatch("turn.complete", ["test-drop@v1"], turn);
+    expect(s.peer.notes("invalidate")).toHaveLength(4);
+    await s.peer.call("unload", { id: "test-drop@v1" });
+    await sleep(160);
+    expect(s.peer.notes("invalidate")).toHaveLength(4);
   });
 });
 
@@ -175,7 +248,13 @@ describe("$.clock", () => {
   });
   test("a fired or cancelled timer frees its slot", async () => {
     const s = setup({ timersPerSession: 1 });
-    await runTurn(s, "test-free", `const a = $.clock.after(5000, () => {}); a.cancel(); $.clock.after(5000, () => {}); return "ok";`);
+    await runTurn(
+      s,
+      "test-free",
+      `const a = $.clock.after(5000, () => {}); a.cancel();
+       await new Promise((r) => $.clock.after(5, r));
+       $.clock.after(5000, () => {}); return "ok";`,
+    );
     expect(logs(s)).toEqual([`ok "ok"`]);
   });
   test("a timer that throws sends failed and counts a strike", async () => {
@@ -269,6 +348,20 @@ describe("$.ui", () => {
     expect(t.text).toHaveLength(500);
     expect(t).toMatchObject({ mod: "test-toast@v1", sessionId: "ses_test1", timeoutMs: 1000, tone: "warn" });
   });
+  test("toast options must be what the types say: timeoutMs a positive number, tone accent or warn", async () => {
+    const s = setup();
+    await runTurn(
+      s,
+      "test-toast-opts",
+      `const out = [];
+       for (const o of [{ tone: "nope" }, { tone: 1 }, { timeoutMs: -5 }, { timeoutMs: 0 }, { timeoutMs: Infinity }, { timeoutMs: NaN }, { timeoutMs: "10" }, "loud", { timeoutMs: 2000, tone: "accent" }, {}, undefined]) {
+         try { $.ui.toast("hi", o); out.push("ok"); } catch (err) { out.push(err.name); }
+       }
+       return out;`,
+    );
+    expect(logs(s)).toEqual([`ok ["TypeError","TypeError","TypeError","TypeError","TypeError","TypeError","TypeError","TypeError","ok","ok","ok"]`]);
+    expect(s.peer.reqs("ui.toast").map((t) => [t.timeoutMs, t.tone])).toEqual([[2000, "accent"], [undefined, undefined], [undefined, undefined]]);
+  });
   test("a toast Fleet refuses is logged to stderr, not thrown", async () => {
     const s = setup();
     s.peer.answers["ui.toast"] = () => {
@@ -322,5 +415,69 @@ describe("$.ui", () => {
     const r = await s.render(["test-resolve@v1"], renderE("StatusChip", "ses_test1", {}));
     expect(r.result).toEqual({ type: "Pill", props: { tone: "good", label: "ok" } });
     expect(r.drawnBy).toEqual(["test-resolve@v1"]);
+  });
+});
+
+describe("a hook still running when its session is forgotten", () => {
+  /** Holds every store.get until `release()`. */
+  function gated(s: ReturnType<typeof setup>) {
+    let release!: () => void;
+    const gate = new Promise<void>((r) => (release = r));
+    s.peer.answers["store.get"] = async () => {
+      await gate;
+      return { value: 1 };
+    };
+    return () => release();
+  }
+  const zTurn = { ...turn, sessionId: "ses_Z" };
+  const zBand = renderE("ComposerBand", "ses_Z", { isWorking: false }, "ses_Z");
+
+  test("can't write $.state or start timers for the forgotten session", async () => {
+    const s = setup({ timerMinMs: 10 });
+    const release = gated(s);
+    await s.load(
+      "test-zombie",
+      `on("turn.complete", async ($, e) => {
+         await $.store.get("x");
+         for (const [name, f] of [["state", () => $.state.set("k", 1)], ["after", () => $.clock.after(10, () => $.ui.log("zombie"))], ["every", () => $.clock.every(10, () => $.ui.log("zombie"))]]) {
+           try { f(); $.ui.log(name + " ok"); } catch (err) { $.ui.log(name + " threw"); }
+         }
+       });
+       on("ui.render", ($, e) => { $.ui.log("k=" + $.state.get("k")); return null; });`,
+    );
+    const p = s.dispatch("turn.complete", ["test-zombie@v1"], zTurn, "ses_Z");
+    await sleep(20);
+    await s.peer.call("forget", { sessionId: "ses_Z" });
+    release();
+    await p;
+    await sleep(60);
+    expect(logs(s)).toEqual(["state threw", "after threw", "every threw"]);
+    await s.render(["test-zombie@v1"], zBand, "ses_Z");
+    expect(logs(s).at(-1)).toBe("k=undefined");
+  });
+
+  test("a render that finishes after its session was forgotten registers no handles and runs no more hooks", async () => {
+    const s = setup();
+    const release = gated(s);
+    await s.load("test-zombie-wait", `on("ui.render", async ($, e, next) => { await $.store.get("x"); return next(e); });`);
+    await s.load("test-zombie-draw", `on("ui.render", ($, e) => { $.ui.log("drew"); return $.ui.resolve(e).Button({ key: "b", label: "x", onPress: () => $.ui.log("pressed") }); });`);
+    const p = s.render(["test-zombie-wait@v1", "test-zombie-draw@v1"], zBand, "ses_Z");
+    await sleep(20);
+    await s.peer.call("forget", { sessionId: "ses_Z" });
+    release();
+    const r = await p;
+    const handle = r.result?.handles?.onPress ?? "h1";
+    const err = await s.dispatch("ui.press", [], { sessionId: "ses_Z", mod: "test-zombie-draw@v1", element: "b", component: "ComposerBand", requestId: "ses_Z", surface: "desktop", handle }, "ses_Z").catch((e) => e);
+    expect(err.code).toBe(-32602);
+    expect(logs(s)).toEqual([]);
+  });
+
+  test("a session forgotten and seen again works as new: its $ is fresh", async () => {
+    const s = setup();
+    await s.load("test-again", `on("turn.complete", ($, e, next) => { $.state.set("k", (($.state.get("k") ?? 0) + 1)); $.ui.log("k=" + $.state.get("k")); return next(e); });`);
+    await s.dispatch("turn.complete", ["test-again@v1"], zTurn, "ses_Z");
+    await s.peer.call("forget", { sessionId: "ses_Z" });
+    await s.dispatch("turn.complete", ["test-again@v1"], zTurn, "ses_Z");
+    expect(logs(s)).toEqual(["k=1", "k=1"]);
   });
 });

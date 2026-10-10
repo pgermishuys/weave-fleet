@@ -184,3 +184,36 @@ describe("handles", () => {
     expect(logs(s)).toEqual(["pressed test-inner"]);
   });
 });
+
+describe("hand-written elements", () => {
+  const HAND_BUTTON = `on("ui.render", ($, e) => ({ type: "Button", props: { key: "go", label: "Go", onPress: () => { throw new Error("second broke"); } } }));`;
+
+  test("a hand-written element is drawn by the mod whose hook returned it, not the outermost mod", async () => {
+    const s = setup();
+    await s.load("test-first", `on("ui.render", ($, e, next) => next(e));`);
+    await s.load("test-second", `on("ui.render", ($, e) => ({ type: "Text", props: {}, children: ["hi"] }));`);
+    const r = await s.render(["test-first@v1", "test-second@v1"], band);
+    expect(r.drawnBy).toEqual(["test-second@v1"]);
+  });
+
+  test("a hand-written Button's callback belongs to the mod that wrote it: its failure strikes that mod", async () => {
+    const s = setup();
+    await s.load("test-first", `on("ui.render", ($, e, next) => next(e));`);
+    await s.load("test-second", HAND_BUTTON);
+    const r = await s.render(["test-first@v1", "test-second@v1"], band);
+    expect(r.drawnBy).toEqual(["test-second@v1"]);
+    await s.dispatch("ui.press", [], control("ui.press", "test-second@v1", r.result.handles.onPress));
+    expect(s.peer.notes("failed").map((f) => [f.mod, f.message])).toEqual([["test-second@v1", "second broke"]]);
+  });
+
+  test("a hand-written Button inside another mod's Box is owned by its writer, and its handle dies when the writer unloads", async () => {
+    const s = setup();
+    await s.load("test-outer", `on("ui.render", async ($, e, next) => { const { Box } = $.ui.resolve(e); return Box({ children: [await next(e)] }); });`);
+    await s.load("test-second", HAND_BUTTON);
+    const r = await s.render(["test-outer@v1", "test-second@v1"], band);
+    expect(r.drawnBy).toEqual(["test-outer@v1", "test-second@v1"]);
+    await s.peer.call("unload", { id: "test-second@v1" });
+    const err = await s.dispatch("ui.press", [], control("ui.press", "test-second@v1", r.result.children[0].handles.onPress)).catch((e) => e);
+    expect(err.code).toBe(-32602);
+  });
+});

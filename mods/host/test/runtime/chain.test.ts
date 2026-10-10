@@ -210,6 +210,30 @@ describe("end of chain and results", () => {
     await s.dispatch("turn.complete", ["test-a@v1", "test-b@v1"], turn);
     expect(s.peer.notes("log")[0].text).toBe("b saw t1");
   });
+  test("a watch-only hook whose .catch answers still lets later mods' turn.complete hooks run, once", async () => {
+    const s = setup();
+    await s.load("test-a", `on("turn.complete", () => { throw new Error("boom"); }).catch(($, e, next) => { $.ui.log("caught"); });`);
+    await s.load("test-b", `on("turn.complete", ($, e, next) => { $.ui.log("b ran"); return next(e); });`);
+    const r = await s.dispatch("turn.complete", ["test-a@v1", "test-b@v1"], turn);
+    expect(s.peer.notes("log").map((l) => l.text)).toEqual(["caught", "b ran"]);
+    expect(r.failures).toEqual([]);
+  });
+  test("a watch-only hook whose .catch answers still lets later mods' session.start hooks run", async () => {
+    const s = setup();
+    await s.load("test-a", `on("session.start", () => { throw new Error("boom"); }).catch(($, e, next) => { $.ui.log("caught"); });`);
+    await s.load("test-b", `on("session.start", ($, e, next) => { $.ui.log("b started " + e.reason); return next(e); });`);
+    await s.dispatch("session.start", ["test-a@v1", "test-b@v1"], { sessionId: "ses_test1", reason: "start" });
+    expect(s.peer.notes("log").map((l) => l.text)).toEqual(["caught", "b started start"]);
+  });
+  test("when a watch-only .catch calls next, the rest of the chain runs exactly once", async () => {
+    const s = setup();
+    await s.load("test-a", `on("turn.complete", async ($, e, next) => { await next(e); throw new Error("after"); }).catch(async ($, e, next) => { await next(e); $.ui.log("caught"); });`);
+    await s.load("test-b", `on("turn.complete", ($, e, next) => { $.ui.log("b ran"); return next(e); });`);
+    await s.dispatch("turn.complete", ["test-a@v1", "test-b@v1"], turn);
+    await s.load("test-c", `on("turn.complete", () => { throw new Error("before"); }).catch(async ($, e, next) => { await next(e); throw new Error("catch broke"); });`);
+    await s.dispatch("turn.complete", ["test-c@v1", "test-b@v1"], turn);
+    expect(s.peer.notes("log").map((l) => l.text)).toEqual(["b ran", "caught", "b ran"]);
+  });
 });
 
 describe("draft scope", () => {

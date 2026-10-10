@@ -1,5 +1,5 @@
 import { describe, expect, test } from "bun:test";
-import { renderE, setup } from "../helpers/harness";
+import { renderE, setup, sleep } from "../helpers/harness";
 
 const band = renderE("ComposerBand", "ses_test1", { isWorking: false });
 const chip = renderE("StatusChip", "ses_test1", {});
@@ -41,6 +41,29 @@ describe("budget", () => {
     const r = await s.render(["test-burn@v1"], band);
     expect(r.failures).toMatchObject([{ mod: "test-burn@v1", event: "ui.render", kind: "timeout", strikes: 1 }]);
     expect(r.result).toEqual({ type: "Fleet" });
+  });
+
+  test("another session's busy hook doesn't use up this hook's budget", async () => {
+    const s = setup({ hookMs: 100 });
+    await s.load("test-wait", `on("turn.complete", async ($, e, next) => { await new Promise((r) => $.clock.after(30, r)); await new Promise((r) => $.clock.after(30, r)); return next(e); });`);
+    await s.load("test-busy", `on("turn.complete", ($, e, next) => { const t = Date.now() + 90; while (Date.now() < t) {} return next(e); });`);
+    const tc = (sessionId: string) => ({ sessionId, turnId: "t", isAborted: false, isFailed: false });
+    const a = s.dispatch("turn.complete", ["test-wait@v1"], tc("ses_A"), "ses_A");
+    const b = s.dispatch("turn.complete", ["test-busy@v1"], tc("ses_B"), "ses_B");
+    const [ra, rb] = await Promise.all([a, b]);
+    expect(ra.failures).toEqual([]);
+    expect(rb.failures).toEqual([]);
+  });
+
+  test("another mod's busy timer doesn't use up this hook's budget", async () => {
+    const s = setup({ hookMs: 100 });
+    await s.load("test-ticker", `on("session.start", ($, e, next) => { $.clock.after(10, () => { const t = Date.now() + 90; while (Date.now() < t) {} }); return next(e); });`);
+    await s.load("test-wait", `on("turn.complete", async ($, e, next) => { await new Promise((r) => $.clock.after(30, r)); await new Promise((r) => $.clock.after(30, r)); return next(e); });`);
+    const ticker = s.dispatch("session.start", ["test-ticker@v1"], { sessionId: "ses_B", reason: "start" }, "ses_B");
+    const r = await s.dispatch("turn.complete", ["test-wait@v1"], { sessionId: "ses_A", turnId: "t", isAborted: false, isFailed: false }, "ses_A");
+    await ticker;
+    expect(r.failures).toEqual([]);
+    expect(s.peer.notes("failed")).toEqual([]);
   });
 
   test("overlapping waits pause the budget once", async () => {
@@ -259,5 +282,77 @@ describe("strikes", () => {
     await s.load("test-y", `on("ui.render", () => { throw new Error("y"); });`);
     const r = await s.render(["test-x@v1", "test-y@v1"], band);
     expect(r.failures.map((f: any) => [f.mod, f.strikes])).toEqual([["test-x@v1", 1], ["test-y@v1", 1]]);
+  });
+});
+
+describe("aborted calls", () => {
+  const tc = { sessionId: "ses_test1", turnId: "t", isAborted: false, isFailed: false };
+  const WAITS = `on("turn.complete", async ($, e, next) => { await new Promise((r) => $.clock.after(100, r)); return next(e); });`;
+
+  test("an unload mid-hook settles the call at once as skipped, with no failure", async () => {
+    const s = setup({ hookMs: 2000 });
+    await s.load("test-u", WAITS);
+    const t0 = Date.now();
+    const p = s.dispatch("turn.complete", ["test-u@v1"], tc);
+    await sleep(20);
+    await s.peer.call("unload", { id: "test-u@v1" });
+    const r = await p;
+    expect(Date.now() - t0).toBeLessThan(200);
+    expect(r.failures).toEqual([]);
+  });
+
+  test("a forget mid-hook settles the call at once as skipped, with no failure", async () => {
+    const s = setup({ hookMs: 2000 });
+    await s.load("test-f", WAITS);
+    const t0 = Date.now();
+    const p = s.dispatch("turn.complete", ["test-f@v1"], tc);
+    await sleep(20);
+    await s.peer.call("forget", { sessionId: "ses_test1" });
+    const r = await p;
+    expect(Date.now() - t0).toBeLessThan(200);
+    expect(r.failures).toEqual([]);
+  });
+
+  test("a reload mid-hook settles the old call at once, and the new module isn't struck for it", async () => {
+    const s = setup({ hookMs: 300 });
+    await s.load("test-r", WAITS);
+    const t0 = Date.now();
+    const p = s.dispatch("turn.complete", ["test-r@v1"], tc);
+    await sleep(20);
+    await s.load("test-r", `on("turn.complete", ($, e, next) => next(e));`);
+    const r = await p;
+    expect(Date.now() - t0).toBeLessThan(200);
+    expect(r.failures).toEqual([]);
+  });
+
+  test("a fresh load after an unload mid-hook starts at strike 0", async () => {
+    const s = setup({ hookMs: 100 });
+    await s.load("test-u", WAITS);
+    const p = s.dispatch("turn.complete", ["test-u@v1"], tc);
+    await sleep(20);
+    await s.peer.call("unload", { id: "test-u@v1" });
+    await p;
+    await s.load("test-u", `on("turn.complete", () => { throw new Error("new"); });`);
+    const r = await s.dispatch("turn.complete", ["test-u@v1"], tc);
+    expect(r.failures.map((f: any) => f.strikes)).toEqual([1]);
+  });
+
+  test("a timer of a replaced module that fails late doesn't strike the module that replaced it", async () => {
+    const s = setup();
+    let release!: () => void;
+    const gate = new Promise<void>((r) => (release = r));
+    s.peer.answers["store.get"] = async () => {
+      await gate;
+      return {};
+    };
+    await s.load("test-old", `on("turn.complete", ($, e, next) => { $.clock.after(0, async () => { await $.store.get("k"); throw new Error("old timer"); }); return next(e); });`);
+    await s.dispatch("turn.complete", ["test-old@v1"], tc);
+    await sleep(10);
+    await s.load("test-old", `on("turn.complete", () => { throw new Error("new"); });`);
+    release();
+    await sleep(10);
+    expect(s.peer.notes("failed")).toEqual([]);
+    const r = await s.dispatch("turn.complete", ["test-old@v1"], tc);
+    expect(r.failures.map((f: any) => f.strikes)).toEqual([1]);
   });
 });

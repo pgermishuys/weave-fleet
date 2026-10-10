@@ -158,6 +158,50 @@ describe("the real host over stdio", () => {
     expect(Date.now() - t).toBeLessThan(2000);
   });
 
+  test("shutdown lets an in-flight hook finish, $.clock waits and all, before the host exits", async () => {
+    const c = start();
+    await c.request("initialize", { protocol: 1, fleetVersion: "x" });
+    const root = writeMod("demo-slow", `on("turn.complete", async ($, e, next) => { await new Promise((r) => $.clock.after(300, r)); $.ui.log("done"); return next(e); });`);
+    await c.request("load", { id: "demo-slow@v1", name: "demo-slow", version: 1, root });
+    let answered = false;
+    void c.request("dispatch", { event: "turn.complete", sessionId: "ses_test1", e: { sessionId: "ses_test1", turnId: "t", isAborted: false, isFailed: false }, mods: ["demo-slow@v1"] }).then(() => (answered = true));
+    await sleep(20);
+    expect(await c.request("shutdown", {})).toEqual({});
+    expect(await c.exited).toBe(0);
+    await sleep(20);
+    expect(c.notes("log").map((l) => l.text)).toEqual(["done"]);
+    expect(answered).toBe(true);
+  });
+
+  test("with a hook that won't finish in time, shutdown still exits 0 within 2 seconds", async () => {
+    const c = start();
+    await c.request("initialize", { protocol: 1, fleetVersion: "x" });
+    const root = writeMod("demo-stuck", `on("turn.complete", async ($, e, next) => { await new Promise((r) => $.clock.after(5000, r)); return next(e); });`);
+    await c.request("load", { id: "demo-stuck@v1", name: "demo-stuck", version: 1, root });
+    void c.request("dispatch", { event: "turn.complete", sessionId: "ses_test1", e: { sessionId: "ses_test1", turnId: "t", isAborted: false, isFailed: false }, mods: ["demo-stuck@v1"] }).catch(() => {});
+    await sleep(20);
+    const t = Date.now();
+    void c.request("shutdown", {});
+    expect(await c.exited).toBe(0);
+    expect(Date.now() - t).toBeLessThan(2000);
+  });
+
+  test("initialize, load and shutdown in one write: the load is answered before the host exits", async () => {
+    const c = start();
+    const [init, load, shutdown] = c.requestAll([
+      ["initialize", { protocol: 1, fleetVersion: "x" }],
+      ["load", { id: "test-chips@v1", name: "test-chips", version: 1, root: CHIPS }],
+      ["shutdown", {}],
+    ]);
+    let loaded: any;
+    void load!.then((r) => (loaded = r), (e) => (loaded = e));
+    expect(await init).toMatchObject({ protocol: 1 });
+    expect(await shutdown).toEqual({});
+    expect(await c.exited).toBe(0);
+    await sleep(20);
+    expect(loaded?.check?.ok).toBe(true);
+  });
+
   test("the host exits when stdin closes", async () => {
     const c = start();
     await c.request("initialize", { protocol: 1, fleetVersion: "x" });

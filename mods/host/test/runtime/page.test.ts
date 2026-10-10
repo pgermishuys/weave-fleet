@@ -42,4 +42,23 @@ describe("Page paths at render time", () => {
     expect(r.failures).toHaveLength(1);
     expect(r.result).toEqual({ type: "Fleet" });
   });
+
+  test("a hand-written Page from an inner mod is checked against that mod's folder, not the outer mod's", async () => {
+    const s = setup();
+    await s.load("page-outer", `on("ui.render", async ($, e, next) => { const { Box } = $.ui.resolve(e); return Box({ children: [await next(e)] }); });`);
+    await loadWith(s, "page-inner", `on("ui.render", async ($, e, next) => ({ type: "Page", props: { key: "p", path: "p.html", title: "t" } }));`, { "p.html": "<p>x</p>" });
+    const r = await s.render(["page-outer@v1", "page-inner@v1"], pane);
+    expect(r.failures).toEqual([]);
+    expect(r.result.children).toEqual([{ type: "Page", props: { key: "p", path: "p.html", title: "t" } }]);
+    expect(r.drawnBy).toEqual(["page-outer@v1", "page-inner@v1"]);
+  });
+
+  test("the inner mod, not the outer one, takes the strike for its own bad hand-written Page", async () => {
+    const s = setup();
+    await s.load("page-outer", `on("ui.render", async ($, e, next) => { const { Box } = $.ui.resolve(e); return Box({ children: [await next(e)] }); });`);
+    await s.load("page-inner", `on("ui.render", async ($, e, next) => ({ type: "Page", props: { key: "p", path: "missing.html", title: "t" } }));`);
+    const r = await s.render(["page-outer@v1", "page-inner@v1"], pane);
+    expect(r.failures.map((f: any) => f.mod)).toEqual(["page-inner@v1"]);
+    expect(r.result.children).toEqual([{ type: "Fleet" }]);
+  });
 });

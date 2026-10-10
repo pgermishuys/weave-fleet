@@ -87,6 +87,18 @@ export class HostClient {
     });
   }
 
+  /** Sends several requests in one write, as Fleet may; answers come back as for `request`. */
+  requestAll(calls: [method: string, params: unknown][]): Promise<any>[] {
+    const lines: string[] = [];
+    const answers = calls.map(([method, params]) => {
+      const id = this.nextId++;
+      lines.push(JSON.stringify({ jsonrpc: "2.0", id, method, params }));
+      return new Promise((resolve, reject) => this.pending.set(id, { resolve, reject }));
+    });
+    this.sendRaw(lines.join("\n"));
+    return answers;
+  }
+
   notes(method: string): any[] {
     return this.notifications.filter((n) => n.method === method).map((n) => n.params);
   }
