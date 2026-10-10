@@ -184,7 +184,11 @@ public sealed class BunMachineFinderTests : IDisposable
         Bun("one");
         // A relative entry that does lead to a bun from the current folder: it must still be ignored.
         var relative = Path.GetRelativePath(Directory.GetCurrentDirectory(), Folder("one"));
-        Path.IsPathRooted(relative).ShouldBeFalse();
+        // On Windows the temp folder can be on another drive than the current one (C: vs D: on CI), and then there is
+        // no relative path; "C:Users\…" (no backslash after the drive) is relative to that drive's current folder.
+        if (Path.IsPathFullyQualified(relative))
+            relative = relative[..2] + relative[3..];
+        Path.IsPathFullyQualified(relative).ShouldBeFalse();
         var finder = Finder($".{Path.PathSeparator}{Path.PathSeparator}{relative}");
 
         (await Paths(finder)).ShouldBeEmpty();
