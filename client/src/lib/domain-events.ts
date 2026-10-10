@@ -795,6 +795,16 @@ export interface HarnessCatalogChanged extends EventCursorMetadata {
   };
 }
 
+/** A mod was kept, undone, turned on or off, failed three times, or safe mode changed. Sent on the `sessions` topic. */
+export interface ModsChanged extends EventCursorMetadata {
+  type: "mods.changed";
+  payload: {
+    name?: string | null;
+    reason: "kept" | "version" | "undone" | "on" | "off" | "strikes" | "draft-off" | "draft-on" | "safe-mode";
+    sessionId?: string | null;
+  };
+}
+
 export type DomainEvent =
   | SessionStarted
   | SessionIdled
@@ -846,4 +856,5 @@ export type DomainEvent =
   | MemorySaved
   | WorkflowRunChanged
   | HarnessUsageChanged
-  | HarnessCatalogChanged;
+  | HarnessCatalogChanged
+  | ModsChanged;
