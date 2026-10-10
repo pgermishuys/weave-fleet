@@ -153,6 +153,8 @@ public sealed partial class ModsRuntime(
             Task sends;
             lock (_sync)
             {
+                install.Trailing?.Dispose();
+                install.Pending = null;
                 _running = null;
                 if (install.Final is { } final)
                     Send(final);
@@ -194,9 +196,16 @@ public sealed partial class ModsRuntime(
             var terminal = job.Phase is BunInstallPhases.Succeeded or BunInstallPhases.Failed;
             var phaseChanged = install.LastPhase != job.Phase;
             var now = clock.GetTimestamp();
-            if (!terminal && !phaseChanged && clock.GetElapsedTime(install.LastRaised, now) < ProgressInterval)
+            var elapsed = clock.GetElapsedTime(install.LastRaised, now);
+            if (!terminal && !phaseChanged && elapsed < ProgressInterval)
+            {
+                // Sent when the interval is up, so a download that pauses still shows how far it got.
+                install.Pending = job;
+                install.Trailing ??= clock.CreateTimer(_ => SendPending(install), null, ProgressInterval - elapsed, Timeout.InfiniteTimeSpan);
                 return;
+            }
 
+            install.Pending = null;
             install.LastPhase = job.Phase;
             install.LastRaised = now;
             var payload = new ModsRuntimePayload
@@ -208,6 +217,21 @@ public sealed partial class ModsRuntime(
                 install.Final = payload; // Sent when the install has ended: see RunAsync.
             else
                 Send(payload);
+        }
+    }
+
+    private void SendPending(Install install)
+    {
+        lock (_sync)
+        {
+            install.Trailing?.Dispose();
+            install.Trailing = null;
+            if (install.Pending is not { } job || _running != install)
+                return;
+
+            install.Pending = null;
+            install.LastRaised = clock.GetTimestamp();
+            Send(new ModsRuntimePayload { Job = job, Reason = ModsRuntimeReasons.Job });
         }
     }
 
@@ -287,6 +311,8 @@ public sealed partial class ModsRuntime(
         public string? LastPhase { get; set; }
         public long LastRaised { get; set; }
         public ModsRuntimePayload? Final { get; set; }
+        public ModsRuntimeJob? Pending { get; set; }
+        public ITimer? Trailing { get; set; }
     }
 
     /// <summary>Reports at once, on the caller's thread, so the order the installer reports in is the order seen.</summary>
