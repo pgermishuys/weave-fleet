@@ -160,6 +160,24 @@ internal static partial class SafeFile
         }
     }
 
+    /// <summary>Unix only: the type bits and the size of an open file, as fstat reports them.</summary>
+    internal static bool TryFStat(int fd, out int mode, out long size)
+    {
+        mode = 0;
+        size = 0;
+        if (Layout is not { } layout)
+            return false;
+        Span<byte> buffer = stackalloc byte[StatBufferBytes];
+        buffer.Clear();
+        if (Fstat(layout, fd, buffer) != 0)
+            return false;
+        mode = layout.ModeBytes == 2
+            ? BinaryPrimitives.ReadUInt16LittleEndian(buffer[layout.ModeOffset..])
+            : (int)BinaryPrimitives.ReadUInt32LittleEndian(buffer[layout.ModeOffset..]);
+        size = BinaryPrimitives.ReadInt64LittleEndian(buffer[layout.SizeOffset..]);
+        return true;
+    }
+
     private static FileProblem OpenWindows(string path, long maxBytes, out FileStream? stream)
     {
         stream = null;

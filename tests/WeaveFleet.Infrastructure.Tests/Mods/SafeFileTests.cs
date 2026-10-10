@@ -4,9 +4,10 @@ using WeaveFleet.Infrastructure.Mods;
 namespace WeaveFleet.Infrastructure.Tests.Mods;
 
 /// <summary>
-/// Opening a file and checking what it is, in one step. On Linux x64 these also prove the <c>struct stat</c> offsets
-/// (mode at 24, size at 48) against a known file, a named pipe and a directory.
+/// Opening a file and checking what it is, in one step. On Unix these also prove the fstat layout (type bits and size)
+/// against a known file, a named pipe, a directory, a device and a link.
 /// </summary>
+[Trait("Category", "ModsFileSafety")]
 public sealed class SafeFileTests : IDisposable
 {
     private readonly string _folder = Path.Combine(Path.GetTempPath(), $"fleet-safefile-{Guid.NewGuid():N}");
@@ -36,6 +37,20 @@ public sealed class SafeFileTests : IDisposable
         length.ShouldBe(1234);
         Open(At("f"), 1233, out _).ShouldBe(FileProblem.TooLarge);
         Open(At("f"), 5000, out _).ShouldBe(FileProblem.None);
+    }
+
+    [Fact]
+    public void FileStatus_layout_changed_if_this_fails_mode_type_bits_and_size_of_a_known_file()
+    {
+        if (OperatingSystem.IsWindows())
+            return;
+        File.WriteAllBytes(At("known"), new byte[1234]);
+        using var stream = new FileStream(At("known"), FileMode.Open, FileAccess.Read);
+
+        SafeFile.TryFStat((int)stream.SafeFileHandle.DangerousGetHandle(), out var mode, out var size)
+            .ShouldBeTrue("FileStatus layout changed: fstat failed");
+        (mode & 0xF000).ShouldBe(0x8000, "FileStatus layout changed: Mode is not at the expected place");
+        size.ShouldBe(1234, "FileStatus layout changed: Size is not at the expected place");
     }
 
     [Fact]

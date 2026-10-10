@@ -232,6 +232,7 @@ public sealed class FileModVersionStoreTests : IDisposable
         (await _store.KeepAsync(User, Session, Name, NoSource, NoCheck)).Number.ShouldBe(1);
     }
 
+    [Trait("Category", "ModsFileSafety")]
     [Fact]
     public async Task Keep_refuses_a_symbolic_link()
     {
@@ -617,6 +618,7 @@ public sealed class FileModVersionStoreTests : IDisposable
 
     private static readonly TimeSpan Patience = TimeSpan.FromSeconds(10);
 
+    [Trait("Category", "ModsFileSafety")]
     [Fact]
     public async Task Keep_refuses_a_draft_holding_a_named_pipe_without_blocking()
     {
@@ -635,6 +637,7 @@ public sealed class FileModVersionStoreTests : IDisposable
         (await _store.KeysAsync("someone-else", Name).WaitAsync(Patience)).ShouldBeEmpty();
     }
 
+    [Trait("Category", "ModsFileSafety")]
     [Fact]
     public async Task Show_code_skips_a_named_pipe_without_blocking()
     {
@@ -649,6 +652,7 @@ public sealed class FileModVersionStoreTests : IDisposable
         files!.Select(f => f.Path).ShouldBe(["mod.json", "mod.ts"]);
     }
 
+    [Trait("Category", "ModsFileSafety")]
     [Fact]
     public async Task A_named_pipe_as_the_manifest_reads_as_no_manifest_without_blocking()
     {
@@ -700,6 +704,7 @@ public sealed class FileModVersionStoreTests : IDisposable
         return UserFolder();
     }
 
+    [Trait("Category", "ModsFileSafety")]
     [Fact]
     public async Task Show_code_and_Keep_do_not_follow_a_linked_draft_folder()
     {
@@ -719,6 +724,7 @@ public sealed class FileModVersionStoreTests : IDisposable
         (await _store.GetAsync(User, Name)).Versions.ShouldBeEmpty();
     }
 
+    [Trait("Category", "ModsFileSafety")]
     [Fact]
     public async Task Keep_refuses_a_linked_session_folder_and_leaves_what_it_points_at_alone()
     {
@@ -743,6 +749,7 @@ public sealed class FileModVersionStoreTests : IDisposable
         (await _store.GetAsync(User, Name)).Versions.ShouldBeEmpty();
     }
 
+    [Trait("Category", "ModsFileSafety")]
     [Fact]
     public async Task Keep_refuses_a_linked_drafts_folder()
     {
@@ -758,6 +765,7 @@ public sealed class FileModVersionStoreTests : IDisposable
         File.Exists(Path.Combine(inner, "mod.ts")).ShouldBeTrue();
     }
 
+    [Trait("Category", "ModsFileSafety")]
     [Fact]
     public async Task Keep_refuses_a_linked_folder_inside_the_draft()
     {
@@ -772,6 +780,7 @@ public sealed class FileModVersionStoreTests : IDisposable
         (await _store.ReadDraftFilesAsync(User, Session, Name))!.Select(f => f.Path).ShouldBe(["mod.json", "mod.ts"]);
     }
 
+    [Trait("Category", "ModsFileSafety")]
     [Fact]
     public async Task A_linked_mod_folder_is_never_followed()
     {
@@ -801,6 +810,7 @@ public sealed class FileModVersionStoreTests : IDisposable
         File.ReadAllText(Path.Combine(outside, "store.json")).ShouldBe("""{"k":1}""");
     }
 
+    [Trait("Category", "ModsFileSafety")]
     [Fact]
     public async Task A_linked_store_or_off_file_is_never_followed()
     {
@@ -1268,6 +1278,7 @@ public sealed class FileModVersionStoreTests : IDisposable
         files!.Select(f => f.Path).ShouldBe(["mod.json", "mod.ts"]);
     }
 
+    [Trait("Category", "ModsFileSafety")]
     [Fact]
     public async Task Keep_says_a_named_pipe_is_not_a_regular_file_and_names_it()
     {
@@ -1291,6 +1302,7 @@ public sealed class FileModVersionStoreTests : IDisposable
         await Should.ThrowAsync<ModStoreException>(() => Keep().WaitAsync(Patience));
     }
 
+    [Trait("Category", "ModsFileSafety")]
     [Fact]
     public async Task A_name_swapped_between_a_file_and_a_named_pipe_never_hangs_Show_code_or_Keep()
     {
@@ -1595,6 +1607,7 @@ public sealed class FileModVersionStoreTests : IDisposable
         Directory.GetFileSystemEntries(Path.Combine(UserFolder(), Name)).ShouldBeEmpty();
     }
 
+    [Trait("Category", "ModsFileSafety")]
     [Fact]
     public async Task Check_never_hands_the_checker_a_named_pipe_or_a_link()
     {
