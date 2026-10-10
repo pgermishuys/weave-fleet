@@ -83,8 +83,11 @@ public sealed class BunRuntimeInstallerTests : IDisposable
         var result = await installer.EnsureAsync(wrong, null, CancellationToken.None);
 
         result.Error.Code.ShouldBe("Mods.Runtime");
-        result.Error.Description.ShouldBe("The Bun 1.4.2 download didn't match its checksum, so Fleet deleted it.");
+        result.Error.Description.ShouldBe(
+            "The download didn't match Bun 1.4.2's checksum, so Fleet deleted it. " +
+            "Try again; if it happens again, something between you and GitHub is changing files.");
         installer.Job!.Phase.ShouldBe(BunInstallPhases.Failed);
+        installer.Job.Reason.ShouldBe(BunInstallFailures.Checksum);
         installer.Job.Message.ShouldBe(result.Error.Description);
         Directory.Exists(Path.Combine(Root, "1.4.2")).ShouldBeFalse();
         Leftovers().ShouldBeEmpty();
@@ -96,13 +99,12 @@ public sealed class BunRuntimeInstallerTests : IDisposable
     {
         var release = Publish(mode: BunServeMode.Truncate);
         var installer = NewInstaller(release, "linux-x64");
-        var total = Zip("linux-x64").Length + 100;
 
         var result = await installer.EnsureAsync(release, null, CancellationToken.None);
 
-        result.Error.Description.ShouldStartWith("Couldn't download Bun 1.4.2: the download stopped after ");
-        result.Error.Description.ShouldEndWith($" of {total} bytes.");
+        result.Error.Description.ShouldBe("The download stopped after 0 of 0 MB. Try again.");
         installer.Job!.Phase.ShouldBe(BunInstallPhases.Failed);
+        installer.Job.Reason.ShouldBe(BunInstallFailures.Stopped);
         Everything().ShouldBeEmpty();
     }
 
@@ -116,9 +118,89 @@ public sealed class BunRuntimeInstallerTests : IDisposable
 
         var result = await installer.EnsureAsync(release, null, CancellationToken.None);
 
-        result.Error.Description.ShouldBe($"Couldn't download Bun 1.4.2: the server answered {status} {reason}.");
+        result.Error.Description.ShouldBe($"127.0.0.1 answered {status} {reason}.");
         installer.Job!.Phase.ShouldBe(BunInstallPhases.Failed);
+        installer.Job.Reason.ShouldBe(BunInstallFailures.Other);
         Everything().ShouldBeEmpty();
+    }
+
+    [Theory]
+    [InlineData(403, "Forbidden")]
+    [InlineData(407, "Proxy Authentication Required")]
+    public async Task Says_a_proxy_or_firewall_is_probably_blocking_when_the_server_refuses(int status, string reason)
+    {
+        var release = Publish(status: status);
+        var installer = NewInstaller(release, "linux-x64");
+
+        var result = await installer.EnsureAsync(release, null, CancellationToken.None);
+
+        result.Error.Description.ShouldBe(
+            $"127.0.0.1 answered {status} {reason}, so a proxy or firewall is probably blocking downloads from GitHub.");
+        installer.Job!.Reason.ShouldBe(BunInstallFailures.Blocked);
+        Everything().ShouldBeEmpty();
+    }
+
+    [Fact]
+    public async Task Says_the_connection_was_refused_when_nothing_listens()
+    {
+        var release = Publish();
+        var port = FreePort();
+        var installer = NewInstaller(release, "linux-x64", downloadBase: new Uri($"http://127.0.0.1:{port}/"));
+
+        var result = await installer.EnsureAsync(release, null, CancellationToken.None);
+
+        result.Error.Description.ShouldBe(
+            "Fleet couldn't reach 127.0.0.1: the connection was refused. Check that this computer is online, then try again.");
+        installer.Job!.Phase.ShouldBe(BunInstallPhases.Failed);
+        installer.Job.Reason.ShouldBe(BunInstallFailures.Offline);
+        Everything().ShouldBeEmpty();
+    }
+
+    [Fact]
+    public async Task Says_the_connection_timed_out_when_nothing_arrives_before_the_first_byte()
+    {
+        var release = Publish(mode: BunServeMode.Silent);
+        var installer = NewInstaller(release, "linux-x64", stall: TimeSpan.FromMilliseconds(300));
+
+        var result = await installer.EnsureAsync(release, null, CancellationToken.None).WaitAsync(TimeSpan.FromSeconds(20));
+
+        result.Error.Description.ShouldBe(
+            "Fleet couldn't reach 127.0.0.1: the connection timed out. Check that this computer is online, then try again.");
+        installer.Job!.Reason.ShouldBe(BunInstallFailures.Offline);
+        Everything().ShouldBeEmpty();
+    }
+
+    [Theory]
+    [InlineData(HttpRequestError.NameResolutionError, "Fleet couldn't reach example.test: it couldn't find example.test (DNS). Check that this computer is online, then try again.", BunInstallFailures.Offline)]
+    [InlineData(HttpRequestError.ConnectionError, "Fleet couldn't reach example.test: the connection was refused. Check that this computer is online, then try again.", BunInstallFailures.Offline)]
+    [InlineData(HttpRequestError.SecureConnectionError, "example.test's secure connection was interrupted, so a proxy or firewall is probably blocking downloads from GitHub.", BunInstallFailures.Blocked)]
+    [InlineData(HttpRequestError.ProxyTunnelError, "example.test's secure connection was interrupted, so a proxy or firewall is probably blocking downloads from GitHub.", BunInstallFailures.Blocked)]
+    public void Classifies_a_failed_request_by_what_went_wrong(HttpRequestError error, string message, string reason)
+    {
+        var (actualReason, actualMessage) = BunRuntimeInstaller.DescribeRequestFailure(
+            new HttpRequestException(error, "x"), "example.test", received: 0, total: null);
+
+        actualReason.ShouldBe(reason);
+        actualMessage.ShouldBe(message);
+    }
+
+    [Fact]
+    public void A_failed_request_after_some_bytes_is_a_stopped_download_with_megabytes()
+    {
+        var (reason, message) = BunRuntimeInstaller.DescribeRequestFailure(
+            new HttpRequestException(HttpRequestError.ConnectionError, "x"), "example.test", received: 21_400_000, total: 35_200_000);
+
+        reason.ShouldBe(BunInstallFailures.Stopped);
+        message.ShouldBe("The download stopped after 21 of 35 MB. Try again.");
+    }
+
+    [Fact]
+    public void A_stopped_download_without_a_known_size_names_only_what_arrived()
+    {
+        var (_, message) = BunRuntimeInstaller.DescribeRequestFailure(
+            new HttpRequestException(HttpRequestError.ConnectionError, "x"), "example.test", received: 21_400_000, total: null);
+
+        message.ShouldBe("The download stopped after 21 MB. Try again.");
     }
 
     [Fact]
@@ -129,8 +211,9 @@ public sealed class BunRuntimeInstallerTests : IDisposable
 
         var result = await installer.EnsureAsync(release, null, CancellationToken.None).WaitAsync(TimeSpan.FromSeconds(20));
 
-        result.Error.Description.ShouldBe("Couldn't download Bun 1.4.2: nothing arrived for 0.3 seconds.");
+        result.Error.Description.ShouldBe("The download stopped after 0 of 0 MB. Try again.");
         installer.Job!.Phase.ShouldBe(BunInstallPhases.Failed);
+        installer.Job.Reason.ShouldBe(BunInstallFailures.Stopped);
         Everything().ShouldBeEmpty();
     }
 
@@ -150,6 +233,7 @@ public sealed class BunRuntimeInstallerTests : IDisposable
         error.ShouldBeAssignableTo<OperationCanceledException>();
         installer.Job!.Phase.ShouldBe(BunInstallPhases.Failed);
         installer.Job.Message.ShouldBe("The install was cancelled.");
+        installer.Job.Reason.ShouldBe(BunInstallFailures.Cancelled);
         Everything().ShouldBeEmpty();
 
         Publish();
@@ -320,8 +404,9 @@ public sealed class BunRuntimeInstallerTests : IDisposable
 
         var result = await installer.EnsureAsync(release, null, CancellationToken.None);
 
-        result.Error.Description.ShouldBe("Fleet has no Bun build for freebsd-x64. Install Bun and set Fleet:Harness:BunPath to it.");
+        result.Error.Description.ShouldBe("Fleet has no Bun build for this computer. Install Bun yourself and point Fleet at it.");
         installer.Job!.Phase.ShouldBe(BunInstallPhases.Failed);
+        installer.Job.Reason.ShouldBe(BunInstallFailures.NoBuild);
         _server.Requests.ShouldBeEmpty();
     }
 
@@ -389,6 +474,7 @@ public sealed class BunRuntimeInstallerTests : IDisposable
         result.Error.Description.ShouldBe("Couldn't install Bun 1.4.2: Access to the path is denied.");
         attempts.ShouldBe(5);
         installer.Job!.Phase.ShouldBe(BunInstallPhases.Failed);
+        installer.Job.Reason.ShouldBe(BunInstallFailures.Other);
         Everything().ShouldBeEmpty();
     }
 
@@ -1062,6 +1148,15 @@ public sealed class BunRuntimeInstallerTests : IDisposable
 
     // -- helpers ------------------------------------------------------------------------------------------------
 
+    private static int FreePort()
+    {
+        var probe = new System.Net.Sockets.TcpListener(System.Net.IPAddress.Loopback, 0);
+        probe.Start();
+        var port = ((System.Net.IPEndPoint)probe.LocalEndpoint).Port;
+        probe.Stop();
+        return port;
+    }
+
     private static Func<string, CancellationToken, Task<BunProbeResult>> Prints(string version) =>
         (_, _) => Task.FromResult(new BunProbeResult(BunVersion.Parse(version), null));
 
@@ -1076,7 +1171,8 @@ public sealed class BunRuntimeInstallerTests : IDisposable
         TimeSpan? stall = null,
         Action<string, string>? move = null,
         Action<string, string>? rename = null,
-        string? home = null) =>
+        string? home = null,
+        Uri? downloadBase = null) =>
         new(
             new FleetOptions { Harness = { BunPath = bunPath ?? "" } },
             new FakeHttpClientFactory(),
@@ -1084,7 +1180,7 @@ public sealed class BunRuntimeInstallerTests : IDisposable
         {
             Home = home ?? _home,
             Rid = rid,
-            DownloadBase = _server.BaseUri,
+            DownloadBase = downloadBase ?? _server.BaseUri,
             Probe = probe ?? Fails("Not expected to run."),
             StallTimeout = stall ?? TimeSpan.FromSeconds(60),
             MoveRetryDelay = TimeSpan.FromMilliseconds(1),

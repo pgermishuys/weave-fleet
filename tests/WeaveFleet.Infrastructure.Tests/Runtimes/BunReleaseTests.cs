@@ -34,6 +34,27 @@ public sealed class BunReleaseTests
         asset.ExecutableName.ShouldBe(executable);
     }
 
+    [Theory]
+    [InlineData("linux-x64", 36646949L)]
+    [InlineData("linux-arm64", 36602920L)]
+    [InlineData("osx-x64", 28440543L)]
+    [InlineData("osx-arm64", 25377591L)]
+    [InlineData("win-x64", 39807490L)]
+    [InlineData("win-arm64", 36330062L)]
+    public void Each_pinned_asset_knows_its_size(string rid, long size)
+        => BunRelease.Pinned.AssetFor(rid)!.Size.ShouldBe(size);
+
+    [Fact]
+    public void The_pinned_source_never_announces_a_new_release()
+    {
+        var raised = 0;
+        var releases = new PinnedBunReleases();
+        releases.Changed += (_, _) => raised++;
+
+        releases.Current.ShouldBe(BunRelease.Pinned);
+        raised.ShouldBe(0);
+    }
+
     [Fact]
     public void A_platform_without_a_build_has_no_asset()
         => BunRelease.Pinned.AssetFor("linux-musl-x64").ShouldBeNull();

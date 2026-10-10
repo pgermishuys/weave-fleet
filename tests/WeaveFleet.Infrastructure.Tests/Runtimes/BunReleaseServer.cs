@@ -17,6 +17,9 @@ internal enum BunServeMode
 
     /// <summary>Send a few bytes, wait for <see cref="BunReleaseServer.ReleaseHeld"/>, then send the rest.</summary>
     Hold,
+
+    /// <summary>Accept the request and never answer it, so the client waits for the response headers.</summary>
+    Silent,
 }
 
 /// <summary>A loopback HTTP server that plays GitHub's release downloads for the Bun installer tests.</summary>
@@ -27,6 +30,7 @@ internal sealed class BunReleaseServer : IDisposable
     private readonly Dictionary<string, (byte[] Body, int Status, BunServeMode Mode)> _routes = [];
     private readonly List<string> _requests = [];
     private readonly TaskCompletionSource _stalled = new(TaskCreationOptions.RunContinuationsAsynchronously);
+    private readonly TaskCompletionSource _silent = new(TaskCreationOptions.RunContinuationsAsynchronously);
     private readonly TaskCompletionSource _held = new(TaskCreationOptions.RunContinuationsAsynchronously);
     private readonly TaskCompletionSource _release = new(TaskCreationOptions.RunContinuationsAsynchronously);
 
@@ -48,6 +52,9 @@ internal sealed class BunReleaseServer : IDisposable
 
     /// <summary>Completes once a <see cref="BunServeMode.Stall"/> response has sent its first bytes.</summary>
     public Task Stalled => _stalled.Task;
+
+    /// <summary>Completes once a <see cref="BunServeMode.Silent"/> request has arrived.</summary>
+    public Task Silenced => _silent.Task;
 
     /// <summary>Completes once a <see cref="BunServeMode.Hold"/> response has sent its first bytes and is waiting.</summary>
     public Task Held => _held.Task;
@@ -126,6 +133,10 @@ internal sealed class BunReleaseServer : IDisposable
 
             switch (route.Mode)
             {
+                case BunServeMode.Silent:
+                    _silent.TrySetResult();
+                    await Task.Delay(Timeout.Infinite, _stop.Token);
+                    break;
                 case BunServeMode.Normal:
                     response.ContentLength64 = route.Body.Length;
                     await response.OutputStream.WriteAsync(route.Body);
