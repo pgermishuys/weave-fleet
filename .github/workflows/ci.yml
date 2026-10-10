@@ -173,6 +173,38 @@ jobs:
           path: client/test-results/**/*.xml
           reporter: java-junit
 
+  # ── Mod host (mods/host: Bun + TypeScript) ───────────────────────────────
+  mods-host:
+    name: Mod host
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      # Pinned to the Bun Fleet downloads for mods (BunRuntimeInstaller), so the host is tested on the runtime it ships with.
+      - name: Setup Bun
+        uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: '1.4.2'
+
+      - name: Install dependencies
+        run: bun install --frozen-lockfile
+        working-directory: mods/host
+
+      - name: Typecheck
+        run: bun run typecheck
+        working-directory: mods/host
+
+      - name: Unit and end-to-end tests
+        run: bun test
+        working-directory: mods/host
+
+      - name: Build dist/host.js
+        run: bun run build && test -s dist/host.js
+        working-directory: mods/host
+
   # ── fleet launchers (bin/fleet, bin/fleet.cmd) ───────────────────────────
   launchers:
     name: Launchers (${{ matrix.os }})
