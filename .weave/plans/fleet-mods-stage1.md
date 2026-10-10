@@ -267,3 +267,15 @@ branch `feat/mods-host-client-reference` (7bcb39b0, closed PR #491), with review
 - **`ModHostFiles` walks up to a folder with `WeaveFleet.slnx`** to find `mods/host/dist/host.js` in every build. Do that
   only in Development.
 - **`ModHostRpc.OnLine` never disposes its `JsonDocument`**: dispose it, cloning what outlives the line.
+- **`HandleNotification` doesn't scope `invalidate` and `log`** to loaded mods, or a draft to its own session, as the
+  `$` requests are. It must before M6 wires them to the browser.
+- **`DispatchAsync` with an undefined `E`** throws instead of answering NotDispatched.
+- **A host error during a check** is worded as "the mod runtime isn't ready"; say what the host said.
+- **`CheckAsync` racing `ShutdownAsync`** on the check lease's timer.
+- **A struck mod isn't sent `unload`**: the host unloads it at its own three strikes, but Fleet should say so too.
+- **A literal `{ "$regex": … }` object in a matcher** is refused at `on()` in the host, so the wire encoding stays
+  unambiguous.
+- **Deleting the staged drafts folder** (`StagedRoot`) has no link check.
+- **A draft refused at staging** needs `ReloadDraftAsync` from the agent's tools (M7) to load again.
+- **Keep while the host can't run** is refused with "The mod runtime isn't ready yet: …"; the UI needs its own text (M8).
+- **A Keep cancelled mid-load** leaves mods unloaded until the next reconcile.
