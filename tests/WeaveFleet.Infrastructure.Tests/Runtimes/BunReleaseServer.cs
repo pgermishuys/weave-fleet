@@ -17,6 +17,9 @@ internal enum BunServeMode
 
     /// <summary>Send a few bytes, wait for <see cref="BunReleaseServer.ReleaseHeld"/>, then send the rest.</summary>
     Hold,
+
+    /// <summary>Accept the request and never answer it, so the client waits for the response headers.</summary>
+    Silent,
 }
 
 /// <summary>A loopback HTTP server that plays GitHub's release downloads for the Bun installer tests.</summary>
@@ -126,6 +129,9 @@ internal sealed class BunReleaseServer : IDisposable
 
             switch (route.Mode)
             {
+                case BunServeMode.Silent:
+                    await Task.Delay(Timeout.Infinite, _stop.Token);
+                    break;
                 case BunServeMode.Normal:
                     response.ContentLength64 = route.Body.Length;
                     await response.OutputStream.WriteAsync(route.Body);

@@ -434,6 +434,41 @@ public sealed class SignalREventContractTests : IAsyncLifetime, IDisposable
     }
 
     [Fact]
+    public async Task A_mods_runtime_event_carries_the_job_and_why_it_was_raised()
+    {
+        await _hub.InvokeAsync("SubscribeToSessionsTopicAsync");
+        await WaitForBroadcasterSubscriberAsync();
+        var broadcaster = _server.Services.GetRequiredService<WeaveFleet.Application.Events.IEventBroadcaster>();
+        var payload = new WeaveFleet.Domain.Events.ModsRuntimePayload
+        {
+            Reason = "job",
+            Job = new WeaveFleet.Domain.Events.ModsRuntimeJob
+            {
+                Phase = "failed",
+                Version = "1.4.3",
+                Reason = "offline",
+                BytesTotal = 36_646_949,
+                StartedAt = new DateTimeOffset(2026, 10, 10, 9, 0, 0, TimeSpan.Zero),
+            },
+        };
+
+        await broadcaster.BroadcastAsync(
+            "sessions",
+            "mods.runtime",
+            JsonSerializer.SerializeToElement(payload, WebJson),
+            new WeaveFleet.Domain.Events.ModsRuntimeChanged { Payload = payload },
+            userId: null,
+            ct: CancellationToken.None);
+
+        var props = (await WaitForWorkEventAsync("mods.runtime", "sessions")).Data.GetProperty("properties");
+        props.GetProperty("reason").GetString().ShouldBe("job");
+        var job = props.GetProperty("job");
+        job.GetProperty("phase").GetString().ShouldBe("failed");
+        job.GetProperty("reason").GetString().ShouldBe("offline");
+        job.GetProperty("bytesTotal").GetInt64().ShouldBe(36_646_949);
+    }
+
+    [Fact]
     public async Task A_session_notification_carries_its_kind_request_and_machine()
     {
         await _hub.InvokeAsync("SubscribeToSessionsTopicAsync");
