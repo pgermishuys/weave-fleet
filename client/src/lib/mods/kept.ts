@@ -83,6 +83,21 @@ export interface ModDraft {
   kept: number | null;
   /** The agent asked the user to keep it (`fleet_mod_keep`), with its note; cleared by Keep, Discard or Turn off. */
   keepRequest?: ModKeepRequest | null;
+  /** Why the draft's last load was refused (from the mod host); null or absent when it loaded or hasn't been tried. */
+  problem?: ModDraftProblem | null;
+}
+
+export interface ModDraftProblem {
+  code: string;
+  message: string;
+  line?: number | null;
+}
+
+/** A line of a mod's log (`GET /api/mods/{name}/log`), newest last. */
+export interface ModLogLine {
+  at: string;
+  level: "info" | "warn" | "error";
+  text: string;
 }
 
 export interface ModKeepRequest {
