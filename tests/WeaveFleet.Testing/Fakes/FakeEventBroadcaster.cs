@@ -6,7 +6,8 @@ namespace WeaveFleet.Testing.Fakes;
 
 public sealed class FakeEventBroadcaster : IEventBroadcaster
 {
-    public List<BroadcastRecord> Broadcasts { get; } = [];
+    // Relay pumps and the fan-out service broadcast from different threads; a plain List loses entries when two Adds race.
+    public BroadcastLog Broadcasts { get; } = new();
 
     /// <summary>
     /// Optional callback invoked after every broadcast is recorded.
@@ -49,5 +50,29 @@ public sealed class FakeEventBroadcaster : IEventBroadcaster
     {
         /// <summary>Deprecated compatibility alias for <see cref="EventId"/>.</summary>
         public long? SequenceNumber => EventId;
+    }
+
+    /// <summary>A thread-safe list of what was broadcast. Reads see a snapshot, so they can run while broadcasts arrive.</summary>
+    public sealed class BroadcastLog : IEnumerable<BroadcastRecord>
+    {
+        private readonly object _gate = new();
+        private readonly List<BroadcastRecord> _items = [];
+
+        public int Count { get { lock (_gate) return _items.Count; } }
+
+        public BroadcastRecord this[int index] { get { lock (_gate) return _items[index]; } }
+
+        public void Add(BroadcastRecord record) { lock (_gate) _items.Add(record); }
+
+        public void Clear() { lock (_gate) _items.Clear(); }
+
+        public IEnumerator<BroadcastRecord> GetEnumerator()
+        {
+            BroadcastRecord[] snapshot;
+            lock (_gate) snapshot = [.. _items];
+            return ((IEnumerable<BroadcastRecord>)snapshot).GetEnumerator();
+        }
+
+        System.Collections.IEnumerator System.Collections.IEnumerable.GetEnumerator() => GetEnumerator();
     }
 }

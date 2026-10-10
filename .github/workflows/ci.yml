@@ -50,9 +50,26 @@ jobs:
 
       # The [OpenCodeFact] live tests run a real opencode against a scripted model. Pinned, so a new
       # OpenCode release can't break CI unannounced: bump the version here and check the live tests pass.
+      - name: Cache OpenCode
+        id: opencode-cache
+        uses: actions/cache@v4
+        with:
+          path: ~/.opencode
+          key: opencode-${{ runner.os }}-${{ env.OPENCODE_VERSION }}
+
+      # The download now and then fails ("Version ... is not available"): try a few times before giving up.
       - name: Install OpenCode
+        if: steps.opencode-cache.outputs.cache-hit != 'true'
         run: |
-          curl -fsSL https://opencode.ai/install | bash -s -- --version "$OPENCODE_VERSION" --no-modify-path
+          for attempt in 1 2 3 4; do
+            curl -fsSL https://opencode.ai/install | bash -s -- --version "$OPENCODE_VERSION" --no-modify-path && break
+            if [ "$attempt" -eq 4 ]; then echo "OpenCode install failed after $attempt attempts"; exit 1; fi
+            echo "OpenCode install attempt $attempt failed; retrying in $((attempt * 10))s"
+            sleep $((attempt * 10))
+          done
+
+      - name: Add OpenCode to PATH
+        run: |
           echo "$HOME/.opencode/bin" >> "$GITHUB_PATH"
           "$HOME/.opencode/bin/opencode" --version
 
