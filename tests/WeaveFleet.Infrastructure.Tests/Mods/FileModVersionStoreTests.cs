@@ -1,3 +1,4 @@
+using System.Diagnostics;
 using System.Security.Cryptography;
 using System.Text;
 using System.Text.Json;
@@ -23,10 +24,54 @@ public sealed class FileModVersionStoreTests : IDisposable
     {
         _store.Dispose();
         if (Directory.Exists(_root))
-            Directory.Delete(_root, recursive: true);
+            Remove(_root);
+        foreach (var folder in _outside)
+            if (Directory.Exists(folder))
+                Remove(folder);
     }
 
-    private static readonly ModKeepSource NoSource = new(null, null, null);
+    private static void Remove(string folder)
+    {
+        // Kept versions are read-only, and a test may have made a folder read-only on purpose.
+        if (!OperatingSystem.IsWindows())
+            File.SetUnixFileMode(folder, (UnixFileMode)0b111_111_111);
+        foreach (var entry in new DirectoryInfo(folder).EnumerateFileSystemInfos())
+        {
+            if (entry.LinkTarget is not null)
+                entry.Delete();
+            else if (entry is DirectoryInfo directory)
+                Remove(directory.FullName);
+            else
+            {
+                entry.Attributes = FileAttributes.Normal;
+                entry.Delete();
+            }
+        }
+
+        Directory.Delete(folder);
+    }
+
+    private readonly List<string> _outside = [];
+
+    /// <summary>A folder beside the store root, with one file in it, for a link to point at.</summary>
+    private string Outside()
+    {
+        var folder = Path.Combine(Path.GetTempPath(), $"fleet-mods-outside-{Guid.NewGuid():N}");
+        Directory.CreateDirectory(folder);
+        File.WriteAllText(Path.Combine(folder, "secret.txt"), "outside");
+        File.WriteAllText(Path.Combine(folder, "mod.json"), Manifest);
+        File.WriteAllText(Path.Combine(folder, "mod.ts"), "export default {};");
+        _outside.Add(folder);
+        return folder;
+    }
+
+    private static readonly ModKeepSource NoSource = new(null, null);
+    private static readonly ModKeepCheck NoCheck = (_, _) => Task.FromResult<JsonElement?>(null);
+
+    private static ModKeepCheck Report(string json) => (_, _) => Task.FromResult<JsonElement?>(Json(json));
+
+    private Task<ModVersion> Keep(string session = Session, string name = Name, ModKeepCheck? check = null)
+        => _store.KeepAsync(User, session, name, NoSource, check ?? NoCheck);
 
     private string Draft(string session = Session, string name = Name, string? manifest = Manifest, string code = "export default {};\n")
     {
@@ -53,7 +98,7 @@ public sealed class FileModVersionStoreTests : IDisposable
     public async Task Keep_writes_the_layout_and_an_index_with_the_documented_shape()
     {
         Draft();
-        var version = await _store.KeepAsync(User, Session, Name, new ModKeepSource(" Chips ", " first ", Json("""{"ok":true}""")));
+        var version = await _store.KeepAsync(User, Session, Name, new ModKeepSource(" Chips ", " first "), Report("""{"ok":true}"""));
 
         version.Number.ShouldBe(1);
         version.Version.ShouldBe("0.1.0");
@@ -82,7 +127,7 @@ public sealed class FileModVersionStoreTests : IDisposable
     public async Task A_version_with_no_check_writes_null()
     {
         Draft();
-        await _store.KeepAsync(User, Session, Name, NoSource);
+        await _store.KeepAsync(User, Session, Name, NoSource, NoCheck);
 
         using var index = JsonDocument.Parse(File.ReadAllText(Path.Combine(UserFolder(), Name, "versions.json")));
         index.RootElement.GetProperty("versions")[0].GetProperty("check").ValueKind.ShouldBe(JsonValueKind.Null);
@@ -93,7 +138,7 @@ public sealed class FileModVersionStoreTests : IDisposable
     {
         Draft(code: "export default { a: 1 };\n");
 
-        var version = await _store.KeepAsync(User, Session, Name, NoSource);
+        var version = await _store.KeepAsync(User, Session, Name, NoSource, NoCheck);
 
         version.Sha256.ShouldBe(Convert.ToHexStringLower(SHA256.HashData(Encoding.UTF8.GetBytes("export default { a: 1 };\n"))));
     }
@@ -102,13 +147,13 @@ public sealed class FileModVersionStoreTests : IDisposable
     public async Task Versions_count_up_and_an_earlier_one_never_changes()
     {
         var draft = Draft(code: "// one\n");
-        await _store.KeepAsync(User, Session, Name, NoSource);
+        await _store.KeepAsync(User, Session, Name, NoSource, NoCheck);
         Directory.Exists(draft).ShouldBeFalse();
         // The session's drafts folder goes too when that was its last draft.
         Directory.Exists(Path.GetDirectoryName(draft)).ShouldBeFalse();
 
         Draft(code: "// two\n");
-        var second = await _store.KeepAsync(User, Session, Name, NoSource);
+        var second = await _store.KeepAsync(User, Session, Name, NoSource, NoCheck);
 
         second.Number.ShouldBe(2);
         File.ReadAllText(Path.Combine(_store.VersionFolder(User, Name, 1), "mod.ts")).ShouldBe("// one\n");
@@ -123,12 +168,12 @@ public sealed class FileModVersionStoreTests : IDisposable
     public async Task Keep_turns_the_mod_on_and_clears_the_drafts_off_entry()
     {
         Draft();
-        await _store.KeepAsync(User, Session, Name, NoSource);
+        await _store.KeepAsync(User, Session, Name, NoSource, NoCheck);
         await _store.SetOffAsync(User, Name, new ModOff(ModOffBy.User, DateTimeOffset.UtcNow));
 
         Draft(code: "// again\n");
         await _store.SetDraftOffAsync(User, Session, Name, new ModOff(ModOffBy.User, DateTimeOffset.UtcNow));
-        await _store.KeepAsync(User, Session, Name, NoSource);
+        await _store.KeepAsync(User, Session, Name, NoSource, NoCheck);
 
         (await _store.GetAsync(User, Name)).Off.ShouldBeNull();
         (await _store.GetDraftAsync(User, Session, Name)).ShouldBeNull();
@@ -139,14 +184,14 @@ public sealed class FileModVersionStoreTests : IDisposable
 
     [Fact]
     public async Task Keep_without_a_draft_throws()
-        => await Should.ThrowAsync<ModStoreException>(() => _store.KeepAsync(User, Session, Name, NoSource));
+        => await Should.ThrowAsync<ModStoreException>(() => _store.KeepAsync(User, Session, Name, NoSource, NoCheck));
 
     [Fact]
     public async Task Keep_refuses_a_draft_without_mod_json()
     {
         Draft(manifest: null);
 
-        var error = await Should.ThrowAsync<ModStoreException>(() => _store.KeepAsync(User, Session, Name, NoSource));
+        var error = await Should.ThrowAsync<ModStoreException>(() => _store.KeepAsync(User, Session, Name, NoSource, NoCheck));
 
         error.Message.ShouldContain("mod.json");
         (await _store.GetAsync(User, Name)).Versions.ShouldBeEmpty();
@@ -167,7 +212,7 @@ public sealed class FileModVersionStoreTests : IDisposable
         var folder = Draft(manifest: manifest);
         File.WriteAllText(Path.Combine(folder, "mod.py"), "x");
 
-        var error = await Should.ThrowAsync<ModStoreException>(() => _store.KeepAsync(User, Session, Name, NoSource));
+        var error = await Should.ThrowAsync<ModStoreException>(() => _store.KeepAsync(User, Session, Name, NoSource, NoCheck));
 
         error.Message.ShouldNotBeNullOrWhiteSpace();
         (await _store.GetAsync(User, Name)).Versions.ShouldBeEmpty();
@@ -184,7 +229,7 @@ public sealed class FileModVersionStoreTests : IDisposable
         Directory.CreateDirectory(Path.GetDirectoryName(Path.Combine(folder, hooks))!);
         File.WriteAllText(Path.Combine(folder, hooks), "export default {};");
 
-        (await _store.KeepAsync(User, Session, Name, NoSource)).Number.ShouldBe(1);
+        (await _store.KeepAsync(User, Session, Name, NoSource, NoCheck)).Number.ShouldBe(1);
     }
 
     [Fact]
@@ -194,7 +239,7 @@ public sealed class FileModVersionStoreTests : IDisposable
         Directory.CreateDirectory(Path.Combine(folder, "pages"));
         File.CreateSymbolicLink(Path.Combine(folder, "pages", "secret.txt"), "/etc/hostname");
 
-        var error = await Should.ThrowAsync<ModStoreException>(() => _store.KeepAsync(User, Session, Name, NoSource));
+        var error = await Should.ThrowAsync<ModStoreException>(() => _store.KeepAsync(User, Session, Name, NoSource, NoCheck));
 
         error.Message.ShouldContain("link", Case.Insensitive);
     }
@@ -206,7 +251,7 @@ public sealed class FileModVersionStoreTests : IDisposable
         for (var i = 0; i < 500; i++)
             File.WriteAllText(Path.Combine(folder, $"f{i}.txt"), "x");
 
-        await Should.ThrowAsync<ModStoreException>(() => _store.KeepAsync(User, Session, Name, NoSource));
+        await Should.ThrowAsync<ModStoreException>(() => _store.KeepAsync(User, Session, Name, NoSource, NoCheck));
     }
 
     [Fact]
@@ -215,7 +260,7 @@ public sealed class FileModVersionStoreTests : IDisposable
         var folder = Draft();
         File.WriteAllBytes(Path.Combine(folder, "big.bin"), new byte[16 * 1024 * 1024]);
 
-        await Should.ThrowAsync<ModStoreException>(() => _store.KeepAsync(User, Session, Name, NoSource));
+        await Should.ThrowAsync<ModStoreException>(() => _store.KeepAsync(User, Session, Name, NoSource, NoCheck));
     }
 
     [Theory]
@@ -225,12 +270,18 @@ public sealed class FileModVersionStoreTests : IDisposable
     [InlineData("Upper")]
     [InlineData("a/b")]
     [InlineData("")]
+    [InlineData("con")]
+    [InlineData("nul")]
+    [InlineData("aux")]
+    [InlineData("prn")]
+    [InlineData("com1")]
+    [InlineData("lpt9")]
     public async Task A_bad_name_throws_on_writes_and_reads_as_nothing(string name)
     {
         Should.Throw<ArgumentException>(() => _store.VersionFolder(User, name, 1));
         Should.Throw<ArgumentException>(() => _store.DraftFolder(User, Session, name));
-        await Should.ThrowAsync<ArgumentException>(() => _store.KeepAsync(User, Session, name, NoSource));
-        await Should.ThrowAsync<ArgumentException>(() => _store.SetActiveAsync(User, name, 1));
+        await Should.ThrowAsync<ArgumentException>(() => _store.KeepAsync(User, Session, name, NoSource, NoCheck));
+        await Should.ThrowAsync<ArgumentException>(() => _store.UseVersionAsync(User, name, 1));
         await Should.ThrowAsync<ArgumentException>(() => _store.SetOffAsync(User, name, null));
         await Should.ThrowAsync<ArgumentException>(() => _store.SetDraftOffAsync(User, Session, name, null));
         await Should.ThrowAsync<ArgumentException>(() => _store.SetValueAsync(User, name, "k", Json("1")));
@@ -239,6 +290,9 @@ public sealed class FileModVersionStoreTests : IDisposable
         (await _store.GetAsync(User, name)).Versions.ShouldBeEmpty();
         (await _store.GetDraftAsync(User, Session, name)).ShouldBeNull();
         (await _store.ReadVersionFilesAsync(User, name, 1)).ShouldBeNull();
+        (await _store.ReadVersionManifestAsync(User, name, 1)).ShouldBeNull();
+        await Should.ThrowAsync<ArgumentException>(() => _store.UseVersionAsync(User, name, 1));
+        await Should.ThrowAsync<ArgumentException>(() => _store.UndoAsync(User, name, DateTimeOffset.UtcNow));
         (await _store.ReadDraftFilesAsync(User, Session, name)).ShouldBeNull();
         (await _store.GetValueAsync(User, name, "k")).ShouldBeNull();
         (await _store.KeysAsync(User, name)).ShouldBeEmpty();
@@ -248,7 +302,7 @@ public sealed class FileModVersionStoreTests : IDisposable
     public async Task A_name_of_65_characters_is_refused()
     {
         var name = new string('a', 65);
-        await Should.ThrowAsync<ArgumentException>(() => _store.KeepAsync(User, Session, name, NoSource));
+        await Should.ThrowAsync<ArgumentException>(() => _store.KeepAsync(User, Session, name, NoSource, NoCheck));
         (await _store.GetAsync(User, name)).Versions.ShouldBeEmpty();
     }
 
@@ -259,7 +313,7 @@ public sealed class FileModVersionStoreTests : IDisposable
     public async Task A_bad_session_id_throws_on_writes_and_reads_as_nothing(string session)
     {
         Should.Throw<ArgumentException>(() => _store.DraftFolder(User, session, Name));
-        await Should.ThrowAsync<ArgumentException>(() => _store.KeepAsync(User, session, Name, NoSource));
+        await Should.ThrowAsync<ArgumentException>(() => _store.KeepAsync(User, session, Name, NoSource, NoCheck));
         (await _store.ListDraftsAsync(User, session)).ShouldBeEmpty();
         (await _store.GetDraftAsync(User, session, Name)).ShouldBeNull();
     }
@@ -269,8 +323,8 @@ public sealed class FileModVersionStoreTests : IDisposable
     {
         Draft(name: "zeta-mod", manifest: Manifest.Replace("test-chips", "zeta-mod"));
         Draft(name: "alpha-mod", manifest: Manifest.Replace("test-chips", "alpha-mod"));
-        await _store.KeepAsync(User, Session, "zeta-mod", NoSource);
-        await _store.KeepAsync(User, Session, "alpha-mod", NoSource);
+        await _store.KeepAsync(User, Session, "zeta-mod", NoSource, NoCheck);
+        await _store.KeepAsync(User, Session, "alpha-mod", NoSource, NoCheck);
         await _store.SetValueAsync(User, "only-store", "k", Json("1"));
         Draft(name: Name);
 
@@ -278,27 +332,17 @@ public sealed class FileModVersionStoreTests : IDisposable
     }
 
     [Fact]
-    public async Task A_corrupt_index_reads_as_empty()
-    {
-        Draft();
-        await _store.KeepAsync(User, Session, Name, NoSource);
-        File.WriteAllText(Path.Combine(UserFolder(), Name, "versions.json"), "{ nope");
-
-        (await _store.GetAsync(User, Name)).ShouldBe(ModHistory.Empty(Name));
-    }
-
-    [Fact]
     public async Task The_active_version_can_change_and_must_exist()
     {
         Draft();
-        await _store.KeepAsync(User, Session, Name, NoSource);
+        await _store.KeepAsync(User, Session, Name, NoSource, NoCheck);
         Draft();
-        await _store.KeepAsync(User, Session, Name, NoSource);
+        await _store.KeepAsync(User, Session, Name, NoSource, NoCheck);
 
-        await _store.SetActiveAsync(User, Name, 1);
+        await _store.UseVersionAsync(User, Name, 1);
         (await _store.GetAsync(User, Name)).ActiveVersion!.Number.ShouldBe(1);
 
-        await Should.ThrowAsync<ModStoreException>(() => _store.SetActiveAsync(User, Name, 9));
+        await Should.ThrowAsync<ModStoreException>(() => _store.UseVersionAsync(User, Name, 9));
         (await _store.GetAsync(User, Name)).Active.ShouldBe(1);
     }
 
@@ -306,7 +350,7 @@ public sealed class FileModVersionStoreTests : IDisposable
     public async Task A_mod_can_be_turned_off_and_on()
     {
         Draft();
-        await _store.KeepAsync(User, Session, Name, NoSource);
+        await _store.KeepAsync(User, Session, Name, NoSource, NoCheck);
         var at = new DateTimeOffset(2026, 10, 10, 8, 0, 0, TimeSpan.Zero);
 
         await _store.SetOffAsync(User, Name, new ModOff(ModOffBy.Strikes, at, "boom"));
@@ -377,7 +421,7 @@ public sealed class FileModVersionStoreTests : IDisposable
         draftFiles![2].Content.ShouldBe("<p>hi</p>");
 
         File.Delete(Path.Combine(folder, "link.txt"));
-        await _store.KeepAsync(User, Session, Name, NoSource);
+        await _store.KeepAsync(User, Session, Name, NoSource, NoCheck);
         var versionFiles = await _store.ReadVersionFilesAsync(User, Name, 1);
         versionFiles!.Select(f => f.Path).ShouldBe(["mod.json", "mod.ts", "pages/deep/a.html"]);
         (await _store.ReadVersionFilesAsync(User, Name, 2)).ShouldBeNull();
@@ -385,19 +429,46 @@ public sealed class FileModVersionStoreTests : IDisposable
     }
 
     [Fact]
-    public async Task The_manifest_is_read_or_null()
+    public async Task A_drafts_manifest_is_read_or_null()
     {
         var folder = Draft();
-        var manifest = await _store.ReadManifestAsync(folder);
-        manifest.ShouldBe(new ModManifest(Name, "0.1.0", "Shows chips.", "mod.ts"));
+        (await _store.GetDraftAsync(User, Session, Name))!.Manifest.ShouldBe(new ModManifest(Name, "0.1.0", "Shows chips.", "mod.ts"));
+        (await _store.ListDraftsAsync(User, Session)).Single().Manifest.ShouldBe(new ModManifest(Name, "0.1.0", "Shows chips.", "mod.ts"));
 
-        (await _store.ReadManifestAsync(Path.Combine(_root, "nowhere"))).ShouldBeNull();
         File.WriteAllText(Path.Combine(folder, "mod.json"), "nope");
-        (await _store.ReadManifestAsync(folder)).ShouldBeNull();
+        (await _store.GetDraftAsync(User, Session, Name))!.Manifest.ShouldBeNull();
         File.WriteAllText(Path.Combine(folder, "mod.json"), """{"name":"x","version":"1","description":"","hooks":"a.ts"}""");
-        (await _store.ReadManifestAsync(folder)).ShouldBeNull();
+        (await _store.GetDraftAsync(User, Session, Name))!.Manifest.ShouldBeNull();
         File.WriteAllText(Path.Combine(folder, "mod.json"), """{"name":"x","version":"1","description":"d","hooks":5}""");
-        (await _store.ReadManifestAsync(folder)).ShouldBeNull();
+        (await _store.GetDraftAsync(User, Session, Name))!.Manifest.ShouldBeNull();
+        File.Delete(Path.Combine(folder, "mod.json"));
+        var draft = (await _store.GetDraftAsync(User, Session, Name))!;
+        draft.Manifest.ShouldBeNull();
+        draft.Folder.ShouldBe(folder);
+    }
+
+    [Fact]
+    public async Task A_manifest_over_64_KiB_reads_as_null()
+    {
+        var folder = Draft();
+        File.WriteAllText(Path.Combine(folder, "mod.json"), Manifest.Replace("Shows chips.", new string('x', 70 * 1024)));
+
+        (await _store.GetDraftAsync(User, Session, Name))!.Manifest.ShouldBeNull();
+    }
+
+    [Fact]
+    public async Task A_kept_versions_manifest_is_read_only_when_the_index_lists_it()
+    {
+        Draft();
+        await Keep();
+
+        (await _store.ReadVersionManifestAsync(User, Name, 1)).ShouldBe(new ModManifest(Name, "0.1.0", "Shows chips.", "mod.ts"));
+        (await _store.ReadVersionManifestAsync(User, Name, 2)).ShouldBeNull();
+
+        var orphan = Path.Combine(UserFolder(), Name, "v7");
+        Directory.CreateDirectory(orphan);
+        File.WriteAllText(Path.Combine(orphan, "mod.json"), Manifest);
+        (await _store.ReadVersionManifestAsync(User, Name, 7)).ShouldBeNull();
     }
 
     [Fact]
@@ -418,11 +489,42 @@ public sealed class FileModVersionStoreTests : IDisposable
     }
 
     [Fact]
-    public async Task A_key_must_be_1_to_1024_characters()
+    public async Task A_key_must_be_1_to_64_letters_digits_underscore_dash_or_dot()
     {
         await Should.ThrowAsync<ArgumentException>(() => _store.SetValueAsync(User, Name, "", Json("1")));
-        await Should.ThrowAsync<ArgumentException>(() => _store.SetValueAsync(User, Name, new string('k', 1025), Json("1")));
-        await _store.SetValueAsync(User, Name, new string('k', 1024), Json("1"));
+        await Should.ThrowAsync<ArgumentException>(() => _store.SetValueAsync(User, Name, new string('k', 65), Json("1")));
+        await _store.SetValueAsync(User, Name, new string('k', 64), Json("1"));
+        await _store.SetValueAsync(User, Name, "a.b_c-d", Json("1"));
+        await _store.SetValueAsync(User, Name, ".", Json("1"));
+        await _store.SetValueAsync(User, Name, "_", Json("1"));
+        await _store.SetValueAsync(User, Name, "-", Json("1"));
+
+        foreach (var key in new[] { "a/b", "a b", "a\\b", "caf\u00e9", "\u65e5\u672c", "a:b", "a\n" })
+            await Should.ThrowAsync<ArgumentException>(() => _store.SetValueAsync(User, Name, key, Json("1")));
+
+        (await _store.GetValueAsync(User, Name, "a/b")).ShouldBeNull();
+    }
+
+    [Fact]
+    public async Task The_store_size_counts_utf8_json_without_escapes()
+    {
+        // The default encoder would write each \u00e9 as 6 characters: 12 KB for this value.
+        await _store.SetValueAsync(User, Name, "k", Json($"\"{new string('\u00e9', 2000)}\""));
+
+        var length = new FileInfo(Path.Combine(UserFolder(), Name, "store.json")).Length;
+        length.ShouldBe(2 * 2000 + 8);
+        File.ReadAllText(Path.Combine(UserFolder(), Name, "store.json")).ShouldNotContain("\\u");
+    }
+
+    [Fact]
+    public async Task The_limit_holds_exactly_at_4_MiB_of_utf8()
+    {
+        // {"k":"<é x N>"} is 8 bytes around the string, and each é is 2 bytes.
+        var count = (ModStoreLimits.StoreBytes - 8) / 2;
+        await _store.SetValueAsync(User, Name, "k", Json($"\"{new string('\u00e9', count)}\""));
+        new FileInfo(Path.Combine(UserFolder(), Name, "store.json")).Length.ShouldBe(ModStoreLimits.StoreBytes);
+
+        await Should.ThrowAsync<ModStoreFullException>(() => _store.SetValueAsync(User, Name, "k", Json($"\"{new string('\u00e9', count + 1)}\"")));
     }
 
     [Fact]
@@ -431,7 +533,7 @@ public sealed class FileModVersionStoreTests : IDisposable
         Draft();
         await _store.SetValueAsync(User, Name, "seen", Json("3"));
 
-        await _store.KeepAsync(User, Session, Name, NoSource);
+        await _store.KeepAsync(User, Session, Name, NoSource, NoCheck);
 
         (await _store.GetValueAsync(User, Name, "seen"))!.Value.GetInt32().ShouldBe(3);
     }
@@ -486,7 +588,7 @@ public sealed class FileModVersionStoreTests : IDisposable
             Draft(session: $"ses_{i}", code: $"// {i}\n");
 
         var versions = await Task.WhenAll(Enumerable.Range(0, 20)
-            .Select(i => Task.Run(() => _store.KeepAsync(User, $"ses_{i}", Name, NoSource))));
+            .Select(i => Task.Run(() => _store.KeepAsync(User, $"ses_{i}", Name, NoSource, NoCheck))));
 
         versions.Select(v => v.Number).Order().ShouldBe(Enumerable.Range(1, 20));
         var history = await _store.GetAsync(User, Name);
@@ -502,5 +604,630 @@ public sealed class FileModVersionStoreTests : IDisposable
         await Task.WhenAll(Enumerable.Range(0, 30).Select(i => Task.Run(() => _store.SetValueAsync(User, Name, $"k{i}", Json($"{i}")))));
 
         (await _store.KeysAsync(User, Name)).Count.ShouldBe(30);
+    }
+
+    // ── Only regular files ──────────────────────────────────────────────
+
+    private static void MakeFifo(string path)
+    {
+        using var process = Process.Start("mkfifo", path)!;
+        process.WaitForExit();
+        process.ExitCode.ShouldBe(0);
+    }
+
+    private static readonly TimeSpan Patience = TimeSpan.FromSeconds(10);
+
+    [Fact]
+    public async Task Keep_refuses_a_draft_holding_a_named_pipe_without_blocking()
+    {
+        if (OperatingSystem.IsWindows())
+            return;
+        var folder = Draft();
+        MakeFifo(Path.Combine(folder, "pipe"));
+
+        var error = await Should.ThrowAsync<ModStoreException>(() => Keep().WaitAsync(Patience));
+
+        error.Message.ShouldContain("regular", Case.Insensitive);
+        (await _store.GetAsync(User, Name)).Versions.ShouldBeEmpty();
+        Directory.GetDirectories(Path.Combine(UserFolder(), Name)).ShouldBeEmpty();
+        Directory.Exists(folder).ShouldBeTrue();
+        // Another user's call still goes through.
+        (await _store.KeysAsync("someone-else", Name).WaitAsync(Patience)).ShouldBeEmpty();
+    }
+
+    [Fact]
+    public async Task Show_code_skips_a_named_pipe_without_blocking()
+    {
+        if (OperatingSystem.IsWindows())
+            return;
+        var folder = Draft();
+        MakeFifo(Path.Combine(folder, "pipe"));
+        MakeFifo(Path.Combine(folder, "mod.json.fifo"));
+
+        var files = await _store.ReadDraftFilesAsync(User, Session, Name).WaitAsync(Patience);
+
+        files!.Select(f => f.Path).ShouldBe(["mod.json", "mod.ts"]);
+    }
+
+    [Fact]
+    public async Task A_named_pipe_as_the_manifest_reads_as_no_manifest_without_blocking()
+    {
+        if (OperatingSystem.IsWindows())
+            return;
+        var folder = Draft(manifest: null);
+        MakeFifo(Path.Combine(folder, "mod.json"));
+
+        (await _store.GetDraftAsync(User, Session, Name).WaitAsync(Patience))!.Manifest.ShouldBeNull();
+        await Should.ThrowAsync<ModStoreException>(() => Keep().WaitAsync(Patience));
+    }
+
+    // ── Locks per user and mod ──────────────────────────────────────────
+
+    [Fact]
+    public async Task A_slow_keep_blocks_only_its_own_mod()
+    {
+        Draft();
+        var entered = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+        var release = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+        var keeping = Keep(check: async (_, _) =>
+        {
+            entered.SetResult();
+            await release.Task;
+            return null;
+        });
+        await entered.Task.WaitAsync(Patience);
+
+        (await _store.KeysAsync("someone-else", Name).WaitAsync(Patience)).ShouldBeEmpty();
+        (await _store.GetAsync(User, "other-mod").WaitAsync(Patience)).Versions.ShouldBeEmpty();
+        await _store.SetValueAsync(User, "other-mod", "k", Json("1")).WaitAsync(Patience);
+        await _store.SetDraftOffAsync(User, "ses_other", "other-mod", null).WaitAsync(Patience);
+        (await _store.ListDraftsAsync(User, "ses_other").WaitAsync(Patience)).ShouldBeEmpty();
+
+        // The same mod waits its turn.
+        var same = _store.GetAsync(User, Name);
+        await Task.Delay(300);
+        same.IsCompleted.ShouldBeFalse();
+
+        release.SetResult();
+        (await keeping.WaitAsync(Patience)).Number.ShouldBe(1);
+        (await same.WaitAsync(Patience)).Versions.Count.ShouldBe(1);
+    }
+
+    // ── No links from the user's folder down ────────────────────────────
+
+    /// <summary>The user's folder, created if it isn't there yet (by a harmless write to another mod).</summary>
+    private string UserFolder0()
+    {
+        _store.SetValueAsync(User, "zz-anchor", "k", Json("1")).GetAwaiter().GetResult();
+        return UserFolder();
+    }
+
+    [Fact]
+    public async Task Show_code_and_Keep_do_not_follow_a_linked_draft_folder()
+    {
+        var outside = Outside();
+        var session = Path.Combine(UserFolder0(), "drafts", Session);
+        Directory.CreateDirectory(session);
+        Directory.CreateSymbolicLink(Path.Combine(session, Name), outside);
+
+        (await _store.ReadDraftFilesAsync(User, Session, Name)).ShouldBeNull();
+        (await _store.GetDraftAsync(User, Session, Name)).ShouldBeNull();
+        (await _store.ListDraftsAsync(User, Session)).ShouldBeEmpty();
+        var error = await Should.ThrowAsync<ModStoreException>(() => Keep());
+
+        error.Message.ShouldContain("link", Case.Insensitive);
+        File.ReadAllText(Path.Combine(outside, "secret.txt")).ShouldBe("outside");
+        File.Exists(Path.Combine(outside, "mod.ts")).ShouldBeTrue();
+        (await _store.GetAsync(User, Name)).Versions.ShouldBeEmpty();
+    }
+
+    [Fact]
+    public async Task Keep_refuses_a_linked_session_folder_and_leaves_what_it_points_at_alone()
+    {
+        var outside = Outside();
+        var inner = Path.Combine(outside, Name);
+        Directory.CreateDirectory(inner);
+        File.WriteAllText(Path.Combine(inner, "mod.json"), Manifest);
+        File.WriteAllText(Path.Combine(inner, "mod.ts"), "export default {};");
+        var drafts = Path.Combine(UserFolder0(), "drafts");
+        Directory.CreateDirectory(drafts);
+        Directory.CreateSymbolicLink(Path.Combine(drafts, Session), outside);
+
+        (await _store.ReadDraftFilesAsync(User, Session, Name)).ShouldBeNull();
+        (await _store.ListDraftsAsync(User, Session)).ShouldBeEmpty();
+        var error = await Should.ThrowAsync<ModStoreException>(() => Keep());
+
+        error.Message.ShouldContain("link", Case.Insensitive);
+        Directory.Exists(outside).ShouldBeTrue();
+        File.Exists(Path.Combine(outside, "secret.txt")).ShouldBeTrue();
+        File.Exists(Path.Combine(inner, "mod.ts")).ShouldBeTrue();
+        await Should.ThrowAsync<ModStoreException>(() => _store.SetDraftOffAsync(User, Session, Name, new ModOff(ModOffBy.User, DateTimeOffset.UtcNow)));
+        (await _store.GetAsync(User, Name)).Versions.ShouldBeEmpty();
+    }
+
+    [Fact]
+    public async Task Keep_refuses_a_linked_drafts_folder()
+    {
+        var outside = Outside();
+        var inner = Path.Combine(outside, Session, Name);
+        Directory.CreateDirectory(inner);
+        File.WriteAllText(Path.Combine(inner, "mod.json"), Manifest);
+        File.WriteAllText(Path.Combine(inner, "mod.ts"), "export default {};");
+        Directory.CreateSymbolicLink(Path.Combine(UserFolder0(), "drafts"), outside);
+
+        await Should.ThrowAsync<ModStoreException>(() => Keep());
+        (await _store.ListDraftsAsync(User, Session)).ShouldBeEmpty();
+        File.Exists(Path.Combine(inner, "mod.ts")).ShouldBeTrue();
+    }
+
+    [Fact]
+    public async Task Keep_refuses_a_linked_folder_inside_the_draft()
+    {
+        var outside = Outside();
+        var folder = Draft();
+        Directory.CreateSymbolicLink(Path.Combine(folder, "pages"), outside);
+
+        var error = await Should.ThrowAsync<ModStoreException>(() => Keep());
+
+        error.Message.ShouldContain("link", Case.Insensitive);
+        File.Exists(Path.Combine(outside, "secret.txt")).ShouldBeTrue();
+        (await _store.ReadDraftFilesAsync(User, Session, Name))!.Select(f => f.Path).ShouldBe(["mod.json", "mod.ts"]);
+    }
+
+    [Fact]
+    public async Task A_linked_mod_folder_is_never_followed()
+    {
+        var outside = Outside();
+        var kept = Path.Combine(outside, "v1");
+        Directory.CreateDirectory(kept);
+        File.WriteAllText(Path.Combine(kept, "mod.json"), Manifest);
+        File.WriteAllText(Path.Combine(kept, "mod.ts"), "export default {};");
+        File.WriteAllText(Path.Combine(outside, "store.json"), """{"k":1}""");
+        File.WriteAllText(Path.Combine(outside, "versions.json"),
+            """{"name":"test-chips","active":1,"off":null,"versions":[{"number":1,"createdAt":"2026-10-10T00:00:00+00:00","version":"0.1.0","sha256":"ab","sessionId":null,"sessionTitle":null,"note":null,"check":null}]}""");
+        Directory.CreateSymbolicLink(Path.Combine(UserFolder0(), Name), outside);
+
+        (await _store.GetAsync(User, Name)).ShouldBe(ModHistory.Empty(Name));
+        (await _store.ListAsync(User)).ShouldBeEmpty();
+        (await _store.ReadVersionFilesAsync(User, Name, 1)).ShouldBeNull();
+        (await _store.ReadVersionManifestAsync(User, Name, 1)).ShouldBeNull();
+        (await _store.GetValueAsync(User, Name, "k")).ShouldBeNull();
+        (await _store.KeysAsync(User, Name)).ShouldBeEmpty();
+        await Should.ThrowAsync<ModStoreException>(() => _store.SetValueAsync(User, Name, "j", Json("2")));
+        await Should.ThrowAsync<ModStoreException>(() => _store.UseVersionAsync(User, Name, 1));
+        await Should.ThrowAsync<ModStoreException>(() => _store.SetOffAsync(User, Name, new ModOff(ModOffBy.User, DateTimeOffset.UtcNow)));
+        Draft();
+        await Should.ThrowAsync<ModStoreException>(() => Keep());
+
+        Directory.GetFileSystemEntries(outside).Select(Path.GetFileName).Order().ShouldBe(["mod.json", "mod.ts", "secret.txt", "store.json", "v1", "versions.json"]);
+        File.ReadAllText(Path.Combine(outside, "store.json")).ShouldBe("""{"k":1}""");
+    }
+
+    [Fact]
+    public async Task A_linked_store_or_off_file_is_never_followed()
+    {
+        var outside = Outside();
+        Draft();
+        await _store.SetValueAsync(User, Name, "k", Json("1"));
+        var mod = Path.Combine(UserFolder(), Name);
+        File.Move(Path.Combine(mod, "store.json"), Path.Combine(outside, "store.json"));
+        File.CreateSymbolicLink(Path.Combine(mod, "store.json"), Path.Combine(outside, "store.json"));
+        File.WriteAllText(Path.Combine(outside, "off.json"), """{"test-chips":{"by":"user","at":"2026-10-10T00:00:00+00:00"}}""");
+        File.CreateSymbolicLink(Path.Combine(UserFolder(), "drafts", Session, "off.json"), Path.Combine(outside, "off.json"));
+
+        (await _store.GetValueAsync(User, Name, "k")).ShouldBeNull();
+        await Should.ThrowAsync<ModStoreException>(() => _store.SetValueAsync(User, Name, "j", Json("2")));
+        (await _store.GetDraftAsync(User, Session, Name))!.Off.ShouldBeNull();
+        File.ReadAllText(Path.Combine(outside, "store.json")).ShouldBe("""{"k":1}""");
+    }
+
+    // ── Keep copies first, then checks the copy ─────────────────────────
+
+    [Fact]
+    public async Task Keep_keeps_what_it_copied_when_the_draft_changes_during_the_check()
+    {
+        var folder = Draft(code: "// copied\n");
+        string? staged = null;
+        var sawCopy = false;
+
+        var version = await Keep(check: (stagedFolder, _) =>
+        {
+            staged = stagedFolder;
+            sawCopy = File.ReadAllText(Path.Combine(stagedFolder, "mod.ts")) == "// copied\n";
+            File.WriteAllText(Path.Combine(folder, "mod.ts"), "// changed by the agent\n");
+            return Task.FromResult<JsonElement?>(null);
+        });
+
+        sawCopy.ShouldBeTrue();
+        Path.GetFileName(staged!).ShouldStartWith("v1.");
+        Path.GetFileName(staged!).ShouldEndWith(".tmp");
+        Directory.Exists(staged!).ShouldBeFalse();
+        File.ReadAllText(Path.Combine(_store.VersionFolder(User, Name, 1), "mod.ts")).ShouldBe("// copied\n");
+        version.Sha256.ShouldBe(Convert.ToHexStringLower(SHA256.HashData(Encoding.UTF8.GetBytes("// copied\n"))));
+        (await _store.GetAsync(User, Name)).Versions.Single().Sha256.ShouldBe(version.Sha256);
+    }
+
+    [Fact]
+    public async Task Keep_reads_the_manifest_from_the_copy()
+    {
+        var folder = Draft();
+
+        var version = await Keep(check: (_, _) =>
+        {
+            File.WriteAllText(Path.Combine(folder, "mod.json"), Manifest.Replace("0.1.0", "9.9.9"));
+            return Task.FromResult<JsonElement?>(null);
+        });
+
+        version.Version.ShouldBe("0.1.0");
+    }
+
+    [Fact]
+    public async Task Keep_refuses_a_report_that_is_not_ok_and_leaves_no_staging_folder()
+    {
+        var folder = Draft();
+
+        var error = await Should.ThrowAsync<ModStoreException>(
+            () => Keep(check: Report("""{"ok":false,"errors":[{"message":"uses eval"}]}""")));
+
+        error.Message.ShouldContain("uses eval");
+        (await _store.GetAsync(User, Name)).Versions.ShouldBeEmpty();
+        Directory.GetFileSystemEntries(Path.Combine(UserFolder(), Name)).ShouldBeEmpty();
+        Directory.Exists(folder).ShouldBeTrue();
+    }
+
+    [Fact]
+    public async Task A_check_that_throws_leaves_no_staging_folder()
+    {
+        Draft();
+
+        await Should.ThrowAsync<InvalidOperationException>(() => Keep(check: (_, _) => throw new InvalidOperationException("boom")));
+
+        Directory.GetFileSystemEntries(Path.Combine(UserFolder(), Name)).ShouldBeEmpty();
+        (await Keep()).Number.ShouldBe(1);
+    }
+
+    [Fact]
+    public async Task The_check_report_is_stored_with_the_version()
+    {
+        Draft();
+
+        var version = await Keep(check: Report("""{"ok":true,"warnings":[]}"""));
+
+        version.Check!.Value.GetProperty("ok").GetBoolean().ShouldBeTrue();
+        (await _store.GetAsync(User, Name)).Versions.Single().Check!.Value.GetProperty("warnings").GetArrayLength().ShouldBe(0);
+    }
+
+    [Fact]
+    public async Task Keep_removes_staging_folders_a_crash_left_behind()
+    {
+        Draft();
+        var mod = Path.Combine(UserFolder(), Name);
+        Directory.CreateDirectory(Path.Combine(mod, "v3.0123456789abcdef.tmp", "deep"));
+        File.WriteAllText(Path.Combine(mod, "v3.0123456789abcdef.tmp", "deep", "x.txt"), "x");
+        Directory.CreateDirectory(Path.Combine(mod, "v1.fedcba.tmp"));
+
+        var version = await Keep();
+
+        version.Number.ShouldBe(1);
+        Directory.GetFileSystemEntries(mod).Select(Path.GetFileName).Order().ShouldBe(["v1", "versions.json"]);
+    }
+
+    [Fact]
+    public async Task Kept_files_are_read_only()
+    {
+        var folder = Draft();
+        Directory.CreateDirectory(Path.Combine(folder, "pages"));
+        File.WriteAllText(Path.Combine(folder, "pages", "a.html"), "<p>hi</p>");
+        await Keep();
+
+        var version = _store.VersionFolder(User, Name, 1);
+        foreach (var file in Directory.EnumerateFiles(version, "*", SearchOption.AllDirectories))
+        {
+            File.GetAttributes(file).HasFlag(FileAttributes.ReadOnly).ShouldBeTrue(file);
+            if (!OperatingSystem.IsWindows())
+                File.GetUnixFileMode(file).ShouldBe(UnixFileMode.UserRead, file);
+        }
+
+        // Directories stay traversable.
+        (await _store.ReadVersionFilesAsync(User, Name, 1))!.Count.ShouldBe(3);
+    }
+
+    [Fact]
+    public async Task A_draft_that_cannot_be_deleted_does_not_fail_Keep()
+    {
+        if (OperatingSystem.IsWindows())
+            return;
+        Draft();
+        var session = Path.GetDirectoryName(_store.DraftFolder(User, Session, Name))!;
+        File.SetUnixFileMode(session, UnixFileMode.UserRead | UnixFileMode.UserExecute);
+        try
+        {
+            try
+            {
+                File.WriteAllText(Path.Combine(session, "probe"), "x");
+                return; // Running as a user who can write anyway (root): nothing to test.
+            }
+            catch (UnauthorizedAccessException)
+            {
+            }
+
+            var version = await Keep();
+
+            version.Number.ShouldBe(1);
+            (await _store.GetAsync(User, Name)).Versions.Single().Number.ShouldBe(1);
+            Directory.Exists(_store.VersionFolder(User, Name, 1)).ShouldBeTrue();
+        }
+        finally
+        {
+            File.SetUnixFileMode(session, (UnixFileMode)0b111_111_111);
+        }
+    }
+
+    [Fact]
+    public async Task Keep_counts_files_while_copying()
+    {
+        var folder = Draft();
+        for (var i = 0; i < 497; i++)
+            File.WriteAllText(Path.Combine(folder, $"f{i}.txt"), "x");
+
+        // mod.json, mod.ts and 497 files: 499.
+        (await Keep()).Number.ShouldBe(1);
+
+        var again = Draft();
+        for (var i = 0; i < 499; i++)
+            File.WriteAllText(Path.Combine(again, $"f{i}.txt"), "x");
+        await Should.ThrowAsync<ModStoreException>(() => Keep());
+        Directory.GetDirectories(Path.Combine(UserFolder(), Name)).Select(Path.GetFileName).ShouldBe(["v1"]);
+    }
+
+    // ── Use version, Undo and Off ───────────────────────────────────────
+
+    /// <summary>The history on disk is the one the call answered with (a record compares its version list by reference).</summary>
+    private async Task ShouldBeStored(ModHistory answered)
+    {
+        var stored = await _store.GetAsync(User, Name);
+        stored.Active.ShouldBe(answered.Active);
+        stored.Off.ShouldBe(answered.Off);
+        stored.Versions.Select(v => v.Number).ShouldBe(answered.Versions.Select(v => v.Number));
+    }
+
+    private async Task KeepVersions(int count)
+    {
+        for (var i = 1; i <= count; i++)
+        {
+            Draft(code: $"// {i}\n");
+            await Keep();
+        }
+    }
+
+    [Fact]
+    public async Task Use_version_makes_it_active_and_turns_the_mod_on()
+    {
+        await KeepVersions(3);
+        var at = new DateTimeOffset(2026, 10, 10, 8, 0, 0, TimeSpan.Zero);
+        await _store.SetOffAsync(User, Name, new ModOff(ModOffBy.Strikes, at, "boom"));
+
+        var history = await _store.UseVersionAsync(User, Name, 2);
+
+        history.Active.ShouldBe(2);
+        history.Off.ShouldBeNull();
+        await ShouldBeStored(history);
+        (await _store.GetAsync(User, Name)).Versions.Count.ShouldBe(3);
+    }
+
+    [Fact]
+    public async Task Use_version_of_a_missing_version_or_mod_throws_and_changes_nothing()
+    {
+        await KeepVersions(1);
+        var off = new ModOff(ModOffBy.User, DateTimeOffset.UtcNow);
+        await _store.SetOffAsync(User, Name, off);
+
+        await Should.ThrowAsync<ModStoreException>(() => _store.UseVersionAsync(User, Name, 9));
+        await Should.ThrowAsync<ModStoreException>(() => _store.UseVersionAsync(User, "other-mod", 1));
+
+        (await _store.GetAsync(User, Name)).Off.ShouldBe(off);
+    }
+
+    [Fact]
+    public async Task Undo_goes_back_one_version_and_turns_the_mod_on()
+    {
+        await KeepVersions(3);
+        var at = new DateTimeOffset(2026, 10, 10, 8, 0, 0, TimeSpan.Zero);
+
+        var history = await _store.UndoAsync(User, Name, at);
+
+        history.Active.ShouldBe(2);
+        history.Off.ShouldBeNull();
+        await ShouldBeStored(history);
+        (await _store.UndoAsync(User, Name, at)).Active.ShouldBe(1);
+    }
+
+    [Fact]
+    public async Task Undo_on_an_off_mod_at_a_later_version_makes_the_previous_one_active_and_on()
+    {
+        await KeepVersions(3);
+        await _store.SetOffAsync(User, Name, new ModOff(ModOffBy.Strikes, DateTimeOffset.UtcNow, "boom"));
+
+        var history = await _store.UndoAsync(User, Name, DateTimeOffset.UtcNow);
+
+        history.Active.ShouldBe(2);
+        history.Off.ShouldBeNull();
+    }
+
+    [Fact]
+    public async Task Undo_means_the_highest_listed_version_below_the_active_one()
+    {
+        await KeepVersions(3);
+        var path = Path.Combine(UserFolder(), Name, "versions.json");
+        var index = System.Text.Json.Nodes.JsonNode.Parse(File.ReadAllText(path))!.AsObject();
+        index["versions"]!.AsArray().RemoveAt(1);
+        File.WriteAllText(path, index.ToJsonString());
+
+        (await _store.GetAsync(User, Name)).Versions.Select(v => v.Number).ShouldBe([1, 3]);
+        (await _store.UndoAsync(User, Name, DateTimeOffset.UtcNow)).Active.ShouldBe(1);
+    }
+
+    [Fact]
+    public async Task Undo_on_the_first_version_turns_the_mod_off_and_keeps_it_active()
+    {
+        await KeepVersions(1);
+        var at = new DateTimeOffset(2026, 10, 10, 8, 0, 0, TimeSpan.Zero);
+
+        var history = await _store.UndoAsync(User, Name, at);
+
+        history.Active.ShouldBe(1);
+        history.Off.ShouldBe(new ModOff(ModOffBy.User, at));
+        await ShouldBeStored(history);
+        Directory.Exists(_store.VersionFolder(User, Name, 1)).ShouldBeTrue();
+    }
+
+    [Fact]
+    public async Task Undo_on_an_off_first_version_has_nothing_to_undo()
+    {
+        await KeepVersions(1);
+        await _store.UndoAsync(User, Name, DateTimeOffset.UtcNow);
+
+        var error = await Should.ThrowAsync<ModStoreException>(() => _store.UndoAsync(User, Name, DateTimeOffset.UtcNow));
+
+        error.Message.ShouldBe("Nothing to undo");
+        (await _store.GetAsync(User, Name)).Off.ShouldNotBeNull();
+    }
+
+    [Fact]
+    public async Task Undo_of_a_mod_that_was_never_kept_throws()
+        => await Should.ThrowAsync<ModStoreException>(() => _store.UndoAsync(User, Name, DateTimeOffset.UtcNow));
+
+    [Fact]
+    public async Task Set_off_answers_with_the_history()
+    {
+        await KeepVersions(2);
+        var off = new ModOff(ModOffBy.User, DateTimeOffset.UtcNow);
+
+        var history = await _store.SetOffAsync(User, Name, off);
+
+        history.Off.ShouldBe(off);
+        history.Active.ShouldBe(2);
+        history.Versions.Count.ShouldBe(2);
+        (await _store.SetOffAsync(User, Name, null)).Off.ShouldBeNull();
+    }
+
+    [Fact]
+    public async Task Undo_and_Keep_in_parallel_leave_a_consistent_index()
+    {
+        await KeepVersions(2);
+        Draft(session: "ses_x", code: "// three\n");
+
+        var undo = _store.UndoAsync(User, Name, DateTimeOffset.UtcNow);
+        var keep = Keep(session: "ses_x");
+        await Task.WhenAll(undo, keep);
+
+        var history = await _store.GetAsync(User, Name);
+        history.Versions.Select(v => v.Number).ShouldBe([1, 2, 3]);
+        // Either order is fine, but the writes were serialised: no version was lost.
+        (history.Active is 1 or 3).ShouldBeTrue();
+    }
+
+    // ── A broken index never loses history ──────────────────────────────
+
+    [Theory]
+    [InlineData("{ nope")]
+    [InlineData("[1,2]")]
+    [InlineData("null")]
+    [InlineData("5")]
+    [InlineData("")]
+    public async Task A_broken_index_is_moved_aside_and_rebuilt_from_the_version_folders(string broken)
+    {
+        await KeepVersions(2);
+        var index = Path.Combine(UserFolder(), Name, "versions.json");
+        File.WriteAllText(index, broken);
+
+        var history = await _store.GetAsync(User, Name);
+
+        history.Versions.Select(v => v.Number).ShouldBe([1, 2]);
+        history.Active.ShouldBe(2);
+        history.Off.ShouldBeNull();
+        var first = history.Versions[0];
+        first.Version.ShouldBe("0.1.0");
+        first.Sha256.ShouldBe(Convert.ToHexStringLower(SHA256.HashData(Encoding.UTF8.GetBytes("// 1\n"))));
+        first.SessionId.ShouldBeNull();
+        first.SessionTitle.ShouldBeNull();
+        first.Note.ShouldBeNull();
+        first.Check.ShouldBeNull();
+        (DateTimeOffset.UtcNow - first.CreatedAt).ShouldBeLessThan(TimeSpan.FromMinutes(5));
+        var aside = Directory.GetFiles(Path.GetDirectoryName(index)!, "versions.json.broken-*").ShouldHaveSingleItem();
+        File.ReadAllText(aside).ShouldBe(broken);
+        File.Exists(index).ShouldBeTrue();
+    }
+
+    [Fact]
+    public async Task Keep_after_a_broken_index_lists_every_version()
+    {
+        await KeepVersions(2);
+        var index = Path.Combine(UserFolder(), Name, "versions.json");
+        File.WriteAllText(index, "{ nope");
+
+        Draft(code: "// 3\n");
+        var version = await Keep();
+
+        version.Number.ShouldBe(3);
+        var history = await _store.GetAsync(User, Name);
+        history.Versions.Select(v => v.Number).ShouldBe([1, 2, 3]);
+        history.Active.ShouldBe(3);
+        Directory.GetFiles(Path.GetDirectoryName(index)!, "versions.json.broken-*").ShouldHaveSingleItem();
+    }
+
+    // ── Show code ───────────────────────────────────────────────────────
+
+    [Fact]
+    public async Task Show_code_serves_only_versions_the_index_lists()
+    {
+        await KeepVersions(1);
+        var orphan = Path.Combine(UserFolder(), Name, "v7");
+        Directory.CreateDirectory(orphan);
+        File.WriteAllText(Path.Combine(orphan, "mod.json"), Manifest);
+        File.WriteAllText(Path.Combine(orphan, "mod.ts"), "// orphan\n");
+
+        (await _store.ReadVersionFilesAsync(User, Name, 7)).ShouldBeNull();
+        (await _store.ReadVersionFilesAsync(User, Name, 1))!.Count.ShouldBe(2);
+        // The orphan still counts for the next number.
+        Draft();
+        (await Keep()).Number.ShouldBe(8);
+    }
+
+    [Fact]
+    public async Task Show_code_stops_at_the_file_cap()
+    {
+        var folder = Draft();
+        for (var i = 0; i < 250; i++)
+            File.WriteAllText(Path.Combine(folder, $"f{i:000}.txt"), "x");
+
+        var files = await _store.ReadDraftFilesAsync(User, Session, Name);
+
+        files!.Count.ShouldBe(ModStoreLimits.ShownFiles);
+    }
+
+    [Fact]
+    public async Task Show_code_of_a_kept_version_stops_at_the_file_cap()
+    {
+        var folder = Draft();
+        for (var i = 0; i < 300; i++)
+            File.WriteAllText(Path.Combine(folder, $"f{i:000}.txt"), "x");
+        await Keep();
+
+        (await _store.ReadVersionFilesAsync(User, Name, 1))!.Count.ShouldBe(ModStoreLimits.ShownFiles);
+    }
+
+    [Fact]
+    public async Task Show_code_stops_at_the_byte_cap()
+    {
+        var folder = Draft();
+        for (var i = 0; i < 12; i++)
+            File.WriteAllText(Path.Combine(folder, $"big{i:00}.txt"), new string('x', 450_000));
+
+        var files = (await _store.ReadDraftFilesAsync(User, Session, Name))!;
+
+        files.Sum(f => (long)Encoding.UTF8.GetByteCount(f.Content)).ShouldBeLessThanOrEqualTo(ModStoreLimits.ShownBytes);
+        files.Count.ShouldBeLessThan(14);
+        files.Count.ShouldBeGreaterThan(5);
     }
 }
