@@ -78,15 +78,17 @@ public static class FleetToolCatalog
 /// <summary>
 /// Which of Fleet's switchable tools a session gets, as the OpenCode plugins decide it from the switches their process
 /// started with: <c>fleet_message</c> with messages between sessions on, the hand-off tools with agent hand-off on,
-/// <c>fleet_memory_*</c> with memory on,
+/// <c>fleet_memory_*</c> with memory on, the <c>fleet_mod_*</c> tools with Mods on,
 /// <c>fleet_step_done</c> in a workflow step's session, and the agent's browser tools with Settings → Browser on.
 /// </summary>
 /// <param name="Walkthrough">The fleet-walkthrough skill is on: its page tool comes with it.</param>
 /// <param name="AgentHandoff">Agents may hand work to other machines (<c>AgentHandoffFeature</c>): its tools, and a machine on the message tools.</param>
-public sealed record FleetToolSwitches(bool SessionMessages, bool Memory, bool WorkflowStep, bool Browser, bool Walkthrough = false, bool AgentHandoff = false)
+/// <param name="Mods">Mods are switched on (<c>ModsFeature</c>): the agent's <c>fleet_mod_*</c> tools. Safe mode doesn't hide them.</param>
+public sealed record FleetToolSwitches(bool SessionMessages, bool Memory, bool WorkflowStep, bool Browser, bool Walkthrough = false, bool AgentHandoff = false, bool Mods = false)
 {
     public const string SessionMessagesSwitch = "sessionMessages";
     public const string AgentHandoffSwitch = "agentHandoff";
+    public const string ModsSwitch = "mods";
     public const string MemorySwitch = "memory";
     public const string WorkflowStepSwitch = "workflowStep";
     public const string BrowserSwitch = "browser";
@@ -105,6 +107,7 @@ public sealed record FleetToolSwitches(bool SessionMessages, bool Memory, bool W
         BrowserSwitch => Browser,
         WalkthroughSwitch => Walkthrough,
         AgentHandoffSwitch => AgentHandoff,
+        ModsSwitch => Mods,
         _ => false,
     };
 }

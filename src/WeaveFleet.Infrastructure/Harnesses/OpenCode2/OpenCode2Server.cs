@@ -23,7 +23,7 @@ internal interface IOpenCode2EventSink
 
 /// <summary>
 /// What Fleet starts an owner's server with: where Fleet is, the config it adds (<see cref="OpenCode2FleetFiles"/>),
-/// whether the server gets the tools for messages between sessions, agent hand-off, workflow steps and fleet-walkthrough's page, the install it runs (<see cref="OpenCode2Install"/>),
+/// whether the server gets the tools for messages between sessions, agent hand-off, Mods, workflow steps and fleet-walkthrough's page, the install it runs (<see cref="OpenCode2Install"/>),
 /// the profile its sessions use, if any (<see cref="OpenCode2Profiles"/>), and the folder Weave reads when the owner keeps
 /// their Weave config in Fleet (<see cref="OpenCode2Weave"/>).
 /// When the owner changes a setting behind it, the server is replaced once nothing runs on it (no turn, no background
@@ -40,7 +40,8 @@ internal sealed record OpenCode2ServerSetup(
     string? WeaveConfigFolder = null,
     string? MemoryFolder = null,
     bool Walkthrough = false,
-    bool AgentHandoff = false)
+    bool AgentHandoff = false,
+    bool Mods = false)
 {
     public static readonly OpenCode2ServerSetup None = new(null, null, false);
 }
