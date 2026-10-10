@@ -35,7 +35,7 @@ export interface Dispatch {
   site?: string;
   /** ui.press/input/select: the callback the chain ends in. */
   control?: HandleEntry;
-  /** ui.render: the mod whose accepted answer held each element that has no OWNER tag (one written by hand). */
+  /** ui.render: the mod whose accepted answer held each element no factory made (one written by hand). */
   owners: WeakMap<object, string>;
   /** The session's generation when the dispatch began. */
   generation: number;

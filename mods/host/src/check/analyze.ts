@@ -64,8 +64,8 @@ const DOLLAR_METHODS = new Set([
 const PROTOTYPE_NAMES = new Set(["constructor", "__proto__", "prototype"]);
 /** The old accessor methods: they read and write any property, `constructor` included, by a string. */
 const LEGACY_ACCESSORS = new Set(["__lookupGetter__", "__lookupSetter__", "__defineGetter__", "__defineSetter__"]);
-/** `Object` methods that only walk prototypes: a mod that draws never needs them. */
-const PROTOTYPE_WALKERS = new Set(["getPrototypeOf", "setPrototypeOf", "getOwnPropertyDescriptors"]);
+/** `Object` methods that walk prototypes or list symbol keys: a mod that draws never needs them. */
+const PROTOTYPE_WALKERS = new Set(["getPrototypeOf", "setPrototypeOf", "getOwnPropertyDescriptors", "getOwnPropertySymbols"]);
 const isFunction = (node: N) =>
   node?.type === "FunctionDeclaration" || node?.type === "FunctionExpression" || node?.type === "ArrowFunctionExpression";
 
@@ -277,7 +277,8 @@ export function analyzeModule(ast: N, root: string, limits: Pick<HostLimits, "mo
   /** `Object.getOwnPropertyDescriptor(fp, "constructor")` and the like reach what `.constructor` would. */
   function reflection(call: N, method: string): void {
     if (PROTOTYPE_WALKERS.has(method)) {
-      fail("prototype", `Object.${method} isn't allowed: it reaches the prototype chain`, call.callee.property);
+      const reach = method === "getOwnPropertySymbols" ? "it lists keys that belong to the host" : "it reaches the prototype chain";
+      fail("prototype", `Object.${method} isn't allowed: ${reach}`, call.callee.property);
       return;
     }
     for (const arg of call.arguments) {

@@ -9,8 +9,21 @@ import { LIMITS, type HostLimits } from "./limits";
 export type ModId = string;
 export type HandleKind = "onPress" | "onSubmit" | "onInput" | "onSelect";
 
-/** Every element a factory makes carries the mod that made it under this symbol. */
-export const OWNER: unique symbol = Symbol("fleet-mods.owner");
+/**
+ * Who made each factory element. Kept here, out of every mod's reach: nothing on an element says who made it, so a
+ * mod can't copy or forge another mod's ownership (review 2 of #486).
+ */
+const madeBy = new WeakMap<object, ModId>();
+
+/** The mod whose factory made `element`, if a factory made it. */
+export function ownerOf(element: unknown): ModId | undefined {
+  return typeof element === "object" && element !== null ? madeBy.get(element) : undefined;
+}
+
+function made<T extends object>(owner: ModId, element: T): T {
+  madeBy.set(element, owner);
+  return element;
+}
 
 const isRecord = (v: unknown): v is Record<string, unknown> => typeof v === "object" && v !== null && !Array.isArray(v);
 
@@ -26,16 +39,11 @@ function copyProps(props: unknown): Record<string, unknown> {
 function makeContainer(owner: ModId, type: "Box" | "Text", props: unknown): Element {
   const { children, ...rest } = copyProps(props);
   const list = Array.isArray(children) ? [...children] : children === undefined ? [] : [children];
-  return Object.freeze({
-    type,
-    props: Object.freeze(rest),
-    children: Object.freeze(list),
-    [OWNER]: owner,
-  }) as unknown as Element;
+  return made(owner, Object.freeze({ type, props: Object.freeze(rest), children: Object.freeze(list) })) as unknown as Element;
 }
 
 function makeLeaf(owner: ModId, type: string, props: unknown): Element {
-  return Object.freeze({ type, props: Object.freeze(copyProps(props)), [OWNER]: owner }) as unknown as Element;
+  return made(owner, Object.freeze({ type, props: Object.freeze(copyProps(props)) })) as unknown as Element;
 }
 
 /** The factories for one mod. Each element is tagged with `owner`. */
@@ -56,9 +64,9 @@ export function createElements(owner: ModId): Elements {
 
 export interface WireOptions {
   site: RenderComponent;
-  /** Owner of elements that carry no OWNER tag (a mod that wrote element data by hand): the hook's mod. */
+  /** Owner of elements no factory made (a mod that wrote element data by hand): the hook's mod. */
   defaultOwner: ModId;
-  /** Owner of an element with no OWNER tag, when known (the mod whose hook returned it); else `defaultOwner`. */
+  /** Owner of an element no factory made, when known (the mod whose hook returned it); else `defaultOwner`. */
   ownerOf?: (element: object) => ModId | undefined;
   /** True when `path` names an `.html` file that exists inside `owner`'s folder. */
   pageExists: (owner: ModId, path: string) => boolean;
@@ -253,7 +261,7 @@ function visit(ctx: Ctx, node: unknown, depth: number, path: string): WireElemen
   const props = rawProps as Record<string, unknown>;
   const spec = SPECS[type];
 
-  const owner = typeof (el as any)[OWNER] === "string" ? ((el as any)[OWNER] as ModId) : (ctx.opts.ownerOf?.(el) ?? ctx.opts.defaultOwner);
+  const owner = madeBy.get(el) ?? ctx.opts.ownerOf?.(el) ?? ctx.opts.defaultOwner;
   if (!ctx.owners.includes(owner)) ctx.owners.push(owner);
 
   const wireProps: Record<string, Json> = {};
