@@ -319,6 +319,47 @@ public sealed class ModBridge(
         }
     }
 
+    // ── Reading the arguments, the same way for the plugins' calls and MCP ──
+
+    /// <summary>An object argument, which some models send as JSON text; anything else as it came.</summary>
+    public static JsonElement ReadObject(JsonElement value)
+    {
+        if (value.ValueKind != JsonValueKind.String)
+            return value;
+        try
+        {
+            using var document = JsonDocument.Parse(value.GetString()!);
+            return document.RootElement.Clone();
+        }
+        catch (JsonException)
+        {
+            return value;
+        }
+    }
+
+    /// <summary>
+    /// The <c>files</c> argument as <c>{path, content}</c> entries, from a list or JSON text; null when it's missing or isn't a
+    /// list. An entry without both is passed with an empty path, which the tool refuses.
+    /// </summary>
+    public static List<ModFile>? ReadFiles(JsonElement value)
+    {
+        var list = ReadObject(value);
+        if (list.ValueKind != JsonValueKind.Array)
+            return null;
+
+        var files = new List<ModFile>();
+        foreach (var entry in list.EnumerateArray())
+        {
+            files.Add(entry.ValueKind == JsonValueKind.Object
+                && entry.TryGetProperty("path", out var path) && path.ValueKind == JsonValueKind.String
+                && entry.TryGetProperty("content", out var content) && content.ValueKind == JsonValueKind.String
+                    ? new ModFile(path.GetString()!, content.GetString()!)
+                    : new ModFile("", ""));
+        }
+
+        return files;
+    }
+
     // ── Helpers ─────────────────────────────────────────────────────────
 
     private static CanvasResult<CanvasToolOutput> Ok(string title, string output) => CanvasResult.Ok(new CanvasToolOutput(title, output));

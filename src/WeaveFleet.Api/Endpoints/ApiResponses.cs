@@ -364,17 +364,15 @@ public sealed record MemoryBridgeRequest(
     string? Replaces = null,
     string? Id = null);
 
-/// <summary>A file the agent writes into a draft mod: its path inside the mod's folder and its text.</summary>
-public sealed record ModBridgeFile(string? Path, string? Content);
-
 /// <summary>
 /// What the <c>fleet_mod_*</c> tools post: the harness's id for the calling session and the tool's arguments. <c>E</c> is
-/// the sample event's fields for <c>fleet_mod_test</c>.
+/// the sample event's fields for <c>fleet_mod_test</c>. <c>Files</c> and <c>E</c> stay JSON: a model may send either as JSON
+/// text, which <see cref="WeaveFleet.Application.Mods.ModBridge"/> reads the same way for the plugins' calls and MCP.
 /// </summary>
 public sealed record ModBridgeRequest(
     string? HarnessSessionId,
     string? Name = null,
-    IReadOnlyList<ModBridgeFile>? Files = null,
+    JsonElement? Files = null,
     string? Event = null,
     JsonElement? E = null,
     string? Note = null);

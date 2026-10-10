@@ -153,7 +153,7 @@ public static class CanvasBridgeEndpoints
                 BridgeToken(http),
                 request.HarnessSessionId,
                 request.Name,
-                request.Files?.Select(f => f.Path is { } path && f.Content is { } content ? new ModFile(path, content) : new ModFile("", "")).ToList(),
+                ModBridge.ReadFiles(request.Files ?? default),
                 ct)))
             .WithName("ModBridgeWrite");
 
@@ -166,7 +166,7 @@ public static class CanvasBridgeEndpoints
             .WithName("ModBridgeReload");
 
         mods.MapPost("/test", async (ModBridgeRequest request, HttpContext http, ModBridge bridge, CancellationToken ct)
-            => ToResult(await bridge.TestAsync(BridgeToken(http), request.HarnessSessionId, request.Name, request.Event, request.E ?? default, ct)))
+            => ToResult(await bridge.TestAsync(BridgeToken(http), request.HarnessSessionId, request.Name, request.Event, ModBridge.ReadObject(request.E ?? default), ct)))
             .WithName("ModBridgeTest");
 
         mods.MapPost("/keep", async (ModBridgeRequest request, HttpContext http, ModBridge bridge, CancellationToken ct)
