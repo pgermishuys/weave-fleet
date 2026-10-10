@@ -84,13 +84,26 @@ describe("summarizeCheck", () => {
     expect(text(r, "listens")).toBe("Buttons and fields it draws, when a session opens, when a turn ends");
   });
 
+  it("says it reads every tool call when a render hook isn't narrowed to sites without tool rows", () => {
+    const every = "Tool input and output of every tool call";
+    // No matcher, tool sites not narrowed by tool, or sites Fleet can't put in words: it can draw any tool row.
+    expect(text(report({ hooks: [{ event: "ui.render" }] }), "reads")).toBe(every);
+    expect(text(report({ hooks: [{ event: "ui.render", matcher: { props: { status: "error" } } }] }), "reads")).toBe(every);
+    expect(text(report({ hooks: [{ event: "ui.render", matcher: { component: { $regex: "^Tool" } } }] }), "reads")).toBe(every);
+    expect(text(report({ hooks: [{ event: "ui.render", matcher: { component: "ToolUse" } }] }), "reads")).toBe(every);
+    // Narrowed by tool name (only tool rows carry one): those calls only.
+    expect(text(report({ hooks: [{ event: "ui.render", matcher: { props: { tool: "bash" } } }] }), "reads")).toBe("Tool input and output of those calls");
+    // Narrowed to sites without tool rows: it reads none.
+    expect(text(report({ hooks: [{ event: "ui.render", matcher: { component: ["ComposerBand", "StatusChip"] } }] }), "reads")).toBeUndefined();
+  });
+
   it("reads session details when it calls session.*", () => {
     expect(text(report({ calls: ["session.title"] }), "reads")).toBe("Session details (title, folder, harness)");
   });
 
   it("joins both reads", () => {
     const r = report({ hooks: [{ event: "ui.render", matcher: { component: "ToolUse" } }], calls: ["session.title"] });
-    expect(text(r, "reads")).toBe("Tool input and output of those calls; session details (title, folder, harness)");
+    expect(text(r, "reads")).toBe("Tool input and output of every tool call; session details (title, folder, harness)");
   });
 
   it("lists state keys", () => {

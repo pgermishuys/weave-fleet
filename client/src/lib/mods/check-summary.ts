@@ -85,10 +85,21 @@ function describeRender(matcher: unknown): Described[] {
   return described;
 }
 
-function drawsToolRows(hook: ModCheckHook): boolean {
-  if (hook.event !== "ui.render") return false;
-  const components = isRecord(hook.matcher) ? words(hook.matcher.component) : null;
-  return components?.some((name) => name === "ToolUse" || name === "ToolResult") ?? false;
+/**
+ * Which tool rows a render hook can be asked to draw, and so read: none, only calls narrowed by tool name, or every
+ * call. Anything Fleet can't read as plain site names counts as every call, so the review never says less than it can.
+ */
+function toolReach(hook: ModCheckHook): "none" | "some" | "every" {
+  if (hook.event !== "ui.render") return "none";
+  if (!isRecord(hook.matcher)) return "every";
+  const component = hook.matcher.component;
+  const named = typeof component === "string" ? [component]
+    : Array.isArray(component) && component.every((item) => typeof item === "string") ? component as string[]
+      : null;
+  if (component !== undefined && !named) return "every";
+  if (named && !named.some((name) => name === "ToolUse" || name === "ToolResult")) return "none";
+  const props = hook.matcher.props;
+  return isRecord(props) && words(props.tool) ? "some" : "every";
 }
 
 /** What a mod touches, in plain words, from the static check's report. Rows that don't apply are left out. */
@@ -108,7 +119,9 @@ export function summarizeCheck(report: ModCheckReport): CheckRow[] {
   }
 
   const reads: string[] = [];
-  if (report.hooks.some(drawsToolRows)) reads.push("Tool input and output of those calls");
+  const reach = report.hooks.map(toolReach);
+  if (reach.includes("every")) reads.push("Tool input and output of every tool call");
+  else if (reach.includes("some")) reads.push("Tool input and output of those calls");
   if (callsOf("session.")) reads.push("Session details (title, folder, harness)");
   if (reads.length > 0) rows.push({ key: "reads", text: reads.map((r, i) => (i === 0 ? r : r.charAt(0).toLowerCase() + r.slice(1))).join("; ") });
 
