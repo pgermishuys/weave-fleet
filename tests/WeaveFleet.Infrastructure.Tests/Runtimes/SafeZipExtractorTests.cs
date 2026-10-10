@@ -221,4 +221,117 @@ public sealed class SafeZipExtractorTests : IDisposable
 
         Should.Throw<OperationCanceledException>(() => SafeZipExtractor.Extract(_zip, _dest, ct: cts.Token));
     }
+
+    private void BuildStoredZip(string name, byte[] data)
+    {
+        using var stream = File.Create(_zip);
+        using var archive = new ZipArchive(stream, ZipArchiveMode.Create);
+        var entry = archive.CreateEntry(name, CompressionLevel.NoCompression);
+        using var writer = entry.Open();
+        writer.Write(data);
+    }
+
+    // Local header offsets: CRC 14, uncompressed size 22. Central directory offsets: CRC 16, uncompressed size 24.
+    private void PatchUInt32(int localOffset, int centralOffset, uint value)
+    {
+        var bytes = File.ReadAllBytes(_zip);
+        var central = -1;
+        for (var i = 0; i < bytes.Length - 4; i++)
+            if (bytes[i] == 0x50 && bytes[i + 1] == 0x4B && bytes[i + 2] == 1 && bytes[i + 3] == 2) { central = i; break; }
+        central.ShouldBeGreaterThan(0);
+        BitConverter.GetBytes(value).CopyTo(bytes, localOffset);
+        BitConverter.GetBytes(value).CopyTo(bytes, central + centralOffset);
+        File.WriteAllBytes(_zip, bytes);
+    }
+
+    [Theory]
+    [InlineData(0x81FFu, UnixFileMode.UserRead | UnixFileMode.UserWrite | UnixFileMode.UserExecute | UnixFileMode.GroupRead | UnixFileMode.GroupExecute | UnixFileMode.OtherRead | UnixFileMode.OtherExecute)]
+    [InlineData(0x81B6u, UnixFileMode.UserRead | UnixFileMode.UserWrite | UnixFileMode.GroupRead | UnixFileMode.OtherRead)]
+    public void Group_and_other_never_get_write(uint mode, UnixFileMode expected)
+    {
+        if (OperatingSystem.IsWindows()) return;
+        BuildZip(("bun", "x", mode));
+
+        SafeZipExtractor.Extract(_zip, _dest);
+
+        File.GetUnixFileMode(Path.Combine(_dest, "bun")).ShouldBe(expected);
+    }
+
+    [Fact]
+    public void An_entry_with_a_declared_size_smaller_than_its_data_is_refused()
+    {
+        BuildStoredZip("big.bin", new byte[100_000]);
+        PatchUInt32(22, 24, 10);
+
+        var ex = Should.Throw<InvalidDataException>(() => SafeZipExtractor.Extract(_zip, _dest));
+        ex.Message.ShouldContain("big.bin");
+    }
+
+    [Fact]
+    public void An_entry_with_a_wrong_crc_is_refused()
+    {
+        BuildStoredZip("data.bin", Encoding.UTF8.GetBytes("hello world"));
+        PatchUInt32(14, 16, 0xDEADBEEF);
+
+        var ex = Should.Throw<InvalidDataException>(() => SafeZipExtractor.Extract(_zip, _dest));
+        ex.Message.ShouldContain("data.bin");
+    }
+
+    [Fact]
+    public void An_entry_with_a_correct_crc_and_size_unpacks()
+    {
+        BuildStoredZip("data.bin", Encoding.UTF8.GetBytes("hello world"));
+
+        SafeZipExtractor.Extract(_zip, _dest);
+
+        File.ReadAllText(Path.Combine(_dest, "data.bin")).ShouldBe("hello world");
+    }
+
+    [Fact]
+    public void A_file_followed_by_a_child_of_the_same_path_is_refused()
+    {
+        BuildZip(("x", "a", 0), ("x/y", "b", 0));
+
+        var ex = Should.Throw<InvalidDataException>(() => SafeZipExtractor.Extract(_zip, _dest));
+        ex.Message.ShouldContain("x");
+        Directory.GetFileSystemEntries(_dest).ShouldBeEmpty();
+    }
+
+    [Fact]
+    public void A_child_followed_by_a_file_at_its_parent_path_is_refused()
+    {
+        BuildZip(("x/y", "b", 0), ("X", "a", 0));
+
+        var ex = Should.Throw<InvalidDataException>(() => SafeZipExtractor.Extract(_zip, _dest));
+        ex.Message.ShouldContain("X");
+        Directory.GetFileSystemEntries(_dest).ShouldBeEmpty();
+    }
+
+    [Fact]
+    public void A_file_and_a_folder_with_the_same_name_are_refused()
+    {
+        BuildZip(("x", "a", 0), ("x/", "", 0));
+
+        Should.Throw<InvalidDataException>(() => SafeZipExtractor.Extract(_zip, _dest));
+        Directory.GetFileSystemEntries(_dest).ShouldBeEmpty();
+    }
+
+    [Fact]
+    public void A_folder_entry_without_a_trailing_slash_unpacks_as_a_folder_with_a_child()
+    {
+        BuildZip(("x", "", 0x41EDu), ("x/y", "b", 0));
+
+        SafeZipExtractor.Extract(_zip, _dest);
+
+        Directory.Exists(Path.Combine(_dest, "x")).ShouldBeTrue();
+        File.ReadAllText(Path.Combine(_dest, "x", "y")).ShouldBe("b");
+    }
+
+    [Fact]
+    public void A_folder_listed_twice_or_also_an_implicit_parent_is_fine()
+    {
+        BuildZip(("a/b/c.txt", "c", 0), ("a/", "", 0), ("a/b/", "", 0));
+        SafeZipExtractor.Extract(_zip, _dest);
+        File.ReadAllText(Path.Combine(_dest, "a", "b", "c.txt")).ShouldBe("c");
+    }
 }
