@@ -35,7 +35,7 @@ beforeEach(() => {
 
 describe("fetchModsSwitch", () => {
   it("reads the switch", async () => {
-    apiFetchOnMock.mockResolvedValue(json({ on: true, safeMode: false }));
+    apiFetchOnMock.mockImplementation(async () => json({ on: true, safeMode: false }));
     expect(await fetchModsSwitch(machine)).toEqual({ on: true, safeMode: false });
     expect(lastCall()[0]).toBe(machine);
     expect(lastCall()[1]).toBe("/api/features/mods");
@@ -53,20 +53,20 @@ describe("fetchModsSwitch", () => {
 
 describe("requests", () => {
   it("fetchMods", async () => {
-    apiFetchOnMock.mockResolvedValue(json({ safeMode: false, mods: [] }));
+    apiFetchOnMock.mockImplementation(async () => json({ safeMode: false, mods: [] }));
     expect(await fetchMods()).toEqual({ safeMode: false, mods: [] });
     expect(lastCall()[0]).toBeNull();
     expect(lastCall()[1]).toBe("/api/mods");
   });
 
   it("fetchModVersionFiles unwraps files and encodes the name", async () => {
-    apiFetchOnMock.mockResolvedValue(json({ files: [{ path: "index.ts", content: "x" }] }));
+    apiFetchOnMock.mockImplementation(async () => json({ files: [{ path: "index.ts", content: "x" }] }));
     expect(await fetchModVersionFiles("a b/c", 2, machine)).toEqual([{ path: "index.ts", content: "x" }]);
     expect(lastCall()[1]).toBe("/api/mods/a%20b%2Fc/versions/2/files");
   });
 
   it("activateModVersion PUTs the version", async () => {
-    apiFetchOnMock.mockResolvedValue(json({ name: "test-chips" }));
+    apiFetchOnMock.mockImplementation(async () => json({ name: "test-chips" }));
     await activateModVersion("test-chips", 2);
     const [, path, init] = lastCall();
     expect(path).toBe("/api/mods/test-chips/active");
@@ -76,14 +76,14 @@ describe("requests", () => {
   });
 
   it("undoMod POSTs", async () => {
-    apiFetchOnMock.mockResolvedValue(json({ name: "test-chips" }));
+    apiFetchOnMock.mockImplementation(async () => json({ name: "test-chips" }));
     await undoMod("test-chips");
     expect(lastCall()[1]).toBe("/api/mods/test-chips/undo");
     expect(lastCall()[2]?.method).toBe("POST");
   });
 
   it("setModOn picks on or off", async () => {
-    apiFetchOnMock.mockResolvedValue(json({ name: "test-chips" }));
+    apiFetchOnMock.mockImplementation(async () => json({ name: "test-chips" }));
     await setModOn("test-chips", true);
     expect(lastCall()[1]).toBe("/api/mods/test-chips/on");
     await setModOn("test-chips", false);
@@ -92,7 +92,7 @@ describe("requests", () => {
   });
 
   it("setSafeMode PUTs { on }", async () => {
-    apiFetchOnMock.mockResolvedValue(json({ safeMode: true, mods: [] }));
+    apiFetchOnMock.mockImplementation(async () => json({ safeMode: true, mods: [] }));
     expect(await setSafeMode(true)).toEqual({ safeMode: true, mods: [] });
     const [, path, init] = lastCall();
     expect(path).toBe("/api/mods/safe-mode");
@@ -118,7 +118,7 @@ describe("requests", () => {
   });
 
   it("keepDraft sends the note, or no body when it is empty", async () => {
-    apiFetchOnMock.mockResolvedValue(json({ name: "test-chips" }));
+    apiFetchOnMock.mockImplementation(async () => json({ name: "test-chips" }));
     await keepDraft("s1", "test-chips", "show failing names");
     let [, path, init] = lastCall();
     expect(path).toBe("/api/sessions/s1/mods/drafts/test-chips/keep");
@@ -130,7 +130,7 @@ describe("requests", () => {
   });
 
   it("setDraftOn picks on or off", async () => {
-    apiFetchOnMock.mockResolvedValue(json({ name: "test-chips" }));
+    apiFetchOnMock.mockImplementation(async () => json({ name: "test-chips" }));
     await setDraftOn("s1", "test-chips", false, machine);
     expect(lastCall()[0]).toBe(machine);
     expect(lastCall()[1]).toBe("/api/sessions/s1/mods/drafts/test-chips/off");
@@ -141,7 +141,7 @@ describe("requests", () => {
 
 describe("errors", () => {
   it("throws ModsRequestError with the server's message and status", async () => {
-    apiFetchOnMock.mockResolvedValue(json({ error: "No such mod." }, 404));
+    apiFetchOnMock.mockImplementation(async () => json({ error: "No such mod." }, 404));
     const error = await undoMod("nope").catch((e: unknown) => e);
     expect(error).toBeInstanceOf(ModsRequestError);
     expect((error as ModsRequestError).message).toBe("No such mod.");
@@ -149,7 +149,7 @@ describe("errors", () => {
   });
 
   it("falls back to a plain message when the body isn't JSON", async () => {
-    apiFetchOnMock.mockResolvedValue(new Response("boom", { status: 502 }));
+    apiFetchOnMock.mockImplementation(async () => new Response("boom", { status: 502 }));
     const error = (await fetchMods().catch((e: unknown) => e)) as ModsRequestError;
     expect(error).toBeInstanceOf(ModsRequestError);
     expect(error.status).toBe(502);
