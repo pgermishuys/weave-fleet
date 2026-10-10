@@ -1,6 +1,7 @@
 using System.Runtime.InteropServices;
 using System.Security.Cryptography;
 using Microsoft.Win32.SafeHandles;
+using WeaveFleet.Infrastructure.IO;
 
 namespace WeaveFleet.Infrastructure.Mods;
 
@@ -37,7 +38,7 @@ internal enum FileProblem
 /// </summary>
 internal static partial class SafeFile
 {
-    // SystemNative_FStat normalises the mode bits on every OS (PAL_S_IFMT 0xF000, IFIFO 0x1000, IFCHR 0x2000,
+    // NativeFileStatus (SystemNative_FStat) normalises the mode bits on every OS (PAL_S_IFMT 0xF000, IFIFO 0x1000, IFCHR 0x2000,
     // IFDIR 0x4000, IFREG 0x8000, IFLNK 0xA000, IFSOCK 0xC000).
     private const int FormatMask = 0xF000;
     private const int RegularFile = 0x8000;
@@ -47,27 +48,8 @@ internal static partial class SafeFile
     private const int ElinuxLoop = 40;
     private const int EmacLoop = 62;
 
-    // The whole FileStatus is 17 fields (about 160 bytes today). We hand the native side far more room than that, so a
-    // field appended at the end by a later .NET can never write past our buffer.
-    private const int StatBufferBytes = 256;
-
     // Linux x64 (glibc and musl), Linux arm64, and macOS. Fleet ships no other Unix.
     private static readonly UnixLayout? Layout = UnixLayout.ForThisSystem();
-
-    /// <summary>
-    /// The leading fields of dotnet/runtime release/10.0 <c>src/native/libs/System.Native/pal_io.h</c> <c>FileStatus</c>, the only ones we read:
-    /// <c>int32_t Flags; int32_t Mode; uint32_t Uid; uint32_t Gid; int64_t Size;</c> (then times, Dev, RDev, Ino, UserFlags).
-    /// Its layout is the same on every OS and CPU; fields are only ever appended. The BCL's own copy is Interop.Stat.cs.
-    /// </summary>
-    [StructLayout(LayoutKind.Sequential)]
-    private struct FileStatusHead
-    {
-        public int Flags;
-        public int Mode;
-        public uint Uid;
-        public uint Gid;
-        public long Size;
-    }
 
     /// <summary>The <c>open</c> flags and the "too many links" error, which differ by OS and CPU. Nothing else does.</summary>
     private sealed record UnixLayout(int OpenFlags, int LoopError)
@@ -94,10 +76,6 @@ internal static partial class SafeFile
     // and has no O_NONBLOCK, which is what stops a named pipe from blocking the open.
     [LibraryImport("libc", EntryPoint = "open", SetLastError = true, StringMarshalling = StringMarshalling.Utf8)]
     private static partial int NativeOpen(string path, int flags);
-
-    // int32_t SystemNative_FStat(intptr_t fd, FileStatus* output); returns 0, or -1 with errno set.
-    [LibraryImport("libSystem.Native", EntryPoint = "SystemNative_FStat", SetLastError = true)]
-    private static partial int NativeFStat(nint fd, Span<byte> output);
 
     /// <summary>
     /// Opens <paramref name="path"/> for reading when it is a regular file of at most <paramref name="maxBytes"/> (by the size
@@ -172,22 +150,6 @@ internal static partial class SafeFile
         }
     }
 
-    /// <summary>Unix only: the file type bits and the size of an open file, as <c>fstat</c> reports them.</summary>
-    internal static bool TryFStat(int fd, out int mode, out long size)
-    {
-        mode = 0;
-        size = 0;
-        Span<byte> buffer = stackalloc byte[StatBufferBytes];
-        buffer.Clear();
-        if (NativeFStat(fd, buffer) != 0)
-            return false;
-
-        var head = MemoryMarshal.Read<FileStatusHead>(buffer);
-        mode = head.Mode;
-        size = head.Size;
-        return true;
-    }
-
     private static FileProblem OpenWindows(string path, long maxBytes, out FileStream? stream)
     {
         stream = null;
@@ -239,12 +201,12 @@ internal static partial class SafeFile
         var handle = new SafeFileHandle(fd, ownsHandle: true);
         try
         {
-            if (!TryFStat(fd, out var mode, out var size))
+            if (!NativeFileStatus.TryFStat(fd, out var status))
                 return Marshal.GetLastPInvokeError() == Eacces ? FileProblem.Unreadable : FileProblem.NotRegular;
 
-            if ((mode & FormatMask) != RegularFile)
+            if ((status.Mode & FormatMask) != RegularFile)
                 return FileProblem.NotRegular;
-            if (size > maxBytes)
+            if (status.Size > maxBytes)
                 return FileProblem.TooLarge;
 
             stream = new FileStream(handle, FileAccess.Read, bufferSize: 1, isAsync: false);

@@ -1,4 +1,5 @@
 using System.Diagnostics;
+using WeaveFleet.Infrastructure.IO;
 using WeaveFleet.Infrastructure.Mods;
 
 namespace WeaveFleet.Infrastructure.Tests.Mods;
@@ -47,10 +48,10 @@ public sealed class SafeFileTests : IDisposable
         File.WriteAllBytes(At("known"), new byte[1234]);
         using var stream = new FileStream(At("known"), FileMode.Open, FileAccess.Read);
 
-        SafeFile.TryFStat((int)stream.SafeFileHandle.DangerousGetHandle(), out var mode, out var size)
+        NativeFileStatus.TryFStat(stream.SafeFileHandle.DangerousGetHandle(), out var status)
             .ShouldBeTrue("FileStatus layout changed: fstat failed");
-        (mode & 0xF000).ShouldBe(0x8000, "FileStatus layout changed: Mode is not at the expected place");
-        size.ShouldBe(1234, "FileStatus layout changed: Size is not at the expected place");
+        (status.Mode & 0xF000).ShouldBe(0x8000, "FileStatus layout changed: Mode is not at the expected place");
+        status.Size.ShouldBe(1234, "FileStatus layout changed: Size is not at the expected place");
     }
 
     [Fact]

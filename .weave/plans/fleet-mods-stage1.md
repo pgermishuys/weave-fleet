@@ -205,3 +205,27 @@ not merge, check a PR isn't merged before pushing), plus for server work:
   (tests-after-edits); `ui.message` from a `Page` back to its mod. Not in Stage 1 unless a lane needs one.
 - Mockups used to evaluate the feature (not in the repo): `~/.cache/fleet-mods-stage1/` (`report/`, `testchips-mockup/`,
   `stage2-mockup/`, `sites-mockup/`).
+- **10 Oct 2026, Bun for mods (user's decisions, shown in `~/.cache/fleet-mods-stage1/mods-switch-mockup/`):**
+  1. *Turning Mods on* (Settings → Features) first says that mods need Bun, what Fleet will download and where, then
+     installs at once with a progress bar in that row (inline, not a dialog). The first mod never waits on the
+     download. A failed install turns the switch back off.
+  2. *Our own manifest.* fleet-releases carries a `bun.json`: the recommended Bun version, a sha256 per platform, the
+     oldest safe version and a note. Fleet reads it on its own update schedule (5 s after start, then every
+     `Fleet:Update:CheckIntervalHours`). The pinned `BunRelease` stays as the offline fallback. Fleet never reads
+     Bun's GitHub to decide anything: Bun publishes no security advisories, so Fleet decides "unsafe" when it bumps the
+     manifest. A CI job can watch Bun's releases and open the bump PR. Bun 1.4.3 is the first bump.
+  3. *A Bun already on the machine is offered first, in every build*: `PATH`, `~/.bun/bin`, Homebrew, at 1.4 or
+     later ("Fleet found Bun 1.4.5 at ~/.bun/bin/bun" with Use my Bun / Download Fleet's own / Cancel). A found Bun
+     is used only once the user picks it, which saves it as `Fleet:Harness:BunPath`. The user keeps it current with
+     `bun upgrade`; Fleet restarts the host when its version changes.
+  4. *Security updates.* If one can't install, Fleet warns (the row says why, with Retry, plus a Fleet notice), mods
+     keep running, and Fleet retries on its schedule. A user's own Bun that's too old gets "run bun upgrade" and "Use
+     Fleet's own Bun instead"; Fleet never replaces it.
+- **The new split for Bun.** *M4b* (two PRs): (1) finding Bun on the machine with versions, `BunLocation` saying which
+  Bun runs (the user's own or Fleet's), releases as data with the pin as fallback, several installed versions with the
+  newest kept running during a download, pruning, safety status, and the contract line; (2) the `bun.json` manifest:
+  shape and validation, fetching on Fleet's update schedule, change events, publishing and the bump job (proposed
+  first; nothing changes in fleet-releases without the user's go-ahead). *M2* (host client and supervisor) runs the
+  host on `IBunRuntime.FindAsync`'s Bun, restarts it when that Bun's version changes, and prunes once the host has
+  moved. *M2b* (turning Mods on): the Settings row, the runtime status API and its events, saving the Bun path the
+  user picks, the background install at start, and the notices.

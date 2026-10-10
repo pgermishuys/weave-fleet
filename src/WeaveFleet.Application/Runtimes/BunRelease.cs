@@ -1,13 +1,13 @@
 using System.Runtime.InteropServices;
 
-namespace WeaveFleet.Infrastructure.Runtimes;
+namespace WeaveFleet.Application.Runtimes;
 
 /// <summary>One platform's Bun archive in a release.</summary>
 /// <param name="Rid">The .NET runtime identifier it runs on, e.g. <c>linux-x64</c>.</param>
 /// <param name="FileName">The release asset, e.g. <c>bun-linux-x64-baseline.zip</c>. The archive holds one folder
 /// named after it (without <c>.zip</c>) with <c>bun</c> or <c>bun.exe</c> inside.</param>
 /// <param name="Sha256">The asset's sha256 in lowercase hex, from the release's <c>SHASUMS256.txt</c>.</param>
-internal sealed record BunAsset(string Rid, string FileName, string Sha256)
+public sealed record BunAsset(string Rid, string FileName, string Sha256)
 {
     /// <summary>The folder inside the archive that holds the executable.</summary>
     public string Folder => Path.GetFileNameWithoutExtension(FileName);
@@ -16,16 +16,33 @@ internal sealed record BunAsset(string Rid, string FileName, string Sha256)
     public string ExecutableName => Rid.StartsWith("win-", StringComparison.Ordinal) ? "bun.exe" : "bun";
 }
 
-/// <summary>A Bun release Fleet can install, with the archive and sha256 for each platform it supports.</summary>
-internal sealed record BunRelease(string Version, IReadOnlyList<BunAsset> Assets)
+/// <summary>
+/// A Bun release Fleet can install, with the archive and sha256 for each platform it supports. Fleet's own manifest
+/// says which release it wants; <see cref="Pinned"/> is the one built into Fleet, used when there's no manifest.
+/// </summary>
+/// <param name="Version">The release, e.g. <c>1.4.2</c>.</param>
+/// <param name="Assets">The archive for each platform.</param>
+public sealed record BunRelease(string Version, IReadOnlyList<BunAsset> Assets)
 {
+    /// <summary>The oldest Bun mods run on. A Bun older than this is never used, whatever its source.</summary>
+    public const string MinimumVersion = "1.4.0";
+
     /// <summary>Where Bun's releases are downloaded from: <c>{base}/bun-v{version}/{asset}</c>.</summary>
     public static readonly Uri GitHubDownloads = new("https://github.com/oven-sh/bun/releases/download/");
 
     /// <summary>
-    /// The Bun Fleet installs. The x64 builds are the <c>-baseline</c> ones, which run on CPUs without AVX2 (older
-    /// machines, and x64 under Rosetta or some VMs). The sha256 values are from the release's <c>SHASUMS256.txt</c>,
-    /// which <c>BunReleaseTests</c> checks them against.
+    /// The oldest version that's safe to run. A Bun older than this still runs mods, but Fleet warns, and replaces it
+    /// when it's Fleet's own. Fleet decides this when it bumps its manifest; Bun publishes no security advisories.
+    /// </summary>
+    public string OldestSafe { get; init; } = MinimumVersion;
+
+    /// <summary>Why this release is recommended, in a sentence, e.g. what it fixes. Shown with security warnings.</summary>
+    public string? Note { get; init; }
+
+    /// <summary>
+    /// The Bun built into Fleet, used until a manifest names another. The x64 builds are the <c>-baseline</c> ones,
+    /// which run on CPUs without AVX2 (older machines, and x64 under Rosetta or some VMs). The sha256 values are from
+    /// the release's <c>SHASUMS256.txt</c>, which <c>BunReleaseTests</c> checks them against.
     /// </summary>
     public static BunRelease Pinned { get; } = new("1.4.2",
     [
@@ -55,4 +72,11 @@ internal sealed record BunRelease(string Version, IReadOnlyList<BunAsset> Assets
         };
         return $"{os}-{arch}";
     }
+}
+
+/// <summary>The Bun release Fleet wants now: its manifest's, or <see cref="BunRelease.Pinned"/> without one.</summary>
+public interface IBunReleases
+{
+    /// <summary>The release to install and to judge installed and configured Buns against.</summary>
+    BunRelease Current { get; }
 }

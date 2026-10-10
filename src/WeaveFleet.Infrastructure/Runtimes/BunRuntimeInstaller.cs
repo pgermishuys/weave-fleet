@@ -1,24 +1,25 @@
+using System.Collections.Concurrent;
 using System.Globalization;
 using System.Security.Cryptography;
 using System.Text.Json;
 using System.Text.Json.Serialization;
-using Microsoft.Extensions.Hosting;
 using Microsoft.Extensions.Logging;
 using WeaveFleet.Application.Configuration;
 using WeaveFleet.Application.Runtimes;
 using WeaveFleet.Domain.Common;
 using WeaveFleet.Infrastructure.Harnesses;
+using WeaveFleet.Infrastructure.IO;
 
 namespace WeaveFleet.Infrastructure.Runtimes;
 
 /// <summary>
-/// Finds the Bun the mod host runs on and, when there's none, downloads the pinned release, checks its sha256 and
-/// installs it under <c>~/.weave/runtimes/bun/{version}/</c>. The archive is unpacked next to its final place and
-/// moved in whole, so a half-finished install is never mistaken for a good one.
+/// Finds the Bun the mod host runs on: the user's own (the configured path), or Fleet's, which it downloads from the
+/// release it wants, checks against that release's sha256 and installs under <c>~/.weave/runtimes/bun/{version}/</c>.
+/// Several versions can sit side by side, so mods keep running on the old one while a new one downloads. The archive
+/// is unpacked next to its final place and moved in whole, so a half-finished install is never mistaken for a good one.
 /// </summary>
 internal sealed partial class BunRuntimeInstaller(
     FleetOptions options,
-    IHostEnvironment environment,
     IHttpClientFactory httpClientFactory,
     ILogger<BunRuntimeInstaller> logger) : IBunRuntime, IDisposable
 {
@@ -30,14 +31,12 @@ internal sealed partial class BunRuntimeInstaller(
     private static readonly TimeSpan StaleAfter = TimeSpan.FromHours(1);
 
     private readonly SemaphoreSlim _gate = new(1, 1);
+    private readonly ConcurrentDictionary<string, (ProbeKey Key, BunVersion Version)> _probed = new();
     private BunInstallJob? _job;
-    private Func<string?>? _findOnPath;
+    private BunMachineFinder? _finder;
 
     /// <summary>Test seam: the user's home folder.</summary>
     internal string Home { get; init; } = ExecutableResolver.HomeDirectory() ?? Environment.CurrentDirectory;
-
-    /// <summary>Test seam: the release to install.</summary>
-    internal BunRelease Release { get; init; } = BunRelease.Pinned;
 
     /// <summary>Test seam: the platform to install for.</summary>
     internal string Rid { get; init; } = BunRelease.CurrentRid();
@@ -51,18 +50,25 @@ internal sealed partial class BunRuntimeInstaller(
     /// <summary>Test seam: moves the unpacked folder into place.</summary>
     internal Action<string, string> MoveDirectory { get; init; } = Directory.Move;
 
+    /// <summary>Test seam: renames a version folder out of the way before it's deleted.</summary>
+    internal Action<string, string> RenameDirectory { get; init; } = Directory.Move;
+
     /// <summary>Test seam: the wait before the second try of the final move; each later wait doubles.</summary>
     internal TimeSpan MoveRetryDelay { get; init; } = TimeSpan.FromMilliseconds(100);
 
-    /// <summary>Test seam: finds <c>bun</c> on <c>PATH</c>.</summary>
-    internal Func<string?> FindOnPath
-    {
-        get => _findOnPath ?? DefaultFindOnPath;
-        init => _findOnPath = value;
-    }
+    /// <summary>Test seam: whether to hold a configured path to Windows' rules (it must end in <c>.exe</c>).</summary>
+    internal bool IsWindows { get; init; } = OperatingSystem.IsWindows();
 
-    /// <inheritdoc />
-    public string Version => Release.Version;
+    /// <summary>Test seam: learns a Bun's version.</summary>
+    internal Func<string, CancellationToken, Task<BunProbeResult>> Probe { get; init; } =
+        (path, ct) => BunVersionProbe.RunAsync(path, BunVersionProbe.DefaultTimeout, ct);
+
+    /// <summary>Test seam: finds the Buns on the machine.</summary>
+    internal BunMachineFinder Finder
+    {
+        get => _finder ??= new BunMachineFinder { Home = Home, Probe = Probe };
+        init => _finder = value;
+    }
 
     /// <inheritdoc />
     public BunInstallJob? Job => Volatile.Read(ref _job);
@@ -72,52 +78,49 @@ internal sealed partial class BunRuntimeInstaller(
 
     private string Root => Path.Combine(Home, ".weave", "runtimes", "bun");
 
-    private string InstallFolder => Path.Combine(Root, Release.Version);
-
-    private string? DefaultFindOnPath() =>
-        ExecutableResolver.TryResolve("bun", [Path.Combine(Home, ".bun", "bin")], out var path) ? path : null;
+    private string ExecutableName => Rid.StartsWith("win-", StringComparison.Ordinal) ? "bun.exe" : "bun";
 
     /// <inheritdoc />
-    public BunLocation? Find()
+    public Task<IReadOnlyList<BunCandidate>> FindOnMachineAsync(CancellationToken ct) => Finder.FindAsync(ct);
+
+    /// <inheritdoc />
+    public Task<BunCandidate> CheckAsync(string path, CancellationToken ct) => Finder.CheckAsync(path, ct);
+
+    /// <inheritdoc />
+    public async Task<BunLocation?> FindAsync(BunRelease release, CancellationToken ct)
     {
         if (!string.IsNullOrWhiteSpace(options.Harness.BunPath))
-        {
-            var configured = options.Harness.BunPath;
-            return Path.IsPathFullyQualified(configured) && File.Exists(configured)
-                ? new BunLocation(configured, BunSources.Configured, null)
-                : null;
-        }
+            return (await CheckConfiguredAsync(options.Harness.BunPath, ct).ConfigureAwait(false)).Location;
 
-        if (Release.AssetFor(Rid) is { } asset && IsInstalled(InstallFolder, asset))
-            return new BunLocation(Path.Combine(InstallFolder, asset.ExecutableName), BunSources.Installed, Release.Version);
+        var installed = ScanInstalled(release);
+        var wanted = installed.FirstOrDefault(bun => bun.Name == release.Version);
+        if (wanted is not null)
+            return wanted.Location;
 
-        if (environment.IsDevelopment() && FindOnPath() is { } onPath)
-            return new BunLocation(Path.GetFullPath(onPath), BunSources.Path, null);
-
-        return null;
+        // Not there yet (it may be downloading): keep running the newest one that's there.
+        var minimum = BunVersion.Parse(BunRelease.MinimumVersion);
+        return installed.Where(bun => bun.Version >= minimum).OrderByDescending(bun => bun.Version).FirstOrDefault()?.Location;
     }
 
     /// <inheritdoc />
-    public async Task<Result<BunLocation>> EnsureAsync(IProgress<BunInstallJob>? progress, CancellationToken ct)
+    public async Task<Result<BunLocation>> EnsureAsync(BunRelease release, IProgress<BunInstallJob>? progress, CancellationToken ct)
     {
-        var configured = options.Harness.BunPath;
-        if (!string.IsNullOrWhiteSpace(configured) && Find() is null)
+        if (!string.IsNullOrWhiteSpace(options.Harness.BunPath))
         {
-            return new FleetError(ErrorCode, Path.IsPathFullyQualified(configured)
-                ? $"Fleet:Harness:BunPath is {configured}, which doesn't exist."
-                : $"Fleet:Harness:BunPath must be an absolute path; it's {configured}.");
+            var (location, error) = await CheckConfiguredAsync(options.Harness.BunPath, ct).ConfigureAwait(false);
+            return location is not null ? location : new FleetError(ErrorCode, error!);
         }
 
-        if (Find() is { } found)
+        if (FindRelease(release) is { } found)
             return found;
 
         await _gate.WaitAsync(ct).ConfigureAwait(false);
         try
         {
-            if (Find() is { } installedMeanwhile)
+            if (FindRelease(release) is { } installedMeanwhile)
                 return installedMeanwhile;
 
-            return await InstallAsync(progress, ct).ConfigureAwait(false);
+            return await InstallAsync(release, progress, ct).ConfigureAwait(false);
         }
         finally
         {
@@ -125,16 +128,217 @@ internal sealed partial class BunRuntimeInstaller(
         }
     }
 
-    private async Task<Result<BunLocation>> InstallAsync(IProgress<BunInstallJob>? progress, CancellationToken ct)
+    /// <inheritdoc />
+    public IReadOnlyList<BunLocation> Installed() =>
+        [.. ScanInstalled(null).OrderByDescending(bun => bun.Version).Select(bun => bun.Location)];
+
+    /// <inheritdoc />
+    public async Task<IReadOnlyList<string>> PruneAsync(IReadOnlyCollection<string> inUse, CancellationToken ct)
     {
-        var version = Release.Version;
+        await _gate.WaitAsync(ct).ConfigureAwait(false);
+        try
+        {
+            if (!Directory.Exists(Root))
+                return [];
+
+            var installed = ScanInstalled(null);
+            if (installed.Count == 0)
+                return [];
+
+            var newest = installed.Max(bun => bun.Version);
+            // Links are followed on both sides, so a home reached through a symlink still matches the Bun in use.
+            var protectedPaths = inUse.Select(NormalisePath).OfType<string>().ToList();
+            var comparison = OperatingSystem.IsWindows() || OperatingSystem.IsMacOS()
+                ? StringComparison.OrdinalIgnoreCase
+                : StringComparison.Ordinal;
+
+            var doomed = new List<(BunVersion Version, string Name, string Folder)>();
+            foreach (var folder in Directory.EnumerateDirectories(Root))
+            {
+                var name = Path.GetFileName(folder);
+                if (!BunVersion.TryParse(name, out var version) || version >= newest)
+                    continue;
+
+                var prefix = BunPaths.Canonical(folder).TrimEnd(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar) + Path.DirectorySeparatorChar;
+                if (protectedPaths.Any(path => path.StartsWith(prefix, comparison)))
+                    continue;
+
+                doomed.Add((version, name, folder));
+            }
+
+            var deleted = new List<string>();
+            foreach (var (_, name, folder) in doomed.OrderBy(entry => entry.Version))
+            {
+                // Renaming first is atomic, and fails while a running bun.exe holds the folder (Windows): then it waits for a later prune.
+                var aside = Path.Combine(Root, $".staging-{Guid.NewGuid():N}");
+                try
+                {
+                    RenameDirectory(folder, aside);
+                }
+                catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
+                {
+                    LogPruneSkipped(ex, name);
+                    continue;
+                }
+
+                TryDelete(aside);
+                LogPruned(name);
+                deleted.Add(name);
+            }
+
+            return deleted;
+        }
+        finally
+        {
+            _gate.Release();
+        }
+    }
+
+    /// <inheritdoc />
+    public BunSafety SafetyOf(BunLocation location, BunRelease release)
+    {
+        var oldestSafe = BunVersion.TryParse(release.OldestSafe, out var parsedOldest)
+            ? parsedOldest
+            : BunVersion.Parse(BunRelease.MinimumVersion);
+        var installed = location.Source == BunSources.Installed;
+        var known = BunVersion.TryParse(location.Version, out var version);
+        var safe = known && version >= oldestSafe;
+        var updateAvailable = installed && known && BunVersion.TryParse(release.Version, out var wanted) && version < wanted;
+        if (safe)
+            return new BunSafety(true, updateAvailable, null);
+
+        var note = string.IsNullOrWhiteSpace(release.Note) ? "" : release.Note + " ";
+        var message = installed
+            ? $"Fleet's Bun {location.Version} needs a security fix: the oldest safe version is {release.OldestSafe}. {note}Fleet installs Bun {release.Version} to replace it."
+            : $"Your Bun {location.Version} needs a security fix: the oldest safe version is {release.OldestSafe}. {note}Run bun upgrade and Fleet picks up the new version by itself, or use Fleet's own Bun instead.";
+        return new BunSafety(false, updateAvailable, message);
+    }
+
+    /// <summary>The configured Bun when it can be used, otherwise why not.</summary>
+    private async Task<(BunLocation? Location, string? Error)> CheckConfiguredAsync(string configured, CancellationToken ct)
+    {
+        if (!Path.IsPathFullyQualified(configured))
+            return (null, $"Fleet:Harness:BunPath must be an absolute path; it's {configured}.");
+
+        if (IsWindows && !configured.EndsWith(".exe", StringComparison.OrdinalIgnoreCase))
+            return (null, $"Fleet:Harness:BunPath is {configured}, which must end in .exe: point it at bun.exe.");
+
+        if (Directory.Exists(configured))
+            return (null, $"Fleet:Harness:BunPath is {configured}, which is a folder, not the bun program.");
+
+        var key = ProbeKeyOf(configured);
+        if (key is null)
+            return (null, $"Fleet:Harness:BunPath is {configured}, which doesn't exist.");
+
+        BunVersion version;
+        if (_probed.TryGetValue(configured, out var cached) && cached.Key == key)
+        {
+            version = cached.Version;
+        }
+        else
+        {
+            var probe = await Probe(configured, ct).ConfigureAwait(false);
+            if (probe.Version is not { } probed)
+                return (null, $"Fleet:Harness:BunPath is {configured}, which didn't run: {probe.Error}");
+
+            // Only a Bun that ran is remembered, so a slow start or a Bun still being written is looked at again.
+            _probed[configured] = (key, probed);
+            version = probed;
+        }
+
+        if (version < BunVersion.Parse(BunRelease.MinimumVersion))
+        {
+            return (null, $"Bun {version} at {configured} is older than {BunRelease.MinimumVersion}, " +
+                "the oldest Bun mods run on. Run bun upgrade, or use Fleet's own Bun.");
+        }
+
+        return (new BunLocation(configured, BunSources.Configured, version.ToString()), null);
+    }
+
+    /// <summary>What identifies the file as it is now, so a replaced one is probed again; <see langword="null"/> when there's no such file.</summary>
+    private static ProbeKey? ProbeKeyOf(string path)
+    {
+        try
+        {
+            var info = new FileInfo(path);
+            if (!info.Exists)
+                return null;
+
+            var target = info.ResolveLinkTarget(returnFinalTarget: true);
+            var file = target as FileInfo ?? info;
+            if (!file.Exists)
+                return null;
+
+            // The device and inode tell a replacement of the same size and time from the file probed before.
+            ulong? device = null, inode = null;
+            if (NativeFileStatus.TryStat(file.FullName, out var status))
+                (device, inode) = (status.Dev, status.Ino);
+            return new ProbeKey(Path.GetFullPath(path), target?.FullName, file.Length, file.LastWriteTimeUtc, device, inode);
+        }
+        catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
+        {
+            return null;
+        }
+    }
+
+    private static string? NormalisePath(string path)
+    {
+        try
+        {
+            return BunPaths.Canonical(path);
+        }
+        catch (Exception ex) when (ex is ArgumentException or NotSupportedException or PathTooLongException)
+        {
+            return null;
+        }
+    }
+
+    /// <summary>The release's own version, when it's installed and is the release's build.</summary>
+    private BunLocation? FindRelease(BunRelease release) =>
+        ScanInstalled(release).FirstOrDefault(bun => bun.Name == release.Version)?.Location;
+
+    /// <summary>
+    /// Every installed version folder. With a <paramref name="release"/>, the folder of its version also has to hold
+    /// that release's build (same sha256), or it isn't counted.
+    /// </summary>
+    private List<InstalledBun> ScanInstalled(BunRelease? release)
+    {
+        var found = new List<InstalledBun>();
+        if (!Directory.Exists(Root))
+            return found;
+
+        foreach (var folder in Directory.EnumerateDirectories(Root))
+        {
+            var name = Path.GetFileName(folder);
+            if (!BunVersion.TryParse(name, out var version))
+                continue;
+
+            string? sha = null;
+            if (release is not null && name == release.Version)
+            {
+                if (release.AssetFor(Rid) is not { } asset)
+                    continue;
+                sha = asset.Sha256;
+            }
+
+            if (IsInstalled(folder, name, sha))
+                found.Add(new InstalledBun(name, version, new BunLocation(Path.Combine(folder, ExecutableName), BunSources.Installed, name)));
+        }
+
+        return found;
+    }
+
+    private async Task<Result<BunLocation>> InstallAsync(BunRelease release, IProgress<BunInstallJob>? progress, CancellationToken ct)
+    {
+        var version = release.Version;
+        var installFolder = Path.Combine(Root, version);
         long received = 0;
         long? total = null;
 
         void Set(string phase, string? message) =>
             Publish(progress, new BunInstallJob(phase, version, message, received, total));
 
-        if (Release.AssetFor(Rid) is not { } asset)
+        if (release.AssetFor(Rid) is not { } asset)
         {
             var message = $"Fleet has no Bun build for {Rid}. Install Bun and set Fleet:Harness:BunPath to it.";
             LogNoBuild(Rid);
@@ -153,7 +357,7 @@ internal sealed partial class BunRuntimeInstaller(
             Set(BunInstallPhases.Downloading, Working);
 
             var archive = Path.Combine(downloadDirectory, asset.FileName);
-            await DownloadAsync(asset, archive, (bytes, length) =>
+            await DownloadAsync(release, asset, archive, (bytes, length) =>
             {
                 received = bytes;
                 total = length;
@@ -170,11 +374,11 @@ internal sealed partial class BunRuntimeInstaller(
 
             Set(BunInstallPhases.Extracting, Working);
             await Task.Run(() => Unpack(asset, archive, stagingDirectory, actual, version, ct), ct).ConfigureAwait(false);
-            await PlaceAsync(asset, Path.Combine(stagingDirectory, asset.Folder), ct).ConfigureAwait(false);
+            await PlaceAsync(asset, version, installFolder, Path.Combine(stagingDirectory, asset.Folder), ct).ConfigureAwait(false);
 
-            LogInstalled(version, InstallFolder);
+            LogInstalled(version, installFolder);
             Set(BunInstallPhases.Succeeded, $"Installed Bun {version}.");
-            return new BunLocation(Path.Combine(InstallFolder, asset.ExecutableName), BunSources.Installed, version);
+            return new BunLocation(Path.Combine(installFolder, asset.ExecutableName), BunSources.Installed, version);
         }
         catch (OperationCanceledException) when (ct.IsCancellationRequested)
         {
@@ -202,9 +406,9 @@ internal sealed partial class BunRuntimeInstaller(
     }
 
     private async Task DownloadAsync(
-        BunAsset asset, string destination, Action<long, long?> report, CancellationToken ct)
+        BunRelease release, BunAsset asset, string destination, Action<long, long?> report, CancellationToken ct)
     {
-        var version = Release.Version;
+        var version = release.Version;
         using var client = httpClientFactory.CreateClient();
         client.Timeout = Timeout.InfiniteTimeSpan;
         using var stall = CancellationTokenSource.CreateLinkedTokenSource(ct);
@@ -214,7 +418,7 @@ internal sealed partial class BunRuntimeInstaller(
         long? total = null;
         try
         {
-            var url = Release.DownloadUrl(DownloadBase, asset);
+            var url = release.DownloadUrl(DownloadBase, asset);
             using var response = await client.GetAsync(url, HttpCompletionOption.ResponseHeadersRead, stall.Token).ConfigureAwait(false);
             if (!response.IsSuccessStatusCode)
                 throw new InstallFailure($"Couldn't download Bun {version}: the server answered {(int)response.StatusCode} {response.ReasonPhrase}.");
@@ -294,19 +498,18 @@ internal sealed partial class BunRuntimeInstaller(
                 UnixFileMode.OtherRead | UnixFileMode.OtherExecute);
         }
 
-        var manifest = new BunInstallManifest(version, asset.FileName, sha256, DateTimeOffset.UtcNow);
+        var manifest = new BunInstallManifest(version, asset.FileName, sha256, DateTimeOffset.UtcNow, Rid);
         File.WriteAllText(
             Path.Combine(folder, ManifestFileName),
             JsonSerializer.Serialize(manifest, BunInstallManifestJsonContext.Default.BunInstallManifest));
     }
 
     /// <summary>Moves the unpacked folder to <c>{root}/{version}</c>, keeping an install another Fleet finished first.</summary>
-    private async Task PlaceAsync(BunAsset asset, string unpacked, CancellationToken ct)
+    private async Task PlaceAsync(BunAsset asset, string version, string target, string unpacked, CancellationToken ct)
     {
-        var target = InstallFolder;
         if (Directory.Exists(target))
         {
-            if (IsInstalled(target, asset))
+            if (IsInstalled(target, version, asset.Sha256))
                 return;
 
             // Renaming first is atomic, so another Fleet never sees a half-deleted folder; a later sweep catches a leftover.
@@ -333,7 +536,7 @@ internal sealed partial class BunRuntimeInstaller(
             }
             catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
             {
-                if (IsInstalled(target, asset))
+                if (IsInstalled(target, version, asset.Sha256))
                     return; // Another Fleet installed the same version between the check and the move.
 
                 if (attempt >= MoveAttempts)
@@ -346,7 +549,11 @@ internal sealed partial class BunRuntimeInstaller(
         }
     }
 
-    private bool IsInstalled(string folder, BunAsset asset)
+    /// <summary>
+    /// Whether <paramref name="folder"/> holds a finished install of <paramref name="version"/> for this platform:
+    /// a manifest naming that version (and, when given, <paramref name="sha256"/>) and the executable.
+    /// </summary>
+    private bool IsInstalled(string folder, string version, string? sha256)
     {
         try
         {
@@ -357,9 +564,10 @@ internal sealed partial class BunRuntimeInstaller(
             var manifest = JsonSerializer.Deserialize(
                 File.ReadAllText(manifestPath), BunInstallManifestJsonContext.Default.BunInstallManifest);
             return manifest is not null
-                && manifest.Version == Release.Version
-                && string.Equals(manifest.Sha256, asset.Sha256, StringComparison.OrdinalIgnoreCase)
-                && File.Exists(Path.Combine(folder, asset.ExecutableName));
+                && manifest.Version == version
+                && (manifest.Rid is null || manifest.Rid == Rid)
+                && (sha256 is null || string.Equals(manifest.Sha256, sha256, StringComparison.OrdinalIgnoreCase))
+                && File.Exists(Path.Combine(folder, ExecutableName));
         }
         catch (Exception ex) when (ex is IOException or JsonException or UnauthorizedAccessException)
         {
@@ -429,6 +637,12 @@ internal sealed partial class BunRuntimeInstaller(
         progress?.Report(job);
     }
 
+    /// <summary>A version folder that counts as installed.</summary>
+    private sealed record InstalledBun(string Name, BunVersion Version, BunLocation Location);
+
+    /// <summary>What a probed file looked like, so a changed one is probed again.</summary>
+    private sealed record ProbeKey(string Path, string? ResolvedPath, long Length, DateTime LastWriteUtc, ulong? Device, ulong? Inode);
+
     /// <summary>A failure with a message fit to show the user.</summary>
     private sealed class InstallFailure(string message) : Exception(message);
 
@@ -437,6 +651,12 @@ internal sealed partial class BunRuntimeInstaller(
 
     [LoggerMessage(Level = LogLevel.Warning, Message = "Moving Bun into place failed (try {Attempt} of {Attempts}); trying again.")]
     private partial void LogMoveRetry(Exception ex, int attempt, int attempts);
+
+    [LoggerMessage(Level = LogLevel.Information, Message = "Deleted the old Bun {Version}.")]
+    private partial void LogPruned(string version);
+
+    [LoggerMessage(Level = LogLevel.Warning, Message = "Couldn't delete the old Bun {Version} (it may be running); leaving it for a later prune.")]
+    private partial void LogPruneSkipped(Exception ex, string version);
 
     [LoggerMessage(Level = LogLevel.Information, Message = "Installed Bun {Version} at {Folder}.")]
     private partial void LogInstalled(string version, string folder);
@@ -468,7 +688,8 @@ internal sealed record BunInstallManifest(
     [property: JsonPropertyName("version")] string Version,
     [property: JsonPropertyName("assetFileName")] string AssetFileName,
     [property: JsonPropertyName("sha256")] string Sha256,
-    [property: JsonPropertyName("installedAt")] DateTimeOffset InstalledAt);
+    [property: JsonPropertyName("installedAt")] DateTimeOffset InstalledAt,
+    [property: JsonPropertyName("rid")] string? Rid = null);
 
 [JsonSerializable(typeof(BunInstallManifest))]
 [JsonSourceGenerationOptions(PropertyNamingPolicy = JsonKnownNamingPolicy.CamelCase, WriteIndented = true)]

@@ -14,6 +14,9 @@ internal enum BunServeMode
 
     /// <summary>Send a few bytes, then say nothing until the fixture is disposed.</summary>
     Stall,
+
+    /// <summary>Send a few bytes, wait for <see cref="BunReleaseServer.ReleaseHeld"/>, then send the rest.</summary>
+    Hold,
 }
 
 /// <summary>A loopback HTTP server that plays GitHub's release downloads for the Bun installer tests.</summary>
@@ -24,6 +27,8 @@ internal sealed class BunReleaseServer : IDisposable
     private readonly Dictionary<string, (byte[] Body, int Status, BunServeMode Mode)> _routes = [];
     private readonly List<string> _requests = [];
     private readonly TaskCompletionSource _stalled = new(TaskCreationOptions.RunContinuationsAsynchronously);
+    private readonly TaskCompletionSource _held = new(TaskCreationOptions.RunContinuationsAsynchronously);
+    private readonly TaskCompletionSource _release = new(TaskCreationOptions.RunContinuationsAsynchronously);
 
     public BunReleaseServer()
     {
@@ -43,6 +48,12 @@ internal sealed class BunReleaseServer : IDisposable
 
     /// <summary>Completes once a <see cref="BunServeMode.Stall"/> response has sent its first bytes.</summary>
     public Task Stalled => _stalled.Task;
+
+    /// <summary>Completes once a <see cref="BunServeMode.Hold"/> response has sent its first bytes and is waiting.</summary>
+    public Task Held => _held.Task;
+
+    /// <summary>Lets every <see cref="BunServeMode.Hold"/> response send the rest of its body.</summary>
+    public void ReleaseHeld() => _release.TrySetResult();
 
     /// <summary>The paths requested so far, in order.</summary>
     public IReadOnlyList<string> Requests
@@ -132,6 +143,16 @@ internal sealed class BunReleaseServer : IDisposable
                     await response.OutputStream.FlushAsync();
                     _stalled.TrySetResult();
                     await Task.Delay(Timeout.Infinite, _stop.Token);
+                    break;
+                case BunServeMode.Hold:
+                    var first = Math.Min(10, route.Body.Length);
+                    response.ContentLength64 = route.Body.Length;
+                    await response.OutputStream.WriteAsync(route.Body.AsMemory(0, first));
+                    await response.OutputStream.FlushAsync();
+                    _held.TrySetResult();
+                    await _release.Task.WaitAsync(_stop.Token);
+                    await response.OutputStream.WriteAsync(route.Body.AsMemory(first));
+                    response.Close();
                     break;
             }
         }
