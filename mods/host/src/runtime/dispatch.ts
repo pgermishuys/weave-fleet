@@ -30,15 +30,16 @@ function hooksFor(mods: LoadedMod[], event: EventName, e: unknown): HookRef[] {
   return refs;
 }
 
-function newDispatch(rt: Runtime, event: EventName, sessionId: string, hooks: HookRef[]): Dispatch {
-  return { rt, event, sessionId, hooks, failures: [], owners: new WeakMap(), generation: generationOf(rt, sessionId) };
+function newDispatch(rt: Runtime, event: EventName, sessionId: string, hooks: HookRef[], announce: boolean): Dispatch {
+  return { rt, event, sessionId, hooks, failures: [], owners: new WeakMap(), generation: generationOf(rt, sessionId), announce };
 }
 
 /**
  * Runs the `session.start` hooks of `mod` for the session if no earlier run has; shares a run that is going on.
  * Returns the failures of the run this call made (none when it shared or found it done).
+ * `announce`: the dispatch this run comes before has several mods, so its hooks are announced with `running`.
  */
-export async function ensureStarted(rt: Runtime, mod: LoadedMod, sessionId: string): Promise<HookFailureReport[]> {
+export async function ensureStarted(rt: Runtime, mod: LoadedMod, sessionId: string, announce = false): Promise<HookFailureReport[]> {
   const existing = mod.starts.get(sessionId);
   if (existing) {
     await existing;
@@ -48,7 +49,7 @@ export async function ensureStarted(rt: Runtime, mod: LoadedMod, sessionId: stri
   const run = (async () => {
     const hooks = hooksFor([mod], "session.start", e);
     if (hooks.length === 0) return [];
-    const d = newDispatch(rt, "session.start", sessionId, hooks);
+    const d = newDispatch(rt, "session.start", sessionId, hooks, announce);
     await runFrom(d, 0, frozenCopy(e));
     return d.failures;
   })();
@@ -89,7 +90,7 @@ export async function dispatch(rt: Runtime, params: DispatchParams) {
   let scope = chainMods;
   if (event === "session.start") {
     scope = chainMods.filter((m) => !m.starts.has(sessionId));
-    const d = newDispatch(rt, event, sessionId, hooksFor(scope, event, hookE));
+    const d = newDispatch(rt, event, sessionId, hooksFor(scope, event, hookE), chainMods.length > 1);
     let release!: (f: HookFailureReport[]) => void;
     const started = new Promise<HookFailureReport[]>((r) => (release = r));
     for (const m of scope) m.starts.set(sessionId, started);
@@ -104,11 +105,11 @@ export async function dispatch(rt: Runtime, params: DispatchParams) {
   const generation = generationOf(rt, sessionId);
   for (const m of chainMods) {
     if (generationOf(rt, sessionId) !== generation) break;
-    failures.push(...(await ensureStarted(rt, m, sessionId)));
+    failures.push(...(await ensureStarted(rt, m, sessionId, chainMods.length > 1)));
   }
 
   const live = chainMods.filter((m) => !m.dead);
-  const d = newDispatch(rt, event, sessionId, hooksFor(live, event, hookE));
+  const d = newDispatch(rt, event, sessionId, hooksFor(live, event, hookE), chainMods.length > 1);
   d.generation = generation;
   d.control = control;
   if (event === "ui.render") {

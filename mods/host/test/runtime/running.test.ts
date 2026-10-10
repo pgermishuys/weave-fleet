@@ -59,7 +59,7 @@ describe("the running notification", () => {
     const h = (await s.render(["test-btn@v1"], band)).result.handles.onPress;
     s.peer.notifications.length = 0;
     const e = { sessionId: "ses_test1", mod: "test-btn@v1", element: "go", component: "ComposerBand", requestId: "ses_test1", surface: "desktop", handle: h };
-    await s.dispatch("ui.press", ["test-spy@v1"], e);
+    await s.dispatch("ui.press", ["test-spy@v1", "test-btn@v1"], e);
     expect(orderOf(s)).toEqual(["running test-spy@v1 ui.press", "running test-btn@v1 ui.press", "log pressed"]);
   });
 

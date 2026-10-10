@@ -39,6 +39,13 @@ export interface Dispatch {
   owners: WeakMap<object, string>;
   /** The session's generation when the dispatch began. */
   generation: number;
+  /** Does the chain have several mods? Then each hook is announced with `running`, so Fleet can tell which one hung. */
+  announce: boolean;
+}
+
+/** Tells Fleet `mod` is about to run code for this dispatch. Sent before the code starts: a busy loop never yields. */
+export function announceRunning(d: Dispatch, modId: string) {
+  if (d.announce) d.rt.peer.notify("running", { mod: modId, event: d.event, sessionId: d.sessionId });
 }
 
 /** Was the dispatch's session forgotten since it began? Then nothing more runs for it. */
@@ -221,7 +228,10 @@ async function callHook(d: Dispatch, ref: HookRef, e: any, rest: Rest): Promise<
         next = makeNext(st, rest, b, ac.signal, d.event, hookMs);
         return b;
       },
-      () => rt.meter.run(key, () => inMod(ctx, () => reg.hook($, e, next))),
+      () => {
+        announceRunning(d, mod.id);
+        return rt.meter.run(key, () => inMod(ctx, () => reg.hook($, e, next)));
+      },
     );
     const outcome = await run.done;
     run.budget.finish();
@@ -293,7 +303,10 @@ async function runCatch(
       });
       return b;
     },
-    () => rt.meter.run(ownerKey(mod.id, d.sessionId), () => inMod(ctx, () => reg.catchHandler!($, e, catchNext))),
+    () => {
+      announceRunning(d, mod.id);
+      return rt.meter.run(ownerKey(mod.id, d.sessionId), () => inMod(ctx, () => reg.catchHandler!($, e, catchNext)));
+    },
   );
   const outcome = await run.done;
   run.budget.finish();
@@ -332,6 +345,7 @@ async function endOfChain(d: Dispatch, e: any): Promise<Out> {
   const timeout = new Promise<"timeout">((r) => (timer = setTimeout(() => r("timeout"), rt.limits.hookMs)));
   try {
     const args = h.kind === "onPress" ? [] : [e.value];
+    announceRunning(d, h.owner);
     const winner = await Promise.race([Promise.resolve(rt.meter.run(ownerKey(h.owner, d.sessionId), () => inMod(ctx, () => h.fn(...args)))).then(() => "done" as const), timeout]);
     if (winner === "timeout" && owner) rt.fail(owner, d.sessionId, d.event, "timeout", `the callback used more than its ${rt.limits.hookMs} ms`);
   } catch (err) {

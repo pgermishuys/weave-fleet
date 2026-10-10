@@ -259,8 +259,8 @@ resets the count. A kept mod is turned off for every session, with the error in 
 on again. A draft is turned off in its session, with the error on its draft card, until the agent reloads it.
 
 **A blocked host.** A hook that never yields (a busy loop) can't be stopped inside the host. Fleet waits 15 s for a
-dispatch, then restarts the host and strikes the mod that was running. All mods reload; `$.state` is lost and
-`session.start` fires with `reason: "reload"`.
+dispatch, then restarts the host and strikes the mod the host last said was running (with one mod in the chain, that
+mod). All mods reload; `$.state` is lost and `session.start` fires with `reason: "reload"`.
 
 ## Drafts, Keep and Undo
 
@@ -325,7 +325,8 @@ temporary file, then move it), as in `FileSkillVersionStore`.
 Fleet starts one host process when the Mods switch is on, Start without mods isn't set, and at least one mod is kept
 and on or drafted. It runs `{bun} {fleet}/mods-host/host.js --stdio`, where `{bun}` is the user's own Bun when they chose one
 (`Fleet:Harness:BunPath`) and otherwise the Bun Fleet installed under `~/.weave/runtimes/bun/{version}/`. It restarts
-the host with backoff when it dies, and stops it on shutdown.
+the host with backoff when it dies, and stops it on shutdown. Fleet runs one host per user; mod ids are unique within a
+host.
 
 JSON-RPC 2.0 over stdin/stdout, one JSON object per line, UTF-8, 8 MiB per line at most. Both sides send requests,
 responses and notifications. The host's stderr goes to Fleet's log. The types are the `fleet-mods/protocol` module.
@@ -351,7 +352,9 @@ ends in that callback.
 `$.clock` and `$.ui.resolve` never leave the host.
 
 **Host → Fleet (notifications).** `invalidate` (`mod`, `sessionId?`), `log` (`mod`, `sessionId?`, `level`, `text`),
-`failed` (a timer or callback failure: `mod`, `event`, `kind`, `message`, `strikes`, `sessionId?`).
+`failed` (a timer or callback failure: `mod`, `event`, `kind`, `message`, `strikes`, `sessionId?`), `running` (`mod`,
+`event`, `sessionId`: sent before each hook, `.catch` and control callback runs, only when the chain has more than one
+mod, so Fleet knows whom to strike if the dispatch never answers).
 
 **Trees on the wire** are `WireElement`s: children flattened, and each callback replaced by a `handles` entry
 (`{ "onPress": "h17" }`) that the host keeps until the site is drawn again or the session is forgotten. A `Page`
