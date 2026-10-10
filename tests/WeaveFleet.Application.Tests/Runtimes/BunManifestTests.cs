@@ -170,6 +170,6 @@ public sealed class BunManifestTests
         Parse(padded, out var release, out var error).ShouldBeFalse();
 
         release.ShouldBeNull();
-        error.ShouldContain("64");
+        error!.ShouldContain("64");
     }
 }
