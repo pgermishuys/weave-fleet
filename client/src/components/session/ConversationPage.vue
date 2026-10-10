@@ -18,6 +18,14 @@ const props = defineProps<{
   page: ToolCardPage;
   /** The call's title, which names the page. */
   title: string;
+  /** A full address to draw, in place of `page.path` on the session's machine (a mod's page is served by the mod host). */
+  src?: string;
+  /**
+   * A page that must stay inside its frame (a mod's): no "open in a new tab", and popups it opens keep the sandbox.
+   * On Fleet's own origin its HTML would otherwise run outside the sandbox, until the server that serves it sends a
+   * `Content-Security-Policy: sandbox` header of its own.
+   */
+  contained?: boolean;
 }>();
 
 // Before the page reports its height. Short, so a page that never reports (it failed to load) leaves little space.
@@ -29,7 +37,10 @@ const frame = useTemplateRef<HTMLIFrameElement>("frame");
 const fullFrame = useTemplateRef<HTMLIFrameElement>("fullFrame");
 const closeButton = useTemplateRef<HTMLButtonElement>("closeButton");
 
-const address = computed(() => apiUrlOn(machine.connection, props.page.path));
+const SANDBOX = "allow-scripts allow-forms allow-popups allow-popups-to-escape-sandbox allow-modals allow-downloads";
+const CONTAINED_SANDBOX = "allow-scripts allow-forms allow-popups allow-modals allow-downloads";
+const sandbox = computed(() => (props.contained ? CONTAINED_SANDBOX : SANDBOX));
+const address = computed(() => props.src ?? apiUrlOn(machine.connection, props.page.path));
 // Read once: the page reads its frame's name when it loads, and later changes go by message.
 const frameName = pageFrameName("conversation", theme.value);
 const height = shallowRef(knownHeights.get(props.page.id) ?? START_HEIGHT);
@@ -107,7 +118,7 @@ const knownHeights = new Map<string, number>();
       :style="{ height: `${height}px` }"
       class="conversation-page__frame"
       loading="lazy"
-      sandbox="allow-scripts allow-forms allow-popups allow-popups-to-escape-sandbox allow-modals allow-downloads"
+      :sandbox="sandbox"
       referrerpolicy="no-referrer"
       @load="sendTheme(frame)"
     />
@@ -123,6 +134,7 @@ const knownHeights = new Map<string, number>();
         <Maximize2 :size="14" />
       </button>
       <button
+        v-if="!contained"
         type="button"
         class="conversation-page__action"
         title="Open in a new tab"
@@ -166,7 +178,7 @@ const knownHeights = new Map<string, number>();
             :name="frameName"
             :title="title"
             class="conversation-page__full"
-            sandbox="allow-scripts allow-forms allow-popups allow-popups-to-escape-sandbox allow-modals allow-downloads"
+            :sandbox="sandbox"
             referrerpolicy="no-referrer"
             @load="sendTheme(fullFrame)"
           />
