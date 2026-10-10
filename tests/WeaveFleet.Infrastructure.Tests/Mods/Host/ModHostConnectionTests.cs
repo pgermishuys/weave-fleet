@@ -40,7 +40,7 @@ public sealed class ModHostConnectionTests : IAsyncDisposable
     private Task<IModHostConnection> StartAsync(ModHostLaunch launch)
         => new ModHostConnectionFactory(_log).StartAsync(launch, new NoCalls(), CancellationToken.None);
 
-    private static ModWireDispatch SessionStart(JsonElement e = default) => new("session.start", "ses_test1", e, [], null);
+    private static ModWireDispatch SessionStart() => new("session.start", "ses_test1", JsonDocument.Parse("{}").RootElement, [], null);
 
     private static bool IsGone(int pid)
     {
@@ -146,7 +146,7 @@ public sealed class ModHostConnectionTests : IAsyncDisposable
         var thrown = await Should.ThrowAsync<ModHostNotReadyException>(StartAsync(Launch(script)));
 
         thrown.Message.ShouldBe("The mod host speaks protocol 2; this Fleet needs protocol 1.");
-        (await BecomesGoneAsync(int.Parse(File.ReadAllText(pidFile).Trim()))).ShouldBeTrue();
+        (await BecomesGoneAsync(int.Parse(File.ReadAllText(pidFile).Trim(), System.Globalization.CultureInfo.InvariantCulture))).ShouldBeTrue();
     }
 
     [Fact]
@@ -160,7 +160,7 @@ public sealed class ModHostConnectionTests : IAsyncDisposable
         var thrown = await Should.ThrowAsync<ModHostNotReadyException>(StartAsync(Launch(script)));
 
         thrown.Message.ShouldContain("protocol 1 is not supported");
-        (await BecomesGoneAsync(int.Parse(File.ReadAllText(pidFile).Trim()))).ShouldBeTrue();
+        (await BecomesGoneAsync(int.Parse(File.ReadAllText(pidFile).Trim(), System.Globalization.CultureInfo.InvariantCulture))).ShouldBeTrue();
     }
 
     [Fact]

@@ -66,6 +66,8 @@ public interface IModHostCalls
 /// <summary>JSON-RPC error codes the protocol uses.</summary>
 public static class ModHostErrorCodes
 {
+    public const int ParseError = -32700;
+    public const int InvalidRequest = -32600;
     public const int InvalidParams = -32602;
     public const int MethodNotFound = -32601;
     public const int Internal = -32603;

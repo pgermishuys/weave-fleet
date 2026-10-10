@@ -310,7 +310,7 @@ public sealed class ModHostRpcTests : IAsyncDisposable
         var answer = await ReadAsync();
         answer.GetProperty("id").GetInt32().ShouldBe(3);
         answer.GetProperty("error").GetProperty("code").GetInt32().ShouldBe(-32603);
-        answer.GetProperty("error").GetProperty("message").GetString().ShouldContain("too large");
+        answer.GetProperty("error").GetProperty("message").GetString().ShouldNotBeNull().ShouldContain("too large");
     }
 
     [Fact]
@@ -388,7 +388,7 @@ public sealed class ModHostRpcTests : IAsyncDisposable
 }
 
 /// <summary>An <see cref="ILogger"/> that keeps the formatted messages.</summary>
-internal sealed class CapturingLogger : ILogger
+internal sealed class CapturingLogger : ILogger<ModHostConnectionFactory>
 {
     private readonly ConcurrentQueue<string> _messages = new();
 
