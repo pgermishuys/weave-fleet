@@ -201,6 +201,12 @@ const DESCRIPTORS: readonly ToolDescriptor[] = [
   { name: "fleet_session_start", category: "fleet", permissionKind: "read", heading: "Start session on a machine", icon: MonitorUp, titledFromAnswer: true },
   { name: "fleet_memory_save", category: "fleet", permissionKind: "read", heading: "Remember", icon: Lightbulb, label: (input) => { const note = text(input, "text"); return note ? truncate(note, 80) : "remember"; } },
   { name: "fleet_memory_forget", category: "fleet", permissionKind: "read", heading: "Forget note", icon: LightbulbOff, label: (input) => text(input, "id") ?? "forget note" },
+  { name: "fleet_mod_write", category: "fleet", permissionKind: "read", heading: "Write mod", icon: Pencil, label: (input) => text(input, "name") ?? "write mod" },
+  { name: "fleet_mod_check", category: "fleet", permissionKind: "read", heading: "Check mod", icon: CircleCheck, label: (input) => text(input, "name") ?? "check mod" },
+  { name: "fleet_mod_reload", category: "fleet", permissionKind: "read", heading: "Reload mod", icon: Code, label: (input) => text(input, "name") ?? "reload mod" },
+  { name: "fleet_mod_test", category: "fleet", permissionKind: "read", heading: "Test mod", icon: Code, label: (input) => text(input, "name") ?? "test mod" },
+  { name: "fleet_mod_keep", category: "fleet", permissionKind: "read", heading: "Keep mod", icon: CircleCheck, label: (input) => text(input, "name") ?? "keep mod" },
+  { name: "fleet_mod_list", category: "fleet", permissionKind: "read", heading: "List mods", icon: ListChecks, label: () => "list mods" },
   { name: "fleet_step_done", category: "fleet", permissionKind: "read", heading: "Step done", icon: CircleCheck },
 ];
 
