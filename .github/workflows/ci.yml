@@ -249,12 +249,13 @@ jobs:
         with:
           dotnet-version: '10.0.x'
 
+      # Also the mod store's file-safety tests, for SafeFile's Windows path (attributes, no FIFOs).
       - name: Run the leftover-process test
         shell: bash
         run: >
           dotnet test tests/WeaveFleet.Infrastructure.Tests
           --configuration Release
-          --filter "FullyQualifiedName~ClaudeCodeProcessManagerTests.What_the_agent_left_running"
+          --filter "FullyQualifiedName~ClaudeCodeProcessManagerTests.What_the_agent_left_running|Category=ModsFileSafety"
           --logger "trx;LogFileName=windows-processes.trx"
           --results-directory test-results/
           -p:SkipFrontendBuild=true
@@ -267,6 +268,48 @@ jobs:
           echo "Tests run: ${total}"
           if [ "${total:-0}" -eq 0 ]; then
             echo "::error::The leftover-process test didn't run."
+            exit 1
+          fi
+
+  # The mod store opens and stats every file of a mod natively (SafeFile: open with O_NONBLOCK | O_NOFOLLOW, then
+  # fstat), and the open flags differ by OS and CPU. The other .NET tests run on Linux x64 only, so these few run on
+  # each other Unix Fleet's code has a path for. macos-13 is retired; macos-15-intel is GitHub's x64 macOS image.
+  mods-file-safety:
+    name: Mod file safety (${{ matrix.runs_on }})
+    runs-on: ${{ matrix.runs_on }}
+    timeout-minutes: 15
+    strategy:
+      fail-fast: false
+      matrix:
+        runs_on: [macos-latest, macos-15-intel, ubuntu-24.04-arm]
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup .NET
+        uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: '10.0.x'
+
+      - name: Run the mod store's file-safety tests
+        shell: bash
+        run: >
+          dotnet test tests/WeaveFleet.Infrastructure.Tests
+          --configuration Release
+          --filter "Category=ModsFileSafety"
+          --logger "trx;LogFileName=mods-file-safety.trx"
+          --results-directory test-results/
+          -p:SkipFrontendBuild=true
+
+      # dotnet test exits 0 when nothing runs.
+      - name: Fail if no test ran
+        shell: bash
+        run: |
+          total=$(grep -ho '<Counters total="[0-9]*"' test-results/mods-file-safety.trx | grep -o '[0-9]*' || echo 0)
+          echo "Tests run: ${total}"
+          if [ "${total:-0}" -eq 0 ]; then
+            echo "::error::The mod file-safety tests didn't run."
             exit 1
           fi
 
