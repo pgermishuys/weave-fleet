@@ -165,21 +165,18 @@ internal sealed partial class BunRuntimeInstaller(
         catch (OperationCanceledException) when (ct.IsCancellationRequested)
         {
             LogCancelled(version);
-            Cleanup(downloadDirectory, stagingDirectory);
             Set(BunInstallPhases.Failed, "The install was cancelled.");
             throw;
         }
         catch (InstallFailure failure)
         {
             LogFailed(version, failure.Message);
-            Cleanup(downloadDirectory, stagingDirectory);
             Set(BunInstallPhases.Failed, failure.Message);
             return new FleetError(ErrorCode, failure.Message);
         }
         catch (Exception ex)
         {
             LogInstallException(ex, version);
-            Cleanup(downloadDirectory, stagingDirectory);
             var message = $"Couldn't install Bun {version}: {ex.Message}";
             Set(BunInstallPhases.Failed, message);
             return new FleetError(ErrorCode, message);
