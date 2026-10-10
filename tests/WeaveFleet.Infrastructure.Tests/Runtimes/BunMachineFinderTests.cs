@@ -186,6 +186,17 @@ public sealed class BunMachineFinderTests : IDisposable
         (await Paths(finder)).ShouldBe([exe, c]);
     }
 
+    [Theory]
+    [InlineData(@"C:\Users\sam\.bun\bin", true)]
+    [InlineData("C:/tools", true)]
+    [InlineData(@"\\server\share\bin", true)]
+    [InlineData("C:bin", false)]
+    [InlineData(@"\bin", false)]
+    [InlineData(@".\bin", false)]
+    [InlineData("bin", false)]
+    public void On_Windows_a_PATH_entry_must_be_fully_qualified(string entry, bool searched) =>
+        Finder(windows: true).IsFullyQualified(entry).ShouldBe(searched);
+
     [Fact]
     public async Task On_Windows_the_home_folder_is_searched_and_the_system_folders_are_not()
     {

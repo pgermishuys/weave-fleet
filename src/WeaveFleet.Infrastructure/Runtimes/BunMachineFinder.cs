@@ -75,9 +75,9 @@ internal sealed class BunMachineFinder
         var separator = IsWindows ? ';' : ':';
         foreach (var entry in (PathEnv ?? "").Split(separator, StringSplitOptions.RemoveEmptyEntries))
         {
-            // A relative entry (such as ".") would search wherever Fleet happens to be running.
+            // A relative entry (such as "." or, on Windows, "C:bin") would search wherever Fleet happens to be running.
             var directory = IsWindows ? entry.Trim().Trim('"') : entry;
-            if (directory.Length > 0 && Path.IsPathRooted(directory))
+            if (directory.Length > 0 && IsFullyQualified(directory))
                 yield return directory;
         }
 
@@ -89,6 +89,17 @@ internal sealed class BunMachineFinder
                 yield return directory;
         }
     }
+
+    /// <summary>
+    /// <see cref="Path.IsPathFullyQualified(string)"/> for the platform being searched, so the Windows rules apply under
+    /// <see cref="IsWindows"/> on any machine: a drive and a backslash (<c>C:\bin</c>) or a UNC path.
+    /// </summary>
+    internal bool IsFullyQualified(string directory) =>
+        IsWindows
+            ? (directory.Length >= 3 && char.IsAsciiLetter(directory[0]) && directory[1] == ':' && directory[2] is '\\' or '/')
+              || directory.StartsWith(@"\\", StringComparison.Ordinal)
+              || Path.IsPathFullyQualified(directory)
+            : Path.IsPathFullyQualified(directory);
 
     private async Task<BunCandidate> ClassifyAsync(string path, string resolved, CancellationToken ct)
     {
