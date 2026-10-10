@@ -219,6 +219,17 @@ public sealed class ModHostSupervisorTests : IDisposable
     }
 
     [Fact]
+    public async Task A_request_whose_pipe_closes_is_not_ready_for_the_caller()
+    {
+        var connection = await StartedAsync();
+        connection.OnRequest = () => Task.FromException<JsonElement>(new ModHostClosedException("The mod host closed its connection."));
+
+        var failure = await Should.ThrowAsync<ModHostNotReadyException>(_supervisor.RequestAsync("ping", default).Within());
+
+        failure.Message.ShouldBe("The mod host stopped; Fleet is restarting it.");
+    }
+
+    [Fact]
     public async Task A_request_answers_with_the_hosts_result_and_one_while_stopped_is_not_ready()
     {
         await Should.ThrowAsync<ModHostNotReadyException>(_supervisor.RequestAsync("ping", default).Within());
