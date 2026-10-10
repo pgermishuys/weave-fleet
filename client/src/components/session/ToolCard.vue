@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { computed, shallowRef, watch } from "vue";
+import { computed, shallowRef, watch, type Component } from "vue";
 import { Check } from "lucide-vue-next";
 import DiffView from "@/components/session/DiffView.vue";
 import StatusGlyph from "@/components/sessions/StatusGlyph.vue";
@@ -7,6 +7,10 @@ import { useWorkspaceUiStore } from "@/stores/workspace-ui";
 import { getToolIcon, getToolDisplayLabel } from "@/lib/tool-icons";
 import { parseVisualPayload, type VisualPayload } from "@/lib/visual-payload";
 import { getVisualRenderer } from "@/lib/visual-renderer-registry";
+import ModTree from "@/components/mods/ModTree.vue";
+import { toolRowViewId, toolRowViews } from "@/lib/mods/points";
+import { useResolvedModView } from "@/lib/mods/resolve";
+import type { ModAction } from "@/lib/mods/types";
 
 interface DiffLine {
   type: "add" | "remove" | "context";
@@ -18,6 +22,10 @@ interface DiffLine {
 const props = withDefaults(
   defineProps<{
     id: string;
+    /** The call's id, which a mod's tree for this row is keyed by (with the session). */
+    callId?: string;
+    /** The session the call is in. Without it, no mod draws on the row. */
+    sessionId?: string;
     title: string;
     kind?: string;
     status?: string;
@@ -33,6 +41,8 @@ const props = withDefaults(
     improvable?: boolean;
   }>(),
   {
+    callId: undefined,
+    sessionId: undefined,
     kind: "Tool",
     status: "Completed",
     summary: "",
@@ -121,6 +131,28 @@ const diffStats = computed(() => {
   return adds + removes > 0 ? { adds, removes } : null;
 });
 
+// A mod's tree on the line sits before Fleet's result, and its controls stay clear of the row's toggle.
+// A mod can draw the row's line (ToolUse) and its opened body (ToolResult). Each is read for this row's id alone, so a
+// contribution for another call doesn't redraw this one, and removal brings Fleet's own drawing back.
+function viewId(site: "ToolUse" | "ToolResult"): string | undefined {
+  return props.sessionId && props.callId ? toolRowViewId(site, props.sessionId, props.callId) : undefined;
+}
+const useView = useResolvedModView(toolRowViews, () => viewId("ToolUse"), "ToolUse");
+const resultView = useResolvedModView(toolRowViews, () => viewId("ToolResult"), "ToolResult");
+
+// Without a ToolResult tree the body is Fleet's own, drawn straight into `.tool-body` (no wrapper).
+const FleetBody: Component = (_props, { slots }) => slots.fleet?.();
+const resultBind = computed(() => {
+  const view = resultView.value;
+  if (!view.draws) return {};
+  return {
+    tree: view.tree,
+    site: "ToolResult",
+    sessionId: props.sessionId,
+    onAction: (action: ModAction) => view.view.onAction?.(action, "desktop"),
+  };
+});
+
 function handleToggle(event: Event): void {
   const target = event.target as HTMLDetailsElement;
   isCollapsed.value = !target.open;
@@ -147,6 +179,7 @@ function handleExpandVisual(): void {
   >
     <summary
       class="tool-header"
+      :class="{ 'tool-header--mod': useView.draws }"
       data-testid="tool-card-header"
     >
       <component :is="toolIcon" class="tool-header__icon" />
@@ -172,6 +205,20 @@ function handleExpandVisual(): void {
       >
         Improve
       </button>
+      <span
+        v-if="useView.draws"
+        class="tool-header__mod"
+        data-testid="tool-card-mod"
+        @click.stop
+      >
+        <ModTree
+          v-if="useView.tree"
+          :tree="useView.tree"
+          site="ToolUse"
+          :session-id="sessionId"
+          @action="useView.view.onAction?.($event, 'desktop')"
+        />
+      </span>
       <span
         v-if="status === 'Running' || status === 'Background' || status === 'Error'"
         class="tool-header__status"
@@ -199,60 +246,67 @@ function handleExpandVisual(): void {
         <span class="tool-header__removes">−{{ diffStats.removes }}</span>
       </span>
       <Check
-        v-else-if="status === 'Completed'"
+        v-else-if="status === 'Completed' && !useView.draws"
         class="tool-header__done"
         aria-label="Completed"
       />
     </summary>
 
-    <p v-if="preview" class="tool-preview">{{ preview }}</p>
+    <p v-if="preview && !useView.draws" class="tool-preview">{{ preview }}</p>
 
     <div
       :id="`${id}-body`"
       class="tool-body"
       data-testid="tool-card-body"
     >
-      <p
-        v-if="summary"
-        class="tool-summary"
-        data-testid="tool-card-summary"
+      <component
+        :is="resultView.draws ? ModTree : FleetBody"
+        v-bind="resultBind"
       >
-        {{ summary }}
-      </p>
+        <template #fleet>
+          <p
+            v-if="summary"
+            class="tool-summary"
+            data-testid="tool-card-summary"
+          >
+            {{ summary }}
+          </p>
 
-      <DiffView
-        v-if="shouldShowDiff"
-        :lines="diffLines"
-      />
+          <DiffView
+            v-if="shouldShowDiff"
+            :lines="diffLines"
+          />
 
-      <div
-        v-if="visualPayload && visualRenderer"
-        class="tool-visual"
-        data-testid="tool-card-visual"
-      >
-        <component :is="visualRenderer" :content="visualPayload.content" />
-        <button
-          class="tool-visual__expand"
-          data-testid="tool-visual-expand"
-          @click="handleExpandVisual"
-        >
-          Expand
-        </button>
-      </div>
+          <div
+            v-if="visualPayload && visualRenderer"
+            class="tool-visual"
+            data-testid="tool-card-visual"
+          >
+            <component :is="visualRenderer" :content="visualPayload.content" />
+            <button
+              class="tool-visual__expand"
+              data-testid="tool-visual-expand"
+              @click="handleExpandVisual"
+            >
+              Expand
+            </button>
+          </div>
 
-      <pre
-        v-if="output && !visualPayload"
-        class="tool-output"
-        data-testid="tool-card-output"
-      ><code>{{ output }}</code></pre>
+          <pre
+            v-if="output && !visualPayload"
+            class="tool-output"
+            data-testid="tool-card-output"
+          ><code>{{ output }}</code></pre>
 
-      <p
-        v-if="!summary && !output && !shouldShowDiff"
-        class="tool-empty"
-        data-testid="tool-card-empty-state"
-      >
-        No output captured
-      </p>
+          <p
+            v-if="!summary && !output && !shouldShowDiff"
+            class="tool-empty"
+            data-testid="tool-card-empty-state"
+          >
+            No output captured
+          </p>
+        </template>
+      </component>
     </div>
   </details>
 </template>
@@ -349,6 +403,43 @@ function handleExpandVisual(): void {
 .tool-header__show:focus-visible {
   outline: 2px solid var(--accent);
   outline-offset: -2px;
+}
+
+/* The mod's slot shrinks and wraps instead of widening the row (the title keeps truncating). Only the first
+   right-aligned item takes the free space: after the Show button the slot sits beside it. */
+.tool-header__mod {
+  display: flex;
+  flex: 0 1 auto;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 4px 6px;
+  min-width: 0;
+  /* Never more than 60% of the row: the title keeps the rest (and at least its minimum, below). */
+  max-width: 60%;
+  margin-left: auto;
+}
+
+/* With a mod drawing on the line the command keeps a floor of 30% of the row (12 characters at most), ellipsizing
+   inside it, so a long pill can't squeeze it to nothing. Rows no mod draws on keep today's CSS. */
+.tool-header--mod .tool-header__detail,
+.tool-header--mod .tool-header__pattern {
+  min-width: min(30%, 12ch);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.tool-header__mod :deep(.mod-tree) {
+  flex-wrap: wrap;
+  min-width: 0;
+  max-width: 100%;
+}
+
+.tool-header__show ~ .tool-header__mod,
+.tool-header__mod ~ .tool-header__status,
+.tool-header__mod ~ .tool-header__result {
+  margin-left: 0;
 }
 
 .tool-header__show + .tool-header__done {

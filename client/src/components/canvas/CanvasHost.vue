@@ -10,6 +10,7 @@ import {
   DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
+import ModDraftMark from "@/components/mods/ModDraftMark.vue";
 import BrowserOpenDialog from "@/components/canvas/BrowserOpenDialog.vue";
 import UnsavedFileDialog from "@/components/canvas/UnsavedFileDialog.vue";
 import type { UseDiffsResult } from "@/composables/use-diffs";
@@ -32,6 +33,7 @@ import {
   visualCanvasTitle,
   type CanvasInstance,
 } from "@/stores/canvases";
+import { isDraftView, modPanes, modPaneViewId } from "@/lib/mods/points";
 import { useFileBuffersStore } from "@/stores/file-buffers";
 
 const props = withDefaults(defineProps<{
@@ -137,6 +139,14 @@ function focusTab(canvas: CanvasInstance): void {
 function activate(canvas: CanvasInstance): void {
   store.activate(props.sessionId, canvas.id);
 }
+
+function isDraftModPane(canvas: CanvasInstance): boolean {
+  if (!canvas.modPane) return false;
+  const view = modPanes.get(modPaneViewId(props.sessionId, canvas.modPane.mod, canvas.modPane.paneId));
+  return !!view && isDraftView(view);
+}
+
+const hasDraftTab = computed(() => canvases.value.some(isDraftModPane));
 
 function isUnsaved(canvas: CanvasInstance): boolean {
   return !!canvas.file && fileBuffers.isDirty(props.sessionId, canvas.file.path);
@@ -274,6 +284,9 @@ const activeProps = computed(() => {
       appId: canvas.browser.appId,
     };
   }
+  if (canvas.kind === "mod" && canvas.modPane) {
+    return { sessionId: props.sessionId, paneId: canvas.modPane.paneId, mod: canvas.modPane.mod };
+  }
   if (canvas.kind === "page" && canvas.page) {
     return { sessionId: props.sessionId, page: canvas.page };
   }
@@ -292,6 +305,7 @@ const activeProps = computed(() => {
           'canvas-tabs--fade-start': fadeStart,
           'canvas-tabs--fade-end': fadeEnd,
           'canvas-tabs--dragging': draggingTabs,
+          'canvas-tabs--draft': hasDraftTab,
         }"
         role="tablist"
         aria-label="Canvases"
@@ -327,6 +341,7 @@ const activeProps = computed(() => {
             class="canvas-tab__icon"
           />
           <span class="canvas-tab__label">{{ canvasTitle(canvas) }}</span>
+          <ModDraftMark v-if="isDraftModPane(canvas)" />
           <span
             v-if="canvas.kind === 'changes' && changedCount > 0"
             class="canvas-tab__count"
@@ -536,6 +551,12 @@ const activeProps = computed(() => {
   scrollbar-width: none;
 }
 
+/* Bringing the active tab into view leaves room for the fade, so it doesn't cut the tab before it. Only while a Draft
+   mark widens a tab: with no mods the strip is main's. */
+.canvas-tabs--draft {
+  scroll-padding-inline: 24px;
+}
+
 .canvas-tabs::-webkit-scrollbar {
   display: none;
 }
@@ -600,6 +621,13 @@ const activeProps = computed(() => {
   min-width: 0;
   overflow: hidden;
   text-overflow: ellipsis;
+}
+
+/* The Draft mark on a pane's tab is compact, so it widens the tab as little as it can. */
+.canvas-tab :deep(.mod-draft-mark) {
+  padding: 0 3px;
+  font-size: 9px;
+  line-height: 13px;
 }
 
 .canvas-tab__count {

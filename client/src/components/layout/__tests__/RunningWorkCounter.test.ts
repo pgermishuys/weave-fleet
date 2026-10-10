@@ -17,7 +17,7 @@ vi.mock("@/composables/use-signalr-socket", () => ({
   },
   onReconnect: () => () => undefined,
 }));
-vi.mock("@tanstack/vue-router", () => ({ useRouter: () => ({ navigate }) }));
+vi.mock("@tanstack/vue-router", () => ({ useRouter: () => ({ navigate }), useLocation: () => ({ value: "/" }) }));
 
 import StatusBar from "@/components/layout/StatusBar.vue";
 import { _resetRunningWorkForTesting } from "@/composables/use-running-work";

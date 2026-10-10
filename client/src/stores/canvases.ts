@@ -10,6 +10,7 @@ import {
   type ServerCanvasSnapshot,
   type ShownPage,
 } from "@/lib/server-canvas";
+import { modPanes, modPaneOwner } from "@/lib/mods/points";
 import type { VisualPayload } from "@/lib/visual-payload";
 import { useFileBuffersStore } from "@/stores/file-buffers";
 
@@ -68,6 +69,8 @@ export interface CanvasInstance {
   page?: ShownPage & { title: string };
   /** Present on file tabs: the file and how it's shown. */
   file?: FileTab;
+  /** Present on mod panes: which pane of which mod this tab draws. */
+  modPane?: { paneId: string; title: string; mod: string };
 }
 
 export interface SessionCanvases {
@@ -106,6 +109,11 @@ export function visualCanvasTitle(payload: VisualPayload): string {
 
 export function visualCanvasId(payload: VisualPayload): string {
   return `visual:${visualCanvasTitle(payload)}`;
+}
+
+/** A pane id belongs to its mod: two mods may use the same one. */
+export function modPaneCanvasId(mod: string, paneId: string): string {
+  return `mod:${mod}:${paneId}`;
 }
 
 export function fileCanvasId(path: string): string {
@@ -282,12 +290,39 @@ export const useCanvasesStore = defineStore("canvases", () => {
     return id;
   }
 
+  /** Open (or bring forward) the tab for a mod's pane. A pane id has one tab; opening it again updates it in place. */
+  function openModPane(sessionId: string, modPane: NonNullable<CanvasInstance["modPane"]>): string {
+    const id = modPaneCanvasId(modPane.mod, modPane.paneId);
+    update(sessionId, (current) => {
+      const next: CanvasInstance = { id, kind: "mod", modPane };
+      const exists = current.canvases.some((canvas) => canvas.id === id);
+      return {
+        ...current,
+        canvases: exists ? current.canvases.map((canvas) => (canvas.id === id ? next : canvas)) : [...current.canvases, next],
+        activeId: id,
+      };
+    });
+    return id;
+  }
+
+  /** Redraw an open pane's tab (its title) without opening it or bringing it forward. Does nothing if it isn't open. */
+  function updateModPane(sessionId: string, modPane: NonNullable<CanvasInstance["modPane"]>): void {
+    const id = modPaneCanvasId(modPane.mod, modPane.paneId);
+    if (!sessionCanvases(sessionId).canvases.some((canvas) => canvas.id === id)) return;
+    update(sessionId, (current) => ({
+      ...current,
+      canvases: current.canvases.map((canvas) => (canvas.id === id ? { id, kind: "mod", modPane } : canvas)),
+    }));
+  }
+
   function close(sessionId: string, canvasId: string): void {
     if (FIXED_CANVAS_IDS.has(canvasId)) return;
 
     const closing = sessionCanvases(sessionId).canvases.find((canvas) => canvas.id === canvasId);
     update(sessionId, (current) => withoutCanvas(current, canvasId));
     if (closing?.file) useFileBuffersStore().remove(sessionId, closing.file.path);
+    // A closed pane is gone for the phone's menu too, wherever the tab was closed from.
+    if (closing?.modPane) modPanes.removeByOwner(modPaneOwner(sessionId, closing.modPane.mod, closing.modPane.paneId));
   }
 
   /**
@@ -491,6 +526,8 @@ export const useCanvasesStore = defineStore("canvases", () => {
     open,
     introduce,
     openVisual,
+    openModPane,
+    updateModPane,
     openFile,
     keepFile,
     unpinFile,

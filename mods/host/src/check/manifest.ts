@@ -2,8 +2,8 @@ import { readFile, realpath, stat } from "node:fs/promises";
 import { basename, dirname, isAbsolute, relative, resolve } from "node:path";
 import type { CheckProblem } from "fleet-mods/protocol";
 import type { Manifest } from "./index";
+import { MOD_NAME } from "../ids";
 
-const NAME = /^[a-z][a-z0-9-]{0,63}$/;
 const KNOWN = new Set(["name", "version", "description", "hooks"]);
 const EXTENSIONS = [".js", ".mjs", ".ts", ".mts"];
 
@@ -60,7 +60,7 @@ export async function readManifest(root: string, manifestPath: string): Promise<
 
   const name = m.name;
   if (typeof name !== "string") bad('"name" is required and must be a string');
-  else if (!NAME.test(name)) bad(`"name" must be lowercase letters, digits and "-", 1 to 64, starting with a letter: ${JSON.stringify(name)}`);
+  else if (!MOD_NAME.test(name)) bad(`"name" must be lowercase letters, digits and "-", 1 to 64, starting with a letter: ${JSON.stringify(name)}`);
   else if (name.startsWith("fleet-")) bad('"name" can\'t start with "fleet-": that prefix is reserved');
   else {
     const folder = basename(resolve(root));

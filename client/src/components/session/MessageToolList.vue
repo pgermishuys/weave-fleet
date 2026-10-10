@@ -50,6 +50,8 @@ function handleExpandVisual(payload: VisualPayload): void {
       <ToolCard
         v-else
         :id="tool.id"
+        :call-id="tool.callId"
+        :session-id="sessionId"
         :title="tool.title"
         :kind="tool.kind"
         :status="tool.status"

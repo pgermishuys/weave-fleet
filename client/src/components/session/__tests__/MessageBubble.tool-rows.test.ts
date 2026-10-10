@@ -195,7 +195,8 @@ describe("MessageBubble tool rows: pages", () => {
 
     expect(view.findAllComponents(ToolCard)).toHaveLength(1);
     const shown = view.getComponent(ConversationPage);
-    expect(shown.props()).toEqual({ page, title: "CI test times" });
+    // A conversation page is not a mod page: it keeps its own address and "open in a new tab".
+    expect(shown.props()).toEqual({ page, title: "CI test times", src: undefined, contained: false });
     expect(view.find(".msg-tools").element.contains(shown.element)).toBe(false);
   });
 

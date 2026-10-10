@@ -7,10 +7,10 @@ import { useCanvasesStore, type CanvasInstance } from "@/stores/canvases";
 describe("canvas kinds", () => {
   it("has these kinds, each with its own label", () => {
     expect(canvasTypes.items.value.map((type) => type.kind)).toEqual([
-      "changes", "files", "context", "progress", "turns", "agents", "visual", "browser", "page", "file",
+      "changes", "files", "context", "progress", "turns", "agents", "visual", "browser", "page", "file", "mod",
     ]);
     expect(canvasTypes.items.value.map((type) => type.label)).toEqual([
-      "Changes", "Files", "Context", "Progress", "Turns", "Agents", "Diagram", "Browser", "Page", "File",
+      "Changes", "Files", "Context", "Progress", "Turns", "Agents", "Diagram", "Browser", "Page", "File", "Mod",
     ]);
     for (const type of canvasTypes.items.value) {
       expect(type.component).toBeTruthy();

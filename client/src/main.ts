@@ -12,6 +12,7 @@ import { getPromptTrackingState } from "@/composables/use-send-prompt";
 import { useSessionsStore } from "@/stores/sessions";
 import { useThemeStore } from "@/stores/theme";
 import { useWorkspaceUiStore } from "@/stores/workspace-ui";
+import { installModsTestApi } from "@/lib/mods/test-api";
 import { restoreActiveMachine } from "@/lib/machines";
 import { startServiceWorker } from "@/composables/use-service-worker";
 import { captureInstallPrompt } from "@/lib/phone/install-prompt";
@@ -61,6 +62,8 @@ if (browserWindow) {
     }),
   };
 }
+
+installModsTestApi(pinia);
 
 await router.load();
 
