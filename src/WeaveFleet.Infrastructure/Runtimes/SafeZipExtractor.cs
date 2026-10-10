@@ -5,8 +5,9 @@ namespace WeaveFleet.Infrastructure.Runtimes;
 /// <summary>
 /// Unpacks a zip archive Fleet downloaded without letting it write outside the folder it's unpacked into: no entry
 /// whose path leaves the folder (<c>../</c>, an absolute path, a drive letter), no symbolic links, no entry twice, and
-/// no more than a set number of bytes in all. Unix permission bits in the archive are kept (setuid, setgid and sticky
-/// are dropped), so executables stay executable.
+/// no more than a set number of bytes in all, and no entry whose size or CRC-32 differs from what the archive declares.
+/// Unix permission bits in the archive are kept so executables stay executable, except that setuid, setgid and sticky
+/// are dropped and group and other never get write.
 /// </summary>
 internal static class SafeZipExtractor
 {
@@ -17,6 +18,7 @@ internal static class SafeZipExtractor
     private const int UnixTypeMask = 0xF000;
     private const int UnixRegularFile = 0x8000;
     private const int UnixDirectory = 0x4000;
+    private const int UnixSafeMode = 0x1ED; // rwx for the owner, r-x for group and other
 
     /// <summary>
     /// Unpacks <paramref name="zipPath"/> into <paramref name="destination"/>, which must not exist yet or be empty.
@@ -61,7 +63,8 @@ internal static class SafeZipExtractor
             throw new InvalidDataException($"The archive has {archive.Entries.Count} entries; at most {MaxEntries} are allowed.");
 
         var plan = new List<(ZipArchiveEntry, string, bool)>(archive.Entries.Count);
-        var seen = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+        var files = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+        var folders = new HashSet<string>(StringComparer.OrdinalIgnoreCase); // listed or implied by a longer path
         long declared = 0;
 
         foreach (var entry in archive.Entries)
@@ -74,8 +77,8 @@ internal static class SafeZipExtractor
             if (segments.Contains(".."))
                 throw new InvalidDataException($"Refusing archive entry '{name}': it climbs out of the folder.");
 
-            var isDirectory = name[^1] is '/' or '\\';
             var unixType = (entry.ExternalAttributes >> 16) & UnixTypeMask;
+            var isDirectory = name[^1] is '/' or '\\' || unixType == UnixDirectory;
             if (unixType == 0xA000)
                 throw new InvalidDataException($"Refusing archive entry '{name}': symbolic links are not allowed.");
             if (unixType is not (0 or UnixRegularFile or UnixDirectory))
@@ -84,9 +87,35 @@ internal static class SafeZipExtractor
             var normalized = string.Join('/', segments.Where(s => s.Length > 0 && s != "."));
             if (normalized.Length == 0 && !isDirectory)
                 throw new InvalidDataException($"Refusing archive entry '{name}': its path is not allowed.");
-            if (normalized.Length > 0 && !seen.Add(normalized))
-                throw new InvalidDataException($"Refusing archive entry '{name}': the archive has that path twice.");
+            if (normalized.Length > 0)
+            {
+                var parts = normalized.Split('/');
+                var prefix = "";
+                for (var i = 0; i < parts.Length - 1; i++)
+                {
+                    prefix = i == 0 ? parts[0] : prefix + "/" + parts[i];
+                    if (files.Contains(prefix))
+                        throw new InvalidDataException($"Refusing archive entry '{name}': '{prefix}' is a file and a folder.");
+                    folders.Add(prefix);
+                }
 
+                if (isDirectory)
+                {
+                    if (files.Contains(normalized))
+                        throw new InvalidDataException($"Refusing archive entry '{name}': that path is a file and a folder.");
+                    folders.Add(normalized);
+                }
+                else
+                {
+                    if (files.Contains(normalized))
+                        throw new InvalidDataException($"Refusing archive entry '{name}': the archive has that path twice.");
+                    if (folders.Contains(normalized))
+                        throw new InvalidDataException($"Refusing archive entry '{name}': that path is a file and a folder.");
+                    files.Add(normalized);
+                }
+            }
+
+            // Only the declared sizes can be capped before writing; each entry is held to its declared size and CRC as it is written.
             declared += entry.Length;
             if (declared > maxBytes)
                 throw new InvalidDataException($"Refusing archive entry '{name}': the archive unpacks to more than {maxBytes} bytes.");
@@ -110,16 +139,48 @@ internal static class SafeZipExtractor
         using var output = new FileStream(target, FileMode.CreateNew, FileAccess.Write, FileShare.None);
         var buffer = new byte[81920];
         int read;
+        long entryBytes = 0;
+        var crc = 0xFFFFFFFFu;
         while ((read = input.Read(buffer, 0, buffer.Length)) > 0)
         {
             ct.ThrowIfCancellationRequested();
             written += read;
+            entryBytes += read;
             if (written > maxBytes)
                 throw new InvalidDataException($"Refusing archive entry '{entry.FullName}': the archive unpacks to more than {maxBytes} bytes.");
+            crc = UpdateCrc(crc, buffer, read);
             output.Write(buffer, 0, read);
         }
 
+        if (entryBytes != entry.Length)
+            throw new InvalidDataException($"Refusing archive entry '{entry.FullName}': it unpacked to {entryBytes} bytes, not the {entry.Length} it declares.");
+        if (~crc != entry.Crc32)
+            throw new InvalidDataException($"Refusing archive entry '{entry.FullName}': its contents do not match its CRC-32.");
+
         return written;
+    }
+
+    private static readonly uint[] CrcTable = BuildCrcTable();
+
+    private static uint[] BuildCrcTable()
+    {
+        var table = new uint[256];
+        for (uint n = 0; n < 256; n++)
+        {
+            var c = n;
+            for (var k = 0; k < 8; k++)
+                c = (c & 1) != 0 ? 0xEDB88320u ^ (c >> 1) : c >> 1;
+            table[n] = c;
+        }
+
+        return table;
+    }
+
+    private static uint UpdateCrc(uint crc, byte[] buffer, int count)
+    {
+        for (var i = 0; i < count; i++)
+            crc = CrcTable[(crc ^ buffer[i]) & 0xFF] ^ (crc >> 8);
+        return crc;
     }
 
     private static void ApplyUnixMode(ZipArchiveEntry entry, string target)
@@ -128,6 +189,6 @@ internal static class SafeZipExtractor
         var attributes = entry.ExternalAttributes >> 16;
         if (attributes == 0) return;
 
-        File.SetUnixFileMode(target, (UnixFileMode)(attributes & 0x1FF) | UnixFileMode.UserRead | UnixFileMode.UserWrite);
+        File.SetUnixFileMode(target, (UnixFileMode)(attributes & UnixSafeMode) | UnixFileMode.UserRead | UnixFileMode.UserWrite);
     }
 }
