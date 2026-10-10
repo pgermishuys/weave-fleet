@@ -2,7 +2,7 @@ import { DOMWrapper, flushPromises, mount, type VueWrapper } from "@vue/test-uti
 import { computed, defineComponent, h, ref, shallowRef, watchEffect, type Ref } from "vue";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { api, NO_PROFILE } from "@/api/client";
-import type { BranchInfo, HarnessCatalog, HarnessInfo, HarnessProfile, RepositoryDetail, ScannedRepository, WorktreeInfo } from "@/api/client";
+import type { BranchInfo, HarnessCatalog, HarnessInfo, HarnessProfile, RepositoryDetail, ScannedRepository, SessionListItem, WorktreeInfo } from "@/api/client";
 import NewSessionComposer from "@/components/sessions/NewSessionComposer.vue";
 import { toAgentOptions } from "@/composables/use-agents";
 import { toModelOptions } from "@/composables/use-models";
@@ -489,6 +489,70 @@ describe("NewSessionComposer", () => {
       // A preview: the request carries no branch, and the server does the naming.
       expect(view.get("[data-testid='new-session-plan']").text())
         .toContain("New worktree ~/src/rocket-worktrees/fleet-fix-login-redirect on fleet/fix-login-redirect");
+    });
+  });
+
+  describe("opened from a project", () => {
+    function projectSession(id: string, created: number, overrides: Partial<SessionListItem> = {}): SessionListItem {
+      return {
+        instanceId: `instance-${id}`,
+        workspaceId: `workspace-${id}`,
+        workspaceDirectory: comet.path,
+        workspaceDisplayName: null,
+        isolationStrategy: "existing",
+        sessionStatus: "idle",
+        session: { id, title: "Earlier work", time: { created, updated: created }, tags: [] },
+        instanceStatus: "running",
+        lifecycleStatus: "active",
+        retentionStatus: "active",
+        typedInstanceStatus: "running",
+        isHidden: false,
+        harnessType: "opencode",
+        tags: [],
+        projectId: "project-fleet",
+        projectName: "Fleet Core",
+        ...overrides,
+      } as SessionListItem;
+    }
+
+    it("starts in the folder the project's newest session used, not the last one used", async () => {
+      rememberFolder({ kind: "repository", path: rocket.path });
+      useSessionsStore().setSessions([
+        projectSession("older", 1, { workspaceDirectory: "/home/me/notes" }),
+        projectSession("newer", 2, {
+          isolationStrategy: "worktree",
+          workspaceDirectory: "/home/me/src/comet-worktrees/fix",
+          sourceDirectory: comet.path,
+        }),
+      ]);
+      mocks.search.value = { projectId: "project-fleet", source: undefined };
+      const view = await mountComposer();
+
+      expect(view.get("[data-testid='new-session-folder-chip']").text()).toContain("comet");
+    });
+
+    it("moves a kept draft to the project's folder", async () => {
+      rememberFolder({ kind: "repository", path: rocket.path });
+      const first = await mountComposer();
+      await type(first, "Half a thought");
+      first.unmount();
+      wrapper = null;
+
+      useSessionsStore().setSessions([projectSession("earlier", 1)]);
+      mocks.search.value = { projectId: "project-fleet", source: undefined };
+      const again = await mountComposer();
+
+      expect(textarea(again).element.value).toBe("Half a thought");
+      expect(again.get("[data-testid='new-session-folder-chip']").text()).toContain("comet");
+    });
+
+    it("keeps the folder when none of the project's sessions has one", async () => {
+      rememberFolder({ kind: "repository", path: rocket.path });
+      useSessionsStore().setSessions([projectSession("elsewhere", 1, { projectId: "project-other" })]);
+      mocks.search.value = { projectId: "project-fleet", source: undefined };
+      const view = await mountComposer();
+
+      expect(view.get("[data-testid='new-session-folder-chip']").text()).toContain("rocket");
     });
   });
 
