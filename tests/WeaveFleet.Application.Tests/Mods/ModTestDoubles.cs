@@ -138,8 +138,20 @@ internal sealed class InMemoryModVersionStore : IModVersionStore
     public Task<IReadOnlyList<ModFile>?> ReadDraftFilesAsync(string userId, string sessionId, string name, CancellationToken ct = default)
         => Task.FromResult<IReadOnlyList<ModFile>?>(_drafts.ContainsKey((userId, sessionId, name)) ? _files.GetValueOrDefault(DraftFolder(userId, sessionId, name)) : null);
 
+    /// <summary>Follows the store's rules for what the tests need: a path that leaves the folder is refused, and nothing is written.</summary>
     public Task<ModDraft> WriteDraftFilesAsync(string userId, string sessionId, string name, IReadOnlyList<ModFile> files, CancellationToken ct = default)
-        => throw new NotImplementedException();
+    {
+        if (files.Any(f => f.Path.Contains("..", StringComparison.Ordinal)))
+            throw new ModStoreException("A file's path stays inside the mod's folder.");
+
+        var folder = DraftFolder(userId, sessionId, name);
+        var existing = _drafts.GetValueOrDefault((userId, sessionId, name));
+        _files[folder] = (_files.GetValueOrDefault(folder) ?? []).Where(f => files.All(n => n.Path != f.Path)).Concat(files).ToList();
+        var draft = new ModDraft(sessionId, name, folder, existing?.Off, new ModManifest(name, "0.1.0", "Shows chips", "mod.ts"));
+        _drafts[(userId, sessionId, name)] = draft;
+        Writes.Add($"write {sessionId}/{name} {string.Join(",", files.Select(f => f.Path))}");
+        return Task.FromResult(draft);
+    }
 
     public async Task<JsonElement?> CheckDraftAsync(string userId, string sessionId, string name, ModKeepCheck check, CancellationToken ct = default)
     {
@@ -167,4 +179,42 @@ internal sealed class FakeModChecker(JsonElement? report = null) : IModChecker
         Checked.Add(folder);
         return Task.FromResult(Report);
     }
+}
+
+/// <summary>A mod host that answers what a test sets and remembers what it was asked.</summary>
+internal sealed class FakeModDraftRunner : IModDraftRunner
+{
+    private readonly List<ModDraftLogLine> _log = [];
+
+    public string? NotReady { get; set; }
+    public ModDraftLoad Load { get; set; } = new(true, null, null, JsonDocument.Parse("""["ui.render ToolUse"]""").RootElement.Clone());
+    public ModDraftTestRun Run { get; set; } = new(true, JsonDocument.Parse("""{"type":"Pill"}""").RootElement.Clone(), ["test-chips"], []);
+    public ModDraftProblem? Problem { get; set; }
+
+    /// <summary>Called inside <see cref="DispatchAsync"/>, to write the log lines a hook would.</summary>
+    public Action? OnDispatch { get; set; }
+
+    public List<(string User, string Session, string Name)> Reloaded { get; } = [];
+    public List<(string User, string Session, string Event, JsonElement E)> Dispatched { get; } = [];
+
+    public void AddLog(string level, string text) => _log.Add(new ModDraftLogLine(new DateTimeOffset(2026, 10, 10, 9, 5, _log.Count % 60, TimeSpan.Zero), level, text));
+
+    public string? NotReadyReason(string userId) => NotReady;
+
+    public Task<ModDraftLoad> ReloadAsync(string userId, string sessionId, string name, CancellationToken ct = default)
+    {
+        Reloaded.Add((userId, sessionId, name));
+        return Task.FromResult(Load);
+    }
+
+    public Task<ModDraftTestRun> DispatchAsync(string userId, string sessionId, string eventName, JsonElement e, CancellationToken ct = default)
+    {
+        Dispatched.Add((userId, sessionId, eventName, e.Clone()));
+        OnDispatch?.Invoke();
+        return Task.FromResult(Run);
+    }
+
+    public ModDraftProblem? LoadProblem(string userId, string sessionId, string name) => Problem;
+
+    public IReadOnlyList<ModDraftLogLine> Log(string userId, string name, string? sessionId) => _log.ToList();
 }

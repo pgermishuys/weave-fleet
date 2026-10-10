@@ -92,6 +92,8 @@ public sealed class ModEndpointTests : IAsyncDisposable
     [InlineData("POST", "/api/sessions/s1/mods/drafts/test-chips/keep")]
     [InlineData("POST", "/api/sessions/s1/mods/drafts/test-chips/off")]
     [InlineData("POST", "/api/sessions/s1/mods/drafts/test-chips/on")]
+    [InlineData("DELETE", "/api/sessions/s1/mods/drafts/test-chips/keep-request")]
+    [InlineData("GET", "/api/mods/test-chips/log")]
     public async Task Every_route_is_404_with_the_message_while_the_switch_is_off(string method, string url)
     {
         using var request = new HttpRequestMessage(new HttpMethod(method), url);
@@ -191,6 +193,62 @@ public sealed class ModEndpointTests : IAsyncDisposable
     }
 
     // ── Keep, use, undo, on and off ─────────────────────────────────────
+
+    // ── Keep requests and the log ───────────────────────────────────────
+
+    [Fact]
+    public async Task A_listed_draft_has_no_keep_request_and_no_problem_by_default()
+    {
+        await TurnOnAsync();
+        WriteDraft();
+
+        var draft = (await _client.GetFromJsonAsync<JsonElement>($"/api/sessions/{_session}/mods/drafts")).EnumerateArray().Single();
+
+        draft.TryGetProperty("keepRequest", out var request).ShouldBeTrue();
+        request.ValueKind.ShouldBe(JsonValueKind.Null);
+        draft.TryGetProperty("problem", out var problem).ShouldBeTrue();
+        problem.ValueKind.ShouldBe(JsonValueKind.Null);
+    }
+
+    [Fact]
+    public async Task Declining_a_keep_request_answers_204_and_leaves_the_draft()
+    {
+        await TurnOnAsync();
+        WriteDraft();
+
+        var response = await _client.DeleteAsync(Draft("/keep-request"));
+
+        response.StatusCode.ShouldBe(HttpStatusCode.NoContent);
+        (await _client.GetFromJsonAsync<JsonElement>($"/api/sessions/{_session}/mods/drafts")).GetArrayLength().ShouldBe(1);
+    }
+
+    [Fact]
+    public async Task Declining_a_keep_request_of_a_missing_draft_is_404()
+    {
+        await TurnOnAsync();
+
+        (await _client.DeleteAsync(Draft("/keep-request"))).StatusCode.ShouldBe(HttpStatusCode.NotFound);
+    }
+
+    [Fact]
+    public async Task The_log_is_a_list_and_a_draft_session_may_be_named()
+    {
+        await TurnOnAsync();
+
+        var kept = await _client.GetFromJsonAsync<JsonElement>($"/api/mods/{_name}/log");
+        var draft = await _client.GetFromJsonAsync<JsonElement>($"/api/mods/{_name}/log?session={_session}");
+
+        kept.ValueKind.ShouldBe(JsonValueKind.Array);
+        draft.ValueKind.ShouldBe(JsonValueKind.Array);
+    }
+
+    [Fact]
+    public async Task The_log_of_a_name_that_isnt_a_mod_name_is_404()
+    {
+        await TurnOnAsync();
+
+        (await _client.GetAsync("/api/mods/Upper/log")).StatusCode.ShouldBe(HttpStatusCode.NotFound);
+    }
 
     [Fact]
     public async Task Keep_makes_version_1_active_and_removes_the_draft()

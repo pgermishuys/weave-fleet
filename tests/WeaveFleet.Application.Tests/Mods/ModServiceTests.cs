@@ -15,6 +15,8 @@ public sealed class ModServiceTests
 
     private readonly InMemoryModVersionStore _store = new();
     private readonly FakeModChecker _checker = new();
+    private readonly FakeModDraftRunner _runner = new();
+    private readonly ModKeepRequests _keepRequests = new(TimeProvider.System);
     private readonly FakeEventBroadcaster _events = new();
     private readonly InMemorySessionRepository _sessions = new();
     private readonly ModsSafeMode _safeMode = new();
@@ -23,7 +25,7 @@ public sealed class ModServiceTests
     public ModServiceTests()
     {
         _sessions.Seed(new Session { Id = SessionId, Title = "Tidy the build output" });
-        _service = new ModService(_store, _checker, _events, new TestUserContext(User), _safeMode, _sessions, TimeProvider.System);
+        _service = new ModService(_store, _checker, _events, new TestUserContext(User), _safeMode, _sessions, TimeProvider.System, _runner, _keepRequests);
     }
 
     private static ModVersion Version(int number, string? note = null)
@@ -535,6 +537,156 @@ public sealed class ModServiceTests
         _events.Broadcasts.ShouldBeEmpty();
     }
 
+    // ── Agent writes and keep requests ──────────────────────────────────
+
+    private static List<ModFile> Files(params string[] paths) => paths.Select(p => new ModFile(p, $"// {p}")).ToList();
+
+    [Fact]
+    public async Task Writing_creates_the_draft_and_raises_draft_written()
+    {
+        var draft = (await _service.WriteDraftAsync(SessionId, Chips, Files("mod.json", "mod.ts"))).Value;
+
+        (draft.SessionId, draft.Name).ShouldBe((SessionId, Chips));
+        (await _service.ListDraftsAsync(SessionId)).Value.ShouldHaveSingleItem().Name.ShouldBe(Chips);
+        ChangedOnce().ShouldBe(("draft-written", Chips, SessionId));
+    }
+
+    [Fact]
+    public async Task Writing_maps_a_store_refusal_to_a_validation_error_and_raises_nothing()
+    {
+        var result = await _service.WriteDraftAsync(SessionId, Chips, Files("../escape.ts"));
+
+        result.Error.Code.ShouldStartWith("Validation.");
+        result.Error.Description.ShouldBe("A file's path stays inside the mod's folder.");
+        _events.Broadcasts.ShouldBeEmpty();
+    }
+
+    [Fact]
+    public async Task Writing_without_files_or_to_a_bad_name_or_session_is_refused_before_the_store()
+    {
+        (await _service.WriteDraftAsync(SessionId, Chips, [])).Error.Code.ShouldStartWith("Validation.");
+        (await _service.WriteDraftAsync(SessionId, "Bad Name", Files("mod.json"))).Error.Code.ShouldStartWith("Validation.");
+        (await _service.WriteDraftAsync("a/b", Chips, Files("mod.json"))).Error.Code.ShouldEndWith(".NotFound");
+        _store.Writes.ShouldBeEmpty();
+        _events.Broadcasts.ShouldBeEmpty();
+    }
+
+    [Fact]
+    public async Task A_draft_shows_its_keep_request_and_none_before_one_is_made()
+    {
+        _store.SeedDraft(User, SessionId, Chips);
+        (await _service.ListDraftsAsync(SessionId)).Value.Single().KeepRequest.ShouldBeNull();
+
+        await _service.RequestKeepAsync(SessionId, Chips, "Shows totals");
+
+        var request = (await _service.ListDraftsAsync(SessionId)).Value.Single().KeepRequest.ShouldNotBeNull();
+        request.Note.ShouldBe("Shows totals");
+        _events.Broadcasts.Select(b => b.DomainEvent.ShouldBeOfType<ModsChanged>().Payload.Reason).ShouldBe(["keep-requested"]);
+    }
+
+    [Fact]
+    public async Task A_blank_note_is_no_note_and_a_long_one_is_refused()
+    {
+        _store.SeedDraft(User, SessionId, Chips);
+
+        await _service.RequestKeepAsync(SessionId, Chips, "  ");
+        _keepRequests.Get(User, SessionId, Chips)!.Note.ShouldBeNull();
+
+        (await _service.RequestKeepAsync(SessionId, Chips, new string('x', ModService.MaxNoteLength + 1))).Error.Code.ShouldStartWith("Validation.");
+        (await _service.RequestKeepAsync(SessionId, "nope", null)).Error.Code.ShouldEndWith(".NotFound");
+    }
+
+    [Fact]
+    public async Task Keeping_resolves_the_request_as_kept_with_the_version_number()
+    {
+        _store.SeedDraft(User, SessionId, Chips);
+        var request = (await _service.RequestKeepAsync(SessionId, Chips, null)).Value;
+
+        await _service.KeepAsync(SessionId, Chips, null);
+
+        (await request.Decision).ShouldBe(new ModKeepDecision(ModKeepOutcome.Kept, 1));
+        _keepRequests.Get(User, SessionId, Chips).ShouldBeNull();
+    }
+
+    [Fact]
+    public async Task A_keep_the_store_refuses_leaves_the_request_up()
+    {
+        _store.SeedDraft(User, SessionId, Chips);
+        _checker.Report = Json("""{"ok":false,"errors":[{"message":"bad"}]}""");
+        var request = (await _service.RequestKeepAsync(SessionId, Chips, null)).Value;
+
+        (await _service.KeepAsync(SessionId, Chips, null)).IsFailure.ShouldBeTrue();
+
+        request.Decision.IsCompleted.ShouldBeFalse();
+        _keepRequests.Get(User, SessionId, Chips).ShouldNotBeNull();
+    }
+
+    [Fact]
+    public async Task Turning_the_draft_off_resolves_the_request_as_declined_but_turning_it_on_doesnt()
+    {
+        _store.SeedDraft(User, SessionId, Chips, off: new ModOff(ModOffBy.User, DateTimeOffset.UnixEpoch));
+        var request = (await _service.RequestKeepAsync(SessionId, Chips, null)).Value;
+
+        await _service.SetDraftOnAsync(SessionId, Chips, on: true);
+        request.Decision.IsCompleted.ShouldBeFalse();
+
+        await _service.SetDraftOnAsync(SessionId, Chips, on: false);
+        (await request.Decision).Outcome.ShouldBe(ModKeepOutcome.Declined);
+    }
+
+    [Fact]
+    public async Task Declining_resolves_the_request_raises_keep_declined_and_leaves_the_draft()
+    {
+        _store.SeedDraft(User, SessionId, Chips);
+        var request = (await _service.RequestKeepAsync(SessionId, Chips, null)).Value;
+        _events.Broadcasts.Clear();
+
+        var draft = (await _service.DeclineKeepAsync(SessionId, Chips)).Value;
+
+        (await request.Decision).Outcome.ShouldBe(ModKeepOutcome.Declined);
+        draft.KeepRequest.ShouldBeNull();
+        draft.Off.ShouldBeNull();
+        ChangedOnce().ShouldBe(("keep-declined", Chips, SessionId));
+        (await _service.ListDraftsAsync(SessionId)).Value.ShouldHaveSingleItem();
+    }
+
+    [Fact]
+    public async Task Declining_a_missing_draft_is_not_found_and_raises_nothing()
+    {
+        (await _service.DeclineKeepAsync(SessionId, Chips)).Error.Code.ShouldEndWith(".NotFound");
+        (await _service.DeclineKeepAsync("a/b", Chips)).Error.Code.ShouldEndWith(".NotFound");
+        _events.Broadcasts.ShouldBeEmpty();
+    }
+
+    [Fact]
+    public async Task A_draft_shows_the_hosts_load_problem_as_its_first_error_else_a_load_problem()
+    {
+        _store.SeedDraft(User, SessionId, Chips);
+        (await _service.ListDraftsAsync(SessionId)).Value.Single().Problem.ShouldBeNull();
+
+        _runner.Problem = new ModDraftProblem(
+            "It didn't load.",
+            Json("""{"ok":false,"errors":[{"code":"parse","message":"Unexpected token","line":3},{"code":"x","message":"second"}]}"""),
+            DateTimeOffset.UnixEpoch);
+        (await _service.ListDraftsAsync(SessionId)).Value.Single().Problem.ShouldBe(new ModDraftProblemView("parse", "Unexpected token", 3));
+
+        _runner.Problem = new ModDraftProblem("The host crashed.", null, DateTimeOffset.UnixEpoch);
+        (await _service.ListDraftsAsync(SessionId)).Value.Single().Problem.ShouldBe(new ModDraftProblemView("load", "The host crashed.", null));
+
+        _runner.Problem = new ModDraftProblem("No line here.", Json("""{"ok":false,"errors":[{"message":"No code"}]}"""), DateTimeOffset.UnixEpoch);
+        (await _service.ListDraftsAsync(SessionId)).Value.Single().Problem.ShouldBe(new ModDraftProblemView("load", "No code", null));
+    }
+
+    [Fact]
+    public void The_log_comes_from_the_runner_and_a_bad_name_is_not_found()
+    {
+        _runner.AddLog("log", "hello");
+
+        _service.ReadLog(Chips, SessionId).Value.ShouldHaveSingleItem().Text.ShouldBe("hello");
+        _service.ReadLog("Bad Name", null).Error.Code.ShouldEndWith(".NotFound");
+        _service.ReadLog(Chips, "a/b").Error.Code.ShouldEndWith(".NotFound");
+    }
+
     // ── Safe mode ───────────────────────────────────────────────────────
 
     [Fact]
@@ -554,7 +706,7 @@ public sealed class ModServiceTests
     [Fact]
     public async Task Safe_mode_is_the_current_users_only()
     {
-        var other = new ModService(_store, _checker, _events, new TestUserContext("other-user"), _safeMode, _sessions, TimeProvider.System);
+        var other = new ModService(_store, _checker, _events, new TestUserContext("other-user"), _safeMode, _sessions, TimeProvider.System, _runner, new ModKeepRequests(TimeProvider.System));
 
         await _service.SetSafeModeAsync(true);
 

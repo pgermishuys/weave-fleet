@@ -91,7 +91,7 @@ public sealed class ModServiceFileStoreTests : IDisposable
         {
             Store = store;
             Sessions.Seed(new Session { Id = Alpha, Title = "Tidy the build output" }, new Session { Id = Beta, Title = "Rename the chips" });
-            Service = new ModService(store, Checker, Events, User, SafeMode, Sessions, TimeProvider.System);
+            Service = new ModService(store, Checker, Events, User, SafeMode, Sessions, TimeProvider.System, new NoModDraftRunner(), new ModKeepRequests(TimeProvider.System));
         }
 
         public FileModVersionStore Store { get; }
