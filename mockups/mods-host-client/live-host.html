@@ -1,0 +1,35 @@
+<!doctype html><html><head><meta charset=utf-8><title>M2: the live mod host in a scratch Fleet</title><style>
+:root{--bg:#f6f5f2;--card:#fff;--ink:#1d1d1b;--mut:#77756f;--line:#e4e1da;--accent:#3d5afe;--good:#1f8a4c;--bad:#c63b2f;--neutral:#6b6a66;--code:#f0eee9}
+@media (prefers-color-scheme:dark){:root{--bg:#141413;--card:#1d1d1b;--ink:#ecebe7;--mut:#9a988f;--line:#2e2d2a;--code:#262522}}
+body{margin:0;background:var(--bg);color:var(--ink);font:14px/1.5 ui-sans-serif,system-ui,-apple-system,"Segoe UI",sans-serif}
+main{max-width:1080px;margin:0 auto;padding:28px 24px 40px} h1{font-size:22px;margin:0 0 4px} .sub{color:var(--mut);margin:0 0 20px}
+.grid{display:grid;grid-template-columns:1fr 1fr;gap:14px} @media(max-width:800px){.grid{grid-template-columns:1fr}}
+.card{background:var(--card);border:1px solid var(--line);border-radius:10px;padding:14px 16px} .card h2{font-size:13px;margin:0 0 10px;color:var(--mut);font-weight:600;text-transform:uppercase;letter-spacing:.04em}
+.n{display:inline-block;width:20px;height:20px;border-radius:50%;background:var(--accent);color:#fff;font-size:11px;text-align:center;line-height:20px;margin-right:6px}
+table.kv{border-collapse:collapse;width:100%} .kv th{text-align:left;color:var(--mut);font-weight:500;width:84px;padding:3px 8px 3px 0;vertical-align:top} .kv td{padding:3px 0}
+code{font:12px ui-monospace,SFMono-Regular,Menlo,monospace;background:var(--code);padding:1px 5px;border-radius:4px} .mut{color:var(--mut)}
+.st.running{color:var(--good)} .st.stopped{color:var(--mut)}
+.pill{display:inline-block;border-radius:999px;padding:1px 9px;font-size:12px;font-weight:600;border:1px solid} .pill.good{color:var(--good);border-color:var(--good)} .pill.bad{color:var(--bad);border-color:var(--bad)} .pill.neutral{color:var(--neutral);border-color:var(--neutral)}
+.box{display:flex;gap:6px} .box.column{flex-direction:column;gap:6px} .txt.code{font:12px ui-monospace,monospace} .txt.bad{color:var(--bad)}
+.drawn{background:var(--bg);border:1px dashed var(--line);border-radius:8px;padding:10px 12px;margin:6px 0} .meta{color:var(--mut);font-size:12px}
+.row{display:flex;gap:10px;align-items:center;font:12px ui-monospace,monospace;color:var(--mut);margin-top:8px} .wide{grid-column:1/-1}
+pre{font:11.5px/1.45 ui-monospace,monospace;background:var(--code);padding:10px;border-radius:8px;margin:0;overflow:auto;max-height:230px}
+</style></head><body><main>
+<h1>The live mod host, driven through a scratch Fleet</h1>
+<p class=sub>Release AOT build of <code>feat/mods-host-client</code> with <code>-p:FleetModsDebug=true</code>, installed as <code>bin/fleet</code> + <code>app/</code> (with <code>app/mods-host/host.js</code>), scratch HOME, Bun 1.4.2. Status and dispatches come from the test-only <code>/api/mods/debug</code> routes, which shipped builds don't have.</p>
+<div class=grid>
+<div class=card><h2><span class=n>1</span>Mods off, then on with nothing kept</h2><table class=kv><tr><th>state</th><td><b class='st stopped'>stopped</b> <span class=mut>— Mods are off.</span></td></tr><tr><th>loaded</th><td><span class=mut>none</span></td></tr><tr><th>restarts</th><td>0</td></tr></table><div style="height:8px"></div><table class=kv><tr><th>state</th><td><b class='st stopped'>stopped</b> <span class=mut>— No mod is kept or drafted.</span></td></tr><tr><th>loaded</th><td><span class=mut>none</span></td></tr><tr><th>restarts</th><td>0</td></tr></table></div>
+<div class=card><h2><span class=n>2</span>The host's check of the agent's draft</h2>
+<table class=kv><tr><th>mod</th><td><b>test-chips</b> 0.1.0 · 47 lines · ok <b>true</b></td></tr>
+<tr><th>hooks</th><td><code>ui.render {&quot;component&quot;:[&quot;ToolUse&quot;,&quot;ToolResult&quot;],&quot;props&quot;:{&quot;tool&quot;:[&quot;bash&quot;,&quot;shell&quot;]}}</code></td></tr>
+<tr><th>calls</th><td><code>ui.resolve</code></td></tr><tr><th>state</th><td class=mut>(none)</td></tr><tr><th>pages</th><td class=mut>(none)</td></tr>
+<tr><th>Keep</th><td>v1, report stored with the version</td></tr></table>
+<div class=row>GET /api/sessions/ses_demo1/mods/drafts/test-chips/check → the CheckReport from the real host</div></div>
+<div class=card><h2><span class=n>3</span>After Keep: the host started and loaded it</h2><table class=kv><tr><th>state</th><td><b class='st running'>running</b></td></tr><tr><th>process</th><td>pid 3918096</td></tr><tr><th>bun</th><td>1.4.2 <code>~/.bun/bin/bun</code></td></tr><tr><th>host</th><td>0.1.0</td></tr><tr><th>loaded</th><td><code>test-chips@v1</code></td></tr><tr><th>restarts</th><td>0</td></tr></table></div>
+<div class=card><h2><span class=n>4</span>ui.render for a <code>dotnet test</code> row</h2>
+<div class=meta>ToolUse (on the row's line)</div><div class=drawn><div class='box row'><span class='pill good'>212 passed</span><span class='pill bad'>2 failed</span><span class='pill neutral'>4 skipped</span></div></div><div class=meta>dispatched <b>true</b> · drawnBy test-chips@v1 · failures 0</div>
+<div class=meta style="margin-top:8px">ToolResult (the opened body; Fleet's own output below)</div><div class=drawn><div class='box column'><span class='txt code bad'>Demo.Tests.Parses_empty_input</span><span class='txt code bad'>Demo.Tests.Keeps_order</span><span class=mut>Fleet's own drawing</span></div></div><div class=meta>dispatched <b>true</b> · drawnBy test-chips@v1 · failures 0</div>
+<div class=meta style="margin-top:8px">A <code>read</code> row</div><div class=drawn><span class=mut>not dispatched: no mod hooks this row, so nothing crossed the pipe</span></div><div class=meta>dispatched <b>false</b> · drawnBy — · failures 0</div></div>
+<div class=card><h2><span class=n>5</span>Killed the host (SIGKILL pid 3918096)</h2><table class=kv><tr><th>state</th><td><b class='st running'>running</b></td></tr><tr><th>process</th><td>pid 3918115</td></tr><tr><th>bun</th><td>1.4.2 <code>~/.bun/bin/bun</code></td></tr><tr><th>host</th><td>0.1.0</td></tr><tr><th>loaded</th><td><code>test-chips@v1</code></td></tr><tr><th>restarts</th><td>1</td></tr><tr><th>last exit</th><td>exited with code 137 <span class=mut>at 16:43:49</span></td></tr></table></div>
+<div class=card><h2><span class=n>6</span>Dispatch after the restart</h2><div class=drawn><div class='box row'><span class='pill good'>212 passed</span><span class='pill bad'>2 failed</span><span class='pill neutral'>4 skipped</span></div></div><div class=meta>dispatched <b>true</b> · drawnBy test-chips@v1 · failures 0</div><div class=row>test-chips@v1's log: 0 lines (no failures)</div></div>
+</div></main></body></html>
