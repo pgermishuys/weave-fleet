@@ -271,9 +271,10 @@ describe("ModsSection", () => {
     it("shows the code of a version in the dialog, loading it by name and number", async () => {
       files.fetchModVersionFiles.mockResolvedValue([{ path: "index.ts", content: "x" }]);
       const wrapper = await openHistory();
-      expect(wrapper.findComponent(CodeDialogStub).props("open")).toBe(false);
+      const row = wrapper.get("[data-testid=mod-row-branch-badge]");
+      expect(row.findComponent(CodeDialogStub).props("open")).toBe(false);
       await wrapper.get("[data-testid=mod-code-branch-badge-2]").trigger("click");
-      const dialog = wrapper.findComponent(CodeDialogStub);
+      const dialog = row.findComponent(CodeDialogStub);
       expect(dialog.props("open")).toBe(true);
       expect(dialog.props("title")).toBe("branch-badge · v2");
       await (dialog.props("load") as () => Promise<unknown>)();

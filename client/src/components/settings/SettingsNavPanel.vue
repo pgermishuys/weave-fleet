@@ -1,8 +1,9 @@
 <script setup lang="ts">
 import type { Component } from "vue";
-import { computed } from "vue";
-import { Cable, FolderGit2, Globe, Info, Lightbulb, Palette, Puzzle, Server, ShieldCheck, SlidersHorizontal, Waves, Workflow, Wrench } from "lucide-vue-next";
+import { computed, onMounted } from "vue";
+import { Blocks, Cable, FolderGit2, Globe, Info, Lightbulb, Palette, Puzzle, Server, ShieldCheck, SlidersHorizontal, Waves, Workflow, Wrench } from "lucide-vue-next";
 import { useUpdateStatus } from "@/composables/use-update-status";
+import { useModsStore } from "@/stores/mods";
 
 type SettingsSectionId =
   | "workspace"
@@ -10,6 +11,7 @@ type SettingsSectionId =
   | "appearance"
   | "skills"
   | "memory"
+  | "mods"
   | "browser"
   | "permissions"
   | "tools"
@@ -42,12 +44,17 @@ const { isUpdateAvailable, isUpdateStaged } = useUpdateStatus();
 
 const showUpdateDot = computed(() => isUpdateAvailable.value || isUpdateStaged.value);
 
-const items: readonly SettingsNavItem[] = [
+const mods = useModsStore();
+// The switch decides whether Mods has a place in the nav; read it once here so the entry is right on first paint.
+onMounted(() => { void mods.loadSwitch(); });
+
+const allItems: readonly SettingsNavItem[] = [
   { id: "workspace", label: "Folders", icon: FolderGit2 },
   { id: "appearance", label: "Appearance", icon: Palette },
   { id: "features", label: "Features", icon: SlidersHorizontal },
   { id: "skills", label: "Skills", icon: Wrench },
   { id: "memory", label: "Memory", icon: Lightbulb },
+  { id: "mods", label: "Mods", icon: Blocks },
   { id: "permissions", label: "Permissions", icon: ShieldCheck },
   { id: "browser", label: "Browser", icon: Globe },
   { id: "tools", label: "Tools", icon: Puzzle },
@@ -57,6 +64,8 @@ const items: readonly SettingsNavItem[] = [
   { id: "workflows", label: "Workflows", icon: Workflow },
   { id: "system", label: "System", icon: Info },
 ];
+
+const items = computed(() => allItems.filter((item) => item.id !== "mods" || mods.isSwitchedOn));
 
 function selectSection(sectionId: SettingsSectionId): void {
   emit("update:modelValue", sectionId);
