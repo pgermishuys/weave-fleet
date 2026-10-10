@@ -336,6 +336,7 @@ public sealed class ModsRuntimeEndpointTests : IAsyncDisposable
 /// The bun-path route against the real installer's checks, with real scripts standing in for Bun: the messages for a path
 /// that is a folder, missing, not working, too old, or changeable by others.
 /// </summary>
+[System.Runtime.Versioning.UnsupportedOSPlatform("windows")]
 public sealed class ModsRuntimeBunPathValidationTests : IAsyncDisposable
 {
     private const string Url = "/api/features/mods/runtime/bun-path";
@@ -382,7 +383,6 @@ public sealed class ModsRuntimeBunPathValidationTests : IAsyncDisposable
     [Fact]
     public async Task A_working_bun_is_saved_for_the_user_and_shown_in_the_view()
     {
-        if (OperatingSystem.IsWindows()) return;
         var bun = Script("bun", "echo 1.4.7");
 
         var response = await _client.PutAsJsonAsync(Url, new { path = bun });
@@ -399,7 +399,6 @@ public sealed class ModsRuntimeBunPathValidationTests : IAsyncDisposable
     [Fact]
     public async Task A_folder_is_refused_and_named()
     {
-        if (OperatingSystem.IsWindows()) return;
 
         var (status, error) = await PutAsync(_folder);
 
@@ -410,7 +409,6 @@ public sealed class ModsRuntimeBunPathValidationTests : IAsyncDisposable
     [Fact]
     public async Task A_missing_file_is_refused_and_named()
     {
-        if (OperatingSystem.IsWindows()) return;
         var missing = Path.Combine(_folder, "nope");
 
         var (status, error) = await PutAsync(missing);
@@ -422,7 +420,6 @@ public sealed class ModsRuntimeBunPathValidationTests : IAsyncDisposable
     [Fact]
     public async Task A_program_that_does_not_run_as_bun_is_refused()
     {
-        if (OperatingSystem.IsWindows()) return;
         var broken = Script("broken", "exit 3");
 
         var (status, error) = await PutAsync(broken);
@@ -435,7 +432,6 @@ public sealed class ModsRuntimeBunPathValidationTests : IAsyncDisposable
     [Fact]
     public async Task A_bun_older_than_the_oldest_mods_run_on_is_refused()
     {
-        if (OperatingSystem.IsWindows()) return;
         var old = Script("old", "echo 1.3.0");
 
         var (status, error) = await PutAsync(old);
@@ -447,7 +443,6 @@ public sealed class ModsRuntimeBunPathValidationTests : IAsyncDisposable
     [Fact]
     public async Task A_bun_that_others_can_change_is_refused_without_running_it()
     {
-        if (OperatingSystem.IsWindows()) return;
         var marker = Path.Combine(_folder, "ran");
         var open = Script("open", $"touch {marker}; echo 1.4.7");
         File.SetUnixFileMode(open, (UnixFileMode)0b111_111_111);
@@ -455,14 +450,13 @@ public sealed class ModsRuntimeBunPathValidationTests : IAsyncDisposable
         var (status, error) = await PutAsync(open);
 
         status.ShouldBe(HttpStatusCode.BadRequest);
-        error.ShouldContain("can be changed by other users");
+        error.ShouldNotBeNull().ShouldContain("can be changed by other users");
         File.Exists(marker).ShouldBeFalse();
     }
 
     [Fact]
     public async Task A_bun_in_a_folder_that_others_can_change_is_refused()
     {
-        if (OperatingSystem.IsWindows()) return;
         var shared = Path.Combine(_folder, "shared");
         Directory.CreateDirectory(shared);
         var bun = Path.Combine(shared, "bun");

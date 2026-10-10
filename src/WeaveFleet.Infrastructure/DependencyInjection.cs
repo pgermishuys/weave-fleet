@@ -307,6 +307,10 @@ public static class DependencyInjection
         services.AddSingleton<WeaveFleet.Application.Mods.ModsSafeMode>();
         services.AddScoped<WeaveFleet.Application.Mods.ModsFeature>();
         services.AddScoped<WeaveFleet.Application.Mods.ModService>();
+        // The mod runtime (Bun): installs and tracks it for every user, and keeps it current in the background.
+        services.AddSingleton<WeaveFleet.Application.Mods.IModsPreferenceReader, WeaveFleet.Infrastructure.Data.Repositories.DapperModsPreferenceReader>();
+        services.AddSingleton<WeaveFleet.Application.Mods.IModsRuntime, WeaveFleet.Application.Mods.ModsRuntime>();
+        services.AddHostedService<WeaveFleet.Application.Mods.ModsRuntimeHostedService>();
         services.AddScoped<WeaveFleet.Application.Workflows.WorkflowModelRoles>();
         services.AddScoped<WeaveFleet.Application.Workflows.WorkflowService>();
         services.AddScoped<WeaveFleet.Application.Workflows.WorkflowDrafter>();
