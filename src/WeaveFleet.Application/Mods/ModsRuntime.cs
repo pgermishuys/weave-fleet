@@ -146,11 +146,15 @@ public sealed partial class ModsRuntime(
         }
         finally
         {
+            // Clients hear how it ended only now, with the switch already off and the install gone, so a Retry they
+            // send straight away starts a new install instead of joining this one.
             Task sends;
             lock (_sync)
             {
-                sends = _sends;
                 _running = null;
+                if (install.Final is { } final)
+                    Send(final);
+                sends = _sends;
             }
 
             await sends.ConfigureAwait(false);
@@ -193,11 +197,15 @@ public sealed partial class ModsRuntime(
 
             install.LastPhase = job.Phase;
             install.LastRaised = now;
-            Send(new ModsRuntimePayload
+            var payload = new ModsRuntimePayload
             {
                 Job = job,
                 Reason = job.Phase == BunInstallPhases.Succeeded ? ModsRuntimeReasons.Installed : ModsRuntimeReasons.Job,
-            });
+            };
+            if (terminal)
+                install.Final = payload; // Sent when the install has ended: see RunAsync.
+            else
+                Send(payload);
         }
     }
 
@@ -276,6 +284,7 @@ public sealed partial class ModsRuntime(
         public Task? Task { get; set; }
         public string? LastPhase { get; set; }
         public long LastRaised { get; set; }
+        public ModsRuntimePayload? Final { get; set; }
     }
 
     /// <summary>Reports at once, on the caller's thread, so the order the installer reports in is the order seen.</summary>
