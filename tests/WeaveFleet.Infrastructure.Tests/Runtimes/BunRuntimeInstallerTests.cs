@@ -275,7 +275,13 @@ public sealed class BunRuntimeInstallerTests : IDisposable
 
         await installer.EnsureAsync(progress, CancellationToken.None);
 
-        var phases = progress.Events.Select(e => e.Phase).Distinct().ToList();
+        var phases = new List<string>();
+        foreach (var phase in progress.Events.Select(e => e.Phase))
+        {
+            if (phases.Count == 0 || phases[^1] != phase)
+                phases.Add(phase);
+        }
+
         phases.ShouldBe([BunInstallPhases.Downloading, BunInstallPhases.Verifying, BunInstallPhases.Extracting, BunInstallPhases.Succeeded]);
         progress.Events[0].ShouldBe(new BunInstallJob(BunInstallPhases.Downloading, "1.4.2", "Installing the mod runtime…", 0, null));
         var downloading = progress.Events.Where(e => e.Phase == BunInstallPhases.Downloading).ToList();
@@ -354,6 +360,145 @@ public sealed class BunRuntimeInstallerTests : IDisposable
         Directory.Exists(fresh).ShouldBeTrue();
     }
 
+    [Fact]
+    public async Task Retries_the_final_move_when_access_is_denied_for_a_moment()
+    {
+        var release = Publish();
+        var attempts = 0;
+        var installer = NewInstaller(release, "linux-x64", move: (from, to) =>
+        {
+            if (++attempts <= 2)
+                throw new UnauthorizedAccessException("Access to the path is denied.");
+            Directory.Move(from, to);
+        });
+
+        var result = await installer.EnsureAsync(null, CancellationToken.None);
+
+        result.IsSuccess.ShouldBeTrue(result.IsFailure ? result.Error.Description : "");
+        attempts.ShouldBe(3);
+        File.Exists(Path.Combine(Root, "1.4.2", "install.json")).ShouldBeTrue();
+        Leftovers().ShouldBeEmpty();
+    }
+
+    [Fact]
+    public async Task Fails_with_a_clear_message_and_cleans_up_when_the_move_never_works()
+    {
+        var release = Publish();
+        var attempts = 0;
+        var installer = NewInstaller(release, "linux-x64", move: (_, _) =>
+        {
+            attempts++;
+            throw new UnauthorizedAccessException("Access to the path is denied.");
+        });
+
+        var result = await installer.EnsureAsync(null, CancellationToken.None);
+
+        result.Error.Description.ShouldBe("Couldn't install Bun 1.4.2: Access to the path is denied.");
+        attempts.ShouldBe(5);
+        installer.Job!.Phase.ShouldBe(BunInstallPhases.Failed);
+        Everything().ShouldBeEmpty();
+    }
+
+    [Fact]
+    public async Task Keeps_an_install_another_fleet_finished_while_the_move_was_failing()
+    {
+        var release = Publish();
+        var asset = release.AssetFor("linux-x64")!;
+        var installer = NewInstaller(release, "linux-x64", move: (from, to) =>
+        {
+            Directory.Move(from, to);
+            throw new IOException("Looks like it failed, but it didn't.");
+        });
+
+        var result = await installer.EnsureAsync(null, CancellationToken.None);
+
+        result.IsSuccess.ShouldBeTrue(result.IsFailure ? result.Error.Description : "");
+        File.Exists(Path.Combine(Root, "1.4.2", asset.ExecutableName)).ShouldBeTrue();
+    }
+
+    [Fact]
+    public async Task Keeps_a_download_folder_whose_files_are_still_being_written()
+    {
+        var release = Publish();
+        var live = Path.Combine(Root, ".download-live");
+        var dead = Path.Combine(Root, ".download-dead");
+        foreach (var directory in new[] { live, dead })
+        {
+            Directory.CreateDirectory(directory);
+            await File.WriteAllTextAsync(Path.Combine(directory, "bun.zip"), "x");
+        }
+
+        var old = DateTime.UtcNow.AddHours(-2);
+        File.SetLastWriteTimeUtc(Path.Combine(dead, "bun.zip"), old);
+        Directory.SetLastWriteTimeUtc(live, old);
+        Directory.SetLastWriteTimeUtc(dead, old);
+        var installer = NewInstaller(release, "linux-x64");
+
+        await installer.EnsureAsync(null, CancellationToken.None);
+
+        Directory.Exists(live).ShouldBeTrue();
+        Directory.Exists(dead).ShouldBeFalse();
+    }
+
+    [Fact]
+    public async Task Leaves_no_staging_folder_after_replacing_a_broken_version_folder()
+    {
+        var release = Publish();
+        var broken = Path.Combine(Root, "1.4.2");
+        Directory.CreateDirectory(broken);
+        await File.WriteAllTextAsync(Path.Combine(broken, "junk.txt"), "half an install");
+        var installer = NewInstaller(release, "linux-x64");
+
+        var result = await installer.EnsureAsync(null, CancellationToken.None);
+
+        result.IsSuccess.ShouldBeTrue();
+        Directory.GetDirectories(Root, ".staging-*").ShouldBeEmpty();
+        Leftovers().ShouldBeEmpty();
+    }
+
+    [Fact]
+    public async Task A_relative_configured_path_is_an_error_and_nothing_downloads()
+    {
+        var release = Publish();
+        var installer = NewInstaller(release, "linux-x64", bunPath: "tools/bun");
+
+        installer.Find().ShouldBeNull();
+        var result = await installer.EnsureAsync(null, CancellationToken.None);
+
+        result.Error.Code.ShouldBe("Mods.Runtime");
+        result.Error.Description.ShouldBe("Fleet:Harness:BunPath must be an absolute path; it's tools/bun.");
+        _server.Requests.ShouldBeEmpty();
+        installer.Job.ShouldBeNull();
+    }
+
+    [Fact]
+    public void A_relative_bun_on_path_comes_back_absolute()
+    {
+        var release = Publish();
+        var installer = NewInstaller(release, "linux-x64", environment: Environments.Development, onPath: () => Path.Combine("bin", "bun"));
+
+        installer.Find().ShouldBe(new BunLocation(Path.GetFullPath(Path.Combine("bin", "bun")), BunSources.Path, null));
+    }
+
+    [Fact]
+    public async Task Reinstalls_when_the_manifest_is_valid_but_the_binary_is_missing()
+    {
+        var release = Publish();
+        var asset = release.AssetFor("linux-x64")!;
+        var installer = NewInstaller(release, "linux-x64");
+        await installer.EnsureAsync(null, CancellationToken.None);
+        var executable = Path.Combine(Root, "1.4.2", asset.ExecutableName);
+        File.Delete(executable);
+
+        installer.Find().ShouldBeNull();
+        var result = await installer.EnsureAsync(null, CancellationToken.None);
+
+        result.IsSuccess.ShouldBeTrue(result.IsFailure ? result.Error.Description : "");
+        _server.Requests.Count.ShouldBe(2);
+        File.Exists(executable).ShouldBeTrue();
+        Leftovers().ShouldBeEmpty();
+    }
+
     // -- helpers ------------------------------------------------------------------------------------------------
 
     private BunRuntimeInstaller NewInstaller(
@@ -362,7 +507,8 @@ public sealed class BunRuntimeInstallerTests : IDisposable
         string environment = "Production",
         string? bunPath = null,
         Func<string?>? onPath = null,
-        TimeSpan? stall = null) =>
+        TimeSpan? stall = null,
+        Action<string, string>? move = null) =>
         new(
             new FleetOptions { Harness = { BunPath = bunPath ?? "" } },
             new FakeEnvironment(environment),
@@ -375,6 +521,8 @@ public sealed class BunRuntimeInstallerTests : IDisposable
             DownloadBase = _server.BaseUri,
             FindOnPath = onPath ?? (() => null),
             StallTimeout = stall ?? TimeSpan.FromSeconds(60),
+            MoveRetryDelay = TimeSpan.FromMilliseconds(1),
+            MoveDirectory = move ?? Directory.Move,
         };
 
     /// <summary>Serves a fake archive for every pinned platform and returns a release whose checksums match them.</summary>
