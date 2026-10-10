@@ -25,6 +25,7 @@ import DockedPermission from "@/components/phone/session/DockedPermission.vue";
 import DockedQuestion from "@/components/phone/session/DockedQuestion.vue";
 import PhoneComposer from "@/components/phone/session/PhoneComposer.vue";
 import ModComposerBand from "@/components/mods/ModComposerBand.vue";
+import ModDraftCards from "@/components/mods/review/ModDraftCards.vue";
 import ModPaneSheet from "@/components/phone/session/ModPaneSheet.vue";
 import { isDraftView, modPanes, modPaneViewId } from "@/lib/mods/points";
 import { harnessCapabilities } from "@/composables/use-composer-actions";
@@ -470,6 +471,11 @@ onUnmounted(() => {
           <PhoneRetryLine
             :key="sessionId"
             :session-id="sessionId"
+          />
+
+          <ModDraftCards
+            :session-id="sessionId"
+            :messages="stream.messages.value"
           />
 
           <p

@@ -10,6 +10,7 @@ import ShellCommandBlock from "@/components/session/ShellCommandBlock.vue";
 import CompactionDivider from "@/components/session/CompactionDivider.vue";
 import { sessionRetry } from "@/lib/session-row-status";
 import WorkingIndicator from "@/components/session/WorkingIndicator.vue";
+import ModDraftCards from "@/components/mods/review/ModDraftCards.vue";
 import PermissionCard from "@/components/session/PermissionCard.vue";
 import { useSessionPermissions } from "@/composables/use-session-permissions";
 import { useSessionStream } from "@/composables/use-session-stream";
@@ -737,6 +738,13 @@ function handleImproveSkill(skill: string, toolId: string): void {
         class="activity-permission"
         :ask="ask"
         :on-answer="(reply, message) => answerPermission(ask, reply, message)"
+      />
+
+      <!-- Drafts the agent wrote here, as its latest output; a side conversation has none of its own. -->
+      <ModDraftCards
+        v-if="!props.after"
+        :session-id="props.sessionId"
+        :messages="stream.messages.value"
       />
 
       <!-- Streaming indicator -->

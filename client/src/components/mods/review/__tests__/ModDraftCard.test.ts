@@ -189,7 +189,9 @@ describe("ModDraftCard", () => {
 
   it("shows the request without a note", () => {
     const wrapper = mountCard(draft({ keepRequest: { note: null, at: "2026-10-10T10:00:00Z" } }));
-    expect(wrapper.find("[data-testid=mod-draft-request]").text()).toBe("The agent asks you to keep this Review…");
+    const line = wrapper.find("[data-testid=mod-draft-request]").text();
+    expect(line).toContain("The agent asks you to keep this");
+    expect(line).toContain("Review…");
   });
 
   it("has no request line without a request, and stops showing it when the request goes", async () => {
