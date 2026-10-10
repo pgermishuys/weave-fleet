@@ -61,6 +61,7 @@ public static class EndpointExtensions
         apiScope.MapKeyFileEndpoints();
         apiScope.MapSkillEndpoints();
         apiScope.MapBuiltInSkillEndpoints();
+        apiScope.MapModEndpoints();
         apiScope.MapMemoryEndpoints();
         apiScope.MapReportEndpoints();
         apiScope.MapWorkflowEndpoints();

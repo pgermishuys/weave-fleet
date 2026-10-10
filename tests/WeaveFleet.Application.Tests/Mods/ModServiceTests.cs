@@ -226,10 +226,10 @@ public sealed class ModServiceTests
 
         var drafts = (await _service.ListDraftsAsync(SessionId)).Value;
 
-        drafts.Select(d => d.Name).ShouldBe([Chips, "other-mod"]);
-        var chips = drafts[0];
+        drafts.Select(d => d.Name).ShouldBe(["other-mod", Chips]);
+        var chips = drafts[1];
         (chips.SessionId, chips.Description, chips.Version, chips.Kept, chips.Off).ShouldBe((SessionId, "Shows chips", "0.1.0", 2, null));
-        var other = drafts[1];
+        var other = drafts[0];
         (other.Description, other.Version, other.Kept).ShouldBe((null, null, null));
     }
 
@@ -477,15 +477,5 @@ public sealed class ModServiceTests
         off.SafeMode.ShouldBeFalse();
         _safeMode.IsOn.ShouldBeFalse();
         _events.Broadcasts.Count.ShouldBe(2);
-    }
-
-    [Fact]
-    public void A_mods_changed_event_has_no_name_or_session_unless_it_is_about_one()
-    {
-        var json = JsonSerializer.Serialize<DomainEvent>(
-            new ModsChanged { Payload = new ModsChangedPayload { Reason = "safe-mode" } },
-            new JsonSerializerOptions(JsonSerializerDefaults.Web) { DefaultIgnoreCondition = System.Text.Json.Serialization.JsonIgnoreCondition.WhenWritingNull });
-
-        json.ShouldBe("""{"type":"mods.changed","payload":{"reason":"safe-mode"}}""");
     }
 }

@@ -148,7 +148,7 @@ public sealed class ModEndpointTests : IAsyncDisposable
         var files = await _client.GetFromJsonAsync<JsonElement>(Draft("/files"));
 
         files.GetProperty("files").EnumerateArray().Select(f => f.GetProperty("path").GetString()).ShouldBe(["mod.json", "mod.ts"]);
-        files.GetProperty("files")[1].GetProperty("content").GetString().ShouldContain("register");
+        files.GetProperty("files")[1].GetProperty("content").GetString()!.ShouldContain("register");
     }
 
     [Fact]

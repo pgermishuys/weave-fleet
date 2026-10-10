@@ -77,6 +77,12 @@ public static class EventTypes
     /// </summary>
     public const string HarnessUsage = "harness.usage";
 
+    /// <summary>
+    /// A mod was kept, undone, turned on or off, or failed three times, or Fleet started without mods. Fleet's own event
+    /// on the <c>sessions</c> topic, with a <c>ModsChangedPayload</c>; clients refetch <c>/api/mods</c>.
+    /// </summary>
+    public const string ModsChanged = "mods.changed";
+
     /// <summary>Returns <c>true</c> for <see cref="ContextUsage"/> and <see cref="ContextCompaction"/>.</summary>
     public static bool IsContextEvent(string type) => type is ContextUsage or ContextCompaction;
 

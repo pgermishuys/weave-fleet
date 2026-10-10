@@ -219,6 +219,12 @@ public sealed class HarnessOptions
     public bool Workflows { get; set; }
 
     /// <summary>
+    /// Lets the agent write mods (small TypeScript modules that change how Fleet looks and behaves for the user) and
+    /// runs the ones the user kept. Experimental: a user's <c>Mods</c> preference wins over this. Default: false.
+    /// </summary>
+    public bool Mods { get; set; }
+
+    /// <summary>
     /// Where Fleet records the harness processes it starts on Linux and macOS, so one left running by a Fleet that
     /// died without stopping it is stopped when a Fleet starts again. Default: "" (<c>harness-processes</c> in the
     /// user's <see cref="FleetPaths.DefaultAppDataDirectory"/>, shared by every Fleet the user runs: each stops only

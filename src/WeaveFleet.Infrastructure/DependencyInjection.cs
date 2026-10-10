@@ -303,6 +303,10 @@ public static class DependencyInjection
         services.AddSingleton<HarnessUsageLimits>();
         services.AddSingleton<IPendingPermissions>(sp => sp.GetRequiredService<PendingPermissionStore>());
         services.AddScoped<WeaveFleet.Application.Workflows.WorkflowsFeature>();
+        // Safe mode ("Start without mods") lives in memory, shared by every request and by the mod host.
+        services.AddSingleton<WeaveFleet.Application.Mods.ModsSafeMode>();
+        services.AddScoped<WeaveFleet.Application.Mods.ModsFeature>();
+        services.AddScoped<WeaveFleet.Application.Mods.ModService>();
         services.AddScoped<WeaveFleet.Application.Workflows.WorkflowModelRoles>();
         services.AddScoped<WeaveFleet.Application.Workflows.WorkflowService>();
         services.AddScoped<WeaveFleet.Application.Workflows.WorkflowDrafter>();
