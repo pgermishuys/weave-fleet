@@ -34,9 +34,14 @@ export const useModsRuntimeStore = defineStore("mods-runtime", () => {
   }
 
   /** POSTs a request that answers with the view. Returns the server's message when it refuses, else null. */
-  async function post(action: "install" | "cancel"): Promise<string | null> {
+  async function post(action: "install" | "cancel" | "use", body?: unknown): Promise<string | null> {
     try {
-      const response = await apiFetch(`${RUNTIME}/${action}`, { method: "POST" });
+      const response = await apiFetch(
+        `${RUNTIME}/${action}`,
+        body === undefined
+          ? { method: "POST" }
+          : { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body) },
+      );
       if (!response.ok) return await errorText(response);
       view.value = (await response.json()) as ModsRuntimeView;
       return null;
@@ -71,6 +76,8 @@ export const useModsRuntimeStore = defineStore("mods-runtime", () => {
     load,
     /** Turns Mods on and starts, or joins, the install of Fleet's own Bun. */
     install: () => post("install"),
+    /** Turns Mods on and runs them on a Bun from `view.found`; nothing is downloaded. */
+    use: (path: string) => post("use", { path }),
     cancel: () => post("cancel"),
     applyEvent,
     listen,

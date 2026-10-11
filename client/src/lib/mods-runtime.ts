@@ -27,12 +27,22 @@ export interface ModsRuntimeRelease {
   source: string;
 }
 
+/** A Bun Fleet found on this computer that mods can run on. */
+export interface ModsRuntimeFound {
+  /** What `POST /use` takes. */
+  path: string;
+  displayPath: string;
+  version: string;
+}
+
 /** What `GET /api/features/mods/runtime` answers: the Bun mods run on and the install state. */
 export interface ModsRuntimeView {
   bun: ModsRuntimeBun | null;
   configuredPath?: string | null;
   release: ModsRuntimeRelease;
   job: ModsRuntimeJob | null;
+  /** Buns on this computer to pick from; empty when one is in use, the configuration sets one, or in cloud mode. */
+  found?: ModsRuntimeFound[];
 }
 
 export const MODS_RUNTIME_EVENT = "mods.runtime";

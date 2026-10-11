@@ -68,6 +68,12 @@ async function install(): Promise<void> {
   store.confirming = false;
   await run(() => store.install());
 }
+
+async function useMine(path: string): Promise<void> {
+  cameBack.value = false;
+  store.confirming = false;
+  await run(() => store.use(path));
+}
 </script>
 
 <template>
@@ -88,7 +94,9 @@ async function install(): Promise<void> {
       <ModsConfirm
         v-if="state === 'confirm'"
         :release="view.release"
+        :found="view.found"
         @install="install"
+        @use="useMine"
         @cancel="store.confirming = false"
       />
       <ModsProgress

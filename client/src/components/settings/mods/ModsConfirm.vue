@@ -1,12 +1,15 @@
 <script setup lang="ts">
 import { computed } from "vue";
-import { megabytes, type ModsRuntimeRelease } from "@/lib/mods-runtime";
+import { megabytes, type ModsRuntimeFound, type ModsRuntimeRelease } from "@/lib/mods-runtime";
 import { CODE, PRIMARY_BUTTON, SECONDARY_BUTTON } from "./classes";
 
 /** What Fleet will do, said before it does anything (step 2). The switch stays off until the user chooses. */
-const props = defineProps<{ release: ModsRuntimeRelease }>();
+const props = defineProps<{ release: ModsRuntimeRelease; found?: ModsRuntimeFound[] }>();
 
-defineEmits<{ install: []; cancel: [] }>();
+defineEmits<{ install: []; use: [path: string]; cancel: [] }>();
+
+/** The first Bun Fleet found: the one offered. */
+const mine = computed(() => props.found?.[0] ?? null);
 
 const size = computed(() => (props.release.size ? ` (about ${megabytes(props.release.size)} MB)` : ""));
 </script>
@@ -24,7 +27,15 @@ const size = computed(() => (props.release.size ? ` (about ${megabytes(props.rel
     </h4>
 
     <p
-      v-if="!release.hasBuild"
+      v-if="mine"
+      class="max-w-xl text-sm leading-6 text-muted"
+    >
+      Fleet found Bun {{ mine.version }} at <code :class="CODE">{{ mine.displayPath }}</code>. Mods can run on it, and you keep it up to date with <code :class="CODE">bun upgrade</code>.<template v-if="release.hasBuild">
+        Or Fleet can download its own Bun {{ release.version }}{{ size }} from <code :class="CODE">{{ release.source }}</code>, check it, install it in <code :class="CODE">{{ release.installFolder }}</code> and keep it up to date.
+      </template>
+    </p>
+    <p
+      v-else-if="!release.hasBuild"
       class="max-w-xl text-sm leading-6 text-muted"
     >
       Fleet has no Bun build for this computer. Install Bun yourself and point Fleet at it.
@@ -38,12 +49,20 @@ const size = computed(() => (props.release.size ? ` (about ${megabytes(props.rel
 
     <div class="flex flex-wrap items-center gap-2">
       <button
-        v-if="release.hasBuild"
+        v-if="mine"
         type="button"
         :class="PRIMARY_BUTTON"
+        @click="$emit('use', mine.path)"
+      >
+        Use my Bun {{ mine.version }}
+      </button>
+      <button
+        v-if="release.hasBuild"
+        type="button"
+        :class="mine ? SECONDARY_BUTTON : PRIMARY_BUTTON"
         @click="$emit('install')"
       >
-        Turn on and install
+        {{ mine ? "Download Fleet's own" : "Turn on and install" }}
       </button>
       <button
         type="button"

@@ -93,6 +93,8 @@ public sealed class TurningModsOnTests : E2ETestBase,
                 {
                     Home = Home,
                     DownloadBase = Bun.BaseUrl,
+                    // Not the real PATH: a Bun on the machine running the tests would turn the notice into the "found" one.
+                    Finder = new BunMachineFinder { Home = Home, PathEnv = "", SystemDirectories = [] },
                 });
             });
         }

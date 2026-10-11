@@ -1,5 +1,6 @@
 using WeaveFleet.Application.Configuration;
 using WeaveFleet.Application.Mods;
+using WeaveFleet.Application.Mods.Host;
 using WeaveFleet.Application.Users;
 using WeaveFleet.Domain.Repositories;
 
@@ -34,6 +35,12 @@ public static class ModsRuntimeEndpoints
             .Produces<ModsRuntimeView>(StatusCodes.Status200OK)
             .Produces<ModsRuntimeView>(StatusCodes.Status202Accepted);
 
+        // POST /api/features/mods/runtime/use — runs mods on a Bun the view listed under "found" and turns Mods on for the
+        // caller. Nothing is downloaded. 400 for a path that isn't one of them, 404 in cloud mode, 409 when the configuration sets a Bun.
+        runtime.MapPost("/use", UseAsync)
+            .WithName("UseModsRuntime")
+            .Produces<ModsRuntimeView>();
+
         runtime.MapPost("/cancel", CancelAsync)
             .WithName("CancelModsRuntimeInstall")
             .Produces<ModsRuntimeView>();
@@ -51,6 +58,30 @@ public static class ModsRuntimeEndpoints
         var started = await service.StartInstallAsync(user.UserId, ct);
         var view = await service.GetViewAsync(ct);
         return started ? Results.Accepted(uri: (string?)null, view) : Results.Ok(view);
+    }
+
+    private static async Task<IResult> UseAsync(
+        UseModsRuntimeRequest request, IModsRuntime service, FleetOptions options, IUserContext user, HttpContext http, CancellationToken ct)
+    {
+        // Cloud mode runs managed machines: there is no user computer whose Bun could be offered.
+        if (options.Cloud.Enabled)
+            return Results.NotFound(new ApiErrorResponse("Mods can't use your own Bun in cloud mode."));
+
+        if (!string.IsNullOrWhiteSpace(options.Harness.BunPath))
+            return Results.Conflict(new ApiErrorResponse($"Fleet uses the Bun at {options.Harness.BunPath}, set in its configuration."));
+
+        if (string.IsNullOrWhiteSpace(request.Path))
+            return Results.BadRequest(new ApiErrorResponse("\"path\" is required: the path of a Bun Fleet found."));
+
+        var used = await service.UseAsync(request.Path, ct);
+        if (used.IsFailure)
+            return Results.BadRequest(new ApiErrorResponse(used.Error.Description));
+
+        await TurnModsOnAsync(http, ct);
+        // The host follows the switch. In the background, as PUT /api/preferences/Mods does.
+        var host = http.RequestServices.GetRequiredService<IModHost>();
+        _ = Task.Run(() => host.EnsureAsync(user.UserId, CancellationToken.None), CancellationToken.None);
+        return Results.Ok(await service.GetViewAsync(ct));
     }
 
     private static async Task<IResult> CancelAsync(IModsRuntime service, CancellationToken ct)
@@ -74,3 +105,7 @@ public static class ModsRuntimeEndpoints
 }
 
 #pragma warning restore IL2026
+
+/// <summary>The body of <c>POST /api/features/mods/runtime/use</c>.</summary>
+/// <param name="Path">One of the paths the view lists under <c>found</c>.</param>
+internal sealed record UseModsRuntimeRequest(string? Path);

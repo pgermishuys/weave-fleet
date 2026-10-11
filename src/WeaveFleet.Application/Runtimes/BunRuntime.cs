@@ -126,14 +126,15 @@ public interface IBunRuntime
     /// <summary>
     /// The Bun to run, without downloading anything. With a configured path: that Bun, when the path is absolute,
     /// exists, runs and is <see cref="BunRelease.MinimumVersion"/> or later; otherwise <see langword="null"/>.
-    /// Without one: <paramref name="release"/>'s version when it's installed, otherwise the newest installed version,
+    /// Without one, the Bun the user picked from the ones Fleet found (see <see cref="UseAsync"/>) while it is still
+    /// there, safe to run and recent enough; otherwise <paramref name="release"/>'s version when it's installed, otherwise the newest installed version,
     /// so mods keep running while a newer one downloads. Never looks on <c>PATH</c>.
     /// </summary>
     Task<BunLocation?> FindAsync(BunRelease release, CancellationToken ct);
 
     /// <summary>
     /// With a configured path: that Bun as <see cref="FindAsync"/> finds it, or an error saying why it can't run;
-    /// nothing is downloaded. Without one: <paramref name="release"/>'s version, installing it when it isn't
+    /// nothing is downloaded. The Bun the user picked is used the same way, when it still works. Otherwise: <paramref name="release"/>'s version, installing it when it isn't
     /// installed. One install runs at a time; a caller arriving during one waits for it. Cancelling stops the
     /// download and deletes what it wrote.
     /// </summary>
@@ -149,6 +150,14 @@ public interface IBunRuntime
     /// <c>--version</c>. Finding one never makes Fleet use it.
     /// </summary>
     Task<IReadOnlyList<BunCandidate>> FindOnMachineAsync(CancellationToken ct);
+
+    /// <summary>
+    /// Makes the Bun at <paramref name="path"/> the one to run, on this machine for every user, when it is one of the
+    /// <see cref="BunCandidateStatuses.Usable"/> Buns <see cref="FindOnMachineAsync"/> finds now (the same path, not
+    /// a link to it). Anything else is an error saying why. Nothing is downloaded, and the choice is a pointer to the
+    /// user's file: Fleet never copies, updates or replaces it.
+    /// </summary>
+    Task<Result<BunLocation>> UseAsync(string path, CancellationToken ct);
 
     /// <summary>Checks a path the user typed the way <see cref="FindOnMachineAsync"/> checks what it finds. It must be absolute.</summary>
     Task<BunCandidate> CheckAsync(string path, CancellationToken ct);
