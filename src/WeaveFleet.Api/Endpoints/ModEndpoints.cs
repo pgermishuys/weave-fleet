@@ -105,6 +105,15 @@ public static class ModEndpoints
             .WithName("TurnModDraftOn")
             .Produces<ModDraftView>();
 
+        // DELETE /api/sessions/{sessionId}/mods/drafts/{name}/keep-request — the user declines the agent's ask to keep it.
+        drafts.MapDelete("/drafts/{name}/keep-request", async (string sessionId, string name, ModService service, CancellationToken ct) =>
+            {
+                var declined = await service.DeclineKeepAsync(sessionId, name, ct);
+                return declined.IsSuccess ? Results.NoContent() : declined.ToApiResult();
+            })
+            .WithName("DeclineModKeepRequest")
+            .Produces(StatusCodes.Status204NoContent);
+
         // ── The switch, as the server sees it ────────────────────────────────
         // Not gated: Settings asks while the switch is off, to show what the server would do without a stored choice.
         var features = app.MapGroup("/api/features").WithTags("Mods");
