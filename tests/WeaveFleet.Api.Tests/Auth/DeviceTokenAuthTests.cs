@@ -197,6 +197,10 @@ public sealed class DeviceTokenAuthTests
         };
         await hub.StartAsync();
         var connections = factory.Services.GetRequiredService<DeviceConnections>();
+        // StartAsync can return before the hub's OnConnectedAsync has tracked the connection: wait for it.
+        var tracked = DateTime.UtcNow.AddSeconds(30);
+        while (connections.CountFor(device.Id) == 0 && DateTime.UtcNow < tracked)
+            await Task.Delay(10);
         connections.CountFor(device.Id).ShouldBe(1);
 
         using var owner = CreateClient(factory, MachineToken(factory));
