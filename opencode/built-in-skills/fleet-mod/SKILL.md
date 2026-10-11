@@ -69,7 +69,7 @@ A prop not listed makes the tree invalid.
 | `Text` | `color`, `bold`, `italic`, `strikethrough`, `code`, `dimColor`, `wrap`, `children` |
 | `Pill` | `tone` (`good`, `warn`, `bad`, `neutral`, `accent`), `label`, `icon?` |
 | `Icon` | `name`, `color?`, `label?` (`check x alert info circle dot clock loader play test bug terminal file folder search sparkles zap`...) |
-| `Button` | `key`, `label`, `onPress`, `icon?`, `tone?`, `disabled?` |
+| `Button` | `key`, `label`, `onPress`, `icon?`, `tone?` (`primary`, `danger`, `quiet`; not Pill's tones), `disabled?` |
 | `Input`, `Select` | `key`, `label?`, `value?`, plus `onSubmit`/`onInput` or `options` and `onSelect` |
 | `Markdown`, `Code` | `text`; `source`, `language?`, `path?`, `startLine?`, `format?` (`source`, `diff`) |
 
