@@ -470,6 +470,38 @@ public sealed class SignalREventContractTests : IAsyncLifetime, IDisposable
     }
 
     [Fact]
+    public async Task A_mods_redraw_for_a_session_reaches_that_session_as_mod_ui()
+    {
+        var sessionId = await CreateSessionAsync();
+        await _hub.InvokeAsync<JsonElement>("SubscribeToSessionAsync", sessionId);
+        await WaitForBroadcasterSubscriberAsync();
+
+        _server.Services.GetRequiredService<WeaveFleet.Application.Mods.Host.IModHostUi>().Invalidated("local-user", "test-chips@v2", sessionId);
+
+        var received = await WaitForWorkEventAsync("mod.ui", $"session:{sessionId}");
+        var props = received.Data.GetProperty("properties");
+        props.GetProperty("sessionId").GetString().ShouldBe(sessionId);
+        props.GetProperty("mod").GetString().ShouldBe("test-chips");
+        // No site or call named: every site is drawn again.
+        (props.TryGetProperty("site", out var site) ? site.ValueKind : JsonValueKind.Null).ShouldBe(JsonValueKind.Null);
+        (props.TryGetProperty("requestId", out var requestId) ? requestId.ValueKind : JsonValueKind.Null).ShouldBe(JsonValueKind.Null);
+    }
+
+    [Fact]
+    public async Task A_mods_redraw_for_every_session_reaches_the_sessions_topic_as_mod_ui()
+    {
+        await _hub.InvokeAsync("SubscribeToSessionsTopicAsync");
+        await WaitForBroadcasterSubscriberAsync();
+
+        _server.Services.GetRequiredService<WeaveFleet.Application.Mods.Host.IModHostUi>().Invalidated("local-user", "test-chips@v2", null);
+
+        var received = await WaitForWorkEventAsync("mod.ui", "sessions");
+        var props = received.Data.GetProperty("properties");
+        props.GetProperty("mod").GetString().ShouldBe("test-chips");
+        (props.TryGetProperty("sessionId", out var session) ? session.ValueKind : JsonValueKind.Null).ShouldBe(JsonValueKind.Null);
+    }
+
+    [Fact]
     public async Task A_session_notification_carries_its_kind_request_and_machine()
     {
         await _hub.InvokeAsync("SubscribeToSessionsTopicAsync");

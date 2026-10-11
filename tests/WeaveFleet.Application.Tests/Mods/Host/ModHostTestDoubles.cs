@@ -180,6 +180,13 @@ internal sealed class FakeUi : IModHostUi
 
     public void Invalidated(string userId, string modId, string? sessionId) => Add($"invalidate {modId} {sessionId}");
 
+    /// <summary>How many times the loaded mods changed; kept out of <see cref="Calls"/>, which tests compare whole.</summary>
+    public int Loads => Volatile.Read(ref _loads);
+
+    public void Loaded(string userId) => Interlocked.Increment(ref _loads);
+
+    private int _loads;
+
     public void Logged(string userId, string modId, string? sessionId, string level, string text) => Add($"log {modId} {sessionId} {level} {text}");
 
     private Task Add(string call)
