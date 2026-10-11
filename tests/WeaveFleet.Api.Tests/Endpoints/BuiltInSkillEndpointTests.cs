@@ -59,6 +59,18 @@ public sealed class BuiltInSkillEndpointTests : IAsyncDisposable
     }
 
     [Fact]
+    public async Task Fleet_mod_has_no_switch_because_it_comes_with_Mods()
+    {
+        (await ListAsync()).Single(skill => skill.GetProperty("name").GetString() == "fleet-mod")
+            .GetProperty("withMods").GetBoolean().ShouldBeTrue();
+
+        var response = await _client.PutAsJsonAsync("/api/skills/built-in/fleet-mod", new { enabled = true });
+
+        response.StatusCode.ShouldBe(HttpStatusCode.BadRequest);
+        (await response.Content.ReadFromJsonAsync<JsonElement>()).GetProperty("error").GetString()!.ShouldContain("Mods");
+    }
+
+    [Fact]
     public async Task A_skill_Fleet_doesnt_ship_is_not_found()
     {
         var response = await _client.PutAsJsonAsync("/api/skills/built-in/code-review", new { enabled = true });
