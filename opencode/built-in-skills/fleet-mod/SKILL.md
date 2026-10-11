@@ -43,7 +43,8 @@ A module exports `register(on)`; see test-chips below. `on(event, matcher?, asyn
   `$.store` and `$.clock` exist too. There is no fs, process, network or `setTimeout`. If the user needs those, say
   it isn't possible yet.
 - Events you can use: `ui.render` (draws; a hook has 10 s), `prompt.submit` (changes a prompt; see below, a hook
-  has 1.5 s) and `turn.complete` (a turn ended; see the last section). There are no tool or permission events.
+  has 1.5 s) `turn.complete` (a turn ended; see the next section) and `permission.ask` (refuse an agent's ask; see the last section).
+  There are no tool events.
 
 ## Changing a prompt: `prompt.submit`
 
@@ -227,3 +228,30 @@ hooks:  ui.render ["ToolUse","ToolResult"] { props: { tool: ["bash","shell"] } }
 ```
 
 Ask to keep it with a one-line note once it loads.
+
+## Refusing an agent's ask: `permission.ask`
+
+When the user wants a command or edit refused outright ("never let the agent push from main"), hook `permission.ask`.
+`e` is `{ sessionId, requestId, kind, tool, title, patterns }`: `kind` is `shell`, `edit`, `web`, `read` or `other`, and
+`title` is the command for a shell ask. Match on `kind`/`tool`/`title` and decide in the hook.
+
+- Return `{ decision: "deny", reason: "..." }` to refuse. The user is not asked; the agent is told
+  `<mod name>: <reason>` and can change course. `reason` is required, at most 500 characters.
+- Return `next(e)` to let the user answer as usual. Anything else (a throw, no reason, a slow hook) also lets the user
+  answer. There is no `allow` yet.
+- It only sees asks that would reach the user, so the session's permission level (Settings → Permissions) must be `Ask`
+  or `Edits`; at `Allow everything` nothing asks and the hook never runs. Say so if the user's mod seems to do nothing.
+- A hook has 1.5 s and Fleet waits 2 s. Keep it quick; `$.session.branch()` is fine.
+
+```ts
+import type { Register } from "fleet-mods";
+
+export const register: Register = (on) => {
+  on("permission.ask", { kind: "shell", title: /\bgit\s+push\b/ }, async ($, e, next) => {
+    if ((await $.session.branch()) === "main") return { decision: "deny", reason: "Don't push from main. Make a branch and push that instead." };
+    return next(e);
+  });
+};
+```
+
+This is Fleet's `push-guard` sample.

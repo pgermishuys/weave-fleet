@@ -1,0 +1,6 @@
+{
+  "name": "push-guard",
+  "version": "0.1.0",
+  "description": "Refuses the agent's git push while the session is on main, and tells it to push a branch instead",
+  "hooks": "./mod.ts"
+}

@@ -48,6 +48,10 @@ const FLEET = Object.freeze({ type: "Fleet" });
 const messageOf = (e: unknown) => (e instanceof Error ? e.message : String(e));
 const isObject = (v: unknown): v is Record<string, unknown> => typeof v === "object" && v !== null && !Array.isArray(v);
 
+/** Which mod made each deny, by the answer object: an outer hook returning `next`'s answer keeps the inner mod's name. */
+const denyMadeBy = new WeakMap<object, string>();
+export const denierOf = (v: unknown): string | undefined => (isObject(v) ? denyMadeBy.get(v) : undefined);
+
 /** Does `path` name an .html file inside `owner`'s folder (after following links)? */
 export function pageExists(rt: Runtime, owner: string, path: string): boolean {
   const root = rt.mods.get(owner)?.root;
@@ -87,6 +91,10 @@ function accept(d: Dispatch, mod: LoadedMod, v: unknown): string | null {
       return isObject(v) && typeof v.text === "string" && Array.isArray(v.context) && v.context.every((c) => typeof c === "string")
         ? null
         : "prompt.submit takes next(e) or { ...e, text, context } with a string text and a list of strings";
+    case "permission.ask":
+      return isObject(v) && (v.decision === "ask" || (v.decision === "deny" && typeof v.reason === "string" && v.reason.trim() !== "" && v.reason.length <= 500))
+        ? null
+        : 'permission.ask takes next(e), { decision: "ask" } or { decision: "deny", reason } with a reason of at most 500 characters';
     case "ui.press":
       return isObject(v) && typeof v.element === "string" ? null : "ui.press takes next(e) or { element }";
     case "ui.input":
@@ -202,7 +210,7 @@ async function callHook(d: Dispatch, ref: HookRef, e: any, rest: Rest): Promise<
   const scope: DollarScope = { rendering: d.event === "ui.render", context: ctx, site: d.site, budget: null };
   const $ = createDollar(rt, mod, sid, d.event, scope);
   const st: NextState = { called: false, resolved: false, over: false };
-  const hookMs = d.event === "prompt.submit" ? Math.min(rt.limits.hookMs, rt.limits.promptHookMs) : rt.limits.hookMs;
+  const hookMs = d.event === "prompt.submit" || d.event === "permission.ask" ? Math.min(rt.limits.hookMs, rt.limits.promptHookMs) : rt.limits.hookMs;
   const key = ownerKey(mod.id, sid);
   let replay: Promise<Out> | undefined;
   /** The rest of the chain for the hook and its `.catch` together: what the hook's next got, else one run of it. */
@@ -244,6 +252,7 @@ async function callHook(d: Dispatch, ref: HookRef, e: any, rest: Rest): Promise<
     if (!failure) {
       mod.strikes = 0;
       const value = (outcome as { value: unknown }).value;
+      if (d.event === "permission.ask" && isObject(value) && value.decision === "deny" && !denyMadeBy.has(value)) denyMadeBy.set(value, mod.name);
       if (WATCH_ONLY.has(d.event)) return await restOnce(e);
       return { v: value, by: mod.id, nullBy: nullAttribution(mod, value, st) };
     }
@@ -326,6 +335,8 @@ async function endOfChain(d: Dispatch, e: any): Promise<Out> {
     case "turn.complete":
     case "prompt.submit":
       return { v: e };
+    case "permission.ask":
+      return { v: { decision: "ask" } };
   }
   const h = d.control!;
   const { rt } = d;
