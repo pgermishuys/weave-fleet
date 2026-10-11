@@ -229,3 +229,53 @@ not merge, check a PR isn't merged before pushing), plus for server work:
   host on `IBunRuntime.FindAsync`'s Bun, restarts it when that Bun's version changes, and prunes once the host has
   moved. *M2b* (turning Mods on): the Settings row, the runtime status API and its events, saving the Bun path the
   user picks, the background install at start, and the notices.
+
+## Hardening (M10)
+
+Cut from M2 when it became a walking skeleton (10 Oct evening). The full code for most of these is on the reference
+branch `feat/mods-host-client-reference` (7bcb39b0, closed PR #491), with review 1's findings in
+`~/.cache/fleet-mods-stage1/review-m2/REVIEW-1.md`.
+
+- **Hang blame.** The host sends `running {mod, event?, sessionId?}` on every entry into mod code: hook starts, `next`
+  resolving back into a hook, a `$` answer resuming a mod, timers, callbacks and `register`. Fleet strikes the mod of the
+  last one after the timed-out request was sent, and nobody when none arrived. Until then, a 15 s hang restarts the host
+  with no strike.
+- **Sticky hang strikes.** Fleet counts hang strikes across restarts. Only a hook the host reports as succeeded resets
+  them, and Fleet's own reload `session.start` never does.
+- **A load that never finishes** is marked refused, with a problem, instead of just restarting the host.
+- **Draft-folder watcher.** Saving a draft reloads it, debounced, with a maximum wait, never following links, and with a
+  bounded number of inotify instances per user (poll inside drafts). Until then, a draft reloads through an explicit call.
+- **Host stderr.** Read it raw, cut each line at about 8 KiB, rate-limit it, and count what's dropped. Cap the
+  per-mod log's line length too.
+- **Host → Fleet requests** get a concurrency cap, answering a busy error past it.
+- **Forget on archive or delete.** Subscribe to session archive and delete, and call `ForgetSessionAsync`, so a
+  session's timers and drafts stop at once.
+- **Bun changes.** Poll `FindAsync`, plus M2b's `IModsRuntime.BunChanged`, and restart the host on a new path or
+  version. Then prune, keeping every user's in-use Bun. Until then, nothing prunes, so nothing can delete a Bun in use.
+- **A user's host coming up on first sight** after a Fleet restart (signed-in users other than the local one).
+- **Backoff** is reset by a planned stop. A failed restart (runtime not ready) is retried sooner than the next reconcile.
+- **A busy host outlives Fleet on Linux** (an idle one exits when its stdin closes): `prctl(PR_SET_PDEATHSIG)` or
+  `setpriv --pdeathsig`. Check the Windows Job Object path at the same time.
+- **Inherited file descriptors** from the parent shell reach the host.
+- **A failed restart is never retried**: after a restart that ends not ready, nothing tries again until the next
+  `mods.changed` or switch change. Retry on a timer.
+- **The race between `EnsureAsync` and stopping**: a reconcile that starts a host while Fleet is stopping (`StopAsync`)
+  can leave one running. Check under the gate, after the start, whether a stop came in meanwhile.
+- **`ModHostProcess.Exited` waits for stderr** to be read to its end, so a grandchild holding the pipe open delays the
+  exit and the restart. Complete it on the process exiting, and drain stderr separately.
+- **`PreferencesEndpoints`'s fire-and-forget `EnsureAsync`** drops exceptions without logging them. Log them.
+- **`ModHostFiles` walks up to a folder with `WeaveFleet.slnx`** to find `mods/host/dist/host.js` in every build. Do that
+  only in Development.
+- **`ModHostRpc.OnLine` never disposes its `JsonDocument`**: dispose it, cloning what outlives the line.
+- **`HandleNotification` doesn't scope `invalidate` and `log`** to loaded mods, or a draft to its own session, as the
+  `$` requests are. It must before M6 wires them to the browser.
+- **`DispatchAsync` with an undefined `E`** throws instead of answering NotDispatched.
+- **A host error during a check** is worded as "the mod runtime isn't ready"; say what the host said.
+- **`CheckAsync` racing `ShutdownAsync`** on the check lease's timer.
+- **A struck mod isn't sent `unload`**: the host unloads it at its own three strikes, but Fleet should say so too.
+- **A literal `{ "$regex": … }` object in a matcher** is refused at `on()` in the host, so the wire encoding stays
+  unambiguous.
+- **Deleting the staged drafts folder** (`StagedRoot`) has no link check.
+- **A draft refused at staging** needs `ReloadDraftAsync` from the agent's tools (M7) to load again.
+- **Keep while the host can't run** is refused with "The mod runtime isn't ready yet: …"; the UI needs its own text (M8).
+- **A Keep cancelled mid-load** leaves mods unloaded until the next reconcile.

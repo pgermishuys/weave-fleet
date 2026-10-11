@@ -3,6 +3,7 @@ extern alias IdpHost;
 using Microsoft.AspNetCore.Hosting;
 using Microsoft.AspNetCore.Hosting.Server;
 using Microsoft.AspNetCore.Hosting.Server.Features;
+using Microsoft.AspNetCore.TestHost;
 using Microsoft.AspNetCore.Mvc.Testing;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Hosting;
@@ -114,6 +115,8 @@ public sealed class AuthFleetWebApplicationFactory : WebApplicationFactory<Progr
 
     protected override void ConfigureWebHost(IWebHostBuilder builder)
     {
+        // No Bun for the mod host, whatever this machine has installed: tests never start a real one here.
+        builder.ConfigureTestServices(services => services.AddSingleton<WeaveFleet.Application.Mods.Host.IModHostBun, WeaveFleet.Testing.Fakes.NoModHostBun>());
         builder.UseEnvironment("Testing");
 
         builder.ConfigureServices(services =>
