@@ -252,7 +252,7 @@ public sealed class BunRuntimeInstallerTests : IDisposable
         installer.Job.Reason.ShouldBe(BunInstallFailures.Cancelled);
         Everything().ShouldBeEmpty();
 
-        Publish();
+        release = Publish();
         var again = await installer.EnsureAsync(release, null, CancellationToken.None);
 
         again.IsSuccess.ShouldBeTrue();
@@ -1271,10 +1271,13 @@ public sealed class BunRuntimeInstallerTests : IDisposable
         using var stream = new MemoryStream();
         using (var zip = new ZipArchive(stream, ZipArchiveMode.Create, leaveOpen: true))
         {
-            zip.CreateEntry($"{asset.Folder}/");
+            // A fixed time keeps the bytes (and so the checksum) the same however many times, and whenever, this is built.
+            var stamp = new DateTimeOffset(2026, 1, 1, 0, 0, 0, TimeSpan.Zero);
+            zip.CreateEntry($"{asset.Folder}/").LastWriteTime = stamp;
             if (includeExecutable)
             {
                 var entry = zip.CreateEntry($"{asset.Folder}/{asset.ExecutableName}");
+                entry.LastWriteTime = stamp;
                 entry.ExternalAttributes = 0x81A4 << 16;
                 using var writer = new StreamWriter(entry.Open());
                 writer.Write(Script(version));
@@ -1282,7 +1285,9 @@ public sealed class BunRuntimeInstallerTests : IDisposable
 
             if (extraEntry is not null)
             {
-                using var writer = new StreamWriter(zip.CreateEntry(extraEntry).Open());
+                var extra = zip.CreateEntry(extraEntry);
+                extra.LastWriteTime = stamp;
+                using var writer = new StreamWriter(extra.Open());
                 writer.Write("not yours");
             }
         }
