@@ -365,13 +365,21 @@ value.
 
 These shapes are for M5 and M6; mods don't see them.
 
-- **`mod.ui`** (a domain event on the session's topic): `{ site, requestId, tree, mods: [{ name, draft }] }`, where
-  `tree` is a `WireElement` or `null`, and `null` with no `mods` means "no mod draws here any more". The client
-  contributes it to the site's contribution point (`toolRowViews`, `composerBands`, `statusChips`, or a `mod` canvas).
+- **`GET /api/sessions/{id}/mods/sites`** → `{ sites: [{ site, tools }] }`: which tool-row sites the session's loaded
+  mods hook (kept mods and that session's drafts), and for which canonical tool names (`null`: any tool). The client
+  fetches it when it first shows the session's rows, and again on `mods.changed` and on a `mod.ui` with no session.
+- **`POST /api/sessions/{id}/mods/render`** `{ site, requestId, props }` → `{ tree, mods: [{ name, draft }] }`: one
+  tool row's site (`ToolUse` or `ToolResult`), asked for by the client when a row of a hooked tool is shown and when its
+  status changes, never as its output streams. `props` are the [tool row props](#tool-row-props); Fleet caps them
+  again. `tree` is a `WireElement` or `null`, and `null` with no `mods` means "no mod draws here". The client
+  contributes it to `toolRowViews`.
+- **`mod.ui`** (a domain event) `{ sessionId?, site?, requestId?, mod? }`: draw again. On the session's topic when a
+  mod invalidated in one session (the client renders that call's rows, or all the session's, again); on the `sessions`
+  topic with no `sessionId` when a mod invalidated everywhere, or, with no `mod`, when Fleet loaded or dropped mods
+  (the client asks for every session's sites again). Trees for `ComposerBand`, `StatusChip` and panes will travel the
+  same way when those sites are wired.
 - **`mod.pane`**: `{ id, title, open, mod }`, opening or closing a pane.
 - **`mods.changed`**: a mod was kept, undone, turned on or off, or failed three times. Clients refetch `/api/mods`.
-- **`POST /api/sessions/{id}/mods/render`** `{ site, requestIds }`: the client shows rows Fleet hasn't rendered for
-  this session yet (after a reload). Answers arrive as `mod.ui` events.
 - **`POST /api/sessions/{id}/mods/action`** `{ handle, kind: "press" | "input" | "submit" | "select", value?, surface }`:
   a control was used. The host knows each handle's mod and key, and fills `mod` and `element` in the event itself.
 - `$.ui.toast` reaches the browser as a notice through the existing notices path.
