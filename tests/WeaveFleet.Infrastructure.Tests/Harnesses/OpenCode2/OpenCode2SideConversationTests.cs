@@ -121,4 +121,51 @@ public sealed class OpenCode2SideConversationTests
             api.Posts().Select(r => r.Path).ShouldBe([$"/api/session/{Session}/prompt"]);
         }
     }
+
+    // V2 takes a note (a steer) at the first step of the run a prompt starts and leaves a queued prompt for the next
+    // step, so an idle session's prompt with notes must not say queue: the note and the prompt share one step.
+    [Fact]
+    public async Task A_prompt_with_notes_to_an_idle_session_goes_in_with_the_default_delivery()
+    {
+        var api = new StubHandler(_ => Json("""{"data":{}}"""));
+        var (server, session) = Start(api);
+        await using (server)
+        await using (session)
+        {
+            await session.SendPromptAsync("hi", new PromptOptions { ModelNotes = ["the branch"], Delivery = PromptDelivery.Queue }, CancellationToken.None);
+
+            api.Posts().Select(r => r.Path).ShouldBe([$"/api/session/{Session}/synthetic", $"/api/session/{Session}/prompt"]);
+            JsonDocument.Parse(api.Posts()[1].Body!).RootElement.TryGetProperty("delivery", out _).ShouldBeFalse();
+        }
+    }
+
+    [Fact]
+    public async Task A_prompt_with_notes_to_a_running_session_stays_queued()
+    {
+        var api = new StubHandler(request => request.RequestUri!.AbsolutePath == "/api/session/active"
+            ? Json("{\"data\":{\"" + Session + "\":{}}}")
+            : Json("""{"data":{}}"""));
+        var (server, session) = Start(api);
+        await using (server)
+        await using (session)
+        {
+            await session.SendPromptAsync("hi", new PromptOptions { ModelNotes = ["the branch"], Delivery = PromptDelivery.Queue }, CancellationToken.None);
+
+            JsonDocument.Parse(api.Posts()[1].Body!).RootElement.GetProperty("delivery").GetString().ShouldBe("queue");
+        }
+    }
+
+    [Fact]
+    public async Task A_queued_prompt_without_notes_stays_queued()
+    {
+        var api = new StubHandler(_ => Json("""{"data":{}}"""));
+        var (server, session) = Start(api);
+        await using (server)
+        await using (session)
+        {
+            await session.SendPromptAsync("hi", new PromptOptions { Delivery = PromptDelivery.Queue }, CancellationToken.None);
+
+            JsonDocument.Parse(api.Posts()[0].Body!).RootElement.GetProperty("delivery").GetString().ShouldBe("queue");
+        }
+    }
 }

@@ -136,9 +136,19 @@ internal sealed partial class OpenCode2HarnessSession : IHarnessSession, IOpenCo
 
         // Fleet's notes to the model go in as synthetic messages that wait for the prompt, as V2's own notes do: the
         // model reads them, the conversation doesn't show them (OpenCode2History).
-        foreach (var note in options?.ModelNotes ?? [])
+        var notes = options?.ModelNotes ?? [];
+        foreach (var note in notes)
             await server.Client.AddSyntheticAsync(ResumeToken, note, ct).ConfigureAwait(false);
-        await server.Client.PromptAsync(ResumeToken, text, options?.MessageId, PromptFiles(options?.Attachments), Delivery(options?.Delivery), ct)
+        // A note is a steer in V2's inbox and a queued prompt waits for the turn after: the prompt's own arrival starts a run,
+        // the run takes the note at its first step and leaves the prompt for the next one, so one prompt cost two model turns
+        // (the first answering the note alone). With nothing running there's nothing to guard against, so the prompt goes
+        // with V2's default (steer), which the same first step takes in with the note. A turn Fleet didn't know of keeps
+        // the queue, as before.
+        var delivery = Delivery(options?.Delivery);
+        if (notes.Count > 0 && delivery == OpenCode2Deliveries.Queue
+            && !(await server.Client.GetActiveSessionIdsAsync(ct).ConfigureAwait(false)).Contains(ResumeToken))
+            delivery = null;
+        await server.Client.PromptAsync(ResumeToken, text, options?.MessageId, PromptFiles(options?.Attachments), delivery, ct)
             .ConfigureAwait(false);
     }
 
