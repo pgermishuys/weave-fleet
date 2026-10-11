@@ -40,16 +40,6 @@ export interface ModCheckReport {
   warnings: ModCheckProblem[];
 }
 
-export interface KeptMod {
-  name: string;
-  description: string | null;
-  /** The version sessions load; null only before anything is kept. */
-  active: number | null;
-  /** The active version's own version string. */
-  activeVersion: string | null;
-  off: ModOff | null;
-}
-
 /** A mod the agent is writing in one session. */
 export interface ModDraft {
   sessionId: string;
@@ -82,3 +72,35 @@ export interface ModsSwitch {
   on: boolean;
   safeMode: boolean;
 }
+
+/** One kept version. Fleet numbers them `v1`, `v2`…; `version` is the author's own string. */
+export interface ModVersion {
+  number: number;
+  createdAt: string;
+  version: string;
+  sha256: string;
+  sessionId: string | null;
+  sessionTitle: string | null;
+  note: string | null;
+}
+
+export interface KeptMod {
+  name: string;
+  description: string | null;
+  /** The version sessions load; null only before anything is kept. */
+  active: number | null;
+  /** The active version's own version string. */
+  activeVersion: string | null;
+  off: ModOff | null;
+  /** Oldest first. */
+  versions: ModVersion[];
+}
+
+export interface ModsView {
+  safeMode: boolean;
+  mods: KeptMod[];
+}
+
+/** `?mods=off` on any Fleet address starts without mods. */
+export const MODS_OFF_QUERY = "mods";
+export const MODS_OFF_VALUE = "off";
