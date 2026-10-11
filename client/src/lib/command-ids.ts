@@ -34,6 +34,7 @@ export const COMMAND_IDS = [
   "zoom-out",
   "open-marketplace-panel",
   "report-problem",
+  "start-without-mods",
   "board-toggle-mode",
 ] as const;
 
