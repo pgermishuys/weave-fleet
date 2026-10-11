@@ -12,6 +12,7 @@ const SAMPLES = [
   { name: "edit-size", added: "Added. Edit a file in any session to see it." },
   { name: "search-hits", added: "Added. Run a grep in any session to see it." },
   { name: "branch-context", added: "Added. Ask about the branch, a PR or a push in any session." },
+  { name: "tests-after-edits", added: "Added. When a turn changes files, \"Run the tests\" is queued next." },
 ] as const;
 
 const isAdding = shallowRef(false);

@@ -94,7 +94,7 @@ export const register: Register = (on, options) => {
 | Event | Fires when | `e` | A hook can return |
 | :- | :- | :- | :- |
 | `session.start` | Once per mod per session, before the mod's first other event in it, and again after the mod reloads | `sessionId`, `reason` (`start` or `reload`) | `next(e)` |
-| `turn.complete` | A turn ended: finished, stopped by the user (`isAborted`) or failed (`isFailed`) | `sessionId`, `turnId`, `isAborted`, `isFailed`, `failure?`, `agent?`, `model?`, `usage?` (`input`, `output`, `cacheRead`, `cacheWrite`), `cost?` | `next(e)` (watch only) |
+| `turn.complete` | A turn ended: finished, stopped by the user (`isAborted`) or failed (`isFailed`) | `sessionId`, `turnId`, `isAborted`, `isFailed`, `failure?`, `changedFiles` (see below). `agent`, `model`, `usage` and `cost` are in the types but Fleet doesn't send them yet | `next(e)` (watch only) |
 | `prompt.submit` | The user sent a prompt, before the harness gets it | `sessionId`, `text`, `context` (a list of strings, `[]` at first) | `next(e)`, `next({ ...e, text })` to reword it, or `next({ ...e, context: [...e.context, "…"] })` to add notes for the model |
 | `ui.render` | Fleet is about to draw a [render site](#render-sites) the mod hooked | `component`, `sessionId`, `requestId`, `props` | A tree, `null` to draw nothing, or `next(e)` |
 | `ui.press` | A `Button` the mod drew is pressed | `sessionId`, `mod` (the name of the mod that drew it), `element` (the key), `component`, `requestId`, `surface` | `next(e)`, or `{ element }` to swallow the press |
@@ -103,6 +103,27 @@ export const register: Register = (on, options) => {
 
 Fleet sends `session.start` when a session is opened on any screen or starts a turn; the host runs each mod's hook at
 most once per loaded module per session, and runs it first if another event for that session arrives before it.
+
+**`turn.complete`** fires when a session's turn ends, the moment Fleet would send the next queued message. Fleet waits up
+to 2 s for the hooks (it doesn't restart the host when they take longer; the queue just goes on), then sends the queue's
+next message. Side conversations (`/btw`) don't fire it. What `e` holds:
+
+- `turnId` is the turn's last assistant message id, `""` when the harness reported none.
+- `isAborted` is true when the user pressed Stop on the turn. `isFailed` and `failure` are the failure card's text.
+- `changedFiles` is the distinct files the agent's edit, write and patch tool calls finished since the last
+  `turn.complete`, relative to the session's folder when inside it (absolute otherwise). Edits by other means (a shell
+  `sed`) are not seen. OpenCode and OpenCode 2 report them; Claude Code and Pi sessions always send `[]`.
+
+**`$.prompt.submit({ text })`** queues a message in the current session, the same queue the user's own messages wait in,
+so it shows in the queue list. It resolves when queued and rejects with Fleet's reason when refused (empty or longer
+than 100,000 characters, the session is archived or not the user's, or the cap below).
+
+- From a `turn.complete` hook the message is only added to the queue; Fleet sends the queue right after the hooks,
+  so a follow-up goes in that one send, behind anything the user had already queued (first in, first out, one message
+  per turn). Anywhere else it is sent at once when the session is idle, else when the turn ends.
+- **Cap.** Mods may queue 3 messages in a row in a session. The 4th is refused ("…queued 3 follow-ups in a row; Fleet
+  waits for you before another") until the user sends or queues a message in that session. Fleet keeps the count in
+  memory, so a restart starts it again.
 
 **`prompt.submit`** is a transform event: each hook's `next(e)` passes the possibly changed event on, and the end of the
 chain is the event as it arrived there. Matchers work on `text` (the text as the user typed it, whatever an earlier mod
@@ -367,7 +388,7 @@ unhooked events never cross the pipe. A `dispatch` for `ui.press`/`ui.input`/`ui
 ends in that callback.
 
 **Host → Fleet (requests).** `$` calls that need Fleet, named after the call, each with `mod` and `sessionId`:
-`store.get`, `store.set`, `store.delete`, `store.keys`, `ui.open`, `ui.close`, `ui.toast`, `session.get`. `$.state`,
+`store.get`, `store.set`, `store.delete`, `store.keys`, `ui.open`, `ui.close`, `ui.toast`, `session.get`, `prompt.queue` (plus `text`). `$.state`,
 `$.clock` and `$.ui.resolve` never leave the host.
 
 **Host → Fleet (notifications).** `invalidate` (`mod`, `sessionId?`), `log` (`mod`, `sessionId?`, `level`, `text`),
