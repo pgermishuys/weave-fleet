@@ -47,7 +47,9 @@ public sealed partial class OpenCode2FleetToolCatalogPluginTests
     {
         var plugin = ToolName().Matches(Plugin).Select(match => match.Groups[1].Value).ToList();
 
-        plugin.TakeLast(6).ShouldBe(FleetToolCatalog.All.Where(tool => tool.Requires == FleetToolSwitches.ModsSwitch).Select(tool => tool.Name));
+        var mods = FleetToolCatalog.All.Where(tool => tool.Requires == FleetToolSwitches.ModsSwitch).Select(tool => tool.Name).ToList();
+
+        plugin.TakeLast(mods.Count).ShouldBe(mods);
     }
 
     [Fact]
