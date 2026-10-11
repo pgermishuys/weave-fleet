@@ -39,7 +39,7 @@ public sealed class ModBridgeTests
         _callers.Caller = new HarnessCanvasCaller(SessionId, Owner);
 
         var user = new ScopedUser();
-        var service = new ModService(_store, _checker, _events, user, _safeMode, _sessions, TimeProvider.System, _host, _keepRequests);
+        var service = new ModService(_store, _checker, _events, user, _safeMode, _sessions, new Host.FakeFiles(), TimeProvider.System, _host, _keepRequests);
         _bridge = new ModBridge([_callers], user, new ModsFeature(new FleetOptions(), _preferences, _safeMode, user), _safeMode, service, _host);
     }
 

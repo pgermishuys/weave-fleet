@@ -480,5 +480,6 @@ file sealed class NoHost : WeaveFleet.Application.Mods.Host.IModHost
     public Task<System.Text.Json.JsonElement> CheckAsync(string userId, string folder, CancellationToken ct = default) => throw new NotSupportedException();
     public Task ReloadDraftAsync(string userId, string sessionId, string name, CancellationToken ct = default) => Task.CompletedTask;
     public Task ForgetSessionAsync(string userId, string sessionId, CancellationToken ct = default) => Task.CompletedTask;
+    public IReadOnlyList<WeaveFleet.Application.Mods.Host.ModSiteHooks> SitesFor(string userId, string sessionId) => [];
     public WeaveFleet.Application.Mods.Host.ModLoadProblem? GetLoadProblem(string userId, string modId) => null;
 }

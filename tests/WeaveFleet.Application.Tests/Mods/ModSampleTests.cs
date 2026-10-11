@@ -30,7 +30,7 @@ public sealed class ModSampleTests : IDisposable
         File.WriteAllText(Path.Combine(folder, "mod.ts"), Module);
         _files.SamplesFolder = _samples;
         _store.FolderSha256 = Sha256(Module);
-        _service = new ModService(_store, _checker, _events, new TestUserContext(User), new ModsSafeMode(), new InMemorySessionRepository(), _files, TimeProvider.System);
+        _service = new ModService(_store, _checker, _events, new TestUserContext(User), new ModsSafeMode(), new InMemorySessionRepository(), _files, TimeProvider.System, new FakeModHost(), new ModKeepRequests(TimeProvider.System));
     }
 
     public void Dispose()
@@ -164,7 +164,7 @@ public sealed class ModSampleTests : IDisposable
     [Fact]
     public async Task A_host_that_isnt_ready_refuses_as_Keep_does()
     {
-        var notReady = new ModService(_store, new RefusingChecker(), _events, new TestUserContext(User), new ModsSafeMode(), new InMemorySessionRepository(), _files, TimeProvider.System);
+        var notReady = new ModService(_store, new RefusingChecker(), _events, new TestUserContext(User), new ModsSafeMode(), new InMemorySessionRepository(), _files, TimeProvider.System, new FakeModHost(), new ModKeepRequests(TimeProvider.System));
 
         var result = await notReady.AddSampleAsync(Chips);
 

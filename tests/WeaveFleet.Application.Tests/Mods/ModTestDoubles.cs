@@ -300,5 +300,7 @@ internal sealed class FakeModHost : IModHost
 
     public Task ForgetSessionAsync(string userId, string sessionId, CancellationToken ct = default) => Task.CompletedTask;
 
+    public IReadOnlyList<ModSiteHooks> SitesFor(string userId, string sessionId) => [];
+
     public ModLoadProblem? GetLoadProblem(string userId, string modId) => Problems.GetValueOrDefault(modId);
 }
