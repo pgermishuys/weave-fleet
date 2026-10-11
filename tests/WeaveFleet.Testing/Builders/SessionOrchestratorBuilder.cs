@@ -90,6 +90,7 @@ public sealed class SessionOrchestratorBuilder
     private ISessionTerminalCleanup? _sessionTerminals;
     private WeaveFleet.Application.Pages.IPageStore? _sessionPages;
     private AgentMemoryService? _agentMemory;
+    private WeaveFleet.Application.Mods.ModPromptHook? _modPrompts;
     private readonly List<ISessionSourceProvider> _additionalSourceProviders = [];
 
     /// <summary>Adds a session source provider beyond the local-directory one Build() always registers.</summary>
@@ -138,6 +139,12 @@ public sealed class SessionOrchestratorBuilder
     public SessionOrchestratorBuilder WithSessionScreenshots(ISessionScreenshotStore sessionScreenshots)
     {
         _sessionScreenshots = sessionScreenshots;
+        return this;
+    }
+
+    public SessionOrchestratorBuilder WithModPrompts(WeaveFleet.Application.Mods.ModPromptHook modPrompts)
+    {
+        _modPrompts = modPrompts;
         return this;
     }
 
@@ -200,7 +207,7 @@ public sealed class SessionOrchestratorBuilder
         Prompting = new SessionPrompting(
             SessionRepository, HarnessRegistry, Activation, ActivityTracker, delegationService, sessionSourceResolutionService,
             SessionSourceUsageRepository, EventBroadcaster, _userContext, NullLogger<SessionPrompting>.Instance,
-            MessageRepository, agentMemory: _agentMemory);
+            MessageRepository, agentMemory: _agentMemory, modPrompts: _modPrompts);
         Asks = new SessionAsks(SessionRepository, InstanceTracker, Activation, NullLogger<SessionAsks>.Instance);
         Catalog = new SessionCatalog(SessionRepository, Activation, NullLogger<SessionCatalog>.Instance);
         History = new SessionHistory(SessionRepository, SessionMessageProxy, _options, NullLogger<SessionHistory>.Instance);

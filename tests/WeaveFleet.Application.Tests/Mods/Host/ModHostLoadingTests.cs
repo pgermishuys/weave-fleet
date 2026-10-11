@@ -21,13 +21,15 @@ public sealed class ModHostLoadingTests : IDisposable
     private readonly FakeTimeProvider _time = new();
     private readonly Dictionary<string, Session> _sessions = [];
     private readonly Dictionary<string, string[]> _hooks = [];
+    private readonly Dictionary<string, string?> _branches = [];
     private readonly ModHostSupervisor _supervisor;
 
     public ModHostLoadingTests()
     {
         _supervisor = new ModHostSupervisor(User, new ModHostDependencies(
             new ModHostOptions(), _factory, _gate, new FakeBun(), new FakeFiles(), _store, _strikes, _ui,
-            (_, id, _) => Task.FromResult(_sessions.GetValueOrDefault(id)), _time, NullLogger.Instance));
+            (_, id, _) => Task.FromResult(_sessions.GetValueOrDefault(id)), _time, NullLogger.Instance,
+            (directory, _) => Task.FromResult(_branches.GetValueOrDefault(directory))));
         // A load answers with the hooks the test gave the mod's name (ui.render and session.start unless it said otherwise).
         _factory.Answers["load"] = p => Answer(new
         {
@@ -313,7 +315,10 @@ public sealed class ModHostLoadingTests : IDisposable
         _sessions["ses_test2"] = new Session { Id = "ses_test2", Title = "Someone else's", UserId = "test-other" };
 
         (await Call("session.get", new { mod = "test-chips@v1", sessionId = "ses_test1" })).GetRawText()
-            .ShouldBe("""{"id":"ses_test1","title":"Demo session","harness":"opencode","cwd":"/work/demo","surfaces":["desktop"]}""");
+            .ShouldBe("""{"id":"ses_test1","title":"Demo session","harness":"opencode","cwd":"/work/demo","surfaces":["desktop"],"branch":null}""");
+
+        _branches["/work/demo"] = "feature/berths";
+        (await Call("session.get", new { mod = "test-chips@v1", sessionId = "ses_test1" })).GetProperty("branch").GetString().ShouldBe("feature/berths");
         foreach (var session in new[] { "ses_test2", "ses_test3" })
             (await Should.ThrowAsync<ModHostRpcException>(Call("session.get", new { mod = "test-chips@v1", sessionId = session }))).Code.ShouldBe(ModHostErrorCodes.InvalidParams);
     }

@@ -70,6 +70,17 @@ public sealed class GitDiffService
         return result.IsSuccess && !string.IsNullOrWhiteSpace(repoRoot) ? repoRoot : null;
     }
 
+    /// <summary>The branch checked out in <paramref name="directory"/>, or null when it isn't in a git repository or HEAD is detached.</summary>
+    public async Task<string?> CurrentBranchAsync(string directory, CancellationToken ct)
+    {
+        if (string.IsNullOrWhiteSpace(directory) || !Directory.Exists(directory))
+            return null;
+
+        var result = await RunGitAsync(directory, ["symbolic-ref", "--quiet", "--short", "HEAD"], ct).ConfigureAwait(false);
+        var branch = result.StandardOutput.Trim();
+        return result.IsSuccess && branch.Length > 0 ? branch : null;
+    }
+
     /// <summary>
     /// The commit <paramref name="reference"/> names (a branch, a tag, a commit, <c>origin/main</c>), or null when it
     /// names none. Something that reads as an option is no reference.

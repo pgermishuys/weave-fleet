@@ -204,6 +204,31 @@ public sealed class GitDiffServiceTests
     }
 
     [Fact]
+    public async Task current_branch_names_the_checked_out_branch_and_is_null_outside_a_repository_or_on_a_detached_head()
+    {
+        var tempRoot = CreateTempDirectory();
+        var service = new GitDiffService();
+
+        try
+        {
+            (await service.CurrentBranchAsync(tempRoot, CancellationToken.None)).ShouldBeNull("the folder is outside any repository");
+
+            await InitRepoOnMainAsync(tempRoot);
+            await RunGitAsync(tempRoot, "checkout", "-b", "feature/berths");
+            Directory.CreateDirectory(Path.Combine(tempRoot, "src"));
+            (await service.CurrentBranchAsync(Path.Combine(tempRoot, "src"), CancellationToken.None)).ShouldBe("feature/berths");
+
+            await RunGitAsync(tempRoot, "checkout", "--detach");
+            (await service.CurrentBranchAsync(tempRoot, CancellationToken.None)).ShouldBeNull();
+            (await service.CurrentBranchAsync(Path.Combine(tempRoot, "missing"), CancellationToken.None)).ShouldBeNull();
+        }
+        finally
+        {
+            Directory.Delete(tempRoot, recursive: true);
+        }
+    }
+
+    [Fact]
     public async Task branch_rebased_onto_a_newer_main_lists_only_the_branchs_own_changes()
     {
         var tempRoot = CreateTempDirectory();

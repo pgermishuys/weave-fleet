@@ -175,6 +175,32 @@ public sealed class RealModHostTests : IAsyncDisposable
     }
 
     [Fact]
+    public async Task A_prompt_submit_hook_rewrites_a_prompt_and_adds_context_through_the_real_host()
+    {
+        if (Real() is not { } real)
+            return;
+        var folder = Directory.CreateDirectory(Path.Combine(_root, "shout")).FullName;
+        File.WriteAllText(Path.Combine(folder, "mod.json"), """{"name":"shout","version":"0.1.0","description":"Shouts a prompt","hooks":"./mod.ts"}""");
+        File.WriteAllText(Path.Combine(folder, "mod.ts"), """
+            import type { Register } from "fleet-mods";
+            export const register: Register = (on) => {
+              on("prompt.submit", { text: /^please/i }, ($, e, next) => next({ ...e, text: e.text.toUpperCase(), context: [...e.context, "Shouted."] }));
+            };
+            """);
+        await _store.KeepFolderAsync(User, "shout", folder, new ModKeepSource(null, null), (_, _) => Task.FromResult<JsonElement?>(null));
+        var (service, _) = await LaunchAsync(real);
+        var hook = new ModPromptHook(service, TimeProvider.System, NullLogger<ModPromptHook>.Instance);
+
+        var shouted = await hook.ApplyAsync(User, "ses_live1", "please look at the logs", CancellationToken.None).WaitAsync(TimeSpan.FromSeconds(10));
+        var untouched = await hook.ApplyAsync(User, "ses_live1", "look at the logs", CancellationToken.None).WaitAsync(TimeSpan.FromSeconds(10));
+
+        shouted.Text.ShouldBe("PLEASE LOOK AT THE LOGS");
+        shouted.Context.ShouldBe(["Shouted."]);
+        untouched.Text.ShouldBe("look at the logs", "the host applied the matcher");
+        untouched.Context.ShouldBeEmpty();
+    }
+
+    [Fact]
     public async Task The_shipped_sample_is_kept_checked_and_draws_pills_for_a_dotnet_test_row_through_the_render_service()
     {
         if (Real() is not { } real || new ModHostFiles(AppContext.BaseDirectory).SamplesFolder is not { } samples)
