@@ -1,3 +1,4 @@
+using System.Text.Json;
 using Microsoft.Extensions.Logging.Abstractions;
 using WeaveFleet.Application.Configuration;
 using WeaveFleet.Application.Runtimes;
@@ -34,6 +35,13 @@ public sealed class BunRuntimeUseTests : IDisposable
     private string Root => Path.Combine(_home, ".weave", "runtimes", "bun");
 
     private string Pointer => Path.Combine(Root, "use.json");
+
+    /// <summary>The path in the pointer file, read as JSON: a Windows path is written with its backslashes escaped.</summary>
+    private string? PointedPath()
+    {
+        using var pointer = JsonDocument.Parse(File.ReadAllText(Pointer));
+        return pointer.RootElement.GetProperty("path").GetString();
+    }
 
     /// <summary>A bun on the fake <c>PATH</c> that prints <paramref name="version"/>.</summary>
     private string PutBun(string version, string folder = "bin")
@@ -93,7 +101,7 @@ public sealed class BunRuntimeUseTests : IDisposable
 
         result.IsSuccess.ShouldBeTrue(result.IsFailure ? result.Error.Description : "");
         result.Value.ShouldBe(new BunLocation(mine, BunSources.Configured, "1.4.5"));
-        File.ReadAllText(Pointer).ShouldContain(mine);
+        PointedPath().ShouldBe(mine);
         (await installer.FindAsync(Release, CancellationToken.None)).ShouldBe(new BunLocation(mine, BunSources.Configured, "1.4.5"));
     }
 
@@ -256,7 +264,7 @@ public sealed class BunRuntimeUseTests : IDisposable
         var both = NewInstaller(onPath: ["bin2", "bin"]);
         (await both.UseAsync(second, CancellationToken.None)).IsSuccess.ShouldBeTrue();
 
-        File.ReadAllText(Pointer).ShouldContain(second);
+        PointedPath().ShouldBe(second);
         Directory.GetFiles(Root).Select(Path.GetFileName).ShouldBe(["use.json"]);
     }
 
