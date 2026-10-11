@@ -8,20 +8,34 @@ builds on). Claude Code mods docs: https://code.claude.com/docs/en/plugins/mods/
 
 ## Stage 1 status (11 October 2026, M9 live check)
 
-On `main` at `b7e0f096`: the contract (#481), the mod host (#486), the client sites (#487), the store and `/api/mods`
-(#488), Bun install and finding (#489, #490), the host client and supervisor (#493, #494, #496, #497), turning Mods on
-(#498, #499), draft card, review, Settings → Mods and Start without mods (#500–#503), test-chips end to end (#504,
-#509, #505), the agent's mod tools and the `fleet-mod` skill (#506, with #507 and #508 folded in).
+On `main` at `f0235c2c`:
+- the contract (#481) and the mod host (#486);
+- the client sites (#487), and the store and `/api/mods` (#488);
+- installing and finding Bun (#489, #490), and the host client and supervisor (#493, #494, #496, #497);
+- turning Mods on (#498, #499);
+- the draft card, review, Settings → Mods and Start without mods (#500–#503);
+- test-chips end to end (#504, #509, #505);
+- the agent's mod tools and the `fleet-mod` skill (#506, with #507 and #508 folded in);
+- two fixes from this live check: `fleet-mod` comes with Mods (#511), and Use my Bun (#512).
 
-Checked live on a scratch Fleet (Release install layout, scratch HOMEs, pooled OpenCode on Claude Sonnet 5.5) by
-M9; screenshots in `mockups/mods-stage1-live-check/`:
+All four done-checks pass. M9 ran them on a scratch Fleet: the Release install layout, a fresh scratch HOME for each
+check, pooled OpenCode on Claude Sonnet 5.5, and an invented bun project. Screenshots are in
+`mockups/mods-stage1-live-check/`, with checks 1 and 3 rerun on `f0235c2c` in its `rerun/` folder.
 
-1. Turning Mods on with no Bun: works (notice, progress, ready; Bun 1.4.2 downloaded and checked against the pinned
-   sha256). **With a Bun already on the machine, Fleet doesn't offer it**: decision 3's "Use my Bun" isn't built.
-2. test-chips on a real `bun test` row: works, desktop and phone, light and dark.
-3. The writing loop: works (draft draws in its session only, Keep, Undo, off, `?mods=off`), **but the `fleet-mod`
-   skill is off by default even with Mods on**, so the agent has the tools without the guide.
-4. Mods off: nothing changes; no host, no Bun download.
+1. **Turning Mods on.**
+   - With no Bun, Fleet says what it will download, then shows a progress bar, then ready. Bun 1.4.2 is checked
+     against the pinned sha256.
+   - With a Bun on PATH, Fleet offers it ("Fleet found Bun 1.4.2 at …", Use my Bun / Download Fleet's own). Use my Bun
+     downloads nothing and saves `~/.weave/runtimes/bun/use.json`.
+   - Before #512, Fleet didn't offer a Bun it found.
+2. **test-chips on a real `bun test` row.** It shows passed, failed and skipped counts, and the failing name when
+   opened, on desktop and phone, light and dark.
+3. **The writing loop.**
+   - Asked with no hints, the agent loads `fleet-mod`, and its first draft loads.
+   - The draft draws only in its own session. After Keep it draws in the others too.
+   - v2, Undo, turning the mod off, and `?mods=off` (banner, host stopped) all work.
+   - Before #511, the skill was off by default, and the agent guessed the API and searched the disk.
+4. **Mods off changes nothing.** There's no mod UI and no host, and no Bun is downloaded.
 
 ## Decisions already made by the user (don't reopen)
 
@@ -371,6 +385,11 @@ branch `feat/mods-host-client-reference` (7bcb39b0, closed PR #491), with review
     `hooks.js` left from the agent's failed attempts went into v1). Keep only what the check read, or list extra files
     in the review.
   - Claude Code and OpenCode 2 weren't live-checked (covered by the catalog, plugin and MCP tests).
+  - Use my Bun (#512):
+    - The runtime view runs the finder, one `bun --version` per candidate, on each GET while no Bun is in use. Cache
+      it.
+    - Picking another Bun once one is in use needs "Use my own Bun…" (a typed path), which isn't built.
+    - `/install` doesn't start the host itself; it waits for the next reconcile.
   - The ToolRow props carry no exit code, so "a chip with the command's exit code" can't be written; add `exitCode`
     to the props when the harness reports one.
 
