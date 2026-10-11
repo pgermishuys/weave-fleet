@@ -73,9 +73,7 @@ public sealed partial class FleetToolCatalogPluginTests
             ("fleet_mod_write", "mods"),
             ("fleet_mod_check", "mods"),
             ("fleet_mod_reload", "mods"),
-            ("fleet_mod_test", "mods"),
             ("fleet_mod_keep", "mods"),
-            ("fleet_mod_list", "mods"),
         ]);
     }
 

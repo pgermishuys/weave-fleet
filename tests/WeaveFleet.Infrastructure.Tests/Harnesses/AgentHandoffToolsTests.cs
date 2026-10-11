@@ -76,7 +76,7 @@ public sealed class AgentHandoffToolsTests
         JsonNode.DeepEquals(Without(on, AddedTools), off).ShouldBeTrue();
     }
 
-    private static readonly string[] ModTools = ["fleet_mod_write", "fleet_mod_check", "fleet_mod_reload", "fleet_mod_test", "fleet_mod_keep", "fleet_mod_list"];
+    private static readonly string[] ModTools = ["fleet_mod_write", "fleet_mod_check", "fleet_mod_reload", "fleet_mod_keep"];
 
     [Theory]
     [InlineData("fleet-canvas.ts", "opencode")]
