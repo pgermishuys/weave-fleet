@@ -1,6 +1,8 @@
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging;
+using WeaveFleet.Application.Mods;
 using WeaveFleet.Application.Users;
+using WeaveFleet.Domain.Repositories;
 using WeaveFleet.Domain.Events;
 
 namespace WeaveFleet.Application.Sessions;
@@ -15,7 +17,7 @@ namespace WeaveFleet.Application.Sessions;
 /// caught up with the event yet. What's queued is in the database, so a Fleet restart keeps it; it's sent the next
 /// time the session's turn ends, or with Send now.
 /// </remarks>
-public sealed partial class PromptQueueDispatcher(IServiceScopeFactory scopeFactory, ILogger<PromptQueueDispatcher> logger)
+public sealed partial class PromptQueueDispatcher(IServiceScopeFactory scopeFactory, ILogger<PromptQueueDispatcher> logger, ModTurnHook? modTurns = null)
 {
     private readonly Lock _gate = new();
     private readonly List<Task> _inFlight = [];
@@ -33,6 +35,9 @@ public sealed partial class PromptQueueDispatcher(IServiceScopeFactory scopeFact
     /// <summary>Called for every event the relay translates, on its pump.</summary>
     public void Observe(string sessionId, string? userId, DomainEvent? domainEvent)
     {
+        if (!string.IsNullOrEmpty(userId))
+            modTurns?.Observe(sessionId, domainEvent);
+
         if (domainEvent is not SessionIdled || string.IsNullOrEmpty(userId))
             return;
 
@@ -54,7 +59,23 @@ public sealed partial class PromptQueueDispatcher(IServiceScopeFactory scopeFact
         {
             using var scope = scopeFactory.CreateScope();
             using var user = scope.ServiceProvider.GetRequiredService<IBackgroundUserScope>().Begin(userId);
+            // The user's mods hear the turn ended first; one may queue a follow-up, which the send below then sends.
+            if (modTurns is not null)
+                await CompleteTurnAsync(scope.ServiceProvider, sessionId, userId).ConfigureAwait(false);
             await scope.ServiceProvider.GetRequiredService<PromptQueueService>().SendNextAsync(sessionId).ConfigureAwait(false);
+        }
+        catch (Exception ex)
+        {
+            LogSendFailed(ex, sessionId);
+        }
+    }
+
+    private async Task CompleteTurnAsync(IServiceProvider services, string sessionId, string userId)
+    {
+        try
+        {
+            var session = await services.GetRequiredService<ISessionRepository>().GetByIdAsync(sessionId).ConfigureAwait(false);
+            await modTurns!.CompleteAsync(userId, sessionId, session?.Directory, session?.SideOfSessionId is not null || session?.ParentSessionId is not null).ConfigureAwait(false);
         }
         catch (Exception ex)
         {

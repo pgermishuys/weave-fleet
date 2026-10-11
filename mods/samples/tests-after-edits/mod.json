@@ -1,0 +1,6 @@
+{
+  "name": "tests-after-edits",
+  "version": "0.1.0",
+  "description": "When a turn changed files, queues \"Run the tests\" as the next message",
+  "hooks": "./mod.ts"
+}

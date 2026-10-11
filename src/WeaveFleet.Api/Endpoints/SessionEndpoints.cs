@@ -6,6 +6,7 @@ using WeaveFleet.Application.Browser;
 using WeaveFleet.Application.Canvases;
 using WeaveFleet.Application.DTOs;
 using WeaveFleet.Application.Git;
+using WeaveFleet.Application.Mods;
 using WeaveFleet.Application.Progress;
 using WeaveFleet.Application.Sessions;
 using WeaveFleet.Application.Sessions.Asks;
@@ -332,12 +333,15 @@ public static class SessionEndpoints
         .WithName("AddSessionSource");
 
         // POST /api/sessions/{id}/prompt
-        group.MapPost("/{id}/prompt", async (string id, SendPromptApiRequest req, SessionPrompting sessionPrompting, SessionService sessionService, InstanceTracker tracker, HttpContext http, SessionMessagesFeature sessionMessages, SessionReferenceExpander references, CancellationToken ct) =>
+        group.MapPost("/{id}/prompt", async (string id, SendPromptApiRequest req, SessionPrompting sessionPrompting, SessionService sessionService, InstanceTracker tracker, HttpContext http, SessionMessagesFeature sessionMessages, SessionReferenceExpander references, ModFollowUps modFollowUps, CancellationToken ct) =>
         {
             // With messages on, agents message sessions through fleet_message, which says who sent it; this path
             // would make the text look like the user's.
             if (http.IsAgentRequest() && await sessionMessages.IsEnabledAsync())
                 return Results.Conflict(new ErrorResponse(SessionMessages.UseTheToolMessage));
+
+            // The user speaking starts mods' count of follow-ups over.
+            modFollowUps.UserSpoke(id);
 
             var modelResolution = await ResolveSessionModelAsync(id, req.Model, sessionService, tracker, ct);
             if (modelResolution.ErrorResult is not null)
@@ -371,11 +375,13 @@ public static class SessionEndpoints
         // POST /api/sessions/{id}/queue — queue a message, a slash command or a shell command. Fleet sends it when the
         // turn ends (at once, when the session turns out to be idle); the queue is Fleet's, so leaving the session or
         // closing the browser doesn't lose it. Gated as a prompt is.
-        group.MapPost("/{id}/queue", async (string id, QueuePromptApiRequest req, PromptQueueService queue, SessionService sessionService, InstanceTracker tracker, HttpContext http, SessionReferenceExpander references, CancellationToken ct) =>
+        group.MapPost("/{id}/queue", async (string id, QueuePromptApiRequest req, PromptQueueService queue, SessionService sessionService, InstanceTracker tracker, HttpContext http, SessionReferenceExpander references, ModFollowUps modFollowUps, CancellationToken ct) =>
         {
             // The queue is the user's composer; agents message sessions with their own tool.
             if (http.IsAgentRequest())
                 return Results.Json(new ErrorResponse("Agents message sessions with their own tool."), ApiJsonContext.Default.ErrorResponse, statusCode: StatusCodes.Status403Forbidden);
+
+            modFollowUps.UserSpoke(id);
 
             var modelResolution = await ResolveSessionModelAsync(id, req.Model, sessionService, tracker, ct);
             if (modelResolution.ErrorResult is not null)

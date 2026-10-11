@@ -345,6 +345,8 @@ public static class DependencyInjection
         services.AddSingleton<WeaveFleet.Application.Mods.IModsRuntime, WeaveFleet.Application.Mods.ModsRuntime>();
         services.AddScoped<WeaveFleet.Application.Mods.ModRenderService>();
         services.AddSingleton<WeaveFleet.Application.Mods.ModPromptHook>();
+        services.AddSingleton<WeaveFleet.Application.Mods.ModFollowUps>();
+        services.AddSingleton<WeaveFleet.Application.Mods.ModTurnHook>();
         services.AddSingleton<WeaveFleet.Application.Mods.ModKeepRequests>();
         services.AddScoped<WeaveFleet.Application.Mods.ModBridge>();
         services.AddScoped<WeaveFleet.Application.Workflows.WorkflowModelRoles>();

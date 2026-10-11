@@ -122,6 +122,12 @@ export function createDollar(rt: Runtime, mod: LoadedMod, sessionId: string, eve
       surfaces: async () => (await sessionField("surfaces")) as never,
       branch: async () => ((await sessionField("branch")) as string | null | undefined) ?? null,
     },
+    prompt: {
+      async submit(prompt) {
+        if (!prompt || typeof prompt.text !== "string" || prompt.text.trim() === "") throw new TypeError("$.prompt.submit takes { text } with some text");
+        await ask("prompt.queue", { text: prompt.text });
+      },
+    },
     clock: {
       now: () => rt.now(),
       after: (ms, fn) => (live(), rt.clock.after(owner, ms, fn)),

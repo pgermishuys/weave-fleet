@@ -68,7 +68,17 @@ public sealed partial class PromptQueueService(
     /// Adds a message to the end of the session's queue. When the session isn't in a turn after all (it ended while
     /// the request was on its way), the queue is sent at once rather than waiting for a turn that won't end.
     /// </summary>
-    public async Task<Result<QueuedPrompt>> EnqueueAsync(string sessionId, QueuePromptRequest request, CancellationToken ct = default)
+    public Task<Result<QueuedPrompt>> EnqueueAsync(string sessionId, QueuePromptRequest request, CancellationToken ct = default)
+        => EnqueueCoreAsync(sessionId, request, deferSend: false, ct);
+
+    /// <summary>
+    /// Adds and broadcasts without sending: the caller sends the queue itself right after (a mod queueing during the
+    /// turn's <c>turn.complete</c>, which <see cref="PromptQueueDispatcher"/> follows with a send).
+    /// </summary>
+    public Task<Result<QueuedPrompt>> EnqueueWithoutSendingAsync(string sessionId, QueuePromptRequest request, CancellationToken ct = default)
+        => EnqueueCoreAsync(sessionId, request, deferSend: true, ct);
+
+    private async Task<Result<QueuedPrompt>> EnqueueCoreAsync(string sessionId, QueuePromptRequest request, bool deferSend, CancellationToken ct)
     {
         var kind = string.IsNullOrWhiteSpace(request.Kind) ? QueuedPromptKinds.Prompt : request.Kind;
         if (!QueuedPromptKinds.IsKnown(kind))
@@ -107,7 +117,7 @@ public sealed partial class PromptQueueService(
 
         await BroadcastAsync(sessionId, ct).ConfigureAwait(false);
 
-        if (!IsInTurn(sessionId))
+        if (!deferSend && !IsInTurn(sessionId))
             await SendNextAsync(sessionId, ct).ConfigureAwait(false);
 
         return item;

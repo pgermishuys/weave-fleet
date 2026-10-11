@@ -132,20 +132,34 @@ declare module "fleet-mods" {
     readonly reason: "start" | "reload";
   }
 
-  /** A turn ended, including one the user stopped (`isAborted`) or one that failed (`isFailed`). Watch only. */
+  /**
+   * A turn ended, including one the user stopped (`isAborted`) or one that failed (`isFailed`). Watch only. Fleet waits
+   * up to 2 s for the hooks, then sends the next queued message; a hook may call `$.prompt.submit` to queue a follow-up.
+   * Fleet sends `sessionId`, `turnId`, `isAborted`, `isFailed`, `failure` and `changedFiles`; `agent`, `model`, `usage`
+   * and `cost` are not sent yet and are always absent.
+   */
   export interface TurnCompleteEvent {
     readonly sessionId: string;
-    /** The turn's assistant message id. */
+    /** The turn's last assistant message id; "" when the harness reported none. */
     readonly turnId: string;
+    /** The user stopped the turn with Stop. */
     readonly isAborted: boolean;
     readonly isFailed: boolean;
     /** What the failure card says, when `isFailed`. */
     readonly failure?: string;
+    /**
+     * Files the agent's edit, write and patch tools changed in this turn, distinct, relative to the session's folder when
+     * inside it. Edits by other means (a shell `sed`) are not seen. Only OpenCode and OpenCode 2 report them; Claude Code
+     * and Pi sessions always send `[]`.
+     */
+    readonly changedFiles: readonly string[];
+    /** Not sent yet. */
     readonly agent?: string;
-    /** `provider/model`, when the harness reported it. */
+    /** `provider/model`, when the harness reported it. Not sent yet. */
     readonly model?: string;
+    /** Not sent yet. */
     readonly usage?: { readonly input: number; readonly output: number; readonly cacheRead: number; readonly cacheWrite: number };
-    /** In the provider's currency unit, as Fleet's cost column shows it. */
+    /** In the provider's currency unit, as Fleet's cost column shows it. Not sent yet. */
     readonly cost?: number;
   }
 
@@ -276,6 +290,7 @@ declare module "fleet-mods" {
     readonly state: StateApi;
     readonly store: StoreApi;
     readonly session: SessionApi;
+    readonly prompt: PromptApi;
     readonly clock: ClockApi;
   }
 
@@ -322,6 +337,17 @@ declare module "fleet-mods" {
     surfaces(): Promise<Surface[]>;
     /** The git branch checked out in the session's folder; null when it is not in a git repository or HEAD is detached. */
     branch(): Promise<string | null>;
+  }
+
+  export interface PromptApi {
+    /**
+     * Queues a message in the current session, as the user's own queue does (it shows in the queue list). Resolves
+     * when it is queued; rejects with Fleet's reason when refused (empty or too long, the session is archived, or the
+     * mod already queued 3 follow-ups in a row and the user has not spoken since). From a `turn.complete` hook the
+     * message is sent as soon as the hooks are done, before anything else in the queue goes; elsewhere it is sent at
+     * once when the session is idle, else when the turn ends.
+     */
+    submit(prompt: { readonly text: string }): Promise<void>;
   }
 
   /** Timers belong to the mod and the session they were started in, and stop when the module reloads or the session goes. */
@@ -622,6 +648,7 @@ declare module "fleet-mods/protocol" {
     "ui.open"(params: CallContext & { id: string; title?: string }): Record<string, never>;
     "ui.close"(params: CallContext & { id: string }): Record<string, never>;
     "ui.toast"(params: CallContext & { text: string; timeoutMs?: number; tone?: "accent" | "warn" }): Record<string, never>;
+    "prompt.queue"(params: CallContext & { text: string }): Record<string, never>;
     "session.get"(params: CallContext): { id: string; title: string; harness: string; cwd: string; surfaces: Surface[]; branch: string | null };
   }
 

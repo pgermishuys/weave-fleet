@@ -42,8 +42,8 @@ A module exports `register(on)`; see test-chips below. `on(event, matcher?, asyn
 - `$.ui.resolve(e)` gives the element factories: `const { Box, Text, Pill } = $.ui.resolve(e)`. `$.state`,
   `$.store` and `$.clock` exist too. There is no fs, process, network or `setTimeout`. If the user needs those, say
   it isn't possible yet.
-- Events you can use: `ui.render` (draws; a hook has 10 s) and `prompt.submit` (changes a prompt; see below, a hook
-  has 1.5 s). There are no tool or permission events.
+- Events you can use: `ui.render` (draws; a hook has 10 s), `prompt.submit` (changes a prompt; see below, a hook
+  has 1.5 s) and `turn.complete` (a turn ended; see the last section). There are no tool or permission events.
 
 ## Changing a prompt: `prompt.submit`
 
@@ -74,6 +74,38 @@ export const register: Register = (on) => {
 ```
 
 This is Fleet's `branch-context` sample (`mod.json` like any mod: name `branch-context`, `hooks: "./mod.ts"`).
+
+## After a turn: `turn.complete` and `$.prompt.submit`
+
+When the user wants something to happen once the agent finishes ("run the tests after edits"), hook `turn.complete`.
+`e` is `{ sessionId, turnId, isAborted, isFailed, failure?, changedFiles }`. `changedFiles` lists the files the agent's
+edit, write and patch tools changed in that turn (relative to the session's folder; `[]` on Claude Code and Pi; a shell
+`sed` isn't seen). The hook only watches: always `return next(e)`.
+
+- `await $.prompt.submit({ text: "..." })` queues a message in the session. It shows in the queue list and is sent next.
+  It rejects with Fleet's reason when refused, so `try`/`catch` it.
+- A mod may queue 3 messages in a row; the 4th is refused until the user sends one of their own. Check `isAborted`
+  and `isFailed` first, or the mod keeps nagging after a Stop or a failure.
+- Fleet waits 2 s for the hooks, then sends the queue. Keep hooks quick.
+
+```ts
+import type { Register } from "fleet-mods";
+
+export const register: Register = (on) => {
+  on("turn.complete", async ($, e, next) => {
+    if (e.changedFiles.length > 0 && !e.isAborted && !e.isFailed) {
+      try {
+        await $.prompt.submit({ text: "Run the tests" });
+      } catch (err) {
+        $.ui.log(`Could not queue the tests: ${err instanceof Error ? err.message : String(err)}`, { level: "warn" });
+      }
+    }
+    return next(e);
+  });
+};
+```
+
+This is Fleet's `tests-after-edits` sample (`mod.json` like any mod).
 
 ## The two sites
 

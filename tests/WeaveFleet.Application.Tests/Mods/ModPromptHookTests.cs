@@ -122,7 +122,7 @@ public sealed class ModPromptHookTests
         await Should.ThrowAsync<OperationCanceledException>(pending.Within());
     }
 
-    private sealed class ScriptedHost : IModHost
+    internal sealed class ScriptedHost : IModHost
     {
         public Func<ModDispatchRequest, Task<ModDispatchResult>> Reply { get; set; } = _ => Task.FromResult(ModDispatchResult.NotDispatched);
 
