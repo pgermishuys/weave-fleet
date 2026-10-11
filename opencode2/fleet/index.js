@@ -540,7 +540,7 @@ if (process.env.FLEET_MODS === "1") {
         "Write files into this session's draft mod, creating the draft if it's new.",
         "Paths are relative to the mod's folder (mod.json, the hooks module, any pages).",
         "A file you send replaces the one there; files you don't send stay.",
-        "Returns the static check. A draft runs only in this session, and Fleet reloads it when you write.",
+        "Fleet then loads it in this session only and says whether it loaded or why not.",
       ].join(" "),
       {
         name: {
@@ -558,8 +558,8 @@ if (process.env.FLEET_MODS === "1") {
     fleetTool(
       "fleet_mod_check",
       [
-        "Run the static check on a draft mod: its hooks, $ calls, state keys and pages, and any errors with line and column.",
-        "Also shows why it last failed to load and its latest log lines.",
+        "Run the static check on a draft mod and return its report:",
+        "its hooks, $ calls, state keys and pages, and any errors with line and column.",
       ].join(" "),
       { name: { type: "string", description: "The draft's name." } },
       (input, tool) => callFleet("check", tool, { name: input.name }, MODS_PATH + "check"),
@@ -567,42 +567,18 @@ if (process.env.FLEET_MODS === "1") {
     fleetTool(
       "fleet_mod_reload",
       [
-        "Load a draft mod again in this session now, and say whether it loaded and what it registered.",
+        "Load a draft mod again in this session now, and say whether it loaded or why not.",
         "Use it after a fix, or to turn a draft back on after three failures turned it off.",
       ].join(" "),
       { name: { type: "string", description: "The draft's name." } },
       (input, tool) => callFleet("reload", tool, { name: input.name }, MODS_PATH + "reload"),
     ),
     fleetTool(
-      "fleet_mod_test",
-      [
-        "Send a sample event through this session's mods, the draft included, and show what comes back:",
-        "the tree drawn, or the failure, with the draft's log lines. Nothing is drawn on screen.",
-      ].join(" "),
-      {
-        name: { type: "string", description: "The draft's name." },
-        event: {
-          type: "string",
-          enum: ["ui.render", "session.start", "turn.complete", "ui.press", "ui.input", "ui.select"],
-          description: "The event to send.",
-        },
-        e: {
-          type: "object",
-          description: [
-            "The event's fields; Fleet fills in sessionId.",
-            "ui.render: {component, props}, e.g. {component: \"ToolUse\", props: {tool: \"bash\", status: \"completed\", input: {command: \"dotnet test\"}, output: \"Passed: 3\"}}.",
-            "A control event: {handle, value?}, with a handle from a tree a test returned.",
-          ].join(" "),
-        },
-      },
-      (input, tool) => callFleet("test", tool, { name: input.name, event: input.event, e: input.e }, MODS_PATH + "test"),
-    ),
-    fleetTool(
       "fleet_mod_keep",
       [
         "Ask the user to keep a draft mod for all their sessions.",
         "Fleet shows them what it touches and they decide; you can't keep it yourself.",
-        "Waits up to a minute for their answer.",
+        "It returns at once; the user answers from the draft card in the conversation.",
       ].join(" "),
       {
         name: { type: "string", description: "The draft's name." },
@@ -612,12 +588,6 @@ if (process.env.FLEET_MODS === "1") {
         },
       },
       (input, tool) => callFleet("keep", tool, { name: input.name, note: input.note }, MODS_PATH + "keep"),
-    ),
-    fleetTool(
-      "fleet_mod_list",
-      "List this session's draft mods, whether each is loaded or why not, and the mods the user has kept.",
-      {},
-      (_input, tool) => callFleet("list", tool, {}, MODS_PATH + "list"),
     ),
   )
 }
