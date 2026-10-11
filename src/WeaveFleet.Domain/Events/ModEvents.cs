@@ -52,7 +52,7 @@ public sealed record ModsRuntimePayload
     /// <summary>Gets the install running now or the last one since Fleet started; null before the first.</summary>
     public ModsRuntimeJob? Job { get; init; }
 
-    /// <summary>Gets why this was raised: <c>job</c> (progress or a phase change), or <c>installed</c> (it succeeded).</summary>
+    /// <summary>Gets why this was raised: <c>job</c> (progress or a phase change), <c>installed</c> (it succeeded), or <c>used</c> (the user chose a Bun already on their computer).</summary>
     public required string Reason { get; init; }
 }
 

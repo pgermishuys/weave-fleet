@@ -503,6 +503,7 @@ internal sealed record ErrorResponse(string Error);
 [JsonSerializable(typeof(WeaveFleet.Api.Endpoints.KeepModRequest))]
 [JsonSerializable(typeof(WeaveFleet.Api.Endpoints.ModsSwitchView))]
 [JsonSerializable(typeof(WeaveFleet.Application.Mods.ModsRuntimeView))]
+[JsonSerializable(typeof(WeaveFleet.Api.Endpoints.UseModsRuntimeRequest))]
 [JsonSerializable(typeof(WeaveFleet.Application.Skills.BuiltInSkillView))]
 [JsonSerializable(typeof(IReadOnlyList<WeaveFleet.Application.Skills.BuiltInSkillView>))]
 [JsonSerializable(typeof(List<WeaveFleet.Application.Skills.BuiltInSkillView>))]

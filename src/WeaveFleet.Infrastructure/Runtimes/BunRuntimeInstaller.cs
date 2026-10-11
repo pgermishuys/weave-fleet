@@ -26,6 +26,7 @@ internal sealed partial class BunRuntimeInstaller(
     private const string ErrorCode = "Mods.Runtime";
     private const string Working = "Installing the mod runtime…";
     private const string ManifestFileName = "install.json";
+    private const string UseFileName = "use.json";
     private const int MoveAttempts = 5;
     private const long ProgressStepBytes = 1024 * 1024;
     private static readonly TimeSpan StaleAfter = TimeSpan.FromHours(1);
@@ -35,6 +36,8 @@ internal sealed partial class BunRuntimeInstaller(
     private BunInstallJob? _job;
     private BunMachineFinder? _finder;
     private Uri? _downloadBase;
+    private (string Path, ProbeKey Key, BunLocation Location)? _pointed;
+    private string? _warnedPointer;
 
     /// <summary>Test seam: the user's home folder.</summary>
     internal string Home { get; init; } = ExecutableResolver.HomeDirectory() ?? Environment.CurrentDirectory;
@@ -94,6 +97,9 @@ internal sealed partial class BunRuntimeInstaller(
 
     private string Root => Path.Combine(Home, ".weave", "runtimes", "bun");
 
+    /// <summary>The pointer to the Bun the user picked from the ones Fleet found; machine-wide, beside Fleet's own Buns.</summary>
+    private string UseFile => Path.Combine(Root, UseFileName);
+
     private string ExecutableName => Rid.StartsWith("win-", StringComparison.Ordinal) ? "bun.exe" : "bun";
 
     /// <inheritdoc />
@@ -107,6 +113,9 @@ internal sealed partial class BunRuntimeInstaller(
     {
         if (!string.IsNullOrWhiteSpace(options.Harness.BunPath))
             return (await CheckConfiguredAsync(options.Harness.BunPath, ct).ConfigureAwait(false)).Location;
+
+        if (await FindPointedAsync(ct).ConfigureAwait(false) is { } pointed)
+            return pointed;
 
         var installed = ScanInstalled(release);
         var wanted = installed.FirstOrDefault(bun => bun.Name == release.Version);
@@ -127,6 +136,9 @@ internal sealed partial class BunRuntimeInstaller(
             return location is not null ? location : new FleetError(ErrorCode, error!);
         }
 
+        if (await FindPointedAsync(ct).ConfigureAwait(false) is { } pointed)
+            return pointed;
+
         if (FindRelease(release) is { } found)
             return found;
 
@@ -142,6 +154,28 @@ internal sealed partial class BunRuntimeInstaller(
         {
             _gate.Release();
         }
+    }
+
+    /// <inheritdoc />
+    public async Task<Result<BunLocation>> UseAsync(string path, CancellationToken ct)
+    {
+        var comparison = OperatingSystem.IsWindows() || OperatingSystem.IsMacOS() ? StringComparison.OrdinalIgnoreCase : StringComparison.Ordinal;
+        var named = (await FindOnMachineAsync(ct).ConfigureAwait(false)).FirstOrDefault(found => string.Equals(found.Path, path, comparison));
+        if (named is not { Status: BunCandidateStatuses.Usable, Version: { } version })
+            return new FleetError(ErrorCode, named?.Message ?? $"Fleet didn't find a Bun at {path}.");
+
+        try
+        {
+            WritePointer(named.Path);
+        }
+        catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
+        {
+            return new FleetError(ErrorCode, $"Fleet couldn't save your choice: {ex.Message}");
+        }
+
+        _pointed = null;
+        LogUsing(named.Path, version);
+        return new BunLocation(named.Path, BunSources.Configured, version);
     }
 
     /// <inheritdoc />
@@ -228,6 +262,100 @@ internal sealed partial class BunRuntimeInstaller(
             ? $"Fleet's Bun {location.Version} needs a security fix: the oldest safe version is {release.OldestSafe}. {note}Fleet installs Bun {release.Version} to replace it."
             : $"Your Bun {location.Version} needs a security fix: the oldest safe version is {release.OldestSafe}. {note}Run bun upgrade and Fleet picks up the new version by itself, or use Fleet's own Bun instead.";
         return new BunSafety(false, updateAvailable, message);
+    }
+
+    /// <summary>
+    /// The Bun the user picked, when it can still be used: checked at every call, so a Bun that was deleted, replaced by
+    /// one that can't run, or moved somewhere others can change is ignored (and said so once) and Fleet falls back.
+    /// </summary>
+    private async Task<BunLocation?> FindPointedAsync(CancellationToken ct)
+    {
+        var pointed = ReadPointer();
+        if (pointed is null)
+            return null;
+
+        try
+        {
+            var key = ProbeKeyOf(pointed);
+            if (key is not null && _pointed is { } cached && cached.Path == pointed && cached.Key == key
+                && (IsWindows || Finder.WhyNotSafeToRun(BunPaths.Canonical(pointed)) is null))
+            {
+                return cached.Location;
+            }
+
+            // The finder's own check: absolute, a file, safe to run, runs, and recent enough.
+            var candidate = await Finder.CheckAsync(pointed, ct).ConfigureAwait(false);
+            if (key is not null && candidate is { Status: BunCandidateStatuses.Usable, Version: { } version })
+            {
+                var location = new BunLocation(pointed, BunSources.Configured, version);
+                _pointed = (pointed, key, location);
+                _warnedPointer = null;
+                return location;
+            }
+
+            IgnorePointer(pointed, candidate.Message ?? "it can't be checked");
+        }
+        catch (Exception ex) when (ex is IOException or UnauthorizedAccessException or ArgumentException or NotSupportedException)
+        {
+            IgnorePointer(pointed, ex.Message);
+        }
+
+        return null;
+    }
+
+    private void IgnorePointer(string pointed, string reason)
+    {
+        _pointed = null;
+        if (_warnedPointer == pointed)
+            return;
+
+        _warnedPointer = pointed;
+        LogPointerIgnored(pointed, reason);
+    }
+
+    /// <summary>The path in the pointer file; <see langword="null"/> when there is none, or it can't be read.</summary>
+    private string? ReadPointer()
+    {
+        try
+        {
+            if (!File.Exists(UseFile))
+                return null;
+
+            var pointer = JsonSerializer.Deserialize(File.ReadAllText(UseFile), BunInstallManifestJsonContext.Default.BunUsePointer);
+            if (!string.IsNullOrWhiteSpace(pointer?.Path))
+                return pointer.Path;
+
+            IgnorePointer(UseFile, "it names no Bun");
+        }
+        catch (Exception ex) when (ex is IOException or UnauthorizedAccessException or JsonException)
+        {
+            IgnorePointer(UseFile, ex.Message);
+        }
+
+        return null;
+    }
+
+    /// <summary>Writes the pointer to a temporary file beside it and moves that over it, so it is never half written.</summary>
+    private void WritePointer(string path)
+    {
+        Directory.CreateDirectory(Root);
+        var temporary = Path.Combine(Root, $".{UseFileName}.{Guid.NewGuid():N}.tmp");
+        try
+        {
+            File.WriteAllText(temporary, JsonSerializer.Serialize(new BunUsePointer(path), BunInstallManifestJsonContext.Default.BunUsePointer));
+            File.Move(temporary, UseFile, overwrite: true);
+        }
+        finally
+        {
+            try
+            {
+                File.Delete(temporary);
+            }
+            catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
+            {
+                // Best effort.
+            }
+        }
     }
 
     /// <summary>The configured Bun when it can be used, otherwise why not.</summary>
@@ -728,6 +856,12 @@ internal sealed partial class BunRuntimeInstaller(
     [LoggerMessage(Level = LogLevel.Warning, Message = "Moving Bun into place failed (try {Attempt} of {Attempts}); trying again.")]
     private partial void LogMoveRetry(Exception ex, int attempt, int attempts);
 
+    [LoggerMessage(Level = LogLevel.Information, Message = "Mods will run on the user's own Bun {Version} at {Path}.")]
+    private partial void LogUsing(string path, string version);
+
+    [LoggerMessage(Level = LogLevel.Warning, Message = "Ignoring the Bun picked for mods ({Path}): {Reason}")]
+    private partial void LogPointerIgnored(string path, string reason);
+
     [LoggerMessage(Level = LogLevel.Information, Message = "Deleted the old Bun {Version}.")]
     private partial void LogPruned(string version);
 
@@ -767,7 +901,11 @@ internal sealed record BunInstallManifest(
     [property: JsonPropertyName("installedAt")] DateTimeOffset InstalledAt,
     [property: JsonPropertyName("rid")] string? Rid = null);
 
+/// <summary>Written as <c>use.json</c> beside Fleet's Buns: the Bun the user picked from the ones Fleet found.</summary>
+internal sealed record BunUsePointer([property: JsonPropertyName("path")] string Path);
+
 [JsonSerializable(typeof(BunInstallManifest))]
+[JsonSerializable(typeof(BunUsePointer))]
 [JsonSourceGenerationOptions(PropertyNamingPolicy = JsonKnownNamingPolicy.CamelCase, WriteIndented = true)]
 internal sealed partial class BunInstallManifestJsonContext : JsonSerializerContext
 {

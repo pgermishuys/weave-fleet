@@ -5,6 +5,7 @@ using WeaveFleet.Application.Configuration;
 using WeaveFleet.Application.Events;
 using WeaveFleet.Application.Runtimes;
 using WeaveFleet.Application.Users;
+using WeaveFleet.Domain.Common;
 using WeaveFleet.Domain.Events;
 using WeaveFleet.Domain.Harnesses;
 using WeaveFleet.Domain.Repositories;
@@ -66,6 +67,15 @@ public sealed partial class ModsRuntime(
             current = new ModsRuntimeBun(location.ExecutablePath, Display(location.ExecutablePath), location.Source, location.Version, safety.Safe, safety.Message);
         }
 
+        // Only while nothing is in use: the Buns on the machine are offered to someone who has none yet.
+        IReadOnlyList<ModsRuntimeFound> found = [];
+        if (current is null && configured is null && !options.Cloud.Enabled)
+        {
+            found = [.. (await bun.FindOnMachineAsync(ct).ConfigureAwait(false))
+                .Where(candidate => candidate is { Status: BunCandidateStatuses.Usable, Version: not null })
+                .Select(candidate => new ModsRuntimeFound(candidate.Path, Display(candidate.Path), candidate.Version!))];
+        }
+
         return new ModsRuntimeView(
             current,
             configured,
@@ -75,7 +85,20 @@ public sealed partial class ModsRuntime(
                 asset is not null,
                 Display(Path.Combine(Home, ".weave", "runtimes", "bun", release.Version)),
                 SourceOf(options.Harness.BunDownloadBase)),
-            Job);
+            Job,
+            found);
+    }
+
+    /// <inheritdoc />
+    public async Task<Result<ModsRuntimeView>> UseAsync(string path, CancellationToken ct)
+    {
+        if (await bun.UseAsync(path, ct).ConfigureAwait(false) is { IsFailure: true } refused)
+            return refused.Error;
+
+        // Told to everyone, so another window's notice gives way to the ready row.
+        lock (_sync)
+            Send(new ModsRuntimePayload { Reason = ModsRuntimeReasons.Used });
+        return await GetViewAsync(ct).ConfigureAwait(false);
     }
 
     /// <summary>The path with the home folder shortened to <c>~</c>, whichever separator follows it.</summary>
@@ -105,6 +128,7 @@ public sealed partial class ModsRuntime(
                 return true;
 
             if (!string.IsNullOrWhiteSpace(options.Harness.BunPath)
+                || found is { Source: BunSources.Configured }
                 || found is { Source: BunSources.Installed } && found.Version == release.Version)
                 return false;
 
