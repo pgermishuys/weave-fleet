@@ -12,6 +12,9 @@ public sealed class ModsFeature(FleetOptions options, IUserPreferenceRepository 
 
     public const string TurnedOffMessage = "Mods are turned off in Fleet's Settings.";
 
+    /// <summary>Set to <c>1</c> for an OpenCode process started with Mods on: its plugin adds the <c>fleet_mod_*</c> tools.</summary>
+    public const string EnvironmentVariable = "FLEET_MODS";
+
     /// <summary>The user's choice in Settings, or the option when they haven't made one. Settings and the API use this.</summary>
     public async Task<bool> IsSwitchedOnAsync()
     {

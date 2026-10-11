@@ -23,6 +23,7 @@ const SESSION_READ_PATH = "/api/bridge/session/read"
 const SESSION_START_PATH = "/api/bridge/session/start"
 const MACHINE_LIST_PATH = "/api/bridge/session/machines"
 const STEP_DONE_PATH = "/api/bridge/workflow/step-done"
+const MODS_PATH = "/api/bridge/mods/"
 
 // Agent hand-off: set only on servers started with it on (and so with messages between sessions on). It adds the
 // hand-off tools and a machine on fleet_message and fleet_session_read; without it they're as they always were.
@@ -526,6 +527,67 @@ if (process.env.FLEET_MEMORY_DIR) {
       "Remove a note from Fleet memory that turned out wrong or out of date. Use its id from the list in your instructions.",
       { id: { type: "string", description: "The note's id, from the list under \"Fleet memory\" in your instructions." } },
       (input, tool) => callFleet("forget", tool, { id: input.id }, MEMORY_PATH + "forget"),
+    ),
+  )
+}
+
+// Only in servers started with Mods on. A draft is the agent's own mod for this session; Fleet runs the checks.
+if (process.env.FLEET_MODS === "1") {
+  tools.push(
+    fleetTool(
+      "fleet_mod_write",
+      [
+        "Write files into this session's draft mod, creating the draft if it's new.",
+        "Paths are relative to the mod's folder (mod.json, the hooks module, any pages).",
+        "A file you send replaces the one there; files you don't send stay.",
+        "Fleet then loads it in this session only and says whether it loaded or why not.",
+      ].join(" "),
+      {
+        name: {
+          type: "string",
+          description: "The mod's name, as in its mod.json: lowercase letters, digits and -, starting with a letter.",
+        },
+        files: {
+          type: "array",
+          items: { type: "object" },
+          description: "The files to write, each {path, content}. Paths use / and stay inside the mod's folder.",
+        },
+      },
+      (input, tool) => callFleet("write", tool, { name: input.name, files: input.files }, MODS_PATH + "write"),
+    ),
+    fleetTool(
+      "fleet_mod_check",
+      [
+        "Run the static check on a draft mod and return its report:",
+        "its hooks, $ calls, state keys and pages, and any errors with line and column.",
+      ].join(" "),
+      { name: { type: "string", description: "The draft's name." } },
+      (input, tool) => callFleet("check", tool, { name: input.name }, MODS_PATH + "check"),
+    ),
+    fleetTool(
+      "fleet_mod_reload",
+      [
+        "Load a draft mod again in this session now, and say whether it loaded or why not.",
+        "Use it after a fix, or to turn a draft back on after three failures turned it off.",
+      ].join(" "),
+      { name: { type: "string", description: "The draft's name." } },
+      (input, tool) => callFleet("reload", tool, { name: input.name }, MODS_PATH + "reload"),
+    ),
+    fleetTool(
+      "fleet_mod_keep",
+      [
+        "Ask the user to keep a draft mod for all their sessions.",
+        "Fleet shows them what it touches and they decide; you can't keep it yourself.",
+        "It returns at once; the user answers from the draft card in the conversation.",
+      ].join(" "),
+      {
+        name: { type: "string", description: "The draft's name." },
+        note: {
+          type: "string",
+          description: "Why it's worth keeping, in a sentence the user reads in the review, or an empty string.",
+        },
+      },
+      (input, tool) => callFleet("keep", tool, { name: input.name, note: input.note }, MODS_PATH + "keep"),
     ),
   )
 }

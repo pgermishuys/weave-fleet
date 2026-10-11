@@ -182,6 +182,7 @@ internal sealed record ErrorResponse(string Error);
 [JsonSerializable(typeof(SessionReferenceDto[]))]
 [JsonSerializable(typeof(WorkflowStepBridgeRequest))]
 [JsonSerializable(typeof(MemoryBridgeRequest))]
+[JsonSerializable(typeof(ModBridgeRequest))]
 // Workflows
 [JsonSerializable(typeof(WeaveFleet.Application.Workflows.WorkflowLibraryDto))]
 [JsonSerializable(typeof(WeaveFleet.Application.Workflows.WorkflowRunDto))]

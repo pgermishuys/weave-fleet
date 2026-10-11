@@ -70,6 +70,10 @@ public sealed partial class FleetToolCatalogPluginTests
             ("fleet_memory_save", "memory"),
             ("fleet_memory_forget", "memory"),
             ("fleet_step_done", "workflowStep"),
+            ("fleet_mod_write", "mods"),
+            ("fleet_mod_check", "mods"),
+            ("fleet_mod_reload", "mods"),
+            ("fleet_mod_keep", "mods"),
         ]);
     }
 

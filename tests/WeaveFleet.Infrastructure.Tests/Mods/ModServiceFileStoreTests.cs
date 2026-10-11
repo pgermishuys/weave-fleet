@@ -91,7 +91,7 @@ public sealed class ModServiceFileStoreTests : IDisposable
         {
             Store = store;
             Sessions.Seed(new Session { Id = Alpha, Title = "Tidy the build output" }, new Session { Id = Beta, Title = "Rename the chips" });
-            Service = new ModService(store, Checker, Events, User, SafeMode, Sessions, new WeaveFleet.Infrastructure.Mods.Host.ModHostFiles(AppContext.BaseDirectory), TimeProvider.System);
+            Service = new ModService(store, Checker, Events, User, SafeMode, Sessions, new WeaveFleet.Infrastructure.Mods.Host.ModHostFiles(AppContext.BaseDirectory), TimeProvider.System, new NoHost(), new ModKeepRequests(TimeProvider.System));
         }
 
         public FileModVersionStore Store { get; }
@@ -468,4 +468,18 @@ public sealed class ModServiceFileStoreTests : IDisposable
         => Directory.Exists(_root)
             ? Directory.GetFileSystemEntries(_root, "*", SearchOption.AllDirectories).Select(p => Path.GetRelativePath(_root, p)).Order().ToArray()
             : [];
+}
+
+/// <summary>No mod host: nothing loads, so no draft has a load problem.</summary>
+file sealed class NoHost : WeaveFleet.Application.Mods.Host.IModHost
+{
+    public WeaveFleet.Application.Mods.Host.ModHostStatus GetStatus(string userId) => WeaveFleet.Application.Mods.Host.ModHostStatus.Stopped;
+    public Task EnsureAsync(string userId, CancellationToken ct = default) => Task.CompletedTask;
+    public Task<WeaveFleet.Application.Mods.Host.ModDispatchResult> DispatchAsync(string userId, WeaveFleet.Application.Mods.Host.ModDispatchRequest request, CancellationToken ct = default)
+        => Task.FromResult(WeaveFleet.Application.Mods.Host.ModDispatchResult.NotDispatched);
+    public Task<System.Text.Json.JsonElement> CheckAsync(string userId, string folder, CancellationToken ct = default) => throw new NotSupportedException();
+    public Task ReloadDraftAsync(string userId, string sessionId, string name, CancellationToken ct = default) => Task.CompletedTask;
+    public Task ForgetSessionAsync(string userId, string sessionId, CancellationToken ct = default) => Task.CompletedTask;
+    public IReadOnlyList<WeaveFleet.Application.Mods.Host.ModSiteHooks> SitesFor(string userId, string sessionId) => [];
+    public WeaveFleet.Application.Mods.Host.ModLoadProblem? GetLoadProblem(string userId, string modId) => null;
 }

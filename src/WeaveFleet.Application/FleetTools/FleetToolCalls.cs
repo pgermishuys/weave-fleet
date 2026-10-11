@@ -6,6 +6,7 @@ using WeaveFleet.Application.Browser;
 using WeaveFleet.Application.Canvases;
 using WeaveFleet.Application.Machines;
 using WeaveFleet.Application.Memory;
+using WeaveFleet.Application.Mods;
 using WeaveFleet.Application.Pages;
 using WeaveFleet.Application.Sessions;
 using WeaveFleet.Application.Walkthroughs;
@@ -36,7 +37,8 @@ public sealed class FleetToolCalls(
     SessionMessageBridge messages,
     MachineHandoffBridge handoff,
     AgentMemoryBridge memory,
-    WorkflowStepBridge steps)
+    WorkflowStepBridge steps,
+    ModBridge mods)
 {
     /// <summary>The tools the process with <paramref name="bridgeToken"/> has; null when Fleet can't place it.</summary>
     public async Task<IReadOnlyList<FleetToolDefinition>?> ListAsync(string bridgeToken, CancellationToken ct = default)
@@ -129,6 +131,10 @@ public sealed class FleetToolCalls(
             "fleet_memory_save" => memory.SaveAsync(token, session, String(args, "list"), String(args, "text"), String(args, "kind"), String(args, "replaces"), ct),
             "fleet_memory_forget" => memory.ForgetAsync(token, session, String(args, "id"), ct),
             "fleet_step_done" => steps.DoneAsync(token, session, String(args, "outcome"), String(args, "summary"), ct),
+            "fleet_mod_write" => mods.WriteAsync(token, session, String(args, "name"), ModBridge.ReadFiles(Element(args, "files")), ct),
+            "fleet_mod_check" => mods.CheckAsync(token, session, String(args, "name"), ct),
+            "fleet_mod_reload" => mods.ReloadAsync(token, session, String(args, "name"), ct),
+            "fleet_mod_keep" => mods.KeepAsync(token, session, String(args, "name"), NonEmpty(args, "note"), ct),
             _ => Task.FromResult(CanvasResult.Fail<CanvasToolOutput>(CanvasErrorKind.Invalid, $"Fleet has no tool {name}.")),
         };
     }

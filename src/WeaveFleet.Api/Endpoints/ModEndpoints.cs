@@ -113,6 +113,15 @@ public static class ModEndpoints
             .WithName("TurnModDraftOn")
             .Produces<ModDraftView>();
 
+        // DELETE /api/sessions/{sessionId}/mods/drafts/{name}/keep-request — the user declines the agent's ask to keep it.
+        drafts.MapDelete("/drafts/{name}/keep-request", async (string sessionId, string name, ModService service, CancellationToken ct) =>
+            {
+                var declined = await service.DeclineKeepAsync(sessionId, name, ct);
+                return declined.IsSuccess ? Results.NoContent() : declined.ToApiResult();
+            })
+            .WithName("DeclineModKeepRequest")
+            .Produces(StatusCodes.Status204NoContent);
+
         // ── Drawing a session's tool rows ────────────────────────────────────
         // The session must exist and be the user's; the mods are the user's own.
 

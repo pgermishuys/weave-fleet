@@ -1,6 +1,7 @@
 using System.Collections.Concurrent;
 using System.Text.Json;
 using WeaveFleet.Application.Mods;
+using WeaveFleet.Application.Mods.Host;
 
 namespace WeaveFleet.Application.Tests.Mods;
 
@@ -190,6 +191,41 @@ internal sealed class InMemoryModVersionStore : IModVersionStore
     public Task<IReadOnlyList<ModFile>?> ReadDraftFilesAsync(string userId, string sessionId, string name, CancellationToken ct = default)
         => Task.FromResult<IReadOnlyList<ModFile>?>(_drafts.ContainsKey((userId, sessionId, name)) ? _files.GetValueOrDefault(DraftFolder(userId, sessionId, name)) : null);
 
+    /// <summary>Follows the store's rules for what the tests need: a path that leaves the folder is refused, and nothing is written.</summary>
+    public Task<ModDraft> WriteDraftFilesAsync(string userId, string sessionId, string name, IReadOnlyList<ModFile> files, CancellationToken ct = default)
+    {
+        if (files.Any(f => f.Path.Contains("..", StringComparison.Ordinal)))
+            throw new ModStoreException("A file's path stays inside the mod's folder.");
+
+        var folder = DraftFolder(userId, sessionId, name);
+        var existing = _drafts.GetValueOrDefault((userId, sessionId, name));
+        _files[folder] = (_files.GetValueOrDefault(folder) ?? []).Where(f => files.All(n => n.Path != f.Path)).Concat(files).ToList();
+        // As the store reads it: a mod.json written now is parsed, and one that isn't a whole manifest leaves none.
+        var manifest = files.FirstOrDefault(f => f.Path == "mod.json") is { } written
+            ? ParseManifest(written.Content)
+            : existing?.Manifest ?? new ModManifest(name, "0.1.0", "Shows chips", "mod.ts");
+        var draft = new ModDraft(sessionId, name, folder, existing?.Off, manifest);
+        _drafts[(userId, sessionId, name)] = draft;
+        Writes.Add($"write {sessionId}/{name} {string.Join(",", files.Select(f => f.Path))}");
+        return Task.FromResult(draft);
+    }
+
+    private static ModManifest? ParseManifest(string json)
+    {
+        try
+        {
+            var root = JsonDocument.Parse(json).RootElement;
+            string? Field(string field) => root.TryGetProperty(field, out var value) && value.ValueKind == JsonValueKind.String ? value.GetString() : null;
+            return Field("name") is { } name && Field("version") is { } version && Field("description") is { } description && Field("hooks") is { } hooks
+                ? new ModManifest(name, version, description, hooks)
+                : null;
+        }
+        catch (JsonException)
+        {
+            return null;
+        }
+    }
+
     public async Task<JsonElement?> CheckDraftAsync(string userId, string sessionId, string name, ModKeepCheck check, CancellationToken ct = default)
     {
         if (!_drafts.ContainsKey((userId, sessionId, name)))
@@ -231,4 +267,40 @@ internal sealed class FakeModChecker(JsonElement? report = null) : IModChecker
         Checked.Add(folder);
         return Task.FromResult(Report);
     }
+}
+
+/// <summary>A mod host that answers what a test sets and remembers what it was asked.</summary>
+internal sealed class FakeModHost : IModHost
+{
+    public ModHostStatus Status { get; set; } = new(ModHostStates.Running, null, 4242, "/bun", "0.1.0", 0);
+
+    /// <summary>Load problems by mod id (<c>name@draft:{sessionId}</c>).</summary>
+    public Dictionary<string, ModLoadProblem> Problems { get; } = new(StringComparer.Ordinal);
+
+    /// <summary>Called inside <see cref="ReloadDraftAsync"/>, to set what the load left behind.</summary>
+    public Action<string, string>? OnReload { get; set; }
+
+    public List<(string User, string Session, string Name)> Reloaded { get; } = [];
+
+    public ModHostStatus GetStatus(string userId) => Status;
+
+    public Task EnsureAsync(string userId, CancellationToken ct = default) => Task.CompletedTask;
+
+    public Task<ModDispatchResult> DispatchAsync(string userId, ModDispatchRequest request, CancellationToken ct = default)
+        => Task.FromResult(ModDispatchResult.NotDispatched);
+
+    public Task<JsonElement> CheckAsync(string userId, string folder, CancellationToken ct = default) => throw new NotSupportedException();
+
+    public Task ReloadDraftAsync(string userId, string sessionId, string name, CancellationToken ct = default)
+    {
+        Reloaded.Add((userId, sessionId, name));
+        OnReload?.Invoke(sessionId, name);
+        return Task.CompletedTask;
+    }
+
+    public Task ForgetSessionAsync(string userId, string sessionId, CancellationToken ct = default) => Task.CompletedTask;
+
+    public IReadOnlyList<ModSiteHooks> SitesFor(string userId, string sessionId) => [];
+
+    public ModLoadProblem? GetLoadProblem(string userId, string modId) => Problems.GetValueOrDefault(modId);
 }

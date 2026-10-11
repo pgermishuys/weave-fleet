@@ -510,6 +510,87 @@
           "summary"
         ]
       }
+    },
+    {
+      "name": "fleet_mod_write",
+      "description": "Write files into this session's draft mod, creating the draft if it's new. Paths are relative to the mod's folder (mod.json, the hooks module, any pages). A file you send replaces the one there; files you don't send stay. Fleet then loads it in this session only and says whether it loaded or why not.",
+      "requires": "mods",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "name": {
+            "type": "string",
+            "description": "The mod's name, as in its mod.json: lowercase letters, digits and -, starting with a letter."
+          },
+          "files": {
+            "type": "array",
+            "items": {
+              "type": "object"
+            },
+            "description": "The files to write, each {path, content}. Paths use / and stay inside the mod's folder."
+          }
+        },
+        "required": [
+          "name",
+          "files"
+        ]
+      }
+    },
+    {
+      "name": "fleet_mod_check",
+      "description": "Run the static check on a draft mod and return its report: its hooks, $ calls, state keys and pages, and any errors with line and column.",
+      "requires": "mods",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "name": {
+            "type": "string",
+            "description": "The draft's name."
+          }
+        },
+        "required": [
+          "name"
+        ]
+      }
+    },
+    {
+      "name": "fleet_mod_reload",
+      "description": "Load a draft mod again in this session now, and say whether it loaded or why not. Use it after a fix, or to turn a draft back on after three failures turned it off.",
+      "requires": "mods",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "name": {
+            "type": "string",
+            "description": "The draft's name."
+          }
+        },
+        "required": [
+          "name"
+        ]
+      }
+    },
+    {
+      "name": "fleet_mod_keep",
+      "description": "Ask the user to keep a draft mod for all their sessions. Fleet shows them what it touches and they decide; you can't keep it yourself. It returns at once; the user answers from the draft card in the conversation.",
+      "requires": "mods",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "name": {
+            "type": "string",
+            "description": "The draft's name."
+          },
+          "note": {
+            "type": "string",
+            "description": "Why it's worth keeping, in a sentence the user reads in the review, or an empty string."
+          }
+        },
+        "required": [
+          "name",
+          "note"
+        ]
+      }
     }
   ]
 }

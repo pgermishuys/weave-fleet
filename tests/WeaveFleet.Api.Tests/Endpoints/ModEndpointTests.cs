@@ -6,6 +6,7 @@ using System.Text.Json;
 using Microsoft.Extensions.DependencyInjection;
 using WeaveFleet.Api.Tests.Infrastructure;
 using WeaveFleet.Application.Configuration;
+using WeaveFleet.Application.Mods;
 
 namespace WeaveFleet.Api.Tests.Endpoints;
 
@@ -95,6 +96,7 @@ public sealed class ModEndpointTests : IAsyncDisposable
     [InlineData("POST", "/api/mods/samples/test-chips")]
     [InlineData("GET", "/api/sessions/s1/mods/sites")]
     [InlineData("POST", "/api/sessions/s1/mods/render")]
+    [InlineData("DELETE", "/api/sessions/s1/mods/drafts/test-chips/keep-request")]
     public async Task Every_route_is_404_with_the_message_while_the_switch_is_off(string method, string url)
     {
         using var request = new HttpRequestMessage(new HttpMethod(method), url);
@@ -193,6 +195,46 @@ public sealed class ModEndpointTests : IAsyncDisposable
         var on = await _client.PostAsync(Draft("/on"), null);
         on.StatusCode.ShouldBe(HttpStatusCode.OK);
         (await on.Content.ReadFromJsonAsync<JsonElement>()).GetProperty("off").ValueKind.ShouldBe(JsonValueKind.Null);
+    }
+
+    // ── Keep requests ───────────────────────────────────────────────────
+
+    [Fact]
+    public async Task A_listed_draft_has_no_keep_request_and_no_problem_by_default()
+    {
+        await TurnOnAsync();
+        WriteDraft();
+
+        var draft = (await _client.GetFromJsonAsync<JsonElement>($"/api/sessions/{_session}/mods/drafts")).EnumerateArray().Single();
+
+        draft.GetProperty("keepRequest").ValueKind.ShouldBe(JsonValueKind.Null);
+        draft.GetProperty("problem").ValueKind.ShouldBe(JsonValueKind.Null);
+    }
+
+    [Fact]
+    public async Task A_keep_request_is_listed_with_its_note_and_declining_it_answers_204_and_clears_it()
+    {
+        await TurnOnAsync();
+        WriteDraft();
+        using (var scope = _factory.Services.CreateScope())
+            (await scope.ServiceProvider.GetRequiredService<ModService>().RequestKeepAsync(_session, _name, "Shows totals")).IsSuccess.ShouldBeTrue();
+
+        var asked = (await _client.GetFromJsonAsync<JsonElement>($"/api/sessions/{_session}/mods/drafts")).EnumerateArray().Single();
+        asked.GetProperty("keepRequest").GetProperty("note").GetString().ShouldBe("Shows totals");
+        asked.GetProperty("keepRequest").TryGetProperty("at", out _).ShouldBeTrue();
+
+        (await _client.DeleteAsync(Draft("/keep-request"))).StatusCode.ShouldBe(HttpStatusCode.NoContent);
+
+        var declined = (await _client.GetFromJsonAsync<JsonElement>($"/api/sessions/{_session}/mods/drafts")).EnumerateArray().Single();
+        declined.GetProperty("keepRequest").ValueKind.ShouldBe(JsonValueKind.Null);
+    }
+
+    [Fact]
+    public async Task Declining_a_keep_request_of_a_missing_draft_is_404()
+    {
+        await TurnOnAsync();
+
+        (await _client.DeleteAsync(Draft("/keep-request"))).StatusCode.ShouldBe(HttpStatusCode.NotFound);
     }
 
     // ── Keep, use, undo, on and off ─────────────────────────────────────

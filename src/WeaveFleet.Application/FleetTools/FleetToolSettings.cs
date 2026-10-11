@@ -1,6 +1,7 @@
 using WeaveFleet.Application.Browser;
 using WeaveFleet.Application.Machines;
 using WeaveFleet.Application.Memory;
+using WeaveFleet.Application.Mods;
 using WeaveFleet.Application.Sessions;
 using WeaveFleet.Application.Skills;
 using WeaveFleet.Application.Users;
@@ -21,7 +22,8 @@ public sealed class FleetToolSettings(
     SessionMessagesFeature sessionMessages,
     AgentHandoffFeature agentHandoff,
     AgentMemoryFeature memory,
-    WorkflowsFeature workflows)
+    WorkflowsFeature workflows,
+    ModsFeature mods)
 {
     public async Task<FleetToolSwitches> ForSessionAsync(string userId, string fleetSessionId)
     {
@@ -37,7 +39,9 @@ public sealed class FleetToolSettings(
                 WorkflowStep: workflowStep,
                 Browser: AgentBrowserSettings.From(await preferences.GetAllAsync().ConfigureAwait(false)).Enabled,
                 Walkthrough: (await BuiltInSkillService.GetEnabledAsync(preferences).ConfigureAwait(false)).Contains(FleetToolSwitches.WalkthroughSkill),
-                AgentHandoff: await agentHandoff.IsEnabledAsync().ConfigureAwait(false));
+                AgentHandoff: await agentHandoff.IsEnabledAsync().ConfigureAwait(false),
+                // Switched on is enough: safe mode only stops drafts from loading, and the tools say so when called.
+                Mods: await mods.IsSwitchedOnAsync().ConfigureAwait(false));
         }
     }
 }
