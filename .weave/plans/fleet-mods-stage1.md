@@ -6,6 +6,8 @@ Written 10 October 2026 against `main` at `1c93a44d` (Stage 0 merged except E3 `
 Background: `~/.cache/fleet-mods-proposal/index.html` (the proposal), `stage0-frontend-cleanup.md` (the clean-up this
 builds on). Claude Code mods docs: https://code.claude.com/docs/en/plugins/mods/overview and `/reference`.
 
+Stage 2 (mods that act: prompt, turn end, permission asks) is done; its status is in `fleet-mods-stage2.md`.
+
 ## Stage 1 status (11 October 2026, M9 live check)
 
 On `main` at `f0235c2c`:
