@@ -83,7 +83,7 @@ jobs:
         run: >
           dotnet test WeaveFleet.slnx
           --configuration Release
-          --filter "Category!=E2E&Category!=HarnessSmoke"
+          --filter "Category!=E2E&Category!=HarnessSmoke&Category!=ModHostLive"
           --logger "trx;LogFileName=test-results.trx"
           --results-directory test-results/
           --no-build
@@ -177,7 +177,7 @@ jobs:
   mods-host:
     name: Mod host
     runs-on: ubuntu-latest
-    timeout-minutes: 5
+    timeout-minutes: 15
 
     steps:
       - name: Checkout
@@ -204,6 +204,37 @@ jobs:
       - name: Build dist/host.js
         run: bun run build && test -s dist/host.js
         working-directory: mods/host
+
+      # Fleet's side of the pipe (ModHostClient, the supervisor) against the dist/host.js just built, on the same Bun.
+      - name: Setup .NET
+        uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: '10.0.x'
+
+      - name: Fleet against the real host
+        shell: bash
+        run: >
+          dotnet test tests/WeaveFleet.Infrastructure.Tests
+          --configuration Release
+          --filter "Category=ModHostLive"
+          --logger "trx;LogFileName=mods-host-live.trx"
+          --results-directory test-results/
+          -p:SkipFrontendBuild=true
+          -p:SkipModsHost=true
+        env:
+          # A missing Bun or host.js fails these tests instead of letting them return early.
+          FLEET_MODS_LIVE: '1'
+
+      # dotnet test exits 0 when nothing runs.
+      - name: Fail if no live test ran
+        shell: bash
+        run: |
+          total=$(grep -ho '<Counters total="[0-9]*"' test-results/mods-host-live.trx | grep -o '[0-9]*' || echo 0)
+          echo "Tests run: ${total}"
+          if [ "${total:-0}" -eq 0 ]; then
+            echo "::error::The live mod host tests didn't run."
+            exit 1
+          fi
 
   # ── fleet launchers (bin/fleet, bin/fleet.cmd) ───────────────────────────
   launchers:

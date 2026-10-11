@@ -552,6 +552,8 @@ internal sealed class SessionTagTestServer : IAsyncDisposable
 
         protected override void ConfigureWebHost(IWebHostBuilder builder)
         {
+            // No Bun for the mod host, whatever this machine has installed: tests never start a real one here.
+            builder.ConfigureTestServices(services => services.AddSingleton<WeaveFleet.Application.Mods.Host.IModHostBun, WeaveFleet.Testing.Fakes.NoModHostBun>());
             builder.UseEnvironment("Testing");
 
             builder.ConfigureServices(services =>

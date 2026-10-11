@@ -1,0 +1,6 @@
+{
+  "name": "press-demo",
+  "version": "0.1.0",
+  "description": "Draws a button above the composer that logs when it's pressed",
+  "hooks": "./mod.ts"
+}
