@@ -296,3 +296,10 @@ branch `feat/mods-host-client-reference` (7bcb39b0, closed PR #491), with review
 - **A draft refused at staging** needs `ReloadDraftAsync` from the agent's tools (M7) to load again.
 - **Keep while the host can't run** is refused with "The mod runtime isn't ready yet: …"; the UI needs its own text (M8).
 - **A Keep cancelled mid-load** leaves mods unloaded until the next reconcile.
+- **Draft cards (M8 part 1, review of #500):**
+  - A `mods.changed` that arrives while a drafts GET is in flight joins that GET, so the card can show the state from
+    before the change. Fetch once more after, or tag responses with a sequence number.
+  - A drafts load that fails with anything but 404 shows nothing; show the error.
+  - A 404 on Turn off (the draft is gone) should drop the card.
+  - Drafts are kept for every session the user has viewed; drop a session's when it's closed.
+  - `mods.test.ts`'s `vi.waitFor` in the `mods.changed` tests should be plain `expect` after the awaited load.

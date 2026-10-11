@@ -1,0 +1,180 @@
+import { beforeEach, describe, expect, it, vi } from "vitest";
+import { createPinia, setActivePinia } from "pinia";
+import type { ModDraft } from "@/lib/mods/kept";
+import type { MachineConnection } from "@/lib/machines";
+
+const api = vi.hoisted(() => ({
+  fetchModsSwitch: vi.fn(),
+  fetchDrafts: vi.fn(),
+  setDraftOn: vi.fn(),
+}));
+const events = vi.hoisted(() => ({
+  onDomainEvent: vi.fn(),
+  handlers: new Map<string, (event: { payload: Record<string, unknown> }) => void>(),
+}));
+const remote = vi.hoisted(() => ({ connection: { id: "remote" } as unknown }));
+
+vi.mock("@/lib/mods/kept-api", async (importActual) => ({
+  ...(await importActual<typeof import("@/lib/mods/kept-api")>()),
+  ...api,
+}));
+vi.mock("@/composables/on-domain-event", () => ({ onDomainEvent: events.onDomainEvent }));
+vi.mock("@/lib/machine-target", () => ({
+  liveTarget: () => ({ key: "home", connection: null, isLive: true }),
+}));
+vi.mock("@/stores/machines", () => ({
+  useMachinesStore: () => ({
+    sessionTarget: (sessionId: string) =>
+      sessionId === "s-remote"
+        ? { key: "remote", connection: remote.connection, isLive: false }
+        : { key: "home", connection: null, isLive: true },
+  }),
+}));
+
+import { ModsRequestError } from "@/lib/mods/kept-api";
+import { useModsStore } from "@/stores/mods";
+import { usePreferencesStore } from "@/stores/preferences";
+import { MODS_PREFERENCE_KEY } from "@/lib/mods";
+
+const draft = (sessionId: string, name: string, overrides: Partial<ModDraft> = {}): ModDraft => ({
+  sessionId,
+  name,
+  description: null,
+  version: null,
+  off: null,
+  kept: null,
+  ...overrides,
+});
+
+/** Fires a `mods.changed` event as the machine `key` pushes it. */
+function emit(key: string, payload: Record<string, unknown>) {
+  events.handlers.get(key)?.({ payload });
+}
+
+beforeEach(() => {
+  setActivePinia(createPinia());
+  for (const fn of Object.values(api)) fn.mockReset();
+  events.handlers.clear();
+  events.onDomainEvent.mockReset();
+  events.onDomainEvent.mockImplementation((target: { key: string }, topic, type, handler) => {
+    expect([topic, type]).toEqual(["sessions", "mods.changed"]);
+    events.handlers.set(target.key, handler);
+    return () => events.handlers.delete(target.key);
+  });
+});
+
+describe("loading", () => {
+  it("fills the switch and a session's drafts", async () => {
+    api.fetchModsSwitch.mockResolvedValue({ on: true, safeMode: false });
+    api.fetchDrafts.mockResolvedValue([draft("s1", "context-gauge")]);
+    const store = useModsStore();
+    await Promise.all([store.loadSwitch(), store.loadDrafts("s1")]);
+    expect(store.isSwitchedOn).toBe(true);
+    expect(store.draftsFor("s1").map((d) => d.name)).toEqual(["context-gauge"]);
+  });
+
+  it("follows the user's Mods choice as soon as it's made, and the server's answer until then", async () => {
+    api.fetchModsSwitch.mockResolvedValue({ on: false, safeMode: false });
+    const store = useModsStore();
+    const preferences = usePreferencesStore();
+    await store.loadSwitch();
+    expect(store.isSwitchedOn).toBe(false);
+
+    // Turning Mods on in Features shows the draft cards without a reload.
+    preferences.preferences = { [MODS_PREFERENCE_KEY]: "true" };
+    expect(store.isSwitchedOn).toBe(true);
+    preferences.preferences = { [MODS_PREFERENCE_KEY]: "false" };
+    expect(store.isSwitchedOn).toBe(false);
+  });
+
+  it("draftsFor is empty for unknown sessions", () => {
+    expect(useModsStore().draftsFor("nope")).toEqual([]);
+  });
+
+  it("coalesces concurrent loads of the same thing", async () => {
+    api.fetchDrafts.mockResolvedValue([]);
+    const store = useModsStore();
+    await Promise.all([store.loadDrafts("s1"), store.loadDrafts("s1")]);
+    expect(api.fetchDrafts).toHaveBeenCalledTimes(1);
+    await store.loadDrafts("s1");
+    expect(api.fetchDrafts).toHaveBeenCalledTimes(2);
+  });
+
+  it("leaves state empty when Mods are switched off (404)", async () => {
+    api.fetchDrafts.mockRejectedValue(new ModsRequestError("Mods are off.", 404));
+    const store = useModsStore();
+    await expect(store.loadDrafts("s1")).resolves.toBeUndefined();
+    expect(store.draftsFor("s1")).toEqual([]);
+  });
+});
+
+describe("setDraftOn", () => {
+  it("replaces that draft in place", async () => {
+    api.fetchDrafts.mockResolvedValue([draft("s1", "a"), draft("s1", "b")]);
+    const store = useModsStore();
+    await store.loadDrafts("s1");
+    const off = draft("s1", "a", { off: { by: "user", at: "2026-10-10T10:00:00Z" } });
+    api.setDraftOn.mockResolvedValue(off);
+    await store.setDraftOn("s1", "a", false);
+    expect(api.setDraftOn).toHaveBeenCalledWith("s1", "a", false, null);
+    expect(store.draftsFor("s1")).toEqual([{ ...off, keepRequest: null }, draft("s1", "b")]);
+  });
+
+  it("clears the keep request when turning off, not when turning on", async () => {
+    const asked = { note: "keep it", at: "2026-10-10T10:00:00Z" };
+    api.fetchDrafts.mockResolvedValue([draft("s1", "a", { keepRequest: asked }), draft("s1", "b", { keepRequest: asked })]);
+    const store = useModsStore();
+    await store.loadDrafts("s1");
+    api.setDraftOn.mockResolvedValue(draft("s1", "a", { keepRequest: asked }));
+    await store.setDraftOn("s1", "a", false);
+    expect(store.draftsFor("s1")[0]?.keepRequest).toBeNull();
+    expect(store.draftsFor("s1")[1]?.keepRequest).toEqual(asked);
+    api.setDraftOn.mockResolvedValue(draft("s1", "b", { keepRequest: asked }));
+    await store.setDraftOn("s1", "b", true);
+    expect(store.draftsFor("s1")[1]?.keepRequest).toEqual(asked);
+  });
+
+  it("rethrows the request error", async () => {
+    api.setDraftOn.mockRejectedValue(new ModsRequestError("That draft is gone.", 404));
+    await expect(useModsStore().setDraftOn("s1", "x", false)).rejects.toMatchObject({ message: "That draft is gone.", status: 404 });
+  });
+});
+
+describe("mods.changed", () => {
+  it("subscribes lazily, once per machine", async () => {
+    const store = useModsStore();
+    expect(events.onDomainEvent).not.toHaveBeenCalled();
+    api.fetchModsSwitch.mockResolvedValue({ on: true, safeMode: false });
+    api.fetchDrafts.mockResolvedValue([]);
+    await store.loadSwitch();
+    await store.loadDrafts("s1");
+    expect(events.onDomainEvent).toHaveBeenCalledTimes(1);
+    await store.loadDrafts("s-remote");
+    expect(events.onDomainEvent).toHaveBeenCalledTimes(2);
+  });
+
+  it.each(["draft-written", "keep-requested", "draft-on", "draft-off"])("reloads a tracked session's drafts on %s", async (reason) => {
+    api.fetchDrafts.mockResolvedValue([]);
+    await useModsStore().loadDrafts("s1");
+    emit("home", { reason, sessionId: "other", name: "a" });
+    expect(api.fetchDrafts).toHaveBeenCalledTimes(1);
+    emit("home", { reason, sessionId: "s1", name: "a" });
+    await vi.waitFor(() => expect(api.fetchDrafts).toHaveBeenCalledTimes(2));
+  });
+
+  it("reads the switch again when the server says it moved", async () => {
+    api.fetchModsSwitch.mockResolvedValueOnce({ on: false, safeMode: false }).mockResolvedValueOnce({ on: true, safeMode: false });
+    const store = useModsStore();
+    await store.loadSwitch();
+    emit("home", { reason: "switch" });
+    await vi.waitFor(() => expect(store.isSwitchedOn).toBe(true));
+  });
+
+  it("refreshes a remote session's drafts from that machine's stream", async () => {
+    api.fetchDrafts.mockResolvedValue([]);
+    await useModsStore().loadDrafts("s-remote");
+    emit("remote", { reason: "draft-written", sessionId: "s-remote", name: "a" });
+    await vi.waitFor(() => expect(api.fetchDrafts).toHaveBeenCalledTimes(2));
+    expect(api.fetchDrafts).toHaveBeenLastCalledWith("s-remote", remote.connection as MachineConnection);
+  });
+});
