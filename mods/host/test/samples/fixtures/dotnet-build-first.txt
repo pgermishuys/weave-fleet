@@ -1,0 +1,14 @@
+  Determining projects to restore...
+  Restored /work/harbor-api/HarborApi.csproj (in 119 ms).
+/work/harbor-api/src/Berths.cs(9,16): warning CS8602: Dereference of a possibly null reference. [/work/harbor-api/HarborApi.csproj]
+/work/harbor-api/src/Berths.cs(15,13): warning CS0219: The variable 'draft' is assigned but its value is never used [/work/harbor-api/HarborApi.csproj]
+  HarborApi -> /work/harbor-api/bin/Debug/net10.0/HarborApi.dll
+
+Build succeeded.
+
+/work/harbor-api/src/Berths.cs(9,16): warning CS8602: Dereference of a possibly null reference. [/work/harbor-api/HarborApi.csproj]
+/work/harbor-api/src/Berths.cs(15,13): warning CS0219: The variable 'draft' is assigned but its value is never used [/work/harbor-api/HarborApi.csproj]
+    2 Warning(s)
+    0 Error(s)
+
+Time Elapsed 00:00:02.76

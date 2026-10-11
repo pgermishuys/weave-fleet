@@ -1,0 +1,4 @@
+# example.com/dock-planner
+./main.go:5:2: "os" imported and not used
+./main.go:9:2: declared and not used: unused
+./main.go:14:21: cannot use slots(4) (value of type int) as string value in variable declaration

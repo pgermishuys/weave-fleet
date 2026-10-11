@@ -1,0 +1,7 @@
+Found 3 matches
+/work/cart-totals/src/totals.ts:
+  Line 14:     console.log("coupon applied", code);
+
+  Line 18:     console.log("big coupon", code);
+
+  Line 30:   console.log("tax", rate);

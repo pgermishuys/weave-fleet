@@ -1,0 +1,10 @@
+  % Total    % Received % Xferd  Average Speed  Time    Time    Time   Current
+                                 Dload  Upload  Total   Spent   Left   Speed
+  0      0   0      0   0      0      0      0                              0100    946 100    946   0      0  1.38M      0                              0100    946 100    946   0      0 148.5k      0                              0100    946 100    946   0      0 146.2k      0                              0
+HTTP/1.1 200 OK
+Content-Type: application/json
+Cache-Control: no-store
+Date: Sun, 11 Oct 2026 16:54:20 GMT
+Content-Length: 946
+
+{"berths":[{"id":1,"name":"Pier 1","free":true},{"id":2,"name":"Pier 2","free":false},{"id":3,"name":"Pier 3","free":false},{"id":4,"name":"Pier 4","free":true},{"id":5,"name":"Pier 5","free":false},{"id":6,"name":"Pier 6","free":false},{"id":7,"name":"Pier 7","free":true},{"id":8,"name":"Pier 8","free":false},{"id":9,"name":"Pier 9","free":false},{"id":10,"name":"Pier 10","free":true},{"id":11,"name":"Pier 11","free":false},{"id":12,"name":"Pier 12","free":false},{"id":13,"name":"Pier 13","free":true},{"id":14,"name":"Pier 14","free":false},{"id":15,"name":"Pier 15","free":false},{"id":16,"name":"Pier 16","free":true},{"id":17,"name":"Pier 17","free":false},{"id":18,"name":"Pier 18","free":false},{"id":19,"name":"Pier 19","free":true},{"id":20,"name":"Pier 20","free":false},{"id":21,"name":"Pier 21","free":false},{"id":22,"name":"Pier 22","free":true},{"id":23,"name":"Pier 23","free":false},{"id":24,"name":"Pier 24","free":false}]}

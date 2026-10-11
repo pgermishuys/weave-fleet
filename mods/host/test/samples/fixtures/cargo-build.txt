@@ -1,0 +1,26 @@
+   Compiling tide-gauge v0.1.0 (/work/tide-gauge)
+warning: unused variable: `offset`
+ --> src/main.rs:4:9
+  |
+4 |     let offset = 3;
+  |         ^^^^^^ help: if this is intentional, prefix it with an underscore: `_offset`
+  |
+  = note: `#[warn(unused_variables)]` on by default
+
+warning: unused import: `std::fmt`
+ --> src/lib.rs:1:5
+  |
+1 | use std::fmt;
+  |     ^^^^^^^^
+
+error[E0308]: mismatched types
+ --> src/main.rs:8:18
+  |
+8 |     let level: u32 = "high";
+  |                --- ^^^^^^ expected `u32`, found `&str`
+  |                |
+  |                expected due to this
+
+For more information about this error, try `rustc --explain E0308`.
+warning: `tide-gauge` (bin "tide-gauge") generated 2 warnings
+error: could not compile `tide-gauge` (bin "tide-gauge") due to 1 previous error; 2 warnings emitted

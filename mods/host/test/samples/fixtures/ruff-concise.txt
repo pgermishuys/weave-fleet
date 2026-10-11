@@ -1,0 +1,7 @@
+tides.py:1:8: F401 [*] `os` imported but unused
+tides.py:2:8: F401 [*] `sys` imported but unused
+tides.py:7:5: F841 Local variable `unused` is assigned to but never used
+tides.py:14:5: E722 Do not use bare `except`
+tides.py:18:34: F541 [*] f-string without any placeholders
+Found 5 errors.
+[*] 3 fixable with `--fix` (1 unsafe fix available with `--fix --unsafe-fixes`).

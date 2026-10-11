@@ -1,0 +1,6 @@
+{
+  "name": "build-summary",
+  "version": "0.1.0",
+  "description": "Draws build output as error and warning counts",
+  "hooks": "./mod.ts"
+}

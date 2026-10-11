@@ -1,0 +1,6 @@
+{
+  "name": "edit-size",
+  "version": "0.1.0",
+  "description": "Draws file writes and patches as lines added and removed",
+  "hooks": "./mod.ts"
+}

@@ -1,0 +1,6 @@
+{
+  "name": "git-glance",
+  "version": "0.1.0",
+  "description": "Draws git status and log as counts",
+  "hooks": "./mod.ts"
+}

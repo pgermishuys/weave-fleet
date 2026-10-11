@@ -1,0 +1,6 @@
+{
+  "name": "lint-summary",
+  "version": "0.1.0",
+  "description": "Draws ESLint and ruff runs as error and warning counts",
+  "hooks": "./mod.ts"
+}
