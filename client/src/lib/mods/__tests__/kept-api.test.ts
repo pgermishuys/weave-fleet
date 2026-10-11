@@ -4,7 +4,19 @@ import type { MachineConnection } from "@/lib/machines";
 const { apiFetchOnMock } = vi.hoisted(() => ({ apiFetchOnMock: vi.fn() }));
 vi.mock("@/lib/api-client", () => ({ apiFetchOn: apiFetchOnMock }));
 
-import { checkDraft, dismissKeepRequest, fetchDrafts, fetchModsSwitch, keepDraft, ModsRequestError, setDraftOn } from "@/lib/mods/kept-api";
+import {
+  checkDraft,
+  dismissKeepRequest,
+  fetchDrafts,
+  fetchMods,
+  fetchModsSwitch,
+  keepDraft,
+  ModsRequestError,
+  setDraftOn,
+  setModOn,
+  setSafeMode,
+  undoMod,
+} from "@/lib/mods/kept-api";
 
 const json = (body: unknown, status = 200) =>
   new Response(JSON.stringify(body), { status, headers: { "Content-Type": "application/json" } });
@@ -96,4 +108,39 @@ describe("errors", () => {
     expect((error as ModsRequestError).message).toBe("That draft is gone.");
     expect((error as ModsRequestError).status).toBe(404);
   });
+});
+
+describe("kept mods", () => {
+  it("fetchMods reads the list from the given machine", async () => {
+    apiFetchOnMock.mockImplementation(async () => json({ safeMode: false, mods: [] }));
+    expect(await fetchMods(machine)).toEqual({ safeMode: false, mods: [] });
+    expect(lastCall()[0]).toBe(machine);
+    expect(lastCall()[1]).toBe("/api/mods");
+  });
+
+  it("undoMod POSTs, encoding the name", async () => {
+    apiFetchOnMock.mockImplementation(async () => json({ name: "test chips" }));
+    await undoMod("test chips");
+    expect(lastCall()[1]).toBe("/api/mods/test%20chips/undo");
+    expect(lastCall()[2]?.method).toBe("POST");
+  });
+
+  it("setModOn picks on or off", async () => {
+    apiFetchOnMock.mockImplementation(async () => json({ name: "test-chips" }));
+    await setModOn("test-chips", true);
+    expect(lastCall()[1]).toBe("/api/mods/test-chips/on");
+    await setModOn("test-chips", false);
+    expect(lastCall()[1]).toBe("/api/mods/test-chips/off");
+  });
+
+  it("setSafeMode PUTs { on }", async () => {
+    apiFetchOnMock.mockImplementation(async () => json({ safeMode: true, mods: [] }));
+    expect(await setSafeMode(true)).toEqual({ safeMode: true, mods: [] });
+    const [, path, init] = lastCall();
+    expect(path).toBe("/api/mods/safe-mode");
+    expect(init?.method).toBe("PUT");
+    expect(JSON.parse(init?.body as string)).toEqual({ on: true });
+    expect(new Headers(init?.headers).get("Content-Type")).toBe("application/json");
+  });
+
 });
