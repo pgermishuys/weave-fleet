@@ -1,0 +1,12 @@
+de5c4b4 Cache pier listings
+2d78375 Add health endpoint
+98e4308 Log reservation conflicts
+f92a45d Bump SDK to net10
+2b0b691 Return 404 for unknown berths
+71b108b Add pier capacity report
+cdfa65d Rename Berth.Label to Name
+a52295f Add tide-aware docking windows
+7d64a4e Fix owner null check
+ec3e144 Reserve berths for visiting boats
+2d1ea6a Add berth lookup by name
+cbbb137 Add berth model

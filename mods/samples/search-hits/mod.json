@@ -1,0 +1,6 @@
+{
+  "name": "search-hits",
+  "version": "0.1.0",
+  "description": "Draws grep and glob results as match and file counts",
+  "hooks": "./mod.ts"
+}

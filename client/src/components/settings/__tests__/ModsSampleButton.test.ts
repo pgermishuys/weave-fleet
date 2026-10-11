@@ -17,6 +17,17 @@ describe("ModsSampleButton", () => {
     expect(wrapper.get("[data-testid='mods-sample-message']").text()).toBe("Added. Run tests in any session to see it.");
   });
 
+  it("offers each showcase sample and posts its own route", async () => {
+    apiFetchMock.mockResolvedValue(new Response("{}", { status: 200 }));
+    const wrapper = mount(ModsSampleButton);
+    const buttons = wrapper.findAll("[data-testid='mods-sample-button']");
+    expect(buttons.map((b) => b.attributes("data-sample"))).toEqual(["test-chips", "build-summary", "git-glance", "http-check", "lint-summary", "edit-size", "search-hits"]);
+    await buttons[1].trigger("click");
+    await flushPromises();
+    expect(apiFetchMock).toHaveBeenCalledWith("/api/mods/samples/build-summary", { method: "POST" });
+    expect(wrapper.get("[data-testid='mods-sample-message']").text()).toBe("Added. Run a build in any session to see it.");
+  });
+
   it("shows the server's message when it refuses", async () => {
     apiFetchMock.mockResolvedValue(new Response(JSON.stringify({ error: "The mods runtime isn't ready." }), { status: 400 }));
     const wrapper = mount(ModsSampleButton);

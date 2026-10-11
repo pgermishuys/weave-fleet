@@ -1,0 +1,69 @@
+F401 [*] `os` imported but unused
+ --> tides.py:1:8
+  |
+1 | import os
+  |        ^^
+2 | import sys
+3 | from datetime import datetime, timedelta
+  |
+help: Remove unused import: `os`
+  |
+  - import os
+1 | import sys
+  |
+
+F401 [*] `sys` imported but unused
+ --> tides.py:2:8
+  |
+1 | import os
+2 | import sys
+  |        ^^^
+3 | from datetime import datetime, timedelta
+  |
+help: Remove unused import: `sys`
+  |
+1 | import os
+  - import sys
+2 | from datetime import datetime, timedelta
+  |
+
+F841 Local variable `unused` is assigned to but never used
+ --> tides.py:7:5
+  |
+6 | def high_tide(day):
+7 |     unused = 4
+  |     ^^^^^^
+8 |     return day + timedelta(hours=6)
+  |
+help: Remove assignment to unused variable `unused`
+  |
+6 | def high_tide(day):
+  -     unused = 4
+7 |     return day + timedelta(hours=6)
+  |
+note: This is an unsafe fix and may change runtime behavior
+
+E722 Do not use bare `except`
+  --> tides.py:14:5
+   |
+12 |     try:
+13 |         return datetime.fromisoformat(text)
+14 |     except:
+   |     ^^^^^^
+15 |         return None
+   |
+
+F541 [*] f-string without any placeholders
+  --> tides.py:18:34
+   |
+18 | print(high_tide(datetime.now()), f"done")
+   |                                  ^^^^^^^
+help: Remove extraneous `f` prefix
+   |
+17 |
+   - print(high_tide(datetime.now()), f"done")
+18 + print(high_tide(datetime.now()), "done")
+   |
+
+Found 5 errors.
+[*] 3 fixable with `--fix` (1 unsafe fix available with `--fix --unsafe-fixes`).

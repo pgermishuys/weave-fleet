@@ -1,0 +1,4 @@
+HTTP/1.1 301 Moved Permanently
+Location: /berths
+content-length: 0
+

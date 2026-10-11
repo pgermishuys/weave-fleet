@@ -1,0 +1,19 @@
+  Determining projects to restore...
+  All projects are up-to-date for restore.
+/work/harbor-api/src/Berths.cs(9,16): warning CS8602: Dereference of a possibly null reference. [/work/harbor-api/HarborApi.csproj]
+/work/harbor-api/src/Berths.cs(17,25): error CS1061: 'Berth' does not contain a definition for 'Nme' and no accessible extension method 'Nme' accepting a first argument of type 'Berth' could be found (are you missing a using directive or an assembly reference?) [/work/harbor-api/HarborApi.csproj]
+/work/harbor-api/src/Berths.cs(16,55): warning CS0168: The variable 'e' is declared but never used [/work/harbor-api/HarborApi.csproj]
+/work/harbor-api/src/Berths.cs(15,13): warning CS0219: The variable 'draft' is assigned but its value is never used [/work/harbor-api/HarborApi.csproj]
+/work/harbor-api/src/Program.cs(5,9): error CS0029: Cannot implicitly convert type 'string' to 'int' [/work/harbor-api/HarborApi.csproj]
+
+Build FAILED.
+
+/work/harbor-api/src/Berths.cs(9,16): warning CS8602: Dereference of a possibly null reference. [/work/harbor-api/HarborApi.csproj]
+/work/harbor-api/src/Berths.cs(16,55): warning CS0168: The variable 'e' is declared but never used [/work/harbor-api/HarborApi.csproj]
+/work/harbor-api/src/Berths.cs(15,13): warning CS0219: The variable 'draft' is assigned but its value is never used [/work/harbor-api/HarborApi.csproj]
+/work/harbor-api/src/Berths.cs(17,25): error CS1061: 'Berth' does not contain a definition for 'Nme' and no accessible extension method 'Nme' accepting a first argument of type 'Berth' could be found (are you missing a using directive or an assembly reference?) [/work/harbor-api/HarborApi.csproj]
+/work/harbor-api/src/Program.cs(5,9): error CS0029: Cannot implicitly convert type 'string' to 'int' [/work/harbor-api/HarborApi.csproj]
+    3 Warning(s)
+    2 Error(s)
+
+Time Elapsed 00:00:02.23

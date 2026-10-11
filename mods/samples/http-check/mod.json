@@ -1,0 +1,6 @@
+{
+  "name": "http-check",
+  "version": "0.1.0",
+  "description": "Draws curl responses as a status pill and size",
+  "hooks": "./mod.ts"
+}

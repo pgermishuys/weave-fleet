@@ -1,0 +1,13 @@
+Found 5 matches
+/work/cart-totals/src/cart.ts:
+  Line 3: export function summary(lines: Line[], coupon?: string): string {
+
+
+/work/cart-totals/src/totals.ts:
+  Line 3: export function subtotal(lines: Line[]): number {
+
+  Line 11: export function applyCoupon(total: number, code: string | undefined): number {
+
+  Line 24: export function format(cents: number): string {
+
+  Line 29: export function taxFor(lines: Line[], rate: any): number {
