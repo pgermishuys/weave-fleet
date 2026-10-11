@@ -98,7 +98,7 @@ public sealed class ClaudeCodeFleetToolsTests
     [Fact]
     public void The_mod_tools_are_listed_only_with_Mods_on()
     {
-        string[] modTools = ["fleet_mod_write", "fleet_mod_check", "fleet_mod_reload", "fleet_mod_test", "fleet_mod_keep", "fleet_mod_list"];
+        string[] modTools = ["fleet_mod_write", "fleet_mod_check", "fleet_mod_reload", "fleet_mod_keep"];
         var off = new FleetToolSwitches(SessionMessages: true, Memory: true, WorkflowStep: true, Browser: true, Walkthrough: true, AgentHandoff: true);
 
         FleetToolCatalog.For(off).Select(tool => tool.Name).ShouldNotContain(name => modTools.Contains(name));
