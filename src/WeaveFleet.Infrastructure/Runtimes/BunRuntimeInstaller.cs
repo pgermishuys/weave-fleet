@@ -52,6 +52,9 @@ internal sealed partial class BunRuntimeInstaller(
     /// <summary>Test seam: how long a download may go without a byte before it fails.</summary>
     internal TimeSpan StallTimeout { get; init; } = TimeSpan.FromSeconds(60);
 
+    /// <summary>Test seam: the clock the stall timeout runs on.</summary>
+    internal TimeProvider Clock { get; init; } = TimeProvider.System;
+
     /// <summary>Test seam: moves the unpacked folder into place.</summary>
     internal Action<string, string> MoveDirectory { get; init; } = Directory.Move;
 
@@ -427,8 +430,9 @@ internal sealed partial class BunRuntimeInstaller(
         var host = DownloadBase.Host;
         using var client = httpClientFactory.CreateClient();
         client.Timeout = Timeout.InfiniteTimeSpan;
-        using var stall = CancellationTokenSource.CreateLinkedTokenSource(ct);
-        stall.CancelAfter(StallTimeout);
+        // Restarted by every read, on the seam's clock; linked to ct so the caller's cancel still stops it.
+        using var timer = new CancellationTokenSource(StallTimeout, Clock);
+        using var stall = CancellationTokenSource.CreateLinkedTokenSource(ct, timer.Token);
 
         long received = 0;
         long? total = null;
@@ -452,7 +456,7 @@ internal sealed partial class BunRuntimeInstaller(
             int read;
             while ((read = await body.ReadAsync(buffer, stall.Token).ConfigureAwait(false)) > 0)
             {
-                stall.CancelAfter(StallTimeout);
+                timer.CancelAfter(StallTimeout);
                 await file.WriteAsync(buffer.AsMemory(0, read), stall.Token).ConfigureAwait(false);
                 received += read;
                 if (received - reported >= step)

@@ -31,6 +31,7 @@ internal sealed class BunReleaseServer : IDisposable
     private readonly List<string> _requests = [];
     private readonly TaskCompletionSource _stalled = new(TaskCreationOptions.RunContinuationsAsynchronously);
     private readonly TaskCompletionSource _held = new(TaskCreationOptions.RunContinuationsAsynchronously);
+    private readonly TaskCompletionSource _silenced = new(TaskCreationOptions.RunContinuationsAsynchronously);
     private readonly TaskCompletionSource _release = new(TaskCreationOptions.RunContinuationsAsynchronously);
 
     public BunReleaseServer()
@@ -54,6 +55,9 @@ internal sealed class BunReleaseServer : IDisposable
 
     /// <summary>Completes once a <see cref="BunServeMode.Hold"/> response has sent its first bytes and is waiting.</summary>
     public Task Held => _held.Task;
+
+    /// <summary>Completes once a <see cref="BunServeMode.Silent"/> request has arrived and is getting no answer.</summary>
+    public Task Silenced => _silenced.Task;
 
     /// <summary>Lets every <see cref="BunServeMode.Hold"/> response send the rest of its body.</summary>
     public void ReleaseHeld() => _release.TrySetResult();
@@ -130,6 +134,7 @@ internal sealed class BunReleaseServer : IDisposable
             switch (route.Mode)
             {
                 case BunServeMode.Silent:
+                    _silenced.TrySetResult();
                     await Task.Delay(Timeout.Infinite, _stop.Token);
                     break;
                 case BunServeMode.Normal:
