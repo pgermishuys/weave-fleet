@@ -148,6 +148,7 @@ public sealed class BunRuntimeInstallerTests : IDisposable
         var installer = new BunRuntimeInstaller(
             new FleetOptions { Harness = { BunDownloadBase = _server.BaseUri.ToString().TrimEnd('/') } },
             new FakeHttpClientFactory(),
+            new FixedReleases(release),
             NullLogger<BunRuntimeInstaller>.Instance)
         {
             Home = _home,
@@ -167,6 +168,7 @@ public sealed class BunRuntimeInstallerTests : IDisposable
         var installer = new BunRuntimeInstaller(
             new FleetOptions { Harness = { BunDownloadBase = "ftp://nope" } },
             new FakeHttpClientFactory(),
+            new FixedReleases(BunRelease.Pinned),
             NullLogger<BunRuntimeInstaller>.Instance);
 
         installer.DownloadBase.ShouldBe(BunRelease.GitHubDownloads);
@@ -811,6 +813,7 @@ public sealed class BunRuntimeInstallerTests : IDisposable
         var installer = new BunRuntimeInstaller(
             new FleetOptions { Harness = { BunPath = bun } },
             new FakeHttpClientFactory(),
+            new FixedReleases(BunRelease.Pinned),
             NullLogger<BunRuntimeInstaller>.Instance)
         {
             Home = _home,
@@ -903,6 +906,20 @@ public sealed class BunRuntimeInstallerTests : IDisposable
 
         deleted.ShouldBe(["1.4.0", "1.4.2", "1.4.3"]);
         Directory.GetDirectories(Root).Select(Path.GetFileName).Order().ShouldBe(["1.4.1", "1.4.4"]);
+    }
+
+    [Fact]
+    public async Task Prune_keeps_the_current_releases_version_when_a_manifest_rolled_back_below_the_newest_installed()
+    {
+        Plant("1.4.1");
+        Plant("1.4.2");
+        Plant("1.4.4");
+        var installer = NewInstaller(Publish("1.4.4"), current: Publish("1.4.2"));
+
+        var deleted = await installer.PruneAsync([], CancellationToken.None);
+
+        deleted.ShouldBe(["1.4.1"]);
+        Directory.GetDirectories(Root).Select(Path.GetFileName).Order().ShouldBe(["1.4.2", "1.4.4"]);
     }
 
     [Fact]
@@ -1147,6 +1164,7 @@ public sealed class BunRuntimeInstallerTests : IDisposable
         var installer = new BunRuntimeInstaller(
             new FleetOptions { Harness = { BunPath = configured } },
             new FakeHttpClientFactory(),
+            new FixedReleases(BunRelease.Pinned),
             NullLogger<BunRuntimeInstaller>.Instance)
         {
             Home = _home,
@@ -1187,10 +1205,12 @@ public sealed class BunRuntimeInstallerTests : IDisposable
         Action<string, string>? move = null,
         Action<string, string>? rename = null,
         string? home = null,
-        Uri? downloadBase = null) =>
+        Uri? downloadBase = null,
+        BunRelease? current = null) =>
         new(
             new FleetOptions { Harness = { BunPath = bunPath ?? "" } },
             new FakeHttpClientFactory(),
+            new FixedReleases(current ?? release),
             NullLogger<BunRuntimeInstaller>.Instance)
         {
             Home = home ?? _home,
@@ -1287,6 +1307,15 @@ public sealed class BunRuntimeInstallerTests : IDisposable
         public List<BunInstallJob> Events { get; } = [];
 
         public void Report(BunInstallJob value) => Events.Add(value);
+    }
+
+    internal sealed class FixedReleases(BunRelease current) : IBunReleases
+    {
+        public BunRelease Current { get; } = current;
+
+        public event EventHandler<BunReleaseChangedEventArgs>? Changed { add { } remove { } }
+
+        public Task RefreshAsync(CancellationToken ct) => Task.CompletedTask;
     }
 
     private sealed class FakeHttpClientFactory : IHttpClientFactory

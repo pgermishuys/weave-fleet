@@ -62,6 +62,7 @@ public sealed class BunRuntimeUseTests : IDisposable
         return new BunRuntimeInstaller(
             new FleetOptions { Harness = { BunPath = bunPath } },
             new FakeHttpClientFactory(),
+            new BunRuntimeInstallerTests.FixedReleases(BunRelease.Pinned),
             NullLogger<BunRuntimeInstaller>.Instance)
         {
             Home = _home,
