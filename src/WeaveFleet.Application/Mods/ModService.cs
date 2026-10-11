@@ -240,6 +240,13 @@ public sealed class ModService(
         return await ToViewAsync(found.Value, ct).ConfigureAwait(false);
     }
 
+    /// <summary>
+    /// The mod host has loaded the draft again, or refused it: its <see cref="ModDraftView.Problem"/> may have changed, so
+    /// clients showing the draft refetch it.
+    /// </summary>
+    public Task DraftLoadedAsync(string sessionId, string name, CancellationToken ct = default)
+        => RaiseAsync("draft-loaded", name, sessionId, ct);
+
     /// <summary>Three failures in a row in a draft: the draft is turned off in its session.</summary>
     public async Task<Result<ModDraftView>> RecordDraftStrikesAsync(string sessionId, string name, string error, CancellationToken ct = default)
         => await ChangeDraftAsync(sessionId, name, "strikes",
