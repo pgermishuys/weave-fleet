@@ -1,12 +1,18 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { createPinia, setActivePinia } from "pinia";
-import type { ModDraft } from "@/lib/mods/kept";
+import type { KeptMod, ModDraft, ModsView } from "@/lib/mods/kept";
 import type { MachineConnection } from "@/lib/machines";
 
 const api = vi.hoisted(() => ({
   fetchModsSwitch: vi.fn(),
+  fetchMods: vi.fn(),
+  undoMod: vi.fn(),
+  setModOn: vi.fn(),
+  setSafeMode: vi.fn(),
   fetchDrafts: vi.fn(),
   setDraftOn: vi.fn(),
+  keepDraft: vi.fn(),
+  dismissKeepRequest: vi.fn(),
 }));
 const events = vi.hoisted(() => ({
   onDomainEvent: vi.fn(),
@@ -36,6 +42,16 @@ import { useModsStore } from "@/stores/mods";
 import { usePreferencesStore } from "@/stores/preferences";
 import { MODS_PREFERENCE_KEY } from "@/lib/mods";
 
+const mod = (name: string, overrides: Partial<KeptMod> = {}): KeptMod => ({
+  name,
+  description: null,
+  active: 1,
+  activeVersion: "1.0.0",
+  off: null,
+  versions: [],
+  ...overrides,
+});
+const view = (mods: KeptMod[], safeMode = false): ModsView => ({ safeMode, mods });
 const draft = (sessionId: string, name: string, overrides: Partial<ModDraft> = {}): ModDraft => ({
   sessionId,
   name,
@@ -140,6 +156,35 @@ describe("setDraftOn", () => {
   });
 });
 
+describe("keep and dismissKeepRequest", () => {
+  const asked = { note: "keep it", at: "2026-10-10T10:00:00Z" };
+
+  it("keep reloads that session's drafts, and rethrows a refusal leaving the request", async () => {
+    api.fetchDrafts.mockResolvedValueOnce([draft("s1", "a", { keepRequest: asked })]);
+    const store = useModsStore();
+    await store.loadDrafts("s1");
+    api.keepDraft.mockRejectedValueOnce(new ModsRequestError("The check found a problem.", 400));
+    await expect(store.keep("s1", "a", "")).rejects.toMatchObject({ status: 400 });
+    expect(store.draftsFor("s1")[0]?.keepRequest).toEqual(asked);
+    api.keepDraft.mockResolvedValue({ name: "a" });
+    api.fetchDrafts.mockResolvedValueOnce([draft("s1", "a", { kept: 1 })]);
+    await store.keep("s1", "a", "note");
+    expect(api.keepDraft).toHaveBeenLastCalledWith("s1", "a", "note", null);
+    expect(store.draftsFor("s1")[0]?.kept).toBe(1);
+  });
+
+  it("dismissKeepRequest clears the request and reloads", async () => {
+    api.fetchDrafts.mockResolvedValueOnce([draft("s1", "a", { keepRequest: asked })]);
+    const store = useModsStore();
+    await store.loadDrafts("s1");
+    api.dismissKeepRequest.mockResolvedValue(undefined);
+    api.fetchDrafts.mockResolvedValueOnce([draft("s1", "a")]);
+    await store.dismissKeepRequest("s1", "a");
+    expect(api.dismissKeepRequest).toHaveBeenCalledWith("s1", "a", null);
+    expect(store.draftsFor("s1")[0]?.keepRequest ?? null).toBeNull();
+  });
+});
+
 describe("mods.changed", () => {
   it("subscribes lazily, once per machine", async () => {
     const store = useModsStore();
@@ -177,4 +222,72 @@ describe("mods.changed", () => {
     await vi.waitFor(() => expect(api.fetchDrafts).toHaveBeenCalledTimes(2));
     expect(api.fetchDrafts).toHaveBeenLastCalledWith("s-remote", remote.connection as MachineConnection);
   });
+});
+
+describe("kept mods", () => {
+  it("loads the list, and leaves it empty on a 404", async () => {
+    api.fetchMods.mockResolvedValueOnce(view([mod("test-chips")]));
+    const store = useModsStore();
+    await store.loadKept();
+    expect(store.kept?.mods.map((m) => m.name)).toEqual(["test-chips"]);
+    api.fetchMods.mockRejectedValueOnce(new ModsRequestError("Mods are off.", 404));
+    await store.loadKept();
+    expect(store.kept).toBeNull();
+  });
+
+  it("rejects with the server's message when the list can't load, so Settings can offer Retry", async () => {
+    api.fetchMods.mockRejectedValueOnce(new ModsRequestError("The mods folder can't be read.", 500));
+    await expect(useModsStore().loadKept()).rejects.toThrow("The mods folder can't be read.");
+  });
+
+  it("undo and setOn replace the mod in the list", async () => {
+    api.fetchMods.mockResolvedValue(view([mod("a"), mod("b")]));
+    const store = useModsStore();
+    await store.loadKept();
+    api.undoMod.mockResolvedValue(mod("a", { active: 2 }));
+    await store.undo("a");
+    expect(api.undoMod).toHaveBeenCalledWith("a", null);
+    expect(store.kept?.mods[0]?.active).toBe(2);
+    api.setModOn.mockResolvedValue(mod("b", { off: { by: "user", at: "x" } }));
+    await store.setOn("b", false);
+    expect(api.setModOn).toHaveBeenCalledWith("b", false, null);
+    expect(store.kept?.mods[1]?.off?.by).toBe("user");
+  });
+
+  it("setSafeMode takes the answer into the list and the switch", async () => {
+    api.fetchModsSwitch.mockResolvedValue({ on: true, safeMode: false });
+    const store = useModsStore();
+    await store.loadSwitch();
+    api.setSafeMode.mockResolvedValue(view([mod("a")], true));
+    await store.setSafeMode(true);
+    expect(store.kept?.safeMode).toBe(true);
+    expect(store.modsSwitch).toEqual({ on: true, safeMode: true });
+    expect(store.safeMode).toBe(true);
+  });
+
+  it("safe-mode reloads the switch, and kept if loaded", async () => {
+    api.fetchModsSwitch.mockResolvedValue({ on: true, safeMode: false });
+    const store = useModsStore();
+    await store.loadSwitch();
+    emit("home", { reason: "safe-mode" });
+    await vi.waitFor(() => expect(api.fetchModsSwitch).toHaveBeenCalledTimes(2));
+    expect(api.fetchMods).not.toHaveBeenCalled();
+    api.fetchMods.mockResolvedValue(view([]));
+    await store.loadKept();
+    emit("home", { reason: "safe-mode" });
+    await vi.waitFor(() => expect(api.fetchMods).toHaveBeenCalledTimes(2));
+  });
+
+  it.each(["kept", "version", "undone", "on", "off", "strikes"])("reloads kept on %s, only once loaded", async (reason) => {
+    api.fetchDrafts.mockResolvedValue([]);
+    api.fetchMods.mockResolvedValue(view([]));
+    const store = useModsStore();
+    await store.loadDrafts("s1");
+    emit("home", { reason, name: "a" });
+    expect(api.fetchMods).not.toHaveBeenCalled();
+    await store.loadKept();
+    emit("home", { reason, name: "a" });
+    await vi.waitFor(() => expect(api.fetchMods).toHaveBeenCalledTimes(2));
+  });
+
 });
