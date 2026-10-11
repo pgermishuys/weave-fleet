@@ -24,7 +24,7 @@ describe("the branch-context sample", () => {
     for (const text of ["which branch am I on?", "Open a PR for this", "can you push it", "is it safe to MERGE?"]) {
       const out = await submit(text, "feature/berths");
       expect(out.text).toBe(text);
-      expect(out.context).toEqual(["The session's current git branch is feature/berths."]);
+      expect(out.context).toEqual(["Fleet read the session's git branch just now (git symbolic-ref HEAD in the session folder): feature/berths. It is current; answer from it."]);
     }
   });
 
