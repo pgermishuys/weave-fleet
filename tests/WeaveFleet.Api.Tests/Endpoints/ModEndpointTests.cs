@@ -92,6 +92,7 @@ public sealed class ModEndpointTests : IAsyncDisposable
     [InlineData("POST", "/api/sessions/s1/mods/drafts/test-chips/keep")]
     [InlineData("POST", "/api/sessions/s1/mods/drafts/test-chips/off")]
     [InlineData("POST", "/api/sessions/s1/mods/drafts/test-chips/on")]
+    [InlineData("POST", "/api/mods/samples/test-chips")]
     public async Task Every_route_is_404_with_the_message_while_the_switch_is_off(string method, string url)
     {
         using var request = new HttpRequestMessage(new HttpMethod(method), url);

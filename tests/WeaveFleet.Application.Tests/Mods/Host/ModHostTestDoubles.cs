@@ -124,6 +124,7 @@ internal sealed class FakeFiles : IModHostFiles
 {
     public string? HostScript { get; set; } = "/app/mods-host/host.js";
     public string FleetVersion => "9.9.9";
+    public string? SamplesFolder { get; set; }
 }
 
 /// <summary>Hands out the events a test publishes, as a subscription to the "sessions" topic would.</summary>

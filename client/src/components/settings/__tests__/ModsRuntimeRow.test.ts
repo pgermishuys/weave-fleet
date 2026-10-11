@@ -188,6 +188,19 @@ describe("Mods row: turning Mods on", () => {
     expect(panel(wrapper).text()).toContain("~/.weave/runtimes/bun/1.4.2/bun");
   });
 
+  it("4 ready: offers the test-chips sample", async () => {
+    const wrapper = await mountRow(makeView({ bun: installed() }), "true");
+
+    expect(panel(wrapper).find("[data-testid='mods-sample-button']").text()).toBe("Try the test-chips sample");
+  });
+
+  it("3 downloading: doesn't offer the sample until Bun is there", async () => {
+    const wrapper = await mountRow(makeView({ job: job() }), "true");
+
+    expect(stateOf(wrapper)).toBe("progress");
+    expect(wrapper.find("[data-testid='mods-sample-button']").exists()).toBe(false);
+  });
+
   it("4 ready: with a Bun from config it says your Bun", async () => {
     const bun = { ...installed("1.4.5")!, source: "configured" as const, displayPath: "/opt/bun/bin/bun" };
     const wrapper = await mountRow(makeView({ bun, configuredPath: bun.path }), "true");

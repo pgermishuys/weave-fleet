@@ -97,6 +97,26 @@ internal sealed class InMemoryModVersionStore : IModVersionStore
         return version;
     }
 
+    /// <summary>The module hash the next <see cref="KeepFolderAsync"/> records; the real store hashes the folder's module.</summary>
+    public string FolderSha256 { get; set; } = "sample-sha";
+
+    public async Task<ModVersion> KeepFolderAsync(string userId, string name, string sourceFolder, ModKeepSource source, ModKeepCheck check, CancellationToken ct = default)
+    {
+        var staged = StagedFolder(userId, "sample", name);
+        Staged.Add(staged);
+        var report = await check(staged, ct);
+        if (ModChecks.Refusal(report) is { } refusal)
+            throw new ModStoreException(refusal);
+
+        var history = _histories.GetValueOrDefault((userId, name)) ?? ModHistory.Empty(name);
+        var number = history.Versions.Count == 0 ? 1 : history.Versions.Max(v => v.Number) + 1;
+        var version = new ModVersion(number, new DateTimeOffset(2026, 10, 10, 9, 0, 0, TimeSpan.Zero), "0.1.0", FolderSha256, null, source.SessionTitle, source.Note, report);
+        SeedVersion(userId, name, number);
+        _histories[(userId, name)] = history with { Active = number, Off = null, Versions = [.. history.Versions, version] };
+        Writes.Add($"keep-folder {name} v{number} from {sourceFolder}");
+        return version;
+    }
+
     public Task<ModHistory> UseVersionAsync(string userId, string name, int number, CancellationToken ct = default)
     {
         var history = Existing(userId, name);

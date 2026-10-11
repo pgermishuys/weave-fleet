@@ -23,7 +23,7 @@ public sealed class ModServiceTests
     public ModServiceTests()
     {
         _sessions.Seed(new Session { Id = SessionId, Title = "Tidy the build output" });
-        _service = new ModService(_store, _checker, _events, new TestUserContext(User), _safeMode, _sessions, TimeProvider.System);
+        _service = new ModService(_store, _checker, _events, new TestUserContext(User), _safeMode, _sessions, new Host.FakeFiles(), TimeProvider.System);
     }
 
     private static ModVersion Version(int number, string? note = null)
@@ -554,7 +554,7 @@ public sealed class ModServiceTests
     [Fact]
     public async Task Safe_mode_is_the_current_users_only()
     {
-        var other = new ModService(_store, _checker, _events, new TestUserContext("other-user"), _safeMode, _sessions, TimeProvider.System);
+        var other = new ModService(_store, _checker, _events, new TestUserContext("other-user"), _safeMode, _sessions, new Host.FakeFiles(), TimeProvider.System);
 
         await _service.SetSafeModeAsync(true);
 
