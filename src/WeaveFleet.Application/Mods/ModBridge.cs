@@ -40,7 +40,7 @@ public sealed class ModBridge(
                 return Ok($"Wrote {name}", output + SafeModeNote);
 
             await ReloadDraftAsync(gate, name!, ct).ConfigureAwait(false);
-            return Ok($"Wrote {name}", output + LoadResult(gate, name!));
+            return Ok($"Wrote {name}", output + LoadResult(gate, written.Value));
         }, ct);
 
     public Task<CanvasResult<CanvasToolOutput>> CheckAsync(string? bridgeToken, string? harnessSessionId, string? name, CancellationToken ct = default)
@@ -59,16 +59,18 @@ public sealed class ModBridge(
         => RunAsync(bridgeToken, harnessSessionId, name, needsDraft: true, loads: true, async gate =>
         {
             // Three strikes (or the user) turned it off: reloading after a fix is how the agent turns it back on.
-            var wasOff = gate.Draft!.Off is not null;
+            var draft = gate.Draft!;
+            var wasOff = draft.Off is not null;
             if (wasOff)
             {
                 var on = await mods.SetDraftOnAsync(gate.SessionId, name!, on: true, ct).ConfigureAwait(false);
                 if (on.IsFailure)
                     return Fail(CanvasErrorKind.Invalid, on.Error.Description);
+                draft = on.Value;
             }
 
             await ReloadDraftAsync(gate, name!, ct).ConfigureAwait(false);
-            var output = LoadResult(gate, name!);
+            var output = LoadResult(gate, draft);
             return Ok($"Reloaded {name}", wasOff ? output + "\nIt was off; it's on again." : output);
         }, ct);
 
@@ -144,9 +146,25 @@ public sealed class ModBridge(
         await mods.DraftLoadedAsync(gate.SessionId, name, ct).ConfigureAwait(false);
     }
 
-    /// <summary>What the host made of the draft after a reload: loaded, refused with the check's errors, or not running.</summary>
-    private string LoadResult(Gate gate, string name)
+    /// <summary>
+    /// What the host made of the draft after a reload: loaded, refused with the check's errors, or not running. The host
+    /// skips a draft that's off or has no whole <c>mod.json</c> without a problem, so those are said first, never "loaded".
+    /// </summary>
+    private string LoadResult(Gate gate, ModDraftView draft)
     {
+        var name = draft.Name;
+        if (draft.Off is { } off)
+        {
+            return off.By == ModOffBy.Strikes
+                ? $"{name} isn't loaded: it's off in this session after three failures in a row{(off.Error is { } error ? $" ({error})" : "")}. "
+                  + "Once it's fixed, fleet_mod_reload turns it back on."
+                : $"{name} isn't loaded: the user turned it off in this session. Ask them before turning it back on with fleet_mod_reload.";
+        }
+
+        // The view's version comes from mod.json: none means the store couldn't read a whole manifest.
+        if (draft.Version is null)
+            return $"{name} isn't loaded: its mod.json is missing or incomplete. It needs name, version, description and hooks.";
+
         if (host.GetLoadProblem(gate.UserId, $"{name}@draft:{gate.SessionId}") is { } problem)
             return $"{name} didn't load: {problem.Message}{Errors(problem.Report)}";
 
