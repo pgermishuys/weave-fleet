@@ -10,10 +10,10 @@ namespace WeaveFleet.Infrastructure.Data.Repositories;
 /// <summary>The <c>queued_prompts</c> table (migration 044), scoped to the current user's sessions.</summary>
 public sealed class QueuedPromptRepository(IDbConnectionFactory connectionFactory, IUserContext userContext) : IQueuedPromptRepository
 {
-    private const string Columns = "q.id, q.session_id, q.kind, q.text, q.command, q.arguments, q.agent, q.provider_id, q.model_id, q.effort, q.created_at";
+    private const string Columns = "q.id, q.session_id, q.kind, q.text, q.command, q.arguments, q.agent, q.provider_id, q.model_id, q.effort, q.mod, q.created_at";
 
     // SQLite's RETURNING can't name a table alias.
-    private const string ReturnedColumns = "id, session_id, kind, text, command, arguments, agent, provider_id, model_id, effort, created_at";
+    private const string ReturnedColumns = "id, session_id, kind, text, command, arguments, agent, provider_id, model_id, effort, mod, created_at";
 
     public async Task<IReadOnlyList<QueuedPrompt>> ListAsync(string sessionId)
     {
@@ -87,8 +87,8 @@ public sealed class QueuedPromptRepository(IDbConnectionFactory connectionFactor
         using var conn = connectionFactory.CreateConnection();
         var inserted = await conn.ExecuteNonQueryAsync(
             $"""
-            INSERT INTO queued_prompts (id, session_id, position, kind, text, command, arguments, agent, provider_id, model_id, effort, created_at)
-            SELECT @Id, @SessionId, {positionSql}, @Kind, @Text, @Command, @Arguments, @Agent, @ProviderId, @ModelId, @Effort, @CreatedAt
+            INSERT INTO queued_prompts (id, session_id, position, kind, text, command, arguments, agent, provider_id, model_id, effort, mod, created_at)
+            SELECT @Id, @SessionId, {positionSql}, @Kind, @Text, @Command, @Arguments, @Agent, @ProviderId, @ModelId, @Effort, @Mod, @CreatedAt
             FROM sessions
             WHERE id = @SessionId AND user_id = @UserId
             """,
@@ -104,6 +104,7 @@ public sealed class QueuedPromptRepository(IDbConnectionFactory connectionFactor
                 cmd.AddParameter("ProviderId", item.ProviderId);
                 cmd.AddParameter("ModelId", item.ModelId);
                 cmd.AddParameter("Effort", item.Effort);
+                cmd.AddParameter("Mod", item.Mod);
                 cmd.AddParameter("CreatedAt", item.CreatedAt.ToString("O", CultureInfo.InvariantCulture));
                 cmd.AddParameter("UserId", userContext.UserId);
             });
@@ -122,6 +123,7 @@ public sealed class QueuedPromptRepository(IDbConnectionFactory connectionFactor
         ProviderId = r.GetNullableString(r.GetOrdinal("provider_id")),
         ModelId = r.GetNullableString(r.GetOrdinal("model_id")),
         Effort = r.GetNullableString(r.GetOrdinal("effort")),
+        Mod = r.GetNullableString(r.GetOrdinal("mod")),
         CreatedAt = DateTimeOffset.TryParse(
             r.GetString(r.GetOrdinal("created_at")), CultureInfo.InvariantCulture, DateTimeStyles.AssumeUniversal, out var created)
             ? created

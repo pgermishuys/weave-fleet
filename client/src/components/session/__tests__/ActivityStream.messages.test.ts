@@ -178,6 +178,18 @@ describe("ActivityStream message views", () => {
     expect(bubbleOf(wrapper, "m3").props("clusterPosition")).toBe("middle");
   });
 
+  it("captions a prompt a mod sent or rewrote, and no other", async () => {
+    stream.messages = shallowRef([
+      text("m1", "user", "Please ship it"),
+      text("m2", "user", "Run the tests", { mod: { kind: "sent", name: "tests-after-edits" } }),
+      text("m3", "user", "Looks good to me.", { mod: { kind: "rewritten", name: "lgtm-expander" } }),
+    ]);
+    const wrapper = await open();
+
+    expect(wrapper.findAll("[data-testid='mod-mark']").map((mark) => mark.text())).toEqual(["Sent by tests-after-edits", "Rewritten by lgtm-expander"]);
+    expect(rows(wrapper)[0]!.id).toBe("m1");
+  });
+
   it("shows a shell command the user ran as its own block, on the user's side", async () => {
     stream.messages = shallowRef([
       text("m1", "user", "Run it"),

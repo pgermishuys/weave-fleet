@@ -16,7 +16,7 @@ internal delegate Task<Session?> ModSessionLookup(string userId, string sessionI
 internal delegate Task<string?> ModBranchLookup(string directory, CancellationToken ct);
 
 /// <summary>Queues a message a mod asked for in a session of the user's; Fleet's reason when it refuses, else null.</summary>
-internal delegate Task<string?> ModPromptQueuer(string userId, string sessionId, string text, CancellationToken ct);
+internal delegate Task<string?> ModPromptQueuer(string userId, string sessionId, string text, string mod, CancellationToken ct);
 
 /// <summary>What a <see cref="ModHostSupervisor"/> needs from the rest of Fleet.</summary>
 internal sealed record ModHostDependencies(
@@ -653,7 +653,7 @@ internal sealed partial class ModHostSupervisor(string userId, ModHostDependenci
                     w.WriteString("branch", branch);
                 });
             case "prompt.queue":
-                var queued = await QueueAsync(sessionId, Required(parameters, "text"), ct).ConfigureAwait(false);
+                var queued = await QueueAsync(sessionId, Required(parameters, "text"), route.Name, ct).ConfigureAwait(false);
                 return queued is null ? Empty : throw Invalid(queued);
             case "ui.open":
                 await deps.Ui.OpenPaneAsync(userId, route.Id, sessionId, Required(parameters, "id"), Text(parameters, "title"), ct).ConfigureAwait(false);
@@ -671,12 +671,12 @@ internal sealed partial class ModHostSupervisor(string userId, ModHostDependenci
     }
 
     /// <summary>A mod's message goes to a session of its user's; Fleet's reason when it can't.</summary>
-    private async Task<string?> QueueAsync(string sessionId, string text, CancellationToken ct)
+    private async Task<string?> QueueAsync(string sessionId, string text, string mod, CancellationToken ct)
     {
         var session = await deps.FindSession(userId, sessionId, ct).ConfigureAwait(false);
         if (session is null || session.UserId != userId)
             return $"There is no session {sessionId}.";
-        return deps.QueuePrompt is { } queue ? await queue(userId, sessionId, text, ct).ConfigureAwait(false) : "Fleet can't queue messages here.";
+        return deps.QueuePrompt is { } queue ? await queue(userId, sessionId, text, mod, ct).ConfigureAwait(false) : "Fleet can't queue messages here.";
     }
 
     void IModHostCalls.HandleNotification(string method, JsonElement parameters)

@@ -148,7 +148,7 @@ public sealed class ModTurnFollowUpTests : IAsyncDisposable
         string? refusal = "not asked";
         _host.Reply = async _ =>
         {
-            refusal = await _followUps.QueueAsync(_service, "s1", "Run the tests", CancellationToken.None);
+            refusal = await _followUps.QueueAsync(_service, "s1", "Run the tests", "tests-after-edits", CancellationToken.None);
             // The session is idle, yet the message waits for the dispatcher's send rather than racing it.
             Sent.ShouldBeEmpty();
             (await _queue.ListAsync("s1")).Select(i => i.Text).ShouldBe(["Run the tests"]);
@@ -165,12 +165,31 @@ public sealed class ModTurnFollowUpTests : IAsyncDisposable
     }
 
     [Fact]
+    public async Task A_follow_up_names_the_mod_in_the_queue_and_is_sent_as_that_mods()
+    {
+        string? shown = null;
+        _host.Reply = async _ =>
+        {
+            await _followUps.QueueAsync(_service, "s1", "Run the tests", "tests-after-edits", CancellationToken.None);
+            shown = (await _queue.ListAsync("s1")).Single().Mod;
+            return ModDispatchResult.NotDispatched;
+        };
+
+        await TurnEnds();
+
+        shown.ShouldBe("tests-after-edits");
+        _harness.SendPromptCalls.Single().Options!.SentByMod.ShouldBe("tests-after-edits");
+        _builder.EventBroadcaster.Broadcasts.First(b => b.Type == PromptQueueService.ChangedEvent)
+            .Payload.GetProperty("items")[0].GetProperty("mod").GetString().ShouldBe("tests-after-edits");
+    }
+
+    [Fact]
     public async Task A_follow_up_goes_behind_what_the_user_already_queued()
     {
         await QueueWhileBusyAsync("user's own");
         _host.Reply = async _ =>
         {
-            await _followUps.QueueAsync(_service, "s1", "Run the tests", CancellationToken.None);
+            await _followUps.QueueAsync(_service, "s1", "Run the tests", "tests-after-edits", CancellationToken.None);
             return ModDispatchResult.NotDispatched;
         };
 
@@ -213,16 +232,16 @@ public sealed class ModTurnFollowUpTests : IAsyncDisposable
     {
         _builder.ActivityTracker.Update("s1", ActivityStatuses.Busy, User);
         for (var i = 1; i <= 3; i++)
-            (await _followUps.QueueAsync(_service, "s1", $"again {i}", CancellationToken.None)).ShouldBeNull();
+            (await _followUps.QueueAsync(_service, "s1", $"again {i}", "tests-after-edits", CancellationToken.None)).ShouldBeNull();
 
-        var fourth = await _followUps.QueueAsync(_service, "s1", "again 4", CancellationToken.None);
+        var fourth = await _followUps.QueueAsync(_service, "s1", "again 4", "tests-after-edits", CancellationToken.None);
 
         fourth.ShouldNotBeNull().ShouldContain("3 follow-ups in a row");
         (await _queue.ListAsync("s1")).Select(i => i.Text).ShouldBe(["again 1", "again 2", "again 3"]);
 
         _followUps.UserSpoke("s1");
-        (await _followUps.QueueAsync(_service, "s1", "again 5", CancellationToken.None)).ShouldBeNull();
-        (await _followUps.QueueAsync(_service, "other", "elsewhere", CancellationToken.None)).ShouldNotBeNull("no session, so refused");
+        (await _followUps.QueueAsync(_service, "s1", "again 5", "tests-after-edits", CancellationToken.None)).ShouldBeNull();
+        (await _followUps.QueueAsync(_service, "other", "elsewhere", "tests-after-edits", CancellationToken.None)).ShouldNotBeNull("no session, so refused");
     }
 
     [Fact]
@@ -230,13 +249,13 @@ public sealed class ModTurnFollowUpTests : IAsyncDisposable
     {
         Seed("old", "/work/demo", retention: "archived");
 
-        (await _followUps.QueueAsync(_service, "s1", "  ", CancellationToken.None)).ShouldNotBeNull();
-        (await _followUps.QueueAsync(_service, "s1", new string('x', PromptQueueService.MaxTextLength + 1), CancellationToken.None)).ShouldNotBeNull();
+        (await _followUps.QueueAsync(_service, "s1", "  ", "tests-after-edits", CancellationToken.None)).ShouldNotBeNull();
+        (await _followUps.QueueAsync(_service, "s1", new string('x', PromptQueueService.MaxTextLength + 1), null, CancellationToken.None)).ShouldNotBeNull();
         for (var i = 0; i < 5; i++)
-            (await _followUps.QueueAsync(_service, "old", "hello", CancellationToken.None)).ShouldNotBeNull().ShouldContain("read-only");
+            (await _followUps.QueueAsync(_service, "old", "hello", "tests-after-edits", CancellationToken.None)).ShouldNotBeNull().ShouldContain("read-only");
 
         _builder.ActivityTracker.Update("s1", ActivityStatuses.Busy, User);
-        (await _followUps.QueueAsync(_service, "s1", "fine", CancellationToken.None)).ShouldBeNull();
+        (await _followUps.QueueAsync(_service, "s1", "fine", "tests-after-edits", CancellationToken.None)).ShouldBeNull();
     }
 
     /// <summary>A clock that says when the 2 s wait started, so a test advances it only then.</summary>

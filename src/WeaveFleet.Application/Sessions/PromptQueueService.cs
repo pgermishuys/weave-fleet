@@ -21,13 +21,14 @@ public sealed record QueuePromptRequest(
     string? Agent = null,
     string? ProviderId = null,
     string? ModelId = null,
-    string? Effort = null);
+    string? Effort = null,
+    string? Mod = null);
 
 /// <summary>A queued message as the client shows it.</summary>
-public sealed record QueuedPromptView(string Id, string Kind, string Text, string CreatedAt)
+public sealed record QueuedPromptView(string Id, string Kind, string Text, string CreatedAt, string? Mod = null)
 {
     public static QueuedPromptView From(QueuedPrompt item)
-        => new(item.Id, item.Kind, item.Text, item.CreatedAt.ToString("O", System.Globalization.CultureInfo.InvariantCulture));
+        => new(item.Id, item.Kind, item.Text, item.CreatedAt.ToString("O", System.Globalization.CultureInfo.InvariantCulture), item.Mod);
 }
 
 /// <summary>The <c>session.queue</c> event: a session's whole queue, sent whenever it changes.</summary>
@@ -110,6 +111,7 @@ public sealed partial class PromptQueueService(
             ProviderId = request.ProviderId,
             ModelId = request.ModelId,
             Effort = request.Effort,
+            Mod = request.Mod,
             CreatedAt = DateTimeOffset.UtcNow,
         };
         if (!await queue.AddAsync(item).ConfigureAwait(false))
@@ -221,6 +223,7 @@ public sealed partial class PromptQueueService(
                 ModelId = item.ModelId,
                 Effort = item.Effort,
                 Delivery = delivery,
+                SentByMod = item.Mod,
             },
             ct),
     };

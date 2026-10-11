@@ -1,5 +1,6 @@
 using WeaveFleet.Application.Sessions;
 using WeaveFleet.Domain.Entities;
+using WeaveFleet.Domain.Harnesses;
 using WeaveFleet.Infrastructure.Data.Repositories;
 using WeaveFleet.Infrastructure.Events;
 using WeaveFleet.Infrastructure.Tests.Data;
@@ -102,4 +103,23 @@ public sealed class SessionSnapshotBuilderTests
         CreatedAt = DateTime.UtcNow.ToString("O"),
         UpdatedAt = DateTime.UtcNow.ToString("O"),
     };
+
+    [Fact]
+    public async Task BuildAsync_marks_the_prompts_a_mod_sent_or_rewrote_after_a_reload()
+    {
+        var (keeper, factory) = await TestDbHelper.CreateSharedDbAsync();
+        using var _ = keeper;
+        var session = await RepositoryOwnershipTestHelper.SeedOwnedSessionGraphAsync(factory, TestUserContext.DefaultUserId);
+        var messages = new MessageRepository(factory, new TestUserContext());
+        foreach (var id in new[] { "msg_1", "msg_2", "msg_3" })
+            await messages.UpsertAsync(MessagePersistenceService.ToPersistedMessage(session.Session.Id, MessagePersistenceService.CreateUserPromptMessage("Run the tests", DateTimeOffset.UtcNow, null, id)));
+        await messages.SaveModMarkAsync(session.Session.Id, "msg_2", new ModMark(ModMark.Sent, "tests-after-edits"));
+        await messages.SaveModMarkAsync(session.Session.Id, "msg_3", new ModMark(ModMark.Rewritten, "lgtm-expander"));
+
+        var snapshot = await new SessionSnapshotBuilder(factory, new TestUserContext(), new SessionActivityTracker()).BuildAsync(session.Session.Id);
+
+        snapshot.Messages.Single(m => m.Info.Id == "msg_1").Info.Mod.ShouldBeNull();
+        snapshot.Messages.Single(m => m.Info.Id == "msg_2").Info.Mod.ShouldBe(new ModMark(ModMark.Sent, "tests-after-edits"));
+        snapshot.Messages.Single(m => m.Info.Id == "msg_3").Info.Mod.ShouldBe(new ModMark(ModMark.Rewritten, "lgtm-expander"));
+    }
 }

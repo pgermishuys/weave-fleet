@@ -12,7 +12,7 @@ import type {
   AccumulatedCompactionPart,
 } from "@/lib/client-types";
 import { toMessageRole } from "@/lib/shell-commands";
-import type { SlashCommand, TurnError } from "@/lib/domain-events";
+import type { ModMark, SlashCommand, TurnError } from "@/lib/domain-events";
 
 /** The slash command carried on a message info, which reaches here as loosely typed data. */
 function readCommand(value: unknown): SlashCommand | undefined {
@@ -20,6 +20,13 @@ function readCommand(value: unknown): SlashCommand | undefined {
   const { name, arguments: args } = value as Record<string, unknown>;
   if (typeof name !== "string" || name.length === 0) return undefined;
   return typeof args === "string" && args.length > 0 ? { name, arguments: args } : { name };
+}
+
+/** The mod mark carried on a message info, which reaches here as loosely typed data. */
+function readMod(value: unknown): ModMark | undefined {
+  if (typeof value !== "object" || value === null) return undefined;
+  const { kind, name } = value as Record<string, unknown>;
+  return (kind === "sent" || kind === "rewritten") && typeof name === "string" && name.length > 0 ? { kind, name } : undefined;
 }
 
 /** The failure carried on a message info, which reaches here as loosely typed harness data. */
@@ -118,6 +125,7 @@ export function ensureMessage(
     ...(info.steered === true ? { steered: true } : {}),
     ...(info.compactionSummary === true ? { compactionSummary: true } : {}),
     command: role === "user" ? readCommand(info.command) : undefined,
+    ...(role === "user" && readMod(info.mod) ? { mod: readMod(info.mod) } : {}),
   };
   
   return insertMessageSorted(prev, newMsg);
@@ -188,10 +196,12 @@ export function mergeMessageUpdate(
   const command = role === "user" ? readCommand(info.command) : undefined;
   const hasNewCommand = Boolean(command && (command.name !== existing.command?.name || command.arguments !== existing.command?.arguments));
 
+  const mod = role === "user" ? readMod(info.mod) : undefined;
+  const hasNewMod = Boolean(mod && (mod.kind !== existing.mod?.kind || mod.name !== existing.mod?.name));
   const hasNewSteered = info.steered === true && !existing.steered;
   const hasNewCompactionSummary = info.compactionSummary === true && !existing.compactionSummary;
 
-  if (!hasNewCompletedAt && !hasNewCreatedAt && !hasNewTokens && !hasUpdatedTokens && !hasNewCost && !hasSnapshotParts && !hasNewModelID && !hasNewTurnError && !hasNewFinish && !hasNewRole && !hasNewCommand && !hasNewSteered && !hasNewCompactionSummary) {
+  if (!hasNewCompletedAt && !hasNewCreatedAt && !hasNewTokens && !hasUpdatedTokens && !hasNewCost && !hasSnapshotParts && !hasNewModelID && !hasNewTurnError && !hasNewFinish && !hasNewRole && !hasNewCommand && !hasNewMod && !hasNewSteered && !hasNewCompactionSummary) {
     return prev; // nothing new to merge
   }
 
@@ -208,6 +218,7 @@ export function mergeMessageUpdate(
     ...(hasNewCompactionSummary ? { compactionSummary: true } : {}),
     ...(hasNewRole ? { role } : {}),
     ...(hasNewCommand ? { command } : {}),
+    ...(hasNewMod ? { mod } : {}),
     tokens: mergedTokens,
     cost: mergedCost,
   };

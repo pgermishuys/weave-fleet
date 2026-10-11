@@ -328,13 +328,18 @@ public sealed class OpenCodeSessionMessageProxy(
     private async Task<MessagePage> WithCommandsAsync(string fleetSessionId, MessagePage page)
     {
         var commands = await GetCommandsAsync(fleetSessionId, page.Messages.Select(m => m.Role)).ConfigureAwait(false);
-        return commands.Count == 0
+        var marks = await GetModMarksAsync(fleetSessionId, page.Messages.Select(m => m.Role)).ConfigureAwait(false);
+        return commands.Count == 0 && marks.Count == 0
             ? page
             : page with
             {
-                Messages = [.. page.Messages.Select(m => m.Role == "user" && commands.TryGetValue(m.Id, out var command)
-                    ? m with { Command = command }
-                    : m)],
+                Messages = [.. page.Messages.Select(m => m.Role != "user"
+                    ? m
+                    : m with
+                    {
+                        Command = commands.TryGetValue(m.Id, out var command) ? command : m.Command,
+                        Mod = marks.TryGetValue(m.Id, out var mark) ? mark : m.Mod,
+                    })],
             };
     }
 
@@ -344,12 +349,26 @@ public sealed class OpenCodeSessionMessageProxy(
         IReadOnlyList<MessageLifecyclePayload> messages)
     {
         var commands = await GetCommandsAsync(fleetSessionId, messages.Select(m => m.Info.Role)).ConfigureAwait(false);
-        return commands.Count == 0
+        var marks = await GetModMarksAsync(fleetSessionId, messages.Select(m => m.Info.Role)).ConfigureAwait(false);
+        return commands.Count == 0 && marks.Count == 0
             ? messages
-            : [.. messages.Select(m => m.Info.Role == "user" && commands.TryGetValue(m.Info.Id, out var command)
-                ? m with { Info = m.Info with { Command = command } }
-                : m)];
+            : [.. messages.Select(m => m.Info.Role != "user"
+                ? m
+                : m with
+                {
+                    Info = m.Info with
+                    {
+                        Command = commands.TryGetValue(m.Info.Id, out var command) ? command : m.Info.Command,
+                        Mod = marks.TryGetValue(m.Info.Id, out var mark) ? mark : m.Info.Mod,
+                    },
+                })];
     }
+
+    /// <summary>The session's prompts that a mod sent or rewrote, by message id.</summary>
+    private async Task<IReadOnlyDictionary<string, ModMark>> GetModMarksAsync(string fleetSessionId, IEnumerable<string> roles)
+        => messageRepository is not null && roles.Contains("user")
+            ? await messageRepository.GetModMarksAsync(fleetSessionId).ConfigureAwait(false)
+            : new Dictionary<string, ModMark>();
 
     /// <summary>The session's commands by message id; none are read for a page without a user message.</summary>
     private async Task<IReadOnlyDictionary<string, SlashCommand>> GetCommandsAsync(string fleetSessionId, IEnumerable<string> roles)
@@ -506,6 +525,7 @@ public sealed class OpenCodeSessionMessageProxy(
                 // So a prompt sent into a running turn still says so after a reload.
                 Steered = message.Steered ? true : null,
                 Command = message.Command,
+                Mod = message.Mod,
                 CompactionSummary = message.CompactionSummary ? true : null,
             },
             Parts = parts,
@@ -619,6 +639,7 @@ public sealed class OpenCodeSessionMessageProxy(
             ModelId = payload.Info.ModelId,
             Steered = payload.Info.Steered == true,
             Command = payload.Info.Command,
+            Mod = payload.Info.Mod,
             CompactionSummary = payload.Info.CompactionSummary == true,
         };
     }

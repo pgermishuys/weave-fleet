@@ -11,6 +11,8 @@ export interface QueuedMessage {
   id: string;
   text: string;
   kind: QueuedMessageKind;
+  /** The mod that queued it, when the user didn't. */
+  mod?: string;
 }
 
 /** What goes with a queued item besides its text: how it goes out, and what the composer had picked. */
@@ -34,10 +36,10 @@ const queues = reactive<Record<string, QueuedMessage[]>>({});
 
 function toQueuedMessage(value: unknown): QueuedMessage | null {
   if (!value || typeof value !== "object") return null;
-  const { id, text, kind } = value as Record<string, unknown>;
+  const { id, text, kind, mod } = value as Record<string, unknown>;
   if (typeof id !== "string" || typeof text !== "string") return null;
   // A message's @ sessions are written into it as a block for the agent; the queue shows what was typed.
-  return { id, text: stripSessionReferences(text), kind: kind === "command" || kind === "shell" ? kind : "prompt" };
+  return { id, text: stripSessionReferences(text), kind: kind === "command" || kind === "shell" ? kind : "prompt", ...(typeof mod === "string" && mod ? { mod } : {}) };
 }
 
 function toQueue(values: unknown): QueuedMessage[] {

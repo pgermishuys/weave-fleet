@@ -214,6 +214,9 @@ public sealed record MessageEventInfo
     /// the prompt the harness expanded it into.
     /// </summary>
     public SlashCommand? Command { get; init; }
+
+    /// <summary>The mod that sent or rewrote this prompt. Set only on such a prompt.</summary>
+    public ModMark? Mod { get; init; }
 }
 
 /// <summary>

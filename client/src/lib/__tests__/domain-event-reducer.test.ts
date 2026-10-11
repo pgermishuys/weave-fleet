@@ -189,6 +189,7 @@ function createMessageLifecyclePayload(
       turnError: overrides.turnError ?? null,
       finish: overrides.finish ?? null,
       ...(overrides.steered ? { steered: overrides.steered } : {}),
+      ...(overrides.mod ? { mod: overrides.mod } : {}),
     },
     parts: text == null
       ? []
@@ -234,6 +235,20 @@ function deferResponse(): { promise: Promise<{ data: unknown; error: undefined; 
 
   return { promise, resolve }
 }
+
+describe("domain-event-reducer prompts a mod sent or rewrote", () => {
+  it("keeps the mod mark on the prompt, live and from a snapshot, and leaves the others alone", () => {
+    const typed = createMessageLifecyclePayload({ id: "msg_0001", role: "user", createdAt: 1000, text: "ship it" })
+    const sent = createMessageLifecyclePayload({ id: "msg_0002", role: "user", createdAt: 2000, text: "Run the tests", mod: { kind: "sent", name: "tests-after-edits" } })
+
+    const live = applyDomainEvent(createSessionStreamState(createSnapshot({ messages: [typed] })), { type: "message.updated", payload: sent })
+    const reloaded = createSessionStreamState(createSnapshot({ messages: [typed, sent] }))
+
+    for (const state of [live, reloaded]) {
+      expect(state.messages.map((m) => m.mod)).toEqual([undefined, { kind: "sent", name: "tests-after-edits" }])
+    }
+  })
+})
 
 describe("domain-event-reducer steered prompts", () => {
   it("keeps the mark on a prompt sent into a running turn, live and from a snapshot", () => {

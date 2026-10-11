@@ -123,6 +123,8 @@ export async function dispatch(rt: Runtime, params: DispatchParams) {
   if (event === "permission.ask" && isObject(out.v) && out.v.decision === "deny" && denierOf(out.v)) {
     return { result: { ...out.v, mod: denierOf(out.v) }, failures };
   }
+  // A rewrite names the mod that made it, so Fleet can say who changed the words the user typed.
+  if (event === "prompt.submit" && d.rewriter && isObject(out.v) && out.v.text !== e.text) return { result: { ...out.v, mod: d.rewriter }, failures };
   if (event !== "ui.render") return { result: out.v, failures };
   // Forgotten while it ran: Fleet no longer draws the session, so no handles are kept for it.
   if (isStale(d)) return { result: { type: "Fleet" }, failures };

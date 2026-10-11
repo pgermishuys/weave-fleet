@@ -6,8 +6,11 @@ using WeaveFleet.Application.Mods.Host;
 
 namespace WeaveFleet.Application.Mods;
 
-/// <summary>What a prompt becomes after the user's mods: the words to show and send, and notes only the model gets.</summary>
-public sealed record ModPromptOutcome(string Text, IReadOnlyList<string> Context)
+/// <summary>
+/// What a prompt becomes after the user's mods: the words to show and send, and notes only the model gets. <c>Mod</c> names the
+/// mod whose rewrite the words are, when one changed them.
+/// </summary>
+public sealed record ModPromptOutcome(string Text, IReadOnlyList<string> Context, string? Mod = null)
 {
     public static ModPromptOutcome Unchanged(string text) => new(text, []);
 }
@@ -90,7 +93,8 @@ public sealed partial class ModPromptHook(IModHost host, TimeProvider time, ILog
             }
         }
 
-        return new ModPromptOutcome(text.GetString()!, notes);
+        var rewriter = o.TryGetProperty("mod", out var mod) && mod.ValueKind == JsonValueKind.String && mod.GetString() is { Length: > 0 } name ? name : null;
+        return new ModPromptOutcome(text.GetString()!, notes, rewriter);
     }
 
     private static JsonElement Event(string sessionId, string text)

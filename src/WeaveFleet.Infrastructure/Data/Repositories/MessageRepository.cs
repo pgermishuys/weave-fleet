@@ -390,6 +390,51 @@ public sealed class MessageRepository : IMessageRepository
         return rows.ToDictionary(row => row.MessageId, row => row.Command, StringComparer.Ordinal);
     }
 
+    public async Task SaveModMarkAsync(string sessionId, string messageId, ModMark mark)
+    {
+        using var conn = _connectionFactory.CreateConnection();
+        await conn.ExecuteNonQueryAsync(
+            """
+            INSERT INTO message_mods (session_id, message_id, kind, mod)
+            SELECT @SessionId, @MessageId, @Kind, @Mod
+            FROM sessions
+            WHERE id = @SessionId AND user_id = @UserId
+            ON CONFLICT(session_id, message_id) DO UPDATE SET
+                kind = excluded.kind,
+                mod = excluded.mod
+            """,
+            cmd =>
+            {
+                cmd.AddParameter("SessionId", sessionId);
+                cmd.AddParameter("MessageId", messageId);
+                cmd.AddParameter("Kind", mark.Kind);
+                cmd.AddParameter("Mod", mark.Name);
+                cmd.AddParameter("UserId", _userContext.UserId);
+            });
+    }
+
+    public async Task<IReadOnlyDictionary<string, ModMark>> GetModMarksAsync(string sessionId)
+    {
+        using var conn = _connectionFactory.CreateConnection();
+        var rows = await conn.QueryAsync(
+            """
+            SELECT m.message_id, m.kind, m.mod
+            FROM message_mods m
+            INNER JOIN sessions s ON s.id = m.session_id
+            WHERE m.session_id = @SessionId AND s.user_id = @UserId
+            """,
+            cmd =>
+            {
+                cmd.AddParameter("SessionId", sessionId);
+                cmd.AddParameter("UserId", _userContext.UserId);
+            },
+            r => (
+                MessageId: r.GetString(r.GetOrdinal("message_id")),
+                Mark: new ModMark(r.GetString(r.GetOrdinal("kind")), r.GetString(r.GetOrdinal("mod")))));
+
+        return rows.ToDictionary(row => row.MessageId, row => row.Mark, StringComparer.Ordinal);
+    }
+
     private static PersistedMessage ReadMessage(DbDataReader r) => new()
     {
         Id = r.GetString(r.GetOrdinal("id")),

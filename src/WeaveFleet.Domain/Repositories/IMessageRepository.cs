@@ -83,4 +83,10 @@ public interface IMessageRepository
 
     /// <summary>The slash commands the session's user messages came from, by message id.</summary>
     Task<IReadOnlyDictionary<string, SlashCommand>> GetCommandsAsync(string sessionId);
+
+    /// <summary>Remembers that the user message <paramref name="messageId"/> was sent or rewritten by a mod.</summary>
+    Task SaveModMarkAsync(string sessionId, string messageId, ModMark mark);
+
+    /// <summary>The marks on the session's user messages, by message id.</summary>
+    Task<IReadOnlyDictionary<string, ModMark>> GetModMarksAsync(string sessionId);
 }

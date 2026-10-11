@@ -73,6 +73,16 @@ public sealed class ModPromptHookTests
     }
 
     [Fact]
+    public async Task Names_the_mod_the_host_says_rewrote_the_text()
+    {
+        _host.Reply = _ => Task.FromResult(Answer("""{"text":"Hi","context":[],"mod":"lgtm-expander"}"""));
+        (await Apply()).Mod.ShouldBe("lgtm-expander");
+
+        _host.Reply = _ => Task.FromResult(Answer("""{"text":"Hi","context":[]}"""));
+        (await Apply()).Mod.ShouldBeNull();
+    }
+
+    [Fact]
     public async Task Context_that_is_not_a_list_is_ignored_and_non_strings_in_it_are_skipped()
     {
         _host.Reply = _ => Task.FromResult(Answer("""{"text":"Hi","context":"nope"}"""));

@@ -67,6 +67,39 @@ public sealed class SessionOrchestratorModPromptTests : IAsyncDisposable
         BubbleText().ShouldBe("Which git branch is this session on?");
     }
 
+    private JsonElement BubbleInfo() =>
+        _builder.EventBroadcaster.Broadcasts.Single(b => b.Topic == $"session:{SessionId}" && b.Type == "message.updated").Payload.GetProperty("info");
+
+    [Fact]
+    public async Task A_rewrite_is_marked_with_the_mod_and_kept_by_the_messages_id()
+    {
+        _host.Result = """{"sessionId":"s1","text":"Which git branch is this session on?","context":[],"mod":"lgtm-expander"}""";
+        var sut = Build();
+
+        await sut.PromptSessionAsync(SessionId, "which branch?", null);
+
+        BubbleInfo().GetProperty("mod").GetProperty("kind").GetString().ShouldBe("rewritten");
+        BubbleInfo().GetProperty("mod").GetProperty("name").GetString().ShouldBe("lgtm-expander");
+        (await _builder.MessageRepository.GetModMarksAsync(SessionId))[BubbleInfo().GetProperty("id").GetString()!].ShouldBe(new ModMark(ModMark.Rewritten, "lgtm-expander"));
+    }
+
+    [Fact]
+    public async Task A_prompt_a_mod_queued_says_it_was_sent_by_that_mod_and_notes_alone_add_no_mark()
+    {
+        _host.Result = """{"sessionId":"s1","text":"Run the tests","context":[]}""";
+        var sut = Build();
+
+        await sut.PromptSessionAsync(SessionId, "Run the tests", new PromptOptions { SentByMod = "tests-after-edits" });
+
+        BubbleInfo().GetProperty("mod").GetProperty("kind").GetString().ShouldBe("sent");
+        BubbleInfo().GetProperty("mod").GetProperty("name").GetString().ShouldBe("tests-after-edits");
+
+        _builder.EventBroadcaster.Broadcasts.Clear();
+        _host.Result = """{"sessionId":"s1","text":"which branch?","context":["A note."]}""";
+        await sut.PromptSessionAsync(SessionId, "which branch?", null);
+        BubbleInfo().TryGetProperty("mod", out _).ShouldBeFalse();
+    }
+
     [Fact]
     public async Task Context_reaches_the_model_notes_alone_not_the_bubble_or_the_text()
     {

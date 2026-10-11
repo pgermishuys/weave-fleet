@@ -171,7 +171,13 @@ public sealed partial class SessionPrompting(
                 DateTimeOffset.UtcNow,
                 options?.Agent,
                 generatedMessageId,
-                options?.Attachments) with { Steered = delivery == PromptDelivery.Steer };
+                options?.Attachments) with
+            {
+                Steered = delivery == PromptDelivery.Steer,
+                Mod = options?.SentByMod is { Length: > 0 } sender
+                    ? new ModMark(ModMark.Sent, sender)
+                    : modPrompt.Mod is { Length: > 0 } rewriter ? new ModMark(ModMark.Rewritten, rewriter) : null,
+            };
 
             await BroadcastUserMessageAsync(id, userMsg, effectiveCorrelationId, ct).ConfigureAwait(false);
 
@@ -223,6 +229,10 @@ public sealed partial class SessionPrompting(
             // conversation gets none: it's only ever seen beside its session.
             if (sessionRecaps is not null && sessionResult.Value.SideOfSessionId is null)
                 await sessionRecaps.OnPromptSentAsync(id, sessionResult.Value.UserId, ct).ConfigureAwait(false);
+
+            // The harness keeps its own copy of the words; the mark is Fleet's, by the same id.
+            if (userMsg.Mod is { } mark && messageRepository is not null)
+                await messageRepository.SaveModMarkAsync(id, generatedMessageId, mark).ConfigureAwait(false);
 
             // Saved under the id the harness was given, so the snapshot can tell when the harness has its own copy.
             if (saveUserMessage && messageRepository is not null)
@@ -442,7 +452,8 @@ public sealed partial class SessionPrompting(
                 message.ModelId,
                 new CommittedMessageTime(message.Timestamp.ToUnixTimeMilliseconds()),
                 message.Steered ? true : null,
-                message.Command),
+                message.Command,
+                message.Mod),
             parts),
             ApplicationJsonContext.Default.CommittedMessage);
 
@@ -484,7 +495,8 @@ public sealed partial class SessionPrompting(
                 message.ModelId,
                 new CommittedMessageTime(message.Timestamp.ToUnixTimeMilliseconds()),
                 message.Steered ? true : null,
-                message.Command),
+                message.Command,
+                message.Mod),
             parts,
             correlationId),
             ApplicationJsonContext.Default.CommittedUserPromptMessage);
