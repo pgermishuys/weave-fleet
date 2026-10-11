@@ -42,7 +42,38 @@ A module exports `register(on)`; see test-chips below. `on(event, matcher?, asyn
 - `$.ui.resolve(e)` gives the element factories: `const { Box, Text, Pill } = $.ui.resolve(e)`. `$.state`,
   `$.store` and `$.clock` exist too. There is no fs, process, network or `setTimeout`. If the user needs those, say
   it isn't possible yet.
-- Use only the `ui.render` event. A hook has 10 s.
+- Events you can use: `ui.render` (draws; a hook has 10 s) and `prompt.submit` (changes a prompt; see below, a hook
+  has 1.5 s). There are no tool or permission events.
+
+## Changing a prompt: `prompt.submit`
+
+When the user wants to reword what they send, or have the model know something without typing it, hook
+`prompt.submit`. `e` is `{ sessionId, text, context }`; `context` is a list of strings, empty at first.
+
+- `return next(e)`: leave it.
+- `return next({ ...e, text: "..." })`: reword it. The user's bubble shows the new words, and the agent gets them.
+- `return next({ ...e, context: [...e.context, "..."] })`: notes only the model sees. The bubble does not show them.
+  Pi ignores them; OpenCode, OpenCode 2 and Claude Code take them. 8 KiB in total.
+- Always pass `...e` and keep `text` a non-empty string and `context` a list of strings, or Fleet ignores the answer.
+- It fails open: a hook that throws, is slow (1.5 s) or answers badly leaves the prompt as typed. A mod can't block or
+  drop a prompt. Slash commands skip it.
+- A matcher compares `text`: `{ text: /branch|merge/i }`. Keep hooks fast; the user waits for them.
+- `await $.session.branch()` is the git branch in the session's folder, or `null` (no repository, or a detached HEAD).
+  Also `$.session.cwd()` and `title()`. Call it only when the matcher passed.
+
+```ts
+import type { Register } from "fleet-mods";
+
+export const register: Register = (on) => {
+  on("prompt.submit", { text: /branch|\bprs?\b|pull request|push|merge/i }, async ($, e, next) => {
+    const branch = await $.session.branch();
+    if (!branch) return next(e);
+    return next({ ...e, context: [...e.context, `The session's current git branch is ${branch}.`] });
+  });
+};
+```
+
+This is Fleet's `branch-context` sample (`mod.json` like any mod: name `branch-context`, `hooks: "./mod.ts"`).
 
 ## The two sites
 

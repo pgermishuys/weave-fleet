@@ -1,0 +1,6 @@
+{
+  "name": "branch-context",
+  "version": "0.1.0",
+  "description": "Tells the model which git branch the session is on when you ask about branches, PRs, pushes or merges",
+  "hooks": "./mod.ts"
+}

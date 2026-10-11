@@ -16,6 +16,7 @@ export const LIMITS: Readonly<HostLimits> = Object.freeze({
   hookMs: 10_000,
   catchMs: 1_000,
   dispatchMs: 15_000,
+  promptHookMs: 1_500,
   strikes: 3,
   treeTextChars: 100_000,
   treeNodes: 2_000,

@@ -4,7 +4,7 @@
  * The prose is docs/mods/api.md; where the two disagree, this file wins and the doc is the bug. Names follow Claude
  * Code's mods API (https://code.claude.com/docs/en/plugins/mods/reference) wherever the concept is the same, so a mod
  * written for one reads naturally in the other. Everything here is the Stage 1 subset: no `$.fs`, `$.process`,
- * `$.http` or `$.model`, no prompt, tool or permission events.
+ * `$.http` or `$.model`, one prompt event (`prompt.submit`), no tool or permission events.
  *
  * A mod imports types only:
  *
@@ -105,6 +105,7 @@ declare module "fleet-mods" {
   export interface EventArgs {
     "session.start": SessionStartEvent;
     "turn.complete": TurnCompleteEvent;
+    "prompt.submit": PromptSubmitEvent;
     "ui.render": UiRenderEvent;
     "ui.press": UiPressEvent;
     "ui.input": UiInputEvent;
@@ -114,6 +115,7 @@ declare module "fleet-mods" {
   export interface EventResult {
     "session.start": SessionStartEvent;
     "turn.complete": TurnCompleteEvent;
+    "prompt.submit": PromptSubmitEvent;
     "ui.render": Element | null;
     "ui.press": UiPressResult;
     "ui.input": UiInputResult;
@@ -145,6 +147,20 @@ declare module "fleet-mods" {
     readonly usage?: { readonly input: number; readonly output: number; readonly cacheRead: number; readonly cacheWrite: number };
     /** In the provider's currency unit, as Fleet's cost column shows it. */
     readonly cost?: number;
+  }
+
+  /**
+   * The user sent a prompt, before the harness gets it. Return `next(e)` to leave it, `next({ ...e, text })` to rewrite
+   * it (the conversation shows the new words), or `next({ ...e, context: [...e.context, "…"] })` to give the model
+   * notes the conversation does not show. A hook that fails, answers without `text` and `context`, or runs past
+   * `Limits.promptHookMs` counts as `next(e)` with the event unchanged. Slash commands are not sent through it.
+   */
+  export interface PromptSubmitEvent {
+    readonly sessionId: string;
+    /** What the user typed, or what an earlier mod made of it. */
+    readonly text: string;
+    /** Model-only notes so far (empty to begin with). Not shown in the conversation. Pi ignores them. */
+    readonly context: readonly string[];
   }
 
   /** The places a mod can draw in Stage 1. */
@@ -304,6 +320,8 @@ declare module "fleet-mods" {
     cwd(): Promise<string>;
     /** Where the session is open right now. Empty when nobody is looking. */
     surfaces(): Promise<Surface[]>;
+    /** The git branch checked out in the session's folder; null when it is not in a git repository or HEAD is detached. */
+    branch(): Promise<string | null>;
   }
 
   /** Timers belong to the mod and the session they were started in, and stop when the module reloads or the session goes. */
@@ -483,6 +501,8 @@ declare module "fleet-mods" {
     readonly catchMs: 1_000;
     /** Fleet's wait for a whole dispatch; past it Fleet restarts the host and strikes the mod that was running. */
     readonly dispatchMs: 15_000;
+    /** A `prompt.submit` hook's own time. Fleet stops waiting for the whole event after 2 s. */
+    readonly promptHookMs: 1_500;
     /** Failures in a row (unanswered by `.catch`) that turn a mod off. */
     readonly strikes: 3;
     /** Text drawn per tree; the rest is cut. */
@@ -602,7 +622,7 @@ declare module "fleet-mods/protocol" {
     "ui.open"(params: CallContext & { id: string; title?: string }): Record<string, never>;
     "ui.close"(params: CallContext & { id: string }): Record<string, never>;
     "ui.toast"(params: CallContext & { text: string; timeoutMs?: number; tone?: "accent" | "warn" }): Record<string, never>;
-    "session.get"(params: CallContext): { id: string; title: string; harness: string; cwd: string; surfaces: Surface[] };
+    "session.get"(params: CallContext): { id: string; title: string; harness: string; cwd: string; surfaces: Surface[]; branch: string | null };
   }
 
   export interface CallContext {

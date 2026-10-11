@@ -120,6 +120,7 @@ export function createDollar(rt: Runtime, mod: LoadedMod, sessionId: string, eve
       harness: async () => (await sessionField("harness")) as string,
       cwd: async () => (await sessionField("cwd")) as string,
       surfaces: async () => (await sessionField("surfaces")) as never,
+      branch: async () => ((await sessionField("branch")) as string | null | undefined) ?? null,
     },
     clock: {
       now: () => rt.now(),
