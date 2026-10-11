@@ -1,3 +1,4 @@
+using System.Collections.Concurrent;
 using System.Runtime.CompilerServices;
 using System.Text.Json;
 using System.Threading.Channels;
@@ -26,6 +27,16 @@ internal sealed class FakeConnection(int processId) : IModHostConnection
     public Task<int> Exited => _exited.Task;
     public Func<Task<JsonElement>> OnRequest { get; set; } = () => Task.FromResult(default(JsonElement));
 
+    /// <summary>Scripted answers by method, shared with the factory; methods without one go to <see cref="OnRequest"/>.</summary>
+    public ConcurrentDictionary<string, Func<JsonElement, Task<JsonElement>>> Answers { get; init; } = new();
+
+    /// <summary>Every request Fleet sent, in order.</summary>
+    public ConcurrentQueue<(string Method, JsonElement Params)> Requests { get; } = new();
+
+    public string[] Methods => [.. Requests.Select(r => r.Method)];
+
+    public JsonElement[] Sent(string method) => [.. Requests.Where(r => r.Method == method).Select(r => r.Params)];
+
     /// <summary>When false, <see cref="Kill"/> leaves the process "running", to count how often Fleet kills it.</summary>
     public bool KillEndsProcess { get; set; } = true;
     public List<TimeSpan> Shutdowns { get; } = [];
@@ -34,7 +45,11 @@ internal sealed class FakeConnection(int processId) : IModHostConnection
 
     public void Crash(int code = 1) => _exited.TrySetResult(code);
 
-    public Task<JsonElement> RequestAsync(string method, JsonElement parameters, TimeSpan timeout) => OnRequest();
+    public Task<JsonElement> RequestAsync(string method, JsonElement parameters, TimeSpan timeout)
+    {
+        Requests.Enqueue((method, parameters.ValueKind == JsonValueKind.Undefined ? parameters : parameters.Clone()));
+        return Answers.TryGetValue(method, out var answer) ? answer(parameters) : OnRequest();
+    }
 
     public Task ShutdownAsync(TimeSpan grace)
     {
@@ -63,6 +78,9 @@ internal sealed class FakeFactory : IModHostConnectionFactory
 
     public List<ModHostLaunch> Launches { get; } = [];
     public List<FakeConnection> Connections { get; } = [];
+
+    /// <summary>The answers every host this factory starts gives, by method.</summary>
+    public ConcurrentDictionary<string, Func<JsonElement, Task<JsonElement>>> Answers { get; } = new();
     public Exception? Fail { get; set; }
 
     /// <summary>When set, a start waits for it, so a test can hold the host in <c>starting</c>.</summary>
@@ -78,7 +96,7 @@ internal sealed class FakeFactory : IModHostConnectionFactory
             throw fail;
         if (Hold is { } hold)
             await hold.Task.ConfigureAwait(false);
-        var connection = new FakeConnection(100 + Connections.Count);
+        var connection = new FakeConnection(100 + Connections.Count) { Answers = Answers };
         Connections.Add(connection);
         _started.Writer.TryWrite(connection);
         return connection;
@@ -126,4 +144,51 @@ internal sealed class ChannelBroadcaster : IEventBroadcaster
     public Task BroadcastAsync(string topic, string type, JsonElement payload, long? eventId, string? userId, CancellationToken ct) => throw new NotSupportedException();
     public Task BroadcastAsync(string topic, string type, JsonElement payload, DomainEvent? domainEvent, string? userId, CancellationToken ct) => throw new NotSupportedException();
     public Task BroadcastAsync(string topic, string type, JsonElement payload, long? eventId, DomainEvent? domainEvent, string? userId, CancellationToken ct) => throw new NotSupportedException();
+}
+
+/// <summary>Records each mod turned off, as it's called.</summary>
+internal sealed class FakeStrikes : IModStrikeRecorder
+{
+    public ConcurrentQueue<string> Recorded { get; } = new();
+
+    public Task RecordKeptAsync(string userId, string name, string message, CancellationToken ct)
+    {
+        Recorded.Enqueue($"kept {name}: {message}");
+        return Task.CompletedTask;
+    }
+
+    public Task RecordDraftAsync(string userId, string sessionId, string name, string message, CancellationToken ct)
+    {
+        Recorded.Enqueue($"draft {sessionId}/{name}: {message}");
+        return Task.CompletedTask;
+    }
+}
+
+/// <summary>Records what mods asked of the browser, one line per call; every session is open on the desktop.</summary>
+internal sealed class FakeUi : IModHostUi
+{
+    public ConcurrentQueue<string> Calls { get; } = new();
+
+    public Task OpenPaneAsync(string userId, string modId, string sessionId, string paneId, string? title, CancellationToken ct) => Add($"open {modId} {sessionId} {paneId} {title}");
+
+    public Task ClosePaneAsync(string userId, string modId, string sessionId, string paneId, CancellationToken ct) => Add($"close {modId} {sessionId} {paneId}");
+
+    public Task ToastAsync(string userId, string modId, string sessionId, string text, int? timeoutMs, string? tone, CancellationToken ct) => Add($"toast {modId} {sessionId} {text} {timeoutMs} {tone}");
+
+    public IReadOnlyList<string> SurfacesOf(string userId, string sessionId) => ["desktop"];
+
+    public void Invalidated(string userId, string modId, string? sessionId) => Add($"invalidate {modId} {sessionId}");
+
+    public void Logged(string userId, string modId, string? sessionId, string level, string text) => Add($"log {modId} {sessionId} {level} {text}");
+
+    private Task Add(string call)
+    {
+        Calls.Enqueue(call);
+        return Task.CompletedTask;
+    }
+}
+
+internal sealed class NoUserScope : WeaveFleet.Application.Users.IBackgroundUserScope
+{
+    public IDisposable Begin(string userId) => new CancellationTokenSource();
 }

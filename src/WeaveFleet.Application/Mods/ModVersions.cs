@@ -198,6 +198,14 @@ public interface IModVersionStore
     /// </summary>
     string HostFolder(string userId);
 
+    /// <summary>
+    /// Copies the session's draft to <paramref name="destination"/> (which must not exist; its parent is created) the way
+    /// Keep copies one: regular files only, no links, within the limits. The mod host loads drafts from such a copy, never
+    /// from the folder the agent is writing (a pipe there would hang it). Throws <see cref="ModStoreException"/> when there's
+    /// no such draft or it can't be copied; nothing is left at <paramref name="destination"/> then.
+    /// </summary>
+    Task StageDraftAsync(string userId, string sessionId, string name, string destination, CancellationToken ct = default);
+
     // ── $.store: per user, per mod, shared by a draft and its kept mod ──
 
     Task<JsonElement?> GetValueAsync(string userId, string name, string key, CancellationToken ct = default);

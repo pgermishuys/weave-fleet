@@ -221,7 +221,8 @@ public static class DependencyInjection
         services.AddScoped<BuiltInSkillService>();
         services.AddSingleton<ISkillVersionStore>(sp => new WeaveFleet.Infrastructure.Skills.FileSkillVersionStore(sp.GetRequiredService<FleetOptions>()));
         services.AddSingleton<WeaveFleet.Application.Mods.IModVersionStore>(sp => new WeaveFleet.Infrastructure.Mods.FileModVersionStore(sp.GetRequiredService<FleetOptions>()));
-        services.AddSingleton<WeaveFleet.Application.Mods.IModChecker, WeaveFleet.Application.Mods.NoModChecker>();
+        // The static check is the mod host's, so Keep and /check show its report (and refuse while no host can run).
+        services.AddScoped<WeaveFleet.Application.Mods.IModChecker, WeaveFleet.Application.Mods.Host.HostModChecker>();
         // The mod host: one Bun process per user, started when one of their mods should run (docs/mods/api.md, "The protocol").
         services.AddSingleton(new WeaveFleet.Application.Mods.Host.ModHostOptions());
         services.AddSingleton<WeaveFleet.Application.Mods.Host.ModHostService>();
@@ -229,6 +230,9 @@ public static class DependencyInjection
         services.AddSingleton<WeaveFleet.Application.Mods.Host.IModHostConnectionFactory, WeaveFleet.Infrastructure.Mods.Host.ModHostConnectionFactory>();
         services.AddSingleton<WeaveFleet.Application.Mods.Host.IModUserGate, WeaveFleet.Application.Mods.Host.ScopedModUserGate>();
         services.AddSingleton<WeaveFleet.Application.Mods.Host.IModHostBun, WeaveFleet.Application.Mods.Host.BunModHostBun>();
+        services.AddSingleton<WeaveFleet.Application.Mods.Host.IModStrikeRecorder, WeaveFleet.Application.Mods.Host.ScopedModStrikeRecorder>();
+        // M6 draws what mods ask for; until then $.ui calls succeed and go nowhere.
+        services.TryAddSingleton<WeaveFleet.Application.Mods.Host.IModHostUi, WeaveFleet.Application.Mods.Host.NoModHostUi>();
         services.AddSingleton<WeaveFleet.Application.Mods.Host.IModHostFiles>(new WeaveFleet.Infrastructure.Mods.Host.ModHostFiles(AppContext.BaseDirectory));
         services.AddScoped<SkillImprover>();
         services.AddScoped<ISessionActivator>(sp => sp.GetRequiredService<WeaveFleet.Application.Sessions.Activation.SessionActivation>());

@@ -1,8 +1,12 @@
 using System.Collections.Concurrent;
+using System.Text.Json;
+using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Hosting;
 using Microsoft.Extensions.Logging;
 using WeaveFleet.Application.Events;
+using WeaveFleet.Application.Users;
 using WeaveFleet.Domain.Harnesses;
+using WeaveFleet.Domain.Repositories;
 
 namespace WeaveFleet.Application.Mods.Host;
 
@@ -31,21 +35,52 @@ public sealed partial class ModHostService : IModHost, IHostedService, IAsyncDis
         IModHostBun bun,
         IModHostFiles files,
         IModVersionStore store,
+        IModStrikeRecorder strikes,
+        IModHostUi ui,
+        IServiceScopeFactory scopes,
+        IBackgroundUserScope users,
         IEventBroadcaster events,
         TimeProvider time,
         ILogger<ModHostService> logger)
     {
-        _deps = new ModHostDependencies(options, connections, gate, bun, files, store, time, logger);
+        _deps = new ModHostDependencies(options, connections, gate, bun, files, store, strikes, ui, FindSessionIn(scopes, users), time, logger);
         _events = events;
         _logger = logger;
     }
 
+    /// <summary>Sessions are read as their user, in a scope of their own: the host's calls come outside any request.</summary>
+    private static ModSessionLookup FindSessionIn(IServiceScopeFactory scopes, IBackgroundUserScope users)
+        => async (userId, sessionId, ct) =>
+        {
+            using var asUser = users.Begin(userId);
+            var scope = scopes.CreateAsyncScope();
+            await using (scope.ConfigureAwait(false))
+                return await scope.ServiceProvider.GetRequiredService<ISessionRepository>().GetByIdAsync(sessionId).ConfigureAwait(false);
+        };
+
     internal ModHostSupervisor? SupervisorOf(string userId) => _supervisors.GetValueOrDefault(userId);
+
+    private bool Stopping => Volatile.Read(ref _stop) is not null;
+
+    private ModHostSupervisor For(string userId) => _supervisors.GetOrAdd(userId, id => new ModHostSupervisor(id, _deps));
 
     public ModHostStatus GetStatus(string userId) => SupervisorOf(userId)?.GetStatus() ?? ModHostStatus.Stopped;
 
-    public Task EnsureAsync(string userId, CancellationToken ct = default)
-        => Volatile.Read(ref _stop) is not null ? Task.CompletedTask : _supervisors.GetOrAdd(userId, id => new ModHostSupervisor(id, _deps)).EnsureAsync(ct);
+    public Task EnsureAsync(string userId, CancellationToken ct = default) => Stopping ? Task.CompletedTask : For(userId).EnsureAsync(ct);
+
+    public Task<ModDispatchResult> DispatchAsync(string userId, ModDispatchRequest request, CancellationToken ct = default)
+        => SupervisorOf(userId)?.DispatchAsync(request, ct) ?? Task.FromResult(ModDispatchResult.NotDispatched);
+
+    public Task<JsonElement> CheckAsync(string userId, string folder, CancellationToken ct = default)
+        => Stopping ? Task.FromException<JsonElement>(new ModHostNotReadyException("Fleet is stopping.")) : For(userId).CheckAsync(folder, ct);
+
+    public Task ReloadDraftAsync(string userId, string sessionId, string name, CancellationToken ct = default)
+        => Stopping ? Task.CompletedTask : For(userId).ReloadDraftAsync(sessionId, name, ct);
+
+    public Task ForgetSessionAsync(string userId, string sessionId, CancellationToken ct = default)
+        => SupervisorOf(userId)?.ForgetSessionAsync(sessionId) ?? Task.CompletedTask;
+
+    public ModLoadProblem? GetLoadProblem(string userId, string modId) => SupervisorOf(userId)?.GetLoadProblem(modId);
 
     public Task StartAsync(CancellationToken cancellationToken)
     {
@@ -82,7 +117,10 @@ public sealed partial class ModHostService : IModHost, IHostedService, IAsyncDis
             await foreach (var e in _events.SubscribeAsync(["sessions"], null, ct).ConfigureAwait(false))
             {
                 if (e is { Type: EventTypes.ModsChanged, UserId: { } userId })
+                {
+                    SupervisorOf(userId)?.ClearLoadProblems();
                     EnsureInBackground(userId);
+                }
             }
         }
         catch (OperationCanceledException) when (ct.IsCancellationRequested)

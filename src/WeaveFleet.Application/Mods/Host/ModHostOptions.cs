@@ -14,4 +14,7 @@ public sealed record ModHostOptions
 
     /// <summary>A host that stayed up this long starts the waits again from the first.</summary>
     public TimeSpan StableUptime { get; init; } = TimeSpan.FromSeconds(60);
+
+    /// <summary>How long a host started for checks may stay up after the last one when no mod needs it.</summary>
+    public TimeSpan CheckLease { get; init; } = TimeSpan.FromSeconds(60);
 }

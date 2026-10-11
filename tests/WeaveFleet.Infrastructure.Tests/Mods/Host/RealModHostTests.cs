@@ -1,10 +1,12 @@
 using System.Diagnostics;
 using System.Text.Json;
+using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging.Abstractions;
 using Shouldly;
 using WeaveFleet.Application.Mods;
 using WeaveFleet.Application.Mods.Host;
 using WeaveFleet.Application.Runtimes;
+using WeaveFleet.Application.Users;
 using WeaveFleet.Infrastructure.Mods;
 using WeaveFleet.Infrastructure.Mods.Host;
 using WeaveFleet.Testing.Fakes;
@@ -23,6 +25,7 @@ public sealed class RealModHostTests : IAsyncDisposable
 
     private readonly string _root = Directory.CreateTempSubdirectory("fleet-realhost-").FullName;
     private readonly FileModVersionStore _store;
+    private readonly LoggingUi _ui = new();
     private readonly RecordingFactory _connections = new(new ModHostConnectionFactory(NullLogger<ModHostConnectionFactory>.Instance));
     private ModHostService? _service;
 
@@ -61,16 +64,19 @@ public sealed class RealModHostTests : IAsyncDisposable
         return document.RootElement.Clone();
     }
 
-    /// <summary>A service whose user has test-chips kept (through the store's Keep, without a check) and Mods on.</summary>
-    private async Task<(ModHostService Service, ModHostSupervisor Supervisor)?> StartAsync()
+    /// <summary>A service whose user has test-chips (and <paramref name="also"/>) kept, through the store's Keep without a check, and Mods on.</summary>
+    private async Task<(ModHostService Service, ModHostSupervisor Supervisor)?> StartAsync(params string[] also)
     {
         if (Real() is not { } real)
             return null;
-        var draft = _store.DraftFolder(User, "ses_live1", "test-chips");
-        Directory.CreateDirectory(draft);
-        foreach (var file in Directory.EnumerateFiles(Fixture("test-chips")))
-            File.Copy(file, Path.Combine(draft, Path.GetFileName(file)));
-        await _store.KeepAsync(User, "ses_live1", "test-chips", new ModKeepSource(null, null), (_, _) => Task.FromResult<JsonElement?>(null));
+        foreach (var name in also.Prepend("test-chips"))
+        {
+            var draft = _store.DraftFolder(User, "ses_live1", name);
+            Directory.CreateDirectory(draft);
+            foreach (var file in Directory.EnumerateFiles(Fixture(name)))
+                File.Copy(file, Path.Combine(draft, Path.GetFileName(file)));
+            await _store.KeepAsync(User, "ses_live1", name, new ModKeepSource(null, null), (_, _) => Task.FromResult<JsonElement?>(null));
+        }
 
         _service = new ModHostService(
             new ModHostOptions { RequestTimeout = TimeSpan.FromSeconds(10) },
@@ -79,6 +85,10 @@ public sealed class RealModHostTests : IAsyncDisposable
             new FixedBun(real.Bun),
             new ModHostFiles(AppContext.BaseDirectory, real.Script),
             _store,
+            new NoStrikes(),
+            _ui,
+            new ServiceCollection().BuildServiceProvider().GetRequiredService<IServiceScopeFactory>(),
+            new NoUserScope(),
             new FakeEventBroadcaster(),
             TimeProvider.System,
             NullLogger<ModHostService>.Instance);
@@ -147,6 +157,37 @@ public sealed class RealModHostTests : IAsyncDisposable
     }
 
     [Fact]
+    public async Task A_kept_mod_loads_and_draws_a_dotnet_test_row_and_an_unhooked_event_never_crosses()
+    {
+        if (await StartAsync() is not (var service, _))
+            return;
+        service.GetLoadProblem(User, "test-chips@v1").ShouldBeNull();
+        var e = Json("""{ "sessionId": "ses_live1", "component": "ToolUse", "props": { "tool": "bash", "input": { "command": "dotnet test" }, "output": "Failed!  - Failed: 2, Passed: 212, Skipped: 4, Total: 218" } }""");
+        var drawn = await service.DispatchAsync(User, new ModDispatchRequest("ui.render", "ses_live1", e)).WaitAsync(TimeSpan.FromSeconds(10));
+        drawn.DrawnBy.ShouldBe(["test-chips@v1"]);
+        drawn.Result!.Value.GetProperty("children").EnumerateArray().Select(c => c.GetProperty("props").GetProperty("label").GetString()).ShouldBe(["212 passed", "2 failed", "4 skipped"]);
+        (await service.DispatchAsync(User, new ModDispatchRequest("turn.complete", "ses_live1", e)).WaitAsync(TimeSpan.FromSeconds(10))).Dispatched.ShouldBeFalse();
+    }
+
+    [Fact]
+    public async Task A_button_a_mod_drew_is_pressed_and_its_callback_runs()
+    {
+        if (await StartAsync("press-demo") is not (var service, _))
+            return;
+        var band = Json("""{ "sessionId": "ses_live1", "component": "ComposerBand", "requestId": "ses_live1", "props": { "isWorking": false } }""");
+        var drawn = await service.DispatchAsync(User, new ModDispatchRequest("ui.render", "ses_live1", band)).WaitAsync(TimeSpan.FromSeconds(10));
+        drawn.DrawnBy.ShouldBe(["press-demo@v1"]);
+        var handle = drawn.Result!.Value.GetProperty("handles").GetProperty("onPress").GetString();
+
+        var press = Json($$"""{ "sessionId": "ses_live1", "component": "ComposerBand", "requestId": "ses_live1", "surface": "desktop", "handle": "{{handle}}" }""");
+        var pressed = await service.DispatchAsync(User, new ModDispatchRequest("ui.press", "ses_live1", press, "desktop")).WaitAsync(TimeSpan.FromSeconds(10));
+
+        pressed.Dispatched.ShouldBeTrue();
+        pressed.Result!.Value.GetProperty("element").GetString().ShouldBe("go");
+        (await _ui.Lines.Task.WaitAsync(TimeSpan.FromSeconds(10))).ShouldBe(("press-demo@v1", "pressed"));
+    }
+
+    [Fact]
     public async Task Stopping_Fleet_shuts_the_host_down_on_its_shutdown_request()
     {
         if (await StartAsync() is not (var service, _))
@@ -177,6 +218,40 @@ public sealed class RealModHostTests : IAsyncDisposable
         public Task<bool> IsSwitchedOnAsync(string userId, CancellationToken ct) => Task.FromResult(true);
 
         public bool IsSafeMode(string userId) => false;
+    }
+
+    /// <summary>Drops every <c>$.ui</c> call but the first log line, which it hands to the test.</summary>
+    private sealed class LoggingUi : IModHostUi
+    {
+        private readonly NoModHostUi _none = new();
+
+        public TaskCompletionSource<(string Mod, string Text)> Lines { get; } = new(TaskCreationOptions.RunContinuationsAsynchronously);
+
+        public Task OpenPaneAsync(string userId, string modId, string sessionId, string paneId, string? title, CancellationToken ct) => _none.OpenPaneAsync(userId, modId, sessionId, paneId, title, ct);
+
+        public Task ClosePaneAsync(string userId, string modId, string sessionId, string paneId, CancellationToken ct) => _none.ClosePaneAsync(userId, modId, sessionId, paneId, ct);
+
+        public Task ToastAsync(string userId, string modId, string sessionId, string text, int? timeoutMs, string? tone, CancellationToken ct) => _none.ToastAsync(userId, modId, sessionId, text, timeoutMs, tone, ct);
+
+        public IReadOnlyList<string> SurfacesOf(string userId, string sessionId) => [];
+
+        public void Invalidated(string userId, string modId, string? sessionId)
+        {
+        }
+
+        public void Logged(string userId, string modId, string? sessionId, string level, string text) => Lines.TrySetResult((modId, text));
+    }
+
+    private sealed class NoStrikes : IModStrikeRecorder
+    {
+        public Task RecordKeptAsync(string userId, string name, string message, CancellationToken ct) => Task.CompletedTask;
+
+        public Task RecordDraftAsync(string userId, string sessionId, string name, string message, CancellationToken ct) => Task.CompletedTask;
+    }
+
+    private sealed class NoUserScope : IBackgroundUserScope
+    {
+        public IDisposable Begin(string userId) => new CancellationTokenSource();
     }
 
     private sealed class FixedBun(string path) : IModHostBun
