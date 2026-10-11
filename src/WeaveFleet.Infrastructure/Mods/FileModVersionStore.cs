@@ -120,31 +120,7 @@ public sealed class FileModVersionStore(string root) : IModVersionStore, IDispos
                 if (!IsClean(draft) || !IsClean(modFolder) || !Directory.Exists(draft) || TreeHash(staged) != stagedTree || !DraftIsStill(draft, stagedTree))
                     throw new ModStoreException("The draft changed while it was being checked; check it again.");
 
-                var history = ReadIndex(userId, name);
-                var number = NextNumber(modFolder, history);
-                var kept = Path.Combine(modFolder, $"v{number}");
-                Directory.Move(staged, kept);
-
-                var version = new ModVersion(
-                    number,
-                    DateTimeOffset.UtcNow,
-                    manifest.Version,
-                    sha256,
-                    sessionId,
-                    Trimmed(source.SessionTitle),
-                    Trimmed(source.Note),
-                    report);
-                try
-                {
-                    WriteIndex(userId, new ModHistory(name, number, null, [.. history.Versions, version]));
-                }
-                catch
-                {
-                    TryDelete(kept);
-                    throw;
-                }
-
-                MakeReadOnly(kept);
+                var version = CommitVersion(userId, name, modFolder, staged, manifest, sha256, sessionId, source, report);
                 RemoveDraft(userId, sessionId, name, draft);
                 return version;
             }, ct).ConfigureAwait(false);
@@ -153,6 +129,77 @@ public sealed class FileModVersionStore(string root) : IModVersionStore, IDispos
         {
             TryDelete(stagingFolder);
         }
+    }
+
+    public async Task<ModVersion> KeepFolderAsync(string userId, string name, string sourceFolder, ModKeepSource source, ModKeepCheck check, CancellationToken ct = default)
+    {
+        ThrowIfInvalid(name);
+        ArgumentNullException.ThrowIfNull(check);
+
+        var modFolder = ModFolder(userId, name);
+        var stagingFolder = Path.Combine(modFolder, $"keep.{Guid.NewGuid():N}.tmp");
+        var staged = Path.Combine(stagingFolder, name);
+        try
+        {
+            var (manifest, sha256) = await LockedAsync(ModLock(userId, name), () =>
+            {
+                if (!IsClean(modFolder))
+                    throw new ModStoreException("The mod's folder is, or sits behind, a symbolic link, which can't be kept.");
+                if (!Directory.Exists(sourceFolder))
+                    throw new ModStoreException($"There's no folder to keep {name} from.");
+                Directory.CreateDirectory(modFolder);
+                DeleteLeftoverStaging(modFolder);
+                CopyDraft(sourceFolder, staged);
+                return ValidateCopy(staged, name);
+            }, ct).ConfigureAwait(false);
+
+            // No lock is held while the check runs: it can take the mod host seconds.
+            var report = await check(staged, ct).ConfigureAwait(false);
+            if (ModChecks.Refusal(report) is { } refusal)
+                throw new ModStoreException(refusal);
+
+            return await LockedAsync(ModLock(userId, name), () =>
+            {
+                if (!IsClean(modFolder))
+                    throw new ModStoreException("The mod's folder is, or sits behind, a symbolic link, which can't be kept.");
+                return CommitVersion(userId, name, modFolder, staged, manifest, sha256, null, source, report);
+            }, ct).ConfigureAwait(false);
+        }
+        finally
+        {
+            TryDelete(stagingFolder);
+        }
+    }
+
+    /// <summary>Moves the checked copy to the next <c>v{n}/</c>, lists it, makes it active and turns the mod on. Runs under the mod's lock.</summary>
+    private ModVersion CommitVersion(string userId, string name, string modFolder, string staged, ModManifest manifest, string sha256, string? sessionId, ModKeepSource source, JsonElement? report)
+    {
+        var history = ReadIndex(userId, name);
+        var number = NextNumber(modFolder, history);
+        var kept = Path.Combine(modFolder, $"v{number}");
+        Directory.Move(staged, kept);
+
+        var version = new ModVersion(
+            number,
+            DateTimeOffset.UtcNow,
+            manifest.Version,
+            sha256,
+            sessionId,
+            Trimmed(source.SessionTitle),
+            Trimmed(source.Note),
+            report);
+        try
+        {
+            WriteIndex(userId, new ModHistory(name, number, null, [.. history.Versions, version]));
+        }
+        catch
+        {
+            TryDelete(kept);
+            throw;
+        }
+
+        MakeReadOnly(kept);
+        return version;
     }
 
     public async Task<JsonElement?> CheckDraftAsync(string userId, string sessionId, string name, ModKeepCheck check, CancellationToken ct = default)

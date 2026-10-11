@@ -36,6 +36,12 @@ public interface IModHost
     /// <summary>The session is archived or gone: the host drops its <c>$.state</c>, timers and handles.</summary>
     Task ForgetSessionAsync(string userId, string sessionId, CancellationToken ct = default);
 
+    /// <summary>
+    /// Which tool-row sites the session's mods may draw, from the hooks of the mods loaded now (kept mods and that
+    /// session's own drafts, as <see cref="ModRouting.ChainFor"/> picks them). Empty when the host isn't running.
+    /// </summary>
+    IReadOnlyList<ModSiteHooks> SitesFor(string userId, string sessionId);
+
     /// <summary>Why the host last refused to load <paramref name="modId"/>; null when it loaded.</summary>
     ModLoadProblem? GetLoadProblem(string userId, string modId);
 }
@@ -171,4 +177,7 @@ public interface IModHostFiles
     string? HostScript { get; }
 
     string FleetVersion { get; }
+
+    /// <summary><c>{app}/mods-samples</c>, or <c>mods/samples</c> when running from the repository; null when neither exists.</summary>
+    string? SamplesFolder { get; }
 }

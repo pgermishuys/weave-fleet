@@ -90,6 +90,12 @@ public static class EventTypes
     /// </summary>
     public const string ModsRuntime = "mods.runtime";
 
+    /// <summary>
+    /// A mod asked for its sites to be drawn again. Fleet's own event with a <c>ModUiPayload</c>, on the session's topic,
+    /// or on the <c>sessions</c> topic when it means every session; clients render the site again.
+    /// </summary>
+    public const string ModUi = "mod.ui";
+
     /// <summary>Returns <c>true</c> for <see cref="ContextUsage"/> and <see cref="ContextCompaction"/>.</summary>
     public static bool IsContextEvent(string type) => type is ContextUsage or ContextCompaction;
 

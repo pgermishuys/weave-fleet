@@ -124,6 +124,7 @@ internal sealed class FakeFiles : IModHostFiles
 {
     public string? HostScript { get; set; } = "/app/mods-host/host.js";
     public string FleetVersion => "9.9.9";
+    public string? SamplesFolder { get; set; }
 }
 
 /// <summary>Hands out the events a test publishes, as a subscription to the "sessions" topic would.</summary>
@@ -178,6 +179,13 @@ internal sealed class FakeUi : IModHostUi
     public IReadOnlyList<string> SurfacesOf(string userId, string sessionId) => ["desktop"];
 
     public void Invalidated(string userId, string modId, string? sessionId) => Add($"invalidate {modId} {sessionId}");
+
+    /// <summary>How many times the loaded mods changed; kept out of <see cref="Calls"/>, which tests compare whole.</summary>
+    public int Loads => Volatile.Read(ref _loads);
+
+    public void Loaded(string userId) => Interlocked.Increment(ref _loads);
+
+    private int _loads;
 
     public void Logged(string userId, string modId, string? sessionId, string level, string text) => Add($"log {modId} {sessionId} {level} {text}");
 

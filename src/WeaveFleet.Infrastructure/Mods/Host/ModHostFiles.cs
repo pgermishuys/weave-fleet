@@ -32,6 +32,27 @@ public sealed class ModHostFiles(string baseDirectory, string? overridePath = nu
     }
 
     /// <inheritdoc />
+    public string? SamplesFolder
+    {
+        get
+        {
+            var installed = Path.Combine(baseDirectory, "mods-samples");
+            if (Directory.Exists(installed))
+                return installed;
+
+            var directory = new DirectoryInfo(baseDirectory);
+            for (var level = 0; directory is not null && level <= MaxLevelsUp; level++, directory = directory.Parent)
+            {
+                var samples = Path.Combine(directory.FullName, "mods", "samples");
+                if (File.Exists(Path.Combine(directory.FullName, "WeaveFleet.slnx")) && Directory.Exists(samples))
+                    return samples;
+            }
+
+            return null;
+        }
+    }
+
+    /// <inheritdoc />
     public string FleetVersion { get; } = ReadVersion();
 
     private string? Resolve()

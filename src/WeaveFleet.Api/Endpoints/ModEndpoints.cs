@@ -1,6 +1,7 @@
 using System.Text.Json;
 using System.Text.Json.Serialization;
 using WeaveFleet.Application.Mods;
+using WeaveFleet.Application.Sessions;
 using WeaveFleet.Application.Users;
 
 namespace WeaveFleet.Api.Endpoints;
@@ -65,6 +66,13 @@ public static class ModEndpoints
             .WithName("TurnModOff")
             .Produces<ModView>();
 
+        // POST /api/mods/samples/{name} — adds Fleet's own sample (test-chips) as the active version, with the static check.
+        // Nothing changes when it is already active and on. 404 for a sample Fleet doesn't ship.
+        mods.MapPost("/samples/{name}", async (string name, ModService service, CancellationToken ct)
+                => (await service.AddSampleAsync(name, ct)).ToApiResult())
+            .WithName("AddModSample")
+            .Produces<ModView>();
+
         // ── A session's drafts ───────────────────────────────────────────────
         // Drafts live in the user's folder under the session's id, so another user's session has none to show.
 
@@ -104,6 +112,29 @@ public static class ModEndpoints
                 => (await service.SetDraftOnAsync(sessionId, name, on: true, ct)).ToApiResult())
             .WithName("TurnModDraftOn")
             .Produces<ModDraftView>();
+
+        // ── Drawing a session's tool rows ────────────────────────────────────
+        // The session must exist and be the user's; the mods are the user's own.
+
+        // GET /api/sessions/{sessionId}/mods/sites — which tool-row sites the session's mods hook, and for which tools
+        // (null: any), so the browser asks only about rows a mod could draw.
+        drafts.MapGet("/sites", async (string sessionId, SessionService sessions, ModRenderService render) =>
+            {
+                var session = await sessions.GetSessionAsync(sessionId);
+                return session.IsFailure ? session.Error.ToSessionApiResult() : Results.Ok(render.SitesFor(sessionId));
+            })
+            .WithName("GetModSites")
+            .Produces<ModSitesView>();
+
+        // POST /api/sessions/{sessionId}/mods/render  { "site": "ToolUse", "requestId": "<call id>", "props": { … } }
+        // → { "tree": <WireElement>|null, "mods": [ { "name", "draft" } ] }. A null tree means Fleet draws its own.
+        drafts.MapPost("/render", async (string sessionId, ModRenderRequest request, SessionService sessions, ModRenderService render, CancellationToken ct) =>
+            {
+                var session = await sessions.GetSessionAsync(sessionId);
+                return session.IsFailure ? session.Error.ToSessionApiResult() : (await render.RenderAsync(sessionId, request, ct)).ToApiResult();
+            })
+            .WithName("RenderModRow")
+            .Produces<ModRenderView>();
 
         // ── The switch, as the server sees it ────────────────────────────────
         // Not gated: Settings asks while the switch is off, to show what the server would do without a stored choice.

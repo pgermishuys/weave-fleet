@@ -6,6 +6,7 @@ import { usePreferencesStore } from "@/stores/preferences";
 import ModsConfirm from "./ModsConfirm.vue";
 import ModsFailed from "./ModsFailed.vue";
 import ModsProgress from "./ModsProgress.vue";
+import ModsSampleButton from "../ModsSampleButton.vue";
 import { CODE } from "./classes";
 
 /**
@@ -120,6 +121,7 @@ async function install(): Promise<void> {
         >
           {{ view.bun.displayPath }}
         </p>
+        <ModsSampleButton />
       </div>
     </template>
 

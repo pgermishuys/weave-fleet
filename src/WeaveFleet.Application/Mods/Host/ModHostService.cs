@@ -80,6 +80,8 @@ public sealed partial class ModHostService : IModHost, IHostedService, IAsyncDis
     public Task ForgetSessionAsync(string userId, string sessionId, CancellationToken ct = default)
         => SupervisorOf(userId)?.ForgetSessionAsync(sessionId) ?? Task.CompletedTask;
 
+    public IReadOnlyList<ModSiteHooks> SitesFor(string userId, string sessionId) => SupervisorOf(userId)?.SitesFor(sessionId) ?? [];
+
     public ModLoadProblem? GetLoadProblem(string userId, string modId) => SupervisorOf(userId)?.GetLoadProblem(modId);
 
     public Task StartAsync(CancellationToken cancellationToken)
