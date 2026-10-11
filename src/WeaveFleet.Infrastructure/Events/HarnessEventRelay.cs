@@ -9,6 +9,7 @@ using WeaveFleet.Application.Browser;
 using WeaveFleet.Application.Diagnostics;
 using WeaveFleet.Application.Events;
 using WeaveFleet.Application.Harnesses;
+using WeaveFleet.Application.Mods;
 using WeaveFleet.Application.Recaps;
 using WeaveFleet.Application.Sessions;
 using WeaveFleet.Application.Workflows;
@@ -103,6 +104,7 @@ public sealed class HarnessEventRelay : BackgroundService
     private readonly HarnessUsageLimits? _usageLimits;
     private readonly SessionCallbackDispatcher? _callbacks;
     private readonly StreamingReplies? _streaming;
+    private readonly IModPermissionHook? _modPermissions;
     private CancellationToken _stoppingToken;
 
     /// <summary>
@@ -133,8 +135,10 @@ public sealed class HarnessEventRelay : BackgroundService
         SessionContextRecorder? context = null,
         TurnRetryScheduler? retries = null,
         HarnessUsageLimits? usageLimits = null,
-        StreamingReplies? streaming = null)
+        StreamingReplies? streaming = null,
+        IModPermissionHook? modPermissions = null)
     {
+        _modPermissions = modPermissions;
         _streaming = streaming;
         _context = context;
         _retries = retries;
@@ -364,6 +368,8 @@ public sealed class HarnessEventRelay : BackgroundService
         pumpActivity?.SetTag("harness.type", sessionHarnessType);
 
         var suppressedUserMessageIds = new HashSet<string>(StringComparer.Ordinal);
+        var refusedAsks = new HashSet<string>(StringComparer.Ordinal);
+        string? refusedStatusFrom = null;
         using var translationScope = _scopeFactory.CreateScope();
         var translator = translationScope.ServiceProvider.GetRequiredService<DomainEventTranslator>();
 
@@ -404,9 +410,26 @@ public sealed class HarnessEventRelay : BackgroundService
                     continue;
                 }
 
+                // The waiting_input status that follows an ask a mod refused would tell the user to come back for nothing.
+                var afterRefusal = refusedStatusFrom;
+                refusedStatusFrom = null;
+                if (afterRefusal is not null && evt.SessionId == afterRefusal && IsWaitingInputStatus(evt))
+                    continue;
+
                 // An ask is shown where the user looks: a subagent's on the session it works for.
                 if (_permissions is not null && evt.Type is EventTypes.PermissionAsked or EventTypes.PermissionReplied)
-                    targetFleetSessionId = await ObservePermissionEventAsync(evt, targetFleetSessionId, sessionUserId).ConfigureAwait(false);
+                {
+                    var observed = await ObservePermissionEventAsync(evt, targetFleetSessionId, sessionUserId, refusedAsks, ct).ConfigureAwait(false);
+                    if (observed.Refused)
+                    {
+                        // Nobody was shown the ask, so nobody sees its end either: the harness's reply to our answer is dropped.
+                        if (evt.Type == EventTypes.PermissionAsked)
+                            refusedStatusFrom = evt.SessionId;
+                        continue;
+                    }
+
+                    targetFleetSessionId = observed.ShownOn;
+                }
 
                 HarnessEvent eventToPublish = evt;
 
@@ -570,15 +593,46 @@ public sealed class HarnessEventRelay : BackgroundService
     /// Keeps the pending asks current, and returns the session the permission event is shown on: the top of the chain of
     /// sessions <paramref name="sessionId"/> is a subagent of, or <paramref name="sessionId"/> itself.
     /// </summary>
-    private async Task<string> ObservePermissionEventAsync(HarnessEvent evt, string sessionId, string? userId)
+    private async Task<(string ShownOn, bool Refused)> ObservePermissionEventAsync(
+        HarnessEvent evt,
+        string sessionId,
+        string? userId,
+        HashSet<string> refusedAsks,
+        CancellationToken ct)
     {
         var shownOn = await TopSessionAsync(sessionId, userId).ConfigureAwait(false);
         if (evt.Type == EventTypes.PermissionAsked && PermissionEvents.ReadAsk(evt) is { } ask)
+        {
+            // The user's mods may refuse an ask before anyone is shown it. Fleet waits for them for a moment, then asks as usual.
+            if (_modPermissions is not null && userId is not null
+                && await _modPermissions.RefusalAsync(userId, shownOn, ask, ct).ConfigureAwait(false) is { } refusal)
+            {
+                refusedAsks.Add(ask.Id);
+                // Off the pump: answering calls back into the harness, whose own events this pump is reading.
+                _ = Task.Run(() => _modPermissions.RejectAsync(userId, ask, refusal), CancellationToken.None);
+                return (shownOn, true);
+            }
+
             _permissions!.Asked(shownOn, ask);
+        }
         else if (evt.Type == EventTypes.PermissionReplied && PermissionEvents.ReadReplied(evt) is { } replied)
+        {
+            if (refusedAsks.Remove(replied.Id))
+                return (shownOn, true);
             _permissions!.Replied(replied.Id);
-        return shownOn;
+        }
+
+        return (shownOn, false);
     }
+
+    private static bool IsWaitingInputStatus(HarnessEvent evt)
+        => evt.Type == EventTypes.SessionStatus
+            && evt.Payload is { ValueKind: JsonValueKind.Object } payload
+            && payload.TryGetProperty("status", out var status)
+            && status.ValueKind == JsonValueKind.Object
+            && status.TryGetProperty("type", out var type)
+            && type.ValueKind == JsonValueKind.String
+            && type.GetString() == ActivityStatuses.WaitingInput;
 
     private async Task<string> TopSessionAsync(string sessionId, string? userId)
     {

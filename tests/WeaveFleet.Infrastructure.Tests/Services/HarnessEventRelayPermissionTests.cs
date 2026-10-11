@@ -1,5 +1,6 @@
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging.Abstractions;
+using WeaveFleet.Application.Mods;
 using WeaveFleet.Application.Sessions;
 using WeaveFleet.Domain.Entities;
 using WeaveFleet.Domain.Harnesses;
@@ -98,6 +99,100 @@ public sealed class HarnessEventRelayPermissionTests
 
         await cts.CancelAsync();
         await relay.StopAsync(CancellationToken.None);
+    }
+
+    [Fact]
+    public async Task An_ask_a_mod_refuses_is_never_shown_and_is_answered_with_the_mods_words()
+    {
+        var mods = new FakeModPermissions { Refuse = ask => ask.Id == "per_deny" ? "push-guard: Don't push from main." : null };
+        var (relay, session, publisher, store) = Start(mods);
+        using var cts = new CancellationTokenSource(TimeSpan.FromSeconds(10));
+        await relay.StartAsync(cts.Token);
+        var denied = new PermissionAsk { Id = "per_deny", SessionId = Parent, Kind = PermissionKinds.Shell, Tool = "bash", Title = "git push" };
+        var shown = new PermissionAsk { Id = "per_ok", SessionId = Parent, Kind = PermissionKinds.Shell, Tool = "bash", Title = "ls" };
+
+        // What an adapter sends: the ask and its Needs-you, then (once our answer is in) the harness's own settling.
+        session.Emit(PermissionEvents.Asked(denied, Parent));
+        session.Emit(PermissionEvents.Status(ActivityStatuses.WaitingInput, Parent));
+        session.Emit(PermissionEvents.Replied(denied, PermissionReplies.Reject, Parent));
+        session.Emit(PermissionEvents.Status(ActivityStatuses.Busy, Parent));
+        session.Emit(PermissionEvents.Asked(shown, Parent));
+
+        await WaitUntilAsync(() => publisher.Calls.Any(c => c.Event.Type == EventTypes.PermissionAsked), cts.Token);
+        (await mods.Rejected.Task.WaitAsync(TimeSpan.FromSeconds(10))).ShouldBe(("per_deny", "push-guard: Don't push from main."));
+        publisher.Calls.Count(c => c.Event.Type == EventTypes.PermissionAsked).ShouldBe(1);
+        publisher.Calls.Single(c => c.Event.Type == EventTypes.PermissionAsked).Event.Payload!.Value.GetProperty("id").GetString().ShouldBe("per_ok");
+        publisher.Calls.ShouldNotContain(c => c.Event.Type == EventTypes.PermissionReplied, "the harness's settling of a refused ask is dropped");
+        store.WaitingIn(Parent).ShouldHaveSingleItem().Id.ShouldBe("per_ok");
+        var statuses = publisher.Calls.Where(c => c.Event.Type == EventTypes.SessionStatus).Select(c => c.Event.Payload!.Value.GetProperty("status").GetProperty("type").GetString()).ToList();
+        statuses.ShouldBe([ActivityStatuses.Busy], "the Needs-you for the refused ask is dropped");
+
+        await cts.CancelAsync();
+        await relay.StopAsync(CancellationToken.None);
+    }
+
+    [Fact]
+    public async Task An_ask_no_mod_refuses_is_recorded_and_published_as_before()
+    {
+        var mods = new FakeModPermissions();
+        var (relay, session, publisher, store) = Start(mods);
+        using var cts = new CancellationTokenSource(TimeSpan.FromSeconds(10));
+        await relay.StartAsync(cts.Token);
+        var ask = new PermissionAsk { Id = "per_1", SessionId = Parent, Kind = PermissionKinds.Shell, Tool = "bash", Title = "git push" };
+
+        session.Emit(PermissionEvents.Asked(ask, Parent));
+        session.Emit(PermissionEvents.Status(ActivityStatuses.WaitingInput, Parent));
+
+        await WaitUntilAsync(() => publisher.Calls.Any(c => c.Event.Type == EventTypes.SessionStatus), cts.Token);
+        publisher.Calls.ShouldContain(c => c.Event.Type == EventTypes.PermissionAsked);
+        store.WaitingIn(Parent).ShouldHaveSingleItem().Id.ShouldBe("per_1");
+        mods.Asked.ShouldBe([("user-1", Parent, "per_1")]);
+        mods.Rejected.Task.IsCompleted.ShouldBeFalse();
+
+        await cts.CancelAsync();
+        await relay.StopAsync(CancellationToken.None);
+    }
+
+    private static (HarnessEventRelay Relay, FakeHarnessSession Session, FakeEventPublisher Publisher, PendingPermissionStore Store) Start(IModPermissionHook mods)
+    {
+        var sessions = new InMemorySessionRepository();
+        sessions.Seed(new Session { Id = Parent, InstanceId = "instance-parent", UserId = "user-1", HarnessType = "opencode" });
+        var scopeFactory = TestServiceScopeFactory.Create(services =>
+        {
+            services.AddLogging();
+            services.AddSingleton<ISessionRepository>(sessions);
+            services.AddTransient<DomainEventTranslator>();
+        });
+        var tracker = new InstanceTracker();
+        var publisher = new FakeEventPublisher();
+        var store = new PendingPermissionStore();
+        var relay = new HarnessEventRelay(
+            tracker, new FakeEventBroadcaster(), publisher, new SessionActivityTracker(), scopeFactory, NullLogger<HarnessEventRelay>.Instance,
+            permissions: store, modPermissions: mods);
+        var session = new FakeHarnessSession("instance-parent");
+        tracker.Register(session.InstanceId, session);
+        return (relay, session, publisher, store);
+    }
+
+    private sealed class FakeModPermissions : IModPermissionHook
+    {
+        public Func<PermissionAsk, string?> Refuse { get; init; } = _ => null;
+
+        public List<(string User, string ShownOn, string Id)> Asked { get; } = [];
+
+        public TaskCompletionSource<(string Id, string Message)> Rejected { get; } = new(TaskCreationOptions.RunContinuationsAsynchronously);
+
+        public Task<string?> RefusalAsync(string userId, string shownOn, PermissionAsk ask, CancellationToken ct)
+        {
+            Asked.Add((userId, shownOn, ask.Id));
+            return Task.FromResult(Refuse(ask));
+        }
+
+        public Task RejectAsync(string userId, PermissionAsk ask, string message)
+        {
+            Rejected.TrySetResult((ask.Id, message));
+            return Task.CompletedTask;
+        }
     }
 
     private static async Task WaitUntilAsync(Func<bool> condition, CancellationToken ct)
