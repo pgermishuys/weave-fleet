@@ -19,6 +19,8 @@ Also merged while main was red: #519 (relay test waited a fixed 200 ms) and #522
 deterministic: 4 in 6,000 runs failed). Stage total: about 2,250 lines against the ~3,400 budget, about 3.5 h of
 wall clock against ~11 h. One review round per PR; no blockers were found; every non-blocking note is below.
 
+Website docs: weave-website #17 (merged 11 October 2026, docs and showcase pages).
+
 Screenshots: `mockups/mods-stage2-s1/`, `mockups/mods-stage2-s2/`, `mockups/mods-stage2-s3/`, and the cross-harness
 check in `mockups/mods-stage2-crossharness/`.
 
@@ -26,24 +28,23 @@ check in `mockups/mods-stage2-crossharness/`.
 
 | | OpenCode (pooled) | OpenCode 2 | Claude Code | Pi |
 |---|---|---|---|---|
-| S1 `prompt.submit` | Pass: branch answered from the note, no tool call; `lgtm-expander`, written by the agent with the fleet-mod tools, rewrote the bubble | Note reaches the model (quoted word for word), **but costs an extra model turn** (below) | Not live-checked: needs the user's sign-in on a scratch HOME | No context by design (no `TakesModelNotes`) |
-| S2 `turn.complete` + follow-up | Pass, including the visible queue and the cap | Pass ("Run the tests" sent next; agent ran the tests) | Not live-checked; `changedFiles` is always `[]` there | Not checked |
-| S3 `permission.ask` | Pass: push on `main` denied with the reason in the row; other asks and a branch push still asked | In the shared path, not live-checked; V2 may drop the reject text | In the shared path, not live-checked | Pi doesn't ask |
+| S1 `prompt.submit` | Pass: branch answered from the note, no tool call; `lgtm-expander`, written by the agent with the fleet-mod tools, rewrote the bubble | Pass after #524 (one turn; before it the note cost an extra model turn) | Pass: answered from the note, no tool call | No context by design (no `TakesModelNotes`) |
+| S2 `turn.complete` + follow-up | Pass, including the visible queue and the cap | Pass ("Run the tests" sent next; agent ran the tests) | No follow-up: `changedFiles` is always `[]` there, so tests-after-edits never fires (Later) | Not checked |
+| S3 `permission.ask` | Pass: push on `main` denied with the reason in the row; other asks and a branch push still asked | In the shared path, not live-checked; V2 may drop the reject text | Pass: push on `main` refused, the reason shows in the row | Pi doesn't ask |
 
 OpenCode 2 ran on a free OpenCode model on the scratch HOME (its Copilot sign-in lives in its database, which wasn't
-copied). Claude Code: a copied credentials file was expired and couldn't refresh; it was deleted at once rather than
-risk rotating the user's real sign-in. **To finish the Claude Code check, the user runs S1/S2 once on their own Fleet,
-or allows a scratch HOME to use their Claude sign-in.**
+copied). Claude Code ran on the user's own Claude gateway (the user allowed it; only `ANTHROPIC_BASE_URL` and
+`ANTHROPIC_AUTH_TOKEN` were passed to the scratch Fleet, never written to disk).
 
 ## Findings from the live checks
 
-1. **OpenCode 2 runs each Fleet model note as its own turn.** `OpenCode2HarnessSession.SendPromptAsync` adds every
+1. **Fixed in #524. OpenCode 2 ran each Fleet model note as its own turn.** `OpenCode2HarnessSession.SendPromptAsync` adds every
    `ModelNotes` entry with `AddSyntheticAsync(…, Resume = false)` and then sends the prompt. On a fresh session, V2
    started a turn on the note alone (the model answered "there's no question in your message yet" and ran a tool), and
    the prompt ran as a second turn. This is older than mods: memory changes, lost-work notes and side-conversation
    notes go the same way. S1 makes it frequent. Fix: send the notes with the prompt (as parts of the same message) or
    find why `Resume = false` resumes. **~150–300 lines with a live test.**
-2. **Mod-sent prompts look like the user's.** A follow-up from `$.prompt.submit` and a rewritten prompt show as plain
+2. **Fixed in #525. Mod-sent prompts looked like the user's.** A follow-up from `$.prompt.submit` and a rewritten prompt show as plain
    user bubbles; the cap screenshot needed a reading guide. Fix: a "from <mod>" mark on queued items and on the bubble
    (a column on queued prompts, the client chip). **~300 lines.** Recommended before mods leave Experimental.
 3. **OpenCode's reject text says "The user rejected…"** for a mod's deny (the reason itself is right). A "refused by
@@ -59,6 +60,7 @@ review); permission hooks for harnesses the shared path doesn't reach (~600 each
 and Pi's first prompt through the prompt hook; the M10 hardening list in the Stage 1 plan.
 
 New in Stage 2:
+- Claude Code: `changedFiles` from its Edit/Write tool calls, so `turn.complete` hooks such as tests-after-edits work there. ~150
 - `allow` decisions for `permission.ask` (needs a per-mod grant and a security review). ~400
 - OpenCode 2: show a mod's deny reason to the agent (V2 drops the reject message). ~200
 
