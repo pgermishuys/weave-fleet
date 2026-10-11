@@ -329,6 +329,7 @@ public static class DependencyInjection
         // The mod runtime (Bun): installs it in the background and tells clients how it's going.
         services.AddSingleton<WeaveFleet.Application.Mods.IModsRuntime, WeaveFleet.Application.Mods.ModsRuntime>();
         services.AddScoped<WeaveFleet.Application.Mods.ModRenderService>();
+        services.AddSingleton<WeaveFleet.Application.Mods.ModKeepRequests>();
         services.AddScoped<WeaveFleet.Application.Workflows.WorkflowModelRoles>();
         services.AddScoped<WeaveFleet.Application.Workflows.WorkflowService>();
         services.AddScoped<WeaveFleet.Application.Workflows.WorkflowDrafter>();
