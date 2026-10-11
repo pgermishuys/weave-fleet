@@ -1,5 +1,5 @@
 import { RpcError, ErrorCodes } from "../rpc";
-import { isStale, runFrom, pageExists, type Dispatch, type HookRef } from "./chain";
+import { denierOf, isStale, runFrom, pageExists, type Dispatch, type HookRef } from "./chain";
 import { generationOf } from "./runtime";
 import { frozenCopy } from "./freeze";
 import { matches } from "./match";
@@ -119,6 +119,10 @@ export async function dispatch(rt: Runtime, params: DispatchParams) {
   const out = await runFrom(d, 0, frozenCopy(hookE));
   failures.push(...d.failures);
 
+  // A deny names the mod that made it, so Fleet can tell the agent who refused.
+  if (event === "permission.ask" && isObject(out.v) && out.v.decision === "deny" && denierOf(out.v)) {
+    return { result: { ...out.v, mod: denierOf(out.v) }, failures };
+  }
   if (event !== "ui.render") return { result: out.v, failures };
   // Forgotten while it ran: Fleet no longer draws the session, so no handles are kept for it.
   if (isStale(d)) return { result: { type: "Fleet" }, failures };

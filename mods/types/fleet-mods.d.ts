@@ -4,7 +4,7 @@
  * The prose is docs/mods/api.md; where the two disagree, this file wins and the doc is the bug. Names follow Claude
  * Code's mods API (https://code.claude.com/docs/en/plugins/mods/reference) wherever the concept is the same, so a mod
  * written for one reads naturally in the other. Everything here is the Stage 1 subset: no `$.fs`, `$.process`,
- * `$.http` or `$.model`, one prompt event (`prompt.submit`), no tool or permission events.
+ * `$.http` or `$.model`, one prompt event (`prompt.submit`), one permission event (`permission.ask`), no tool events.
  *
  * A mod imports types only:
  *
@@ -106,6 +106,7 @@ declare module "fleet-mods" {
     "session.start": SessionStartEvent;
     "turn.complete": TurnCompleteEvent;
     "prompt.submit": PromptSubmitEvent;
+    "permission.ask": PermissionAskEvent;
     "ui.render": UiRenderEvent;
     "ui.press": UiPressEvent;
     "ui.input": UiInputEvent;
@@ -116,6 +117,7 @@ declare module "fleet-mods" {
     "session.start": SessionStartEvent;
     "turn.complete": TurnCompleteEvent;
     "prompt.submit": PromptSubmitEvent;
+    "permission.ask": PermissionAskResult;
     "ui.render": Element | null;
     "ui.press": UiPressResult;
     "ui.input": UiInputResult;
@@ -176,6 +178,29 @@ declare module "fleet-mods" {
     /** Model-only notes so far (empty to begin with). Not shown in the conversation. Pi ignores them. */
     readonly context: readonly string[];
   }
+
+  /**
+   * The agent asked to do something the session's permission level makes the user answer (Settings → Permissions), before
+   * the user sees it. Only asks that would reach the user are sent. Return `next(e)` or `{ decision: "ask" }` to let the
+   * user decide, or `{ decision: "deny", reason }` to refuse it: the user sees no card, and the agent is told
+   * "<mod>: <reason>". A hook that fails, answers something else, or runs past `Limits.promptHookMs` counts as
+   * `{ decision: "ask" }`, and so does Fleet's wait of 2 s for the whole event. There is no `allow` yet.
+   */
+  export interface PermissionAskEvent {
+    readonly sessionId: string;
+    /** The harness's id for the ask. */
+    readonly requestId: string;
+    /** What the ask is for: `shell`, `edit`, `web`, `read` or `other`. */
+    readonly kind: "shell" | "edit" | "web" | "read" | "other";
+    /** The harness's name for the tool, e.g. `bash`, `edit`, `Bash`. */
+    readonly tool: string;
+    /** What it touches in one line: the command for a shell ask, the file, the address; "" when the harness said none. */
+    readonly title: string;
+    /** The patterns the harness asked about (`git push origin main`), as it sent them. */
+    readonly patterns: readonly string[];
+  }
+
+  export type PermissionAskResult = { readonly decision: "ask" } | { readonly decision: "deny"; readonly reason: string };
 
   /** The places a mod can draw in Stage 1. */
   export type RenderComponent = "ToolUse" | "ToolResult" | "ComposerBand" | "StatusChip" | "Pane";
@@ -527,7 +552,7 @@ declare module "fleet-mods" {
     readonly catchMs: 1_000;
     /** Fleet's wait for a whole dispatch; past it Fleet restarts the host and strikes the mod that was running. */
     readonly dispatchMs: 15_000;
-    /** A `prompt.submit` hook's own time. Fleet stops waiting for the whole event after 2 s. */
+    /** A `prompt.submit` or `permission.ask` hook's own time. Fleet stops waiting for the whole event after 2 s. */
     readonly promptHookMs: 1_500;
     /** Failures in a row (unanswered by `.catch`) that turn a mod off. */
     readonly strikes: 3;

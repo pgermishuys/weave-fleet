@@ -13,6 +13,7 @@ const SAMPLES = [
   { name: "search-hits", added: "Added. Run a grep in any session to see it." },
   { name: "branch-context", added: "Added. Ask about the branch, a PR or a push in any session." },
   { name: "tests-after-edits", added: "Added. When a turn changes files, \"Run the tests\" is queued next." },
+  { name: "push-guard", added: "Added. Set Settings → Permissions to ask, then have an agent push from main." },
 ] as const;
 
 const isAdding = shallowRef(false);

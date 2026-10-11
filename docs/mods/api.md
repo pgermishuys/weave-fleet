@@ -8,7 +8,7 @@ Fleet mods mirror [Claude Code's mods](https://code.claude.com/docs/en/plugins/m
 same, the name is the same: `register(on, options)`, `on(event, matcher?, hook)`, hooks as `($, e, next)` middleware,
 `$` as the only way out, `ui.render`/`ui.press`/`ui.input`/`ui.select`, `$.ui.resolve(e)`, `$.state`, `$.store`,
 `$.clock`, `.catch`, `next.called`, `next.error`. Stage 1 is the subset that draws, plus one prompt event
-(`prompt.submit`): no tool or permission events, and nothing that reaches files, processes, the network or models. The
+(`prompt.submit`) and one permission event (`permission.ask`): no tool events, and nothing that reaches files, processes, the network or models. The
 rest comes in Stage 2 with the `calls:` review.
 
 - [A mod on disk](#a-mod-on-disk)
@@ -96,6 +96,7 @@ export const register: Register = (on, options) => {
 | `session.start` | Once per mod per session, before the mod's first other event in it, and again after the mod reloads | `sessionId`, `reason` (`start` or `reload`) | `next(e)` |
 | `turn.complete` | A turn ended: finished, stopped by the user (`isAborted`) or failed (`isFailed`) | `sessionId`, `turnId`, `isAborted`, `isFailed`, `failure?`, `changedFiles` (see below). `agent`, `model`, `usage` and `cost` are in the types but Fleet doesn't send them yet | `next(e)` (watch only) |
 | `prompt.submit` | The user sent a prompt, before the harness gets it | `sessionId`, `text`, `context` (a list of strings, `[]` at first) | `next(e)`, `next({ ...e, text })` to reword it, or `next({ ...e, context: [...e.context, "…"] })` to add notes for the model |
+| `permission.ask` | The agent asked to do something the session's permission level makes the user answer, before the user sees it | `sessionId`, `requestId`, `kind` (`shell`, `edit`, `web`, `read` or `other`), `tool`, `title` (the command for a shell ask), `patterns` (what "Don't ask again" would allow, e.g. `git push *`) | `next(e)` or `{ decision: "ask" }` to let the user answer, or `{ decision: "deny", reason }` to refuse it (`allow` is planned, not wired) |
 | `ui.render` | Fleet is about to draw a [render site](#render-sites) the mod hooked | `component`, `sessionId`, `requestId`, `props` | A tree, `null` to draw nothing, or `next(e)` |
 | `ui.press` | A `Button` the mod drew is pressed | `sessionId`, `mod` (the name of the mod that drew it), `element` (the key), `component`, `requestId`, `surface` | `next(e)`, or `{ element }` to swallow the press |
 | `ui.input` | An `Input` changes (`kind: "change"`, at most 4 a second) or is submitted (`kind: "submit"`) | as `ui.press`, plus `kind`, `value` | `next({ ...e, value })`, or `{ element, value }` to swallow it |
@@ -143,6 +144,25 @@ did). What Fleet does with the answer:
   model are not possible yet.
 - Slash commands (`/compact`, a skill, a command) are not sent through it. Every other prompt is,
   including a new session's first message and prompts from automations.
+
+**`permission.ask`** lets a mod refuse an agent's ask before the user is bothered with it. Matchers work on `kind`, `tool`
+and `title`. The end of the chain is `{ decision: "ask" }`. What Fleet does with the answer:
+
+- **`deny`** records and shows nothing: the user gets no card and no Needs-you. Fleet answers the ask for them exactly as
+  a reject with a message from the card does, with the message `<mod name>: <reason>`, so the agent is told who refused
+  and why. The harness shows that as the tool call's error in the conversation (OpenCode, Claude Code). OpenCode 2 is sent
+  the message but its server drops it, so the agent sees a plain rejection there. `reason` is a non-empty string of at
+  most 500 characters; anything else is a [failure](#order-and-failure) and the chain goes on.
+- Only asks that would reach the user are sent. An ask the session's level allows (Settings → Permissions: at
+  `all`, nothing asks), one the user said "Don't ask again" about, and one an unattended run refuses never reach a mod.
+  A mod that wants shell commands is seen only while the session's level is `ask` or `edits`.
+- It is **fail open**. The ask goes to the user as it would have when no mod hooks it (no wait, nothing crosses the
+  pipe), the Mods switch is off or the host isn't running, the dispatch throws, the host doesn't answer within 2 s (Fleet
+  stops waiting; the agent's ask meanwhile waits on the one answer anyway), the answer is `ask`, or it isn't a `deny`
+  with a reason. The wait holds this one session's events for at most 2 s.
+- Every harness gets it: OpenCode, OpenCode 2 and Claude Code all report their asks to Fleet in one shape, and the hook
+  sits there. Pi has no asks. A subagent's ask is sent on the session the user sees it on, the parent.
+- A `permission.ask` hook has 1.5 s of its own time. `allow` (answering for the user) is not possible yet.
 
 At the end of a `ui.press`/`ui.input`/`ui.select` chain, Fleet's own behaviour is the control's callback (`onPress`,
 `onSubmit`/`onInput`, `onSelect`) in the mod that drew it. Another mod's hook on the same event runs first, as in
@@ -289,7 +309,7 @@ draft with a kept mod's name takes that mod's place in its session. Within a mod
 called `on`.
 
 **Budget.** A hook has 10 s of its own time per dispatch; time inside `next` or a `$` call doesn't count. A `.catch`
-handler has 1 s. A `prompt.submit` hook has 1.5 s. Past its budget a hook is skipped.
+handler has 1 s. A `prompt.submit` or `permission.ask` hook has 1.5 s. Past its budget a hook is skipped.
 
 **A failure** is a hook that throws, times out, or returns what the event doesn't take (an invalid tree). With no
 `.catch`, a hook that failed before calling `next` is skipped and the next handler runs in its place; one that failed
@@ -430,10 +450,12 @@ These shapes are for M5 and M6; mods don't see them.
 | Limit | Value |
 | :- | :- |
 | A hook's own time per dispatch | 10 s |
-| A `prompt.submit` hook's own time | 1.5 s |
+| A `prompt.submit` or `permission.ask` hook's own time | 1.5 s |
 | A `.catch` handler's own time | 1 s |
 | Fleet's wait for `prompt.submit` before the prompt goes on unchanged | 2 s |
+| Fleet's wait for `permission.ask` before the ask goes to the user | 2 s |
 | `prompt.submit` context | 8 KiB in total |
+| A `permission.ask` deny reason | 500 characters |
 | Fleet's wait for a whole dispatch, before it restarts the host | 15 s |
 | Failures in a row that turn a mod off | 3 |
 | Text drawn per tree | 100,000 characters; the rest is cut |
