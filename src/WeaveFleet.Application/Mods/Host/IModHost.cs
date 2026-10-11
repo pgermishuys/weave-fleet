@@ -171,4 +171,7 @@ public interface IModHostFiles
     string? HostScript { get; }
 
     string FleetVersion { get; }
+
+    /// <summary><c>{app}/mods-samples</c>, or <c>mods/samples</c> when running from the repository; null when neither exists.</summary>
+    string? SamplesFolder { get; }
 }

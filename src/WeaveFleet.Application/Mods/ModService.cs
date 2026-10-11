@@ -1,5 +1,7 @@
+using System.Security.Cryptography;
 using System.Text.Json;
 using WeaveFleet.Application.Events;
+using WeaveFleet.Application.Mods.Host;
 using WeaveFleet.Application.Users;
 using WeaveFleet.Domain.Common;
 using WeaveFleet.Domain.Events;
@@ -41,6 +43,7 @@ public sealed class ModService(
     IUserContext user,
     ModsSafeMode safeMode,
     ISessionRepository sessions,
+    IModHostFiles files,
     TimeProvider clock)
 {
     public const int MaxNoteLength = 2000;
@@ -199,6 +202,61 @@ public sealed class ModService(
 
         await RaiseAsync("kept", name, sessionId, ct).ConfigureAwait(false);
         return await ToViewAsync(await store.GetAsync(UserId, name, ct).ConfigureAwait(false), ct).ConfigureAwait(false);
+    }
+
+    // ── Samples ─────────────────────────────────────────────────────────
+
+    /// <summary>
+    /// Adds Fleet's sample mod <paramref name="name"/> (the <c>mods-samples</c> folder) as the user's active version, with
+    /// the static check Keep runs. Nothing changes when that exact module is already active and on; an older version with
+    /// it is made active (and on) instead of keeping a copy.
+    /// </summary>
+    public async Task<Result<ModView>> AddSampleAsync(string name, CancellationToken ct = default)
+    {
+        var folder = files.SamplesFolder is { } root && ModNames.IsValid(name) ? Path.Combine(root, name) : null;
+        if (folder is null || !File.Exists(Path.Combine(folder, "mod.json")))
+            return FleetError.NotFoundFor("ModSample", name);
+
+        string sha256;
+        try
+        {
+            sha256 = SampleModuleSha256(folder);
+        }
+        catch (Exception e) when (e is IOException or JsonException or KeyNotFoundException or ArgumentException or InvalidOperationException or UnauthorizedAccessException)
+        {
+            return FleetError.ValidationError("Sample", $"The sample {name} can't be read: {e.Message}");
+        }
+
+        var history = await store.GetAsync(UserId, name, ct).ConfigureAwait(false);
+        if (history.Versions.LastOrDefault(v => string.Equals(v.Sha256, sha256, StringComparison.Ordinal)) is { } same)
+        {
+            if (history.Active == same.Number && history.Off is null)
+                return await ToViewAsync(history, ct).ConfigureAwait(false);
+            return await ChangeAsync(name, "kept", sessionId: null, () => store.UseVersionAsync(UserId, name, same.Number, ct), ct).ConfigureAwait(false);
+        }
+
+        try
+        {
+            await store.KeepFolderAsync(UserId, name, folder, new ModKeepSource(null, "Fleet's sample"), (staged, token) => checker.CheckAsync(staged, token), ct).ConfigureAwait(false);
+        }
+        catch (ModStoreException e)
+        {
+            return FleetError.ValidationError("Keep", e.Message);
+        }
+
+        await RaiseAsync("kept", name, sessionId: null, ct).ConfigureAwait(false);
+        return await ToViewAsync(await store.GetAsync(UserId, name, ct).ConfigureAwait(false), ct).ConfigureAwait(false);
+    }
+
+    /// <summary>SHA-256 of the sample's hooks module, hex, as the store records it for a version.</summary>
+    private static string SampleModuleSha256(string folder)
+    {
+        using var manifest = JsonDocument.Parse(File.ReadAllBytes(Path.Combine(folder, "mod.json")));
+        var hooks = manifest.RootElement.GetProperty("hooks").GetString() ?? throw new InvalidOperationException("mod.json has no hooks.");
+        var module = Path.GetFullPath(Path.Combine(folder, hooks));
+        if (!module.StartsWith(Path.GetFullPath(folder) + Path.DirectorySeparatorChar, StringComparison.Ordinal))
+            throw new InvalidOperationException("mod.json's hooks points outside the mod's folder.");
+        return Convert.ToHexStringLower(SHA256.HashData(File.ReadAllBytes(module)));
     }
 
     // ── Safe mode ───────────────────────────────────────────────────────

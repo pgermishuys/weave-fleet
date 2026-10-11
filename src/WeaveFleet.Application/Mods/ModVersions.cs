@@ -138,6 +138,13 @@ public interface IModVersionStore
     Task<ModVersion> KeepAsync(string userId, string sessionId, string name, ModKeepSource source, ModKeepCheck check, CancellationToken ct = default);
 
     /// <summary>
+    /// <see cref="KeepAsync"/> for a folder that isn't a draft (Fleet's own sample): copies <paramref name="sourceFolder"/>
+    /// into a staging folder the same way, checks it, and keeps it as the next version, active and on, with no session.
+    /// Throws <see cref="ModStoreException"/> when the folder isn't a mod named <paramref name="name"/> or the check refuses it.
+    /// </summary>
+    Task<ModVersion> KeepFolderAsync(string userId, string name, string sourceFolder, ModKeepSource source, ModKeepCheck check, CancellationToken ct = default);
+
+    /// <summary>
     /// Makes <paramref name="number"/> the active version and turns the mod on, in one step. Throws
     /// <see cref="ModStoreException"/> when the mod or the version doesn't exist.
     /// </summary>

@@ -84,6 +84,11 @@
     </ItemGroup>
   </Target>
 
+  <!-- Fleet's sample mods (mods/samples) ship as mods-samples/ beside mods-host/, for "Add" in the Mods settings. -->
+  <ItemGroup>
+    <None Include="$(ModsHostDir)..\samples\**\*" Link="mods-samples\%(RecursiveDir)%(Filename)%(Extension)" CopyToOutputDirectory="PreserveNewest" CopyToPublishDirectory="PreserveNewest" />
+  </ItemGroup>
+
   <Target Name="RequireModsHostForPublish" BeforeTargets="PrepareForPublish" Condition="'$(Configuration)' == 'Release' And '$(SkipModsHost)' != 'true'">
     <Error Condition="!Exists('$(ModsHostDir)dist\host.js')"
            Text="mods/host/dist/host.js is missing: run `bun install --frozen-lockfile &amp;&amp; bun run build` in mods/host, or pass -p:SkipModsHost=true." />

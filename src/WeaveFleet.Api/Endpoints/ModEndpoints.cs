@@ -65,6 +65,13 @@ public static class ModEndpoints
             .WithName("TurnModOff")
             .Produces<ModView>();
 
+        // POST /api/mods/samples/{name} — adds Fleet's own sample (test-chips) as the active version, with the static check.
+        // Nothing changes when it is already active and on. 404 for a sample Fleet doesn't ship.
+        mods.MapPost("/samples/{name}", async (string name, ModService service, CancellationToken ct)
+                => (await service.AddSampleAsync(name, ct)).ToApiResult())
+            .WithName("AddModSample")
+            .Produces<ModView>();
+
         // ── A session's drafts ───────────────────────────────────────────────
         // Drafts live in the user's folder under the session's id, so another user's session has none to show.
 
