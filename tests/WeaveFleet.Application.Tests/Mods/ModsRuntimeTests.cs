@@ -312,6 +312,8 @@ public sealed class ModsRuntimeTests
     private sealed class FixedReleases(BunRelease current) : IBunReleases
     {
         public BunRelease Current { get; } = current;
+        public event EventHandler<BunReleaseChangedEventArgs>? Changed { add { } remove { } }
+        public Task RefreshAsync(CancellationToken ct) => Task.CompletedTask;
     }
 
     /// <summary>Plays the installer: scripted reports, a gate to pause on, and a configurable failure.</summary>

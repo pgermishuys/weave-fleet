@@ -1,0 +1,75 @@
+name: Publish Bun manifest
+
+# Copies bun/bun.json to the root of fleet-releases' main branch as bun.json, where running Fleets fetch it
+# (https://raw.githubusercontent.com/pgermishuys/fleet-releases/main/bun.json). It is a plain file, not a release asset,
+# so it never shows up in What's new or the update check. Releases and tags there are never touched.
+# Without the FLEET_RELEASES_TOKEN secret the job succeeds and does nothing.
+
+on:
+  push:
+    branches: [main]
+    paths: ['bun/bun.json']
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: publish-bun-manifest
+  cancel-in-progress: false
+
+jobs:
+  publish:
+    name: Publish bun.json
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    env:
+      FLEET_RELEASES_TOKEN: ${{ secrets.FLEET_RELEASES_TOKEN }}
+
+    steps:
+      - name: Check for the token
+        id: token
+        shell: bash
+        run: |
+          if [ -z "$FLEET_RELEASES_TOKEN" ]; then
+            echo "::notice::FLEET_RELEASES_TOKEN isn't set, so bun.json is not published to fleet-releases."
+            echo "enabled=false" >> "$GITHUB_OUTPUT"
+          else
+            echo "enabled=true" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Checkout
+        if: steps.token.outputs.enabled == 'true'
+        uses: actions/checkout@v4
+
+      - name: Setup .NET
+        if: steps.token.outputs.enabled == 'true'
+        uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: '10.0.x'
+
+      # The same rules Fleet applies when it reads the manifest.
+      - name: Validate bun.json
+        if: steps.token.outputs.enabled == 'true'
+        run: dotnet test tests/WeaveFleet.Application.Tests --filter "FullyQualifiedName~BunManifestFileTests" -p:SkipFrontendBuild=true
+
+      - name: Publish to fleet-releases
+        if: steps.token.outputs.enabled == 'true'
+        shell: bash
+        run: |
+          set -euo pipefail
+          version="$(jq -r .version bun/bun.json)"
+          clone="$(mktemp -d)"
+          git clone --quiet --depth 1 --branch main "https://x-access-token:${FLEET_RELEASES_TOKEN}@github.com/pgermishuys/fleet-releases.git" "$clone"
+          cp bun/bun.json "$clone/bun.json"
+          cd "$clone"
+          if [ -z "$(git status --porcelain bun.json)" ]; then
+            echo "::notice::fleet-releases already has this bun.json; nothing to publish."
+            exit 0
+          fi
+          git config user.name "weave-fleet-bot"
+          git config user.email "weave-fleet-bot@users.noreply.github.com"
+          git add bun.json
+          git commit --quiet -m "bun.json: Bun ${version}"
+          git push --quiet origin HEAD:main
+          echo "::notice::Published bun.json (Bun ${version}) to fleet-releases."

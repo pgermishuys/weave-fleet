@@ -18,6 +18,7 @@
     <EmbeddedResource Include="Resources\key-file-types.json" />
     <EmbeddedResource Include="Workflows\BuiltIn\*.yaml" LogicalName="workflows/%(Filename)%(Extension)" />
     <EmbeddedResource Include="FleetTools\fleet-tools.json" LogicalName="fleet-tools.json" />
+    <EmbeddedResource Include="..\..\bun\bun.json" LogicalName="bun.json" />
     <EmbeddedResource Include="Walkthroughs\walkthrough.html" LogicalName="walkthrough.html" />
   </ItemGroup>
 

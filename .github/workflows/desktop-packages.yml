@@ -97,7 +97,7 @@ jobs:
         uses: oven-sh/setup-bun@v2
         with:
           # The Bun Fleet runs mods on (BunRelease.Pinned), as in CI, so the host.js shipped is built by the Bun it runs on.
-          bun-version: '1.4.2'
+          bun-version-file: .bun-version
 
       - name: Build Vue client
         shell: bash
