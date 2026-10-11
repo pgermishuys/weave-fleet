@@ -1,5 +1,6 @@
 using WeaveFleet.Application.Mods;
 using WeaveFleet.Application.Mods.Host;
+using WeaveFleet.Application.Skills;
 using WeaveFleet.Application.Users;
 using WeaveFleet.Domain.Repositories;
 
@@ -31,6 +32,10 @@ public static class PreferencesEndpoints
 
             if (mods is not null && !modsWasOn && await mods.IsSwitchedOnAsync())
                 await http.RequestServices.GetRequiredService<ModService>().SwitchedOnAsync(http.RequestAborted);
+
+            // fleet-mod comes with Mods, so each harness reads its built-in skills again.
+            if (mods is not null && modsWasOn != await mods.IsSwitchedOnAsync())
+                await http.RequestServices.GetRequiredService<BuiltInSkillService>().ModsChangedAsync();
 
             // The mod host follows the switch. In the background: stopping a host can take its two seconds of grace.
             if (mods is not null)

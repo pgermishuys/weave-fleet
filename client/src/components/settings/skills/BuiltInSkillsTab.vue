@@ -117,7 +117,12 @@ async function toggleFleetChange(name: string): Promise<void> {
               class="animate-spin text-muted"
               aria-hidden="true"
             />
+            <span
+              v-if="skill.withMods"
+              class="text-xs text-muted"
+            >{{ skill.enabled ? "On with Mods" : "Off · turns on with Mods" }}</span>
             <button
+              v-else
               type="button"
               role="switch"
               :aria-checked="skill.enabled"

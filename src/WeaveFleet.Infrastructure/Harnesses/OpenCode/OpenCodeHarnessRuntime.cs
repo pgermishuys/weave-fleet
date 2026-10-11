@@ -507,7 +507,8 @@ public sealed class OpenCodeHarnessRuntime : IHarnessRuntime, IDisposable, IAsyn
             preferences,
             scope.ServiceProvider.GetService<ISkillVersionStore>(),
             userId,
-            OpenCodeFleetSkills.BuiltIn.Select(skill => skill.Name)).ConfigureAwait(false);
+            OpenCodeFleetSkills.BuiltIn.Select(skill => skill.Name),
+            scope.ServiceProvider.GetService<ModsFeature>() is { } mods && await mods.IsSwitchedOnAsync().ConfigureAwait(false)).ConfigureAwait(false);
     }
 
     /// <summary>

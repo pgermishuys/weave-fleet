@@ -61,7 +61,7 @@ public sealed class BuiltInSkillModsTests
         var result = await ServiceWith(modsOn: true).SetEnabledAsync("fleet-mod", enabled: false);
 
         result.IsFailure.ShouldBeTrue();
-        result.Error.Message.ShouldContain("Mods");
+        result.Error.Description.ShouldContain("Mods");
         (await _preferences.GetAsync(BuiltInSkillService.PreferenceKey)).ShouldBeNull();
     }
 

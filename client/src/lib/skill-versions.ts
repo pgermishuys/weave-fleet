@@ -17,6 +17,8 @@ export interface BuiltInSkill {
   fleetChanged?: boolean;
   /** How many versions the user made, including ones not in use. */
   versionCount?: number;
+  /** No switch of its own: it's on while the Mods feature is on. */
+  withMods?: boolean;
 }
 
 export interface SkillVersionInfo {
