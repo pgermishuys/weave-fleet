@@ -6,6 +6,23 @@ Written 10 October 2026 against `main` at `1c93a44d` (Stage 0 merged except E3 `
 Background: `~/.cache/fleet-mods-proposal/index.html` (the proposal), `stage0-frontend-cleanup.md` (the clean-up this
 builds on). Claude Code mods docs: https://code.claude.com/docs/en/plugins/mods/overview and `/reference`.
 
+## Stage 1 status (11 October 2026, M9 live check)
+
+On `main` at `b7e0f096`: the contract (#481), the mod host (#486), the client sites (#487), the store and `/api/mods`
+(#488), Bun install and finding (#489, #490), the host client and supervisor (#493, #494, #496, #497), turning Mods on
+(#498, #499), draft card, review, Settings → Mods and Start without mods (#500–#503), test-chips end to end (#504,
+#509, #505), the agent's mod tools and the `fleet-mod` skill (#506, with #507 and #508 folded in).
+
+Checked live on a scratch Fleet (Release install layout, scratch HOMEs, pooled OpenCode on Claude Sonnet 5.5) by
+M9; screenshots in `mockups/mods-stage1-live-check/`:
+
+1. Turning Mods on with no Bun: works (notice, progress, ready; Bun 1.4.2 downloaded and checked against the pinned
+   sha256). **With a Bun already on the machine, Fleet doesn't offer it**: decision 3's "Use my Bun" isn't built.
+2. test-chips on a real `bun test` row: works, desktop and phone, light and dark.
+3. The writing loop: works (draft draws in its session only, Keep, Undo, off, `?mods=off`), **but the `fleet-mod`
+   skill is off by default even with Mods on**, so the agent has the tools without the guide.
+4. Mods off: nothing changes; no host, no Bun download.
+
 ## Decisions already made by the user (don't reopen)
 
 1. **Mirror Claude Code mods.** A mod is a module exporting `register(on, options)`; hooks are middleware
@@ -310,6 +327,52 @@ branch `feat/mods-host-client-reference` (7bcb39b0, closed PR #491), with review
   - The client listens for a session's `mod.ui` from the first row it shows and never stops; drop it when the session
     closes.
   - `mod.ui` carries `site`, but the client redraws both sites of a call (or every row of the session) either way.
+- **From the review of M8 parts 2, 3a, 3b (#501–#503):**
+  - The banner after `?mods=off` when a remote machine is live: aim `?mods=off` at that machine too, or show home's
+    safe mode (`safe-mode-start.ts:42`, `ModsSafeModeBanner.vue`). Do this first.
+  - `setSafeMode(false)` must clear `fleet.mods.startWithout`, so safe mode doesn't come back on the next reload. Also
+    first.
+  - A slow first `?mods=off` request is never retried in the session; retry after mount or post a notice.
+  - Cloud mode: the pre-mount PUT has no CSRF cookie yet, so a 400 is treated as settled. `GET /api/features/mods`
+    first, or treat 400 as "not yet".
+  - The review dialog's v(kept+1) should be max+1 (`ModReviewDialog.vue:43`).
+  - `dismissKeepRequest` treats a 404 as done.
+  - The draws row is misleading for mixed string/regex component arrays (`check-summary.ts:86`).
+  - The reads row misses `turn.complete`, and any `session.*` call claims title, folder and harness.
+  - A switch load failure shows "Mods are off" instead of an error with Retry.
+  - Review… should be disabled while the agent is writing, like Keep….
+- **From the review of M6 thin (#504, #505, #509):**
+  - `client/src/lib/mods/renders.ts`: the `answers` map (one promise per session/call/site/status/generation) is never
+    pruned; drop entries once applied, or cap it (an LRU of a few hundred).
+  - `renders.ts` keys `hooks`, `sessionGen` and `callGen` by session id alone; key them by machine too, so two
+    machines' sessions can't share an entry.
+- **From the review of M7 (#506–#508):**
+  - Keep requests live in memory (`ModKeepRequests`): a restart forgets them and archiving a session doesn't drop them.
+  - A draft folder swapped for a link between `RequireClean` and `File.Move` could redirect a write (needs a local
+    writer).
+  - On a case-insensitive disk, writing `Mod.ts` over `mod.ts` counts twice toward the 500-file limit.
+  - `ModBridge.cs:77`: `fleet_mod_keep` passes `loads: true`, so asking to keep is refused in safe mode though it loads
+    nothing.
+  - `ModBridge.cs` `LoadResult`: when the only draft isn't wanted the host stops and the agent hears "the mod host is
+    Stopped (No mod is kept or drafted.)", a confusing reason.
+  - `fleet_mod_test` (plan M7) isn't built, and `api.md:160`'s promise that `$.ui.log` reaches the agent via
+    `fleet_mod_check`/`test` isn't met: neither returns the mod's log.
+  - `fleet-mod` `SKILL.md:3` vs `:45-47`: the description promises chips or bands, the body says ToolUse/ToolResult
+    only; align it with the five sites once they're wired.
+  - `SKILL.md:64`: "a prop not listed makes the tree invalid", but the table omits valid props (Box `key`, Input
+    `placeholder`/`submitLabel`, Markdown `key`/`dimColor`, Code `wrap`) and `Page`.
+  - `SKILL.md:160` shows the check's hooks line in text form; `fleet_mod_check` returns indented JSON.
+  - `SKILL.md:23`: with the skill on and Mods off the tools don't exist at all; say so.
+- **From the live check (M9, 11 Oct):**
+  - After Keep the draft folder is emptied, so the agent's next one-file edit (only `mod.js`) fails with "mod.json is
+    missing or incomplete". The message is clear and the agent recovers by writing `mod.json` again; seeding a new
+    draft from the kept version would avoid the round trip.
+  - Keep copies every file in the draft folder into the version, including files the hooks module never imports (a
+    `hooks.js` left from the agent's failed attempts went into v1). Keep only what the check read, or list extra files
+    in the review.
+  - Claude Code and OpenCode 2 weren't live-checked (covered by the catalog, plugin and MCP tests).
+  - The ToolRow props carry no exit code, so "a chip with the command's exit code" can't be written; add `exitCode`
+    to the props when the harness reports one.
 
 ## Next (after M6 thin)
 
