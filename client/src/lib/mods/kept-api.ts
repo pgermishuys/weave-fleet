@@ -6,7 +6,7 @@
 import { apiFetchOn } from "@/lib/api-client";
 import { extractApiError } from "@/lib/api-error";
 import type { MachineConnection } from "@/lib/machines";
-import type { KeptMod, ModCheckReport, ModDraft, ModsSwitch } from "@/lib/mods/kept";
+import type { KeptMod, ModCheckReport, ModDraft, ModsSwitch, ModsView } from "@/lib/mods/kept";
 
 /** A refused request: the server's own words, and its status (404 while the Mods switch is off). */
 export class ModsRequestError extends Error {
@@ -93,3 +93,21 @@ export async function dismissKeepRequest(
     throw error;
   }
 }
+
+const modPath = (name: string) => `/api/mods/${encodeURIComponent(name)}`;
+const post = (path: string, machine: MachineConnection | null) => request<KeptMod>(machine, path, { method: "POST" });
+
+export const fetchMods = (machine: MachineConnection | null = null) => request<ModsView>(machine, "/api/mods");
+
+export const undoMod = (name: string, machine: MachineConnection | null = null) =>
+  post(`${modPath(name)}/undo`, machine);
+
+export const setModOn = (name: string, on: boolean, machine: MachineConnection | null = null) =>
+  post(`${modPath(name)}/${on ? "on" : "off"}`, machine);
+
+export const setSafeMode = (on: boolean, machine: MachineConnection | null = null) =>
+  request<ModsView>(machine, "/api/mods/safe-mode", {
+    method: "PUT",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ on }),
+  });

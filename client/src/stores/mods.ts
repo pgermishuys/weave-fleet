@@ -2,24 +2,29 @@ import { defineStore } from "pinia";
 import { computed, shallowRef } from "vue";
 import { onDomainEvent } from "@/composables/on-domain-event";
 import { liveTarget, type MachineTarget } from "@/lib/machine-target";
-import type { KeptMod, ModDraft, ModsSwitch } from "@/lib/mods/kept";
+import type { KeptMod, ModDraft, ModsSwitch, ModsView } from "@/lib/mods/kept";
 import * as modsApi from "@/lib/mods/kept-api";
 import { ModsRequestError } from "@/lib/mods/kept-api";
 import { MODS_PREFERENCE_KEY } from "@/lib/mods";
 import { useMachinesStore } from "@/stores/machines";
 import { usePreferencesStore } from "@/stores/preferences";
 
+/** Why a kept mod (rather than a draft or safe mode) changed. */
+const KEPT_REASONS = new Set(["kept", "version", "undone", "on", "off", "strikes"]);
+
 /**
- * The Mods switch and each session's drafts, for the draft cards. It follows `mods.changed` itself, refetching a
+ * The Mods switch, kept mods and each session's drafts, for the draft cards. It follows `mods.changed` itself, refetching a
  * tracked session's drafts, so components read it and call its actions. A session's drafts belong to the machine the
  * session is on.
  */
 export const useModsStore = defineStore("mods", () => {
   const modsSwitch = shallowRef<ModsSwitch | null>(null);
+  const kept = shallowRef<ModsView | null>(null);
   const drafts = shallowRef<Record<string, ModDraft[]>>({});
   const stops = new Map<string, () => void>();
   const inflight = new Map<string, Promise<void>>();
 
+  const safeMode = computed(() => kept.value?.safeMode ?? modsSwitch.value?.safeMode ?? false);
   const preferences = usePreferencesStore();
   // The user's choice in Features wins as soon as it's made (no event says the switch moved); until they choose, the
   // server's answer, which falls back to Fleet's own option.
@@ -48,11 +53,20 @@ export const useModsStore = defineStore("mods", () => {
 
   function listen(target: MachineTarget): void {
     if (stops.has(target.key)) return;
-    stops.set(target.key, onDomainEvent(target, "sessions", "mods.changed", ({ payload }) => {
+    const key = target.key;
+    stops.set(key, onDomainEvent(target, "sessions", "mods.changed", ({ payload }) => {
       const sessionId = payload.sessionId;
       if (sessionId && sessionId in drafts.value) void loadDrafts(sessionId);
-      // The Mods switch moved (on this machine, or from another tab).
-      if (payload.reason === "switch" && target.key === liveTarget().key) void loadSwitch();
+      // The switch, kept mods and safe mode are the live machine's; another machine's stream only speaks for its drafts.
+      if (key !== liveTarget().key) return;
+      if (payload.reason === "switch") {
+        void loadSwitch();
+      } else if (payload.reason === "safe-mode") {
+        void loadSwitch();
+        if (kept.value) void loadKept();
+      } else if (KEPT_REASONS.has(payload.reason) && kept.value) {
+        void loadKept();
+      }
     }));
   }
 
@@ -61,6 +75,19 @@ export const useModsStore = defineStore("mods", () => {
     listen(target);
     return once("switch", async () => {
       modsSwitch.value = await modsApi.fetchModsSwitch(target.connection);
+    });
+  }
+
+  function loadKept(): Promise<void> {
+    const target = liveTarget();
+    listen(target);
+    return once("kept", async () => {
+      try {
+        kept.value = await modsApi.fetchMods(target.connection);
+      } catch (error) {
+        if (error instanceof ModsRequestError && error.status === 404) kept.value = null;
+        throw error;
+      }
     });
   }
 
@@ -105,5 +132,49 @@ export const useModsStore = defineStore("mods", () => {
     return draft;
   }
 
-  return { modsSwitch, drafts, isSwitchedOn, draftsFor, loadSwitch, loadDrafts, keep, setDraftOn, dismissKeepRequest };
+  function replaceMod(mod: KeptMod): void {
+    if (!kept.value) return;
+    const has = kept.value.mods.some((m) => m.name === mod.name);
+    kept.value = {
+      ...kept.value,
+      mods: has ? kept.value.mods.map((m) => (m.name === mod.name ? mod : m)) : [...kept.value.mods, mod],
+    };
+  }
+
+  async function undo(name: string): Promise<KeptMod> {
+    const mod = await modsApi.undoMod(name, liveTarget().connection);
+    replaceMod(mod);
+    return mod;
+  }
+
+  async function setOn(name: string, on: boolean): Promise<KeptMod> {
+    const mod = await modsApi.setModOn(name, on, liveTarget().connection);
+    replaceMod(mod);
+    return mod;
+  }
+
+  async function setSafeMode(on: boolean): Promise<ModsView> {
+    const view = await modsApi.setSafeMode(on, liveTarget().connection);
+    kept.value = view;
+    if (modsSwitch.value) modsSwitch.value = { ...modsSwitch.value, safeMode: view.safeMode };
+    return view;
+  }
+
+  return {
+    modsSwitch,
+    kept,
+    drafts,
+    safeMode,
+    isSwitchedOn,
+    draftsFor,
+    loadSwitch,
+    loadKept,
+    loadDrafts,
+    keep,
+    setDraftOn,
+    dismissKeepRequest,
+    undo,
+    setOn,
+    setSafeMode,
+  };
 });
