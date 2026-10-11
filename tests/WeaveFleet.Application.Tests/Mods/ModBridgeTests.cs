@@ -45,7 +45,9 @@ public sealed class ModBridgeTests
 
     private static JsonElement Json(string json) => JsonDocument.Parse(json).RootElement.Clone();
 
-    private static List<ModFile> Files(params string[] paths) => paths.Select(p => new ModFile(p, $"// {p}")).ToList();
+    private const string Manifest = """{"name":"test-chips","version":"0.1.0","description":"Draws test runs as counts","hooks":"./mod.ts"}""";
+
+    private static List<ModFile> Files(params string[] paths) => paths.Select(p => new ModFile(p, p == "mod.json" ? Manifest : $"// {p}")).ToList();
 
     private void SeedDraft(ModOff? off = null) => _store.SeedDraft(Owner, SessionId, Chips, off);
 
@@ -176,6 +178,48 @@ public sealed class ModBridgeTests
         var result = await Call("write");
 
         result.Value!.Output.ShouldEndWith("test-chips isn't loaded: the mod host is not-ready (The mod runtime (Bun) isn't installed yet.).");
+    }
+
+    [Fact]
+    public async Task Write_to_a_draft_three_strikes_turned_off_says_its_off_and_how_to_turn_it_on()
+    {
+        SeedDraft(off: new ModOff(ModOffBy.Strikes, DateTimeOffset.UnixEpoch, "TypeError: counts is undefined"));
+
+        var result = await Call("write");
+
+        result.Value!.Output.ShouldEndWith(
+            "test-chips isn't loaded: it's off in this session after three failures in a row (TypeError: counts is undefined). "
+            + "Once it's fixed, fleet_mod_reload turns it back on.");
+    }
+
+    [Fact]
+    public async Task Write_to_a_draft_the_user_turned_off_says_so_and_to_ask_before_turning_it_on()
+    {
+        SeedDraft(off: new ModOff(ModOffBy.User, DateTimeOffset.UnixEpoch));
+
+        var result = await Call("write");
+
+        result.Value!.Output.ShouldEndWith(
+            "test-chips isn't loaded: the user turned it off in this session. Ask them before turning it back on with fleet_mod_reload.");
+    }
+
+    [Fact]
+    public async Task Write_with_an_incomplete_mod_json_says_so_instead_of_loaded()
+    {
+        var result = await _bridge.WriteAsync(Token, HarnessSessionId, Chips, [new ModFile("mod.json", """{"name":"test-chips"}"""), new ModFile("mod.ts", "//")]);
+
+        result.Value!.Output.ShouldEndWith(
+            "test-chips isn't loaded: its mod.json is missing or incomplete. It needs name, version, description and hooks.");
+    }
+
+    [Fact]
+    public async Task Reload_of_a_draft_without_a_whole_mod_json_says_so_instead_of_loaded()
+    {
+        _store.SeedDraft(Owner, SessionId, Chips, withManifest: false);
+
+        var result = await Call("reload");
+
+        result.Value!.Output.ShouldBe("test-chips isn't loaded: its mod.json is missing or incomplete. It needs name, version, description and hooks.");
     }
 
     [Fact]
