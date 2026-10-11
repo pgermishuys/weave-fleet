@@ -119,7 +119,7 @@ async function toggleFleetChange(name: string): Promise<void> {
             />
             <span
               v-if="skill.withMods"
-              class="text-xs text-muted"
+              class="shrink-0 whitespace-nowrap text-xs text-muted"
             >{{ skill.enabled ? "On with Mods" : "Off · turns on with Mods" }}</span>
             <button
               v-else
