@@ -21,6 +21,7 @@ import StatusBar from "@/components/layout/StatusBar.vue";
 import SessionsV2RightPanel from "@/components/sessions/SessionsV2RightPanel.vue";
 import ArchiveUndoToast from "@/components/sessions/ArchiveUndoToast.vue";
 import NoticeCard from "@/components/notices/NoticeCard.vue";
+import ModsSafeModeBanner from "@/components/mods/ModsSafeModeBanner.vue";
 import { Menu } from "lucide-vue-next";
 import { Sheet, SheetContent, SheetTitle } from "@/components/ui/sheet";
 import { Button } from "@/components/ui/button";
@@ -322,6 +323,9 @@ function onGutterPointerDown(e: PointerEvent): void {
     >
       <Menu class="h-5 w-5" />
     </Button>
+
+    <!-- Takes no room unless mods are stopped (Start without mods). -->
+    <ModsSafeModeBanner />
 
     <div
       class="main"
