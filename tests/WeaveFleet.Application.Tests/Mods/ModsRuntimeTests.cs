@@ -24,8 +24,8 @@ public sealed class ModsRuntimeTests
     private readonly FakeTimeProvider _clock = new(new DateTimeOffset(2026, 10, 10, 9, 0, 0, TimeSpan.Zero));
     private readonly BunRelease _release = new("1.4.2", [new BunAsset(BunRelease.CurrentRid(), "bun.zip", new string('a', 64)) { Size = 36_646_949 }]);
 
-    private ModsRuntime NewRuntime(IUserPreferenceRepository? preferences = null) => new(
-        _bun, new FixedReleases(_release), _events, TestServiceScopeFactory.Create(services => services.AddScoped<IUserPreferenceRepository>(_ => preferences ?? _preferences)), _scope, new FleetOptions(), _clock, NullLogger<ModsRuntime>.Instance)
+    private ModsRuntime NewRuntime(IUserPreferenceRepository? preferences = null, FleetOptions? options = null) => new(
+        _bun, new FixedReleases(_release), _events, TestServiceScopeFactory.Create(services => services.AddScoped<IUserPreferenceRepository>(_ => preferences ?? _preferences)), _scope, options ?? new FleetOptions(), _clock, NullLogger<ModsRuntime>.Instance)
     {
         Home = "/home/alice",
     };
@@ -56,6 +56,101 @@ public sealed class ModsRuntimeTests
         view.Release.ShouldBe(new ModsRuntimeRelease("1.4.2", 36_646_949, true, "~/.weave/runtimes/bun/1.4.2", "github.com/oven-sh/bun"));
         view.Bun!.Version.ShouldBe("1.4.2");
         view.Job!.Phase.ShouldBe("succeeded");
+    }
+
+    private static BunCandidate Candidate(string path, string status, string? version = "1.4.5") =>
+        new(path, path, version, status, status == BunCandidateStatuses.Usable ? null : "Why not.");
+
+    [Fact]
+    public async Task The_view_lists_only_the_usable_buns_on_the_machine_with_the_home_folder_shortened()
+    {
+        _bun.Machine =
+        [
+            Candidate("/home/alice/.bun/bin/bun", BunCandidateStatuses.Usable, "1.4.5"),
+            Candidate("/opt/old/bun", BunCandidateStatuses.TooOld, "1.3.0"),
+            Candidate("/tmp/shared/bun", BunCandidateStatuses.NotChecked, null),
+            Candidate("/opt/broken/bun", BunCandidateStatuses.NotWorking, null),
+            Candidate("/usr/local/bin/bun", BunCandidateStatuses.Usable, "1.4.2"),
+        ];
+
+        var view = await NewRuntime().GetViewAsync(CancellationToken.None);
+
+        view.Found.ShouldBe([
+            new ModsRuntimeFound("/home/alice/.bun/bin/bun", "~/.bun/bin/bun", "1.4.5"),
+            new ModsRuntimeFound("/usr/local/bin/bun", "/usr/local/bin/bun", "1.4.2"),
+        ]);
+    }
+
+    [Fact]
+    public async Task The_finder_is_skipped_when_the_configuration_sets_a_bun_a_bun_is_in_use_or_cloud_mode_is_on()
+    {
+        _bun.Machine = [Candidate("/home/alice/.bun/bin/bun", BunCandidateStatuses.Usable)];
+
+        var configured = await NewRuntime(options: new FleetOptions { Harness = { BunPath = "/opt/bun/bin/bun" } }).GetViewAsync(CancellationToken.None);
+        var cloud = await NewRuntime(options: new FleetOptions { Cloud = { Enabled = true } }).GetViewAsync(CancellationToken.None);
+        _bun.Install("1.4.2");
+        var inUse = await NewRuntime().GetViewAsync(CancellationToken.None);
+
+        configured.Found.ShouldBeEmpty();
+        cloud.Found.ShouldBeEmpty();
+        inUse.Found.ShouldBeEmpty();
+        _bun.MachineScans.ShouldBe(0);
+    }
+
+    [Fact]
+    public async Task Using_a_found_bun_remembers_it_tells_everyone_and_returns_the_view_without_downloading()
+    {
+        var mine = Candidate("/home/alice/.bun/bin/bun", BunCandidateStatuses.Usable, "1.4.5");
+        _bun.Machine = [mine];
+        var runtime = NewRuntime();
+
+        var result = await runtime.UseAsync(mine.Path, CancellationToken.None);
+        await runtime.Sent;
+
+        result.IsSuccess.ShouldBeTrue(result.IsFailure ? result.Error.Description : "");
+        result.Value.Bun.ShouldBe(new ModsRuntimeBun(mine.Path, "~/.bun/bin/bun", "configured", "1.4.5", true, null));
+        result.Value.Found.ShouldBeEmpty();
+        _bun.Ensured.ShouldBe(0);
+        Sent().Select(p => p.Reason).ShouldBe(["used"]);
+        _events.Broadcasts.ShouldAllBe(b => b.UserId == null);
+    }
+
+    [Fact]
+    public async Task Using_a_path_the_finder_refuses_is_an_error_and_nothing_is_sent()
+    {
+        _bun.Machine = [Candidate("/opt/old/bun", BunCandidateStatuses.TooOld, "1.3.0")];
+        var runtime = NewRuntime();
+
+        var result = await runtime.UseAsync("/opt/old/bun", CancellationToken.None);
+        await runtime.Sent;
+
+        result.Error.Description.ShouldBe("Why not.");
+        Sent().ShouldBeEmpty();
+    }
+
+    [Fact]
+    public async Task Installing_while_a_bun_the_user_picked_is_in_use_downloads_nothing()
+    {
+        var mine = Candidate("/home/alice/.bun/bin/bun", BunCandidateStatuses.Usable, "1.4.5");
+        _bun.Machine = [mine];
+        var runtime = NewRuntime();
+        await runtime.UseAsync(mine.Path, CancellationToken.None);
+
+        (await runtime.StartInstallAsync(Alice, CancellationToken.None)).ShouldBeFalse();
+
+        _bun.Ensured.ShouldBe(0);
+    }
+
+    [Fact]
+    public async Task Installing_with_buns_found_but_none_chosen_still_downloads_fleets_own()
+    {
+        _bun.Machine = [Candidate("/home/alice/.bun/bin/bun", BunCandidateStatuses.Usable)];
+        var runtime = NewRuntime();
+
+        (await runtime.StartInstallAsync(Alice, CancellationToken.None)).ShouldBeTrue();
+        await runtime.WhenIdle;
+
+        _bun.Ensured.ShouldBe(1);
     }
 
     [Fact]
@@ -234,7 +329,7 @@ public sealed class ModsRuntimeTests
 
         public Gate Hold(bool waitForCancel = false) => _gate = new Gate(waitForCancel);
 
-        public Task<BunLocation?> FindAsync(BunRelease release, CancellationToken ct) => Task.FromResult(_installed.LastOrDefault());
+        public Task<BunLocation?> FindAsync(BunRelease release, CancellationToken ct) => Task.FromResult(_chosen ?? _installed.LastOrDefault());
 
         public async Task<Result<BunLocation>> EnsureAsync(BunRelease release, IProgress<BunInstallJob>? progress, CancellationToken ct)
         {
@@ -267,7 +362,25 @@ public sealed class ModsRuntimeTests
             return _installed[^1];
         }
 
-        public Task<IReadOnlyList<BunCandidate>> FindOnMachineAsync(CancellationToken ct) => throw new NotSupportedException();
+        public IReadOnlyList<BunCandidate> Machine { get; set; } = [];
+        public int MachineScans { get; private set; }
+        private BunLocation? _chosen;
+
+        public Task<IReadOnlyList<BunCandidate>> FindOnMachineAsync(CancellationToken ct)
+        {
+            MachineScans++;
+            return Task.FromResult(Machine);
+        }
+
+        public Task<Result<BunLocation>> UseAsync(string path, CancellationToken ct)
+        {
+            var named = Machine.FirstOrDefault(candidate => candidate.Path == path);
+            if (named is not { Status: BunCandidateStatuses.Usable })
+                return Task.FromResult<Result<BunLocation>>(new FleetError("Mods.Runtime", named?.Message ?? "Not found."));
+
+            return Task.FromResult<Result<BunLocation>>(_chosen = new BunLocation(path, BunSources.Configured, named.Version!));
+        }
+
         public Task<BunCandidate> CheckAsync(string path, CancellationToken ct) => throw new NotSupportedException();
         public IReadOnlyList<BunLocation> Installed() => _installed;
         public Task<IReadOnlyList<string>> PruneAsync(IReadOnlyCollection<string> inUse, CancellationToken ct) => throw new NotSupportedException();

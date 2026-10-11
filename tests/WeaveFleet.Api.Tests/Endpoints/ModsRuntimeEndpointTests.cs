@@ -84,6 +84,96 @@ public sealed class ModsRuntimeEndpointTests : IAsyncDisposable
         _bun.Ensures.ShouldBe(0);
     }
 
+    private const string Mine = "/home/alice/.bun/bin/bun";
+
+    private static BunCandidate Usable(string path, string version = "1.4.5") => new(path, path, version, BunCandidateStatuses.Usable, null);
+
+    [Fact]
+    public async Task The_view_lists_the_usable_buns_found_on_the_machine()
+    {
+        _bun.Machine = [Usable(Mine), new BunCandidate("/opt/old/bun", "/opt/old/bun", "1.3.0", BunCandidateStatuses.TooOld, "Too old.")];
+
+        var found = (await _client.GetFromJsonAsync<JsonElement>(Runtime)).GetProperty("found");
+
+        found.GetArrayLength().ShouldBe(1);
+        found[0].GetProperty("path").GetString().ShouldBe(Mine);
+        found[0].GetProperty("version").GetString().ShouldBe("1.4.5");
+        found[0].GetProperty("displayPath").GetString().ShouldNotBeNullOrEmpty();
+    }
+
+    [Fact]
+    public async Task Using_a_found_bun_turns_the_switch_on_returns_the_view_and_downloads_nothing()
+    {
+        _bun.Machine = [Usable(Mine)];
+
+        var response = await _client.PostAsJsonAsync($"{Runtime}/use", new { path = Mine });
+
+        response.StatusCode.ShouldBe(HttpStatusCode.OK);
+        var view = await response.Content.ReadFromJsonAsync<JsonElement>();
+        view.GetProperty("bun").GetProperty("source").GetString().ShouldBe("configured");
+        view.GetProperty("bun").GetProperty("version").GetString().ShouldBe("1.4.5");
+        view.GetProperty("found").GetArrayLength().ShouldBe(0);
+        (await SwitchOnAsync()).ShouldBeTrue();
+        _bun.Ensures.ShouldBe(0);
+    }
+
+    [Fact]
+    public async Task Using_a_path_that_was_not_found_is_400_with_the_reason_and_leaves_the_switch_off()
+    {
+        _bun.Machine = [Usable(Mine)];
+
+        var response = await _client.PostAsJsonAsync($"{Runtime}/use", new { path = "/somewhere/else/bun" });
+
+        response.StatusCode.ShouldBe(HttpStatusCode.BadRequest);
+        (await response.Content.ReadFromJsonAsync<JsonElement>()).GetProperty("error").GetString()!.ShouldContain("/somewhere/else/bun");
+        (await SwitchOnAsync()).ShouldBeFalse();
+    }
+
+    [Fact]
+    public async Task Using_without_a_path_is_400()
+    {
+        var response = await _client.PostAsJsonAsync($"{Runtime}/use", new { });
+
+        response.StatusCode.ShouldBe(HttpStatusCode.BadRequest);
+    }
+
+    [Fact]
+    public async Task Cloud_mode_offers_no_buns_and_refuses_to_use_one()
+    {
+        _factory.Services.GetRequiredService<FleetOptions>().Cloud.Enabled = true;
+        _bun.Machine = [Usable(Mine)];
+
+        var view = await _client.GetFromJsonAsync<JsonElement>(Runtime);
+        var response = await _client.PostAsJsonAsync($"{Runtime}/use", new { path = Mine });
+
+        view.GetProperty("found").GetArrayLength().ShouldBe(0);
+        response.StatusCode.ShouldBe(HttpStatusCode.NotFound);
+        (await SwitchOnAsync()).ShouldBeFalse();
+    }
+
+    [Fact]
+    public async Task Using_a_bun_is_refused_with_409_when_the_configuration_sets_one()
+    {
+        _factory.Services.GetRequiredService<FleetOptions>().Harness.BunPath = "/opt/tools/bun/bin/bun";
+        _bun.Machine = [Usable(Mine)];
+
+        var response = await _client.PostAsJsonAsync($"{Runtime}/use", new { path = Mine });
+
+        response.StatusCode.ShouldBe(HttpStatusCode.Conflict);
+    }
+
+    [Fact]
+    public async Task Installing_still_works_while_buns_are_found_and_none_is_chosen()
+    {
+        _bun.Machine = [Usable(Mine)];
+
+        var response = await _client.PostAsync($"{Runtime}/install", null);
+
+        response.StatusCode.ShouldBeOneOf(HttpStatusCode.Accepted, HttpStatusCode.OK);
+        await _bun.Started.Task;
+        _bun.Ensures.ShouldBe(1);
+    }
+
     [Fact]
     public async Task Cancelling_with_nothing_running_is_409()
     {
@@ -119,6 +209,7 @@ public sealed class ModsRuntimeEndpointTests : IAsyncDisposable
         public TaskCompletionSource Started { get; } = new(TaskCreationOptions.RunContinuationsAsynchronously);
         public TaskCompletionSource Gate { get; } = new(TaskCreationOptions.RunContinuationsAsynchronously);
         public BunInstallJob? Job => null;
+        public IReadOnlyList<BunCandidate> Machine { get; set; } = [];
 
         public Task<BunLocation?> FindAsync(BunRelease release, CancellationToken ct) => Task.FromResult(Installed);
 
@@ -140,7 +231,17 @@ public sealed class ModsRuntimeEndpointTests : IAsyncDisposable
             return Installed = new BunLocation($"/bun/{release.Version}/bun", BunSources.Installed, release.Version);
         }
 
-        public Task<IReadOnlyList<BunCandidate>> FindOnMachineAsync(CancellationToken ct) => throw new NotSupportedException();
+        public Task<IReadOnlyList<BunCandidate>> FindOnMachineAsync(CancellationToken ct) => Task.FromResult(Machine);
+
+        public Task<Result<BunLocation>> UseAsync(string path, CancellationToken ct)
+        {
+            var named = Machine.FirstOrDefault(candidate => candidate.Path == path);
+            if (named is not { Status: BunCandidateStatuses.Usable })
+                return Task.FromResult<Result<BunLocation>>(new FleetError("Mods.Runtime", named?.Message ?? $"Fleet didn't find a Bun at {path}."));
+
+            return Task.FromResult<Result<BunLocation>>(Installed = new BunLocation(path, BunSources.Configured, named.Version!));
+        }
+
         public Task<BunCandidate> CheckAsync(string path, CancellationToken ct) => throw new NotSupportedException();
         IReadOnlyList<BunLocation> IBunRuntime.Installed() => Installed is null ? [] : [Installed];
         public Task<IReadOnlyList<string>> PruneAsync(IReadOnlyCollection<string> inUse, CancellationToken ct) => throw new NotSupportedException();

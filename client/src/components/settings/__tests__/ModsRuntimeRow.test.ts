@@ -27,6 +27,7 @@ function job(overrides: Partial<ModsRuntimeJob> = {}): ModsRuntimeJob {
 }
 
 let server: { view: ModsRuntimeView; calls: string[]; overrides: Record<string, () => Response> };
+const requestBodies = new Map<string, unknown>();
 
 const json = (body: unknown) => new Response(JSON.stringify(body), { headers: { "content-type": "application/json" } });
 
@@ -53,12 +54,14 @@ describe("Mods row: turning Mods on", () => {
     getMock.mockReset();
     putMock.mockReset().mockResolvedValue({});
     server = { view: makeView(), calls: [], overrides: {} };
+    requestBodies.clear();
     vi.stubGlobal(
       "fetch",
       vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
         const path = new URL(String(input), "http://localhost").pathname;
         const key = `${(init?.method ?? "GET").toUpperCase()} ${path}`;
         server.calls.push(key);
+        requestBodies.set(key, init?.body);
         if (server.overrides[key]) return server.overrides[key]!();
         return path === "/api/features/mods" ? json({ on: false }) : json(server.view);
       }),
@@ -139,6 +142,65 @@ describe("Mods row: turning Mods on", () => {
     expect(stateOf(wrapper)).toBe("progress");
     expect(panel(wrapper).text()).toContain("This keeps going if you leave Settings. Mods start as soon as it's done.");
     expect(toggle(wrapper).classes()).not.toContain("ring-2");
+  });
+
+  const mine = { path: "/home/u/.bun/bin/bun", displayPath: "~/.bun/bin/bun", version: "1.4.2" };
+
+  it("2 confirm: with a Bun found it offers it first, then Fleet's own, then Cancel", async () => {
+    const wrapper = await mountRow(makeView({ found: [mine] }));
+
+    await toggle(wrapper).trigger("click");
+
+    expect(stateOf(wrapper)).toBe("confirm");
+    expect(panel(wrapper).text()).toContain("Mods need Bun");
+    expect(panel(wrapper).text()).toContain("Fleet found Bun 1.4.2 at ~/.bun/bin/bun. Mods can run on it, and you keep it up to date with bun upgrade.");
+    expect(panel(wrapper).text()).toContain("Or Fleet can download its own Bun 1.4.2 (about 35 MB) from github.com/oven-sh/bun, check it, install it in ~/.weave/runtimes/bun/1.4.2 and keep it up to date.");
+    expect(buttons(panel(wrapper))).toEqual(["Use my Bun 1.4.2", "Download Fleet's own", "Cancel"]);
+    expect(putMock).not.toHaveBeenCalled();
+  });
+
+  it("2 confirm: Use my Bun posts the path, shows Mods on with the user's Bun, and downloads nothing", async () => {
+    const wrapper = await mountRow(makeView({ found: [mine] }));
+    await toggle(wrapper).trigger("click");
+    server.overrides[`POST ${RUNTIME}/use`] = () => {
+      server.view = makeView({ bun: { path: mine.path, displayPath: mine.displayPath, source: "configured", version: "1.4.2", safe: true } });
+      return json(server.view);
+    };
+    getMock.mockResolvedValue({ data: { Mods: "true" } });
+
+    await button(wrapper, "Use my Bun 1.4.2").trigger("click");
+    await flushPromises();
+
+    expect(called("use")).toHaveLength(1);
+    expect(called("install")).toHaveLength(0);
+    expect(requestBodies.get(`POST ${RUNTIME}/use`)).toBe(JSON.stringify({ path: mine.path }));
+    expect(stateOf(wrapper)).toBe("ready");
+    expect(panel(wrapper).text()).toContain("Mods on · your Bun 1.4.2");
+    expect(wrapper.find("[role='progressbar']").exists()).toBe(false);
+  });
+
+  it("2 confirm: Download Fleet's own posts the install even when a Bun was found", async () => {
+    const wrapper = await mountRow(makeView({ found: [mine] }));
+    await toggle(wrapper).trigger("click");
+    server.overrides[`POST ${RUNTIME}/install`] = () => json(makeView({ job: job() }));
+
+    await button(wrapper, "Download Fleet's own").trigger("click");
+    await flushPromises();
+
+    expect(called("install")).toHaveLength(1);
+    expect(called("use")).toHaveLength(0);
+    expect(stateOf(wrapper)).toBe("progress");
+  });
+
+  it("2 confirm: a refused Bun shows the server's reason", async () => {
+    const wrapper = await mountRow(makeView({ found: [mine] }));
+    await toggle(wrapper).trigger("click");
+    server.overrides[`POST ${RUNTIME}/use`] = () => new Response(JSON.stringify({ error: "Bun 1.3.0 is older than 1.4.0." }), { status: 400 });
+
+    await button(wrapper, "Use my Bun 1.4.2").trigger("click");
+    await flushPromises();
+
+    expect(wrapper.text()).toContain("Bun 1.3.0 is older than 1.4.0.");
   });
 
   it("3a downloading: heading, megabytes, bar, steps and the announcement", async () => {
