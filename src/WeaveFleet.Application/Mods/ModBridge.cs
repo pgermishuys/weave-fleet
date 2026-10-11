@@ -39,7 +39,7 @@ public sealed class ModBridge(
             if (gate.SafeMode)
                 return Ok($"Wrote {name}", output + SafeModeNote);
 
-            await host.ReloadDraftAsync(gate.UserId, gate.SessionId, name!, ct).ConfigureAwait(false);
+            await ReloadDraftAsync(gate, name!, ct).ConfigureAwait(false);
             return Ok($"Wrote {name}", output + LoadResult(gate, name!));
         }, ct);
 
@@ -67,7 +67,7 @@ public sealed class ModBridge(
                     return Fail(CanvasErrorKind.Invalid, on.Error.Description);
             }
 
-            await host.ReloadDraftAsync(gate.UserId, gate.SessionId, name!, ct).ConfigureAwait(false);
+            await ReloadDraftAsync(gate, name!, ct).ConfigureAwait(false);
             var output = LoadResult(gate, name!);
             return Ok($"Reloaded {name}", wasOff ? output + "\nIt was off; it's on again." : output);
         }, ct);
@@ -136,6 +136,13 @@ public sealed class ModBridge(
     }
 
     // ── Helpers ─────────────────────────────────────────────────────────
+
+    /// <summary>Has the host reload the draft, then tells clients, whose draft card shows the load's problem.</summary>
+    private async Task ReloadDraftAsync(Gate gate, string name, CancellationToken ct)
+    {
+        await host.ReloadDraftAsync(gate.UserId, gate.SessionId, name, ct).ConfigureAwait(false);
+        await mods.DraftLoadedAsync(gate.SessionId, name, ct).ConfigureAwait(false);
+    }
 
     /// <summary>What the host made of the draft after a reload: loaded, refused with the check's errors, or not running.</summary>
     private string LoadResult(Gate gate, string name)
