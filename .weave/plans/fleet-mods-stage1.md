@@ -150,6 +150,23 @@ Sizes: S small, M normal, L large. Dependencies in brackets.
 - **M10 Hardening and docs (M).** Host crash and restart, hook timeouts, three strikes, a mod that floods
   invalidations (throttle), Start without mods, Windows Job Object path, memory with 20 mods. `docs/mods.md` for
   users.
+  - From turning Mods on (M2b, #498/#499), found in review and not blocking:
+    - Switching Mods off during an install doesn't cancel it.
+    - A Fleet restart during an install leaves the switch on with no Bun.
+    - Retry and the old install's switch-off can still race.
+    - A joined install remembers only the first user, so only they get switched off if it fails.
+    - Any user can cancel another user's install, and `GET /api/features/mods/runtime` shows paths: hosted mode needs
+      an owner check.
+    - Bodyless POSTs (`install`, `cancel`) have no Origin check.
+    - The client's runtime store has no ordering guard between a request's answer and events.
+    - The row doesn't refetch the runtime view after a reconnect.
+    - A failed `load()` in the switch's click isn't handled.
+    - Wording: the heading for checksum and unpack failures says "Couldn't download Bun"; "from GitHub" shows with a
+      mirror; "0 of 0 MB" for a tiny stall.
+    - The "point Fleet at it" hint has no UI yet (it comes with "Use my own Bun…").
+    - Other tabs don't see the switch change.
+    - Test servers probe a free port and then bind it, which can race.
+    - The end-to-end test swaps in an installer with its own download base instead of using `Fleet:Harness:BunDownloadBase`.
 
 ## Rules for every PR
 

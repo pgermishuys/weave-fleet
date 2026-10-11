@@ -242,6 +242,12 @@ public sealed class HarnessOptions
     /// it's relative or doesn't exist, mods can't start. Default: "" (the Bun Fleet installs under <c>~/.weave/runtimes/bun/{version}/</c>).
     /// </summary>
     public string BunPath { get; set; } = "";
+
+    /// <summary>
+    /// Where Fleet downloads Bun releases from: <c>{base}/bun-v{version}/{asset}</c>. For a mirror when GitHub is
+    /// blocked, and for tests. Default: "" (GitHub).
+    /// </summary>
+    public string BunDownloadBase { get; set; } = "";
 }
 
 /// <summary>Transactional outbox polling and retention configuration.</summary>
