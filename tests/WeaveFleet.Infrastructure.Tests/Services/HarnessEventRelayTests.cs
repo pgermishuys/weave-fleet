@@ -1251,7 +1251,9 @@ public sealed class HarnessEventRelayTests
         });
         instance.Complete();
 
-        await Task.Delay(200);
+        // Wait for the publish itself: a fixed delay raced the relay's pump on a loaded runner (main, 11 Oct 2026).
+        using var published = new CancellationTokenSource(TimeSpan.FromSeconds(10));
+        await WaitUntilAsync(() => Task.FromResult(!publisher.Calls.IsEmpty), published.Token);
 
         // Assert: the part delta should NOT be suppressed (message ID not in suppression set)
         publisher.Calls.ShouldNotBeEmpty("Message part delta for non-suppressed message should NOT be suppressed");
@@ -1313,7 +1315,9 @@ public sealed class HarnessEventRelayTests
         });
         instance.Complete();
 
-        await Task.Delay(200);
+        // Wait for the publish itself: a fixed delay raced the relay's pump on a loaded runner (main, 11 Oct 2026).
+        using var published = new CancellationTokenSource(TimeSpan.FromSeconds(10));
+        await WaitUntilAsync(() => Task.FromResult(!publisher.Calls.IsEmpty), published.Token);
 
         // Assert: the assistant message should NOT be suppressed
         publisher.Calls.ShouldNotBeEmpty("Assistant messages should never be suppressed");
