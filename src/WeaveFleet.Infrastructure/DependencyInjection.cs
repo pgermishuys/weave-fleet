@@ -231,8 +231,8 @@ public static class DependencyInjection
         services.AddSingleton<WeaveFleet.Application.Mods.Host.IModUserGate, WeaveFleet.Application.Mods.Host.ScopedModUserGate>();
         services.AddSingleton<WeaveFleet.Application.Mods.Host.IModHostBun, WeaveFleet.Application.Mods.Host.BunModHostBun>();
         services.AddSingleton<WeaveFleet.Application.Mods.Host.IModStrikeRecorder, WeaveFleet.Application.Mods.Host.ScopedModStrikeRecorder>();
-        // M6 draws what mods ask for; until then $.ui calls succeed and go nowhere.
-        services.TryAddSingleton<WeaveFleet.Application.Mods.Host.IModHostUi, WeaveFleet.Application.Mods.Host.NoModHostUi>();
+        // Redraws reach the browser as mod.ui; the rest of $.ui succeeds and goes nowhere until panes and toasts land.
+        services.TryAddSingleton<WeaveFleet.Application.Mods.Host.IModHostUi, WeaveFleet.Application.Mods.Host.BroadcastingModHostUi>();
         services.AddSingleton<WeaveFleet.Application.Mods.Host.IModHostFiles>(new WeaveFleet.Infrastructure.Mods.Host.ModHostFiles(AppContext.BaseDirectory));
         services.AddScoped<SkillImprover>();
         services.AddScoped<ISessionActivator>(sp => sp.GetRequiredService<WeaveFleet.Application.Sessions.Activation.SessionActivation>());
@@ -328,6 +328,7 @@ public static class DependencyInjection
         services.AddScoped<WeaveFleet.Application.Mods.ModService>();
         // The mod runtime (Bun): installs it in the background and tells clients how it's going.
         services.AddSingleton<WeaveFleet.Application.Mods.IModsRuntime, WeaveFleet.Application.Mods.ModsRuntime>();
+        services.AddScoped<WeaveFleet.Application.Mods.ModRenderService>();
         services.AddScoped<WeaveFleet.Application.Workflows.WorkflowModelRoles>();
         services.AddScoped<WeaveFleet.Application.Workflows.WorkflowService>();
         services.AddScoped<WeaveFleet.Application.Workflows.WorkflowDrafter>();
