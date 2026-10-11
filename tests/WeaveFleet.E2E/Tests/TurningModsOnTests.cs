@@ -116,6 +116,8 @@ public sealed class TurningModsOnTests : E2ETestBase,
         private sealed class FixedRelease(BunRelease release) : IBunReleases
         {
             public BunRelease Current => release;
+            public event EventHandler<BunReleaseChangedEventArgs>? Changed { add { } remove { } }
+            public Task RefreshAsync(CancellationToken ct) => Task.CompletedTask;
         }
     }
 
