@@ -279,7 +279,7 @@ dispatch, then restarts the host and strikes the mod that was running. All mods 
   keeps them stopped until Fleet restarts or the user turns mods back on (`PUT /api/mods/safe-mode {"on":false}`;
   turning the Mods switch off and on again clears it too). It is per user and held in memory: other users' mods keep
   running, and only the user's own clients hear about it.
-- **The Mods switch** (Settings → Experimental, off by default) gates all of it. With it off, nothing changes, no host
+- **The Mods switch** (Settings → Features, marked Experimental, off by default) gates all of it. With it off, nothing changes, no host
   runs and no Bun is downloaded.
 
 ## Where mods live
