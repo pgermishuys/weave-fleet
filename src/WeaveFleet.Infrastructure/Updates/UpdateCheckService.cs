@@ -194,7 +194,7 @@ public sealed partial class UpdateCheckService(
         return "linux-x64";
     }
 
-    private static bool IsInstalledLayout()
+    internal static bool IsInstalledLayout()
     {
         // The app binary lives at <install>/app/WeaveFleet.Api[.exe].
         // The VERSION file lives at <install>/VERSION (one level above app/).

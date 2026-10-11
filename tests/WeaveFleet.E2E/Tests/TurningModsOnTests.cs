@@ -89,6 +89,7 @@ public sealed class TurningModsOnTests : E2ETestBase,
                 services.AddSingleton<IBunRuntime>(sp => new BunRuntimeInstaller(
                     sp.GetRequiredService<FleetOptions>(),
                     sp.GetRequiredService<IHttpClientFactory>(),
+                    sp.GetRequiredService<IBunReleases>(),
                     sp.GetRequiredService<ILogger<BunRuntimeInstaller>>())
                 {
                     Home = Home,
