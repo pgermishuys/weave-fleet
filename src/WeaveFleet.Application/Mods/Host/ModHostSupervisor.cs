@@ -130,6 +130,9 @@ internal sealed partial class ModHostSupervisor(string userId, ModHostDependenci
         }
     }
 
+    public IReadOnlyList<ModSiteHooks> SitesFor(string sessionId)
+        => Volatile.Read(ref _connection) is null ? [] : ModRouting.SitesFor(Volatile.Read(ref _routes), sessionId);
+
     /// <summary>The static check of a folder. Starts a host for it that stays up for checks a while but loads no mod.</summary>
     public async Task<JsonElement> CheckAsync(string folder, CancellationToken ct)
     {
@@ -358,6 +361,7 @@ internal sealed partial class ModHostSupervisor(string userId, ModHostDependenci
                 _loaded[mod.Id] = new LoadedMod(new ModRoute(mod.Id, mod.Name, mod.SessionId, HooksOf(answer)), staged);
                 Publish();
             }
+            deps.Ui.Loaded(userId);
             took = true;
             _problems.TryRemove(mod.Id, out _);
             DeleteStaged(old?.Staged);
@@ -441,14 +445,18 @@ internal sealed partial class ModHostSupervisor(string userId, ModHostDependenci
     private LoadedMod? Drop(string? id)
     {
         LoadedMod? dropped = null;
+        bool changed;
         lock (_sync)
         {
+            changed = _loaded.Count > 0;
             if (id is null)
                 _loaded.Clear();
             else if (!_loaded.Remove(id, out dropped))
                 return null;
             Publish();
         }
+        if (changed)
+            deps.Ui.Loaded(userId);
         if (id is null)
             DeleteFolder(StagedRoot);
         DeleteStaged(dropped?.Staged);
@@ -653,7 +661,11 @@ internal sealed partial class ModHostSupervisor(string userId, ModHostDependenci
             if (Text(parameters, "mod") is not { } modId)
                 return;
             if (method == "invalidate")
-                deps.Ui.Invalidated(userId, modId, Text(parameters, "sessionId"));
+            {
+                // Only a loaded mod redraws, and a draft only ever redraws its own session.
+                if (Volatile.Read(ref _routes).FirstOrDefault(r => r.Id == modId) is { } route)
+                    deps.Ui.Invalidated(userId, modId, route.DraftSessionId ?? Text(parameters, "sessionId"));
+            }
             else if (method == "log")
                 deps.Ui.Logged(userId, modId, Text(parameters, "sessionId"), Text(parameters, "level") ?? "info", Text(parameters, "text") ?? "");
             else if (method == "failed")

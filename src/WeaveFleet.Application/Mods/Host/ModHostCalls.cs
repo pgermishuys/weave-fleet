@@ -1,4 +1,7 @@
 using System.Text.Json;
+using WeaveFleet.Application.Events;
+using WeaveFleet.Domain.Events;
+using WeaveFleet.Domain.Harnesses;
 
 namespace WeaveFleet.Application.Mods.Host;
 
@@ -28,8 +31,8 @@ public interface IModStrikeRecorder
 }
 
 /// <summary>
-/// What mods ask of the browser: panes, toasts, redraws, log lines, and where a session is open. M6 implements it; until
-/// then <see cref="NoModHostUi"/> answers and drops.
+/// What mods ask of the browser: panes, toasts, redraws, log lines, and where a session is open. Redraws are real
+/// (<see cref="BroadcastingModHostUi"/>); the rest answers and drops (<see cref="NoModHostUi"/>) until panes and toasts land.
 /// </summary>
 public interface IModHostUi
 {
@@ -44,6 +47,9 @@ public interface IModHostUi
 
     /// <summary>A mod asked for its sites to be drawn again: in one session, or every session when <paramref name="sessionId"/> is null.</summary>
     void Invalidated(string userId, string modId, string? sessionId);
+
+    /// <summary>The user's loaded mods changed (loaded, reloaded or dropped): every session asks again which sites they hook.</summary>
+    void Loaded(string userId);
 
     void Logged(string userId, string modId, string? sessionId, string level, string text);
 }
@@ -63,7 +69,63 @@ public sealed class NoModHostUi : IModHostUi
     {
     }
 
+    public void Loaded(string userId)
+    {
+    }
+
     public void Logged(string userId, string modId, string? sessionId, string level, string text)
     {
+    }
+}
+
+/// <summary>
+/// <see cref="NoModHostUi"/> except that a redraw reaches the browser as <c>mod.ui</c>: on the session's topic when a
+/// session is named, else on the user's <c>sessions</c> topic (every session).
+/// </summary>
+public sealed class BroadcastingModHostUi(IEventBroadcaster events) : IModHostUi
+{
+    private readonly NoModHostUi _none = new();
+
+    public Task OpenPaneAsync(string userId, string modId, string sessionId, string paneId, string? title, CancellationToken ct)
+        => _none.OpenPaneAsync(userId, modId, sessionId, paneId, title, ct);
+
+    public Task ClosePaneAsync(string userId, string modId, string sessionId, string paneId, CancellationToken ct)
+        => _none.ClosePaneAsync(userId, modId, sessionId, paneId, ct);
+
+    public Task ToastAsync(string userId, string modId, string sessionId, string text, int? timeoutMs, string? tone, CancellationToken ct)
+        => _none.ToastAsync(userId, modId, sessionId, text, timeoutMs, tone, ct);
+
+    public IReadOnlyList<string> SurfacesOf(string userId, string sessionId) => _none.SurfacesOf(userId, sessionId);
+
+    public void Invalidated(string userId, string modId, string? sessionId)
+    {
+        var at = modId.IndexOf('@', StringComparison.Ordinal);
+        var payload = new ModUiPayload { SessionId = sessionId, Mod = at > 0 ? modId[..at] : modId };
+        _ = SendAsync(userId, sessionId is null ? "sessions" : $"session:{sessionId}", payload);
+    }
+
+    /// <summary>Fleet's own redraw, with no mod: on the <c>sessions</c> topic, so every session asks for its sites again.</summary>
+    public void Loaded(string userId) => _ = SendAsync(userId, "sessions", new ModUiPayload());
+
+    public void Logged(string userId, string modId, string? sessionId, string level, string text)
+        => _none.Logged(userId, modId, sessionId, level, text);
+
+    /// <summary>A redraw is best effort: one that can't be sent is dropped, and the mod asks again.</summary>
+    private async Task SendAsync(string userId, string topic, ModUiPayload payload)
+    {
+        try
+        {
+            await events.BroadcastAsync(
+                topic,
+                EventTypes.ModUi,
+                JsonSerializer.SerializeToElement(payload, ApplicationJsonContext.Default.ModUiPayload),
+                new ModUi { Payload = payload },
+                userId,
+                CancellationToken.None).ConfigureAwait(false);
+        }
+        catch (Exception)
+        {
+            // Nothing to tell the mod, and nobody awaits this.
+        }
     }
 }

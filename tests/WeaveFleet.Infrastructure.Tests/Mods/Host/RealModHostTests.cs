@@ -78,6 +78,11 @@ public sealed class RealModHostTests : IAsyncDisposable
             await _store.KeepAsync(User, "ses_live1", name, new ModKeepSource(null, null), (_, _) => Task.FromResult<JsonElement?>(null));
         }
 
+        return await LaunchAsync(real);
+    }
+
+    private async Task<(ModHostService Service, ModHostSupervisor Supervisor)> LaunchAsync((string Bun, string Script) real)
+    {
         _service = new ModHostService(
             new ModHostOptions { RequestTimeout = TimeSpan.FromSeconds(10) },
             _connections,
@@ -170,6 +175,33 @@ public sealed class RealModHostTests : IAsyncDisposable
     }
 
     [Fact]
+    public async Task The_shipped_sample_is_kept_checked_and_draws_pills_for_a_dotnet_test_row_through_the_render_service()
+    {
+        if (Real() is not { } real || new ModHostFiles(AppContext.BaseDirectory).SamplesFolder is not { } samples)
+            return;
+        var (service, _) = await LaunchAsync(real);
+
+        // The real store and the real host's check, as "Add" runs them.
+        var version = await _store.KeepFolderAsync(User, "test-chips", Path.Combine(samples, "test-chips"), new ModKeepSource(null, "Fleet's sample"),
+            async (staged, ct) => await service.CheckAsync(User, staged, ct));
+        (version.Number, version.SessionId, version.Check!.Value.GetProperty("ok").GetBoolean()).ShouldBe((1, null, true));
+        await service.EnsureAsync(User).WaitAsync(TimeSpan.FromSeconds(30));
+        var render = new ModRenderService(service, new TestUserContext(User));
+        render.SitesFor("ses_live1").Sites.Select(s => $"{s.Site}={string.Join(",", s.Tools!)}").ShouldBe(["ToolUse=bash,shell", "ToolResult=bash,shell"]);
+
+        const string Output = "Failed WidgetTests.Spins [4 ms]\nFailed!  - Failed: 1, Passed: 3, Skipped: 0, Total: 4, Duration: 1 s";
+        var props = JsonSerializer.SerializeToElement(new { tool = "bash", input = new { command = "dotnet test" }, output = Output });
+        var use = (await render.RenderAsync("ses_live1", new ModRenderRequest("ToolUse", "call_1", props))).Value;
+
+        use.Mods.ShouldBe([new ModRenderedBy("test-chips", false)]);
+        use.Tree!.Value.GetProperty("children").EnumerateArray().Select(c => c.GetProperty("props").GetProperty("label").GetString()).ShouldBe(["3 passed", "1 failed"]);
+        var opened = (await render.RenderAsync("ses_live1", new ModRenderRequest("ToolResult", "call_1", props))).Value;
+        opened.Tree!.Value.GetRawText().ShouldContain("WidgetTests.Spins");
+        var read = JsonSerializer.SerializeToElement(new { tool = "read", input = new { }, output = "" });
+        (await render.RenderAsync("ses_live1", new ModRenderRequest("ToolUse", "call_2", read))).Value.Tree.ShouldBeNull();
+    }
+
+    [Fact]
     public async Task A_button_a_mod_drew_is_pressed_and_its_callback_runs()
     {
         if (await StartAsync("press-demo") is not (var service, _))
@@ -236,6 +268,10 @@ public sealed class RealModHostTests : IAsyncDisposable
         public IReadOnlyList<string> SurfacesOf(string userId, string sessionId) => [];
 
         public void Invalidated(string userId, string modId, string? sessionId)
+        {
+        }
+
+        public void Loaded(string userId)
         {
         }
 

@@ -23,6 +23,7 @@ public sealed class HostModCheckerTests
         public Task<ModDispatchResult> DispatchAsync(string userId, ModDispatchRequest request, CancellationToken ct = default) => throw new NotSupportedException();
         public Task ReloadDraftAsync(string userId, string sessionId, string name, CancellationToken ct = default) => throw new NotSupportedException();
         public Task ForgetSessionAsync(string userId, string sessionId, CancellationToken ct = default) => throw new NotSupportedException();
+        public IReadOnlyList<ModSiteHooks> SitesFor(string userId, string sessionId) => throw new NotSupportedException();
         public ModLoadProblem? GetLoadProblem(string userId, string modId) => throw new NotSupportedException();
     }
 

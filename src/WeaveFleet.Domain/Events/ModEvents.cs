@@ -82,3 +82,41 @@ public sealed record ModsRuntimeJob
     /// <summary>Gets when the install started.</summary>
     public required DateTimeOffset StartedAt { get; init; }
 }
+
+/// <summary>
+/// A mod asked for its sites to be drawn again (<c>$.ui.invalidate</c>). Raised on the session's topic, or on the
+/// <c>sessions</c> topic for every session when the mod named none.
+/// </summary>
+public sealed record ModUi : DomainEvent
+{
+    /// <summary>
+    /// Gets the payload describing what to draw again.
+    /// </summary>
+    public required ModUiPayload Payload { get; init; }
+}
+
+/// <summary>
+/// Payload naming what a mod wants drawn again.
+/// </summary>
+public sealed record ModUiPayload
+{
+    /// <summary>
+    /// Gets the session to draw again; null for every session.
+    /// </summary>
+    public string? SessionId { get; init; }
+
+    /// <summary>
+    /// Gets the render site (<c>ToolUse</c>, <c>ToolResult</c>…); null for every site.
+    /// </summary>
+    public string? Site { get; init; }
+
+    /// <summary>
+    /// Gets the call or pane id at the site; null for every one.
+    /// </summary>
+    public string? RequestId { get; init; }
+
+    /// <summary>
+    /// Gets the name of the mod that asked; null when Fleet loaded or dropped mods, so every session asks for its sites again.
+    /// </summary>
+    public string? Mod { get; init; }
+}

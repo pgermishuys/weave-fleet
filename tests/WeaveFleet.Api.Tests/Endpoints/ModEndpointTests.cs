@@ -93,6 +93,8 @@ public sealed class ModEndpointTests : IAsyncDisposable
     [InlineData("POST", "/api/sessions/s1/mods/drafts/test-chips/off")]
     [InlineData("POST", "/api/sessions/s1/mods/drafts/test-chips/on")]
     [InlineData("POST", "/api/mods/samples/test-chips")]
+    [InlineData("GET", "/api/sessions/s1/mods/sites")]
+    [InlineData("POST", "/api/sessions/s1/mods/render")]
     public async Task Every_route_is_404_with_the_message_while_the_switch_is_off(string method, string url)
     {
         using var request = new HttpRequestMessage(new HttpMethod(method), url);
@@ -101,6 +103,8 @@ public sealed class ModEndpointTests : IAsyncDisposable
             request.Content = JsonContent.Create(new { version = 1 });
         else if (url.EndsWith("/safe-mode", StringComparison.Ordinal))
             request.Content = JsonContent.Create(new { on = true });
+        else if (url.EndsWith("/render", StringComparison.Ordinal))
+            request.Content = JsonContent.Create(new { site = "ToolUse", requestId = "call_1", props = new { tool = "bash" } });
 
         var response = await _client.SendAsync(request);
 

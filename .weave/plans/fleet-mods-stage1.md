@@ -303,3 +303,20 @@ branch `feat/mods-host-client-reference` (7bcb39b0, closed PR #491), with review
   - A 404 on Turn off (the draft is gone) should drop the card.
   - Drafts are kept for every session the user has viewed; drop a session's when it's closed.
   - `mods.test.ts`'s `vi.waitFor` in the `mods.changed` tests should be plain `expect` after the awaited load.
+- **Tool rows (M6 thin):**
+  - The client's render cache keeps every (call, status) answer for the page's life, and a failed render (`null`) is
+    kept until the next `mod.ui` or `mods.changed`. Bound it, and retry a failed one once.
+  - Opening a long session sends one render per hooked row (four at a time). Batch them (`{ site, requests: [...] }`).
+  - The client listens for a session's `mod.ui` from the first row it shows and never stops; drop it when the session
+    closes.
+  - `mod.ui` carries `site`, but the client redraws both sites of a call (or every row of the session) either way.
+
+## Next (after M6 thin)
+
+- Wire the other sites to the host the same way: `ComposerBand`, `StatusChip` and panes (`mod.pane`, `$.ui.open`).
+- Controls: `ui.press`/`ui.input`/`ui.select` through `POST /api/sessions/{id}/mods/action`.
+- `$.ui.toast` through the notices path.
+- Serving a mod's `Page` files.
+- Resolving tool names on the server, so a render doesn't depend on the client's registry.
+- `turn.complete` dispatched from Fleet's turn events.
+

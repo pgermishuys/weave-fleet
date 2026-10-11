@@ -476,6 +476,7 @@ public class SessionEventsHub : Hub
         BrowserStepped          => "browser.step",
         ModsChanged             => "mods.changed",
         ModsRuntimeChanged      => "mods.runtime",
+        ModUi                   => "mod.ui",
         _ => domainEvent.GetType().Name,
     };
 }
