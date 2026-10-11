@@ -180,10 +180,30 @@ internal sealed class InMemoryModVersionStore : IModVersionStore
         var folder = DraftFolder(userId, sessionId, name);
         var existing = _drafts.GetValueOrDefault((userId, sessionId, name));
         _files[folder] = (_files.GetValueOrDefault(folder) ?? []).Where(f => files.All(n => n.Path != f.Path)).Concat(files).ToList();
-        var draft = new ModDraft(sessionId, name, folder, existing?.Off, new ModManifest(name, "0.1.0", "Shows chips", "mod.ts"));
+        // As the store reads it: a mod.json written now is parsed, and one that isn't a whole manifest leaves none.
+        var manifest = files.FirstOrDefault(f => f.Path == "mod.json") is { } written
+            ? ParseManifest(written.Content)
+            : existing?.Manifest ?? new ModManifest(name, "0.1.0", "Shows chips", "mod.ts");
+        var draft = new ModDraft(sessionId, name, folder, existing?.Off, manifest);
         _drafts[(userId, sessionId, name)] = draft;
         Writes.Add($"write {sessionId}/{name} {string.Join(",", files.Select(f => f.Path))}");
         return Task.FromResult(draft);
+    }
+
+    private static ModManifest? ParseManifest(string json)
+    {
+        try
+        {
+            var root = JsonDocument.Parse(json).RootElement;
+            string? Field(string field) => root.TryGetProperty(field, out var value) && value.ValueKind == JsonValueKind.String ? value.GetString() : null;
+            return Field("name") is { } name && Field("version") is { } version && Field("description") is { } description && Field("hooks") is { } hooks
+                ? new ModManifest(name, version, description, hooks)
+                : null;
+        }
+        catch (JsonException)
+        {
+            return null;
+        }
     }
 
     public async Task<JsonElement?> CheckDraftAsync(string userId, string sessionId, string name, ModKeepCheck check, CancellationToken ct = default)
