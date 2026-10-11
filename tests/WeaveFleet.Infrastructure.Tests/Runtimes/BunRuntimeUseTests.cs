@@ -10,6 +10,9 @@ public sealed class BunRuntimeUseTests : IDisposable
 {
     private static readonly BunRelease Release = BunRelease.Pinned;
 
+    /// <summary>The finder searches the way this host does: bun.exe and a <c>;</c>-separated PATH on Windows.</summary>
+    private static readonly bool Host = OperatingSystem.IsWindows();
+
     private readonly string _home = Path.Combine(Path.GetTempPath(), $"fleet-bun-use-{Guid.NewGuid():N}");
     private readonly Dictionary<string, string> _versions = new();
     private string? _unsafeReason;
@@ -37,7 +40,7 @@ public sealed class BunRuntimeUseTests : IDisposable
     {
         var directory = Path.Combine(_home, folder);
         Directory.CreateDirectory(directory);
-        var path = Path.Combine(directory, "bun");
+        var path = Path.Combine(directory, Host ? "bun.exe" : "bun");
         File.WriteAllText(path, $"#!/bin/sh\necho {version}\n");
         _versions[path] = version;
         return path;
@@ -55,14 +58,14 @@ public sealed class BunRuntimeUseTests : IDisposable
         {
             Home = _home,
             Rid = "linux-x64",
-            IsWindows = false,
+            IsWindows = Host,
             Probe = Probe,
             Finder = new BunMachineFinder
             {
                 Home = _home,
                 PathEnv = string.Join(Path.PathSeparator, (onPath ?? ["bin"]).Select(folder => Path.Combine(_home, folder))),
                 SystemDirectories = [],
-                IsWindows = false,
+                IsWindows = Host,
                 Probe = Probe,
                 WhyNotSafeToRun = _ => _unsafeReason,
             },
@@ -160,6 +163,8 @@ public sealed class BunRuntimeUseTests : IDisposable
     [Fact]
     public async Task A_found_bun_that_is_not_safe_to_run_is_refused()
     {
+        if (OperatingSystem.IsWindows()) return; // Fleet checks who can change a Bun on Linux and macOS only.
+
         var mine = PutBun("1.4.5");
         _unsafeReason = "Others can change it.";
 
@@ -199,6 +204,8 @@ public sealed class BunRuntimeUseTests : IDisposable
     [Fact]
     public async Task A_pointed_bun_that_became_unsafe_is_ignored_at_the_next_resolve()
     {
+        if (OperatingSystem.IsWindows()) return; // Fleet checks who can change a Bun on Linux and macOS only.
+
         var mine = PutBun("1.4.5");
         PlantInstalled();
         var installer = NewInstaller();
