@@ -4,8 +4,10 @@ import { Check, ChevronDown, ChevronRight } from "lucide-vue-next";
 import PhoneGlyph from "@/components/phone/PhoneGlyph.vue";
 import ModTree from "@/components/mods/ModTree.vue";
 import { toolRowViewId, toolRowViews } from "@/lib/mods/points";
+import { useModToolRows } from "@/lib/mods/renders";
 import { resolvedViewsById } from "@/lib/mods/resolve";
 import { stepRow, visibleSteps, type FoldedStep, type PhoneBlock } from "@/lib/phone/fold-steps";
+import { toToolCardItem } from "@/components/session/activity-stream-tool-card";
 import { getToolIcon } from "@/lib/tool-icons";
 
 /**
@@ -40,6 +42,24 @@ const sections = computed(() => props.parts.map((part) => {
     })),
   };
 }));
+
+// Ask for the trees of mods that hook these steps. The sheet's result view reads the same contributions.
+useModToolRows(() =>
+  sections.value.flatMap((section) =>
+    section.kind === "steps"
+      ? section.rows.map(({ step }) => ({
+          sessionId: props.sessionId,
+          callId: step.part.callId,
+          rawTool: step.part.tool,
+          status: step.status,
+          read: () => {
+            const { input, output, title } = toToolCardItem(step.part);
+            return { input, output, title };
+          },
+        }))
+      : [],
+  ),
+);
 
 // A mod's tree for a call's line. Not part of `sections`: that would rebuild every row whenever any view changes.
 // Each call's view is read on its own, so a contribution for one call redraws only the run that holds it.

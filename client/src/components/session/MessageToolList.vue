@@ -52,6 +52,7 @@ function handleExpandVisual(payload: VisualPayload): void {
         :id="tool.id"
         :call-id="tool.callId"
         :session-id="sessionId"
+        :input="tool.input"
         :title="tool.title"
         :kind="tool.kind"
         :status="tool.status"
