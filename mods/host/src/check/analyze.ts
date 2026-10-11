@@ -58,6 +58,7 @@ const DOLLAR_METHODS = new Set([
   "state.get", "state.set",
   "store.get", "store.set", "store.delete", "store.keys",
   "session.id", "session.title", "session.harness", "session.cwd", "session.surfaces", "session.branch",
+  "prompt.submit",
   "clock.now", "clock.after", "clock.every",
 ]);
 
