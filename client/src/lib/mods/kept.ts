@@ -10,6 +10,46 @@ export interface ModOff {
   error?: string | null;
 }
 
+export interface ModCheckProblem {
+  line?: number;
+  column?: number;
+  code: string;
+  message: string;
+}
+
+export interface ModCheckHook {
+  event: string;
+  /** The matcher as JSON; a RegExp as `{ "$regex": source, "flags": flags }`. */
+  matcher?: unknown;
+}
+
+/** What the static check read from a mod without running it (`CheckReport` in `mods/types/fleet-mods.d.ts`). */
+export interface ModCheckReport {
+  ok: boolean;
+  name: string;
+  version: string;
+  description: string;
+  lines: number;
+  sha256: string;
+  hooks: ModCheckHook[];
+  /** Every `$` call as `ns.method`, sorted, once each. */
+  calls: string[];
+  state: string[];
+  pages: string[];
+  errors: ModCheckProblem[];
+  warnings: ModCheckProblem[];
+}
+
+export interface KeptMod {
+  name: string;
+  description: string | null;
+  /** The version sessions load; null only before anything is kept. */
+  active: number | null;
+  /** The active version's own version string. */
+  activeVersion: string | null;
+  off: ModOff | null;
+}
+
 /** A mod the agent is writing in one session. */
 export interface ModDraft {
   sessionId: string;

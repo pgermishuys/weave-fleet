@@ -2,7 +2,7 @@ import { defineStore } from "pinia";
 import { computed, shallowRef } from "vue";
 import { onDomainEvent } from "@/composables/on-domain-event";
 import { liveTarget, type MachineTarget } from "@/lib/machine-target";
-import type { ModDraft, ModsSwitch } from "@/lib/mods/kept";
+import type { KeptMod, ModDraft, ModsSwitch } from "@/lib/mods/kept";
 import * as modsApi from "@/lib/mods/kept-api";
 import { ModsRequestError } from "@/lib/mods/kept-api";
 import { MODS_PREFERENCE_KEY } from "@/lib/mods";
@@ -78,15 +78,32 @@ export const useModsStore = defineStore("mods", () => {
     });
   }
 
+  function replaceDraft(sessionId: string, name: string, change: (draft: ModDraft) => ModDraft): void {
+    const list = drafts.value[sessionId];
+    if (!list) return;
+    drafts.value = { ...drafts.value, [sessionId]: list.map((d) => (d.name === name ? change(d) : d)) };
+  }
+
+  const withoutKeepRequest = (draft: ModDraft): ModDraft => ({ ...draft, keepRequest: null });
+
+  async function keep(sessionId: string, name: string, note: string): Promise<KeptMod> {
+    const mod = await modsApi.keepDraft(sessionId, name, note, machineOf(sessionId).connection);
+    replaceDraft(sessionId, name, withoutKeepRequest);
+    await loadDrafts(sessionId);
+    return mod;
+  }
+
+  async function dismissKeepRequest(sessionId: string, name: string): Promise<void> {
+    await modsApi.dismissKeepRequest(sessionId, name, machineOf(sessionId).connection);
+    replaceDraft(sessionId, name, withoutKeepRequest);
+    await loadDrafts(sessionId);
+  }
+
   async function setDraftOn(sessionId: string, name: string, on: boolean): Promise<ModDraft> {
     const draft = await modsApi.setDraftOn(sessionId, name, on, machineOf(sessionId).connection);
-    const list = drafts.value[sessionId];
-    if (list) {
-      const next = on ? draft : { ...draft, keepRequest: null };
-      drafts.value = { ...drafts.value, [sessionId]: list.map((d) => (d.name === name ? next : d)) };
-    }
+    replaceDraft(sessionId, name, () => (on ? draft : withoutKeepRequest(draft)));
     return draft;
   }
 
-  return { modsSwitch, drafts, isSwitchedOn, draftsFor, loadSwitch, loadDrafts, setDraftOn };
+  return { modsSwitch, drafts, isSwitchedOn, draftsFor, loadSwitch, loadDrafts, keep, setDraftOn, dismissKeepRequest };
 });

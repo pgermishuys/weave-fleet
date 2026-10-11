@@ -2,6 +2,7 @@
 import { computed, shallowRef } from "vue";
 import { LoaderCircle } from "lucide-vue-next";
 import ModActionButton from "@/components/mods/review/ModActionButton.vue";
+import ModReviewDialog from "@/components/mods/review/ModReviewDialog.vue";
 import ModDraftMark from "@/components/mods/ModDraftMark.vue";
 import type { ModDraft } from "@/lib/mods/kept";
 import { useModsStore } from "@/stores/mods";
@@ -11,6 +12,7 @@ const props = defineProps<{ draft: ModDraft; phone?: boolean }>();
 
 const store = useModsStore();
 
+const reviewOpen = shallowRef(false);
 const toggling = shallowRef(false);
 const actionError = shallowRef<string | null>(null);
 
@@ -64,6 +66,15 @@ async function toggle(): Promise<void> {
           {{ request.note }}
         </p>
       </div>
+      <ModActionButton
+        :phone="phone"
+        size="sm"
+        variant="primary"
+        data-testid="mod-draft-review"
+        @click="reviewOpen = true"
+      >
+        Review…
+      </ModActionButton>
     </div>
 
     <div class="mod-draft-card__head">
@@ -116,6 +127,16 @@ async function toggle(): Promise<void> {
       <ModActionButton
         :phone="phone"
         size="sm"
+        variant="primary"
+        :disabled="stillWriting"
+        data-testid="mod-draft-keep"
+        @click="reviewOpen = true"
+      >
+        Keep…
+      </ModActionButton>
+      <ModActionButton
+        :phone="phone"
+        size="sm"
         variant="outline"
         :disabled="toggling"
         data-testid="mod-draft-toggle"
@@ -129,6 +150,13 @@ async function toggle(): Promise<void> {
         {{ isOff ? "Turn on again" : "Turn off" }}
       </ModActionButton>
     </div>
+
+    <ModReviewDialog
+      v-model:open="reviewOpen"
+      :session-id="draft.sessionId"
+      :draft="draft"
+      :phone="phone"
+    />
   </div>
 </template>
 
@@ -146,6 +174,10 @@ async function toggle(): Promise<void> {
 }
 
 .mod-draft-card__request {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
   margin: -2px -4px 4px;
   padding: 8px 10px;
   border-radius: var(--radius-btn);
@@ -196,6 +228,10 @@ async function toggle(): Promise<void> {
   align-items: center;
   gap: 8px;
   margin-top: 2px;
+}
+
+.mod-draft-card--phone .mod-draft-card__request {
+  flex-wrap: wrap;
 }
 
 /* Phone: the buttons stay in one wrapping row, the card stays short. */
