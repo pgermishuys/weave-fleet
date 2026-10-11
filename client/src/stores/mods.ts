@@ -51,6 +51,8 @@ export const useModsStore = defineStore("mods", () => {
     stops.set(target.key, onDomainEvent(target, "sessions", "mods.changed", ({ payload }) => {
       const sessionId = payload.sessionId;
       if (sessionId && sessionId in drafts.value) void loadDrafts(sessionId);
+      // The Mods switch moved (on this machine, or from another tab).
+      if (payload.reason === "switch" && target.key === liveTarget().key) void loadSwitch();
     }));
   }
 

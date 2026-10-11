@@ -162,6 +162,14 @@ describe("mods.changed", () => {
     await vi.waitFor(() => expect(api.fetchDrafts).toHaveBeenCalledTimes(2));
   });
 
+  it("reads the switch again when the server says it moved", async () => {
+    api.fetchModsSwitch.mockResolvedValueOnce({ on: false, safeMode: false }).mockResolvedValueOnce({ on: true, safeMode: false });
+    const store = useModsStore();
+    await store.loadSwitch();
+    emit("home", { reason: "switch" });
+    await vi.waitFor(() => expect(store.isSwitchedOn).toBe(true));
+  });
+
   it("refreshes a remote session's drafts from that machine's stream", async () => {
     api.fetchDrafts.mockResolvedValue([]);
     await useModsStore().loadDrafts("s-remote");
