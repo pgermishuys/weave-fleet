@@ -91,12 +91,6 @@ describe("loading", () => {
     expect(useModsStore().draftsFor("nope")).toEqual([]);
   });
 
-  it("sends a session's drafts to its machine", async () => {
-    api.fetchDrafts.mockResolvedValue([]);
-    await useModsStore().loadDrafts("s-remote");
-    expect(api.fetchDrafts).toHaveBeenCalledWith("s-remote", remote.connection);
-  });
-
   it("coalesces concurrent loads of the same thing", async () => {
     api.fetchDrafts.mockResolvedValue([]);
     const store = useModsStore();

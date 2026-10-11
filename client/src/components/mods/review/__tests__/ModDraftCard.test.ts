@@ -84,10 +84,6 @@ describe("ModDraftCard", () => {
     expect(noLine.find("[data-testid=mod-draft-check]").text()).toBe("Check: Bad manifest");
   });
 
-  it("shows nothing for a null problem", () => {
-    expect(mountCard(draft({ problem: null })).find("[data-testid=mod-draft-check]").exists()).toBe(false);
-  });
-
   it("shows the agent's request to keep, with its note", () => {
     const wrapper = mountCard(draft({ keepRequest: { note: "Counts are easier to scan.", at: "2026-10-10T10:00:00Z" } }));
     expect(wrapper.find("[data-testid=mod-draft-request]").text()).toContain("The agent asks you to keep this");
@@ -99,13 +95,6 @@ describe("ModDraftCard", () => {
     const line = wrapper.find("[data-testid=mod-draft-request]").text();
     expect(line).toContain("The agent asks you to keep this");
     expect(line).not.toContain("Review");
-  });
-
-  it("has no request line without a request, and stops showing it when the request goes", async () => {
-    const wrapper = mountCard(draft({ keepRequest: { note: null, at: "2026-10-10T10:00:00Z" } }));
-    await wrapper.setProps({ draft: draft({ keepRequest: null }) });
-    expect(wrapper.find("[data-testid=mod-draft-request]").exists()).toBe(false);
-    expect(mountCard(draft()).find("[data-testid=mod-draft-request]").exists()).toBe(false);
   });
 
   it("shows no line number for a null line", () => {

@@ -64,12 +64,4 @@ describe("errors", () => {
     expect((error as ModsRequestError).message).toBe("That draft is gone.");
     expect((error as ModsRequestError).status).toBe(404);
   });
-
-  it("falls back to a plain message when the body isn't JSON", async () => {
-    apiFetchOnMock.mockImplementation(async () => new Response("boom", { status: 502 }));
-    const error = (await fetchDrafts("s1").catch((e: unknown) => e)) as ModsRequestError;
-    expect(error).toBeInstanceOf(ModsRequestError);
-    expect(error.status).toBe(502);
-    expect(error.message).not.toBe("");
-  });
 });

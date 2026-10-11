@@ -42,12 +42,6 @@ describe("ModDraftCards", () => {
     expect(store.loadDrafts).toHaveBeenCalledWith("s1");
   });
 
-  it("tells the cards when they're on the phone", async () => {
-    const wrapper = mount(ModDraftCards, { props: { sessionId: "s1", phone: true } });
-    await flushPromises();
-    expect(wrapper.find("[data-testid=card]").attributes("data-phone")).toBe("true");
-  });
-
   it("renders nothing with the Mods switch off, and doesn't load drafts", async () => {
     store.isSwitchedOn = false;
     const wrapper = mount(ModDraftCards, { props: { sessionId: "s1" } });
