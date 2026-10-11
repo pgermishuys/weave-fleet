@@ -151,7 +151,8 @@ public sealed class ModBridgeTests
         result.Value!.Title.ShouldBe($"Wrote {Chips}");
         result.Value!.Output.ShouldBe("Wrote mod.json, mod.ts to the draft test-chips.\ntest-chips loaded in this session.");
         _host.Reloaded.ShouldBe([(Owner, SessionId, Chips)]);
-        _events.Broadcasts.Select(b => b.DomainEvent.ShouldBeOfType<ModsChanged>().Payload.Reason).ShouldBe(["draft-written"]);
+        // The card refetches after the load too, when its problem may have changed.
+        _events.Broadcasts.Select(b => b.DomainEvent.ShouldBeOfType<ModsChanged>().Payload.Reason).ShouldBe(["draft-written", "draft-loaded"]);
     }
 
     [Fact]
@@ -222,6 +223,8 @@ public sealed class ModBridgeTests
         result.Value!.Title.ShouldBe($"Reloaded {Chips}");
         result.Value!.Output.ShouldBe("test-chips loaded in this session.");
         _host.Reloaded.ShouldBe([(Owner, SessionId, Chips)]);
+        var loaded = _events.Broadcasts.Select(b => b.DomainEvent.ShouldBeOfType<ModsChanged>().Payload).ShouldHaveSingleItem();
+        (loaded.Reason, loaded.Name, loaded.SessionId).ShouldBe(("draft-loaded", Chips, SessionId));
     }
 
     [Fact]
