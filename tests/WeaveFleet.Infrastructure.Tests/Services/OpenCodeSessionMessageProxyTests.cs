@@ -1639,6 +1639,20 @@ public sealed class OpenCodeSessionMessageProxyTests
     }
 
     [Fact]
+    public async Task GetMessagesAsync_marks_a_user_message_a_mod_sent()
+    {
+        var repository = new InMemoryMessageRepository();
+        await repository.SaveModMarkAsync("session-new", "msg_follow_up", new ModMark(ModMark.Sent, "tests-after-edits"));
+        var proxy = CreateLiveProxy(
+            [HarnessMessage("msg_typed", "user", _promptSentAt), HarnessMessage("msg_follow_up", "user", _promptSentAt.AddMinutes(1))],
+            repository);
+
+        var page = await proxy.GetMessagesAsync("session-new");
+
+        page.Messages.Select(m => m.Mod).ShouldBe([null, new ModMark(ModMark.Sent, "tests-after-edits")]);
+    }
+
+    [Fact]
     public async Task GetMessagesAsync_marks_a_user_message_that_came_from_a_command()
     {
         var repository = new InMemoryMessageRepository();

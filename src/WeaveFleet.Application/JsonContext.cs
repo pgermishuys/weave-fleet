@@ -21,7 +21,8 @@ internal sealed record CommittedMessageInfo(
     string? ModelID,
     CommittedMessageTime Time,
     bool? Steered = null,
-    SlashCommand? Command = null);
+    SlashCommand? Command = null,
+    ModMark? Mod = null);
 
 internal sealed record CommittedMessage(CommittedMessageInfo Info, List<JsonElement> Parts);
 

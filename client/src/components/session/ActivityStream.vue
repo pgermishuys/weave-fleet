@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { computed, nextTick, onMounted, onUnmounted, ref, watch } from "vue";
-import { ArrowUpRight, Bot, Bug, CornerDownRight, RotateCw, TerminalSquare, TriangleAlert, Workflow } from "lucide-vue-next";
+import { ArrowUpRight, Bot, Bug, CornerDownRight, Puzzle, RotateCw, TerminalSquare, TriangleAlert, Workflow } from "lucide-vue-next";
 import { useMachineTarget } from "@/lib/machine-target";
 import { useRouter } from "@tanstack/vue-router";
 import type { PeerSender } from "@/lib/session-messages";
@@ -588,6 +588,18 @@ function handleImproveSkill(skill: string, toolId: string): void {
             aria-hidden="true"
           />
           <span class="peer-from__title">{{ message.workflowStep }}</span>
+        </span>
+        <span
+          v-if="message.mod"
+          class="peer-from"
+          data-testid="mod-mark"
+          :title="message.mod.kind === 'sent' ? 'A mod sent this message, not you.' : 'A mod reworded what you typed before it was sent.'"
+        >
+          <Puzzle
+            class="peer-from__icon"
+            aria-hidden="true"
+          />
+          <span class="peer-from__title">{{ message.mod.kind === "sent" ? "Sent by" : "Rewritten by" }} {{ message.mod.name }}</span>
         </span>
         <span
           v-if="message.steered"

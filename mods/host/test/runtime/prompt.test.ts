@@ -18,7 +18,7 @@ describe("prompt.submit", () => {
     await s.load("test-a", `on("prompt.submit", ($, e, next) => next({ ...e, text: e.text.toUpperCase() }));`);
     await s.load("test-b", `on("prompt.submit", { text: /branch/ }, ($, e, next) => next({ ...e, text: e.text + " (b saw " + e.text.slice(0, 5) + ")" }));`);
     const r = await s.dispatch("prompt.submit", ids("test-a", "test-b"), submit);
-    expect(r.result).toEqual({ ...submit, text: "WHICH BRANCH AM I ON? (b saw WHICH)" });
+    expect(r.result).toEqual({ ...submit, text: "WHICH BRANCH AM I ON? (b saw WHICH)", mod: "test-a" });
   });
 
   test("context accumulates across two mods", async () => {
@@ -72,5 +72,15 @@ describe("prompt.submit", () => {
     expect((await s.dispatch("prompt.submit", ids("test-branch"), submit)).result.context).toEqual(["feature/berths"]);
     const other = { ...submit, sessionId: "ses_other" };
     expect((await s.dispatch("prompt.submit", ids("test-branch"), other, "ses_other")).result.context).toEqual(["null"]);
+  });
+
+  test("a rewrite names the mod that changed the text; a pass-through or a context-only hook does not", async () => {
+    const s = setup();
+    await s.load("test-inner", `on("prompt.submit", ($, e, next) => next({ ...e, text: "Looks good to me." }));`);
+    await s.load("test-outer", `on("prompt.submit", async ($, e, next) => next(e));`);
+    await s.load("test-notes", `on("prompt.submit", ($, e, next) => next({ ...e, context: ["a note"] }));`);
+    expect((await s.dispatch("prompt.submit", ids("test-outer", "test-inner"), submit)).result.mod).toBe("test-inner");
+    const notesOnly = (await s.dispatch("prompt.submit", ids("test-notes"), submit)).result;
+    expect(notesOnly.mod).toBeUndefined();
   });
 });

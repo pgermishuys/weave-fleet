@@ -97,6 +97,12 @@ export interface SlashCommand {
   arguments?: string | null;
 }
 
+/** Which mod put a prompt in the conversation: it sent the message, or rewrote the words the user typed. */
+export interface ModMark {
+  kind: "sent" | "rewritten";
+  name: string;
+}
+
 export interface MessageEventInfo {
   id: string;
   role: string;
@@ -116,6 +122,8 @@ export interface MessageEventInfo {
   steered?: boolean | null;
   /** The slash command a user message came from; its text is then what the harness made of the command. */
   command?: SlashCommand | null;
+  /** The mod that sent or rewrote a user prompt. */
+  mod?: ModMark | null;
   /** Set on the summary a compaction wrote as a message of its own (OpenCode's); it shows behind the divider. */
   compactionSummary?: boolean | null;
 }

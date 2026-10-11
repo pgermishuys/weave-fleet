@@ -69,13 +69,13 @@ public sealed partial class ModHostService : IModHost, IHostedService, IAsyncDis
         };
 
     private static ModPromptQueuer QueuePromptIn(IServiceScopeFactory scopes, IBackgroundUserScope users)
-        => async (userId, sessionId, text, ct) =>
+        => async (userId, sessionId, text, mod, ct) =>
         {
             using var asUser = users.Begin(userId);
             var scope = scopes.CreateAsyncScope();
             await using (scope.ConfigureAwait(false))
                 return await scope.ServiceProvider.GetRequiredService<ModFollowUps>()
-                    .QueueAsync(scope.ServiceProvider.GetRequiredService<PromptQueueService>(), sessionId, text, ct).ConfigureAwait(false);
+                    .QueueAsync(scope.ServiceProvider.GetRequiredService<PromptQueueService>(), sessionId, text, mod, ct).ConfigureAwait(false);
         };
 
     internal ModHostSupervisor? SupervisorOf(string userId) => _supervisors.GetValueOrDefault(userId);

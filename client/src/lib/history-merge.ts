@@ -61,6 +61,7 @@ function convertToAccumulatedMessage(message: MessageLifecyclePayload): Accumula
     cost: message.info.cost ?? undefined,
     tokens: message.info.tokens ?? undefined,
     ...(message.info.steered === true ? { steered: true } : {}),
+    ...(message.info.mod ? { mod: message.info.mod } : {}),
     ...(message.info.compactionSummary === true ? { compactionSummary: true } : {}),
   }
 }

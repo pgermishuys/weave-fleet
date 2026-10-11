@@ -11,7 +11,7 @@ import type {
   SessionRetentionStatus,
   InstanceStatus,
 } from "@/lib/types";
-import type { SlashCommand, TurnError } from "@/lib/domain-events";
+import type { ModMark, SlashCommand, TurnError } from "@/lib/domain-events";
 
 // Re-export status types for consumer convenience
 export type { SessionActivityStatus, SessionActionCapabilities, SessionLifecycleStatus, SessionRetentionStatus, InstanceStatus };
@@ -135,6 +135,8 @@ export interface AccumulatedMessage {
    * expanded template), which the conversation keeps behind the command.
    */
   command?: SlashCommand;
+  /** The mod that sent or rewrote this prompt, so it doesn't pass for something the user typed. */
+  mod?: ModMark;
   /**
    * The summary a compaction wrote as a message of its own (OpenCode's). The conversation shows it behind the
    * compaction's divider, not as a reply.

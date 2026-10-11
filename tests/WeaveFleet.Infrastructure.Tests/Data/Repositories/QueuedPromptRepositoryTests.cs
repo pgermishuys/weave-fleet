@@ -20,6 +20,7 @@ public sealed class QueuedPromptRepositoryTests
         ProviderId = "p",
         ModelId = "m",
         Effort = "high",
+        Mod = kind == QueuedPromptKinds.Command ? null : "tests-after-edits",
         CreatedAt = new DateTimeOffset(2026, 9, 25, 10, 0, 0, TimeSpan.Zero),
     };
 
@@ -42,6 +43,8 @@ public sealed class QueuedPromptRepositoryTests
         items[1].Arguments.ShouldBe("src");
         items[0].Agent.ShouldBe("reviewer");
         items[0].Effort.ShouldBe("high");
+        items[0].Mod.ShouldBe("tests-after-edits");
+        items[1].Mod.ShouldBeNull();
         items[0].CreatedAt.ShouldBe(new DateTimeOffset(2026, 9, 25, 10, 0, 0, TimeSpan.Zero));
     }
 

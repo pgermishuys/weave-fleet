@@ -39,6 +39,8 @@ export interface Dispatch {
   owners: WeakMap<object, string>;
   /** The session's generation when the dispatch began. */
   generation: number;
+  /** prompt.submit: the mod whose hook last changed the text (an outer hook passing an inner one's text on isn't it). */
+  rewriter?: string;
 }
 
 /** Was the dispatch's session forgotten since it began? Then nothing more runs for it. */
@@ -111,6 +113,8 @@ interface NextState {
   called: boolean;
   resolved: boolean;
   value?: Out;
+  /** What the latest call to next was given. */
+  sent?: unknown;
   /** The latest call to next, settled or not. */
   last?: Promise<Out>;
   over: boolean;
@@ -128,6 +132,7 @@ function makeNext(st: NextState, rest: Rest, budget: Budget, signal: AbortSignal
       return Promise.reject(err);
     }
     st.called = true;
+    st.sent = copy;
     budget.pause();
     const p = rest(copy)
       .then((out) => {
@@ -192,6 +197,13 @@ function execute(
   return { done, budget };
 }
 
+/** Did this hook change the text itself: before passing it on, or after getting it back? (Not just hand on what an inner hook made.) */
+function authoredText(e: any, value: Record<string, unknown>, st: NextState): boolean {
+  const passed = st.called && isObject(st.sent) ? st.sent.text : value.text;
+  const back = st.resolved && isObject(st.value?.v) ? st.value.v.text : value.text;
+  return passed !== e.text || value.text !== back;
+}
+
 function nullAttribution(mod: LoadedMod, value: unknown, st: NextState): string | undefined {
   if (value !== null) return undefined;
   return st.resolved && st.value?.v === null && st.value.nullBy ? st.value.nullBy : mod.id;
@@ -254,6 +266,7 @@ async function callHook(d: Dispatch, ref: HookRef, e: any, rest: Rest): Promise<
       const value = (outcome as { value: unknown }).value;
       if (d.event === "permission.ask" && isObject(value) && value.decision === "deny" && !denyMadeBy.has(value)) denyMadeBy.set(value, mod.name);
       if (WATCH_ONLY.has(d.event)) return await restOnce(e);
+      if (d.event === "prompt.submit" && isObject(value) && authoredText(e, value, st)) d.rewriter = mod.name;
       return { v: value, by: mod.id, nullBy: nullAttribution(mod, value, st) };
     }
 

@@ -25,6 +25,9 @@ public sealed record QueuedPrompt
     public string? ModelId { get; init; }
     public string? Effort { get; init; }
 
+    /// <summary>The mod that queued it (<c>$.prompt.submit</c>), when the user didn't.</summary>
+    public string? Mod { get; init; }
+
     public DateTimeOffset CreatedAt { get; init; }
 }
 

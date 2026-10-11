@@ -23,7 +23,7 @@ import type {
   AccumulatedToolPart,
   DelegationDto,
 } from "@/lib/client-types";
-import type { SlashCommand, TurnError } from "@/lib/domain-events";
+import type { ModMark, SlashCommand, TurnError } from "@/lib/domain-events";
 import { isQuestionPart } from "@/lib/question-types";
 import { mergeMessagesByTimestamp } from "@/lib/merge-messages";
 import { workflowMessageKey, workflowMessageLabel } from "@/lib/workflows";
@@ -88,6 +88,8 @@ export interface ActivityMessage {
   shell?: ShellCommandView;
   /** The slash command a message of yours came from; its body is then what the harness made of the command. */
   command?: SlashCommand;
+  /** The mod that sent or rewrote a prompt of yours: "Sent by ..." or "Rewritten by ...". */
+  mod?: ModMark;
   /** Set when this is where the harness compacted the conversation: it shows as a divider. */
   compaction?: CompactionView;
 }
@@ -275,6 +277,7 @@ export function useActivityMessages(options: ActivityMessagesOptions) {
       showIdentity: true,
       turnError: message.turnError,
       command: message.role === "user" ? message.command : undefined,
+      mod: message.role === "user" ? message.mod : undefined,
       compaction: compactionOf(message),
     } satisfies ActivityMessage;
   }

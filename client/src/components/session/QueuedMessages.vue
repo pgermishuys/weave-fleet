@@ -35,7 +35,7 @@ const emit = defineEmits<{
       class="queued__item"
       data-testid="queued-message"
     >
-      <span class="queued__label">{{ index === 0 ? "Next" : "Queued" }}</span>
+      <span class="queued__label">{{ index === 0 ? "Next" : "Queued" }}<template v-if="item.mod"> · from {{ item.mod }}</template></span>
       <span
         class="queued__text"
         :title="item.text"

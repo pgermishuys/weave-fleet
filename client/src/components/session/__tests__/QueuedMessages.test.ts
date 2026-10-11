@@ -20,6 +20,15 @@ describe("QueuedMessages", () => {
     expect(rows[0]!.text()).toContain("Next");
   });
 
+  it("names the mod that queued a message in its row, and only there", () => {
+    const wrapper = mount(QueuedMessages, {
+      props: { items: [{ id: "q-1", text: "Run the tests", kind: "prompt", mod: "tests-after-edits" }, ...items], canSendNow: () => false },
+    });
+
+    const labels = wrapper.findAll(".queued__label").map((label) => label.text());
+    expect(labels).toEqual(["Next · from tests-after-edits", "Queued", "Queued"]);
+  });
+
   it("offers Send now only for what can go into the turn", async () => {
     const wrapper = mount(QueuedMessages, {
       props: { items, canSendNow: (item: QueuedMessage) => !item.text.startsWith("/") },

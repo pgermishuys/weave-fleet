@@ -36,8 +36,8 @@ public sealed class ModFollowUps
             _streak.Remove(sessionId);
     }
 
-    /// <summary>Queues a mod's message. Returns Fleet's reason when it is refused, else null.</summary>
-    public async Task<string?> QueueAsync(PromptQueueService queue, string sessionId, string? text, CancellationToken ct)
+    /// <summary>Queues <paramref name="mod"/>'s message, which the queue and the conversation name it by. Returns Fleet's reason when it is refused, else null.</summary>
+    public async Task<string?> QueueAsync(PromptQueueService queue, string sessionId, string? text, string? mod, CancellationToken ct)
     {
         if (string.IsNullOrWhiteSpace(text))
             return "Type some text to queue.";
@@ -52,7 +52,7 @@ public sealed class ModFollowUps
             _streak[sessionId] = count + 1;
         }
 
-        var request = new QueuePromptRequest(text, QueuedPromptKinds.Prompt);
+        var request = new QueuePromptRequest(text, QueuedPromptKinds.Prompt, Mod: mod);
         var result = await (_dispatching.ContainsKey(sessionId) ? queue.EnqueueWithoutSendingAsync(sessionId, request, ct) : queue.EnqueueAsync(sessionId, request, ct)).ConfigureAwait(false);
         if (result.IsFailure)
         {

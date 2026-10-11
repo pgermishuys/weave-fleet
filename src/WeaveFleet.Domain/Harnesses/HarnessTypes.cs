@@ -527,6 +527,9 @@ public sealed record HarnessMessage
     /// </summary>
     public SlashCommand? Command { get; init; }
 
+    /// <summary>The mod that sent or rewrote this prompt, when one did.</summary>
+    public ModMark? Mod { get; init; }
+
     /// <summary>Convenience: concatenated text parts.</summary>
     public string TextContent =>
         string.Join("", Parts.OfType<TextPart>().Select(p => p.Text));
@@ -556,6 +559,9 @@ public sealed record PromptOptions
     public IReadOnlyList<HarnessAttachment>? Attachments { get; init; }
     public string? Effort { get; init; }
     public string? MessageId { get; init; }
+
+    /// <summary>The mod that queued this prompt, so its message says so. Harnesses ignore it.</summary>
+    public string? SentByMod { get; init; }
 
     /// <summary>
     /// Text Fleet sends with the prompt for the model alone: the harness passes it on as its own words, not the
@@ -664,6 +670,16 @@ public sealed record CommandOptions
 
 /// <summary>A slash command as the user sent it: <c>/name arguments</c>.</summary>
 public sealed record SlashCommand(string Name, string? Arguments);
+
+/// <summary>
+/// Which mod put a prompt in the conversation, so it doesn't pass for something the user typed: it
+/// <see cref="Sent"/> the message (a follow-up it queued) or <see cref="Rewritten"/> the words the user typed.
+/// </summary>
+public sealed record ModMark(string Kind, string Name)
+{
+    public const string Sent = "sent";
+    public const string Rewritten = "rewritten";
+}
 
 /// <summary>An agent available for selection in the UI.</summary>
 public sealed record AgentInfo

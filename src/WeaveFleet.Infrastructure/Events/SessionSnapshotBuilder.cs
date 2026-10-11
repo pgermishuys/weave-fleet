@@ -82,8 +82,9 @@ public sealed class SessionSnapshotBuilder(
 
         var messageRows = await connection.QueryAsync(
             """
-            SELECT m.id, m.session_id, m.role, m.parts_json, m.timestamp, m.created_at, m.agent_name, m.model_id, m.steered, m.error_json
+            SELECT m.id, m.session_id, m.role, m.parts_json, m.timestamp, m.created_at, m.agent_name, m.model_id, m.steered, m.error_json, mm.kind AS mod_kind, mm.mod AS mod_name
             FROM messages m
+            LEFT JOIN message_mods mm ON mm.session_id = m.session_id AND mm.message_id = m.id
             INNER JOIN sessions s ON s.id = m.session_id
             WHERE m.session_id = @SessionId
               AND s.user_id = @UserId
@@ -300,6 +301,7 @@ public sealed class SessionSnapshotBuilder(
                     : null,
                 // A prompt sent into a running turn, which a harness whose history Fleet keeps can't say itself.
                 Steered = message.Steered ? true : null,
+                Mod = message.Mod,
                 // Why its turn stopped, so a failure card Fleet saved still shows after a reload.
                 Error = message.ErrorJson is { Length: > 0 } errorJson
                     ? JsonSerializer.Deserialize(errorJson, WeaveFleet.Application.ApplicationJsonContext.Default.TurnError)
@@ -414,7 +416,8 @@ public sealed class SessionSnapshotBuilder(
         reader.GetNullableString(reader.GetOrdinal("agent_name")),
         reader.GetNullableString(reader.GetOrdinal("model_id")),
         reader.GetInt64(reader.GetOrdinal("steered")) != 0,
-        reader.GetNullableString(reader.GetOrdinal("error_json")));
+        reader.GetNullableString(reader.GetOrdinal("error_json")),
+        reader.GetNullableString(reader.GetOrdinal("mod_kind")) is { } kind && reader.GetNullableString(reader.GetOrdinal("mod_name")) is { } name ? new ModMark(kind, name) : null);
 
 
     private sealed record SessionRow(string Id, string Title, string Status);
@@ -429,7 +432,8 @@ public sealed class SessionSnapshotBuilder(
         string? AgentName,
         string? ModelId,
         bool Steered,
-        string? ErrorJson = null);
+        string? ErrorJson = null,
+        ModMark? Mod = null);
 
 
     /// <summary>A compaction's divider, as history and the live conversation carry it.</summary>

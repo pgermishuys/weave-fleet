@@ -166,4 +166,17 @@ public sealed class InMemoryMessageRepository : IMessageRepository
         Task.FromResult<IReadOnlyDictionary<string, SlashCommand>>(_commands
             .Where(c => c.Key.SessionId == sessionId)
             .ToDictionary(c => c.Key.MessageId, c => c.Value, StringComparer.Ordinal));
+
+    private readonly Dictionary<(string SessionId, string MessageId), ModMark> _modMarks = new();
+
+    public Task SaveModMarkAsync(string sessionId, string messageId, ModMark mark)
+    {
+        _modMarks[(sessionId, messageId)] = mark;
+        return Task.CompletedTask;
+    }
+
+    public Task<IReadOnlyDictionary<string, ModMark>> GetModMarksAsync(string sessionId) =>
+        Task.FromResult<IReadOnlyDictionary<string, ModMark>>(_modMarks
+            .Where(c => c.Key.SessionId == sessionId)
+            .ToDictionary(c => c.Key.MessageId, c => c.Value, StringComparer.Ordinal));
 }

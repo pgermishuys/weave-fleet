@@ -32,7 +32,7 @@ public sealed class ModHostLoadingTests : IDisposable
             new ModHostOptions(), _factory, _gate, new FakeBun(), new FakeFiles(), _store, _strikes, _ui,
             (_, id, _) => Task.FromResult(_sessions.GetValueOrDefault(id)), _time, NullLogger.Instance,
             (directory, _) => Task.FromResult(_branches.GetValueOrDefault(directory)),
-            (user, session, text, _) =>
+            (user, session, text, _, _) =>
             {
                 _queued.Add((user, session, text));
                 return Task.FromResult(_queueRefusal);
