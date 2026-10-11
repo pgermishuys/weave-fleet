@@ -145,11 +145,23 @@ internal sealed partial class OpenCode2HarnessSession : IHarnessSession, IOpenCo
         // with V2's default (steer), which the same first step takes in with the note. A turn Fleet didn't know of keeps
         // the queue, as before.
         var delivery = Delivery(options?.Delivery);
-        if (notes.Count > 0 && delivery == OpenCode2Deliveries.Queue
-            && !(await server.Client.GetActiveSessionIdsAsync(ct).ConfigureAwait(false)).Contains(ResumeToken))
+        if (notes.Count > 0 && delivery == OpenCode2Deliveries.Queue && !await IsRunningAsync(server, ct).ConfigureAwait(false))
             delivery = null;
         await server.Client.PromptAsync(ResumeToken, text, options?.MessageId, PromptFiles(options?.Attachments), delivery, ct)
             .ConfigureAwait(false);
+    }
+
+    /// <summary>Whether V2 is running a turn for this session; when it can't say, the prompt is treated as meeting one and queues.</summary>
+    private async Task<bool> IsRunningAsync(OpenCode2Server server, CancellationToken ct)
+    {
+        try
+        {
+            return (await server.Client.GetActiveSessionIdsAsync(ct).ConfigureAwait(false)).Contains(ResumeToken);
+        }
+        catch (Exception ex) when (ex is HttpRequestException or TaskCanceledException && !ct.IsCancellationRequested)
+        {
+            return true;
+        }
     }
 
     /// <summary>
