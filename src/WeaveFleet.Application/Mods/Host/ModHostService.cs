@@ -5,6 +5,7 @@ using Microsoft.Extensions.Hosting;
 using Microsoft.Extensions.Logging;
 using WeaveFleet.Application.Events;
 using WeaveFleet.Application.Git;
+using WeaveFleet.Application.Sessions;
 using WeaveFleet.Application.Users;
 using WeaveFleet.Domain.Harnesses;
 using WeaveFleet.Domain.Repositories;
@@ -44,7 +45,7 @@ public sealed partial class ModHostService : IModHost, IHostedService, IAsyncDis
         TimeProvider time,
         ILogger<ModHostService> logger)
     {
-        _deps = new ModHostDependencies(options, connections, gate, bun, files, store, strikes, ui, FindSessionIn(scopes, users), time, logger, FindBranchIn(scopes));
+        _deps = new ModHostDependencies(options, connections, gate, bun, files, store, strikes, ui, FindSessionIn(scopes, users), time, logger, FindBranchIn(scopes), QueuePromptIn(scopes, users));
         _events = events;
         _logger = logger;
     }
@@ -65,6 +66,16 @@ public sealed partial class ModHostService : IModHost, IHostedService, IAsyncDis
             var scope = scopes.CreateAsyncScope();
             await using (scope.ConfigureAwait(false))
                 return await scope.ServiceProvider.GetRequiredService<GitDiffService>().CurrentBranchAsync(directory, ct).ConfigureAwait(false);
+        };
+
+    private static ModPromptQueuer QueuePromptIn(IServiceScopeFactory scopes, IBackgroundUserScope users)
+        => async (userId, sessionId, text, ct) =>
+        {
+            using var asUser = users.Begin(userId);
+            var scope = scopes.CreateAsyncScope();
+            await using (scope.ConfigureAwait(false))
+                return await scope.ServiceProvider.GetRequiredService<ModFollowUps>()
+                    .QueueAsync(scope.ServiceProvider.GetRequiredService<PromptQueueService>(), sessionId, text, ct).ConfigureAwait(false);
         };
 
     internal ModHostSupervisor? SupervisorOf(string userId) => _supervisors.GetValueOrDefault(userId);

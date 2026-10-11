@@ -22,6 +22,8 @@ public sealed class ModHostLoadingTests : IDisposable
     private readonly Dictionary<string, Session> _sessions = [];
     private readonly Dictionary<string, string[]> _hooks = [];
     private readonly Dictionary<string, string?> _branches = [];
+    private readonly List<(string User, string Session, string Text)> _queued = [];
+    private string? _queueRefusal;
     private readonly ModHostSupervisor _supervisor;
 
     public ModHostLoadingTests()
@@ -29,7 +31,12 @@ public sealed class ModHostLoadingTests : IDisposable
         _supervisor = new ModHostSupervisor(User, new ModHostDependencies(
             new ModHostOptions(), _factory, _gate, new FakeBun(), new FakeFiles(), _store, _strikes, _ui,
             (_, id, _) => Task.FromResult(_sessions.GetValueOrDefault(id)), _time, NullLogger.Instance,
-            (directory, _) => Task.FromResult(_branches.GetValueOrDefault(directory))));
+            (directory, _) => Task.FromResult(_branches.GetValueOrDefault(directory)),
+            (user, session, text, _) =>
+            {
+                _queued.Add((user, session, text));
+                return Task.FromResult(_queueRefusal);
+            }));
         // A load answers with the hooks the test gave the mod's name (ui.render and session.start unless it said otherwise).
         _factory.Answers["load"] = p => Answer(new
         {
@@ -321,6 +328,28 @@ public sealed class ModHostLoadingTests : IDisposable
         (await Call("session.get", new { mod = "test-chips@v1", sessionId = "ses_test1" })).GetProperty("branch").GetString().ShouldBe("feature/berths");
         foreach (var session in new[] { "ses_test2", "ses_test3" })
             (await Should.ThrowAsync<ModHostRpcException>(Call("session.get", new { mod = "test-chips@v1", sessionId = session }))).Code.ShouldBe(ModHostErrorCodes.InvalidParams);
+    }
+
+    [Fact]
+    public async Task Prompt_queue_queues_in_the_users_own_session_and_answers_with_fleets_reason_when_refused()
+    {
+        Keep("test-chips", 1);
+        await StartedAsync();
+        _sessions["ses_test1"] = new Session { Id = "ses_test1", Title = "Demo session", HarnessType = "opencode", Directory = "/work/demo", UserId = User };
+        _sessions["ses_test2"] = new Session { Id = "ses_test2", Title = "Someone else's", UserId = "test-other" };
+
+        (await Call("prompt.queue", new { mod = "test-chips@v1", sessionId = "ses_test1", text = "Run the tests" })).GetRawText().ShouldBe("{}");
+        _queued.ShouldBe([(User, "ses_test1", "Run the tests")]);
+
+        _queueRefusal = "Mods have queued 3 follow-ups in a row in this session; Fleet waits for you before another.";
+        (await Should.ThrowAsync<ModHostRpcException>(Call("prompt.queue", new { mod = "test-chips@v1", sessionId = "ses_test1", text = "again" })))
+            .Message.ShouldContain("3 follow-ups in a row");
+
+        // Another user's session and a session that does not exist are refused before anything is queued.
+        foreach (var session in new[] { "ses_test2", "ses_test3" })
+            (await Should.ThrowAsync<ModHostRpcException>(Call("prompt.queue", new { mod = "test-chips@v1", sessionId = session, text = "x" }))).Code.ShouldBe(ModHostErrorCodes.InvalidParams);
+        (await Should.ThrowAsync<ModHostRpcException>(Call("prompt.queue", new { mod = "test-chips@v1", sessionId = "ses_test1" }))).Code.ShouldBe(ModHostErrorCodes.InvalidParams);
+        _queued.Count.ShouldBe(2);
     }
 
     [Fact]

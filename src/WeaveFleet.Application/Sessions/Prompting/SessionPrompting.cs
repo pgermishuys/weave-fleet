@@ -40,7 +40,8 @@ public sealed partial class SessionPrompting(
     IMessageRepository? messageRepository = null,
     SessionRecapService? sessionRecaps = null,
     AgentMemoryService? agentMemory = null,
-    ModPromptHook? modPrompts = null)
+    ModPromptHook? modPrompts = null,
+    ModTurnHook? modTurns = null)
 {
     public async Task<Result<Unit>> PromptSessionAsync(
         string id,
@@ -371,6 +372,8 @@ public sealed partial class SessionPrompting(
         if (instanceResult.IsFailure)
             return instanceResult.Error;
 
+        // So a mod hearing the turn end knows the user stopped it.
+        modTurns?.Aborted(id);
         await instanceResult.Value.AbortAsync(ct);
         return Unit.Value;
     }

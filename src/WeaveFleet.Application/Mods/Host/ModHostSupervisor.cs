@@ -15,6 +15,9 @@ internal delegate Task<Session?> ModSessionLookup(string userId, string sessionI
 /// <summary>The git branch checked out in a folder, or null (not a repository, or a detached HEAD).</summary>
 internal delegate Task<string?> ModBranchLookup(string directory, CancellationToken ct);
 
+/// <summary>Queues a message a mod asked for in a session of the user's; Fleet's reason when it refuses, else null.</summary>
+internal delegate Task<string?> ModPromptQueuer(string userId, string sessionId, string text, CancellationToken ct);
+
 /// <summary>What a <see cref="ModHostSupervisor"/> needs from the rest of Fleet.</summary>
 internal sealed record ModHostDependencies(
     ModHostOptions Options,
@@ -28,7 +31,8 @@ internal sealed record ModHostDependencies(
     ModSessionLookup FindSession,
     TimeProvider Time,
     ILogger Logger,
-    ModBranchLookup? FindBranch = null);
+    ModBranchLookup? FindBranch = null,
+    ModPromptQueuer? QueuePrompt = null);
 
 /// <summary>
 /// One user's mod host: keeps the process running while a mod of theirs should run, stops it when none should, and starts
@@ -38,7 +42,7 @@ internal sealed record ModHostDependencies(
 #pragma warning disable CA1001 // The gate is never waited on by handle, so there is nothing to release.
 internal sealed partial class ModHostSupervisor(string userId, ModHostDependencies deps) : IModHostCalls
 {
-    private static readonly HashSet<string> Calls = ["store.get", "store.set", "store.delete", "store.keys", "session.get", "ui.open", "ui.close", "ui.toast"];
+    private static readonly HashSet<string> Calls = ["store.get", "store.set", "store.delete", "store.keys", "session.get", "prompt.queue", "ui.open", "ui.close", "ui.toast"];
     private static readonly JsonElement Empty = Params(_ => { });
 
     private readonly SemaphoreSlim _gate = new(1, 1);
@@ -648,6 +652,9 @@ internal sealed partial class ModHostSupervisor(string userId, ModHostDependenci
                     Strings(w, "surfaces", deps.Ui.SurfacesOf(userId, sessionId));
                     w.WriteString("branch", branch);
                 });
+            case "prompt.queue":
+                var queued = await QueueAsync(sessionId, Required(parameters, "text"), ct).ConfigureAwait(false);
+                return queued is null ? Empty : throw Invalid(queued);
             case "ui.open":
                 await deps.Ui.OpenPaneAsync(userId, route.Id, sessionId, Required(parameters, "id"), Text(parameters, "title"), ct).ConfigureAwait(false);
                 return Empty;
@@ -661,6 +668,15 @@ internal sealed partial class ModHostSupervisor(string userId, ModHostDependenci
             default:
                 throw Invalid($"{method} needs a value.");
         }
+    }
+
+    /// <summary>A mod's message goes to a session of its user's; Fleet's reason when it can't.</summary>
+    private async Task<string?> QueueAsync(string sessionId, string text, CancellationToken ct)
+    {
+        var session = await deps.FindSession(userId, sessionId, ct).ConfigureAwait(false);
+        if (session is null || session.UserId != userId)
+            return $"There is no session {sessionId}.";
+        return deps.QueuePrompt is { } queue ? await queue(userId, sessionId, text, ct).ConfigureAwait(false) : "Fleet can't queue messages here.";
     }
 
     void IModHostCalls.HandleNotification(string method, JsonElement parameters)
