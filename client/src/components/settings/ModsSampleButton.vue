@@ -47,7 +47,7 @@ async function addSample(sample: (typeof SAMPLES)[number]): Promise<void> {
       :data-sample="sample.name"
       @click="addSample(sample)"
     >
-      Try {{ sample.name }}
+      {{ sample.name === 'test-chips' ? 'Try the test-chips sample' : `Try ${sample.name}` }}
     </button>
     <span
       v-if="message"
