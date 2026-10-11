@@ -2,6 +2,7 @@ using System.Diagnostics;
 using System.IO.Compression;
 using System.Security.Cryptography;
 using Microsoft.Extensions.Logging.Abstractions;
+using Microsoft.Extensions.Time.Testing;
 using WeaveFleet.Application.Configuration;
 using WeaveFleet.Application.Runtimes;
 using WeaveFleet.Infrastructure.Runtimes;
@@ -191,9 +192,13 @@ public sealed class BunRuntimeInstallerTests : IDisposable
     public async Task Says_the_connection_timed_out_when_nothing_arrives_before_the_first_byte()
     {
         var release = Publish(mode: BunServeMode.Silent);
-        var installer = NewInstaller(release, "linux-x64", stall: TimeSpan.FromMilliseconds(20));
+        var clock = new FakeTimeProvider();
+        var installer = NewInstaller(release, "linux-x64", clock: clock);
 
-        var result = await installer.EnsureAsync(release, null, CancellationToken.None);
+        var install = installer.EnsureAsync(release, null, CancellationToken.None);
+        await _server.Silenced.WaitAsync(TimeSpan.FromSeconds(10));
+        clock.Advance(TimeSpan.FromSeconds(60));
+        var result = await install.WaitAsync(TimeSpan.FromSeconds(10));
 
         result.Error.Description.ShouldBe(
             "Fleet couldn't reach 127.0.0.1: the connection timed out. Check that this computer is online, then try again.");
@@ -205,9 +210,20 @@ public sealed class BunRuntimeInstallerTests : IDisposable
     public async Task Gives_up_on_a_download_that_stalls()
     {
         var release = Publish(mode: BunServeMode.Stall);
-        var installer = NewInstaller(release, "linux-x64", stall: TimeSpan.FromMilliseconds(300));
+        var clock = new FakeTimeProvider();
+        var installer = NewInstaller(release, "linux-x64", clock: clock);
+        var someArrived = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+        var progress = new SyncProgress(job =>
+        {
+            if (job.BytesReceived > 0)
+                someArrived.TrySetResult();
+        });
 
-        var result = await installer.EnsureAsync(release, null, CancellationToken.None).WaitAsync(TimeSpan.FromSeconds(20));
+        var install = installer.EnsureAsync(release, progress, CancellationToken.None);
+        await _server.Stalled.WaitAsync(TimeSpan.FromSeconds(10));
+        await someArrived.Task.WaitAsync(TimeSpan.FromSeconds(10));
+        clock.Advance(TimeSpan.FromSeconds(60));
+        var result = await install.WaitAsync(TimeSpan.FromSeconds(10));
 
         result.Error.Description.ShouldBe("The download stopped after 0 of 0 MB. Try again.");
         installer.Job!.Phase.ShouldBe(BunInstallPhases.Failed);
@@ -1167,6 +1183,7 @@ public sealed class BunRuntimeInstallerTests : IDisposable
         string? bunPath = null,
         Func<string, CancellationToken, Task<BunProbeResult>>? probe = null,
         TimeSpan? stall = null,
+        TimeProvider? clock = null,
         Action<string, string>? move = null,
         Action<string, string>? rename = null,
         string? home = null,
@@ -1181,6 +1198,7 @@ public sealed class BunRuntimeInstallerTests : IDisposable
             DownloadBase = downloadBase ?? _server.BaseUri,
             Probe = probe ?? Fails("Not expected to run."),
             StallTimeout = stall ?? TimeSpan.FromSeconds(60),
+            Clock = clock ?? TimeProvider.System,
             MoveRetryDelay = TimeSpan.FromMilliseconds(1),
             MoveDirectory = move ?? Directory.Move,
             RenameDirectory = rename ?? Directory.Move,
@@ -1274,5 +1292,11 @@ public sealed class BunRuntimeInstallerTests : IDisposable
     private sealed class FakeHttpClientFactory : IHttpClientFactory
     {
         public HttpClient CreateClient(string name) => new();
+    }
+
+    /// <summary>Reports on the installer's own thread, in order.</summary>
+    private sealed class SyncProgress(Action<BunInstallJob> report) : IProgress<BunInstallJob>
+    {
+        public void Report(BunInstallJob value) => report(value);
     }
 }
