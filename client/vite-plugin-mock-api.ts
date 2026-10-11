@@ -603,6 +603,9 @@ export function mockApiPlugin(options: MockApiOptions = {}): Plugin {
   }
 
   const routes: MockRoute[] = [
+    // ─── Mods at tool rows: no mod hooks anything in mock mode ─────────────────
+    { pattern: /^\/api\/sessions\/([^/]+)\/mods\/sites$/, handler: () => json({ sites: [] }) },
+    { pattern: /^\/api\/sessions\/([^/]+)\/mods\/render$/, handler: () => json({ tree: null, mods: [] }) },
     // ─── Terminals ──────────────────────────────────────────────────────────────
     // The shell itself is pretend and runs in the browser (terminal-mock-shell.ts);
     // these routes only keep each session's list of tabs.

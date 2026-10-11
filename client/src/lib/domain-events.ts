@@ -834,6 +834,20 @@ export interface ModsRuntime extends EventCursorMetadata {
   };
 }
 
+/** A mod's drawing changed: render again. On the session's topic, or on `sessions` with no session for every session. */
+export interface ModUiChanged extends EventCursorMetadata {
+  type: "mod.ui";
+  payload: {
+    sessionId: string | null;
+    /** Only this site, when set. */
+    site: string | null;
+    /** Only this call's row, when set. */
+    requestId: string | null;
+    /** The mod that asked; absent when Fleet loaded or dropped mods (on `sessions`: ask for every session's sites again). */
+    mod?: string | null;
+  };
+}
+
 export type DomainEvent =
   | SessionStarted
   | SessionIdled
@@ -887,4 +901,5 @@ export type DomainEvent =
   | HarnessUsageChanged
   | HarnessCatalogChanged
   | ModsChanged
-  | ModsRuntime;
+  | ModsRuntime
+  | ModUiChanged;

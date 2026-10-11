@@ -9,6 +9,7 @@ import { parseVisualPayload, type VisualPayload } from "@/lib/visual-payload";
 import { getVisualRenderer } from "@/lib/visual-renderer-registry";
 import ModTree from "@/components/mods/ModTree.vue";
 import { toolRowViewId, toolRowViews } from "@/lib/mods/points";
+import { useModToolRows } from "@/lib/mods/renders";
 import { useResolvedModView } from "@/lib/mods/resolve";
 import type { ModAction } from "@/lib/mods/types";
 
@@ -26,6 +27,8 @@ const props = withDefaults(
     callId?: string;
     /** The session the call is in. Without it, no mod draws on the row. */
     sessionId?: string;
+    /** What the harness passed the tool; a mod that hooks the row is sent it. */
+    input?: Record<string, unknown>;
     title: string;
     kind?: string;
     status?: string;
@@ -43,6 +46,7 @@ const props = withDefaults(
   {
     callId: undefined,
     sessionId: undefined,
+    input: undefined,
     kind: "Tool",
     status: "Completed",
     summary: "",
@@ -137,6 +141,17 @@ const diffStats = computed(() => {
 function viewId(site: "ToolUse" | "ToolResult"): string | undefined {
   return props.sessionId && props.callId ? toolRowViewId(site, props.sessionId, props.callId) : undefined;
 }
+// Ask the server for the trees of mods that hook this row. The status decides when; the output is read only to send.
+useModToolRows(() => [
+  {
+    sessionId: props.sessionId,
+    callId: props.callId,
+    rawTool: props.kind,
+    status: props.status,
+    read: () => ({ input: props.input, output: props.output, title: props.title }),
+  },
+]);
+
 const useView = useResolvedModView(toolRowViews, () => viewId("ToolUse"), "ToolUse");
 const resultView = useResolvedModView(toolRowViews, () => viewId("ToolResult"), "ToolResult");
 
