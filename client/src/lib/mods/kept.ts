@@ -40,7 +40,6 @@ export interface ModCheckReport {
   warnings: ModCheckProblem[];
 }
 
-
 /** A mod the agent is writing in one session. */
 export interface ModDraft {
   sessionId: string;

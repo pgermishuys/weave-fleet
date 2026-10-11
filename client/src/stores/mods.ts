@@ -40,15 +40,13 @@ export const useModsStore = defineStore("mods", () => {
   const machineOf = (sessionId: string): MachineTarget => useMachinesStore().sessionTarget(sessionId);
 
   /** One fetch per `key` at a time; load failures leave what's shown (a 404 means Mods are off: nothing to show). */
-  function once(key: string, run: () => Promise<void>): Promise<void> {
+  function once(key: string, run: () => Promise<void>, rethrow = false): Promise<void> {
     let pending = inflight.get(key);
     if (!pending) {
-      pending = run()
-        .catch(() => undefined)
-        .finally(() => inflight.delete(key));
+      pending = run().finally(() => inflight.delete(key));
       inflight.set(key, pending);
     }
-    return pending;
+    return rethrow ? pending : pending.catch(() => undefined);
   }
 
   function listen(target: MachineTarget): void {
@@ -63,9 +61,9 @@ export const useModsStore = defineStore("mods", () => {
         void loadSwitch();
       } else if (payload.reason === "safe-mode") {
         void loadSwitch();
-        if (kept.value) void loadKept();
+        if (kept.value) void loadKept().catch(() => undefined);
       } else if (KEPT_REASONS.has(payload.reason) && kept.value) {
-        void loadKept();
+        void loadKept().catch(() => undefined);
       }
     }));
   }
@@ -78,6 +76,7 @@ export const useModsStore = defineStore("mods", () => {
     });
   }
 
+  /** Rejects with the server's message when the list can't load (Settings shows it with Retry); a 404 is Mods off. */
   function loadKept(): Promise<void> {
     const target = liveTarget();
     listen(target);
@@ -85,10 +84,10 @@ export const useModsStore = defineStore("mods", () => {
       try {
         kept.value = await modsApi.fetchMods(target.connection);
       } catch (error) {
-        if (error instanceof ModsRequestError && error.status === 404) kept.value = null;
-        throw error;
+        if (!(error instanceof ModsRequestError && error.status === 404)) throw error;
+        kept.value = null;
       }
-    });
+    }, true);
   }
 
   function loadDrafts(sessionId: string): Promise<void> {

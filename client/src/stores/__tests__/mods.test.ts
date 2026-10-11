@@ -235,6 +235,11 @@ describe("kept mods", () => {
     expect(store.kept).toBeNull();
   });
 
+  it("rejects with the server's message when the list can't load, so Settings can offer Retry", async () => {
+    api.fetchMods.mockRejectedValueOnce(new ModsRequestError("The mods folder can't be read.", 500));
+    await expect(useModsStore().loadKept()).rejects.toThrow("The mods folder can't be read.");
+  });
+
   it("undo and setOn replace the mod in the list", async () => {
     api.fetchMods.mockResolvedValue(view([mod("a"), mod("b")]));
     const store = useModsStore();
