@@ -106,7 +106,7 @@ most once per loaded module per session, and runs it first if another event for 
 
 **`turn.complete`** fires when a session's turn ends, the moment Fleet would send the next queued message. Fleet waits up
 to 2 s for the hooks (it doesn't restart the host when they take longer; the queue just goes on), then sends the queue's
-next message. Side conversations (`/btw`) don't fire it. What `e` holds:
+next message. Side conversations (`/btw`) and the child sessions an agent delegates to don't fire it. What `e` holds:
 
 - `turnId` is the turn's last assistant message id, `""` when the harness reported none.
 - `isAborted` is true when the user pressed Stop on the turn. `isFailed` and `failure` are the failure card's text.

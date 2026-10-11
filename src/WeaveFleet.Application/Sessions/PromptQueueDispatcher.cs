@@ -75,7 +75,7 @@ public sealed partial class PromptQueueDispatcher(IServiceScopeFactory scopeFact
         try
         {
             var session = await services.GetRequiredService<ISessionRepository>().GetByIdAsync(sessionId).ConfigureAwait(false);
-            await modTurns!.CompleteAsync(userId, sessionId, session?.Directory, session?.SideOfSessionId is not null).ConfigureAwait(false);
+            await modTurns!.CompleteAsync(userId, sessionId, session?.Directory, session?.SideOfSessionId is not null || session?.ParentSessionId is not null).ConfigureAwait(false);
         }
         catch (Exception ex)
         {

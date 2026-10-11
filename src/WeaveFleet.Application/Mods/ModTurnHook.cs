@@ -64,9 +64,9 @@ public sealed partial class ModTurnHook(IModHost host, ModFollowUps followUps, T
     /// <summary>
     /// Dispatches <c>turn.complete</c> for the session whose turn just ended and waits up to <see cref="Wait"/>. A
     /// follow-up a hook queues in that time is added to the queue and not sent here; the caller sends it next. Side
-    /// conversations are not turns of their own and are skipped.
+    /// conversations and an agent's delegated child sessions are not the user's turns, and are skipped.
     /// </summary>
-    public async Task CompleteAsync(string userId, string sessionId, string? directory, bool isSideConversation, CancellationToken ct = default)
+    public async Task CompleteAsync(string userId, string sessionId, string? directory, bool notTheUsersTurn, CancellationToken ct = default)
     {
         Turn? turn;
         lock (_gate)
@@ -74,7 +74,7 @@ public sealed partial class ModTurnHook(IModHost host, ModFollowUps followUps, T
             _turns.Remove(sessionId, out turn);
         }
 
-        if (isSideConversation)
+        if (notTheUsersTurn)
             return;
 
         try

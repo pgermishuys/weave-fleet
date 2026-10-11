@@ -63,11 +63,11 @@ public sealed class ModTurnFollowUpTests : IAsyncDisposable
 
     public ValueTask DisposeAsync() => _harness.DisposeAsync();
 
-    private void Seed(string id, string directory, string retention = "active", string? sideOf = null)
+    private void Seed(string id, string directory, string retention = "active", string? sideOf = null, string? parent = null)
         => _builder.SessionRepository.Seed(new Session
         {
             Id = id, InstanceId = "inst-1", Title = "T", Status = "active", Directory = directory, CreatedAt = "2026-01-01",
-            RetentionStatus = retention, HarnessType = "opencode", UserId = User, SideOfSessionId = sideOf,
+            RetentionStatus = retention, HarnessType = "opencode", UserId = User, SideOfSessionId = sideOf, ParentSessionId = parent,
         });
 
     private static FilesWritten Wrote(params string[] paths) => new() { Payload = new FilesWrittenPayload { SessionId = "s1", Paths = paths } };
@@ -128,6 +128,15 @@ public sealed class ModTurnFollowUpTests : IAsyncDisposable
     {
         Seed("side1", "/work/demo", sideOf: "s1");
         await TurnEnds("side1");
+
+        _host.Requests.ShouldBeEmpty();
+    }
+
+    [Fact]
+    public async Task A_delegated_child_session_is_not_a_turn_for_mods()
+    {
+        Seed("child1", "/work/demo", parent: "s1");
+        await TurnEnds("child1");
 
         _host.Requests.ShouldBeEmpty();
     }
