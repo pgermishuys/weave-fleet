@@ -37,6 +37,17 @@ check, pooled OpenCode on Claude Sonnet 5.5, and an invented bun project. Screen
    - Before #511, the skill was off by default, and the agent guessed the API and searched the disk.
 4. **Mods off changes nothing.** There's no mod UI and no host, and no Bun is downloaded.
 
+Checks 2 and 3 on the two other harnesses (11 October 2026, same scratch layout, Bun 1.4.2 on PATH, screenshots in
+`mockups/mods-stage1-live-check/oc2-and-claude-code/`). All pass, with no code changes needed:
+- **Claude Code** (default model claude-opus-5-5). Check 2: the `bash` row shows 1 passed / 1 failed / 1 skipped, and
+  opened it names `ratio of one is itself`, on desktop and phone. Check 3: the agent loaded `fleet-mod` and used
+  `fleet_mod_write`, `fleet_mod_check` and `fleet_mod_keep`; the draft drew only in session A, after Keep it drew in B, and
+  v2, Undo (back to v1), Turn off and `?mods=off` (banner, host stopped) all behaved.
+- **OpenCode 2** (2.0.18, `opencode/big-pickle`). Same results on the `shell` row, with the same tools. This model loaded
+  `fleet-mod` on one run and not on the other (it still used the `fleet_mod_*` tools) and searched the disk first: a weak
+  model, not a Fleet fault.
+- OpenCode 2 ignores `auth.json` (it keeps sign-ins in its own database), so it ran on a free model, not Claude Sonnet 5.5.
+
 ## Decisions already made by the user (don't reopen)
 
 1. **Mirror Claude Code mods.** A mod is a module exporting `register(on, options)`; hooks are middleware
