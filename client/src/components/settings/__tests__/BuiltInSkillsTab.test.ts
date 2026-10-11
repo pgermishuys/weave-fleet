@@ -75,6 +75,21 @@ describe("BuiltInSkillsTab", () => {
     expect(wrapper.get(switchFor("fleet-run")).attributes("aria-checked")).toBe("true");
   });
 
+  it("shows a skill that comes with Mods as on or off with Mods, with no switch", async () => {
+    apiFetchMock.mockImplementation(() => respond([
+      { name: "fleet-mod", description: "Write mods.", enabled: true, withMods: true },
+      { name: "fleet-mods-off", description: "Write mods.", enabled: false, withMods: true },
+    ]));
+
+    const wrapper = mount(BuiltInSkillsTab);
+    await flushPromises();
+
+    expect(wrapper.get("[data-testid='built-in-skill-fleet-mod']").text()).toContain("On with Mods");
+    expect(wrapper.get("[data-testid='built-in-skill-fleet-mods-off']").text()).toContain("Off · turns on with Mods");
+    expect(wrapper.find(switchFor("fleet-mod")).exists()).toBe(false);
+    expect(wrapper.find(switchFor("fleet-mods-off")).exists()).toBe(false);
+  });
+
   it("turns a skill on through the API and shows the server's answer", async () => {
     let finishSave: (response: Response) => void = () => {};
     apiFetchMock.mockImplementation((_path: string, init?: RequestInit) =>

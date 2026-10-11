@@ -1,6 +1,7 @@
 using System.Security.Cryptography;
 using System.Text;
 using Microsoft.Extensions.DependencyInjection;
+using WeaveFleet.Application.Mods;
 using WeaveFleet.Application.Skills;
 using WeaveFleet.Domain.Repositories;
 
@@ -70,7 +71,8 @@ internal static class BuiltInSkillFiles
             preferences,
             services.GetService<ISkillVersionStore>(),
             ownerUserId,
-            Names).ConfigureAwait(false);
+            Names,
+            services.GetService<ModsFeature>() is { } mods && await mods.IsSwitchedOnAsync().ConfigureAwait(false)).ConfigureAwait(false);
         var yours = new Dictionary<string, string>(StringComparer.Ordinal);
         foreach (var (name, _, folder) in skills)
         {

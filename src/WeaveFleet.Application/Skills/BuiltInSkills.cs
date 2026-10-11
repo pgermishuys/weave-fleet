@@ -1,5 +1,6 @@
 using Microsoft.Extensions.Logging;
 using WeaveFleet.Application.Harnesses;
+using WeaveFleet.Application.Mods;
 using WeaveFleet.Application.Users;
 using WeaveFleet.Domain.Common;
 using WeaveFleet.Domain.Repositories;
@@ -22,8 +23,9 @@ public interface IBuiltInSkillCatalog
 /// <param name="Version">The user's version sessions get; null for Fleet's.</param>
 /// <param name="FleetChanged">Fleet changed its version since the user's was made, or since they last kept theirs.</param>
 /// <param name="VersionCount">How many versions the user made, including ones not in use.</param>
+/// <param name="WithMods">The skill has no switch: it's on while Mods is on.</param>
 public sealed record BuiltInSkillView(
-    string Name, string Description, bool Enabled, int? Version = null, bool FleetChanged = false, int VersionCount = 0);
+    string Name, string Description, bool Enabled, int? Version = null, bool FleetChanged = false, int VersionCount = 0, bool WithMods = false);
 
 /// <summary>One of the user's versions, as the history lists it.</summary>
 public sealed record SkillVersionView(
@@ -68,9 +70,13 @@ public sealed partial class BuiltInSkillService(
     IUserContext? user = null,
     ILogger<BuiltInSkillService>? logger = null,
     ISkillVersionStore? versions = null,
-    ISessionRepository? sessions = null)
+    ISessionRepository? sessions = null,
+    ModsFeature? mods = null)
 {
     public const string PreferenceKey = "BuiltInSkills";
+
+    /// <summary>Teaches the <c>fleet_mod_*</c> tools, so it comes with Mods: on while Mods is, gone when it isn't.</summary>
+    public const string ModsSkill = "fleet-mod";
 
     private const int MaxNoteLength = 2000;
 
@@ -78,7 +84,7 @@ public sealed partial class BuiltInSkillService(
 
     public async Task<IReadOnlyList<BuiltInSkillView>> ListAsync()
     {
-        var enabled = await GetEnabledAsync(preferences).ConfigureAwait(false);
+        var enabled = await EffectiveAsync().ConfigureAwait(false);
         var histories = versions is null
             ? new Dictionary<string, SkillVersionHistory>()
             : (await versions.ListAsync(UserId).ConfigureAwait(false)).ToDictionary(h => h.Name, StringComparer.Ordinal);
@@ -93,6 +99,8 @@ public sealed partial class BuiltInSkillService(
         var skill = catalog.Skills.FirstOrDefault(skill => skill.Name == name);
         if (skill is null)
             return FleetError.NotFoundFor("BuiltInSkill", name);
+        if (name == ModsSkill)
+            return FleetError.ValidationError("Enabled", $"{name} has no switch of its own: it's on while Mods is on (Settings → Features).");
 
         var names = new SortedSet<string>(await GetEnabledAsync(preferences).ConfigureAwait(false), StringComparer.Ordinal);
         if (enabled)
@@ -113,7 +121,7 @@ public sealed partial class BuiltInSkillService(
             return FleetError.NotFoundFor("BuiltInSkill", name);
 
         var (skill, fleetContent) = found;
-        var enabled = (await GetEnabledAsync(preferences).ConfigureAwait(false)).Contains(name);
+        var enabled = (await EffectiveAsync().ConfigureAwait(false)).Contains(name);
         var history = versions is null ? SkillVersionHistory.Empty(name) : await versions.GetAsync(UserId, name).ConfigureAwait(false);
 
         string? yours = null;
@@ -226,14 +234,37 @@ public sealed partial class BuiltInSkillService(
             ? (skill, content)
             : null;
 
+    /// <summary>The user's choice, with <see cref="ModsSkill"/> following the Mods switch instead.</summary>
+    private async Task<IReadOnlySet<string>> EffectiveAsync()
+        => WithModsSkill(
+            await GetEnabledAsync(preferences).ConfigureAwait(false),
+            mods is not null && await mods.IsSwitchedOnAsync().ConfigureAwait(false));
+
+    /// <summary>
+    /// Where the rule for <see cref="ModsSkill"/> lives: whatever the user's list says, it's in while Mods is on and out
+    /// while it's off. Safe mode doesn't change it, as it doesn't hide the tools.
+    /// </summary>
+    public static IReadOnlySet<string> WithModsSkill(IReadOnlySet<string> chosen, bool modsOn)
+    {
+        var names = chosen.ToHashSet(StringComparer.Ordinal);
+        if (modsOn)
+            names.Add(ModsSkill);
+        else
+            names.Remove(ModsSkill);
+        return names;
+    }
+
+    /// <summary>Mods was switched on or off: each harness reads its skills again, as <see cref="ModsSkill"/> follows it.</summary>
+    public Task ModsChangedAsync() => TellHarnessesAsync();
+
     private BuiltInSkillView ToView(BuiltInSkill skill, bool enabled, SkillVersionHistory? history)
     {
         var count = history?.Versions.Count ?? 0;
         if (history?.ActiveVersion is null)
-            return new BuiltInSkillView(skill.Name, skill.Description, enabled, VersionCount: count);
+            return new BuiltInSkillView(skill.Name, skill.Description, enabled, VersionCount: count, WithMods: skill.Name == ModsSkill);
 
         var changed = catalog.ContentOf(skill.Name) is { } fleet && FleetChanged(history, fleet);
-        return new BuiltInSkillView(skill.Name, skill.Description, enabled, history.Active, changed, count);
+        return new BuiltInSkillView(skill.Name, skill.Description, enabled, history.Active, changed, count, skill.Name == ModsSkill);
     }
 
     private static bool FleetChanged(SkillVersionHistory history, string fleetContent)
@@ -277,12 +308,12 @@ public sealed partial class BuiltInSkillService(
     /// <summary>
     /// The built-in skills the owner turned on, each with the folder of the version they made when there is one. A
     /// harness loads Fleet's copy for a skill with no folder and the folder for the rest, so only one copy of a name ever
-    /// reaches it.
+    /// reaches it. <paramref name="mods"/> is whether Mods is on, which decides <see cref="ModsSkill"/>.
     /// </summary>
     public static async Task<IReadOnlyList<(string Name, int? Version, string? Folder)>> GetSessionSkillsAsync(
-        IUserPreferenceRepository preferences, ISkillVersionStore? versions, string ownerUserId, IEnumerable<string> shipped)
+        IUserPreferenceRepository preferences, ISkillVersionStore? versions, string ownerUserId, IEnumerable<string> shipped, bool mods = false)
     {
-        var enabled = await GetEnabledAsync(preferences).ConfigureAwait(false);
+        var enabled = WithModsSkill(await GetEnabledAsync(preferences).ConfigureAwait(false), mods);
         var histories = versions is null
             ? new Dictionary<string, SkillVersionHistory>()
             : (await versions.ListAsync(ownerUserId).ConfigureAwait(false)).ToDictionary(h => h.Name, StringComparer.Ordinal);
