@@ -4,7 +4,7 @@ import type { MachineConnection } from "@/lib/machines";
 const { apiFetchOnMock } = vi.hoisted(() => ({ apiFetchOnMock: vi.fn() }));
 vi.mock("@/lib/api-client", () => ({ apiFetchOn: apiFetchOnMock }));
 
-import { fetchDrafts, fetchModsSwitch, ModsRequestError, setDraftOn } from "@/lib/mods/kept-api";
+import { checkDraft, dismissKeepRequest, fetchDrafts, fetchModsSwitch, keepDraft, ModsRequestError, setDraftOn } from "@/lib/mods/kept-api";
 
 const json = (body: unknown, status = 200) =>
   new Response(JSON.stringify(body), { status, headers: { "Content-Type": "application/json" } });
@@ -53,6 +53,38 @@ describe("requests", () => {
     expect(lastCall()[2]?.method).toBe("POST");
     await setDraftOn("s1", "test chips", true);
     expect(lastCall()[1]).toBe("/api/sessions/s1/mods/drafts/test%20chips/on");
+  });
+});
+
+describe("check, keep and dismiss", () => {
+  it("checkDraft reads the report, null when there is no checker", async () => {
+    apiFetchOnMock.mockResolvedValueOnce(json({ check: { ok: true, name: "test-chips" } }));
+    expect((await checkDraft("s1", "test-chips", machine))?.name).toBe("test-chips");
+    expect(lastCall()[0]).toBe(machine);
+    expect(lastCall()[1]).toBe("/api/sessions/s1/mods/drafts/test-chips/check");
+    apiFetchOnMock.mockResolvedValueOnce(json({ check: null }));
+    expect(await checkDraft("s1", "test-chips")).toBeNull();
+  });
+
+  it("keepDraft POSTs the trimmed note, or no body when it is empty", async () => {
+    apiFetchOnMock.mockImplementation(async () => json({ name: "test-chips" }));
+    await keepDraft("s1", "test-chips", "  Easier to scan.  ", machine);
+    expect(lastCall()[1]).toBe("/api/sessions/s1/mods/drafts/test-chips/keep");
+    expect(lastCall()[2]?.method).toBe("POST");
+    expect(JSON.parse(lastCall()[2]?.body as string)).toEqual({ note: "Easier to scan." });
+    await keepDraft("s1", "test-chips", "   ");
+    expect(lastCall()[2]?.body).toBeUndefined();
+  });
+
+  it("dismissKeepRequest DELETEs, accepts an empty 204 and treats 404 as done", async () => {
+    apiFetchOnMock.mockResolvedValueOnce(new Response(null, { status: 204 }));
+    await expect(dismissKeepRequest("s1", "test-chips", machine)).resolves.toBeUndefined();
+    expect(lastCall()[1]).toBe("/api/sessions/s1/mods/drafts/test-chips/keep-request");
+    expect(lastCall()[2]?.method).toBe("DELETE");
+    apiFetchOnMock.mockResolvedValueOnce(json({ error: "gone" }, 404));
+    await expect(dismissKeepRequest("s1", "test-chips")).resolves.toBeUndefined();
+    apiFetchOnMock.mockResolvedValueOnce(json({ error: "Nope." }, 400));
+    await expect(dismissKeepRequest("s1", "test-chips")).rejects.toMatchObject({ status: 400 });
   });
 });
 

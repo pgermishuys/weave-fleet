@@ -1,4 +1,5 @@
 import { flushPromises, mount } from "@vue/test-utils";
+import { defineComponent, h } from "vue";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import type { ModDraft } from "@/lib/mods/kept";
 
@@ -6,6 +7,14 @@ const { setDraftOnMock } = vi.hoisted(() => ({ setDraftOnMock: vi.fn() }));
 
 vi.mock("@/stores/mods", () => ({
   useModsStore: () => ({ setDraftOn: setDraftOnMock }),
+}));
+
+vi.mock("@/components/mods/review/ModReviewDialog.vue", () => ({
+  default: defineComponent({
+    name: "ModReviewDialog",
+    props: ["open", "sessionId", "draft", "phone"],
+    setup: (p) => () => h("div", { "data-testid": "review-dialog", "data-open": String(p.open), "data-phone": String(!!p.phone) }),
+  }),
 }));
 
 import { ModsRequestError } from "@/lib/mods/kept-api";
@@ -94,7 +103,7 @@ describe("ModDraftCard", () => {
     const wrapper = mountCard(draft({ keepRequest: { note: null, at: "2026-10-10T10:00:00Z" } }));
     const line = wrapper.find("[data-testid=mod-draft-request]").text();
     expect(line).toContain("The agent asks you to keep this");
-    expect(line).not.toContain("Review");
+    expect(line).not.toContain("Counts are easier");
   });
 
   it("shows no line number for a null line", () => {
@@ -102,11 +111,27 @@ describe("ModDraftCard", () => {
     expect(wrapper.find("[data-testid=mod-draft-check]").text()).toBe("Check: Bad manifest");
   });
 
+  it("Keep… opens the review, and is disabled while the draft is still being written", async () => {
+    const wrapper = mountCard(draft());
+    expect(wrapper.find("[data-testid=review-dialog]").attributes("data-open")).toBe("false");
+    await wrapper.find("[data-testid=mod-draft-keep]").trigger("click");
+    expect(wrapper.find("[data-testid=review-dialog]").attributes("data-open")).toBe("true");
+    const writing = mountCard(draft({ description: null, version: null }));
+    expect(writing.find("[data-testid=mod-draft-keep]").attributes("disabled")).toBeDefined();
+  });
+
+  it("Review… in the keep request opens the review", async () => {
+    const wrapper = mountCard(draft({ keepRequest: { note: "Counts are easier to scan.", at: "2026-10-10T10:00:00Z" } }));
+    await wrapper.find("[data-testid=mod-draft-review]").trigger("click");
+    expect(wrapper.find("[data-testid=review-dialog]").attributes("data-open")).toBe("true");
+  });
+
   describe("on the phone", () => {
     it("draws the phone's own buttons, never the desktop ones", () => {
       const wrapper = mountCard(draft(), true);
       expect(wrapper.find("[data-testid=mod-draft-toggle]").classes()).toEqual(expect.arrayContaining(["ph-btn", "ph-btn--outline"]));
       expect(wrapper.find("[data-slot=button]").exists()).toBe(false);
+      expect(wrapper.find("[data-testid=review-dialog]").attributes("data-phone")).toBe("true");
     });
   });
 });

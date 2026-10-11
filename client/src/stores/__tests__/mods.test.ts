@@ -7,6 +7,8 @@ const api = vi.hoisted(() => ({
   fetchModsSwitch: vi.fn(),
   fetchDrafts: vi.fn(),
   setDraftOn: vi.fn(),
+  keepDraft: vi.fn(),
+  dismissKeepRequest: vi.fn(),
 }));
 const events = vi.hoisted(() => ({
   onDomainEvent: vi.fn(),
@@ -137,6 +139,35 @@ describe("setDraftOn", () => {
   it("rethrows the request error", async () => {
     api.setDraftOn.mockRejectedValue(new ModsRequestError("That draft is gone.", 404));
     await expect(useModsStore().setDraftOn("s1", "x", false)).rejects.toMatchObject({ message: "That draft is gone.", status: 404 });
+  });
+});
+
+describe("keep and dismissKeepRequest", () => {
+  const asked = { note: "keep it", at: "2026-10-10T10:00:00Z" };
+
+  it("keep reloads that session's drafts, and rethrows a refusal leaving the request", async () => {
+    api.fetchDrafts.mockResolvedValueOnce([draft("s1", "a", { keepRequest: asked })]);
+    const store = useModsStore();
+    await store.loadDrafts("s1");
+    api.keepDraft.mockRejectedValueOnce(new ModsRequestError("The check found a problem.", 400));
+    await expect(store.keep("s1", "a", "")).rejects.toMatchObject({ status: 400 });
+    expect(store.draftsFor("s1")[0]?.keepRequest).toEqual(asked);
+    api.keepDraft.mockResolvedValue({ name: "a" });
+    api.fetchDrafts.mockResolvedValueOnce([draft("s1", "a", { kept: 1 })]);
+    await store.keep("s1", "a", "note");
+    expect(api.keepDraft).toHaveBeenLastCalledWith("s1", "a", "note", null);
+    expect(store.draftsFor("s1")[0]?.kept).toBe(1);
+  });
+
+  it("dismissKeepRequest clears the request and reloads", async () => {
+    api.fetchDrafts.mockResolvedValueOnce([draft("s1", "a", { keepRequest: asked })]);
+    const store = useModsStore();
+    await store.loadDrafts("s1");
+    api.dismissKeepRequest.mockResolvedValue(undefined);
+    api.fetchDrafts.mockResolvedValueOnce([draft("s1", "a")]);
+    await store.dismissKeepRequest("s1", "a");
+    expect(api.dismissKeepRequest).toHaveBeenCalledWith("s1", "a", null);
+    expect(store.draftsFor("s1")[0]?.keepRequest ?? null).toBeNull();
   });
 });
 
