@@ -41,7 +41,7 @@ public sealed class ModsRuntimeEndpointTests : IAsyncDisposable
         view.GetProperty("bun").ValueKind.ShouldBe(JsonValueKind.Null);
         view.GetProperty("job").ValueKind.ShouldBe(JsonValueKind.Null);
         var release = view.GetProperty("release");
-        release.GetProperty("version").GetString().ShouldBe("1.4.2");
+        release.GetProperty("version").GetString().ShouldBe(BunRelease.Pinned.Version);
         release.GetProperty("hasBuild").GetBoolean().ShouldBeTrue();
         release.GetProperty("source").GetString().ShouldBe("github.com/oven-sh/bun");
         (await SwitchOnAsync()).ShouldBeFalse();
@@ -64,12 +64,12 @@ public sealed class ModsRuntimeEndpointTests : IAsyncDisposable
     [Fact]
     public async Task Installing_when_the_releases_bun_is_there_answers_200_and_downloads_nothing()
     {
-        _bun.Installed = new BunLocation("/bun/1.4.2/bun", BunSources.Installed, "1.4.2");
+        _bun.Installed = new BunLocation($"/bun/{BunRelease.Pinned.Version}/bun", BunSources.Installed, BunRelease.Pinned.Version);
 
         var response = await _client.PostAsync($"{Runtime}/install", null);
 
         response.StatusCode.ShouldBe(HttpStatusCode.OK);
-        (await response.Content.ReadFromJsonAsync<JsonElement>()).GetProperty("bun").GetProperty("version").GetString().ShouldBe("1.4.2");
+        (await response.Content.ReadFromJsonAsync<JsonElement>()).GetProperty("bun").GetProperty("version").GetString().ShouldBe(BunRelease.Pinned.Version);
         _bun.Ensures.ShouldBe(0);
     }
 
