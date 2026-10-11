@@ -51,13 +51,13 @@ const REFUSED_GLOBALS: Record<string, string> = {
   Atomics: "",
 };
 
-const EVENTS = ["session.start", "turn.complete", "ui.render", "ui.press", "ui.input", "ui.select"];
+const EVENTS = ["session.start", "turn.complete", "prompt.submit", "ui.render", "ui.press", "ui.input", "ui.select"];
 
 const DOLLAR_METHODS = new Set([
   "ui.resolve", "ui.invalidate", "ui.open", "ui.close", "ui.toast", "ui.log",
   "state.get", "state.set",
   "store.get", "store.set", "store.delete", "store.keys",
-  "session.id", "session.title", "session.harness", "session.cwd", "session.surfaces",
+  "session.id", "session.title", "session.harness", "session.cwd", "session.surfaces", "session.branch",
   "clock.now", "clock.after", "clock.every",
 ]);
 

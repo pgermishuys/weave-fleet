@@ -6,6 +6,7 @@ using WeaveFleet.Application.DTOs;
 using WeaveFleet.Application.Events;
 using WeaveFleet.Application.Harnesses;
 using WeaveFleet.Application.Memory;
+using WeaveFleet.Application.Mods;
 using WeaveFleet.Application.Recaps;
 using WeaveFleet.Application.Sessions.Activation;
 using WeaveFleet.Application.SessionSources;
@@ -38,7 +39,8 @@ public sealed partial class SessionPrompting(
     ILogger<SessionPrompting> logger,
     IMessageRepository? messageRepository = null,
     SessionRecapService? sessionRecaps = null,
-    AgentMemoryService? agentMemory = null)
+    AgentMemoryService? agentMemory = null,
+    ModPromptHook? modPrompts = null)
 {
     public async Task<Result<Unit>> PromptSessionAsync(
         string id,
@@ -146,6 +148,13 @@ public sealed partial class SessionPrompting(
 
         await activation.ApplyPermissionsAsync(sessionResult.Value, instanceResult.Value, ct).ConfigureAwait(false);
 
+        // The user's mods may reword the prompt or add notes for the model. The words they leave are what the
+        // conversation shows and the harness gets; the notes go with the harness's other model-only notes.
+        var modPrompt = modPrompts is null
+            ? ModPromptOutcome.Unchanged(text)
+            : await modPrompts.ApplyAsync(sessionResult.Value.UserId, id, text, ct).ConfigureAwait(false);
+        text = modPrompt.Text;
+
         try
         {
             // Generate ascending message ID for the user prompt.
@@ -195,6 +204,10 @@ public sealed partial class SessionPrompting(
                 : [];
             if (LostWorkNote.For(lostWork) is { } lostWorkNote)
                 modelNotes = [.. modelNotes ?? [], lostWorkNote];
+
+            if (modPrompt.Context.Count > 0
+                && harnessRegistry.GetByType(sessionResult.Value.HarnessType)?.Capabilities.TakesModelNotes == true)
+                modelNotes = [.. modelNotes ?? [], .. modPrompt.Context];
 
             // Pass the generated message ID through to the harness, with any notes the session's prompts carry.
             var promptOptionsWithMessageId = options is null

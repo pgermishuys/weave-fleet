@@ -7,9 +7,9 @@ when the two disagree, the types win and this page is the bug.
 Fleet mods mirror [Claude Code's mods](https://code.claude.com/docs/en/plugins/mods/overview). Where the concept is the
 same, the name is the same: `register(on, options)`, `on(event, matcher?, hook)`, hooks as `($, e, next)` middleware,
 `$` as the only way out, `ui.render`/`ui.press`/`ui.input`/`ui.select`, `$.ui.resolve(e)`, `$.state`, `$.store`,
-`$.clock`, `.catch`, `next.called`, `next.error`. Stage 1 is the subset that draws: no prompt, tool or permission
-events, and nothing that reaches files, processes, the network or models. Those come in Stage 2 with the `calls:`
-review.
+`$.clock`, `.catch`, `next.called`, `next.error`. Stage 1 is the subset that draws, plus one prompt event
+(`prompt.submit`): no tool or permission events, and nothing that reaches files, processes, the network or models. The
+rest comes in Stage 2 with the `calls:` review.
 
 - [A mod on disk](#a-mod-on-disk)
 - [Hooks](#hooks)
@@ -95,6 +95,7 @@ export const register: Register = (on, options) => {
 | :- | :- | :- | :- |
 | `session.start` | Once per mod per session, before the mod's first other event in it, and again after the mod reloads | `sessionId`, `reason` (`start` or `reload`) | `next(e)` |
 | `turn.complete` | A turn ended: finished, stopped by the user (`isAborted`) or failed (`isFailed`) | `sessionId`, `turnId`, `isAborted`, `isFailed`, `failure?`, `agent?`, `model?`, `usage?` (`input`, `output`, `cacheRead`, `cacheWrite`), `cost?` | `next(e)` (watch only) |
+| `prompt.submit` | The user sent a prompt, before the harness gets it | `sessionId`, `text`, `context` (a list of strings, `[]` at first) | `next(e)`, `next({ ...e, text })` to reword it, or `next({ ...e, context: [...e.context, "…"] })` to add notes for the model |
 | `ui.render` | Fleet is about to draw a [render site](#render-sites) the mod hooked | `component`, `sessionId`, `requestId`, `props` | A tree, `null` to draw nothing, or `next(e)` |
 | `ui.press` | A `Button` the mod drew is pressed | `sessionId`, `mod` (the name of the mod that drew it), `element` (the key), `component`, `requestId`, `surface` | `next(e)`, or `{ element }` to swallow the press |
 | `ui.input` | An `Input` changes (`kind: "change"`, at most 4 a second) or is submitted (`kind: "submit"`) | as `ui.press`, plus `kind`, `value` | `next({ ...e, value })`, or `{ element, value }` to swallow it |
@@ -102,6 +103,25 @@ export const register: Register = (on, options) => {
 
 Fleet sends `session.start` when a session is opened on any screen or starts a turn; the host runs each mod's hook at
 most once per loaded module per session, and runs it first if another event for that session arrives before it.
+
+**`prompt.submit`** is a transform event: each hook's `next(e)` passes the possibly changed event on, and the end of the
+chain is the event as it arrived there. Matchers work on `text` (the text as the user typed it, whatever an earlier mod
+did). What Fleet does with the answer:
+
+- `text` is what the conversation shows in the user's bubble and what the harness receives. A rewrite is visible.
+- `context` goes to the model alone, in the notes Fleet already passes with a prompt, and is not in the bubble or in
+  `text`. OpenCode, OpenCode 2 and Claude Code take them; Pi doesn't (the notes are dropped). At most 8 KiB in total;
+  entries past that are dropped.
+- It is **fail open**. The prompt goes on unchanged, with no context, when Fleet has no mod hooking it, the Mods
+  switch is off or the host isn't running, the dispatch throws, the host doesn't answer within 2 s (Fleet then just
+  stops waiting; it doesn't restart the host, and the dispatch finishes unobserved), or the answer isn't an object
+  with a `text` that is a string with something in it. Non-string `context` entries are ignored; a `context` that isn't
+  a list counts as none. A hook that fails inside the host is a normal [failure](#order-and-failure) (a strike, or
+  `.catch`), and the chain goes on as if it had returned `next(e)`.
+- A prompt hook has 1.5 s of its own time (not 10 s). Dropping a prompt, blocking one or answering it without the
+  model are not possible yet.
+- Slash commands (`/compact`, a skill, a command) are not sent through it. Every other prompt is,
+  including a new session's first message and prompts from automations.
 
 At the end of a `ui.press`/`ui.input`/`ui.select` chain, Fleet's own behaviour is the control's callback (`onPress`,
 `onSubmit`/`onInput`, `onSelect`) in the mod that drew it. Another mod's hook on the same event runs first, as in
@@ -158,7 +178,7 @@ phone and other tabs showing the session get the same tree.
 | | `log(text, { level? })` | A line in the mod's log: Settings → Mods shows it, and `fleet_mod_check`/`fleet_mod_test` return it to the agent. |
 | `$.state` | `get(key)`, `set(key, value)` | Reactive JSON values for one mod in one session. A `ui.render` hook that reads a key redraws when it's written; it can't write. Survives a reload of the module; dropped when the session is archived or the host restarts. Keys are string literals. |
 | `$.store` | `get`, `set`, `delete`, `keys` | Per user, per mod, saved by Fleet; a draft shares the store of the kept mod with its name. Async. |
-| `$.session` | `id()`, `title()`, `harness()`, `cwd()`, `surfaces()` | The session of the current event, timer or callback. Async. `surfaces()` is where it's open now: `desktop`, `phone`, or empty. |
+| `$.session` | `id()`, `title()`, `harness()`, `cwd()`, `surfaces()`, `branch()` | The session of the current event, timer or callback. Async. `surfaces()` is where it's open now: `desktop`, `phone`, or empty. `branch()` is the git branch checked out in the session's folder, or `null` when it isn't in a git repository or HEAD is detached; Fleet reads it when asked. |
 | `$.clock` | `now()`, `after(ms, fn)`, `every(ms, fn)` | Timers belong to the mod and session they were started in, and stop when the module reloads or the session is archived. `every` at 100 ms at least. |
 
 There is no `$.fs`, `$.process`, `$.http`, `$.model`, `$.prompt` or `$.tool` in Stage 1, and no `setTimeout`: use
@@ -248,7 +268,7 @@ draft with a kept mod's name takes that mod's place in its session. Within a mod
 called `on`.
 
 **Budget.** A hook has 10 s of its own time per dispatch; time inside `next` or a `$` call doesn't count. A `.catch`
-handler has 1 s. Past its budget a hook is skipped.
+handler has 1 s. A `prompt.submit` hook has 1.5 s. Past its budget a hook is skipped.
 
 **A failure** is a hook that throws, times out, or returns what the event doesn't take (an invalid tree). With no
 `.catch`, a hook that failed before calling `next` is skipped and the next handler runs in its place; one that failed
@@ -389,7 +409,10 @@ These shapes are for M5 and M6; mods don't see them.
 | Limit | Value |
 | :- | :- |
 | A hook's own time per dispatch | 10 s |
+| A `prompt.submit` hook's own time | 1.5 s |
 | A `.catch` handler's own time | 1 s |
+| Fleet's wait for `prompt.submit` before the prompt goes on unchanged | 2 s |
+| `prompt.submit` context | 8 KiB in total |
 | Fleet's wait for a whole dispatch, before it restarts the host | 15 s |
 | Failures in a row that turn a mod off | 3 |
 | Text drawn per tree | 100,000 characters; the rest is cut |

@@ -17,7 +17,7 @@ export interface Peer {
   notify(method: string, params: unknown): void;
 }
 
-export const EVENTS: readonly EventName[] = ["session.start", "turn.complete", "ui.render", "ui.press", "ui.input", "ui.select"];
+export const EVENTS: readonly EventName[] = ["session.start", "turn.complete", "prompt.submit", "ui.render", "ui.press", "ui.input", "ui.select"];
 /** Events whose hooks only watch: every hook runs and the return value is ignored. */
 export const WATCH_ONLY: ReadonlySet<EventName> = new Set<EventName>(["session.start", "turn.complete"]);
 export const CONTROL_EVENTS: ReadonlySet<EventName> = new Set<EventName>(["ui.press", "ui.input", "ui.select"]);

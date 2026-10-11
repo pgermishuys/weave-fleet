@@ -21,7 +21,7 @@ describe("ModsSampleButton", () => {
     apiFetchMock.mockResolvedValue(new Response("{}", { status: 200 }));
     const wrapper = mount(ModsSampleButton);
     const buttons = wrapper.findAll("[data-testid='mods-sample-button']");
-    expect(buttons.map((b) => b.attributes("data-sample"))).toEqual(["test-chips", "build-summary", "git-glance", "http-check", "lint-summary", "edit-size", "search-hits"]);
+    expect(buttons.map((b) => b.attributes("data-sample"))).toEqual(["test-chips", "build-summary", "git-glance", "http-check", "lint-summary", "edit-size", "search-hits", "branch-context"]);
     await buttons[1].trigger("click");
     await flushPromises();
     expect(apiFetchMock).toHaveBeenCalledWith("/api/mods/samples/build-summary", { method: "POST" });

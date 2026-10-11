@@ -83,6 +83,10 @@ function accept(d: Dispatch, mod: LoadedMod, v: unknown): string | null {
       for (const el of unowned) d.owners.set(el, mod.id);
       return null;
     }
+    case "prompt.submit":
+      return isObject(v) && typeof v.text === "string" && Array.isArray(v.context) && v.context.every((c) => typeof c === "string")
+        ? null
+        : "prompt.submit takes next(e) or { ...e, text, context } with a string text and a list of strings";
     case "ui.press":
       return isObject(v) && typeof v.element === "string" ? null : "ui.press takes next(e) or { element }";
     case "ui.input":
@@ -198,7 +202,7 @@ async function callHook(d: Dispatch, ref: HookRef, e: any, rest: Rest): Promise<
   const scope: DollarScope = { rendering: d.event === "ui.render", context: ctx, site: d.site, budget: null };
   const $ = createDollar(rt, mod, sid, d.event, scope);
   const st: NextState = { called: false, resolved: false, over: false };
-  const hookMs = rt.limits.hookMs;
+  const hookMs = d.event === "prompt.submit" ? Math.min(rt.limits.hookMs, rt.limits.promptHookMs) : rt.limits.hookMs;
   const key = ownerKey(mod.id, sid);
   let replay: Promise<Out> | undefined;
   /** The rest of the chain for the hook and its `.catch` together: what the hook's next got, else one run of it. */
@@ -320,6 +324,7 @@ async function endOfChain(d: Dispatch, e: any): Promise<Out> {
       return { v: FLEET };
     case "session.start":
     case "turn.complete":
+    case "prompt.submit":
       return { v: e };
   }
   const h = d.control!;

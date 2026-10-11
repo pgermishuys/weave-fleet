@@ -11,6 +11,7 @@ const SAMPLES = [
   { name: "lint-summary", added: "Added. Run ESLint or ruff in any session to see it." },
   { name: "edit-size", added: "Added. Edit a file in any session to see it." },
   { name: "search-hits", added: "Added. Run a grep in any session to see it." },
+  { name: "branch-context", added: "Added. Ask about the branch, a PR or a push in any session." },
 ] as const;
 
 const isAdding = shallowRef(false);

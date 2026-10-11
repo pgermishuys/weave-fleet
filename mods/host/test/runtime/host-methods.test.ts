@@ -109,9 +109,9 @@ describe("load", () => {
 
   test("refuses an event the host doesn't have at runtime", async () => {
     const s = setup({}, fakeCheck);
-    const err = await s.load("test-unknown", `on("prompt.submit", ($, e, next) => next(e));`).catch((e) => e);
+    const err = await s.load("test-unknown", `on("tool.before", ($, e, next) => next(e));`).catch((e) => e);
     expect(err.code).toBe(-32001);
-    expect(err.data.errors.find((x: any) => x.code === "register").message).toContain("prompt.submit");
+    expect(err.data.errors.find((x: any) => x.code === "register").message).toContain("tool.before");
   });
 
   test("on called after register returned throws", async () => {

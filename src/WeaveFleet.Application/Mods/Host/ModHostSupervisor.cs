@@ -12,6 +12,9 @@ namespace WeaveFleet.Application.Mods.Host;
 /// <summary>Finds a session as its user, outside any request; null when there's none.</summary>
 internal delegate Task<Session?> ModSessionLookup(string userId, string sessionId, CancellationToken ct);
 
+/// <summary>The git branch checked out in a folder, or null (not a repository, or a detached HEAD).</summary>
+internal delegate Task<string?> ModBranchLookup(string directory, CancellationToken ct);
+
 /// <summary>What a <see cref="ModHostSupervisor"/> needs from the rest of Fleet.</summary>
 internal sealed record ModHostDependencies(
     ModHostOptions Options,
@@ -24,7 +27,8 @@ internal sealed record ModHostDependencies(
     IModHostUi Ui,
     ModSessionLookup FindSession,
     TimeProvider Time,
-    ILogger Logger);
+    ILogger Logger,
+    ModBranchLookup? FindBranch = null);
 
 /// <summary>
 /// One user's mod host: keeps the process running while a mod of theirs should run, stops it when none should, and starts
@@ -631,6 +635,10 @@ internal sealed partial class ModHostSupervisor(string userId, ModHostDependenci
                 var session = await deps.FindSession(userId, sessionId, ct).ConfigureAwait(false);
                 if (session is null || session.UserId != userId)
                     throw Invalid($"There is no session {sessionId}.");
+                // Only session.get pays for the branch, and only a mod that asks gets here.
+                var branch = deps.FindBranch is { } findBranch && !string.IsNullOrEmpty(session.Directory)
+                    ? await findBranch(session.Directory, ct).ConfigureAwait(false)
+                    : null;
                 return Params(w =>
                 {
                     w.WriteString("id", session.Id);
@@ -638,6 +646,7 @@ internal sealed partial class ModHostSupervisor(string userId, ModHostDependenci
                     w.WriteString("harness", session.HarnessType);
                     w.WriteString("cwd", session.Directory);
                     Strings(w, "surfaces", deps.Ui.SurfacesOf(userId, sessionId));
+                    w.WriteString("branch", branch);
                 });
             case "ui.open":
                 await deps.Ui.OpenPaneAsync(userId, route.Id, sessionId, Required(parameters, "id"), Text(parameters, "title"), ct).ConfigureAwait(false);
