@@ -20,6 +20,9 @@ const store = vi.hoisted(() => ({
 }));
 vi.mock("@/stores/mods", () => ({ useModsStore: () => store.state }));
 
+const { apiFetchMock } = vi.hoisted(() => ({ apiFetchMock: vi.fn() }));
+vi.mock("@/lib/api-client", async (importOriginal) => ({ ...(await importOriginal<object>()), apiFetch: apiFetchMock }));
+
 const { default: ModsSection } = await import("@/components/settings/ModsSection.vue");
 const { useSettingsNav } = await import("@/composables/use-settings-nav");
 
@@ -123,7 +126,8 @@ describe("ModsSection", () => {
   it("says so when nothing is kept yet", async () => {
     setKept([]);
     const wrapper = await mountSection();
-    expect(wrapper.get("[data-testid=mods-empty]").text()).toContain("No kept mods yet. When an agent writes a mod in a session, you can keep it from there.");
+    expect(wrapper.get("[data-testid=mods-empty]").text()).toContain("No kept mods yet. When an agent writes a mod in a session, you can keep it from there, or add one from the Showcase below.");
+    expect(wrapper.find("[data-testid=mods-showcase]").exists()).toBe(true);
   });
 
   it("shows the safe-mode callout and turns mods back on", async () => {
@@ -148,6 +152,52 @@ describe("ModsSection", () => {
     const wrapper = await mountSection();
     expect(wrapper.get("[data-testid=mods-switched-off]").text()).toContain("Turn Mods on in Settings → Features");
     expect(wrapper.find("[data-testid^=mod-row-]").exists()).toBe(false);
+  });
+
+  describe("Showcase", () => {
+    beforeEach(() => apiFetchMock.mockReset().mockResolvedValue(new Response("{}", { status: 200 })));
+
+    it("lists every sample with a Showcase tag, what it does and where to see it", async () => {
+      const wrapper = await mountSection();
+      const samples = wrapper.findAll("[data-testid=mods-sample]");
+      expect(samples.map((s) => s.attributes("data-sample"))).toEqual(["test-chips", "build-summary", "git-glance", "http-check", "lint-summary", "edit-size", "search-hits", "branch-context", "tests-after-edits", "push-guard", "press-counter", "release-board"]);
+      const http = wrapper.get("[data-sample=http-check]").text();
+      expect(http).toContain("Showcase");
+      expect(http).toContain("Draws curl responses as a status pill and size");
+      expect(http).toContain("Try it: Run curl -i in any session.");
+    });
+
+    it("says Added for a sample that's kept and on, and offers Add again when it's off", async () => {
+      setKept([{ ...chips }, { ...gauge, name: "git-glance" }]);
+      const wrapper = await mountSection();
+      expect(wrapper.get("[data-sample=test-chips]").find("[data-testid=mods-sample-added]").exists()).toBe(true);
+      expect(wrapper.get("[data-sample=test-chips]").find("[data-testid=mods-sample-add]").exists()).toBe(false);
+      expect(wrapper.get("[data-sample=git-glance]").find("[data-testid=mods-sample-add]").exists()).toBe(true);
+    });
+
+    it("Add posts the sample's own route", async () => {
+      setKept([]);
+      const wrapper = await mountSection();
+      await wrapper.get("[data-sample=build-summary] [data-testid=mods-sample-add]").trigger("click");
+      await flushPromises();
+      expect(apiFetchMock).toHaveBeenCalledWith("/api/mods/samples/build-summary", { method: "POST" });
+      expect(wrapper.find("[data-testid=mods-sample-error]").exists()).toBe(false);
+    });
+
+    it("shows the server's refusal on that sample's row", async () => {
+      apiFetchMock.mockResolvedValueOnce(new Response(JSON.stringify({ error: "The mods runtime isn't ready." }), { status: 400 }));
+      setKept([]);
+      const wrapper = await mountSection();
+      await wrapper.get("[data-sample=push-guard] [data-testid=mods-sample-add]").trigger("click");
+      await flushPromises();
+      expect(wrapper.get("[data-sample=push-guard] [data-testid=mods-sample-error]").text()).toBe("The mods runtime isn't ready.");
+    });
+
+    it("isn't shown while Mods are off", async () => {
+      store.state.isSwitchedOn = false;
+      const wrapper = await mountSection();
+      expect(wrapper.find("[data-testid=mods-showcase]").exists()).toBe(false);
+    });
   });
 
   describe("on and off", () => {

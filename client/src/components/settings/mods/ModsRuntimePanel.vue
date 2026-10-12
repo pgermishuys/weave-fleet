@@ -1,12 +1,12 @@
 <script setup lang="ts">
 import { computed, shallowRef, watch } from "vue";
 import { jobRunning, progressTitle } from "@/lib/mods-runtime";
+import { useSettingsNav } from "@/composables/use-settings-nav";
 import { useModsRuntimeStore } from "@/stores/mods-runtime";
 import { usePreferencesStore } from "@/stores/preferences";
 import ModsConfirm from "./ModsConfirm.vue";
 import ModsFailed from "./ModsFailed.vue";
 import ModsProgress from "./ModsProgress.vue";
-import ModsSampleButton from "../ModsSampleButton.vue";
 import { CODE } from "./classes";
 
 /**
@@ -18,6 +18,7 @@ const props = defineProps<{ enabled: boolean }>();
 
 const store = useModsRuntimeStore();
 const preferences = usePreferencesStore();
+const { setActiveSection } = useSettingsNav();
 
 const view = computed(() => store.view);
 const actionError = shallowRef<string | null>(null);
@@ -129,7 +130,15 @@ async function useMine(path: string): Promise<void> {
         >
           {{ view.bun.displayPath }}
         </p>
-        <ModsSampleButton />
+        <p class="text-xs text-muted">
+          To see what mods can do, add one from the
+          <button
+            type="button"
+            class="text-accent hover:underline focus-visible:outline focus-visible:outline-2 focus-visible:outline-accent"
+            data-testid="mods-showcase-link"
+            @click="setActiveSection('mods')"
+          >Showcase in Mods</button>.
+        </p>
       </div>
     </template>
 
