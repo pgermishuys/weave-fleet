@@ -282,6 +282,7 @@ The report (`CheckReport` in the types) lists:
 - `calls:` every `$` call as `ns.method`, sorted, once each (`state.get`, `state.set`, `ui.invalidate`, `ui.resolve`)
 - `state:` every `$.state` key
 - `pages:` every `Page` path, each checked to exist inside the mod's folder
+- `panes:` the panes `mod.json` declares (`id`, `title`, `icon`), when it declares any
 - the name, version, description, line count and sha256 of the module, and errors and warnings with line and column
 
 A module **doesn't load** when:

@@ -175,10 +175,12 @@ function listen(machine: MachineTarget, sessionId: string): void {
       for (const id of Object.keys(hooks)) void loadHooks(machine, id);
     };
     onDomainEvent(machine, "sessions", "mods.changed", reloadAll);
-    // With no session it's every session: a mod's own redraw, or Fleet's once the host has loaded or dropped mods,
-    // which changes which sites they hook, so ask for the sites again too.
-    onDomainEvent(machine, "sessions", "mod.ui", ({ payload }) =>
-      payload.sessionId ? invalidate(payload.sessionId, payload.requestId) : reloadAll());
+    // With no session it's every session. Fleet's own (no mod) follows the host loading or dropping mods, which changes
+    // which sites they hook, so ask for the sites again. A mod's own redraw can't change its hooks: only draw again.
+    onDomainEvent(machine, "sessions", "mod.ui", ({ payload }) => {
+      if (payload.sessionId || payload.mod) invalidate(payload.sessionId, payload.requestId);
+      else reloadAll();
+    });
   }
   const topic = `${machine.key}:session:${sessionId}`;
   if (!listening.has(topic)) {

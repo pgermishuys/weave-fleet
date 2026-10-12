@@ -144,6 +144,17 @@ describe("mod tool row renders", () => {
     expect(toolRowViews.get("ToolUse:s1:c1")?.tree).toBeNull();
   });
 
+  it("draws again on a mod's own mod.ui with no session, without asking for the sites again", async () => {
+    card();
+    await flushPromises();
+    const sites = () => fetchMock.mock.calls.filter(([, path]) => String(path).endsWith("/mods/sites")).length;
+    const before = { sites: sites(), renders: renders().length };
+    emit("sessions", "mod.ui", { sessionId: null, site: null, requestId: null, mod: "test-chips" });
+    await flushPromises();
+    expect(renders().length).toBeGreaterThan(before.renders);
+    expect(sites()).toBe(before.sites);
+  });
+
   it("renders again on mod.ui for the session, for one call, and leaves other calls and sessions alone", async () => {
     card();
     card({ callId: "c2" });
