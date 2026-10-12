@@ -1,11 +1,17 @@
 import { defineComponent, h, nextTick } from "vue";
-import { mount } from "@vue/test-utils";
+import { flushPromises, mount } from "@vue/test-utils";
+import { createPinia, setActivePinia } from "pinia";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import ModComposerBand from "@/components/mods/ModComposerBand.vue";
 import ModPaneSheet from "../ModPaneSheet.vue";
 import SessionMenuSheet from "../SessionMenuSheet.vue";
 import { composerBands, modPanes, modPaneViewId, type ModPaneView } from "@/lib/mods/points";
+import { liveTarget } from "@/lib/machine-target";
+import { resetModRenders, watchModSession } from "@/lib/mods/renders";
 import type { ModWireElement } from "@/lib/mods/types";
+
+const { fetchSites } = vi.hoisted(() => ({ fetchSites: vi.fn() }));
+vi.mock("@/lib/api-client", async (importOriginal) => ({ ...(await importOriginal<object>()), apiFetchOn: fetchSites }));
 
 // The sheet's own behaviour (gestures, history) isn't under test: just what it holds.
 const BottomSheet = defineComponent({
@@ -28,6 +34,9 @@ const viewOf = (paneId: string, mod = "panel") => modPaneViewId("s1", mod, paneI
 const menuProps = { open: true, title: "Fix", machineName: "atlas", changedFiles: 0, working: false, supportsSide: true, canFork: true, canOpenOnComputer: true };
 
 beforeEach(() => {
+  setActivePinia(createPinia());
+  resetModRenders();
+  fetchSites.mockReset().mockImplementation(async () => new Response(JSON.stringify({ sites: [], panes: [] })));
   modPanes.clear();
   composerBands.clear();
 });
@@ -38,6 +47,14 @@ describe("Session menu with panes", () => {
     const empty = mount(SessionMenuSheet, { props: { ...menuProps, panes: [] }, global }).html();
     expect(empty).toBe(without);
     expect(without).not.toContain("menu-pane");
+  });
+
+  it("shows each pane's hint: the mod's name, or Off", () => {
+    const menu = mount(SessionMenuSheet, {
+      props: { ...menuProps, panes: [{ id: "a", title: "Pane a", draft: false, hint: "panel" }, { id: "b", title: "Pane b", draft: false, hint: "Off" }] },
+      global,
+    });
+    expect(menu.findAll("[data-testid=menu-pane] .ph-mi__hint").map((hint) => hint.text())).toEqual(["panel", "Off"]);
   });
 
   it("lists each open pane, marks drafts, and emits the pane to open", async () => {
@@ -93,6 +110,17 @@ describe("Pane sheet", () => {
     modPanes.contribute("two", [pane("a", { mod: "two", tree: text("From two") })]);
     const sheet = mount(ModPaneSheet, { props: { open: true, sessionId: "s1", viewId: viewOf("a", "two") }, global });
     expect(sheet.find("[data-testid=mod-pane-body]").text()).toBe("From two");
+  });
+
+  it("says the mod is off, with Turn on, while its declared pane is off", async () => {
+    fetchSites.mockImplementation(async () => new Response(JSON.stringify({ sites: [], panes: [{ mod: "panel", id: "a", title: "Pane a", icon: null, draft: false, off: true }] })));
+    watchModSession(liveTarget(), "s1");
+    await flushPromises();
+    modPanes.contribute("t", [pane("a")]);
+    const sheet = mount(ModPaneSheet, { props: { open: true, sessionId: "s1", viewId: viewOf("a") }, global });
+    expect(sheet.get("[data-testid=mod-pane-off]").text()).toContain("panel is off");
+    expect(sheet.find("[data-testid=mod-pane-turn-on]").exists()).toBe(true);
+    expect(sheet.find("[data-testid=mod-pane-body]").exists()).toBe(false);
   });
 
   it("draws nothing for another session's pane", () => {

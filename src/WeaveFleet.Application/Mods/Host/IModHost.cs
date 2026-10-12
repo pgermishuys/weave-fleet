@@ -42,6 +42,9 @@ public interface IModHost
     /// </summary>
     IReadOnlyList<ModSiteHooks> SitesFor(string userId, string sessionId);
 
+    /// <summary>The panes the session's loaded mods declare in <c>mod.json</c>. Empty when the host isn't running.</summary>
+    IReadOnlyList<ModDeclaredPane> PanesFor(string userId, string sessionId) => [];
+
     /// <summary>Why the host last refused to load <paramref name="modId"/>; null when it loaded.</summary>
     ModLoadProblem? GetLoadProblem(string userId, string modId);
 }

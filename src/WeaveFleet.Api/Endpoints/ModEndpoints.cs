@@ -130,7 +130,7 @@ public static class ModEndpoints
         drafts.MapGet("/sites", async (string sessionId, SessionService sessions, ModRenderService render) =>
             {
                 var session = await sessions.GetSessionAsync(sessionId);
-                return session.IsFailure ? session.Error.ToSessionApiResult() : Results.Ok(render.SitesFor(sessionId));
+                return session.IsFailure ? session.Error.ToSessionApiResult() : Results.Ok(await render.SitesForAsync(sessionId));
             })
             .WithName("GetModSites")
             .Produces<ModSitesView>();

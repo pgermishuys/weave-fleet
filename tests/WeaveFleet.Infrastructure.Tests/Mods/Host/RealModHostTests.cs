@@ -201,6 +201,25 @@ public sealed class RealModHostTests : IAsyncDisposable
     }
 
     [Fact]
+    public async Task The_release_board_sample_declares_a_pane_that_the_sites_list_carries_and_keeps_when_the_mod_is_off()
+    {
+        if (Real() is not { } real || new ModHostFiles(AppContext.BaseDirectory).SamplesFolder is not { } samples)
+            return;
+        var (service, _) = await LaunchAsync(real);
+        await _store.KeepFolderAsync(User, "release-board", Path.Combine(samples, "release-board"), new ModKeepSource(null, null),
+            async (staged, ct) => await service.CheckAsync(User, staged, ct));
+        await service.EnsureAsync(User).WaitAsync(TimeSpan.FromSeconds(30));
+        var render = new ModRenderService(service, new TestUserContext(User), _store);
+
+        var panes = (await render.SitesForAsync("ses_live1")).Panes;
+        panes.ShouldBe([new ModDeclaredPane("release-board", "board", "Release board", "gauge", Draft: false, Off: false)]);
+
+        await _store.SetOffAsync(User, "release-board", new ModOff(ModOffBy.User, DateTimeOffset.UnixEpoch));
+        await service.EnsureAsync(User).WaitAsync(TimeSpan.FromSeconds(30));
+        (await render.SitesForAsync("ses_live1")).Panes.ShouldBe([panes[0] with { Off = true }]);
+    }
+
+    [Fact]
     public async Task The_shipped_sample_is_kept_checked_and_draws_pills_for_a_dotnet_test_row_through_the_render_service()
     {
         if (Real() is not { } real || new ModHostFiles(AppContext.BaseDirectory).SamplesFolder is not { } samples)
@@ -212,8 +231,8 @@ public sealed class RealModHostTests : IAsyncDisposable
             async (staged, ct) => await service.CheckAsync(User, staged, ct));
         (version.Number, version.SessionId, version.Check!.Value.GetProperty("ok").GetBoolean()).ShouldBe((1, null, true));
         await service.EnsureAsync(User).WaitAsync(TimeSpan.FromSeconds(30));
-        var render = new ModRenderService(service, new TestUserContext(User));
-        render.SitesFor("ses_live1").Sites.Select(s => $"{s.Site}={string.Join(",", s.Tools!)}").ShouldBe(["ToolUse=bash,shell", "ToolResult=bash,shell"]);
+        var render = new ModRenderService(service, new TestUserContext(User), _store);
+        (await render.SitesForAsync("ses_live1")).Sites.Select(s => $"{s.Site}={string.Join(",", s.Tools!)}").ShouldBe(["ToolUse=bash,shell", "ToolResult=bash,shell"]);
 
         const string Output = "Failed WidgetTests.Spins [4 ms]\nFailed!  - Failed: 1, Passed: 3, Skipped: 0, Total: 4, Duration: 1 s";
         var props = JsonSerializer.SerializeToElement(new { tool = "bash", input = new { command = "dotnet test" }, output = Output });

@@ -3,8 +3,11 @@ import { basename, dirname, isAbsolute, relative, resolve } from "node:path";
 import type { CheckProblem } from "fleet-mods/protocol";
 import type { Manifest } from "./index";
 import { MOD_NAME } from "../ids";
+import { ICONS } from "../tree";
 
-const KNOWN = new Set(["name", "version", "description", "hooks"]);
+const KNOWN = new Set(["name", "version", "description", "hooks", "panes"]);
+const PANE_ID = /^[A-Za-z0-9_-]{1,64}$/;
+const MAX_PANES = 8;
 const EXTENSIONS = [".js", ".mjs", ".ts", ".mts"];
 
 export interface ManifestResult {
@@ -15,6 +18,13 @@ export interface ManifestResult {
   partial: { name: string; version: string; description: string };
   errors: CheckProblem[];
   warnings: CheckProblem[];
+}
+
+/** A pane declared in mod.json: listed in the session's "+" menu and drawn by the mod's `Pane` hook. */
+export interface DeclaredPane {
+  id: string;
+  title: string;
+  icon?: string;
 }
 
 const inside = (base: string, path: string) => {
@@ -101,9 +111,27 @@ export async function readManifest(root: string, manifestPath: string): Promise<
     }
   }
 
+  const panes: DeclaredPane[] = [];
+  if (m.panes !== undefined) {
+    if (!Array.isArray(m.panes)) bad('"panes" must be a list');
+    else if (m.panes.length > MAX_PANES) bad(`"panes" lists ${m.panes.length} panes: the limit is ${MAX_PANES}`);
+    else {
+      for (const [i, p] of m.panes.entries()) {
+        const at = `panes[${i}]`;
+        const o = typeof p === "object" && p !== null && !Array.isArray(p) ? (p as Record<string, unknown>) : undefined;
+        if (!o) bad(`${at} must be an object { id, title, icon }`);
+        else if (typeof o.id !== "string" || !PANE_ID.test(o.id)) bad(`${at}.id must be letters, digits, "_" or "-", 1 to 64`);
+        else if (panes.some((x) => x.id === o.id)) bad(`${at}.id ${JSON.stringify(o.id)} is declared twice`);
+        else if (typeof o.title !== "string" || o.title.trim().length === 0 || o.title.length > 40) bad(`${at}.title is required: 1 to 40 characters`);
+        else if (o.icon !== undefined && !ICONS.includes(o.icon as never)) bad(`${at}.icon must be one of Fleet's icon names (${ICONS.join(", ")})`);
+        else panes.push({ id: o.id, title: o.title, ...(o.icon === undefined ? {} : { icon: o.icon as string }) });
+      }
+    }
+  }
+
   if (errors.length > 0 || modulePath === undefined) return done();
   return {
-    manifest: { name: m.name as string, version: m.version as string, description: description as string, hooks: hooks as string },
+    manifest: { name: m.name as string, version: m.version as string, description: description as string, hooks: hooks as string, ...(panes.length > 0 ? { panes } : {}) },
     modulePath,
     partial,
     errors,

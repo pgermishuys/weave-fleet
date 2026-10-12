@@ -144,6 +144,9 @@ internal sealed partial class ModHostSupervisor(string userId, ModHostDependenci
     public IReadOnlyList<ModSiteHooks> SitesFor(string sessionId)
         => Volatile.Read(ref _connection) is null ? [] : ModRouting.SitesFor(Volatile.Read(ref _routes), sessionId);
 
+    public IReadOnlyList<ModDeclaredPane> PanesFor(string sessionId)
+        => Volatile.Read(ref _connection) is null ? [] : ModRouting.PanesFor(Volatile.Read(ref _routes), sessionId);
+
     /// <summary>The static check of a folder. Starts a host for it that stays up for checks a while but loads no mod.</summary>
     public async Task<JsonElement> CheckAsync(string folder, CancellationToken ct)
     {
@@ -369,7 +372,7 @@ internal sealed partial class ModHostSupervisor(string userId, ModHostDependenci
             lock (_sync)
             {
                 _loaded.Remove(mod.Id, out old);
-                _loaded[mod.Id] = new LoadedMod(new ModRoute(mod.Id, mod.Name, mod.SessionId, HooksOf(answer)), staged);
+                _loaded[mod.Id] = new LoadedMod(new ModRoute(mod.Id, mod.Name, mod.SessionId, HooksOf(answer), PanesOf(answer)), staged);
                 Publish();
             }
             deps.Ui.Loaded(userId);
@@ -723,6 +726,13 @@ internal sealed partial class ModHostSupervisor(string userId, ModHostDependenci
             ? []
             : [.. Items(answer, "hooks").Where(h => Text(h, "event") is not null)
                 .Select(h => new ModHookSpec(Text(h, "event")!, h.TryGetProperty("matcher", out var matcher) ? matcher.Clone() : null))];
+
+    /// <summary>The panes <c>mod.json</c> declares, from the check report in <c>load</c>'s answer (the host validated them).</summary>
+    private static List<ModPaneSpec> PanesOf(JsonElement answer)
+        => answer.ValueKind == JsonValueKind.Object && answer.TryGetProperty("check", out var check) ? [.. Items(check, "panes").Select(PaneOf).OfType<ModPaneSpec>()] : [];
+
+    private static ModPaneSpec? PaneOf(JsonElement pane)
+        => Text(pane, "id") is { } id && Text(pane, "title") is { } title ? new ModPaneSpec(id, title, Text(pane, "icon")) : null;
 
     private static ModHostRpcException Invalid(string message) => new(ModHostErrorCodes.InvalidParams, message);
 

@@ -190,8 +190,11 @@ This is Fleet's `press-counter` sample (it reads the count again inside the call
 
 A mod can open its own tab next to Changes and Files in the session's content panel.
 - Open it from a callback (a button's `onPress`) with `await $.ui.open({ id: "board", title: "Release board" })`. Close
-  it with `await $.ui.close({ id: "board" })`. Ids are letters, digits, `_` and `-`. You don't declare the pane
-  anywhere; the mod only opens it from something the user pressed or from an event in the session.
+  it with `await $.ui.close({ id: "board" })`. Ids are letters, digits, `_` and `-`.
+- To let the user open it from the **+** menu too, declare it in `mod.json`:
+  `"panes": [{ "id": "board", "title": "Release board", "icon": "gauge" }]` (up to 8; `icon` is an Icon name). It is
+  listed under **From mods**, drawn by the same `Pane` hook (`e.requestId` is the `id`), and stays listed with an Off
+  hint while the mod is off. The user's Keep review says "A pane in the + menu: Release board".
 - Draw it in a second hook: `on("ui.render", { component: "Pane" }, ...)`. `e.requestId` is the pane's id, so branch
   on it (return `next(e)` for ids that aren't yours) and `e.props.title` is the tab's title. Only your own mod's
   `Pane` hooks draw your pane.

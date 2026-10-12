@@ -19,6 +19,8 @@ export interface Manifest {
   description: string;
   /** As written in mod.json, relative to it. */
   hooks: string;
+  /** Panes mod.json declares. Absent when there are none. */
+  panes?: Array<{ id: string; title: string; icon?: string }>;
 }
 
 export interface CheckResult {
@@ -63,6 +65,7 @@ export async function checkMod(root: string, manifest = "mod.json", limits: Part
   const finish = (extra: Partial<CheckResult> = {}): CheckResult => {
     report.errors.sort((a, b) => (a.line ?? 0) - (b.line ?? 0) || (a.column ?? 0) - (b.column ?? 0));
     report.ok = report.errors.length === 0;
+    if (read.manifest?.panes) report.panes = read.manifest.panes;
     return report.ok ? { report, manifest: read.manifest, modulePath: read.modulePath, ...extra } : { report };
   };
   if (!read.manifest || !read.modulePath) return finish();

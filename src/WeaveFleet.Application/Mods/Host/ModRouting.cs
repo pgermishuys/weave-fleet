@@ -6,7 +6,13 @@ namespace WeaveFleet.Application.Mods.Host;
 /// <param name="Id"><c>name@v3</c> or <c>name@draft:{sessionId}</c>.</param>
 /// <param name="DraftSessionId">The draft's session; null for a kept mod.</param>
 /// <param name="Hooks">What its <c>register</c> registered (<c>load</c>'s <c>hooks</c>), in order.</param>
-public sealed record ModRoute(string Id, string Name, string? DraftSessionId, IReadOnlyList<ModHookSpec> Hooks);
+public sealed record ModRoute(string Id, string Name, string? DraftSessionId, IReadOnlyList<ModHookSpec> Hooks, IReadOnlyList<ModPaneSpec>? Panes = null);
+
+/// <summary>A pane <c>mod.json</c> declares (<c>panes</c>), listed in the session's "+" menu.</summary>
+public sealed record ModPaneSpec(string Id, string Title, string? Icon);
+
+/// <summary>A declared pane for the browser: whose it is, whether it is the session's draft, and whether its mod is off.</summary>
+public sealed record ModDeclaredPane(string Mod, string Id, string Title, string? Icon, bool Draft, bool Off);
 
 /// <summary>A render site and the tools a session's mods may draw there; <see cref="Tools"/> is null when any tool may be drawn on.</summary>
 public sealed record ModSiteHooks(string Site, IReadOnlyList<string>? Tools);
@@ -61,6 +67,10 @@ public static class ModRouting
 
         return [.. ToolSites.Where(sites.ContainsKey).Select(s => new ModSiteHooks(s, sites[s].Any ? null : sites[s].Tools))];
     }
+
+    /// <summary>The panes the session's loaded mods declare, in load order (kept mods, then the session's drafts).</summary>
+    public static IReadOnlyList<ModDeclaredPane> PanesFor(IEnumerable<ModRoute> loaded, string sessionId)
+        => [.. InSession(loaded, sessionId).SelectMany(mod => (mod.Panes ?? []).Select(p => new ModDeclaredPane(mod.Name, p.Id, p.Title, p.Icon, mod.DraftSessionId is not null, Off: false)))];
 
     private static readonly string[] ToolSites = ["ToolUse", "ToolResult"];
 

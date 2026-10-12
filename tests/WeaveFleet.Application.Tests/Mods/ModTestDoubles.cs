@@ -22,18 +22,18 @@ internal sealed class InMemoryModVersionStore : IModVersionStore
     public List<string> Staged { get; } = [];
 
     /// <summary>The manifest and files <see cref="VersionFolder"/> shows for a kept version.</summary>
-    public void SeedVersion(string user, string name, int number, string version = "0.1.0", string description = "Shows chips")
+    public void SeedVersion(string user, string name, int number, string version = "0.1.0", string description = "Shows chips", IReadOnlyList<ModPaneSpec>? panes = null)
     {
         var folder = VersionFolder(user, name, number);
-        _manifests[folder] = new ModManifest(name, version, description, "mod.ts");
+        _manifests[folder] = new ModManifest(name, version, description, "mod.ts", panes);
         _files[folder] = [new ModFile("mod.json", "{}"), new ModFile("mod.ts", $"// v{number}")];
     }
 
     public void SeedHistory(string user, ModHistory history) => _histories[(user, history.Name)] = history;
 
-    public void SeedDraft(string user, string session, string name, ModOff? off = null, bool withManifest = true)
+    public void SeedDraft(string user, string session, string name, ModOff? off = null, bool withManifest = true, IReadOnlyList<ModPaneSpec>? panes = null)
     {
-        var manifest = withManifest ? new ModManifest(name, "0.1.0", "Shows chips", "mod.ts") : null;
+        var manifest = withManifest ? new ModManifest(name, "0.1.0", "Shows chips", "mod.ts", panes) : null;
         var draft = new ModDraft(session, name, DraftFolder(user, session, name), off, manifest);
         _drafts[(user, session, name)] = draft;
         _files[draft.Folder] = [new ModFile("mod.json", "{}"), new ModFile("mod.ts", "// draft")];

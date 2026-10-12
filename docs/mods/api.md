@@ -54,6 +54,7 @@ test-chips/
 | `version` | Yes | The author's version string. Fleet numbers kept versions itself (`v1`, `v2`…); this one is shown beside it. |
 | `description` | Yes | One line, 200 characters at most. Settings → Mods and the review dialog show it. |
 | `hooks` | Yes | Path to the hooks module, relative to `mod.json`, inside the folder. `.js`, `.mjs`, `.ts` or `.mts`. |
+| `panes` | No | Panes the mod offers in the session's **+** menu: up to 8 of `{ "id", "title", "icon"? }`. `id` is letters, digits, `_` and `-`, 1 to 64, unique in the mod; `title` is 1 to 40 characters; `icon` is one of the [Icon](#elements) names. The check refuses anything else. See [Panes](#render-sites). |
 
 The hooks module is one ES module file that exports `register`. It may `import type` from `fleet-mods`; it may not
 import anything else (see [the static check](#the-static-check)). A mod can also ship `.html` pages (and their CSS,
@@ -176,7 +177,7 @@ Claude Code.
 | `ToolResult` | The body a tool row shows when opened, in place of Fleet's. | The tool call id | [Tool row props](#tool-row-props) |
 | `ComposerBand` | A band above the composer (desktop: between the background strip and the queued messages; phone: above the phone composer). Shared by every mod. | The session id | `isWorking` |
 | `StatusChip` | A chip at the end of the status bar, for the session on screen. Inline elements only. Nothing when no session is on screen. | The session id | none |
-| `Pane` | A pane the mod opened with `$.ui.open`: a tab next to Changes and Files in the session's content panel on desktop (the phone's sheet is planned) | The pane's id | `title` |
+| `Pane` | A pane the mod opened with `$.ui.open` or declared in `mod.json`: a tab next to Changes and Files in the session's content panel on desktop, a sheet from the session menu on the phone | The pane's id | `title` |
 
 `next(e)` at a site resolves to what the rest of the chain draws: another mod's tree, or `{ type: "Fleet" }`, which is
 Fleet's own drawing of the site (nothing at `ToolUse`, `ComposerBand` and `StatusChip`; Fleet's body at
@@ -187,8 +188,13 @@ Fleet's own drawing of the site (nothing at `ToolUse`, `ComposerBand` and `Statu
 closed, and brings it forward; the same id again redraws it in place. A `ui.render` hook with `component: "Pane"` draws it
 and tells panes apart by `e.requestId` (the pane's id). A pane's id belongs to its mod: only the opening mod's `Pane`
 hooks draw it, and two mods may use the same id. `$.ui.close({ id })` closes the tab. Open and close panes from a callback or an event, never from a draw: a `ui.render` hook that calls them throws. A
-`$.ui.open` in `session.start` runs again whenever the host restarts, so open panes from a user's press instead. A mod may open a pane it never
-declared; declaring panes in `mod.json` is planned. Tabs are not restored after a page reload, and a `$.ui.open` sent
+`$.ui.open` in `session.start` runs again whenever the host restarts, so open panes from a user's press instead. **Declared panes.** A mod lists panes in `mod.json` (`panes`)
+and Fleet shows them under **From mods** in the **+** menu (and in the phone's session menu): the icon, the title, a
+Draft mark for a draft's pane, and the mod's name as the hint (**Open** while its tab is open). Picking one opens the
+tab and asks the mod's `Pane` hook to draw it, with `e.requestId` the declared `id`. A draft's panes are listed only in the
+session that wrote it. A mod that is turned off keeps its panes in the menu with an **Off** hint; its open tab says
+"<mod> is off" with **Turn on** (the same switch as Settings → Mods), and draws again once the mod is on. A mod may also open a pane it never
+declared; it draws the same way but isn't in the menu. Tabs are not restored after a page reload, and a `$.ui.open` sent
 while no browser shows the session is lost. The pane's controls (`Button`, `Input`, `Select`) reach the mod like any other.
 
 **Inline elements** are `Text`, `Pill`, `Icon`, `Button` and a `Box` with `flexDirection: "row"` holding only those.
@@ -434,7 +440,9 @@ value.
 
 These shapes are for M5 and M6; mods don't see them.
 
-- **`GET /api/sessions/{id}/mods/sites`** → `{ sites: [{ site, tools }] }`: which tool-row sites the session's loaded
+- **`GET /api/sessions/{id}/mods/sites`** → `{ sites: [{ site, tools }], panes: [{ mod, id, title, icon, draft, off }] }`.
+  `panes` are those `mod.json` declares: from the loaded mods, and for a kept mod that is turned off (`off: true`) from
+  its active version's `mod.json`, so the menu still lists it; a draft's only in its own session. Sites: which tool-row sites the session's loaded
   mods hook (kept mods and that session's drafts), and for which canonical tool names (`null`: any tool). The client
   fetches it when it first shows the session's rows, and again on `mods.changed` and on a `mod.ui` with no session.
 - **`POST /api/sessions/{id}/mods/render`** `{ site, requestId, props }` → `{ tree, mods: [{ name, draft }] }`: one

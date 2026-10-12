@@ -18,8 +18,8 @@ const props = defineProps<{
   canFork: boolean;
   /** Whether the session's machine has a page to open it on (a node has none). */
   canOpenOnComputer: boolean;
-  /** Panes mods opened in this session: each is a menu item that opens its sheet. */
-  panes?: readonly { id: string; title: string; draft: boolean }[];
+  /** Panes mods declared or opened in this session: each is a menu item that opens its sheet. */
+  panes?: readonly { id: string; title: string; draft: boolean; hint?: string }[];
 }>();
 const emit = defineEmits<{ (event: "pick", action: MenuAction): void; (event: "rename", title: string): void; (event: "pane", id: string): void; (event: "close"): void }>();
 
@@ -146,6 +146,10 @@ async function pick(action: MenuAction): Promise<void> {
         <PanelsTopLeft aria-hidden="true" />
         <span>{{ pane.title }}</span>
         <ModDraftMark v-if="pane.draft" />
+        <span
+          v-if="pane.hint"
+          class="ph-mi__hint"
+        >{{ pane.hint }}</span>
       </button>
       <hr>
       <button

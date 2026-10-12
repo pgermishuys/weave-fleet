@@ -88,6 +88,40 @@ public sealed class ModSitesTests : IDisposable
         supervisor.SitesFor(Session).ShouldBeEmpty();
     }
 
+    // ── Declared panes ──────────────────────────────────────────────────
+
+    private static ModRoute WithPanes(ModRoute route, params ModPaneSpec[] panes) => route with { Panes = panes };
+
+    private static string ShowPanes(IEnumerable<ModDeclaredPane> panes)
+        => string.Join(";", panes.Select(p => $"{p.Mod}/{p.Id}{(p.Draft ? " draft" : "")}{(p.Off ? " off" : "")}"));
+
+    [Fact]
+    public void Panes_of_loaded_mods_are_listed_and_a_draft_only_in_its_own_session()
+    {
+        var kept = WithPanes(Kept("release-board"), new ModPaneSpec("board", "Release board", "gauge"));
+        var own = WithPanes(Draft("test-digest", Session), new ModPaneSpec("summary", "Test summary", null));
+        var other = WithPanes(Draft("other-draft", "ses_test2"), new ModPaneSpec("x", "X", null));
+
+        ShowPanes(ModRouting.PanesFor([kept, own, other], Session)).ShouldBe("release-board/board;test-digest/summary draft");
+        ShowPanes(ModRouting.PanesFor([kept, own, other], "ses_test3")).ShouldBe("release-board/board");
+    }
+
+    [Fact]
+    public async Task A_mod_that_is_off_keeps_its_panes_in_the_list_with_off_set()
+    {
+        _store.SeedVersion(User, "ci-watch", 1, panes: [new ModPaneSpec("runs", "CI runs", "zap")]);
+        _store.SeedHistory(User, new ModHistory("ci-watch", 1, new ModOff(ModOffBy.User, DateTimeOffset.UnixEpoch), [new ModVersion(1, DateTimeOffset.UnixEpoch, "0.1.0", "x", null, null, null, null)]));
+        _store.SeedVersion(User, "on-mod", 1, panes: [new ModPaneSpec("p", "P", null)]);
+        _store.SeedHistory(User, new ModHistory("on-mod", 1, null, [new ModVersion(1, DateTimeOffset.UnixEpoch, "0.1.0", "x", null, null, null, null)]));
+        _store.SeedDraft(User, Session, "my-draft", new ModOff(ModOffBy.User, DateTimeOffset.UnixEpoch), panes: [new ModPaneSpec("d", "D", null)]);
+        _store.SeedDraft(User, "ses_test2", "their-draft", new ModOff(ModOffBy.User, DateTimeOffset.UnixEpoch), panes: [new ModPaneSpec("t", "T", null)]);
+
+        var view = await Service(new FakeHost(_ => ModDispatchResult.NotDispatched)).SitesForAsync(Session);
+
+        // The fake host has no loaded mods: on-mod isn't listed here (the running host lists it); the off ones are.
+        ShowPanes(view.Panes).ShouldBe("ci-watch/runs off;my-draft/d draft off");
+    }
+
     // ── Render ──────────────────────────────────────────────────────────
 
     private sealed class FakeHost(Func<ModDispatchRequest, ModDispatchResult> answer) : IModHost
@@ -114,7 +148,7 @@ public sealed class ModSitesTests : IDisposable
 
     private const string Props = """{ "tool": "bash", "rawTool": "Bash", "category": "shell", "status": "completed", "title": "dotnet test", "input": { "command": "dotnet test" }, "inputTruncated": false, "output": "Passed!", "outputTruncated": false, "durationMs": 1200 }""";
 
-    private static ModRenderService Service(FakeHost host) => new(host, new TestUserContext(User));
+    private ModRenderService Service(FakeHost host) => new(host, new TestUserContext(User), _store);
 
     [Fact]
     public async Task A_render_dispatches_ui_render_with_the_event_mods_see()
@@ -321,8 +355,8 @@ public sealed class ModSitesTests : IDisposable
     }
 
     [Fact]
-    public void The_sites_are_the_hosts()
-        => Service(new FakeHost(_ => ModDispatchResult.NotDispatched)).SitesFor(Session).Sites.Select(s => $"{s.Site}={string.Join(",", s.Tools!)}").ShouldBe(["ToolUse=bash"]);
+    public async Task The_sites_are_the_hosts()
+        => (await Service(new FakeHost(_ => ModDispatchResult.NotDispatched)).SitesForAsync(Session)).Sites.Select(s => $"{s.Site}={string.Join(",", s.Tools!)}").ShouldBe(["ToolUse=bash"]);
 
     // ── Redraws ─────────────────────────────────────────────────────────
 

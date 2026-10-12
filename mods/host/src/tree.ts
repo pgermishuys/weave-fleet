@@ -105,7 +105,7 @@ const key: Check = (name, v) =>
 const ROLES = ["text", "muted", "accent", "good", "warn", "bad"] as const;
 const TONES = ["good", "warn", "bad", "neutral", "accent"] as const;
 const SPACES = [0, 1, 2, 3, 4, 6, 8] as const;
-const ICONS = [
+export const ICONS = [
   "check", "x", "alert", "info", "circle", "dot", "clock", "loader", "play", "skip",
   "test", "bug", "terminal", "file", "folder", "git-branch", "search", "sparkles", "zap", "gauge",
   "arrow-right", "chevron-right", "external-link", "copy", "eye", "eye-off",

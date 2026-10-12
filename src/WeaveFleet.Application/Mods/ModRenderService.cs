@@ -31,10 +31,11 @@ public sealed record ModRenderedBy(string Name, bool Draft);
 public sealed record ModRenderView(JsonElement? Tree, IReadOnlyList<ModRenderedBy> Mods);
 
 /// <summary>Which tool-row sites a session's mods hook, so the browser asks only about rows a mod could draw.</summary>
-public sealed record ModSitesView(IReadOnlyList<ModSiteHooks> Sites);
+/// <param name="Panes">The panes the session's mods declare in <c>mod.json</c>, those of a mod that is off included (<c>Off</c>).</param>
+public sealed record ModSitesView(IReadOnlyList<ModSiteHooks> Sites, IReadOnlyList<ModDeclaredPane> Panes);
 
 /// <summary>Draws a session's tool rows through the user's mods.</summary>
-public sealed class ModRenderService(IModHost host, IUserContext user)
+public sealed class ModRenderService(IModHost host, IUserContext user, IModVersionStore store)
 {
     /// <summary>A row's <c>input</c> as JSON over this many bytes is replaced by <c>{}</c>.</summary>
     public const int MaxInputBytes = 64 * 1024;
@@ -42,7 +43,23 @@ public sealed class ModRenderService(IModHost host, IUserContext user)
     /// <summary>A row's <c>output</c> longer than this keeps its last characters.</summary>
     public const int MaxOutputChars = 256 * 1024;
 
-    public ModSitesView SitesFor(string sessionId) => new(host.SitesFor(user.UserId, sessionId));
+    public async Task<ModSitesView> SitesForAsync(string sessionId, CancellationToken ct = default)
+    {
+        var panes = host.PanesFor(user.UserId, sessionId).ToList();
+        // A mod that is off isn't loaded, so its panes come from the manifest the store keeps; the menu still lists them.
+        foreach (var history in (await store.ListAsync(user.UserId, ct).ConfigureAwait(false)).Where(h => h is { Off: not null, Active: not null }))
+        {
+            var manifest = await store.ReadVersionManifestAsync(user.UserId, history.Name, history.Active!.Value, ct).ConfigureAwait(false);
+            panes.AddRange((manifest?.Panes ?? []).Select(p => new ModDeclaredPane(history.Name, p.Id, p.Title, p.Icon, Draft: false, Off: true)));
+        }
+        // Only this session's drafts, as for the hooks.
+        if (ModNames.IsValidSessionId(sessionId))
+        {
+            foreach (var draft in (await store.ListDraftsAsync(user.UserId, sessionId, ct).ConfigureAwait(false)).Where(d => d is { Off: not null, Manifest.Panes: not null }))
+                panes.AddRange(draft.Manifest!.Panes!.Select(p => new ModDeclaredPane(draft.Name, p.Id, p.Title, p.Icon, Draft: true, Off: true)));
+        }
+        return new ModSitesView(host.SitesFor(user.UserId, sessionId), panes);
+    }
 
     /// <summary>A control was used: the host finds its mod and callback from the handle, and the callback runs.</summary>
     public async Task<Result<ModActionView>> ActAsync(string sessionId, ModActionRequest request, CancellationToken ct = default)
