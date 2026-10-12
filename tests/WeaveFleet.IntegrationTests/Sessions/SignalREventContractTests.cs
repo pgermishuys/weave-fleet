@@ -488,6 +488,39 @@ public sealed class SignalREventContractTests : IAsyncLifetime, IDisposable
     }
 
     [Fact]
+    public async Task A_mod_opening_a_pane_reaches_that_session_as_mod_pane()
+    {
+        var sessionId = await CreateSessionAsync();
+        await _hub.InvokeAsync<JsonElement>("SubscribeToSessionAsync", sessionId);
+        await WaitForBroadcasterSubscriberAsync();
+
+        await _server.Services.GetRequiredService<WeaveFleet.Application.Mods.Host.IModHostUi>()
+            .OpenPaneAsync("local-user", "release-board@v2", sessionId, "board", "Release board", CancellationToken.None);
+
+        var props = (await WaitForWorkEventAsync("mod.pane", $"session:{sessionId}")).Data.GetProperty("properties");
+        props.GetProperty("sessionId").GetString().ShouldBe(sessionId);
+        props.GetProperty("mod").GetString().ShouldBe("release-board");
+        props.GetProperty("id").GetString().ShouldBe("board");
+        props.GetProperty("title").GetString().ShouldBe("Release board");
+        props.GetProperty("open").GetBoolean().ShouldBeTrue();
+    }
+
+    [Fact]
+    public async Task A_mod_closing_a_pane_reaches_that_session_as_mod_pane_with_open_false()
+    {
+        var sessionId = await CreateSessionAsync();
+        await _hub.InvokeAsync<JsonElement>("SubscribeToSessionAsync", sessionId);
+        await WaitForBroadcasterSubscriberAsync();
+
+        await _server.Services.GetRequiredService<WeaveFleet.Application.Mods.Host.IModHostUi>()
+            .ClosePaneAsync("local-user", "release-board@v2", sessionId, "board", CancellationToken.None);
+
+        var props = (await WaitForWorkEventAsync("mod.pane", $"session:{sessionId}")).Data.GetProperty("properties");
+        props.GetProperty("id").GetString().ShouldBe("board");
+        props.GetProperty("open").GetBoolean().ShouldBeFalse();
+    }
+
+    [Fact]
     public async Task A_mods_redraw_for_every_session_reaches_the_sessions_topic_as_mod_ui()
     {
         await _hub.InvokeAsync("SubscribeToSessionsTopicAsync");

@@ -7,10 +7,11 @@ using WeaveFleet.Domain.Common;
 namespace WeaveFleet.Application.Mods;
 
 /// <summary>A browser's ask for a tool row's tree (<c>docs/mods/api.md</c>, "Render sites").</summary>
-/// <param name="Site"><c>ToolUse</c> or <c>ToolResult</c>.</param>
-/// <param name="RequestId">The tool call's id.</param>
-/// <param name="Props">The tool row props, as the browser has them.</param>
-public sealed record ModRenderRequest(string? Site, string? RequestId, JsonElement? Props);
+/// <param name="Site"><c>ToolUse</c>, <c>ToolResult</c> or <c>Pane</c>.</param>
+/// <param name="RequestId">The tool call's id; for a <c>Pane</c>, the pane's id.</param>
+/// <param name="Props">The tool row props, as the browser has them; for a <c>Pane</c>, <c>{ title }</c>.</param>
+/// <param name="Mod">The mod that owns the pane; required for a <c>Pane</c>, ignored elsewhere.</param>
+public sealed record ModRenderRequest(string? Site, string? RequestId, JsonElement? Props, string? Mod = null);
 
 /// <summary>A control in a mod's tree was used (<c>docs/mods/api.md</c>, "Fleet and the browser").</summary>
 /// <param name="Handle">The control's handle from the tree.</param>
@@ -83,15 +84,17 @@ public sealed class ModRenderService(IModHost host, IUserContext user)
 
     public async Task<Result<ModRenderView>> RenderAsync(string sessionId, ModRenderRequest request, CancellationToken ct = default)
     {
-        if (request.Site is not ("ToolUse" or "ToolResult"))
-            return FleetError.ValidationError("Site", "\"site\" must be ToolUse or ToolResult.");
+        if (request.Site is not ("ToolUse" or "ToolResult" or "Pane"))
+            return FleetError.ValidationError("Site", "\"site\" must be ToolUse, ToolResult or Pane.");
+        if (request.Site == "Pane" && string.IsNullOrEmpty(request.Mod))
+            return FleetError.ValidationError("Mod", "\"mod\" is required for a Pane: the mod that owns it.");
         if (string.IsNullOrEmpty(request.RequestId))
             return FleetError.ValidationError("RequestId", "\"requestId\" is required: the tool call's id.");
         if (request.Props is not { ValueKind: JsonValueKind.Object } props)
             return FleetError.ValidationError("Props", "\"props\" must be an object.");
 
         var e = Event(request.Site, sessionId, request.RequestId, props);
-        var answer = await host.DispatchAsync(user.UserId, new ModDispatchRequest("ui.render", sessionId, e), ct).ConfigureAwait(false);
+        var answer = await host.DispatchAsync(user.UserId, new ModDispatchRequest("ui.render", sessionId, e, Mod: request.Site == "Pane" ? request.Mod : null), ct).ConfigureAwait(false);
         if (!answer.Dispatched || answer.Result is not { } result || IsFleet(result))
             return new ModRenderView(null, []);
 

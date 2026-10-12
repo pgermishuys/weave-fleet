@@ -9,7 +9,7 @@ namespace WeaveFleet.Application.Mods.Host;
 /// <param name="Event"><c>session.start</c>, <c>turn.complete</c>, <c>ui.render</c>, <c>ui.press</c>, <c>ui.input</c> or <c>ui.select</c>.</param>
 /// <param name="E">The event as mods see it, before any hook. Control events carry the control's <c>handle</c>.</param>
 /// <param name="Surface"><c>desktop</c> or <c>phone</c>, for control events.</param>
-public sealed record ModDispatchRequest(string Event, string SessionId, JsonElement E, string? Surface = null);
+public sealed record ModDispatchRequest(string Event, string SessionId, JsonElement E, string? Surface = null, string? Mod = null);
 
 /// <param name="Dispatched">False when nothing crossed the pipe or the host didn't answer: draw Fleet's own.</param>
 /// <param name="Result">The chain's result: for <c>ui.render</c> a <c>WireElement</c>, <c>null</c>, or <c>{ "type": "Fleet" }</c>.</param>
@@ -32,7 +32,7 @@ public interface IModStrikeRecorder
 
 /// <summary>
 /// What mods ask of the browser: panes, toasts, redraws, log lines, and where a session is open. Redraws are real
-/// (<see cref="BroadcastingModHostUi"/>); the rest answers and drops (<see cref="NoModHostUi"/>) until panes and toasts land.
+/// (<see cref="BroadcastingModHostUi"/>), and so are panes; the rest answers and drops (<see cref="NoModHostUi"/>) until toasts land.
 /// </summary>
 public interface IModHostUi
 {
@@ -79,18 +79,39 @@ public sealed class NoModHostUi : IModHostUi
 }
 
 /// <summary>
-/// <see cref="NoModHostUi"/> except that a redraw reaches the browser as <c>mod.ui</c>: on the session's topic when a
-/// session is named, else on the user's <c>sessions</c> topic (every session).
+/// <see cref="NoModHostUi"/> except that a redraw reaches the browser as <c>mod.ui</c> (on the session's topic when a
+/// session is named, else on the user's <c>sessions</c> topic) and a pane open or close as <c>mod.pane</c>.
 /// </summary>
 public sealed class BroadcastingModHostUi(IEventBroadcaster events) : IModHostUi
 {
     private readonly NoModHostUi _none = new();
 
     public Task OpenPaneAsync(string userId, string modId, string sessionId, string paneId, string? title, CancellationToken ct)
-        => _none.OpenPaneAsync(userId, modId, sessionId, paneId, title, ct);
+        => PaneAsync(userId, modId, sessionId, paneId, title, true);
 
     public Task ClosePaneAsync(string userId, string modId, string sessionId, string paneId, CancellationToken ct)
-        => _none.ClosePaneAsync(userId, modId, sessionId, paneId, ct);
+        => PaneAsync(userId, modId, sessionId, paneId, null, false);
+
+    /// <summary>Best effort, like a redraw: a pane event that can't be sent is dropped.</summary>
+    private async Task PaneAsync(string userId, string modId, string sessionId, string paneId, string? title, bool open)
+    {
+        var at = modId.IndexOf('@', StringComparison.Ordinal);
+        var payload = new ModPanePayload { SessionId = sessionId, Mod = at > 0 ? modId[..at] : modId, Id = paneId, Title = title, Open = open };
+        try
+        {
+            await events.BroadcastAsync(
+                $"session:{sessionId}",
+                EventTypes.ModPane,
+                JsonSerializer.SerializeToElement(payload, ApplicationJsonContext.Default.ModPanePayload),
+                new ModPane { Payload = payload },
+                userId,
+                CancellationToken.None).ConfigureAwait(false);
+        }
+        catch (Exception)
+        {
+            // Nothing to tell the mod.
+        }
+    }
 
     public Task ToastAsync(string userId, string modId, string sessionId, string text, int? timeoutMs, string? tone, CancellationToken ct)
         => _none.ToastAsync(userId, modId, sessionId, text, timeoutMs, tone, ct);

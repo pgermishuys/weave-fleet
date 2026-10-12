@@ -153,8 +153,8 @@ module when the user uses the control.
 - A press on a tree that was since drawn again (the mod reloaded) does nothing; Fleet draws the current tree.
 - `Input`: `onInput` gets changes (at most 4 a second), `onSubmit` the submit. `Select`: `onSelect`. The value is the
   callback's first argument.
-- Hooks on `ui.press`, `ui.input` and `ui.select` see the event first (`e.element` is the control's `key`); you
-  rarely need them.
+- Hooks on `ui.press`, `ui.input` and `ui.select` see the event first (`e.element` is the control's `key`, `e.mod` the
+  mod that drew it); you rarely need them.
 
 ```ts
 import type { Register } from "fleet-mods";
@@ -185,6 +185,46 @@ export const register: Register = (on) => {
 ```
 
 This is Fleet's `press-counter` sample (it reads the count again inside the callback, so quick presses don't lose one).
+
+## Panes: a tab the mod draws
+
+A mod can open its own tab next to Changes and Files in the session's content panel.
+- Open it from a callback (a button's `onPress`) with `await $.ui.open({ id: "board", title: "Release board" })`. Close
+  it with `await $.ui.close({ id: "board" })`. Ids are letters, digits, `_` and `-`. You don't declare the pane
+  anywhere; the mod only opens it from something the user pressed or from an event in the session.
+- Draw it in a second hook: `on("ui.render", { component: "Pane" }, ...)`. `e.requestId` is the pane's id, so branch
+  on it (return `next(e)` for ids that aren't yours) and `e.props.title` is the tab's title. Only your own mod's
+  `Pane` hooks draw your pane.
+- The pane is a full tree: `Box`, `Text`, `Pill`, `Button`, `Input` and the rest work, and so does `$.state` (a write
+  the hook read draws the pane again).
+- Open and close panes from a callback or an event, never from a draw: a `ui.render` hook that calls `$.ui.open` or
+  `$.ui.close` throws. A `$.ui.open` in `session.start` runs again whenever the host restarts, so open panes from a
+  user's press instead.
+- Tabs are not restored after a page reload, and an open sent while no browser shows the session is lost: open panes in
+  answer to something the user just did.
+
+```ts
+export const register: Register = (on) => {
+  on("ui.render", { component: "ToolResult", props: { tool: ["bash", "shell"] } }, async ($, e, next) => {
+    if (e.component !== "ToolResult") return next(e);
+    const { Box, Button } = $.ui.resolve(e);
+    return Box({ flexDirection: "column", gap: 2, children: [
+      Button({ key: "open", label: "Open board", onPress: async () => { await $.ui.open({ id: "board", title: "Release board" }); } }),
+      await next(e),
+    ] });
+  });
+  on("ui.render", { component: "Pane" }, async ($, e, next) => {
+    if (e.component !== "Pane" || e.requestId !== "board") return next(e);
+    const { Box, Text, Button } = $.ui.resolve(e);
+    return Box({ flexDirection: "column", gap: 3, children: [
+      Text({ bold: true, children: ["Release 2.4"] }),
+      Button({ key: "close", label: "Close", onPress: async () => { await $.ui.close({ id: "board" }); } }),
+    ] });
+  });
+};
+```
+
+This is a cut-down `release-board` sample.
 
 ## What the static check refuses
 

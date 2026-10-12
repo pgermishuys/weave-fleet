@@ -98,7 +98,7 @@ export const register: Register = (on, options) => {
 | `prompt.submit` | The user sent a prompt, before the harness gets it | `sessionId`, `text`, `context` (a list of strings, `[]` at first) | `next(e)`, `next({ ...e, text })` to reword it, or `next({ ...e, context: [...e.context, "…"] })` to add notes for the model |
 | `permission.ask` | The agent asked to do something the session's permission level makes the user answer, before the user sees it | `sessionId`, `requestId`, `kind` (`shell`, `edit`, `web`, `read` or `other`), `tool`, `title` (the command for a shell ask), `patterns` (what "Don't ask again" would allow, e.g. `git push *`) | `next(e)` or `{ decision: "ask" }` to let the user answer, or `{ decision: "deny", reason }` to refuse it (`allow` is planned, not wired) |
 | `ui.render` | Fleet is about to draw a [render site](#render-sites) the mod hooked | `component`, `sessionId`, `requestId`, `props` | A tree, `null` to draw nothing, or `next(e)` |
-| `ui.press` | A `Button` the mod drew is pressed | `sessionId`, `mod` (the name of the mod that drew it), `element` (the key), `component`, `requestId`, `surface` | `next(e)`, or `{ element }` to swallow the press |
+| `ui.press` | A `Button` the mod drew is pressed | `sessionId`, `mod` (the name of the mod that drew it), `element` (the key), `surface` | `next(e)`, or `{ element }` to swallow the press |
 | `ui.input` | An `Input` changes (`kind: "change"`, at most 4 a second) or is submitted (`kind: "submit"`) | as `ui.press`, plus `kind`, `value` | `next({ ...e, value })`, or `{ element, value }` to swallow it |
 | `ui.select` | A `Select` changes | as `ui.press`, plus `value` | `next({ ...e, value })`, or `{ element, value }` to swallow it |
 
@@ -176,12 +176,20 @@ Claude Code.
 | `ToolResult` | The body a tool row shows when opened, in place of Fleet's. | The tool call id | [Tool row props](#tool-row-props) |
 | `ComposerBand` | A band above the composer (desktop: between the background strip and the queued messages; phone: above the phone composer). Shared by every mod. | The session id | `isWorking` |
 | `StatusChip` | A chip at the end of the status bar, for the session on screen. Inline elements only. Nothing when no session is on screen. | The session id | none |
-| `Pane` | A pane the mod opened with `$.ui.open`: a `mod` canvas in the session's content panel on desktop, a sheet from the session menu on the phone | The pane's id | `title` |
+| `Pane` | A pane the mod opened with `$.ui.open`: a tab next to Changes and Files in the session's content panel on desktop (the phone's sheet is planned) | The pane's id | `title` |
 
 `next(e)` at a site resolves to what the rest of the chain draws: another mod's tree, or `{ type: "Fleet" }`, which is
 Fleet's own drawing of the site (nothing at `ToolUse`, `ComposerBand` and `StatusChip`; Fleet's body at
 `ToolResult`). A tree replaces what later mods draw; to keep theirs (or Fleet's body), put `await next(e)` inside a
 `Box` of yours, at most once. `null` draws nothing (at `ToolResult`, an empty body).
+
+**Panes.** `$.ui.open({ id, title? })` opens a tab in the session the call belongs to, opening the content panel if it is
+closed, and brings it forward; the same id again redraws it in place. A `ui.render` hook with `component: "Pane"` draws it
+and tells panes apart by `e.requestId` (the pane's id). A pane's id belongs to its mod: only the opening mod's `Pane`
+hooks draw it, and two mods may use the same id. `$.ui.close({ id })` closes the tab. Open and close panes from a callback or an event, never from a draw: a `ui.render` hook that calls them throws. A
+`$.ui.open` in `session.start` runs again whenever the host restarts, so open panes from a user's press instead. A mod may open a pane it never
+declared; declaring panes in `mod.json` is planned. Tabs are not restored after a page reload, and a `$.ui.open` sent
+while no browser shows the session is lost. The pane's controls (`Button`, `Input`, `Select`) reach the mod like any other.
 
 **Inline elements** are `Text`, `Pill`, `Icon`, `Button` and a `Box` with `flexDirection: "row"` holding only those.
 Anything else at `ToolUse` or `StatusChip` makes the tree invalid.
@@ -214,7 +222,7 @@ phone and other tabs showing the session get the same tree.
 | `$.mod` | `name`, `version` | `version` is Fleet's number, or `"draft"` |
 | `$.ui` | `resolve(e)` | The element factories, as in Claude Code: `const { Box, Text, Pill } = $.ui.resolve(e)`. One set serves desktop and phone. |
 | | `invalidate("ui.render")` | Draw this mod's sites again: in the current session, or in every session when called outside one. Throttled to 10 a second; calls in between coalesce. |
-| | `open({ id, title? })`, `close({ id })` | Open (or bring forward) and close a pane in the current session. A `Pane` hook draws it. |
+| | `open({ id, title? })`, `close({ id })` | Open (or bring forward) and close a pane in the current session: a tab in its content panel, drawn by the mod's `Pane` hook. `title` is the tab's label (the id when omitted). Both are best effort: if no browser is showing the session, the call is dropped. |
 | | `toast(text, { timeoutMs?, tone? })` | **Planned, not wired:** the call is accepted and nothing is shown. It will show a Fleet notice on the screens showing the session, titled with the mod's name. |
 | | `log(text, { level? })` | A line in the mod's log: Settings → Mods shows it, and `fleet_mod_check`/`fleet_mod_test` return it to the agent. |
 | `$.state` | `get(key)`, `set(key, value)` | Reactive JSON values for one mod in one session. A `ui.render` hook that reads a key redraws when it's written; it can't write. Survives a reload of the module; dropped when the session is archived or the host restarts. Keys are string literals. |
@@ -437,9 +445,14 @@ These shapes are for M5 and M6; mods don't see them.
 - **`mod.ui`** (a domain event) `{ sessionId?, site?, requestId?, mod? }`: draw again. On the session's topic when a
   mod invalidated in one session (the client renders that call's rows, or all the session's, again); on the `sessions`
   topic with no `sessionId` when a mod invalidated everywhere, or, with no `mod`, when Fleet loaded or dropped mods
-  (the client asks for every session's sites again). Trees for `ComposerBand`, `StatusChip` and panes will travel the
+  (the client asks for every session's sites again). Trees for `ComposerBand` and `StatusChip` will travel the
   same way when those sites are wired.
-- **`mod.pane`**: `{ id, title, open, mod }`, opening or closing a pane.
+- **`mod.pane`** (a domain event, on the session's topic) `{ sessionId, mod, id, title?, open }`: a mod called
+  `$.ui.open` (`open: true`, with the tab's `title`) or `$.ui.close` (`open: false`). The client, at the session's page,
+  opens or closes the tab and draws it with `POST …/mods/render` `{ site: "Pane", requestId: <pane id>, mod, props: { title } }`.
+  `mod` is required for `Pane` (400 naming the field otherwise) and limits the chain to that mod's hooks. The client draws
+  an open pane again on `mod.ui` (for that mod) and on `mods.changed`, so a draw that landed while the host was reloading
+  a mod is not left empty.
 - **`mods.changed`**: a mod was kept, undone, turned on or off, or failed three times. Clients refetch `/api/mods`.
 - **`POST /api/sessions/{id}/mods/action`** `{ handle, kind: "press" | "input" | "submit" | "select", value?, surface? }`
   → `{ handled }`: a control in a mod's tree was used. `surface` is `desktop` (the default) or `phone`. The host knows

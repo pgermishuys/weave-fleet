@@ -18,6 +18,7 @@ export interface DollarScope {
   budget: Budget | null;
 }
 
+const PANE_IN_RENDER = "a ui.render hook can't open or close a pane; do it from a callback or another hook";
 const PANE_ID = /^[A-Za-z0-9_-]{1,64}$/;
 
 /** `$` for one hook call: bound to a mod, a session and an event. */
@@ -63,10 +64,14 @@ export function createDollar(rt: Runtime, mod: LoadedMod, sessionId: string, eve
         if (!stale()) rt.invalidator.request(mod.id, sessionId);
       },
       async open(pane) {
+        live();
+        if (rendering()) throw new Error(PANE_IN_RENDER);
         if (!pane || typeof pane.id !== "string" || !PANE_ID.test(pane.id)) throw new TypeError("a pane id is 1 to 64 letters, digits, _ or -");
         await ask("ui.open", pane.title === undefined ? { id: pane.id } : { id: pane.id, title: String(pane.title) });
       },
       async close(pane) {
+        live();
+        if (rendering()) throw new Error(PANE_IN_RENDER);
         if (!pane || typeof pane.id !== "string" || !PANE_ID.test(pane.id)) throw new TypeError("a pane id is 1 to 64 letters, digits, _ or -");
         await ask("ui.close", { id: pane.id });
       },

@@ -124,6 +124,9 @@ internal sealed partial class ModHostSupervisor(string userId, ModHostDependenci
         if (Volatile.Read(ref _loading) is { } loading)
             await loading.Task.WaitAsync(ct).ConfigureAwait(false);
         var chain = ModRouting.ChainFor(Volatile.Read(ref _routes), request.Event, request.SessionId, request.E);
+        // A pane belongs to one mod: only its hooks draw it.
+        if (request.Mod is { } only)
+            chain = [.. chain.Where(id => string.Equals(id.Split('@')[0], only, StringComparison.Ordinal))];
         if (chain.Count == 0 && request.Event is not ("ui.press" or "ui.input" or "ui.select"))
             return ModDispatchResult.NotDispatched;
         lock (_sync)

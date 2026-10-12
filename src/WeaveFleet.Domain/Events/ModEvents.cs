@@ -95,6 +95,32 @@ public sealed record ModUi : DomainEvent
     public required ModUiPayload Payload { get; init; }
 }
 
+/// <summary>A mod opened or closed one of its panes (<c>$.ui.open</c>, <c>$.ui.close</c>), on the session's topic.</summary>
+public sealed record ModPane : DomainEvent
+{
+    /// <summary>Gets the payload describing the pane.</summary>
+    public required ModPanePayload Payload { get; init; }
+}
+
+/// <summary>Payload of <see cref="ModPane"/>.</summary>
+public sealed record ModPanePayload
+{
+    /// <summary>Gets the session whose panel gets or loses the tab.</summary>
+    public required string SessionId { get; init; }
+
+    /// <summary>Gets the mod's name (no version).</summary>
+    public required string Mod { get; init; }
+
+    /// <summary>Gets the pane's id, unique within the mod.</summary>
+    public required string Id { get; init; }
+
+    /// <summary>Gets the tab's title; null on close.</summary>
+    public string? Title { get; init; }
+
+    /// <summary>Gets a value indicating whether the pane opens (true) or closes (false).</summary>
+    public required bool Open { get; init; }
+}
+
 /// <summary>
 /// Payload naming what a mod wants drawn again.
 /// </summary>

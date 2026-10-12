@@ -36,4 +36,5 @@ namespace WeaveFleet.Domain.Events;
 [JsonDerivedType(typeof(ModsChanged), "mods.changed")]
 [JsonDerivedType(typeof(ModsRuntimeChanged), "mods.runtime")]
 [JsonDerivedType(typeof(ModUi), "mod.ui")]
+[JsonDerivedType(typeof(ModPane), "mod.pane")]
 public abstract record DomainEvent;
