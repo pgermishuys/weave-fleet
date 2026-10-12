@@ -126,6 +126,13 @@ describe("ModDraftCard", () => {
     expect(wrapper.find("[data-testid=review-dialog]").attributes("data-open")).toBe("true");
   });
 
+  it("offers one way into the review: Review… in the request, no Keep… beside Turn off", () => {
+    const wrapper = mountCard(draft({ keepRequest: { note: null, at: "2026-10-10T10:00:00Z" } }));
+    expect(wrapper.find("[data-testid=mod-draft-review]").exists()).toBe(true);
+    expect(wrapper.find("[data-testid=mod-draft-keep]").exists()).toBe(false);
+    expect(wrapper.find("[data-testid=mod-draft-toggle]").exists()).toBe(true);
+  });
+
   describe("on the phone", () => {
     it("draws the phone's own buttons, never the desktop ones", () => {
       const wrapper = mountCard(draft(), true);

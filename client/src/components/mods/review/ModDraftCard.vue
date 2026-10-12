@@ -124,7 +124,9 @@ async function toggle(): Promise<void> {
     </p>
 
     <div class="mod-draft-card__actions">
+      <!-- The agent's request already offers Review…, which opens the same dialog. -->
       <ModActionButton
+        v-if="!request"
         :phone="phone"
         size="sm"
         variant="primary"
