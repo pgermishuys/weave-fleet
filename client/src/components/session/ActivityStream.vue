@@ -755,6 +755,7 @@ function handleImproveSkill(skill: string, toolId: string): void {
       <!-- Drafts the agent wrote here, as its latest output; a side conversation has none of its own. -->
       <ModDraftCards
         v-if="!props.after"
+        class="activity-mod-drafts"
         :session-id="props.sessionId"
       />
 
@@ -1095,8 +1096,9 @@ function handleImproveSkill(skill: string, toolId: string): void {
   margin-bottom: 6px;
 }
 
-/* An ask waits under the conversation, as wide as a message. */
-.activity-permission {
+/* An ask, or a draft waiting to be kept, sits under the conversation as wide as a message. */
+.activity-permission,
+.activity-mod-drafts {
   flex-shrink: 0;
   width: 100%;
   max-width: 760px;
