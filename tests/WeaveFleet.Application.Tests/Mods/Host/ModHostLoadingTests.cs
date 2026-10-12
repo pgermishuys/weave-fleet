@@ -238,6 +238,19 @@ public sealed class ModHostLoadingTests : IDisposable
     }
 
     [Fact]
+    public async Task A_dispatch_naming_a_mod_goes_only_to_that_mods_hooks()
+    {
+        Keep("test-chips", 1);
+        Keep("release-board", 1);
+        var connection = await StartedAsync();
+
+        var request = new ModDispatchRequest("ui.render", "ses_test1", Json(new { component = "Pane", requestId = "board" }), Mod: "release-board");
+        (await _supervisor.DispatchAsync(request, CancellationToken.None).Within()).Dispatched.ShouldBeTrue();
+
+        Chain(connection.Sent("dispatch").ShouldHaveSingleItem()).ShouldBe(["release-board@v1"]);
+    }
+
+    [Fact]
     public async Task After_a_restart_a_sessions_reload_start_goes_before_its_held_dispatches()
     {
         Keep("test-chips", 1);

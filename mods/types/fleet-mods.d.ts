@@ -258,7 +258,7 @@ declare module "fleet-mods" {
   /** A chip at the end of the status bar, for the session on screen. Inline elements only. */
   export type StatusChipProps = Readonly<Record<string, never>>;
 
-  /** A pane the mod opened with `$.ui.open`, in the session's content panel (a sheet on the phone). */
+  /** A pane the mod opened with `$.ui.open`, in the session's content panel: a tab on desktop (the phone's sheet is planned). */
   export interface PaneProps {
     readonly title: string;
   }
@@ -294,8 +294,6 @@ declare module "fleet-mods" {
     readonly mod: string;
     /** The control's `key`. */
     readonly element: string;
-    readonly component: RenderComponent;
-    readonly requestId: string;
     /** Where the user was: `desktop` (a browser or the desktop app) or `phone`. */
     readonly surface: Surface;
   }
@@ -324,8 +322,9 @@ declare module "fleet-mods" {
     resolve(e: UiRenderEvent): Elements;
     /** Draw this mod's sites again for the current session (all sessions outside a session's events). Throttled to 10 a second. */
     invalidate(event: "ui.render"): void;
-    /** Opens (or focuses) a pane in the current session. `id`: letters, digits, `_`, `-`, up to 64. */
+    /** Opens (or focuses) a pane in the current session, drawn by the mod's `Pane` hook (`e.requestId` is the id); `title` labels the tab. `id`: letters, digits, `_`, `-`, up to 64. */
     open(pane: { id: string; title?: string }): Promise<void>;
+    /** Closes the pane's tab. */
     close(pane: { id: string }): Promise<void>;
     /** A Fleet notice on the screens showing the current session, titled with the mod's name. 500 characters at most. */
     toast(text: string, options?: { timeoutMs?: number; tone?: "accent" | "warn" }): void;

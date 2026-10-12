@@ -477,6 +477,7 @@ public class SessionEventsHub : Hub
         ModsChanged             => "mods.changed",
         ModsRuntimeChanged      => "mods.runtime",
         ModUi                   => "mod.ui",
+        ModPane                 => "mod.pane",
         _ => domainEvent.GetType().Name,
     };
 }

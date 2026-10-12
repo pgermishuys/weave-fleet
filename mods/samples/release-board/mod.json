@@ -1,0 +1,6 @@
+{
+  "name": "release-board",
+  "version": "0.1.0",
+  "description": "Opens a Release board tab from a button in a shell row, and closes it again",
+  "hooks": "./mod.ts"
+}

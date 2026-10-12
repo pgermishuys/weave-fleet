@@ -25,6 +25,7 @@ import { useSessionDetailActions } from "@/composables/use-session-detail-action
 import { useSentPrompts } from "@/composables/use-send-prompt";
 import { provideSessionDiffsContext } from "@/composables/use-session-diffs-context";
 import { useSessionRecap } from "@/composables/use-session-recap";
+import { useSessionModPanes } from "@/composables/use-session-mod-panes";
 import { useSessionTerminals } from "@/composables/use-session-terminals";
 import { lineageOf } from "@/lib/session-lineage";
 import {
@@ -48,6 +49,7 @@ const SessionDetailPage = defineComponent({
   setup(_props, { expose }) {
     const params = Route.useParams();
     useSessionTerminals(() => params.value.id);
+    useSessionModPanes(() => params.value.id);
     const recap = useSessionRecap(() => params.value.id);
     const search = Route.useSearch();
     const navigate = Route.useNavigate();

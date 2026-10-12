@@ -96,6 +96,9 @@ public static class EventTypes
     /// </summary>
     public const string ModUi = "mod.ui";
 
+    /// <summary>A mod opened or closed a pane (<c>$.ui.open</c>/<c>$.ui.close</c>): <c>ModPanePayload</c>, on the session's topic.</summary>
+    public const string ModPane = "mod.pane";
+
     /// <summary>Returns <c>true</c> for <see cref="ContextUsage"/> and <see cref="ContextCompaction"/>.</summary>
     public static bool IsContextEvent(string type) => type is ContextUsage or ContextCompaction;
 

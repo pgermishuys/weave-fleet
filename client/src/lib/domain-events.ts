@@ -856,6 +856,21 @@ export interface ModUiChanged extends EventCursorMetadata {
   };
 }
 
+/** A mod opened or closed one of its panes (`$.ui.open`, `$.ui.close`). On the session's topic. */
+export interface ModPaneChanged extends EventCursorMetadata {
+  type: "mod.pane";
+  payload: {
+    sessionId: string;
+    /** The mod's name, without its version. */
+    mod: string;
+    /** The pane's id, unique within the mod. */
+    id: string;
+    /** The tab's title; absent on close. */
+    title?: string | null;
+    open: boolean;
+  };
+}
+
 export type DomainEvent =
   | SessionStarted
   | SessionIdled
@@ -910,4 +925,5 @@ export type DomainEvent =
   | HarnessCatalogChanged
   | ModsChanged
   | ModsRuntime
-  | ModUiChanged;
+  | ModUiChanged
+  | ModPaneChanged;

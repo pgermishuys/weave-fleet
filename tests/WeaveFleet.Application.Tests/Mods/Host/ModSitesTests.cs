@@ -255,7 +255,7 @@ public sealed class ModSitesTests : IDisposable
     }
 
     [Theory]
-    [InlineData("ComposerBand", "call_1", "Validation.Site")]
+    [InlineData("StatusChip", "call_1", "Validation.Site")]
     [InlineData(null, "call_1", "Validation.Site")]
     [InlineData("ToolUse", null, "Validation.RequestId")]
     [InlineData("ToolUse", "", "Validation.RequestId")]
@@ -280,6 +280,44 @@ public sealed class ModSitesTests : IDisposable
         (await Service(host).RenderAsync(Session, new ModRenderRequest("ToolUse", "call_1", J(props)))).Error.Code.ShouldBe("Validation.Props");
         (await Service(host).RenderAsync(Session, new ModRenderRequest("ToolUse", "call_1", null))).Error.Code.ShouldBe("Validation.Props");
         host.Dispatched.ShouldBeEmpty();
+    }
+
+    [Fact]
+    public async Task A_pane_render_names_its_mod_and_only_that_mod_draws_it()
+    {
+        var host = new FakeHost(_ => new ModDispatchResult(true, J("""{ "type": "Box", "props": {}, "children": [] }"""), ["release-board@v2"]));
+
+        var view = (await Service(host).RenderAsync(Session, new ModRenderRequest("Pane", "board", J("""{ "title": "Release board" }"""), "release-board"))).Value;
+
+        var request = host.Dispatched.ShouldHaveSingleItem().Request;
+        (request.Event, request.Mod).ShouldBe(("ui.render", "release-board"));
+        request.E.GetProperty("component").GetString().ShouldBe("Pane");
+        request.E.GetProperty("requestId").GetString().ShouldBe("board");
+        request.E.GetProperty("props").GetProperty("title").GetString().ShouldBe("Release board");
+        view.Mods.ShouldBe([new ModRenderedBy("release-board", false)]);
+    }
+
+    [Theory]
+    [InlineData(null)]
+    [InlineData("")]
+    public async Task A_pane_render_without_its_mod_is_refused_naming_the_field(string? mod)
+    {
+        var host = new FakeHost(_ => ModDispatchResult.NotDispatched);
+
+        var result = await Service(host).RenderAsync(Session, new ModRenderRequest("Pane", "board", J("""{ "title": "Release board" }"""), mod));
+
+        result.Error.Code.ShouldBe("Validation.Mod");
+        host.Dispatched.ShouldBeEmpty();
+    }
+
+    [Fact]
+    public async Task A_tool_rows_render_doesnt_narrow_the_chain_to_a_mod()
+    {
+        var host = new FakeHost(_ => ModDispatchResult.NotDispatched);
+
+        await Service(host).RenderAsync(Session, new ModRenderRequest("ToolUse", "call_1", J(Props), "release-board"));
+
+        host.Dispatched.ShouldHaveSingleItem().Request.Mod.ShouldBeNull();
     }
 
     [Fact]
@@ -384,5 +422,21 @@ public sealed class ModSitesTests : IDisposable
         sent.Payload.TryGetProperty("sessionId", out var onTheWire).ShouldBe(session is not null);
         if (session is not null)
             onTheWire.GetString().ShouldBe(session);
+    }
+
+    [Fact]
+    public async Task A_pane_opened_or_closed_reaches_the_sessions_topic_as_mod_pane()
+    {
+        var events = new FakeEventBroadcaster();
+        var ui = new BroadcastingModHostUi(events);
+
+        await ui.OpenPaneAsync(User, "release-board@v2", Session, "board", "Release board", CancellationToken.None);
+        await ui.ClosePaneAsync(User, "release-board@draft:ses_test1", Session, "board", CancellationToken.None);
+
+        events.Broadcasts.Select(b => (b.Topic, b.Type, b.UserId)).ShouldBe([($"session:{Session}", "mod.pane", User), ($"session:{Session}", "mod.pane", User)]);
+        var opened = events.Broadcasts[0].DomainEvent.ShouldBeOfType<ModPane>().Payload;
+        (opened.SessionId, opened.Mod, opened.Id, opened.Title, opened.Open).ShouldBe((Session, "release-board", "board", "Release board", true));
+        var closed = events.Broadcasts[1].DomainEvent.ShouldBeOfType<ModPane>().Payload;
+        (closed.Mod, closed.Id, closed.Title, closed.Open).ShouldBe(("release-board", "board", null, false));
     }
 }
