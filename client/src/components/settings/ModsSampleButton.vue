@@ -14,6 +14,8 @@ const SAMPLES = [
   { name: "branch-context", added: "Added. Ask about the branch, a PR or a push in any session." },
   { name: "tests-after-edits", added: "Added. When a turn changes files, \"Run the tests\" is queued next." },
   { name: "push-guard", added: "Added. Set Settings → Permissions to ask, then have an agent push from main." },
+  { name: "press-counter", added: "Added. Open a shell command's row in any session and press Count a press." },
+  { name: "release-board", added: "Added. Pick Release board under From mods in a session's + menu." },
 ] as const;
 
 const isAdding = shallowRef(false);
