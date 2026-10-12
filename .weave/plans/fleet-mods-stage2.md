@@ -55,7 +55,8 @@ copied). Claude Code ran on the user's own Claude gateway (the user allowed it; 
 ## Later (priced; nothing here is started)
 
 From the brief (unchanged): dropping a prompt with a notice (~400); `/commands` (~800); composer band + status chip
-wiring (~800); ~~panes + buttons (~1,500)~~ (done 12 October 2026, see "Panes and buttons" below); `$.fs` / `$.process` / `$.http` with declared calls (~2,500, needs a security
+wiring (~800); ~~panes + buttons (~1,500)~~ (done 12 October 2026, see "Panes and buttons" below);
+`$.fs` / `$.process` / `$.http` with declared calls (~2,500, needs a security
 review); permission hooks for harnesses the shared path doesn't reach (~600 each; none needed so far); slash commands
 and Pi's first prompt through the prompt hook; the M10 hardening list in the Stage 1 plan.
 
