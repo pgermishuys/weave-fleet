@@ -136,6 +136,53 @@ public sealed class ModSitesTests : IDisposable
         props.GetProperty("inputTruncated").GetBoolean().ShouldBeFalse();
     }
 
+    // ── Controls ────────────────────────────────────────────────────────
+
+    [Theory]
+    [InlineData("press", "ui.press", null)]
+    [InlineData("input", "ui.input", "change")]
+    [InlineData("submit", "ui.input", "submit")]
+    [InlineData("select", "ui.select", null)]
+    public async Task A_used_control_is_dispatched_with_its_handle_and_surface(string kind, string ev, string? eventKind)
+    {
+        var host = new FakeHost(_ => new ModDispatchResult(true, J("{}"), []));
+
+        var view = (await Service(host).ActAsync(Session, new ModActionRequest("h17", kind, "abc", "phone"))).Value;
+
+        view.Handled.ShouldBeTrue();
+        var (user, request) = host.Dispatched.ShouldHaveSingleItem();
+        (user, request.Event, request.SessionId, request.Surface).ShouldBe((User, ev, Session, "phone"));
+        request.E.GetProperty("handle").GetString().ShouldBe("h17");
+        request.E.GetProperty("value").GetString().ShouldBe("abc");
+        (request.E.TryGetProperty("kind", out var k) ? k.GetString() : null).ShouldBe(eventKind);
+    }
+
+    [Fact]
+    public async Task A_control_nobody_can_take_is_not_handled_so_the_browser_draws_again()
+    {
+        var host = new FakeHost(_ => ModDispatchResult.NotDispatched);
+
+        var result = await Service(host).ActAsync(Session, new ModActionRequest("h_gone", "press", null, null));
+
+        result.Value.Handled.ShouldBeFalse();
+        host.Dispatched.Single().Request.Surface.ShouldBe("desktop");
+    }
+
+    [Theory]
+    [InlineData("h1", "click", null, "Kind")]
+    [InlineData(null, "press", null, "Handle")]
+    [InlineData("h1", "press", "tablet", "Surface")]
+    public async Task A_bad_action_is_refused_before_it_reaches_the_host(string? handle, string kind, string? surface, string field)
+    {
+        var host = new FakeHost(_ => ModDispatchResult.NotDispatched);
+
+        var result = await Service(host).ActAsync(Session, new ModActionRequest(handle, kind, null, surface));
+
+        result.IsFailure.ShouldBeTrue();
+        result.Error.Description.ShouldContain($"\"{field.ToLowerInvariant()}\"");
+        host.Dispatched.ShouldBeEmpty();
+    }
+
     [Fact]
     public async Task Not_dispatched_and_Fleet_both_draw_nothing_and_name_no_mods()
     {

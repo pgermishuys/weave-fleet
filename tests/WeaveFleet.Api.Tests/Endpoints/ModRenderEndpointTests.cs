@@ -128,6 +128,38 @@ public sealed class ModRenderEndpointTests : IAsyncDisposable
     }
 
     [Fact]
+    public async Task An_action_for_a_session_that_isnt_there_is_404()
+    {
+        await TurnOnAsync();
+
+        (await _client.PostAsJsonAsync("/api/sessions/nope/mods/action", new { handle = "h1", kind = "press" })).StatusCode.ShouldBe(HttpStatusCode.NotFound);
+    }
+
+    [Fact]
+    public async Task An_action_no_mod_host_can_take_answers_not_handled()
+    {
+        await TurnOnAsync();
+        var session = await SeedSessionAsync();
+
+        var response = await _client.PostAsJsonAsync($"/api/sessions/{session}/mods/action", new { handle = "h1", kind = "press", surface = "phone" });
+
+        response.StatusCode.ShouldBe(HttpStatusCode.OK);
+        (await response.Content.ReadFromJsonAsync<JsonElement>()).GetProperty("handled").GetBoolean().ShouldBeFalse();
+    }
+
+    [Fact]
+    public async Task A_bad_action_is_400_and_names_the_field()
+    {
+        await TurnOnAsync();
+        var session = await SeedSessionAsync();
+
+        var response = await _client.PostAsJsonAsync($"/api/sessions/{session}/mods/action", new { handle = "h1", kind = "click" });
+
+        response.StatusCode.ShouldBe(HttpStatusCode.BadRequest);
+        (await response.Content.ReadFromJsonAsync<JsonElement>()).GetProperty("error").GetString()!.ShouldContain("\"kind\"");
+    }
+
+    [Fact]
     public async Task A_sample_Fleet_doesnt_ship_is_404()
     {
         await TurnOnAsync();

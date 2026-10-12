@@ -12,6 +12,17 @@ namespace WeaveFleet.Application.Mods;
 /// <param name="Props">The tool row props, as the browser has them.</param>
 public sealed record ModRenderRequest(string? Site, string? RequestId, JsonElement? Props);
 
+/// <summary>A control in a mod's tree was used (<c>docs/mods/api.md</c>, "Fleet and the browser").</summary>
+/// <param name="Handle">The control's handle from the tree.</param>
+/// <param name="Kind"><c>press</c>, <c>input</c>, <c>submit</c> or <c>select</c>.</param>
+/// <param name="Value">What an <c>Input</c> or <c>Select</c> holds.</param>
+/// <param name="Surface"><c>desktop</c> (the default) or <c>phone</c>.</param>
+public sealed record ModActionRequest(string? Handle, string? Kind, string? Value, string? Surface);
+
+/// <param name="Handled">False when no mod could take it: the handle is unknown or expired (the tree was drawn again, or
+/// the mod reloaded) or the host isn't running. The browser draws the site again.</param>
+public sealed record ModActionView(bool Handled);
+
 /// <summary>A mod whose tree is in a render answer; <paramref name="Draft"/> when it is the session's draft.</summary>
 public sealed record ModRenderedBy(string Name, bool Draft);
 
@@ -31,6 +42,44 @@ public sealed class ModRenderService(IModHost host, IUserContext user)
     public const int MaxOutputChars = 256 * 1024;
 
     public ModSitesView SitesFor(string sessionId) => new(host.SitesFor(user.UserId, sessionId));
+
+    /// <summary>A control was used: the host finds its mod and callback from the handle, and the callback runs.</summary>
+    public async Task<Result<ModActionView>> ActAsync(string sessionId, ModActionRequest request, CancellationToken ct = default)
+    {
+        var (ev, kind) = request.Kind switch
+        {
+            "press" => ("ui.press", "press"),
+            "input" => ("ui.input", "change"),
+            "submit" => ("ui.input", "submit"),
+            "select" => ("ui.select", "select"),
+            _ => (null, null),
+        };
+        if (ev is null)
+            return FleetError.ValidationError("Kind", "\"kind\" must be press, input, submit or select.");
+        if (string.IsNullOrEmpty(request.Handle))
+            return FleetError.ValidationError("Handle", "\"handle\" is required: the control's handle from the tree.");
+        if (request.Surface is not (null or "desktop" or "phone"))
+            return FleetError.ValidationError("Surface", "\"surface\" must be desktop or phone.");
+        var surface = request.Surface ?? "desktop";
+
+        var buffer = new ArrayBufferWriter<byte>();
+        using (var writer = new Utf8JsonWriter(buffer))
+        {
+            writer.WriteStartObject();
+            writer.WriteString("sessionId", sessionId);
+            writer.WriteString("handle", request.Handle);
+            writer.WriteString("surface", surface);
+            if (ev == "ui.input")
+                writer.WriteString("kind", kind);
+            if (request.Value is not null)
+                writer.WriteString("value", request.Value);
+            writer.WriteEndObject();
+        }
+
+        using var document = JsonDocument.Parse(buffer.WrittenMemory);
+        var answer = await host.DispatchAsync(user.UserId, new ModDispatchRequest(ev, sessionId, document.RootElement.Clone(), surface), ct).ConfigureAwait(false);
+        return new ModActionView(answer.Dispatched);
+    }
 
     public async Task<Result<ModRenderView>> RenderAsync(string sessionId, ModRenderRequest request, CancellationToken ct = default)
     {

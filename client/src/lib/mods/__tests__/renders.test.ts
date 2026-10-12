@@ -224,3 +224,44 @@ describe("mod tool row renders", () => {
     expect(sent()[0].props).toMatchObject({ tool: "bash", status: "completed", input: { command: "bun test" } });
   });
 });
+
+describe("controls in a mod's tree", () => {
+  const actions = () => fetchMock.mock.calls.filter(([, path]) => String(path).endsWith("/mods/action"));
+  const pressed = (handled: unknown, status = 200) => {
+    const base = fetchMock.getMockImplementation()!;
+    fetchMock.mockImplementation(async (machine: unknown, path: string, init?: RequestInit) =>
+      path.endsWith("/mods/action") ? answer(handled, status) : base(machine, path, init));
+  };
+
+  it("posts a used control to the server, with its surface", async () => {
+    pressed({ handled: true });
+    card();
+    await flushPromises();
+    toolRowViews.get("ToolResult:s1:c1")!.onAction!({ handle: "h1", kind: "press" }, "desktop");
+    await flushPromises();
+    expect(actions()).toHaveLength(1);
+    expect(actions()[0][1]).toBe("/api/sessions/s1/mods/action");
+    expect(JSON.parse((actions()[0][2] as RequestInit).body as string)).toEqual({ handle: "h1", kind: "press", surface: "desktop" });
+    // The mod redraws through mod.ui; the client doesn't ask on its own.
+    expect(renders()).toHaveLength(2);
+  });
+
+  it("draws the call's row again when the server can't deliver the action (an expired handle)", async () => {
+    pressed({ handled: false });
+    card();
+    await flushPromises();
+    toolRowViews.get("ToolUse:s1:c1")!.onAction!({ handle: "h1", kind: "input", value: "x" }, "phone");
+    await flushPromises();
+    expect(JSON.parse((actions()[0][2] as RequestInit).body as string)).toMatchObject({ kind: "input", value: "x", surface: "phone" });
+    expect(renders()).toHaveLength(4);
+  });
+
+  it("draws again when the request itself fails", async () => {
+    pressed({}, 500);
+    card();
+    await flushPromises();
+    toolRowViews.get("ToolUse:s1:c1")!.onAction!({ handle: "h1", kind: "press" }, "desktop");
+    await flushPromises();
+    expect(renders()).toHaveLength(4);
+  });
+});

@@ -497,6 +497,8 @@ internal sealed record ErrorResponse(string Error);
 [JsonSerializable(typeof(WeaveFleet.Application.Mods.ModCheckView))]
 [JsonSerializable(typeof(WeaveFleet.Application.Mods.ModRenderRequest))]
 [JsonSerializable(typeof(WeaveFleet.Application.Mods.ModRenderView))]
+[JsonSerializable(typeof(WeaveFleet.Application.Mods.ModActionRequest))]
+[JsonSerializable(typeof(WeaveFleet.Application.Mods.ModActionView))]
 [JsonSerializable(typeof(WeaveFleet.Application.Mods.ModSitesView))]
 [JsonSerializable(typeof(WeaveFleet.Api.Endpoints.UseModVersionRequest))]
 [JsonSerializable(typeof(WeaveFleet.Api.Endpoints.SetModsSafeModeRequest))]

@@ -1,0 +1,6 @@
+{
+  "name": "press-counter",
+  "version": "0.1.0",
+  "description": "Counts presses of a button in an opened shell row",
+  "hooks": "./mod.ts"
+}
