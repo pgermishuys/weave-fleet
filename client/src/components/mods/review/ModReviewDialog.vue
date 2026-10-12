@@ -107,7 +107,7 @@ async function decline(): Promise<void> {
 }
 
 const LABELS: Record<string, string> = {
-  draws: "Draws", listens: "Reacts to", reads: "Reads", state: "Remembers", store: "Saves",
+  draws: "Draws", adds: "Adds", listens: "Reacts to", reads: "Reads", state: "Remembers", store: "Saves",
   pages: "Pages", also: "Also", changes: "Changes", network: "Network", files: "Files",
 };
 /** Several draw sites share the first row's label (`draws-1`…). */

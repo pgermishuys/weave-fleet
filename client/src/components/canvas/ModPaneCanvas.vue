@@ -1,9 +1,12 @@
 <script setup lang="ts">
-import { computed } from "vue";
+import { computed, onMounted } from "vue";
+import ModPaneOff from "@/components/mods/ModPaneOff.vue";
 import ModTree from "@/components/mods/ModTree.vue";
 import { modPanes, modPaneViewId, useModView } from "@/lib/mods/points";
+import { isModOff } from "@/lib/mods/mod-off";
 import { useResolvedModView } from "@/lib/mods/resolve";
 import type { ModAction } from "@/lib/mods/types";
+import { useModsStore } from "@/stores/mods";
 
 /**
  * A pane a mod opened, drawn from the view the mod last contributed. Without one (restored after a reload, before the
@@ -22,6 +25,13 @@ const resolved = useResolvedModView(modPanes, viewId, "Pane");
 const tree = computed(() => (resolved.value.draws ? resolved.value.tree : null));
 const modName = computed(() => view.value?.mod ?? props.mod);
 
+// A pane the mod opened without declaring it is judged by the kept mods; have them.
+const mods = useModsStore();
+onMounted(() => {
+  if (!mods.kept) void mods.loadKept().catch(() => undefined);
+});
+const off = computed(() => isModOff(props.sessionId, props.mod));
+
 function send(action: ModAction): void {
   view.value?.onAction?.(action, "desktop");
 }
@@ -32,8 +42,13 @@ function send(action: ModAction): void {
     class="mod-pane"
     data-testid="mod-pane"
   >
+    <ModPaneOff
+      v-if="off"
+      :session-id="sessionId"
+      :mod="mod"
+    />
     <ModTree
-      v-if="tree"
+      v-else-if="tree"
       :tree="tree"
       site="Pane"
       :session-id="sessionId"

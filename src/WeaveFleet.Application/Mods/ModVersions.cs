@@ -1,4 +1,5 @@
 using System.Text.Json;
+using WeaveFleet.Application.Mods.Host;
 
 namespace WeaveFleet.Application.Mods;
 
@@ -59,7 +60,8 @@ public delegate Task<JsonElement?> ModKeepCheck(string stagedFolder, Cancellatio
 
 /// <summary>What a mod's <c>mod.json</c> says (<c>docs/mods/api.md</c>, "A mod on disk").</summary>
 /// <param name="Hooks">The hooks module, relative to <c>mod.json</c>.</param>
-public sealed record ModManifest(string Name, string Version, string Description, string Hooks);
+/// <param name="Panes">The panes it declares, read leniently (the mod host validates them); null when none.</param>
+public sealed record ModManifest(string Name, string Version, string Description, string Hooks, IReadOnlyList<ModPaneSpec>? Panes = null);
 
 /// <summary>A file of a version or a draft, for Show code. Paths are relative to the mod's folder, with <c>/</c>.</summary>
 public sealed record ModFile(string Path, string Content);

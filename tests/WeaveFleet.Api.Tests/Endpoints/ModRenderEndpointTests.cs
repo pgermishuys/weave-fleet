@@ -85,6 +85,7 @@ public sealed class ModRenderEndpointTests : IAsyncDisposable
         var sites = await _client.GetFromJsonAsync<JsonElement>($"/api/sessions/{session}/mods/sites");
 
         sites.GetProperty("sites").GetArrayLength().ShouldBe(0);
+        sites.GetProperty("panes").GetArrayLength().ShouldBe(0);
     }
 
     [Fact]

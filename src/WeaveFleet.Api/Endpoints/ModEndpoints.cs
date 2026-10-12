@@ -127,10 +127,10 @@ public static class ModEndpoints
 
         // GET /api/sessions/{sessionId}/mods/sites — which tool-row sites the session's mods hook, and for which tools
         // (null: any), so the browser asks only about rows a mod could draw.
-        drafts.MapGet("/sites", async (string sessionId, SessionService sessions, ModRenderService render) =>
+        drafts.MapGet("/sites", async (string sessionId, SessionService sessions, ModRenderService render, CancellationToken ct) =>
             {
                 var session = await sessions.GetSessionAsync(sessionId);
-                return session.IsFailure ? session.Error.ToSessionApiResult() : Results.Ok(render.SitesFor(sessionId));
+                return session.IsFailure ? session.Error.ToSessionApiResult() : Results.Ok(await render.SitesForAsync(sessionId, ct));
             })
             .WithName("GetModSites")
             .Produces<ModSitesView>();

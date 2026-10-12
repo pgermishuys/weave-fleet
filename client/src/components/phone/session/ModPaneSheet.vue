@@ -3,9 +3,11 @@ import { computed } from "vue";
 import { useModView } from "@/lib/mods/points";
 import { X } from "lucide-vue-next";
 import BottomSheet from "@/components/phone/BottomSheet.vue";
+import ModPaneOff from "@/components/mods/ModPaneOff.vue";
 import ModDraftMark from "@/components/mods/ModDraftMark.vue";
 import ModTree from "@/components/mods/ModTree.vue";
 import { modPanes } from "@/lib/mods/points";
+import { isModOff } from "@/lib/mods/mod-off";
 import { useResolvedModView } from "@/lib/mods/resolve";
 import type { ModAction } from "@/lib/mods/types";
 
@@ -17,6 +19,8 @@ const emit = defineEmits<{ (event: "close"): void }>();
 const view = useModView(modPanes, () => props.viewId ?? undefined);
 const resolved = useResolvedModView(modPanes, () => props.viewId ?? undefined, "Pane");
 const shown = computed(() => props.open && view.value !== undefined);
+
+const off = computed(() => view.value !== undefined && isModOff(props.sessionId, view.value.mod));
 
 function act(action: ModAction): void {
   view.value?.onAction?.(action, "phone");
@@ -43,8 +47,13 @@ function act(action: ModAction): void {
         <X aria-hidden="true" />
       </button>
     </template>
+    <ModPaneOff
+      v-if="view && off"
+      :session-id="sessionId"
+      :mod="view.mod"
+    />
     <div
-      v-if="resolved.draws && resolved.tree"
+      v-else-if="resolved.draws && resolved.tree"
       class="mps__body"
       data-testid="mod-pane-body"
     >

@@ -74,6 +74,22 @@ describe("summarizeCheck", () => {
   });
 });
 
+describe("declared panes", () => {
+  const panes = [{ id: "board", title: "Release board" }, { id: "log", title: "Log" }];
+
+  it("adds a row naming the panes in the + menu, after what it draws", () => {
+    const r = report({ hooks: [render({ component: ["ToolUse", "Pane"] })], panes });
+    expect(keys(r).slice(0, 3)).toEqual(["draws", "adds", "reads"]);
+    expect(text(r, "adds")).toBe("A pane in the + menu: Release board and Log");
+  });
+
+  it("drops 'A pane it opens' when panes are declared, and keeps it when they aren't", () => {
+    const hooks = [render({ component: "Pane" })];
+    expect(keys(report({ hooks, panes }))).toEqual(["adds", "changes", "network", "files"]);
+    expect(text(report({ hooks }), "draws")).toBe("A pane it opens");
+  });
+});
+
 describe("checkProblems", () => {
   it("gives the first error with its position and the warning count", () => {
     const r = report({

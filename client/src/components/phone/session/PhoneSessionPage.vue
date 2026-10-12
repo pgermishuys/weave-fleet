@@ -28,6 +28,9 @@ import ModComposerBand from "@/components/mods/ModComposerBand.vue";
 import ModDraftCards from "@/components/mods/review/ModDraftCards.vue";
 import ModPaneSheet from "@/components/phone/session/ModPaneSheet.vue";
 import { isDraftView, modPanes, modPaneViewId } from "@/lib/mods/points";
+import { drawModPane, openAndDrawModPane } from "@/lib/mods/pane-renders";
+import { declaredModPanes, watchModSession } from "@/lib/mods/renders";
+import { useSessionModPanes } from "@/composables/use-session-mod-panes";
 import { harnessCapabilities } from "@/composables/use-composer-actions";
 import { useDeskPresence } from "@/composables/use-desk-presence";
 import { useMachineReachability } from "@/composables/phone/use-machine-reachability";
@@ -236,15 +239,42 @@ const computerLink = computed(() => machineWebApp.value
 // Panes mods opened here: the menu lists them, a pick opens its sheet. A pane is identified by its id in `modPanes`
 // (session, mod and pane), so two mods can use the same pane id.
 const openPaneId = shallowRef<string | null>(null);
-const sessionPanes = computed(() => modPanes.items.value
-  .filter((pane) => pane.sessionId === sessionId.value)
-  .map((pane) => ({ id: modPaneViewId(pane.sessionId, pane.mod, pane.paneId), title: pane.title, draft: isDraftView(pane) })));
+// The session's mods declare panes in mod.json; redraws and buttons need the session's mod events here too.
+watch(sessionId, (id) => watchModSession(machine, id), { immediate: true });
+useSessionModPanes(sessionId);
+const sessionPanes = computed(() => {
+  const opened = modPanes.items.value.filter((pane) => pane.sessionId === sessionId.value);
+  const list = declaredModPanes(sessionId.value).map((pane) => {
+    const view = opened.find((open) => open.mod === pane.mod && open.paneId === pane.id);
+    return {
+      id: modPaneViewId(sessionId.value, pane.mod, pane.id),
+      mod: pane.mod,
+      paneId: pane.id,
+      title: view?.title ?? pane.title,
+      draft: pane.draft,
+      hint: pane.off ? "Off" : pane.mod,
+    };
+  });
+  // A pane a mod opened without declaring it.
+  for (const view of opened) {
+    if (!list.some((pane) => pane.mod === view.mod && pane.paneId === view.paneId)) {
+      list.push({ id: modPaneViewId(view.sessionId, view.mod, view.paneId), mod: view.mod, paneId: view.paneId, title: view.title, draft: isDraftView(view), hint: view.mod });
+    }
+  }
+  return list;
+});
 function openPane(id: string): void {
+  const pane = sessionPanes.value.find((candidate) => candidate.id === id);
+  if (!pane) return;
+  // Opens the pane's view (the sheet draws it) and asks its mod to draw it; a pane already open is only drawn again.
+  if (modPanes.get(id)) void drawModPane(machine, sessionId.value, pane.mod, pane.paneId, pane.title);
+  else openAndDrawModPane(machine, sessionId.value, pane.mod, pane.paneId, pane.title);
   openPaneId.value = id;
   sheet.value = "pane";
 }
-watch(sessionPanes, (panes) => {
-  if (sheet.value === "pane" && !panes.some((pane) => pane.id === openPaneId.value)) sheet.value = null;
+// The sheet closes when its pane's view goes (the mod closed it).
+watch(() => openPaneId.value !== null && modPanes.get(openPaneId.value) === undefined, (gone) => {
+  if (gone && sheet.value === "pane") sheet.value = null;
 });
 
 async function onMenu(action: MenuAction): Promise<void> {

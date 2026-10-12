@@ -111,10 +111,14 @@ export function summarizeCheck(report: ModCheckReport): CheckRow[] {
   const calls = new Set(report.calls);
   const callsOf = (prefix: string) => report.calls.some((call) => call.startsWith(prefix));
 
-  const drawn = report.hooks.filter((hook) => hook.event === "ui.render").flatMap((hook) => describeRender(hook.matcher));
+  const titles = (report.panes ?? []).map((pane) => pane.title);
+  // A declared pane is said under "Adds"; "A pane it opens" would say the same thing twice.
+  const drawn = report.hooks.filter((hook) => hook.event === "ui.render").flatMap((hook) => describeRender(hook.matcher))
+    .filter((line) => titles.length === 0 || line.text !== SITE_WORDS.Pane);
   drawn.forEach((line, index) => {
     rows.push({ key: index === 0 ? "draws" : `draws-${index}`, ...line });
   });
+  if (titles.length > 0) rows.push({ key: "adds", text: `A pane in the + menu: ${list(titles)}` });
 
   const listens = [...new Set(report.hooks.map((hook) => LISTENS[hook.event]).filter((word): word is string => !!word))];
   if (listens.length > 0) {

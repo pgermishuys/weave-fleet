@@ -7,6 +7,7 @@ using System.Text.Json;
 using System.Text.Json.Serialization;
 using WeaveFleet.Application.Configuration;
 using WeaveFleet.Application.Mods;
+using WeaveFleet.Application.Mods.Host;
 
 namespace WeaveFleet.Infrastructure.Mods;
 
@@ -1061,11 +1062,24 @@ public sealed class FileModVersionStore(string root) : IModVersionStore, IDispos
             var version = Field(root, "version");
             var description = Field(root, "description");
             var hooks = Field(root, "hooks");
-            return name is null || version is null || description is null || hooks is null ? null : new ModManifest(name, version, description, hooks);
+            return name is null || version is null || description is null || hooks is null ? null : new ModManifest(name, version, description, hooks, PanesOf(root));
         }
         catch (Exception e) when (e is JsonException or IOException or UnauthorizedAccessException)
         {
             return null;
+        }
+
+        static List<ModPaneSpec>? PanesOf(JsonElement root)
+        {
+            if (!root.TryGetProperty("panes", out var list) || list.ValueKind != JsonValueKind.Array)
+                return null;
+            var panes = new List<ModPaneSpec>();
+            foreach (var pane in list.EnumerateArray().Where(p => p.ValueKind == JsonValueKind.Object).Take(8))
+            {
+                if (Field(pane, "id") is { } id && Field(pane, "title") is { } title)
+                    panes.Add(new ModPaneSpec(id, title, Field(pane, "icon")));
+            }
+            return panes.Count > 0 ? panes : null;
         }
 
         static string? Field(JsonElement root, string field)

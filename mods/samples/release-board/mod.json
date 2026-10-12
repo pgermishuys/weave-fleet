@@ -1,6 +1,13 @@
 {
   "name": "release-board",
   "version": "0.1.0",
-  "description": "Opens a Release board tab from a button in a shell row, and closes it again",
-  "hooks": "./mod.ts"
+  "description": "A Release board pane in the + menu, and a button in a shell row that opens it and closes it again",
+  "hooks": "./mod.ts",
+  "panes": [
+    {
+      "id": "board",
+      "title": "Release board",
+      "icon": "gauge"
+    }
+  ]
 }

@@ -1,7 +1,7 @@
 import type { Register } from "fleet-mods";
 
 // Shows how a mod opens its own tab: the opened body of a shell row gets an "Open board" button, and the board is a
-// Pane the mod draws itself, with a "Close" button that closes the tab. The mod opens a pane it never declared.
+// Pane the mod draws itself, with a "Close" button that closes the tab. mod.json declares the pane too, so it is also in the + menu.
 const ITEMS = [
   { title: "Cut the release branch", state: "Done", tone: "good" },
   { title: "Smoke test on staging", state: "Running", tone: "warn" },

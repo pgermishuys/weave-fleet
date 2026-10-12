@@ -102,6 +102,8 @@ public sealed partial class ModHostService : IModHost, IHostedService, IAsyncDis
 
     public IReadOnlyList<ModSiteHooks> SitesFor(string userId, string sessionId) => SupervisorOf(userId)?.SitesFor(sessionId) ?? [];
 
+    public IReadOnlyList<ModDeclaredPane> PanesFor(string userId, string sessionId) => SupervisorOf(userId)?.PanesFor(sessionId) ?? [];
+
     public ModLoadProblem? GetLoadProblem(string userId, string modId) => SupervisorOf(userId)?.GetLoadProblem(modId);
 
     public Task StartAsync(CancellationToken cancellationToken)

@@ -36,6 +36,8 @@ export interface ModCheckReport {
   calls: string[];
   state: string[];
   pages: string[];
+  /** The panes `mod.json` declares, listed in the session's "+" menu. */
+  panes?: Array<{ id: string; title: string; icon?: string }>;
   errors: ModCheckProblem[];
   warnings: ModCheckProblem[];
 }

@@ -57,6 +57,43 @@ describe("manifest", () => {
     expect((await check({ name: "a".repeat(64), source: ok })).report.ok).toBe(true);
   });
 
+  describe("panes", () => {
+    const pane = { id: "board", title: "Release board", icon: "gauge" };
+
+    test("declared panes are returned with the manifest and the report", async () => {
+      const r = await check({ manifest: { panes: [pane, { id: "log", title: "Log" }] }, source: ok });
+      expect(r.report.ok).toBe(true);
+      expect(r.manifest?.panes).toEqual([pane, { id: "log", title: "Log" }]);
+      expect(r.report.panes).toEqual([pane, { id: "log", title: "Log" }]);
+    });
+
+    test("a mod without panes has none in the report", async () => {
+      expect((await check({ source: ok })).report.panes).toBeUndefined();
+    });
+
+    test("eight panes are fine, nine are not", async () => {
+      const many = (n: number) => Array.from({ length: n }, (_, i) => ({ id: `p${i}`, title: `Pane ${i}` }));
+      expect((await check({ manifest: { panes: many(8) }, source: ok })).report.ok).toBe(true);
+      const r = await check({ manifest: { panes: many(9) }, source: ok });
+      expect(codes(r)).toEqual(["manifest"]);
+      expect(r.report.errors[0]?.message).toContain("limit is 8");
+    });
+
+    test.each([
+      ["a list", "board", '"panes" must be a list'],
+      ["an object per pane", ["board"], "must be an object"],
+      ["a bad id", [{ ...pane, id: "my board" }], ".id must be"],
+      ["an empty title", [{ ...pane, title: " " }], ".title is required"],
+      ["a title over 40", [{ ...pane, title: "x".repeat(41) }], ".title is required"],
+      ["an unknown icon", [{ ...pane, icon: "rocket" }], ".icon must be"],
+      ["a duplicate id", [pane, pane], "declared twice"],
+    ])("panes that are not %s are refused", async (_, panes, message) => {
+      const r = await check({ manifest: { panes }, source: ok });
+      expect(codes(r)).toEqual(["manifest"]);
+      expect(r.report.errors[0]?.message).toContain(message);
+    });
+  });
+
   test("the fleet- prefix is reserved", async () => {
     const r = await check({ name: "fleet-chips", source: ok });
     expect(r.report.errors[0]).toMatchObject({ code: "manifest" });

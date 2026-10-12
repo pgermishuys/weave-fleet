@@ -44,6 +44,19 @@ export interface ModToolRow {
   read: () => { input?: Record<string, unknown> | null; output?: string; title: string; durationMs?: number };
 }
 
+/** A pane a mod declares in mod.json, listed in the session's "+" menu; `off` when its mod is turned off. */
+export interface DeclaredModPane {
+  mod: string;
+  id: string;
+  title: string;
+  icon?: string | null;
+  draft: boolean;
+  off: boolean;
+}
+
+/** The panes the session's mods declare, as the server last said. */
+const declaredPanes = shallowReactive<Record<string, DeclaredModPane[]>>({});
+
 /** A session's hooks as the server last said; null while unknown or when it has none (Mods off). */
 const hooks = shallowReactive<Record<string, SiteHook[] | null>>({});
 /** Bumped to make a session's rows (or one call's) ask again. */
@@ -59,7 +72,7 @@ let inFlight = 0;
 
 /** Forgets everything; for tests. */
 export function resetModRenders(): void {
-  for (const store of [hooks, sessionGen, callGen] as Array<Record<string, unknown>>) {
+  for (const store of [hooks, sessionGen, callGen, declaredPanes] as Array<Record<string, unknown>>) {
     for (const key of Object.keys(store)) delete store[key];
   }
   wanted.clear();
@@ -119,8 +132,12 @@ async function fetchHooks(machine: MachineTarget, sessionId: string): Promise<Si
   try {
     const response = await apiFetchOn(machine.connection, `/api/sessions/${encodeURIComponent(sessionId)}/mods/sites`);
     // 404 is Mods off: no sites, and no asking again until `mods.changed`.
-    if (!response.ok) return null;
-    const body = (await response.json()) as { sites?: Array<{ site: Site; tools: string[] | null }> };
+    if (!response.ok) {
+      declaredPanes[sessionId] = [];
+      return null;
+    }
+    const body = (await response.json()) as { sites?: Array<{ site: Site; tools: string[] | null }>; panes?: DeclaredModPane[] };
+    declaredPanes[sessionId] = body.panes ?? [];
     return (body.sites ?? []).map((hook) => ({ site: hook.site, tools: hook.tools?.map((tool) => getTool(tool).name) ?? null }));
   } catch {
     return null;
@@ -158,10 +175,12 @@ function listen(machine: MachineTarget, sessionId: string): void {
       for (const id of Object.keys(hooks)) void loadHooks(machine, id);
     };
     onDomainEvent(machine, "sessions", "mods.changed", reloadAll);
-    // With no session it's every session: a mod's own redraw, or Fleet's once the host has loaded or dropped mods,
-    // which changes which sites they hook, so ask for the sites again too.
-    onDomainEvent(machine, "sessions", "mod.ui", ({ payload }) =>
-      payload.sessionId ? invalidate(payload.sessionId, payload.requestId) : reloadAll());
+    // With no session it's every session. Fleet's own (no mod) follows the host loading or dropping mods, which changes
+    // which sites they hook, so ask for the sites again. A mod's own redraw can't change its hooks: only draw again.
+    onDomainEvent(machine, "sessions", "mod.ui", ({ payload }) => {
+      if (payload.sessionId || payload.mod) invalidate(payload.sessionId, payload.requestId);
+      else reloadAll();
+    });
   }
   const topic = `${machine.key}:session:${sessionId}`;
   if (!listening.has(topic)) {
@@ -231,6 +250,20 @@ function sync(machine: MachineTarget, row: ModToolRow): void {
       toolRowViews.removeByOwner(ownerOf(site, sessionId, callId));
     }
   }
+}
+
+/** Starts listening for the session's mod events and loads its hooks and declared panes once. */
+export function watchModSession(machine: MachineTarget, sessionId: string): void {
+  listen(machine, sessionId);
+  if (!(sessionId in hooks)) {
+    hooks[sessionId] = null;
+    void loadHooks(machine, sessionId);
+  }
+}
+
+/** The panes the session's mods declare (reactive). */
+export function declaredModPanes(sessionId: string): readonly DeclaredModPane[] {
+  return declaredPanes[sessionId] ?? [];
 }
 
 /** Draws the rows with mods' trees: asks for each row of a hooked tool and keeps `toolRowViews` in step. */

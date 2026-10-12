@@ -710,6 +710,8 @@ declare module "fleet-mods/protocol" {
     state: string[];
     /** Every `Page` path, each checked to exist inside the mod's folder. */
     pages: string[];
+    /** The panes `mod.json` declares (`panes`), listed in the session's "+" menu. Absent when there are none. */
+    panes?: Array<{ id: string; title: string; icon?: string }>;
     errors: CheckProblem[];
     warnings: CheckProblem[];
   }

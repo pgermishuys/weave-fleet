@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { computed, inject, nextTick, onBeforeUnmount, ref, watch } from "vue";
-import { Globe, Maximize2, Minimize2, Pin, Plus, X } from "lucide-vue-next";
+import { Globe, Maximize2, Minimize2, Pin, Plus, Puzzle, X } from "lucide-vue-next";
 import { useResizeObserver } from "@vueuse/core";
 import {
   DropdownMenu,
@@ -28,12 +28,16 @@ import {
 import type { VisualPayload } from "@/lib/visual-payload";
 import {
   isCanvasClosable,
+  modPaneCanvasId,
   useCanvasesStore,
   visualCanvasId,
   visualCanvasTitle,
   type CanvasInstance,
 } from "@/stores/canvases";
+import { modIcon } from "@/components/mods/mod-icons";
 import { isDraftView, modPanes, modPaneViewId } from "@/lib/mods/points";
+import { openAndDrawModPane } from "@/lib/mods/pane-renders";
+import { declaredModPanes, watchModSession } from "@/lib/mods/renders";
 import { useFileBuffersStore } from "@/stores/file-buffers";
 
 const props = withDefaults(defineProps<{
@@ -58,6 +62,10 @@ const activeCanvas = computed<CanvasInstance>(
 );
 const changedCount = computed(() => sharedDiffs?.diffs.value.length ?? 0);
 const openIds = computed(() => new Set(canvases.value.map((canvas) => canvas.id)));
+
+// Panes the session's mods declare in mod.json: listed under "From mods", off mods included.
+watch(() => props.sessionId, (id) => watchModSession(machine, id), { immediate: true });
+const modMenuPanes = computed(() => declaredModPanes(props.sessionId));
 
 // Visuals from the conversation, newest first, one entry per canvas title.
 const conversationVisuals = computed(() => {
@@ -229,6 +237,10 @@ function onTabKeydown(event: KeyboardEvent): void {
 
 function openBuiltIn(kind: (typeof PICKABLE_CANVAS_KINDS)[number]): void {
   store.open(props.sessionId, kind);
+}
+
+function openModPaneFromMenu(pane: { mod: string; id: string; title: string }): void {
+  openAndDrawModPane(machine, props.sessionId, pane.mod, pane.id, pane.title);
 }
 
 function openVisual(payload: VisualPayload): void {
@@ -412,8 +424,8 @@ const activeProps = computed(() => {
           </button>
         </DropdownMenuTrigger>
         <DropdownMenuContent
-          align="start"
-          class="canvas-picker w-64"
+          align="end"
+          class="canvas-picker w-80"
         >
           <DropdownMenuLabel class="canvas-picker__group">
             Built in
@@ -443,6 +455,27 @@ const activeProps = computed(() => {
             <span>Browser…</span>
             <span class="canvas-picker__hint">Run or open a page</span>
           </DropdownMenuItem>
+          <template v-if="modMenuPanes.length > 0">
+            <DropdownMenuSeparator />
+            <DropdownMenuLabel class="canvas-picker__group">
+              From mods
+            </DropdownMenuLabel>
+            <DropdownMenuItem
+              v-for="pane in modMenuPanes"
+              :key="`${pane.mod}:${pane.id}`"
+              class="canvas-picker__item"
+              :data-testid="`canvas-picker-mod-${pane.mod}-${pane.id}`"
+              @select="openModPaneFromMenu(pane)"
+            >
+              <component
+                :is="modIcon(pane.icon) ?? Puzzle"
+                aria-hidden="true"
+              />
+              <span class="canvas-picker__label">{{ pane.title }}</span>
+              <ModDraftMark v-if="pane.draft" />
+              <span class="canvas-picker__hint">{{ pane.off ? "Off" : openIds.has(modPaneCanvasId(pane.mod, pane.id)) ? "Open" : pane.mod }}</span>
+            </DropdownMenuItem>
+          </template>
           <template v-if="conversationVisuals.length > 0">
             <DropdownMenuSeparator />
             <DropdownMenuLabel class="canvas-picker__group">
@@ -828,5 +861,6 @@ const activeProps = computed(() => {
   padding-left: 12px;
   font-size: 11.5px;
   color: var(--muted);
+  white-space: nowrap;
 }
 </style>
