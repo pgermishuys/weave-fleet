@@ -48,7 +48,7 @@ describe("FeaturesSection", () => {
   });
 
   describe("Mods", () => {
-    const description = "Agents can write small add-ons that draw in Fleet: counts on tool rows, a band above the composer, a status-bar chip. You review each one before it's kept.";
+    const description = "Agents can write small add-ons for Fleet: what a tool row shows, buttons, panes you open from the + menu, and hooks on prompts, turns and permission asks. You review each one before it's kept.";
 
     it("is off by default, labelled Experimental, with its description", async () => {
       const wrapper = await mountSection();

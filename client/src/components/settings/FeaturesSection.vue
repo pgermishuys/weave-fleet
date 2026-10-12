@@ -510,7 +510,7 @@ async function toggleBoardFeature(): Promise<void> {
           </span>
         </p>
         <p class="mt-1 text-xs text-muted">
-          Agents can write small add-ons that draw in Fleet: counts on tool rows, a band above the composer, a status-bar chip. You review each one before it's kept.
+          Agents can write small add-ons for Fleet: what a tool row shows, buttons, panes you open from the + menu, and hooks on prompts, turns and permission asks. You review each one before it's kept.
         </p>
         <ModsRuntimePanel :enabled="isModsEnabled" />
       </div>

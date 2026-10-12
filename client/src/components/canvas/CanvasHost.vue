@@ -857,8 +857,13 @@ const activeProps = computed(() => {
 }
 
 .canvas-picker__hint {
+  /* The hint gives way first, so a mod pane's title stays readable beside a long mod name. */
+  flex-shrink: 1000;
+  min-width: 3ch;
   margin-left: auto;
   padding-left: 12px;
+  overflow: hidden;
+  text-overflow: ellipsis;
   font-size: 11.5px;
   color: var(--muted);
   white-space: nowrap;
