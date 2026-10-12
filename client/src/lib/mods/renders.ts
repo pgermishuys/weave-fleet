@@ -1,6 +1,7 @@
 import { reactive, shallowReactive, watchEffect } from "vue";
 import { onDomainEvent } from "@/composables/on-domain-event";
 import { apiFetchOn } from "@/lib/api-client";
+import { modActionSender } from "@/lib/mods/actions";
 import { toolRowViews, type ToolRowView } from "@/lib/mods/points";
 import type { ModAuthor, ModWireElement } from "@/lib/mods/types";
 import { useMachineTarget, type MachineTarget } from "@/lib/machine-target";
@@ -169,11 +170,12 @@ function listen(machine: MachineTarget, sessionId: string): void {
   }
 }
 
-function apply(owner: string, view: Omit<ToolRowView, "tree" | "mods">, response: RenderResponse): void {
+function apply(machine: MachineTarget, owner: string, view: Omit<ToolRowView, "tree" | "mods" | "onAction">, response: RenderResponse): void {
   toolRowViews.removeByOwner(owner);
   // No mod draws: Fleet's own row. (A mod that draws nothing comes back with its name and a null tree.)
   if (response.tree === null && response.mods.length === 0) return;
-  toolRowViews.contribute(owner, [{ ...view, tree: response.tree, mods: response.mods }]);
+  const onAction = modActionSender(machine, view.sessionId, () => invalidate(view.sessionId, view.callId));
+  toolRowViews.contribute(owner, [{ ...view, tree: response.tree, mods: response.mods, onAction }]);
 }
 
 function request(machine: MachineTarget, row: ModToolRow, site: Site, sessionId: string, callId: string): void {
@@ -207,7 +209,7 @@ function request(machine: MachineTarget, row: ModToolRow, site: Site, sessionId:
   }
   void answer.then((response) => {
     // A newer ask (another status, a `mod.ui`) has taken this one's place.
-    if (response && wanted.get(owner) === key) apply(owner, { site, sessionId, callId, tool }, response);
+    if (response && wanted.get(owner) === key) apply(machine, owner, { site, sessionId, callId, tool }, response);
   });
 }
 

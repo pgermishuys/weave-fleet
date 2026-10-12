@@ -141,6 +141,51 @@ A prop not listed makes the tree invalid.
 - Every `Button`, `Input` and `Select` needs a `key`, unique in the tree: letters, digits, `_`, `-`, `.`, 64 at most.
 - Limits: 2,000 elements, depth 32, 256 KiB as JSON. `false` and `null` in `children` are fine.
 
+## Buttons
+
+A `Button` (or `Input`, `Select`) works at every site. Give it a `key` and a callback; Fleet runs the callback in your
+module when the user uses the control.
+
+- `Button({ key: "go", label: "Go", onPress: () => { ... } })`. The callback is a closure over `$`, so it can write
+  `$.state` or call `$.prompt.submit`. A `ui.render` hook can read `$.state` but not write it.
+- Keep what the tree shows in `$.state` (per mod, per session). Writing a key the render read draws the site again, so
+  a press that changes the count redraws the row with no other call. `$.ui.invalidate("ui.render")` draws again by hand.
+- A press on a tree that was since drawn again (the mod reloaded) does nothing; Fleet draws the current tree.
+- `Input`: `onInput` gets changes (at most 4 a second), `onSubmit` the submit. `Select`: `onSelect`. The value is the
+  callback's first argument.
+- Hooks on `ui.press`, `ui.input` and `ui.select` see the event first (`e.element` is the control's `key`); you
+  rarely need them.
+
+```ts
+import type { Register } from "fleet-mods";
+
+export const register: Register = (on) => {
+  on("ui.render", { component: "ToolResult", props: { tool: ["bash", "shell"] } }, async ($, e, next) => {
+    if (e.component !== "ToolResult") return next(e);
+    const { Box, Text, Button } = $.ui.resolve(e);
+    const presses = $.state.get<number>("presses") ?? 0;
+    return Box({
+      flexDirection: "column",
+      gap: 2,
+      children: [
+        Box({
+          flexDirection: "row",
+          gap: 2,
+          alignItems: "center",
+          children: [
+            Button({ key: "count", label: "Count a press", tone: "primary", onPress: () => { $.state.set("presses", ($.state.get<number>("presses") ?? 0) + 1); } }),
+            Text({ dimColor: true, children: [`Pressed ${presses} times`] }),
+          ],
+        }),
+        await next(e),
+      ],
+    });
+  });
+};
+```
+
+This is Fleet's `press-counter` sample (it reads the count again inside the callback, so quick presses don't lose one).
+
 ## What the static check refuses
 
 A module that does these doesn't load:

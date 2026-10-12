@@ -215,11 +215,11 @@ phone and other tabs showing the session get the same tree.
 | `$.ui` | `resolve(e)` | The element factories, as in Claude Code: `const { Box, Text, Pill } = $.ui.resolve(e)`. One set serves desktop and phone. |
 | | `invalidate("ui.render")` | Draw this mod's sites again: in the current session, or in every session when called outside one. Throttled to 10 a second; calls in between coalesce. |
 | | `open({ id, title? })`, `close({ id })` | Open (or bring forward) and close a pane in the current session. A `Pane` hook draws it. |
-| | `toast(text, { timeoutMs?, tone? })` | A Fleet notice on the screens showing the session, titled with the mod's name. |
+| | `toast(text, { timeoutMs?, tone? })` | **Planned, not wired:** the call is accepted and nothing is shown. It will show a Fleet notice on the screens showing the session, titled with the mod's name. |
 | | `log(text, { level? })` | A line in the mod's log: Settings → Mods shows it, and `fleet_mod_check`/`fleet_mod_test` return it to the agent. |
 | `$.state` | `get(key)`, `set(key, value)` | Reactive JSON values for one mod in one session. A `ui.render` hook that reads a key redraws when it's written; it can't write. Survives a reload of the module; dropped when the session is archived or the host restarts. Keys are string literals. |
 | `$.store` | `get`, `set`, `delete`, `keys` | Per user, per mod, saved by Fleet; a draft shares the store of the kept mod with its name. Async. |
-| `$.session` | `id()`, `title()`, `harness()`, `cwd()`, `surfaces()`, `branch()` | The session of the current event, timer or callback. Async. `surfaces()` is where it's open now: `desktop`, `phone`, or empty. `branch()` is the git branch checked out in the session's folder, or `null` when it isn't in a git repository or HEAD is detached; Fleet reads it when asked. |
+| `$.session` | `id()`, `title()`, `harness()`, `cwd()`, `surfaces()`, `branch()` | The session of the current event, timer or callback. Async. `surfaces()` is **planned, not wired**: it answers an empty list today; it will say where the session is open now: `desktop`, `phone`, or empty. `branch()` is the git branch checked out in the session's folder, or `null` when it isn't in a git repository or HEAD is detached; Fleet reads it when asked. |
 | `$.clock` | `now()`, `after(ms, fn)`, `every(ms, fn)` | Timers belong to the mod and session they were started in, and stop when the module reloads or the session is archived. `every` at 100 ms at least. |
 
 There is no `$.fs`, `$.process`, `$.http`, `$.model`, `$.prompt` or `$.tool` in Stage 1, and no `setTimeout`: use
@@ -441,9 +441,19 @@ These shapes are for M5 and M6; mods don't see them.
   same way when those sites are wired.
 - **`mod.pane`**: `{ id, title, open, mod }`, opening or closing a pane.
 - **`mods.changed`**: a mod was kept, undone, turned on or off, or failed three times. Clients refetch `/api/mods`.
-- **`POST /api/sessions/{id}/mods/action`** `{ handle, kind: "press" | "input" | "submit" | "select", value?, surface }`:
-  a control was used. The host knows each handle's mod and key, and fills `mod` and `element` in the event itself.
-- `$.ui.toast` reaches the browser as a notice through the existing notices path.
+- **`POST /api/sessions/{id}/mods/action`** `{ handle, kind: "press" | "input" | "submit" | "select", value?, surface? }`
+  → `{ handled }`: a control in a mod's tree was used. `surface` is `desktop` (the default) or `phone`. The host knows
+  each handle's mod and key and fills `mod` and `element` in the event itself; `kind: "input"` reaches the mod as
+  `ui.input` with `kind: "change"`. The session must exist (404 otherwise); a missing `handle` or an unknown `kind` or
+  `surface` is 400 naming the field. The call answers once the host has run the hooks and the control's callback.
+  `handled: false` means no mod took it: the handle is unknown or expired (the tree was drawn again, or the mod
+  reloaded) or the host isn't running. A callback that throws is a failure of the mod, as for any hook.
+  Every drawn tree gets this from one place, so a control works at every site (today: tool rows). The mod answers by
+  writing `$.state` or calling `$.ui.invalidate`, which sends the usual `mod.ui`; the client draws the site again then.
+  When `handled` is false, or the request fails, the client draws the call's row again itself, so a stale control is
+  replaced by the current tree. The client sends `kind: "input"` at most 4 times a second per field (the first at
+  once, the last value always), and `submit` and `select` as they happen.
+- `$.ui.toast` is planned: the host accepts the call and Fleet shows nothing yet.
 
 ## Limits
 

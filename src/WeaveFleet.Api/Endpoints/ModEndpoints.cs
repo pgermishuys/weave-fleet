@@ -145,6 +145,17 @@ public static class ModEndpoints
             .WithName("RenderModRow")
             .Produces<ModRenderView>();
 
+        // POST /api/sessions/{sessionId}/mods/action  { "handle": "h17", "kind": "press", "value"?: "…", "surface"?: "desktop" }
+        // → { "handled": bool }. A control in a mod's tree was used; the host runs the callback of the mod that drew it.
+        // "handled": false means the handle is unknown or expired (the tree was drawn again): the browser draws it again.
+        drafts.MapPost("/action", async (string sessionId, ModActionRequest request, SessionService sessions, ModRenderService render, CancellationToken ct) =>
+            {
+                var session = await sessions.GetSessionAsync(sessionId);
+                return session.IsFailure ? session.Error.ToSessionApiResult() : (await render.ActAsync(sessionId, request, ct)).ToApiResult();
+            })
+            .WithName("ActOnModControl")
+            .Produces<ModActionView>();
+
         // ── The switch, as the server sees it ────────────────────────────────
         // Not gated: Settings asks while the switch is off, to show what the server would do without a stored choice.
         var features = app.MapGroup("/api/features").WithTags("Mods");
