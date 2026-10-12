@@ -197,6 +197,9 @@ A mod can open its own tab next to Changes and Files in the session's content pa
   `Pane` hooks draw your pane.
 - The pane is a full tree: `Box`, `Text`, `Pill`, `Button`, `Input` and the rest work, and so does `$.state` (a write
   the hook read draws the pane again).
+- Open and close panes from a callback or an event, never from a draw: a `ui.render` hook that calls `$.ui.open` or
+  `$.ui.close` throws. A `$.ui.open` in `session.start` runs again whenever the host restarts, so open panes from a
+  user's press instead.
 - Tabs are not restored after a page reload, and an open sent while no browser shows the session is lost: open panes in
   answer to something the user just did.
 

@@ -186,7 +186,8 @@ Fleet's own drawing of the site (nothing at `ToolUse`, `ComposerBand` and `Statu
 **Panes.** `$.ui.open({ id, title? })` opens a tab in the session the call belongs to, opening the content panel if it is
 closed, and brings it forward; the same id again redraws it in place. A `ui.render` hook with `component: "Pane"` draws it
 and tells panes apart by `e.requestId` (the pane's id). A pane's id belongs to its mod: only the opening mod's `Pane`
-hooks draw it, and two mods may use the same id. `$.ui.close({ id })` closes the tab. A mod may open a pane it never
+hooks draw it, and two mods may use the same id. `$.ui.close({ id })` closes the tab. Open and close panes from a callback or an event, never from a draw: a `ui.render` hook that calls them throws. A
+`$.ui.open` in `session.start` runs again whenever the host restarts, so open panes from a user's press instead. A mod may open a pane it never
 declared; declaring panes in `mod.json` is planned. Tabs are not restored after a page reload, and a `$.ui.open` sent
 while no browser shows the session is lost. The pane's controls (`Button`, `Input`, `Select`) reach the mod like any other.
 

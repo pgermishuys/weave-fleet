@@ -53,6 +53,15 @@ describe("$.state", () => {
     await s.render(["test-ro@v1"], band);
     expect(logs(s)).toEqual(["a ui.render hook can't write $.state"]);
   });
+  test("a ui.render hook can't open or close a pane, and asks Fleet nothing", async () => {
+    const s = setup();
+    await s.load("test-pr", `on("ui.render", async ($, e) => { for (const call of [() => $.ui.open({ id: "b" }), () => $.ui.close({ id: "b" })]) { try { await call(); } catch (err) { $.ui.log(err.message); } } return ${text}; });`);
+    await s.render(["test-pr@v1"], band);
+    const refusal = "a ui.render hook can't open or close a pane; do it from a callback or another hook";
+    expect(logs(s)).toEqual([refusal, refusal]);
+    expect(s.peer.reqs("ui.open")).toEqual([]);
+    expect(s.peer.reqs("ui.close")).toEqual([]);
+  });
   test("the same $ captured by a callback can write after the render hook settled", async () => {
     const s = setup();
     await s.load("test-cb", `on("ui.render", ($, e) => { $.clock.after(10, () => { $.state.set("k", 1); $.ui.log("wrote " + $.state.get("k")); }); return ${text}; });`);
