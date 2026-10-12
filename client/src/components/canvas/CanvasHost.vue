@@ -473,7 +473,14 @@ const activeProps = computed(() => {
               />
               <span class="canvas-picker__label">{{ pane.title }}</span>
               <ModDraftMark v-if="pane.draft" />
-              <span class="canvas-picker__hint">{{ pane.off ? "Off" : openIds.has(modPaneCanvasId(pane.mod, pane.id)) ? "Open" : pane.mod }}</span>
+              <span
+                v-if="pane.off || openIds.has(modPaneCanvasId(pane.mod, pane.id))"
+                class="canvas-picker__hint"
+              >{{ pane.off ? "Off" : "Open" }}</span>
+              <span
+                v-else
+                class="canvas-picker__hint canvas-picker__hint--name"
+              >{{ pane.mod }}</span>
             </DropdownMenuItem>
           </template>
           <template v-if="conversationVisuals.length > 0">
@@ -862,5 +869,13 @@ const activeProps = computed(() => {
   font-size: 11.5px;
   color: var(--muted);
   white-space: nowrap;
+}
+
+/* A mod's name gives way before its pane's title does; "Open" and "Off" don't. */
+.canvas-picker__hint--name {
+  flex-shrink: 1000;
+  min-width: calc(3ch + 12px);
+  overflow: hidden;
+  text-overflow: ellipsis;
 }
 </style>

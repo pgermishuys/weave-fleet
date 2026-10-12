@@ -55,7 +55,8 @@ copied). Claude Code ran on the user's own Claude gateway (the user allowed it; 
 ## Later (priced; nothing here is started)
 
 From the brief (unchanged): dropping a prompt with a notice (~400); `/commands` (~800); composer band + status chip
-wiring (~800); panes + buttons (~1,500); `$.fs` / `$.process` / `$.http` with declared calls (~2,500, needs a security
+wiring (~800); ~~panes + buttons (~1,500)~~ (done 12 October 2026, see "Panes and buttons" below);
+`$.fs` / `$.process` / `$.http` with declared calls (~2,500, needs a security
 review); permission hooks for harnesses the shared path doesn't reach (~600 each; none needed so far); slash commands
 and Pi's first prompt through the prompt hook; the M10 hardening list in the Stage 1 plan.
 
@@ -76,3 +77,48 @@ From the review rounds (each one round, non-blocking):
 - S3 (#521): a failed reject leaves the agent waiting with no card (should fail open and show the ask); Claude Code
   can flash Needs-you for a refused ask; asks wait up to 2 s while the host loads; OpenCode 1 rejects the session's
   other pending asks on any reject; catch-handler denies read "A mod".
+
+## Panes and buttons (12 October 2026)
+
+Built from the brief agreed in the planning session "Canvas Expansion using Fleet mods"
+(`~/.cache/fleet-mod-panes-menu/brief.md`, menu Option A). Three slices, one after another, each live-checked on a
+scratch Fleet and reviewed once before it merged. About 1,630 lines against the ~2,100 budget, about 2.5 h against ~7 h.
+
+| Slice | What's wired | PR | Lines (incl. tests, no PNGs) | Demo |
+|---|---|---|---|---|
+| P1 Buttons for every site | `POST /api/sessions/{id}/mods/action` → `{ handled }`; the client's `modActionSender` is every site's `onAction`; an expired handle answers `handled: false` and the site draws again. Sample: press-counter | #526 | +357 / −8 | Pass |
+| P2 Panes a mod opens | Pane site (render request names `mod`, chain narrowed to it); `$.ui.open`/`close` → `mod.pane`; the session page opens/closes the tab and redraws open panes on `mods.changed`/`mod.ui`; a `ui.render` hook can't open or close a pane (review blocker: render loop). Sample: release-board | #527 | +594 / −26 | Pass |
+| P3 Declared panes in the + menu | `panes` in `mod.json` (max 8; checked by the host); `GET /mods/sites` → `{ sites, panes }`, off mods' panes from the version store; "From mods" group (Draft, Open, Off hints); Off tab with Turn on; phone session menu and sheet; Keep card "Adds" row | #528 | +683 / −53 | Pass |
+
+Screenshots: `mockups/mods-buttons/`, `mockups/mods-panes-open/`, `mockups/mods-panes-menu/`, and the final check in
+`mockups/mods-panes-final/`.
+
+**Final live check (main at `10406034`, install layout, pooled OpenCode, Claude Sonnet 5.5): pass.** Asked plainly for a
+"Deploy checklist" pane with "Mark done" buttons, the agent loaded the fleet-mod skill, wrote `deploy-checklist` with a
+declared pane, fixed a computed `$.state` key the check refused (the skill lists that rule), and asked to keep it. The
+pane was under From mods with a Draft mark, drew, ticked a step on a press, showed Off and "is off" + Turn on, drew
+again after Turn on, and the Keep card said "Adds: A pane in the + menu: Deploy checklist". (The first try's check
+failed only because the scratch HOME had no `.weave/runtimes/bun/use.json`.) Follow-ups in the same PR as this note:
+press-counter and release-board in Settings' sample list, the Mods switch's description says what's wired (it named a
+composer band and a status chip), and a menu row's hint gives way before the pane's title.
+
+### Later (priced where known; nothing here is started)
+
+- Pane tabs come back after a page reload, and a `ui.open` sent while no browser listened is replayed; with real
+  `$.ui.toast` and `$.session.surfaces()`. ~450
+- A kept mod that's off plus an on draft of the same name: the pane is listed twice and its tab sticks on "is off"
+  (the draft should win in `ModRenderService.SitesForAsync`). ~60
+- Safe mode: on mods' panes vanish while off mods' panes stay listed, and their Turn on draws nothing.
+- Two screens on one session (desktop + phone, two tabs) drop each other's handles, so every other press only redraws.
+  A press that lands between a redraw and the new tree is dropped too. `handled: false` doesn't say why.
+- A throwing button callback isn't shown to the user.
+- A Pane draw that calls `$.ui.invalidate` redraws ~10×/s while open (as tool rows do); `$.ui.open` in `session.start`
+  runs again on every host restart; each open pane draws twice on keep/reload; `$.ui.open` titles aren't capped
+  server-side; an off draft's panes aren't validated; drafts list before kept mods in the menu; the phone sheet has no
+  side padding; the pane-renders "newest" map never shrinks; a draft's pane loses its Draft mark while the host reloads.
+- Escape didn't close the + menu under headless Chromium (not checked in a real browser).
+- Turning a draft off and on again forgets its per-session `$.state` (the checklist came back unticked).
+- A long pane title beside the Draft mark and a long mod name still truncates in the 320 px menu ("Deploy checkl…");
+  the tab label truncates too. Consider dropping the mod-name hint on draft rows.
+- Live checks need a scripted tool row: a scratch Fleet can't create a test-harness session with a scenario through
+  the public API (P1/P2 used an uncommitted `Program.cs` patch).
