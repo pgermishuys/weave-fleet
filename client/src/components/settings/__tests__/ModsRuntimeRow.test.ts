@@ -3,6 +3,7 @@ import { createPinia, setActivePinia } from "pinia";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import FeaturesSection from "@/components/settings/FeaturesSection.vue";
 import type { ModsRuntimeJob, ModsRuntimeView } from "@/lib/mods-runtime";
+import { useSettingsNav } from "@/composables/use-settings-nav";
 
 const { getMock, putMock } = vi.hoisted(() => ({ getMock: vi.fn(), putMock: vi.fn() }));
 
@@ -250,17 +251,19 @@ describe("Mods row: turning Mods on", () => {
     expect(panel(wrapper).text()).toContain("~/.weave/runtimes/bun/1.4.2/bun");
   });
 
-  it("4 ready: offers the test-chips sample", async () => {
+  it("4 ready: points to the Showcase in Mods instead of listing the samples", async () => {
     const wrapper = await mountRow(makeView({ bun: installed() }), "true");
 
-    expect(panel(wrapper).find("[data-testid='mods-sample-button']").text()).toBe("Try the test-chips sample");
+    expect(panel(wrapper).find("[data-testid='mods-sample-add']").exists()).toBe(false);
+    await panel(wrapper).get("[data-testid='mods-showcase-link']").trigger("click");
+    expect(useSettingsNav().activeSection.value).toBe("mods");
   });
 
-  it("3 downloading: doesn't offer the sample until Bun is there", async () => {
+  it("3 downloading: doesn't point to the Showcase until Bun is there", async () => {
     const wrapper = await mountRow(makeView({ job: job() }), "true");
 
     expect(stateOf(wrapper)).toBe("progress");
-    expect(wrapper.find("[data-testid='mods-sample-button']").exists()).toBe(false);
+    expect(wrapper.find("[data-testid='mods-showcase-link']").exists()).toBe(false);
   });
 
   it("4 ready: with a Bun from config it says your Bun", async () => {
