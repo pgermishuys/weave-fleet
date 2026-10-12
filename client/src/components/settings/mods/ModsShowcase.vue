@@ -90,8 +90,8 @@ async function add(sample: Sample): Promise<void> {
       Showcase
     </h3>
     <p class="mt-1 text-sm text-muted">
-      Fleet's own sample mods, to see what a mod can do. Add one and it's kept like any mod: on in every session, and
-      you can turn it off or remove it above.
+      Fleet's own sample mods, to see what a mod can do. Add one and it's kept like any mod: on in every session, with
+      its switch in the list above.
     </p>
 
     <div
