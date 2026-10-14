@@ -1125,7 +1125,7 @@ describe("Composer attach any file", () => {
   let fetchMock: ReturnType<typeof vi.fn>;
 
   function logFile(name = "build-output.log"): File {
-    return new File(["line one\nline two\n"], name, { type: "text/plain" });
+    return new File(["line one\nline two\n" + "x".repeat(4096)], name, { type: "text/plain" });
   }
 
   async function attach(wrapper: ReturnType<typeof mountComposer>, file: File): Promise<void> {
@@ -1224,6 +1224,241 @@ describe("Composer attach any file", () => {
 
     expect(wrapper.find("[data-testid='draft-file-chip']").exists()).toBe(false);
     expect(fetchMock).not.toHaveBeenCalled();
+  });
+});
+
+describe("Composer big paste", () => {
+  const harnesses = [
+    { type: "opencode", displayName: "OpenCode", available: true, userEnabled: true, capabilities: { supportsImageAttachments: true } },
+  ];
+  const saved = { path: ".weave/attachments/3f9a2c1d/pasted-text.txt", name: "pasted-text.txt", size: 2048, lines: 40, mime: "text/plain" };
+  const bigText = Array.from({ length: 40 }, (_, i) => `line ${i + 1}`).join("\n");
+  let fetchMock: ReturnType<typeof vi.fn>;
+
+  function promptTexts(): string[] {
+    return (mockApi.POST.mock.calls as unknown as [string, { body?: { text?: string } }][])
+      .filter(([url]) => url === "/api/sessions/{id}/prompt")
+      .map(([, init]) => init.body?.text ?? "");
+  }
+
+  async function mountWith(preferences: Record<string, string>) {
+    usePreferencesStore().preferences = preferences;
+    const wrapper = mountComposer();
+    await flushPromises();
+    return wrapper;
+  }
+
+  async function paste(wrapper: ReturnType<typeof mountComposer>, text: string, files: File[] = []) {
+    await wrapper.get("[data-testid='prompt-input']").trigger("paste", { clipboardData: { files, items: [], getData: () => text } });
+    await flushPromises();
+  }
+
+  async function press(wrapper: ReturnType<typeof mountComposer>, key: string, init: KeyboardEventInit = {}) {
+    const event = new KeyboardEvent("keydown", { key, bubbles: true, cancelable: true, ...init });
+    wrapper.get("[data-testid='prompt-input']").element.dispatchEvent(event);
+    await flushPromises();
+    return event;
+  }
+
+  const textarea = (wrapper: ReturnType<typeof mountComposer>) => wrapper.get("[data-testid='prompt-input']").element as HTMLTextAreaElement;
+  const chips = (wrapper: ReturnType<typeof mountComposer>) => wrapper.findAll("[data-testid='draft-file-chip']");
+
+  beforeEach(() => {
+    mockApi.GET.mockReset();
+    mockApi.POST.mockReset();
+    configureApiFetch();
+    const fallback = mockApi.GET.getMockImplementation() as unknown as (url: string, init?: unknown) => Promise<unknown>;
+    mockApi.GET.mockImplementation((async (url: string, init?: unknown) => {
+      if (url === "/api/harnesses") return { data: harnesses, error: undefined, response: new Response() };
+      return fallback(url, init);
+    }) as never);
+    useDraftState("session-1", { agentId: "", modelId: "" }).resetText();
+    fetchMock = vi.fn(async () => new Response(JSON.stringify(saved), { status: 200, headers: { "Content-Type": "application/json" } }));
+    vi.stubGlobal("fetch", fetchMock);
+  });
+
+  afterEach(() => {
+    useDraftFiles("session-1").clearFiles();
+    vi.unstubAllGlobals();
+  });
+
+  it("offers a bar for a big paste, and Enter attaches it as pasted-text.txt with its line count", async () => {
+    const wrapper = await mountWith({ AttachAnyFile: "true" });
+    await paste(wrapper, bigText);
+
+    expect(wrapper.get("[data-testid='paste-offer']").text()).toContain("40 lines pasted");
+    expect(wrapper.get("[data-testid='paste-offer']").attributes("role")).toBe("group");
+    expect(textarea(wrapper).value).toBe("");
+
+    const event = await press(wrapper, "Enter");
+
+    expect(event.defaultPrevented).toBe(true);
+    expect(wrapper.find("[data-testid='paste-offer']").exists()).toBe(false);
+    expect(chips(wrapper)).toHaveLength(1);
+    expect(chips(wrapper)[0].text()).toContain("pasted-text.txt");
+    expect(chips(wrapper)[0].text()).toContain(`40 lines · ${bigText.length} B`);
+    expect(promptTexts()).toEqual([]);
+  });
+
+  it("says characters when the paste is one long line", async () => {
+    const wrapper = await mountWith({ AttachAnyFile: "true" });
+    await paste(wrapper, "x".repeat(2500));
+
+    expect(wrapper.get("[data-testid='paste-offer']").text()).toContain("2,500 characters pasted");
+  });
+
+  it("pastes as text at the caret on Escape", async () => {
+    const wrapper = await mountWith({ AttachAnyFile: "true" });
+    await wrapper.get("[data-testid='prompt-input']").setValue("before after");
+    textarea(wrapper).setSelectionRange(7, 7);
+    await paste(wrapper, bigText);
+
+    await press(wrapper, "Escape");
+
+    expect(textarea(wrapper).value).toBe(`before ${bigText}after`);
+    expect(textarea(wrapper).selectionStart).toBe(7 + bigText.length);
+    expect(wrapper.find("[data-testid='paste-offer']").exists()).toBe(false);
+    expect(chips(wrapper)).toHaveLength(0);
+  });
+
+  it("pastes as text, then lets the key through, when a letter is typed", async () => {
+    const wrapper = await mountWith({ AttachAnyFile: "true" });
+    await paste(wrapper, bigText);
+
+    const event = await press(wrapper, "a");
+
+    expect(event.defaultPrevented).toBe(false);
+    expect(textarea(wrapper).value).toBe(bigText);
+    expect(wrapper.find("[data-testid='paste-offer']").exists()).toBe(false);
+  });
+
+  it("leaves the offer open for a modifier key", async () => {
+    const wrapper = await mountWith({ AttachAnyFile: "true" });
+    await paste(wrapper, bigText);
+
+    await press(wrapper, "Shift");
+    await press(wrapper, "c", { ctrlKey: true });
+
+    expect(wrapper.find("[data-testid='paste-offer']").exists()).toBe(true);
+  });
+
+  it("switches the choice with Tab, so Enter pastes as text", async () => {
+    const wrapper = await mountWith({ AttachAnyFile: "true" });
+    await paste(wrapper, bigText);
+    expect(wrapper.get("[data-testid='paste-offer-attach']").classes()).toContain("paste-offer__choice--active");
+
+    await press(wrapper, "Tab");
+    expect(wrapper.get("[data-testid='paste-offer-text']").classes()).toContain("paste-offer__choice--active");
+    await press(wrapper, "Tab", { shiftKey: true });
+    expect(wrapper.get("[data-testid='paste-offer-attach']").classes()).toContain("paste-offer__choice--active");
+
+    await press(wrapper, "Tab");
+    await press(wrapper, "Enter");
+
+    expect(textarea(wrapper).value).toBe(bigText);
+    expect(chips(wrapper)).toHaveLength(0);
+  });
+
+  it("takes a click on a button", async () => {
+    const wrapper = await mountWith({ AttachAnyFile: "true" });
+    await paste(wrapper, bigText);
+
+    await wrapper.get("[data-testid='paste-offer-attach']").trigger("click");
+
+    expect(chips(wrapper)).toHaveLength(1);
+  });
+
+  it("replaces an unanswered offer with a second big paste", async () => {
+    const wrapper = await mountWith({ AttachAnyFile: "true" });
+    await paste(wrapper, bigText);
+    await paste(wrapper, "x".repeat(2500));
+
+    expect(wrapper.findAll("[data-testid='paste-offer']")).toHaveLength(1);
+    expect(wrapper.get("[data-testid='paste-offer']").text()).toContain("2,500 characters pasted");
+  });
+
+  it("attaches without asking when set to always attach, and numbers a second file", async () => {
+    const wrapper = await mountWith({ AttachAnyFile: "true", LargePastes: "attach" });
+    await paste(wrapper, bigText);
+    await paste(wrapper, bigText);
+
+    expect(wrapper.find("[data-testid='paste-offer']").exists()).toBe(false);
+    expect(chips(wrapper).map((c) => c.text())).toEqual([
+      expect.stringContaining("pasted-text.txt"),
+      expect.stringContaining("pasted-text-2.txt"),
+    ]);
+  });
+
+  it("leaves a big paste alone when set to paste as text", async () => {
+    const wrapper = await mountWith({ AttachAnyFile: "true", LargePastes: "text" });
+    await paste(wrapper, bigText);
+
+    expect(wrapper.find("[data-testid='paste-offer']").exists()).toBe(false);
+    expect(chips(wrapper)).toHaveLength(0);
+  });
+
+  it("leaves a small paste alone", async () => {
+    const wrapper = await mountWith({ AttachAnyFile: "true" });
+    const event = new Event("paste", { cancelable: true });
+    Object.assign(event, { clipboardData: { files: [], items: [], getData: () => "just a line" } });
+    textarea(wrapper).dispatchEvent(event);
+
+    expect(event.defaultPrevented).toBe(false);
+    expect(wrapper.find("[data-testid='paste-offer']").exists()).toBe(false);
+  });
+
+  it("leaves a big paste alone with the switch off", async () => {
+    const wrapper = await mountWith({});
+    const event = new Event("paste", { cancelable: true });
+    Object.assign(event, { clipboardData: { files: [], items: [], getData: () => bigText } });
+    textarea(wrapper).dispatchEvent(event);
+
+    expect(event.defaultPrevented).toBe(false);
+    expect(wrapper.find("[data-testid='paste-offer']").exists()).toBe(false);
+  });
+
+  it("drops the offer when the prompt is sent", async () => {
+    const wrapper = await mountWith({ AttachAnyFile: "true" });
+    await wrapper.get("[data-testid='prompt-input']").setValue("Look");
+    await paste(wrapper, bigText);
+
+    await wrapper.get("[data-testid='prompt-send-button']").trigger("click");
+    await flushPromises();
+
+    expect(wrapper.find("[data-testid='paste-offer']").exists()).toBe(false);
+  });
+
+  it("puts a small text file in the prompt and uploads a pasted one, however short", async () => {
+    const wrapper = await mountWith({ AttachAnyFile: "true", LargePastes: "attach" });
+    const input = wrapper.get("input[type='file']");
+    Object.defineProperty(input.element, "files", { value: [new File(["a `tick` and ```fence```\n"], "notes.txt", { type: "text/plain" })], configurable: true });
+    await input.trigger("change");
+    await paste(wrapper, bigText);
+    await flushPromises();
+    await wrapper.get("[data-testid='prompt-input']").setValue("Look");
+
+    await wrapper.get("[data-testid='prompt-send-button']").trigger("click");
+    await flushPromises();
+
+    expect(fetchMock).toHaveBeenCalledTimes(1);
+    expect((fetchMock.mock.calls[0] as unknown as [string])[0]).toContain("name=pasted-text.txt");
+    expect(promptTexts()).toEqual([
+      "Look\n\nnotes.txt:\n````\na `tick` and ```fence```\n````\n\nAttached: .weave/attachments/3f9a2c1d/pasted-text.txt (40 lines, 2 KB)\nRead it as needed.",
+    ]);
+  });
+
+  it("uploads a text file of 4 KB or more", async () => {
+    const wrapper = await mountWith({ AttachAnyFile: "true" });
+    const input = wrapper.get("input[type='file']");
+    Object.defineProperty(input.element, "files", { value: [new File(["x".repeat(4096)], "big.log", { type: "text/plain" })], configurable: true });
+    await input.trigger("change");
+    await flushPromises();
+    await wrapper.get("[data-testid='prompt-input']").setValue("Look");
+
+    await wrapper.get("[data-testid='prompt-send-button']").trigger("click");
+    await flushPromises();
+
+    expect(fetchMock).toHaveBeenCalledTimes(1);
   });
 });
 

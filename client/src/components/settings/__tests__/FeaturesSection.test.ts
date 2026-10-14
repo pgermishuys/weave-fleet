@@ -47,6 +47,25 @@ describe("FeaturesSection", () => {
     expect(toggle.attributes("aria-checked")).toBe("true");
   });
 
+  describe("Large pastes", () => {
+    it("shows the row only with Attach any file on, and saves the choice", async () => {
+      const wrapper = await mountSection();
+      expect(wrapper.find("[data-testid='large-pastes-select']").exists()).toBe(false);
+
+      await wrapper.get("[data-testid='attach-any-file-switch']").trigger("click");
+      await flushPromises();
+      const select = wrapper.get("[data-testid='large-pastes-select']");
+      expect((select.element as HTMLSelectElement).value).toBe("ask");
+      expect(wrapper.text()).toContain("A paste of 2,000 characters or 25 lines or more.");
+
+      await select.setValue("attach");
+      await flushPromises();
+
+      expect(putMock).toHaveBeenCalledWith("/api/preferences/{key}", { params: { path: { key: "LargePastes" } }, body: { value: "attach" } });
+      expect((select.element as HTMLSelectElement).value).toBe("attach");
+    });
+  });
+
   describe("Mods", () => {
     const description = "Agents can write small add-ons for Fleet: what a tool row shows, buttons, panes you open from the + menu, and hooks on prompts, turns and permission asks. You review each one before it's kept.";
 
