@@ -7,7 +7,7 @@ import { browseSessionDirectory, readSessionFile } from "@/api/session-files";
 import { useMachineTarget } from "@/lib/machine-target";
 
 /** The session's folder, read-only: folders to walk through, a file's text to read. Editing is for the computer. */
-const props = defineProps<{ open: boolean; sessionId: string }>();
+const props = defineProps<{ open: boolean; sessionId: string; /** A file to show as soon as the sheet opens. */ openPath?: string | null }>();
 const machine = useMachineTarget();
 const emit = defineEmits<{ (event: "close"): void }>();
 
@@ -68,7 +68,14 @@ function goBack(): void {
 
 watch(() => props.open, (open) => {
   file.value = null;
-  if (open) void browse("");
+  if (!open) return;
+  const target = props.openPath;
+  if (!target) {
+    void browse("");
+    return;
+  }
+  const slash = target.lastIndexOf("/");
+  void browse(target.slice(0, Math.max(0, slash))).then(() => read({ name: target.slice(slash + 1), relativePath: target, isDirectory: false }));
 });
 </script>
 

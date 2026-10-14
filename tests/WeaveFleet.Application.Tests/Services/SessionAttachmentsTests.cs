@@ -215,4 +215,110 @@ public sealed class SessionAttachmentsTests : IDisposable
         (await SaveAsync("a.txt", [1])).IsFailure.ShouldBeTrue();
         Directory.GetFileSystemEntries(elsewhere).ShouldBeEmpty();
     }
+
+    private string SessionFolder => Path.Combine(_directory, ".weave", "attachments", "sess-att");
+
+    /// <summary>A file of <paramref name="mb"/> megabytes in the session's folder, without writing them.</summary>
+    private void Fill(int mb)
+    {
+        Directory.CreateDirectory(SessionFolder);
+        using var file = File.Create(Path.Combine(SessionFolder, "old.bin"));
+        file.SetLength(mb * 1024L * 1024);
+    }
+
+    [Fact]
+    public async Task a_content_length_that_would_pass_the_session_limit_refuses_before_any_write()
+    {
+        Fill(95);
+
+        var result = await SaveAsync("a.log", [1], length: 6L * 1024 * 1024);
+
+        result.Error.Description.ShouldBe("This session's attachments would pass 100 MB. Clear some first.");
+        AttachmentFiles().Select(Path.GetFileName).ShouldBe(["old.bin"]);
+    }
+
+    [Fact]
+    public async Task a_stream_that_would_pass_the_session_limit_is_cut_off_and_removed()
+    {
+        Fill(95);
+
+        var result = await SaveAsync("a.log", new byte[6 * 1024 * 1024]);
+
+        result.Error.Description.ShouldBe("This session's attachments would pass 100 MB. Clear some first.");
+        AttachmentFiles().Select(Path.GetFileName).ShouldBe(["old.bin"]);
+    }
+
+    [Fact]
+    public async Task a_file_that_fits_in_what_is_left_is_saved()
+    {
+        Fill(95);
+        (await SaveAsync("a.log", new byte[4 * 1024 * 1024])).IsSuccess.ShouldBeTrue();
+    }
+
+    [Fact]
+    public async Task another_sessions_files_do_not_count()
+    {
+        Fill(99);
+        Seed("sess-two", _directory, "active");
+        (await SaveAsync("a.log", [1, 2], id: "sess-two")).IsSuccess.ShouldBeTrue();
+    }
+
+    [Fact]
+    public async Task deleting_a_sessions_files_leaves_another_sessions_and_the_ignore_file()
+    {
+        Seed("sess-two", _directory, "active");
+        await SaveAsync("a.log", [1]);
+        await SaveAsync("b.log", [1], id: "sess-two");
+
+        SessionAttachments.DeleteFor((await _builder.SessionRepository.GetByIdAsync(SessionId))!).ShouldBeTrue();
+
+        Directory.Exists(SessionFolder).ShouldBeFalse();
+        File.Exists(Path.Combine(_directory, ".weave/attachments/sess-two/b.log")).ShouldBeTrue();
+        File.Exists(Path.Combine(_directory, ".weave/attachments/.gitignore")).ShouldBeTrue();
+    }
+
+    [Fact]
+    public async Task deleting_the_last_sessions_files_removes_the_empty_folders_above()
+    {
+        await SaveAsync("a.log", [1]);
+
+        (await _sut.ClearAsync(SessionId)).IsSuccess.ShouldBeTrue();
+
+        Directory.Exists(Path.Combine(_directory, ".weave")).ShouldBeFalse();
+        Directory.Exists(_directory).ShouldBeTrue();
+    }
+
+    [Fact]
+    public async Task deleting_keeps_a_weave_folder_that_holds_other_things()
+    {
+        await SaveAsync("a.log", [1]);
+        File.WriteAllText(Path.Combine(_directory, ".weave", "config.json"), "{}");
+
+        await _sut.ClearAsync(SessionId);
+
+        Directory.Exists(Path.Combine(_directory, ".weave", "attachments")).ShouldBeFalse();
+        File.Exists(Path.Combine(_directory, ".weave", "config.json")).ShouldBeTrue();
+    }
+
+    [Fact]
+    public async Task clearing_works_for_an_archived_session_and_when_there_is_nothing_to_clear()
+    {
+        Seed("sess-old", _directory, "archived");
+        (await _sut.ClearAsync("sess-old")).IsSuccess.ShouldBeTrue();
+        (await _sut.ClearAsync("nope")).Error.Code.ShouldBe(FleetError.NotFoundFor("Session", "nope").Code);
+    }
+
+    [Fact]
+    public async Task deleting_never_follows_a_linked_folder()
+    {
+        var elsewhere = Path.Combine(_root, "elsewhere");
+        Directory.CreateDirectory(elsewhere);
+        File.WriteAllText(Path.Combine(elsewhere, "keep.txt"), "x");
+        Directory.CreateDirectory(Path.Combine(_directory, ".weave", "attachments"));
+        Directory.CreateSymbolicLink(SessionFolder, elsewhere);
+
+        SessionAttachments.DeleteFor((await _builder.SessionRepository.GetByIdAsync(SessionId))!).ShouldBeFalse();
+
+        File.Exists(Path.Combine(elsewhere, "keep.txt")).ShouldBeTrue();
+    }
 }

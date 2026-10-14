@@ -394,6 +394,7 @@ public static class DependencyInjection
         services.AddScoped<PageBridge>();
         services.AddScoped<WeaveFleet.Application.Walkthroughs.WalkthroughBridge>();
         services.AddHostedService<SideConversationSweeper>();
+        services.AddHostedService<ArchivedAttachmentsCleanupService>();
         services.AddScoped<BrowserPreviews>();
         services.AddScoped<BrowserBridge>();
         services.AddSingleton<IAgentBrowserSteps, AgentBrowserStepStore>();

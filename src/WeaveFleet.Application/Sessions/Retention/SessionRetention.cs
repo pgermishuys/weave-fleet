@@ -6,6 +6,7 @@ using WeaveFleet.Application.DTOs;
 using WeaveFleet.Application.Events;
 using WeaveFleet.Application.Pages;
 using WeaveFleet.Application.Recaps;
+using WeaveFleet.Application.Sessions.Files;
 using WeaveFleet.Application.Terminals;
 using WeaveFleet.Application.Workspaces;
 using WeaveFleet.Domain.Common;
@@ -165,6 +166,19 @@ public sealed partial class SessionRetention(
         }
     }
 
+    /// <summary>Deletes the files attached to the session's prompts. Best effort: it never fails the caller.</summary>
+    private void DeleteAttachments(Session session)
+    {
+        try
+        {
+            SessionAttachments.DeleteFor(session);
+        }
+        catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
+        {
+            LogAttachmentCleanupFailed(ex, session.Id);
+        }
+    }
+
     /// <summary>Brings an archived session back to the active list. Its conversation is intact; the terminals archiving ended stay gone.</summary>
     public async Task<Result<Unit>> UnarchiveSessionAsync(string id, CancellationToken ct = default)
     {
@@ -239,6 +253,8 @@ public sealed partial class SessionRetention(
         // End the session's terminals and apps before its folder goes: a process inside a worktree keeps it open on Windows.
         await EndTerminalsAsync(id, ct);
         await StopAppsAsync(id, ct);
+
+        DeleteAttachments(session);
 
         // Clean up workspace directory (worktree/clone) — best effort, must not block deletion
         try
@@ -452,6 +468,9 @@ public sealed partial class SessionRetention(
 
     [LoggerMessage(Level = LogLevel.Warning, Message = "Failed to delete the screenshots of session {SessionId}")]
     private partial void LogScreenshotCleanupFailed(Exception ex, string sessionId);
+
+    [LoggerMessage(Level = LogLevel.Warning, Message = "Failed to delete the attachments of session {SessionId}")]
+    private partial void LogAttachmentCleanupFailed(Exception ex, string sessionId);
 
     [LoggerMessage(Level = LogLevel.Warning, Message = "Failed to delete the pages of session {SessionId}")]
     private partial void LogPageCleanupFailed(Exception ex, string sessionId);

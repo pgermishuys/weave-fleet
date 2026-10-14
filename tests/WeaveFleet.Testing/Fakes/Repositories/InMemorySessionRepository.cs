@@ -95,6 +95,10 @@ public sealed class InMemorySessionRepository : ISessionRepository
         => Task.FromResult<IReadOnlyList<Session>>([.. _store.Values.Where(s =>
             s.SideOfSessionId is not null && s.SideDiscardedAt is not null && string.CompareOrdinal(s.SideDiscardedAt, cutoff) < 0)]);
 
+    public Task<IReadOnlyList<Session>> ListArchivedBeforeAsync(string cutoff)
+        => Task.FromResult<IReadOnlyList<Session>>([.. _store.Values.Where(s =>
+            s.RetentionStatus == "archived" && s.ArchivedAt is not null && string.CompareOrdinal(s.ArchivedAt, cutoff) < 0)]);
+
     public Task SetSideSeenAnswerAsync(string id, string? answerId)
     {
         if (_store.TryGetValue(id, out var session))

@@ -340,6 +340,7 @@ internal sealed class FakeSessionRepository : ISessionRepository
     public Task<Domain.Entities.Session?> GetDiscardedSideConversationAsync(string sessionId) => throw new NotImplementedException();
     public Task<IReadOnlyList<Domain.Entities.Session>> ListSideConversationsAsync(string sessionId) => throw new NotImplementedException();
     public Task<IReadOnlyList<Domain.Entities.Session>> ListSideConversationsDiscardedBeforeAsync(string cutoff) => throw new NotImplementedException();
+    public Task<IReadOnlyList<Domain.Entities.Session>> ListArchivedBeforeAsync(string cutoff) => throw new NotImplementedException();
     public Task SetSideConversationStateAsync(string id, bool minimized, string? discardedAt) => throw new NotImplementedException();
     public Task SetSideSeenAnswerAsync(string id, string? answerId) => throw new NotImplementedException();
     public Task KeepSideConversationAsync(string id, string workspaceId) => throw new NotImplementedException();
