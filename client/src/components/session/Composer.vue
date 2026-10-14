@@ -31,7 +31,6 @@ import { useDraftAttachments } from "@/composables/use-draft-attachments";
 import { useDraftFiles } from "@/composables/use-draft-files";
 import { uploadSessionAttachment } from "@/api/session-attachments";
 import {
-  ATTACH_ANY_FILE_PREFERENCE_KEY,
   INLINE_MAX_BYTES,
   LARGE_PASTES_PREFERENCE_KEY,
   describeDraftFile,
@@ -128,8 +127,6 @@ const { files: draftFiles, addFile, removeFile, clearFiles } = useDraftFiles(pro
 const machine = useMachineTarget();
 const preferencesStore = usePreferencesStore();
 preferencesStore.ensureLoaded();
-/** The "Attach any file" switch: files that aren't images are held in the draft and uploaded when it's sent. */
-const attachAnyFile = computed(() => preferencesStore.get(ATTACH_ANY_FILE_PREFERENCE_KEY, "false") === "true");
 const isUploading = shallowRef(false);
 const largePastes = computed(() => preferencesStore.get(LARGE_PASTES_PREFERENCE_KEY, "ask") as LargePastes);
 /** A big paste waiting for a choice: the text and where the caret was, so Paste as text goes back there. */
@@ -315,32 +312,21 @@ async function attachDraftFiles(): Promise<boolean> {
 
 
 function handlePaste(event: ClipboardEvent): void {
-  if (attachAnyFile.value) {
-    // Text pastes as text unless it's big; a paste that carries files is taken.
-    const files = Array.from(event.clipboardData?.files ?? []);
-    if (files.length === 0) {
-      handleTextPaste(event);
-      return;
-    }
-    event.preventDefault();
-    addFiles(files);
+  // Text pastes as text unless it's big; a paste that carries files is taken. Spreadsheets and word processors put a
+  // picture of what was copied beside its text: where the harness can't take images, the text is what's meant.
+  const files = Array.from(event.clipboardData?.files ?? []);
+  const onlyUnusableImages = !supportsImages.value && files.every((file) => ALLOWED_IMAGE_MIMES.has(file.type));
+  if (files.length === 0 || (onlyUnusableImages && event.clipboardData?.getData("text/plain"))) {
+    handleTextPaste(event);
     return;
   }
-  // A harness that can't take images: a pasted one stays out of the draft, and text pastes as text.
-  if (!supportsImages.value) return;
-  const items = Array.from(event.clipboardData?.items ?? []);
-  const imageItems = items.filter((item) => item.type.startsWith("image/"));
-  if (imageItems.length === 0) return;
   event.preventDefault();
-  for (const item of imageItems) {
-    const blob = item.getAsFile();
-    if (blob) processImageBlob(blob);
-  }
+  addFiles(files);
 }
 
 function handleDragOver(event: DragEvent): void {
   event.preventDefault();
-  isDragging.value = attachAnyFile.value || supportsImages.value;
+  isDragging.value = true;
 }
 
 function handleDragLeave(): void {
@@ -350,29 +336,12 @@ function handleDragLeave(): void {
 function handleDrop(event: DragEvent): void {
   event.preventDefault();
   isDragging.value = false;
-  if (attachAnyFile.value) {
-    addFiles(Array.from(event.dataTransfer?.files ?? []));
-    return;
-  }
-  if (!supportsImages.value) return;
-  const files = Array.from(event.dataTransfer?.files ?? []);
-  for (const file of files) {
-    if (file.type.startsWith("image/")) {
-      processImageBlob(file);
-    }
-  }
+  addFiles(Array.from(event.dataTransfer?.files ?? []));
 }
 
 function handleFileInput(event: Event): void {
   const input = event.target as HTMLInputElement;
-  const files = Array.from(input.files ?? []);
-  if (attachAnyFile.value) {
-    addFiles(files);
-  } else {
-    for (const file of files) {
-      processImageBlob(file);
-    }
-  }
+  addFiles(Array.from(input.files ?? []));
   input.value = "";
 }
 
@@ -1354,7 +1323,6 @@ function handleKeydown(event: KeyboardEvent): void {
       <input
         ref="fileInput"
         type="file"
-        :accept="attachAnyFile ? undefined : 'image/png,image/jpeg,image/gif,image/webp'"
         multiple
         class="sr-only"
         @change="handleFileInput"
@@ -1387,10 +1355,10 @@ function handleKeydown(event: KeyboardEvent): void {
             <span>btw</span>
           </span>
           <Button
-            v-else-if="supportsImages || attachAnyFile"
+            v-else
             variant="toolbar-icon"
             size="toolbar"
-            :title="attachAnyFile ? 'Attach files' : 'Attach image'"
+            title="Attach files"
             :disabled="isDisabled"
             @click="fileInputRef?.click()"
           >
