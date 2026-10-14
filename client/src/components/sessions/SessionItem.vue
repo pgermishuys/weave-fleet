@@ -16,6 +16,7 @@ import {
   CornerLeftUp,
   FolderOpen,
   GitFork,
+  Paperclip,
   Pencil,
   Pin,
   PinOff,
@@ -68,6 +69,11 @@ import { prState, prWords } from "@/lib/pr-state";
 import { linkNumber, linkPrFacts } from "@/lib/smart-links";
 import { useSmartLinksStore } from "@/stores/smart-links";
 import ConfirmDeleteSessionDialog from "./ConfirmDeleteSessionDialog.vue";
+import ConfirmClearAttachmentsDialog from "./ConfirmClearAttachmentsDialog.vue";
+import { clearSessionAttachments } from "@/api/session-attachments";
+import { ATTACH_ANY_FILE_PREFERENCE_KEY } from "@/lib/attached-files";
+import { useMachineTarget } from "@/lib/machine-target";
+import { usePreferencesStore } from "@/stores/preferences";
 
 interface Props {
   session: SessionListItem;
@@ -117,6 +123,13 @@ const workflowsNav = useWorkflowsNav();
 const isInlineEditing = shallowRef(false);
 const isContextMenuOpen = shallowRef(false);
 const isDeleteDialogOpen = shallowRef(false);
+const machine = useMachineTarget();
+const preferences = usePreferencesStore();
+preferences.ensureLoaded();
+const canClearAttachments = computed(() => preferences.get(ATTACH_ANY_FILE_PREFERENCE_KEY, "false") === "true");
+const isClearDialogOpen = shallowRef(false);
+const isClearing = shallowRef(false);
+const clearError = shallowRef<string | null>(null);
 const isRestoring = shallowRef(false);
 const renameDraft = shallowRef("");
 const initialRenameTitle = shallowRef("");
@@ -568,6 +581,24 @@ function openDeleteDialog(): void {
 
   isContextMenuOpen.value = false;
   isDeleteDialogOpen.value = true;
+}
+
+function openClearDialog(): void {
+  isContextMenuOpen.value = false;
+  clearError.value = null;
+  isClearDialogOpen.value = true;
+}
+
+async function handleClearAttachments(): Promise<void> {
+  isClearing.value = true;
+  try {
+    await clearSessionAttachments(machine, sessionId.value);
+    isClearDialogOpen.value = false;
+  } catch (error) {
+    clearError.value = error instanceof Error ? error.message : "Couldn't clear the attachments.";
+  } finally {
+    isClearing.value = false;
+  }
 }
 
 async function handleDelete(): Promise<void> {
@@ -1028,6 +1059,17 @@ function removeSessionFromStore(): void {
           Copy session ID
         </ContextMenuItem>
 
+        <ContextMenuItem
+          v-if="canClearAttachments"
+          :disabled="isAnyActionPending"
+          hint="Deletes the files you attached to this session's prompts. Fleet asks first."
+          data-testid="session-context-clear-attachments"
+          @select="openClearDialog"
+        >
+          <Paperclip class="size-3.5" />
+          Clear attachments…
+        </ContextMenuItem>
+
         <template v-if="canDelete">
           <ContextMenuSeparator />
 
@@ -1048,6 +1090,14 @@ function removeSessionFromStore(): void {
       </ContextMenuHint>
     </ContextMenuContent>
   </ContextMenu>
+
+  <ConfirmClearAttachmentsDialog
+    v-model:open="isClearDialogOpen"
+    :session-title="displayTitle"
+    :is-clearing="isClearing"
+    :error="clearError"
+    @confirm="handleClearAttachments"
+  />
 
   <ConfirmDeleteSessionDialog
     v-model:open="isDeleteDialogOpen"

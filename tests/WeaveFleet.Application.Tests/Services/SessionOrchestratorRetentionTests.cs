@@ -113,6 +113,31 @@ public sealed class SessionOrchestratorRetentionTests : IAsyncDisposable
     }
 
     [Fact]
+    public async Task deleting_removes_the_sessions_attached_files()
+    {
+        var folder = Path.Combine(Path.GetTempPath(), $"fleet-retain-{Guid.NewGuid():N}");
+        try
+        {
+            var files = Path.Combine(folder, ".weave", "attachments", "sess-ret");
+            Directory.CreateDirectory(files);
+            File.WriteAllText(Path.Combine(files, "a.log"), "x");
+            var session = (await _builder.SessionRepository.GetByIdAsync(SessionId))!;
+            session.Directory = folder;
+            var sut = _builder.Build();
+
+            (await sut.DeleteSessionAsync(SessionId)).IsSuccess.ShouldBeTrue();
+
+            Directory.Exists(Path.Combine(folder, ".weave")).ShouldBeFalse();
+            (await _builder.SessionRepository.GetByIdAsync(SessionId)).ShouldBeNull();
+        }
+        finally
+        {
+            if (Directory.Exists(folder))
+                Directory.Delete(folder, recursive: true);
+        }
+    }
+
+    [Fact]
     public async Task archiving_restoring_or_deleting_a_missing_session_is_not_found()
     {
         var sut = _builder.Build();

@@ -25,3 +25,12 @@ export async function uploadSessionAttachment(
 
   return (await response.json()) as AttachedFile;
 }
+
+/** Delete every file attached to the session's prompts. */
+export async function clearSessionAttachments(machine: MachineTarget, sessionId: string): Promise<void> {
+  const response = await apiFetchOn(machine.connection, `/api/sessions/${encodeURIComponent(sessionId)}/attachments`, { method: "DELETE" });
+  if (!response.ok) {
+    const body = (await response.json().catch(() => null)) as { error?: unknown } | null;
+    throw new Error(typeof body?.error === "string" && body.error ? body.error : `Failed to clear attachments: HTTP ${response.status}`);
+  }
+}

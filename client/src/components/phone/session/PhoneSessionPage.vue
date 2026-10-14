@@ -12,6 +12,7 @@ import PhoneMarkdown from "@/components/phone/session/PhoneMarkdown.vue";
 import PhonePlanBar from "@/components/phone/session/PhonePlanBar.vue";
 import PhoneSessionHeader from "@/components/phone/session/PhoneSessionHeader.vue";
 import ChangesSheet from "@/components/phone/session/ChangesSheet.vue";
+import { fileExtensionLabel, parseAttachedNote } from "@/lib/attached-files";
 import FilesSheet from "@/components/phone/session/FilesSheet.vue";
 import OpenOnComputerCard from "@/components/phone/session/OpenOnComputerCard.vue";
 import PlanSheet from "@/components/phone/session/PlanSheet.vue";
@@ -277,6 +278,18 @@ watch(() => openPaneId.value !== null && modPanes.get(openPaneId.value) === unde
   if (gone && sheet.value === "pane") sheet.value = null;
 });
 
+/** A file chip on one of your messages opens that file in the Files sheet. */
+const attachedFilePath = shallowRef<string | null>(null);
+function openAttachedFile(path: string): void {
+  attachedFilePath.value = path;
+  sheet.value = "files";
+}
+
+/** What you typed and the files its trailing note names (see `parseAttachedNote`). */
+function userBody(text: string): ReturnType<typeof parseAttachedNote> {
+  return parseAttachedNote(text);
+}
+
 async function onMenu(action: MenuAction): Promise<void> {
   switch (action) {
     case "changes":
@@ -289,6 +302,9 @@ async function onMenu(action: MenuAction): Promise<void> {
       sheet.value = action;
       break;
     case "files":
+      attachedFilePath.value = null;
+      sheet.value = action;
+      break;
     case "side":
       sheet.value = action;
       break;
@@ -440,11 +456,29 @@ onUnmounted(() => {
             />
             <template v-if="block.kind === 'user'">
               <p
+                v-if="userBody(block.text).text || !userBody(block.text).files.length"
                 class="ph-umsg"
                 data-testid="phone-user-message"
               >
-                {{ block.text }}
+                {{ userBody(block.text).text }}
               </p>
+              <div
+                v-if="userBody(block.text).files.length"
+                class="ph-ufiles"
+                data-testid="phone-user-files"
+              >
+                <button
+                  v-for="file in userBody(block.text).files"
+                  :key="file.path"
+                  type="button"
+                  class="ph-ufile"
+                  @click="openAttachedFile(file.path)"
+                >
+                  <span class="ph-ufile__ext">{{ fileExtensionLabel(file.name) }}</span>
+                  <span class="ph-ufile__name">{{ file.name }}</span>
+                  <span class="ph-ufile__details">{{ file.details }}</span>
+                </button>
+              </div>
               <span
                 v-if="block.steered || block.images"
                 class="ph-umsg-meta"
@@ -619,6 +653,7 @@ onUnmounted(() => {
     />
     <FilesSheet
       :open="sheet === 'files'"
+      :open-path="attachedFilePath"
       :session-id="sessionId"
       @close="sheet = null"
     />

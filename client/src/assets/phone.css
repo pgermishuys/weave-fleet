@@ -1085,6 +1085,50 @@ html[data-phone]:not([data-phone-scheme="light"]) .ph-btn--primary.is-pressed {
   overflow-wrap: anywhere;
 }
 
+/* Files you attached to a message: a chip each, under the bubble */
+.ph-ufiles {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+  gap: 6px;
+  max-width: 84%;
+  align-self: flex-end;
+}
+
+.ph-ufile {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  min-height: 36px;
+  max-width: 100%;
+  padding: 4px 10px;
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  background: var(--ph-tint-5);
+  color: var(--text);
+  font-size: var(--ph-t-cap);
+}
+
+.ph-ufile__ext {
+  padding: 0 4px;
+  border: 1px solid var(--border);
+  border-radius: 3px;
+  font-family: var(--font-mono, monospace);
+  font-size: 9px;
+  color: var(--muted);
+}
+
+.ph-ufile__name {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.ph-ufile__details {
+  color: var(--muted);
+}
+
 .ph-umsg-meta {
   display: inline-flex;
   align-items: center;

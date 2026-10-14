@@ -1056,6 +1056,16 @@ public static class SessionEndpoints
         .Produces(404)
         .WithName("UploadSessionAttachment");
 
+        // DELETE /api/sessions/{id}/attachments — removes the files attached to the session's prompts, archived or not.
+        group.MapDelete("/{id}/attachments", async (string id, SessionAttachments attachments) =>
+        {
+            var result = await attachments.ClearAsync(id);
+            return result.Match(_ => Results.NoContent(), err => err.ToSessionApiResult());
+        })
+        .Produces(204)
+        .Produces(404)
+        .WithName("ClearSessionAttachments");
+
         // PUT /api/sessions/{id}/files/content — save a file from the editor. 409 when the file changed since it was read.
         group.MapPut("/{id}/files/content", async (string id, WriteSessionFileRequest req, SessionFiles sessionFiles, CancellationToken ct) =>
         {

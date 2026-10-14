@@ -173,6 +173,16 @@ public sealed class SessionRepository(
             ReadSession);
     }
 
+    public async Task<IReadOnlyList<Session>> ListArchivedBeforeAsync(string cutoff)
+    {
+        // Every owner's: the cleanup that reads them runs outside any request.
+        using var conn = connectionFactory.CreateConnection();
+        return await conn.QueryAsync(
+            "SELECT * FROM sessions WHERE retention_status = 'archived' AND archived_at IS NOT NULL AND archived_at < @Cutoff",
+            cmd => cmd.AddParameter("Cutoff", cutoff),
+            ReadSession);
+    }
+
     public async Task SetSideSeenAnswerAsync(string id, string? answerId)
     {
         using var conn = connectionFactory.CreateConnection();

@@ -141,6 +141,20 @@ public sealed class SessionFileBrowserEndpointTests : IAsyncDisposable
     }
 
     [Fact]
+    public async Task clearing_attachments_answers_204_deletes_the_files_and_is_not_found_for_an_unknown_session()
+    {
+        var createResponse = await _client.PostAsJsonAsync("/api/sessions", new { directory = _tempDirectory.Path, title = "Attach" });
+        var sessionId = (await createResponse.Content.ReadFromJsonAsync<CreateSessionApiResponse>())!.Session.Id;
+        await _client.PostAsync($"/api/sessions/{sessionId}/attachments?name=a.log", new ByteArrayContent([1]));
+
+        var cleared = await _client.DeleteAsync($"/api/sessions/{sessionId}/attachments");
+
+        cleared.StatusCode.ShouldBe(HttpStatusCode.NoContent);
+        Directory.Exists(Path.Combine(_tempDirectory.Path, ".weave")).ShouldBeFalse();
+        (await _client.DeleteAsync("/api/sessions/nope/attachments")).StatusCode.ShouldBe(HttpStatusCode.NotFound);
+    }
+
+    [Fact]
     public async Task content_endpoint_returns_400_when_path_is_missing()
     {
         // Arrange: create a session

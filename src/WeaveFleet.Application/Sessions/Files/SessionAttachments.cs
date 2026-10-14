@@ -3,6 +3,7 @@ using System.Globalization;
 using System.Text.Unicode;
 using Microsoft.Extensions.Logging;
 using WeaveFleet.Domain.Common;
+using WeaveFleet.Domain.Entities;
 using WeaveFleet.Domain.Repositories;
 
 namespace WeaveFleet.Application.Sessions.Files;
@@ -19,6 +20,7 @@ public sealed record SessionAttachment(string Path, string Name, long Size, int?
 public sealed class SessionAttachments(ISessionRepository sessionRepository, ILogger<SessionAttachments> logger)
 {
     public const long MaxBytes = 25L * 1024 * 1024;
+    public const long MaxSessionBytes = 100L * 1024 * 1024;
     private const int MaxNameLength = 100;
     private const int BinarySniffBytes = 8 * 1024;
     private const string Folder = ".weave/attachments";
@@ -49,7 +51,7 @@ public sealed class SessionAttachments(ISessionRepository sessionRepository, ILo
         if (contentLength > MaxBytes)
             return TooBig(name, contentLength.Value);
 
-        var key = new string(session.Id.Where(c => char.IsAsciiLetterOrDigit(c) || c is '_' or '-').Take(8).ToArray());
+        var key = Key(session);
         var weave = Path.Combine(session.Directory, ".weave");
         var root = Path.Combine(weave, "attachments");
         var folder = Path.Combine(root, key);
@@ -58,6 +60,12 @@ public sealed class SessionAttachments(ISessionRepository sessionRepository, ILo
         Directory.CreateDirectory(folder);
         if (AnyLink(weave, root, folder))
             return LinkError();
+
+        // What the session's folder may still take: a file is cut off at the smaller of the file limit and this.
+        var left = Math.Max(0, MaxSessionBytes - FolderBytes(folder));
+        if (contentLength > left)
+            return SessionFull();
+        var cap = Math.Min(MaxBytes, left);
 
         // The folder ignores itself, so git never sees an attachment.
         var ignore = Path.Combine(root, ".gitignore");
@@ -79,7 +87,7 @@ public sealed class SessionAttachments(ISessionRepository sessionRepository, ILo
                 int read;
                 while ((read = await content.ReadAsync(buffer, ct).ConfigureAwait(false)) > 0)
                 {
-                    if (size + read > MaxBytes)
+                    if (size + read > cap)
                     {
                         size += read;
                         tooBig = true;
@@ -109,7 +117,7 @@ public sealed class SessionAttachments(ISessionRepository sessionRepository, ILo
         if (tooBig)
         {
             TryDelete(Path.Combine(folder, fileName));
-            return TooBig(name, size);
+            return cap < MaxBytes ? SessionFull() : TooBig(name, size);
         }
 
         var binary = IsBinary(sniff.AsSpan(0, sniffed), complete: size == sniffed);
@@ -117,6 +125,49 @@ public sealed class SessionAttachments(ISessionRepository sessionRepository, ILo
         var mime = string.IsNullOrWhiteSpace(contentType) ? "application/octet-stream" : contentType;
         return new SessionAttachment($"{Folder}/{key}/{fileName}", name, size, lines, mime);
     }
+
+    /// <summary>Deletes every attachment of a session, for the Clear button.</summary>
+    public async Task<Result<Unit>> ClearAsync(string sessionId)
+    {
+        var sessionResult = await sessionRepository.GetSessionAsync(sessionId);
+        if (sessionResult.IsFailure)
+            return sessionResult.Error;
+        DeleteFor(sessionResult.Value);
+        return Unit.Value;
+    }
+
+    /// <summary>
+    /// Deletes the session's attachment folder, then <c>.weave/attachments</c> if only its <c>.gitignore</c> is left, then
+    /// <c>.weave</c> if that leaves it empty. Does nothing when one of those folders is a link. Returns whether anything went.
+    /// </summary>
+    public static bool DeleteFor(Session session)
+    {
+        if (string.IsNullOrWhiteSpace(session.Directory))
+            return false;
+        var weave = Path.Combine(session.Directory, ".weave");
+        var root = Path.Combine(weave, "attachments");
+        var folder = Path.Combine(root, Key(session));
+        if (!Directory.Exists(folder) || AnyLink(weave, root, folder))
+            return false;
+
+        Directory.Delete(folder, recursive: true);
+        var ignore = Path.Combine(root, ".gitignore");
+        if (Directory.EnumerateFileSystemEntries(root).All(e => e == ignore))
+        {
+            File.Delete(ignore);
+            Directory.Delete(root);
+            if (!Directory.EnumerateFileSystemEntries(weave).Any())
+                Directory.Delete(weave);
+        }
+
+        return true;
+    }
+
+    private static string Key(Session session) =>
+        new(session.Id.Where(c => char.IsAsciiLetterOrDigit(c) || c is '_' or '-').Take(8).ToArray());
+
+    private static long FolderBytes(string folder) =>
+        new DirectoryInfo(folder).EnumerateFiles().Sum(f => f.Length);
 
     /// <summary>Letters, digits, dot, dash and underscore; no leading dot; at most 100 characters, the extension kept.</summary>
     internal static string? SanitizeName(string? name)
@@ -177,6 +228,9 @@ public sealed class SessionAttachments(ISessionRepository sessionRepository, ILo
         try { File.Delete(path); }
         catch (IOException) { }
     }
+
+    private static Result<SessionAttachment> SessionFull() =>
+        FleetError.ValidationError("Attachment.Size", "This session's attachments would pass 100 MB. Clear some first.");
 
     private static Result<SessionAttachment> TooBig(string name, long bytes)
     {
