@@ -71,9 +71,7 @@ import { useSmartLinksStore } from "@/stores/smart-links";
 import ConfirmDeleteSessionDialog from "./ConfirmDeleteSessionDialog.vue";
 import ConfirmClearAttachmentsDialog from "./ConfirmClearAttachmentsDialog.vue";
 import { clearSessionAttachments } from "@/api/session-attachments";
-import { ATTACH_ANY_FILE_PREFERENCE_KEY } from "@/lib/attached-files";
 import { useMachineTarget } from "@/lib/machine-target";
-import { usePreferencesStore } from "@/stores/preferences";
 
 interface Props {
   session: SessionListItem;
@@ -124,9 +122,6 @@ const isInlineEditing = shallowRef(false);
 const isContextMenuOpen = shallowRef(false);
 const isDeleteDialogOpen = shallowRef(false);
 const machine = useMachineTarget();
-const preferences = usePreferencesStore();
-preferences.ensureLoaded();
-const canClearAttachments = computed(() => preferences.get(ATTACH_ANY_FILE_PREFERENCE_KEY, "false") === "true");
 const isClearDialogOpen = shallowRef(false);
 const isClearing = shallowRef(false);
 const clearError = shallowRef<string | null>(null);
@@ -1060,7 +1055,6 @@ function removeSessionFromStore(): void {
         </ContextMenuItem>
 
         <ContextMenuItem
-          v-if="canClearAttachments"
           :disabled="isAnyActionPending"
           hint="Deletes the files you attached to this session's prompts. Fleet asks first."
           data-testid="session-context-clear-attachments"

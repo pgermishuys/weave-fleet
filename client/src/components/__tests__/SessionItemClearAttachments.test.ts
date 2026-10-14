@@ -7,7 +7,6 @@ vi.mock("@tanstack/vue-router", () => ({ useRouter: () => ({ navigate: vi.fn() }
 
 import SessionItem from "@/components/sessions/SessionItem.vue";
 import type { SessionListItem } from "@/api/client";
-import { usePreferencesStore } from "@/stores/preferences";
 
 const stubs = {
   ContextMenu: { template: "<div><slot /></div>" },
@@ -65,14 +64,10 @@ describe("SessionItem: Clear attachments…", () => {
 
   beforeEach(() => {
     clearSessionAttachments.mockReset();
-    const preferences = usePreferencesStore();
-    preferences.hasFetched = true;
-    preferences.preferences = { AttachAnyFile: "true" };
   });
 
-  it("isn't in the menu with the Attach any file switch off", () => {
-    usePreferencesStore().preferences = {};
-    expect(item().find(entry).exists()).toBe(false);
+  it("is in the menu", () => {
+    expect(item().find(entry).exists()).toBe(true);
   });
 
   it("asks first, then clears the session's attachments, archived or not", async () => {

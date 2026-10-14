@@ -1106,14 +1106,33 @@ describe("Composer images", () => {
     }) as never);
   });
 
-  it("offers Attach image only where the harness passes images on", async () => {
+  it("offers Attach files on every harness, but refuses an image where the harness can't take one", async () => {
     const takes = mountComposer({ session: createSession({ harnessType: "opencode" }) });
     await flushPromises();
-    expect(takes.find("button[title='Attach image']").exists()).toBe(true);
+    expect(takes.find("button[title='Attach files']").exists()).toBe(true);
 
     const drops = mountComposer({ session: createSession({ harnessType: "pi" }) });
     await flushPromises();
-    expect(drops.find("button[title='Attach image']").exists()).toBe(false);
+    expect(drops.find("button[title='Attach files']").exists()).toBe(true);
+
+    const input = drops.get("input[type='file']");
+    Object.defineProperty(input.element, "files", { value: [new File(["x"], "shot.png", { type: "image/png" })], configurable: true });
+    await input.trigger("change");
+    await flushPromises();
+    expect(drops.text()).toContain("This session's harness can't take images.");
+  });
+
+  it("pastes the text of a spreadsheet copy, not its picture, where the harness can't take images", async () => {
+    const wrapper = mountComposer({ session: createSession({ harnessType: "pi" }) });
+    await flushPromises();
+    const event = new Event("paste", { cancelable: true });
+    const picture = new File(["x"], "cells.png", { type: "image/png" });
+    Object.assign(event, { clipboardData: { files: [picture], items: [], getData: () => "ch_10432\t30s" } });
+    wrapper.get("[data-testid='prompt-input']").element.dispatchEvent(event);
+    await flushPromises();
+
+    expect(event.defaultPrevented).toBe(false);
+    expect(wrapper.text()).not.toContain("can't take images");
   });
 });
 
@@ -1160,12 +1179,7 @@ describe("Composer attach any file", () => {
     vi.unstubAllGlobals();
   });
 
-  function withSwitch(on: boolean): void {
-    usePreferencesStore().preferences = on ? { AttachAnyFile: "true" } : {};
-  }
-
   it("holds a non-image file as a chip, uploads it on send and ends the prompt with the note", async () => {
-    withSwitch(true);
     const wrapper = mountComposer();
     await flushPromises();
     expect(wrapper.find("button[title='Attach files']").exists()).toBe(true);
@@ -1187,7 +1201,6 @@ describe("Composer attach any file", () => {
   });
 
   it("keeps the draft and sends nothing when an upload fails", async () => {
-    withSwitch(true);
     fetchMock.mockImplementation(async () => new Response(JSON.stringify({ error: "dump.zip is 61 MB. The limit is 25 MB." }), { status: 400 }));
     const wrapper = mountComposer();
     await flushPromises();
@@ -1204,7 +1217,6 @@ describe("Composer attach any file", () => {
   });
 
   it("refuses a file over 25 MB", async () => {
-    withSwitch(true);
     const wrapper = mountComposer();
     await flushPromises();
 
@@ -1212,18 +1224,6 @@ describe("Composer attach any file", () => {
 
     expect(wrapper.text()).toContain("dump.zip is 26 MB. The limit is 25 MB.");
     expect(wrapper.find("[data-testid='draft-file-chip']").exists()).toBe(false);
-  });
-
-  it("ignores a non-image file with the switch off", async () => {
-    withSwitch(false);
-    const wrapper = mountComposer();
-    await flushPromises();
-    expect(wrapper.find("button[title='Attach image']").exists()).toBe(true);
-
-    await attach(wrapper, logFile());
-
-    expect(wrapper.find("[data-testid='draft-file-chip']").exists()).toBe(false);
-    expect(fetchMock).not.toHaveBeenCalled();
   });
 });
 
@@ -1283,7 +1283,7 @@ describe("Composer big paste", () => {
   });
 
   it("offers a bar for a big paste, and Enter attaches it as pasted-text.txt with its line count", async () => {
-    const wrapper = await mountWith({ AttachAnyFile: "true" });
+    const wrapper = await mountWith({});
     await paste(wrapper, bigText);
 
     expect(wrapper.get("[data-testid='paste-offer']").text()).toContain("40 lines pasted");
@@ -1301,14 +1301,14 @@ describe("Composer big paste", () => {
   });
 
   it("says characters when the paste is one long line", async () => {
-    const wrapper = await mountWith({ AttachAnyFile: "true" });
+    const wrapper = await mountWith({});
     await paste(wrapper, "x".repeat(2500));
 
     expect(wrapper.get("[data-testid='paste-offer']").text()).toContain("2,500 characters pasted");
   });
 
   it("pastes as text at the caret on Escape", async () => {
-    const wrapper = await mountWith({ AttachAnyFile: "true" });
+    const wrapper = await mountWith({});
     await wrapper.get("[data-testid='prompt-input']").setValue("before after");
     textarea(wrapper).setSelectionRange(7, 7);
     await paste(wrapper, bigText);
@@ -1322,7 +1322,7 @@ describe("Composer big paste", () => {
   });
 
   it("pastes as text, then lets the key through, when a letter is typed", async () => {
-    const wrapper = await mountWith({ AttachAnyFile: "true" });
+    const wrapper = await mountWith({});
     await paste(wrapper, bigText);
 
     const event = await press(wrapper, "a");
@@ -1333,7 +1333,7 @@ describe("Composer big paste", () => {
   });
 
   it("leaves the offer open for a modifier key", async () => {
-    const wrapper = await mountWith({ AttachAnyFile: "true" });
+    const wrapper = await mountWith({});
     await paste(wrapper, bigText);
 
     await press(wrapper, "Shift");
@@ -1343,7 +1343,7 @@ describe("Composer big paste", () => {
   });
 
   it("switches the choice with Tab, so Enter pastes as text", async () => {
-    const wrapper = await mountWith({ AttachAnyFile: "true" });
+    const wrapper = await mountWith({});
     await paste(wrapper, bigText);
     expect(wrapper.get("[data-testid='paste-offer-attach']").classes()).toContain("paste-offer__choice--active");
 
@@ -1360,7 +1360,7 @@ describe("Composer big paste", () => {
   });
 
   it("takes a click on a button", async () => {
-    const wrapper = await mountWith({ AttachAnyFile: "true" });
+    const wrapper = await mountWith({});
     await paste(wrapper, bigText);
 
     await wrapper.get("[data-testid='paste-offer-attach']").trigger("click");
@@ -1369,7 +1369,7 @@ describe("Composer big paste", () => {
   });
 
   it("replaces an unanswered offer with a second big paste", async () => {
-    const wrapper = await mountWith({ AttachAnyFile: "true" });
+    const wrapper = await mountWith({});
     await paste(wrapper, bigText);
     await paste(wrapper, "x".repeat(2500));
 
@@ -1378,7 +1378,7 @@ describe("Composer big paste", () => {
   });
 
   it("attaches without asking when set to always attach, and numbers a second file", async () => {
-    const wrapper = await mountWith({ AttachAnyFile: "true", LargePastes: "attach" });
+    const wrapper = await mountWith({ LargePastes: "attach" });
     await paste(wrapper, bigText);
     await paste(wrapper, bigText);
 
@@ -1390,7 +1390,7 @@ describe("Composer big paste", () => {
   });
 
   it("leaves a big paste alone when set to paste as text", async () => {
-    const wrapper = await mountWith({ AttachAnyFile: "true", LargePastes: "text" });
+    const wrapper = await mountWith({ LargePastes: "text" });
     await paste(wrapper, bigText);
 
     expect(wrapper.find("[data-testid='paste-offer']").exists()).toBe(false);
@@ -1398,7 +1398,7 @@ describe("Composer big paste", () => {
   });
 
   it("leaves a small paste alone", async () => {
-    const wrapper = await mountWith({ AttachAnyFile: "true" });
+    const wrapper = await mountWith({});
     const event = new Event("paste", { cancelable: true });
     Object.assign(event, { clipboardData: { files: [], items: [], getData: () => "just a line" } });
     textarea(wrapper).dispatchEvent(event);
@@ -1407,18 +1407,8 @@ describe("Composer big paste", () => {
     expect(wrapper.find("[data-testid='paste-offer']").exists()).toBe(false);
   });
 
-  it("leaves a big paste alone with the switch off", async () => {
-    const wrapper = await mountWith({});
-    const event = new Event("paste", { cancelable: true });
-    Object.assign(event, { clipboardData: { files: [], items: [], getData: () => bigText } });
-    textarea(wrapper).dispatchEvent(event);
-
-    expect(event.defaultPrevented).toBe(false);
-    expect(wrapper.find("[data-testid='paste-offer']").exists()).toBe(false);
-  });
-
   it("drops the offer when the prompt is sent", async () => {
-    const wrapper = await mountWith({ AttachAnyFile: "true" });
+    const wrapper = await mountWith({});
     await wrapper.get("[data-testid='prompt-input']").setValue("Look");
     await paste(wrapper, bigText);
 
@@ -1429,7 +1419,7 @@ describe("Composer big paste", () => {
   });
 
   it("puts a small text file in the prompt and uploads a pasted one, however short", async () => {
-    const wrapper = await mountWith({ AttachAnyFile: "true", LargePastes: "attach" });
+    const wrapper = await mountWith({ LargePastes: "attach" });
     const input = wrapper.get("input[type='file']");
     Object.defineProperty(input.element, "files", { value: [new File(["a `tick` and ```fence```\n"], "notes.txt", { type: "text/plain" })], configurable: true });
     await input.trigger("change");
@@ -1448,7 +1438,7 @@ describe("Composer big paste", () => {
   });
 
   it("uploads a text file of 4 KB or more", async () => {
-    const wrapper = await mountWith({ AttachAnyFile: "true" });
+    const wrapper = await mountWith({});
     const input = wrapper.get("input[type='file']");
     Object.defineProperty(input.element, "files", { value: [new File(["x".repeat(4096)], "big.log", { type: "text/plain" })], configurable: true });
     await input.trigger("change");

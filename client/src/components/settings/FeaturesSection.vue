@@ -7,7 +7,7 @@ import { SESSION_RECAP_PREFERENCE_KEY } from "@/composables/use-session-recap";
 import { RETRY_AFTER_LIMITS_PREFERENCE_KEY } from "@/composables/use-session-retry";
 import { MODS_PREFERENCE_KEY } from "@/lib/mods";
 import { SESSION_MESSAGES_PREFERENCE_KEY } from "@/lib/session-messages";
-import { ATTACH_ANY_FILE_PREFERENCE_KEY, LARGE_PASTES_PREFERENCE_KEY } from "@/lib/attached-files";
+import { LARGE_PASTES_PREFERENCE_KEY } from "@/lib/attached-files";
 import { AGENT_HANDOFF_PREFERENCE_KEY, LIVE_MACHINES_PREFERENCE_KEY } from "@/lib/machines";
 import {
   DESKTOP_NOTIFICATIONS_PREFERENCE_KEY,
@@ -99,20 +99,6 @@ async function toggleSessionMessages(): Promise<void> {
     await preferencesStore.set(SESSION_MESSAGES_PREFERENCE_KEY, isSessionMessagesEnabled.value ? "false" : "true");
   } finally {
     isSavingSessionMessages.value = false;
-  }
-}
-
-const isAttachAnyFileEnabled = computed(
-  () => preferencesStore.get(ATTACH_ANY_FILE_PREFERENCE_KEY, "false") === "true",
-);
-const isSavingAttachAnyFile = shallowRef(false);
-
-async function toggleAttachAnyFile(): Promise<void> {
-  isSavingAttachAnyFile.value = true;
-  try {
-    await preferencesStore.set(ATTACH_ANY_FILE_PREFERENCE_KEY, isAttachAnyFileEnabled.value ? "false" : "true");
-  } finally {
-    isSavingAttachAnyFile.value = false;
   }
 }
 
@@ -341,6 +327,34 @@ async function toggleBoardFeature(): Promise<void> {
     <div class="mt-3 flex items-start justify-between gap-4 rounded-card border border-border bg-main-bg p-4">
       <div>
         <p class="text-sm font-medium text-text">
+          Large pastes
+        </p>
+        <p class="mt-1 text-xs text-muted">
+          When you paste 2,000 characters or 25 lines or more.
+        </p>
+      </div>
+      <select
+        :value="largePastes"
+        aria-label="Large pastes"
+        data-testid="large-pastes-select"
+        class="rounded-md border border-border bg-transparent px-2 py-1 text-sm text-text outline-none"
+        @change="setLargePastes"
+      >
+        <option value="ask">
+          Ask
+        </option>
+        <option value="attach">
+          Always attach
+        </option>
+        <option value="text">
+          Paste as text
+        </option>
+      </select>
+    </div>
+
+    <div class="mt-3 flex items-start justify-between gap-4 rounded-card border border-border bg-main-bg p-4">
+      <div>
+        <p class="text-sm font-medium text-text">
           Desktop notifications
         </p>
         <p class="mt-1 text-xs text-muted">
@@ -426,78 +440,6 @@ async function toggleBoardFeature(): Promise<void> {
             :class="isSessionMessagesEnabled ? 'translate-x-5' : 'translate-x-0'"
           />
         </button>
-      </div>
-    </div>
-
-    <div class="mt-3 rounded-card border border-border bg-main-bg p-4">
-      <div class="flex items-start justify-between gap-4">
-        <div>
-          <p class="flex items-center gap-2 text-sm font-medium text-text">
-            Attach any file
-            <span class="rounded-full border border-border px-2 py-px text-[0.7rem] font-medium uppercase tracking-wide text-muted">
-              Experimental
-            </span>
-          </p>
-          <p class="mt-1 text-xs text-muted">
-            Attach logs, PDFs and other files, not just images. Fleet saves them in the session's folder and tells the agent where they are.
-          </p>
-        </div>
-
-        <div class="flex items-center gap-2">
-          <LoaderCircle
-            v-if="isSavingAttachAnyFile"
-            :size="16"
-            class="animate-spin text-muted"
-            aria-hidden="true"
-          />
-          <button
-            type="button"
-            role="switch"
-            :aria-checked="isAttachAnyFileEnabled"
-            :disabled="preferencesStore.isLoading || isSavingAttachAnyFile"
-            aria-label="Enable attach any file"
-            data-testid="attach-any-file-switch"
-            class="relative inline-flex h-6 w-11 shrink-0 cursor-pointer rounded-full border-2 border-transparent transition-colors duration-200 ease-in-out focus:outline-none focus:ring-2 focus:ring-accent focus:ring-offset-2 focus:ring-offset-main-bg disabled:cursor-not-allowed disabled:opacity-60"
-            :class="isAttachAnyFileEnabled ? 'bg-accent' : 'bg-border'"
-            @click="toggleAttachAnyFile"
-          >
-            <span
-              class="pointer-events-none inline-block h-5 w-5 rounded-full bg-white shadow ring-0 transition duration-200 ease-in-out"
-              :class="isAttachAnyFileEnabled ? 'translate-x-5' : 'translate-x-0'"
-            />
-          </button>
-        </div>
-      </div>
-
-      <div
-        v-if="isAttachAnyFileEnabled"
-        class="mt-3 flex items-center justify-between gap-4 border-t border-border pt-3"
-      >
-        <div>
-          <p class="text-sm text-text">
-            Large pastes
-          </p>
-          <p class="mt-1 text-xs text-muted">
-            A paste of 2,000 characters or 25 lines or more.
-          </p>
-        </div>
-        <select
-          :value="largePastes"
-          aria-label="Large pastes"
-          data-testid="large-pastes-select"
-          class="rounded-md border border-border bg-transparent px-2 py-1 text-sm text-text outline-none"
-          @change="setLargePastes"
-        >
-          <option value="ask">
-            Ask
-          </option>
-          <option value="attach">
-            Always attach
-          </option>
-          <option value="text">
-            Paste as text
-          </option>
-        </select>
       </div>
     </div>
 

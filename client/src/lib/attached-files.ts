@@ -1,6 +1,3 @@
-/** The user preference behind the switch in Settings → Features. */
-export const ATTACH_ANY_FILE_PREFERENCE_KEY = "AttachAnyFile";
-
 /** What a big paste does: "ask" shows the bar, "attach" makes a file, "text" pastes as usual. */
 export const LARGE_PASTES_PREFERENCE_KEY = "LargePastes";
 export type LargePastes = "ask" | "attach" | "text";

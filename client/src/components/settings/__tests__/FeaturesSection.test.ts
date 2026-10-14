@@ -48,15 +48,11 @@ describe("FeaturesSection", () => {
   });
 
   describe("Large pastes", () => {
-    it("shows the row only with Attach any file on, and saves the choice", async () => {
+    it("always shows, and saves the choice", async () => {
       const wrapper = await mountSection();
-      expect(wrapper.find("[data-testid='large-pastes-select']").exists()).toBe(false);
-
-      await wrapper.get("[data-testid='attach-any-file-switch']").trigger("click");
-      await flushPromises();
       const select = wrapper.get("[data-testid='large-pastes-select']");
       expect((select.element as HTMLSelectElement).value).toBe("ask");
-      expect(wrapper.text()).toContain("A paste of 2,000 characters or 25 lines or more.");
+      expect(wrapper.text()).toContain("When you paste 2,000 characters or 25 lines or more.");
 
       await select.setValue("attach");
       await flushPromises();
