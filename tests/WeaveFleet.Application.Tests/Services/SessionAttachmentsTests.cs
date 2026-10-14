@@ -129,6 +129,28 @@ public sealed class SessionAttachmentsTests : IDisposable
     }
 
     [Fact]
+    public async Task a_pdf_has_no_line_count_even_when_its_start_is_plain_text()
+    {
+        var result = await SaveAsync("report.pdf", System.Text.Encoding.ASCII.GetBytes("%PDF-1.4\n1 0 obj\n<< >>\nendobj\n"));
+        result.Value.Lines.ShouldBeNull();
+    }
+
+    [Fact]
+    public async Task bytes_that_are_not_utf8_have_no_line_count()
+    {
+        var result = await SaveAsync("legacy.dat", [(byte)'a', 0xC3, 0x28, (byte)'\n']);
+        result.Value.Lines.ShouldBeNull();
+    }
+
+    [Fact]
+    public void a_character_cut_off_at_the_end_of_the_sample_is_still_text()
+    {
+        byte[] start = [(byte)'a', 0xC3];
+        SessionAttachments.IsBinary(start, complete: false).ShouldBeFalse();
+        SessionAttachments.IsBinary(start, complete: true).ShouldBeTrue();
+    }
+
+    [Fact]
     public async Task refuses_a_file_over_the_limit_and_leaves_nothing_behind()
     {
         var result = await SaveAsync("dump.zip", new byte[(25 * 1024 * 1024) + 1]);

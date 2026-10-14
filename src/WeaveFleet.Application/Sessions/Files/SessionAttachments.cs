@@ -1,4 +1,6 @@
+using System.Buffers;
 using System.Globalization;
+using System.Text.Unicode;
 using Microsoft.Extensions.Logging;
 using WeaveFleet.Domain.Common;
 using WeaveFleet.Domain.Repositories;
@@ -66,7 +68,8 @@ public sealed class SessionAttachments(ISessionRepository sessionRepository, ILo
         long size = 0;
         long newlines = 0;
         var lastByte = (byte)'\n';
-        var binary = false;
+        var sniff = new byte[BinarySniffBytes];
+        var sniffed = 0;
         var tooBig = false;
         try
         {
@@ -84,8 +87,12 @@ public sealed class SessionAttachments(ISessionRepository sessionRepository, ILo
                     }
 
                     var chunk = buffer.AsSpan(0, read);
-                    if (size < BinarySniffBytes && chunk[..(int)Math.Min(read, BinarySniffBytes - size)].Contains((byte)0))
-                        binary = true;
+                    if (sniffed < BinarySniffBytes)
+                    {
+                        var take = Math.Min(read, BinarySniffBytes - sniffed);
+                        chunk[..take].CopyTo(sniff.AsSpan(sniffed));
+                        sniffed += take;
+                    }
                     newlines += chunk.Count((byte)'\n');
                     lastByte = chunk[^1];
                     size += read;
@@ -105,6 +112,7 @@ public sealed class SessionAttachments(ISessionRepository sessionRepository, ILo
             return TooBig(name, size);
         }
 
+        var binary = IsBinary(sniff.AsSpan(0, sniffed), complete: size == sniffed);
         int? lines = binary ? null : checked((int)(newlines + (size > 0 && lastByte != '\n' ? 1 : 0)));
         var mime = string.IsNullOrWhiteSpace(contentType) ? "application/octet-stream" : contentType;
         return new SessionAttachment($"{Folder}/{key}/{fileName}", name, size, lines, mime);
@@ -145,6 +153,18 @@ public sealed class SessionAttachments(ISessionRepository sessionRepository, ILo
             {
             }
         }
+    }
+
+    /// <summary>
+    /// Whether a file's first bytes say it isn't text: a NUL, a PDF's header (often plain ASCII up front), or bytes that
+    /// aren't UTF-8. A character cut off at the end of the sample doesn't count when the file goes on.
+    /// </summary>
+    internal static bool IsBinary(ReadOnlySpan<byte> start, bool complete)
+    {
+        if (start.Contains((byte)0) || start.StartsWith("%PDF-"u8))
+            return true;
+        var chars = new char[start.Length];
+        return Utf8.ToUtf16(start, chars, out _, out _, replaceInvalidSequences: false, isFinalBlock: complete) == OperationStatus.InvalidData;
     }
 
     private static bool AnyLink(params string[] paths) => paths.Any(p => new DirectoryInfo(p).LinkTarget is not null);
