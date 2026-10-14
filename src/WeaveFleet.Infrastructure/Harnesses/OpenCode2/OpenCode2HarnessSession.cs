@@ -5,6 +5,7 @@ using System.Threading.Channels;
 using Microsoft.Extensions.Logging;
 using WeaveFleet.Application.Analytics;
 using WeaveFleet.Application.Harnesses;
+using WeaveFleet.Application.Sessions;
 using WeaveFleet.Domain.Harnesses;
 
 namespace WeaveFleet.Infrastructure.Harnesses.OpenCode2;
@@ -136,7 +137,17 @@ internal sealed partial class OpenCode2HarnessSession : IHarnessSession, IOpenCo
 
         // Fleet's notes to the model go in as synthetic messages that wait for the prompt, as V2's own notes do: the
         // model reads them, the conversation doesn't show them (OpenCode2History).
+        // The skills the user named with $ go with the prompt; a name V2 doesn't list goes in a note instead.
         var notes = options?.ModelNotes ?? [];
+        IReadOnlyList<OpenCode2PromptSkill>? skills = null;
+        if (options?.Skills is { Count: > 0 } named)
+        {
+            var (known, unknown) = await OpenCode2Catalog.FindSkillsAsync(server, _context.WorkingDirectory, named, ct).ConfigureAwait(false);
+            skills = known;
+            if (unknown.Count > 0)
+                notes = [.. notes, SkillMentions.Note(unknown)];
+        }
+
         foreach (var note in notes)
             await server.Client.AddSyntheticAsync(ResumeToken, note, ct).ConfigureAwait(false);
         // A note is a steer in V2's inbox and a queued prompt waits for the turn after: the prompt's own arrival starts a run,
@@ -147,7 +158,7 @@ internal sealed partial class OpenCode2HarnessSession : IHarnessSession, IOpenCo
         var delivery = Delivery(options?.Delivery);
         if (notes.Count > 0 && delivery == OpenCode2Deliveries.Queue && !await IsRunningAsync(server, ct).ConfigureAwait(false))
             delivery = null;
-        await server.Client.PromptAsync(ResumeToken, text, options?.MessageId, PromptFiles(options?.Attachments), delivery, ct)
+        await server.Client.PromptAsync(ResumeToken, text, options?.MessageId, PromptFiles(options?.Attachments), delivery, ct, skills)
             .ConfigureAwait(false);
     }
 

@@ -21,6 +21,7 @@ public sealed class QueuedPromptRepositoryTests
         ModelId = "m",
         Effort = "high",
         Mod = kind == QueuedPromptKinds.Command ? null : "tests-after-edits",
+        Skills = kind == QueuedPromptKinds.Command ? null : ["fleet-debug", "plugin:review"],
         CreatedAt = new DateTimeOffset(2026, 9, 25, 10, 0, 0, TimeSpan.Zero),
     };
 
@@ -45,6 +46,8 @@ public sealed class QueuedPromptRepositoryTests
         items[0].Effort.ShouldBe("high");
         items[0].Mod.ShouldBe("tests-after-edits");
         items[1].Mod.ShouldBeNull();
+        items[0].Skills.ShouldBe(["fleet-debug", "plugin:review"]);
+        items[1].Skills.ShouldBeNull();
         items[0].CreatedAt.ShouldBe(new DateTimeOffset(2026, 9, 25, 10, 0, 0, TimeSpan.Zero));
     }
 

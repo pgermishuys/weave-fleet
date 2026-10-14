@@ -145,7 +145,8 @@ public sealed record InstanceCommandsResponse(
     string InstanceId,
     IReadOnlyList<InstanceCommandItem> Commands);
 
-public sealed record InstanceCommandItem(string Name, string? Description);
+/// <summary><c>Kind</c> is "skill" or "command" (null when the harness can't tell); <c>UserOnly</c> marks a skill the model can't load.</summary>
+public sealed record InstanceCommandItem(string Name, string? Description, string? Kind = null, bool UserOnly = false);
 
 public sealed record InstanceAgentsResponse(
     string InstanceId,

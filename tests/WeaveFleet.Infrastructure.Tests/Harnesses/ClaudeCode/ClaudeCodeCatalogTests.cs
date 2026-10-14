@@ -3,6 +3,7 @@ using Microsoft.Extensions.Logging.Abstractions;
 using Microsoft.Extensions.Time.Testing;
 using Shouldly;
 using WeaveFleet.Application.Configuration;
+using WeaveFleet.Application.Sessions;
 using WeaveFleet.Infrastructure.Harnesses.ClaudeCode;
 
 namespace WeaveFleet.Infrastructure.Tests.Harnesses.ClaudeCode;
@@ -95,6 +96,38 @@ public sealed class ClaudeCodeCatalogTests
         // Claude Code's own /code-review would sit beside /fleet-code-review; typed in full, it still runs.
         ClaudeCodeHarnessSession.ComposerCommands(ClaudeCodeCatalog.CommandsFromInitialize(WithCommands)).Select(c => c.Name)
             .ShouldBe(["fleet-walkthrough", "tidy"]);
+    }
+
+    [Fact]
+    public void A_skill_with_model_invocation_disabled_is_the_users_alone()
+    {
+        var folder = Directory.CreateTempSubdirectory("fleet-skill-files-").FullName;
+        try
+        {
+            void Skill(string name, string frontmatter)
+            {
+                Directory.CreateDirectory(Path.Combine(folder, name));
+                File.WriteAllText(Path.Combine(folder, name, "SKILL.md"), $"---\nname: {name}\n{frontmatter}\n---\nbody\ndisable-model-invocation: true\n");
+            }
+
+            Skill("deploy", "disable-model-invocation: True");
+            Skill("tidy", "description: x");
+            Skill("loud", "disable-model-invocation: false");
+
+            ClaudeCodeSkillFiles.IsUserOnly("deploy", [folder]).ShouldBeTrue();
+            ClaudeCodeSkillFiles.IsUserOnly("tidy", [folder]).ShouldBeFalse("only the frontmatter counts, not the body");
+            ClaudeCodeSkillFiles.IsUserOnly("loud", [folder]).ShouldBeFalse();
+            ClaudeCodeSkillFiles.IsUserOnly("missing", [folder]).ShouldBeFalse();
+            ClaudeCodeSkillFiles.IsUserOnly("../deploy", [Path.Combine(folder, "tidy")]).ShouldBeFalse();
+            ClaudeCodeSkillFiles.IsUserOnly("deploy", ["/no/such/folder", folder]).ShouldBeTrue("the first folder that has it wins, later ones fill in");
+
+            var commands = ClaudeCodeHarnessSession.ComposerCommands(ClaudeCodeCatalog.CommandsFromInitialize(WithCommands), [folder]);
+            commands.ShouldAllBe(c => c.Kind == "skill");
+        }
+        finally
+        {
+            Directory.Delete(folder, recursive: true);
+        }
     }
 
     [Fact]

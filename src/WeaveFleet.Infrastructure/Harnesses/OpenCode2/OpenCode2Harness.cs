@@ -53,6 +53,7 @@ public sealed class OpenCode2Harness : IHarness
         SupportsSideConversations = true,
         // Synthetic text parts ahead of the prompt.
         TakesModelNotes = true,
+        TakesSkills = true,
         SupportsAgentBrowser = true,
         // Fleet's plugin gives the agent its tools, fleet_session_read among them.
         SupportsFleetTools = true,

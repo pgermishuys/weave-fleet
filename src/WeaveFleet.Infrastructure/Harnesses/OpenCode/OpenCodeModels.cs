@@ -683,6 +683,9 @@ internal sealed record OpenCodeCommandInfo
 {
     [JsonPropertyName("name")] public required string Name { get; init; }
     [JsonPropertyName("description")] public string? Description { get; init; }
+
+    /// <summary>Where it comes from: <c>command</c>, <c>mcp</c> or <c>skill</c>.</summary>
+    [JsonPropertyName("source")] public string? Source { get; init; }
 }
 
 // ---------------------------------------------------------------------------

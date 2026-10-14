@@ -3996,6 +3996,7 @@ export interface components {
             model?: null | components["schemas"]["ModelRef"];
             effort?: null | string;
             sessionReferences?: null | components["schemas"]["SessionReferenceDto"][];
+            skills?: null | string[];
         };
         QueuedPromptView: {
             id: string;
@@ -4090,6 +4091,7 @@ export interface components {
             effort: null | string;
             delivery?: null | string;
             sessionReferences?: null | components["schemas"]["SessionReferenceDto"][];
+            skills?: null | string[];
         };
         SessionReferenceDto: {
             token: string;

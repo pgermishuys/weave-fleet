@@ -14,10 +14,12 @@ import type { FileReferenceEnv } from "@/lib/file-references";
 import { formatRelativeTime, formatAbsoluteTimestamp } from "@/lib/format-utils";
 import { sharedMarkdownRenderer } from "@/lib/markdown-renderer";
 import { withSessionReferenceChips, type SessionReference } from "@/lib/session-references";
+import { sessionSkillNames, skillDeliveries, skillNamesIn, withSkillChips } from "@/lib/skill-mentions";
 import { formatSlashCommand } from "@/lib/slash-command-utils";
 import { useMachineTarget } from "@/lib/machine-target";
 import { fileExtensionLabel, parseAttachedNote } from "@/lib/attached-files";
 import { useFileLinksStore } from "@/stores/file-links";
+import { useSessionsStore } from "@/stores/sessions";
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
 
 interface ImageAttachmentDisplay {
@@ -85,6 +87,7 @@ const markdownRenderer = sharedMarkdownRenderer();
 
 const fileLinks = useFileLinksStore();
 const machine = useMachineTarget();
+const sessions = useSessionsStore();
 
 // Files you attached sit in a note at the end of what you sent: they show as chips, with the note under them.
 const parsedBody = computed(() => props.role === "user" ? parseAttachedNote(props.body) : { text: props.body, files: [] });
@@ -93,9 +96,14 @@ const attachedFiles = computed(() => parsedBody.value.files);
 const rendered = computed(() => {
   const sessionId = props.sessionId;
   const env: FileReferenceEnv = sessionId ? { fileRefs: [], resolveFileRef: (path) => fileLinks.resolve(sessionId, path) } : {};
-  const html = markdownRenderer.render(parsedBody.value.text, env);
+  const rawHtml = markdownRenderer.render(parsedBody.value.text, env);
+  const html = props.sessionReferences?.length ? withSessionReferenceChips(rawHtml, props.sessionReferences) : rawHtml;
+  // Your `$` skills are in the text as typed: each one the session offers shows as a chip, tinted as it was sent.
+  const skills = props.role === "user" && sessionId
+    ? skillDeliveries(sessions.sessionById(sessionId)?.harnessType, skillNamesIn(parsedBody.value.text, sessionSkillNames(sessionId)))
+    : [];
   return {
-    html: props.sessionReferences?.length ? withSessionReferenceChips(html, props.sessionReferences) : html,
+    html: withSkillChips(html, skills),
     fileRefs: env.fileRefs ?? [],
   };
 });
@@ -509,8 +517,9 @@ function handleExpandVisual(payload: VisualPayload): void {
   overflow-wrap: anywhere;
 }
 
-/* A session you referenced with @: its title as a chip, linking to it. */
-.msg-body__content :deep(.session-ref-chip) {
+/* A session you referenced with @: its title as a chip, linking to it. A $ skill is the same chip, in green. */
+.msg-body__content :deep(.session-ref-chip),
+.msg-body__content :deep(.skill-ref-chip) {
   display: inline-flex;
   align-items: center;
   gap: 5px;
@@ -529,6 +538,26 @@ function handleExpandVisual(payload: VisualPayload): void {
 
 .msg-body__content :deep(.session-ref-chip:hover) {
   background: color-mix(in srgb, var(--accent) 24%, transparent);
+}
+
+.msg-body__content :deep(.skill-ref-chip) {
+  background: color-mix(in srgb, var(--running) 14%, transparent);
+}
+
+/* A skill sent as a note for the agent to load, not with the message. */
+.msg-body__content :deep(.skill-ref-chip--note) {
+  background: color-mix(in srgb, var(--idle) 14%, transparent);
+}
+
+.msg-body__content :deep(.skill-ref-chip__icon) {
+  width: 13px;
+  height: 13px;
+  flex-shrink: 0;
+  color: var(--running);
+}
+
+.msg-body__content :deep(.skill-ref-chip--note .skill-ref-chip__icon) {
+  color: var(--idle);
 }
 
 .msg-body__content :deep(.session-ref-chip__icon) {

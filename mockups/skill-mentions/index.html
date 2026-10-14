@@ -1,0 +1,486 @@
+<!doctype html>
+<html lang="en" data-theme="dark">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Skill mentions in the composer</title>
+<style>
+/* Fleet's own tokens (client/src/assets/main.css): dark is :root, light is [data-theme="light"]. */
+:root {
+  --panel-bg: #141418; --card-bg: #1b1b20; --main-bg: #0d0d10;
+  --border: rgba(255, 255, 255, 0.075); --text: #e8e8ec; --muted: #8e8e9a;
+  --accent: #6366f1; --accent-dim: rgba(99, 102, 241, 0.15);
+  --running: #22c55e; --idle: #f59e0b; --error: #ef4444;
+  --radius-card: 10px; --radius-btn: 8px; --radius-panel: 12px;
+  --transition: 150ms ease-out;
+  --font-sans-stack: "Inter Variable", "Inter", system-ui, -apple-system, sans-serif;
+  --font-mono-stack: "JetBrains Mono Variable", "JetBrains Mono", ui-monospace, monospace;
+}
+:root[data-theme="light"] {
+  --panel-bg: #FFFFFF; --card-bg: #ffffff; --main-bg: #F3F2EF;
+  --border: rgba(26, 25, 24, 0.09); --text: #1A1918; --muted: #6E6A65;
+  --accent: #5B6EC7; --accent-dim: rgba(91, 110, 199, 0.12);
+  --running: #16a34a; --idle: #d97706; --error: #dc2626;
+}
+* { box-sizing: border-box; }
+html, body { margin: 0; background: var(--main-bg); color: var(--text); font-family: var(--font-sans-stack); font-size: 14px; }
+code, .mono { font-family: var(--font-mono-stack); font-size: 12.5px; }
+button { font: inherit; }
+:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+
+/* ── Page chrome (mockup only) ── */
+.page { max-width: 1180px; margin: 0 auto; padding: 28px 24px 64px; }
+.top { display: flex; flex-wrap: wrap; align-items: flex-end; gap: 16px 28px; margin-bottom: 8px; }
+.top h1 { margin: 0; font-size: 22px; font-weight: 650; letter-spacing: -0.01em; }
+.top p { margin: 6px 0 0; color: var(--muted); max-width: 640px; line-height: 1.5; }
+.controls { display: flex; flex-wrap: wrap; gap: 14px; margin-left: auto; }
+.seg { display: inline-flex; border: 1px solid var(--border); border-radius: var(--radius-btn); background: var(--card-bg); padding: 2px; }
+.seg button { border: 0; background: transparent; color: var(--muted); padding: 5px 10px; border-radius: 6px; cursor: pointer; font-size: 12.5px; white-space: nowrap; }
+.seg button[aria-pressed="true"] { background: var(--accent-dim); color: var(--text); font-weight: 550; }
+.ctl-label { display: block; font-size: 11px; color: var(--muted); text-transform: uppercase; letter-spacing: .04em; font-weight: 600; margin-bottom: 4px; }
+
+section.part { margin-top: 40px; }
+section.part > h2 { font-size: 15px; margin: 0 0 4px; font-weight: 650; display: flex; gap: 10px; align-items: baseline; }
+section.part > h2 .num { color: var(--accent); font-variant-numeric: tabular-nums; }
+section.part > .lede { margin: 0 0 16px; color: var(--muted); line-height: 1.55; max-width: 760px; }
+.tag { display: inline-block; font-size: 11px; font-weight: 600; padding: 2px 7px; border-radius: 999px; background: var(--accent-dim); color: var(--accent); vertical-align: 2px; }
+.tag--warn { background: color-mix(in srgb, var(--idle) 16%, transparent); color: var(--idle); }
+
+.grid2 { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 20px; }
+.grid3 { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 20px; }
+@media (max-width: 900px) { .grid2, .grid3 { grid-template-columns: minmax(0, 1fr); } }
+
+.panel { background: var(--panel-bg); border: 1px solid var(--border); border-radius: var(--radius-panel); padding: 16px; min-width: 0; }
+.panel-head { display: flex; align-items: center; gap: 8px; margin-bottom: 12px; font-size: 12px; color: var(--muted); }
+.panel-head strong { color: var(--text); font-size: 13px; }
+.caption { margin: 12px 2px 0; font-size: 12.5px; color: var(--muted); line-height: 1.5; }
+.caption b { color: var(--text); font-weight: 600; }
+
+/* Stage: popup sits above the composer, in flow (Fleet positions it absolutely above the frame). */
+.stage { display: flex; flex-direction: column; gap: 6px; }
+
+/* ── AutocompletePopup.vue, copied ── */
+.autocomplete-popup { max-height: 340px; overflow-y: auto; padding: 6px; border: 1px solid var(--border); border-radius: var(--radius-card); background: var(--card-bg); box-shadow: 0 16px 40px -12px rgba(0,0,0,.45); }
+.autocomplete-popup__group + .autocomplete-popup__group { margin-top: 2px; }
+.autocomplete-popup__group-label { display: flex; padding: 6px 8px 2px; color: var(--muted); font-size: 11px; font-weight: 600; letter-spacing: .04em; text-transform: uppercase; }
+.autocomplete-popup__group-hint { margin-left: auto; font-weight: 400; letter-spacing: 0; text-transform: none; }
+.autocomplete-popup__row { display: flex; border-radius: 7px; }
+.autocomplete-popup__row--selected { background: var(--accent-dim); }
+.autocomplete-popup__item { display: flex; min-width: 0; flex: 1; align-items: center; gap: 9px; padding: 6px 8px; border: 0; border-radius: 7px; background: transparent; color: inherit; text-align: left; cursor: pointer; }
+.autocomplete-popup__icon-wrap { position: relative; display: inline-flex; flex-shrink: 0; align-items: center; justify-content: center; width: 16px; height: 16px; }
+.ic { width: 14px; height: 14px; color: var(--muted); fill: none; stroke: currentColor; stroke-width: 2; stroke-linecap: round; stroke-linejoin: round; flex-shrink: 0; }
+.ic--accent { color: var(--accent); }
+.autocomplete-popup__content { display: flex; min-width: 0; flex: 1; align-items: baseline; gap: 9px; }
+.autocomplete-popup__label { flex-shrink: 1; min-width: 0; overflow: hidden; color: var(--text); font-size: 13.5px; line-height: 1.4; text-overflow: ellipsis; white-space: nowrap; }
+.autocomplete-popup__label mark { background: none; color: var(--accent); font-weight: 600; }
+.autocomplete-popup__description { flex: 1 1 0; min-width: 0; overflow: hidden; color: var(--muted); font-size: 12px; line-height: 1.4; text-overflow: ellipsis; white-space: nowrap; }
+.autocomplete-popup__age { flex-shrink: 0; color: var(--muted); font-size: 12px; }
+.autocomplete-popup__hint { margin: 4px -6px -6px; padding: 7px 14px 8px; border-top: 1px solid var(--border); color: var(--muted); font-size: 12px; line-height: 1.45; }
+.autocomplete-popup__hint kbd { padding: 0 4px; border: 1px solid var(--border); border-radius: 3px; font-family: inherit; font-size: 11px; }
+.autocomplete-popup__hint--warn { color: var(--idle); }
+.autocomplete-popup__state { padding: 14px 16px; color: var(--muted); font-size: 12px; text-align: center; }
+.agent-dot { position: absolute; right: -1px; bottom: -1px; width: 7px; height: 7px; border: 1px solid var(--card-bg); border-radius: 50%; }
+.status-dot { width: 7px; height: 7px; border-radius: 50%; background: var(--running); }
+.new-group .autocomplete-popup__group-label span:first-child::after { content: "new"; margin-left: 6px; padding: 0 5px; border-radius: 999px; background: var(--accent-dim); color: var(--accent); font-size: 10px; letter-spacing: 0; }
+
+/* ── ComposerFrame.vue + Composer.vue, copied ── */
+.composer-frame { position: relative; border: 1px solid color-mix(in srgb, var(--accent) 55%, var(--border)); border-radius: calc(var(--radius-panel) + 2px); background: var(--card-bg); box-shadow: 0 10px 28px -18px rgba(0,0,0,.5); }
+.composer-frame--idle { border-color: var(--border); }
+.composer-frame__textarea { min-height: 52px; padding: 14px 16px 6px; color: var(--text); font-size: 14px; line-height: 1.5; white-space: pre-wrap; overflow-wrap: break-word; }
+.composer-frame__toolbar { display: flex; align-items: center; gap: 2px; padding: 4px 8px 8px; }
+.caret { display: inline-block; width: 1.5px; height: 1.15em; margin: 0 0 -3px 1px; background: var(--text); animation: blink 1.1s steps(1) infinite; }
+@keyframes blink { 50% { opacity: 0; } }
+@media (prefers-reduced-motion: reduce) { .caret { animation: none; } }
+.composer-reference { --reference-tint: color-mix(in srgb, var(--accent) 28%, transparent); border-radius: 4px; background: var(--reference-tint); box-shadow: -3px 0 0 var(--reference-tint), 3px 0 0 var(--reference-tint); -webkit-box-decoration-break: clone; box-decoration-break: clone; }
+.composer-reference--session { --reference-tint: color-mix(in srgb, var(--accent) 18%, transparent); }
+/* Proposed: a skill picked from the list. Same tint family as references, with a hairline so it reads as "runs", not "points at". */
+.composer-reference--skill { --reference-tint: color-mix(in srgb, var(--running) 22%, transparent); }
+.composer-reference--skill-note { --reference-tint: color-mix(in srgb, var(--idle) 22%, transparent); }
+.plain-typing { color: var(--text); }
+.tb-btn { display: inline-flex; align-items: center; gap: 6px; height: 28px; padding: 0 8px; border: 0; border-radius: var(--radius-btn); background: transparent; color: var(--muted); font-size: 12.5px; }
+.tb-btn .ic { width: 14px; height: 14px; }
+.send { width: 30px; height: 30px; margin-left: auto; border-radius: 999px; border: 0; background: var(--accent); display: grid; place-items: center; }
+.send .ic { color: #fff; }
+
+/* ── MessageBubble.vue user message, copied ── */
+.msg-user { display: flex; justify-content: flex-end; }
+.msg-user .msg-body { max-width: 92%; padding: 10px 14px; border: 1px solid var(--border); border-radius: 14px 14px 4px 14px; background: color-mix(in srgb, var(--text) 5%, transparent); line-height: 1.55; }
+.ref-chip { display: inline-flex; align-items: center; gap: 5px; max-width: 100%; height: 22px; padding: 0 8px 0 6px; border-radius: 6px; background: var(--accent-dim); color: var(--text); font-size: 12.5px; font-weight: 500; line-height: 1; vertical-align: 1px; }
+.ref-chip .ic { width: 13px; height: 13px; color: var(--accent); }
+.ref-chip--skill { background: color-mix(in srgb, var(--running) 14%, transparent); }
+.ref-chip--skill .ic { color: var(--running); }
+.ref-chip--note { background: color-mix(in srgb, var(--idle) 14%, transparent); }
+.ref-chip--note .ic { color: var(--idle); }
+code.file-ref { text-decoration: underline dotted color-mix(in srgb, var(--accent) 70%, transparent); text-underline-offset: 3px; }
+
+/* ── Wire panel ── */
+.wire { margin: 0; padding: 12px 14px; border-radius: var(--radius-card); background: color-mix(in srgb, var(--text) 4%, var(--card-bg)); border: 1px solid var(--border); font-family: var(--font-mono-stack); font-size: 12px; line-height: 1.6; white-space: pre-wrap; overflow-wrap: anywhere; color: var(--text); }
+.wire .k { color: var(--accent); }
+.wire .s { color: var(--running); }
+.wire .c { color: var(--muted); }
+.wire .w { color: var(--idle); }
+.how { margin: 0; padding-left: 18px; color: var(--muted); line-height: 1.6; font-size: 13px; }
+.how li + li { margin-top: 4px; }
+.how b { color: var(--text); font-weight: 600; }
+
+.dim-note { margin-top: 10px; padding: 9px 12px; border-radius: var(--radius-card); border: 1px dashed var(--border); color: var(--muted); font-size: 12.5px; line-height: 1.5; }
+
+.questions { margin: 0; padding-left: 20px; line-height: 1.65; }
+.questions li + li { margin-top: 6px; }
+.questions .muted { color: var(--muted); }
+
+@media (max-width: 520px) {
+  .page { padding: 20px 16px 48px; }
+  .controls { margin-left: 0; }
+  .autocomplete-popup__description { display: none; }
+}
+</style>
+</head>
+<body>
+<svg width="0" height="0" style="position:absolute" aria-hidden="true">
+  <symbol id="i-file" viewBox="0 0 24 24"><path d="M15 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V7Z"/><path d="M14 2v4a2 2 0 0 0 2 2h4"/><path d="M10 9H8"/><path d="M16 13H8"/><path d="M16 17H8"/></symbol>
+  <symbol id="i-folder" viewBox="0 0 24 24"><path d="M20 20a2 2 0 0 0 2-2V8a2 2 0 0 0-2-2h-7.9a2 2 0 0 1-1.69-.9L9.6 3.9A2 2 0 0 0 7.93 3H4a2 2 0 0 0-2 2v13a2 2 0 0 0 2 2Z"/></symbol>
+  <symbol id="i-bot" viewBox="0 0 24 24"><path d="M12 8V4H8"/><rect width="16" height="12" x="4" y="8" rx="2"/><path d="M2 14h2"/><path d="M20 14h2"/><path d="M15 13v2"/><path d="M9 13v2"/></symbol>
+  <symbol id="i-term" viewBox="0 0 24 24"><polyline points="4 17 10 11 4 5"/><line x1="12" x2="20" y1="19" y2="19"/></symbol>
+  <symbol id="i-skill" viewBox="0 0 24 24"><path d="M15 12h-5"/><path d="M15 8h-5"/><path d="M19 17V5a2 2 0 0 0-2-2H4"/><path d="M8 21h12a2 2 0 0 0 2-2v-1a1 1 0 0 0-1-1H11a1 1 0 0 0-1 1v1a2 2 0 1 1-4 0V5a2 2 0 1 0-4 0v2a1 1 0 0 0 1 1h3"/></symbol>
+  <symbol id="i-clip" viewBox="0 0 24 24"><path d="m21.44 11.05-9.19 9.19a6 6 0 0 1-8.49-8.49l8.57-8.57A4 4 0 1 1 18 8.84l-8.59 8.57a2 2 0 0 1-2.83-2.83l8.49-8.48"/></symbol>
+  <symbol id="i-up" viewBox="0 0 24 24"><path d="m5 12 7-7 7 7"/><path d="M12 19V5"/></symbol>
+  <symbol id="i-down" viewBox="0 0 24 24"><path d="m6 9 6 6 6-6"/></symbol>
+</svg>
+
+<div class="page">
+  <header class="top">
+    <div>
+      <h1>Skill mentions in the composer</h1>
+      <p>Proposal: type <code>$</code> anywhere in a message to pick a skill. On OpenCode 2 only, skills could also show in the <code>@</code> list. Built from Fleet's real composer, popup and chip CSS. Everything else in the composer stays as it is today.</p>
+    </div>
+    <div class="controls">
+      <div>
+        <span class="ctl-label" id="h-label">Session's harness</span>
+        <div class="seg" role="group" aria-labelledby="h-label" id="harness">
+          <button data-v="oc2" aria-pressed="true">OpenCode 2</button>
+          <button data-v="cc" aria-pressed="false">Claude Code</button>
+          <button data-v="oc1" aria-pressed="false">OpenCode</button>
+          <button data-v="pi" aria-pressed="false">Pi</button>
+        </div>
+      </div>
+      <div>
+        <span class="ctl-label" id="t-label">Theme</span>
+        <div class="seg" role="group" aria-labelledby="t-label" id="theme">
+          <button data-v="dark" aria-pressed="true">Dark</button>
+          <button data-v="light" aria-pressed="false">Light</button>
+        </div>
+      </div>
+    </div>
+  </header>
+
+  <!-- 1 -->
+  <section class="part">
+    <h2><span class="num">1</span> Today vs proposed, same message</h2>
+    <p class="lede">The user wants the agent to debug, then tidy. Today a skill has to start the message, as <code>/name</code>, and only one fits. With <code>$</code>, skills go wherever the sentence puts them.</p>
+    <div class="grid2">
+      <div class="panel">
+        <div class="panel-head"><strong>Today</strong> · <code>/</code> at the start only</div>
+        <div class="stage">
+          <div class="composer-frame composer-frame--idle">
+            <div class="composer-frame__textarea">/fleet-debug The refund total is off by a cent on <span class="composer-reference">@src/api/refunds.ts</span>. Once it's fixed, tidy it with $fleet-simplify<span class="caret"></span></div>
+            <div class="composer-frame__toolbar" data-toolbar></div>
+          </div>
+        </div>
+        <p class="caption"><b>$fleet-simplify is just text.</b> Whether it runs depends on the model noticing the name. A <code>/fleet-simplify</code> mid-sentence would be text too.</p>
+      </div>
+      <div class="panel">
+        <div class="panel-head"><strong>Proposed</strong> · <code>$</code> anywhere</div>
+        <div class="stage">
+          <div class="composer-frame composer-frame--idle">
+            <div class="composer-frame__textarea">The refund total is off by a cent on <span class="composer-reference">@src/api/refunds.ts</span>. Use <span class="composer-reference composer-reference--skill">$fleet-debug</span> to find it, then tidy the fix with <span class="composer-reference" data-second-skill>$fleet-simplify</span><span class="caret"></span></div>
+            <div class="composer-frame__toolbar" data-toolbar></div>
+          </div>
+        </div>
+        <p class="caption" data-cap-1></p>
+      </div>
+    </div>
+  </section>
+
+  <!-- 2 -->
+  <section class="part">
+    <h2><span class="num">2</span> Typing <code>$</code></h2>
+    <p class="lede">The list opens after <code>$</code> at the start of a word, anywhere in the draft. It holds only the session's skills (Fleet's built-in ones and the folder's), with the same rows and keys as the <code>@</code> list. A <code>$</code> that matches no skill, such as <code>$HOME</code> or <code>$5</code>, stays plain text.</p>
+    <div class="grid3">
+      <div class="panel">
+        <div class="panel-head"><strong>Just typed <code>$</code></strong></div>
+        <div class="stage">
+          <div class="autocomplete-popup" role="listbox" aria-label="Skills" data-popup="all"></div>
+          <div class="composer-frame">
+            <div class="composer-frame__textarea">The refund total is off by a cent. Use <span class="plain-typing">$</span><span class="caret"></span></div>
+            <div class="composer-frame__toolbar" data-toolbar></div>
+          </div>
+        </div>
+      </div>
+      <div class="panel">
+        <div class="panel-head"><strong>Narrowing: <code>$sim</code></strong></div>
+        <div class="stage">
+          <div class="autocomplete-popup" role="listbox" aria-label="Skills" data-popup="filtered"></div>
+          <div class="composer-frame">
+            <div class="composer-frame__textarea">…then tidy the fix with <span class="plain-typing">$sim</span><span class="caret"></span></div>
+            <div class="composer-frame__toolbar" data-toolbar></div>
+          </div>
+        </div>
+      </div>
+      <div class="panel">
+        <div class="panel-head"><strong>No match: <code>$HOME</code></strong></div>
+        <div class="stage">
+          <div class="autocomplete-popup" role="listbox" aria-label="Skills">
+            <div class="autocomplete-popup__state">No skill named “HOME”. It stays as text.</div>
+          </div>
+          <div class="composer-frame">
+            <div class="composer-frame__textarea">Why is $HOME empty inside the test runner<span class="caret"></span></div>
+            <div class="composer-frame__toolbar" data-toolbar></div>
+          </div>
+        </div>
+        <p class="caption">The list closes at the next space, as the <code>@</code> list does. Only picked skills become chips. A typed <code>$fleet-debug</code> that exactly matches a skill becomes one too.</p>
+      </div>
+    </div>
+  </section>
+
+  <!-- 3 -->
+  <section class="part">
+    <h2><span class="num">3</span> What the agent gets <span class="tag" data-harness-tag></span></h2>
+    <p class="lede">The sent message reads the same on every harness, with a chip for each skill. Only the wire format differs. Switch the harness at the top.</p>
+    <div class="grid2">
+      <div class="panel">
+        <div class="panel-head"><strong>In the conversation</strong></div>
+        <div class="msg-user">
+          <div class="msg-body">The refund total is off by a cent on <code class="file-ref">src/api/refunds.ts</code>. Use <span class="ref-chip ref-chip--skill"><svg class="ic"><use href="#i-skill"/></svg>fleet-debug</span> to find it, then tidy the fix with <span class="ref-chip" data-chip2><svg class="ic"><use href="#i-skill"/></svg>fleet-simplify</span></div>
+        </div>
+        <ul class="how" style="margin-top:16px" data-how></ul>
+      </div>
+      <div class="panel">
+        <div class="panel-head"><strong>On the wire</strong> · <span data-wire-label></span></div>
+        <pre class="wire" data-wire></pre>
+      </div>
+    </div>
+  </section>
+
+  <!-- 4 -->
+  <section class="part">
+    <h2><span class="num">4</span> Optional: skills in the <code>@</code> list <span class="tag">OpenCode 2 only</span></h2>
+    <p class="lede">OpenCode 2's own TUI lists skills under <code>@</code>, so people coming from it will type <code>@</code>. This adds a Skills group to Fleet's <code>@</code> list on OpenCode 2 sessions only. Picking from it makes the same chip and sends the same thing as <code>$</code>. Other harnesses never get it, so <code>@</code> keeps meaning "point at something" there.</p>
+    <div style="margin-bottom:14px">
+      <div class="seg" role="group" aria-label="Skills in the @ list" id="atskills">
+        <button data-v="off" aria-pressed="false">Off (<code>$</code> only)</button>
+        <button data-v="on" aria-pressed="true">On</button>
+      </div>
+    </div>
+    <div class="grid2">
+      <div class="panel">
+        <div class="panel-head"><strong>Just typed <code>@</code></strong> · <span data-at-harness></span></div>
+        <div class="stage">
+          <div class="autocomplete-popup" role="listbox" aria-label="Autocomplete suggestions" data-popup="at-empty"></div>
+          <div class="composer-frame">
+            <div class="composer-frame__textarea">Look at <span class="plain-typing">@</span><span class="caret"></span></div>
+            <div class="composer-frame__toolbar" data-toolbar></div>
+          </div>
+        </div>
+      </div>
+      <div class="panel">
+        <div class="panel-head"><strong>Narrowing: <code>@deb</code></strong> · <span data-at-harness></span></div>
+        <div class="stage">
+          <div class="autocomplete-popup" role="listbox" aria-label="Autocomplete suggestions" data-popup="at-filtered"></div>
+          <div class="composer-frame">
+            <div class="composer-frame__textarea">Use <span class="plain-typing">@deb</span><span class="caret"></span></div>
+            <div class="composer-frame__toolbar" data-toolbar></div>
+          </div>
+        </div>
+      </div>
+    </div>
+    <div class="dim-note" data-at-note></div>
+  </section>
+
+  <!-- 5 -->
+  <section class="part">
+    <h2><span class="num">5</span> For you to decide</h2>
+    <ol class="questions">
+      <li><b><code>$</code> for skills, on every harness?</b> <span class="muted">This matches T3 Code, OpenChamber and Codex. <code>/name</code> at the start keeps working as it does today.</span></li>
+      <li><b>Skills in the <code>@</code> list on OpenCode 2: on or off?</b> <span class="muted">It helps people coming from OpenCode 2's TUI, but <code>@</code> would then mean something different there than on other harnesses.</span></li>
+      <li><b>Claude Code's second skill:</b> <span class="muted">send it as a note (shown here), or allow only one <code>$</code> skill per message on Claude Code and grey out the rest of the list?</span></li>
+    </ol>
+  </section>
+</div>
+
+<script>
+const SKILLS = [
+  { name: "fleet-debug", desc: "Find the root cause of a bug before changing any code" },
+  { name: "fleet-simplify", desc: "Review the changed code for reuse and simplification" },
+  { name: "fleet-code-review", desc: "Review a change for bugs, ranked by severity" },
+  { name: "release-notes", desc: "Draft release notes from the merged pull requests" },
+  { name: "db-migration", desc: "Write a database migration and check it runs both ways" },
+];
+const HARNESS = {
+  oc2: { name: "OpenCode 2", agent: "Build", model: "Sonnet 5.5" },
+  cc:  { name: "Claude Code", agent: null, model: "Opus 5.5" },
+  oc1: { name: "OpenCode", agent: "Build", model: "Sonnet 5.5" },
+  pi:  { name: "Pi", agent: null, model: "Sonnet 5.5" },
+};
+const state = { harness: "oc2", atSkills: "on" };
+
+const icon = (id, cls = "") => `<svg class="ic ${cls}"><use href="#i-${id}"/></svg>`;
+const esc = (s) => s.replace(/&/g, "&amp;").replace(/</g, "&lt;");
+function mark(label, q) {
+  const i = q ? label.toLowerCase().indexOf(q) : -1;
+  return i < 0 ? esc(label) : `${esc(label.slice(0, i))}<mark>${esc(label.slice(i, i + q.length))}</mark>${esc(label.slice(i + q.length))}`;
+}
+function row({ ic, label, desc, sel, q, age, extra = "" }) {
+  return `<div class="autocomplete-popup__row ${sel ? "autocomplete-popup__row--selected" : ""}">
+    <button type="button" class="autocomplete-popup__item" aria-selected="${!!sel}">
+      <span class="autocomplete-popup__icon-wrap">${ic}${extra}</span>
+      <span class="autocomplete-popup__content"><span class="autocomplete-popup__label">${mark(label, q)}</span>${desc ? `<span class="autocomplete-popup__description">${esc(desc)}</span>` : ""}</span>
+      ${age ? `<span class="autocomplete-popup__age">${age}</span>` : ""}
+    </button></div>`;
+}
+const group = (label, rows, cls = "", hint = "") =>
+  `<section class="autocomplete-popup__group ${cls}"><div class="autocomplete-popup__group-label"><span>${label}</span>${hint ? `<span class="autocomplete-popup__group-hint">${hint}</span>` : ""}</div>${rows.join("")}</section>`;
+
+function skillHint() {
+  const h = state.harness;
+  if (h === "oc2") return `<kbd>Enter</kbd> add skill · OpenCode 2 loads it with the message`;
+  if (h === "cc") return `<kbd>Enter</kbd> add skill · Claude Code runs the first skill in a message`;
+  return `<kbd>Enter</kbd> add skill · ${HARNESS[h].name} gets a note naming it, then loads it`;
+}
+
+function renderPopups() {
+  document.querySelector('[data-popup="all"]').innerHTML =
+    group("Skills", SKILLS.map((s, i) => row({ ic: icon("skill", "ic--accent"), label: s.name, desc: s.desc, sel: i === 0 }))) +
+    `<div class="autocomplete-popup__hint">${skillHint()}</div>`;
+
+  const q = "sim";
+  document.querySelector('[data-popup="filtered"]').innerHTML =
+    group("Skills", SKILLS.filter(s => s.name.includes(q)).map((s, i) => row({ ic: icon("skill", "ic--accent"), label: s.name, desc: s.desc, sel: i === 0, q }))) +
+    (state.harness === "cc"
+      ? `<div class="autocomplete-popup__hint autocomplete-popup__hint--warn">This message already runs <b>fleet-debug</b>. Claude Code runs one skill per message, so this one goes as a note.</div>`
+      : `<div class="autocomplete-popup__hint">${skillHint()}</div>`);
+
+  const oc2 = state.harness === "oc2";
+  const showSkills = oc2 && state.atSkills === "on";
+  const sessions = group("Sessions", [row({ ic: `<span class="status-dot"></span>`, label: "Checkout totals off by a cent", age: "2h", sel: false })], "", "Tab to attach");
+  const files = group("Files & folders", [
+    row({ ic: icon("folder", "ic--accent"), label: "api", desc: "src/" }),
+    row({ ic: icon("file"), label: "refunds.ts", desc: "src/api/" }),
+    row({ ic: icon("file"), label: "README.md", desc: "" }),
+  ]);
+  const agents = HARNESS[state.harness].agent ? group("Agents", [
+    row({ ic: icon("bot"), label: "@plan", desc: "Plans before it builds", extra: `<span class="agent-dot" style="background:#f59e0b"></span>` }),
+    row({ ic: icon("bot"), label: "@explore", desc: "Reads the code, changes nothing", extra: `<span class="agent-dot" style="background:#22c55e"></span>` }),
+  ]) : "";
+  const skillsAt = showSkills ? group("Skills", SKILLS.slice(0, 3).map(s => row({ ic: icon("skill", "ic--accent"), label: "@" + s.name, desc: s.desc })), "new-group") : "";
+  // First row selected for the hint.
+  document.querySelector('[data-popup="at-empty"]').innerHTML =
+    (sessions + files + agents + skillsAt).replace("autocomplete-popup__row \"", "autocomplete-popup__row autocomplete-popup__row--selected\"") +
+    `<div class="autocomplete-popup__hint"><kbd>Enter</kbd> reference it</div>`;
+
+  const dq = "deb";
+  const filesF = group("Files & folders", [
+    row({ ic: icon("file"), label: "debounce.ts", desc: "src/lib/", q: dq }),
+    row({ ic: icon("folder", "ic--accent"), label: "debug", desc: "tests/", q: dq }),
+  ]);
+  const skillsF = showSkills ? group("Skills", [row({ ic: icon("skill", "ic--accent"), label: "@fleet-debug", desc: SKILLS[0].desc, q: dq, sel: true })], "new-group") : "";
+  const filtered = showSkills ? skillsF + filesF : filesF.replace("autocomplete-popup__row \"", "autocomplete-popup__row autocomplete-popup__row--selected\"");
+  document.querySelector('[data-popup="at-filtered"]').innerHTML = filtered +
+    `<div class="autocomplete-popup__hint">${showSkills ? "<kbd>Enter</kbd> add skill (same as <code>$fleet-debug</code>)" : "<kbd>Enter</kbd> reference it"}</div>`;
+
+  document.querySelectorAll("[data-at-harness]").forEach(el => el.textContent = HARNESS[state.harness].name);
+  document.querySelector("[data-at-note]").innerHTML = oc2
+    ? (showSkills
+        ? `When a filter matches a skill exactly or by prefix, the Skills group moves to the top, as in the <code>@deb</code> panel. Otherwise it sits after Agents, so files stay first for a bare <code>@</code>.`
+        : `Off: <code>@</code> on OpenCode 2 is what it is today. Skills come only from <code>$</code> (and <code>/name</code> at the start).`)
+    : `${HARNESS[state.harness].name} session: the <code>@</code> list never shows skills here, whatever the setting. Switch the harness to OpenCode 2 to see the option.`;
+}
+
+function renderToolbars() {
+  const h = HARNESS[state.harness];
+  const html = `<span class="tb-btn">${icon("clip")}</span>` +
+    (h.agent ? `<span class="tb-btn">${icon("bot")} ${h.agent} ${icon("down")}</span>` : "") +
+    `<span class="tb-btn">${h.model} ${icon("down")}</span>` +
+    `<button class="send" type="button" aria-label="Send">${icon("up")}</button>`;
+  document.querySelectorAll("[data-toolbar]").forEach(el => el.innerHTML = html);
+}
+
+function renderWire() {
+  const h = state.harness;
+  const tag = document.querySelector("[data-harness-tag]");
+  tag.textContent = HARNESS[h].name;
+  const second = document.querySelector("[data-second-skill]");
+  const chip2 = document.querySelector("[data-chip2]");
+  const cc = h === "cc";
+  second.className = "composer-reference " + (cc ? "composer-reference--skill-note" : "composer-reference--skill");
+  chip2.className = "ref-chip " + (cc ? "ref-chip--note" : "ref-chip--skill");
+  chip2.title = cc ? "Sent as a note: Claude Code runs one skill per message" : "";
+
+  const cap = document.querySelector("[data-cap-1]");
+  const how = document.querySelector("[data-how]");
+  const wire = document.querySelector("[data-wire]");
+  const label = document.querySelector("[data-wire-label]");
+
+  if (h === "oc2") {
+    cap.innerHTML = "<b>Both skills are attached to the message.</b> OpenCode 2 loads each skill's instructions with it, so the model doesn't have to go looking.";
+    label.textContent = "prompt with a skills field (as OpenCode 2's own @skill)";
+    how.innerHTML = `<li><b>Structured, not text.</b> Fleet already sends this field today when <code>/skill</code> is picked. <code>$</code> just lets it hold more than one, from anywhere.</li>
+      <li><b>Skill text goes in by the server,</b> ahead of your words. No tool call is needed.</li>
+      <li>If OpenCode 2 doesn't know a skill (renamed or removed), Fleet <b>falls back to a note</b>, as on OpenCode.</li>`;
+    wire.innerHTML = `<span class="c">POST /session/{id}/prompt</span>
+{
+  <span class="k">"text"</span>: <span class="s">"The refund total is off by a cent on @src/api/refunds.ts. Use $fleet-debug to find it, then tidy the fix with $fleet-simplify"</span>,
+  <span class="k">"skills"</span>: [
+    { <span class="k">"id"</span>: <span class="s">"skl_fleet-debug"</span>,    <span class="k">"name"</span>: <span class="s">"fleet-debug"</span> },
+    { <span class="k">"id"</span>: <span class="s">"skl_fleet-simplify"</span>, <span class="k">"name"</span>: <span class="s">"fleet-simplify"</span> }
+  ]
+}`;
+  } else if (h === "cc") {
+    cap.innerHTML = "<b>Claude Code runs one skill per message.</b> The first skill runs. The second, in amber, goes as a note, and Claude can still load it with its Skill tool.";
+    label.textContent = "rewritten to /name (as T3 Code does)";
+    how.innerHTML = `<li>Claude Code expands a skill only when the message <b>starts with</b> <code>/name</code>, so Fleet moves the first skill there.</li>
+      <li>Your words follow as the skill's arguments, so the sentence still reads right.</li>
+      <li><b>The second skill goes as a note</b> (amber chip). Claude sees the name and can load it with its Skill tool, but nothing guarantees it will.</li>`;
+    wire.innerHTML = `<span class="c">stdin → claude</span>
+<span class="s">/fleet-debug</span> The refund total is off by a cent on @src/api/refunds.ts. Use fleet-debug to find it, then tidy the fix with fleet-simplify
+
+<span class="w">The user also named this skill: fleet-simplify. Load it with the Skill tool when you reach that step.</span>`;
+  } else {
+    const n = HARNESS[h].name;
+    cap.innerHTML = `<b>${n} has no field for attaching skills.</b> Fleet adds a short note naming them, and the agent loads each one with its skill tool.`;
+    label.textContent = "text plus a note (as OpenChamber's fallback)";
+    how.innerHTML = `<li>${n} has <b>no skills field</b> on a prompt, so the skills ride along as a short note.</li>
+      <li>The agent loads them with its <b>skill tool</b>, which costs one tool call per skill.</li>
+      <li>A <code>/name</code> at the start still goes the way it does today${h === "oc1" ? " (OpenCode lists skills as commands)" : ""}.</li>`;
+    wire.innerHTML = `<span class="c">${h === "oc1" ? "POST /session/{id}/message" : "prompt → pi"}</span>
+{
+  <span class="k">"parts"</span>: [
+    { <span class="k">"type"</span>: <span class="s">"text"</span>, <span class="k">"text"</span>: <span class="s">"The refund total is off by a cent on @src/api/refunds.ts. Use $fleet-debug to find it, then tidy the fix with $fleet-simplify"</span> },
+    { <span class="k">"type"</span>: <span class="s">"text"</span>, <span class="k">"synthetic"</span>: true,
+      <span class="k">"text"</span>: <span class="w">"The user named these skills: fleet-debug, fleet-simplify. Load each with the skill tool before the step it's for."</span> }
+  ]
+}`;
+  }
+}
+
+function render() { renderToolbars(); renderPopups(); renderWire(); }
+
+function bindSeg(id, onPick) {
+  const el = document.getElementById(id);
+  el.addEventListener("click", (e) => {
+    const b = e.target.closest("button"); if (!b) return;
+    el.querySelectorAll("button").forEach(x => x.setAttribute("aria-pressed", String(x === b)));
+    onPick(b.dataset.v);
+  });
+}
+bindSeg("harness", v => { state.harness = v; render(); });
+bindSeg("atskills", v => { state.atSkills = v; render(); });
+bindSeg("theme", v => { document.documentElement.dataset.theme = v; });
+if (window.matchMedia && matchMedia("(prefers-color-scheme: light)").matches) {
+  document.documentElement.dataset.theme = "light";
+  document.querySelectorAll("#theme button").forEach(b => b.setAttribute("aria-pressed", String(b.dataset.v === "light")));
+}
+render();
+</script>
+</body>
+</html>

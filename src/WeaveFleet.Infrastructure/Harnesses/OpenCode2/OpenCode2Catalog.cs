@@ -81,12 +81,12 @@ internal static class OpenCode2Catalog
     {
         var listed = commands
             .Where(command => !string.IsNullOrWhiteSpace(command.Name))
-            .Select(command => new CommandInfo { Name = command.Name!, Description = command.Description })
+            .Select(command => new CommandInfo { Name = command.Name!, Description = command.Description, Kind = "command" })
             .ToList();
         var names = listed.Select(command => command.Name).ToHashSet(StringComparer.Ordinal);
         listed.AddRange(skills
             .Where(skill => !string.IsNullOrWhiteSpace(skill.Name) && names.Add(skill.Name!))
-            .Select(skill => new CommandInfo { Name = skill.Name!, Description = skill.Description }));
+            .Select(skill => new CommandInfo { Name = skill.Name!, Description = skill.Description, Kind = "skill" }));
         return listed;
     }
 
@@ -106,6 +106,27 @@ internal static class OpenCode2Catalog
         return commands.Any(command => string.Equals(command.Name, name, StringComparison.Ordinal))
             ? null
             : new OpenCode2PromptSkill { Id = id, Name = name };
+    }
+
+    /// <summary>
+    /// The skills a prompt names with <c>$</c>: those V2 lists, to go with the prompt, and the names it doesn't. A <c>$</c>
+    /// skill is a skill even when a command has its name, unlike <see cref="FindSkillAsync"/>'s <c>/name</c>.
+    /// </summary>
+    public static async Task<(IReadOnlyList<OpenCode2PromptSkill> Known, IReadOnlyList<string> Unknown)> FindSkillsAsync(
+        OpenCode2Server server, string directory, IReadOnlyList<string> names, CancellationToken ct)
+    {
+        var listed = await SkillsOrNoneAsync(server, directory, ct).ConfigureAwait(false);
+        var known = new List<OpenCode2PromptSkill>();
+        var unknown = new List<string>();
+        foreach (var name in names)
+        {
+            if (listed.FirstOrDefault(skill => string.Equals(skill.Name, name, StringComparison.Ordinal)) is { Id: { Length: > 0 } id })
+                known.Add(new OpenCode2PromptSkill { Id = id, Name = name });
+            else
+                unknown.Add(name);
+        }
+
+        return (known, unknown);
     }
 
     /// <summary>V2's skills in <paramref name="directory"/>; none when it can't list them, so its commands still work.</summary>

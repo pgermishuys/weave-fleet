@@ -1410,6 +1410,7 @@ internal sealed partial class OpenCodeHarnessSession : IHarnessSession
         {
             Name = c.Name,
             Description = c.Description,
+            Kind = c.Source == "skill" ? "skill" : "command",
         }).ToList();
     }
 

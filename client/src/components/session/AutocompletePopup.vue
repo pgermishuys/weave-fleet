@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { computed, ref, watch, nextTick } from "vue";
-import { AlertCircle, Bot, ChevronRight, FileText, Folder, LoaderCircle, Terminal } from "lucide-vue-next";
+import { AlertCircle, Bot, ChevronRight, FileText, Folder, LoaderCircle, ScrollText, Terminal } from "lucide-vue-next";
 import StatusGlyph from "@/components/sessions/StatusGlyph.vue";
 import type { AutocompleteItem } from "@/composables/use-autocomplete";
 import { useRelativeTime } from "@/composables/use-relative-time";
@@ -23,6 +23,10 @@ interface AutocompletePopupProps {
   query?: string;
   /** What the agent gets for a session, shown under the list while a session is selected. */
   sessionNote?: string;
+  /** What happens to a skill picked from the `$` list on this harness, said in the footer. */
+  skillHint?: string;
+  /** What the list says when nothing matches. */
+  emptyText?: string;
 }
 
 interface ItemGroup {
@@ -51,6 +55,7 @@ watch(() => props.selectedValue, (val) => {
 
 const groupDefinitions: ReadonlyArray<{ key: AutocompleteItem["group"]; label: string; hint?: string }> = [
   { key: "command", label: "Commands" },
+  { key: "skill", label: "Skills" },
   { key: "session", label: "Sessions", hint: "Tab to attach" },
   { key: "file", label: "Files & folders" },
   { key: "agent", label: "Agents" },
@@ -124,13 +129,14 @@ function handleSelect(value: string): void {
           v-for="item in group.items"
           :key="item.id"
           class="autocomplete-popup__row"
-          :class="{ 'autocomplete-popup__row--selected': isSelected(item) }"
+          :class="{ 'autocomplete-popup__row--selected': isSelected(item), 'autocomplete-popup__row--disabled': item.disabledReason }"
         >
           <button
             :data-value="item.value"
             type="button"
             class="autocomplete-popup__item"
             :aria-selected="isSelected(item)"
+            :disabled="Boolean(item.disabledReason)"
             @mousedown="handleItemMouseDown"
             @click="handleSelect(item.value)"
           >
@@ -138,6 +144,12 @@ function handleSelect(value: string): void {
               <Terminal
                 v-if="item.group === 'command'"
                 class="autocomplete-popup__icon"
+                aria-hidden="true"
+              />
+
+              <ScrollText
+                v-else-if="item.group === 'skill'"
+                class="autocomplete-popup__icon autocomplete-popup__icon--skill"
                 aria-hidden="true"
               />
 
@@ -180,7 +192,7 @@ function handleSelect(value: string): void {
 
             <span class="autocomplete-popup__content">
               <span
-                v-if="item.session"
+                v-if="item.session || item.group === 'skill'"
                 class="autocomplete-popup__label"
                 data-testid="autocomplete-session-title"
               >{{ titleParts(item.label).before }}<mark>{{ titleParts(item.label).match }}</mark>{{ titleParts(item.label).after }}</span>
@@ -189,9 +201,9 @@ function handleSelect(value: string): void {
                 class="autocomplete-popup__label"
               >{{ item.label }}</span>
               <span
-                v-if="item.description"
+                v-if="item.disabledReason || item.description"
                 class="autocomplete-popup__description"
-              >{{ item.description }}</span>
+              >{{ item.disabledReason ?? item.description }}</span>
             </span>
             <span
               v-if="item.session"
@@ -244,7 +256,23 @@ function handleSelect(value: string): void {
       v-else
       class="autocomplete-popup__state"
     >
-      No results
+      {{ emptyText ?? "No results" }}
+    </div>
+
+    <div
+      v-if="selectedItem?.group === 'skill'"
+      class="autocomplete-popup__hint"
+      :class="{ 'autocomplete-popup__hint--warn': selectedItem.warning }"
+      data-testid="autocomplete-skill-hint"
+    >
+      <template v-if="selectedItem.disabledReason || selectedItem.warning">
+        {{ selectedItem.disabledReason ?? selectedItem.warning }}
+      </template>
+      <template v-else>
+        <kbd>Enter</kbd> add skill<template v-if="skillHint">
+          · {{ skillHint }}
+        </template>
+      </template>
     </div>
 
     <div
@@ -377,6 +405,18 @@ function handleSelect(value: string): void {
   font-size: 12px;
 }
 
+.autocomplete-popup__hint--warn {
+  color: var(--idle);
+}
+
+.autocomplete-popup__row--disabled {
+  opacity: 0.5;
+}
+
+.autocomplete-popup__row--disabled .autocomplete-popup__item {
+  cursor: default;
+}
+
 .autocomplete-popup__hint kbd {
   padding: 0 4px;
   border: 1px solid var(--border);
@@ -404,6 +444,10 @@ function handleSelect(value: string): void {
 
 .autocomplete-popup__icon--folder {
   color: var(--accent);
+}
+
+.autocomplete-popup__icon--skill {
+  color: var(--running);
 }
 
 .autocomplete-popup__agent-dot {

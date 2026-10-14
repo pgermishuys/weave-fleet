@@ -58,6 +58,7 @@ import {
   splitDraftReferences,
 } from "@/lib/composer-references";
 import { rememberedSessionTokens, sessionReferencesIn } from "@/lib/session-references";
+import { sessionSkillNames, skillDeliveries, skillListHint, skillNamesIn } from "@/lib/skill-mentions";
 import { useSendPrompt } from "@/composables/use-send-prompt";
 import { parseSlashCommand } from "@/lib/slash-command-utils";
 import { isShellDraft, shellDraftCommand } from "@/lib/shell-commands";
@@ -544,6 +545,8 @@ function queueDraft(typed: string, text: string, options: QueueOptions): void {
   if (options.kind === "prompt") {
     const references = sessionReferencesIn(props.sessionId, text);
     if (references.length > 0) options = { ...options, sessionReferences: references };
+    const skills = skillNamesIn(text, sessionSkillNames(props.sessionId));
+    if (skills.length > 0) options = { ...options, skills };
   }
   setText("");
   void enqueue(text, options).then((queued) => {
@@ -625,13 +628,23 @@ const autocomplete = useAutocomplete({
   fleetCommands: computed(() => supportsSideConversations.value ? [SIDE_QUESTION_COMMAND] : []),
   sessions: referableSessions,
   harnessName: (type) => harnesses.value.find((harness) => harness.type === type)?.displayName,
+  harnessType: () => selectedSession.value?.harnessType,
+});
+// The skills the draft names, each tinted by how it reaches the agent: with the message, or as a note.
+const draftSkills = computed(() => new Map(skillDeliveries(
+  selectedSession.value?.harnessType,
+  skillNamesIn(draft.text, sessionSkillNames(props.sessionId)),
+).map(({ name, delivery }) => [name, delivery])));
+const skillHint = computed(() => {
+  const type = selectedSession.value?.harnessType;
+  return skillListHint(type, harnesses.value.find((harness) => harness.type === type)?.displayName ?? "The agent");
 });
 watch(() => autocomplete.isMentionOpen.value, (open) => {
   mentionOpen.value = open;
 });
 const draftSegments = computed(() => isShellMode.value
   ? [{ text: draft.text }]
-  : splitDraftReferences(draft.text, cursorPosition.value, rememberedSessionTokens(props.sessionId), pickedFileTokens(props.sessionId)));
+  : splitDraftReferences(draft.text, cursorPosition.value, rememberedSessionTokens(props.sessionId), pickedFileTokens(props.sessionId), draftSkills.value));
 // References picked from the @ list are edited as one piece (see handleReferenceKey).
 const pickedRanges = computed(() => isShellMode.value
   ? []
@@ -1064,7 +1077,9 @@ function handleKeydown(event: KeyboardEvent): void {
     return;
   }
 
-  const autocompleteWasOpen = hasValidSessionId.value && autocomplete.isOpen.value;
+  // A `$` that names no skill ("costs $5") is text: the list only says so, and Enter still sends.
+  const autocompleteWasOpen = hasValidSessionId.value && autocomplete.isOpen.value
+    && !(autocomplete.isSkillOpen.value && autocomplete.items.value.length === 0 && !autocomplete.isLoading.value);
 
   if (hasValidSessionId.value) {
     autocomplete.onKeyDown(event);
@@ -1170,6 +1185,8 @@ function handleKeydown(event: KeyboardEvent): void {
         :on-select="autocomplete.onSelect"
         :on-open-folder="autocomplete.onOpenFolder"
         :query="autocomplete.query.value"
+        :skill-hint="skillHint"
+        :empty-text="autocomplete.isSkillOpen.value ? `No skill named “${autocomplete.query.value}”. It stays as text.` : undefined"
         :session-note="supportsFleetTools
           ? 'The agent gets a link to the session, not a copy, and reads what it needs.'
           : 'The agent gets the session\'s title and a recap of where it stands, not a copy.'"
@@ -1217,7 +1234,11 @@ function handleKeydown(event: KeyboardEvent): void {
         ><span
           v-if="segment.reference"
           class="composer-reference"
-          :class="{ 'composer-reference--session': segment.reference === 'session' }"
+          :class="{
+            'composer-reference--session': segment.reference === 'session',
+            'composer-reference--skill': segment.reference === 'skill' && !segment.note,
+            'composer-reference--skill-note': segment.note,
+          }"
         >{{ segment.text }}</span><template v-else>{{ segment.text }}</template></template>{{ " " }}</div>
         <!-- eslint-enable vue/multiline-html-element-content-newline, vue/singleline-html-element-content-newline -->
         <textarea
@@ -1573,6 +1594,15 @@ function handleKeydown(event: KeyboardEvent): void {
 /* A session picked from the @ list: the accent, as the chip it becomes in the sent message. */
 .composer-reference--session {
   --reference-tint: color-mix(in srgb, var(--accent) 18%, transparent);
+}
+
+/* A skill: green when it goes with the message, amber when it goes as a note (see skillDeliveries). */
+.composer-reference--skill {
+  --reference-tint: color-mix(in srgb, var(--running) 22%, transparent);
+}
+
+.composer-reference--skill-note {
+  --reference-tint: color-mix(in srgb, var(--idle) 22%, transparent);
 }
 
 .input-history {

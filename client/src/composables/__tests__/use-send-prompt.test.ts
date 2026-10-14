@@ -10,6 +10,7 @@ import {
   useSentPrompts,
 } from "@/composables/use-send-prompt"
 import type { AccumulatedMessage } from "@/lib/client-types"
+import { rememberSessionSkills } from "@/lib/skill-mentions"
 import { rememberSessionReference } from "@/lib/session-references"
 
 vi.mock("@/api/client", () => ({
@@ -309,6 +310,24 @@ describe("use-send-prompt steering", () => {
 
     expect(sentBody().delivery).toBeUndefined()
     expect(useSentPrompts(sessionId).sentPrompts.value[0]?.steered).toBeUndefined()
+  })
+})
+
+describe("use-send-prompt $ skills", () => {
+  it("sends the session's skills the text names, in order, and leaves the text as typed", async () => {
+    const sessionId = "session-skills"
+    rememberSessionSkills(sessionId, [{ name: "fleet-debug", kind: "skill" }, { name: "fleet-simplify", kind: "skill" }])
+    useDraftState(sessionId, { agentId: "", modelId: "" }).setText("Tidy with $fleet-simplify after $fleet-debug, not $HOME")
+
+    mockApi.POST.mockReturnValueOnce(new Promise(() => {}))
+    useSendPrompt(sessionId).sendPrompt()
+    await nextTick()
+
+    const promptCall = (mockApi.POST.mock.calls as unknown[][]).find(([url]) => url === "/api/sessions/{id}/prompt")
+    expect((promptCall?.[1] as { body: unknown }).body).toMatchObject({
+      text: "Tidy with $fleet-simplify after $fleet-debug, not $HOME",
+      skills: ["fleet-simplify", "fleet-debug"],
+    })
   })
 })
 

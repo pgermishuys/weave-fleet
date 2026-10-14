@@ -28,6 +28,9 @@ public sealed record QueuedPrompt
     /// <summary>The mod that queued it (<c>$.prompt.submit</c>), when the user didn't.</summary>
     public string? Mod { get; init; }
 
+    /// <summary>The skills the message named with <c>$</c> (<see cref="PromptOptions.Skills"/>), kept for when it's sent.</summary>
+    public IReadOnlyList<string>? Skills { get; init; }
+
     public DateTimeOffset CreatedAt { get; init; }
 }
 

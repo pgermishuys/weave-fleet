@@ -52,7 +52,7 @@ public static class InstanceEndpoints
                 return Results.NotFound(new ErrorResponse($"Instance '{id}' not found or not running."));
 
             var commands = await instance.GetCommandsAsync(ct);
-            var result = commands.Select(c => new InstanceCommandItem(c.Name, c.Description)).ToList();
+            var result = commands.Select(c => new InstanceCommandItem(c.Name, c.Description, c.Kind, c.UserOnly)).ToList();
             return Results.Ok(new InstanceCommandsResponse(id, result));
         })
         .WithName("GetInstanceCommands");
