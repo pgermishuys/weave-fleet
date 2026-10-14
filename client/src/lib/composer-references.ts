@@ -7,10 +7,13 @@
 import { reactive } from "vue";
 import { readStoredDraft, writeStoredDraft } from "@/lib/draft-storage";
 import { textHasToken } from "@/lib/session-references";
+import { insideBackticks, type SkillDelivery } from "@/lib/skill-mentions";
 
 export interface DraftSegment {
   text: string;
-  reference?: "file" | "folder" | "session";
+  reference?: "file" | "folder" | "session" | "skill";
+  /** A skill that goes to the agent as a note rather than with the message (see `skillDeliveries`). */
+  note?: boolean;
   /** Picked from the `@` list: drawn as a reference even with the caret at its end, and edited as one piece. */
   picked?: boolean;
 }
@@ -21,21 +24,23 @@ export interface ReferenceRange {
   end: number;
 }
 
-// "@" at the start or after whitespace, then everything up to the next whitespace.
-const REFERENCE_PATTERN = /(^|\s)(@[^\s@][^\s]*)/g;
+// "@" or "$" at the start or after whitespace, then everything up to the next whitespace.
+const REFERENCE_PATTERN = /(^|\s)(@[^\s@][^\s]*|\$[^\s$][^\s]*)/g;
 // Sentence punctuation typed straight after a reference isn't part of it.
 const TRAILING_PUNCTUATION = /[.,;:!?)\]}'"]+$/;
 
 /**
  * Splits a draft into plain text and references. A token the caret is in (or at the end of) is
  * still being typed, so it stays plain until you move past it, unless it was picked from the `@`
- * list: sessions in `sessionTokens`, files and folders in `fileTokens`.
+ * list: sessions in `sessionTokens`, files and folders in `fileTokens`. A `$` token is a reference only when it names
+ * one of `skills` outside backticks.
  */
 export function splitDraftReferences(
   text: string,
   caret: number | null = null,
   sessionTokens: ReadonlySet<string> = new Set(),
   fileTokens: ReadonlySet<string> = new Set(),
+  skills: ReadonlyMap<string, SkillDelivery> = new Map(),
 ): DraftSegment[] {
   const segments: DraftSegment[] = [];
   let plainStart = 0;
@@ -45,6 +50,9 @@ export function splitDraftReferences(
     const start = (match.index ?? 0) + match[1].length;
     const end = start + token.length;
     const tokenEnd = start + match[2].length;
+
+    const skill = token.startsWith("$") ? skills.get(token.slice(1)) : undefined;
+    if (token.startsWith("$") && (!skill || insideBackticks(text, start))) continue;
 
     const isSession = sessionTokens.has(token);
     const picked = isSession || fileTokens.has(token);
@@ -58,8 +66,9 @@ export function splitDraftReferences(
     }
     segments.push({
       text: token,
-      reference: isSession ? "session" : token.endsWith("/") ? "folder" : "file",
+      reference: skill ? "skill" : isSession ? "session" : token.endsWith("/") ? "folder" : "file",
       ...(picked ? { picked } : {}),
+      ...(skill === "note" ? { note: true } : {}),
     });
     plainStart = end;
   }

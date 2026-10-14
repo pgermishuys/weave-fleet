@@ -7,6 +7,7 @@ import type { AccumulatedMessage, ImageAttachment } from "@/lib/client-types";
 import { modelFromKey } from "@/lib/agent-model-choice";
 import { diagLog } from "@/lib/message-diagnostics";
 import { sessionReferencesIn, stripSessionReferences, type SessionReference } from "@/lib/session-references";
+import { sessionSkillNames, skillNamesIn } from "@/lib/skill-mentions";
 import { useSessionsStore } from "@/stores/sessions";
 import { useMachineTarget } from "@/lib/machine-target";
 
@@ -413,6 +414,8 @@ interface BackendSendPromptRequest {
   delivery?: "steer";
   /** Sessions picked from the `@` list, by the token each left in the text. */
   sessionReferences?: { token: string; sessionId: string }[];
+  /** The skills the text's `$` tokens name, in order; the harness decides how each reaches the agent. */
+  skills?: string[];
 }
 
 export interface SendPromptOptions {
@@ -545,6 +548,7 @@ export function useSendPrompt(sessionId: string) {
     const resolvedModelId = model?.id ?? pickedModel?.modelID ?? "";
     const usesDefaultAgent = !draft.agentId;
     const sessionReferences = sessionReferencesIn(sessionId, body);
+    const skills = skillNamesIn(body, sessionSkillNames(sessionId));
 
     ensureSentPrompts(sessionId).push({
       id: promptId,
@@ -615,6 +619,10 @@ export function useSendPrompt(sessionId: string) {
 
     if (sessionReferences.length > 0) {
       request.sessionReferences = sessionReferences.map(({ token, sessionId: referencedId }) => ({ token, sessionId: referencedId }));
+    }
+
+    if (skills.length > 0) {
+      request.skills = skills;
     }
 
     void postPrompt(promptId, request);

@@ -135,6 +135,12 @@ public sealed record HarnessCapabilities
     public bool TakesModelNotes { get; init; }
 
     /// <summary>
+    /// The harness sends <see cref="PromptOptions.Skills"/> itself, in the way it loads a skill. Without it Fleet adds a
+    /// note naming the skills to what the model is told (a model note, or the end of the text).
+    /// </summary>
+    public bool TakesSkills { get; init; }
+
+    /// <summary>
     /// The adapter turns Settings → Permissions levels (<see cref="PermissionLevels"/>) into the harness's own rules, and
     /// the harness's asks come to Fleet. Without it Fleet can't hand the harness a level, and Settings → Permissions says so.
     /// </summary>
@@ -571,6 +577,13 @@ public sealed record PromptOptions
     public IReadOnlyList<string>? ModelNotes { get; init; }
 
     /// <summary>
+    /// Skills the user named with <c>$</c> in the text, in order, without the <c>$</c>. The text still holds the
+    /// <c>$name</c> tokens. A harness with <see cref="HarnessCapabilities.TakesSkills"/> sends them itself; for others
+    /// Fleet adds a note naming them.
+    /// </summary>
+    public IReadOnlyList<string>? Skills { get; init; }
+
+    /// <summary>
     /// The agent's memory notes for the session's folder, for a harness that takes them with the prompt as part of the
     /// system prompt (Claude Code), which keeps the first prompt's notes for the session: a system prompt that changes
     /// mid-session can't reuse the prompt cache. <see langword="null"/> when memory is off. Fleet's OpenCode plugins read
@@ -697,6 +710,12 @@ public sealed record CommandInfo
 {
     public required string Name { get; init; }
     public string? Description { get; init; }
+
+    /// <summary><c>"skill"</c> or <c>"command"</c>; <see langword="null"/> when the harness can't tell.</summary>
+    public string? Kind { get; init; }
+
+    /// <summary>A Claude Code skill the user alone can run (<c>disable-model-invocation</c>): the model can't load it.</summary>
+    public bool UserOnly { get; init; }
 }
 
 /// <summary>A model provider with its available models.</summary>

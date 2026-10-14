@@ -12,16 +12,21 @@ import {
   type ReferableSession,
 } from "@/lib/session-references";
 import { useMachineTarget } from "@/lib/machine-target";
+import { rememberSessionSkills, sessionSkillNames, sessionSkills, skillNamesIn, skillTrigger } from "@/lib/skill-mentions";
 
 export interface AutocompleteItem {
   id: string;
   label: string;
   description?: string;
-  group: "command" | "agent" | "file" | "session";
+  group: "command" | "agent" | "file" | "session" | "skill";
   value: string;
   meta?: string;
   /** For a session: what its row shows besides the title. */
   session?: ReferableSession;
+  /** Why it can't be picked here; the row is greyed out. */
+  disabledReason?: string;
+  /** For a skill: a warning to show while it's selected (it goes as a note, not with the message). */
+  warning?: string;
 }
 
 /** How many sessions the `@` list offers: a few for a bare `@`, which is mostly for files, more once you type. */
@@ -41,12 +46,16 @@ export interface UseAutocompleteParams {
   sessions?: MaybeRefOrGetter<readonly SessionListItem[]>;
   /** A harness's name for the sessions' rows. */
   harnessName?: (type: string) => string | undefined;
+  /** The session's harness, which decides how a `$` skill is sent (see `skillDeliveries`). */
+  harnessType?: MaybeRefOrGetter<string | null | undefined>;
 }
 
 export interface UseAutocompleteResult {
   isOpen: ComputedRef<boolean>;
   /** Whether the `@` list is open: what's typed after `@` names a file, an agent or a session. */
   isMentionOpen: ComputedRef<boolean>;
+  /** Whether the `$` list is open: what's typed after `$` names a skill. */
+  isSkillOpen: ComputedRef<boolean>;
   items: ComputedRef<AutocompleteItem[]>;
   /** What's typed after the `@` or `/`, for the popup to mark in the rows. */
   query: ComputedRef<string>;
@@ -61,7 +70,7 @@ export interface UseAutocompleteResult {
 }
 
 interface Trigger {
-  type: "slash" | "mention";
+  type: "slash" | "mention" | "skill";
   startIndex: number;
 }
 
@@ -112,6 +121,7 @@ function useSessionCommands(sessionId: MaybeRefOrGetter<string | null | undefine
 
         const body = responseData as unknown as { commands?: AutocompleteCommand[] };
         data.value = body.commands ?? [];
+        rememberSessionSkills(nextSessionId, data.value);
       } catch (fetchError) {
         if (fetchError instanceof DOMException && fetchError.name === "AbortError") {
           return;
@@ -187,6 +197,7 @@ export function useAutocomplete({
   fleetCommands = [],
   sessions = [],
   harnessName,
+  harnessType,
 }: UseAutocompleteParams): UseAutocompleteResult {
   const selectedIndex = ref(0);
   const suppressedValue = ref<string | null>(null);
@@ -196,6 +207,12 @@ export function useAutocomplete({
   const computedTrigger = computed<Trigger | null>(() => {
     if (!value.value) {
       return null;
+    }
+
+    // A `$` the caret is typing, anywhere (after a `/command` too), the caret is typing, when the session has skills to offer.
+    const skill = skillTrigger(value.value, cursorPosition.value);
+    if (skill && (sessionSkills(toValue(sessionId)).length > 0 || commandsLoading.value)) {
+      return { type: "skill", startIndex: skill.start };
     }
 
     if (value.value.startsWith("/") && cursorPosition.value >= 1) {
@@ -269,6 +286,10 @@ export function useAutocomplete({
         }));
     }
 
+    if (computedTrigger.value.type === "skill") {
+      return skillItems(computedTrigger.value.startIndex);
+    }
+
     const filter = filterText.value.toLowerCase();
     const agentItems: AutocompleteItem[] = agents.value
       .filter((agent) => filter === ""
@@ -315,6 +336,35 @@ export function useAutocomplete({
     // Sessions, then files and folders: a session is the rarer pick, so the few that match go on top.
     return [...sessionItems, ...fileItems, ...agentItems];
   });
+
+  /**
+   * The session's skills matching what's typed after `$`, names starting with it first. On Claude Code, which expands
+   * only the skill a message starts with, a skill picked after another goes as a note, and one the model can't load
+   * can't go at all.
+   */
+  function skillItems(startIndex: number): AutocompleteItem[] {
+    const filter = filterText.value.toLowerCase();
+    const draftSessionId = toValue(sessionId);
+    const others = value.value.slice(0, startIndex) + value.value.slice(cursorPosition.value);
+    const first = toValue(harnessType) === "claude-code" ? skillNamesIn(others, sessionSkillNames(draftSessionId))[0] : undefined;
+    const harness = harnessName?.("claude-code") ?? "Claude Code";
+
+    return sessionSkills(draftSessionId)
+      .filter((skill) => skill.name.toLowerCase().includes(filter))
+      .sort((a, b) => Number(!a.name.toLowerCase().startsWith(filter)) - Number(!b.name.toLowerCase().startsWith(filter)))
+      .map((skill) => ({
+        id: `skill:${skill.name}`,
+        label: skill.name,
+        description: skill.description,
+        group: "skill",
+        value: `$${skill.name} `,
+        ...(first && skill.name !== first
+          ? skill.userOnly
+            ? { disabledReason: `The model can't load ${skill.name}, so it only runs first in a message, and this one already runs ${first}.` }
+            : { warning: `This message already runs ${first}. ${harness} runs one skill per message, so this one goes as a note.` }
+          : {}),
+      }));
+  }
 
   const clampedIndex = computed(() => items.value.length === 0
     ? 0
@@ -406,7 +456,9 @@ export function useAutocomplete({
       case "Enter":
       case "Tab": {
         const item = items.value[clampedIndex.value];
-        if (item) {
+        if (item?.disabledReason) {
+          event.preventDefault();
+        } else if (item) {
           event.preventDefault();
           pick(item, event.key);
         } else if (isLoading.value) {
@@ -430,6 +482,9 @@ export function useAutocomplete({
   }
 
   function pick(item: AutocompleteItem, key: string): void {
+    if (item.disabledReason) {
+      return;
+    }
     if (key === "Tab" && item.meta === "dir") {
       onOpenFolder(item.value);
     } else {
@@ -438,7 +493,7 @@ export function useAutocomplete({
   }
 
   const isLoading = computed(() => (
-    computedTrigger.value?.type === "slash"
+    computedTrigger.value?.type === "slash" || computedTrigger.value?.type === "skill"
       ? commandsLoading.value
       : computedTrigger.value?.type === "mention"
         ? agentsLoading.value || filesLoading.value
@@ -446,7 +501,7 @@ export function useAutocomplete({
   ));
 
   const error = computed(() => (
-    computedTrigger.value?.type === "slash"
+    computedTrigger.value?.type === "slash" || computedTrigger.value?.type === "skill"
       ? commandsError.value
       : computedTrigger.value?.type === "mention"
         ? agentsError.value ?? filesError.value
@@ -476,6 +531,7 @@ export function useAutocomplete({
   return {
     isOpen,
     isMentionOpen: computed(() => isOpen.value && computedTrigger.value?.type === "mention"),
+    isSkillOpen: computed(() => isOpen.value && computedTrigger.value?.type === "skill"),
     items,
     query: filterText,
     isLoading,

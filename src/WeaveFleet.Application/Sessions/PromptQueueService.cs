@@ -22,7 +22,8 @@ public sealed record QueuePromptRequest(
     string? ProviderId = null,
     string? ModelId = null,
     string? Effort = null,
-    string? Mod = null);
+    string? Mod = null,
+    IReadOnlyList<string>? Skills = null);
 
 /// <summary>A queued message as the client shows it.</summary>
 public sealed record QueuedPromptView(string Id, string Kind, string Text, string CreatedAt, string? Mod = null)
@@ -112,6 +113,7 @@ public sealed partial class PromptQueueService(
             ModelId = request.ModelId,
             Effort = request.Effort,
             Mod = request.Mod,
+            Skills = request.Skills is { Count: > 0 } ? request.Skills : null,
             CreatedAt = DateTimeOffset.UtcNow,
         };
         if (!await queue.AddAsync(item).ConfigureAwait(false))
@@ -224,6 +226,7 @@ public sealed partial class PromptQueueService(
                 Effort = item.Effort,
                 Delivery = delivery,
                 SentByMod = item.Mod,
+                Skills = item.Skills,
             },
             ct),
     };

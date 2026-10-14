@@ -216,12 +216,24 @@ public sealed partial class SessionPrompting(
                 && harnessRegistry.GetByType(sessionResult.Value.HarnessType)?.Capabilities.TakesModelNotes == true)
                 modelNotes = [.. modelNotes ?? [], .. modPrompt.Context];
 
+            // A harness that doesn't send the named skills itself is told which they are, unseen by the user: as a model
+            // note where it passes those on, else at the end of the text it gets (the conversation keeps the user's own).
+            var wireText = text;
+            if (options?.Skills is { Count: > 0 } skills
+                && harnessRegistry.GetByType(sessionResult.Value.HarnessType)?.Capabilities.TakesSkills != true)
+            {
+                if (harnessRegistry.GetByType(sessionResult.Value.HarnessType)?.Capabilities.TakesModelNotes == true)
+                    modelNotes = [.. modelNotes ?? [], SkillMentions.Note(skills)];
+                else
+                    wireText = text + "\n\n" + SkillMentions.Note(skills);
+            }
+
             // Pass the generated message ID through to the harness, with any notes the session's prompts carry.
             var promptOptionsWithMessageId = options is null
                 ? new PromptOptions { MessageId = generatedMessageId, ModelNotes = modelNotes, MemoryNotes = memoryNotes }
                 : options with { MessageId = generatedMessageId, ModelNotes = modelNotes, MemoryNotes = memoryNotes };
 
-            await instanceResult.Value.SendPromptAsync(text, promptOptionsWithMessageId, ct);
+            await instanceResult.Value.SendPromptAsync(wireText, promptOptionsWithMessageId, ct);
             if (lostWork.Count > 0)
                 await delegationService.MarkLostWorkReportedAsync(lostWork).ConfigureAwait(false);
 

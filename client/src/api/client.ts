@@ -231,6 +231,10 @@ export interface SendCommandResponse {
 export interface AutocompleteCommand {
   name: string;
   description?: string;
+  /** "skill" or "command"; left out when the harness can't tell, as on Claude Code, where both run from `/name`. */
+  kind?: "skill" | "command" | null;
+  /** A skill the model can't load (Claude Code's `disable-model-invocation`). */
+  userOnly?: boolean;
 }
 
 export interface AutocompleteAgent {

@@ -1,6 +1,7 @@
 using System.Net;
 using System.Text;
 using System.Text.Json;
+using WeaveFleet.Application.Sessions;
 using Microsoft.Extensions.Logging.Abstractions;
 using WeaveFleet.Domain.Harnesses;
 using WeaveFleet.Infrastructure.Harnesses.OpenCode2;
@@ -231,6 +232,38 @@ public sealed class OpenCode2AgentsTests
         prompt.Path.ShouldBe($"/api/session/{Session}/prompt");
         JsonDocument.Parse(prompt.Body!).RootElement.GetRawText().ShouldBe(
             """{"id":"msg_fleet","text":"/fleet-walkthrough the branch","skills":[{"id":"fleet-walkthrough","name":"fleet-walkthrough"}]}""");
+    }
+
+    [Fact]
+    public async Task Skills_named_with_a_dollar_go_with_the_prompt_and_an_unknown_one_goes_as_a_note()
+    {
+        var api = SkillsAndCommands();
+        await using var server = Server(api);
+        await using var session = NewSession(server);
+
+        await session.SendPromptAsync(
+            "use $fleet-walkthrough then $nothing-here",
+            new PromptOptions { MessageId = "msg_fleet", Skills = ["fleet-walkthrough", "nothing-here"] },
+            CancellationToken.None);
+
+        var posts = api.Posts().Where(r => r.Path.Contains("/synthetic") || r.Path.EndsWith("/prompt", StringComparison.Ordinal)).ToList();
+        posts.Select(r => r.Path.Split('/')[^1]).ShouldBe(["synthetic", "prompt"]);
+        JsonDocument.Parse(posts[0].Body!).RootElement.GetProperty("text").GetString().ShouldBe(SkillMentions.Note(["nothing-here"]));
+        JsonDocument.Parse(posts[1].Body!).RootElement.GetRawText().ShouldBe(
+            """{"id":"msg_fleet","text":"use $fleet-walkthrough then $nothing-here","skills":[{"id":"fleet-walkthrough","name":"fleet-walkthrough"}]}""");
+    }
+
+    [Fact]
+    public async Task A_dollar_skill_is_a_skill_even_when_a_command_has_its_name()
+    {
+        var api = SkillsAndCommands();
+        await using var server = Server(api);
+
+        var (known, unknown) = await OpenCode2Catalog.FindSkillsAsync(server, Folder, ["hello", "fleet-walkthrough"], CancellationToken.None);
+
+        // "hello" is a command and also a skill in the fixture: unlike /hello, $hello is the skill.
+        known.Select(s => s.Name).ShouldBe(["hello", "fleet-walkthrough"]);
+        unknown.ShouldBeEmpty();
     }
 
     [Fact]

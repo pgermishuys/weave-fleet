@@ -393,6 +393,22 @@ public sealed class ClaudeCodeLongLivedProcessTests : IAsyncDisposable
     }
 
     [Fact]
+    public async Task Skills_named_with_a_dollar_go_as_a_slash_command_and_a_note_and_the_conversation_keeps_the_words()
+    {
+        if (OperatingSystem.IsWindows())
+            return;
+
+        Start();
+        await PromptAsync("use $fleet-debug and $fleet-design", new PromptOptions { Skills = ["fleet-debug", "fleet-design"] });
+
+        var content = JsonDocument.Parse(StdinLines().Single()).RootElement.GetProperty("message").GetProperty("content");
+        content.EnumerateArray().Select(block => block.GetProperty("text").GetString()).ShouldBe(
+            [SkillMentions.Note(["fleet-design"]), "/fleet-debug use $fleet-debug and $fleet-design"]);
+        _messages.All.Single(m => m.Role == "user").PartsJson.ShouldContain("use $fleet-debug and $fleet-design");
+        _messages.All.Single(m => m.Role == "user").PartsJson.ShouldNotContain("/fleet-debug use");
+    }
+
+    [Fact]
     public async Task A_steered_prompt_goes_into_the_running_turn_and_is_saved_where_it_was_sent()
     {
         if (OperatingSystem.IsWindows())

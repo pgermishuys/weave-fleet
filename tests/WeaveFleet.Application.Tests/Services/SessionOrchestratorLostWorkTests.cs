@@ -78,6 +78,37 @@ public sealed class SessionOrchestratorLostWorkTests : IAsyncDisposable
     }
 
     [Fact]
+    public async Task Named_skills_go_as_a_model_note_to_a_harness_that_passes_notes_but_not_skills()
+    {
+        Seed(takesModelNotes: true);
+
+        await _builder.Build().PromptSessionAsync("s1", "use $a", new PromptOptions { Skills = ["a"] });
+
+        var call = Calls("use $a");
+        call.Options!.ModelNotes.ShouldNotBeNull().ShouldHaveSingleItem().ShouldBe(SkillMentions.Note(["a"]));
+    }
+
+    [Fact]
+    public async Task Named_skills_go_at_the_end_of_the_text_the_harness_gets_when_it_takes_no_notes()
+    {
+        Seed(takesModelNotes: false);
+
+        await _builder.Build().PromptSessionAsync("s1", "use $a", new PromptOptions { Skills = ["a"] });
+
+        _session.SendPromptCalls.Single().Text.ShouldBe("use $a\n\n" + SkillMentions.Note(["a"]));
+    }
+
+    [Fact]
+    public async Task A_harness_that_sends_skills_itself_gets_no_note()
+    {
+        Seed(takesModelNotes: true, takesSkills: true);
+
+        await _builder.Build().PromptSessionAsync("s1", "use $a", new PromptOptions { Skills = ["a"] });
+
+        Calls("use $a").Options!.ModelNotes.ShouldBeNull();
+    }
+
+    [Fact]
     public void The_note_stays_short_however_much_was_lost()
     {
         var lost = Enumerable.Range(0, 25)
@@ -95,9 +126,9 @@ public sealed class SessionOrchestratorLostWorkTests : IAsyncDisposable
 
     private (string Text, PromptOptions? Options) Calls(string text) => _session.SendPromptCalls.Single(c => c.Text == text);
 
-    private void Seed(bool takesModelNotes)
+    private void Seed(bool takesModelNotes, bool takesSkills = false)
     {
-        _builder.RegisterHarness("claude-code", "Claude Code", new HarnessCapabilities { TakesModelNotes = takesModelNotes });
+        _builder.RegisterHarness("claude-code", "Claude Code", new HarnessCapabilities { TakesModelNotes = takesModelNotes, TakesSkills = takesSkills });
         _builder.WorkspaceRepository.Seed(new Workspace { Id = "ws-1", Directory = _repository, IsolationStrategy = "existing" });
         _builder.SessionRepository.Seed(new Session
         {

@@ -308,7 +308,8 @@ internal sealed class ClaudeCodeHarnessSession : IHarnessSession
                 // 3. Send it to the session's claude process, starting one if there's none, with Fleet's notes to the
                 //    model ahead of it.
                 _memoryNotes ??= options?.MemoryNotes;
-                var line = ClaudeCodeInput.UserMessage(text, options?.ModelNotes, options?.Attachments);
+                var (wireText, notes) = WithSkills(text, options);
+                var line = ClaudeCodeInput.UserMessage(wireText, notes, options?.Attachments);
                 var process = await EnsureProcessAsync(options, ct).ConfigureAwait(false);
                 if (!await SendToAsync(process, turn, line, ct).ConfigureAwait(false))
                 {
@@ -364,13 +365,28 @@ internal sealed class ClaudeCodeHarnessSession : IHarnessSession
             return false;
 
         LogSendPrompt(_logger, InstanceId, null);
-        var line = ClaudeCodeInput.UserMessage(text, options.ModelNotes, options.Attachments);
+        var (wireText, notes) = WithSkills(text, options);
+        var line = ClaudeCodeInput.UserMessage(wireText, notes, options.Attachments);
         if (!await process.WriteLineAsync(line, ct).ConfigureAwait(false))
             return false;
 
         // Had the turn just ended, Claude Code starts one with it by itself, which Fleet follows like any other.
         await PersistUserPromptAsync(text, options, steered: true).ConfigureAwait(false);
         return true;
+    }
+
+    /// <summary>
+    /// What goes to Claude Code when the user named skills with <c>$</c>: the first as <c>/name</c> ahead of the text, the
+    /// one form Claude Code expands, and the rest in a note for the model. The conversation keeps the user's own words
+    /// (<see cref="PersistUserPromptAsync"/> gets the text as typed).
+    /// </summary>
+    internal static (string Text, IReadOnlyList<string>? Notes) WithSkills(string text, PromptOptions? options)
+    {
+        if (options?.Skills is not { Count: > 0 } skills)
+            return (text, options?.ModelNotes);
+
+        var notes = skills.Count > 1 ? [.. options.ModelNotes ?? [], SkillMentions.Note(skills.Skip(1).ToList())] : options.ModelNotes;
+        return ($"/{skills[0]} {text}", notes);
     }
 
     /// <summary>Waits for a running turn to end, then starts Fleet's.</summary>
@@ -1016,14 +1032,26 @@ internal sealed class ClaudeCodeHarnessSession : IHarnessSession
             return [];
 
         var skills = await ReadSkillsAsync().ConfigureAwait(false);
-        return ComposerCommands(await _catalog.GetCommandsAsync(_workingDirectory, skills, ct).ConfigureAwait(false));
+        return ComposerCommands(
+            await _catalog.GetCommandsAsync(_workingDirectory, skills, ct).ConfigureAwait(false),
+            ClaudeCodeSkillFiles.Folders(skills?.Folder, _workingDirectory));
     }
 
-    /// <summary>The commands that aren't Claude Code's own.</summary>
-    internal static IReadOnlyList<CommandInfo> ComposerCommands(IReadOnlyList<ClaudeCodeCommand> commands)
+    /// <summary>
+    /// The commands that aren't Claude Code's own. Each is a skill as far as Fleet can say (Claude Code expands any
+    /// <c>/name</c>, and its model loads either through its Skill tool), unless its <c>SKILL.md</c> in
+    /// <paramref name="skillFolders"/> keeps it from the model (<see cref="CommandInfo.UserOnly"/>).
+    /// </summary>
+    internal static IReadOnlyList<CommandInfo> ComposerCommands(IReadOnlyList<ClaudeCodeCommand> commands, IReadOnlyList<string>? skillFolders = null)
         => [.. commands
             .Where(command => !command.BuiltIn)
-            .Select(command => new CommandInfo { Name = command.Name, Description = command.Description })];
+            .Select(command => new CommandInfo
+            {
+                Name = command.Name,
+                Description = command.Description,
+                Kind = "skill",
+                UserOnly = skillFolders is not null && ClaudeCodeSkillFiles.IsUserOnly(command.Name, skillFolders),
+            })];
 
     /// <inheritdoc />
     /// <remarks>Claude Code's own list, with each model's efforts (<see cref="ClaudeCodeCatalog"/>).</remarks>

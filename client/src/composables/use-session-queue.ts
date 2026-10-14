@@ -26,6 +26,8 @@ export interface QueueOptions {
   effort?: string;
   /** For a message: the sessions picked from the `@` list whose tokens are in its text. */
   sessionReferences?: readonly SessionReference[];
+  /** For a message: the skills its `$` tokens name, in order. */
+  skills?: readonly string[];
 }
 
 /** The `session.queue` event: a session's whole queue, sent whenever it changes. */
@@ -119,6 +121,9 @@ export function useSessionQueue(sessionId: string) {
           effort: options.effort ?? null,
           ...(options.sessionReferences?.length
             ? { sessionReferences: options.sessionReferences.map(({ token, sessionId }) => ({ token, sessionId })) }
+            : {}),
+          ...(options.skills?.length
+            ? { skills: [...options.skills] }
             : {}),
         },
       });

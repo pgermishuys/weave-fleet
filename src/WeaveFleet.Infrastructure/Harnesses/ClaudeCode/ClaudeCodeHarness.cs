@@ -48,6 +48,7 @@ public sealed class ClaudeCodeHarness : IHarness
         ChildSessionsResumable = false,
         // Fleet's notes to the model go ahead of the prompt as text blocks of their own.
         TakesModelNotes = true,
+        TakesSkills = true,
         // Fleet's MCP server gives the agent Fleet's tools (ClaudeCodeFleetTools), fleet_session_read among them.
         SupportsFleetTools = true,
         // fleet_browser_read and fleet_browser_act, as on OpenCode.

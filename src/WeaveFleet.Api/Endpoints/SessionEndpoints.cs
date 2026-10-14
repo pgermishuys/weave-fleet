@@ -355,8 +355,13 @@ public static class SessionEndpoints
             if (text.IsFailure)
                 return text.Error.ToSessionApiResult();
 
+            // Skills named with $ in the text; each harness sends them its own way (SkillMentions).
+            var skills = SkillMentions.Validate(req.Text, req.Skills);
+            if (skills.IsFailure)
+                return skills.Error.ToSessionApiResult();
+
             var attachments = req.Attachments?.Select(a => new HarnessAttachment(a.Mime, a.Filename ?? "image.png", a.Data)).ToList();
-            var options = new PromptOptions { Agent = req.Agent, ProviderId = modelResolution.ProviderId, ModelId = modelResolution.ModelId, Attachments = attachments, Effort = req.Effort, Delivery = delivery };
+            var options = new PromptOptions { Agent = req.Agent, Skills = skills.Value, ProviderId = modelResolution.ProviderId, ModelId = modelResolution.ModelId, Attachments = attachments, Effort = req.Effort, Delivery = delivery };
             var result = await sessionPrompting.PromptSessionWithReceiptAsync(id, text.Value, options, req.UserMessageId, req.CorrelationId, ct);
             return result.Match(r => Results.Ok(new SendPromptApiResponse(r.EventId, r.CorrelationId)), err => err.ToSessionApiResult());
         })
@@ -397,9 +402,13 @@ public static class SessionEndpoints
                 text = expanded.Value;
             }
 
+            var skills = SkillMentions.Validate(req.Text, req.Skills);
+            if (skills.IsFailure)
+                return skills.Error.ToSessionApiResult();
+
             var result = await queue.EnqueueAsync(
                 id,
-                new QueuePromptRequest(text, req.Kind, req.Command, req.Arguments, req.Agent, modelResolution.ProviderId, modelResolution.ModelId, req.Effort),
+                new QueuePromptRequest(text, req.Kind, req.Command, req.Arguments, req.Agent, modelResolution.ProviderId, modelResolution.ModelId, req.Effort, Skills: skills.Value),
                 ct);
             return result.Match(
                 item => Results.Json(QueuedPromptView.From(item), ApiJsonContext.Default.QueuedPromptView, statusCode: StatusCodes.Status201Created),
@@ -936,7 +945,7 @@ public static class SessionEndpoints
             return result.Match(
                 commands =>
                 {
-                    var items = commands.Select(c => new InstanceCommandItem(c.Name, c.Description)).ToList();
+                    var items = commands.Select(c => new InstanceCommandItem(c.Name, c.Description, c.Kind, c.UserOnly)).ToList();
                     return Results.Ok(new InstanceCommandsResponse(id, items));
                 },
                 err => err.ToSessionApiResult());
@@ -1415,7 +1424,9 @@ internal sealed record SendPromptApiRequest(
     // "queue" (the default: Fleet sends it once the session is idle) or "steer" (into the running turn).
     string? Delivery = null,
     // Sessions picked from the composer's @ list, by the token each left in the text.
-    SessionReferenceDto[]? SessionReferences = null);
+    SessionReferenceDto[]? SessionReferences = null,
+    // Skills named with $ in the text, without the $, in the order they appear.
+    string[]? Skills = null);
 
 /// <summary>A session picked from the composer's <c>@</c> list: the token it left in the text (<c>@t3code-notes</c>), and its id.</summary>
 internal sealed record SessionReferenceDto(string Token, string SessionId);
@@ -1431,7 +1442,8 @@ internal sealed record QueuePromptApiRequest(
     string? Agent = null,
     ModelRef? Model = null,
     string? Effort = null,
-    SessionReferenceDto[]? SessionReferences = null);
+    SessionReferenceDto[]? SessionReferences = null,
+    string[]? Skills = null);
 
 internal sealed record ImageAttachmentDto(string Mime, string? Filename, string Data);
 

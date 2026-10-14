@@ -138,6 +138,7 @@ async function mountAutocomplete(
   cursor: number,
   sessionId: Ref<string> | string = "instance-1",
   sessions: SessionListItem[] = [],
+  harnessType?: string,
 ) {
   const value = shallowRef(initialValue);
   const cursorPosition = shallowRef(cursor);
@@ -157,6 +158,7 @@ async function mountAutocomplete(
     sessions,
     // As the composer does, from the harnesses the server lists.
     harnessName: (type) => ({ "claude-code": "Claude Code" })[type],
+    harnessType,
   }));
   unmounts.push(() => mounted.wrapper.unmount());
 
@@ -502,6 +504,73 @@ describe("useAutocomplete", () => {
       expect(sessionReferencesIn("instance-1", value.value)).toEqual([
         { token: "@t3code-what-can-we-learn", sessionId: "ses-a", title: "t3code: what can we learn?" },
       ]);
+    });
+  });
+
+  describe("$ skills", () => {
+    const skills = [
+      { name: "fleet-debug", description: "Find the root cause", kind: "skill" },
+      { name: "fleet-simplify", description: "Tidy the change", kind: "skill" },
+      { name: "release-notes", description: "Draft release notes", kind: "skill", userOnly: true },
+      { name: "review", description: "A command", kind: "command" },
+    ];
+
+    beforeEach(() => {
+      const commands = mockApi.GET.getMockImplementation()!;
+      mockApi.GET.mockImplementation(async (url: string, init: unknown) => url === "/api/sessions/{id}/commands"
+        ? { data: { commands: skills }, error: undefined, response: createJsonResponse({ commands: skills }) }
+        : commands(url, init));
+    });
+
+    it("lists the session's skills after a $ anywhere, not its commands, and puts the pick in as $name", async () => {
+      vi.useFakeTimers();
+      const { result, value, cursorPosition } = await mountAutocomplete("Fix it, then use $sim", 21);
+      await flushAll();
+
+      expect(result.isSkillOpen.value).toBe(true);
+      expect(result.items.value.map((item) => item.label)).toEqual(["fleet-simplify"]);
+
+      value.value = "Fix it, then use $";
+      cursorPosition.value = value.value.length;
+      await flushAll();
+      expect(result.items.value.map((item) => item.label)).toEqual(["fleet-debug", "fleet-simplify", "release-notes"]);
+
+      result.onKeyDown(createKeyboardEvent("Enter"));
+      await vi.advanceTimersByTimeAsync(0);
+      expect(value.value).toBe("Fix it, then use $fleet-debug ");
+    });
+
+    it("opens after a /command at the start too, and not inside a word or backticks", async () => {
+      const { result, value, cursorPosition } = await mountAutocomplete("/fleet-review then $fl", 22);
+      await flushAll();
+      expect(result.isSkillOpen.value).toBe(true);
+
+      for (const text of ["costs US$5", "run `echo $HO"]) {
+        value.value = text;
+        cursorPosition.value = text.length;
+        await flushAll();
+        expect(result.isSkillOpen.value).toBe(false);
+      }
+    });
+
+    it("on Claude Code, warns that a second skill goes as a note and greys out one the model can't load", async () => {
+      const { result, value } = await mountAutocomplete("Use $fleet-debug then $", 23, "instance-1", [], "claude-code");
+      await flushAll();
+
+      const byName = Object.fromEntries(result.items.value.map((item) => [item.label, item]));
+      expect(byName["fleet-debug"].warning).toBeUndefined();
+      expect(byName["fleet-simplify"].warning).toBe(
+        "This message already runs fleet-debug. Claude Code runs one skill per message, so this one goes as a note.");
+      expect(byName["release-notes"].disabledReason).toBe("The model can't load release-notes, so it only runs first in a message, and this one already runs fleet-debug.");
+
+      // Enter on the greyed-out row neither picks it nor sends the message.
+      result.onKeyDown(createKeyboardEvent("ArrowDown"));
+      result.onKeyDown(createKeyboardEvent("ArrowDown"));
+      const enter = createKeyboardEvent("Enter");
+      result.onKeyDown(enter);
+      await flushAll();
+      expect(enter.defaultPrevented).toBe(true);
+      expect(value.value).toBe("Use $fleet-debug then $");
     });
   });
 });
