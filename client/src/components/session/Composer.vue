@@ -32,10 +32,18 @@ import { useDraftFiles } from "@/composables/use-draft-files";
 import { uploadSessionAttachment } from "@/api/session-attachments";
 import {
   ATTACH_ANY_FILE_PREFERENCE_KEY,
+  INLINE_MAX_BYTES,
+  LARGE_PASTES_PREFERENCE_KEY,
+  describeDraftFile,
+  describePaste,
   fileExtensionLabel,
-  formatFileSize,
+  inlineFileBlock,
+  isBigPaste,
+  isTextFile,
+  pastedFileName,
   withAttachedNote,
   type AttachedFile,
+  type LargePastes,
 } from "@/lib/attached-files";
 import { useMachineTarget } from "@/lib/machine-target";
 import { usePreferencesStore } from "@/stores/preferences";
@@ -123,6 +131,9 @@ preferencesStore.ensureLoaded();
 /** The "Attach any file" switch: files that aren't images are held in the draft and uploaded when it's sent. */
 const attachAnyFile = computed(() => preferencesStore.get(ATTACH_ANY_FILE_PREFERENCE_KEY, "false") === "true");
 const isUploading = shallowRef(false);
+const largePastes = computed(() => preferencesStore.get(LARGE_PASTES_PREFERENCE_KEY, "ask") as LargePastes);
+/** A big paste waiting for a choice: the text and where the caret was, so Paste as text goes back there. */
+const pasteOffer = shallowRef<{ text: string; start: number; end: number; choice: "attach" | "text" } | null>(null);
 const pasteError = shallowRef<string | undefined>(undefined);
 const isDragging = shallowRef(false);
 const lightboxUrl = shallowRef<string | null>(null);
@@ -185,7 +196,7 @@ function removeAttachment(id: string): void {
 const MAX_FILE_BYTES = 25 * 1024 * 1024;
 
 /** A picked, dropped or pasted file: an image goes the native way where the harness takes images, anything else is held for upload. */
-function addFiles(files: File[]): void {
+function addFiles(files: File[], pasted = false): void {
   for (const file of files) {
     const isImage = ALLOWED_IMAGE_MIMES.has(file.type);
     if (isImage && !supportsImages.value) {
@@ -201,17 +212,94 @@ function addFiles(files: File[]): void {
       continue;
     }
     if (isImage) processImageBlob(file);
-    else addFile(file);
+    else addFile(file, pasted);
   }
+}
+
+function attachPastedText(text: string): void {
+  const name = pastedFileName(draftFiles.value.map((f) => f.name));
+  addFiles([new File([text], name, { type: "text/plain" })], true);
+}
+
+/** Puts the offered text in the draft at the caret it was pasted at. `sync` also sets the text area now, so a key that goes on to type lands after it. */
+function pasteOfferedText(sync: boolean): void {
+  const offer = pasteOffer.value;
+  pasteOffer.value = null;
+  if (!offer) return;
+  const value = draft.text.slice(0, offer.start) + offer.text + draft.text.slice(offer.end);
+  const caret = offer.start + offer.text.length;
+  const textarea = textareaRef.value;
+  if (sync && textarea) {
+    textarea.value = value;
+    textarea.setSelectionRange(caret, caret);
+  }
+  setText(value);
+  void nextTick(() => {
+    textarea?.setSelectionRange(caret, caret);
+    resizeTextarea();
+  });
+}
+
+function attachOffer(): void {
+  const offer = pasteOffer.value;
+  pasteOffer.value = null;
+  if (offer) attachPastedText(offer.text);
+  textareaRef.value?.focus();
+}
+
+function chooseOffer(choice: "attach" | "text"): void {
+  if (choice === "attach") attachOffer();
+  else {
+    pasteOfferedText(false);
+    textareaRef.value?.focus();
+  }
+}
+
+/** The bar's keys, ahead of the text area's own. Returns true when the key is used up. */
+function handleOfferKey(event: KeyboardEvent): boolean {
+  const offer = pasteOffer.value;
+  if (!offer) return false;
+  if (event.key === "Enter") {
+    event.preventDefault();
+    chooseOffer(offer.choice);
+  } else if (event.key === "Tab") {
+    event.preventDefault();
+    pasteOffer.value = { ...offer, choice: offer.choice === "attach" ? "text" : "attach" };
+  } else if (event.key === "Escape") {
+    event.preventDefault();
+    pasteOfferedText(false);
+  } else if (event.key.length === 1 && !event.ctrlKey && !event.metaKey && !event.altKey) {
+    pasteOfferedText(true);
+    return false;
+  } else {
+    return false;
+  }
+  return true;
+}
+
+/** A text paste of 2,000 characters or 25 lines: attached or pasted as the Large pastes setting says, or offered. */
+function handleTextPaste(event: ClipboardEvent): void {
+  const text = event.clipboardData?.getData("text/plain") ?? "";
+  if (largePastes.value === "text" || !isBigPaste(text) || isShellMode.value || isSideMode.value) return;
+  event.preventDefault();
+  if (largePastes.value === "attach") {
+    attachPastedText(text);
+    return;
+  }
+  const textarea = event.target as HTMLTextAreaElement;
+  pasteOffer.value = { text, start: textarea.selectionStart, end: textarea.selectionEnd, choice: "attach" };
 }
 
 /** Uploads the draft's files in order and adds a note naming them to the text. Nothing changes if one fails. */
 async function attachDraftFiles(): Promise<boolean> {
   isUploading.value = true;
   const uploaded: AttachedFile[] = [];
+  const inlined: string[] = [];
   try {
-    for (const { file } of draftFiles.value) {
-      uploaded.push(await uploadSessionAttachment(machine, props.sessionId, file));
+    for (const { file, pasted } of draftFiles.value) {
+      // A small text file goes into the prompt; a paste the user chose to attach always uploads.
+      if (!pasted && isTextFile(file) && file.size < INLINE_MAX_BYTES) inlined.push(inlineFileBlock(file.name, await file.text()));
+      else uploaded.push(await uploadSessionAttachment(machine, props.sessionId, file));
     }
   } catch (error) {
     setPasteError(error instanceof Error ? error.message : "Couldn't upload the files.");
@@ -220,16 +308,20 @@ async function attachDraftFiles(): Promise<boolean> {
     isUploading.value = false;
   }
   clearFiles();
-  setText(withAttachedNote(draft.text, uploaded));
+  const typed = [draft.text.trimEnd(), ...inlined].filter(Boolean).join("\n\n");
+  setText(withAttachedNote(inlined.length > 0 ? typed : draft.text, uploaded));
   return true;
 }
 
 
 function handlePaste(event: ClipboardEvent): void {
   if (attachAnyFile.value) {
-    // Text pastes as text; only a paste that carries files is taken.
+    // Text pastes as text unless it's big; a paste that carries files is taken.
     const files = Array.from(event.clipboardData?.files ?? []);
-    if (files.length === 0) return;
+    if (files.length === 0) {
+      handleTextPaste(event);
+      return;
+    }
     event.preventDefault();
     addFiles(files);
     return;
@@ -462,6 +554,7 @@ onUnmounted(() => {
   clearStatusIndicatorTimer();
   stopStatusIndicatorDots();
   clearPasteError();
+  pasteOffer.value = null;
 });
 
 // The queue is Fleet's: it keeps what's queued and sends the next one when a turn ends, so leaving the session or
@@ -865,6 +958,8 @@ function handleSend(steer = false): void {
     return;
   }
 
+  pasteOffer.value = null;
+
   // Files go up first; the send carries on with the note in the text. A command, shell command or side question has no use for them.
   if (draftFiles.value.length > 0 && !isShellMode.value && !isSideMode.value && parseSideQuestion(text) === null && !parseSlashCommand(draft.text)) {
     void attachDraftFiles().then((uploaded) => {
@@ -946,6 +1041,8 @@ function handleKeydown(event: KeyboardEvent): void {
   if (isDisabled.value) {
     return;
   }
+
+  if (handleOfferKey(event)) return;
 
   // --- Input history popup handling ---
   if (inputHistory.isOpen.value) {
@@ -1057,6 +1154,36 @@ function handleKeydown(event: KeyboardEvent): void {
       @send-now="sendQueuedNow"
       @remove="removeQueuedAt"
     />
+
+    <div
+      v-if="pasteOffer"
+      class="paste-offer"
+      role="group"
+      aria-label="Large paste"
+      data-testid="paste-offer"
+    >
+      <span class="paste-offer__what">{{ describePaste(pasteOffer.text) }}</span>
+      <button
+        type="button"
+        class="paste-offer__choice"
+        :class="{ 'paste-offer__choice--active': pasteOffer.choice === 'attach' }"
+        data-testid="paste-offer-attach"
+        @mousedown.prevent
+        @click="chooseOffer('attach')"
+      >
+        Attach as file <kbd>Enter</kbd>
+      </button>
+      <button
+        type="button"
+        class="paste-offer__choice"
+        :class="{ 'paste-offer__choice--active': pasteOffer.choice === 'text' }"
+        data-testid="paste-offer-text"
+        @mousedown.prevent
+        @click="chooseOffer('text')"
+      >
+        Paste as text <kbd>Esc</kbd>
+      </button>
+    </div>
 
     <ComposerFrame
       :class="{ 'composer-frame--shell': isShellMode, 'composer-frame--side': isSideMode }"
@@ -1180,7 +1307,7 @@ function handleKeydown(event: KeyboardEvent): void {
         >
           <span class="attachment-chip__ext">{{ fileExtensionLabel(file.name) }}</span>
           <span class="attachment-chip__file-name">{{ file.name }}</span>
-          <span class="attachment-chip__size">{{ formatFileSize(file.size) }}</span>
+          <span class="attachment-chip__size">{{ describeDraftFile(file.size, file.lines) }}</span>
           <button
             type="button"
             class="attachment-chip__remove"
@@ -1662,6 +1789,46 @@ function handleKeydown(event: KeyboardEvent): void {
 
 .attachment-chip__remove:hover {
   background: rgba(220, 38, 38, 0.8);
+}
+
+.paste-offer {
+  display: flex;
+  align-items: center;
+  align-self: center;
+  gap: 4px;
+  margin-bottom: 6px;
+  padding: 3px;
+  border: 1px solid var(--border);
+  border-radius: 999px;
+  background: var(--panel-bg);
+  font-size: 12px;
+}
+
+.paste-offer__what {
+  padding: 0 8px;
+  color: var(--muted);
+}
+
+.paste-offer__choice {
+  padding: 3px 10px;
+  border: none;
+  border-radius: 999px;
+  background: transparent;
+  font-size: 12px;
+  color: var(--text);
+  cursor: pointer;
+}
+
+.paste-offer__choice--active {
+  background: var(--accent);
+  color: var(--primary-foreground);
+}
+
+.paste-offer__choice kbd {
+  margin-left: 4px;
+  font-family: inherit;
+  font-size: 10px;
+  opacity: 0.6;
 }
 
 .attachment-chip--file {

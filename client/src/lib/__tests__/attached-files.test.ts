@@ -1,9 +1,14 @@
 import { describe, expect, it } from "vitest";
 import {
+  countLines,
+  describeDraftFile,
   fileExtensionLabel,
   formatAttachedNote,
   formatFileSize,
+  inlineFileBlock,
+  isBigPaste,
   parseAttachedNote,
+  pastedFileName,
   withAttachedNote,
   type AttachedFile,
 } from "@/lib/attached-files";
@@ -56,5 +61,31 @@ describe("attached files", () => {
   it("parses a message that is only the note, and leaves other text alone", () => {
     expect(parseAttachedNote(formatAttachedNote([log])).text).toBe("");
     expect(parseAttachedNote("Attached: nothing here")).toEqual({ text: "Attached: nothing here", files: [] });
+  });
+});
+
+describe("big paste helpers", () => {
+  it("calls 2,000 characters or 25 lines big", () => {
+    expect(isBigPaste("x".repeat(1999))).toBe(false);
+    expect(isBigPaste("x".repeat(2000))).toBe(true);
+    expect(isBigPaste("a\n".repeat(23) + "a")).toBe(false);
+    expect(isBigPaste("a\n".repeat(24) + "a")).toBe(true);
+  });
+
+  it("counts lines the way the server does", () => {
+    expect(countLines("")).toBe(0);
+    expect(countLines("a\nb")).toBe(2);
+    expect(countLines("a\nb\n")).toBe(2);
+  });
+
+  it("fences a file longer than any backtick run inside", () => {
+    expect(inlineFileBlock("a.txt", "hi\n")).toBe("a.txt:\n```\nhi\n```");
+    expect(inlineFileBlock("a.txt", "```x```")).toBe("a.txt:\n````\n```x```\n````");
+  });
+
+  it("names pasted files without clashes and describes a draft file", () => {
+    expect(pastedFileName(["pasted-text.txt"])).toBe("pasted-text-2.txt");
+    expect(describeDraftFile(190464, 2031)).toBe("2,031 lines · 186 KB");
+    expect(describeDraftFile(512)).toBe("512 B");
   });
 });

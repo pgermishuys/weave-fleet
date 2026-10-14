@@ -1,3 +1,4 @@
+import { readLineCount } from "@/lib/attached-files";
 import { reactive, computed, type ComputedRef } from "vue";
 
 export interface DraftFile {
@@ -5,6 +6,10 @@ export interface DraftFile {
   file: File;
   name: string;
   size: number;
+  /** Lines in a text file, once counted. */
+  lines?: number;
+  /** Text the user pasted and chose to attach: it always uploads. */
+  pasted?: boolean;
 }
 
 const fileRegistry = reactive<Record<string, DraftFile[]>>({});
@@ -20,8 +25,14 @@ function ensureEntry(sessionId: string): DraftFile[] {
 export function useDraftFiles(sessionId: string) {
   const files: ComputedRef<DraftFile[]> = computed(() => ensureEntry(sessionId));
 
-  function addFile(file: File): void {
-    ensureEntry(sessionId).push({ id: crypto.randomUUID(), file, name: file.name, size: file.size });
+  function addFile(file: File, pasted = false): void {
+    const list = ensureEntry(sessionId);
+    list.push({ id: crypto.randomUUID(), file, name: file.name, size: file.size, pasted });
+    const entry = list[list.length - 1];
+    // Counted after it's shown; a file that was removed meanwhile is left alone.
+    void readLineCount(file).then((lines) => {
+      if (lines !== undefined && ensureEntry(sessionId).includes(entry)) entry.lines = lines;
+    }, () => undefined);
   }
 
   function removeFile(id: string): void {
