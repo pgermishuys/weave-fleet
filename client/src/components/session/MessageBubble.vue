@@ -16,6 +16,7 @@ import { sharedMarkdownRenderer } from "@/lib/markdown-renderer";
 import { withSessionReferenceChips, type SessionReference } from "@/lib/session-references";
 import { formatSlashCommand } from "@/lib/slash-command-utils";
 import { useMachineTarget } from "@/lib/machine-target";
+import { fileExtensionLabel, parseAttachedNote } from "@/lib/attached-files";
 import { useFileLinksStore } from "@/stores/file-links";
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
 
@@ -85,10 +86,14 @@ const markdownRenderer = sharedMarkdownRenderer();
 const fileLinks = useFileLinksStore();
 const machine = useMachineTarget();
 
+// Files you attached sit in a note at the end of what you sent: they show as chips, with the note under them.
+const parsedBody = computed(() => props.role === "user" ? parseAttachedNote(props.body) : { text: props.body, files: [] });
+const attachedFiles = computed(() => parsedBody.value.files);
+
 const rendered = computed(() => {
   const sessionId = props.sessionId;
   const env: FileReferenceEnv = sessionId ? { fileRefs: [], resolveFileRef: (path) => fileLinks.resolve(sessionId, path) } : {};
-  const html = markdownRenderer.render(props.body, env);
+  const html = markdownRenderer.render(parsedBody.value.text, env);
   return {
     html: props.sessionReferences?.length ? withSessionReferenceChips(html, props.sessionReferences) : html,
     fileRefs: env.fileRefs ?? [],
@@ -226,12 +231,43 @@ function handleExpandVisual(payload: VisualPayload): void {
           </template>
           <!-- eslint-disable-next-line vue/no-v-html -->
           <div
-            v-else-if="body"
+            v-else-if="parsedBody.text"
             class="msg-body__content md-content"
             @click="handleBodyClick"
             @keydown="handleBodyKeydown"
             v-html="bodyHtml"
           />
+
+          <div
+            v-if="attachedFiles.length > 0"
+            class="msg-files"
+            data-testid="message-files"
+          >
+            <button
+              v-for="file in attachedFiles"
+              :key="file.path"
+              type="button"
+              class="msg-file"
+              :title="file.path"
+              @click="emit('open-file', file.path, undefined, $event.metaKey || $event.ctrlKey)"
+            >
+              <span class="msg-file__ext">{{ fileExtensionLabel(file.name) }}</span>
+              <span class="msg-file__name">{{ file.name }}</span>
+              <span class="msg-file__details">{{ file.details }}</span>
+            </button>
+          </div>
+          <div
+            v-if="attachedFiles.length > 0"
+            class="msg-files-note"
+            data-testid="message-files-note"
+          >
+            <div
+              v-for="file in attachedFiles"
+              :key="file.path"
+            >
+              Attached: {{ file.path }} ({{ file.details }})
+            </div>
+          </div>
 
           <div
             v-if="images && images.length > 0"
@@ -421,6 +457,56 @@ function handleExpandVisual(payload: VisualPayload): void {
 
 .message--user .msg-body__content {
   text-align: left;
+}
+
+/* Files you attached: a chip each, then the note the agent got. */
+.msg-files {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin-top: 8px;
+}
+
+.msg-file {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  padding: 3px 8px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-btn);
+  background: transparent;
+  color: var(--text);
+  font-size: 12px;
+  cursor: pointer;
+}
+
+.msg-file:hover {
+  background: color-mix(in srgb, var(--text) 6%, transparent);
+}
+
+.msg-file__ext {
+  padding: 0 4px;
+  border: 1px solid var(--border);
+  border-radius: 3px;
+  font-family: var(--font-mono, monospace);
+  font-size: 9px;
+  color: var(--muted);
+}
+
+.msg-file__details {
+  color: var(--muted);
+  font-size: 11px;
+}
+
+.msg-files-note {
+  margin-top: 8px;
+  padding-left: 8px;
+  border-left: 2px solid var(--border);
+  color: var(--muted);
+  font-family: var(--font-mono, monospace);
+  font-size: 11px;
+  line-height: 1.5;
+  overflow-wrap: anywhere;
 }
 
 /* A session you referenced with @: its title as a chip, linking to it. */

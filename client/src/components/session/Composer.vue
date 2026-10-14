@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { computed, nextTick, onMounted, onUnmounted, shallowRef, ref, useTemplateRef, watch } from "vue";
 import { storeToRefs } from "pinia";
-import { ArrowUp, CornerDownRight, ListEnd, Paperclip, SquareTerminal, X, CircleX, MessageCircleQuestionMark } from "lucide-vue-next";
+import { ArrowUp, CornerDownRight, ListEnd, Paperclip, SquareTerminal, X, CircleX, MessageCircleQuestionMark, LoaderCircle } from "lucide-vue-next";
 import AutocompletePopup from "@/components/session/AutocompletePopup.vue";
 import ComposerFrame from "@/components/session/ComposerFrame.vue";
 import ContextRing from "@/components/session/ContextRing.vue";
@@ -28,6 +28,17 @@ import { useSideConversation, type SideQuestionChoice } from "@/composables/use-
 import { useHarnesses } from "@/composables/use-harnesses";
 import { useModels } from "@/composables/use-models";
 import { useDraftAttachments } from "@/composables/use-draft-attachments";
+import { useDraftFiles } from "@/composables/use-draft-files";
+import { uploadSessionAttachment } from "@/api/session-attachments";
+import {
+  ATTACH_ANY_FILE_PREFERENCE_KEY,
+  fileExtensionLabel,
+  formatFileSize,
+  withAttachedNote,
+  type AttachedFile,
+} from "@/lib/attached-files";
+import { useMachineTarget } from "@/lib/machine-target";
+import { usePreferencesStore } from "@/stores/preferences";
 import { useDraftTerminalContext } from "@/composables/use-draft-terminal-context";
 import { describeSessionDefaults, modelFromKey } from "@/lib/agent-model-choice";
 import { formatTerminalContext, terminalLineRange } from "@/lib/format-terminal-context";
@@ -105,6 +116,13 @@ const {
   removeContext: removeTerminalContext,
   clearContexts: clearTerminalContexts,
 } = useDraftTerminalContext(props.sessionId);
+const { files: draftFiles, addFile, removeFile, clearFiles } = useDraftFiles(props.sessionId);
+const machine = useMachineTarget();
+const preferencesStore = usePreferencesStore();
+preferencesStore.ensureLoaded();
+/** The "Attach any file" switch: files that aren't images are held in the draft and uploaded when it's sent. */
+const attachAnyFile = computed(() => preferencesStore.get(ATTACH_ANY_FILE_PREFERENCE_KEY, "false") === "true");
+const isUploading = shallowRef(false);
 const pasteError = shallowRef<string | undefined>(undefined);
 const isDragging = shallowRef(false);
 const lightboxUrl = shallowRef<string | null>(null);
@@ -164,8 +182,58 @@ function removeAttachment(id: string): void {
   removeDraftAttachment(id);
 }
 
+const MAX_FILE_BYTES = 25 * 1024 * 1024;
+
+/** A picked, dropped or pasted file: an image goes the native way where the harness takes images, anything else is held for upload. */
+function addFiles(files: File[]): void {
+  for (const file of files) {
+    const isImage = ALLOWED_IMAGE_MIMES.has(file.type);
+    if (isImage && !supportsImages.value) {
+      setPasteError("This session's harness can't take images.");
+      continue;
+    }
+    if (!isImage && file.size > MAX_FILE_BYTES) {
+      setPasteError(`${file.name} is ${Math.round(file.size / 1024 / 1024)} MB. The limit is 25 MB.`);
+      continue;
+    }
+    if (pendingAttachments.value.length + draftFiles.value.length >= MAX_ATTACHMENTS_PER_PROMPT) {
+      setPasteError(`${MAX_ATTACHMENTS_PER_PROMPT} files at most per prompt.`);
+      continue;
+    }
+    if (isImage) processImageBlob(file);
+    else addFile(file);
+  }
+}
+
+/** Uploads the draft's files in order and adds a note naming them to the text. Nothing changes if one fails. */
+async function attachDraftFiles(): Promise<boolean> {
+  isUploading.value = true;
+  const uploaded: AttachedFile[] = [];
+  try {
+    for (const { file } of draftFiles.value) {
+      uploaded.push(await uploadSessionAttachment(machine, props.sessionId, file));
+    }
+  } catch (error) {
+    setPasteError(error instanceof Error ? error.message : "Couldn't upload the files.");
+    return false;
+  } finally {
+    isUploading.value = false;
+  }
+  clearFiles();
+  setText(withAttachedNote(draft.text, uploaded));
+  return true;
+}
+
 
 function handlePaste(event: ClipboardEvent): void {
+  if (attachAnyFile.value) {
+    // Text pastes as text; only a paste that carries files is taken.
+    const files = Array.from(event.clipboardData?.files ?? []);
+    if (files.length === 0) return;
+    event.preventDefault();
+    addFiles(files);
+    return;
+  }
   // A harness that can't take images: a pasted one stays out of the draft, and text pastes as text.
   if (!supportsImages.value) return;
   const items = Array.from(event.clipboardData?.items ?? []);
@@ -180,7 +248,7 @@ function handlePaste(event: ClipboardEvent): void {
 
 function handleDragOver(event: DragEvent): void {
   event.preventDefault();
-  isDragging.value = supportsImages.value;
+  isDragging.value = attachAnyFile.value || supportsImages.value;
 }
 
 function handleDragLeave(): void {
@@ -190,6 +258,10 @@ function handleDragLeave(): void {
 function handleDrop(event: DragEvent): void {
   event.preventDefault();
   isDragging.value = false;
+  if (attachAnyFile.value) {
+    addFiles(Array.from(event.dataTransfer?.files ?? []));
+    return;
+  }
   if (!supportsImages.value) return;
   const files = Array.from(event.dataTransfer?.files ?? []);
   for (const file of files) {
@@ -202,15 +274,19 @@ function handleDrop(event: DragEvent): void {
 function handleFileInput(event: Event): void {
   const input = event.target as HTMLInputElement;
   const files = Array.from(input.files ?? []);
-  for (const file of files) {
-    processImageBlob(file);
+  if (attachAnyFile.value) {
+    addFiles(files);
+  } else {
+    for (const file of files) {
+      processImageBlob(file);
+    }
   }
   input.value = "";
 }
 
 const hasContent = computed(() => isShellMode.value
   ? shellDraftCommand(draft.text).length > 0
-  : !shellSupportPending.value && (draft.text.trim().length > 0 || pendingAttachments.value.length > 0 || terminalContexts.value.length > 0));
+  : !shellSupportPending.value && (draft.text.trim().length > 0 || pendingAttachments.value.length > 0 || draftFiles.value.length > 0 || terminalContexts.value.length > 0));
 
 const STATUS_INDICATOR_LINGER_MS = 1600;
 const STATUS_INDICATOR_DOTS_INTERVAL_MS = 400;
@@ -776,16 +852,24 @@ function sendCurrentDraft(steer = false): boolean {
  * harness can take it there. A slash command always waits: it runs as a command, not inside the turn.
  */
 function handleSend(steer = false): void {
-  if (isDisabled.value) {
+  if (isDisabled.value || isUploading.value) {
     return;
   }
 
   const text = draft.text.trim();
-  if (!text && pendingAttachments.value.length === 0 && terminalContexts.value.length === 0) {
+  if (!text && pendingAttachments.value.length === 0 && draftFiles.value.length === 0 && terminalContexts.value.length === 0) {
     return;
   }
 
   if (shellSupportPending.value) {
+    return;
+  }
+
+  // Files go up first; the send carries on with the note in the text. A command, shell command or side question has no use for them.
+  if (draftFiles.value.length > 0 && !isShellMode.value && !isSideMode.value && parseSideQuestion(text) === null && !parseSlashCommand(draft.text)) {
+    void attachDraftFiles().then((uploaded) => {
+      if (uploaded) handleSend(steer);
+    });
     return;
   }
 
@@ -1058,7 +1142,7 @@ function handleKeydown(event: KeyboardEvent): void {
       </div>
 
       <div
-        v-if="pendingAttachments.length > 0"
+        v-if="pendingAttachments.length > 0 || draftFiles.length > 0"
         class="attachment-strip"
       >
         <div
@@ -1084,6 +1168,25 @@ function handleKeydown(event: KeyboardEvent): void {
             class="attachment-chip__remove"
             :title="`Remove ${att.filename ?? 'image'}`"
             @click="removeAttachment(att.id)"
+          >
+            <X class="attachment-chip__remove-icon" />
+          </button>
+        </div>
+        <div
+          v-for="file in draftFiles"
+          :key="file.id"
+          class="attachment-chip attachment-chip--file"
+          data-testid="draft-file-chip"
+        >
+          <span class="attachment-chip__ext">{{ fileExtensionLabel(file.name) }}</span>
+          <span class="attachment-chip__file-name">{{ file.name }}</span>
+          <span class="attachment-chip__size">{{ formatFileSize(file.size) }}</span>
+          <button
+            type="button"
+            class="attachment-chip__remove"
+            :title="`Remove ${file.name}`"
+            :disabled="isUploading"
+            @click="removeFile(file.id)"
           >
             <X class="attachment-chip__remove-icon" />
           </button>
@@ -1124,7 +1227,7 @@ function handleKeydown(event: KeyboardEvent): void {
       <input
         ref="fileInput"
         type="file"
-        accept="image/png,image/jpeg,image/gif,image/webp"
+        :accept="attachAnyFile ? undefined : 'image/png,image/jpeg,image/gif,image/webp'"
         multiple
         class="sr-only"
         @change="handleFileInput"
@@ -1157,10 +1260,10 @@ function handleKeydown(event: KeyboardEvent): void {
             <span>btw</span>
           </span>
           <Button
-            v-else-if="supportsImages"
+            v-else-if="supportsImages || attachAnyFile"
             variant="toolbar-icon"
             size="toolbar"
-            title="Attach image"
+            :title="attachAnyFile ? 'Attach files' : 'Attach image'"
             :disabled="isDisabled"
             @click="fileInputRef?.click()"
           >
@@ -1228,10 +1331,18 @@ function handleKeydown(event: KeyboardEvent): void {
           :title="isShellMode ? 'Run command' : isSideMode ? 'Ask in the side conversation' : sessionStatus === 'busy'
             ? (steersByDefault ? 'Send now (Enter): the agent reads it at its next step' : 'Queue (Enter): sent when the agent finishes')
             : 'Send'"
-          :disabled="isDisabled || !hasContent"
+          :disabled="isDisabled || !hasContent || isUploading"
+          :aria-busy="isUploading || undefined"
           @click="handleSend(steersByDefault)"
         >
-          <ArrowUp class="size-4" />
+          <LoaderCircle
+            v-if="isUploading"
+            class="size-4 animate-spin"
+          />
+          <ArrowUp
+            v-else
+            class="size-4"
+          />
         </Button>
       </template>
     </ComposerFrame>
@@ -1551,6 +1662,47 @@ function handleKeydown(event: KeyboardEvent): void {
 
 .attachment-chip__remove:hover {
   background: rgba(220, 38, 38, 0.8);
+}
+
+.attachment-chip--file {
+  flex-direction: row;
+  gap: 8px;
+  padding: 4px 8px;
+}
+
+.attachment-chip__ext {
+  padding: 0 4px;
+  border: 1px solid var(--border);
+  border-radius: 3px;
+  font-family: var(--font-mono, monospace);
+  font-size: 9px;
+  color: var(--muted);
+}
+
+.attachment-chip__file-name {
+  max-width: 200px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.attachment-chip__size {
+  color: var(--muted);
+  font-size: 10px;
+}
+
+.attachment-chip--file .attachment-chip__remove {
+  position: static;
+  width: 14px;
+  height: 14px;
+  background: transparent;
+  color: var(--muted);
+  opacity: 1;
+}
+
+.attachment-chip--file .attachment-chip__remove:hover {
+  background: transparent;
+  color: var(--text);
 }
 
 .attachment-chip__remove-icon {

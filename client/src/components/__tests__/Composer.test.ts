@@ -1,5 +1,5 @@
 import { flushPromises, mount } from "@vue/test-utils";
-import { beforeEach, describe, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { useSessionsStore } from "@/stores/sessions";
 import Composer from "@/components/session/Composer.vue";
 import type { SessionListItem } from "@/api/client";
@@ -9,6 +9,8 @@ import { _resetSideConversationsForTesting, useSideConversation } from "@/compos
 import { readStoredDraft } from "@/lib/draft-storage";
 import { pickedFileTokens, resetFileReferences } from "@/lib/composer-references";
 import { forgetHarnessLists } from "@/composables/use-harnesses";
+import { usePreferencesStore } from "@/stores/preferences";
+import { useDraftFiles } from "@/composables/use-draft-files";
 
 vi.mock("@/api/client", () => ({
   api: {
@@ -1112,6 +1114,116 @@ describe("Composer images", () => {
     const drops = mountComposer({ session: createSession({ harnessType: "pi" }) });
     await flushPromises();
     expect(drops.find("button[title='Attach image']").exists()).toBe(false);
+  });
+});
+
+describe("Composer attach any file", () => {
+  const harnesses = [
+    { type: "opencode", displayName: "OpenCode", available: true, userEnabled: true, capabilities: { supportsImageAttachments: true } },
+  ];
+  const saved = { path: ".weave/attachments/3f9a2c1d/build-output.log", name: "build-output.log", size: 2048, lines: 12, mime: "text/plain" };
+  let fetchMock: ReturnType<typeof vi.fn>;
+
+  function logFile(name = "build-output.log"): File {
+    return new File(["line one\nline two\n"], name, { type: "text/plain" });
+  }
+
+  async function attach(wrapper: ReturnType<typeof mountComposer>, file: File): Promise<void> {
+    const input = wrapper.get("input[type='file']");
+    Object.defineProperty(input.element, "files", { value: [file], configurable: true });
+    await input.trigger("change");
+    await flushPromises();
+  }
+
+  function promptTexts(): string[] {
+    return (mockApi.POST.mock.calls as unknown as [string, { body?: { text?: string } }][])
+      .filter(([url]) => url === "/api/sessions/{id}/prompt")
+      .map(([, init]) => init.body?.text ?? "");
+  }
+
+  beforeEach(() => {
+    mockApi.GET.mockReset();
+    mockApi.POST.mockReset();
+    configureApiFetch();
+    const fallback = mockApi.GET.getMockImplementation() as unknown as (url: string, init?: unknown) => Promise<unknown>;
+    mockApi.GET.mockImplementation((async (url: string, init?: unknown) => {
+      if (url === "/api/harnesses") return { data: harnesses, error: undefined, response: new Response() };
+      return fallback(url, init);
+    }) as never);
+    useDraftState("session-1", { agentId: "", modelId: "" }).resetText();
+    fetchMock = vi.fn(async () => new Response(JSON.stringify(saved), { status: 200, headers: { "Content-Type": "application/json" } }));
+    vi.stubGlobal("fetch", fetchMock);
+  });
+
+  afterEach(() => {
+    useDraftFiles("session-1").clearFiles();
+    vi.unstubAllGlobals();
+  });
+
+  function withSwitch(on: boolean): void {
+    usePreferencesStore().preferences = on ? { AttachAnyFile: "true" } : {};
+  }
+
+  it("holds a non-image file as a chip, uploads it on send and ends the prompt with the note", async () => {
+    withSwitch(true);
+    const wrapper = mountComposer();
+    await flushPromises();
+    expect(wrapper.find("button[title='Attach files']").exists()).toBe(true);
+
+    await attach(wrapper, logFile());
+    expect(wrapper.get("[data-testid='draft-file-chip']").text()).toContain("build-output.log");
+
+    await wrapper.get("[data-testid='prompt-input']").setValue("Why does it fail?");
+    await wrapper.get("[data-testid='prompt-send-button']").trigger("click");
+    await flushPromises();
+
+    const [url, init] = fetchMock.mock.calls[0] as unknown as [string, RequestInit];
+    expect(url).toContain("/api/sessions/session-1/attachments?name=build-output.log");
+    expect(init.method).toBe("POST");
+    expect(promptTexts()).toEqual([
+      "Why does it fail?\n\nAttached: .weave/attachments/3f9a2c1d/build-output.log (12 lines, 2 KB)\nRead it as needed.",
+    ]);
+    expect(wrapper.find("[data-testid='draft-file-chip']").exists()).toBe(false);
+  });
+
+  it("keeps the draft and sends nothing when an upload fails", async () => {
+    withSwitch(true);
+    fetchMock.mockImplementation(async () => new Response(JSON.stringify({ error: "dump.zip is 61 MB. The limit is 25 MB." }), { status: 400 }));
+    const wrapper = mountComposer();
+    await flushPromises();
+
+    await attach(wrapper, logFile());
+    await wrapper.get("[data-testid='prompt-input']").setValue("Look");
+    await wrapper.get("[data-testid='prompt-send-button']").trigger("click");
+    await flushPromises();
+
+    expect(promptTexts()).toEqual([]);
+    expect(wrapper.text()).toContain("dump.zip is 61 MB. The limit is 25 MB.");
+    expect(wrapper.findAll("[data-testid='draft-file-chip']")).toHaveLength(1);
+    expect((wrapper.get("[data-testid='prompt-input']").element as HTMLTextAreaElement).value).toBe("Look");
+  });
+
+  it("refuses a file over 25 MB", async () => {
+    withSwitch(true);
+    const wrapper = mountComposer();
+    await flushPromises();
+
+    await attach(wrapper, new File([new Uint8Array(26 * 1024 * 1024)], "dump.zip"));
+
+    expect(wrapper.text()).toContain("dump.zip is 26 MB. The limit is 25 MB.");
+    expect(wrapper.find("[data-testid='draft-file-chip']").exists()).toBe(false);
+  });
+
+  it("ignores a non-image file with the switch off", async () => {
+    withSwitch(false);
+    const wrapper = mountComposer();
+    await flushPromises();
+    expect(wrapper.find("button[title='Attach image']").exists()).toBe(true);
+
+    await attach(wrapper, logFile());
+
+    expect(wrapper.find("[data-testid='draft-file-chip']").exists()).toBe(false);
+    expect(fetchMock).not.toHaveBeenCalled();
   });
 });
 
