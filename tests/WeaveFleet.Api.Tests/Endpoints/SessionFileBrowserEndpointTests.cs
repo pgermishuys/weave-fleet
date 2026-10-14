@@ -57,6 +57,8 @@ public sealed class SessionFileBrowserEndpointTests : IAsyncDisposable
                 services.AddSingleton(orchestrator);
                 services.AddSingleton(builder.Creation);
                 services.AddSingleton(builder.Files);
+                services.AddSingleton(new WeaveFleet.Application.Sessions.Files.SessionAttachments(
+                    builder.SessionRepository, Microsoft.Extensions.Logging.Abstractions.NullLogger<WeaveFleet.Application.Sessions.Files.SessionAttachments>.Instance));
             });
 
         _client = _factory.CreateClient();
@@ -112,6 +114,30 @@ public sealed class SessionFileBrowserEndpointTests : IAsyncDisposable
         var contentResult = await contentResponse.Content.ReadFromJsonAsync<ReadSessionFileResponse>();
         contentResult.ShouldNotBeNull();
         contentResult.Content.ShouldBe("test content from file");
+    }
+
+    [Fact]
+    public async Task attachments_endpoint_writes_the_body_and_answers_in_camel_case()
+    {
+        var createResponse = await _client.PostAsJsonAsync("/api/sessions", new { directory = _tempDirectory.Path, title = "Attach" });
+        var sessionId = (await createResponse.Content.ReadFromJsonAsync<CreateSessionApiResponse>())!.Session.Id;
+
+        var content = new ByteArrayContent("one\ntwo\n"u8.ToArray());
+        content.Headers.ContentType = new("text/plain");
+        var response = await _client.PostAsync($"/api/sessions/{sessionId}/attachments?name=build%20output.log", content);
+
+        response.StatusCode.ShouldBe(HttpStatusCode.OK);
+        using var json = JsonDocument.Parse(await response.Content.ReadAsStringAsync());
+        var root = json.RootElement;
+        root.GetProperty("path").GetString()!.ShouldStartWith(".weave/attachments/");
+        root.GetProperty("name").GetString().ShouldBe("build-output.log");
+        root.GetProperty("size").GetInt64().ShouldBe(8);
+        root.GetProperty("lines").GetInt32().ShouldBe(2);
+        root.GetProperty("mime").GetString().ShouldBe("text/plain");
+        File.Exists(Path.Combine(_tempDirectory.Path, root.GetProperty("path").GetString()!)).ShouldBeTrue();
+
+        var noName = await _client.PostAsync($"/api/sessions/{sessionId}/attachments", new ByteArrayContent([1]));
+        noName.StatusCode.ShouldBe(HttpStatusCode.BadRequest);
     }
 
     [Fact]

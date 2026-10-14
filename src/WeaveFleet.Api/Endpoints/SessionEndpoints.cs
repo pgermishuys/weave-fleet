@@ -1042,6 +1042,20 @@ public static class SessionEndpoints
         .Produces(404)
         .WithName("ResolveSessionFiles");
 
+        // POST /api/sessions/{id}/attachments?name= — a file attached to a prompt, written into the session's folder.
+        // The body is the file itself, so a big one is never held in memory.
+        group.MapPost("/{id}/attachments", async (string id, [FromQuery] string? name, HttpRequest request, SessionAttachments attachments, CancellationToken ct) =>
+        {
+            var result = await attachments.SaveAsync(id, name, request.ContentType, request.Body, request.ContentLength, ct);
+            return result.Match(
+                a => Results.Ok(new SessionAttachmentDto(a.Path, a.Name, a.Size, a.Lines, a.Mime)),
+                err => err.ToSessionApiResult());
+        })
+        .Produces<SessionAttachmentDto>(200)
+        .Produces(400)
+        .Produces(404)
+        .WithName("UploadSessionAttachment");
+
         // PUT /api/sessions/{id}/files/content — save a file from the editor. 409 when the file changed since it was read.
         group.MapPut("/{id}/files/content", async (string id, WriteSessionFileRequest req, SessionFiles sessionFiles, CancellationToken ct) =>
         {
@@ -1684,6 +1698,8 @@ internal sealed record ResolveSessionFilesResponse(IReadOnlyList<ResolvedSession
 /// <param name="Path">The path as it was asked for.</param>
 /// <param name="RelativePath">The file's path from the session's folder, with <c>/</c> between names.</param>
 internal sealed record ResolvedSessionFileDto(string Path, string RelativePath);
+
+internal sealed record SessionAttachmentDto(string Path, string Name, long Size, int? Lines, string Mime);
 
 // ── Write file types ───────────────────────────────────────────────────────────
 

@@ -215,6 +215,7 @@ public static class DependencyInjection
         services.AddScoped<SessionSourceResolutionService>();
         services.AddScoped<GitDiffService>();
         services.AddScoped<WeaveFleet.Application.Sessions.Files.SessionFiles>();
+        services.AddScoped<WeaveFleet.Application.Sessions.Files.SessionAttachments>();
         services.AddScoped<WeaveFleet.Application.Sessions.Activation.SessionActivation>();
         services.AddScoped<WeaveFleet.Application.Sessions.Prompting.SessionPrompting>();
         services.AddScoped<WeaveFleet.Application.Sessions.Asks.SessionAsks>();

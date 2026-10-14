@@ -442,6 +442,7 @@ internal sealed record ErrorResponse(string Error);
 [JsonSerializable(typeof(List<BrowseEntryDto>))]
 [JsonSerializable(typeof(ReadSessionFileResponse))]
 [JsonSerializable(typeof(ResolveSessionFilesRequest))]
+[JsonSerializable(typeof(SessionAttachmentDto))]
 [JsonSerializable(typeof(ResolveSessionFilesResponse))]
 [JsonSerializable(typeof(ResolvedSessionFileDto))]
 [JsonSerializable(typeof(IReadOnlyList<ResolvedSessionFileDto>))]
