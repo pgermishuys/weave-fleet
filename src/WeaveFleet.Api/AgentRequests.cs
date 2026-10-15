@@ -1,4 +1,5 @@
 using System.Net;
+using WeaveFleet.Api.Endpoints;
 using WeaveFleet.Application.Sessions;
 
 namespace WeaveFleet.Api;
@@ -34,6 +35,12 @@ public static class AgentRequests
     {
         if (!context.Request.Path.StartsWithSegments(SessionMessages.AgentPathPrefix, out var rest))
         {
+            // A harness whose MCP client sends headers (GitHub Copilot) names its token there, so it never sits in a URL.
+            if (context.Request.Path == McpEndpoints.Path && BearerToken(context.Request) is { } bearer
+                && IsLoopback(context.Connection.RemoteIpAddress)
+                && context.RequestServices.GetServices<IHarnessBridgeTokens>().Any(t => t.IsKnown(bearer)))
+                context.Items[Key] = bearer;
+
             await next();
             return;
         }
@@ -56,6 +63,9 @@ public static class AgentRequests
         context.Request.Path = end < 0 ? PathString.Empty : new PathString(value[end..]);
         await next();
     });
+
+    private static string? BearerToken(HttpRequest request)
+        => request.Headers.Authorization.ToString() is { } header && header.StartsWith("Bearer ", StringComparison.OrdinalIgnoreCase) ? header[7..].Trim() : null;
 
     private static bool IsLoopback(IPAddress? address)
         => address is not null && IPAddress.IsLoopback(address.IsIPv4MappedToIPv6 ? address.MapToIPv4() : address);

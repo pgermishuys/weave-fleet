@@ -642,6 +642,9 @@ public static class DependencyInjection
         services.AddSingleton<IHarness>(sp => sp.GetRequiredService<CopilotHarness>());
         services.AddSingleton<CopilotHarnessRuntime>();
         services.AddSingleton<IHarnessRuntime>(sp => sp.GetRequiredService<CopilotHarnessRuntime>());
+        services.AddSingleton<IHarnessBridgeTokens>(sp => new CopilotBridgeTokens(sp.GetRequiredService<CopilotHarnessRuntime>().FleetTools));
+        services.AddSingleton<IHarnessCanvasCallerResolver>(sp => new CopilotCanvasCallerResolver(sp.GetRequiredService<CopilotHarnessRuntime>().FleetTools));
+        services.AddSingleton<WeaveFleet.Application.FleetTools.IHarnessMcpCalls>(sp => new CopilotMcpCalls(sp.GetRequiredService<CopilotHarnessRuntime>().FleetTools));
 
         // OpenCode 2: a harness of its own next to OpenCode, off until the user turns it on (opencode2.enabled).
         services.AddHttpClient(OpenCode2HarnessRuntime.HttpClientName);

@@ -317,6 +317,20 @@ public sealed class McpEndpointTests : IAsyncLifetime
 
     // -----------------------------------------------------------------------
 
+    [Fact]
+    public async Task A_bearer_token_names_the_caller_on_a_plain_mcp_url_and_a_wrong_one_is_refused()
+    {
+        async Task<HttpStatusCode> PostBearerAsync(string token)
+        {
+            using var request = new HttpRequestMessage(HttpMethod.Post, "/mcp") { Content = new StringContent("""{"jsonrpc":"2.0","id":1,"method":"ping"}""", Encoding.UTF8, "application/json") };
+            request.Headers.Authorization = new("Bearer", token);
+            return (await _client!.SendAsync(request)).StatusCode;
+        }
+
+        (await PostBearerAsync(Token)).ShouldBe(HttpStatusCode.OK);
+        (await PostBearerAsync("not-a-token")).ShouldBe(HttpStatusCode.NotFound);
+    }
+
     private async Task<HttpResponseMessage> PostAsync(string json)
     {
         using var content = new StringContent(json, Encoding.UTF8, "application/json");

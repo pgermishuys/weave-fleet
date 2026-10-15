@@ -30,6 +30,8 @@ public sealed class CopilotHarness : IHarness
         SupportsModelSelection = true,
         SupportsResume = true,
         SupportsStreaming = true,
+        // Fleet's MCP server gives the agent Fleet's tools (CopilotFleetTools).
+        SupportsFleetTools = true,
         SupportsSteering = true,
         ReportsFileWrites = true,
         HistoryLivesInHarness = true,

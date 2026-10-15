@@ -4,6 +4,7 @@ using System.Text.Json.Nodes;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging;
 using WeaveFleet.Application.Analytics;
+using WeaveFleet.Application.Configuration;
 using WeaveFleet.Application.Harnesses;
 using WeaveFleet.Domain.Entities;
 using WeaveFleet.Domain.Harnesses;
@@ -27,6 +28,9 @@ public sealed class CopilotHarnessRuntime(IServiceScopeFactory scopes, ILoggerFa
     private const string Executable = "weave-copilot";
     private const string LocalUser = "local-user";
     private static readonly TimeSpan CatalogLife = TimeSpan.FromMinutes(10);
+
+    /// <summary>The tokens of the weave-copilot processes running a session, and the MCP server they use for Fleet's tools.</summary>
+    internal CopilotFleetTools FleetTools { get; } = new();
 
     private readonly ILogger _logger = loggers.CreateLogger<CopilotHarnessRuntime>();
     private readonly ConcurrentDictionary<bool, (DateTimeOffset At, HarnessCatalog Catalog)> _catalogs = new();
@@ -52,11 +56,12 @@ public sealed class CopilotHarnessRuntime(IServiceScopeFactory scopes, ILoggerFa
         await RequireFeatureAsync(options.OwnerUserId).ConfigureAwait(false);
         HarnessHelpers.ValidateWorkingDirectory(options.WorkingDirectory);
         var agent = await StartAsync(options.OwnerUserId, options.WorkingDirectory, ct).ConfigureAwait(false);
+        var token = FleetTools.Issue(options.SessionId, options.OwnerUserId);
         try
         {
-            var created = await NewSessionAsync(agent, options.WorkingDirectory, ct).ConfigureAwait(false);
+            var created = await NewSessionAsync(agent, options.WorkingDirectory, CopilotFleetTools.McpServers(LocalFleetUrl(), token), ct).ConfigureAwait(false);
             var session = new AcpHarnessSession(HarnessType, $"copilot-{Guid.NewGuid():N}", options.SessionId, AcpMapper.Str(created, "sessionId")!,
-                options.WorkingDirectory, agent, _logger, analytics, options.ProjectId, options.ProjectName, options.OwnerUserId);
+                options.WorkingDirectory, agent, _logger, analytics, options.ProjectId, options.ProjectName, options.OwnerUserId) { OnEnded = () => FleetTools.Revoke(token) };
             session.ReadModels(created);
             if (options.InitialPrompt is not null)
             {
@@ -68,6 +73,7 @@ public sealed class CopilotHarnessRuntime(IServiceScopeFactory scopes, ILoggerFa
         }
         catch
         {
+            FleetTools.Revoke(token);
             await agent.DisposeAsync().ConfigureAwait(false);
             throw;
         }
@@ -79,15 +85,17 @@ public sealed class CopilotHarnessRuntime(IServiceScopeFactory scopes, ILoggerFa
         await RequireFeatureAsync(options.OwnerUserId).ConfigureAwait(false);
         HarnessHelpers.ValidateWorkingDirectory(options.WorkingDirectory);
         var agent = await StartAsync(options.OwnerUserId, options.WorkingDirectory, ct).ConfigureAwait(false);
+        var token = FleetTools.Issue(options.SessionId, options.OwnerUserId);
         try
         {
             var session = new AcpHarnessSession(HarnessType, $"copilot-{Guid.NewGuid():N}", options.SessionId, options.ResumeToken, options.WorkingDirectory, agent, _logger,
-                analytics, options.ProjectId, options.ProjectName, options.OwnerUserId);
-            await session.LoadAsync(ct).ConfigureAwait(false);
+                analytics, options.ProjectId, options.ProjectName, options.OwnerUserId) { OnEnded = () => FleetTools.Revoke(token) };
+            await session.LoadAsync(CopilotFleetTools.McpServers(LocalFleetUrl(), token), ct).ConfigureAwait(false);
             return session;
         }
         catch
         {
+            FleetTools.Revoke(token);
             await agent.DisposeAsync().ConfigureAwait(false);
             throw;
         }
@@ -150,8 +158,15 @@ public sealed class CopilotHarnessRuntime(IServiceScopeFactory scopes, ILoggerFa
         }
     }
 
-    private static Task<JsonElement> NewSessionAsync(AcpAgentProcess agent, string directory, CancellationToken ct)
-        => agent.Client.RequestAsync("session/new", new JsonObject { ["cwd"] = directory, ["mcpServers"] = new JsonArray() }, ct);
+    private static Task<JsonElement> NewSessionAsync(AcpAgentProcess agent, string directory, JsonArray mcpServers, CancellationToken ct)
+        => agent.Client.RequestAsync("session/new", new JsonObject { ["cwd"] = directory, ["mcpServers"] = mcpServers }, ct);
+
+    /// <summary>Where Fleet listens, for the MCP server; null until it knows.</summary>
+    private string? LocalFleetUrl()
+    {
+        using var scope = scopes.CreateScope();
+        return scope.ServiceProvider.GetService<ILocalFleetUrl>()?.TryGet();
+    }
 
     private async Task RequireFeatureAsync(string ownerUserId)
     {
