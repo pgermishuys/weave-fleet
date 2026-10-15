@@ -16,6 +16,14 @@ internal static class BuiltInSkillFiles
 {
     internal const string Prefix = "opencode/built-in-skills/";
 
+    /// <summary>The skills every session gets, such as <c>fleet</c>: the folders under <c>opencode/skills</c>.</summary>
+    internal const string FleetPrefix = "opencode/skills/";
+
+    /// <summary>The names of the skills every session gets.</summary>
+    public static IReadOnlySet<string> FleetNames { get; } = Resources(FleetPrefix)
+        .Select(resource => resource.RelativePath.Split(Path.DirectorySeparatorChar)[0])
+        .ToHashSet(StringComparer.Ordinal);
+
     /// <summary>The names of the built-in skills this Fleet ships: the folders under <c>opencode/built-in-skills</c>.</summary>
     public static IReadOnlySet<string> Names { get; } = Resources(Prefix)
         .Select(resource => resource.RelativePath.Split(Path.DirectorySeparatorChar)[0])
@@ -24,13 +32,25 @@ internal static class BuiltInSkillFiles
     /// <summary>
     /// Makes <paramref name="root"/> hold exactly the built-in skills in <paramref name="enabled"/>, one folder per skill,
     /// leaving identical files alone. A skill in <paramref name="yours"/> gets the owner's version of its
-    /// <c>SKILL.md</c> in place of Fleet's.
+    /// <c>SKILL.md</c> in place of Fleet's. With <paramref name="withFleetSkills"/> the skills every session gets
+    /// (<see cref="FleetNames"/>) are written too.
     /// </summary>
-    public static void Sync(string root, IReadOnlyCollection<string> enabled, IReadOnlyDictionary<string, string>? yours = null)
+    public static void Sync(
+        string root, IReadOnlyCollection<string> enabled, IReadOnlyDictionary<string, string>? yours = null, bool withFleetSkills = false)
     {
         Directory.CreateDirectory(root);
 
         var shipped = new HashSet<string>(StringComparer.Ordinal);
+        if (withFleetSkills)
+        {
+            foreach (var (relativePath, resourceName) in Resources(FleetPrefix))
+            {
+                var path = Path.GetFullPath(Path.Combine(root, relativePath));
+                WriteIfChanged(path, Read(resourceName));
+                shipped.Add(path);
+            }
+        }
+
         foreach (var (relativePath, resourceName) in Resources(Prefix))
         {
             var skill = relativePath.Split(Path.DirectorySeparatorChar)[0];
@@ -50,6 +70,15 @@ internal static class BuiltInSkillFiles
                 File.Delete(file);
         }
 
+        RemoveEmptyFolders(root);
+    }
+
+    /// <summary>
+    /// Deletes the empty folders under <paramref name="root"/>, such as the one a skill Fleet renamed or dropped leaves
+    /// once its files are gone: an upgraded install would otherwise keep a <c>fleet-api</c> folder beside <c>fleet</c>.
+    /// </summary>
+    internal static void RemoveEmptyFolders(string root)
+    {
         foreach (var folder in Directory.EnumerateDirectories(root, "*", SearchOption.AllDirectories).OrderByDescending(f => f.Length))
         {
             if (!Directory.EnumerateFileSystemEntries(folder).Any())

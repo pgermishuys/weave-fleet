@@ -44,12 +44,25 @@ public sealed partial class OpenCode2FleetFilesTests : IDisposable
     public void The_skills_are_written_with_their_folders_and_stale_files_removed()
     {
         var skills = OpenCode2FleetFiles.InstallSkills(_dataDirectory);
-        File.Exists(Path.Combine(skills, "fleet-api", "SKILL.md")).ShouldBeTrue();
-        File.WriteAllText(Path.Combine(skills, "fleet-api", "old.md"), "no longer shipped");
+        File.Exists(Path.Combine(skills, "fleet", "SKILL.md")).ShouldBeTrue();
+        File.WriteAllText(Path.Combine(skills, "fleet", "old.md"), "no longer shipped");
 
         OpenCode2FleetFiles.InstallSkills(_dataDirectory);
 
-        File.Exists(Path.Combine(skills, "fleet-api", "old.md")).ShouldBeFalse();
+        File.Exists(Path.Combine(skills, "fleet", "old.md")).ShouldBeFalse();
+    }
+
+    [Fact]
+    public void The_folder_of_the_skill_Fleet_renamed_is_removed()
+    {
+        var skills = OpenCode2FleetFiles.InstallSkills(_dataDirectory);
+        Directory.CreateDirectory(Path.Combine(skills, "fleet-api"));
+        File.WriteAllText(Path.Combine(skills, "fleet-api", "SKILL.md"), "from an older Fleet");
+
+        OpenCode2FleetFiles.InstallSkills(_dataDirectory);
+
+        Directory.Exists(Path.Combine(skills, "fleet-api")).ShouldBeFalse();
+        File.Exists(Path.Combine(skills, "fleet", "SKILL.md")).ShouldBeTrue();
     }
 
     [Fact]

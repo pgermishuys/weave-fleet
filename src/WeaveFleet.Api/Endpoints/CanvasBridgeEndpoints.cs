@@ -80,7 +80,7 @@ public static class CanvasBridgeEndpoints
             .WithName("CanvasBridgePageShow");
 
         group.MapPost("/walkthrough-show", async (WalkthroughBridgeRequest request, HttpContext http, WalkthroughBridge bridge, CancellationToken ct)
-            => ToResult(await bridge.ShowAsync(BridgeToken(http), request.HarnessSessionId, request.Title, request.Guide, ct)))
+            => ToResult(await bridge.ShowAsync(BridgeToken(http), request.HarnessSessionId, request.Title, request.Guide ?? default, ct)))
             .WithName("CanvasBridgeWalkthroughShow");
 
         var session = app.MapGroup($"{PathPrefix}/session")

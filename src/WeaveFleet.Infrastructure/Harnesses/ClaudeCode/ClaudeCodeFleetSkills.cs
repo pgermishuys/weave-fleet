@@ -5,7 +5,7 @@ using WeaveFleet.Infrastructure.Users;
 namespace WeaveFleet.Infrastructure.Harnesses.ClaudeCode;
 
 /// <summary>
-/// The built-in skills an owner turned on, in a folder a claude process takes with <c>--add-dir</c>:
+/// Fleet's own skills (<c>fleet</c>) and the built-in skills an owner turned on, in a folder a claude process takes with <c>--add-dir</c>:
 /// <c>{dataDirectory}/claude-code/skills/{owner}</c>, with the skills in its <c>.claude/skills</c>. Claude Code loads an
 /// added folder's skills under their own names, as OpenCode does (<c>/fleet-walkthrough</c>); a plugin's would be
 /// <c>/fleet:fleet-walkthrough</c>. The user's own <c>~/.claude</c> is left alone. Claude Code lists skills when it
@@ -16,8 +16,7 @@ internal sealed partial class ClaudeCodeFleetSkills(string dataDirectory, IServi
     private readonly Lock _sync = new();
 
     /// <summary>
-    /// Writes the owner's folder and returns it, or null when they turned no built-in skill on or it couldn't be
-    /// written; a process then starts without it.
+    /// Writes the owner's folder and returns it, or null when it couldn't be written; a process then starts without it.
     /// </summary>
     public async Task<ClaudeCodeSkillsFolder?> ForOwnerAsync(string ownerUserId)
     {
@@ -38,26 +37,20 @@ internal sealed partial class ClaudeCodeFleetSkills(string dataDirectory, IServi
         }
     }
 
-    /// <summary>Makes the owner's folder hold exactly <paramref name="enabled"/>; removes it when that's none.</summary>
+    /// <summary>Makes the owner's folder hold Fleet's own skills and exactly the built-in skills in <paramref name="enabled"/>.</summary>
     internal static ClaudeCodeSkillsFolder? Sync(
         string dataDirectory, string ownerUserId, IReadOnlyList<string> enabled, IReadOnlyDictionary<string, string>? yours = null)
     {
         var root = Path.Combine(dataDirectory, "claude-code", "skills", BuiltInSkillFiles.OwnerFolder(ownerUserId));
         var names = enabled.Where(BuiltInSkillFiles.Names.Contains).Order(StringComparer.Ordinal).ToList();
-        if (names.Count == 0)
-        {
-            if (Directory.Exists(root))
-                Directory.Delete(root, recursive: true);
-            return null;
-        }
 
-        BuiltInSkillFiles.Sync(Path.Combine(root, ".claude", "skills"), names, yours);
-        return new ClaudeCodeSkillsFolder(root, string.Join(',', names));
+        BuiltInSkillFiles.Sync(Path.Combine(root, ".claude", "skills"), names, yours, withFleetSkills: true);
+        return new ClaudeCodeSkillsFolder(root, string.Join(',', BuiltInSkillFiles.FleetNames.Order(StringComparer.Ordinal).Concat(names)));
     }
 
     [LoggerMessage(Level = LogLevel.Warning, Message = "Couldn't write the built-in skills for Claude Code; its processes start without them")]
     private static partial void LogUnwritten(ILogger logger, Exception exception);
 }
 
-/// <summary>An owner's folder of built-in skills, for <c>--add-dir</c>, and the skills in it, comma-separated.</summary>
+/// <summary>An owner's folder of Fleet's skills, for <c>--add-dir</c>, and the skills in it, comma-separated.</summary>
 internal sealed record ClaudeCodeSkillsFolder(string Folder, string Skills);

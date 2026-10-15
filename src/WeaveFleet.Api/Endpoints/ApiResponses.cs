@@ -338,7 +338,7 @@ public sealed record CanvasResponse(
 /// sometimes send them as strings.
 /// </summary>
 /// <summary>What <c>fleet_walkthrough_show</c> posts: the tab's title and the agent's outline of the change.</summary>
-public sealed record WalkthroughBridgeRequest(string? HarnessSessionId, string? Title = null, JsonElement Guide = default);
+public sealed record WalkthroughBridgeRequest(string? HarnessSessionId, string? Title = null, JsonElement? Guide = null);
 
 public sealed record CanvasBridgeRequest(
     string? HarnessSessionId,

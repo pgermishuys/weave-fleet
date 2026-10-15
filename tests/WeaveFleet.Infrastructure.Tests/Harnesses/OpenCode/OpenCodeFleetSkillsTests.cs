@@ -8,7 +8,7 @@ public sealed class OpenCodeFleetSkillsTests : IDisposable
 
     private string SkillsDirectory => Path.Combine(_dataDirectory, "opencode", "skills");
 
-    private string FleetApiSkill => Path.Combine(SkillsDirectory, "fleet-api", "SKILL.md");
+    private string FleetSkill => Path.Combine(SkillsDirectory, "fleet", "SKILL.md");
 
     public void Dispose()
     {
@@ -31,7 +31,7 @@ public sealed class OpenCodeFleetSkillsTests : IDisposable
             .Select(file => Path.GetRelativePath(SkillsDirectory, file))
             .Order(StringComparer.Ordinal)
             .ShouldBe(repoFiles);
-        repoFiles.ShouldContain(Path.Combine("fleet-api", "SKILL.md"));
+        repoFiles.ShouldContain(Path.Combine("fleet", "SKILL.md"));
         foreach (var file in repoFiles)
             File.ReadAllText(Path.Combine(SkillsDirectory, file)).ShouldBe(File.ReadAllText(Path.Combine(repoSkills, file)));
     }
@@ -41,22 +41,22 @@ public sealed class OpenCodeFleetSkillsTests : IDisposable
     {
         OpenCodeFleetSkills.Install(_dataDirectory);
         var written = new DateTime(2026, 1, 1, 0, 0, 0, DateTimeKind.Utc);
-        File.SetLastWriteTimeUtc(FleetApiSkill, written);
+        File.SetLastWriteTimeUtc(FleetSkill, written);
 
         OpenCodeFleetSkills.Install(_dataDirectory);
 
-        File.GetLastWriteTimeUtc(FleetApiSkill).ShouldBe(written);
+        File.GetLastWriteTimeUtc(FleetSkill).ShouldBe(written);
     }
 
     [Fact]
     public void Install_replaces_a_copy_that_differs()
     {
-        Directory.CreateDirectory(Path.GetDirectoryName(FleetApiSkill)!);
-        File.WriteAllText(FleetApiSkill, "an older skill");
+        Directory.CreateDirectory(Path.GetDirectoryName(FleetSkill)!);
+        File.WriteAllText(FleetSkill, "an older skill");
 
         OpenCodeFleetSkills.Install(_dataDirectory);
 
-        File.ReadAllText(FleetApiSkill).ShouldBe(File.ReadAllText(Path.Combine(RepoSkillsDirectory(), "fleet-api", "SKILL.md")));
+        File.ReadAllText(FleetSkill).ShouldBe(File.ReadAllText(Path.Combine(RepoSkillsDirectory(), "fleet", "SKILL.md")));
     }
 
     [Fact]
@@ -74,7 +74,21 @@ public sealed class OpenCodeFleetSkillsTests : IDisposable
 
         File.Exists(oldScript).ShouldBeFalse();
         File.Exists(oldSkill).ShouldBeFalse();
-        File.Exists(FleetApiSkill).ShouldBeTrue();
+        File.Exists(FleetSkill).ShouldBeTrue();
+    }
+
+    [Fact]
+    public void Install_removes_the_folder_of_the_skill_Fleet_renamed()
+    {
+        var old = Path.Combine(SkillsDirectory, "fleet-api");
+        Directory.CreateDirectory(Path.Combine(old, "scripts"));
+        File.WriteAllText(Path.Combine(old, "SKILL.md"), "from an older Fleet");
+        File.WriteAllText(Path.Combine(old, "scripts", "fleet-api.sh"), "from an older Fleet");
+
+        OpenCodeFleetSkills.Install(_dataDirectory);
+
+        Directory.Exists(old).ShouldBeFalse();
+        File.Exists(FleetSkill).ShouldBeTrue();
     }
 
     [Fact]
