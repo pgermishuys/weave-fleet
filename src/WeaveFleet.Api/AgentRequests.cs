@@ -26,6 +26,16 @@ public static class AgentRequests
     /// <summary>Whether this request came from an agent process through its <c>/agent/{token}</c> prefix.</summary>
     public static bool IsAgentRequest(this HttpContext http) => http.Items.ContainsKey(Key);
 
+    /// <summary>
+    /// A 403 for an agent's call to something only the user changes (Fleet's own safety settings and switches), or null
+    /// for anyone else. Callers return it before doing anything.
+    /// </summary>
+    public static IResult? RefuseAgent(this HttpContext http, string what)
+        => http.IsAgentRequest()
+            ? Results.Json(new ErrorResponse($"Agents can't change {what}. Ask the user to change it in Settings."),
+                ApiJsonContext.Default.ErrorResponse, statusCode: StatusCodes.Status403Forbidden)
+            : null;
+
     /// <summary>The bridge token of the agent process this request came from, or null when it isn't an agent's.</summary>
     public static string? AgentBridgeToken(this HttpContext http) => http.Items.TryGetValue(Key, out var token) ? token as string : null;
 

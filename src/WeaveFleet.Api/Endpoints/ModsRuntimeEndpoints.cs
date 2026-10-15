@@ -51,6 +51,9 @@ public static class ModsRuntimeEndpoints
     private static async Task<IResult> InstallAsync(
         IModsRuntime service, FleetOptions options, IUserContext user, HttpContext http, CancellationToken ct)
     {
+        if (http.RefuseAgent("the Mods switch") is { } refused)
+            return refused;
+
         if (!string.IsNullOrWhiteSpace(options.Harness.BunPath))
             return Results.Conflict(new ApiErrorResponse($"Fleet uses the Bun at {options.Harness.BunPath}, set in its configuration."));
 
@@ -63,6 +66,9 @@ public static class ModsRuntimeEndpoints
     private static async Task<IResult> UseAsync(
         UseModsRuntimeRequest request, IModsRuntime service, FleetOptions options, IUserContext user, HttpContext http, CancellationToken ct)
     {
+        if (http.RefuseAgent("the Mods switch") is { } refused)
+            return refused;
+
         // Cloud mode runs managed machines: there is no user computer whose Bun could be offered.
         if (options.Cloud.Enabled)
             return Results.NotFound(new ApiErrorResponse("Mods can't use your own Bun in cloud mode."));

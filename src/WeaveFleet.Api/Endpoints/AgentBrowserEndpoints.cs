@@ -59,8 +59,11 @@ public static class AgentBrowserEndpoints
         .WithName("GetAgentBrowserSettings");
 
         // PUT /api/agent-browser/settings — change some of them; the rest stay
-        settings.MapPut("/settings", async (AgentBrowserSettingsRequest request, AgentBrowserAccess access, AgentBrowserSettingsChanges changes, IUserContext user) =>
+        settings.MapPut("/settings", async (AgentBrowserSettingsRequest request, AgentBrowserAccess access, AgentBrowserSettingsChanges changes, IUserContext user, HttpContext http) =>
         {
+            if (http.RefuseAgent("what agents may do in Fleet's browser") is { } refused)
+                return refused;
+
             if (request.Pages is not null && !AgentBrowserPages.IsKnown(request.Pages))
                 return Results.UnprocessableEntity(new ErrorResponse("\"pages\" must be \"session\", \"machine\" or \"any\"."));
 

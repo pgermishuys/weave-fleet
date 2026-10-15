@@ -29,8 +29,12 @@ public static class WorkspaceRootEndpoints
         })
         .WithName("GetWorkspaceRoots");
 
-        group.MapPost("/workspace-roots", async (AddWorkspaceRootRequest req, WorkspaceRootService svc) =>
+        group.MapPost("/workspace-roots", async (AddWorkspaceRootRequest req, WorkspaceRootService svc, HttpContext http) =>
         {
+            // The roots are the folders Fleet lets sessions open; the user decides which.
+            if (http.RefuseAgent("which folders Fleet allows") is { } refused)
+                return refused;
+
             var result = await svc.AddRootAsync(req.Path);
             return result.Match(
                 root => Results.Ok(new WorkspaceRootAddedResponse(root.Id, root.Path)),
@@ -38,8 +42,11 @@ public static class WorkspaceRootEndpoints
         })
         .WithName("AddWorkspaceRoot");
 
-        group.MapDelete("/workspace-roots/{id}", async (string id, WorkspaceRootService svc) =>
+        group.MapDelete("/workspace-roots/{id}", async (string id, WorkspaceRootService svc, HttpContext http) =>
         {
+            if (http.RefuseAgent("which folders Fleet allows") is { } refused)
+                return refused;
+
             var result = await svc.RemoveRootAsync(id);
             return result.ToNoContentResult();
         })

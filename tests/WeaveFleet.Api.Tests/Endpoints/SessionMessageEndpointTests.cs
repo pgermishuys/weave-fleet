@@ -119,6 +119,39 @@ public sealed class SessionMessageEndpointTests : IAsyncLifetime
         saved!["copilot.path"].ShouldBe("/opt/weave-copilot");
     }
 
+    [Theory]
+    [InlineData("PermissionLevel", "allow")]
+    [InlineData("Mods", "true")]
+    [InlineData("Copilot", "true")]
+    [InlineData("copilot.hydrafusion", "true")]
+    [InlineData("BuiltInSkills", "true")]
+    public async Task An_agent_cannot_change_any_preference_but_the_user_can(string key, string value)
+    {
+        var byAgent = await _client!.PutAsJsonAsync($"/agent/{Token}/api/preferences/{key}", new { value });
+        var afterAgent = await _client!.GetFromJsonAsync<Dictionary<string, string>>("/api/preferences");
+        var byUser = await _client!.PutAsJsonAsync($"/api/preferences/{key}", new { value });
+
+        byAgent.StatusCode.ShouldBe(HttpStatusCode.Forbidden);
+        (await ErrorAsync(byAgent))!.ShouldContain("Settings");
+        afterAgent!.ContainsKey(key).ShouldBeFalse();
+        byUser.StatusCode.ShouldBe(HttpStatusCode.NoContent);
+        (await _client!.GetFromJsonAsync<Dictionary<string, string>>("/api/preferences"))![key].ShouldBe(value);
+    }
+
+    [Fact]
+    public async Task An_agent_cannot_change_runtime_settings_or_answer_its_own_permission_ask()
+    {
+        var config = await _client!.PutAsJsonAsync($"/agent/{Token}/api/config", new { });
+        var browser = await _client!.PutAsJsonAsync($"/agent/{Token}/api/agent-browser/settings", new { enabled = true });
+        var permission = await _client!.PostAsJsonAsync($"/agent/{Token}/api/sessions/{Sender}/permissions/req-1", new { reply = "always" });
+        var mods = await _client!.PostAsync($"/agent/{Token}/api/features/mods/runtime/install", null);
+        var root = await _client!.PostAsJsonAsync($"/agent/{Token}/api/workspace-roots", new { path = "/" });
+        var removeRoot = await _client!.DeleteAsync($"/agent/{Token}/api/workspace-roots/root-1");
+
+        foreach (var response in new[] { config, browser, permission, mods, root, removeRoot })
+            response.StatusCode.ShouldBe(HttpStatusCode.Forbidden);
+    }
+
     [Fact]
     public async Task With_messages_off_the_tool_is_refused_even_from_a_process_that_has_it()
     {
