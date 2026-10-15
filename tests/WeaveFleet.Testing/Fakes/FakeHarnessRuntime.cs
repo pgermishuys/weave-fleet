@@ -63,6 +63,8 @@ public sealed class FakeHarnessRuntime : IHarnessRuntime
 
     public string? MinimumVersion { get; set; }
 
+    public IHarnessInstaller? Installer { get; set; }
+
     /// <summary>What <see cref="GetUpdateCommand"/> returns; it's given the availability and the target version.</summary>
     public Func<HarnessAvailability, string?, HarnessCommand?> UpdateCommand { get; set; } = (_, _) => null;
 

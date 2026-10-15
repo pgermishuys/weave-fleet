@@ -426,6 +426,7 @@ function statusForHarness(harness: HarnessInfo, enabled: boolean): HarnessStatus
           :harness="harness.info"
           preference-key="copilot.path"
           program="weave-copilot"
+          empty-meaning="use the copy Fleet installed, or weave-copilot on PATH"
         />
 
         <div

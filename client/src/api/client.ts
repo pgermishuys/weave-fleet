@@ -587,7 +587,7 @@ export type HarnessState = "ready" | "not-installed" | "sign-in-required" | "not
 /** An update Fleet started for a harness (`HarnessUpdateJob` on the server). */
 export interface HarnessUpdateJob {
   phase: "waiting" | "running" | "succeeded" | "failed";
-  /** What happened, in a sentence; missing while running. */
+  /** What happened, in a sentence; while running, a harness Fleet downloads itself reports its progress here. */
   message?: string | null;
   /** The last lines the updater printed. */
   output?: string | null;
@@ -604,6 +604,10 @@ export interface HarnessUpdateInfo {
   minimumVersion?: string | null;
   /** The update command as you'd type it. */
   command?: string | null;
+  /** Fleet downloads this harness itself and it isn't installed: it can be installed from here. */
+  canInstall?: boolean;
+  /** What Fleet's own install or update downloads, and where it goes. */
+  installPlan?: string | null;
   job?: HarnessUpdateJob | null;
 }
 

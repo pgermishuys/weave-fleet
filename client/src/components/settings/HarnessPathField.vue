@@ -12,6 +12,8 @@ const props = defineProps<{
   preferenceKey: string;
   /** What the program is called, e.g. `weave-copilot`. */
   program: string;
+  /** What an empty field does, after "Leave it empty to"; finding the program on PATH when missing. */
+  emptyMeaning?: string;
 }>();
 
 const prefs = usePreferencesStore();
@@ -50,7 +52,7 @@ async function check(): Promise<void> {
       :for="`path-${preferenceKey}`"
     >Path to {{ program }}</label>
     <p class="mt-1 text-xs text-muted">
-      Leave it empty to find {{ program }} on PATH.
+      Leave it empty to {{ emptyMeaning ?? `find ${program} on PATH` }}.
     </p>
     <div class="mt-2 flex flex-wrap items-center gap-2">
       <input

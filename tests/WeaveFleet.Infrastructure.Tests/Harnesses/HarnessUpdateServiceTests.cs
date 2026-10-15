@@ -231,6 +231,58 @@ public sealed class HarnessUpdateServiceTests
         }
     }
 
+    [Fact]
+    public async Task A_harness_Fleet_downloads_can_be_installed_from_Settings_and_reports_its_progress()
+    {
+        var installer = new FakeInstaller("0.2.0", async progress =>
+        {
+            progress.Report("Downloading weave-copilot 0.2.0… 50%");
+            _runtime.Availability = HarnessAvailability.Ready("0.2.0", "/home/you/.weave/runtimes/copilot/weave-copilot");
+            await Task.CompletedTask;
+        });
+        _runtime.Installer = installer;
+        _runtime.Availability = HarnessAvailability.NotInstalled("weave-copilot isn't installed.");
+        var service = NewService();
+
+        var before = (await service.DescribeAsync([await InfoAsync()], checkLatest: false, CancellationToken.None))["opencode"];
+        before.CanInstall.ShouldBeTrue();
+        before.UpdateAvailable.ShouldBeFalse();
+        before.InstallPlan.ShouldBe("Fleet downloads it.");
+
+        (await service.StartAsync("opencode", CancellationToken.None)).IsSuccess.ShouldBeTrue();
+        var job = await JobAsync(service, job => job.Phase == HarnessUpdatePhases.Succeeded);
+
+        job.Message.ShouldBe("Installed opencode 0.2.0.");
+        _ran.ShouldBeEmpty();
+    }
+
+    [Fact]
+    public async Task A_harness_Fleet_downloads_is_offered_the_pinned_version_when_it_is_older_and_a_failed_install_says_why()
+    {
+        _runtime.Installer = new FakeInstaller("0.2.0", _ => throw new HarnessInstallException("Couldn't download weave-copilot 0.2.0: GitHub answered 404. The release may not be published yet."));
+        _runtime.Availability = HarnessAvailability.Ready("0.1.0", "/home/you/.weave/runtimes/copilot/weave-copilot");
+        var service = NewService();
+
+        var info = (await service.DescribeAsync([await InfoAsync()], checkLatest: false, CancellationToken.None))["opencode"];
+        info.UpdateAvailable.ShouldBeTrue();
+        info.LatestVersion.ShouldBe("0.2.0");
+        info.CanInstall.ShouldBeFalse();
+
+        await service.StartAsync("opencode", CancellationToken.None);
+        var job = await JobAsync(service, job => job.Phase == HarnessUpdatePhases.Failed);
+        job.Message.ShouldBe("Couldn't download weave-copilot 0.2.0: GitHub answered 404. The release may not be published yet.");
+        job.Output.ShouldBeNull();
+    }
+
+    private sealed class FakeInstaller(string target, Func<IProgress<string>, Task> install) : IHarnessInstaller
+    {
+        public string TargetVersion => target;
+
+        public string Plan => "Fleet downloads it.";
+
+        public Task InstallAsync(IProgress<string> progress, CancellationToken ct) => install(progress);
+    }
+
     private sealed class NoHttpClientFactory : IHttpClientFactory
     {
         public HttpClient CreateClient(string name) => throw new InvalidOperationException("Tests don't reach npm.");

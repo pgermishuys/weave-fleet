@@ -20,7 +20,8 @@ const update = computed(() => props.harness.update ?? null);
 const job = computed(() => update.value?.job ?? null);
 const name = computed(() => props.harness.displayName);
 const tooOld = computed(() => harnessState(props.harness) === "update-needed");
-const offer = computed(() => !job.value && (tooOld.value || update.value?.updateAvailable === true));
+const canInstall = computed(() => update.value?.canInstall === true);
+const offer = computed(() => !job.value && (canInstall.value || tooOld.value || update.value?.updateAvailable === true));
 
 const busy = shallowRef(false);
 const error = shallowRef<string | null>(null);
@@ -83,7 +84,7 @@ async function copyCommand(): Promise<void> {
         v-else-if="job?.phase === 'running'"
         class="harness-update__msg"
       >
-        <b>Updating {{ name }}…</b>
+        <b>{{ job.message ?? `Updating ${name}…` }}</b>
         <span>It stops after 5 minutes if it hasn't finished.</span>
       </p>
       <p
@@ -91,7 +92,15 @@ async function copyCommand(): Promise<void> {
         class="harness-update__msg"
       >
         <b>{{ job.message }}</b>
-        <span v-if="job.phase === 'succeeded'">Idle {{ name }} processes restarted. New sessions use the new version.</span>
+        <span v-if="job.phase === 'succeeded' && job.fromVersion">Idle {{ name }} processes restarted. New sessions use the new version.</span>
+        <span v-else-if="job.phase === 'succeeded'">New sessions can use {{ name }} now.</span>
+      </p>
+      <p
+        v-else-if="offer && canInstall"
+        class="harness-update__msg"
+      >
+        <b>{{ name }} isn't installed.</b>
+        <span>{{ update?.installPlan }}</span>
       </p>
       <p
         v-else-if="offer && tooOld"
@@ -107,6 +116,7 @@ async function copyCommand(): Promise<void> {
       >
         <b>{{ name }} {{ update?.latestVersion }} is available.</b> You have {{ harness.version }}.
         <span v-if="update?.command">Fleet runs <code>{{ update.command }}</code> once no session is working.</span>
+        <span v-else-if="update?.installPlan">{{ update.installPlan }}</span>
       </p>
 
       <div class="harness-update__actions">
@@ -137,7 +147,7 @@ async function copyCommand(): Promise<void> {
           {{ job.phase === "succeeded" ? "Done" : "Dismiss" }}
         </button>
         <button
-          v-if="(offer && update?.command) || job?.phase === 'failed'"
+          v-if="(offer && (update?.command || update?.installPlan)) || job?.phase === 'failed'"
           type="button"
           class="harness-update__btn harness-update__btn--primary"
           :disabled="busy"
@@ -148,7 +158,7 @@ async function copyCommand(): Promise<void> {
             :size="14"
             aria-hidden="true"
           />
-          {{ job?.phase === "failed" ? "Try again" : update?.latestVersion ? `Update to ${update.latestVersion}` : "Update" }}
+          {{ job?.phase === "failed" ? "Try again" : canInstall ? "Install" : update?.latestVersion ? `Update to ${update.latestVersion}` : "Update" }}
         </button>
       </div>
     </div>
