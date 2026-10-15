@@ -1,0 +1,1276 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Better file viewer</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
+<style>
+/* Fleet's own tokens (client/src/assets/main.css + markdown.css): light, then the default dark theme. */
+:root, :root[data-theme="light"] {
+  color-scheme: light;
+  --rail-bg: #ffffff; --panel-bg: #ffffff; --card-bg: #ffffff; --main-bg: #f3f2ef;
+  --border: rgba(26, 25, 24, 0.09);
+  --text: #1a1918; --muted: #6e6a65;
+  --accent: #5b6ec7; --accent-dim: rgba(91, 110, 199, 0.12); --primary-foreground: #ffffff;
+  --running: #16a34a; --idle: #d97706; --error: #dc2626; --queued: #7c3aed;
+  --menu-shadow: 0 16px 40px -12px rgba(26, 25, 24, 0.22), 0 2px 6px rgba(26, 25, 24, 0.06);
+  --sheet-shadow: 0 1px 2px rgba(26, 25, 24, 0.04), 0 12px 32px -18px rgba(26, 25, 24, 0.18);
+  --syntax-keyword: #a626a4; --syntax-string: #50a14f; --syntax-number: #986801; --syntax-comment: #a0a1a7;
+  --syntax-function: #4078f2; --syntax-attr: #c18401; --syntax-type: #e45649; --syntax-literal: #0184bc;
+}
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    color-scheme: dark;
+    --rail-bg: #0d0d10; --panel-bg: #141418; --card-bg: #1b1b20; --main-bg: #0d0d10;
+    --border: rgba(255, 255, 255, 0.075);
+    --text: #e8e8ec; --muted: #8e8e9a;
+    --accent: #6366f1; --accent-dim: rgba(99, 102, 241, 0.15); --primary-foreground: #ffffff;
+    --running: #22c55e; --idle: #f59e0b; --error: #ef4444; --queued: #8b5cf6;
+    --menu-shadow: 0 16px 40px -12px rgba(0, 0, 0, 0.55), 0 2px 6px rgba(0, 0, 0, 0.25);
+    --sheet-shadow: none;
+    --syntax-keyword: #c678dd; --syntax-string: #98c379; --syntax-number: #d19a66; --syntax-comment: #8b949e;
+    --syntax-function: #61afef; --syntax-attr: #e5c07b; --syntax-type: #e06c75; --syntax-literal: #56b6c2;
+  }
+}
+:root[data-theme="dark"] {
+  color-scheme: dark;
+  --rail-bg: #0d0d10; --panel-bg: #141418; --card-bg: #1b1b20; --main-bg: #0d0d10;
+  --border: rgba(255, 255, 255, 0.075);
+  --text: #e8e8ec; --muted: #8e8e9a;
+  --accent: #6366f1; --accent-dim: rgba(99, 102, 241, 0.15); --primary-foreground: #ffffff;
+  --running: #22c55e; --idle: #f59e0b; --error: #ef4444; --queued: #8b5cf6;
+  --menu-shadow: 0 16px 40px -12px rgba(0, 0, 0, 0.55), 0 2px 6px rgba(0, 0, 0, 0.25);
+  --sheet-shadow: none;
+  --syntax-keyword: #c678dd; --syntax-string: #98c379; --syntax-number: #d19a66; --syntax-comment: #8b949e;
+  --syntax-function: #61afef; --syntax-attr: #e5c07b; --syntax-type: #e06c75; --syntax-literal: #56b6c2;
+}
+:root {
+  --sans: "Inter", system-ui, -apple-system, sans-serif;
+  --mono: "JetBrains Mono", ui-monospace, monospace;
+  --radius-btn: 8px; --radius-panel: 12px;
+  --t: 150ms ease-out;
+}
+
+* { box-sizing: border-box; }
+html, body { margin: 0; }
+body {
+  background: var(--main-bg); color: var(--text);
+  font: 14px/1.55 var(--sans);
+  padding: 28px 16px 64px;
+}
+button { font: inherit; color: inherit; }
+:focus-visible { outline: 2px solid var(--accent); outline-offset: 1px; }
+kbd {
+  font: 500 11px var(--sans); padding: 1px 5px; border-radius: 4px;
+  background: color-mix(in srgb, var(--text) 7%, transparent); color: var(--text);
+  white-space: nowrap;
+}
+code { font: 12.5px var(--mono); }
+
+.page { max-width: 1200px; margin: 0 auto; display: grid; gap: 40px; }
+.top { display: grid; gap: 12px; }
+.top__row { display: flex; flex-wrap: wrap; align-items: center; gap: 12px; justify-content: space-between; }
+.eyebrow { font-size: 11.5px; font-weight: 600; letter-spacing: 0.06em; text-transform: uppercase; color: var(--muted); }
+h1 { margin: 0; font-size: 28px; line-height: 1.2; letter-spacing: -0.01em; text-wrap: balance; }
+h2 { margin: 0; font-size: 20px; line-height: 1.25; text-wrap: balance; }
+h3 { margin: 0; font-size: 13px; font-weight: 600; }
+p { margin: 0; }
+.lede { max-width: 72ch; color: var(--muted); }
+.lede b { color: var(--text); font-weight: 500; }
+.seg { display: inline-flex; gap: 1px; padding: 2px; border-radius: 8px; background: color-mix(in srgb, var(--text) 6%, transparent); }
+.seg button { height: 26px; padding: 0 10px; border: 0; border-radius: 6px; background: transparent; color: var(--muted); font-size: 12.5px; cursor: pointer; }
+.seg button[aria-pressed="true"] { background: var(--panel-bg); color: var(--text); box-shadow: 0 1px 2px rgba(0,0,0,.12); }
+.jump { display: flex; flex-wrap: wrap; gap: 6px; }
+.jump a { font-size: 12.5px; color: var(--text); text-decoration: none; padding: 4px 10px; border: 1px solid var(--border); border-radius: 999px; background: var(--panel-bg); }
+.jump a:hover { border-color: var(--accent); }
+
+/* ─── Sections ─────────────────────────────────────────────────────────── */
+.option { display: grid; gap: 14px; scroll-margin-top: 16px; }
+.option__head { display: flex; flex-wrap: wrap; align-items: flex-end; justify-content: space-between; gap: 10px 16px; }
+.option__title { display: grid; gap: 4px; max-width: 78ch; }
+.option__title p { color: var(--muted); }
+.letter { display: inline-grid; place-items: center; width: 24px; height: 24px; margin-right: 8px; border-radius: 7px; background: var(--accent-dim); color: var(--accent); font-size: 13px; font-weight: 700; vertical-align: 2px; }
+.try { font-size: 12.5px; color: var(--muted); }
+.try b { color: var(--text); font-weight: 500; }
+.facts { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 12px; }
+.fact { display: grid; align-content: start; gap: 8px; padding: 14px 16px; border-radius: var(--radius-panel); background: var(--panel-bg); box-shadow: var(--sheet-shadow); border: 1px solid var(--border); }
+.fact ul { margin: 0; padding-left: 18px; display: grid; gap: 5px; font-size: 13px; }
+.fact li::marker { color: var(--muted); }
+.fact p { font-size: 13px; }
+.cost { display: flex; flex-wrap: wrap; gap: 6px; }
+.chip { display: inline-flex; align-items: center; gap: 6px; height: 22px; padding: 0 8px; border-radius: 999px; font-size: 11.5px; font-weight: 600; white-space: nowrap; }
+.chip--go { background: color-mix(in srgb, var(--running) 16%, transparent); color: var(--running); }
+.chip--later { background: color-mix(in srgb, var(--idle) 18%, transparent); color: var(--idle); }
+.chip--no { background: color-mix(in srgb, var(--muted) 18%, transparent); color: var(--muted); }
+.chip--size { background: color-mix(in srgb, var(--text) 7%, transparent); color: var(--text); font-weight: 500; }
+
+.pains { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 10px 24px; margin: 0; padding: 0; list-style: none; counter-reset: pain; }
+.pains li { display: grid; grid-template-columns: 22px 1fr; gap: 2px 8px; font-size: 13px; counter-increment: pain; }
+.pains li::before { content: counter(pain); grid-row: span 2; font: 600 11px var(--mono); color: var(--error); padding-top: 2px; font-variant-numeric: tabular-nums; }
+.pains b { font-weight: 600; }
+.pains span { color: var(--muted); }
+.pains code { font-size: 11.5px; }
+
+.compare { width: 100%; border-collapse: collapse; font-size: 13px; }
+.compare-wrap { overflow-x: auto; border-radius: var(--radius-panel); border: 1px solid var(--border); background: var(--panel-bg); }
+.compare th, .compare td { text-align: left; padding: 9px 14px; border-bottom: 1px solid var(--border); vertical-align: top; }
+.compare th { font-size: 11.5px; font-weight: 600; letter-spacing: .04em; text-transform: uppercase; color: var(--muted); }
+.compare tr:last-child td { border-bottom: 0; }
+.compare td:first-child { font-weight: 600; white-space: nowrap; }
+.compare .num { font-variant-numeric: tabular-nums; white-space: nowrap; }
+
+.rec { display: grid; gap: 14px; padding: 20px; border-radius: var(--radius-panel); border: 1px solid color-mix(in srgb, var(--accent) 40%, var(--border)); background: color-mix(in srgb, var(--accent) 5%, var(--panel-bg)); }
+.rec ol { margin: 0; padding-left: 20px; display: grid; gap: 8px; font-size: 13.5px; max-width: 90ch; }
+.rec ol span { color: var(--muted); }
+
+/* ─── The stage: a Fleet window drawn at real pixel sizes ─────────────── */
+.stage {
+  --frame-h: 560px;
+  position: relative; height: var(--frame-h);
+  display: flex; gap: 8px; padding: 8px 8px 8px 0;
+  border-radius: 14px; overflow: hidden;
+  background: var(--main-bg);
+  border: 1px solid var(--border);
+  box-shadow: 0 30px 60px -40px rgba(0,0,0,.45);
+  font-size: 13px;
+  isolation: isolate;
+}
+.rail { flex: 0 0 48px; display: flex; flex-direction: column; align-items: center; gap: 10px; padding-top: 6px; }
+.rail i { width: 28px; height: 28px; border-radius: 8px; background: color-mix(in srgb, var(--text) 6%, transparent); }
+.rail i.on { background: color-mix(in srgb, var(--accent) 22%, transparent); }
+.list { flex: 0 0 212px; display: flex; flex-direction: column; gap: 6px; min-width: 0; padding-top: 2px; }
+.list__new { height: 30px; border-radius: 8px; background: var(--panel-bg); border: 1px solid var(--border); display: grid; place-items: center; font-weight: 500; font-size: 12.5px; }
+.list__filter { height: 28px; border-radius: 8px; background: color-mix(in srgb, var(--text) 5%, transparent); color: var(--muted); font-size: 12px; padding: 0 10px; display: flex; align-items: center; }
+.list__group { font-size: 11.5px; font-weight: 600; color: var(--muted); padding: 6px 8px 0; }
+.list__row { display: flex; align-items: center; gap: 8px; padding: 6px 10px; border-radius: 8px; font-size: 12.5px; white-space: nowrap; overflow: hidden; }
+.list__row span:first-of-type { overflow: hidden; text-overflow: ellipsis; flex: 1; min-width: 0; }
+.list__row small { color: var(--muted); font-size: 11px; }
+.list__row.on { background: color-mix(in srgb, var(--text) 7%, transparent); font-weight: 500; }
+.dot { width: 7px; height: 7px; border-radius: 50%; background: var(--muted); flex: none; }
+.dot--run { background: var(--running); }
+
+.sheet { flex: 1; min-width: 0; display: flex; border-radius: var(--radius-panel); background: var(--panel-bg); box-shadow: var(--sheet-shadow); border: 1px solid var(--border); overflow: hidden; }
+.conv { flex: 1; min-width: 0; display: flex; flex-direction: column; transition: flex-basis 220ms ease-out; }
+.conv__head { padding: 10px 18px 8px; border-bottom: 1px solid var(--border); }
+.conv__title { font-weight: 600; font-size: 13.5px; }
+.conv__meta { color: var(--muted); font-size: 11.5px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.conv__body { flex: 1; min-height: 0; overflow: hidden; padding: 14px 18px; display: flex; flex-direction: column; gap: 12px; }
+.bubble { align-self: flex-end; max-width: 80%; padding: 8px 12px; border-radius: 12px; background: color-mix(in srgb, var(--text) 6%, transparent); }
+.tool { display: flex; align-items: center; gap: 8px; padding: 7px 12px; border: 1px solid var(--border); border-radius: 9px; font-size: 12px; }
+.tool b { font-weight: 600; }
+.tool code { color: var(--muted); font-size: 11.5px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; min-width: 0; }
+.tool .ok { margin-left: auto; color: var(--running); }
+.say { max-width: 62ch; }
+.say code { font-size: 11.5px; padding: 1px 4px; border-radius: 4px; background: color-mix(in srgb, var(--text) 6%, transparent); }
+.composer { margin: 0 14px 14px; min-height: 64px; border: 1px solid color-mix(in srgb, var(--accent) 45%, var(--border)); border-radius: 12px; padding: 9px 12px; display: flex; flex-wrap: wrap; align-content: flex-start; gap: 6px; color: var(--muted); font-size: 12.5px; }
+.pill { display: inline-flex; align-items: center; height: 22px; padding: 0 7px; border-radius: 6px; background: var(--accent-dim); color: var(--text); font: 11.5px var(--mono); max-width: 100%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.pill--new { animation: pop 260ms ease-out; }
+
+/* The conversation folded into a strip, while Focus is on. */
+.strip { display: none; }
+.is-focus .list { display: none; }
+.is-focus .conv { flex: 0 0 46px; }
+.is-focus .conv > :not(.strip) { display: none; }
+.is-focus .strip { display: flex; flex-direction: column; align-items: center; gap: 12px; padding: 12px 0; height: 100%; border-right: 1px solid var(--border); }
+.strip button { width: 30px; height: 30px; border-radius: 8px; border: 1px solid var(--border); background: var(--card-bg); display: grid; place-items: center; cursor: pointer; color: var(--muted); }
+.strip button:hover { color: var(--text); border-color: var(--accent); }
+.strip__title { writing-mode: vertical-rl; transform: rotate(180deg); font-size: 11.5px; color: var(--muted); white-space: nowrap; display: flex; align-items: center; gap: 8px; }
+.strip__title .dot { animation: breathe 1.6s ease-in-out infinite; }
+
+/* ─── The content panel (CanvasHost + FileCanvas) ─────────────────────── */
+.panel { flex: 0 0 auto; min-width: 0; display: flex; flex-direction: column; border-left: 1px solid var(--border); position: relative; transition: width 220ms ease-out; }
+.ph { display: flex; align-items: center; gap: 2px; height: 44px; padding: 0 8px; border-bottom: 1px solid var(--border); min-width: 0; }
+.tabs { display: flex; gap: 2px; min-width: 0; overflow: hidden; }
+.tab { display: inline-flex; align-items: center; gap: 6px; height: 28px; padding: 0 9px; border: 0; border-radius: 8px; background: transparent; color: var(--muted); font-size: 12.5px; cursor: pointer; white-space: nowrap; max-width: 200px; flex: none; }
+.tab span { overflow: hidden; text-overflow: ellipsis; }
+.tab:hover { color: var(--text); }
+.tab.on { background: color-mix(in srgb, var(--text) 7%, transparent); color: var(--text); font-weight: 500; }
+.tab--preview span { font-style: italic; }
+.spacer { flex: 1; }
+.ib { display: inline-grid; place-items: center; width: 28px; height: 28px; flex: none; border: 1px solid transparent; border-radius: var(--radius-btn); background: transparent; color: var(--muted); cursor: pointer; position: relative; }
+.ib:hover { color: var(--text); background: color-mix(in srgb, var(--text) 6%, transparent); }
+.ib[aria-pressed="true"] { color: var(--accent); background: var(--accent-dim); }
+.ib--new::after { content: ""; position: absolute; top: 3px; right: 3px; width: 6px; height: 6px; border-radius: 50%; background: var(--accent); box-shadow: 0 0 0 2px var(--panel-bg); }
+.fb { display: flex; align-items: center; gap: 6px; min-height: 38px; padding: 0 8px 0 12px; border-bottom: 1px solid var(--border); min-width: 0; }
+.crumbs { display: flex; align-items: center; gap: 1px; min-width: 0; overflow: hidden; color: var(--muted); font-size: 12.5px; white-space: nowrap; }
+.crumbs b { font-weight: 500; color: var(--text); overflow: hidden; text-overflow: ellipsis; }
+.crumbs svg { flex: none; opacity: .7; }
+.crumb { border: 0; background: transparent; padding: 2px 4px; border-radius: 5px; color: var(--muted); font-size: 12.5px; cursor: pointer; white-space: nowrap; }
+.crumb:hover, .crumb[aria-expanded="true"] { background: color-mix(in srgb, var(--text) 7%, transparent); color: var(--text); }
+.crumb--file { color: var(--text); font-weight: 500; }
+.crumb--more { padding: 2px 3px; }
+.tog { display: inline-flex; flex: none; gap: 1px; padding: 2px; border-radius: 8px; background: color-mix(in srgb, var(--text) 5%, transparent); }
+.tog button { height: 22px; padding: 0 8px; border: 0; border-radius: 6px; background: transparent; color: var(--muted); font-size: 12px; cursor: pointer; }
+.tog button.on { background: color-mix(in srgb, var(--text) 10%, transparent); color: var(--text); }
+.fbtn { display: inline-flex; align-items: center; gap: 5px; height: 26px; padding: 0 7px; border: 0; border-radius: 7px; background: transparent; color: var(--muted); font-size: 12px; cursor: pointer; flex: none; }
+.fbtn:hover { color: var(--text); background: color-mix(in srgb, var(--text) 6%, transparent); }
+.fbtn[aria-pressed="true"] { color: var(--accent); background: var(--accent-dim); }
+.pb { flex: 1; min-height: 0; display: flex; flex-direction: column; position: relative; }
+
+/* The code view stands in for CodeMirror with Fleet's editor theme (lib/code-editor/theme.ts). */
+.ed { flex: 1; min-height: 0; position: relative; display: flex; }
+.ed-scroll { flex: 1; min-width: 0; overflow: auto; font: 12.5px/1.6 var(--mono); font-variant-ligatures: none; }
+.ed-lines { display: grid; min-width: 100%; width: max-content; padding: 6px 0 56px; }
+.ed[data-wrap="1"] .ed-lines { width: auto; }
+.ln { display: grid; grid-template-columns: 44px 1fr; }
+.ln-no { position: sticky; left: 0; z-index: 1; display: block; align-self: start; height: 1.6em; padding: 0 10px 0 4px; border: 0; background: var(--panel-bg); color: color-mix(in srgb, var(--muted) 70%, transparent); font: inherit; text-align: right; font-variant-numeric: tabular-nums; user-select: none; }
+.ed[data-lines="1"] .ln-no { cursor: pointer; }
+.ed[data-lines="1"] .ln-no:hover { color: var(--text); }
+.ln-code { white-space: pre; padding: 0 16px 0 calc(6px + var(--ind) * 1ch); }
+.ed[data-wrap="1"] .ln-code { white-space: pre-wrap; overflow-wrap: anywhere; padding-left: calc(6px + (var(--ind) + 2) * 1ch); text-indent: -2ch; }
+.ed[data-wrap="1"] .ln-code.wrapped { background: linear-gradient(90deg, transparent calc(6px + (var(--ind) + 1) * 1ch - 1px), color-mix(in srgb, var(--text) 8%, transparent) 0, transparent calc(6px + (var(--ind) + 1) * 1ch)) no-repeat 0 1.6em / 100% calc(100% - 1.6em); }
+.ln.is-sel { background: color-mix(in srgb, var(--accent) 14%, transparent); }
+.ln.is-sel .ln-no { background: color-mix(in srgb, var(--accent) 14%, var(--panel-bg)); color: var(--accent); font-weight: 500; }
+.ln.is-flash { animation: flash 1.4s ease-out; }
+.ln.is-flash .ln-no { animation: flash-gutter 1.4s ease-out; }
+.k { color: var(--syntax-keyword); } .s { color: var(--syntax-string); } .n { color: var(--syntax-number); }
+.c { color: var(--syntax-comment); font-style: italic; } .f { color: var(--syntax-function); } .t { color: var(--syntax-type); }
+.l { color: var(--syntax-literal); } .p { color: var(--muted); } .h { color: var(--accent); font-weight: 600; }
+
+/* Today's floating chip, beside the selection end. */
+.oldchip { position: absolute; z-index: 5; display: inline-flex; align-items: center; gap: 6px; height: 28px; padding: 0 10px; border: 1px solid var(--border); border-radius: 8px; background: var(--card-bg); font-size: 12px; font-weight: 500; white-space: nowrap; box-shadow: var(--menu-shadow); }
+
+/* The range bar: what you can do with the lines you picked. */
+.rangebar { position: absolute; left: 10px; right: 10px; bottom: 10px; z-index: 6; display: flex; flex-wrap: wrap; align-items: center; gap: 4px; padding: 5px 5px 5px 12px; border: 1px solid var(--border); border-radius: 10px; background: var(--card-bg); box-shadow: var(--menu-shadow); animation: rise 180ms ease-out; }
+.rangebar__label { font: 500 12px var(--mono); margin-right: auto; white-space: nowrap; }
+.rangebar__label small { font-family: var(--sans); color: var(--muted); font-weight: 400; margin-left: 6px; }
+.rb { display: inline-flex; align-items: center; gap: 5px; height: 26px; padding: 0 9px; border: 1px solid var(--border); border-radius: 7px; background: var(--panel-bg); font-size: 12px; font-weight: 500; cursor: pointer; white-space: nowrap; }
+.rb:hover { border-color: var(--accent); }
+.rb--primary { background: var(--accent); border-color: var(--accent); color: var(--primary-foreground); }
+.ed { container-type: inline-size; }
+@container (max-width: 420px) { .rb:not(.rb--primary) span { display: none; } .rb:not(.rb--primary):not(.rb--x) { width: 28px; padding: 0; justify-content: center; } }
+.rb--x { width: 26px; padding: 0; justify-content: center; border-color: transparent; background: transparent; color: var(--muted); }
+
+/* Menus: breadcrumb siblings, outline. */
+.menu { position: absolute; z-index: 20; min-width: 220px; max-width: min(340px, calc(100% - 16px)); max-height: 300px; overflow: auto; padding: 4px; border: 1px solid var(--border); border-radius: 10px; background: var(--card-bg); box-shadow: var(--menu-shadow); animation: rise 140ms ease-out; }
+.menu__label { padding: 6px 8px 4px; font-size: 11px; font-weight: 600; letter-spacing: .04em; text-transform: uppercase; color: var(--muted); }
+.mi { display: flex; align-items: center; gap: 8px; width: 100%; padding: 5px 8px; border: 0; border-radius: 6px; background: transparent; font-size: 12.5px; text-align: left; cursor: pointer; white-space: nowrap; }
+.mi:hover, .mi:focus-visible, .mi.on { background: var(--accent-dim); outline: none; }
+.mi svg { flex: none; color: var(--muted); }
+.mi span { overflow: hidden; text-overflow: ellipsis; min-width: 0; }
+.mi small { margin-left: auto; padding-left: 12px; color: var(--muted); font: 11px var(--mono); }
+.mi.is-cur { font-weight: 600; }
+
+/* Go to file (Ctrl P), with recent files, @symbols and :line. */
+.pal-back { position: absolute; inset: 0; z-index: 30; background: rgba(0,0,0,.28); display: flex; justify-content: center; align-items: flex-start; padding-top: 56px; }
+.pal { width: min(520px, calc(100% - 24px)); border: 1px solid var(--border); border-radius: 12px; background: var(--card-bg); box-shadow: var(--menu-shadow); overflow: hidden; animation: rise 140ms ease-out; }
+.pal__in { display: flex; align-items: center; gap: 8px; height: 44px; padding: 0 14px; border-bottom: 1px solid var(--border); color: var(--muted); }
+.pal__in input { flex: 1; min-width: 0; border: 0; outline: 0; background: transparent; color: var(--text); font-size: 14px; }
+.pal__list { max-height: 300px; overflow: auto; padding: 4px; }
+.pal__hint { display: flex; flex-wrap: wrap; gap: 4px 12px; padding: 8px 14px; border-top: 1px solid var(--border); font-size: 11.5px; color: var(--muted); }
+.pal .mi { padding: 7px 10px; }
+.pal .mi em { font-style: normal; color: var(--muted); font-size: 12px; margin-left: 6px; overflow: hidden; text-overflow: ellipsis; }
+
+/* Files tab */
+.tree { flex: 1; min-height: 0; overflow: auto; padding: 6px 0; }
+.tree__search { margin: 4px 8px 6px 10px; height: 30px; display: flex; align-items: center; gap: 6px; padding: 0 10px; border-radius: 8px; background: color-mix(in srgb, var(--text) 5%, transparent); color: var(--muted); font-size: 13px; }
+.tr { display: flex; align-items: center; gap: 4px; width: 100%; height: 26px; padding-right: 10px; border: 0; background: transparent; font-size: 12.5px; text-align: left; cursor: pointer; white-space: nowrap; }
+.tr:hover { background: color-mix(in srgb, var(--text) 5%, transparent); }
+.tr:focus-visible { outline: 0; box-shadow: inset 0 0 0 2px var(--accent); }
+.tr.is-cur { background: var(--accent-dim); }
+.tr svg { flex: none; color: var(--muted); }
+.tr .m { margin-left: auto; color: var(--idle); font: 600 11px var(--mono); }
+.tr span { overflow: hidden; text-overflow: ellipsis; min-width: 0; }
+
+/* Pop out: a large file view over the window. */
+.ov-back { position: absolute; inset: 0; z-index: 40; background: rgba(0,0,0,.42); display: grid; padding: 18px; animation: fade 160ms ease-out; }
+.ov { min-height: 0; display: grid; grid-template-rows: auto 1fr; border-radius: 12px; border: 1px solid var(--border); background: var(--panel-bg); box-shadow: var(--menu-shadow); overflow: hidden; animation: grow 200ms ease-out; }
+.ov__head { display: flex; align-items: center; gap: 8px; height: 44px; padding: 0 8px 0 14px; border-bottom: 1px solid var(--border); }
+.ov__body { min-height: 0; display: grid; grid-template-columns: 230px minmax(0, 1fr); }
+.ov__body .tree { border-right: 1px solid var(--border); }
+.ov__main { min-width: 0; min-height: 0; display: flex; flex-direction: column; }
+.ov__head .crumbs { flex: 1; }
+.is-phone .ov-back { padding: 0; }
+.is-phone .ov { border-radius: 0; border: 0; }
+.is-phone .ov__body { grid-template-columns: minmax(0, 1fr); }
+.is-phone .ov__body .tree, .is-phone .ov__head .try { display: none; }
+.is-phone .ov__head .crumbs > span, .is-phone .ov__head .crumbs > svg { display: none; }
+
+.toast { position: absolute; left: 50%; bottom: 18px; z-index: 60; max-width: calc(100% - 32px); padding: 7px 12px; border-radius: 9px; background: var(--text); color: var(--panel-bg); font-size: 12.5px; font-weight: 500; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; transform: translate(-50%, 0); animation: rise 160ms ease-out; pointer-events: none; }
+.stagecap { display: flex; justify-content: flex-end; margin-bottom: -6px; font: 500 11.5px var(--mono); color: var(--muted); font-variant-numeric: tabular-nums; }
+.stagecap b { color: var(--text); font-weight: 500; }
+
+/* Phone: the panel is a sheet over the conversation (AppShell.vue). */
+.stage.is-phone { --frame-h: 600px; padding: 0; gap: 0; border-radius: 22px; max-width: 390px; margin: 0 auto; width: 100%; }
+.is-phone .rail, .is-phone .list, .is-phone .conv { display: none !important; }
+.is-phone .sheet { border-radius: 0; border: 0; }
+.is-phone .panel { flex: 1; width: auto !important; border-left: 0; }
+.phonebar { display: flex; align-items: center; gap: 6px; height: 40px; padding: 0 12px; border-bottom: 1px solid var(--border); font-size: 12.5px; color: var(--muted); }
+
+@keyframes rise { from { opacity: 0; transform: translateY(4px); } }
+.toast { animation-name: toast-rise; }
+@keyframes toast-rise { from { opacity: 0; transform: translate(-50%, 6px); } }
+@keyframes pop { from { transform: scale(.9); opacity: 0; } }
+@keyframes fade { from { opacity: 0; } }
+@keyframes grow { from { transform: scale(.97); opacity: 0; } }
+@keyframes breathe { 50% { opacity: .35; } }
+@keyframes flash { from { background: color-mix(in srgb, var(--accent) 30%, transparent); } }
+@keyframes flash-gutter { from { color: var(--accent); } }
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after { animation: none !important; transition: none !important; }
+}
+
+@media (max-width: 860px) {
+  .facts { grid-template-columns: 1fr; }
+  .pains { grid-template-columns: 1fr; }
+}
+@media (max-width: 420px) {
+  body { padding-top: 20px; }
+  h1 { font-size: 23px; }
+  .rangebar .rb span { display: none; }
+}
+</style>
+</head>
+<body>
+<main class="page">
+
+  <header class="top">
+    <div class="top__row">
+      <span class="eyebrow">Proposal · right-hand panel</span>
+      <div class="seg" role="group" aria-label="Theme">
+        <button type="button" data-theme-set="dark">Dark</button>
+        <button type="button" data-theme-set="light">Light</button>
+      </div>
+    </div>
+    <h1>Better file viewer</h1>
+    <p class="lede">Reading a file in the panel means scrolling sideways, dragging past the edge to select a long line, and losing the tree every time a file opens. Every frame below is drawn at Fleet's real sizes: a <b>360 px</b> panel, Fleet's editor font and gutters, on the same made-up file. Each option has a <b>Today</b> and a <b>Proposed</b> view so you can compare them.</p>
+    <nav class="jump" aria-label="Sections">
+      <a href="#today">Today</a>
+      <a href="#a">A · Read it in the panel</a>
+      <a href="#b">B · Focus</a>
+      <a href="#c">C · Pop out</a>
+      <a href="#d">D · Get around</a>
+      <a href="#rec">Recommendation</a>
+    </nav>
+  </header>
+
+  <!-- ─── Today ─────────────────────────────────────────────────────────── -->
+  <section class="option" id="today">
+    <div class="option__head">
+      <div class="option__title">
+        <h2>What's wrong today</h2>
+        <p>Found in the code, not guessed. Try it in the frame: select line 18 to its end, or press Widen.</p>
+      </div>
+    </div>
+    <div class="stage" data-stage="today"></div>
+    <ol class="pains">
+      <li><b>No soft wrap.</b><span>The editor (<code>lib/code-editor/editor-extensions.ts</code>) never adds <code>EditorView.lineWrapping</code>. After the line-number, fold and change gutters, about 38 characters fit in a 360 px panel; <span data-long-count>most</span> lines of this file are longer.</span></li>
+      <li><b>Selecting a long line fights the scroll.</b><span>You drag past the right edge and wait for autoscroll. The "Add lines to message" chip hides on any scroll (<code>@scroll.capture="hideChip"</code> in <code>FileCanvas.vue</code>), so it's gone once you've scrolled sideways, and it sits at the selection end, which is often off-screen.</span></li>
+      <li><b>Line numbers do nothing.</b><span>No click-a-number, no shift-click range, no highlight that stays put. To point the agent at lines 21–27 you drag across the text.</span></li>
+      <li><b>Widen hardly widens.</b><span>It's capped at 760 px and always leaves the conversation 480 px (<code>AppShell.vue</code>). On a 1440 px window with the session list open, Widen gets about 610 px; dragging the gutter stops at half the window.</span></li>
+      <li><b>The tree disappears when a file opens.</b><span>Files and the file share one canvas: a click opens a preview tab, and the tree is a tab away. Going up a folder means going back and finding your place again.</span></li>
+      <li><b>The path bar is just text.</b><span>Breadcrumbs can't be clicked, and below 430 px of panel the folders are hidden, so you can't see where you are.</span></li>
+      <li><b>The tree is mouse-only.</b><span>Folder rows are click-only <code>&lt;div&gt;</code>s (<code>FileBrowserTreeNode.vue</code>): no Tab stop, no arrow keys. 16 px of indent per level pushes deep names off the edge.</span></li>
+      <li><b>Search results lose the file name.</b><span>Results show the full path with an ellipsis at the end, so in a narrow panel the part you need is the part that's cut.</span></li>
+      <li><b>Go to file (Ctrl P) is half there.</b><span>Empty, it lists only the open tabs: no recent files, no <code>@symbol</code>, no <code>:line</code>. Nothing in the panel says it exists.</span></li>
+      <li><b>Phone is the worst case.</b><span>The panel becomes a full-width sheet, but it still doesn't wrap: every long line is a sideways swipe, and the selection handles drift off-screen.</span></li>
+    </ol>
+  </section>
+
+  <!-- ─── Option A ──────────────────────────────────────────────────────── -->
+  <section class="option" id="a">
+    <div class="option__head">
+      <div class="option__title">
+        <h2><span class="letter">A</span>Read it in the panel</h2>
+        <p>Small fixes inside the 360 px panel: wrap, pick lines by their numbers, and do something with them.</p>
+      </div>
+      <div class="seg" role="group" aria-label="Option A view" data-mode-for="a"></div>
+    </div>
+    <div class="stage" data-stage="a"></div>
+    <p class="try"><b>Try:</b> click line 18's number, shift-click 27, then Add to message. Toggle wrap with the button or <kbd>Alt Z</kbd>. Drag down the numbers to pick a run of lines.</p>
+    <div class="facts">
+      <div class="fact">
+        <h3>How it behaves</h3>
+        <ul>
+          <li>Wrap toggle in the file bar, <kbd>Alt Z</kbd>. On by default in the panel; your choice is remembered per file. Wrapped lines hang under their start, with a faint guide.</li>
+          <li>Click a line number to pick the line, shift-click to extend, drag down the numbers for a run. The pick stays highlighted while you scroll and survives a click in the text.</li>
+          <li>A bar at the bottom names the range and offers <b>Copy link</b> (<code>path:21-27</code>), <b>Quote</b> (a fenced block with the path) and <b>Add to message</b>. It replaces today's floating chip, so scrolling never hides it.</li>
+          <li>Selecting text still works the way it does now.</li>
+        </ul>
+      </div>
+      <div class="fact">
+        <h3>Trade-offs</h3>
+        <ul>
+          <li>Wrapped code can be harder to scan for indentation; the hanging indent and guide offset most of it, and the toggle is one key away.</li>
+          <li>Doesn't give you more room. A wide table or a minified file still wants a bigger view (B).</li>
+          <li>Adds one more control to an already busy file bar; it collapses to an icon below 430 px.</li>
+        </ul>
+      </div>
+      <div class="fact">
+        <h3>Cost</h3>
+        <div class="cost"><span class="chip chip--size">~4 files</span><span class="chip chip--size">~350 lines + ~200 tests</span><span class="chip chip--size">1 PR</span></div>
+        <p><code>editor-extensions.ts</code> (wrap compartment + gutter click handlers), new <code>line-range.ts</code> (range field and highlight), <code>FileCanvas.vue</code> (toggle, range bar replaces the chip), <code>stores/canvases.ts</code> (wrap per file). CodeMirror does wrap and gutter events natively.</p>
+        <span class="chip chip--go">Recommended, first</span>
+      </div>
+    </div>
+  </section>
+
+  <!-- ─── Option B ──────────────────────────────────────────────────────── -->
+  <section class="option" id="b">
+    <div class="option__head">
+      <div class="option__title">
+        <h2><span class="letter">B</span>Focus: let the panel take the room</h2>
+        <p>Widen becomes Focus. The panel takes the session list and the conversation; the conversation folds into a strip that still shows the agent working.</p>
+      </div>
+      <div class="seg" role="group" aria-label="Option B view" data-mode-for="b"></div>
+    </div>
+    <div class="stage" data-stage="b"></div>
+    <p class="try"><b>Try:</b> press the Focus button at the top right of the panel, or <kbd>Ctrl Shift ↵</kbd>. <kbd>Esc</kbd> or the strip brings the conversation back. Compare the width badge with Today's Widen.</p>
+    <div class="facts">
+      <div class="fact">
+        <h3>How it behaves</h3>
+        <ul>
+          <li>One button where Widen is now, and <kbd>Ctrl Shift ↵</kbd> (rebindable, free in Fleet's keymap today).</li>
+          <li>The panel fills everything right of the rail. The conversation becomes a 46 px strip: the session's status dot and title, and a button back.</li>
+          <li><kbd>Esc</kbd> (when the editor doesn't need it), the strip, or the button again puts every panel back at the width you left it.</li>
+          <li>Works for every canvas, not just files: Changes, Browser and Page canvases get the room too.</li>
+          <li>On a phone the panel is already full screen, so the button isn't shown.</li>
+        </ul>
+      </div>
+      <div class="fact">
+        <h3>Trade-offs</h3>
+        <ul>
+          <li>You can't read the agent's reply while focused; the strip only says it's working. Add to message still works (the pill waits in the composer).</li>
+          <li>Retires Widen's middle step. Anyone who liked 610 px still has the gutter drag.</li>
+          <li>Doesn't fix wrap or line picking on its own; a 1,100 px view still scrolls on a 180-character line.</li>
+        </ul>
+      </div>
+      <div class="fact">
+        <h3>Cost</h3>
+        <div class="cost"><span class="chip chip--size">~5 files</span><span class="chip chip--size">~250 lines + ~150 tests</span><span class="chip chip--size">1 PR</span></div>
+        <p><code>AppShell.vue</code> (a focused width beside the widened one), <code>stores/canvases.ts</code> (<code>widened</code> becomes <code>focused</code>), <code>CanvasHost.vue</code> (button), new <code>ConversationStrip.vue</code>, <code>keybinding-types.ts</code>. The panel already resizes; this is a third width.</p>
+        <span class="chip chip--go">Recommended, with A</span>
+      </div>
+    </div>
+  </section>
+
+  <!-- ─── Option C ──────────────────────────────────────────────────────── -->
+  <section class="option" id="c">
+    <div class="option__head">
+      <div class="option__title">
+        <h2><span class="letter">C</span>Pop the file out</h2>
+        <p>Open a file in a large view over the whole window, with its own tree on the left, like a light editor. On the desktop app, also in a window of its own.</p>
+      </div>
+      <div class="seg" role="group" aria-label="Option C view" data-mode-for="c"></div>
+    </div>
+    <div class="stage" data-stage="c"></div>
+    <p class="try"><b>Try:</b> press Pop out in the file bar. Pick files in the tree on the left (arrow keys work). <kbd>Esc</kbd> closes it.</p>
+    <div class="facts">
+      <div class="fact">
+        <h3>How it behaves</h3>
+        <ul>
+          <li>Pop out button in the file bar. The view covers the window with a tree beside the file, so you browse without losing your place.</li>
+          <li><kbd>Esc</kbd> closes it; the panel shows the file you ended on.</li>
+          <li>Desktop app: "Open in new window" puts the same view in its own window, for a second screen.</li>
+        </ul>
+      </div>
+      <div class="fact">
+        <h3>Trade-offs</h3>
+        <ul>
+          <li>Hides the conversation completely, and it's a second place where files open, with its own tabs to keep in step.</li>
+          <li>A file's buffer drives one editor at a time (<code>FileBufferRecord.view</code>), so the overlay must borrow the panel's editor or both need to share one buffer safely.</li>
+          <li>A second window needs its own route, sign-in and SignalR connection in Electron.</li>
+          <li>Most of what it gives, B gives with less: B is the same room without a second place.</li>
+        </ul>
+      </div>
+      <div class="fact">
+        <h3>Cost</h3>
+        <div class="cost"><span class="chip chip--size">~8 files</span><span class="chip chip--size">~900 lines + ~300 tests (overlay)</span><span class="chip chip--size">+ ~600 for a window</span></div>
+        <p>New <code>FileViewerOverlay.vue</code> hosting the tree and an editor, changes in <code>buffers.ts</code> to hand the editor between views, and for the window: an Electron <code>BrowserWindow</code>, a route and a connection of its own.</p>
+        <span class="chip chip--no">Not now</span>
+      </div>
+    </div>
+  </section>
+
+  <!-- ─── Option D ──────────────────────────────────────────────────────── -->
+  <section class="option" id="d">
+    <div class="option__head">
+      <div class="option__title">
+        <h2><span class="letter">D</span>Get around without the tree</h2>
+        <p>Make the path bar a menu, give Go to file recent files, symbols and lines, add an outline, and let the tree work from the keyboard.</p>
+      </div>
+      <div class="seg" role="group" aria-label="Option D view" data-mode-for="d"></div>
+    </div>
+    <div class="stage" data-stage="d"></div>
+    <p class="try"><b>Try:</b> click <b>invoices</b> or <b>ledger</b> in the path bar to jump to a neighbouring file. Press the outline button, or <kbd>Ctrl P</kbd> in the frame and type <code>@rec</code> or <code>:40</code>. In the Files tab, use the arrow keys.</p>
+    <div class="facts">
+      <div class="fact">
+        <h3>How it behaves</h3>
+        <ul>
+          <li>Every folder in the path bar opens a menu of what's beside it. In a narrow panel, the middle folders fold into <b>…</b> instead of disappearing.</li>
+          <li><kbd>Ctrl P</kbd> opens on your recent files for this session. <code>@</code> lists the symbols in the file, <code>:40</code> goes to a line. A search icon in the panel header says it's there.</li>
+          <li>Outline button: the file's functions and types, from CodeMirror's syntax tree. Picking one scrolls there and flashes the line.</li>
+          <li>Tree rows become real buttons: <kbd>↑</kbd> <kbd>↓</kbd> move, <kbd>→</kbd> opens a folder, <kbd>←</kbd> closes it, <kbd>Enter</kbd> opens the file. Search results lead with the file name.</li>
+        </ul>
+      </div>
+      <div class="fact">
+        <h3>Trade-offs</h3>
+        <ul>
+          <li>Doesn't touch the scrolling or line-picking problem: it's about getting to the file, not reading it.</li>
+          <li>Symbols only for languages CodeMirror parses in Fleet today (TS/JS, C#, Python, Markdown headings, and so on); other files have no outline.</li>
+          <li>Recent files need a small per-session list in the store (no server change).</li>
+        </ul>
+      </div>
+      <div class="fact">
+        <h3>Cost</h3>
+        <div class="cost"><span class="chip chip--size">~6 files</span><span class="chip chip--size">~550 lines + ~250 tests</span><span class="chip chip--size">2 PRs</span></div>
+        <p><code>FileCanvas.vue</code> (crumb menus, outline), <code>GoToFileDialog.vue</code> + <code>stores/go-to-file.ts</code> (recent, <code>@</code>, <code>:</code>), new <code>lib/code-editor/symbols.ts</code>, <code>FileBrowserTreeNode.vue</code> (roving focus), <code>FileBrowserPanel.vue</code> (results). Path menus reuse <code>useFileBrowser</code>'s folder listing.</p>
+        <span class="chip chip--later">Second step: path menus + recent first</span>
+      </div>
+    </div>
+  </section>
+
+  <!-- ─── Recommendation ────────────────────────────────────────────────── -->
+  <section class="option" id="rec">
+    <div class="option__head">
+      <div class="option__title">
+        <h2>Recommendation: A, then B, then the cheap half of D</h2>
+        <p>A fixes what you hit every time (wrap, picking lines). B gives the room when a file really is wide. D's path menus and recent files make getting to the next file quick. Skip C: B covers it with one place for files instead of two.</p>
+      </div>
+      <div class="seg" role="group" aria-label="Recommendation view" data-mode-for="rec"></div>
+    </div>
+    <div class="stage" data-stage="rec"></div>
+    <p class="try"><b>Try everything at once:</b> pick lines, wrap, Focus with <kbd>Ctrl Shift ↵</kbd>, the path-bar menus and <kbd>Ctrl P</kbd>.</p>
+
+    <div class="compare-wrap">
+      <table class="compare">
+        <thead><tr><th>Option</th><th>Fixes</th><th>Build</th><th>Verdict</th></tr></thead>
+        <tbody>
+          <tr><td>A · Read it in the panel</td><td>1, 2, 3, 10</td><td class="num">~550 lines with tests, 1 PR</td><td><span class="chip chip--go">First</span></td></tr>
+          <tr><td>B · Focus</td><td>4, and 1 for most files</td><td class="num">~400 lines with tests, 1 PR</td><td><span class="chip chip--go">Second</span></td></tr>
+          <tr><td>D · Get around</td><td>5, 6, 7, 8, 9</td><td class="num">~800 lines with tests, 2 PRs</td><td><span class="chip chip--later">Third: path menus + recent; outline and <code>@</code> later</span></td></tr>
+          <tr><td>C · Pop out</td><td>4, 5</td><td class="num">~1,200–1,800 lines</td><td><span class="chip chip--no">Not now</span></td></tr>
+        </tbody>
+      </table>
+    </div>
+
+    <div class="rec">
+      <h3>The order I'd build it</h3>
+      <ol>
+        <li><b>A</b>: wrap toggle, line numbers that pick lines, the range bar. <span>One PR, ~550 lines. Demo: pick lines 18–27 in a 360 px panel without scrolling sideways and send them to the agent.</span></li>
+        <li><b>B</b>: Widen becomes Focus with the conversation strip. <span>One PR, ~400 lines. Demo: Ctrl Shift Enter, read the file at full width, Esc back.</span></li>
+        <li><b>D, cheap half</b>: path bar menus with the … fold, recent files in Ctrl P, the search icon, file name first in results. <span>One PR, ~450 lines.</span></li>
+        <li><b>Later list</b>: outline and <code>@symbol</code>, keyboard tree, pop-out window.</li>
+      </ol>
+      <p class="try">Decisions for you: is wrap <b>on by default</b> in the panel? Should Focus also cover the <b>session list</b> (it does in this mockup), or keep it?</p>
+    </div>
+  </section>
+</main>
+
+<script>
+// ─── Invented content ────────────────────────────────────────────────────
+const MAIN = "src/billing/invoices/reconcile-payouts.ts";
+const FILES = {
+  [MAIN]: `import { LedgerEntry, type LedgerEntryKind } from "../ledger/ledger-entry";
+import { convertMinorUnits, roundHalfEven, type CurrencyCode } from "../ledger/currency";
+import { sendPayoutMismatchNotice } from "./invoice-mailer";
+
+/**
+ * Matches each payout the bank reported against the invoices it settles. A payout that covers several invoices is split across them oldest first; anything left over is held as an unapplied credit on the customer's account.
+ */
+export interface PayoutMatch {
+  payoutId: string;
+  invoiceIds: string[];
+  appliedMinor: number;
+  unappliedMinor: number;
+  currency: CurrencyCode;
+}
+
+const TOLERANCE_MINOR = 2; // bank rounding: up to two cents either way counts as an exact match
+
+export async function reconcilePayouts(payouts: BankPayout[], openInvoices: Invoice[], options: ReconcileOptions = { notifyOnMismatch: true, holdUnappliedDays: 30 }): Promise<PayoutMatch[]> {
+  const byCustomer = groupBy(openInvoices, (invoice) => invoice.customerId);
+  const matches: PayoutMatch[] = [];
+
+  for (const payout of payouts.sort((a, b) => a.settledAt.getTime() - b.settledAt.getTime())) {
+    const invoices = (byCustomer.get(payout.customerId) ?? []).filter((invoice) => invoice.currency === payout.currency && invoice.status !== "void");
+    let remaining = convertMinorUnits(payout.amount, payout.currency);
+    const settled: string[] = [];
+
+    for (const invoice of invoices.sort((a, b) => a.issuedAt.getTime() - b.issuedAt.getTime())) {
+      if (remaining <= 0) break;
+      const due = invoice.totalMinor - invoice.paidMinor;
+      const applied = roundHalfEven(Math.min(due, remaining));
+      remaining -= applied;
+      settled.push(invoice.id);
+      ledger.record(new LedgerEntry({ kind: "payout-applied" satisfies LedgerEntryKind, invoiceId: invoice.id, amountMinor: applied, currency: payout.currency, reference: payout.bankReference }));
+    }
+
+    if (Math.abs(remaining) > TOLERANCE_MINOR && options.notifyOnMismatch) {
+      await sendPayoutMismatchNotice({ customerId: payout.customerId, payoutId: payout.id, expectedMinor: payout.amount, appliedMinor: payout.amount - remaining, holdUntil: addDays(payout.settledAt, options.holdUnappliedDays) });
+    }
+
+    matches.push({ payoutId: payout.id, invoiceIds: settled, appliedMinor: payout.amount - Math.max(remaining, 0), unappliedMinor: Math.max(remaining, 0), currency: payout.currency });
+  }
+
+  return matches;
+}
+
+function groupBy<T, K>(items: T[], key: (item: T) => K): Map<K, T[]> {
+  const groups = new Map<K, T[]>();
+  for (const item of items) groups.set(key(item), [...(groups.get(key(item)) ?? []), item]);
+  return groups;
+}`,
+  "src/billing/invoices/reconcile-payouts.test.ts": `import { describe, expect, it } from "vitest";
+import { reconcilePayouts } from "./reconcile-payouts";
+import { anInvoice, aPayout } from "../../../test/builders";
+
+describe("reconcilePayouts", () => {
+  it("splits a payout across two invoices, oldest first, and leaves no remainder when the totals match exactly", async () => {
+    const older = anInvoice({ id: "inv_1042", totalMinor: 12_500, issuedAt: "2026-08-01" });
+    const newer = anInvoice({ id: "inv_1077", totalMinor: 7_500, issuedAt: "2026-09-01" });
+    const [match] = await reconcilePayouts([aPayout({ amount: 20_000 })], [newer, older]);
+    expect(match.invoiceIds).toEqual(["inv_1042", "inv_1077"]);
+    expect(match.unappliedMinor).toBe(0);
+  });
+});`,
+  "src/billing/invoices/invoice-mailer.ts": `import { mailer } from "../../platform/mailer";
+
+export async function sendPayoutMismatchNotice(notice: { customerId: string; payoutId: string; expectedMinor: number; appliedMinor: number; holdUntil: Date }): Promise<void> {
+  await mailer.send("payout-mismatch", { to: await billingContactFor(notice.customerId), data: notice });
+}`,
+  "src/billing/ledger/ledger-entry.ts": `export type LedgerEntryKind = "payout-applied" | "credit-held" | "credit-released" | "refund";
+
+export class LedgerEntry {
+  constructor(readonly fields: { kind: LedgerEntryKind; invoiceId: string; amountMinor: number; currency: string; reference: string }) {}
+}`,
+  "src/billing/ledger/currency.ts": `export type CurrencyCode = "EUR" | "GBP" | "USD" | "ZAR";
+
+/** Banks report some currencies in major units; Tidewater keeps every amount in minor units (cents). */
+export function convertMinorUnits(amount: number, currency: CurrencyCode): number {
+  return Math.round(amount * 100);
+}
+
+export function roundHalfEven(value: number): number {
+  const floor = Math.floor(value);
+  const diff = value - floor;
+  return diff === 0.5 ? (floor % 2 === 0 ? floor : floor + 1) : Math.round(value);
+}`,
+  "src/api/routes/payouts.ts": `import { router } from "../router";
+import { reconcilePayouts } from "../../billing/invoices/reconcile-payouts";
+
+router.post("/payouts/reconcile", async (request) => reconcilePayouts(request.body.payouts, await request.store.openInvoices()));`,
+  "README.md": `# Tidewater billing
+
+Invoices, payouts and the ledger for Tidewater's marina bookings.
+
+Run \`bun test\` before you push.`,
+  "package.json": `{
+  "name": "tidewater-billing",
+  "private": true,
+  "scripts": { "test": "vitest run", "dev": "bun --hot src/server.ts" }
+}`,
+};
+const PATHS = Object.keys(FILES).sort();
+const MAIN_LINES = FILES[MAIN].split("\n");
+
+// ─── Tiny highlighter (keywords, strings, numbers, calls, types) ─────────
+const KW = new Set("import export from type interface const let async await function for of if break return new satisfies class readonly constructor describe it".split(" "));
+const LIT = new Set(["true", "false", "null", "undefined"]);
+const esc = (s) => s.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
+function hl(line, path) {
+  if (path.endsWith(".md")) return /^#/.test(line) ? `<span class="h">${esc(line)}</span>` : esc(line);
+  const t = line.trim();
+  if (t.startsWith("/**") || t.startsWith("*")) return `<span class="c">${esc(line)}</span>`;
+  let out = "";
+  const re = /(\/\/.*$)|("(?:[^"\\]|\\.)*")|(\b\d[\d_]*\b)|([A-Za-z_$][\w$]*)|(\s+)|([^\sA-Za-z_$\d"]+)/g;
+  let m;
+  while ((m = re.exec(line))) {
+    if (m[1]) out += `<span class="c">${esc(m[1])}</span>`;
+    else if (m[2]) out += `<span class="s">${esc(m[2])}</span>`;
+    else if (m[3]) out += `<span class="n">${m[3]}</span>`;
+    else if (m[4]) {
+      const w = m[4], next = line[re.lastIndex];
+      if (KW.has(w)) out += `<span class="k">${w}</span>`;
+      else if (LIT.has(w)) out += `<span class="l">${w}</span>`;
+      else if (next === "(" ) out += `<span class="f">${w}</span>`;
+      else if (/^[A-Z]/.test(w)) out += `<span class="t">${w}</span>`;
+      else out += w;
+    } else if (m[5]) out += m[5];
+    else out += `<span class="p">${esc(m[6])}</span>`;
+  }
+  return out;
+}
+
+function symbolsOf(path) {
+  const out = [];
+  FILES[path].split("\n").forEach((line, i) => {
+    const m = line.match(/^(?:export\s+)?(?:async\s+)?(function|interface|class|const|type)\s+([A-Za-z_$][\w$]*)/);
+    if (m) out.push({ kind: m[1], name: m[2], line: i + 1 });
+  });
+  return out;
+}
+
+// ─── Icons (lucide) ──────────────────────────────────────────────────────
+const P = {
+  chev: '<path d="m9 18 6-6-6-6"/>',
+  chevDown: '<path d="m6 9 6 6 6-6"/>',
+  x: '<path d="M18 6 6 18"/><path d="m6 6 12 12"/>',
+  plus: '<path d="M5 12h14"/><path d="M12 5v14"/>',
+  search: '<circle cx="11" cy="11" r="8"/><path d="m21 21-4.3-4.3"/>',
+  max: '<polyline points="15 3 21 3 21 9"/><polyline points="9 21 3 21 3 15"/><line x1="21" x2="14" y1="3" y2="10"/><line x1="3" x2="10" y1="21" y2="14"/>',
+  min: '<polyline points="4 14 10 14 10 20"/><polyline points="20 10 14 10 14 4"/><line x1="14" x2="21" y1="10" y2="3"/><line x1="3" x2="10" y1="21" y2="14"/>',
+  focus: '<path d="M3 7V5a2 2 0 0 1 2-2h2"/><path d="M17 3h2a2 2 0 0 1 2 2v2"/><path d="M21 17v2a2 2 0 0 1-2 2h-2"/><path d="M7 21H5a2 2 0 0 1-2-2v-2"/>',
+  wrap: '<line x1="3" x2="21" y1="6" y2="6"/><path d="M3 12h15a3 3 0 1 1 0 6h-4"/><polyline points="16 16 14 18 16 20"/><line x1="3" x2="10" y1="18" y2="18"/>',
+  file: '<path d="M15 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V7Z"/><path d="M14 2v4a2 2 0 0 0 2 2h4"/>',
+  folder: '<path d="M20 20a2 2 0 0 0 2-2V8a2 2 0 0 0-2-2h-7.9a2 2 0 0 1-1.69-.9L9.6 3.9A2 2 0 0 0 7.93 3H4a2 2 0 0 0-2 2v13a2 2 0 0 0 2 2Z"/>',
+  msgPlus: '<path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/><path d="M12 7v6"/><path d="M9 10h6"/>',
+  msg: '<path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/>',
+  link: '<path d="M10 13a5 5 0 0 0 7.54.54l3-3a5 5 0 0 0-7.07-7.07l-1.72 1.71"/><path d="M14 11a5 5 0 0 0-7.54-.54l-3 3a5 5 0 0 0 7.07 7.07l1.71-1.71"/>',
+  quote: '<path d="M16 3a2 2 0 0 0-2 2v6a2 2 0 0 0 2 2 1 1 0 0 1 1 1v1a2 2 0 0 1-2 2 1 1 0 0 0-1 1v2a1 1 0 0 0 1 1 6 6 0 0 0 6-6V5a2 2 0 0 0-2-2z"/><path d="M5 3a2 2 0 0 0-2 2v6a2 2 0 0 0 2 2 1 1 0 0 1 1 1v1a2 2 0 0 1-2 2 1 1 0 0 0-1 1v2a1 1 0 0 0 1 1 6 6 0 0 0 6-6V5a2 2 0 0 0-2-2z"/>',
+  outline: '<path d="M3 12h.01"/><path d="M3 18h.01"/><path d="M3 6h.01"/><path d="M8 12h13"/><path d="M8 18h13"/><path d="M8 6h13"/>',
+  popout: '<path d="M15 3h6v6"/><path d="M10 14 21 3"/><path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6"/>',
+  panel: '<rect width="18" height="18" x="3" y="3" rx="2"/><path d="M15 3v18"/>',
+  diff: '<circle cx="18" cy="18" r="3"/><circle cx="6" cy="6" r="3"/><path d="M13 6h3a2 2 0 0 1 2 2v7"/><path d="M11 18H8a2 2 0 0 1-2-2V9"/>',
+  back: '<path d="m12 19-7-7 7-7"/><path d="M19 12H5"/>',
+  fn: '<path d="M10 3H6a2 2 0 0 0-2 2v14c0 1.1.9 2 2 2h4"/><path d="M14 3h4a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2h-4"/>',
+  clock: '<circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/>',
+};
+const ic = (name, size = 14) => `<svg width="${size}" height="${size}" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">${P[name]}</svg>`;
+
+// ─── What each stage can do once "Proposed" is on ────────────────────────
+const FEATURES = {
+  today: {},
+  a: { wrap: 1, lines: 1 },
+  b: { focus: 1 },
+  c: { popout: 1 },
+  d: { crumbs: 1, outline: 1, palette: 1, treeKeys: 1 },
+  rec: { wrap: 1, lines: 1, focus: 1, crumbs: 1, palette: 1, treeKeys: 1, outline: 1 },
+};
+
+const RAIL = 48, LIST = 212, GAP = 8, MIN_CONV = 480, PANEL = 360, WIDEN_MAX = 760, STRIP = 46;
+const stages = [];
+let activeStage = null;
+
+function makeStage(el) {
+  const id = el.dataset.stage;
+  const s = {
+    id, el, after: id !== "today",
+    wrap: {}, sel: null, anchor: null, widened: false, focus: false, overlay: false,
+    tab: "file", path: MAIN, recent: [MAIN, "src/billing/ledger/currency.ts", "src/api/routes/payouts.ts"],
+    menu: null, palette: null, refs: [], newRef: false, toast: null, flash: null,
+    expanded: new Set(["src", "src/billing", "src/billing/invoices"]), treeFocus: null, oldChip: null,
+  };
+  s.f = () => (s.after ? FEATURES[id] : {});
+  s.cap = document.createElement("div");
+  s.cap.className = "stagecap";
+  el.before(s.cap);
+  stages.push(s);
+  el.addEventListener("pointerdown", () => (activeStage = s));
+  el.addEventListener("focusin", () => (activeStage = s));
+  new ResizeObserver(() => render(s)).observe(el);
+  bindStage(s);
+  return s;
+}
+
+function wrapOn(s, path = s.path) {
+  if (!s.f().wrap) return false;
+  return s.wrap[path] ?? true;
+}
+
+// ─── Rendering ───────────────────────────────────────────────────────────
+function render(s) {
+  const el = s.el;
+  const keep = [...el.querySelectorAll(".ed-scroll, .tree")].map((n) => [n.dataset.key, n.scrollTop, n.scrollLeft]);
+  const width = el.clientWidth;
+  const phone = width < 640;
+  const showList = width >= 980;
+  el.classList.toggle("is-phone", phone);
+  el.classList.toggle("is-focus", s.focus && !phone);
+  const f = s.f();
+
+  const sheet = width - RAIL - (showList ? LIST + GAP : 0) - GAP - 2;
+  const room = sheet - MIN_CONV;
+  let panelW = Math.min(PANEL, room);
+  if (s.widened) panelW = Math.min(room, Math.max(PANEL, Math.min(WIDEN_MAX, room)));
+  if (s.focus) panelW = width - RAIL - GAP - STRIP - 2;
+  s.panelW = phone ? width : Math.round(panelW);
+
+  if (s.cap) s.cap.innerHTML = phone ? "phone: the panel is a full-width sheet" : `panel <b>${s.panelW} px</b> · window ${width.toLocaleString("en")} px${s.focus ? " · Focus" : s.widened ? " · Widen" : ""}`;
+  el.innerHTML = `
+    <div class="rail" aria-hidden="true"><i class="on"></i><i></i><i></i></div>
+    ${showList ? listHtml() : ""}
+    <div class="sheet">
+      <div class="conv">${convHtml(s)}${stripHtml()}</div>
+      <div class="panel" style="width:${s.panelW}px">${phone ? `<div class="phonebar">${ic("back", 14)} Conversation</div>` : ""}${panelHtml(s, phone)}</div>
+    </div>
+    ${s.overlay ? overlayHtml(s) : ""}
+    ${s.palette ? paletteHtml(s) : ""}
+    ${s.toast ? `<div class="toast" role="status">${esc(s.toast)}</div>` : ""}`;
+
+  for (const [key, top, left] of keep) {
+    const n = el.querySelector(`[data-key="${key}"]`);
+    if (n) { n.scrollTop = top; n.scrollLeft = left; }
+  }
+  if (s.flash) {
+    const row = el.querySelector(`.panel .ln[data-n="${s.flash}"]`);
+    const sc = el.querySelector(".panel .ed-scroll");
+    if (row && sc) sc.scrollTop = row.offsetTop - sc.clientHeight / 3;
+    s.flash = null;
+  }
+  if (s.palette) {
+    const input = el.querySelector(".pal input");
+    input.value = s.palette.q;
+    input.focus();
+    input.setSelectionRange(s.palette.q.length, s.palette.q.length);
+  }
+  if (s.treeFocus) el.querySelector(`.tr[data-path="${CSS.escape(s.treeFocus)}"]`)?.focus();
+  s.newRef = false;
+}
+
+function listHtml() {
+  return `<div class="list" aria-hidden="true">
+    <div class="list__new">+ New Session</div>
+    <div class="list__filter">Filter sessions</div>
+    <div class="list__group">tidewater-billing</div>
+    <div class="list__row on"><span>Payout rounding remainder</span><span class="dot dot--run"></span></div>
+    <div class="list__row"><span>Ledger export to CSV</span><small>2h</small></div>
+    <div class="list__row"><span>Dunning emails for overdue invoices</span><small>1d</small></div>
+    <div class="list__row"><span>Upgrade vitest</span><small>3d</small></div>
+  </div>`;
+}
+
+function convHtml(s) {
+  const refs = s.refs.map((r, i) => `<span class="pill ${s.newRef && i === s.refs.length - 1 ? "pill--new" : ""}">${esc(r)}</span>`).join("");
+  return `
+    <div class="conv__head"><div class="conv__title">Payout rounding remainder</div><div class="conv__meta">tidewater-billing · OpenCode · ~/code/tidewater-billing</div></div>
+    <div class="conv__body">
+      <div class="bubble">Payouts that cover several invoices leave a 1-cent remainder. Can you find where?</div>
+      <div class="tool">${ic("file", 13)}<b>Read</b><code>src/billing/invoices/reconcile-payouts.ts</code><span class="ok">✓</span></div>
+      <div class="say">Each invoice's share is rounded on its own at line 30 with <code>roundHalfEven</code>, so two halves of a cent can both round down. I'd round once per payout instead.</div>
+      <div class="tool">${ic("diff", 13)}<b>Thinking</b><code>about the test in reconcile-payouts.test.ts</code></div>
+    </div>
+    <div class="composer">${refs || "Ask the agent, or @ to add context…"}</div>`;
+}
+
+function stripHtml() {
+  return `<div class="strip">
+    <button type="button" data-act="unfocus" aria-label="Back to the conversation" title="Back to the conversation (Esc)">${ic("msg", 15)}</button>
+    <span class="strip__title"><span class="dot dot--run"></span>Payout rounding remainder · working</span>
+  </div>`;
+}
+
+function panelHtml(s, phone) {
+  const f = s.f();
+  const name = (p) => p.slice(p.lastIndexOf("/") + 1);
+  const tabs = [
+    `<button type="button" class="tab ${s.tab === "files" ? "on" : ""}" data-act="tab" data-tab="files">${ic("folder", 13)}<span>Files</span></button>`,
+    `<button type="button" class="tab ${s.tab === "changes" ? "on" : ""}" data-act="tab" data-tab="changes">${ic("diff", 13)}<span>Changes</span></button>`,
+    `<button type="button" class="tab ${s.tab === "file" ? "on" : ""}" data-act="tab" data-tab="file">${ic("file", 13)}<span>${esc(name(s.path))}</span></button>`,
+  ].join("");
+  let headBtns = "";
+  if (f.palette) headBtns += `<button type="button" class="ib ib--new" data-act="palette" aria-label="Go to file" title="Go to file (Ctrl P)">${ic("search")}</button>`;
+  if (!phone) {
+    if (f.focus) headBtns += `<button type="button" class="ib ${s.focus ? "" : "ib--new"}" data-act="focus" aria-pressed="${s.focus}" aria-label="${s.focus ? "Leave focus" : "Focus"}" title="${s.focus ? "Leave focus (Esc)" : "Focus (Ctrl Shift ↵)"}">${ic(s.focus ? "min" : "focus")}</button>`;
+    else headBtns += `<button type="button" class="ib" data-act="widen" aria-pressed="${s.widened}" aria-label="${s.widened ? "Narrow canvas" : "Widen canvas"}" title="${s.widened ? "Narrow canvas" : "Widen canvas"}">${ic(s.widened ? "min" : "max")}</button>`;
+    headBtns += `<span class="ib" aria-hidden="true">${ic("panel")}</span>`;
+  }
+  const head = `<div class="ph"><div class="tabs" role="tablist">${tabs}</div><span class="ib" aria-hidden="true">${ic("plus")}</span><span class="spacer"></span>${headBtns}</div>`;
+
+  let body;
+  if (s.tab === "files") body = treeHtml(s, "panel");
+  else if (s.tab === "changes") body = changesHtml();
+  else body = fileBarHtml(s, s.panelW) + editorHtml(s, s.path, "panel");
+  return head + `<div class="pb">${body}${s.menu ? menuHtml(s) : ""}</div>`;
+}
+
+function changesHtml() {
+  return `<div class="tree" data-key="changes"><p class="try" style="padding:6px 14px">Changes against main</p>
+    <button type="button" class="tr" style="padding-left:14px" data-act="open" data-path="${MAIN}">${ic("file", 13)}<span>reconcile-payouts.ts</span><span class="m" style="color:var(--running)">+3 −2</span></button>
+    <button type="button" class="tr" style="padding-left:14px" data-act="open" data-path="src/billing/invoices/reconcile-payouts.test.ts">${ic("file", 13)}<span>reconcile-payouts.test.ts</span><span class="m" style="color:var(--running)">+12</span></button></div>`;
+}
+
+function fileBarHtml(s, width) {
+  const f = s.f();
+  const parts = s.path.split("/");
+  const file = parts.pop();
+  let crumbs;
+  if (f.crumbs) {
+    const narrow = width < 430;
+    const shown = narrow && parts.length > 1 ? [{ more: true, upto: parts.length - 1 }, { i: parts.length - 1 }] : parts.map((_, i) => ({ i }));
+    crumbs = shown.map((c) => c.more
+      ? `<button type="button" class="crumb crumb--more" data-act="crumb" data-i="more" aria-label="Folders above" aria-expanded="${s.menu?.i === "more"}">…</button>${ic("chev", 11)}`
+      : `<button type="button" class="crumb" data-act="crumb" data-i="${c.i}" aria-haspopup="menu" aria-expanded="${s.menu?.i === String(c.i)}">${esc(parts[c.i])}</button>${ic("chev", 11)}`).join("")
+      + `<button type="button" class="crumb crumb--file" data-act="crumb" data-i="file" aria-haspopup="menu" aria-expanded="${s.menu?.i === "file"}">${esc(file)}</button>`;
+  } else {
+    crumbs = (width < 430 ? "" : parts.map((p) => `<span>${esc(p)}</span>${ic("chev", 11)}`).join("")) + `<b>${esc(file)}</b>`;
+  }
+  let tools = "";
+  if (f.outline && symbolsOf(s.path).length) tools += `<button type="button" class="fbtn" data-act="outline" aria-label="Outline" title="Outline" aria-expanded="${s.menu?.i === "outline"}">${ic("outline", 14)}</button>`;
+  if (f.wrap) tools += `<button type="button" class="fbtn" data-act="wrap" aria-pressed="${wrapOn(s)}" title="Wrap lines (Alt Z)">${ic("wrap", 14)}${width >= 430 ? "Wrap" : ""}</button>`;
+  if (f.popout) tools += `<button type="button" class="fbtn" data-act="popout" title="Pop out">${ic("popout", 14)}${width >= 430 ? "Pop out" : ""}</button>`;
+  return `<div class="fb"><span class="crumbs" title="${esc(s.path)}">${crumbs}</span><span class="spacer"></span>${tools}
+    <div class="tog" role="group" aria-label="View"><button type="button" class="on">Edit</button><button type="button">Diff</button></div></div>`;
+}
+
+function editorHtml(s, path, where) {
+  const f = s.f();
+  const wrap = wrapOn(s, path);
+  const lines = FILES[path].split("\n");
+  const sel = path === s.path ? s.sel : null;
+  const rows = lines.map((line, i) => {
+    const n = i + 1;
+    const ind = line.length - line.trimStart().length;
+    const inSel = sel && n >= sel[0] && n <= sel[1];
+    const long = line.length > 40;
+    const num = f.lines
+      ? `<button type="button" class="ln-no" tabindex="-1" data-act="line" data-n="${n}" aria-label="Line ${n}">${n}</button>`
+      : `<span class="ln-no">${n}</span>`;
+    return `<div class="ln ${inSel ? "is-sel" : ""} ${s.flashLine === n && where === "panel" ? "is-flash" : ""}" data-n="${n}">${num}<span class="ln-code ${wrap && long ? "wrapped" : ""}" style="--ind:${ind}">${hl(line.slice(ind), path) || " "}</span></div>`;
+  }).join("");
+  const bar = sel && f.lines && where === "panel" ? rangeBarHtml(s) : "";
+  const chip = s.oldChip && where === "panel" ? `<span class="oldchip" style="left:${s.oldChip.x}px;top:${s.oldChip.y}px">${ic("msgPlus", 13)} ${esc(s.oldChip.label)}</span>` : "";
+  return `<div class="ed" data-wrap="${wrap ? 1 : 0}" data-lines="${f.lines ? 1 : 0}"><div class="ed-scroll" data-key="ed-${where}"><div class="ed-lines">${rows}</div></div>${bar}${chip}</div>`;
+}
+
+function rangeBarHtml(s) {
+  const [a, b] = s.sel;
+  const label = a === b ? `L${a}` : `L${a}–${b}`;
+  const count = b - a + 1;
+  return `<div class="rangebar" role="toolbar" aria-label="Selected lines">
+    <span class="rangebar__label">${label}<small>${count} line${count === 1 ? "" : "s"}</small></span>
+    <button type="button" class="rb" data-act="copy-link" title="Copy ${esc(refFor(s))}">${ic("link", 13)}<span>Copy link</span></button>
+    <button type="button" class="rb" data-act="copy-quote" title="Copy the lines as a quote">${ic("quote", 13)}<span>Quote</span></button>
+    <button type="button" class="rb rb--primary" data-act="add" title="Add to message">${ic("msgPlus", 13)}<span>Add to message</span></button>
+    <button type="button" class="rb rb--x" data-act="clear-sel" aria-label="Clear selection">${ic("x", 13)}</button>
+  </div>`;
+}
+
+const refFor = (s) => `${s.path}:${s.sel[0] === s.sel[1] ? s.sel[0] : `${s.sel[0]}-${s.sel[1]}`}`;
+
+function treeNodes(s) {
+  const nodes = [];
+  const dirs = new Set();
+  for (const p of PATHS) { const parts = p.split("/"); for (let i = 1; i < parts.length; i++) dirs.add(parts.slice(0, i).join("/")); }
+  const all = [...dirs].map((d) => ({ path: d, dir: true })).concat(PATHS.map((p) => ({ path: p, dir: false })));
+  const parent = (p) => (p.includes("/") ? p.slice(0, p.lastIndexOf("/")) : "");
+  function walk(par, depth) {
+    all.filter((n) => parent(n.path) === par)
+      .sort((x, y) => (x.dir === y.dir ? x.path.localeCompare(y.path) : x.dir ? -1 : 1))
+      .forEach((n) => {
+        nodes.push({ ...n, depth });
+        if (n.dir && s.expanded.has(n.path)) walk(n.path, depth + 1);
+      });
+  }
+  walk("", 0);
+  return nodes;
+}
+
+function treeHtml(s, where) {
+  const keys = s.f().treeKeys || where === "overlay";
+  const nodes = treeNodes(s);
+  const rows = nodes.map((n) => {
+    const nm = n.path.slice(n.path.lastIndexOf("/") + 1);
+    const pad = 8 + n.depth * (keys ? 12 : 16);
+    const icon = n.dir ? ic(s.expanded.has(n.path) ? "chevDown" : "chev", 14) : ic("file", 13);
+    const m = n.path === MAIN ? `<span class="m">M</span>` : "";
+    const cur = !n.dir && n.path === s.path && (where === "overlay" || s.tab === "file") ? "is-cur" : "";
+    const tag = keys ? "button" : "div";
+    return `<${tag} ${keys ? 'type="button"' : ""} class="tr ${cur}" style="padding-left:${pad + (n.dir ? 0 : 16)}px" data-act="${n.dir ? "toggle" : "open"}" data-path="${esc(n.path)}" data-where="${where}" ${keys ? `tabindex="${(s.treeFocus ?? s.path) === n.path ? 0 : -1}" aria-expanded="${n.dir ? s.expanded.has(n.path) : ""}"` : ""}>${icon}<span>${esc(nm)}</span>${m}</${tag}>`;
+  }).join("");
+  return `<div class="tree" data-key="tree-${where}" role="tree">${where === "panel" ? `<div class="tree__search">${ic("search", 14)} Search files…</div>` : ""}${rows}</div>`;
+}
+
+function menuHtml(s) {
+  const m = s.menu;
+  const pb = s.el.querySelector(".pb");
+  let items = "", label = "";
+  const parts = s.path.split("/");
+  if (m.i === "outline") {
+    label = "In this file";
+    items = symbolsOf(s.path).map((sym) => `<button type="button" class="mi" data-act="goto-line" data-n="${sym.line}">${ic(sym.kind === "function" ? "fn" : "outline", 13)}<span>${esc(sym.name)}</span><small>${sym.kind} · ${sym.line}</small></button>`).join("");
+  } else if (m.i === "more") {
+    label = "Folders";
+    items = parts.slice(0, -2).map((p, i) => `<button type="button" class="mi" data-act="crumb" data-i="${i}">${ic("folder", 13)}<span>${esc(parts.slice(0, i + 1).join("/"))}</span></button>`).join("");
+  } else {
+    const dir = m.i === "file" ? parts.slice(0, -1).join("/") : parts.slice(0, Number(m.i) + 1).join("/");
+    label = dir;
+    const kids = new Map();
+    for (const p of PATHS) {
+      if (!p.startsWith(dir + "/")) continue;
+      const rest = p.slice(dir.length + 1);
+      const first = rest.split("/")[0];
+      const isDir = rest.includes("/");
+      if (!kids.has(first)) kids.set(first, { name: first, dir: isDir, path: isDir ? `${dir}/${first}` : p });
+    }
+    items = [...kids.values()].sort((x, y) => (x.dir === y.dir ? x.name.localeCompare(y.name) : x.dir ? -1 : 1)).map((k) => k.dir
+      ? `<button type="button" class="mi" data-act="open-first" data-path="${esc(k.path)}">${ic("folder", 13)}<span>${esc(k.name)}</span><small>›</small></button>`
+      : `<button type="button" class="mi ${k.path === s.path ? "is-cur" : ""}" data-act="open" data-path="${esc(k.path)}">${ic("file", 13)}<span>${esc(k.name)}</span></button>`).join("");
+  }
+  return `<div class="menu" role="menu" style="left:${m.x}px;top:${m.y}px"><div class="menu__label">${esc(label)}</div>${items}</div>`;
+}
+
+function paletteItems(s) {
+  const q = s.palette.q.trim();
+  if (q.startsWith(":")) {
+    const n = parseInt(q.slice(1), 10);
+    const max = FILES[s.path].split("\n").length;
+    return Number.isFinite(n) ? [{ kind: "line", n: Math.min(Math.max(n, 1), max), label: `Go to line ${Math.min(Math.max(n, 1), max)}`, sub: s.path.split("/").pop() }] : [];
+  }
+  if (q.startsWith("@")) {
+    const w = q.slice(1).toLowerCase();
+    return symbolsOf(s.path).filter((x) => x.name.toLowerCase().includes(w)).map((x) => ({ kind: "line", n: x.line, label: x.name, sub: `${x.kind} · line ${x.line}`, icon: x.kind === "function" ? "fn" : "outline" }));
+  }
+  if (!q) return s.recent.map((p) => ({ kind: "file", path: p, label: p.split("/").pop(), sub: p.slice(0, p.lastIndexOf("/")), icon: "clock" }));
+  const fuzzy = (p) => { let i = 0; const l = p.toLowerCase(); for (const ch of q.toLowerCase()) { i = l.indexOf(ch, i); if (i < 0) return false; i++; } return true; };
+  return PATHS.filter(fuzzy).map((p) => ({ kind: "file", path: p, label: p.split("/").pop(), sub: p.slice(0, p.lastIndexOf("/")) }));
+}
+
+function paletteHtml(s) {
+  const items = paletteItems(s);
+  s.palette.items = items;
+  const act = Math.min(s.palette.active, Math.max(items.length - 1, 0));
+  const q = s.palette.q.trim();
+  const label = q.startsWith("@") ? "Symbols in this file" : q.startsWith(":") ? "Line" : q ? "Files" : "Recent in this session";
+  const rows = items.length ? items.map((it, i) => `<button type="button" class="mi ${i === act ? "on" : ""}" data-act="pal-pick" data-i="${i}">${ic(it.icon || "file", 13)}<span>${esc(it.label)}</span><em>${esc(it.sub || "")}</em></button>`).join("")
+    : `<p class="try" style="padding:10px">Nothing matches.</p>`;
+  return `<div class="pal-back" data-act="pal-close"><div class="pal" role="dialog" aria-label="Go to file">
+    <div class="pal__in">${ic("search", 15)}<input type="text" placeholder="Go to file…   @ symbol   : line" aria-label="Go to file" autocomplete="off" spellcheck="false"></div>
+    <div class="pal__list"><div class="menu__label">${label}</div>${rows}</div>
+    <div class="pal__hint"><span><kbd>@</kbd> symbols</span><span><kbd>:</kbd> line</span><span><kbd>↵</kbd> open</span><span><kbd>Esc</kbd> close</span></div>
+  </div></div>`;
+}
+
+function overlayHtml(s) {
+  const parts = s.path.split("/");
+  return `<div class="ov-back"><div class="ov" role="dialog" aria-label="File viewer">
+    <div class="ov__head"><span class="crumbs">${parts.slice(0, -1).map((p) => `<span>${esc(p)}</span>${ic("chev", 11)}`).join("")}<b>${esc(parts.at(-1))}</b></span><span class="spacer"></span>
+      <span class="try"><kbd>Esc</kbd> back to the panel</span>
+      <button type="button" class="ib" data-act="popout-close" aria-label="Close">${ic("x")}</button></div>
+    <div class="ov__body">${treeHtml(s, "overlay")}<div class="ov__main">${editorHtml(s, s.path, "overlay")}</div></div>
+  </div></div>`;
+}
+
+// ─── Behaviour ───────────────────────────────────────────────────────────
+function toast(s, msg) {
+  s.toast = msg;
+  render(s);
+  clearTimeout(s.toastTimer);
+  s.toastTimer = setTimeout(() => { s.toast = null; render(s); }, 2200);
+}
+
+function openFile(s, path) {
+  s.path = path;
+  s.tab = "file";
+  s.sel = null;
+  s.menu = null;
+  s.recent = [path, ...s.recent.filter((p) => p !== path)].slice(0, 6);
+}
+
+function gotoLine(s, n) {
+  s.sel = s.f().lines ? [n, n] : null;
+  s.flash = n;
+  s.flashLine = n;
+  s.menu = null;
+  s.palette = null;
+  render(s);
+  setTimeout(() => { s.flashLine = null; }, 1500);
+}
+
+function copy(text) {
+  try { navigator.clipboard?.writeText(text).catch(() => {}); } catch { /* sandboxed */ }
+}
+
+function bindStage(s) {
+  const el = s.el;
+  let dragging = false;
+
+  el.addEventListener("mousedown", (e) => {
+    const no = e.target.closest('[data-act="line"]');
+    if (!no) return;
+    e.preventDefault();
+    const n = Number(no.dataset.n);
+    if (e.shiftKey && s.anchor) s.sel = [Math.min(s.anchor, n), Math.max(s.anchor, n)];
+    else { s.anchor = n; s.sel = [n, n]; }
+    dragging = true;
+    render(s);
+  });
+  el.addEventListener("mouseover", (e) => {
+    if (!dragging) return;
+    const row = e.target.closest(".panel .ln");
+    if (!row) return;
+    const n = Number(row.dataset.n);
+    const next = [Math.min(s.anchor, n), Math.max(s.anchor, n)];
+    if (s.sel && next[0] === s.sel[0] && next[1] === s.sel[1]) return;
+    s.sel = next;
+    render(s);
+  });
+  document.addEventListener("mouseup", () => (dragging = false));
+
+  // Today: the chip appears beside the end of a text selection, and any scroll hides it.
+  el.addEventListener("mouseup", (e) => {
+    if (s.f().lines || s.tab !== "file" || !e.target.closest(".panel .ed")) return;
+    setTimeout(() => {
+      const sel = window.getSelection();
+      if (!sel || sel.isCollapsed) { if (s.oldChip) { s.oldChip = null; render(s); } return; }
+      const a = sel.anchorNode?.parentElement?.closest(".ln"), b = sel.focusNode?.parentElement?.closest(".ln");
+      if (!a || !b) return;
+      const n1 = Number(a.dataset.n), n2 = Number(b.dataset.n);
+      const first = Math.min(n1, n2), last = Math.max(n1, n2);
+      const r = sel.getRangeAt(0).getBoundingClientRect(), box = el.querySelector(".panel .ed").getBoundingClientRect();
+      const x = Math.min(Math.max(8, r.right - box.left - 95), box.width - 198);
+      s.oldChip = { label: first === last ? `Add line ${first} to message` : `Add lines ${first}–${last} to message`, x: Math.round(x), y: Math.round(r.bottom - box.top + 8) };
+      const ed = el.querySelector(".panel .ed");
+      const chip = document.createElement("span");
+      chip.className = "oldchip";
+      chip.style.left = `${s.oldChip.x}px`; chip.style.top = `${s.oldChip.y}px`;
+      chip.innerHTML = `${ic("msgPlus", 13)} ${esc(s.oldChip.label)}`;
+      ed.querySelector(".oldchip")?.remove();
+      ed.appendChild(chip);
+    }, 0);
+  });
+  el.addEventListener("scroll", (e) => {
+    if (!e.target.classList?.contains("ed-scroll") || !s.oldChip) return;
+    s.oldChip = null;
+    el.querySelector(".oldchip")?.remove();
+  }, true);
+
+  el.addEventListener("click", (e) => {
+    const t = e.target.closest("[data-act]");
+    if (!t || !el.contains(t)) return;
+    const act = t.dataset.act;
+    if (act === "pal-close" && e.target !== t) return;
+    switch (act) {
+      case "tab": s.tab = t.dataset.tab; s.menu = null; break;
+      case "widen": s.widened = !s.widened; break;
+      case "focus": s.focus = !s.focus; s.menu = null; break;
+      case "unfocus": s.focus = false; break;
+      case "wrap": s.wrap[s.path] = !wrapOn(s); toast(s, s.wrap[s.path] ? "Wrapping lines in this file" : "Not wrapping this file"); return;
+      case "clear-sel": s.sel = null; break;
+      case "copy-link": copy(refFor(s)); toast(s, `Copied ${refFor(s)}`); return;
+      case "copy-quote": {
+        const [a, b] = s.sel;
+        copy(`${refFor(s)}\n\`\`\`ts\n${FILES[s.path].split("\n").slice(a - 1, b).join("\n")}\n\`\`\``);
+        toast(s, `Copied lines ${a}–${b} as a quote`); return;
+      }
+      case "add": s.refs.push(`@${refFor(s)}`); s.newRef = true; s.sel = null; toast(s, s.focus ? "Added to your message. It's waiting in the composer." : "Added to your message"); return;
+      case "toggle": {
+        const p = t.dataset.path;
+        s.expanded.has(p) ? s.expanded.delete(p) : s.expanded.add(p);
+        if (s.f().treeKeys || t.dataset.where === "overlay") s.treeFocus = p;
+        break;
+      }
+      case "open":
+        if (t.dataset.where === "overlay") { s.path = t.dataset.path; s.sel = null; s.treeFocus = t.dataset.path; break; }
+        openFile(s, t.dataset.path); s.treeFocus = null; break;
+      case "open-first": {
+        const first = PATHS.find((p) => p.startsWith(t.dataset.path + "/"));
+        if (first) openFile(s, first);
+        break;
+      }
+      case "crumb": case "outline": {
+        const i = act === "outline" ? "outline" : t.dataset.i;
+        if (s.menu?.i === i) { s.menu = null; break; }
+        const pb = el.querySelector(".pb").getBoundingClientRect(), r = t.getBoundingClientRect();
+        const x = Math.max(8, Math.min(r.left - pb.left, pb.width - 236));
+        s.menu = { i, x: Math.round(x), y: Math.round(r.bottom - pb.top + 4) };
+        break;
+      }
+      case "goto-line": gotoLine(s, Number(t.dataset.n)); return;
+      case "palette": s.palette = { q: "", active: 0 }; s.menu = null; break;
+      case "pal-close": s.palette = null; break;
+      case "pal-pick": pickPalette(s, Number(t.dataset.i)); return;
+      case "popout": s.overlay = true; s.treeFocus = s.path; break;
+      case "popout-close": s.overlay = false; s.treeFocus = null; break;
+      case "line": return;
+      default: return;
+    }
+    render(s);
+  });
+
+  el.addEventListener("input", (e) => {
+    if (!s.palette || !e.target.closest(".pal")) return;
+    s.palette.q = e.target.value;
+    s.palette.active = 0;
+    render(s);
+  });
+
+  el.addEventListener("keydown", (e) => {
+    if (s.palette && e.target.closest(".pal")) {
+      const n = s.palette.items?.length ?? 0;
+      if (e.key === "ArrowDown" && n) { e.preventDefault(); s.palette.active = (s.palette.active + 1) % n; render(s); }
+      else if (e.key === "ArrowUp" && n) { e.preventDefault(); s.palette.active = (s.palette.active - 1 + n) % n; render(s); }
+      else if (e.key === "Enter") { e.preventDefault(); pickPalette(s, s.palette.active); }
+      return;
+    }
+    const row = e.target.closest(".tr");
+    if (row && row.tagName === "BUTTON" && ["ArrowDown", "ArrowUp", "ArrowRight", "ArrowLeft"].includes(e.key)) {
+      e.preventDefault();
+      const where = row.dataset.where;
+      const rows = [...el.querySelectorAll(`.tr[data-where="${where}"]`)];
+      const i = rows.indexOf(row);
+      const p = row.dataset.path;
+      const isDir = row.dataset.act === "toggle";
+      if (e.key === "ArrowDown") s.treeFocus = rows[Math.min(i + 1, rows.length - 1)].dataset.path;
+      else if (e.key === "ArrowUp") s.treeFocus = rows[Math.max(i - 1, 0)].dataset.path;
+      else if (e.key === "ArrowRight" && isDir) { s.expanded.add(p); s.treeFocus = p; }
+      else if (e.key === "ArrowLeft") {
+        if (isDir && s.expanded.has(p)) s.expanded.delete(p);
+        else if (p.includes("/")) s.treeFocus = p.slice(0, p.lastIndexOf("/"));
+      }
+      render(s);
+    }
+  });
+}
+
+function pickPalette(s, i) {
+  const it = s.palette?.items?.[i];
+  if (!it) return;
+  s.palette = null;
+  if (it.kind === "file") { openFile(s, it.path); render(s); }
+  else { s.tab = "file"; gotoLine(s, it.n); }
+}
+
+document.addEventListener("keydown", (e) => {
+  const s = activeStage;
+  if (!s) return;
+  const f = s.f();
+  const mod = e.ctrlKey || e.metaKey;
+  if (mod && e.key.toLowerCase() === "p" && f.palette) { e.preventDefault(); s.palette = { q: "", active: 0 }; s.menu = null; render(s); }
+  else if (e.altKey && e.code === "KeyZ" && f.wrap) { e.preventDefault(); s.wrap[s.path] = !wrapOn(s); render(s); }
+  else if (mod && e.shiftKey && e.key === "Enter" && f.focus) { e.preventDefault(); s.focus = !s.focus; render(s); }
+  else if (e.key === "Escape") {
+    if (s.palette) s.palette = null;
+    else if (s.menu) s.menu = null;
+    else if (s.overlay) { s.overlay = false; s.treeFocus = null; }
+    else if (s.sel) s.sel = null;
+    else if (s.focus) s.focus = false;
+    else return;
+    render(s);
+  }
+});
+
+// ─── Wiring ──────────────────────────────────────────────────────────────
+document.querySelectorAll("[data-stage]").forEach((el) => makeStage(el));
+document.querySelectorAll("[data-mode-for]").forEach((seg) => {
+  const s = stages.find((x) => x.id === seg.dataset.modeFor);
+  const draw = () => {
+    seg.innerHTML = `<button type="button" aria-pressed="${!s.after}">Today</button><button type="button" aria-pressed="${s.after}">Proposed</button>`;
+  };
+  seg.addEventListener("click", (e) => {
+    const b = e.target.closest("button");
+    if (!b) return;
+    s.after = b.textContent === "Proposed";
+    Object.assign(s, { sel: null, focus: false, widened: false, overlay: false, menu: null, palette: null, oldChip: null, treeFocus: null });
+    draw();
+    render(s);
+  });
+  draw();
+});
+
+const longCount = MAIN_LINES.filter((l) => l.length > 38).length;
+document.querySelector("[data-long-count]").textContent = `${longCount} of ${MAIN_LINES.length}`;
+
+const themeBtns = document.querySelectorAll("[data-theme-set]");
+function setTheme(t) {
+  document.documentElement.dataset.theme = t;
+  themeBtns.forEach((b) => b.setAttribute("aria-pressed", String(b.dataset.themeSet === t)));
+}
+themeBtns.forEach((b) => b.addEventListener("click", () => setTheme(b.dataset.themeSet)));
+setTheme(matchMedia("(prefers-color-scheme: dark)").matches ? "dark" : "light");
+</script>
+</body>
+</html>
