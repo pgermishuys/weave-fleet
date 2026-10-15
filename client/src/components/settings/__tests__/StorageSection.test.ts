@@ -72,7 +72,7 @@ describe("StorageSection", () => {
     await flushPromises();
 
     expect(wrapper.get("[data-testid='storage-preview']").attributes("disabled")).toBeDefined();
-    expect(wrapper.text()).toContain("no session has been archived for 7 days");
+    expect(wrapper.text()).toContain("Nothing to remove right now. Only checkouts of sessions archived for 7 days or more can go.");
     expect(wrapper.get("[data-testid='storage-total']").text()).toContain("≥ 1.0 GB");
   });
 });
