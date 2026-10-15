@@ -19,6 +19,8 @@ internal sealed record CopilotLaunchArtifacts(string? ModelId) : RuntimeLaunchAr
 /// <summary><see cref="IHarnessRuntime"/> for GitHub Copilot: one weave-copilot process per session, spoken to over ACP.</summary>
 public sealed class CopilotHarnessRuntime(IServiceScopeFactory scopes, ILoggerFactory loggers, IAnalyticsCollector? analytics = null) : IHarnessRuntime
 {
+    private static readonly TimeSpan AuthLife = TimeSpan.FromSeconds(30);
+
     /// <summary>The preference for a path to weave-copilot, for when it isn't on PATH.</summary>
     public const string PathPreferenceKey = "copilot.path";
 
@@ -30,6 +32,13 @@ public sealed class CopilotHarnessRuntime(IServiceScopeFactory scopes, ILoggerFa
 
     private readonly ILogger _logger = loggers.CreateLogger<CopilotHarnessRuntime>();
     private readonly ConcurrentDictionary<bool, (DateTimeOffset At, HarnessCatalog Catalog)> _catalogs = new();
+    private (DateTimeOffset At, bool SignedIn)? _auth;
+
+    /// <inheritdoc />
+    /// <remarks>Over weave-copilot's <c>_fleet/auth/*</c>, which drives GitHub's own <c>copilot login</c> (<see cref="CopilotSignIn"/>).</remarks>
+    public IHarnessProviderSignIn? ProviderSignIn => _signInInstance ??= new CopilotSignIn(
+        StartPlainAsync, () => _auth = null, TimeProvider.System);
+    private CopilotSignIn? _signInInstance;
 
     /// <inheritdoc />
     public string HarnessType => CopilotHarness.TypeName;
@@ -39,8 +48,34 @@ public sealed class CopilotHarnessRuntime(IServiceScopeFactory scopes, ILoggerFa
     {
         if (!await IsOnAsync(LocalUser, CopilotHarness.FeaturePreferenceKey).ConfigureAwait(false))
             return HarnessAvailability.NotWorking(FeatureOffMessage);
-        return await HarnessProbe.CheckInstalledAsync("weave-copilot", await ExecutableAsync(LocalUser).ConfigureAwait(false), [], _logger, ct).ConfigureAwait(false);
+        var installed = await HarnessProbe.CheckInstalledAsync("weave-copilot", await ExecutableAsync(LocalUser).ConfigureAwait(false), [], _logger, ct).ConfigureAwait(false);
+        if (!installed.Available || await IsSignedInAsync(ct).ConfigureAwait(false))
+            return installed;
+        return HarnessAvailability.SignInRequired(SignInMessage, installed.Version, installed.ExecutablePath);
     }
+
+    internal const string SignInMessage = "Sign in to GitHub Copilot.";
+
+    /// <summary>Whether Copilot is signed in, kept for a moment; when weave-copilot can't say, it isn't held against the harness.</summary>
+    private async Task<bool> IsSignedInAsync(CancellationToken ct)
+    {
+        if (_auth is { } known && DateTimeOffset.UtcNow - known.At < AuthLife)
+            return known.SignedIn;
+        try
+        {
+            var status = await CopilotAuthStatus.AskAsync(StartPlainAsync, ct).ConfigureAwait(false);
+            _auth = (DateTimeOffset.UtcNow, status.Authenticated);
+            return status.Authenticated;
+        }
+        catch (Exception ex) when (ex is AcpException or InvalidOperationException or IOException or System.ComponentModel.Win32Exception)
+        {
+            return true;
+        }
+    }
+
+    /// <summary>weave-copilot for the sign-in, without HydraFusion's flag: it only asks about and changes the sign-in.</summary>
+    private async Task<IAcpAgent> StartPlainAsync(CancellationToken ct)
+        => await StartAsync(LocalUser, Environment.CurrentDirectory, ct, withHydraFusion: false).ConfigureAwait(false);
 
     /// <inheritdoc />
     public Task<RuntimePreparation> PrepareRuntimeAsync(RuntimePreparationContext context, CancellationToken ct)
@@ -120,10 +155,10 @@ public sealed class CopilotHarnessRuntime(IServiceScopeFactory scopes, ILoggerFa
         return catalog;
     }
 
-    private async Task<AcpAgentProcess> StartAsync(string ownerUserId, string workingDirectory, CancellationToken ct)
+    private async Task<AcpAgentProcess> StartAsync(string ownerUserId, string workingDirectory, CancellationToken ct, bool withHydraFusion = true)
     {
         List<string> arguments = [];
-        if (await IsOnAsync(ownerUserId, CopilotHarness.HydraFusionPreferenceKey).ConfigureAwait(false))
+        if (withHydraFusion && await IsOnAsync(ownerUserId, CopilotHarness.HydraFusionPreferenceKey).ConfigureAwait(false))
             arguments.Add("--hydrafusion");
 
         var agent = AcpAgentProcess.Start(await ExecutableAsync(ownerUserId).ConfigureAwait(false), arguments, workingDirectory,

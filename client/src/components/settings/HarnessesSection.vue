@@ -169,7 +169,7 @@ function toHarnessCard(harness: HarnessInfo): HarnessCard {
     canToggle: true,
     canDefault: true,
     supportsProfiles: harness.capabilities?.supportsProfiles === true,
-    offersSignIn: harness.capabilities?.supportsProviderSignIn === true && harness.available,
+    offersSignIn: harness.capabilities?.supportsProviderSignIn === true && (harness.available || harness.state === "sign-in-required"),
     describesInstall: Boolean(harness.setup?.mode),
     settings: harness.settings ?? [],
     info: harness,

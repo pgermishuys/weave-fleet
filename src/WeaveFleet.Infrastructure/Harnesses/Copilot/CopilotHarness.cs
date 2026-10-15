@@ -35,6 +35,7 @@ public sealed class CopilotHarness : IHarness
         HistoryLivesInHarness = true,
         SupportsForking = false,
         SupportsImageAttachments = false,
+        SupportsProviderSignIn = true,
         TakesModelNotes = false,
     };
 
