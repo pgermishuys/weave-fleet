@@ -403,6 +403,11 @@ function submit(): void {
   emit("submit", request.value);
 }
 
+/** A rename is done once Enter is pressed in the name: on a saved automation that saves, as Enter in the box does. */
+function commitName(): void {
+  if (isEditing.value) submit();
+}
+
 function setWhen(next: When | null): void {
   state.value.manualWhen = next;
   state.value.forceOnce = false;
@@ -672,6 +677,7 @@ defineExpose({ focusMessage });
           :name-placeholder="namePlaceholder"
           :disabled="busy"
           @close-auto-focus="returnFocusToMessage"
+          @commit="commitName"
         />
       </div>
     </div>

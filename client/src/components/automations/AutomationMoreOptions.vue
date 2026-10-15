@@ -15,6 +15,8 @@ defineProps<{
 
 const emit = defineEmits<{
   closeAutoFocus: [event: Event];
+  /** Enter in the name: done with it. */
+  commit: [];
 }>();
 
 const open = defineModel<boolean>("open", { default: false });
@@ -22,6 +24,13 @@ const name = defineModel<string>("name", { required: true });
 const skip = defineModel<boolean>("skip", { required: true });
 const nameId = useId();
 const skipId = useId();
+
+function finishName(event: KeyboardEvent): void {
+  if (event.isComposing) return;
+  event.preventDefault();
+  open.value = false;
+  emit("commit");
+}
 </script>
 
 <template>
@@ -62,7 +71,7 @@ const skipId = useId();
           data-testid="automation-name"
           :placeholder="namePlaceholder || 'From the first words'"
           autocomplete="off"
-          @keydown.enter.prevent="open = false"
+          @keydown.enter="finishName"
         >
       </div>
       <p
