@@ -786,6 +786,100 @@ describe("NewSessionComposer", () => {
     });
   });
 
+  describe("starters", () => {
+    function knownPreferences(values: Record<string, string> = {}): void {
+      const preferences = usePreferencesStore();
+      preferences.hasFetched = true;
+      preferences.preferences = values;
+    }
+
+    function starters(view: VueWrapper) {
+      return view.find("[data-testid='new-session-starters']");
+    }
+
+    it("shows Fleet's three starters on the empty page by default", async () => {
+      knownPreferences();
+      const view = await mountComposer();
+
+      expect(starters(view).findAll("button").map((chip) => chip.text()))
+        .toEqual(["Explore the code", "Plan a change", "Review my changes", ""]);
+      expect(view.get(".new-session__empty").text()).toContain("Type below, or start from one of these.");
+    });
+
+    it("fills the box and selects the … without sending", async () => {
+      knownPreferences();
+      const view = await mountComposer();
+
+      await view.get("[data-testid='new-session-starter-explore']").trigger("click");
+      await flushPromises();
+
+      const box = textarea(view).element;
+      expect(box.value).toBe("Explore this repository and explain how … works. Don't change any files.");
+      expect(document.activeElement).toBe(box);
+      expect(box.value.slice(box.selectionStart, box.selectionEnd)).toBe("…");
+      expect(mocks.createSession).not.toHaveBeenCalled();
+      expect(starters(view).exists()).toBe(false);
+    });
+
+    it("hides while the box has text and comes back when it's cleared", async () => {
+      knownPreferences();
+      const view = await mountComposer();
+
+      await type(view, "Rename the config loader");
+      expect(starters(view).exists()).toBe(false);
+      expect(view.get(".new-session__empty").text()).toContain("Type below. The chips under the box say where it runs.");
+
+      await type(view, "");
+      expect(starters(view).exists()).toBe(true);
+    });
+
+    it("Hide starters turns them off for good", async () => {
+      knownPreferences();
+      const set = vi.spyOn(usePreferencesStore(), "set");
+      const view = await mountComposer();
+
+      await view.get("[data-testid='new-session-starters-menu']").trigger("click");
+      await flushPromises();
+      await inDocument().get("[data-testid='new-session-starters-hide']").trigger("click");
+      await flushPromises();
+
+      expect(set).toHaveBeenCalledWith("NewSessionStarters", "false");
+      expect(starters(view).exists()).toBe(false);
+    });
+
+    it("stays away when turned off, and until preferences are known", async () => {
+      knownPreferences({ NewSessionStarters: "false" });
+      const off = await mountComposer();
+      expect(starters(off).exists()).toBe(false);
+      off.unmount();
+
+      const preferences = usePreferencesStore();
+      preferences.hasFetched = false;
+      preferences.isLoading = true;
+      preferences.preferences = {};
+      const unknown = await mountComposer();
+      expect(starters(unknown).exists()).toBe(false);
+    });
+
+    it("offers Fix a bug only with Workflows on, and opens its Run box in this folder", async () => {
+      knownPreferences();
+      rememberFolder({ kind: "repository", path: rocket.path });
+      const off = await mountComposer();
+      expect(off.find("[data-testid='new-session-starter-fix-a-bug']").exists()).toBe(false);
+      off.unmount();
+
+      knownPreferences({ Workflows: "true" });
+      const on = await mountComposer();
+      await on.get("[data-testid='new-session-starter-fix-a-bug']").trigger("click");
+
+      expect(mocks.navigate).toHaveBeenCalledWith({
+        to: "/workflows",
+        search: { workflow: "builtin:fix-a-bug", folder: rocket.path },
+      });
+      expect(mocks.createSession).not.toHaveBeenCalled();
+    });
+  });
+
   describe("keyboard", () => {
     it("Enter creates the session with the message as its first prompt", async () => {
       rememberFolder({ kind: "repository", path: rocket.path });

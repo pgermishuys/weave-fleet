@@ -16,6 +16,7 @@ import HarnessPicker from "@/components/sessions/new-session/HarnessPicker.vue";
 import MachinePicker from "@/components/sessions/new-session/MachinePicker.vue";
 import MoreOptions from "@/components/sessions/new-session/MoreOptions.vue";
 import ProfilePicker from "@/components/sessions/new-session/ProfilePicker.vue";
+import StarterChips from "@/components/sessions/new-session/StarterChips.vue";
 import WorkspacePicker from "@/components/sessions/new-session/WorkspacePicker.vue";
 import { useEnabledHarnesses } from "@/composables/use-enabled-harnesses";
 import { useGitHubPicker } from "@/composables/use-github-picker";
@@ -28,6 +29,7 @@ import { useRepositories } from "@/composables/use-repositories";
 import { useRepositoryDetail } from "@/composables/use-repository-detail";
 import { seedSentPrompt } from "@/composables/use-send-prompt";
 import { useCreateSession } from "@/composables/use-session-actions";
+import { useWorkflowsFeature } from "@/composables/use-workflows-feature";
 import { useWorktrees } from "@/composables/use-worktrees";
 import { useWorktreeNamingStore } from "@/stores/worktree-naming";
 import { resolveWorktreeName } from "@/lib/worktree-naming";
@@ -36,6 +38,7 @@ import { findRepositoryForGitHubPreset } from "@/lib/github-session-source";
 import { itemResourceId, itemSessionPreset, type GitHubItemSummary } from "@/lib/github-items";
 import { findHashTrigger, parseGitHubRemote, removeTrigger } from "@/lib/github-reference";
 import { describeNewSession } from "@/lib/new-session-plan";
+import { FIX_A_BUG_WORKFLOW_ID, STARTERS_PREFERENCE_KEY, starterSelection, type TextStarter } from "@/lib/starters";
 import {
   buildCreateSessionRequest,
   buildCreatedSessionRow,
@@ -50,6 +53,7 @@ import { useSessionsStore } from "@/stores/sessions";
 import { useSmartLinksStore } from "@/stores/smart-links";
 import { useWorkspaceUiStore } from "@/stores/workspace-ui";
 import { useMachinesStore } from "@/stores/machines";
+import { usePreferencesStore } from "@/stores/preferences";
 import { useMachineTarget } from "@/lib/machine-target";
 
 const MAX_TEXTAREA_HEIGHT = 180;
@@ -656,6 +660,41 @@ function handleInput(event: Event): void {
   resizeTextarea();
 }
 
+// ── Starters: chips on the empty page that fill the box, never send ──────────────
+const preferencesStore = usePreferencesStore();
+preferencesStore.ensureLoaded();
+const { isWorkflowsEnabled } = useWorkflowsFeature();
+// Only once preferences are known, so someone who hid them never sees them flash.
+const showStarters = computed(() => preferencesStore.hasFetched
+  && preferencesStore.get(STARTERS_PREFERENCE_KEY, "true") !== "false"
+  && message.value === "" && !isStarting.value);
+// Workflows run on this machine, so another machine's folder can't go to its Run box.
+const showWorkflowStarter = computed(() => isWorkflowsEnabled.value && target.isLive);
+
+function fillStarter(starter: TextStarter): void {
+  const [start, end] = starterSelection(starter.text);
+  message.value = starter.text;
+  validationError.value = null;
+  caret.value = end;
+  void nextTick(() => {
+    const textarea = textareaRef.value;
+    if (!textarea) return;
+    resizeTextarea();
+    focusMessage();
+    textarea.setSelectionRange(start, end);
+  });
+}
+
+/** Fix a bug is a workflow: its Run box opens with this folder, and the person presses Run. */
+function openFixABug(): void {
+  void navigate({ to: "/workflows", search: { workflow: FIX_A_BUG_WORKFLOW_ID, folder: repositoryPath.value ?? undefined } });
+}
+
+function hideStarters(): void {
+  void preferencesStore.set(STARTERS_PREFERENCE_KEY, "false");
+  focusMessage();
+}
+
 watch(areRepositoriesReady, applyInitialFolder, { immediate: true });
 
 // A GitHub "start session" can arrive while the page is already open.
@@ -764,7 +803,19 @@ onUnmounted(() => {
     >
       <div class="new-session__empty">
         <strong>What should we work on?</strong>
-        Type below. The chips under the box say where it runs.
+        <template v-if="showStarters">
+          Type below, or start from one of these.
+          <StarterChips
+            :show-workflow="showWorkflowStarter"
+            @fill="fillStarter"
+            @open-workflow="openFixABug"
+            @hide="hideStarters"
+            @close-auto-focus="returnFocusToMessage"
+          />
+        </template>
+        <template v-else>
+          Type below. The chips under the box say where it runs.
+        </template>
       </div>
     </div>
 
@@ -1083,8 +1134,10 @@ onUnmounted(() => {
   padding: 20px 24px 8px;
 }
 
+/* Full width up to its limit, so a starters row that doesn't fit scrolls instead of widening the page. */
 .new-session__empty {
-  max-width: 560px;
+  width: 100%;
+  max-width: 640px;
   margin: auto;
   color: var(--muted);
   font-size: 13.5px;
