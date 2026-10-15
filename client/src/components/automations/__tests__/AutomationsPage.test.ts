@@ -467,6 +467,26 @@ describe("Automations screen", () => {
     });
   });
 
+  it("renames an automation from the … chip, saving on Enter", async () => {
+    // The chip's menu renders into the body, as in the app.
+    wrapper.unmount();
+    wrapper = mount(Screen, { attachTo: document.body, global: { stubs: { teleport: false } } });
+    await openAutomation("a1");
+
+    await wrapper.find("[data-testid='automation-more-chip']").trigger("click");
+    await flushPromises();
+    const name = document.querySelector<HTMLInputElement>("[data-testid='automation-name']");
+    expect(name?.value).toBe("Weekly PR digest");
+    name!.value = "Monday PR digest";
+    name!.dispatchEvent(new Event("input"));
+    // Enter is done: it saves, as Enter in the box does, rather than leaving a Save to find.
+    name!.dispatchEvent(new KeyboardEvent("keydown", { key: "Enter", bubbles: true }));
+    await flushPromises();
+
+    expect(sent[0]).toMatchObject({ method: "PUT", url: "/api/automations/a1", body: { name: "Monday PR digest" } });
+    expect(wrapper.find("[data-testid='automation-title']").text()).toBe("Monday PR digest");
+  });
+
   it("warns that saving moves an older UTC schedule to your time zone", async () => {
     list = [{ ...weekly, timeZone: null }];
     await openAutomation("a1");
