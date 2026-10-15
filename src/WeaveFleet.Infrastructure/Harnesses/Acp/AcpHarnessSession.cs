@@ -15,6 +15,9 @@ namespace WeaveFleet.Infrastructure.Harnesses.Acp;
 /// </summary>
 internal sealed partial class AcpHarnessSession : IHarnessSession
 {
+    /// <summary>weave-copilot's answer to a <c>_fleet/steer</c> that arrived after the turn ended.</summary>
+    internal const int NoTurnRunning = -32001;
+
     private readonly IAcpAgent _agent;
     private readonly AcpMapper _mapper;
     private readonly string _fleetSessionId;
@@ -128,8 +131,17 @@ internal sealed partial class AcpHarnessSession : IHarnessSession
         {
             if (options?.Delivery != PromptDelivery.Steer)
                 throw new HarnessBusyException("The agent is still working on the last prompt.");
-            _mapper.UserPrompt(text);
-            await _agent.Client.RequestAsync("_fleet/steer", new JsonObject { ["sessionId"] = ResumeToken, ["prompt"] = text }, ct).ConfigureAwait(false);
+            try
+            {
+                await _agent.Client.RequestAsync("_fleet/steer", new JsonObject { ["sessionId"] = ResumeToken, ["prompt"] = text }, ct).ConfigureAwait(false);
+            }
+            catch (AcpException ex) when (ex.Code == NoTurnRunning)
+            {
+                // The turn ended while this was on its way: Fleet queues it as a prompt of its own.
+                throw new HarnessBusyException("The turn had just ended, so the message can't steer it.");
+            }
+
+            Emit(_mapper.UserPrompt(text));
             return;
         }
 
@@ -140,7 +152,7 @@ internal sealed partial class AcpHarnessSession : IHarnessSession
         }
 
         Status = HarnessSessionStatus.Running;
-        _mapper.UserPrompt(text);
+        Emit(_mapper.UserPrompt(text));
         Emit(_mapper.Status(ActivityStatuses.Busy));
         _ = RunPromptAsync(text);
     }

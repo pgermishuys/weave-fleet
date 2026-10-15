@@ -86,7 +86,7 @@ internal sealed class FakeAcpAgent : IAcpAgent
                 }
                 catch (Exception ex)
                 {
-                    reply["error"] = new JsonObject { ["code"] = -32603, ["message"] = ex.Message };
+                    reply["error"] = new JsonObject { ["code"] = ex is AcpException acp ? acp.Code : -32603, ["message"] = ex.Message };
                 }
 
                 Send(reply);

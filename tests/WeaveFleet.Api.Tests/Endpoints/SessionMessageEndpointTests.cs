@@ -107,6 +107,19 @@ public sealed class SessionMessageEndpointTests : IAsyncLifetime
     }
 
     [Fact]
+    public async Task An_agent_cannot_name_the_program_Fleet_runs_for_Copilot_but_the_user_can()
+    {
+        var byAgent = await _client!.PutAsJsonAsync($"/agent/{Token}/api/preferences/copilot.path", new { value = "/tmp/evil" });
+        var byUser = await _client!.PutAsJsonAsync("/api/preferences/copilot.path", new { value = "/opt/weave-copilot" });
+
+        byAgent.StatusCode.ShouldBe(HttpStatusCode.Forbidden);
+        (await ErrorAsync(byAgent))!.ShouldContain("Settings");
+        byUser.StatusCode.ShouldBe(HttpStatusCode.NoContent);
+        var saved = await _client!.GetFromJsonAsync<Dictionary<string, string>>("/api/preferences");
+        saved!["copilot.path"].ShouldBe("/opt/weave-copilot");
+    }
+
+    [Fact]
     public async Task With_messages_off_the_tool_is_refused_even_from_a_process_that_has_it()
     {
         var response = await MessageAsync(Receiver, "Update the docs.");

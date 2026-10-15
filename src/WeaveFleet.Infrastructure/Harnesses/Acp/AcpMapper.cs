@@ -23,6 +23,7 @@ internal sealed class AcpMapper(string sessionId)
     private readonly List<HarnessMessage> _history = [];
     private readonly List<MessagePart> _parts = [];
     private readonly Dictionary<string, int> _tools = [];
+    private readonly HashSet<string> _closedCalls = [];
     private readonly StringBuilder _open = new();
     private string? _openKind;
     private string? _openPartId;
@@ -35,8 +36,11 @@ internal sealed class AcpMapper(string sessionId)
     /// <summary>The conversation so far, oldest first, with the turn still running as its last message.</summary>
     internal IReadOnlyList<HarnessMessage> Messages() { lock (_lock) return [.. MessagesCore()]; }
 
-    /// <summary>The user's prompt, which starts a turn.</summary>
-    internal void UserPrompt(string text) { lock (_lock) UserPromptCore(text); }
+    /// <summary>
+    /// The user's prompt, which starts a turn. Mid-turn (a steer) it closes the message in progress: that message is
+    /// completed and its calls still running are settled, so none of them reads as running forever.
+    /// </summary>
+    internal IReadOnlyList<HarnessEvent> UserPrompt(string text) { lock (_lock) return UserPromptCore(text); }
 
     /// <summary>Maps one <c>session/update</c> body (<c>params.update</c>).</summary>
     internal IReadOnlyList<HarnessEvent> Update(JsonElement update) { lock (_lock) return UpdateCore(update); }
@@ -53,12 +57,22 @@ internal sealed class AcpMapper(string sessionId)
     /// <summary>The conversation so far, oldest first, with the turn still running as its last message.</summary>
     private List<HarnessMessage> MessagesCore() => _assistantId is null ? _history : [.. _history, Assistant()];
 
-    /// <summary>The user's prompt, which starts a turn.</summary>
-    private void UserPromptCore(string text)
+    private List<HarnessEvent> UserPromptCore(string text)
     {
-        CommitAssistant();
+        var events = new List<HarnessEvent>();
+        if (_assistantId is { } id)
+        {
+            SettleTools(events, "Redirected before it finished.");
+            // What the agent reports about these calls after the steer belongs to a message that is closed.
+            foreach (var part in _parts.OfType<ToolUsePart>())
+                _closedCalls.Add(part.ToolCallId);
+            events.Add(Event(EventTypes.MessageUpdated, Lifecycle(id, completed: true)));
+            CommitAssistant();
+        }
+
         AddUser(text);
         _userOpen = false;
+        return events;
     }
 
     /// <summary>Maps one <c>session/update</c> body (<c>params.update</c>).</summary>
@@ -134,6 +148,7 @@ internal sealed class AcpMapper(string sessionId)
             CommitAssistant();
         }
 
+        _closedCalls.Clear();
         events.Add(Status(ActivityStatuses.Idle));
         return events;
     }
@@ -190,7 +205,7 @@ internal sealed class AcpMapper(string sessionId)
     {
         _userOpen = false;
         var callId = Str(update, "toolCallId");
-        if (callId is null)
+        if (callId is null || _closedCalls.Contains(callId))
             return;
 
         var prior = _tools.TryGetValue(callId, out var at) ? _parts[at] as ToolUsePart : null;

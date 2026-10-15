@@ -22,6 +22,9 @@ internal interface IAcpAgent : IAsyncDisposable
 /// <summary>An ACP agent running as a child process, with the client that talks to its stdio.</summary>
 internal sealed class AcpAgentProcess : IAcpAgent
 {
+    /// <summary>The most of the agent's stderr kept, in characters.</summary>
+    internal const int MaxStderr = 16 * 1024;
+
     private readonly Process _process;
     private readonly SafeHandle? _group;
     private readonly StringBuilder _stderr = new();
@@ -82,7 +85,12 @@ internal sealed class AcpAgentProcess : IAcpAgent
             if (e.Data is null)
                 return;
             lock (agent._stderr)
+            {
                 agent._stderr.AppendLine(e.Data);
+                // Only the tail matters (it says why the agent stopped): a chatty agent mustn't grow this without end.
+                if (agent._stderr.Length > MaxStderr)
+                    agent._stderr.Remove(0, agent._stderr.Length - MaxStderr);
+            }
         };
         process.BeginErrorReadLine();
         return agent;
