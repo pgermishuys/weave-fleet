@@ -97,6 +97,31 @@ public sealed class WorkspaceRepository(
             });
     }
 
+    public async Task ClearCleanedAsync(string id)
+    {
+        using var conn = connectionFactory.CreateConnection();
+        await conn.ExecuteNonQueryAsync(
+            "UPDATE workspaces SET cleaned_up_at = NULL WHERE id = @Id AND user_id = @UserId",
+            cmd =>
+            {
+                cmd.AddParameter("Id", id);
+                cmd.AddParameter("UserId", userContext.UserId);
+            });
+    }
+
+    public async Task UpdateBranchAsync(string id, string branch)
+    {
+        using var conn = connectionFactory.CreateConnection();
+        await conn.ExecuteNonQueryAsync(
+            "UPDATE workspaces SET branch = @Branch WHERE id = @Id AND user_id = @UserId",
+            cmd =>
+            {
+                cmd.AddParameter("Id", id);
+                cmd.AddParameter("Branch", branch);
+                cmd.AddParameter("UserId", userContext.UserId);
+            });
+    }
+
     public async Task UpdateDisplayNameAsync(string id, string displayName)
     {
         using var conn = connectionFactory.CreateConnection();

@@ -143,7 +143,7 @@ public sealed class OpenCodeSessionMessageProxy(
                 try
                 {
                     var sessionActivator = serviceProvider.GetRequiredService<ISessionActivator>();
-                    await sessionActivator.ActivateSessionAsync(fleetSessionId, ct).ConfigureAwait(false);
+                    await sessionActivator.ActivateToReadAsync(fleetSessionId, ct).ConfigureAwait(false);
                     
                     // Refetch session to get the updated instance ID after activation
                     var resumedSession = await sessionRepository.GetByIdAsync(fleetSessionId).ConfigureAwait(false);
@@ -219,7 +219,7 @@ public sealed class OpenCodeSessionMessageProxy(
                 try
                 {
                     var sessionActivator = serviceProvider.GetRequiredService<ISessionActivator>();
-                    await sessionActivator.ActivateSessionAsync(fleetSessionId, ct).ConfigureAwait(false);
+                    await sessionActivator.ActivateToReadAsync(fleetSessionId, ct).ConfigureAwait(false);
                     
                     // Check if resume succeeded by looking for the harness again
                     harnessSession = instanceTracker.Get(session.InstanceId);

@@ -82,6 +82,33 @@ public sealed class WorkspaceRepositoryTests
     }
 
     [Fact]
+    public async Task ClearCleanedAsync_AndUpdateBranchAsync_PutACheckoutBackOnItsBranch()
+    {
+        var (conn, repo, _) = await CreateAsync();
+        using var _ = conn;
+
+        var ws = new Workspace
+        {
+            Id = Guid.NewGuid().ToString(),
+            Directory = "/tmp/fleet-session-a1b2",
+            IsolationStrategy = "worktree",
+            Branch = "fleet/export-csv",
+            CreatedAt = DateTime.UtcNow.ToString("O"),
+            UserId = TestUserContext.DefaultUserId
+        };
+        await repo.InsertAsync(ws);
+        await repo.MarkCleanedAsync(ws.Id);
+
+        await repo.UpdateBranchAsync(ws.Id, "fleet/export-csv-quotes");
+        await repo.ClearCleanedAsync(ws.Id);
+        var retrieved = await repo.GetByIdAsync(ws.Id);
+
+        retrieved.ShouldNotBeNull();
+        retrieved.CleanedUpAt.ShouldBeNull();
+        retrieved.Branch.ShouldBe("fleet/export-csv-quotes");
+    }
+
+    [Fact]
     public async Task UpdateDisplayNameAsync_ChangesName()
     {
         var (conn, repo, _) = await CreateAsync();

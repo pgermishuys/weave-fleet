@@ -54,11 +54,33 @@ public sealed partial class SessionActivation(
         return await GetOrActivateInstanceAsync(sessionResult.Value, ct).ConfigureAwait(false);
     }
 
+    /// <inheritdoc />
+    public async Task<Result<IHarnessSession>> ActivateToReadAsync(string sessionId, CancellationToken ct = default)
+    {
+        using var _ = logger.BeginSessionScope(sessionId);
+        var sessionResult = await sessionRepository.GetSessionAsync(sessionId).ConfigureAwait(false);
+        if (sessionResult.IsFailure)
+            return sessionResult.Error;
+
+        return await GetOrActivateInstanceToReadAsync(sessionResult.Value, ct).ConfigureAwait(false);
+    }
+
     /// <summary>
     /// The session's running harness, or the session woken: resumed with its token, or started fresh when it was never
     /// prompted. One wake per session at a time, however many requests ask at once.
     /// </summary>
-    public async Task<Result<IHarnessSession>> GetOrActivateInstanceAsync(Session session, CancellationToken ct)
+    public Task<Result<IHarnessSession>> GetOrActivateInstanceAsync(Session session, CancellationToken ct)
+        => GetOrActivateInstanceAsync(session, toRead: false, ct);
+
+    /// <summary>
+    /// The session's running harness, or the session woken only to read from it (the composer's models and agents): a
+    /// session whose checkout Clean now removed isn't woken unless its harness keeps the conversation (OpenCode), so
+    /// opening it leaves the checkout removed.
+    /// </summary>
+    public Task<Result<IHarnessSession>> GetOrActivateInstanceToReadAsync(Session session, CancellationToken ct)
+        => GetOrActivateInstanceAsync(session, toRead: true, ct);
+
+    private async Task<Result<IHarnessSession>> GetOrActivateInstanceAsync(Session session, bool toRead, CancellationToken ct)
     {
         using var activateActivity = FleetInstrumentation.ActivitySource.StartActivity(
             "fleet.activate_instance",
@@ -81,7 +103,7 @@ public sealed partial class SessionActivation(
             if (instance is not null)
                 return Result.Success<IHarnessSession>(instance);
 
-            var activatedResult = await ActivateSessionAsync(currentSession, ct).ConfigureAwait(false);
+            var activatedResult = await ActivateSessionAsync(currentSession, toRead, ct).ConfigureAwait(false);
             return activatedResult;
         }
         finally
@@ -102,14 +124,32 @@ public sealed partial class SessionActivation(
         return profile;
     }
 
-    private async Task<Result<IHarnessSession>> ActivateSessionAsync(Session session, CancellationToken ct)
+    private async Task<Result<IHarnessSession>> ActivateSessionAsync(Session session, bool toRead, CancellationToken ct)
     {
-        var workspaceResult = await workspaceService.GetWorkspaceDirectoryAsync(session.WorkspaceId).ConfigureAwait(false);
-        if (workspaceResult.IsFailure)
+        var workspace = await workspaceService.GetWorkspaceAsync(session.WorkspaceId).ConfigureAwait(false);
+        if (workspace.IsFailure)
         {
             await MarkAutomaticActivationErrorAsync(session, ct).ConfigureAwait(false);
-            return workspaceResult.Error;
+            return workspace.Error;
         }
+
+        // Reading doesn't bring a removed checkout back when Fleet has the conversation itself (Claude Code), and the
+        // session isn't in error for it: it's asleep. OpenCode keeps the conversation, so reading it needs the session
+        // awake, checkout and all.
+        if (toRead
+            && workspace.Value is { IsolationStrategy: "worktree", CleanedUpAt: not null }
+            && harnessRegistry.GetByType(session.HarnessType)?.Capabilities.HistoryLivesInHarness != true)
+            return new FleetError("Session.CheckoutRemoved", "This session's checkout was removed to save space. Its next message puts it back.");
+
+        // A checkout Clean now removed comes back, at the same path, before the harness starts in it.
+        var restored = await WorktreeCleanup.RestoreAsync(workspaceService, eventBroadcaster, workspace.Value, session.UserId, ct).ConfigureAwait(false);
+        if (restored.IsFailure)
+        {
+            await MarkAutomaticActivationErrorAsync(session, ct).ConfigureAwait(false);
+            return restored.Error;
+        }
+
+        var directory = workspace.Value.Directory;
 
         var harnessRuntime = harnessRegistry.GetRuntimeByType(session.HarnessType);
         if (harnessRuntime is null)
@@ -132,7 +172,7 @@ public sealed partial class SessionActivation(
             UserId = session.UserId,
             UserCredentials = ownerCredentials,
             ModelId = null,
-            WorkingDirectory = workspaceResult.Value,
+            WorkingDirectory = directory,
             Profile = profile.Value
         }, ct).ConfigureAwait(false);
 
@@ -155,7 +195,7 @@ public sealed partial class SessionActivation(
                 ? await harnessRuntime.SpawnAsync(new HarnessSpawnOptions
                 {
                     SessionId = session.Id,
-                    WorkingDirectory = workspaceResult.Value,
+                    WorkingDirectory = directory,
                     OwnerUserId = session.UserId,
                     ProjectId = session.ProjectId,
                     ProjectName = projectName,
@@ -165,7 +205,7 @@ public sealed partial class SessionActivation(
                 : await harnessRuntime.ResumeAsync(new HarnessResumeOptions
                 {
                     SessionId = session.Id,
-                    WorkingDirectory = workspaceResult.Value,
+                    WorkingDirectory = directory,
                     OwnerUserId = session.UserId,
                     ResumeToken = session.HarnessResumeToken,
                     ProjectId = session.ProjectId,
@@ -190,7 +230,7 @@ public sealed partial class SessionActivation(
             id: harnessInstance.InstanceId,
             port: 0,
             pid: harnessInstance.ProcessId,
-            directory: workspaceResult.Value,
+            directory: directory,
             url: string.Empty).ConfigureAwait(false);
         if (instanceResult.IsFailure)
         {

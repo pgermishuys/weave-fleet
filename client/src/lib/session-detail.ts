@@ -44,6 +44,8 @@ export interface SessionDetailResponse {
   retryMaxAttempts?: number | null;
   retryMessage?: string | null;
   retryNext?: string | null;
+  /** When Fleet removed the worktree checkout to save space; null while it has one. */
+  checkoutRemovedAt?: string | null;
 }
 
 function getStringField(
@@ -116,6 +118,7 @@ export function normalizeSessionDetailResponse(payload: unknown): SessionDetailR
     retryMaxAttempts: getNumberField(value, "retryMaxAttempts", "RetryMaxAttempts"),
     retryMessage: getStringField(value, "retryMessage", "RetryMessage"),
     retryNext: getStringField(value, "retryNext", "RetryNext"),
+    checkoutRemovedAt: getStringField(value, "checkoutRemovedAt", "CheckoutRemovedAt"),
   };
 }
 
@@ -227,6 +230,9 @@ export function buildSessionListItem(
     lifecycleStatus: normalizedLifecycleStatus,
     retentionStatus: normalizeRetentionStatus(nextRemoteSession.retentionStatus),
     archivedAt: selectedSession?.archivedAt ?? null,
+    checkoutRemovedAt: nextRemoteSession.checkoutRemovedAt !== undefined
+      ? nextRemoteSession.checkoutRemovedAt
+      : selectedSession?.checkoutRemovedAt ?? null,
     typedInstanceStatus: selectedSession?.typedInstanceStatus ?? "running",
     isHidden: selectedSession?.isHidden ?? false,
     totalTokens: nextRemoteSession.totalTokens ?? selectedSession?.totalTokens,

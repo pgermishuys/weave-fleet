@@ -12,6 +12,7 @@ import { modelDisplayName } from "@/lib/agent-model-choice";
 import { describeRetry, retryAttemptLabel, type RetryStatus } from "@/lib/retry-status";
 import { useSessionsStore } from "@/stores/sessions";
 import { useMachinesStore } from "@/stores/machines";
+import { extractApiError } from "@/lib/api-error";
 import { apiFetchOn } from "@/lib/api-client";
 import { useMachineTarget } from "@/lib/machine-target";
 import { useSidebarStore } from "@/stores/sidebar";
@@ -40,6 +41,10 @@ interface Props {
   retryNext?: string | null;
   directory?: string | null;
   branch?: string | null;
+  /** When Fleet removed this session's worktree checkout; null or absent while it has one. */
+  checkoutRemovedAt?: string | null;
+  /** The checkout is being put back (a restore started here or elsewhere). */
+  checkoutRestoring?: boolean;
   tags?: readonly string[];
   /** The session this one was forked from or started by: "Started by …" next to the title links to it. */
   lineageParentId?: string | null;
@@ -58,6 +63,40 @@ interface Props {
 }
 
 const props = defineProps<Props>();
+
+// The removed-checkout chip: Restore now, the putting-back state, and a short note once it is back.
+const restoreStarted = shallowRef(false);
+const restoredNote = shallowRef(false);
+const restoreError = shallowRef<string | null>(null);
+const checkoutRestoringNow = computed(() => restoreStarted.value || props.checkoutRestoring === true);
+const checkoutRemovedLabel = computed(() => {
+  const date = props.checkoutRemovedAt ? new Date(props.checkoutRemovedAt) : null;
+  const when = date && !Number.isNaN(date.getTime()) ? ` on ${date.toLocaleDateString("en-US", { month: "short", day: "numeric" })}` : "";
+  return `Fleet removed this session's checkout${when} to save space. The branch${props.branch ? ` ${props.branch}` : ""} and this conversation are kept; your next message puts it back.`;
+});
+const showCheckoutChip = computed(() => Boolean(props.checkoutRemovedAt) || checkoutRestoringNow.value || restoredNote.value);
+
+async function restoreCheckout(): Promise<void> {
+  const workspaceId = sessionsStore.sessionById(props.id)?.workspaceId;
+  if (!workspaceId) return;
+  restoreStarted.value = true;
+  restoreError.value = null;
+  try {
+    const response = await apiFetchOn(machine.connection, `/api/storage/worktrees/${encodeURIComponent(workspaceId)}/restore`, { method: "POST" });
+    if (!response.ok) {
+      const body = await response.json().catch(() => null);
+      restoreError.value = extractApiError(body, "Couldn't put the checkout back.");
+      return;
+    }
+    sessionsStore.patchSession(props.id, { checkoutRemovedAt: null, checkoutRestoring: false });
+    restoredNote.value = true;
+    setTimeout(() => { restoredNote.value = false; }, 6000);
+  } catch (cause) {
+    restoreError.value = extractApiError(cause, "Couldn't put the checkout back.");
+  } finally {
+    restoreStarted.value = false;
+  }
+}
 const machine = useMachineTarget();
 const emit = defineEmits<{
   "update:editingTitle": [editing: boolean];
@@ -466,6 +505,39 @@ onUnmounted(() => {
           >
             Archived
           </Badge>
+          <span
+            v-if="showCheckoutChip"
+            class="session-detail-header__checkout"
+            :class="{ 'session-detail-header__checkout--quiet': restoredNote && !checkoutRestoringNow && !props.checkoutRemovedAt }"
+            data-testid="session-checkout-chip"
+            :title="restoreError ?? checkoutRemovedLabel"
+          >
+            <template v-if="checkoutRestoringNow">
+              <Loader2
+                :size="11"
+                class="animate-spin"
+                aria-hidden="true"
+              />
+              Putting the checkout back…
+            </template>
+            <template v-else-if="props.checkoutRemovedAt">
+              Checkout removed
+              <button
+                type="button"
+                class="session-detail-header__checkout-restore"
+                data-testid="session-checkout-restore"
+                @click="restoreCheckout"
+              >Restore now</button>
+              <span
+                v-if="restoreError"
+                class="session-detail-header__checkout-error"
+                role="alert"
+              >{{ restoreError }}</span>
+            </template>
+            <template v-else>
+              Checkout restored. Dependencies and .env aren't back.
+            </template>
+          </span>
         </div>
 
         <div class="session-detail-header__meta-row">
@@ -918,6 +990,38 @@ onUnmounted(() => {
   color: var(--text);
   font-family: var(--font-mono-stack);
   font-size: 11.5px;
+}
+
+.session-detail-header__checkout {
+  display: inline-flex;
+  flex: 0 0 auto;
+  align-items: center;
+  gap: 6px;
+  padding: 1px 8px;
+  border: 1px solid color-mix(in srgb, var(--status-waiting) 45%, transparent);
+  border-radius: 999px;
+  background: color-mix(in srgb, var(--status-waiting) 10%, transparent);
+  white-space: nowrap;
+  color: var(--status-waiting);
+  font-size: 11px;
+}
+
+.session-detail-header__checkout--quiet {
+  background: transparent;
+  color: var(--muted);
+}
+
+.session-detail-header__checkout-restore {
+  border: 0;
+  background: transparent;
+  color: var(--text);
+  font-size: 11px;
+  text-decoration: underline;
+  cursor: pointer;
+}
+
+.session-detail-header__checkout-error {
+  color: var(--error);
 }
 
 .session-detail-header__branch-name {

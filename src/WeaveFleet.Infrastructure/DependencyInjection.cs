@@ -210,6 +210,7 @@ public static class DependencyInjection
         services.AddScoped<WeaveFleet.Application.Progress.SessionProgressReader>();
         services.AddScoped<WeaveFleet.Application.Workspaces.Worktrees.WorktreeNamingService>();
         services.AddScoped<WorkspaceService>();
+        services.AddScoped<WorktreeCleanup>();
         services.AddScoped<WorkspaceRootService>();
         services.AddScoped<InstanceService>();
         services.AddScoped<SessionSourceResolutionService>();

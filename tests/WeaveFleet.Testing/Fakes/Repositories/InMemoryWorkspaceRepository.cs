@@ -50,6 +50,20 @@ public sealed class InMemoryWorkspaceRepository : IWorkspaceRepository
         return Task.CompletedTask;
     }
 
+    public Task ClearCleanedAsync(string id)
+    {
+        if (_store.TryGetValue(id, out var workspace))
+            workspace.CleanedUpAt = null;
+        return Task.CompletedTask;
+    }
+
+    public Task UpdateBranchAsync(string id, string branch)
+    {
+        if (_store.TryGetValue(id, out var workspace))
+            workspace.Branch = branch;
+        return Task.CompletedTask;
+    }
+
     public Task UpdateDisplayNameAsync(string id, string displayName)
     {
         if (_store.TryGetValue(id, out var workspace))

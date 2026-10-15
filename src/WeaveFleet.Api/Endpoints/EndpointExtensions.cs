@@ -75,6 +75,7 @@ public static class EndpointExtensions
         apiScope.MapWorkspaceRootEndpoints();
         apiScope.MapWorkspaceEndpoints();
         apiScope.MapWorktreeNamingEndpoints();
+        apiScope.MapStorageEndpoints();
         apiScope.MapSessionEventEndpoints();
         apiScope.MapAnalyticsEndpoints();
         apiScope.MapUserEndpoints();

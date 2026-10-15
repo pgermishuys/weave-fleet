@@ -877,6 +877,10 @@ export interface SessionListItem {
   lifecycleStatus: string;
   retentionStatus: string;
   archivedAt?: string | null;
+  /** When Fleet removed the session's worktree checkout to save space; null while it has one. */
+  checkoutRemovedAt?: string | null;
+  /** Client-only: the checkout is being put back. */
+  checkoutRestoring?: boolean;
   typedInstanceStatus: string;
   isHidden: boolean;
   totalTokens?: number | null;
