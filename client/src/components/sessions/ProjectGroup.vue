@@ -27,7 +27,8 @@ import { groupRunSessions } from "@/lib/workflows";
 import { useWorkflowsStore } from "@/stores/workflows";
 import { heightEnter, heightLeave } from "@/lib/height-transition";
 import type { RunningWorkItem } from "@/lib/running-work";
-import { lineageDescendants, lineageKindLabel, movableOutOf, nestLineage, sessionAgentState } from "@/lib/session-lineage";
+import { familyRootOf, layoutLineage, lineageDescendants, lineageKindLabel, movableOutOf, nestLineage, sessionAgentState } from "@/lib/session-lineage";
+import { hoveredFamily } from "@/composables/use-lineage-hover";
 
 interface ProjectGroupModel {
   id: string;
@@ -104,35 +105,57 @@ const lineage = computed(() => nestLineage(props.project.sessions));
 const entries = computed(() => groupRunSessions(lineage.value.roots, props.openOnMachine ? () => null : workflows.runForSession));
 
 type ChildRow =
-  | { kind: "subagent"; key: string; work: RunningWorkItem }
-  | { kind: "session"; key: string; item: SessionListItem; label: string };
+  | { kind: "subagent"; key: string; depth: number; work: RunningWorkItem }
+  | { kind: "session"; key: string; depth: number; item: SessionListItem; label: string };
 
 /**
  * A session's running subagents, each followed by the subagents it runs itself (Claude Code's nested subagents run in
- * the subagent's own session).
+ * the subagent's own session). They sit one level under the session that runs them, at `depth`.
  */
-function subagentRowsOf(sessionId: string, seen = new Set<string>([sessionId])): ChildRow[] {
+function subagentRowsOf(sessionId: string, depth: number, seen = new Set<string>([sessionId])): ChildRow[] {
   return (props.runningSubagents?.get(sessionId) ?? []).flatMap((work): ChildRow[] => {
     const child = work.childSessionId;
-    const nested = child && !seen.has(child) ? subagentRowsOf(child, seen.add(child)) : [];
-    return [{ kind: "subagent", key: `work:${work.id}`, work }, ...nested];
+    const nested = child && !seen.has(child) ? subagentRowsOf(child, depth + 1, seen.add(child)) : [];
+    return [{ kind: "subagent", key: `work:${work.id}`, depth, work }, ...nested];
   });
 }
 
 /**
- * What shows under a top-level session: everything that came from it, however deep, one indent in and in tree order.
- * Its running subagents first, then each session it forked or started followed by that one's own subagents and
+ * What shows under a top-level session: everything that came from it, in tree order, each level one indent in. Its
+ * running subagents first, then each session it forked or started followed by that one's own subagents and
  * children. The kind label says how each came; the session's own header names its exact parent.
  */
 function childRowsOf(session: SessionListItem): ChildRow[] {
   return [
-    ...subagentRowsOf(session.session.id),
-    ...lineageDescendants(session, lineage.value.childrenOf).flatMap(({ item, kind }): ChildRow[] => [
-      { kind: "session", key: rowKey(item), item, label: lineageKindLabel(kind) },
-      ...subagentRowsOf(item.session.id),
+    ...subagentRowsOf(session.session.id, 1),
+    ...lineageDescendants(session, lineage.value.childrenOf).flatMap(({ item, kind, depth }): ChildRow[] => [
+      { kind: "session", key: rowKey(item), depth, item, label: lineageKindLabel(kind) },
+      ...subagentRowsOf(item.session.id, depth + 1),
     ]),
   ];
 }
+
+/** Each top-level session's child rows with the lines to draw beside them, by the session's id. */
+const familyRows = computed(() => new Map(entries.value.flatMap((entry) => {
+  if (entry.kind === "run") return [];
+  const rows = childRowsOf(entry.session);
+  const lines = layoutLineage(rows.map((row) => row.depth));
+  return [[entry.session.session.id, rows.map((row, i) => ({ ...row, line: lines[i]! }))] as const];
+})));
+
+/** The family that's lit: the one the pointer is on, else the open session's. */
+const litFamily = computed(() => hoveredFamily.value ?? familyRootOf(
+  props.activeSessionId,
+  [...familyRows.value.keys()],
+  (root) => familyRows.value.get(root)!.flatMap((row) => row.kind === "session"
+    ? [row.item.session.id]
+    : row.work.childSessionId ? [row.work.childSessionId] : []),
+));
+
+/** Where a level's line hangs from the row's left edge, and how far in its row's content starts. */
+const lineX = (level: number) => 13 + (level - 1) * 16;
+const lineStyle = (level: number) => ({ "--lx": `${lineX(level)}px` });
+const rowStyle = (depth: number) => ({ "--lineage-indent": `${lineX(depth) + 12}px` });
 
 function hasChildren(session: SessionListItem): boolean {
   return childRowsOf(session).length > 0;
@@ -661,8 +684,15 @@ async function handleDelete(mode: DeleteProjectMode): Promise<void> {
           v-for="entry in entries"
           :key="entry.kind === 'run' ? `run:${entry.runId}` : rowKey(entry.session)"
           class="project-row"
-          :class="{ 'project-row--drop-before': entry.kind !== 'run' && pinDropBefore === entry.session.session.id }"
+          :class="{
+            'project-row--drop-before': entry.kind !== 'run' && pinDropBefore === entry.session.session.id,
+            'project-row--lit': entry.kind !== 'run' && litFamily === entry.session.session.id,
+          }"
           :data-family="entry.kind === 'run' ? undefined : entry.session.session.id"
+          @mouseenter="entry.kind !== 'run' && (hoveredFamily = entry.session.session.id)"
+          @mouseleave="hoveredFamily = null"
+          @focusin="entry.kind !== 'run' && (hoveredFamily = entry.session.session.id)"
+          @focusout="hoveredFamily = null"
         >
           <WorkflowRunGroup
             v-if="entry.kind === 'run'"
@@ -698,10 +728,29 @@ async function handleDelete(mode: DeleteProjectMode): Promise<void> {
               data-testid="session-children"
             >
               <div
-                v-for="child in childRowsOf(entry.session)"
+                v-for="child in familyRows.get(entry.session.session.id)"
                 :key="child.key"
                 class="session-child"
+                :style="rowStyle(child.line.depth)"
               >
+                <i
+                  v-for="level in child.line.through"
+                  :key="level"
+                  class="lineage-line"
+                  :style="lineStyle(level)"
+                  aria-hidden="true"
+                />
+                <i
+                  class="lineage-line"
+                  :class="{ 'lineage-line--last': child.line.last }"
+                  :style="lineStyle(child.line.depth)"
+                  aria-hidden="true"
+                />
+                <i
+                  class="lineage-stub"
+                  :style="lineStyle(child.line.depth)"
+                  aria-hidden="true"
+                />
                 <SubagentSessionRow
                   v-if="child.kind === 'subagent'"
                   :item="child.work"
@@ -826,19 +875,70 @@ async function handleDelete(mode: DeleteProjectMode): Promise<void> {
   flex: 1;
 }
 
-/* What a session started, under it: running subagents, forks, sessions its agent started. The line hangs from the
-   parent's status dot, and each child's dot sits under the parent's title. */
+/* What a session started, under it: running subagents, forks, sessions its agent started, on a tree with elbow lines.
+   The lines are barely there; the family that's open or under the pointer lights up (colour only, nothing moves). */
+.project-row {
+  --lineage-line: color-mix(in srgb, var(--muted) 16%, transparent);
+}
+
+.project-row--lit {
+  --lineage-line: color-mix(in srgb, var(--accent) 85%, transparent);
+}
+
 .session-children {
   display: flex;
   flex-direction: column;
-  gap: 1px;
-  margin: 1px 0 2px 28px;
-  padding-left: 3px;
-  border-left: 1px solid var(--border);
+  margin: 0 0 2px;
 }
 
-.session-children :deep(.session-item) {
+.session-child {
+  position: relative;
+}
+
+.session-children :deep(.session-item),
+.session-children :deep(.subagent-row) {
   min-height: 28px;
+  padding-left: var(--lineage-indent);
+}
+
+.lineage-line,
+.lineage-stub {
+  position: absolute;
+  left: var(--lx);
+  background: var(--lineage-line);
+  pointer-events: none;
+  transition: background var(--transition);
+}
+
+.lineage-line {
+  top: 0;
+  bottom: 0;
+  width: 1px;
+}
+
+.lineage-line--last {
+  bottom: 50%;
+}
+
+.lineage-stub {
+  top: 50%;
+  width: 9px;
+  height: 1px;
+}
+
+.project-row :deep(.session-kind),
+.project-row :deep(.subagent-row__kind),
+.project-row :deep(.session-item--top .session-caret) {
+  transition: color var(--transition);
+}
+
+.project-row--lit :deep(.session-kind),
+.project-row--lit :deep(.subagent-row__kind) {
+  color: color-mix(in srgb, var(--accent) 70%, var(--muted));
+}
+
+.project-row--lit :deep(.session-item--top .session-caret) {
+  color: var(--accent);
 }
 
 .project-content {
