@@ -1260,15 +1260,31 @@ public sealed class SessionOrchestratorTests : IAsyncDisposable
     }
 
     [Fact]
-    public async Task CommandSessionAsync_RemembersNothingWhenTheHarnessPutNoMessageIn()
+    public async Task CommandSessionAsync_KeepsTheCommandItselfWhenTheHarnessPutNoMessageIn()
     {
+        // Weave's /weave:start with no plan only answers with a note: OpenCode 2 keeps nothing the command could show on.
         SeedCommandSession();
         _defaultSession.CommandMessageIdBehavior = _ => null;
 
-        var result = await _sut.CommandSessionAsync("s1", new CommandOptions { Command = "review" });
+        var result = await _sut.CommandSessionAsync("s1", new CommandOptions { Command = "weave:start" });
 
         result.IsSuccess.ShouldBeTrue();
-        (await _builder.MessageRepository.GetCommandsAsync("s1")).ShouldBeEmpty();
+        var messageId = _defaultSession.SendCommandCalls.ShouldHaveSingleItem().MessageId.ShouldNotBeNull();
+        var saved = (await _builder.MessageRepository.GetBySessionAsync("s1", 10, null)).ShouldHaveSingleItem();
+        saved.Id.ShouldBe(messageId);
+        saved.Role.ShouldBe("user");
+        (await _builder.MessageRepository.GetCommandsAsync("s1"))[messageId].ShouldBe(new SlashCommand("weave:start", null));
+    }
+
+    [Fact]
+    public async Task CommandSessionAsync_KeepsNoCopyOfACommandTheHarnessStored()
+    {
+        SeedCommandSession();
+        _defaultSession.CommandMessageIdBehavior = _ => "msg_harness";
+
+        await _sut.CommandSessionAsync("s1", new CommandOptions { Command = "tidy" });
+
+        (await _builder.MessageRepository.GetBySessionAsync("s1", 10, null)).ShouldBeEmpty();
     }
 
     private void SeedCommandSession()

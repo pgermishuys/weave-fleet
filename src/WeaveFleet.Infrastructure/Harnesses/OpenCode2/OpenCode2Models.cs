@@ -181,6 +181,9 @@ internal sealed record OpenCode2Message
     public OpenCode2MessageTimes? Time { get; init; }
     public string? Text { get; init; }
 
+    /// <summary>A <c>synthetic</c> message's line for the transcript, which V2 shows instead of <see cref="Text"/>.</summary>
+    public string? Description { get; init; }
+
     /// <summary>What a <c>synthetic</c> message is about: a background completion says its <c>source</c> and the work.</summary>
     public JsonElement Metadata { get; init; }
 
@@ -255,10 +258,11 @@ internal sealed record OpenCode2InboxItem
     public string? Delivery { get; init; }
 }
 
-/// <summary>What an inbox input will say: a prompt's text, its metadata and attachments.</summary>
+/// <summary>What an inbox input will say: a prompt's text, its metadata and attachments; a synthetic one's line for the transcript.</summary>
 internal sealed record OpenCode2InboxPayload
 {
     public string? Text { get; init; }
+    public string? Description { get; init; }
     public JsonElement Metadata { get; init; }
     public IReadOnlyList<OpenCode2MessageFile>? Files { get; init; }
 }

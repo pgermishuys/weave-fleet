@@ -1638,6 +1638,61 @@ public sealed class OpenCodeSessionMessageProxyTests
         snapshot.Messages[1].Parts.ShouldHaveSingleItem().ShouldBeOfType<TextMessageEventPart>().Text.ShouldBe("msg_command");
     }
 
+    private static async Task<InMemoryMessageRepository> SavedCommandAsync(DateTimeOffset at)
+    {
+        var repository = new InMemoryMessageRepository();
+        var command = MessagePersistenceService.CreateUserCommandMessage(
+            new CommandOptions { Command = "weave:start", MessageId = "msg_fleet_command" }, at);
+        repository.Seed(MessagePersistenceService.ToPersistedMessage("session-new", command));
+        await repository.SaveCommandAsync("session-new", "msg_fleet_command", command.Command!);
+        return repository;
+    }
+
+    // Seen live (fleet-reports #29): /weave:start with no plan answers with a note and puts no message of its own in
+    // OpenCode 2, so after a reload the command was gone, as if it hadn't been sent.
+    [Fact]
+    public async Task GetSnapshotAsync_shows_a_command_the_harness_kept_no_message_for()
+    {
+        var proxy = CreateLiveProxy(
+            [HarnessMessage("msg_note", "notice", _promptSentAt.AddSeconds(1))],
+            await SavedCommandAsync(_promptSentAt));
+
+        var snapshot = await proxy.GetSnapshotAsync("session-new");
+
+        snapshot.Messages.Select(m => m.Info.Id).ShouldBe(["msg_fleet_command", "msg_note"]);
+        snapshot.Messages[0].Info.Command.ShouldBe(new SlashCommand("weave:start", null));
+    }
+
+    [Fact]
+    public async Task GetSnapshotAsync_keeps_such_a_command_in_place_once_the_conversation_goes_on()
+    {
+        var proxy = CreateLiveProxy(
+            [
+                HarnessMessage("msg_first", "user", _promptSentAt.AddMinutes(-1)),
+                HarnessMessage("msg_note", "notice", _promptSentAt.AddSeconds(1)),
+                HarnessMessage("msg_next", "user", _promptSentAt.AddMinutes(1)),
+                HarnessMessage("msg_reply", "assistant", _promptSentAt.AddMinutes(2)),
+            ],
+            await SavedCommandAsync(_promptSentAt));
+
+        var snapshot = await proxy.GetSnapshotAsync("session-new");
+
+        snapshot.Messages.Select(m => m.Info.Id).ShouldBe(["msg_first", "msg_fleet_command", "msg_note", "msg_next", "msg_reply"]);
+        snapshot.Messages[1].Info.Command.ShouldBe(new SlashCommand("weave:start", null));
+    }
+
+    [Fact]
+    public async Task GetMessagesAsync_shows_a_command_the_harness_kept_no_message_for_once()
+    {
+        // Newer than anything the harness has, it reads like a prompt the harness hasn't stored yet.
+        var proxy = CreateLiveProxy([HarnessMessage("msg_first", "user", _promptSentAt.AddMinutes(-1))], await SavedCommandAsync(_promptSentAt));
+
+        var page = await proxy.GetMessagesAsync("session-new");
+
+        page.Messages.Select(m => m.Id).ShouldBe(["msg_first", "msg_fleet_command"]);
+        page.Messages[1].Command.ShouldBe(new SlashCommand("weave:start", null));
+    }
+
     [Fact]
     public async Task GetMessagesAsync_marks_a_user_message_a_mod_sent()
     {
