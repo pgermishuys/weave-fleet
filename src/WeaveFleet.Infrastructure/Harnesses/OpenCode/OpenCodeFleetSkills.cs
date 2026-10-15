@@ -5,7 +5,7 @@ namespace WeaveFleet.Infrastructure.Harnesses.OpenCode;
 /// <summary>
 /// The skills Fleet gives pooled sessions. Their sources are in the repo, embedded here:
 /// <list type="bullet">
-/// <item><c>opencode/skills</c>: skills every session gets, such as <c>fleet-api</c>.</item>
+/// <item><c>opencode/skills</c>: skills every session gets, such as <c>fleet</c>.</item>
 /// <item><c>opencode/built-in-skills</c>: skills a session gets only when its owner turned them on in Settings.</item>
 /// </list>
 /// Fleet writes them into its data folder and passes the folders a process should load to the Fleet plugin
@@ -90,6 +90,7 @@ internal static class OpenCodeFleetSkills
                 File.Delete(file);
         }
 
+        BuiltInSkillFiles.RemoveEmptyFolders(root);
         return root;
     }
 

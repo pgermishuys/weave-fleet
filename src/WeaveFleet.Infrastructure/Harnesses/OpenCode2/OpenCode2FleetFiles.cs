@@ -10,7 +10,7 @@ namespace WeaveFleet.Infrastructure.Harnesses.OpenCode2;
 /// <list type="bullet">
 /// <item>The Fleet plugin (<c>opencode2/fleet/index.js</c> in the repo): the canvas, app and browser tools. V2 loads a
 /// plugin from a folder, so it's written as <c>fleet/index.js</c> and the folder is what the config names.</item>
-/// <item>Fleet's skills: <c>opencode/skills</c> (such as <c>fleet-api</c>) for every session, and
+/// <item>Fleet's skills: <c>opencode/skills</c> (such as <c>fleet</c>) for every session, and
 /// <c>opencode/built-in-skills</c>, one folder per skill, for the ones the owner turned on, in a folder per owner
 /// (<see cref="SyncBuiltInSkills"/>). They're the same skill files the OpenCode harness installs, with a copy of their
 /// own here, so neither harness depends on the other.</item>
@@ -152,6 +152,7 @@ internal static class OpenCode2FleetFiles
                 File.Delete(file);
         }
 
+        BuiltInSkillFiles.RemoveEmptyFolders(root);
         return root;
     }
 

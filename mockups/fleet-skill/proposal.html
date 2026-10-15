@@ -1,0 +1,841 @@
+<!doctype html>
+<html lang="en" data-theme="dark">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Fleet knows what it can do — proposal</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
+<script src="https://unpkg.com/lucide@0.469.0/dist/umd/lucide.min.js"></script>
+<style>
+/* Tokens copied from client/src/assets/main.css (dark default, light under data-theme). */
+:root {
+  --rail-bg: #0d0d10; --panel-bg: #141418; --card-bg: #1b1b20; --main-bg: #0d0d10;
+  --border: rgba(255,255,255,0.075); --text: #e8e8ec; --muted: #8e8e9a;
+  --accent: #6366f1; --accent-dim: rgba(99,102,241,0.15);
+  --running: #22c55e; --idle: #f59e0b; --complete: #3b82f6; --error: #ef4444; --queued: #8b5cf6;
+  --radius-card: 10px; --radius-btn: 8px; --radius-panel: 12px;
+  --sheet-shadow: none; --code-bg: #0f0f12;
+  --font-sans: "Inter Variable", "Inter", system-ui, -apple-system, sans-serif;
+  --font-mono: "JetBrains Mono Variable", "JetBrains Mono", ui-monospace, monospace;
+  color-scheme: dark;
+}
+:root[data-theme="light"] {
+  --rail-bg: #FFFFFF; --panel-bg: #FFFFFF; --card-bg: #ffffff; --main-bg: #F3F2EF;
+  --border: rgba(26,25,24,0.09); --text: #1A1918; --muted: #6E6A65;
+  --accent: #5B6EC7; --accent-dim: rgba(91,110,199,0.12);
+  --running: #16a34a; --idle: #d97706; --complete: #2563eb; --error: #dc2626; --queued: #7c3aed;
+  --sheet-shadow: 0 1px 2px rgba(26,25,24,0.04), 0 12px 32px -18px rgba(26,25,24,0.18);
+  --code-bg: #F3F2EF;
+  color-scheme: light;
+}
+* { box-sizing: border-box; }
+html, body { margin: 0; }
+body { background: var(--main-bg); color: var(--text); font: 14px/1.55 var(--font-sans); -webkit-font-smoothing: antialiased; }
+button { font: inherit; color: inherit; cursor: pointer; }
+svg.lucide { width: 16px; height: 16px; stroke-width: 1.75; flex-shrink: 0; }
+code, .mono { font-family: var(--font-mono); font-size: .92em; }
+.muted { color: var(--muted); }
+a { color: var(--accent); }
+
+/* ── Report frame ───────────────────────────── */
+.page { max-width: 1120px; margin: 0 auto; padding: 32px 24px 80px; }
+.topbar { display: flex; align-items: center; gap: 12px; margin-bottom: 28px; flex-wrap: wrap; }
+.status { display: inline-flex; align-items: center; gap: 6px; height: 24px; padding: 0 10px; border-radius: 999px; background: color-mix(in srgb, var(--idle) 14%, transparent); color: var(--idle); font-size: 12px; font-weight: 600; }
+.theme-t { margin-left: auto; display: inline-flex; border: 1px solid var(--border); border-radius: 8px; overflow: hidden; }
+.theme-t button { border: 0; background: transparent; padding: 5px 12px; font-size: 12.5px; color: var(--muted); }
+.theme-t button[aria-pressed="true"] { background: var(--card-bg); color: var(--text); }
+h1 { font-size: 30px; line-height: 1.2; letter-spacing: -.02em; margin: 0 0 10px; }
+.lede { font-size: 16px; color: var(--muted); max-width: 760px; margin: 0; }
+.demo { margin: 20px 0 0; padding: 14px 18px; border-left: 3px solid var(--accent); background: var(--accent-dim); border-radius: 0 10px 10px 0; max-width: 820px; }
+.demo b { display: block; font-size: 11px; letter-spacing: .06em; text-transform: uppercase; color: var(--muted); margin-bottom: 4px; }
+section { margin-top: 56px; }
+h2 { font-size: 20px; letter-spacing: -.01em; margin: 0 0 6px; display: flex; align-items: baseline; gap: 10px; }
+h2 .n { font-family: var(--font-mono); font-size: 13px; color: var(--muted); font-weight: 500; }
+.sub { color: var(--muted); margin: 0 0 20px; max-width: 780px; }
+.card { background: var(--panel-bg); border: 1px solid var(--border); border-radius: var(--radius-panel); box-shadow: var(--sheet-shadow); }
+
+/* ── Scenario controls ──────────────────────── */
+.controls { display: flex; flex-wrap: wrap; gap: 12px; align-items: center; margin-bottom: 14px; }
+.tabs { display: flex; flex-wrap: wrap; gap: 6px; }
+.tabs button { display: inline-flex; align-items: center; gap: 7px; height: 34px; padding: 0 12px; border: 1px solid var(--border); border-radius: 8px; background: var(--card-bg); color: var(--muted); font-size: 13px; }
+.tabs button[aria-selected="true"] { color: var(--text); border-color: color-mix(in srgb, var(--accent) 60%, var(--border)); background: var(--accent-dim); }
+.seg { display: inline-flex; border: 1px solid var(--border); border-radius: 8px; overflow: hidden; margin-left: auto; }
+.seg button { border: 0; background: var(--card-bg); color: var(--muted); padding: 0 14px; height: 34px; font-size: 13px; font-weight: 500; }
+.seg button[aria-pressed="true"] { background: var(--text); color: var(--main-bg); }
+.seg.small button { height: 28px; font-size: 12px; padding: 0 10px; }
+
+.stage { display: grid; grid-template-columns: minmax(0,1fr) 300px; gap: 16px; }
+.side { display: flex; flex-direction: column; gap: 12px; }
+.note { padding: 14px 16px; }
+.note h4 { margin: 0 0 6px; font-size: 12px; text-transform: uppercase; letter-spacing: .05em; color: var(--muted); }
+.note p { margin: 0; font-size: 13px; }
+.loaded { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 6px; font-size: 13px; }
+.loaded li { display: flex; align-items: center; gap: 8px; }
+.loaded .tok { margin-left: auto; font-family: var(--font-mono); font-size: 12px; color: var(--muted); font-variant-numeric: tabular-nums; }
+.loaded .sw { width: 10px; height: 10px; border-radius: 3px; flex-shrink: 0; }
+.loaded .total { border-top: 1px solid var(--border); padding-top: 6px; font-weight: 600; }
+.verdict { display: inline-flex; align-items: center; gap: 6px; font-size: 12.5px; font-weight: 600; }
+.verdict.bad { color: var(--error); } .verdict.good { color: var(--running); }
+
+/* ── Conversation sheet (Fleet styles) ──────── */
+.sheet { display: flex; flex-direction: column; min-width: 0; overflow: hidden; }
+.sheet-h { display: flex; align-items: center; gap: 12px; padding: 12px 20px; border-bottom: 1px solid var(--border); }
+.sheet-h .t { font-weight: 600; font-size: 15px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.sheet-h .sub2 { color: var(--muted); font-size: 12.5px; display: flex; gap: 6px; align-items: center; white-space: nowrap; }
+.sheet-h .tools { margin-left: auto; display: flex; gap: 14px; color: var(--muted); }
+.harness { display: inline-flex; align-items: center; gap: 5px; height: 22px; padding: 0 8px; border: 1px solid var(--border); border-radius: 999px; font-size: 12px; color: var(--muted); }
+.stream { padding: 22px 28px 8px; display: flex; flex-direction: column; gap: 14px; min-height: 520px; }
+.bubble-wrap { display: flex; justify-content: flex-end; }
+.bubble { max-width: 520px; padding: 10px 16px; border: 1px solid var(--border); border-radius: 14px; background: var(--card-bg); }
+.say { margin: 0; }
+.say + .say { margin-top: 8px; }
+.tools-card { border: 1px solid var(--border); border-radius: var(--radius-card); padding: 4px; display: flex; flex-direction: column; gap: 2px; }
+.tool { display: flex; align-items: center; gap: 10px; padding: 6px 10px; border-radius: 7px; min-width: 0; font-size: 13px; }
+.tool svg.lucide { color: var(--muted); width: 15px; height: 15px; }
+.tool .name { font-weight: 600; flex-shrink: 0; }
+.tool .arg { font-family: var(--font-mono); font-size: 12px; color: var(--muted); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; min-width: 0; flex: 1; }
+.tool .right { margin-left: auto; color: var(--muted); font-size: 12px; flex-shrink: 0; }
+.tool.skill { background: var(--accent-dim); }
+.tool.skill svg.lucide, .tool.skill .name { color: var(--accent); }
+.ok { color: var(--running); }
+
+/* Question card */
+.q { border: 1px solid color-mix(in srgb, var(--idle) 45%, var(--border)); border-radius: var(--radius-card); background: var(--card-bg); padding: 12px; display: flex; flex-direction: column; gap: 8px; }
+.q-h { display: flex; align-items: center; gap: 8px; font-size: 12px; font-weight: 600; color: var(--idle); text-transform: uppercase; letter-spacing: .04em; }
+.q-t { font-weight: 600; }
+.opt { display: flex; align-items: flex-start; gap: 10px; padding: 9px 10px; border: 1px solid var(--border); border-radius: 8px; background: transparent; text-align: left; width: 100%; }
+.opt .r { width: 15px; height: 15px; border-radius: 50%; border: 1.5px solid var(--muted); margin-top: 2px; flex-shrink: 0; }
+.opt.on { border-color: color-mix(in srgb, var(--accent) 60%, var(--border)); background: var(--accent-dim); }
+.opt.on .r { border: 4.5px solid var(--accent); }
+.opt b { font-weight: 600; display: block; }
+.opt span { color: var(--muted); font-size: 12.5px; }
+.q-f { display: flex; justify-content: flex-end; gap: 8px; }
+.btn { height: 30px; padding: 0 12px; border-radius: 8px; border: 1px solid var(--border); background: var(--card-bg); font-size: 13px; font-weight: 500; display: inline-flex; align-items: center; gap: 6px; }
+.btn.primary { background: var(--accent); border-color: var(--accent); color: #fff; }
+.btn svg.lucide { width: 14px; height: 14px; }
+.answered { display: flex; align-items: center; gap: 8px; font-size: 13px; color: var(--muted); }
+.answered b { color: var(--text); font-weight: 500; }
+
+/* Started-sessions card */
+.started { border: 1px solid var(--border); border-radius: var(--radius-card); overflow: hidden; }
+.started-h { display: flex; align-items: center; gap: 8px; padding: 8px 12px; font-size: 12px; color: var(--muted); font-weight: 600; text-transform: uppercase; letter-spacing: .04em; border-bottom: 1px solid var(--border); }
+.srow { display: flex; align-items: center; gap: 10px; padding: 8px 12px; font-size: 13px; min-width: 0; }
+.srow + .srow { border-top: 1px solid var(--border); }
+.srow .ttl { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.srow .br { font-family: var(--font-mono); font-size: 11.5px; color: var(--muted); white-space: nowrap; }
+.dot { width: 8px; height: 8px; border-radius: 50%; flex-shrink: 0; }
+.dot.run { background: var(--running); animation: pulse 2s infinite; }
+@keyframes pulse { 0%,100%{opacity:1} 50%{opacity:.45} }
+@media (prefers-reduced-motion: reduce) { .dot.run { animation: none; } }
+
+/* Draft cards: automation / workflow */
+.draft { border: 1px solid var(--border); border-radius: var(--radius-card); background: var(--card-bg); overflow: hidden; }
+.draft-h { display: flex; align-items: center; gap: 8px; padding: 10px 12px; border-bottom: 1px solid var(--border); }
+.draft-h .k { font-size: 11px; font-weight: 600; text-transform: uppercase; letter-spacing: .05em; color: var(--muted); }
+.draft-h .nm { font-weight: 600; }
+.draft dl { margin: 0; display: grid; grid-template-columns: 110px 1fr; gap: 6px 12px; padding: 12px; font-size: 13px; }
+.draft dt { color: var(--muted); }
+.draft dd { margin: 0; min-width: 0; }
+.draft ol { margin: 0; padding: 10px 12px 10px 34px; font-size: 13px; display: flex; flex-direction: column; gap: 5px; }
+.draft ol li span { color: var(--muted); font-size: 12px; }
+.draft-f { display: flex; gap: 8px; justify-content: flex-end; padding: 10px 12px; border-top: 1px solid var(--border); }
+.cap { list-style: none; margin: 6px 0 0; padding: 0; display: flex; flex-direction: column; gap: 6px; }
+.cap li { display: flex; gap: 10px; align-items: flex-start; }
+.cap li svg.lucide { color: var(--accent); margin-top: 3px; }
+.cap b { font-weight: 600; }
+.code-block { font-family: var(--font-mono); font-size: 12px; background: var(--code-bg); border: 1px solid var(--border); border-radius: 8px; padding: 10px 12px; white-space: pre-wrap; color: var(--muted); }
+
+.composer { margin: 8px 28px 20px; border: 1px solid var(--border); border-radius: 14px; background: var(--card-bg); padding: 12px 14px 10px; display: flex; flex-direction: column; gap: 10px; }
+.composer .input { color: var(--muted); }
+.composer .bar { display: flex; align-items: center; gap: 14px; color: var(--muted); font-size: 12.5px; }
+.composer .send { margin-left: auto; width: 30px; height: 30px; border-radius: 50%; background: var(--accent); color: #fff; display: grid; place-items: center; }
+.composer .send svg.lucide { width: 15px; height: 15px; }
+
+[data-scn], [data-mode], [data-mem] { display: none; }
+
+/* ── Tiers ─────────────────────────────────── */
+.tiers { display: grid; grid-template-columns: repeat(3, minmax(0,1fr)); gap: 12px; }
+.tier { padding: 16px; display: flex; flex-direction: column; gap: 10px; }
+.tier .lvl { font-family: var(--font-mono); font-size: 12px; color: var(--muted); }
+.tier h3 { margin: 0; font-size: 15px; }
+.tier .big { font-size: 26px; font-weight: 700; letter-spacing: -.02em; font-variant-numeric: tabular-nums; }
+.tier .big small { font-size: 13px; font-weight: 500; color: var(--muted); letter-spacing: 0; }
+.tier p { margin: 0; font-size: 13px; color: var(--muted); }
+.tier .when { display: inline-flex; align-self: flex-start; align-items: center; gap: 6px; font-size: 12px; font-weight: 600; padding: 2px 8px; border-radius: 999px; }
+.when.always { background: color-mix(in srgb, var(--accent) 16%, transparent); color: var(--accent); }
+.when.demand { background: color-mix(in srgb, var(--running) 14%, transparent); color: var(--running); }
+.bars { margin-top: 16px; padding: 18px; }
+.bars h3 { margin: 0 0 4px; font-size: 14px; }
+.bars p.cap2 { margin: 0 0 14px; font-size: 13px; color: var(--muted); }
+.bar-row { display: grid; grid-template-columns: 240px minmax(0,1fr) 80px; gap: 12px; align-items: center; font-size: 13px; padding: 5px 0; }
+.bar-track { height: 14px; border-radius: 4px; background: color-mix(in srgb, var(--text) 6%, transparent); overflow: hidden; display: flex; }
+.bar-fill { height: 100%; }
+.bar-row .v { font-family: var(--font-mono); font-size: 12px; text-align: right; font-variant-numeric: tabular-nums; }
+.fill-a { background: var(--accent); } .fill-b { background: color-mix(in srgb, var(--accent) 45%, transparent); } .fill-x { background: var(--error); }
+
+/* ── Skill draft ───────────────────────────── */
+.files { display: grid; grid-template-columns: 240px minmax(0,1fr); min-height: 420px; overflow: hidden; }
+.tree { border-right: 1px solid var(--border); padding: 10px; display: flex; flex-direction: column; gap: 2px; font-size: 13px; }
+.tree .dir { color: var(--muted); padding: 4px 8px; display: flex; gap: 6px; align-items: center; font-family: var(--font-mono); font-size: 12px; }
+.tree button { display: flex; align-items: center; gap: 8px; border: 0; background: transparent; padding: 6px 8px 6px 22px; border-radius: 7px; text-align: left; font-family: var(--font-mono); font-size: 12.5px; color: var(--muted); }
+.tree button[aria-selected="true"] { background: var(--card-bg); color: var(--text); }
+.tree button .tk { margin-left: auto; font-size: 11px; }
+.tree .legend { margin-top: auto; padding: 10px 8px 2px; font-size: 12px; color: var(--muted); border-top: 1px solid var(--border); }
+.file { padding: 0; min-width: 0; display: flex; flex-direction: column; }
+.file-h { display: flex; align-items: center; gap: 8px; padding: 10px 16px; border-bottom: 1px solid var(--border); font-size: 12.5px; color: var(--muted); }
+.file-h .w { margin-left: auto; }
+.file pre { margin: 0; padding: 16px 18px; font-family: var(--font-mono); font-size: 12.5px; line-height: 1.6; white-space: pre-wrap; overflow: auto; flex: 1; }
+.file pre .fm { color: var(--accent); }
+.file pre .hd { color: var(--text); font-weight: 600; }
+.file pre .c { color: var(--muted); }
+[data-file] { display: none; }
+
+/* ── Tables / lists ────────────────────────── */
+table { width: 100%; border-collapse: collapse; font-size: 13.5px; }
+th, td { text-align: left; padding: 10px 14px; border-bottom: 1px solid var(--border); vertical-align: top; }
+th { font-size: 12px; color: var(--muted); font-weight: 600; text-transform: uppercase; letter-spacing: .04em; }
+tr:last-child td { border-bottom: 0; }
+.y { color: var(--running); font-weight: 600; } .n { color: var(--error); font-weight: 600; } .m { color: var(--idle); font-weight: 600; }
+.rules { display: grid; grid-template-columns: repeat(2, minmax(0,1fr)); gap: 12px; }
+.rule { padding: 14px 16px; display: flex; gap: 12px; }
+.rule svg.lucide { color: var(--accent); margin-top: 2px; width: 18px; height: 18px; }
+.rule b { display: block; margin-bottom: 2px; }
+.rule p { margin: 0; color: var(--muted); font-size: 13px; }
+.two { display: grid; grid-template-columns: minmax(0,1fr) minmax(0,1fr); gap: 12px; }
+.ask { padding: 16px 18px; }
+.ask h3 { margin: 0 0 8px; font-size: 15px; display: flex; gap: 8px; align-items: center; }
+.ask p { margin: 0 0 6px; font-size: 13px; color: var(--muted); }
+.ask .rec { color: var(--text); }
+.budget { list-style: none; margin: 0; padding: 0; }
+.budget li { display: flex; gap: 12px; padding: 8px 0; border-bottom: 1px solid var(--border); font-size: 13.5px; }
+.budget li:last-child { border-bottom: 0; }
+.budget li span:first-child { width: 150px; color: var(--muted); flex-shrink: 0; }
+
+/* ── Narrow ────────────────────────────────── */
+@media (max-width: 900px) {
+  .stage { grid-template-columns: 1fr; }
+  .tiers, .rules, .two { grid-template-columns: 1fr; }
+  .files { grid-template-columns: 1fr; }
+  .tree { border-right: 0; border-bottom: 1px solid var(--border); }
+  .tree .legend { display: none; }
+  .seg { margin-left: 0; }
+}
+@media (max-width: 560px) {
+  .page { padding: 20px 16px 60px; }
+  h1 { font-size: 24px; }
+  .stream { padding: 16px 14px 8px; }
+  .composer { margin: 8px 14px 14px; }
+  .sheet-h { padding: 10px 14px; }
+  .sheet-h .tools, .sheet-h .sub2 { display: none; }
+  .bar-row { grid-template-columns: 1fr 64px; }
+  .bar-row .lbl { grid-column: 1 / 3; }
+  .draft dl { grid-template-columns: 1fr; gap: 2px; }
+  .draft dt { margin-top: 6px; }
+  .srow .br { display: none; }
+  th, td { padding: 8px 10px; }
+  .tabs button span.long { display: none; }
+}
+</style>
+</head>
+<body>
+<div class="page">
+
+  <div class="topbar">
+    <span class="status"><i data-lucide="file-pen-line"></i>Proposal · nothing built</span>
+    <span class="muted" style="font-size:12.5px">15 October 2026</span>
+    <div class="theme-t" role="group" aria-label="Theme">
+      <button aria-pressed="true" data-theme-btn="dark">Dark</button>
+      <button aria-pressed="false" data-theme-btn="light">Light</button>
+    </div>
+  </div>
+
+  <h1>Fleet knows what it can do</h1>
+  <p class="lede">An agent running in Fleet should know that Fleet can run work in parallel sessions, run it on a schedule, turn a process into a workflow, and remember things. It should offer those when they fit the request, without loading a manual into every conversation.</p>
+  <div class="demo">
+    <b>Demo sentence</b>
+    In any harness, ask “fix these three issues” and the agent offers three Fleet sessions, each in its own worktree. Ask “every weekday morning…” and it offers an automation. Sessions that never need Fleet pay about <b style="display:inline;font-size:inherit;text-transform:none;letter-spacing:0;color:var(--text)">80 tokens</b> for this.
+  </div>
+
+  <!-- ═════════ 1. Behaviour ═════════ -->
+  <section id="behaviour">
+    <h2><span class="n">01</span>How it behaves</h2>
+    <p class="sub">Five requests users already make. Switch between <b>Today</b> and <b>With the skill</b>. The panel on the right shows what this turn added to the agent's context.</p>
+
+    <div class="controls">
+      <div class="tabs" role="tablist" aria-label="Scenario">
+        <button role="tab" aria-selected="true" data-tab="par"><i data-lucide="git-branch"></i>Parallel <span class="long">sessions</span></button>
+        <button role="tab" aria-selected="false" data-tab="auto"><i data-lucide="alarm-clock"></i>Automation</button>
+        <button role="tab" aria-selected="false" data-tab="wf"><i data-lucide="workflow"></i>Workflow</button>
+        <button role="tab" aria-selected="false" data-tab="mem"><i data-lucide="brain"></i>Memory</button>
+        <button role="tab" aria-selected="false" data-tab="what"><i data-lucide="sparkles"></i>“What can you do?”</button>
+      </div>
+      <div class="seg" role="group" aria-label="Before or after">
+        <button aria-pressed="false" data-mode-btn="before">Today</button>
+        <button aria-pressed="true" data-mode-btn="after">With the skill</button>
+      </div>
+    </div>
+
+    <div class="stage">
+      <div class="card sheet">
+        <div class="sheet-h">
+          <span class="t" id="sheet-title">Small fixes from the backlog</span>
+          <span class="sub2"><i data-lucide="folder" style="width:13px;height:13px"></i>~/source/harbor · main</span>
+          <span class="harness" id="harness-chip">Claude Code</span>
+          <span class="tools"><i data-lucide="git-compare"></i><i data-lucide="panel-right"></i></span>
+        </div>
+
+        <div class="stream">
+
+          <!-- ── Parallel ── -->
+          <div data-scn="par">
+            <div class="bubble-wrap"><div class="bubble">Can you fix #212, #215 and #219? They're all small.</div></div>
+          </div>
+          <div data-scn="par" data-mode="before" style="flex-direction:column;gap:14px">
+            <div class="tools-card">
+              <div class="tool"><i data-lucide="terminal"></i><span class="name">Bash</span><span class="arg">gh issue view 212 215 219</span><span class="right">0.8s</span></div>
+              <div class="tool"><i data-lucide="file-text"></i><span class="name">Read</span><span class="arg">src/http/retry.ts</span></div>
+            </div>
+            <p class="say">I'll take them one at a time. Starting with #212, the <code>Retry-After</code> header being ignored, then #215 and #219.</p>
+            <div class="tools-card">
+              <div class="tool"><i data-lucide="pencil"></i><span class="name">Edit</span><span class="arg">src/http/retry.ts</span><span class="right">+14 −3</span></div>
+              <div class="tool"><i data-lucide="terminal"></i><span class="name">Bash</span><span class="arg">bun run test retry</span><span class="right">running…</span></div>
+            </div>
+          </div>
+          <div data-scn="par" data-mode="after" style="flex-direction:column;gap:14px">
+            <div class="tools-card">
+              <div class="tool"><i data-lucide="terminal"></i><span class="name">Bash</span><span class="arg">gh issue view 212 215 219</span><span class="right">0.8s</span></div>
+              <div class="tool skill"><i data-lucide="book-open"></i><span class="name">Skill</span><span class="arg">fleet → sessions.md</span><span class="right">loaded</span></div>
+            </div>
+            <p class="say">These three touch different files (<code>retry.ts</code>, <code>config/loader.ts</code>, <code>cli/flags.ts</code>), so they can run side by side. Fleet can start a session for each, every one in its own worktree and branch, and you'll see them in the sidebar.</p>
+            <div class="q" id="par-q">
+              <div class="q-h"><i data-lucide="message-circle-question"></i>Question</div>
+              <div class="q-t">How should I do these?</div>
+              <button class="opt on"><span class="r"></span><span><b>Three Fleet sessions, one per issue (Recommended)</b><span>Each in a new worktree off <code>main</code>. This session keeps track of them.</span></span></button>
+              <button class="opt"><span class="r"></span><span><b>Here, one after another</b><span>All in this folder and this conversation.</span></span></button>
+              <div class="q-f"><button class="btn primary" id="par-send">Send</button></div>
+            </div>
+            <div id="par-done" style="display:none;flex-direction:column;gap:14px">
+              <div class="answered"><i data-lucide="check" class="ok"></i>Asked “How should I do these?” → <b>Three Fleet sessions</b></div>
+              <div class="tools-card">
+                <div class="tool"><i data-lucide="terminal"></i><span class="name">Bash</span><span class="arg">curl -X POST $FLEET_URL/api/sessions ×3</span><span class="right ok">201 ×3</span></div>
+              </div>
+              <div class="started">
+                <div class="started-h"><i data-lucide="layers"></i>Started 3 sessions</div>
+                <div class="srow"><span class="dot run"></span><span class="ttl">Fix #212 Retry-After header ignored</span><span class="br">fix/212-retry-after</span></div>
+                <div class="srow"><span class="dot run"></span><span class="ttl">Fix #215 Config loader drops empty arrays</span><span class="br">fix/215-empty-arrays</span></div>
+                <div class="srow"><span class="dot run"></span><span class="ttl">Fix #219 <code>--quiet</code> still prints the banner</span><span class="br">fix/219-quiet-banner</span></div>
+              </div>
+              <p class="say">All three are working. I'll tell you as each one finishes, or open any of them from the sidebar.</p>
+            </div>
+          </div>
+
+          <!-- ── Automation ── -->
+          <div data-scn="auto">
+            <div class="bubble-wrap"><div class="bubble">Every weekday morning, check for outdated dependencies and open a PR for the safe updates.</div></div>
+          </div>
+          <div data-scn="auto" data-mode="before" style="flex-direction:column;gap:14px">
+            <p class="say">I can't run anything on a schedule myself, but a GitHub Action can. I'll add one that runs at 09:00 on weekdays:</p>
+            <div class="tools-card">
+              <div class="tool"><i data-lucide="file-plus"></i><span class="name">Write</span><span class="arg">.github/workflows/deps.yml</span><span class="right">+38</span></div>
+            </div>
+            <p class="say">It uses <code>bun outdated</code> and opens a PR with <code>peter-evans/create-pull-request</code>. You'll need to add a token secret named <code>DEPS_PR_TOKEN</code>.</p>
+          </div>
+          <div data-scn="auto" data-mode="after" style="flex-direction:column;gap:14px">
+            <div class="tools-card">
+              <div class="tool skill"><i data-lucide="book-open"></i><span class="name">Skill</span><span class="arg">fleet → automations.md</span><span class="right">loaded</span></div>
+            </div>
+            <p class="say">Fleet can do this itself as an automation. Each weekday at 09:00 it starts a fresh session in a new worktree and sends it this request, so an agent reads the changelogs and decides what's safe. Here's what I'd create:</p>
+            <div class="draft">
+              <div class="draft-h"><i data-lucide="alarm-clock" style="color:var(--accent)"></i><span class="k">Automation</span><span class="nm">Morning dependency check</span></div>
+              <dl>
+                <dt>When</dt><dd>Weekdays at 09:00 · Europe/London</dd>
+                <dt>Folder</dt><dd><code>~/source/harbor</code></dd>
+                <dt>Runs in</dt><dd>A new session in a new worktree off <code>main</code></dd>
+                <dt>Prompt</dt><dd>Check for outdated dependencies. Read each changelog, update only patch and minor versions with no breaking notes, run the tests, and open a PR. List anything you skipped and why.</dd>
+                <dt>Next run</dt><dd>Thursday 16 October, 09:00</dd>
+              </dl>
+              <div class="draft-f"><button class="btn">Change something</button><button class="btn primary"><i data-lucide="check"></i>Create it</button></div>
+            </div>
+            <p class="say muted" style="font-size:13px">I'll create it only once you say so. It keeps running after this conversation ends, and you can pause it under Automations.</p>
+          </div>
+
+          <!-- ── Workflow ── -->
+          <div data-scn="wf">
+            <div class="bubble-wrap"><div class="bubble">Every release I bump the version, update the changelog, run the full test suite, tag it and draft release notes. Can we make this repeatable?</div></div>
+          </div>
+          <div data-scn="wf" data-mode="before" style="flex-direction:column;gap:14px">
+            <p class="say">Sure. I'll write a script for the mechanical parts and a checklist for the rest.</p>
+            <div class="tools-card">
+              <div class="tool"><i data-lucide="file-plus"></i><span class="name">Write</span><span class="arg">scripts/release.sh</span><span class="right">+52</span></div>
+              <div class="tool"><i data-lucide="file-plus"></i><span class="name">Write</span><span class="arg">RELEASING.md</span><span class="right">+24</span></div>
+            </div>
+            <p class="say">Run <code>./scripts/release.sh minor</code>, then follow <code>RELEASING.md</code> for the changelog and release notes, which need a person.</p>
+          </div>
+          <div data-scn="wf" data-mode="after" style="flex-direction:column;gap:14px">
+            <div class="tools-card">
+              <div class="tool skill"><i data-lucide="book-open"></i><span class="name">Skill</span><span class="arg">fleet → workflows.md</span><span class="right">loaded</span></div>
+              <div class="tool"><i data-lucide="terminal"></i><span class="name">Bash</span><span class="arg">curl $FLEET_URL/api/workflows?repository=…</span><span class="right ok">200</span></div>
+            </div>
+            <p class="say">This fits a Fleet workflow better than a script. Each step is its own agent turn, so the changelog and release notes get written rather than templated, and Fleet stops for you before tagging. You'll find it under Workflows, and an automation can start it later.</p>
+            <div class="draft">
+              <div class="draft-h"><i data-lucide="workflow" style="color:var(--accent)"></i><span class="k">Workflow draft</span><span class="nm">Release</span><span class="muted mono" style="margin-left:auto;font-size:11.5px">.weave/workflows/release.yaml</span></div>
+              <ol>
+                <li>Bump the version <span>· asks major, minor or patch</span></li>
+                <li>Update CHANGELOG.md from the merged PRs since the last tag</li>
+                <li>Run the full test suite <span>· stops on a failure</span></li>
+                <li>Tag and push <span>· you approve this step</span></li>
+                <li>Draft the release notes</li>
+              </ol>
+              <div class="draft-f"><button class="btn">Open in Workflows</button><button class="btn primary"><i data-lucide="check"></i>Save workflow</button></div>
+            </div>
+          </div>
+
+          <!-- ── Memory ── -->
+          <div data-scn="mem">
+            <div class="bubble-wrap"><div class="bubble">Remember that we use bun in this repo, never npm.</div></div>
+          </div>
+          <div data-scn="mem" data-mode="before" style="flex-direction:column;gap:14px">
+            <p class="say">Got it, I'll use bun from now on.</p>
+            <p class="say muted" style="font-size:13px"><i data-lucide="info" style="width:13px;height:13px;vertical-align:-2px"></i> The next session doesn't know any of this. With Fleet memory off, the agent has no memory tool and doesn't know Fleet has one.</p>
+          </div>
+          <div data-scn="mem" data-mode="after" style="flex-direction:column;gap:14px">
+            <div class="seg small" role="group" aria-label="Memory setting" style="align-self:flex-start;margin:0">
+              <button aria-pressed="false" data-mem-btn="on">Memory on</button>
+              <button aria-pressed="true" data-mem-btn="off">Memory off</button>
+            </div>
+            <div data-mem="on" style="flex-direction:column;gap:14px">
+              <div class="tools-card">
+                <div class="tool"><i data-lucide="brain"></i><span class="name">fleet_memory_save</span><span class="arg">repository · “Use bun in harbor, never npm.”</span><span class="right ok">saved</span></div>
+              </div>
+              <p class="say">Saved. Every new session in harbor starts out knowing this. You'll find it, and can undo it, under Settings → Memory.</p>
+            </div>
+            <div data-mem="off" style="flex-direction:column;gap:14px">
+              <div class="tools-card">
+                <div class="tool skill"><i data-lucide="book-open"></i><span class="name">Skill</span><span class="arg">fleet → memory.md</span><span class="right">loaded</span></div>
+                <div class="tool"><i data-lucide="terminal"></i><span class="name">Bash</span><span class="arg">curl $FLEET_URL/api/memory</span><span class="right">enabled: false</span></div>
+              </div>
+              <p class="say">I'll use bun for the rest of this session. To keep it beyond that, there are two ways:</p>
+              <div class="q">
+                <div class="q-h"><i data-lucide="message-circle-question"></i>Question</div>
+                <div class="q-t">Where should this live?</div>
+                <button class="opt on"><span class="r"></span><span><b>Fleet memory</b><span>It's off at the moment. Turn it on under Settings → Memory, then tell me again and I'll save it. It's kept for every harness and you can review it there.</span></span></button>
+                <button class="opt"><span class="r"></span><span><b>AGENTS.md</b><span>I add one line to the repo's instructions. Everyone who clones harbor gets it.</span></span></button>
+                <div class="q-f"><button class="btn primary">Send</button></div>
+              </div>
+            </div>
+          </div>
+
+          <!-- ── What can you do ── -->
+          <div data-scn="what">
+            <div class="bubble-wrap"><div class="bubble">What can you do here, beyond editing code?</div></div>
+          </div>
+          <div data-scn="what" data-mode="before" style="flex-direction:column;gap:14px">
+            <p class="say">I can read and edit files, run commands and tests, search the codebase, use git and the GitHub CLI, and explain code. Tell me what you're working on.</p>
+            <p class="say muted" style="font-size:13px"><i data-lucide="info" style="width:13px;height:13px;vertical-align:-2px"></i> A Claude Code session says nothing about Fleet. An OpenCode session has <code>fleet-api</code>, so it knows about sessions and automations, but not workflows, memory or settings.</p>
+          </div>
+          <div data-scn="what" data-mode="after" style="flex-direction:column;gap:14px">
+            <div class="tools-card">
+              <div class="tool skill"><i data-lucide="book-open"></i><span class="name">Skill</span><span class="arg">fleet</span><span class="right">loaded</span></div>
+              <div class="tool"><i data-lucide="terminal"></i><span class="name">Bash</span><span class="arg">curl $FLEET_URL/api/memory · /api/preferences/Mods</span><span class="right ok">200</span></div>
+            </div>
+            <p class="say">Besides the code itself, I'm running inside Weave Fleet, so I can also:</p>
+            <ul class="cap">
+              <li><i data-lucide="git-branch"></i><span><b>Split work into sessions.</b> Start other Fleet sessions, each in its own worktree, and keep track of them.</span></li>
+              <li><i data-lucide="alarm-clock"></i><span><b>Run things later or on a schedule.</b> Create automations that start a session at a time, or when something happens in Fleet.</span></li>
+              <li><i data-lucide="workflow"></i><span><b>Make a process repeatable.</b> Write a workflow of agent steps you can run from Workflows or an automation.</span></li>
+              <li><i data-lucide="brain"></i><span><b>Remember things across sessions.</b> Fleet memory is <b>on</b>, so I'll save what you ask me to remember.</span></li>
+              <li><i data-lucide="panel-right"></i><span><b>Show you things.</b> Put a page, mockup, diagram or the running app beside this chat.</span></li>
+              <li><i data-lucide="puzzle"></i><span><b>Change how Fleet shows things</b> with a mod. Mods are off; you can turn them on under Settings → Features.</span></li>
+            </ul>
+            <p class="say">What would help?</p>
+          </div>
+
+        </div>
+        <div class="composer">
+          <div class="input">Message the agent…</div>
+          <div class="bar"><i data-lucide="paperclip"></i><span>Sonnet 5.5</span><span id="cmp-harness">Claude Code</span><span class="send"><i data-lucide="arrow-up"></i></span></div>
+        </div>
+      </div>
+
+      <aside class="side">
+        <div class="card note">
+          <h4>Added to context this turn</h4>
+          <ul class="loaded" id="loaded"></ul>
+        </div>
+        <div class="card note">
+          <h4>Result</h4>
+          <p id="verdict"></p>
+        </div>
+        <div class="card note" data-scn="par" data-mode="after" style="display:none">
+          <h4>Try it</h4>
+          <p>Press <b>Send</b> on the question card to see the sessions start.</p>
+        </div>
+      </aside>
+    </div>
+  </section>
+
+  <!-- ═════════ 2. Context ═════════ -->
+  <section id="context">
+    <h2><span class="n">02</span>Why it doesn't fill the context</h2>
+    <p class="sub">Every harness Fleet runs loads skills the same way: the name and one-line description are always listed, and the full text loads only when the agent opens it. Reference files load only when the skill sends the agent to them.</p>
+    <div class="tiers">
+      <div class="card tier">
+        <span class="lvl">Tier 1</span>
+        <h3>The skill's description</h3>
+        <span class="when always"><i data-lucide="infinity" style="width:12px;height:12px"></i>Always listed</span>
+        <div class="big">≈80 <small>tokens</small></div>
+        <p>One line that names the triggers: parallel work, “every morning”, a repeatable process, “remember”, Fleet's settings. It replaces today's <code>fleet-api</code> line (≈60).</p>
+      </div>
+      <div class="card tier">
+        <span class="lvl">Tier 2</span>
+        <h3>SKILL.md: the map</h3>
+        <span class="when demand"><i data-lucide="mouse-pointer-click" style="width:12px;height:12px"></i>When the agent opens it</span>
+        <div class="big">≈1,400 <small>tokens</small></div>
+        <p>What Fleet can do, when to suggest each one, the rule to ask first, and which reference file to read next.</p>
+      </div>
+      <div class="card tier">
+        <span class="lvl">Tier 3</span>
+        <h3>One reference file + live API</h3>
+        <span class="when demand"><i data-lucide="mouse-pointer-click" style="width:12px;height:12px"></i>Only the one that's needed</span>
+        <div class="big">300–700 <small>tokens each</small></div>
+        <p>sessions, automations, workflows, memory, settings. Exact request bodies come from <code>/openapi/v1.json</code>; what's switched on comes from the live API, never from the text.</p>
+      </div>
+    </div>
+
+    <div class="card bars">
+      <h3>Tokens a session carries for this</h3>
+      <p class="cap2">Estimated, per session. Bars share one scale.</p>
+      <div class="bar-row"><span class="lbl">Session that never needs Fleet</span><div class="bar-track"><div class="bar-fill fill-a" style="width:2.5%"></div></div><span class="v">80</span></div>
+      <div class="bar-row"><span class="lbl">Asks for an automation</span><div class="bar-track"><div class="bar-fill fill-a" style="width:2.5%"></div><div class="bar-fill fill-b" style="width:44%"></div><div class="bar-fill fill-b" style="width:17%;opacity:.6"></div></div><span class="v">≈2,030</span></div>
+      <div class="bar-row"><span class="lbl">Rejected: a guide in the system prompt</span><div class="bar-track"><div class="bar-fill fill-x" style="width:100%"></div></div><span class="v">≈3,200</span></div>
+      <p class="cap2" style="margin:12px 0 0">A system-prompt guide sits in every request of every session, including the ones about CSS, and changing it breaks the prompt cache. It also goes against the rule that agents pull context through tools instead of having it injected.</p>
+    </div>
+  </section>
+
+  <!-- ═════════ 3. The skill ═════════ -->
+  <section id="skill">
+    <h2><span class="n">03</span>The skill itself</h2>
+    <p class="sub">A draft of the files. <code>fleet-api</code> grows into this; its route tables move into <code>sessions.md</code> and <code>automations.md</code>.</p>
+    <div class="card files">
+      <div class="tree" role="tablist" aria-label="Skill files">
+        <span class="dir"><i data-lucide="folder-open" style="width:14px;height:14px"></i>opencode/skills/fleet/</span>
+        <button role="tab" aria-selected="true" data-file-btn="skill"><i data-lucide="file-text" style="width:14px;height:14px"></i>SKILL.md<span class="tk">1.4k</span></button>
+        <button role="tab" aria-selected="false" data-file-btn="sessions"><i data-lucide="file" style="width:14px;height:14px"></i>sessions.md<span class="tk">700</span></button>
+        <button role="tab" aria-selected="false" data-file-btn="automations"><i data-lucide="file" style="width:14px;height:14px"></i>automations.md<span class="tk">550</span></button>
+        <button role="tab" aria-selected="false" data-file-btn="workflows"><i data-lucide="file" style="width:14px;height:14px"></i>workflows.md<span class="tk">600</span></button>
+        <button role="tab" aria-selected="false" data-file-btn="memory"><i data-lucide="file" style="width:14px;height:14px"></i>memory.md<span class="tk">300</span></button>
+        <button role="tab" aria-selected="false" data-file-btn="settings"><i data-lucide="file" style="width:14px;height:14px"></i>settings.md<span class="tk">400</span></button>
+        <div class="legend">Numbers are estimated tokens. Only the description line is in context until the agent opens a file.</div>
+      </div>
+      <div class="file">
+        <div data-file="skill" style="display:flex;flex-direction:column;flex:1">
+          <div class="file-h"><i data-lucide="file-text" style="width:14px;height:14px"></i>SKILL.md<span class="w">loads when opened</span></div>
+<pre><span class="fm">---
+name: fleet
+description: You're running inside Weave Fleet, which can do more than edit code.
+  Read this before splitting work into parallel sessions or worktrees, doing
+  something on a schedule or later ("every morning", "when X happens"), making
+  a process repeatable, remembering something across sessions, or when the user
+  asks about Fleet itself, its settings, or what you can do.
+---</span>
+
+<span class="hd"># What Fleet can do for the user</span>
+
+Fleet started this session. Its API is at <span class="c">$FLEET_URL</span>; requests from this
+machine need no token. If it's empty, Fleet didn't start you: don't suggest these.
+
+| When the user wants…                      | Suggest                  | Read            |
+|-------------------------------------------|--------------------------|-----------------|
+| several independent tasks done            | a Fleet session per task | sessions.md     |
+| something done on a schedule, once later, | an automation            | automations.md  |
+|   or when something happens in Fleet      |                          |                 |
+| a process they repeat, in steps           | a workflow               | workflows.md    |
+| you to remember something                 | Fleet memory             | memory.md       |
+| to change how Fleet behaves or looks      | the setting, or a mod    | settings.md     |
+| to see something                          | a page or diagram canvas | (your fleet_* tools) |
+
+<span class="hd">## Suggest, then ask</span>
+
+Say what you'd create and why it fits, then ask. Sessions start agents,
+automations keep running after this conversation, workflows are files in the
+repo. Do it straight away only when the user asked for exactly that.
+
+<span class="hd">## Check what's on before you offer it</span>
+
+Memory, mods and some features are switches. Read them from the API
+(settings.md) before you say something works; if it's off, say where the
+user turns it on. Never switch a setting yourself.
+
+<span class="hd">## Look it up, don't guess</span>
+
+Request bodies are in <span class="c">$FLEET_URL/openapi/v1.json</span>. Use the ids Fleet
+returns, not your harness's session ids.</pre>
+        </div>
+        <div data-file="sessions" style="flex-direction:column;flex:1">
+          <div class="file-h"><i data-lucide="file" style="width:14px;height:14px"></i>sessions.md<span class="w">from fleet-api, trimmed</span></div>
+<pre><span class="hd"># Fleet sessions</span>
+
+<span class="hd">## When to suggest them</span>
+- Tasks that don't touch the same files: one session each, isolation "worktree".
+- A long side task the user doesn't want in this conversation.
+- Trying two approaches: fork this session (not Claude Code or Pi).
+Don't split work that edits the same files, or that's quicker done here.
+
+<span class="hd">## Start one</span>
+POST /api/sessions  { directory, title, isolationStrategy, initialPrompt }
+  isolationStrategy: existing | worktree | clone
+  Send X-Fleet-Harness-Session: $FLEET_HARNESS_SESSION_ID so it's linked to you.
+From a GitHub issue or PR: …
+
+<span class="hd">## Keep track of them</span>
+GET /api/sessions/{id}/status · /messages · /diffs
+Message one with fleet_message when you have it (Fleet refuses POST …/prompt
+from agents then).
+
+<span class="c">… route table as in fleet-api today …</span></pre>
+        </div>
+        <div data-file="automations" style="flex-direction:column;flex:1">
+          <div class="file-h"><i data-lucide="file" style="width:14px;height:14px"></i>automations.md<span class="w">from fleet-api</span></div>
+<pre><span class="hd"># Automations</span>
+
+An automation sends a prompt on a schedule, once, or when something happens
+in Fleet. It can start a new session, wake a tagged one, or run a workflow,
+on this machine or another one in GET /api/machines.
+
+<span class="hd">## When to suggest one</span>
+"every weekday", "each morning", "on Friday at 4", "when a session finishes",
+"remind me tomorrow". Prefer it to cron or a CI job when the work needs an
+agent's judgement, not just a command.
+
+<span class="hd">## Show the user before creating</span>
+Name, when (in their time zone), folder, where it runs, the prompt, next run.
+
+POST /api/automations
+  triggerType: schedule (cron) | once (local date-time) | event (JSON string)
+  …</pre>
+        </div>
+        <div data-file="workflows" style="flex-direction:column;flex:1">
+          <div class="file-h"><i data-lucide="file" style="width:14px;height:14px"></i>workflows.md<span class="w">new</span></div>
+<pre><span class="hd"># Workflows</span>
+
+A workflow is a list of agent steps in .weave/workflows/&lt;name&gt;.yaml. The user
+runs it from Workflows with a request; each step is its own agent turn and can
+stop for the user. Fleet ships some built in.
+
+<span class="hd">## When to suggest one</span>
+A process the user repeats with steps that need judgement: releases,
+triage, a review routine. A plain script is better when every step is a command.
+
+<span class="hd">## Before writing one</span>
+GET /api/workflows?repository=… for what's there (don't duplicate a built-in).
+Read one existing file for the format; the schema is in the OpenAPI document.
+Write the file, then tell the user where to find it and how to run it.</pre>
+        </div>
+        <div data-file="memory" style="flex-direction:column;flex:1">
+          <div class="file-h"><i data-lucide="file" style="width:14px;height:14px"></i>memory.md<span class="w">new</span></div>
+<pre><span class="hd"># Fleet memory</span>
+
+Fleet keeps notes for a repository or a machine and gives them to every new
+session, on every harness. It's off by default.
+
+GET /api/memory → { enabled, … }
+
+- On: you have fleet_memory_save and fleet_memory_forget. Use them.
+- Off: you don't have them. Say memory is off and that the user turns it on
+  under Settings → Memory. Offer AGENTS.md as the other place.
+Don't turn it on yourself.</pre>
+        </div>
+        <div data-file="settings" style="flex-direction:column;flex:1">
+          <div class="file-h"><i data-lucide="file" style="width:14px;height:14px"></i>settings.md<span class="w">new</span></div>
+<pre><span class="hd"># Fleet's settings</span>
+
+Where things are, so you can point the user to them:
+- Features: the Mods switch and other switches
+- Memory: memory on or off, and the notes
+- Skills: built-in skills (fleet-code-review, fleet-design, …)
+- Mods: the user's mods (shown once Mods is on)
+- Permissions: what agents may do without asking
+- Harnesses: OpenCode, Claude Code, Pi; install and update
+- Machines: other machines Fleet can run sessions on
+- Workflows, Weave, Browser, Tools, Folders, Appearance
+
+Reading what's on: GET /api/memory, GET /api/preferences/{Key} (e.g. Mods).
+You can read settings. Only the user changes them.</pre>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- ═════════ 4. Harnesses ═════════ -->
+  <section id="harnesses">
+    <h2><span class="n">04</span>Which sessions get it</h2>
+    <p class="sub">Today only the OpenCode harnesses get Fleet's always-on skill. Claude Code only gets the built-in skills the user switched on, which is why a Claude Code session knows nothing about Fleet.</p>
+    <div class="card" style="overflow-x:auto">
+      <table>
+        <thead><tr><th>Harness</th><th>Today</th><th>With this</th><th>How</th></tr></thead>
+        <tbody>
+          <tr><td>OpenCode</td><td><span class="y">fleet-api</span> <span class="muted">· sessions, automations</span></td><td><span class="y">fleet</span></td><td class="muted">Same folder as today (<code>OpenCodeFleetSkills</code>)</td></tr>
+          <tr><td>OpenCode 2</td><td><span class="y">fleet-api</span> <span class="muted">· sessions, automations</span></td><td><span class="y">fleet</span></td><td class="muted">Same folder as today (<code>OpenCode2FleetFiles</code>)</td></tr>
+          <tr><td>Claude Code</td><td><span class="n">Nothing</span></td><td><span class="y">fleet</span></td><td class="muted">Always write the <code>--add-dir</code> skills folder, not only when a built-in skill is on (<code>ClaudeCodeFleetSkills</code>)</td></tr>
+          <tr><td>Pi</td><td><span class="n">Nothing</span></td><td><span class="m">To check</span></td><td class="muted">If Pi loads skills, the same folder; if not, Later list</td></tr>
+        </tbody>
+      </table>
+    </div>
+
+    <h3 style="margin:28px 0 6px;font-size:16px">How Claude Code gets it</h3>
+    <p class="sub">Fleet already gives Claude Code a skills folder: it starts <code>claude</code> with <code>--add-dir</code> pointing at a folder of its own, and Claude Code loads that folder's <code>.claude/skills</code> next to the user's. It's how this proposal's own session got <code>fleet-mockups</code>. The catch is that Fleet only writes the folder when the user has a built-in skill switched on, and only copies built-in skills into it.</p>
+    <div class="two">
+      <div class="card ask">
+        <h3><i data-lucide="circle-x" style="color:var(--error)"></i>Today</h3>
+<div class="code-block">claude … --mcp-config &lt;Fleet's tools&gt;
+       --add-dir ~/.weave/claude-code/skills/&lt;owner&gt;   <span style="color:var(--error)">← only if a built-in skill is on</span>
+
+~/.weave/claude-code/skills/&lt;owner&gt;/.claude/skills/
+  fleet-code-review/   fleet-design/   fleet-mockups/   …   <span style="color:var(--error)">← no fleet-api</span></div>
+        <p style="margin-top:10px">Folder written by <code>ClaudeCodeFleetSkills.Sync</code>; it keeps only names in <code>BuiltInSkillFiles.Names</code> and deletes the folder when that list is empty.</p>
+      </div>
+      <div class="card ask">
+        <h3><i data-lucide="circle-check" style="color:var(--running)"></i>With this</h3>
+<div class="code-block">claude … --mcp-config &lt;Fleet's tools&gt;
+       --add-dir ~/.weave/claude-code/skills/&lt;owner&gt;   <span style="color:var(--running)">← always</span>
+
+~/.weave/claude-code/skills/&lt;owner&gt;/.claude/skills/
+  <span style="color:var(--running)">fleet/</span>  SKILL.md  sessions.md  automations.md  …   <span style="color:var(--running)">← always</span>
+  fleet-code-review/   fleet-design/   …              ← as switched on</div>
+        <p style="margin-top:10px">The same folder, with Fleet's own skills from <code>opencode/skills/</code> always copied in. About 40 lines of code and tests. Claude Code shows the skill's folder when it opens it, so <code>sessions.md</code> and the rest are read straight from there.</p>
+      </div>
+    </div>
+    <div class="rules" style="margin-top:12px">
+      <div class="card rule"><i data-lucide="refresh-cw"></i><div><b>New sessions only</b><p>Claude Code lists skills when it starts, so sessions already running get the skill on their next start. Same as built-in skills today.</p></div></div>
+      <div class="card rule"><i data-lucide="x-octagon"></i><div><b>Not through Fleet's MCP server</b><p>Fleet's tools already reach Claude Code over <code>--mcp-config</code>, and an MCP server can send “instructions”. But those go into every request, which is the system-prompt cost again. The skill folder loads on demand.</p></div></div>
+    </div>
+  </section>
+
+  <!-- ═════════ 5. Rules ═════════ -->
+  <section id="rules">
+    <h2><span class="n">05</span>How the agent behaves</h2>
+    <div class="rules">
+      <div class="card rule"><i data-lucide="hand"></i><div><b>Suggest, then ask</b><p>It offers the Fleet way with a reason and a preview. It creates sessions, automations or workflows only after a yes, or when the user asked for exactly that.</p></div></div>
+      <div class="card rule"><i data-lucide="toggle-right"></i><div><b>Checks what's on</b><p>It reads memory, mods and other switches from the API before offering them. When something is off, it says where to turn it on. It never changes a setting.</p></div></div>
+      <div class="card rule"><i data-lucide="scale"></i><div><b>Only when it fits</b><p>No Fleet pitch for a one-line fix. Parallel sessions only for work that doesn't overlap; a workflow only when steps need judgement.</p></div></div>
+      <div class="card rule"><i data-lucide="search-check"></i><div><b>Facts from the running Fleet</b><p>Request shapes come from OpenAPI and on/off from the API, so the text can't go stale about this user's Fleet.</p></div></div>
+    </div>
+  </section>
+
+  <!-- ═════════ 6. Test ═════════ -->
+  <section id="test">
+    <h2><span class="n">06</span>How we'll know it works</h2>
+    <p class="sub">The risk isn't the token count. It's whether the agent opens the skill at the right moment. So the wording gets an evaluation before it ships, the way <code>fleet-design</code> did: real prompts, run on each harness, on a scratch Fleet.</p>
+    <div class="card" style="overflow-x:auto">
+      <table>
+        <thead><tr><th>Prompt</th><th>Should</th><th>Must not</th></tr></thead>
+        <tbody>
+          <tr><td>“Fix #212, #215 and #219, they're small”</td><td>Offer one session per issue in worktrees</td><td>Start them without asking</td></tr>
+          <tr><td>“Every weekday at 9, check dependencies”</td><td>Offer an automation, with a preview</td><td>Write a GitHub Action or crontab first</td></tr>
+          <tr><td>“Make our release process repeatable”</td><td>Offer a workflow</td><td>Duplicate a built-in workflow</td></tr>
+          <tr><td>“Remember we use bun” (memory off)</td><td>Say memory is off and where to turn it on</td><td>Claim it'll remember; flip the switch</td></tr>
+          <tr><td>“What can you do here?”</td><td>List Fleet's abilities, with what's on and off</td><td>Mention features this Fleet doesn't have</td></tr>
+          <tr><td>“Rename this variable”</td><td>Just do it</td><td>Open the skill or mention Fleet</td></tr>
+        </tbody>
+      </table>
+    </div>
+    <p class="sub" style="margin-top:12px">Pass bar: right behaviour in at least 8 of 10 runs per prompt on Claude Code and OpenCode 2, and the skill never opened for the control prompt.</p>
+  </section>
+
+  <!-- ═════════ 7. Budget & decisions ═════════ -->
+  <section id="decide">
+    <h2><span class="n">07</span>Build budget and what I need from you</h2>
+    <div class="two">
+      <div class="card ask">
+        <h3><i data-lucide="ruler"></i>Budget</h3>
+        <ul class="budget">
+          <li><span>PRs</span><span>One, into main</span></li>
+          <li><span>Size</span><span>500–700 lines: about 450 of skill text, about 150 of code and tests (Claude Code folder, Pi if it loads skills, rename migration)</span></li>
+          <li><span>Time</span><span>Half a day to build, plus the evaluation runs</span></li>
+          <li><span>PR shows</span><span>Screenshots from a scratch Fleet: a Claude Code session offering sessions, then an automation</span></li>
+          <li><span>Later list</span><span>Fallback tool for harnesses without skills; a test that flags new <code>/api/*</code> groups the skill doesn't mention</span></li>
+        </ul>
+      </div>
+      <div class="card ask">
+        <h3><i data-lucide="circle-help"></i>Decisions</h3>
+        <p><b class="rec">1. Name.</b> Rename <code>fleet-api</code> to <code>fleet</code> (needs a line in the retired-skills migration), or keep the old name and reword it.</p>
+        <p class="rec" style="margin-bottom:14px">I'd rename: the skill is about what Fleet can do, not its API.</p>
+        <p><b class="rec">2. Settings.</b> Agents read settings and point the user to them, and never change them.</p>
+        <p class="rec" style="margin-bottom:14px">I'd keep it read-only. Say if you want agents to be able to turn memory on when you ask.</p>
+        <p><b class="rec">3. Go-ahead</b> to build it at this budget, in a new session.</p>
+      </div>
+    </div>
+  </section>
+
+</div>
+
+<script>
+const S = {
+  par: { title: "Small fixes from the backlog", harness: "Claude Code",
+    before: { loaded: [], verdict: ['bad', 'All three in one folder and one conversation, one after another.'] },
+    after: { loaded: [['Skill description', 80, 'a'], ['SKILL.md', 1400, 'b'], ['sessions.md', 700, 'b']], verdict: ['good', 'Offers three sessions in worktrees, and asks first.'] } },
+  auto: { title: "Dependency updates", harness: "OpenCode 2",
+    before: { loaded: [['fleet-api description', 60, 'a']], verdict: ['bad', 'A GitHub Action and a token to set up. On OpenCode it could know about automations, but nothing in fleet-api says to prefer them.'] },
+    after: { loaded: [['Skill description', 80, 'a'], ['SKILL.md', 1400, 'b'], ['automations.md', 550, 'b']], verdict: ['good', 'Offers a Fleet automation with a preview and creates it after a yes.'] } },
+  wf: { title: "Release process", harness: "Claude Code",
+    before: { loaded: [], verdict: ['bad', 'A script and a checklist; the steps that need judgement stay manual.'] },
+    after: { loaded: [['Skill description', 80, 'a'], ['SKILL.md', 1400, 'b'], ['workflows.md', 600, 'b']], verdict: ['good', 'Drafts a workflow after checking the ones already in the repo.'] } },
+  mem: { title: "Repo conventions", harness: "Claude Code",
+    before: { loaded: [], verdict: ['bad', 'Says it will remember, and the next session doesn’t.'] },
+    after: { loaded: [['Skill description', 80, 'a'], ['SKILL.md', 1400, 'b'], ['memory.md', 300, 'b']], verdict: ['good', 'Knows memory is a setting, sees it is off, and tells the user where to turn it on.'] },
+    afterOn: { loaded: [['Skill description', 80, 'a']], verdict: ['good', 'Memory is on, so the tool is there and the skill isn’t needed.'] } },
+  what: { title: "Getting started", harness: "Claude Code",
+    before: { loaded: [], verdict: ['bad', 'Describes a coding agent. Nothing about Fleet.'] },
+    after: { loaded: [['Skill description', 80, 'a'], ['SKILL.md', 1400, 'b']], verdict: ['good', 'Lists Fleet’s abilities and checks which ones are switched on.'] } },
+};
+let scn = 'par', mode = 'after', mem = 'off';
+
+function render() {
+  document.querySelectorAll('[data-scn]').forEach(el => {
+    const okS = el.dataset.scn === scn;
+    const okM = !el.dataset.mode || el.dataset.mode === mode;
+    el.style.display = okS && okM ? (el.tagName === 'ASIDE' || el.classList.contains('note') ? 'block' : 'flex') : 'none';
+    if (okS && okM && !el.classList.contains('note')) el.style.flexDirection = 'column';
+  });
+  document.querySelectorAll('[data-mem]').forEach(el => { el.style.display = el.dataset.mem === mem ? 'flex' : 'none'; });
+  document.querySelectorAll('[data-tab]').forEach(b => b.setAttribute('aria-selected', b.dataset.tab === scn));
+  document.querySelectorAll('[data-mode-btn]').forEach(b => b.setAttribute('aria-pressed', b.dataset.modeBtn === mode));
+  document.querySelectorAll('[data-mem-btn]').forEach(b => b.setAttribute('aria-pressed', b.dataset.memBtn === mem));
+  const s = S[scn];
+  document.getElementById('sheet-title').textContent = s.title;
+  document.getElementById('harness-chip').textContent = s.harness;
+  document.getElementById('cmp-harness').textContent = s.harness;
+  const st = mode === 'after' && scn === 'mem' && mem === 'on' ? s.afterOn : s[mode];
+  const ul = document.getElementById('loaded');
+  if (!st.loaded.length) {
+    ul.innerHTML = '<li class="muted">Nothing about Fleet</li>';
+  } else {
+    const total = st.loaded.reduce((a, x) => a + x[1], 0);
+    ul.innerHTML = st.loaded.map(([n, t, k]) => `<li><span class="sw" style="background:${k === 'a' ? 'var(--accent)' : 'color-mix(in srgb, var(--accent) 45%, transparent)'}"></span>${n}<span class="tok">${t.toLocaleString('en-GB')}</span></li>`).join('')
+      + `<li class="total">This turn<span class="tok">${total.toLocaleString('en-GB')}</span></li>`;
+  }
+  const [cls, txt] = st.verdict;
+  document.getElementById('verdict').innerHTML = `<span class="verdict ${cls}">${cls === 'good' ? '✓' : '✕'}</span> ${txt}`;
+}
+document.querySelectorAll('[data-tab]').forEach(b => b.onclick = () => { scn = b.dataset.tab; render(); });
+document.querySelectorAll('[data-mode-btn]').forEach(b => b.onclick = () => { mode = b.dataset.modeBtn; render(); });
+document.querySelectorAll('[data-mem-btn]').forEach(b => b.onclick = () => { mem = b.dataset.memBtn; render(); });
+document.getElementById('par-send').onclick = () => {
+  document.getElementById('par-q').style.display = 'none';
+  document.getElementById('par-done').style.display = 'flex';
+};
+document.querySelectorAll('[data-file-btn]').forEach(b => b.onclick = () => {
+  document.querySelectorAll('[data-file-btn]').forEach(x => x.setAttribute('aria-selected', x === b));
+  document.querySelectorAll('[data-file]').forEach(f => f.style.display = f.dataset.file === b.dataset.fileBtn ? 'flex' : 'none');
+});
+document.querySelectorAll('[data-theme-btn]').forEach(b => b.onclick = () => {
+  document.documentElement.dataset.theme = b.dataset.themeBtn;
+  document.querySelectorAll('[data-theme-btn]').forEach(x => x.setAttribute('aria-pressed', x === b));
+});
+if (window.matchMedia && window.matchMedia('(prefers-color-scheme: light)').matches) document.querySelector('[data-theme-btn="light"]').click();
+render();
+lucide.createIcons();
+</script>
+</body>
+</html>

@@ -142,7 +142,7 @@ function readMemoryNotes(directory: string | undefined): string {
 }
 
 export const FleetCanvasPlugin = async (input: { directory?: string }) => ({
-  // Fleet's own skills (fleet-api, and the built-in skills the user turned on) are in its data folder, one or more
+  // Fleet's own skills (fleet, and the built-in skills the user turned on) are in its data folder, one or more
   // folders separated like PATH. Adding them here keeps the user's skill paths: skills.paths in OPENCODE_CONFIG_CONTENT
   // would replace them.
   config: async (config: Config) => {
