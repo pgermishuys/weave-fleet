@@ -7,6 +7,7 @@ import HarnessInstallPanel from "@/components/settings/HarnessInstallPanel.vue";
 import HarnessProfilesPanel from "@/components/settings/HarnessProfilesPanel.vue";
 import HarnessSignInPanel from "@/components/settings/HarnessSignInPanel.vue";
 import HarnessUpdateStrip from "@/components/settings/HarnessUpdateStrip.vue";
+import { forgetHarnessCatalogs } from "@/composables/use-harness-catalog";
 import { refreshAllHarnesses, useHarnesses } from "@/composables/use-harnesses";
 import { useAppShellStore } from "@/stores/app-shell";
 import { useHarnessSetupStore } from "@/stores/harness-setup";
@@ -136,6 +137,9 @@ async function toggleSetting(setting: HarnessSetting): Promise<void> {
 
   try {
     await prefsStore.set(setting.key, isSettingOn(setting) ? "false" : "true");
+    // GitHub Copilot's HydraFusion switch changes the models it offers: the composer asks again at once.
+    if (setting.key.startsWith("copilot.")) forgetHarnessCatalogs("copilot");
+    refreshAllHarnesses();
   } catch (error) {
     settingError.value = {
       key: setting.key,

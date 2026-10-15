@@ -110,7 +110,7 @@ public sealed class HarnessEndpointsTests
         using var document = JsonDocument.Parse(await response.Content.ReadAsStringAsync());
 
         document.RootElement.EnumerateArray().Select(h => h.GetProperty("type").GetString())
-            .ShouldBe(["opencode2", "opencode", "claude-code", "pi"]);
+            .ShouldBe(["opencode2", "opencode", "claude-code", "pi", "copilot"]);
     }
 
     [Fact]

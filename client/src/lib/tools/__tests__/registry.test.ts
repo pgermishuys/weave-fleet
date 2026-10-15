@@ -328,3 +328,12 @@ describe("parseToolInput", () => {
     expect(asRecord("x")).toBeNull();
   });
 });
+
+describe("HydraFusion passes", () => {
+  it("reads as role, model and time once the pass has finished", () => {
+    expect(getToolLabel("hydrafusion_pass", { role: "solver", model: "model-a" })).toBe("Solver · model-a");
+    expect(getToolLabel("hydrafusion_pass", { role: "draft", model: "model-a", durationMs: 18400 })).toBe("Draft · model-a · 18.4 s");
+    expect(getToolLabel("hydrafusion_pass", null)).toBe("hydrafusion_pass");
+    expect(getTool("hydrafusion_pass").heading).toBe("HydraFusion pass");
+  });
+});

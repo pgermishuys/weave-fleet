@@ -59,6 +59,18 @@ describe("FeaturesSection", () => {
     expect(toggle.attributes("aria-checked")).toBe("false");
   });
 
+  it("keeps GitHub Copilot off until it's turned on, and saves the choice", async () => {
+    const wrapper = await mountSection();
+    const toggle = wrapper.get("[data-testid='copilot-switch']");
+    expect(toggle.attributes("aria-checked")).toBe("false");
+
+    await toggle.trigger("click");
+    await flushPromises();
+
+    expect(putMock).toHaveBeenCalledWith("/api/preferences/{key}", { params: { path: { key: "Copilot" } }, body: { value: "true" } });
+    expect(toggle.attributes("aria-checked")).toBe("true");
+  });
+
   describe("Large pastes", () => {
     it("always shows, and saves the choice", async () => {
       const wrapper = await mountSection();
