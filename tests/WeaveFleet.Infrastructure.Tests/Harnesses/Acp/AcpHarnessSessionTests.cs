@@ -184,6 +184,27 @@ public sealed class AcpHarnessSessionTests
     }
 
     [Fact]
+    public async Task an_image_goes_to_the_agent_as_an_image_block_and_other_files_are_refused()
+    {
+        await using var agent = new FakeAcpAgent();
+        agent.Handle = (_, _) => Task.FromResult<JsonNode?>(new JsonObject { ["stopReason"] = "end_turn" });
+        await using var session = NewSession(agent);
+
+        await Should.ThrowAsync<NotSupportedException>(() => session.SendPromptAsync("see", new PromptOptions
+        {
+            Attachments = [new HarnessAttachment("application/pdf", "a.pdf", "AAAA")],
+        }, CancellationToken.None));
+        await session.SendPromptAsync("what is this?", new PromptOptions { Attachments = [new HarnessAttachment("image/png", "square.png", "iVBORw0=")] }, CancellationToken.None);
+
+        for (var i = 0; i < 100 && !agent.Received.Any(r => r.Method == "session/prompt"); i++)
+            await Task.Delay(20);
+        var blocks = agent.Received.Single(r => r.Method == "session/prompt").Params.GetProperty("prompt");
+        blocks[1].GetProperty("type").GetString().ShouldBe("image");
+        blocks[1].GetProperty("mimeType").GetString().ShouldBe("image/png");
+        blocks[1].GetProperty("data").GetString().ShouldBe("iVBORw0=");
+    }
+
+    [Fact]
     public async Task a_steer_the_agent_says_came_too_late_is_left_to_fleets_queue()
     {
         await using var agent = new FakeAcpAgent();

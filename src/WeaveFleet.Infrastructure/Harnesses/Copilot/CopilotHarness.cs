@@ -36,7 +36,8 @@ public sealed class CopilotHarness : IHarness
         ReportsFileWrites = true,
         HistoryLivesInHarness = true,
         SupportsForking = false,
-        SupportsImageAttachments = false,
+        SupportsImageAttachments = true,
+        ReportsTodos = true,
         SupportsProviderSignIn = true,
         TakesModelNotes = false,
     };

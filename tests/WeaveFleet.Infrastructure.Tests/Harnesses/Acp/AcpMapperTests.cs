@@ -246,7 +246,7 @@ public sealed class AcpMapperTests
         => evt.Payload!.Value.GetProperty("part").GetProperty("state").GetProperty("status").GetString()!;
 
     [Fact]
-    public void a_steer_mid_turn_completes_the_message_and_settles_its_running_calls()
+    public void a_steer_mid_turn_completes_the_message_and_leaves_its_running_call_running()
     {
         var mapper = new AcpMapper("s1");
         mapper.Update(Chunk("agent_message_chunk", "Looking."));
@@ -254,23 +254,54 @@ public sealed class AcpMapperTests
 
         var steer = mapper.UserPrompt("never mind");
 
-        steer.Select(e => e.Type).ShouldBe([EventTypes.MessagePartUpdated, EventTypes.MessageUpdated]);
-        steer[0].Payload!.Value.GetProperty("part").GetProperty("state").GetProperty("status").GetString().ShouldBe("error");
-        steer[1].Payload!.Value.GetProperty("info").GetProperty("time").TryGetProperty("completed", out _).ShouldBeTrue();
+        steer.Select(e => e.Type).ShouldBe([EventTypes.MessageUpdated]);
+        steer[0].Payload!.Value.GetProperty("info").GetProperty("time").TryGetProperty("completed", out _).ShouldBeTrue();
+        steer[0].Payload!.Value.GetProperty("parts")[1].GetProperty("state").GetProperty("status").GetString().ShouldBe("running");
         mapper.Messages().Select(m => m.Role).ShouldBe(["assistant", "user"]);
     }
 
     [Fact]
-    public void what_the_agent_says_about_a_call_after_the_steer_does_not_reopen_it()
+    public void the_result_the_agent_reports_after_a_steer_settles_the_call_in_the_message_it_belongs_to()
+    {
+        var mapper = new AcpMapper("s1");
+        mapper.Update(J("""{"sessionUpdate":"tool_call","toolCallId":"c1","kind":"execute","status":"in_progress"}"""));
+        var first = mapper.Messages().Single().Id;
+        mapper.UserPrompt("never mind");
+
+        var late = mapper.Update(J("""{"sessionUpdate":"tool_call_update","toolCallId":"c1","status":"completed","content":[{"type":"content","content":{"type":"text","text":"moved to background"}}]}"""));
+
+        State(late.Single()).ShouldBe("completed");
+        late.Single().Payload!.Value.GetProperty("part").GetProperty("messageID").GetString().ShouldBe(first);
+        mapper.Messages().Select(m => m.Role).ShouldBe(["assistant", "user"]);
+        mapper.Messages()[0].Parts.OfType<ToolUsePart>().Single().State.ShouldBe(ToolUseState.Completed);
+        mapper.Update(J("""{"sessionUpdate":"tool_call_update","toolCallId":"c1","status":"completed"}""")).ShouldBeEmpty();
+    }
+
+    [Fact]
+    public void a_call_still_running_when_the_turn_ends_after_a_steer_is_settled_as_not_finished()
     {
         var mapper = new AcpMapper("s1");
         mapper.Update(J("""{"sessionUpdate":"tool_call","toolCallId":"c1","kind":"execute","status":"in_progress"}"""));
         mapper.UserPrompt("never mind");
 
-        var late = mapper.Update(J("""{"sessionUpdate":"tool_call_update","toolCallId":"c1","status":"completed"}"""));
+        var end = mapper.EndTurn("end_turn");
 
-        late.ShouldBeEmpty();
-        mapper.Messages().Select(m => m.Role).ShouldBe(["assistant", "user"]);
+        State(end.First(e => e.Type == EventTypes.MessagePartUpdated)).ShouldBe("error");
+        mapper.Messages()[0].Parts.OfType<ToolUsePart>().Single().State.ShouldBe(ToolUseState.Error);
+    }
+
+    [Fact]
+    public void a_plan_update_reports_the_whole_todo_list_and_keeps_it_for_the_session_to_ask_for()
+    {
+        var mapper = new AcpMapper("s1");
+
+        var events = mapper.Update(J("""{"sessionUpdate":"plan","entries":[{"content":"Pick a spot","priority":"medium","status":"in_progress"},{"content":"Pack","priority":"medium","status":"completed"}]}"""));
+
+        events.Single().Type.ShouldBe(EventTypes.TodosReported);
+        events.Single().Payload!.Value.GetProperty("items").GetArrayLength().ShouldBe(2);
+        mapper.Todos().Select(t => (t.Content, t.Status)).ShouldBe([("Pick a spot", "in_progress"), ("Pack", "completed")]);
+        mapper.Update(J("""{"sessionUpdate":"plan","entries":[]}""")).Single().Type.ShouldBe(EventTypes.TodosReported);
+        mapper.Todos().ShouldBeEmpty();
     }
 
     [Fact]

@@ -29,6 +29,9 @@ internal sealed class AcpMapper(string sessionId)
     private readonly List<MessagePart> _parts = [];
     private readonly Dictionary<string, int> _tools = [];
     private readonly HashSet<string> _closedCalls = [];
+    // Calls a steer left running in the message it closed: message id and where that message sits in the history.
+    private readonly Dictionary<string, (string MessageId, int HistoryIndex)> _detached = [];
+    private IReadOnlyList<TodoEntry> _todos = [];
     private readonly StringBuilder _open = new();
     private string? _openKind;
     private string? _openPartId;
@@ -39,6 +42,9 @@ internal sealed class AcpMapper(string sessionId)
     private int _partCount;
     private int _stepCount;
     private bool _turnRow;
+
+    /// <summary>The agent's todo list as last reported (<c>plan</c> updates), including while a loaded conversation replays.</summary>
+    internal IReadOnlyList<TodoEntry> Todos() { lock (_lock) return _todos; }
 
     /// <summary>The conversation so far, oldest first, with the turn still running as its last message.</summary>
     internal IReadOnlyList<HarnessMessage> Messages() { lock (_lock) return [.. MessagesCore()]; }
@@ -72,10 +78,17 @@ internal sealed class AcpMapper(string sessionId)
         var events = new List<HarnessEvent>();
         if (_assistantId is { } id)
         {
-            SettleTools(events, "Redirected before it finished.");
-            // What the agent reports about these calls after the steer belongs to a message that is closed.
+            // A call still running goes on running after a steer (Copilot moves a shell command to the background), so it
+            // stays as it is and takes the result the agent reports later; the rest are finished.
+            var historyIndex = _history.Count;
             foreach (var part in _parts.OfType<ToolUsePart>())
-                _closedCalls.Add(part.ToolCallId);
+            {
+                if (part.State is ToolUseState.Pending or ToolUseState.Running)
+                    _detached[part.ToolCallId] = (id, historyIndex);
+                else
+                    _closedCalls.Add(part.ToolCallId);
+            }
+
             events.Add(Event(EventTypes.MessageUpdated, Lifecycle(id, completed: true)));
             CommitAssistant();
         }
@@ -110,6 +123,9 @@ internal sealed class AcpMapper(string sessionId)
             case "tool_call":
             case "tool_call_update":
                 Tool(events, update);
+                break;
+            case "plan":
+                Plan(events, update);
                 break;
         }
 
@@ -217,7 +233,9 @@ internal sealed class AcpMapper(string sessionId)
     private List<HarnessEvent> EndTurnCore(string? stopReason)
     {
         var events = new List<HarnessEvent>();
-        SettleTools(events, stopReason == "cancelled" ? "Stopped before it finished." : "The turn ended before this call did.");
+        var ended = stopReason == "cancelled" ? "Stopped before it finished." : "The turn ended before this call did.";
+        SettleTools(events, ended);
+        SettleDetached(events, ended);
         if (_assistantId is { } id)
         {
             events.Add(Event(EventTypes.MessageUpdated, Lifecycle(id, completed: true)));
@@ -234,6 +252,7 @@ internal sealed class AcpMapper(string sessionId)
     {
         var events = new List<HarnessEvent>();
         SettleTools(events, message);
+        SettleDetached(events, message);
         events.Add(Event(EventTypes.SessionError, JsonSerializer.SerializeToElement(
             new TurnFailedPayload { SessionId = sessionId, MessageId = _assistantId, Error = new TurnError { Name = "AcpError", Message = message } },
             InfrastructureJsonContext.Default.TurnFailedPayload)));
@@ -277,12 +296,36 @@ internal sealed class AcpMapper(string sessionId)
             : new ReasoningMessageEventPart { Id = _openPartId, SessionId = sessionId, MessageId = _assistantId!, Text = text }));
     }
 
+    /// <summary>An ACP <c>plan</c> update carries the whole todo list each time; an empty one clears it.</summary>
+    private void Plan(List<HarnessEvent> events, JsonElement update)
+    {
+        List<TodoEntry> items = [];
+        if (update.TryGetProperty("entries", out var entries) && entries.ValueKind == JsonValueKind.Array)
+        {
+            foreach (var entry in entries.EnumerateArray())
+            {
+                if (Str(entry, "content") is not { Length: > 0 } content)
+                    continue;
+                items.Add(new TodoEntry { Content = content, Status = TodoStatuses.Normalize(Str(entry, "status")), Priority = Str(entry, "priority") });
+            }
+        }
+
+        _todos = items;
+        events.Add(Event(EventTypes.TodosReported, JsonSerializer.SerializeToElement(
+            new TodosReportedPayload { SessionId = sessionId, Items = items }, InfrastructureJsonContext.Default.TodosReportedPayload)));
+    }
+
     private void Tool(List<HarnessEvent> events, JsonElement update)
     {
         _userOpen = false;
         var callId = Str(update, "toolCallId");
         if (callId is null || _closedCalls.Contains(callId))
             return;
+        if (_detached.TryGetValue(callId, out var detached))
+        {
+            LateTool(events, update, callId, detached);
+            return;
+        }
 
         var prior = _tools.TryGetValue(callId, out var at) ? _parts[at] as ToolUsePart : null;
         var kind = Str(update, "kind");
@@ -340,6 +383,59 @@ internal sealed class AcpMapper(string sessionId)
         }
 
         events.Add(PartEvent(new ToolMessageEventPart { Id = partId, SessionId = sessionId, MessageId = _assistantId!, ToolName = name, CallId = callId, State = state }));
+    }
+
+    /// <summary>What the agent reports about a call a steer left running: the row in the closed message takes the real result.</summary>
+    private void LateTool(List<HarnessEvent> events, JsonElement update, string callId, (string MessageId, int HistoryIndex) at)
+    {
+        var message = _history[at.HistoryIndex];
+        var slot = message.Parts.ToList().FindIndex(p => p is ToolUsePart t && t.ToolCallId == callId);
+        if (slot < 0 || message.Parts[slot] is not ToolUsePart prior)
+            return;
+
+        var status = Str(update, "status") ?? "in_progress";
+        var output = ToolOutput(update);
+        ToolInvocationState state = status switch
+        {
+            "completed" => new ToolCompletedState { Input = prior.Arguments, Output = output is null ? null : Json(output), Title = Str(update, "title") },
+            "failed" => new ToolErrorState { Input = prior.Arguments, Output = output is null ? null : Json(output), Error = output ?? "The tool call failed." },
+            _ => new ToolRunningState { Input = prior.Arguments },
+        };
+        var useState = status switch { "completed" => ToolUseState.Completed, "failed" => ToolUseState.Error, _ => ToolUseState.Running };
+        ReplacePart(message, at.HistoryIndex, slot, prior with { State = useState, Output = output is null ? prior.Output : Json(output), Error = useState == ToolUseState.Error ? output : null });
+        events.Add(PartEvent(new ToolMessageEventPart { Id = prior.PartId!, SessionId = sessionId, MessageId = at.MessageId, ToolName = prior.ToolName, CallId = callId, State = state }));
+        if (useState != ToolUseState.Running)
+        {
+            _detached.Remove(callId);
+            _closedCalls.Add(callId);
+        }
+    }
+
+    private void ReplacePart(HarnessMessage message, int historyIndex, int slot, MessagePart part)
+    {
+        var parts = message.Parts.ToList();
+        parts[slot] = part;
+        _history[historyIndex] = message with { Parts = parts };
+    }
+
+    /// <summary>Calls a steer left running that the turn ends on: they didn't finish, and say so.</summary>
+    private void SettleDetached(List<HarnessEvent> events, string reason)
+    {
+        foreach (var (callId, at) in _detached.ToList())
+        {
+            var message = _history[at.HistoryIndex];
+            var slot = message.Parts.ToList().FindIndex(p => p is ToolUsePart t && t.ToolCallId == callId);
+            if (slot < 0 || message.Parts[slot] is not ToolUsePart tool)
+                continue;
+            ReplacePart(message, at.HistoryIndex, slot, tool with { State = ToolUseState.Error, Error = reason });
+            events.Add(PartEvent(new ToolMessageEventPart
+            {
+                Id = tool.PartId!, SessionId = sessionId, MessageId = at.MessageId, ToolName = tool.ToolName, CallId = callId,
+                State = new ToolErrorState { Input = tool.Arguments, Error = reason },
+            }));
+        }
+
+        _detached.Clear();
     }
 
     /// <summary>A call the turn left open (stopped, or failed) would read as running forever.</summary>
