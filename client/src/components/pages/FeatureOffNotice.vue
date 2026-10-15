@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import { ref } from "vue";
 import { Button } from "@/components/ui/button";
+import { usePreferencesStore } from "@/stores/preferences";
 
 const props = defineProps<{
   title: string;
@@ -9,6 +10,7 @@ const props = defineProps<{
   turnOn: () => Promise<void>;
 }>();
 
+const preferences = usePreferencesStore();
 const turningOn = ref(false);
 
 async function onTurnOn(): Promise<void> {
@@ -22,7 +24,9 @@ async function onTurnOn(): Promise<void> {
 </script>
 
 <template>
+  <!-- Until the switches have loaded every feature reads as off: say nothing rather than flash "is off". -->
   <section
+    v-if="preferences.hasFetched"
     class="mx-auto flex h-full max-w-2xl flex-col items-center justify-center p-8 text-center"
     data-testid="feature-off"
   >
