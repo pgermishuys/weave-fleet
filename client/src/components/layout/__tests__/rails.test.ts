@@ -58,23 +58,39 @@ describe("the icon rail", () => {
     navigate.mockClear();
   });
 
-  it("lists sessions, the GitHub plugin, then Plugins, Automations, Analytics, Settings and Help", () => {
+  it("lists every rail with its name under the icon, Board and Workflows included while they're off", () => {
     const wrapper = mount(IconRail);
 
     expect(railLabels(wrapper)).toEqual([
-      "Sessions", "GitHub", "Plugins", "Automations", "Analytics", "Settings", "Help",
+      "Sessions", "Board", "Workflows", "Automations", "Analytics", "GitHub", "Plugins", "Settings", "Help",
     ]);
+    expect(wrapper.findAll("nav.rail-nav .rail-label").map((label) => label.text())).toEqual(railLabels(wrapper));
+    expect(wrapper.find("[data-tooltip]").exists()).toBe(false);
   });
 
-  it("adds Board before Sessions and Workflows after Plugins when those features are on", () => {
+  it("marks only the switched-off rails", () => {
+    const wrapper = mount(IconRail);
+
+    expect(wrapper.findAll("[data-off=true]").map((button) => button.attributes("aria-label"))).toEqual(["Board", "Workflows"]);
+    expect(wrapper.find("[aria-label=Workflows] .rail-off-dot").exists()).toBe(true);
+    expect(wrapper.find("[aria-label=Sessions] .rail-off-dot").exists()).toBe(false);
+  });
+
+  it("drops the marker from Board and Workflows once they're on", () => {
     boardOn.value = true;
     workflowsOn.value = true;
 
     const wrapper = mount(IconRail);
 
-    expect(railLabels(wrapper)).toEqual([
-      "Board", "Sessions", "GitHub", "Plugins", "Workflows", "Automations", "Analytics", "Settings", "Help",
-    ]);
+    expect(wrapper.find("[data-off=true]").exists()).toBe(false);
+    expect(wrapper.find(".rail-off-dot").exists()).toBe(false);
+  });
+
+  it("still opens a switched-off rail's page", async () => {
+    const wrapper = mount(IconRail);
+
+    await wrapper.find("[aria-label=Workflows]").trigger("click");
+    expect(navigate).toHaveBeenLastCalledWith({ to: "/workflows" });
   });
 
   it("makes a clicked rail active and navigates when it has a path", async () => {
@@ -131,6 +147,7 @@ describe("the context panel per rail", () => {
     runtime.clear();
     runtime.registerPlugins([githubPluginManifest, marketplacePluginManifest]);
     boardOn.value = false;
+    workflowsOn.value = false;
   });
 
   function shown(rail: string): string {
@@ -144,12 +161,17 @@ describe("the context panel per rail", () => {
     ["sessions", "panel-sessions"],
     ["analytics", "panel-sessions"],
     ["automations", "panel-automations"],
-    ["workflows", "panel-workflows"],
     ["settings", "panel-settings"],
     ["github", "panel-github"],
     ["marketplace", "panel-marketplace"],
   ])("shows %s as %s", (rail, expected) => {
     expect(shown(rail)).toBe(expected);
+  });
+
+  it("shows the workflows library only while Workflows is on", () => {
+    expect(shown("workflows")).toBe("panel-sessions");
+    workflowsOn.value = true;
+    expect(shown("workflows")).toBe("panel-workflows");
   });
 
   it("shows the sessions panel for Board while Board is off", () => {

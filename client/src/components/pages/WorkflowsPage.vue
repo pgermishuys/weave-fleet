@@ -1,21 +1,23 @@
 <script setup lang="ts">
 import { watch } from "vue";
 import { useRouter, useSearch } from "@tanstack/vue-router";
+import FeatureOffNotice from "@/components/pages/FeatureOffNotice.vue";
 import WorkflowDetailPanel from "@/components/workflows/WorkflowDetailPanel.vue";
 import { useWorkflowsFeature } from "@/composables/use-workflows-feature";
 import { useWorkflowsNav } from "@/composables/use-workflows-nav";
-import { usePreferencesStore } from "@/stores/preferences";
+import { useWorkflowsStore } from "@/stores/workflows";
 
 const router = useRouter();
 const search = useSearch({ from: "/workflows" });
-const preferences = usePreferencesStore();
 const nav = useWorkflowsNav();
-const { isWorkflowsEnabled } = useWorkflowsFeature();
+const store = useWorkflowsStore();
+const { isWorkflowsEnabled, setWorkflowsEnabled } = useWorkflowsFeature();
 
-// Off, the page doesn't exist: go home once the switch is known to be off.
-watch([() => preferences.hasFetched, isWorkflowsEnabled], ([fetched, enabled]) => {
-  if (fetched && !enabled) void router.navigate({ to: "/" });
-}, { immediate: true });
+// The switch flips before the server has saved it, so what loaded in that gap was refused: load again once it's saved.
+async function turnOn(): Promise<void> {
+  await setWorkflowsEnabled(true);
+  await Promise.all([nav.reload(), store.ensureLoaded()]);
+}
 
 // A link names a workflow and the folder its Run box runs in. Nothing starts; the address goes back to plain
 // /workflows so a reload doesn't undo what the person picked since.
@@ -30,5 +32,11 @@ watch(() => [search.value.workflow, search.value.folder] as const, ([workflow, f
 <template>
   <section class="flex h-full flex-col overflow-hidden">
     <WorkflowDetailPanel v-if="isWorkflowsEnabled" />
+    <FeatureOffNotice
+      v-else
+      title="Workflows"
+      description="A workflow is a recipe of steps for an agent, like fixing a bug or reviewing a change, that you can run again and again."
+      :turn-on="turnOn"
+    />
   </section>
 </template>
