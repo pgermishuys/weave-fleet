@@ -1,0 +1,784 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Copy folder path</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600&family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet">
+<style>
+/* Fleet's tokens, copied from client/src/assets/main.css (dark = default theme, light = data-theme="light"). */
+:root {
+  --rail-bg: #FFFFFF; --panel-bg: #FFFFFF; --card-bg: #ffffff; --main-bg: #F3F2EF;
+  --border: rgba(26, 25, 24, 0.09); --text: #1A1918; --muted: #6E6A65;
+  --accent: #5B6EC7; --coral: #D95A3A; --running: #16a34a; --idle: #d97706; --error: #dc2626;
+  --menu-shadow: 0 16px 40px -12px rgba(26, 25, 24, 0.22), 0 2px 6px rgba(26, 25, 24, 0.06);
+  --ph-menu-shadow: 0 16px 40px -14px rgba(26, 25, 24, 0.32), 0 0 0 1px var(--border);
+  --ph-scrim: rgba(26, 25, 24, 0.32);
+  --radius-card: 10px; --radius-btn: 8px; --radius-panel: 12px; --transition: 150ms ease-out;
+  --font-sans-stack: "Inter Variable", "Inter", system-ui, -apple-system, sans-serif;
+  --font-mono-stack: "JetBrains Mono Variable", "JetBrains Mono", ui-monospace, monospace;
+  --status-waiting: var(--idle);
+  color-scheme: light;
+}
+@media (prefers-color-scheme: dark) {
+  :root {
+    --rail-bg: #0d0d10; --panel-bg: #141418; --card-bg: #1b1b20; --main-bg: #0d0d10;
+    --border: rgba(255, 255, 255, 0.075); --text: #e8e8ec; --muted: #8e8e9a;
+    --accent: #6366f1; --running: #22c55e; --idle: #f59e0b; --error: #ef4444;
+    --menu-shadow: 0 16px 40px -12px rgba(0, 0, 0, 0.55), 0 2px 6px rgba(0, 0, 0, 0.25);
+    --ph-menu-shadow: 0 16px 40px -12px rgba(0, 0, 0, 0.6);
+    --ph-scrim: rgba(0, 0, 0, 0.55);
+    color-scheme: dark;
+  }
+}
+html[data-theme="dark"] {
+  --rail-bg: #0d0d10; --panel-bg: #141418; --card-bg: #1b1b20; --main-bg: #0d0d10;
+  --border: rgba(255, 255, 255, 0.075); --text: #e8e8ec; --muted: #8e8e9a;
+  --accent: #6366f1; --running: #22c55e; --idle: #f59e0b; --error: #ef4444;
+  --menu-shadow: 0 16px 40px -12px rgba(0, 0, 0, 0.55), 0 2px 6px rgba(0, 0, 0, 0.25);
+  --ph-menu-shadow: 0 16px 40px -12px rgba(0, 0, 0, 0.6);
+  --ph-scrim: rgba(0, 0, 0, 0.55);
+  color-scheme: dark;
+}
+html[data-theme="light"] {
+  --rail-bg: #FFFFFF; --panel-bg: #FFFFFF; --card-bg: #ffffff; --main-bg: #F3F2EF;
+  --border: rgba(26, 25, 24, 0.09); --text: #1A1918; --muted: #6E6A65;
+  --accent: #5B6EC7; --running: #16a34a; --idle: #d97706; --error: #dc2626;
+  --menu-shadow: 0 16px 40px -12px rgba(26, 25, 24, 0.22), 0 2px 6px rgba(26, 25, 24, 0.06);
+  --ph-menu-shadow: 0 16px 40px -14px rgba(26, 25, 24, 0.32), 0 0 0 1px var(--border);
+  --ph-scrim: rgba(26, 25, 24, 0.32);
+  color-scheme: light;
+}
+
+* { box-sizing: border-box; }
+html, body { margin: 0; }
+body {
+  background: var(--main-bg);
+  color: var(--text);
+  font: 13.5px/1.55 var(--font-sans-stack);
+  padding: 0 16px 64px;
+}
+button { font: inherit; color: inherit; }
+.wrap { max-width: 1040px; margin: 0 auto; display: flex; flex-direction: column; gap: 28px; }
+.mono { font-family: var(--font-mono-stack); font-size: 12px; }
+
+/* ── Page ─────────────────────────────────────────────────────────── */
+.intro { padding-top: 28px; display: flex; flex-direction: column; gap: 8px; max-width: 70ch; }
+.eyebrow { font-size: 11px; font-weight: 600; letter-spacing: 0.06em; text-transform: uppercase; color: var(--muted); }
+h1 { margin: 0; font-size: 22px; font-weight: 600; letter-spacing: -0.01em; text-wrap: balance; }
+h2 { margin: 0; font-size: 15px; font-weight: 600; text-wrap: balance; }
+h3 { margin: 0; font-size: 13px; font-weight: 600; }
+p { margin: 0; }
+.muted { color: var(--muted); }
+.quote { border-left: 2px solid var(--border); padding-left: 12px; color: var(--muted); font-style: italic; }
+
+.controls { display: flex; flex-wrap: wrap; gap: 10px 18px; align-items: center; }
+.ctl { display: flex; align-items: center; gap: 8px; min-width: 0; flex-wrap: wrap; }
+.ctl__label { font-size: 11px; font-weight: 600; letter-spacing: 0.05em; text-transform: uppercase; color: var(--muted); }
+.seg { display: inline-flex; flex-wrap: wrap; gap: 2px; padding: 2px; border: 1px solid var(--border); border-radius: var(--radius-btn); background: var(--panel-bg); }
+.seg button {
+  border: 0; background: transparent; padding: 4px 10px; border-radius: calc(var(--radius-btn) - 2px);
+  font-size: 12.5px; color: var(--muted); cursor: pointer; transition: background var(--transition), color var(--transition);
+}
+.seg button:hover { color: var(--text); }
+.seg button[aria-pressed="true"] { background: color-mix(in srgb, var(--text) 9%, transparent); color: var(--text); font-weight: 500; }
+.seg button:focus-visible, .focusable:focus-visible { outline: 2px solid var(--accent); outline-offset: 1px; }
+
+/* ── Stage: a slice of Fleet's conversation panel ─────────────────── */
+.stage-wrap { display: flex; flex-direction: column; gap: 10px; }
+.stage-row { min-width: 0; }
+.stage {
+  position: relative;
+  margin: 0 auto;
+  width: 100%;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-panel);
+  background: var(--panel-bg);
+  transition: width 200ms ease-out;
+}
+.stage[data-width="narrow"] { width: min(100%, 720px); }
+.convo { min-height: 290px; padding: 18px 20px 22px; display: flex; flex-direction: column; gap: 12px; opacity: 0.55; }
+.convo .bubble { align-self: flex-end; max-width: 70%; padding: 8px 12px; border-radius: 12px; background: color-mix(in srgb, var(--text) 6%, transparent); font-size: 13px; }
+.convo .reply { font-size: 13px; max-width: 62ch; }
+.clip {
+  display: flex; align-items: baseline; gap: 10px; flex-wrap: wrap;
+  padding: 8px 12px; border: 1px dashed var(--border); border-radius: var(--radius-btn);
+  font-size: 12px; color: var(--muted);
+}
+.clip b { font-weight: 600; color: var(--muted); letter-spacing: 0.04em; text-transform: uppercase; font-size: 10.5px; }
+.clip code { font-family: var(--font-mono-stack); color: var(--text); overflow-wrap: anywhere; min-width: 0; }
+.try { font-size: 12.5px; color: var(--muted); }
+.try kbd { font-family: var(--font-mono-stack); font-size: 10.5px; padding: 1px 5px; border: 1px solid var(--border); border-radius: 4px; background: color-mix(in srgb, var(--text) 6%, transparent); }
+
+/* ── Fleet's session header (SessionDetailHeader.vue, styles copied) ── */
+.sdh {
+  display: flex; min-height: 56px; align-items: center;
+  border-bottom: 1px solid var(--border);
+  padding: 8px 1.25rem;
+}
+.stage[data-width="narrow"] .sdh { padding-inline: 1rem; }
+.sdh__main { display: flex; min-width: 0; flex: 1; flex-direction: column; gap: 3px; overflow: hidden; margin: -4px -8px; padding: 4px 8px; }
+.sdh__title-row, .sdh__meta-row { display: flex; min-width: 0; align-items: center; gap: 6px; }
+.sdh__title { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: 14px; font-weight: 600; letter-spacing: -0.005em; line-height: 1.3; }
+.sdh__meta-row { font-size: 12px; line-height: 1.4; color: var(--muted); white-space: nowrap; }
+.sdh__machine { flex-shrink: 0; padding: 1px 6px; border-radius: 5px; background: color-mix(in srgb, var(--coral) 14%, transparent); color: var(--coral); font-family: var(--font-mono-stack); font-size: 10.5px; font-weight: 600; }
+.sdh__project, .sdh__harness, .sdh__model { flex-shrink: 0; max-width: 14rem; overflow: hidden; text-overflow: ellipsis; }
+.sdh__sep { flex-shrink: 0; opacity: 0.6; }
+.sdh__branch { display: inline-flex; flex: 0 0 auto; align-items: center; gap: 4px; min-width: 0; max-width: calc(18ch + 16px); color: var(--text); font-family: var(--font-mono-stack); font-size: 11.5px; }
+.sdh__branch span { min-width: 0; overflow: hidden; text-overflow: ellipsis; }
+.sdh__branch svg { flex-shrink: 0; color: var(--muted); }
+.sdh__directory { flex: 0 1 auto; min-width: 0; overflow: hidden; text-overflow: ellipsis; font-family: var(--font-mono-stack); font-size: 11.5px; opacity: 0.8; }
+.sdh__tags { display: flex; flex-shrink: 0; align-items: center; gap: 4px; margin-left: 4px; }
+.sdh__tag-add { display: inline-flex; align-items: center; justify-content: center; width: 20px; height: 20px; padding: 0; border: 1px dashed color-mix(in srgb, var(--muted) 45%, transparent); border-radius: calc(var(--radius-btn) - 2px); background: transparent; color: var(--muted); opacity: 0.7; }
+.sdh__actions { display: flex; flex-shrink: 0; align-items: center; gap: 2px; margin-left: 0.75rem; }
+.ibtn { display: inline-grid; place-items: center; width: 28px; height: 28px; border: 0; border-radius: var(--radius-btn); background: transparent; color: var(--muted); }
+.sr-only { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; }
+
+/* The path in two parts, for A and B: the start gives way first, so the folder's own name stays in view. */
+.path { display: inline-flex; flex: 0 1 auto; min-width: 0; font-family: var(--font-mono-stack); font-size: 11.5px; }
+.path__head { flex: 0 1 auto; flex-shrink: 1000; min-width: 0; overflow: hidden; text-overflow: ellipsis; }
+.path__leaf { flex: 0 1 auto; min-width: 0; overflow: hidden; text-overflow: ellipsis; }
+
+/* ── Option A: a copy button that shows on hover ─────────────────── */
+.dirA { display: inline-flex; flex: 0 1 auto; align-items: center; gap: 4px; min-width: 24px; }
+.dirA .path { opacity: 0.8; transition: opacity var(--transition); }
+.dirA:hover .path, .dirA.is-hover .path, .dirA:focus-within .path, .dirA.is-focus .path { opacity: 1; color: var(--text); }
+.dirA__copy {
+  position: relative; display: inline-grid; flex: none; place-items: center;
+  width: 20px; height: 20px; padding: 0; border: 0; border-radius: calc(var(--radius-btn) - 2px);
+  background: transparent; color: var(--muted); cursor: pointer; opacity: 0;
+  transition: opacity var(--transition), background var(--transition), color var(--transition);
+}
+.dirA__copy::after { content: ""; position: absolute; inset: -4px; }
+.dirA:hover .dirA__copy, .dirA.is-hover .dirA__copy, .dirA__copy:focus-visible, .dirA.is-focus .dirA__copy, .dirA.is-copied .dirA__copy { opacity: 1; }
+.dirA__copy:hover { background: color-mix(in srgb, var(--text) 7%, transparent); color: var(--text); }
+.dirA__copy:focus-visible, .dirA.is-focus .dirA__copy { outline: 2px solid var(--accent); outline-offset: 0; }
+.dirA__copy .i-check, .is-copied .dirA__copy .i-copy { display: none; }
+.is-copied .dirA__copy .i-check { display: block; color: var(--running); }
+.done { flex: none; font-size: 11px; font-weight: 500; color: var(--muted); display: none; }
+.is-copied .done { display: inline; }
+@media (hover: none) { .dirA__copy { opacity: 0.75; } }
+.dirA.is-touch .dirA__copy { opacity: 0.75; }
+
+/* ── Option B: the path is the button ────────────────────────────── */
+.dirB { display: inline-flex; flex: 0 1 auto; align-items: center; gap: 2px; min-width: 48px; }
+.dirB__path {
+  display: inline-flex; align-items: center; gap: 4px; min-width: 0; max-width: 100%;
+  margin: -1px 0; padding: 1px 5px; border: 0; border-radius: 5px; background: transparent;
+  color: inherit; cursor: pointer; opacity: 0.8; transition: background var(--transition), opacity var(--transition), color var(--transition);
+}
+.dirB__path:hover, .dirB.is-hover .dirB__path { background: color-mix(in srgb, var(--text) 7%, transparent); color: var(--text); opacity: 1; }
+.dirB__path:focus-visible, .dirB__more:focus-visible { outline: 2px solid var(--accent); outline-offset: 0; }
+.dirB__path .i-check { display: none; flex: none; color: var(--running); }
+.is-copied .dirB__path .i-check { display: block; }
+.is-copied .dirB__path { opacity: 1; color: var(--text); }
+.dirB__more {
+  display: inline-grid; flex: none; place-items: center; width: 18px; height: 20px; padding: 0; border: 0;
+  border-radius: 5px; background: transparent; color: var(--muted); cursor: pointer;
+}
+.dirB__more:hover, .dirB__more[aria-expanded="true"] { background: color-mix(in srgb, var(--text) 7%, transparent); color: var(--text); }
+
+/* ── Option C: a folder chip that opens the full path ────────────── */
+.dirC {
+  display: inline-flex; flex: 0 1 auto; align-items: center; gap: 5px; min-width: 0;
+  margin: -2px 0; padding: 1px 6px 1px 6px; border: 1px solid var(--border); border-radius: 999px;
+  background: transparent; color: var(--text); font-family: var(--font-mono-stack); font-size: 11.5px; cursor: pointer;
+  transition: background var(--transition);
+}
+.dirC:hover, .dirC.is-hover, .dirC[aria-expanded="true"] { background: color-mix(in srgb, var(--text) 6%, transparent); }
+.dirC:focus-visible { outline: 2px solid var(--accent); outline-offset: 1px; }
+.dirC svg { flex: none; color: var(--muted); }
+.dirC__name { min-width: 0; overflow: hidden; text-overflow: ellipsis; }
+.dirC__tag { flex: none; font-family: var(--font-sans-stack); font-size: 10.5px; color: var(--muted); }
+
+/* ── Menus and popovers: Fleet's menu look (components/ui/menu-classes.ts) ── */
+.layer { position: absolute; z-index: 20; }
+.menu {
+  min-width: 18rem; max-width: min(24rem, calc(100vw - 32px)); padding: 5px;
+  border: 1px solid var(--border); border-radius: var(--radius-card); background: var(--card-bg);
+  box-shadow: var(--menu-shadow); font-size: 13px; color: var(--text);
+}
+.mi {
+  display: flex; width: 100%; min-height: 30px; align-items: center; gap: 8px; padding: 5px 8px;
+  border: 0; border-radius: calc(var(--radius-btn) - 2px); background: transparent; text-align: left; font-size: 13px; cursor: default; outline: none;
+}
+.mi svg { flex: none; color: var(--muted); }
+.mi:hover, .mi:focus-visible, .mi.is-hi { background: color-mix(in srgb, var(--text) 7%, transparent); }
+.mi:hover svg, .mi:focus-visible svg, .mi.is-hi svg { color: var(--text); }
+.mi[aria-disabled="true"] { opacity: 0.45; }
+.mi__short { margin-left: auto; display: inline-flex; padding: 2px 5px; border: 1px solid var(--border); border-radius: calc(var(--radius-btn) - 3px); background: color-mix(in srgb, var(--text) 6%, transparent); font-size: 10px; line-height: 1; color: var(--muted); }
+.mi__new { margin-left: auto; font-size: 10.5px; color: var(--accent); font-weight: 500; }
+.msep { height: 1px; margin: 4px 2px; background: var(--border); }
+.mlabel { padding: 7px 8px 3px; font-size: 11px; font-weight: 600; letter-spacing: 0.05em; text-transform: uppercase; color: var(--muted); }
+.mhint {
+  margin: 4px -5px -5px; min-height: 50px; padding: 8px 13px 9px; border-top: 1px solid var(--border);
+  background: color-mix(in srgb, var(--text) 2.5%, transparent); border-radius: 0 0 var(--radius-card) var(--radius-card);
+  font-size: 11.5px; line-height: 1.4; color: var(--muted); overflow-wrap: anywhere;
+}
+.mhint code { font-family: var(--font-mono-stack); font-size: 11px; color: var(--text); }
+
+.pop { width: min(25rem, calc(100vw - 32px)); padding: 12px; display: flex; flex-direction: column; gap: 12px; }
+.pop__block { display: flex; flex-direction: column; gap: 5px; }
+.pop__label { display: flex; align-items: center; gap: 6px; font-size: 11px; font-weight: 600; letter-spacing: 0.05em; text-transform: uppercase; color: var(--muted); }
+.pop__label span { font-weight: 400; letter-spacing: 0; text-transform: none; }
+.pop__line { display: flex; align-items: flex-start; gap: 8px; }
+.pop__path { flex: 1; min-width: 0; font-family: var(--font-mono-stack); font-size: 12px; line-height: 1.45; overflow-wrap: anywhere; user-select: all; }
+.sbtn {
+  flex: none; display: inline-flex; align-items: center; gap: 5px; height: 24px; padding: 0 8px;
+  border: 1px solid var(--border); border-radius: calc(var(--radius-btn) - 2px); background: transparent;
+  font-size: 12px; color: var(--text); cursor: pointer;
+}
+.sbtn:hover { background: color-mix(in srgb, var(--text) 6%, transparent); }
+.sbtn:focus-visible { outline: 2px solid var(--accent); outline-offset: 1px; }
+.sbtn.is-copied svg { color: var(--running); }
+.sbtn[disabled] { opacity: 0.45; cursor: default; }
+.pop__open { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; padding-top: 10px; border-top: 1px solid var(--border); }
+.pop__open .muted { font-size: 12px; }
+
+/* ── Notes ─────────────────────────────────────────────────────────── */
+.notes { display: grid; grid-template-columns: minmax(0, 1.3fr) minmax(0, 1fr); gap: 24px; }
+.notes > div { display: flex; flex-direction: column; gap: 10px; min-width: 0; }
+.notes ul { margin: 0; padding-left: 18px; display: flex; flex-direction: column; gap: 4px; }
+.verdict { display: flex; flex-wrap: wrap; gap: 6px 14px; font-size: 12.5px; }
+.verdict b { font-weight: 600; }
+.states { display: grid; grid-template-columns: minmax(0, 1fr); gap: 6px; }
+.state { display: grid; grid-template-columns: 7.5rem minmax(0, 1fr); align-items: center; gap: 10px; min-width: 0; padding: 10px; border: 1px solid var(--border); border-radius: var(--radius-btn); background: var(--panel-bg); }
+.state__name { font-size: 10.5px; font-weight: 600; letter-spacing: 0.05em; text-transform: uppercase; color: var(--muted); }
+.state .sdh__meta-row { overflow: hidden; }
+
+.cases { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 12px 24px; }
+.case { display: flex; flex-direction: column; gap: 4px; min-width: 0; }
+.case code, td code { font-family: var(--font-mono-stack); font-size: 11.5px; overflow-wrap: anywhere; }
+
+/* ── Phone ─────────────────────────────────────────────────────────── */
+.phones { display: flex; flex-wrap: wrap; gap: 20px; }
+.phone-col { display: flex; flex-direction: column; gap: 8px; width: 300px; max-width: 100%; }
+.phone {
+  position: relative; width: 300px; max-width: 100%; height: 520px; overflow: hidden;
+  border: 1px solid var(--border); border-radius: 28px; background: var(--panel-bg);
+  font-family: var(--font-sans-stack);
+}
+.ph-shead { display: flex; align-items: center; gap: 4px; height: 60px; padding: 0 6px; border-bottom: 1px solid var(--border); background: var(--panel-bg); margin-top: 18px; }
+.ph-shead__main { flex: 1; min-width: 0; padding: 0 4px; }
+.ph-shead__t { margin: 0; overflow: hidden; font-size: 15px; font-weight: 600; line-height: 1.3; white-space: nowrap; text-overflow: ellipsis; }
+.ph-shead__s { display: flex; align-items: center; gap: 6px; margin: 1px 0 0; overflow: hidden; font-size: 13px; color: var(--muted); white-space: nowrap; }
+.ph-dot { width: 7px; height: 7px; border-radius: 50%; background: var(--muted); flex: none; }
+.ph-icon { display: inline-grid; place-items: center; width: 40px; height: 40px; flex: none; color: var(--muted); }
+.ph-icon--text { color: var(--text); }
+.ph-convo { padding: 16px; display: flex; flex-direction: column; gap: 12px; font-size: 15px; line-height: 1.45; }
+.ph-convo .bubble { align-self: flex-end; max-width: 80%; padding: 9px 12px; border-radius: 14px; background: color-mix(in srgb, var(--text) 6%, transparent); }
+.ph-scrim { position: absolute; inset: 0; background: var(--ph-scrim); }
+.ph-sheet {
+  position: absolute; right: 8px; bottom: 8px; left: 8px; border: 1px solid var(--border);
+  border-radius: 14px; background: var(--card-bg); box-shadow: var(--ph-menu-shadow);
+}
+.ph-grab { display: grid; height: 14px; place-items: center; }
+.ph-grab::before { content: ""; width: 36px; height: 4px; border-radius: 2px; background: color-mix(in srgb, var(--muted) 40%, transparent); }
+.ph-menu { padding: 2px 6px 6px; }
+.ph-mi { display: flex; align-items: center; gap: 12px; width: 100%; min-height: 44px; padding: 0 12px; border-radius: 8px; font-size: 15px; color: var(--text); }
+.ph-mi svg { flex: none; color: var(--muted); }
+.ph-mi.is-pressed { background: color-mix(in srgb, var(--text) 6%, transparent); }
+.ph-mi > span:not(.ph-mi__hint) { white-space: nowrap; }
+.ph-mi__hint { margin-left: auto; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: 13px; color: var(--muted); font-family: var(--font-mono-stack); }
+.ph-menu hr { height: 1px; margin: 4px -6px; border: 0; background: var(--border); }
+.ph-toast {
+  position: absolute; bottom: 96px; left: 50%; width: calc(100% - 32px); transform: translateX(-50%);
+  display: flex; flex-direction: column; gap: 1px; padding: 10px 16px; border-radius: 12px;
+  background: var(--text); color: var(--main-bg); font-size: 14px; box-shadow: 0 12px 32px -12px rgba(0,0,0,.45);
+}
+.ph-toast small { font-family: var(--font-mono-stack); font-size: 11.5px; opacity: 0.7; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.ph-composer { position: absolute; left: 10px; right: 10px; bottom: 12px; height: 52px; border: 1px solid var(--border); border-radius: 16px; background: var(--card-bg); color: var(--muted); font-size: 15px; display: flex; align-items: center; padding: 0 14px; }
+.web-narrow { position: relative; width: 300px; max-width: 100%; height: 520px; overflow: hidden; border: 1px solid var(--border); border-radius: 28px; background: var(--panel-bg); }
+.web-narrow .sdh { padding-left: 44px; padding-right: 10px; margin-top: 18px; position: relative; }
+.web-narrow .menu-btn { position: absolute; left: 8px; top: 16px; }
+.web-narrow .sdh__actions { margin-left: 6px; }
+.ibtn--on { background: color-mix(in srgb, var(--text) 7%, transparent); color: var(--text); }
+.web-narrow__menu { position: absolute; top: 72px; right: 10px; min-width: 0; width: 210px; }
+.cap { font-size: 12.5px; color: var(--muted); }
+.cap b { color: var(--text); font-weight: 600; }
+
+/* ── Table ─────────────────────────────────────────────────────────── */
+.table-wrap { overflow-x: auto; border: 1px solid var(--border); border-radius: var(--radius-card); background: var(--panel-bg); }
+table { width: 100%; min-width: 680px; border-collapse: collapse; font-size: 12.5px; }
+th, td { padding: 9px 12px; text-align: left; vertical-align: top; border-bottom: 1px solid var(--border); }
+tr:last-child td { border-bottom: 0; }
+thead th { font-size: 11px; font-weight: 600; letter-spacing: 0.05em; text-transform: uppercase; color: var(--muted); }
+tbody th { font-weight: 500; color: var(--muted); width: 22%; }
+td.rec { background: color-mix(in srgb, var(--accent) 7%, transparent); }
+.yes { color: var(--running); }
+.recommend { display: flex; flex-direction: column; gap: 10px; padding: 16px 18px; border: 1px solid color-mix(in srgb, var(--accent) 40%, var(--border)); border-radius: var(--radius-card); background: color-mix(in srgb, var(--accent) 6%, var(--panel-bg)); max-width: 80ch; }
+.recommend ul { margin: 0; padding-left: 18px; display: flex; flex-direction: column; gap: 4px; }
+
+.narrow-note { display: none; }
+@media (max-width: 600px) { .narrow-note { display: block; } }
+@media (max-width: 760px) {
+  .notes, .cases { grid-template-columns: minmax(0, 1fr); }
+}
+@media (max-width: 400px) {
+  .phone-col, .phone, .web-narrow { width: 100%; }
+}
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after { transition: none !important; }
+}
+</style>
+</head>
+<body>
+<div class="wrap">
+
+  <header class="intro">
+    <div class="eyebrow">Proposal · session header · 15 Oct 2026</div>
+    <h1>Copy folder path</h1>
+    <p class="quote">"Quite often I want to be able to copy the directory that I am currently in. We show the directory in the top header; maybe if I hover over it, it could show a copy icon where I can just copy the directory."</p>
+    <p>Today the only way is right-click on the session in the list, then <b>Copy path</b>. The header shows the path as plain text that cuts off at the end, so on a narrow window you lose the folder's own name. Three ways to fix it below, on the same invented session. Every option copies the <b>full</b> path, however much of it is showing.</p>
+  </header>
+
+  <section class="stage-wrap" aria-label="Try it">
+    <div class="controls">
+      <div class="ctl"><span class="ctl__label">Option</span>
+        <div class="seg" data-ctl="opt">
+          <button data-v="today">Today</button>
+          <button data-v="a">A · Copy button</button>
+          <button data-v="b">B · Click the path</button>
+          <button data-v="c">C · Folder chip</button>
+        </div>
+      </div>
+      <div class="ctl"><span class="ctl__label">Session</span>
+        <div class="seg" data-ctl="sess">
+          <button data-v="plain">Folder</button>
+          <button data-v="worktree">Worktree</button>
+          <button data-v="windows">Windows</button>
+          <button data-v="remote">Other machine</button>
+        </div>
+      </div>
+      <div class="ctl"><span class="ctl__label">Window</span>
+        <div class="seg" data-ctl="width">
+          <button data-v="wide">Wide</button>
+          <button data-v="narrow">Narrow</button>
+        </div>
+      </div>
+      <div class="ctl"><span class="ctl__label">Theme</span>
+        <div class="seg" data-ctl="theme">
+          <button data-v="dark">Dark</button>
+          <button data-v="light">Light</button>
+        </div>
+      </div>
+    </div>
+
+    <div class="stage-row">
+      <div class="stage" id="stage">
+        <div id="header"></div>
+        <div class="convo" aria-hidden="true">
+          <div class="bubble">Retry failed webhook deliveries with exponential backoff, max 6 attempts.</div>
+          <div class="reply">I added <span class="mono">RetryPolicy</span> to the delivery worker and a <span class="mono">next_attempt_at</span> column. The tests in <span class="mono">webhooks/retry_test.go</span> pass.</div>
+        </div>
+        <div id="layer"></div>
+      </div>
+    </div>
+    <p class="try narrow-note">This screen is too narrow for the header to show the path, as in Fleet. Open the page on a wider screen to try the options, or see Phone below.</p>
+    <p class="try" id="try"></p>
+    <div class="clip" aria-live="polite"><b>Clipboard</b><code id="clip">nothing copied yet</code></div>
+  </section>
+
+  <section id="notes" aria-live="off"></section>
+
+  <section class="cases-wrap" style="display:flex;flex-direction:column;gap:12px">
+    <h2>Which folder, and the awkward cases</h2>
+    <div class="cases">
+      <div class="case"><h3>Worktree sessions</h3><p class="muted">"The directory I'm in" is the session's working folder, the worktree, because that's where the agent's changes are and where you'd <code>cd</code> to run them. The header already shows that one. B and C also offer the source repo, which Fleet knows for every worktree session.</p></div>
+      <div class="case"><h3>Long paths</h3><p class="muted">A and B cut the start of the path, not the end, so <code>…/fleet-session-7f3a9c21</code> stays readable. C shows only the folder's name and gives the whole path in its popover. All of them copy the full path.</p></div>
+      <div class="case"><h3>Windows</h3><p class="muted">Copied exactly as Fleet has it, backslashes and spaces included: <code>C:\Users\Sam Rivera\code\orbit-api</code>. B's <b>Copy as cd command</b> quotes it the way that machine's shell needs.</p></div>
+      <div class="case"><h3>Another machine</h3><p class="muted">The path belongs to that machine, so copying still works (you'd paste it into an ssh session). B's and C's <b>Open in</b> are off there, with the reason, as in the session list's menu today.</p></div>
+      <div class="case"><h3>Keyboard and screen readers</h3><p class="muted">The copy control is a real button in the tab order, with a visible focus ring. Its name is "Copy folder path", its tooltip shows the full path, and "Folder path copied" is read out once. Nothing depends on hover alone.</p></div>
+      <div class="case"><h3>No hover</h3><p class="muted">On a touch screen A's icon is always shown at reduced strength. Where the header has no room for a path (the phone app, a very narrow window), every option adds a <b>Copy folder path</b> row to the ⋯ menu (below).</p></div>
+    </div>
+  </section>
+
+  <section style="display:flex;flex-direction:column;gap:12px">
+    <h2>Phone</h2>
+    <p class="muted" style="max-width:70ch">Fleet's phone app shows only the folder's name in the header, and there's no hover. The same change goes in for every option: a <b>Copy folder path</b> row in the ⋯ menu, confirmed with the phone's usual toast. A desktop browser window that narrow keeps the desktop header, which has no room for the path at all, so its ⋯ menu gets the same row.</p>
+    <div class="phones" id="phones"></div>
+  </section>
+
+  <section style="display:flex;flex-direction:column;gap:12px">
+    <h2>Side by side</h2>
+    <div class="table-wrap">
+      <table>
+        <thead><tr><th></th><th>Today</th><th>A · Copy button</th><th>B · Click the path</th><th>C · Folder chip</th></tr></thead>
+        <tbody>
+          <tr><th>Clicks to copy</th><td>2, from the session list</td><td class="rec">1</td><td>1</td><td>2</td></tr>
+          <tr><th>Path on screen</th><td>Start of it; the end cuts off</td><td class="rec">Start cut, name kept</td><td>Start cut, name kept</td><td>Name only; full path in the popover</td></tr>
+          <tr><th>Worktree's source repo</th><td>No</td><td class="rec">No</td><td class="yes">In the menu</td><td class="yes">In the popover</td></tr>
+          <tr><th>cd command, Open in</th><td>Open in, from the session list</td><td class="rec">No</td><td class="yes">Both, in the menu</td><td>Open in</td></tr>
+          <tr><th>Surprises</th><td>None</td><td class="rec">None: a button that says what it does</td><td>A click on text copies; selecting part of the path gets harder</td><td>The path isn't visible at a glance any more</td></tr>
+          <tr><th>New UI</th><td></td><td class="rec">One 20px button</td><td>A button, a chevron and a menu</td><td>A chip and a popover</td></tr>
+          <tr><th>Build</th><td></td><td class="rec">About half a day. ~150 lines with tests, header only</td><td>About a day. ~350 lines: menu, quoting, Open in for a dropdown</td><td>About a day and a half. ~450 lines: popover, focus handling, Open in</td></tr>
+        </tbody>
+      </table>
+    </div>
+  </section>
+
+  <section class="recommend">
+    <h2>Recommendation: A</h2>
+    <p>It's the ask as you described it, one click, and the smallest change. Two things come with it:</p>
+    <ul>
+      <li>The path cuts from the start, so the folder's own name stays visible on a narrow window.</li>
+      <li>A <b>Copy folder path</b> row in the ⋯ menu, both the phone app's and the desktop header's, for when there's no room to show the path.</li>
+    </ul>
+    <p class="muted">If you also want the source repo, a <code class="mono">cd</code> line or Open in from the header, B's menu can go on A's path later as a right-click, without changing what a click does.</p>
+  </section>
+
+</div>
+
+<script>
+const ICONS = {
+  copy: '<rect width="14" height="14" x="8" y="8" rx="2" ry="2"/><path d="M4 16c-1.1 0-2-.9-2-2V4c0-1.1.9-2 2-2h10c1.1 0 2 .9 2 2"/>',
+  check: '<path d="M20 6 9 17l-5-5"/>',
+  branch: '<line x1="6" x2="6" y1="3" y2="15"/><circle cx="18" cy="6" r="3"/><circle cx="6" cy="18" r="3"/><path d="M18 9a9 9 0 0 1-9 9"/>',
+  folder: '<path d="M20 20a2 2 0 0 0 2-2V8a2 2 0 0 0-2-2h-7.9a2 2 0 0 1-1.69-.9L9.6 3.9A2 2 0 0 0 7.93 3H4a2 2 0 0 0-2 2v13a2 2 0 0 0 2 2Z"/>',
+  chevDown: '<path d="m6 9 6 6 6-6"/>',
+  chevLeft: '<path d="m15 18-6-6 6-6"/>',
+  terminal: '<polyline points="4 17 10 11 4 5"/><line x1="12" x2="20" y1="19" y2="19"/>',
+  panel: '<rect width="18" height="18" x="3" y="3" rx="2"/><path d="M15 3v18"/>',
+  chart: '<path d="M3 3v16a2 2 0 0 0 2 2h16"/><path d="M18 17V9"/><path d="M13 17V5"/><path d="M8 17v-3"/>',
+  dots: '<circle cx="12" cy="12" r="1"/><circle cx="19" cy="12" r="1"/><circle cx="5" cy="12" r="1"/>',
+  plus: '<path d="M5 12h14"/><path d="M12 5v14"/>',
+  code: '<path d="m16 18 6-6-6-6"/><path d="m8 6-6 6 6 6"/>',
+  fork: '<circle cx="12" cy="18" r="3"/><circle cx="6" cy="6" r="3"/><circle cx="18" cy="6" r="3"/><path d="M18 9v2c0 .6-.4 1-1 1H7c-.6 0-1-.4-1-1V9"/><path d="M12 12v3"/>',
+  diff: '<path d="M12 3v14"/><path d="M5 10h14"/><path d="M5 21h14"/>',
+  file: '<path d="M15 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V7Z"/><path d="M14 2v4a2 2 0 0 0 2 2h4"/>',
+  pencil: '<path d="M21.17 6.81a1 1 0 0 0-3.99-3.99L3.84 16.17a2 2 0 0 0-.5.83l-1.32 4.35a.5.5 0 0 0 .62.62l4.35-1.32a2 2 0 0 0 .83-.5z"/>',
+  laptop: '<path d="M20 16V7a2 2 0 0 0-2-2H6a2 2 0 0 0-2 2v9m16 0H4m16 0 1.28 2.55a1 1 0 0 1-.9 1.45H3.62a1 1 0 0 1-.9-1.45L4 16"/>',
+  archive: '<rect width="20" height="5" x="2" y="3" rx="1"/><path d="M4 8v11a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8"/><path d="M10 12h4"/>',
+  menu: '<line x1="4" x2="20" y1="12" y2="12"/><line x1="4" x2="20" y1="6" y2="6"/><line x1="4" x2="20" y1="18" y2="18"/>',
+};
+const icon = (name, size = 14, cls = "") =>
+  `<svg class="${cls}" width="${size}" height="${size}" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">${ICONS[name]}</svg>`;
+const esc = (s) => s.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/"/g, "&quot;");
+
+/* Invented sessions. */
+const SESSIONS = {
+  plain: { machine: null, branch: "main", dir: "/home/sam/code/orbit-api", source: null, win: false },
+  worktree: { machine: null, branch: "fleet/retry-backoff", dir: "/home/sam/code/orbit-api-worktrees/fleet-session-7f3a9c21", source: "/home/sam/code/orbit-api", win: false },
+  windows: { machine: null, branch: "main", dir: "C:\\Users\\Sam Rivera\\code\\orbit-api", source: null, win: true },
+  remote: { machine: "studio-mac", branch: "fleet/retry-backoff", dir: "/Users/sam/code/orbit-api-worktrees/fleet-session-2b81d0e4", source: "/Users/sam/code/orbit-api", win: false },
+};
+const TITLE = "Retry failed webhook deliveries with backoff";
+
+const state = { opt: "a", sess: "worktree", width: "wide", theme: null, overlay: null, hint: null };
+let copiedTimer = null;
+
+function split(p) {
+  const i = Math.max(p.lastIndexOf("/"), p.lastIndexOf("\\"));
+  return i > 0 ? [p.slice(0, i), p.slice(i)] : ["", p];
+}
+const leafName = (p) => split(p)[1].replace(/^[\\/]/, "");
+function cdLine(s) {
+  if (s.win) return `cd "${s.dir}"`;
+  return /[^\w/.~-]/.test(s.dir) ? `cd '${s.dir.replace(/'/g, "'\\''")}'` : `cd ${s.dir}`;
+}
+const pathHtml = (p) => { const [h, l] = split(p); return `<span class="path"><span class="path__head">${esc(h)}</span><span class="path__leaf">${esc(l)}</span></span>`; };
+
+function dirHtml(opt, s, forced = "") {
+  if (opt === "today") return `<span class="sdh__directory" title="${esc(s.dir)}">${esc(s.dir)}</span>`;
+  if (opt === "a") return `<span class="dirA ${forced}" data-dir>
+      ${pathHtml(s.dir)}
+      <button type="button" class="dirA__copy" data-act="copy" aria-label="Copy folder path" title="Copy ${esc(s.dir)}">${icon("copy", 13, "i-copy")}${icon("check", 13, "i-check")}</button>
+      <span class="done" aria-hidden="true">Copied</span></span>`;
+  if (opt === "b") return `<span class="dirB ${forced}" data-dir>
+      <button type="button" class="dirB__path" data-act="copy" aria-label="Copy folder path ${esc(s.dir)}" title="Click to copy ${esc(s.dir)} · right-click for more">${icon("check", 12, "i-check")}${pathHtml(s.dir)}</button>
+      <button type="button" class="dirB__more" data-act="menu" aria-haspopup="menu" aria-expanded="${state.overlay === "menu"}" aria-label="More ways to copy or open this folder">${icon("chevDown", 12)}</button>
+      <span class="done" aria-hidden="true">Copied</span></span>`;
+  const name = leafName(s.source ?? s.dir);
+  return `<button type="button" class="dirC ${forced}" data-act="pop" aria-haspopup="dialog" aria-expanded="${state.overlay === "pop"}" title="${esc(s.dir)}">
+      ${icon("folder", 12)}<span class="dirC__name">${esc(name)}</span>${s.source ? '<span class="dirC__tag">worktree</span>' : ""}${icon("chevDown", 11)}</button>`;
+}
+
+function metaHtml(opt, s, forced = "", full = true) {
+  const parts = [];
+  if (s.machine && full) parts.push(`<span class="sdh__machine" title="Runs on ${s.machine}">${s.machine}</span>`);
+  if (full) {
+    parts.push(`<span class="sdh__project">orbit-api</span>`, `<span class="sdh__sep">·</span>`,
+      `<span class="sdh__harness">OpenCode</span>`, `<span class="sdh__sep">·</span>`,
+      `<span class="sdh__model">Sonnet 4.5</span>`, `<span class="sdh__sep">·</span>`);
+  }
+  if (full) parts.push(`<span class="sdh__branch" title="Branch ${esc(s.branch)}">${icon("branch", 12)}<span>${esc(s.branch)}</span></span>`,
+    `<span class="sdh__sep">·</span>`);
+  parts.push(dirHtml(opt, s, forced));
+  if (full) parts.push(`<span class="sdh__tags"><span class="sdh__tag-add" aria-hidden="true">${icon("plus", 12)}</span></span>`);
+  return `<div class="sdh__meta-row">${parts.join("")}</div>`;
+}
+
+function headerHtml(opt, s) {
+  return `<header class="sdh">
+    <div class="sdh__main">
+      <div class="sdh__title-row"><span class="sdh__title">${TITLE}</span></div>
+      ${metaHtml(opt, s)}
+    </div>
+    <div class="sdh__actions" aria-hidden="true">
+      <span class="ibtn">${icon("terminal", 15)}</span><span class="ibtn">${icon("panel", 15)}</span>
+      <span class="ibtn">${icon("chart", 15)}</span><span class="ibtn">${icon("dots", 15)}</span>
+    </div>
+    <span class="sr-only" role="status" id="announce"></span>
+  </header>`;
+}
+
+/* ── Overlays ─────────────────────────────────────────────────────── */
+function menuHtml(s) {
+  const remote = !!s.machine;
+  const row = (act, ic, label, hint, extra = "") =>
+    `<button type="button" role="menuitem" class="mi" data-act="${act}" data-hint="${esc(hint)}" ${extra}>${icon(ic, 14)}${label}</button>`;
+  const openHint = remote ? `It's a folder on ${s.machine}, so it doesn't open here.` : `Opens ${s.dir}.`;
+  return `<div class="menu" role="menu" aria-label="Folder">
+    ${row("copy", "copy", "Copy path", `Copies ${s.dir}`)}
+    ${s.source ? row("copy-source", "folder", "Copy source repo path", `Copies ${s.source}, the repo this worktree came from.`) : ""}
+    ${row("copy-cd", "terminal", "Copy as cd command", `Copies ${cdLine(s)}`)}
+    <div class="msep"></div>
+    <div class="mlabel">Open in</div>
+    ${row("noop", "code", "VS Code", openHint, remote ? 'aria-disabled="true"' : "")}
+    ${row("noop", "terminal", "Terminal", openHint, remote ? 'aria-disabled="true"' : "")}
+    ${row("noop", "folder", "Files", openHint, remote ? 'aria-disabled="true"' : "")}
+    <div class="mhint" id="mhint">${esc(state.hint ?? "Copies the folder this session works in.")}</div>
+  </div>`;
+}
+
+function popHtml(s) {
+  const remote = !!s.machine;
+  const block = (label, note, path, act) => `<div class="pop__block">
+      <div class="pop__label">${label}${note ? ` <span>${note}</span>` : ""}</div>
+      <div class="pop__line"><span class="pop__path">${esc(path)}</span>
+        <button type="button" class="sbtn" data-act="${act}">${icon("copy", 12)}<span>Copy</span></button></div></div>`;
+  return `<div class="menu pop" role="dialog" aria-label="Session folder">
+    ${block("Working folder", s.source ? "· a worktree" : (s.machine ? `· on ${s.machine}` : ""), s.dir, "copy")}
+    ${s.source ? block("Source repo", "", s.source, "copy-source") : ""}
+    <div class="pop__open">
+      ${remote ? `<span class="muted">It's a folder on ${s.machine}, so it doesn't open here.</span>` :
+        `<span class="muted">Open in</span>
+         <button type="button" class="sbtn" data-act="noop">${icon("code", 12)}VS Code</button>
+         <button type="button" class="sbtn" data-act="noop">${icon("terminal", 12)}Terminal</button>
+         <button type="button" class="sbtn" data-act="noop">${icon("folder", 12)}Files</button>`}
+    </div>
+  </div>`;
+}
+
+function placeOverlay(anchorSel) {
+  const stage = document.getElementById("stage");
+  const layer = document.getElementById("layer");
+  const anchor = stage.querySelector(anchorSel);
+  if (!anchor || !layer.firstElementChild) return;
+  const sr = stage.getBoundingClientRect(), ar = anchor.getBoundingClientRect();
+  layer.className = "layer";
+  const w = layer.firstElementChild.getBoundingClientRect().width;
+  let left = ar.left - sr.left;
+  left = Math.max(8, Math.min(left, sr.width - w - 8));
+  layer.style.left = left + "px";
+  layer.style.top = (ar.bottom - sr.top + 6) + "px";
+}
+
+function renderOverlay() {
+  const s = SESSIONS[state.sess];
+  const layer = document.getElementById("layer");
+  if (state.overlay === "menu") { layer.innerHTML = menuHtml(s); placeOverlay(".dirB__more"); }
+  else if (state.overlay === "pop") { layer.innerHTML = popHtml(s); placeOverlay(".dirC"); }
+  else { layer.innerHTML = ""; layer.className = ""; }
+  document.querySelectorAll("[aria-haspopup]").forEach((b) => {
+    const mine = (b.dataset.act === "menu" && state.overlay === "menu") || (b.dataset.act === "pop" && state.overlay === "pop");
+    b.setAttribute("aria-expanded", String(mine));
+  });
+}
+
+/* ── Copy ─────────────────────────────────────────────────────────── */
+function copy(text, sourceEl) {
+  try { navigator.clipboard?.writeText(text).catch(() => {}); } catch {}
+  document.getElementById("clip").textContent = text;
+  const announce = document.getElementById("announce");
+  if (announce) announce.textContent = "Folder path copied";
+  const dir = document.querySelector("#header [data-dir]");
+  if (sourceEl && sourceEl.classList.contains("sbtn")) {
+    sourceEl.classList.add("is-copied");
+    sourceEl.innerHTML = icon("check", 12) + "<span>Copied</span>";
+    setTimeout(() => { sourceEl.classList.remove("is-copied"); sourceEl.innerHTML = icon("copy", 12) + "<span>Copy</span>"; }, 1500);
+    return;
+  }
+  if (!dir) return;
+  dir.classList.add("is-copied");
+  clearTimeout(copiedTimer);
+  copiedTimer = setTimeout(() => { dir.classList.remove("is-copied"); if (announce) announce.textContent = ""; }, 1500);
+}
+
+/* ── Notes per option ─────────────────────────────────────────────── */
+const NOTES = {
+  today: {
+    title: "Today",
+    try: "Hover the path for its tooltip. Switch to Narrow and the folder's name is the first thing to go.",
+    what: [
+      "The path is plain text at the end of the meta line, after the branch. It gives way first when the window narrows.",
+      "It cuts off at the end, so a worktree reads <code class=\"mono\">/home/sam/code/orbit-api-work…</code> and its own name is gone.",
+      "To copy it: right-click the session in the list, then <b>Copy path</b>. Or select the text by hand.",
+    ],
+    good: [], watch: [], cost: "",
+    states: ["rest"],
+  },
+  a: {
+    title: "A · A copy button that shows on hover",
+    try: "Hover the path, then click the copy icon. Or <kbd>Tab</kbd> to it and press <kbd>Enter</kbd>.",
+    what: [
+      "Hovering the path brightens it and shows a 20px copy button right after it, the same button the conversation's messages use.",
+      "Click: the icon turns into a green check and \"Copied\" shows next to it for 1.5 s. Nothing else moves.",
+      "The path now cuts from the start, so the folder's name stays. The button doesn't shrink, so it stays whole when the path is squeezed down to a few letters.",
+      "Copies the working folder: the worktree in a worktree session.",
+    ],
+    good: ["Exactly the ask", "One click, no new surface", "Same pattern as Copy message"],
+    watch: ["Can't reach the source repo or a cd line from here", "Hidden until hover (always shown on touch screens)"],
+    cost: "About half a day. ~150 lines in SessionDetailHeader.vue with its tests, plus the two ⋯ menu rows.",
+    states: ["rest", "is-hover", "is-focus", "is-copied", "is-touch"],
+  },
+  b: {
+    title: "B · Click the path to copy, chevron for more",
+    try: "Click the path itself. Then try the chevron for the menu, and hover its rows to see what each one copies.",
+    what: [
+      "The path is the button: it gets a soft fill on hover and a pointer. A click copies, with a check in front and \"Copied\" after.",
+      "The chevron (or a right-click on the path) opens a menu: Copy path, Copy source repo path (worktrees only), Copy as cd command, and Open in.",
+      "The menu's footer says exactly what the row under the pointer will copy, as the session list's menu does.",
+    ],
+    good: ["One click for the common case", "Source repo, cd and Open in in one place", "Footer shows the full path"],
+    watch: ["A click on plain-looking text copies, which can surprise", "Selecting part of the path gets harder", "Two controls where there was text"],
+    cost: "About a day. ~350 lines: a dropdown, Open in as a dropdown submenu (today it's a context-menu one), shell quoting per OS.",
+    states: ["rest", "is-hover", "is-copied"],
+  },
+  c: {
+    title: "C · A folder chip that opens the full path",
+    try: "Click the folder chip. Copy either path from the popover. Press <kbd>Esc</kbd> to close it.",
+    what: [
+      "The meta line shows a chip with the folder's name instead of the path. A worktree shows its repo's name and \"worktree\".",
+      "Clicking it opens a popover with the whole path, wrapped, never cut, each with a Copy button, then Open in.",
+      "The meta line gets shorter, so the branch and model don't get squeezed.",
+    ],
+    good: ["Full path readable for long worktree paths", "Source repo next to the worktree", "Frees room in the header"],
+    watch: ["Two clicks to copy", "The path isn't visible at a glance", "Most new UI of the three"],
+    cost: "About a day and a half. ~450 lines: a popover with focus handling, two copy buttons, Open in buttons.",
+    states: ["rest", "is-hover"],
+  },
+};
+const STATE_NAMES = { rest: "Rest", "is-hover": "Hover", "is-focus": "Keyboard focus", "is-copied": "Copied, 1.5 s", "is-touch": "Touch screen" };
+
+function notesHtml() {
+  const n = NOTES[state.opt], s = SESSIONS[state.sess];
+  const states = n.states.map((st) => `<div class="state"><span class="state__name">${STATE_NAMES[st]}</span>${metaHtml(state.opt, s, st === "rest" ? "" : st, false)}</div>`).join("");
+  return `<div class="notes">
+    <div>
+      <h2>${n.title}</h2>
+      <ul>${n.what.map((w) => `<li>${w}</li>`).join("")}</ul>
+      ${n.cost ? `<p class="muted"><b style="color:var(--text);font-weight:600">Build:</b> ${n.cost}</p>` : ""}
+    </div>
+    <div>
+      <h3>States</h3>
+      <div class="states">${states}</div>
+      ${n.good.length ? `<div class="verdict"><span><b class="yes">For</b> · ${n.good.join(" · ")}</span></div>
+      <div class="verdict"><span><b style="color:var(--status-waiting)">Against</b> · ${n.watch.join(" · ")}</span></div>` : ""}
+    </div>
+  </div>`;
+}
+
+/* ── Phones ───────────────────────────────────────────────────────── */
+function phonesHtml() {
+  const s = SESSIONS[state.sess];
+  const head = `<div class="ph-shead"><span class="ph-icon ph-icon--text">${icon("chevLeft", 20)}</span>
+      <div class="ph-shead__main"><p class="ph-shead__t">${TITLE}</p><p class="ph-shead__s"><span class="ph-dot"></span><span>Idle · ${s.machine ?? "workstation"}</span></p></div>
+      <span class="ph-icon">${icon("dots", 20)}</span></div>`;
+  const convo = `<div class="ph-convo"><div class="bubble">Retry failed webhook deliveries with exponential backoff.</div><div>I added RetryPolicy to the delivery worker…</div></div>`;
+  const mi = (ic, label, hint = "", pressed = false) => `<div class="ph-mi${pressed ? " is-pressed" : ""}">${icon(ic, 18)}<span>${label}</span>${hint ? `<span class="ph-mi__hint">${hint}</span>` : ""}</div>`;
+  const menu = `<div class="ph-scrim"></div><div class="ph-sheet"><div class="ph-grab"></div><div class="ph-menu">
+      ${mi("diff", "Changes", "3 files")}${mi("file", "Files")}${mi("terminal", "Run a command", "!")}<hr>
+      ${mi("copy", "Copy folder path", esc(leafName(s.source ?? s.dir)), true)}
+      ${mi("fork", "Fork from here")}${mi("pencil", "Rename")}${mi("laptop", "Open on my computer")}<hr>
+      ${mi("archive", "Archive")}</div></div>`;
+  const toast = `<div class="ph-toast" role="status"><span>Folder path copied</span><small>${esc(s.dir)}</small></div>`;
+  const narrow = `<div class="web-narrow"><span class="ibtn menu-btn" aria-hidden="true">${icon("menu", 16)}</span>
+      <header class="sdh"><div class="sdh__main"><div class="sdh__title-row"><span class="sdh__title">${TITLE}</span></div>
+      ${metaHtml("a", s, "is-touch", true)}</div><div class="sdh__actions"><span class="ibtn ibtn--on">${icon("dots", 15)}</span></div></header>${convo}
+      <div class="menu web-narrow__menu" aria-hidden="true">
+        <div class="mi is-hi">${icon("copy", 14)}Copy folder path<span class="mi__new">New</span></div>
+        <div class="mi">${icon("pencil", 14)}Rename</div>
+        <div class="mi">${icon("archive", 14)}Archive</div>
+        <div class="msep"></div>
+        <div class="mi" style="color:var(--error)">Delete…</div>
+      </div></div>`;
+  return `
+    <div class="phone-col"><div class="phone">${head}${convo}${menu}</div>
+      <p class="cap"><b>1 · ⋯ menu.</b> A new row after Run a command, hinting the folder's name. Tap copies the working folder.</p></div>
+    <div class="phone-col"><div class="phone">${head}${convo}${toast}<div class="ph-composer">Message…</div></div>
+      <p class="cap"><b>2 · Toast.</b> The phone's usual toast says what happened and starts the path it copied.</p></div>
+    <div class="phone-col">${narrow}
+      <p class="cap"><b>3 · Narrow browser window.</b> Here the meta line has no room for the path, today or with any option. The header's ⋯ menu, which has Rename and Archive, gets <b>Copy folder path</b> as its first row.</p></div>`;
+}
+
+/* ── Render ───────────────────────────────────────────────────────── */
+function render() {
+  const s = SESSIONS[state.sess];
+  document.getElementById("header").innerHTML = headerHtml(state.opt, s);
+  document.getElementById("stage").dataset.width = state.width;
+  document.getElementById("try").innerHTML = NOTES[state.opt].try;
+  document.getElementById("notes").innerHTML = notesHtml();
+  document.getElementById("phones").innerHTML = phonesHtml();
+  document.querySelectorAll(".seg").forEach((seg) => {
+    const key = seg.dataset.ctl;
+    const cur = key === "theme" ? (state.theme ?? (matchMedia("(prefers-color-scheme: light)").matches ? "light" : "dark")) : state[key];
+    seg.querySelectorAll("button").forEach((b) => b.setAttribute("aria-pressed", String(b.dataset.v === cur)));
+  });
+  renderOverlay();
+}
+
+document.querySelectorAll(".seg").forEach((seg) => seg.addEventListener("click", (e) => {
+  const b = e.target.closest("button"); if (!b) return;
+  const key = seg.dataset.ctl;
+  if (key === "theme") { state.theme = b.dataset.v; document.documentElement.dataset.theme = b.dataset.v; }
+  else { state[key] = b.dataset.v; state.overlay = null; state.hint = null; }
+  document.getElementById("clip").textContent = "nothing copied yet";
+  render();
+}));
+
+const stage = document.getElementById("stage");
+stage.addEventListener("click", (e) => {
+  const el = e.target.closest("[data-act]");
+  if (!el || !stage.contains(el)) { if (state.overlay && !e.target.closest(".layer")) { state.overlay = null; renderOverlay(); } return; }
+  const s = SESSIONS[state.sess];
+  const act = el.dataset.act;
+  if (el.getAttribute("aria-disabled") === "true") return;
+  if (act === "copy") { copy(s.dir, el); if (el.classList.contains("mi")) { state.overlay = null; renderOverlay(); } }
+  else if (act === "copy-source") { copy(s.source, el); if (el.classList.contains("mi")) { state.overlay = null; renderOverlay(); } }
+  else if (act === "copy-cd") { copy(cdLine(s), el); state.overlay = null; renderOverlay(); }
+  else if (act === "menu" || act === "pop") {
+    state.overlay = state.overlay === act ? null : act; state.hint = null; renderOverlay();
+    const first = document.querySelector("#layer .mi, #layer .sbtn"); if (first) first.focus();
+  } else if (act === "noop") { state.overlay = null; renderOverlay(); }
+});
+stage.addEventListener("contextmenu", (e) => {
+  if (state.opt === "b" && e.target.closest(".dirB__path")) { e.preventDefault(); state.overlay = "menu"; renderOverlay(); document.querySelector("#layer .mi")?.focus(); }
+});
+stage.addEventListener("mouseover", (e) => setHint(e.target.closest(".mi")));
+stage.addEventListener("focusin", (e) => setHint(e.target.closest(".mi")));
+function setHint(row) {
+  if (!row) return;
+  document.querySelectorAll("#layer .mi").forEach((r) => r.classList.toggle("is-hi", r === row));
+  state.hint = row.dataset.hint;
+  const h = document.getElementById("mhint"); if (h) h.textContent = state.hint;
+}
+document.addEventListener("click", (e) => { if (state.overlay && !stage.contains(e.target)) { state.overlay = null; renderOverlay(); } });
+document.addEventListener("keydown", (e) => {
+  if (!state.overlay) return;
+  if (e.key === "Escape") { const back = state.overlay === "menu" ? ".dirB__more" : ".dirC"; state.overlay = null; renderOverlay(); stage.querySelector(back)?.focus(); }
+  if (state.overlay === "menu" && (e.key === "ArrowDown" || e.key === "ArrowUp")) {
+    e.preventDefault();
+    const rows = [...document.querySelectorAll("#layer .mi")];
+    const i = rows.indexOf(document.activeElement);
+    rows[(i + (e.key === "ArrowDown" ? 1 : -1) + rows.length) % rows.length].focus();
+  }
+});
+window.addEventListener("resize", () => renderOverlay());
+
+render();
+</script>
+</body>
+</html>
