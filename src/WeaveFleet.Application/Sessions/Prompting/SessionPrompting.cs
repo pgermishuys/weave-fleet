@@ -428,9 +428,14 @@ public sealed partial class SessionPrompting(
         var harnessMessageId = await instanceResult.Value.SendCommandAsync(options, ct);
 
         // The harness's message holds what it made of the command (OpenCode's whole template). Remembering the command
-        // under that message's id lets the conversation show "/name arguments" there too, after a reload.
-        if (harnessMessageId is not null && messageRepository is not null && userMsg.Command is { } command)
-            await messageRepository.SaveCommandAsync(id, harnessMessageId, command).ConfigureAwait(false);
+        // under that message's id lets the conversation show "/name arguments" there too, after a reload. A command the
+        // harness kept no message for (a plugin's that only answered with a note) Fleet keeps itself, so it still shows.
+        if (messageRepository is not null && userMsg.Command is { } command)
+        {
+            if (harnessMessageId is null)
+                await messageRepository.UpsertAsync(MessagePersistenceService.ToPersistedMessage(id, userMsg)).ConfigureAwait(false);
+            await messageRepository.SaveCommandAsync(id, harnessMessageId ?? userMsg.Id, command).ConfigureAwait(false);
+        }
 
         return Unit.Value;
     }

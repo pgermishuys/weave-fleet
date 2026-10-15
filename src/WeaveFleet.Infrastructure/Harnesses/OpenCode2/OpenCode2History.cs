@@ -16,26 +16,31 @@ internal static class OpenCode2History
     /// types (idle, …) are left out.
     /// </summary>
     /// <remarks>
-    /// A <c>synthetic</c> message is V2 talking to the model: only a background completion is news for the user, and
-    /// it shows as a message of the session's own, the way it does live. A <c>shell</c> message is a command the user
-    /// ran (<see cref="ShellCommands"/>); V2's synthetic note passing it to the model is left out.
+    /// A <c>synthetic</c> message is V2 talking to the model: only a background completion is news for the user, and a
+    /// plugin's note for the user (<see cref="OpenCode2Mapper.PluginNoteText"/>); each shows as a message of the
+    /// session's own, the way it does live. A <c>shell</c> message is a command the user ran (<see cref="ShellCommands"/>);
+    /// V2's synthetic note passing it to the model is left out.
     /// </remarks>
     public static IReadOnlyList<HarnessMessage> ToHarnessMessages(IEnumerable<OpenCode2Message> messages)
         => messages.Select(ToHarnessMessage).OfType<HarnessMessage>().ToList();
 
     /// <summary>
     /// The prompts waiting in V2's inbox, as the user messages they become. A steer waits there until the running turn's
-    /// next step, and the user sent it already, so it shows now, as it did live.
+    /// next step, and the user sent it already, so it shows now, as it did live. So does a plugin's note for the user,
+    /// which waits there until the next prompt.
     /// </summary>
     public static IReadOnlyList<HarnessMessage> PendingPrompts(IEnumerable<OpenCode2InboxItem> inbox)
         => ToHarnessMessages(inbox
-            .Where(item => item.Type == "user" && item.Payload is not null)
+            .Where(item => item.Payload is not null
+                && (item.Type == "user"
+                    || (item.Type == "synthetic" && OpenCode2Mapper.PluginNoteText(item.Payload.Metadata, item.Payload.Description) is not null)))
             .Select(item => new OpenCode2Message
             {
                 Id = item.Id,
-                Type = "user",
+                Type = item.Type,
                 Time = item.Time,
                 Text = item.Payload!.Text,
+                Description = item.Payload.Description,
                 Metadata = item.Payload.Metadata,
                 Files = item.Payload.Files,
             }));
@@ -118,6 +123,13 @@ internal static class OpenCode2History
                 Id = id,
                 Role = ShellCommands.Role,
                 Parts = [ShellPart(id, shellId, message)],
+                Timestamp = timestamp,
+            },
+            "synthetic" when OpenCode2Mapper.PluginNoteText(message.Metadata, message.Description) is { } note => new HarnessMessage
+            {
+                Id = id,
+                Role = OpenCode2Mapper.NoticeRole,
+                Parts = [new TextPart(note) { PartId = OpenCode2Mapper.PartId(id, "text", 0) }],
                 Timestamp = timestamp,
             },
             "synthetic" when IsBackgroundNotice(message.Metadata) && !OpenCode2Mapper.IsUserShellNotice(message.Text, message.Metadata) => new HarnessMessage

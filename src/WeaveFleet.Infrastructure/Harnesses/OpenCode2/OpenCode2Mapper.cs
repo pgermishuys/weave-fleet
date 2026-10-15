@@ -511,16 +511,30 @@ internal sealed class OpenCode2Mapper(string fleetSessionId, string? workingDire
     /// </summary>
     /// <remarks>
     /// V2 writes other synthetic messages too — Plan mode's reminders, a "the server restarted" note — which are
-    /// instructions to the model, not news for the user: only a background completion (<c>metadata.source</c>) shows.
+    /// instructions to the model, not news for the user: only a background completion (<c>metadata.source</c>) shows,
+    /// and a plugin's note for the user (<see cref="PluginNoteText"/>).
     /// </remarks>
     private List<HarnessEvent> BackgroundNotice(OpenCode2Event evt, JsonElement data)
-        => ReadNoticeMetadata(data) is { } metadata && ReadNoticeItem(data) is { } item
+        => ReadNoticeItem(data) is { } item
             ? Notice(
                 ReadString(data, "inboxID") ?? evt.Id ?? $"{fleetSessionId}-notice",
                 evt.Created ?? DateTimeOffset.UtcNow.ToUnixTimeMilliseconds(),
                 ReadString(item, "text") ?? string.Empty,
-                metadata)
+                item.TryGetProperty("metadata", out var metadata) ? metadata : default,
+                ReadString(item, "description"))
             : [];
+
+    /// <summary>
+    /// What a plugin's note for the user says, or null for any other synthetic message. A plugin that answers the user
+    /// without starting a turn writes a synthetic message with a <c>description</c>, the line V2's own transcript shows
+    /// (Weave's <c>/weave:start</c> with no plan names the plans to choose from); the text is for the model. A
+    /// background completion has a description too, and shows as its whole notice.
+    /// </summary>
+    internal static string? PluginNoteText(JsonElement metadata, string? description)
+        => !string.IsNullOrWhiteSpace(description)
+            && (metadata.ValueKind != JsonValueKind.Object || ReadString(metadata, "source") is not ("shell" or SubagentTool))
+                ? description.Trim()
+                : null;
 
     /// <summary>
     /// The id of a user message V2 took into its inbox (<c>session.inbox.enqueued</c> with a <c>user</c> item): a prompt,
@@ -564,8 +578,11 @@ internal sealed class OpenCode2Mapper(string fleetSessionId, string? workingDire
     /// (<c>&lt;shell …&gt;</c> or <c>&lt;subagent …&gt;</c>), under the id V2 stored it with, so a reopened session
     /// shows the same message. The client reads the tag and shows which call finished.
     /// </summary>
-    private List<HarnessEvent> Notice(string messageId, long created, string text, JsonElement metadata)
+    private List<HarnessEvent> Notice(string messageId, long created, string text, JsonElement metadata, string? description)
     {
+        if (PluginNoteText(metadata, description) is { } note)
+            return NoticeMessage(messageId, created, note);
+
         // Read from history too, where the synthetic messages haven't been sorted yet.
         if (metadata.ValueKind != JsonValueKind.Object || ReadString(metadata, "source") is not ("shell" or SubagentTool))
             return [];
@@ -578,9 +595,13 @@ internal sealed class OpenCode2Mapper(string fleetSessionId, string? workingDire
         if (IsUserShellNotice(text, metadata) || (ReadString(metadata, "shellID") is { } shellId && _userShells.ContainsKey(shellId)))
             return ended is null ? [] : [ended];
 
-        return
+        return [.. ended is null ? [] : new[] { ended }, .. NoticeMessage(messageId, created, text)];
+    }
+
+    /// <summary>A message of the session's own saying <paramref name="text"/>, under the id V2 stored it with.</summary>
+    private List<HarnessEvent> NoticeMessage(string messageId, long created, string text)
+        =>
         [
-            .. ended is null ? [] : new[] { ended },
             Event(EventTypes.MessageUpdated, JsonSerializer.SerializeToElement(
                 new OpenCode2MessageUpdatedPayload
                 {
@@ -595,7 +616,6 @@ internal sealed class OpenCode2Mapper(string fleetSessionId, string? workingDire
                 OpenCode2JsonContext.Default.OpenCode2MessageUpdatedPayload)),
             PartUpdated(TextPart((messageId, PartId(messageId, "text", 0)), "text", text)),
         ];
-    }
 
     /// <summary>How a completion notice says the work ended (<c>metadata.state</c>), as one of <see cref="WorkEndedReasons"/>.</summary>
     private static string NoticeReason(JsonElement metadata) => ReadString(metadata, "state") switch
@@ -725,14 +745,15 @@ internal sealed class OpenCode2Mapper(string fleetSessionId, string? workingDire
     /// </remarks>
     public IReadOnlyList<HarnessEvent> MapMessage(OpenCode2Message message)
     {
-        // A background completion that landed while the stream was down still shows, and reads the same as live.
+        // A background completion or a plugin's note that landed while the stream was down still shows, and reads the same as live.
         if (message is { Type: "synthetic", Id: { } noticeId })
         {
             return Notice(
                 noticeId,
                 message.Time?.Created ?? DateTimeOffset.UtcNow.ToUnixTimeMilliseconds(),
                 message.Text ?? string.Empty,
-                message.Metadata);
+                message.Metadata,
+                message.Description);
         }
 
         // A command the user ran while the stream was down, or one still running: the same message as live.

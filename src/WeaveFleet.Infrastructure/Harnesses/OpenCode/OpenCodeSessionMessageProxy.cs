@@ -315,10 +315,9 @@ public sealed class OpenCodeSessionMessageProxy(
         CancellationToken ct)
     {
         var page = await harnessSession.GetMessagesAsync(new MessageQuery(limit, before), ct).ConfigureAwait(false);
-        page = await WithCommandsAsync(fleetSessionId, page).ConfigureAwait(false);
-        return before is null
-            ? await AddPromptsTheHarnessHasNotStoredAsync(fleetSessionId, page).ConfigureAwait(false)
-            : page;
+        if (before is null)
+            page = await AddPromptsTheHarnessHasNotStoredAsync(fleetSessionId, page).ConfigureAwait(false);
+        return await WithCommandsAsync(fleetSessionId, page).ConfigureAwait(false);
     }
 
     /// <summary>
@@ -383,7 +382,8 @@ public sealed class OpenCodeSessionMessageProxy(
     /// out as soon as the harness has it; anything older than the harness's newest message is not pending.
     /// The harness can list the prompt before it has stored its text; that copy takes Fleet's text, since
     /// the relay leaves out the harness's own user message events and the text would never arrive.
-    /// Turn failures Fleet kept (<see cref="TurnFailureRecorder"/>) go where they happened.
+    /// Turn failures Fleet kept (<see cref="TurnFailureRecorder"/>) go where they happened, and so do commands the
+    /// harness kept no message for, which Fleet keeps instead.
     /// </summary>
     private async Task<MessagePage> AddPromptsTheHarnessHasNotStoredAsync(string fleetSessionId, MessagePage page)
     {
@@ -413,6 +413,17 @@ public sealed class OpenCodeSessionMessageProxy(
         messages.AddRange(pending);
 
         var oldestOnPage = page.Messages.Count > 0 ? page.Messages.Min(m => m.Timestamp) : DateTimeOffset.MinValue;
+        // One from before the page's oldest message belongs on an older page, if there is one.
+        var kept = savedPrompts
+            .Where(m => !harnessIds.Contains(m.Id) && m.Timestamp <= newestInHarness && (!page.HasMore || m.Timestamp >= oldestOnPage))
+            .ToList();
+        if (kept.Count > 0)
+        {
+            var commands = await messageRepository.GetCommandsAsync(fleetSessionId).ConfigureAwait(false);
+            foreach (var command in kept.Where(m => commands.ContainsKey(m.Id)).OrderBy(m => m.Timestamp))
+                messages.Insert(IndexAfter(messages, command.Timestamp), command);
+        }
+
         foreach (var failure in savedMessages.Where(m => m.Error is not null && m.Timestamp >= oldestOnPage).OrderBy(m => m.Timestamp))
             PlaceTurnFailure(messages, failure);
 
@@ -425,14 +436,18 @@ public sealed class OpenCodeSessionMessageProxy(
     /// </summary>
     private static void PlaceTurnFailure(List<HarnessMessage> messages, HarnessMessage failure)
     {
-        var index = messages.FindIndex(m => m.Timestamp > failure.Timestamp);
-        if (index < 0)
-            index = messages.Count;
-
+        var index = IndexAfter(messages, failure.Timestamp);
         if (index > 0 && messages[index - 1] is { Role: "assistant", Error: not null })
             return;
 
         messages.Insert(index, failure);
+    }
+
+    /// <summary>Where a message from <paramref name="timestamp"/> goes: after the last message before it.</summary>
+    private static int IndexAfter(List<HarnessMessage> messages, DateTimeOffset timestamp)
+    {
+        var index = messages.FindIndex(m => m.Timestamp > timestamp);
+        return index < 0 ? messages.Count : index;
     }
 
     private static MessageLifecyclePayload ToMessageLifecyclePayload(HarnessMessage message, string fleetSessionId)
