@@ -58,11 +58,11 @@ describe("the icon rail", () => {
     navigate.mockClear();
   });
 
-  it("lists every rail with its name under the icon, Board and Workflows included while they're off", () => {
+  it("lists every rail with its name under the icon, Workflows included while it's off", () => {
     const wrapper = mount(IconRail);
 
     expect(railLabels(wrapper)).toEqual([
-      "Sessions", "Board", "Workflows", "Automations", "Analytics", "GitHub", "Plugins", "Settings", "Help",
+      "Sessions", "Workflows", "Automations", "Analytics", "GitHub", "Plugins", "Settings", "Help",
     ]);
     expect(wrapper.findAll("nav.rail-nav .rail-label").map((label) => label.text())).toEqual(railLabels(wrapper));
     expect(wrapper.find("[data-tooltip]").exists()).toBe(false);
@@ -71,12 +71,21 @@ describe("the icon rail", () => {
   it("marks only the switched-off rails", () => {
     const wrapper = mount(IconRail);
 
-    expect(wrapper.findAll("[data-off=true]").map((button) => button.attributes("aria-label"))).toEqual(["Board", "Workflows"]);
+    expect(wrapper.findAll("[data-off=true]").map((button) => button.attributes("aria-label"))).toEqual(["Workflows"]);
     expect(wrapper.find("[aria-label=Workflows] .rail-off-dot").exists()).toBe(true);
     expect(wrapper.find("[aria-label=Sessions] .rail-off-dot").exists()).toBe(false);
   });
 
-  it("drops the marker from Board and Workflows once they're on", () => {
+  it("adds Board after Sessions, unmarked, once it's on", () => {
+    boardOn.value = true;
+
+    const wrapper = mount(IconRail);
+
+    expect(railLabels(wrapper).slice(0, 3)).toEqual(["Sessions", "Board", "Workflows"]);
+    expect(wrapper.find("[aria-label=Board]").attributes("data-off")).toBeUndefined();
+  });
+
+  it("drops the marker from Workflows once it's on", () => {
     boardOn.value = true;
     workflowsOn.value = true;
 
