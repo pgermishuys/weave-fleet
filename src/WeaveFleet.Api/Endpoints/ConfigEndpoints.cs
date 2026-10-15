@@ -26,8 +26,8 @@ public static class ConfigEndpoints
         .WithName("GetConfig");
 
         // PUT /api/config — changes Fleet's runtime settings. The Weave config lives at /api/weave.
-        group.MapPut("/config", (JsonObject? body, FleetOptions fleetOptions) =>
-            ApplyRuntimeSettings(body ?? [], fleetOptions) ?? Results.NoContent())
+        group.MapPut("/config", (JsonObject? body, FleetOptions fleetOptions, HttpContext http) =>
+            http.RefuseAgent("Fleet's runtime settings") ?? ApplyRuntimeSettings(body ?? [], fleetOptions) ?? Results.NoContent())
         .WithName("UpdateConfig");
 
         return app;

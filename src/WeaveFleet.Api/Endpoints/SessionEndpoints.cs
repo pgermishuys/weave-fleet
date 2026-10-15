@@ -506,8 +506,13 @@ public static class SessionEndpoints
             string requestId,
             PermissionReplyApiRequest request,
             SessionAsks sessionAsks,
+            HttpContext http,
             CancellationToken ct) =>
         {
+            // The user answers a permission ask, never the agent that raised it.
+            if (http.RefuseAgent("a permission ask") is { } refused)
+                return refused;
+
             var result = await sessionAsks.ReplyToPermissionAsync(id, requestId, request.Reply, request.Message, ct);
             return result.Match(_ => Results.NoContent(), err => err.ToSessionApiResult());
         })

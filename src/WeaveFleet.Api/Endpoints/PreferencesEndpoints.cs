@@ -4,7 +4,6 @@ using WeaveFleet.Application.Mods.Host;
 using WeaveFleet.Application.Skills;
 using WeaveFleet.Application.Users;
 using WeaveFleet.Domain.Repositories;
-using WeaveFleet.Infrastructure.Harnesses.Copilot;
 
 namespace WeaveFleet.Api.Endpoints;
 
@@ -26,10 +25,12 @@ public static class PreferencesEndpoints
 
         group.MapPut("/{key}", async (string key, SetPreferenceRequest req, IUserPreferenceRepository repo, HttpContext http, HarnessAvailabilityCache harnessChecks) =>
         {
-            // This names a program Fleet runs, so only the user sets it, never an agent through its /agent/{token} address.
-            if (http.IsAgentRequest() && key == CopilotHarnessRuntime.PathPreferenceKey)
-                return Results.Json(new ErrorResponse("Agents can't change which program Fleet runs for GitHub Copilot. Ask the user to set it in Settings."),
-                    ApiJsonContext.Default.ErrorResponse, statusCode: StatusCodes.Status403Forbidden);
+            // Preferences hold Fleet's safety settings (permission level) and switches (Copilot, HydraFusion's credits,
+            // Mods, Built-in skills, Session messages) and the program Fleet runs for GitHub Copilot, so only the user
+            // sets them, never an agent through its /agent/{token} address. No key is open to agents: none of Fleet's
+            // skills, plugins or tools write one.
+            if (http.RefuseAgent("Fleet's settings") is { } refused)
+                return refused;
 
             // Turning the Mods switch from off to on turns mods back on, so it ends "Start without mods".
             var mods = key == ModsFeature.PreferenceKey ? http.RequestServices.GetRequiredService<ModsFeature>() : null;
