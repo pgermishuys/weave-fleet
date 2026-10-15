@@ -99,6 +99,14 @@ function patternLabel(input: LabelInput, fallback: string): string {
   return input.pattern ?? fallback;
 }
 
+/** A HydraFusion pass: "Draft · gpt-6.1-sol · 18.4 s" (the time once it has finished). */
+function passLabel(input: LabelInput, fallback: string): string {
+  const millis = Number(input.raw.durationMs);
+  const parts = [text(input, "role"), text(input, "model"), Number.isFinite(millis) && millis > 0 ? `${(millis / 1000).toFixed(1)} s` : undefined];
+  const label = parts.filter(Boolean).join(" · ");
+  return label === "" ? fallback : capitalize(label);
+}
+
 function openLabel(input: LabelInput, fallback: string): string {
   const what = input.command ?? input.url;
   const title = text(input, "title") ?? "";
@@ -184,6 +192,7 @@ const DESCRIPTORS: readonly ToolDescriptor[] = [
   // The agent's own tools
   { name: "task", aliases: ["agent"], category: "subagent", permissionKind: "read", heading: "Task", icon: GitBranch },
   { name: "subagent", category: "subagent", permissionKind: "read", heading: "Subagent", icon: GitBranch, label: subagentLabel },
+  { name: "hydrafusion_pass", category: "subagent", permissionKind: "read", heading: "HydraFusion pass", icon: Layers, label: passLabel },
   { name: "skill", category: "skill", permissionKind: "read", heading: "Skill", icon: Layers, label: (input, fallback) => input.skill ?? fallback },
   { name: "question", category: "question", permissionKind: "read", heading: "Question", icon: MessageCircleQuestion, label: questionLabel },
   { name: "todowrite", aliases: ["todo"], category: "plan", permissionKind: "read", heading: "Update todos", icon: ListTodo, label: todoLabel },

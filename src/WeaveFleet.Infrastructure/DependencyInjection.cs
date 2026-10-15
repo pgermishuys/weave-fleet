@@ -38,6 +38,7 @@ using WeaveFleet.Infrastructure.Events;
 using WeaveFleet.Infrastructure.GitHub;
 using WeaveFleet.Infrastructure.Harnesses;
 using WeaveFleet.Infrastructure.Harnesses.ClaudeCode;
+using WeaveFleet.Infrastructure.Harnesses.Copilot;
 using WeaveFleet.Infrastructure.Harnesses.OpenCode;
 using WeaveFleet.Infrastructure.Harnesses.OpenCode.Pooling;
 using WeaveFleet.Infrastructure.Harnesses.OpenCode2;
@@ -635,6 +636,12 @@ public static class DependencyInjection
         services.AddSingleton<IHarness>(sp => sp.GetRequiredService<PiHarness>());
         services.AddSingleton<PiHarnessRuntime>();
         services.AddSingleton<IHarnessRuntime>(sp => sp.GetRequiredService<PiHarnessRuntime>());
+
+        // GitHub Copilot through weave-copilot (ACP). Experimental: unavailable until Settings → Features turns it on.
+        services.AddSingleton<CopilotHarness>();
+        services.AddSingleton<IHarness>(sp => sp.GetRequiredService<CopilotHarness>());
+        services.AddSingleton<CopilotHarnessRuntime>();
+        services.AddSingleton<IHarnessRuntime>(sp => sp.GetRequiredService<CopilotHarnessRuntime>());
 
         // OpenCode 2: a harness of its own next to OpenCode, off until the user turns it on (opencode2.enabled).
         services.AddHttpClient(OpenCode2HarnessRuntime.HttpClientName);

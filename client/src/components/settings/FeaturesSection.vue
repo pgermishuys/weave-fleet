@@ -129,6 +129,20 @@ const isLiveMachinesEnabled = computed(
 );
 const isSavingLiveMachines = shallowRef(false);
 
+/** GitHub Copilot is a harness the server hides until this is on (`CopilotHarness.FeaturePreferenceKey`). */
+const COPILOT_PREFERENCE_KEY = "Copilot";
+const isCopilotEnabled = computed(() => preferencesStore.get(COPILOT_PREFERENCE_KEY, "false") === "true");
+const isSavingCopilot = shallowRef(false);
+
+async function toggleCopilot(): Promise<void> {
+  isSavingCopilot.value = true;
+  try {
+    await preferencesStore.set(COPILOT_PREFERENCE_KEY, isCopilotEnabled.value ? "false" : "true");
+  } finally {
+    isSavingCopilot.value = false;
+  }
+}
+
 const isAgentHandoffEnabled = computed(
   () => preferencesStore.get(AGENT_HANDOFF_PREFERENCE_KEY, "false") === "true",
 );
@@ -533,6 +547,41 @@ async function toggleBoardFeature(): Promise<void> {
           <span
             class="pointer-events-none inline-block h-5 w-5 rounded-full bg-white shadow ring-0 transition duration-200 ease-in-out"
             :class="isLiveMachinesEnabled ? 'translate-x-5' : 'translate-x-0'"
+          />
+        </button>
+      </div>
+    </div>
+
+    <div class="mt-3 flex items-start justify-between gap-4 rounded-card border border-border bg-main-bg p-4">
+      <div>
+        <p class="flex items-center gap-2 text-sm font-medium text-text">
+          GitHub Copilot
+          <span class="rounded-full border border-border px-2 py-px text-[0.7rem] font-medium uppercase tracking-wide text-muted">
+            Experimental
+          </span>
+        </p>
+        <p class="mt-1 text-xs text-muted">
+          Start sessions on GitHub Copilot, with HydraFusion's passes when you turn them on under Settings → Harnesses.
+          Needs weave-copilot, which Fleet finds on PATH.
+        </p>
+      </div>
+
+      <div class="flex items-center gap-2">
+        <LoaderCircle v-if="isSavingCopilot" :size="16" class="animate-spin text-muted" aria-hidden="true" />
+        <button
+          type="button"
+          role="switch"
+          :aria-checked="isCopilotEnabled"
+          :disabled="preferencesStore.isLoading || isSavingCopilot"
+          aria-label="Enable GitHub Copilot"
+          data-testid="copilot-switch"
+          class="relative inline-flex h-6 w-11 shrink-0 cursor-pointer rounded-full border-2 border-transparent transition-colors duration-200 ease-in-out focus:outline-none focus:ring-2 focus:ring-accent focus:ring-offset-2 focus:ring-offset-main-bg disabled:cursor-not-allowed disabled:opacity-60"
+          :class="isCopilotEnabled ? 'bg-accent' : 'bg-border'"
+          @click="toggleCopilot"
+        >
+          <span
+            class="pointer-events-none inline-block h-5 w-5 rounded-full bg-white shadow ring-0 transition duration-200 ease-in-out"
+            :class="isCopilotEnabled ? 'translate-x-5' : 'translate-x-0'"
           />
         </button>
       </div>
