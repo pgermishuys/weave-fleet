@@ -1124,8 +1124,10 @@ onUnmounted(() => {
   text-overflow: ellipsis;
 }
 
-.session-detail-header__path-head {
-  flex-shrink: 1000;
+/* The leaf never shares the shortfall: it gives way only once the head is gone, at the path's full width. */
+.session-detail-header__path-leaf {
+  flex: none;
+  max-width: 100%;
 }
 
 .session-detail-header__copy-path {
