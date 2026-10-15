@@ -1,11 +1,12 @@
 <script setup lang="ts">
-import { nextTick, shallowRef, useTemplateRef, watch } from "vue";
-import { Archive, Diff, File, GitFork, Laptop, MessageCircle, Pencil, PanelsTopLeft, Square, Terminal } from "lucide-vue-next";
+import { computed, nextTick, shallowRef, useTemplateRef, watch } from "vue";
+import { Archive, Copy, Diff, File, GitFork, Laptop, MessageCircle, Pencil, PanelsTopLeft, Square, Terminal } from "lucide-vue-next";
 import BottomSheet from "@/components/phone/BottomSheet.vue";
 import ModDraftMark from "@/components/mods/ModDraftMark.vue";
+import { splitTypedPath } from "@/lib/new-folder";
 
 /** The session's ⋯ menu, a floating sheet drawn as the desktop's dropdown menu: what its side panels and header actions do. */
-export type MenuAction = "changes" | "files" | "side" | "fork" | "rename" | "computer" | "terminal" | "archive" | "stop";
+export type MenuAction = "changes" | "files" | "side" | "copy-folder" | "fork" | "rename" | "computer" | "terminal" | "archive" | "stop";
 
 const props = defineProps<{
   open: boolean;
@@ -18,10 +19,14 @@ const props = defineProps<{
   canFork: boolean;
   /** Whether the session's machine has a page to open it on (a node has none). */
   canOpenOnComputer: boolean;
+  /** The session's working folder: Copy folder path copies it and hints its name. */
+  folder?: string | null;
   /** Panes mods declared or opened in this session: each is a menu item that opens its sheet. */
   panes?: readonly { id: string; title: string; draft: boolean; hint?: string }[];
 }>();
 const emit = defineEmits<{ (event: "pick", action: MenuAction): void; (event: "rename", title: string): void; (event: "pane", id: string): void; (event: "close"): void }>();
+
+const folderName = computed(() => (props.folder ? splitTypedPath(props.folder).name || props.folder : ""));
 
 const renaming = shallowRef(false);
 const newTitle = shallowRef("");
@@ -152,6 +157,18 @@ async function pick(action: MenuAction): Promise<void> {
         >{{ pane.hint }}</span>
       </button>
       <hr>
+      <button
+        v-if="folder"
+        type="button"
+        class="ph-mi"
+        role="menuitem"
+        data-testid="menu-copy-folder"
+        @click="pick('copy-folder')"
+      >
+        <Copy aria-hidden="true" />
+        <span>Copy folder path</span>
+        <span class="ph-mi__hint">{{ folderName }}</span>
+      </button>
       <button
         v-if="canFork"
         type="button"

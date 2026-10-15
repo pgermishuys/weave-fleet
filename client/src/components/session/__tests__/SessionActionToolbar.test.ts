@@ -1,5 +1,5 @@
 import { mount } from "@vue/test-utils";
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 import SessionActionToolbar from "@/components/session/SessionActionToolbar.vue";
 
 // The ⋯ menu's items render in a portal once it opens; the stubs render them inline.
@@ -88,5 +88,29 @@ describe("SessionActionToolbar", () => {
     await wrapper.get("[data-testid='session-restore-action']").trigger("click");
 
     expect(wrapper.emitted("restore")).toHaveLength(1);
+  });
+
+  it("copies_the_folder_path_from_the_first_row_of_the_more_menu", async () => {
+    const writeText = vi.fn().mockResolvedValue(undefined);
+    vi.stubGlobal("navigator", { ...navigator, clipboard: { writeText } });
+    try {
+      const directory = "/home/sam/code/orbit-api-worktrees/fleet-session-7f3a9c21";
+      const wrapper = mountToolbar({ canArchive: true, directory });
+      const rows = wrapper.get("[data-testid='more-menu']").findAll("button");
+
+      expect(rows[0].attributes("data-testid")).toBe("session-copy-directory-action");
+      expect(rows[0].text()).toBe("Copy folder path");
+      await rows[0].trigger("click");
+
+      expect(writeText).toHaveBeenCalledWith(directory);
+    } finally {
+      vi.unstubAllGlobals();
+    }
+  });
+
+  it("has_no_copy_row_without_a_folder", () => {
+    const wrapper = mountToolbar({ directory: null });
+
+    expect(wrapper.find("[data-testid='session-copy-directory-action']").exists()).toBe(false);
   });
 });

@@ -516,6 +516,7 @@ const SessionDetailPage = defineComponent({
                   isDeleting={isDeleting.value}
                   hasSession={Boolean(params.value.id)}
                   hasInstance={Boolean(instanceId.value)}
+                  directory={selectedSession.value?.workspaceDirectory ?? remoteSession.value?.workspaceDirectory ?? null}
                   errors={actionErrors.value}
                   onAbort={() => void handleAbort()}
                   onFork={handleFork}

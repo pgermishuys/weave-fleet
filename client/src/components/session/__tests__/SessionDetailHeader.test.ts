@@ -259,3 +259,52 @@ describe("SessionDetailHeader removed checkout", () => {
     expect(wrapper.find("[data-testid='session-checkout-chip']").exists()).toBe(false);
   });
 });
+
+describe("SessionDetailHeader folder path", () => {
+  const directory = "/home/sam/code/orbit-api-worktrees/fleet-session-7f3a9c21";
+
+  it("cuts the path from the start: the folder's own name is drawn apart from the rest", () => {
+    const wrapper = mountHeader({ directory } as Partial<HeaderProps>);
+    const path = wrapper.get("[data-testid='session-directory']");
+
+    expect(path.attributes("title")).toBe(directory);
+    expect(path.get(".session-detail-header__path-head").text()).toBe("/home/sam/code/orbit-api-worktrees");
+    expect(path.get(".session-detail-header__path-leaf").text()).toBe("/fleet-session-7f3a9c21");
+  });
+
+  it("copies the full path, says Copied, and clears it after 1.5 s", async () => {
+    vi.useFakeTimers();
+    const writeText = vi.fn().mockResolvedValue(undefined);
+    vi.stubGlobal("navigator", { ...navigator, clipboard: { writeText } });
+    try {
+      const wrapper = mountHeader({ directory } as Partial<HeaderProps>);
+      const button = wrapper.get("[data-testid='session-copy-directory']");
+      expect(button.attributes("aria-label")).toBe("Copy folder path");
+
+      await button.trigger("click");
+      await flushPromises();
+      expect(writeText).toHaveBeenCalledWith(directory);
+      expect(wrapper.get(".session-detail-header__copied").text()).toBe("Copied");
+      expect(wrapper.text()).toContain("Folder path copied");
+
+      vi.advanceTimersByTime(1500);
+      await wrapper.vm.$nextTick();
+      expect(wrapper.find(".session-detail-header__copied").exists()).toBe(false);
+    } finally {
+      vi.useRealTimers();
+      vi.unstubAllGlobals();
+    }
+  });
+
+  it("stays quiet when the clipboard refuses", async () => {
+    vi.stubGlobal("navigator", { ...navigator, clipboard: { writeText: vi.fn().mockRejectedValue(new Error("denied")) } });
+    try {
+      const wrapper = mountHeader({ directory } as Partial<HeaderProps>);
+      await wrapper.get("[data-testid='session-copy-directory']").trigger("click");
+      await flushPromises();
+      expect(wrapper.find(".session-detail-header__copied").exists()).toBe(false);
+    } finally {
+      vi.unstubAllGlobals();
+    }
+  });
+});

@@ -19,7 +19,7 @@ import { useSidebarStore } from "@/stores/sidebar";
 import { useSessionTitle } from "@/composables/use-session-lineage";
 import { lineageLinkLabel, type LineageKind } from "@/lib/session-lineage";
 import { useRouter } from "@tanstack/vue-router";
-import { ArchiveRestore, CornerLeftUp, GitBranch, Layers, Loader2, X, Plus } from "lucide-vue-next";
+import { ArchiveRestore, Check, Copy, CornerLeftUp, GitBranch, Layers, Loader2, X, Plus } from "lucide-vue-next";
 
 interface Props {
   id: string;
@@ -422,7 +422,33 @@ function handleTagInputKeydown(event: KeyboardEvent): void {
   }
 }
 
+// The path cut at its last separator: the start gives way first, so the folder's own name stays in view.
+const directoryParts = computed(() => {
+  const directory = props.directory ?? "";
+  const index = Math.max(directory.lastIndexOf("/"), directory.lastIndexOf("\\"));
+  return index > 0 ? { head: directory.slice(0, index), leaf: directory.slice(index) } : { head: "", leaf: directory };
+});
+
+const directoryCopied = shallowRef(false);
+let directoryCopiedTimer: ReturnType<typeof setTimeout> | undefined;
+
+async function copyDirectory(): Promise<void> {
+  if (!props.directory) return;
+  try {
+    await navigator.clipboard.writeText(props.directory);
+  } catch {
+    // Clipboard failures are non-fatal.
+    return;
+  }
+  directoryCopied.value = true;
+  clearTimeout(directoryCopiedTimer);
+  directoryCopiedTimer = setTimeout(() => {
+    directoryCopied.value = false;
+  }, 1500);
+}
+
 onUnmounted(() => {
+  clearTimeout(directoryCopiedTimer);
   if (composerDisabledSyncTimer !== null) {
     clearInterval(composerDisabledSyncTimer);
     composerDisabledSyncTimer = null;
@@ -616,9 +642,41 @@ onUnmounted(() => {
           <span
             v-if="props.directory"
             class="session-detail-header__directory"
-            :title="props.directory"
+            :class="{ 'session-detail-header__directory--copied': directoryCopied }"
           >
-            {{ props.directory }}
+            <span
+              class="session-detail-header__path"
+              :title="props.directory"
+              data-testid="session-directory"
+            ><span class="session-detail-header__path-head">{{ directoryParts.head }}</span><span class="session-detail-header__path-leaf">{{ directoryParts.leaf }}</span></span>
+            <button
+              type="button"
+              class="session-detail-header__copy-path"
+              aria-label="Copy folder path"
+              :title="props.directory"
+              data-testid="session-copy-directory"
+              @click="copyDirectory"
+            >
+              <Check
+                v-if="directoryCopied"
+                :size="13"
+                aria-hidden="true"
+              />
+              <Copy
+                v-else
+                :size="13"
+                aria-hidden="true"
+              />
+            </button>
+            <span
+              v-if="directoryCopied"
+              class="session-detail-header__copied"
+              aria-hidden="true"
+            >Copied</span>
+            <span
+              class="sr-only"
+              aria-live="polite"
+            >{{ directoryCopied ? "Folder path copied" : "" }}</span>
           </span>
 
           <span class="session-detail-header__tags-row">
@@ -1035,14 +1093,88 @@ onUnmounted(() => {
   color: var(--muted);
 }
 
+/* The path and its copy button: the button never shrinks, the path gives way. */
 .session-detail-header__directory {
+  display: inline-flex;
   flex: 0 1 auto;
+  align-items: center;
+  gap: 4px;
+  min-width: 24px;
+}
+
+.session-detail-header__path {
+  display: inline-flex;
   min-width: 0;
-  overflow: hidden;
-  text-overflow: ellipsis;
   font-family: var(--font-mono-stack);
   font-size: 11.5px;
   opacity: 0.8;
+  transition: opacity var(--transition), color var(--transition);
+}
+
+.session-detail-header__directory:hover .session-detail-header__path,
+.session-detail-header__directory:focus-within .session-detail-header__path {
+  color: var(--text);
+  opacity: 1;
+}
+
+.session-detail-header__path-head,
+.session-detail-header__path-leaf {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.session-detail-header__path-head {
+  flex-shrink: 1000;
+}
+
+.session-detail-header__copy-path {
+  position: relative;
+  display: inline-grid;
+  flex: none;
+  place-items: center;
+  width: 20px;
+  height: 20px;
+  padding: 0;
+  border: 0;
+  border-radius: calc(var(--radius-btn) - 2px);
+  background: transparent;
+  color: var(--muted);
+  cursor: pointer;
+  opacity: 0;
+  transition: opacity var(--transition), background var(--transition), color var(--transition);
+}
+
+.session-detail-header__directory:hover .session-detail-header__copy-path,
+.session-detail-header__directory--copied .session-detail-header__copy-path,
+.session-detail-header__copy-path:focus-visible {
+  opacity: 1;
+}
+
+.session-detail-header__copy-path:hover {
+  background: color-mix(in srgb, var(--text) 7%, transparent);
+  color: var(--text);
+}
+
+.session-detail-header__copy-path:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 0;
+}
+
+.session-detail-header__directory--copied .session-detail-header__copy-path {
+  color: var(--running);
+}
+
+.session-detail-header__copied {
+  flex: none;
+  font-size: 11px;
+  font-weight: 500;
+}
+
+@media (hover: none) {
+  .session-detail-header__copy-path {
+    opacity: 0.75;
+  }
 }
 
 .session-detail-header__tags-row {

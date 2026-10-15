@@ -42,4 +42,22 @@ describe("Session menu", () => {
     expect(menu.find("[data-testid=menu-computer]").exists()).toBe(false);
     expect(menu.find("[data-testid=menu-archive]").exists()).toBe(true);
   });
+
+  it("offers Copy folder path, hinting the folder's name, and picks it", async () => {
+    const folder = "/home/sam/code/orbit-api-worktrees/fleet-session-7f3a9c21";
+    const menu = mount(SessionMenuSheet, { props: { ...props, canOpenOnComputer: false, folder }, global });
+    const row = menu.get("[data-testid=menu-copy-folder]");
+
+    expect(row.text()).toContain("Copy folder path");
+    expect(row.get(".ph-mi__hint").text()).toBe("fleet-session-7f3a9c21");
+    await row.trigger("click");
+
+    expect(menu.emitted("pick")).toEqual([["copy-folder"]]);
+  });
+
+  it("has no Copy folder path without a folder", () => {
+    const menu = mount(SessionMenuSheet, { props: { ...props, canOpenOnComputer: false }, global });
+
+    expect(menu.find("[data-testid=menu-copy-folder]").exists()).toBe(false);
+  });
 });
