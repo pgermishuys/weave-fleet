@@ -10,6 +10,7 @@ import { api } from "@/api/client";
 import type { PluginCatalogResponse } from "@/api/client";
 import { usePluginRuntime } from "@/plugins/composable";
 import "@/components/layout/core-rails";
+import RailButton from "@/components/layout/RailButton.vue";
 import { isSidebarRail, rails, type RailDefinition } from "@/lib/rails";
 import { useBoardFeature } from "@/composables/use-board-feature";
 import { useWorkflowsFeature } from "@/composables/use-workflows-feature";
@@ -26,6 +27,8 @@ import {
 } from "@/components/ui/dropdown-menu";
 
 interface RailItem extends RailDefinition {
+  /** The feature behind it is switched off: drawn dimmed, with a marker. */
+  isOff?: boolean;
   status?: PluginConnectionStatus;
   badge?: number;
 }
@@ -50,23 +53,28 @@ const showPluginRailBadges = false;
 
 const visibleRails = computed<readonly RailItem[]>(() =>
   rails.value
-    .filter((rail) => rail.icon && (!rail.enabled || rail.enabled()))
+    .filter((rail) => rail.icon)
     .map((rail) => {
-      if (!rail.pluginId) return rail;
+      const isOff = rail.off?.() ?? false;
+      if (!rail.pluginId) return { ...rail, isOff };
 
       const pluginStatus = pluginRuntime.getStatus(rail.pluginId);
       const badge = showPluginRailBadges
         ? getStatusBadgeCount(pluginStatus?.actions?.length ?? 0)
         : undefined;
 
-      return { ...rail, status: pluginStatus?.status ?? "disconnected", badge };
+      return { ...rail, isOff, status: pluginStatus?.status ?? "disconnected", badge };
     }));
 
 const topItems = computed(() => visibleRails.value.filter((rail) => rail.placement === "top"));
 
-const pluginItems = computed(() => visibleRails.value.filter((rail) => rail.placement === "plugin"));
+const secondaryItems = computed(() => visibleRails.value.filter((rail) => rail.placement === "secondary"));
 
-const bottomItems = computed(() => visibleRails.value.filter((rail) => rail.placement === "bottom"));
+// Plugin rails sit above Fleet's own bottom rails (Plugins, Settings).
+const bottomItems = computed(() => [
+  ...visibleRails.value.filter((rail) => rail.placement === "plugin"),
+  ...visibleRails.value.filter((rail) => rail.placement === "bottom"),
+]);
 
 // Workflows exist only while they're switched on in Settings.
 watch(isWorkflowsEnabled, (enabled) => {
@@ -183,6 +191,7 @@ function handleSelect(item: RailItem): void {
 <template>
   <aside
     class="rail"
+    :class="{ 'icon-only': isMobileNav }"
     aria-label="Primary navigation"
   >
     <div
@@ -200,73 +209,42 @@ function handleSelect(item: RailItem): void {
       class="rail-nav"
       aria-label="App sections"
     >
-      <button
+      <RailButton
         v-for="item in topItems"
         :key="item.id"
-        type="button"
-        class="rail-item"
-        :class="{ active: activeRail === item.id }"
-        :data-tooltip="item.label"
-        :aria-label="item.label"
-        @click="handleSelect(item)"
-      >
-        <component
-          :is="item.icon"
-          :size="18"
-          aria-hidden="true"
-        />
-      </button>
+        :item="item"
+        :active="activeRail === item.id"
+        :icon-only="isMobileNav"
+        @select="handleSelect"
+      />
 
       <div class="rail-divider" />
 
-      <button
-        v-for="item in pluginItems"
+      <RailButton
+        v-for="item in secondaryItems"
         :key="item.id"
-        type="button"
-        class="rail-item"
-        :class="{ active: activeRail === item.id }"
-        :data-tooltip="item.label"
-        :aria-label="item.label"
-        @click="handleSelect(item)"
-      >
-        <component
-          :is="item.icon"
-          :size="18"
-          aria-hidden="true"
-        />
-        <span
-          v-if="item.badge"
-          class="rail-badge"
-          aria-hidden="true"
-        >
-          {{ item.badge }}
-        </span>
-      </button>
+        :item="item"
+        :active="activeRail === item.id"
+        :icon-only="isMobileNav"
+        @select="handleSelect"
+      />
 
       <div class="rail-divider rail-bottom-divider" />
 
       <div class="rail-bottom">
-        <button
+        <RailButton
           v-for="item in bottomItems"
           :key="item.id"
-          type="button"
-          class="rail-item"
-          :class="{ active: activeRail === item.id }"
-          :data-tooltip="item.label"
-          :aria-label="item.label"
-          @click="handleSelect(item)"
-        >
-          <component
-            :is="item.icon"
-            :size="18"
-            aria-hidden="true"
-          />
-        </button>
+          :item="item"
+          :active="activeRail === item.id"
+          :icon-only="isMobileNav"
+          @select="handleSelect"
+        />
 
         <button
           v-if="isMobileNav"
           type="button"
-          class="rail-item"
+          class="rail-item icon-only"
           data-tooltip="Phone view"
           aria-label="Phone view"
           data-testid="rail-phone-view"
@@ -283,7 +261,8 @@ function handleSelect(item: RailItem): void {
             <button
               type="button"
               class="rail-item"
-              data-tooltip="Help"
+              :class="{ 'icon-only': isMobileNav }"
+              :data-tooltip="isMobileNav ? 'Help' : undefined"
               aria-label="Help"
               data-testid="rail-help"
             >
@@ -291,6 +270,10 @@ function handleSelect(item: RailItem): void {
                 :size="18"
                 aria-hidden="true"
               />
+              <span
+                v-if="!isMobileNav"
+                class="rail-label"
+              >Help</span>
             </button>
           </DropdownMenuTrigger>
           <DropdownMenuContent
@@ -322,13 +305,19 @@ function handleSelect(item: RailItem): void {
 
 <style scoped>
 .rail {
-  width: 48px;
-  min-width: 48px;
+  width: 74px;
+  min-width: 74px;
   background: transparent;
   display: flex;
   flex-direction: column;
   align-items: center;
   padding: 8px 0;
+}
+
+/* The phone drawer keeps the narrow icon-only rail so the sessions column keeps its room. */
+.rail.icon-only {
+  width: 48px;
+  min-width: 48px;
 }
 
 .rail-nav {
@@ -339,32 +328,10 @@ function handleSelect(item: RailItem): void {
   width: 100%;
 }
 
-.rail-item {
-  width: 40px;
-  height: 40px;
+.rail-bottom {
   display: flex;
+  flex-direction: column;
   align-items: center;
-  justify-content: center;
-  border-radius: var(--radius-btn);
-  color: var(--muted);
-  cursor: pointer;
-  position: relative;
-  font-size: 15px;
-  transition: background var(--transition), color var(--transition), border-color var(--transition);
-  margin-bottom: 2px;
-  border: 1px solid transparent;
-  background: transparent;
-  padding: 0;
-}
-
-.rail-item:hover {
-  background: color-mix(in srgb, var(--text) 5%, transparent);
-  color: var(--text);
-}
-
-.rail-item.active {
-  color: var(--text);
-  background: color-mix(in srgb, var(--text) 9%, transparent);
 }
 
 .rail-logo {
@@ -392,11 +359,70 @@ function handleSelect(item: RailItem): void {
 .rail-bottom-divider {
   margin-top: auto;
 }
+</style>
 
-.rail-bottom {
+<style>
+/* Unscoped: RailButton renders the buttons, and Help below renders its own with the same classes. */
+.rail-item {
+  width: 68px;
+  height: 50px;
   display: flex;
   flex-direction: column;
   align-items: center;
+  justify-content: center;
+  gap: 3px;
+  border-radius: var(--radius-btn);
+  color: var(--muted);
+  cursor: pointer;
+  position: relative;
+  transition: background var(--transition), color var(--transition), border-color var(--transition);
+  margin-bottom: 2px;
+  border: 1px solid transparent;
+  background: transparent;
+  padding: 0;
+}
+
+.rail-item.icon-only {
+  width: 40px;
+  height: 40px;
+}
+
+.rail-item:hover {
+  background: color-mix(in srgb, var(--text) 5%, transparent);
+  color: var(--text);
+}
+
+.rail-item.active {
+  color: var(--text);
+  background: color-mix(in srgb, var(--text) 9%, transparent);
+}
+
+.rail-glyph {
+  position: relative;
+  display: flex;
+}
+
+.rail-label {
+  font-size: 10px;
+  font-weight: 500;
+  line-height: 1;
+  white-space: nowrap;
+}
+
+/* Switched off: icon and label dim, not the button, so the hover and active backgrounds stay as they are. */
+.rail-item.off .rail-glyph,
+.rail-item.off .rail-label {
+  opacity: 0.55;
+}
+
+.rail-off-dot {
+  position: absolute;
+  top: -3px;
+  right: -5px;
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: var(--idle);
 }
 
 .rail-badge {
@@ -416,7 +442,8 @@ function handleSelect(item: RailItem): void {
   padding: 0 3px;
 }
 
-.rail-item::after {
+/* A tooltip only where there's no label under the icon. */
+.rail-item[data-tooltip]::after {
   content: attr(data-tooltip);
   position: absolute;
   left: 52px;
@@ -434,9 +461,8 @@ function handleSelect(item: RailItem): void {
   z-index: 100;
 }
 
-.rail-item:hover::after {
+.rail-item[data-tooltip]:hover::after {
   opacity: 1;
   transform: translate(4px, -50%);
 }
-
 </style>

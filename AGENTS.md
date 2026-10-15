@@ -32,7 +32,7 @@ The application shell is a composable layout built from named panels:
 
 | Panel             | Description                                                                 |
 |-------------------|-----------------------------------------------------------------------------|
-| `rail`            | Icon-only vertical nav bar (left edge, always visible)                      |
+| `rail`            | Vertical nav bar (left edge, always visible): an icon with its name under it |
 | `session-list`    | List of sessions for the current workspace (collapsible)                    |
 | `conversation`    | The message/activity stream for the active session                          |
 | `content`         | Right-side artifact viewer (rendered markdown, HTML preview, raw source)     |

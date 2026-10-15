@@ -48,18 +48,29 @@ const BoardContextPanel = defineComponent({
   },
 });
 
+// Its library is for running workflows; with them off the page only says how to turn them on.
+const WorkflowsContextPanel = defineComponent({
+  name: "WorkflowsContextPanel",
+  setup() {
+    const { isWorkflowsEnabled } = useWorkflowsFeature();
+
+    return () => h(isWorkflowsEnabled.value ? WorkflowsNavPanel : SessionsPanel);
+  },
+});
+
 // The icon rail reads these inside a computed, after its own setup has already asked for both features
 // (which starts loading the preferences), so asking again here only reads.
-const boardEnabled = () => useBoardFeature().isBoardFeatureEnabled.value;
-const workflowsEnabled = () => useWorkflowsFeature().isWorkflowsEnabled.value;
+const boardOff = () => !useBoardFeature().isBoardFeatureEnabled.value;
+const workflowsOff = () => !useWorkflowsFeature().isWorkflowsEnabled.value;
 
 /** The rails Fleet ships. Plugin rails (GitHub, Plugins) come from the plugins' own sidebar contributions. */
 railPoint.contribute("core", [
-  { id: "board", label: "Board", icon: LayoutGrid, to: "/board", placement: "top", order: 0, panel: BoardContextPanel, enabled: boardEnabled },
-  { id: "sessions", label: "Sessions", icon: MessageSquare, to: "/", placement: "top", order: 10, panel: SessionsPanel },
-  { id: "workflows", label: "Workflows", icon: Workflow, to: "/workflows", placement: "bottom", order: 10, panel: WorkflowsNavPanel, enabled: workflowsEnabled },
-  { id: "automations", label: "Automations", icon: Zap, to: "/automations", placement: "bottom", order: 20, panel: AutomationsContextPanel },
+  { id: "sessions", label: "Sessions", icon: MessageSquare, to: "/", placement: "top", order: 0, panel: SessionsPanel },
+  // Board and Workflows stay in the rail while they're switched off; their pages say how to turn them on.
+  { id: "board", label: "Board", icon: LayoutGrid, to: "/board", placement: "top", order: 10, panel: BoardContextPanel, off: boardOff },
+  { id: "workflows", label: "Workflows", icon: Workflow, to: "/workflows", placement: "top", order: 20, panel: WorkflowsContextPanel, off: workflowsOff },
+  { id: "automations", label: "Automations", icon: Zap, to: "/automations", placement: "top", order: 30, panel: AutomationsContextPanel },
   // Analytics is a full page; its context column keeps the sessions list.
-  { id: "analytics", label: "Analytics", icon: BarChart3, to: "/analytics", placement: "bottom", order: 30, panel: SessionsPanel },
+  { id: "analytics", label: "Analytics", icon: BarChart3, to: "/analytics", placement: "secondary", order: 0, panel: SessionsPanel },
   { id: "settings", label: "Settings", icon: Settings, to: "/settings", placement: "bottom", order: 40, panel: SettingsContextPanel },
 ]);

@@ -8,8 +8,11 @@ export type BuiltInRailId = "board" | "sessions" | "analytics" | "automations" |
 // `string & {}` keeps the built-in ids in editor completions while accepting a plugin's id.
 export type SidebarRail = BuiltInRailId | (string & {});
 
-/** Where a rail's icon sits in the icon rail: the top group, the plugin group in the middle, or the bottom group. */
-export type RailPlacement = "top" | "plugin" | "bottom";
+/**
+ * Where a rail's icon sits in the icon rail: the top group, the group under the divider, or the bottom group
+ * (plugin rails first, then Fleet's own).
+ */
+export type RailPlacement = "top" | "secondary" | "plugin" | "bottom";
 
 export interface RailDefinition {
   id: SidebarRail;
@@ -23,8 +26,8 @@ export interface RailDefinition {
   panel: Component;
   /** Within a placement, lower comes first. */
   order?: number;
-  /** Hidden from the icon rail while this returns false (a feature switched off). Read inside a computed. */
-  enabled?: () => boolean;
+  /** Shown dimmed with a marker while this returns true (a feature switched off). Read inside a computed. */
+  off?: () => boolean;
   /** Set on a rail that comes from a plugin. */
   pluginId?: string;
 }
