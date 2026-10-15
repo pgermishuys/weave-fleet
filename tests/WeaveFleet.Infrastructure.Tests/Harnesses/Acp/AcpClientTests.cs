@@ -73,4 +73,30 @@ public sealed class AcpClientTests
 
         (await Should.ThrowAsync<AcpException>(pending)).Message.ShouldContain("stopped");
     }
+
+    [Fact]
+    public async Task a_handler_that_throws_on_one_notification_doesnt_end_the_reading()
+    {
+        var seen = new List<string>();
+        await using var agent = new FakeAcpAgent();
+        agent.Client.Notification += (_, p) =>
+        {
+            var n = p.GetProperty("update").GetProperty("n").GetString()!;
+            if (n == "bad")
+                throw new InvalidOperationException("boom");
+            seen.Add(n);
+        };
+        agent.Handle = (_, _) =>
+        {
+            agent.Update("s", new JsonObject { ["n"] = "bad" });
+            agent.Update("s", new JsonObject { ["n"] = "good" });
+            return Task.FromResult<JsonNode?>(new JsonObject());
+        };
+
+        await agent.Client.RequestAsync("session/prompt", null, CancellationToken.None);
+        await agent.Client.RequestAsync("session/prompt", null, CancellationToken.None);
+
+        seen.ShouldBe(["good", "good"]);
+        agent.Client.IsClosed.ShouldBeFalse();
+    }
 }

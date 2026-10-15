@@ -26,6 +26,20 @@ public sealed class AcpMapperTests
     }
 
     [Fact]
+    public void the_finished_message_event_carries_its_parts_so_the_answer_doesnt_vanish()
+    {
+        var mapper = new AcpMapper("s1");
+        mapper.Fusion(J("""{"event":"phase_started","role":"solver","model":"m","index":0}"""));
+        mapper.Update(Chunk("agent_message_chunk", "All done."));
+
+        var finished = mapper.EndTurn("end_turn").Single(e => e.Type == EventTypes.MessageUpdated);
+
+        var parts = finished.Payload!.Value.GetProperty("parts");
+        parts.GetArrayLength().ShouldBe(2);
+        parts[1].GetProperty("text").GetString().ShouldBe("All done.");
+    }
+
+    [Fact]
     public void thinking_and_text_are_separate_parts_in_the_order_they_came()
     {
         var mapper = new AcpMapper("s1");
@@ -95,6 +109,16 @@ public sealed class AcpMapperTests
         pass.ToolName.ShouldBe(AcpMapper.PassTool);
         pass.Arguments.GetProperty("durationMs").GetInt64().ShouldBe(18400);
         pass.Arguments.GetProperty("credits").GetDouble().ShouldBe(4.03);
+    }
+
+    [Fact]
+    public void a_pass_without_usage_sends_null_numbers_and_still_maps()
+    {
+        var mapper = new AcpMapper("s1");
+
+        var events = mapper.Fusion(J("""{"event":"phase_completed","role":"judge","model":"m","index":"one","status":"succeeded","durationMs":null,"credits":null}"""));
+
+        State(events[^1]).ShouldBe("completed");
     }
 
     [Fact]

@@ -18,6 +18,8 @@ internal sealed class AcpMapper(string sessionId)
     /// <summary>The tool name a HydraFusion pass is shown under; the client draws it as a row of its own.</summary>
     internal const string PassTool = "hydrafusion_pass";
 
+    // A steer comes in on the request thread while the read loop is mapping updates.
+    private readonly Lock _lock = new();
     private readonly List<HarnessMessage> _history = [];
     private readonly List<MessagePart> _parts = [];
     private readonly Dictionary<string, int> _tools = [];
@@ -31,10 +33,28 @@ internal sealed class AcpMapper(string sessionId)
     private int _partCount;
 
     /// <summary>The conversation so far, oldest first, with the turn still running as its last message.</summary>
-    internal IReadOnlyList<HarnessMessage> Messages() => _assistantId is null ? _history : [.. _history, Assistant()];
+    internal IReadOnlyList<HarnessMessage> Messages() { lock (_lock) return [.. MessagesCore()]; }
 
     /// <summary>The user's prompt, which starts a turn.</summary>
-    internal void UserPrompt(string text)
+    internal void UserPrompt(string text) { lock (_lock) UserPromptCore(text); }
+
+    /// <summary>Maps one <c>session/update</c> body (<c>params.update</c>).</summary>
+    internal IReadOnlyList<HarnessEvent> Update(JsonElement update) { lock (_lock) return UpdateCore(update); }
+
+    /// <summary>Maps a <c>_fleet/fusion</c> notification: a pass started, or finished with its time and credits.</summary>
+    internal IReadOnlyList<HarnessEvent> Fusion(JsonElement p) { lock (_lock) return FusionCore(p); }
+
+    /// <summary>The turn is over: its message is complete, and the session is idle.</summary>
+    internal IReadOnlyList<HarnessEvent> EndTurn(string? stopReason) { lock (_lock) return EndTurnCore(stopReason); }
+
+    /// <summary>The turn failed, in words the user can read: a failure card, then idle.</summary>
+    internal IReadOnlyList<HarnessEvent> Fail(string message) { lock (_lock) return FailCore(message); }
+
+    /// <summary>The conversation so far, oldest first, with the turn still running as its last message.</summary>
+    private List<HarnessMessage> MessagesCore() => _assistantId is null ? _history : [.. _history, Assistant()];
+
+    /// <summary>The user's prompt, which starts a turn.</summary>
+    private void UserPromptCore(string text)
     {
         CommitAssistant();
         AddUser(text);
@@ -42,7 +62,7 @@ internal sealed class AcpMapper(string sessionId)
     }
 
     /// <summary>Maps one <c>session/update</c> body (<c>params.update</c>).</summary>
-    internal IReadOnlyList<HarnessEvent> Update(JsonElement update)
+    private List<HarnessEvent> UpdateCore(JsonElement update)
     {
         var events = new List<HarnessEvent>();
         switch (Str(update, "sessionUpdate"))
@@ -73,7 +93,7 @@ internal sealed class AcpMapper(string sessionId)
     }
 
     /// <summary>Maps a <c>_fleet/fusion</c> notification: a pass started, or finished with its time and credits.</summary>
-    internal IReadOnlyList<HarnessEvent> Fusion(JsonElement p)
+    private List<HarnessEvent> FusionCore(JsonElement p)
     {
         var kind = Str(p, "event");
         if (kind is not ("phase_started" or "phase_completed"))
@@ -87,14 +107,14 @@ internal sealed class AcpMapper(string sessionId)
             ["role"] = Str(p, "role") ?? Str(p, "phase"),
             ["model"] = Str(p, "model"),
         };
-        if (done && p.TryGetProperty("durationMs", out var ms) && ms.TryGetInt64(out var millis))
+        if (done && p.TryGetProperty("durationMs", out var ms) && ms.ValueKind == JsonValueKind.Number && ms.TryGetInt64(out var millis))
             input["durationMs"] = millis;
-        if (done && p.TryGetProperty("credits", out var credits) && credits.TryGetDouble(out var spent))
+        if (done && p.TryGetProperty("credits", out var credits) && credits.ValueKind == JsonValueKind.Number && credits.TryGetDouble(out var spent))
             input["credits"] = Math.Round(spent, 2);
         if (Str(p, "verdict") is { } verdict)
             input["verdict"] = verdict;
 
-        var index = p.TryGetProperty("index", out var i) && i.TryGetInt32(out var n) ? n : _tools.Count;
+        var index = p.TryGetProperty("index", out var i) && i.ValueKind == JsonValueKind.Number && i.TryGetInt32(out var n) ? n : _tools.Count;
         var failed = done && Str(p, "status") is { } status && status is not ("succeeded" or "completed" or "skipped");
         ToolInvocationState state = !done ? new ToolRunningState { Input = Json(input) }
             : failed ? new ToolErrorState { Input = Json(input), Error = Str(p, "status") }
@@ -104,7 +124,7 @@ internal sealed class AcpMapper(string sessionId)
     }
 
     /// <summary>The turn is over: its message is complete, and the session is idle.</summary>
-    internal IReadOnlyList<HarnessEvent> EndTurn(string? stopReason)
+    private List<HarnessEvent> EndTurnCore(string? stopReason)
     {
         var events = new List<HarnessEvent>();
         SettleTools(events, stopReason == "cancelled" ? "Stopped before it finished." : "The turn ended before this call did.");
@@ -119,7 +139,7 @@ internal sealed class AcpMapper(string sessionId)
     }
 
     /// <summary>The turn failed, in words the user can read: a failure card, then idle.</summary>
-    internal IReadOnlyList<HarnessEvent> Fail(string message)
+    private List<HarnessEvent> FailCore(string message)
     {
         var events = new List<HarnessEvent>();
         SettleTools(events, message);
@@ -147,7 +167,7 @@ internal sealed class AcpMapper(string sessionId)
             return;
 
         EnsureAssistant(events);
-        if (_openKind == kind && _openPartId is { } open)
+        if (_openKind == kind && _openPartId is { } open && PartIndex(open) >= 0)
         {
             _open.Append(text);
             _parts[PartIndex(open)] = Part(kind, _open.ToString(), open);
@@ -294,8 +314,39 @@ internal sealed class AcpMapper(string sessionId)
                     Completed = completed ? DateTimeOffset.UtcNow.ToUnixTimeMilliseconds() : null,
                 },
             },
+            // The event replaces the message's parts: without them the finished message would empty itself.
+            Parts = EventParts(messageId),
         },
         InfrastructureJsonContext.Default.MessageLifecyclePayload);
+
+    private List<MessageEventPart> EventParts(string messageId)
+    {
+        var parts = new List<MessageEventPart>(_parts.Count);
+        foreach (var part in _parts)
+        {
+            switch (part)
+            {
+                case TextPart { PartId: { } id } text:
+                    parts.Add(new TextMessageEventPart { Id = id, SessionId = sessionId, MessageId = messageId, Text = text.Text });
+                    break;
+                case ReasoningPart { PartId: { } id } reasoning:
+                    parts.Add(new ReasoningMessageEventPart { Id = id, SessionId = sessionId, MessageId = messageId, Text = reasoning.Text });
+                    break;
+                case ToolUsePart { PartId: { } id } tool:
+                    ToolInvocationState state = tool.State switch
+                    {
+                        ToolUseState.Completed => new ToolCompletedState { Input = tool.Arguments, Output = tool.Output },
+                        ToolUseState.Error => new ToolErrorState { Input = tool.Arguments, Error = tool.Error },
+                        ToolUseState.Running => new ToolRunningState { Input = tool.Arguments },
+                        _ => new ToolPendingState { Input = tool.Arguments },
+                    };
+                    parts.Add(new ToolMessageEventPart { Id = id, SessionId = sessionId, MessageId = messageId, ToolName = tool.ToolName, CallId = tool.ToolCallId, State = state });
+                    break;
+            }
+        }
+
+        return parts;
+    }
 
     private HarnessEvent PartEvent(MessageEventPart part) => Event(EventTypes.MessagePartUpdated, JsonSerializer.SerializeToElement(
         new MessagePartUpdatedPayload { SessionId = sessionId, Part = part }, InfrastructureJsonContext.Default.MessagePartUpdatedPayload));

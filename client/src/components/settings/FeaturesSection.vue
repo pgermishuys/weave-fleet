@@ -15,6 +15,8 @@ import {
   notificationPermission,
   requestNotificationPermission,
 } from "@/composables/use-session-notifications";
+import { forgetHarnessCatalogs } from "@/composables/use-harness-catalog";
+import { refreshAllHarnesses } from "@/composables/use-harnesses";
 import ModsRuntimePanel from "@/components/settings/mods/ModsRuntimePanel.vue";
 import { useMachinesStore } from "@/stores/machines";
 import { useModsRuntimeStore } from "@/stores/mods-runtime";
@@ -138,6 +140,9 @@ async function toggleCopilot(): Promise<void> {
   isSavingCopilot.value = true;
   try {
     await preferencesStore.set(COPILOT_PREFERENCE_KEY, isCopilotEnabled.value ? "false" : "true");
+    // The composer shows Copilot (or stops showing it) at once, not when its last check is a minute old.
+    forgetHarnessCatalogs("copilot");
+    refreshAllHarnesses();
   } finally {
     isSavingCopilot.value = false;
   }

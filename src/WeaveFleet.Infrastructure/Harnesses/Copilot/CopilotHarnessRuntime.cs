@@ -21,6 +21,8 @@ public sealed class CopilotHarnessRuntime(IServiceScopeFactory scopes, ILoggerFa
     /// <summary>The preference for a path to weave-copilot, for when it isn't on PATH.</summary>
     public const string PathPreferenceKey = "copilot.path";
 
+    internal const string FeatureOffMessage = "GitHub Copilot is experimental: turn it on in Settings → Features.";
+
     private const string Executable = "weave-copilot";
     private const string LocalUser = "local-user";
     private static readonly TimeSpan CatalogLife = TimeSpan.FromMinutes(10);
@@ -35,7 +37,7 @@ public sealed class CopilotHarnessRuntime(IServiceScopeFactory scopes, ILoggerFa
     public async Task<HarnessAvailability> CheckAvailabilityAsync(CancellationToken ct)
     {
         if (!await IsOnAsync(LocalUser, CopilotHarness.FeaturePreferenceKey).ConfigureAwait(false))
-            return HarnessAvailability.NotWorking("GitHub Copilot is experimental: turn it on in Settings → Features.");
+            return HarnessAvailability.NotWorking(FeatureOffMessage);
         return await HarnessProbe.CheckInstalledAsync("weave-copilot", await ExecutableAsync(LocalUser).ConfigureAwait(false), [], _logger, ct).ConfigureAwait(false);
     }
 
@@ -46,6 +48,7 @@ public sealed class CopilotHarnessRuntime(IServiceScopeFactory scopes, ILoggerFa
     /// <inheritdoc />
     public async Task<IHarnessSession> SpawnAsync(HarnessSpawnOptions options, CancellationToken ct)
     {
+        await RequireFeatureAsync(options.OwnerUserId).ConfigureAwait(false);
         HarnessHelpers.ValidateWorkingDirectory(options.WorkingDirectory);
         var agent = await StartAsync(options.OwnerUserId, options.WorkingDirectory, ct).ConfigureAwait(false);
         try
@@ -72,6 +75,7 @@ public sealed class CopilotHarnessRuntime(IServiceScopeFactory scopes, ILoggerFa
     /// <inheritdoc />
     public async Task<IHarnessSession> ResumeAsync(HarnessResumeOptions options, CancellationToken ct)
     {
+        await RequireFeatureAsync(options.OwnerUserId).ConfigureAwait(false);
         HarnessHelpers.ValidateWorkingDirectory(options.WorkingDirectory);
         var agent = await StartAsync(options.OwnerUserId, options.WorkingDirectory, ct).ConfigureAwait(false);
         try
@@ -93,13 +97,16 @@ public sealed class CopilotHarnessRuntime(IServiceScopeFactory scopes, ILoggerFa
     /// <inheritdoc />
     public async Task<HarnessCatalog?> GetCatalogAsync(string ownerUserId, string directory, HarnessProfile? profile, CancellationToken ct)
     {
+        if (!await IsOnAsync(ownerUserId, CopilotHarness.FeaturePreferenceKey).ConfigureAwait(false))
+            return null;
         var hydra = await IsOnAsync(ownerUserId, CopilotHarness.HydraFusionPreferenceKey).ConfigureAwait(false);
         if (_catalogs.TryGetValue(hydra, out var cached) && DateTimeOffset.UtcNow - cached.At < CatalogLife)
             return cached.Catalog;
 
         await using var agent = await StartAsync(ownerUserId, Directory.Exists(directory) ? directory : Environment.CurrentDirectory, ct).ConfigureAwait(false);
-        var created = await NewSessionAsync(agent, directory, ct).ConfigureAwait(false);
-        var (models, current) = AcpHarnessSession.ParseModels(created);
+        // The model list without a session: a session/new would leave one in the user's own Copilot history each time.
+        var listed = await agent.Client.RequestAsync("_fleet/models", new JsonObject(), ct).ConfigureAwait(false);
+        var (models, current) = AcpHarnessSession.ParseModelList(listed);
         var catalog = new HarnessCatalog
         {
             Agents = [],
@@ -143,6 +150,12 @@ public sealed class CopilotHarnessRuntime(IServiceScopeFactory scopes, ILoggerFa
 
     private static Task<JsonElement> NewSessionAsync(AcpAgentProcess agent, string directory, CancellationToken ct)
         => agent.Client.RequestAsync("session/new", new JsonObject { ["cwd"] = directory, ["mcpServers"] = new JsonArray() }, ct);
+
+    private async Task RequireFeatureAsync(string ownerUserId)
+    {
+        if (!await IsOnAsync(ownerUserId, CopilotHarness.FeaturePreferenceKey).ConfigureAwait(false))
+            throw new InvalidOperationException(FeatureOffMessage);
+    }
 
     private async Task<bool> IsOnAsync(string userId, string key)
         => string.Equals(await ReadPreferenceAsync(userId, key).ConfigureAwait(false), "true", StringComparison.OrdinalIgnoreCase);

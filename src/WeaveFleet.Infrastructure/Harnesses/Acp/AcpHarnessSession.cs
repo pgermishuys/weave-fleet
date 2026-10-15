@@ -86,6 +86,22 @@ internal sealed partial class AcpHarnessSession : IHarnessSession
         return (list, AcpMapper.Str(models, "currentModelId"));
     }
 
+    /// <summary>The models of a <c>_fleet/models</c> result (<c>models</c>: <c>[{modelId, name}]</c>) and the current one.</summary>
+    internal static (IReadOnlyList<ModelInfo> Models, string? Current) ParseModelList(JsonElement result)
+    {
+        var list = new List<ModelInfo>();
+        if (result.TryGetProperty("models", out var models) && models.ValueKind == JsonValueKind.Array)
+        {
+            foreach (var model in models.EnumerateArray())
+            {
+                if (AcpMapper.Str(model, "modelId") is { } id && list.All(m => m.Id != id))
+                    list.Add(new ModelInfo { Id = id, Name = AcpMapper.Str(model, "name") ?? id });
+            }
+        }
+
+        return (list, AcpMapper.Str(result, "currentModelId"));
+    }
+
     /// <summary>Loads the conversation again from the agent, which replays it as updates; none of them reach Fleet as events.</summary>
     internal async Task LoadAsync(CancellationToken ct)
     {

@@ -101,8 +101,9 @@ internal sealed partial class AcpClient : IAsyncDisposable
                 {
                     Dispatch(JsonDocument.Parse(line).RootElement);
                 }
-                catch (JsonException ex)
+                catch (Exception ex)
                 {
+                    // One line (or the handler of one) failing mustn't end the reading: pending requests would never settle.
                     LogBadLine(_logger, ex);
                 }
             }
@@ -186,6 +187,6 @@ internal sealed partial class AcpClient : IAsyncDisposable
         _cts.Dispose();
     }
 
-    [LoggerMessage(Level = LogLevel.Debug, Message = "The agent sent a line that isn't JSON.")]
+    [LoggerMessage(Level = LogLevel.Debug, Message = "A line from the agent couldn't be handled.")]
     private static partial void LogBadLine(ILogger logger, Exception exception);
 }
