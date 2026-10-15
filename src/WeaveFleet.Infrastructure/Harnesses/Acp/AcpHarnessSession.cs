@@ -4,6 +4,7 @@ using System.Text.Json;
 using System.Text.Json.Nodes;
 using System.Threading.Channels;
 using Microsoft.Extensions.Logging;
+using WeaveFleet.Application.Analytics;
 using WeaveFleet.Domain.Harnesses;
 
 namespace WeaveFleet.Infrastructure.Harnesses.Acp;
@@ -30,12 +31,21 @@ internal sealed partial class AcpHarnessSession : IHarnessSession
     private readonly ConcurrentDictionary<string, JsonElement> _askOptions = new(StringComparer.Ordinal);
     private IReadOnlyList<ModelInfo> _models = [];
     private string? _model;
+    private readonly IAnalyticsCollector? _analytics;
+    private readonly string? _projectId;
+    private readonly string? _projectName;
+    private readonly string _ownerUserId;
     private bool _replaying;
     private bool _disposed;
 
     internal AcpHarnessSession(string harnessType, string instanceId, string fleetSessionId, string acpSessionId, string workingDirectory,
-        IAcpAgent agent, ILogger logger)
+        IAcpAgent agent, ILogger logger, IAnalyticsCollector? analytics = null, string? projectId = null, string? projectName = null,
+        string ownerUserId = "local-user")
     {
+        _analytics = analytics;
+        _projectId = projectId;
+        _projectName = projectName;
+        _ownerUserId = ownerUserId;
         HarnessType = harnessType;
         InstanceId = instanceId;
         _fleetSessionId = fleetSessionId;
@@ -155,6 +165,12 @@ internal sealed partial class AcpHarnessSession : IHarnessSession
                 ["prompt"] = new JsonArray(new JsonObject { ["type"] = "text", ["text"] = text }),
             }, CancellationToken.None).ConfigureAwait(false);
             Status = HarnessSessionStatus.Idle;
+            if (result.ValueKind == JsonValueKind.Object && result.TryGetProperty("usage", out var usage) && usage.ValueKind == JsonValueKind.Object)
+            {
+                Emit(_mapper.Usage(usage));
+                ReportTokens(usage);
+            }
+
             Emit(_mapper.EndTurn(AcpMapper.Str(result, "stopReason")));
         }
         catch (AcpException ex)
@@ -164,6 +180,42 @@ internal sealed partial class AcpHarnessSession : IHarnessSession
             var why = alive || _agent.Stderr.Length == 0 ? ex.Message : $"{ex.Message} {_agent.Stderr}";
             Emit(_mapper.Fail(why));
         }
+    }
+
+    /// <summary>
+    /// What the turn used goes to the analytics collector, which adds it to the session's tokens (the status bar's count).
+    /// The agent's input counts the cached tokens, which Fleet counts apart.
+    /// </summary>
+    private void ReportTokens(JsonElement usage)
+    {
+        if (_analytics is null)
+            return;
+        double Count(string name) => usage.TryGetProperty(name, out var v) && v.ValueKind == JsonValueKind.Number && v.TryGetDouble(out var n) ? Math.Max(0, n) : 0;
+        var cacheRead = Count("cachedReadTokens");
+        var cacheWrite = Count("cachedWriteTokens");
+        var reasoning = Count("thoughtTokens");
+        var input = Math.Max(0, Count("inputTokens") - cacheRead - cacheWrite);
+        var output = Math.Max(0, Count("outputTokens") - reasoning);
+        if (input + output + reasoning + cacheRead + cacheWrite <= 0)
+            return;
+        _analytics.AcceptTokenEvent(new TokenEventData(
+            EventId: $"{_fleetSessionId}:{Guid.NewGuid():N}",
+            SessionId: _fleetSessionId,
+            ProjectId: _projectId,
+            ProjectName: _projectName,
+            WorkspaceDirectory: _workingDirectory,
+            ModelId: _model,
+            ProviderId: "copilot",
+            TokensInput: input,
+            TokensOutput: output,
+            TokensReasoning: reasoning,
+            TokensCacheRead: cacheRead,
+            TokensCacheWrite: cacheWrite,
+            TokensTotal: input + output + reasoning + cacheRead + cacheWrite,
+            Cost: 0,
+            EstimatedCost: null,
+            CreatedAt: DateTimeOffset.UtcNow,
+            UserId: _ownerUserId));
     }
 
     private static string ModelId(string id) => id.Contains('/') ? id[(id.LastIndexOf('/') + 1)..] : id;

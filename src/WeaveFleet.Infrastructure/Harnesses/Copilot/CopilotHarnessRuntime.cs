@@ -3,6 +3,7 @@ using System.Text.Json;
 using System.Text.Json.Nodes;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging;
+using WeaveFleet.Application.Analytics;
 using WeaveFleet.Application.Harnesses;
 using WeaveFleet.Domain.Entities;
 using WeaveFleet.Domain.Harnesses;
@@ -16,7 +17,7 @@ namespace WeaveFleet.Infrastructure.Harnesses.Copilot;
 internal sealed record CopilotLaunchArtifacts(string? ModelId) : RuntimeLaunchArtifacts;
 
 /// <summary><see cref="IHarnessRuntime"/> for GitHub Copilot: one weave-copilot process per session, spoken to over ACP.</summary>
-public sealed class CopilotHarnessRuntime(IServiceScopeFactory scopes, ILoggerFactory loggers) : IHarnessRuntime
+public sealed class CopilotHarnessRuntime(IServiceScopeFactory scopes, ILoggerFactory loggers, IAnalyticsCollector? analytics = null) : IHarnessRuntime
 {
     /// <summary>The preference for a path to weave-copilot, for when it isn't on PATH.</summary>
     public const string PathPreferenceKey = "copilot.path";
@@ -55,7 +56,7 @@ public sealed class CopilotHarnessRuntime(IServiceScopeFactory scopes, ILoggerFa
         {
             var created = await NewSessionAsync(agent, options.WorkingDirectory, ct).ConfigureAwait(false);
             var session = new AcpHarnessSession(HarnessType, $"copilot-{Guid.NewGuid():N}", options.SessionId, AcpMapper.Str(created, "sessionId")!,
-                options.WorkingDirectory, agent, _logger);
+                options.WorkingDirectory, agent, _logger, analytics, options.ProjectId, options.ProjectName, options.OwnerUserId);
             session.ReadModels(created);
             if (options.InitialPrompt is not null)
             {
@@ -80,7 +81,8 @@ public sealed class CopilotHarnessRuntime(IServiceScopeFactory scopes, ILoggerFa
         var agent = await StartAsync(options.OwnerUserId, options.WorkingDirectory, ct).ConfigureAwait(false);
         try
         {
-            var session = new AcpHarnessSession(HarnessType, $"copilot-{Guid.NewGuid():N}", options.SessionId, options.ResumeToken, options.WorkingDirectory, agent, _logger);
+            var session = new AcpHarnessSession(HarnessType, $"copilot-{Guid.NewGuid():N}", options.SessionId, options.ResumeToken, options.WorkingDirectory, agent, _logger,
+                analytics, options.ProjectId, options.ProjectName, options.OwnerUserId);
             await session.LoadAsync(ct).ConfigureAwait(false);
             return session;
         }

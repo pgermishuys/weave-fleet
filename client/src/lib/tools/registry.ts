@@ -99,10 +99,38 @@ function patternLabel(input: LabelInput, fallback: string): string {
   return input.pattern ?? fallback;
 }
 
-/** A HydraFusion pass: "Draft · gpt-6.1-sol · 18.4 s" (the time once it has finished). */
+const credits = (input: LabelInput): string | undefined => {
+  const spent = Number(input.raw.credits);
+  return Number.isFinite(spent) && spent > 0 ? `${spent.toFixed(2)} credits` : undefined;
+};
+
+/**
+ * A HydraFusion pass: "Critic · gpt-6-luna · needs repair · 43.0 s · 0.20 credits" (verdict, time and credits once it has
+ * finished). A pass that failed says why.
+ */
 function passLabel(input: LabelInput, fallback: string): string {
   const millis = Number(input.raw.durationMs);
-  const parts = [text(input, "role"), text(input, "model"), Number.isFinite(millis) && millis > 0 ? `${(millis / 1000).toFixed(1)} s` : undefined];
+  const parts = [
+    text(input, "role"),
+    text(input, "model"),
+    text(input, "verdict"),
+    Number.isFinite(millis) && millis > 0 ? `${(millis / 1000).toFixed(1)} s` : undefined,
+    credits(input),
+    text(input, "reason") ? truncate(text(input, "reason") ?? "", 60) : undefined,
+  ];
+  const label = parts.filter(Boolean).join(" · ");
+  return label === "" ? fallback : capitalize(label);
+}
+
+/** The head of a turn: the workflow HydraFusion chose and what the turn cost, "Cascade · 4.07 credits · 4 requests". */
+function turnLabel(input: LabelInput, fallback: string): string {
+  const requests = Number(input.raw.requests);
+  const parts = [
+    text(input, "pattern"),
+    credits(input),
+    Number.isFinite(requests) && requests > 0 ? `${requests} ${requests === 1 ? "request" : "requests"}` : undefined,
+    text(input, "degraded") ? "degraded" : undefined,
+  ];
   const label = parts.filter(Boolean).join(" · ");
   return label === "" ? fallback : capitalize(label);
 }
@@ -193,6 +221,7 @@ const DESCRIPTORS: readonly ToolDescriptor[] = [
   { name: "task", aliases: ["agent"], category: "subagent", permissionKind: "read", heading: "Task", icon: GitBranch },
   { name: "subagent", category: "subagent", permissionKind: "read", heading: "Subagent", icon: GitBranch, label: subagentLabel },
   { name: "hydrafusion_pass", category: "subagent", permissionKind: "read", heading: "HydraFusion pass", icon: Layers, label: passLabel },
+  { name: "copilot_turn", category: "subagent", permissionKind: "read", heading: "Turn", icon: Layers, label: turnLabel },
   { name: "skill", category: "skill", permissionKind: "read", heading: "Skill", icon: Layers, label: (input, fallback) => input.skill ?? fallback },
   { name: "question", category: "question", permissionKind: "read", heading: "Question", icon: MessageCircleQuestion, label: questionLabel },
   { name: "todowrite", aliases: ["todo"], category: "plan", permissionKind: "read", heading: "Update todos", icon: ListTodo, label: todoLabel },

@@ -1,6 +1,7 @@
 using System.Text.Json;
 using System.Text.Json.Nodes;
 using Microsoft.Extensions.Logging.Abstractions;
+using WeaveFleet.Application.Analytics;
 using WeaveFleet.Domain.Harnesses;
 using WeaveFleet.Infrastructure.Harnesses;
 using WeaveFleet.Infrastructure.Harnesses.Acp;
@@ -28,6 +29,49 @@ public sealed class AcpHarnessSessionTests
 
     private static bool Idle(List<HarnessEvent> seen)
         => seen.Any(e => e.Type == EventTypes.SessionStatus && e.Payload!.Value.GetProperty("status").GetProperty("type").GetString() == "idle");
+
+    private sealed class Tokens : IAnalyticsCollector
+    {
+        public List<TokenEventData> Events { get; } = [];
+        public void AcceptTokenEvent(TokenEventData data) => Events.Add(data);
+        public void AcceptSessionSnapshot(SessionSnapshotData data) { }
+    }
+
+    [Fact]
+    public async Task a_turns_usage_reaches_the_analytics_collector_so_the_status_bar_counts_it()
+    {
+        await using var agent = new FakeAcpAgent();
+        agent.Handle = (method, _) => Task.FromResult<JsonNode?>(new JsonObject
+        {
+            ["stopReason"] = "end_turn",
+            ["usage"] = new JsonObject { ["inputTokens"] = 1000, ["outputTokens"] = 120, ["thoughtTokens"] = 20, ["cachedReadTokens"] = 600, ["cachedWriteTokens"] = 100, ["credits"] = 0.4 },
+        });
+        var tokens = new Tokens();
+        await using var session = new AcpHarnessSession("copilot", "copilot-1", "fleet-1", "acp-1", "/work", agent, NullLogger.Instance, tokens, "p1", "Demo");
+
+        await session.SendPromptAsync("hello", null, CancellationToken.None);
+        var events = await ReadAsync(session, Idle);
+
+        var counted = tokens.Events.Single();
+        (counted.SessionId, counted.ProjectName, counted.ProviderId).ShouldBe(("fleet-1", "Demo", "copilot"));
+        (counted.TokensInput, counted.TokensOutput, counted.TokensReasoning, counted.TokensCacheRead, counted.TokensCacheWrite).ShouldBe((300d, 100d, 20d, 600d, 100d));
+        counted.TokensTotal.ShouldBe(1120d);
+        events.Select(e => e.Type).ShouldContain(EventTypes.MessagePartUpdated);
+    }
+
+    [Fact]
+    public async Task a_turn_without_usage_counts_nothing()
+    {
+        await using var agent = new FakeAcpAgent();
+        agent.Handle = (_, _) => Task.FromResult<JsonNode?>(new JsonObject { ["stopReason"] = "end_turn" });
+        var tokens = new Tokens();
+        await using var session = new AcpHarnessSession("copilot", "copilot-1", "fleet-1", "acp-1", "/work", agent, NullLogger.Instance, tokens);
+
+        await session.SendPromptAsync("hello", null, CancellationToken.None);
+        await ReadAsync(session, Idle);
+
+        tokens.Events.ShouldBeEmpty();
+    }
 
     [Fact]
     public async Task a_prompt_streams_its_answer_and_ends_idle()

@@ -23,17 +23,21 @@ const props = withDefaults(
 
 const selectedModelId = defineModel<string>({ required: true });
 
+/** What picking HydraFusion means for the bill; the Settings switch says the same. */
+const HYDRAFUSION_NOTE = "HydraFusion runs several models per prompt; cost varies per prompt.";
+const isHydraFusion = (text: string | undefined): boolean => /hydrafusion/i.test(text ?? "");
+
 const items = computed(() => {
   return [
     {
       id: "",
       label: props.defaultLabel,
-      description: props.defaultDescription,
+      description: isHydraFusion(props.defaultLabel) ? HYDRAFUSION_NOTE : props.defaultDescription,
     },
     ...props.models.map((model) => ({
       id: model.selectionKey,
       label: model.name,
-      description: model.description,
+      description: isHydraFusion(model.id) ? HYDRAFUSION_NOTE : model.description,
       meta: model.provider,
     })),
   ];
