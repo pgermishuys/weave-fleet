@@ -81,6 +81,23 @@ async function openSignIn(view: ReturnType<typeof mountPanel>, providerId: strin
 }
 
 describe("HarnessSignInPanel", () => {
+  it("has no provider search for a harness with one provider, signed in or not", async () => {
+    const github = { id: "github-copilot", name: "GitHub Copilot", methods: [{ type: "oauth" as const, label: "Device code", fields: [] }] };
+    store.byHarness = { copilot: { providers: [{ ...github, connections: [{ kind: "credential", id: "gh", label: "octo-dev", active: true }] }] } };
+    const signedIn = mount(HarnessSignInPanel, { props: { harnessType: "copilot", harnessName: "GitHub Copilot", signInCommand: null, autoLoad: false } });
+    await flushPromises();
+    expect(signedIn.find("[data-testid='harness-sign-in-search']").exists()).toBe(false);
+    expect(signedIn.text()).not.toContain("No provider matches");
+    expect(signedIn.text()).not.toContain("Sign in to a provider");
+
+    store.byHarness = { copilot: { providers: [{ ...github, connections: [] }] } };
+    const signedOut = mount(HarnessSignInPanel, { props: { harnessType: "copilot", harnessName: "GitHub Copilot", signInCommand: null, autoLoad: false } });
+    await flushPromises();
+    expect(signedOut.find("[data-testid='harness-sign-in-search']").exists()).toBe(false);
+    expect(signedOut.text()).toContain("Not signed in yet.");
+    expect(signedOut.find("[data-testid='harness-sign-in-open-github-copilot']").exists()).toBe(true);
+  });
+
   it("shows the signed-in providers with the sign-in each uses", async () => {
     const view = mountPanel();
     await flushPromises();

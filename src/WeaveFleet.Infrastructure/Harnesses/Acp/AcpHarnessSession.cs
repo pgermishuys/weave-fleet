@@ -169,7 +169,7 @@ internal sealed partial class AcpHarnessSession : IHarnessSession
         }
 
         Status = HarnessSessionStatus.Running;
-        Emit(_mapper.UserPrompt(text));
+        Emit(_mapper.UserPrompt(text, images));
         Emit(_mapper.Status(ActivityStatuses.Busy));
         _ = RunPromptAsync(text, images);
     }

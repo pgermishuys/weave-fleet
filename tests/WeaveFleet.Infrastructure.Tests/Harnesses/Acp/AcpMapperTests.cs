@@ -313,4 +313,19 @@ public sealed class AcpMapperTests
 
         mapper.Messages().Single().Role.ShouldBe("user");
     }
+
+    [Fact]
+    public void a_prompt_with_an_image_keeps_the_image_in_the_user_message()
+    {
+        var mapper = new AcpMapper("s1");
+
+        mapper.UserPrompt("what is this?", [new HarnessAttachment("image/png", "chart.png", "AAAA")]);
+
+        var parts = mapper.Messages().Single().Parts;
+        parts[0].ShouldBeOfType<TextPart>().Text.ShouldBe("what is this?");
+        var file = parts[1].ShouldBeOfType<FilePart>();
+        file.Mime.ShouldBe("image/png");
+        file.Url.ShouldBe("data:image/png;base64,AAAA");
+        file.Filename.ShouldBe("chart.png");
+    }
 }
