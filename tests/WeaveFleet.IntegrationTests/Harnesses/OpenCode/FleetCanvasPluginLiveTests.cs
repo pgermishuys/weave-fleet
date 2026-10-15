@@ -121,7 +121,7 @@ public sealed partial class FleetCanvasPluginLiveTests
 
             // The plugin added Fleet's skills without dropping the user's own skill path.
             var turn = llm.Queue.Requests.First(request => OfferedToolNames([request]).Count > 0);
-            turn.ShouldContain("fleet");
+            turn.ShouldContain("Weave Fleet runs this session");
             turn.ShouldContain("user-probe-skill");
 
             // A refused call reaches the model as Fleet's own message.
@@ -282,7 +282,7 @@ public sealed partial class FleetCanvasPluginLiveTests
             var requests = await WaitForAsync(() => llm.Queue.Requests.ToList(), list => list.Count(r => OfferedToolNames([r]).Count > 0) >= 2, ct);
             var first = requests.First(request => OfferedToolNames([request]).Count > 0);
             first.ShouldContain("fleet-run");
-            first.ShouldContain("fleet");
+            first.ShouldContain("Weave Fleet runs this session");
             first.ShouldContain("user-probe-skill");
             first.ShouldNotContain("fleet-simplify");
             first.ShouldNotContain("fleet-code-review");
