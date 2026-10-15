@@ -35,6 +35,8 @@ const working = shallowRef<string | null>(null);
 const signIns = computed(() => store.signInsFor(props.harnessType));
 const providers = computed(() => signIns.value?.providers ?? []);
 const signedIn = computed(() => providers.value.filter((provider) => provider.connections.length > 0));
+/** A harness with one provider (GitHub Copilot) has nothing to search: it's signed in, or its sign-in is offered below. */
+const single = computed(() => providers.value.length === 1);
 const others = computed(() => {
   const words = query.value.trim().toLowerCase();
   return providers.value.filter((provider) => provider.connections.length === 0
@@ -194,7 +196,7 @@ async function signOut(provider: HarnessSignInProvider, connection: HarnessSignI
           class="sign-in-panel__muted"
           data-testid="harness-sign-in-none"
         >
-          No providers yet. Find one below to sign in.
+          {{ single ? "Not signed in yet. Sign in below." : "No providers yet. Find one below to sign in." }}
         </p>
         <article
           v-for="provider in signedIn"
@@ -273,13 +275,17 @@ async function signOut(provider: HarnessSignInProvider, connection: HarnessSignI
       </section>
 
       <section
+        v-if="!single || others.length > 0"
         class="sign-in-panel__group"
         aria-label="Sign in to a provider"
       >
         <p class="sign-in-panel__group-title">
-          Sign in to a provider
+          {{ single ? "Sign in" : "Sign in to a provider" }}
         </p>
-        <label class="sign-in-panel__search">
+        <label
+          v-if="!single"
+          class="sign-in-panel__search"
+        >
           <Search
             :size="12"
             aria-hidden="true"
@@ -326,7 +332,7 @@ async function signOut(provider: HarnessSignInProvider, connection: HarnessSignI
             v-if="others.length === 0"
             class="sign-in-panel__muted"
           >
-            No provider matches “{{ query }}”.
+            {{ query.trim() ? `No provider matches “${query.trim()}”.` : "Every provider is signed in." }}
           </p>
         </div>
       </section>

@@ -53,7 +53,7 @@ internal sealed class AcpMapper(string sessionId)
     /// The user's prompt, which starts a turn. Mid-turn (a steer) it closes the message in progress: that message is
     /// completed and its calls still running are settled, so none of them reads as running forever.
     /// </summary>
-    internal IReadOnlyList<HarnessEvent> UserPrompt(string text) { lock (_lock) return UserPromptCore(text); }
+    internal IReadOnlyList<HarnessEvent> UserPrompt(string text, IReadOnlyList<HarnessAttachment>? images = null) { lock (_lock) return UserPromptCore(text, images); }
 
     /// <summary>Maps one <c>session/update</c> body (<c>params.update</c>).</summary>
     internal IReadOnlyList<HarnessEvent> Update(JsonElement update) { lock (_lock) return UpdateCore(update); }
@@ -73,7 +73,7 @@ internal sealed class AcpMapper(string sessionId)
     /// <summary>The conversation so far, oldest first, with the turn still running as its last message.</summary>
     private List<HarnessMessage> MessagesCore() => _assistantId is null ? _history : [.. _history, Assistant()];
 
-    private List<HarnessEvent> UserPromptCore(string text)
+    private List<HarnessEvent> UserPromptCore(string text, IReadOnlyList<HarnessAttachment>? images)
     {
         var events = new List<HarnessEvent>();
         if (_assistantId is { } id)
@@ -93,7 +93,7 @@ internal sealed class AcpMapper(string sessionId)
             CommitAssistant();
         }
 
-        AddUser(text);
+        AddUser(text, images);
         _userOpen = false;
         return events;
     }
@@ -479,8 +479,14 @@ internal sealed class AcpMapper(string sessionId)
 
     private HarnessMessage Assistant() => new() { Id = _assistantId!, Role = "assistant", Parts = [.. _parts], Timestamp = _assistantAt };
 
-    private void AddUser(string text)
-        => _history.Add(new HarnessMessage { Id = $"acp-{sessionId}-{++_messageCount}", Role = "user", Parts = [new TextPart(text)], Timestamp = DateTimeOffset.UtcNow });
+    /// <summary>The user's message: the text, then each attached image as a file part, as the other harnesses show them.</summary>
+    private void AddUser(string text, IReadOnlyList<HarnessAttachment>? images = null)
+    {
+        var id = $"acp-{sessionId}-{++_messageCount}";
+        List<MessagePart> parts = [new TextPart(text)];
+        parts.AddRange((images ?? []).Select((image, index) => new FilePart($"{id}-file-{index}", image.Mime, $"data:{image.Mime};base64,{image.Data}", image.Filename)));
+        _history.Add(new HarnessMessage { Id = id, Role = "user", Parts = parts, Timestamp = DateTimeOffset.UtcNow });
+    }
 
     private void AppendToUser(string text)
     {

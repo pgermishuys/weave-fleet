@@ -180,7 +180,9 @@ function summaryForHarness(harness: HarnessInfo, enabled: boolean): string {
   if (!enabled) return "Disabled until enabled by the user.";
   if (!harness.available) return harness.reason ?? `${harness.displayName} is registered but not currently available.`;
 
-  return `Available now. Uses the ${harness.displayName} runtime registered by the backend.`;
+  // The version is weave-copilot's, the program Fleet runs for GitHub Copilot.
+  if (harness.type === "copilot" && harness.version) return `weave-copilot ${harness.version} is installed and ready.`;
+  return `${harness.displayName} is installed and ready.`;
 }
 
 
