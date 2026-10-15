@@ -44,9 +44,13 @@ const fleetChrome = EditorView.theme({
   },
   // Opaque, so code scrolled sideways doesn't show through the line numbers. The canvas sits on --panel-bg.
   ".cm-gutters": { backgroundColor: "var(--panel-bg)", color: mix("var(--muted)", 70), border: "none" },
-  ".cm-lineNumbers .cm-gutterElement": { padding: "0 10px 0 8px", minWidth: "34px" },
+  // Line numbers pick lines: a click picks one, shift-click or a drag picks a range.
+  ".cm-lineNumbers .cm-gutterElement": { padding: "0 10px 0 8px", minWidth: "34px", cursor: "pointer" },
   ".cm-activeLine": { backgroundColor: mix("var(--text)", 3) },
   ".cm-activeLineGutter": { backgroundColor: "transparent", color: "var(--text)" },
+  ".cm-picked-line": { backgroundColor: mix("var(--accent)", 14) },
+  ".cm-gutterElement.cm-picked-gutter": { backgroundColor: mix("var(--accent)", 14) },
+  ".cm-lineNumbers .cm-gutterElement.cm-picked-gutter": { color: "var(--accent)", fontWeight: "600" },
   ".cm-foldGutter .cm-gutterElement": { color: mix("var(--muted)", 70), padding: "0 2px" },
   ".cm-foldPlaceholder": { background: mix("var(--text)", 6), border: "none", color: "var(--muted)", padding: "0 6px", borderRadius: "4px" },
   ".cm-matchingBracket, &.cm-focused .cm-matchingBracket": { backgroundColor: mix("var(--accent)", 25), outline: "none" },

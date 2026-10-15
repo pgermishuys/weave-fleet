@@ -1,7 +1,7 @@
 <script setup lang="ts">
-import { computed, inject, nextTick, onActivated, onBeforeUnmount, onDeactivated, onMounted, ref, shallowRef, watch } from "vue";
-import { ChevronRight, MessageSquarePlus } from "lucide-vue-next";
-import { Transaction, type Text } from "@codemirror/state";
+import { computed, inject, nextTick, onActivated, onBeforeUnmount, onMounted, ref, shallowRef, watch } from "vue";
+import { ChevronRight, Link, MessageSquarePlus, Quote, WrapText, X } from "lucide-vue-next";
+import { Transaction, type EditorState, type Text } from "@codemirror/state";
 import { EditorView, type ViewUpdate } from "@codemirror/view";
 import { useDiffBase } from "@/composables/use-diff-base";
 import { baseKey, type UseDiffsResult } from "@/composables/use-diffs";
@@ -12,6 +12,9 @@ import type { AnnotationAnchor } from "@/lib/annotation-types";
 import { runSessionCommand } from "@/lib/session-commands";
 import { baseText } from "@/lib/code-editor/agent-lines";
 import { finishCompare, openBuffer, saveBuffer, useDiskVersion } from "@/lib/code-editor/buffers";
+import { isWrapped, setWrap } from "@/lib/code-editor/editor-extensions";
+import { clearPick, pickedLines, selectedLines, type LineRange } from "@/lib/code-editor/line-pick";
+import { WRAP_BY_DEFAULT } from "@/lib/code-editor/wrap-preference";
 import { useMachineTarget } from "@/lib/machine-target";
 import { createDeletedView, markStripe, setMerge } from "@/lib/code-editor/merge";
 import { getVisualRenderer } from "@/lib/visual-renderer-registry";
@@ -40,6 +43,7 @@ const fileName = computed(() => props.path.slice(props.path.lastIndexOf("/") + 1
 const folders = computed(() => props.path.split("/").slice(0, -1));
 const isMac = typeof navigator !== "undefined" && /Mac|iPhone|iPad/.test(navigator.platform);
 const saveKey = isMac ? "⌘S" : "Ctrl S";
+const wrapKey = isMac ? "⌥Z" : "Alt Z";
 
 // ─── What's shown ────────────────────────────────────────────────────────────
 
@@ -98,7 +102,13 @@ function onUpdate(update: ViewUpdate): void {
     clearTimeout(stripeTimer);
     stripeTimer = setTimeout(refreshStripe, 300);
   }
-  if (update.selectionSet || update.focusChanged || update.docChanged || update.geometryChanged) updateChip(update.view);
+  syncFromState(update.state);
+}
+
+/** What the bar shows that lives in the editor's state: wrap, and the picked or selected lines. */
+function syncFromState(state: EditorState): void {
+  wrap.value = isWrapped(state);
+  lines.value = sameLines(lines.value, pickedLines(state) ?? selectedLines(state));
 }
 
 function detach(): void {
@@ -131,6 +141,7 @@ async function attach(): Promise<void> {
   current.handlers = { save: () => void save(), update: onUpdate };
   attached = current;
   revision.value++;
+  syncFromState(editor.state);
   applyMerge();
   refreshStripe();
   focusIfPicked();
@@ -192,7 +203,6 @@ onActivated(() => {
   // The agent may have changed the picture while the tab was in the back.
   if (image.src.value) image.reload();
 });
-onDeactivated(() => hideChip());
 onBeforeUnmount(() => {
   clearTimeout(stripeTimer);
   clearTimeout(toastTimer);
@@ -293,54 +303,73 @@ function doneComparing(): void {
   editor?.focus();
 }
 
-// ─── Add to message ──────────────────────────────────────────────────────────
+// ─── Wrap ────────────────────────────────────────────────────────────────────
 
-const chip = shallowRef<{ label: string; reference: string; x: number; y: number } | null>(null);
-let chipBlurTimer: ReturnType<typeof setTimeout> | undefined;
+const wrap = ref(WRAP_BY_DEFAULT);
 
-function hideChip(): void {
-  chip.value = null;
+function toggleWrap(): void {
+  if (editor) setWrap(editor, props.path, !wrap.value);
 }
 
-function updateChip(target: EditorView): void {
-  const selection = target.state.selection.main;
-  if (selection.empty || !target.hasFocus || !root.value) {
-    // Blur fires before a click on the chip lands; wait a moment before hiding it.
-    clearTimeout(chipBlurTimer);
-    chipBlurTimer = setTimeout(() => {
-      if (!editor?.hasFocus || editor.state.selection.main.empty) hideChip();
-    }, 150);
-    return;
-  }
+// ─── Picked lines: Copy link, Quote, Add to message ──────────────────────────
 
-  const doc = target.state.doc;
-  const first = doc.lineAt(selection.from).number;
-  let last = doc.lineAt(selection.to).number;
-  // A selection that ends at the start of a line doesn't include that line.
-  if (last > first && doc.lineAt(selection.to).from === selection.to) last--;
-  const coords = target.coordsAtPos(selection.head);
-  if (!coords) {
-    hideChip();
-    return;
-  }
+const lines = shallowRef<LineRange | null>(null);
 
-  const box = root.value.getBoundingClientRect();
-  const width = 190;
-  const x = Math.min(Math.max(8, coords.left - box.left - width / 2), Math.max(8, box.width - width - 8));
-  let y = coords.bottom - box.top + 8;
-  if (y + 36 > box.height) y = coords.top - box.top - 36;
-  chip.value = {
-    label: first === last ? `Add line ${first} to message` : `Add lines ${first}–${last} to message`,
-    reference: `@${props.path}:${first === last ? first : `${first}-${last}`}`,
-    x: Math.round(x),
-    y: Math.round(y),
-  };
+function sameLines(current: LineRange | null, next: LineRange | null): LineRange | null {
+  return current && next && current.first === next.first && current.last === next.last ? current : next;
+}
+
+const linesLabel = computed(() => {
+  const range = lines.value;
+  if (!range) return "";
+  return range.first === range.last ? `L${range.first}` : `L${range.first}–${range.last}`;
+});
+const linesCount = computed(() => {
+  const count = lines.value ? lines.value.last - lines.value.first + 1 : 0;
+  return count === 1 ? "1 line" : `${count} lines`;
+});
+const linesReference = computed(() => {
+  const range = lines.value;
+  if (!range) return props.path;
+  return `${props.path}:${range.first === range.last ? range.first : `${range.first}-${range.last}`}`;
+});
+
+/** Clear the picked lines, or the text selection the bar was showing. */
+function clearLines(): void {
+  if (!editor || clearPick(editor)) return;
+  const selection = editor.state.selection.main;
+  if (!selection.empty) editor.dispatch({ selection: { anchor: selection.head } });
+}
+
+async function copy(text: string, done: string): Promise<void> {
+  try {
+    await navigator.clipboard.writeText(text);
+    toast(done);
+  } catch {
+    toast("Couldn't copy to the clipboard");
+  }
+}
+
+function copyLink(): void {
+  void copy(linesReference.value, `Copied ${linesReference.value}`);
+}
+
+/** The reference, then the lines in a fence that's longer than any run of backticks inside them. */
+function copyQuote(): void {
+  const range = lines.value;
+  if (!editor || !range) return;
+  const doc = editor.state.doc;
+  const text = doc.sliceString(doc.line(range.first).from, doc.line(range.last).to);
+  const longest = Math.max(0, ...(text.match(/`+/g) ?? []).map((run) => run.length));
+  const fence = "`".repeat(Math.max(3, longest + 1));
+  const extension = /\.([a-z0-9]+)$/i.exec(fileName.value)?.[1]?.toLowerCase() ?? "";
+  void copy(`${linesReference.value}\n${fence}${extension}\n${text}\n${fence}\n`, `Copied ${linesLabel.value} as a quote`);
 }
 
 function addToMessage(): void {
-  if (!chip.value) return;
-  appendDraftReference(props.sessionId, chip.value.reference);
-  hideChip();
+  if (!lines.value) return;
+  appendDraftReference(props.sessionId, `@${linesReference.value}`);
+  clearLines();
   runSessionCommand("focus-prompt", props.sessionId);
 }
 </script>
@@ -402,6 +431,24 @@ function addToMessage(): void {
           @click="save"
         >Save<kbd>{{ saveKey }}</kbd></button>
       </span>
+
+      <button
+        v-if="showEditor"
+        type="button"
+        class="file-canvas__wrap"
+        :class="{ 'is-on': wrap }"
+        :aria-pressed="wrap"
+        aria-label="Wrap"
+        :title="`Wrap long lines (${wrapKey})`"
+        data-testid="file-wrap"
+        @click="toggleWrap"
+      >
+        <WrapText
+          :size="14"
+          aria-hidden="true"
+        />
+        <span class="file-canvas__wrap-label">Wrap</span>
+      </button>
 
       <div
         v-if="ready"
@@ -564,28 +611,80 @@ function addToMessage(): void {
       ref="editorHost"
       class="file-canvas__editor"
       data-testid="file-editor"
-      @scroll.capture="hideChip"
     />
 
-    <button
-      v-if="chip && showEditor"
-      type="button"
-      class="file-canvas__chip"
-      :style="{ left: `${chip.x}px`, top: `${chip.y}px` }"
-      data-testid="add-to-message"
-      @mousedown.prevent
-      @click="addToMessage"
+    <div
+      v-if="lines && showEditor"
+      class="file-canvas__lines"
+      role="toolbar"
+      aria-label="Picked lines"
+      data-testid="line-bar"
     >
-      <MessageSquarePlus
-        :size="13"
-        aria-hidden="true"
-      />
-      {{ chip.label }}
-    </button>
+      <span class="file-canvas__lines-label">
+        <b data-testid="line-bar-label">{{ linesLabel }}</b>
+        <span>{{ linesCount }}</span>
+      </span>
+      <span class="file-canvas__spacer" />
+      <button
+        type="button"
+        aria-label="Copy link"
+        :title="`Copy ${linesReference}`"
+        data-testid="copy-link"
+        @mousedown.prevent
+        @click="copyLink"
+      >
+        <Link
+          :size="13"
+          aria-hidden="true"
+        />
+        <span class="file-canvas__lines-text">Copy link</span>
+      </button>
+      <button
+        type="button"
+        aria-label="Quote"
+        title="Copy the lines as a quote"
+        data-testid="copy-quote"
+        @mousedown.prevent
+        @click="copyQuote"
+      >
+        <Quote
+          :size="13"
+          aria-hidden="true"
+        />
+        <span class="file-canvas__lines-text">Quote</span>
+      </button>
+      <button
+        type="button"
+        class="is-primary"
+        data-testid="add-to-message"
+        @mousedown.prevent
+        @click="addToMessage"
+      >
+        <MessageSquarePlus
+          :size="13"
+          aria-hidden="true"
+        />
+        Add to message
+      </button>
+      <button
+        type="button"
+        class="file-canvas__lines-clear"
+        aria-label="Clear"
+        title="Clear (Esc)"
+        data-testid="line-bar-clear"
+        @mousedown.prevent
+        @click="clearLines"
+      >
+        <X
+          :size="13"
+          aria-hidden="true"
+        />
+      </button>
+    </div>
 
     <div
       class="file-canvas__toast"
-      :class="{ 'is-shown': toastMessage }"
+      :class="{ 'is-shown': toastMessage, 'is-lifted': lines && showEditor }"
       role="status"
       aria-live="polite"
     >
@@ -717,9 +816,10 @@ function addToMessage(): void {
 }
 
 .file-canvas__toggle button:focus-visible,
+.file-canvas__wrap:focus-visible,
 .file-canvas__save:focus-visible,
 .file-canvas__notice-actions button:focus-visible,
-.file-canvas__chip:focus-visible {
+.file-canvas__lines button:focus-visible {
   outline: 2px solid var(--accent);
   outline-offset: 1px;
 }
@@ -806,33 +906,96 @@ function addToMessage(): void {
   box-shadow: 0 0 0 1px var(--border);
 }
 
-.file-canvas__chip {
-  position: absolute;
-  top: 0;
-  left: 0;
-  z-index: 5;
-  display: inline-flex;
+/* Picked lines, or the lines a selection spans. Docked, so scrolling the file never hides it. */
+.file-canvas__lines {
+  display: flex;
+  flex-shrink: 0;
   align-items: center;
-  gap: 6px;
-  height: 28px;
-  padding: 0 10px;
+  gap: 4px;
+  margin: 0 8px 8px;
+  padding: 5px 6px 5px 12px;
   border: 1px solid var(--border);
-  border-radius: 8px;
+  border-radius: 10px;
   background: var(--card-bg);
-  color: var(--text);
-  font-size: 12px;
-  font-weight: 500;
-  white-space: nowrap;
   box-shadow: 0 16px 40px -12px rgba(0, 0, 0, 0.45);
-  cursor: pointer;
+  font-size: 12px;
+  white-space: nowrap;
   animation: file-canvas-pop 140ms ease-out;
 }
 
-.file-canvas__chip:hover {
+.file-canvas__lines-label {
+  display: inline-flex;
+  align-items: baseline;
+  gap: 6px;
+  color: var(--muted);
+  font-size: 11px;
+}
+
+.file-canvas__lines-label b {
+  font-family: var(--font-mono-stack);
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--text);
+}
+
+.file-canvas__lines button {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  height: 26px;
+  padding: 0 8px;
+  border: 1px solid var(--border);
+  border-radius: 7px;
+  background: transparent;
+  color: var(--text);
+  font-size: 12px;
+  font-weight: 500;
+  cursor: pointer;
+  transition: border-color var(--transition), background-color var(--transition);
+}
+
+.file-canvas__lines button:hover {
   border-color: var(--accent);
 }
 
-.file-canvas__chip svg {
+.file-canvas__lines button.is-primary {
+  border-color: var(--accent);
+  background: var(--accent);
+  color: var(--primary-foreground);
+}
+
+.file-canvas__lines button.file-canvas__lines-clear {
+  padding: 0 6px;
+  border-color: transparent;
+  color: var(--muted);
+}
+
+.file-canvas__lines button.file-canvas__lines-clear:hover {
+  color: var(--text);
+}
+
+.file-canvas__wrap {
+  display: inline-flex;
+  flex-shrink: 0;
+  align-items: center;
+  gap: 5px;
+  height: 26px;
+  padding: 0 8px;
+  border: 0;
+  border-radius: 7px;
+  background: transparent;
+  color: var(--muted);
+  font-size: 12px;
+  cursor: pointer;
+  transition: background-color var(--transition), color var(--transition);
+}
+
+.file-canvas__wrap:hover {
+  color: var(--text);
+}
+
+.file-canvas__wrap.is-on {
+  background: var(--accent-dim);
   color: var(--accent);
 }
 
@@ -857,6 +1020,10 @@ function addToMessage(): void {
   transition: opacity 160ms ease-out, transform 160ms ease-out;
 }
 
+.file-canvas__toast.is-lifted {
+  bottom: 58px;
+}
+
 .file-canvas__toast.is-shown {
   opacity: 1;
   transform: translate(-50%, 0);
@@ -869,8 +1036,23 @@ function addToMessage(): void {
     display: none;
   }
 
-  .file-canvas__save kbd {
+  .file-canvas__save kbd,
+  .file-canvas__wrap-label {
     display: none;
+  }
+
+  .file-canvas__wrap {
+    padding: 0 6px;
+  }
+}
+
+@container (max-width: 420px) {
+  .file-canvas__lines-text {
+    display: none;
+  }
+
+  .file-canvas__lines button {
+    padding: 0 6px;
   }
 }
 
@@ -890,11 +1072,13 @@ function addToMessage(): void {
 
 @media (prefers-reduced-motion: reduce) {
   .file-canvas__notice,
-  .file-canvas__chip {
+  .file-canvas__lines {
     animation: none;
   }
 
   .file-canvas__toast,
+  .file-canvas__wrap,
+  .file-canvas__lines button,
   .file-canvas__toggle button,
   .file-canvas__save,
   .file-canvas__notice-actions button {

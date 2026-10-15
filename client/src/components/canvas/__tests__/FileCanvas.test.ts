@@ -5,6 +5,7 @@ import FileCanvasComponent from "@/components/canvas/FileCanvas.vue";
 import type { FileDiffItem } from "@/api/client";
 import { clearDiffBaseCache } from "@/composables/use-diff-base";
 import { useDraftState } from "@/composables/use-draft-state";
+import { pickLines } from "@/lib/code-editor/line-pick";
 import { sessionCommands } from "@/lib/session-commands";
 import { useCanvasesStore, type FileView } from "@/stores/canvases";
 import { useFileBuffersStore } from "@/stores/file-buffers";
@@ -353,6 +354,72 @@ describe("FileCanvas", () => {
     wrapper.unmount();
   });
 
+  it("wraps long lines by default; the Wrap button turns it off for that file, remembered", async () => {
+    readSessionFileMock.mockResolvedValue(file("const one = 1;\n"));
+    let wrapper = await mountCanvas();
+    const button = wrapper.get('[data-testid="file-wrap"]');
+    expect(button.attributes("aria-pressed")).toBe("true");
+    expect(editor().contentDOM.classList.contains("cm-lineWrapping")).toBe(true);
+
+    await button.trigger("click");
+    expect(button.attributes("aria-pressed")).toBe("false");
+    expect(editor().contentDOM.classList.contains("cm-lineWrapping")).toBe(false);
+    wrapper.unmount();
+
+    // The file opened again, in a new buffer, starts the way you left it.
+    useFileBuffersStore().remove("s1", "src/app.ts");
+    wrapper = await mountCanvas();
+    expect(wrapper.get('[data-testid="file-wrap"]').attributes("aria-pressed")).toBe("false");
+    wrapper.unmount();
+  });
+
+  it("Alt Z toggles wrap in the editor", async () => {
+    readSessionFileMock.mockResolvedValue(file("const one = 1;\n"));
+    const wrapper = await mountCanvas();
+    editor().contentDOM.dispatchEvent(new KeyboardEvent("keydown", { key: "z", code: "KeyZ", altKey: true, bubbles: true }));
+    await flushPromises();
+    expect(wrapper.get('[data-testid="file-wrap"]').attributes("aria-pressed")).toBe("false");
+    wrapper.unmount();
+  });
+
+  it("picked lines show in the bar; Copy link and Quote copy them, and × clears them", async () => {
+    const writeText = vi.fn().mockResolvedValue(undefined);
+    Object.defineProperty(navigator, "clipboard", { value: { writeText }, configurable: true });
+    readSessionFileMock.mockResolvedValue(file(Array.from({ length: 30 }, (_, i) => `const n${i + 1} = ${i + 1};`).join("\n")));
+    const wrapper = await mountCanvas();
+    expect(wrapper.find('[data-testid="line-bar"]').exists()).toBe(false);
+
+    pickLines(editor(), 18, 27);
+    await flushPromises();
+    expect(wrapper.get('[data-testid="line-bar"]').text()).toContain("L18–27");
+    expect(wrapper.get('[data-testid="line-bar"]').text()).toContain("10 lines");
+
+    // Scrolling the file doesn't hide it.
+    wrapper.get('[data-testid="file-editor"] .cm-scroller').element.dispatchEvent(new Event("scroll"));
+    await flushPromises();
+    expect(wrapper.find('[data-testid="line-bar"]').exists()).toBe(true);
+
+    await wrapper.get('[data-testid="copy-link"]').trigger("click");
+    await flushPromises();
+    expect(writeText).toHaveBeenLastCalledWith("src/app.ts:18-27");
+    expect(wrapper.get(".file-canvas__toast").text()).toBe("Copied src/app.ts:18-27");
+
+    pickLines(editor(), 2, 3);
+    await flushPromises();
+    await wrapper.get('[data-testid="copy-quote"]').trigger("click");
+    expect(writeText).toHaveBeenLastCalledWith("src/app.ts:2-3\n```ts\nconst n2 = 2;\nconst n3 = 3;\n```\n");
+
+    pickLines(editor(), 7);
+    await flushPromises();
+    expect(wrapper.get('[data-testid="line-bar-label"]').text()).toBe("L7");
+    await wrapper.get('[data-testid="copy-link"]').trigger("click");
+    expect(writeText).toHaveBeenLastCalledWith("src/app.ts:7");
+
+    await wrapper.get('[data-testid="line-bar-clear"]').trigger("click");
+    expect(wrapper.find('[data-testid="line-bar"]').exists()).toBe(false);
+    wrapper.unmount();
+  });
+
   it("Add to message puts a line reference in the draft and focuses the composer", async () => {
     readSessionFileMock.mockResolvedValue(file("one\ntwo\nthree\nfour\n"));
     // The plumbing for hearing the request lives here only, so the expectations don't depend on it.
@@ -360,19 +427,17 @@ describe("FileCanvas", () => {
     const stop = sessionCommands.contribute("test", [{ sessionId: "s1", handlers: { "focus-prompt": focus } }]);
     const wrapper = await mountCanvas();
     const view = editor();
-    // jsdom has no layout or contenteditable focus; the chip only needs a place and focus.
-    vi.spyOn(view, "hasFocus", "get").mockReturnValue(true);
-    vi.spyOn(view, "coordsAtPos").mockReturnValue({ left: 40, right: 40, top: 30, bottom: 44 });
 
+    // A text selection shows in the bar too, as the lines it spans.
     view.dispatch({ selection: { anchor: view.state.doc.line(2).from, head: view.state.doc.line(4).from } });
     await flushPromises();
+    expect(wrapper.get('[data-testid="line-bar-label"]').text()).toBe("L2–3");
 
-    const chip = wrapper.get('[data-testid="add-to-message"]');
-    expect(chip.text()).toBe("Add lines 2–3 to message");
-    await chip.trigger("click");
+    await wrapper.get('[data-testid="add-to-message"]').trigger("click");
 
     expect(useDraftState("s1", { agentId: "a", modelId: "m" }).draft.text).toBe("@src/app.ts:2-3 ");
     expect(focus).toHaveBeenCalledTimes(1);
+    expect(wrapper.find('[data-testid="line-bar"]').exists()).toBe(false);
     stop();
     wrapper.unmount();
   });
