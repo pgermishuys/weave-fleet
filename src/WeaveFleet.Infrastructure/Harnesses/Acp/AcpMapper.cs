@@ -11,12 +11,17 @@ namespace WeaveFleet.Infrastructure.Harnesses.Acp;
 /// Turns an ACP agent's <c>session/update</c>s into Fleet's harness events, and keeps the conversation they build so the
 /// session can show it again (<see cref="Messages"/>), including after <c>session/load</c> replays it. A turn is one
 /// assistant message: text and thinking grow in place, and each tool call is a part that moves from running to done.
-/// The agent's <c>_fleet/fusion</c> notifications (HydraFusion passes) become tool rows named <see cref="PassTool"/>.
+/// The agent's <c>_fleet/fusion</c> notifications (HydraFusion passes) become tool rows named <see cref="PassTool"/>, and a
+/// turn's workflow and credits one row named <see cref="TurnTool"/> at its head. What a turn used comes as a step-finish
+/// part (<see cref="Usage"/>), which is where Fleet reads the session's tokens from.
 /// </summary>
 internal sealed class AcpMapper(string sessionId)
 {
     /// <summary>The tool name a HydraFusion pass is shown under; the client draws it as a row of its own.</summary>
     internal const string PassTool = "hydrafusion_pass";
+
+    /// <summary>The tool name of a turn's summary row: the workflow it ran (Single, Cascade, Critique) and the credits it cost.</summary>
+    internal const string TurnTool = "copilot_turn";
 
     // A steer comes in on the request thread while the read loop is mapping updates.
     private readonly Lock _lock = new();
@@ -32,6 +37,8 @@ internal sealed class AcpMapper(string sessionId)
     private bool _userOpen;
     private int _messageCount;
     private int _partCount;
+    private int _stepCount;
+    private bool _turnRow;
 
     /// <summary>The conversation so far, oldest first, with the turn still running as its last message.</summary>
     internal IReadOnlyList<HarnessMessage> Messages() { lock (_lock) return [.. MessagesCore()]; }
@@ -47,6 +54,9 @@ internal sealed class AcpMapper(string sessionId)
 
     /// <summary>Maps a <c>_fleet/fusion</c> notification: a pass started, or finished with its time and credits.</summary>
     internal IReadOnlyList<HarnessEvent> Fusion(JsonElement p) { lock (_lock) return FusionCore(p); }
+
+    /// <summary>What the finished turn used (the prompt result's <c>usage</c>): its tokens, and credits when Copilot reported them.</summary>
+    internal IReadOnlyList<HarnessEvent> Usage(JsonElement usage) { lock (_lock) return UsageCore(usage); }
 
     /// <summary>The turn is over: its message is complete, and the session is idle.</summary>
     internal IReadOnlyList<HarnessEvent> EndTurn(string? stopReason) { lock (_lock) return EndTurnCore(stopReason); }
@@ -106,14 +116,23 @@ internal sealed class AcpMapper(string sessionId)
         return events;
     }
 
-    /// <summary>Maps a <c>_fleet/fusion</c> notification: a pass started, or finished with its time and credits.</summary>
+    /// <summary>
+    /// Maps a <c>_fleet/fusion</c> notification: the route chosen or the turn finished (the turn row), or a pass started or
+    /// finished with its time, credits and verdict (a pass row).
+    /// </summary>
     private List<HarnessEvent> FusionCore(JsonElement p)
     {
         var kind = Str(p, "event");
+        var events = new List<HarnessEvent>();
+        if (kind is "resolved" or "completed")
+        {
+            TurnRow(events, p, finished: kind == "completed");
+            return events;
+        }
+
         if (kind is not ("phase_started" or "phase_completed"))
             return [];
 
-        var events = new List<HarnessEvent>();
         var done = kind == "phase_completed";
         var input = new JsonObject
         {
@@ -121,19 +140,76 @@ internal sealed class AcpMapper(string sessionId)
             ["role"] = Str(p, "role") ?? Str(p, "phase"),
             ["model"] = Str(p, "model"),
         };
-        if (done && p.TryGetProperty("durationMs", out var ms) && ms.ValueKind == JsonValueKind.Number && ms.TryGetInt64(out var millis))
-            input["durationMs"] = millis;
-        if (done && p.TryGetProperty("credits", out var credits) && credits.ValueKind == JsonValueKind.Number && credits.TryGetDouble(out var spent))
+        if (done && Number(p, "durationMs") is { } millis)
+            input["durationMs"] = (long)millis;
+        if (done && Number(p, "credits") is { } spent)
             input["credits"] = Math.Round(spent, 2);
         if (Str(p, "verdict") is { } verdict)
             input["verdict"] = verdict;
+        if (Str(p, "reason") is { } reason)
+            input["reason"] = reason;
 
-        var index = p.TryGetProperty("index", out var i) && i.ValueKind == JsonValueKind.Number && i.TryGetInt32(out var n) ? n : _tools.Count;
+        var index = Number(p, "index") is { } n ? (int)n : _tools.Count;
         var failed = done && Str(p, "status") is { } status && status is not ("succeeded" or "completed" or "skipped");
         ToolInvocationState state = !done ? new ToolRunningState { Input = Json(input) }
-            : failed ? new ToolErrorState { Input = Json(input), Error = Str(p, "status") }
+            : failed ? new ToolErrorState { Input = Json(input), Error = Str(p, "reason") ?? Str(p, "status") }
             : new ToolCompletedState { Input = Json(input), Title = Str(p, "role") };
-        UpsertTool(events, $"fusion-{index}", PassTool, input, state, done ? (failed ? ToolUseState.Error : ToolUseState.Completed) : ToolUseState.Running);
+        UpsertTool(events, $"fusion-{index}", PassTool, input, state, done ? (failed ? ToolUseState.Error : ToolUseState.Completed) : ToolUseState.Running,
+            failed ? Str(p, "reason") ?? Str(p, "status") : null);
+        return events;
+    }
+
+    /// <summary>The turn's row: running once the route is chosen (workflow and models), finished with its credits and requests.</summary>
+    private void TurnRow(List<HarnessEvent> events, JsonElement p, bool finished)
+    {
+        var input = new JsonObject { ["pattern"] = Str(p, "pattern"), ["model"] = Str(p, "model") };
+        if (Str(p, "hint") is { } hint)
+            input["hint"] = hint;
+        if (finished)
+        {
+            if (Number(p, "totalCredits") is { } credits)
+                input["credits"] = Math.Round(credits, 2);
+            if (Number(p, "requests") is { } requests)
+                input["requests"] = (long)requests;
+            if (Number(p, "durationMs") is { } millis)
+                input["durationMs"] = (long)millis;
+            if (Str(p, "degradedReason") is { } degraded)
+                input["degraded"] = degraded;
+        }
+
+        var failed = finished && Str(p, "status") is "failed" or "error";
+        ToolInvocationState state = !finished ? new ToolRunningState { Input = Json(input) }
+            : failed ? new ToolErrorState { Input = Json(input), Error = Str(p, "status") }
+            : new ToolCompletedState { Input = Json(input), Title = Str(p, "pattern") };
+        _turnRow = true;
+        UpsertTool(events, "fusion-turn", TurnTool, input, state, !finished ? ToolUseState.Running : failed ? ToolUseState.Error : ToolUseState.Completed);
+    }
+
+    /// <summary>
+    /// A step-finish part with the turn's tokens, which the session's totals and the status bar add up. A turn that cost
+    /// credits and has no HydraFusion row yet (a plain model) gets the same row, with only its credits.
+    /// </summary>
+    private List<HarnessEvent> UsageCore(JsonElement usage)
+    {
+        var events = new List<HarnessEvent>();
+        var input = Number(usage, "inputTokens") ?? 0;
+        var thought = Number(usage, "thoughtTokens") ?? 0;
+        var output = Number(usage, "outputTokens") ?? 0;
+        if (input + output <= 0)
+            return events;
+
+        if (!_turnRow && Number(usage, "credits") is > 0 and var credits)
+            TurnRow(events, Json(new JsonObject { ["totalCredits"] = credits }), finished: true);
+
+        EnsureAssistant(events);
+        var index = _stepCount++;
+        var part = new StepFinishPart(index, "stop", 0, input, Math.Max(0, output - thought), thought, DateTimeOffset.UtcNow.ToUnixTimeMilliseconds());
+        _parts.Add(part);
+        events.Add(PartEvent(new StepFinishedMessageEventPart
+        {
+            Id = $"{_assistantId}-step-finish-{index}", SessionId = sessionId, MessageId = _assistantId!, Index = index, Reason = part.Reason, Cost = 0,
+            Tokens = new MessageTokenUsage { Input = part.TokensInput, Output = part.TokensOutput, Reasoning = part.TokensReasoning }, CompletedAt = part.CompletedAt,
+        }));
         return events;
     }
 
@@ -298,6 +374,7 @@ internal sealed class AcpMapper(string sessionId)
         if (_parts.Count > 0)
             _history.Add(Assistant());
         _assistantId = null;
+        _turnRow = false;
         _parts.Clear();
         _tools.Clear();
         _open.Clear();
@@ -346,6 +423,13 @@ internal sealed class AcpMapper(string sessionId)
                     break;
                 case ReasoningPart { PartId: { } id } reasoning:
                     parts.Add(new ReasoningMessageEventPart { Id = id, SessionId = sessionId, MessageId = messageId, Text = reasoning.Text });
+                    break;
+                case StepFinishPart step:
+                    parts.Add(new StepFinishedMessageEventPart
+                    {
+                        Id = $"{messageId}-step-finish-{step.Index}", SessionId = sessionId, MessageId = messageId, Index = step.Index, Reason = step.Reason, Cost = step.Cost,
+                        Tokens = new MessageTokenUsage { Input = step.TokensInput, Output = step.TokensOutput, Reasoning = step.TokensReasoning }, CompletedAt = step.CompletedAt,
+                    });
                     break;
                 case ToolUsePart { PartId: { } id } tool:
                     ToolInvocationState state = tool.State switch
@@ -425,6 +509,9 @@ internal sealed class AcpMapper(string sessionId)
 
     internal static string? Str(JsonElement element, string name)
         => element.ValueKind == JsonValueKind.Object && element.TryGetProperty(name, out var value) && value.ValueKind == JsonValueKind.String ? value.GetString() : null;
+
+    private static double? Number(JsonElement element, string name)
+        => element.ValueKind == JsonValueKind.Object && element.TryGetProperty(name, out var value) && value.ValueKind == JsonValueKind.Number && value.TryGetDouble(out var number) ? number : null;
 
     private static JsonElement Json(JsonNode node) => JsonDocument.Parse(node.ToJsonString()).RootElement.Clone();
 

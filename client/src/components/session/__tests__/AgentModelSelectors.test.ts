@@ -27,4 +27,20 @@ describe("agent and model pickers", () => {
     expect(mount(ModelSelector, { props: { models, modelValue: createModelSelectionKey("gone", "gone-model") } }).text())
       .toContain("gone-model");
   });
+
+  it("tell HydraFusion's cost note under its entry and under a Default that is HydraFusion", async () => {
+    const note = "HydraFusion runs several models per prompt; cost varies per prompt.";
+    const hydra = { ...models[0]!, id: "hydrafusion", name: "HydraFusion", selectionKey: createModelSelectionKey("copilot", "hydrafusion") };
+    const listed = mount(ModelSelector, { props: { models: [...models, hydra], modelValue: "" } });
+    await listed.get("button").trigger("click");
+    expect(listed.text().split(note)).toHaveLength(2);
+
+    const asDefault = mount(ModelSelector, { props: { models, modelValue: "", defaultLabel: "Default (HydraFusion)" } });
+    await asDefault.get("button").trigger("click");
+    expect(asDefault.text()).toContain(note);
+
+    const plain = mount(ModelSelector, { props: { models, modelValue: "" } });
+    await plain.get("button").trigger("click");
+    expect(plain.text()).not.toContain(note);
+  });
 });

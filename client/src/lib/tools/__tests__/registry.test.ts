@@ -336,4 +336,19 @@ describe("HydraFusion passes", () => {
     expect(getToolLabel("hydrafusion_pass", null)).toBe("hydrafusion_pass");
     expect(getTool("hydrafusion_pass").heading).toBe("HydraFusion pass");
   });
+
+  it("adds a judge's or critic's verdict, the credits it cost and why a failed pass failed", () => {
+    expect(getToolLabel("hydrafusion_pass", { role: "critic", model: "model-b", durationMs: 43042, verdict: "needs repair", credits: 0.2 }))
+      .toBe("Critic · model-b · needs repair · 43.0 s · 0.20 credits");
+    expect(getToolLabel("hydrafusion_pass", { role: "judge", model: "model-b", verdict: "approved" })).toBe("Judge · model-b · approved");
+    expect(getToolLabel("hydrafusion_pass", { role: "critic", model: "model-b", reason: "The critic timed out" })).toBe("Critic · model-b · The critic timed out");
+  });
+
+  it("heads a turn with its workflow, credits and requests", () => {
+    expect(getToolLabel("copilot_turn", { pattern: "critique", credits: 16.83, requests: 7 })).toBe("Critique · 16.83 credits · 7 requests");
+    expect(getToolLabel("copilot_turn", { pattern: "single" })).toBe("Single");
+    expect(getToolLabel("copilot_turn", { credits: 0.25, requests: 1 })).toBe("0.25 credits · 1 request");
+    expect(getToolLabel("copilot_turn", null)).toBe("copilot_turn");
+    expect(getTool("copilot_turn").heading).toBe("Turn");
+  });
 });
