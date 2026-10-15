@@ -53,7 +53,7 @@ const showPluginRailBadges = false;
 
 const visibleRails = computed<readonly RailItem[]>(() =>
   rails.value
-    .filter((rail) => rail.icon)
+    .filter((rail) => rail.icon && !rail.hidden?.())
     .map((rail) => {
       const isOff = rail.off?.() ?? false;
       if (!rail.pluginId) return { ...rail, isOff };

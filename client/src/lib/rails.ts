@@ -28,6 +28,8 @@ export interface RailDefinition {
   order?: number;
   /** Shown dimmed with a marker while this returns true (a feature switched off). Read inside a computed. */
   off?: () => boolean;
+  /** Left out of the icon rail while this returns true (a feature switched off). Read inside a computed. */
+  hidden?: () => boolean;
   /** Set on a rail that comes from a plugin. */
   pluginId?: string;
 }

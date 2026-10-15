@@ -66,8 +66,8 @@ const workflowsOff = () => !useWorkflowsFeature().isWorkflowsEnabled.value;
 /** The rails Fleet ships. Plugin rails (GitHub, Plugins) come from the plugins' own sidebar contributions. */
 railPoint.contribute("core", [
   { id: "sessions", label: "Sessions", icon: MessageSquare, to: "/", placement: "top", order: 0, panel: SessionsPanel },
-  // Board and Workflows stay in the rail while they're switched off; their pages say how to turn them on.
-  { id: "board", label: "Board", icon: LayoutGrid, to: "/board", placement: "top", order: 10, panel: BoardContextPanel, off: boardOff },
+  // Board leaves the rail while it's switched off. Workflows stays, dimmed; its page says how to turn it on.
+  { id: "board", label: "Board", icon: LayoutGrid, to: "/board", placement: "top", order: 10, panel: BoardContextPanel, hidden: boardOff },
   { id: "workflows", label: "Workflows", icon: Workflow, to: "/workflows", placement: "top", order: 20, panel: WorkflowsContextPanel, off: workflowsOff },
   { id: "automations", label: "Automations", icon: Zap, to: "/automations", placement: "top", order: 30, panel: AutomationsContextPanel },
   // Analytics is a full page; its context column keeps the sessions list.
