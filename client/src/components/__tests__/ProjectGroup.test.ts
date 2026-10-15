@@ -254,7 +254,7 @@ describe("ProjectGroup", () => {
       expect(order).toEqual(["quiet-fork", "child-2"]);
     });
 
-    it("keeps everything under the top-level session one indent in, in tree order, however deep", () => {
+    it("draws everything under the top-level session on one tree, in tree order, each level indented", () => {
       const wrapper = mountWithLineage({
         project: {
           ...createProjectGroup(),
@@ -273,8 +273,11 @@ describe("ProjectGroup", () => {
         return [stub.exists() ? stub.attributes("data-id") : "subagent", stub.exists() ? stub.attributes("data-kind") : null];
       });
       expect(rows).toEqual([["capture", "started"], ["subagent", null], ["fork", "fork"]]);
-      // No staircase: no row steps further in than the others.
-      expect(children.findAll(".session-child").every((row) => !row.attributes("style"))).toBe(true);
+      // The subagent and the fork hang off `capture`, one level in; the fork is the last, with no line left running.
+      const indents = children.findAll(".session-child").map((row) => row.attributes("style"));
+      expect(indents).toEqual(["--lineage-indent: 25px;", "--lineage-indent: 41px;", "--lineage-indent: 41px;"]);
+      expect(children.findAll(".session-child")[2]!.findAll(".lineage-line").map((line) => line.classes("lineage-line--last")))
+        .toEqual([true]);
       expect(wrapper.findAll("[data-testid='session-children']")).toHaveLength(1);
     });
 
@@ -285,6 +288,17 @@ describe("ProjectGroup", () => {
       const children = wrapper.findAll("[data-testid='session-children']")[0]!;
       expect(children.findAll("[data-testid='subagent-session-row']").map((row) => row.attributes("data-child-session-id")))
         .toEqual(["child-1", "child-3"]);
+    });
+
+    it("lights the open session's family, and the family under the pointer instead while it's there", async () => {
+      const wrapper = mountWithLineage({ activeSessionId: "quiet-fork" });
+      const lit = () => wrapper.findAll(".project-row--lit").map((row) => row.attributes("data-family"));
+
+      expect(lit()).toEqual(["quiet"]);
+      await wrapper.get(".project-row[data-family='parent']").trigger("mouseenter");
+      expect(lit()).toEqual(["parent"]);
+      await wrapper.get(".project-row[data-family='parent']").trigger("mouseleave");
+      expect(lit()).toEqual(["quiet"]);
     });
 
     describe("dragging a session out of its parent", () => {

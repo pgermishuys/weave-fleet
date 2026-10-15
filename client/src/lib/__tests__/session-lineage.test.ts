@@ -4,6 +4,8 @@ import type { AccumulatedMessage } from "@/lib/client-types";
 import { toRunningWorkItem, type RunningWorkItem } from "@/lib/running-work";
 import {
   buildAgentsLineage,
+  familyRootOf,
+  layoutLineage,
   lineageDescendants,
   lineageOf,
   movableBackUnder,
@@ -230,5 +232,48 @@ describe("summarizeAgentActivity", () => {
       latest: "Reading OpenCode2Delegations.cs to compare",
       modelId: "claude-sonnet-5-5",
     });
+  });
+});
+
+describe("layoutLineage", () => {
+  it("stops a line at the middle of its parent's last child and runs it past the earlier ones", () => {
+    expect(layoutLineage([1, 1, 1])).toEqual([
+      { depth: 1, last: false, through: [] },
+      { depth: 1, last: false, through: [] },
+      { depth: 1, last: true, through: [] },
+    ]);
+  });
+
+  it("keeps an ancestor's line running past its descendants while it has later children", () => {
+    // A (1) > B (2) > C (3); then D (1)
+    expect(layoutLineage([1, 2, 3, 1])).toEqual([
+      { depth: 1, last: false, through: [] },
+      { depth: 2, last: true, through: [1] },
+      { depth: 3, last: true, through: [1] },
+      { depth: 1, last: true, through: [] },
+    ]);
+    // A > B and E, then D: A's line runs past B and E, which share one line.
+    expect(layoutLineage([1, 2, 2, 1]).map((row) => row.through)).toEqual([[], [1], [1], []]);
+    expect(layoutLineage([1, 2, 2]).map((row) => row.last)).toEqual([true, false, true]);
+  });
+
+  it("draws rows deeper than the cap at the cap's indent and line", () => {
+    const rows = layoutLineage([1, 2, 3, 4, 5]);
+    expect(rows.map((row) => row.depth)).toEqual([1, 2, 3, 3, 3]);
+    expect(rows.map((row) => row.last)).toEqual([true, true, false, false, true]);
+  });
+});
+
+describe("familyRootOf", () => {
+  const members: Record<string, string[]> = { a: ["a1", "a2"], b: ["b1"] };
+
+  it("finds the top-level session a root or a descendant belongs to", () => {
+    expect(familyRootOf("a", ["a", "b"], (r) => members[r]!)).toBe("a");
+    expect(familyRootOf("b1", ["a", "b"], (r) => members[r]!)).toBe("b");
+  });
+
+  it("is null for nothing open or a session in no family", () => {
+    expect(familyRootOf(null, ["a"], (r) => members[r]!)).toBeNull();
+    expect(familyRootOf("zzz", ["a", "b"], (r) => members[r]!)).toBeNull();
   });
 });

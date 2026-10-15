@@ -134,8 +134,8 @@ export function nestLineage<T extends LineageFields & { session: { id: string } 
 }
 
 /**
- * A session's descendants in the tree, depth first, each with how deep it sits (1 for a child). The session list shows
- * them all one indent under the top-level session, in this order: no staircase, however deep.
+ * A session's descendants in the tree, depth first, each with how deep it sits (1 for a child). The session list indents
+ * each level and draws its lines (see {@link layoutLineage}), in this order; the indent stops at {@link LINEAGE_MAX_DEPTH}.
  */
 export function lineageDescendants<T extends { session: { id: string } }>(
   root: T,
@@ -150,6 +150,43 @@ export function lineageDescendants<T extends { session: { id: string } }>(
   };
   walk(root.session.id, 1);
   return found;
+}
+
+/** How many levels the session list indents: a deeper row keeps the indent and line of this level. */
+export const LINEAGE_MAX_DEPTH = 3;
+
+export interface LineageConnector {
+  /** The level the row is drawn at: its depth, at most {@link LINEAGE_MAX_DEPTH}. */
+  depth: number;
+  /** No later row hangs off the same line: its line stops at the middle of the row instead of running on. */
+  last: boolean;
+  /** The shallower levels whose line keeps running past this row, because that ancestor has later children. */
+  through: number[];
+}
+
+/**
+ * The lines to draw beside rows in tree order, each given as its depth (1 for a child of the top-level session).
+ * A row's line comes down from its parent and stops at the row's middle when it's the parent's last child; an
+ * ancestor's line runs on past a row while that ancestor still has children to come.
+ */
+export function layoutLineage(depths: readonly number[]): LineageConnector[] {
+  const levels = depths.map((depth) => Math.min(Math.max(depth, 1), LINEAGE_MAX_DEPTH));
+  // Whether a line at `level` goes on after row `index`: the next row at that level or shallower is at that level.
+  const continues = (index: number, level: number) => {
+    const next = levels.slice(index + 1).find((other) => other <= level);
+    return next === level;
+  };
+  return levels.map((depth, index) => ({
+    depth,
+    last: !continues(index, depth),
+    through: Array.from({ length: depth - 1 }, (_, i) => i + 1).filter((level) => continues(index, level)),
+  }));
+}
+
+/** The top-level session whose family (itself and everything under it) holds `id`, or null. */
+export function familyRootOf(id: string | null | undefined, roots: readonly string[], membersOf: (rootId: string) => Iterable<string>): string | null {
+  if (!id) return null;
+  return roots.find((root) => root === id || [...membersOf(root)].includes(id)) ?? null;
 }
 
 /**
