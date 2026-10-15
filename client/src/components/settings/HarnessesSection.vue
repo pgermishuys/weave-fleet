@@ -4,6 +4,7 @@ import { computed, onBeforeUnmount, onMounted, shallowRef, watch } from "vue";
 import { storeToRefs } from "pinia";
 import { Cable, Download, LoaderCircle, RefreshCw, Star } from "lucide-vue-next";
 import HarnessInstallPanel from "@/components/settings/HarnessInstallPanel.vue";
+import HarnessPathField from "@/components/settings/HarnessPathField.vue";
 import HarnessProfilesPanel from "@/components/settings/HarnessProfilesPanel.vue";
 import HarnessSignInPanel from "@/components/settings/HarnessSignInPanel.vue";
 import HarnessUpdateStrip from "@/components/settings/HarnessUpdateStrip.vue";
@@ -416,6 +417,15 @@ function statusForHarness(harness: HarnessInfo, enabled: boolean): HarnessStatus
           :harness-name="harness.name"
           :sign-in-command="harness.info.setup?.signInCommand ?? null"
           :auto-load="harness.enabled"
+        />
+
+        <!-- GitHub Copilot runs weave-copilot, which Fleet finds on PATH unless the user names it here. -->
+        <HarnessPathField
+          v-if="harness.id === 'copilot' && !config.cloudMode"
+          class="mt-4"
+          :harness="harness.info"
+          preference-key="copilot.path"
+          program="weave-copilot"
         />
 
         <div

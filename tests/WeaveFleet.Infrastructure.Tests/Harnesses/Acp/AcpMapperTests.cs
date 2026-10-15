@@ -157,4 +157,42 @@ public sealed class AcpMapperTests
 
     private static string State(HarnessEvent evt)
         => evt.Payload!.Value.GetProperty("part").GetProperty("state").GetProperty("status").GetString()!;
+
+    [Fact]
+    public void a_steer_mid_turn_completes_the_message_and_settles_its_running_calls()
+    {
+        var mapper = new AcpMapper("s1");
+        mapper.Update(Chunk("agent_message_chunk", "Looking."));
+        mapper.Update(J("""{"sessionUpdate":"tool_call","toolCallId":"c1","kind":"execute","title":"sleep","status":"in_progress"}"""));
+
+        var steer = mapper.UserPrompt("never mind");
+
+        steer.Select(e => e.Type).ShouldBe([EventTypes.MessagePartUpdated, EventTypes.MessageUpdated]);
+        steer[0].Payload!.Value.GetProperty("part").GetProperty("state").GetProperty("status").GetString().ShouldBe("error");
+        steer[1].Payload!.Value.GetProperty("info").GetProperty("time").TryGetProperty("completed", out _).ShouldBeTrue();
+        mapper.Messages().Select(m => m.Role).ShouldBe(["assistant", "user"]);
+    }
+
+    [Fact]
+    public void what_the_agent_says_about_a_call_after_the_steer_does_not_reopen_it()
+    {
+        var mapper = new AcpMapper("s1");
+        mapper.Update(J("""{"sessionUpdate":"tool_call","toolCallId":"c1","kind":"execute","status":"in_progress"}"""));
+        mapper.UserPrompt("never mind");
+
+        var late = mapper.Update(J("""{"sessionUpdate":"tool_call_update","toolCallId":"c1","status":"completed"}"""));
+
+        late.ShouldBeEmpty();
+        mapper.Messages().Select(m => m.Role).ShouldBe(["assistant", "user"]);
+    }
+
+    [Fact]
+    public void a_prompt_between_turns_adds_only_the_user_message()
+    {
+        var mapper = new AcpMapper("s1");
+
+        mapper.UserPrompt("hello").ShouldBeEmpty();
+
+        mapper.Messages().Single().Role.ShouldBe("user");
+    }
 }

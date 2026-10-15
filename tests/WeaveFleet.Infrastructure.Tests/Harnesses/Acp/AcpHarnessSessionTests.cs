@@ -140,6 +140,27 @@ public sealed class AcpHarnessSessionTests
     }
 
     [Fact]
+    public async Task a_steer_the_agent_says_came_too_late_is_left_to_fleets_queue()
+    {
+        await using var agent = new FakeAcpAgent();
+        var release = new TaskCompletionSource();
+        agent.Handle = async (method, _) =>
+        {
+            if (method == "_fleet/steer")
+                throw new AcpException("No turn is running", AcpHarnessSession.NoTurnRunning);
+            await release.Task;
+            return new JsonObject { ["stopReason"] = "end_turn" };
+        };
+        await using var session = NewSession(agent);
+        await session.SendPromptAsync("first", null, CancellationToken.None);
+
+        await Should.ThrowAsync<HarnessBusyException>(() => session.SendPromptAsync("late", new PromptOptions { Delivery = PromptDelivery.Steer }, CancellationToken.None));
+        release.SetResult();
+
+        (await session.GetMessagesAsync(null, CancellationToken.None)).Messages.Select(m => m.TextContent).ShouldNotContain("late");
+    }
+
+    [Fact]
     public async Task a_refused_turn_is_a_readable_failure_not_a_hang()
     {
         await using var agent = new FakeAcpAgent { Handle = (_, _) => throw new InvalidOperationException("fusion routing transport failed") };

@@ -164,9 +164,10 @@ public sealed class CopilotHarnessRuntime(IServiceScopeFactory scopes, ILoggerFa
     private async Task<string> ExecutableAsync(string userId)
     {
         var saved = await ReadPreferenceAsync(userId, PathPreferenceKey).ConfigureAwait(false);
-        if (!string.IsNullOrWhiteSpace(saved))
-            return saved;
-        return Environment.GetEnvironmentVariable("FLEET_WEAVE_COPILOT") is { Length: > 0 } fromEnv ? fromEnv : Executable;
+        var named = !string.IsNullOrWhiteSpace(saved) ? saved
+            : Environment.GetEnvironmentVariable("FLEET_WEAVE_COPILOT") is { Length: > 0 } fromEnv ? fromEnv : Executable;
+        // Resolved as the availability probe does, so a .cmd shim on Windows runs, not only a bare weave-copilot.exe.
+        return ExecutableResolver.Resolve(named);
     }
 
     private async Task<string?> ReadPreferenceAsync(string userId, string key)

@@ -347,4 +347,34 @@ describe("HarnessesSection", () => {
     await flushPromises();
     expect(wrapper.find("[data-testid='harnesses-set-up']").exists()).toBe(false);
   });
+
+  describe("the GitHub Copilot path field", () => {
+    it("saves the typed path and checks again, and shows what Fleet found", async () => {
+      let found = false;
+      mockApiResponses({ "copilot.enabled": "true" }, () => [createHarness("copilot", "GitHub Copilot", found
+        ? { version: "weave-copilot 0.1.0", executablePath: "/opt/weave-copilot" }
+        : { available: false, state: "not-installed", reason: "GitHub Copilot isn't installed: Fleet couldn't find weave-copilot on PATH." })]);
+      const wrapper = await mountHarnessesSection();
+      expect(wrapper.find("[data-testid='harness-path-reason']").text()).toContain("couldn't find weave-copilot");
+
+      found = true;
+      await wrapper.find("[data-testid='harness-path-input']").setValue("/opt/weave-copilot");
+      await wrapper.find("[data-testid='harness-path-check']").trigger("click");
+      await flushPromises();
+
+      expect(apiFetchMock).toHaveBeenCalledWith("/api/preferences/{key}", expect.objectContaining({
+        params: { path: { key: "copilot.path" } },
+        body: { value: "/opt/weave-copilot" },
+      }));
+      expect(wrapper.find("[data-testid='harness-path-found']").text()).toContain("weave-copilot 0.1.0 · /opt/weave-copilot");
+    });
+
+    it("is not on other harnesses' cards", async () => {
+      mockApiResponses({});
+
+      const wrapper = await mountHarnessesSection();
+
+      expect(wrapper.find("[data-testid='harness-path-field']").exists()).toBe(false);
+    });
+  });
 });
