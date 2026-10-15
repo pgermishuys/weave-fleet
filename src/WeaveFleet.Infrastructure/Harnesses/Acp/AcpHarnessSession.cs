@@ -5,6 +5,7 @@ using System.Text.Json.Nodes;
 using System.Threading.Channels;
 using Microsoft.Extensions.Logging;
 using WeaveFleet.Application.Analytics;
+using WeaveFleet.Domain.Events;
 using WeaveFleet.Domain.Harnesses;
 
 namespace WeaveFleet.Infrastructure.Harnesses.Acp;
@@ -134,13 +135,16 @@ internal sealed partial class AcpHarnessSession : IHarnessSession
     public async Task SendPromptAsync(string text, PromptOptions? options, CancellationToken ct)
     {
         ObjectDisposedException.ThrowIf(_disposed, this);
-        if (options?.Attachments is { Count: > 0 })
-            throw new NotSupportedException("GitHub Copilot sessions don't take attachments yet.");
+        var images = options?.Attachments ?? [];
+        if (images.Any(a => !a.Mime.StartsWith("image/", StringComparison.OrdinalIgnoreCase)))
+            throw new NotSupportedException("GitHub Copilot sessions take images, not other kinds of file.");
 
         if (Status == HarnessSessionStatus.Running)
         {
             if (options?.Delivery != PromptDelivery.Steer)
                 throw new HarnessBusyException("The agent is still working on the last prompt.");
+            if (images.Count > 0)
+                throw new NotSupportedException("An image can't steer a turn that's running: send it when the turn is over.");
             try
             {
                 await _agent.Client.RequestAsync("_fleet/steer", new JsonObject { ["sessionId"] = ResumeToken, ["prompt"] = text }, ct).ConfigureAwait(false);
@@ -164,18 +168,17 @@ internal sealed partial class AcpHarnessSession : IHarnessSession
         Status = HarnessSessionStatus.Running;
         Emit(_mapper.UserPrompt(text));
         Emit(_mapper.Status(ActivityStatuses.Busy));
-        _ = RunPromptAsync(text);
+        _ = RunPromptAsync(text, images);
     }
 
-    private async Task RunPromptAsync(string text)
+    private async Task RunPromptAsync(string text, IReadOnlyList<HarnessAttachment> images)
     {
         try
         {
-            var result = await _agent.Client.RequestAsync("session/prompt", new JsonObject
-            {
-                ["sessionId"] = ResumeToken,
-                ["prompt"] = new JsonArray(new JsonObject { ["type"] = "text", ["text"] = text }),
-            }, CancellationToken.None).ConfigureAwait(false);
+            var blocks = new JsonArray(new JsonObject { ["type"] = "text", ["text"] = text });
+            foreach (var image in images)
+                blocks.Add((JsonNode)new JsonObject { ["type"] = "image", ["data"] = image.Data, ["mimeType"] = image.Mime, ["uri"] = image.Filename });
+            var result = await _agent.Client.RequestAsync("session/prompt", new JsonObject { ["sessionId"] = ResumeToken, ["prompt"] = blocks }, CancellationToken.None).ConfigureAwait(false);
             Status = HarnessSessionStatus.Idle;
             if (result.ValueKind == JsonValueKind.Object && result.TryGetProperty("usage", out var usage) && usage.ValueKind == JsonValueKind.Object)
             {
@@ -231,6 +234,9 @@ internal sealed partial class AcpHarnessSession : IHarnessSession
     }
 
     private static string ModelId(string id) => id.Contains('/') ? id[(id.LastIndexOf('/') + 1)..] : id;
+
+    /// <summary>The list Copilot last reported, kept by the mapper (it also fills while a loaded conversation replays).</summary>
+    public Task<IReadOnlyList<TodoEntry>?> GetTodosAsync(CancellationToken ct) => Task.FromResult<IReadOnlyList<TodoEntry>?>(_mapper.Todos());
 
     public async Task AbortAsync(CancellationToken ct)
     {
