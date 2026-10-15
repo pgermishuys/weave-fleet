@@ -21,6 +21,7 @@ public static class ModEndpoints
         // AOT-safe skips MapX calls on a group built in one chain ending in a filter lambda, and they crash the AOT build.
         var mods = app.MapGroup("/api/mods").WithTags("Mods");
         mods.AddEndpointFilter(OnlyWhenSwitchedOnAsync);
+        mods.AddEndpointFilter<AgentRequests.WritesAreTheUsers>();
 
         mods.MapGet("/", async (ModService service, CancellationToken ct) => Results.Ok(await service.ListAsync(ct)))
             .WithName("ListMods")
@@ -98,8 +99,8 @@ public static class ModEndpoints
         // POST /api/sessions/{sessionId}/mods/drafts/{name}/keep  { "note": "show failing names" } — the body is optional.
         // The body is an optional parameter, so an empty one is fine and a wrong content type (415), an unknown member or
         // bad JSON (400) get the standard answers.
-        drafts.MapPost("/drafts/{name}/keep", async (string sessionId, string name, KeepModRequest? request, ModService service, CancellationToken ct)
-                => (await service.KeepAsync(sessionId, name, request?.Note, check: null, ct)).ToApiResult())
+        drafts.MapPost("/drafts/{name}/keep", async (HttpContext http, string sessionId, string name, KeepModRequest? request, ModService service, CancellationToken ct)
+                => http.RefuseAgent("which mods are kept (use fleet_mod_keep to ask the user)") ?? (await service.KeepAsync(sessionId, name, request?.Note, check: null, ct)).ToApiResult())
             .WithName("KeepModDraft")
             .Produces<ModView>();
 

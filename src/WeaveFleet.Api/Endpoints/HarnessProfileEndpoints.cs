@@ -11,6 +11,7 @@ public static class HarnessProfileEndpoints
     public static IEndpointRouteBuilder MapHarnessProfileEndpoints(this IEndpointRouteBuilder app)
     {
         var group = app.MapGroup("/api/harnesses/{harnessType}/profiles").WithTags("Harness profiles");
+        group.AddEndpointFilter<AgentRequests.WritesAreTheUsers>();
 
         group.MapGet("/", async (string harnessType, HarnessProfileService profiles) =>
             (await profiles.ListAsync(harnessType)).ToApiResult())

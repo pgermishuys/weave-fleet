@@ -40,6 +40,7 @@ public static class DeviceEndpoints
             return app;
 
         var machine = app.MapGroup("/api/machine").WithTags("Devices");
+        machine.AddEndpointFilter<AgentRequests.WritesAreTheUsers>();
 
         machine.MapPost("/pairing", (
             CreatePairingRequest request,

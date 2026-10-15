@@ -17,8 +17,8 @@ public static class MemoryEndpoints
             .Produces<MemoryOverview>();
 
         // PUT /api/memory  { "enabled": true }. Off keeps the notes; sessions stop reading them.
-        group.MapPut("/", async (SetMemoryEnabledRequest req, AgentMemoryService memory, CancellationToken ct)
-                => Results.Ok(await memory.SetEnabledAsync(req.Enabled, ct)))
+        group.MapPut("/", async (HttpContext http, SetMemoryEnabledRequest req, AgentMemoryService memory, CancellationToken ct)
+                => http.RefuseAgent("the Memory switch") ?? Results.Ok(await memory.SetEnabledAsync(req.Enabled, ct)))
             .WithName("SetMemoryEnabled")
             .Produces<MemoryOverview>();
 
@@ -49,8 +49,10 @@ public static class MemoryEndpoints
             .WithName("ForgetMemoryNote");
 
         // POST /api/memory/clear  { "scope": "all" | "machine" | "repository", "repository": "…" }
-        group.MapPost("/clear", async (ClearMemoryRequest req, AgentMemoryService memory, CancellationToken ct) =>
+        group.MapPost("/clear", async (HttpContext http, ClearMemoryRequest req, AgentMemoryService memory, CancellationToken ct) =>
             {
+                if (http.RefuseAgent("which memory notes are cleared") is { } refused)
+                    return refused;
                 var cleared = await memory.ClearAsync(req.Scope, req.Repository, ct);
                 return cleared.IsSuccess ? Results.Ok(new ClearMemoryResponse(cleared.Value)) : cleared.ToApiResult();
             })

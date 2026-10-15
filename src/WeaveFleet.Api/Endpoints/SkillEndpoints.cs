@@ -16,6 +16,7 @@ public static class SkillEndpoints
     public static IEndpointRouteBuilder MapSkillEndpoints(this IEndpointRouteBuilder app)
     {
         var group = app.MapGroup("/api/skills").WithTags("Skills");
+        group.AddEndpointFilter<AgentRequests.WritesAreTheUsers>();
 
         // GET /api/skills — list from manifest, with where each skill is installed
         group.MapGet("", async (

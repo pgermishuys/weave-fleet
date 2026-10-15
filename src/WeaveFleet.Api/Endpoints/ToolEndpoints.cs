@@ -18,6 +18,7 @@ public static class ToolEndpoints
     public static IEndpointRouteBuilder MapToolEndpoints(this IEndpointRouteBuilder app)
     {
         var group = app.MapGroup("/api/tools").WithTags("Tools");
+        group.AddEndpointFilter<AgentRequests.WritesAreTheUsers>();
 
         // GET /api/tools — list from manifest, with where each tool is installed
         group.MapGet("", async (
