@@ -7,6 +7,7 @@ import {
   type HarnessSignIns,
 } from "@/api/client";
 import { forgetHarnessCatalogs } from "@/composables/use-harness-catalog";
+import { refreshAllHarnesses } from "@/composables/use-harnesses";
 
 /** An answer to a sign-in method's field. */
 export type SignInAnswer = string | number | boolean | string[];
@@ -34,6 +35,8 @@ export const useHarnessSignInStore = defineStore("harness-sign-in", () => {
   /** After a sign-in changed: the models on offer changed too, and the list shows the new sign-ins. */
   async function changed(harnessType: string): Promise<void> {
     forgetHarnessCatalogs(harnessType);
+    // A harness that waited for a sign-in is ready now, or the other way round.
+    refreshAllHarnesses();
     await load(harnessType);
   }
 

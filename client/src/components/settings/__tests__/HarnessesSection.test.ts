@@ -242,6 +242,26 @@ describe("HarnessesSection", () => {
     expect(apiFetchMock).toHaveBeenCalledWith("/api/harnesses/{harnessType}/sign-in", { params: { path: { harnessType: "opencode2" } } });
   });
 
+  it("still lists a harness's sign-ins while it waits for one, so GitHub Copilot can be signed in to from its card", async () => {
+    const waiting = createHarness("copilot", "GitHub Copilot", {
+      available: false,
+      state: "sign-in-required",
+      reason: "Sign in to GitHub Copilot.",
+      capabilities: { ...createHarness("x", "x").capabilities, supportsProviderSignIn: true },
+    });
+    apiFetchMock.mockImplementation((path: string) => {
+      if (path === "/api/harnesses") return reply([waiting]);
+      if (path === "/api/preferences") return reply({ "copilot.enabled": "true" });
+      if (path === "/api/harnesses/{harnessType}/sign-in") return reply({ note: null, providers: [] });
+      return reply({ error: "unexpected path" }, 404);
+    });
+
+    const wrapper = await mountHarnessesSection();
+    await flushPromises();
+
+    expect(wrapper.find("[data-testid='harness-sign-in']").exists()).toBe(true);
+  });
+
   it("offers no sign-in from Fleet when the server doesn't (Fleet runs with sign-in)", async () => {
     mockApiResponses({ "opencode2.enabled": "true" }, () => [createHarness("opencode2", "OpenCode 2", {
       version: "2.0.9",
