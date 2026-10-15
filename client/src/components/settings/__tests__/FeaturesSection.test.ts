@@ -47,6 +47,18 @@ describe("FeaturesSection", () => {
     expect(toggle.attributes("aria-checked")).toBe("true");
   });
 
+  it("shows starters by default, and saves turning them off", async () => {
+    const wrapper = await mountSection();
+    const toggle = wrapper.get("[data-testid='starters-switch']");
+    expect(toggle.attributes("aria-checked")).toBe("true");
+
+    await toggle.trigger("click");
+    await flushPromises();
+
+    expect(putMock).toHaveBeenCalledWith("/api/preferences/{key}", { params: { path: { key: "NewSessionStarters" } }, body: { value: "false" } });
+    expect(toggle.attributes("aria-checked")).toBe("false");
+  });
+
   describe("Large pastes", () => {
     it("always shows, and saves the choice", async () => {
       const wrapper = await mountSection();

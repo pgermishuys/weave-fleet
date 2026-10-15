@@ -8,6 +8,7 @@ import { RETRY_AFTER_LIMITS_PREFERENCE_KEY } from "@/composables/use-session-ret
 import { MODS_PREFERENCE_KEY } from "@/lib/mods";
 import { SESSION_MESSAGES_PREFERENCE_KEY } from "@/lib/session-messages";
 import { LARGE_PASTES_PREFERENCE_KEY } from "@/lib/attached-files";
+import { STARTERS_PREFERENCE_KEY } from "@/lib/starters";
 import { AGENT_HANDOFF_PREFERENCE_KEY, LIVE_MACHINES_PREFERENCE_KEY } from "@/lib/machines";
 import {
   DESKTOP_NOTIFICATIONS_PREFERENCE_KEY,
@@ -54,6 +55,21 @@ async function toggleRetryAfterLimits(): Promise<void> {
     await preferencesStore.set(RETRY_AFTER_LIMITS_PREFERENCE_KEY, isRetryAfterLimitsEnabled.value ? "false" : "true");
   } finally {
     isSavingRetryAfterLimits.value = false;
+  }
+}
+
+// On unless turned off: the new-session page offers a few sentences to start from.
+const isStartersEnabled = computed(
+  () => preferencesStore.get(STARTERS_PREFERENCE_KEY, "true") !== "false",
+);
+const isSavingStarters = shallowRef(false);
+
+async function toggleStarters(): Promise<void> {
+  isSavingStarters.value = true;
+  try {
+    await preferencesStore.set(STARTERS_PREFERENCE_KEY, isStartersEnabled.value ? "false" : "true");
+  } finally {
+    isSavingStarters.value = false;
   }
 }
 
@@ -246,6 +262,43 @@ async function toggleBoardFeature(): Promise<void> {
           <span
             class="pointer-events-none inline-block h-5 w-5 rounded-full bg-white shadow ring-0 transition duration-200 ease-in-out"
             :class="isBoardFeatureEnabled ? 'translate-x-5' : 'translate-x-0'"
+          />
+        </button>
+      </div>
+    </div>
+
+    <div class="mt-3 flex items-start justify-between gap-4 rounded-card border border-border bg-main-bg p-4">
+      <div>
+        <p class="text-sm font-medium text-text">
+          Show starters
+        </p>
+        <p class="mt-1 text-xs text-muted">
+          On the new-session page, offer a few sentences to start from, such as "Explore the code". A starter
+          fills the box; nothing is sent until you press Enter.
+        </p>
+      </div>
+
+      <div class="flex items-center gap-2">
+        <LoaderCircle
+          v-if="isSavingStarters"
+          :size="16"
+          class="animate-spin text-muted"
+          aria-hidden="true"
+        />
+        <button
+          type="button"
+          role="switch"
+          :aria-checked="isStartersEnabled"
+          :disabled="preferencesStore.isLoading || isSavingStarters"
+          aria-label="Show starters"
+          data-testid="starters-switch"
+          class="relative inline-flex h-6 w-11 shrink-0 cursor-pointer rounded-full border-2 border-transparent transition-colors duration-200 ease-in-out focus:outline-none focus:ring-2 focus:ring-accent focus:ring-offset-2 focus:ring-offset-main-bg disabled:cursor-not-allowed disabled:opacity-60"
+          :class="isStartersEnabled ? 'bg-accent' : 'bg-border'"
+          @click="toggleStarters"
+        >
+          <span
+            class="pointer-events-none inline-block h-5 w-5 rounded-full bg-white shadow ring-0 transition duration-200 ease-in-out"
+            :class="isStartersEnabled ? 'translate-x-5' : 'translate-x-0'"
           />
         </button>
       </div>
