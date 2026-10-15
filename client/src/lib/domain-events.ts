@@ -752,6 +752,12 @@ export interface SessionProgressChanged extends EventCursorMetadata {
   payload: SessionProgressSummary;
 }
 
+/** A worktree checkout was removed, is being put back, or is back. Sent on the `sessions` topic, for every session in the workspace. */
+export interface SessionCheckoutChanged extends EventCursorMetadata {
+  type: "session_checkout";
+  payload: { workspaceId: string; state: "removed" | "restoring" | "restored"; removedAt: string | null };
+}
+
 /** A session's progress, with its todos and plan. Sent on the session's topic. */
 export interface ProgressUpdated extends EventCursorMetadata {
   type: "progress.updated";
@@ -916,6 +922,7 @@ export type DomainEvent =
   | SessionListUnarchived
   | SessionListDeleted
   | SessionProgressChanged
+  | SessionCheckoutChanged
   | ProgressUpdated
   | SessionTokensCounted
   | SmartLinkUpdated

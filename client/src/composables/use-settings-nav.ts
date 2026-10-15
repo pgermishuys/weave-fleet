@@ -2,6 +2,7 @@ import { ref } from "vue";
 
 export type SettingsSectionId =
   | "workspace"
+  | "storage"
   | "credentials"
   | "appearance"
   | "skills"

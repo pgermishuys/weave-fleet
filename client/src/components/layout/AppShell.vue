@@ -34,6 +34,7 @@ import { useSessionActivityUpdates } from "@/composables/use-session-activity-up
 import { useSessionNotifications } from "@/composables/use-session-notifications";
 import { useDeskPresence } from "@/composables/use-desk-presence";
 import { useSessionProgressUpdates } from "@/composables/use-session-progress-updates";
+import { useSessionCheckoutUpdates } from "@/composables/use-session-checkout-updates";
 import { useSessionTokenUpdates } from "@/composables/use-session-token-updates";
 import { useSmartLinkUpdates } from "@/composables/use-smart-link-updates";
 import { useMemoryNotices } from "@/composables/use-memory-notices";
@@ -53,6 +54,7 @@ useSessionActivityUpdates();
 useSessionNotifications();
 useDeskPresence();
 useSessionProgressUpdates();
+useSessionCheckoutUpdates();
 useSessionTokenUpdates();
 useSmartLinkUpdates();
 useMemoryNotices();

@@ -1,12 +1,13 @@
 <script setup lang="ts">
 import type { Component } from "vue";
 import { computed, onMounted } from "vue";
-import { Blocks, Cable, FolderGit2, Globe, Info, Lightbulb, Palette, Puzzle, Server, ShieldCheck, SlidersHorizontal, Waves, Workflow, Wrench } from "lucide-vue-next";
+import { Blocks, Cable, FolderGit2, Globe, HardDrive, Info, Lightbulb, Palette, Puzzle, Server, ShieldCheck, SlidersHorizontal, Waves, Workflow, Wrench } from "lucide-vue-next";
 import { useUpdateStatus } from "@/composables/use-update-status";
 import { useModsStore } from "@/stores/mods";
 
 type SettingsSectionId =
   | "workspace"
+  | "storage"
   | "credentials"
   | "appearance"
   | "skills"
@@ -50,6 +51,7 @@ onMounted(() => { void mods.loadSwitch(); });
 
 const allItems: readonly SettingsNavItem[] = [
   { id: "workspace", label: "Folders", icon: FolderGit2 },
+  { id: "storage", label: "Storage", icon: HardDrive },
   { id: "appearance", label: "Appearance", icon: Palette },
   { id: "features", label: "Features", icon: SlidersHorizontal },
   { id: "skills", label: "Skills", icon: Wrench },

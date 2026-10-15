@@ -231,3 +231,31 @@ describe("SessionDetailHeader for a session on a machine that isn't answering", 
     expect(wrapper.get("[data-testid='session-machine']").text()).toBe("mini");
   });
 });
+
+describe("SessionDetailHeader removed checkout", () => {
+  it("offers Restore now while the checkout is removed, and puts it back", async () => {
+    const sessions = useSessionsStore();
+    sessions.setSessions([{ workspaceId: "ws-1", session: { id: "session-1", title: "t", time: { created: 1, updated: 1 }, tags: [] }, checkoutRemovedAt: "2026-10-01T10:00:00Z" } as unknown as SessionListItem]);
+    apiFetch.mockResolvedValue(new Response(null, { status: 204 }));
+    const wrapper = mountHeader({ checkoutRemovedAt: "2026-10-01T10:00:00Z" } as Partial<HeaderProps>);
+
+    expect(wrapper.get("[data-testid='session-checkout-chip']").text()).toContain("Checkout removed");
+    await wrapper.get("[data-testid='session-checkout-restore']").trigger("click");
+    await flushPromises();
+
+    expect(apiFetch).toHaveBeenCalledWith("/api/storage/worktrees/ws-1/restore", { method: "POST" });
+    expect(sessions.sessionById("session-1")?.checkoutRemovedAt).toBeNull();
+  });
+
+  it("shows the server's sentence when the restore fails, and no chip when nothing was removed", async () => {
+    useSessionsStore().setSessions([{ workspaceId: "ws-1", session: { id: "session-1", title: "t", time: { created: 1, updated: 1 }, tags: [] } } as unknown as SessionListItem]);
+    apiFetch.mockResolvedValue(new Response(JSON.stringify({ error: "The branch fleet/x isn't there any more." }), { status: 409 }));
+    const wrapper = mountHeader({ checkoutRemovedAt: "2026-10-01T10:00:00Z" } as Partial<HeaderProps>);
+    await wrapper.get("[data-testid='session-checkout-restore']").trigger("click");
+    await flushPromises();
+    expect(wrapper.get("[data-testid='session-checkout-chip']").text()).toContain("isn't there any more");
+
+    await wrapper.setProps({ checkoutRemovedAt: null } as Partial<HeaderProps>);
+    expect(wrapper.find("[data-testid='session-checkout-chip']").exists()).toBe(false);
+  });
+});

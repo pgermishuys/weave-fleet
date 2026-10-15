@@ -56,6 +56,9 @@ public sealed record SessionListResponse(
     /// <summary>How much work the session's agent left running (subagents, background shells, monitors): the list's chip.</summary>
     public int RunningWorkCount { get; init; }
 
+    /// <summary>When Clean now removed the session's worktree checkout, or null; its next wake puts it back.</summary>
+    public string? CheckoutRemovedAt { get; init; }
+
     /// <summary>The session this one is a fork of, or null.</summary>
     public string? ForkedFromSessionId { get; init; }
 

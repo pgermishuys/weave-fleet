@@ -205,6 +205,9 @@ public sealed record GetSessionResponse(
     string? HarnessProfileId = null,
     string? HarnessProfileName = null)
 {
+    /// <summary>When Clean now removed the session's worktree checkout, or null; its next wake puts it back.</summary>
+    public string? CheckoutRemovedAt { get; init; }
+
     /// <summary>The session this one is a fork of, or null.</summary>
     public string? ForkedFromSessionId { get; init; }
 

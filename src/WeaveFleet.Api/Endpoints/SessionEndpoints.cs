@@ -165,6 +165,7 @@ public static class SessionEndpoints
                         HarnessProfileId: session.HarnessProfileId,
                         HarnessProfileName: profile?.Name)
                     {
+                        CheckoutRemovedAt = workspace is { IsolationStrategy: "worktree" } ? workspace.CleanedUpAt : null,
                         ForkedFromSessionId = session.ForkedFromSessionId,
                         SpawnedBySessionId = session.SpawnedBySessionId,
                         SpawnKind = session.SpawnKind,
@@ -1177,6 +1178,7 @@ public static class SessionEndpoints
             Tags: s.Tags ?? [])
         {
             Origin = origin,
+            CheckoutRemovedAt = workspace is { IsolationStrategy: "worktree" } ? workspace.CleanedUpAt : null,
             SelectedAgent = s.SelectedAgent,
             WorkflowRunId = s.WorkflowRunId,
             SelectedModel = SessionModelChoiceDto.Of(s.SelectedProviderId, s.SelectedModelId),
@@ -1741,7 +1743,7 @@ internal static class SessionFleetErrorExtensions
         error.Code switch
         {
             var c when c.EndsWith(".NotFound", StringComparison.Ordinal) => Results.NotFound(new ErrorResponse(error.Description)),
-            "General.Conflict" => Results.Conflict(new ErrorResponse(error.Description)),
+            "General.Conflict" or "Session.CheckoutRemoved" => Results.Conflict(new ErrorResponse(error.Description)),
             var c when c.StartsWith("Validation.", StringComparison.Ordinal) => Results.BadRequest(new ErrorResponse(error.Description)),
             _ => Results.Problem(error.Description)
         };

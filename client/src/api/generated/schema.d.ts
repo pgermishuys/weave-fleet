@@ -2485,6 +2485,70 @@ export interface paths {
         patch: operations["RenameWorkspace"];
         trace?: never;
     };
+    "/api/storage/worktrees": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get: operations["ListWorktreeCheckouts"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/storage/worktrees/clean": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post: operations["CleanWorktreeCheckouts"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/storage/worktrees/{workspaceId}/size": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get: operations["GetWorktreeCheckoutSize"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/storage/worktrees/{workspaceId}/restore": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post: operations["RestoreWorktreeCheckout"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/worktrees/naming": {
         parameters: {
             query?: never;
@@ -4202,6 +4266,7 @@ export interface components {
             lifecycleStatus: string;
             retentionStatus: string;
             archivedAt: null | string;
+            checkoutRemovedAt?: null | string;
             typedInstanceStatus: string;
             isHidden: boolean;
             /** Format: int32 */
@@ -4590,6 +4655,36 @@ export interface components {
             /** Format: int64 */
             size: number | string;
             truncated: boolean;
+        };
+        WorktreeCheckout: {
+            workspaceId: string;
+            sessionId: string;
+            title: string;
+            repository: string;
+            directory: string;
+            branch: null | string;
+            verdict: string;
+            reason: string;
+            /** Format: int32 */
+            unpushedCommits: null | number;
+            archivedAt: null | string;
+        };
+        WorktreeCheckoutsResponse: {
+            checkouts: components["schemas"]["WorktreeCheckout"][];
+            /** Format: int32 */
+            archivedDays: number;
+        };
+        WorktreeCleanupReport: {
+            removed: components["schemas"]["WorktreeCheckout"][];
+            kept: components["schemas"]["WorktreeCheckout"][];
+        };
+        FolderSize: {
+            /** Format: int64 */
+            bytes: number;
+            complete: boolean;
+        };
+        CleanWorktreesRequest: {
+            workspaceIds: string[];
         };
         WorktreeNamingPreviewRequest: {
             directory: string;
@@ -9548,6 +9643,92 @@ export interface operations {
         responses: {
             /** @description OK */
             200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+        };
+    };
+    ListWorktreeCheckouts: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["WorktreeCheckoutsResponse"];
+                };
+            };
+        };
+    };
+    CleanWorktreeCheckouts: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["CleanWorktreesRequest"];
+            };
+        };
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["WorktreeCleanupReport"];
+                };
+            };
+        };
+    };
+    GetWorktreeCheckoutSize: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                workspaceId: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["FolderSize"];
+                };
+            };
+        };
+    };
+    RestoreWorktreeCheckout: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                workspaceId: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description No Content */
+            204: {
                 headers: {
                     [name: string]: unknown;
                 };

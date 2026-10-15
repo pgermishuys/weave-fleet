@@ -13,6 +13,9 @@ public interface ISessionTerminalCleanup
 {
     /// <summary>Ends every shell in the session and deletes its saved terminals and scrollback.</summary>
     Task EndSessionAsync(string sessionId, CancellationToken ct = default);
+
+    /// <summary>Whether a shell is running in the session: its folder is in use.</summary>
+    bool HasOpenTerminal(string sessionId) => false;
 }
 
 /// <summary>
@@ -40,6 +43,8 @@ public sealed partial class TerminalManager(
     internal Func<System.Collections.IDictionary> ProcessEnvironment { get; init; } = Environment.GetEnvironmentVariables;
 
     public int LiveCount => _live.Count;
+
+    public bool HasOpenTerminal(string sessionId) => _live.Keys.Any(k => k.SessionId == sessionId);
 
     public async Task<IReadOnlyList<TerminalInfo>> ListAsync(string sessionId, CancellationToken ct = default)
     {

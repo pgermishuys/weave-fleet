@@ -549,6 +549,10 @@ internal sealed record ErrorResponse(string Error);
 [JsonSerializable(typeof(WorktreeNamingRequest))]
 [JsonSerializable(typeof(WorktreeNamingPreviewRequest))]
 [JsonSerializable(typeof(WorktreeNamingPreviewResponse))]
+[JsonSerializable(typeof(WorktreeCheckoutsResponse))]
+[JsonSerializable(typeof(CleanWorktreesRequest))]
+[JsonSerializable(typeof(WeaveFleet.Application.Workspaces.WorktreeCleanupReport))]
+[JsonSerializable(typeof(WeaveFleet.Application.Workspaces.FolderSize))]
 [JsonSourceGenerationOptions(PropertyNamingPolicy = JsonKnownNamingPolicy.CamelCase)]
 internal sealed partial class ApiJsonContext : JsonSerializerContext
 {

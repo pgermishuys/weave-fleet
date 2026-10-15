@@ -6,7 +6,7 @@ using WeaveFleet.Domain.Repositories;
 
 namespace WeaveFleet.Application.Sessions.Catalog;
 
-/// <summary>What the session's harness offers the composer: its models, slash commands and agents. Asking wakes the session.</summary>
+/// <summary>What the session's harness offers the composer: its models, slash commands and agents. Asking wakes the session, but not one whose checkout Clean now removed.</summary>
 public sealed class SessionCatalog(
     ISessionRepository sessionRepository,
     SessionActivation activation,
@@ -21,7 +21,7 @@ public sealed class SessionCatalog(
         if (sessionResult.IsFailure)
             return sessionResult.Error;
 
-        var instanceResult = await activation.GetOrActivateInstanceAsync(sessionResult.Value, ct).ConfigureAwait(false);
+        var instanceResult = await activation.GetOrActivateInstanceToReadAsync(sessionResult.Value, ct).ConfigureAwait(false);
         if (instanceResult.IsFailure)
             return instanceResult.Error;
 
@@ -38,7 +38,7 @@ public sealed class SessionCatalog(
         if (sessionResult.IsFailure)
             return sessionResult.Error;
 
-        var instanceResult = await activation.GetOrActivateInstanceAsync(sessionResult.Value, ct).ConfigureAwait(false);
+        var instanceResult = await activation.GetOrActivateInstanceToReadAsync(sessionResult.Value, ct).ConfigureAwait(false);
         if (instanceResult.IsFailure)
             return instanceResult.Error;
 
@@ -55,7 +55,7 @@ public sealed class SessionCatalog(
         if (sessionResult.IsFailure)
             return sessionResult.Error;
 
-        var instanceResult = await activation.GetOrActivateInstanceAsync(sessionResult.Value, ct).ConfigureAwait(false);
+        var instanceResult = await activation.GetOrActivateInstanceToReadAsync(sessionResult.Value, ct).ConfigureAwait(false);
         if (instanceResult.IsFailure)
             return instanceResult.Error;
 

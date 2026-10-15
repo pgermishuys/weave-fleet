@@ -218,6 +218,46 @@ public sealed partial class WorkspaceService(
         return Unit.Value;
     }
 
+    /// <summary>
+    /// Puts back a worktree checkout that Clean now removed (<see cref="WorktreeCleanup"/>): the same folder, on its
+    /// branch. The same folder matters: harnesses keep their conversations by the folder's path. Does nothing for a
+    /// workspace whose checkout wasn't removed.
+    /// </summary>
+    public async Task<Result<Unit>> RestoreCheckoutAsync(Workspace workspace)
+    {
+        if (workspace is not { IsolationStrategy: "worktree", CleanedUpAt: not null, SourceDirectory: { } repository })
+            return Unit.Value;
+
+        var branch = workspace.Branch;
+        if (System.IO.Directory.Exists(workspace.Directory) && System.IO.Directory.EnumerateFileSystemEntries(workspace.Directory).Any())
+        {
+            // Put back by hand already: it's the checkout if git says it's a worktree of this branch.
+            var current = (await TryRunGitAsync(workspace.Directory, "symbolic-ref", "--quiet", "--short", "HEAD"))?.Trim();
+            if (current is null || current != branch)
+                return FleetError.ValidationError("Workspace.Restore", $"Something else is in {workspace.Directory} now, so the checkout can't come back there. The conversation is kept.");
+        }
+        else
+        {
+            if (branch is null || !await RefExistsAsync(repository, $"refs/heads/{branch}"))
+                return FleetError.ValidationError("Workspace.Restore", $"The branch {branch} isn't there any more. The conversation is kept.");
+
+            try
+            {
+                await TryRunGitAsync(repository, "worktree", "prune");
+                await RunGitAsync(repository, "worktree", "add", workspace.Directory, branch);
+            }
+            catch (GitCommandException ex)
+            {
+                return FleetError.ValidationError("Workspace.Restore", $"Couldn't put the checkout back: {ex.GitMessage}. The conversation is kept.");
+            }
+        }
+
+        await workspaceRepository.ClearCleanedAsync(workspace.Id);
+        workspace.CleanedUpAt = null;
+        LogCheckoutRestored(workspace.Directory, branch ?? "");
+        return Unit.Value;
+    }
+
     public async Task<Result<string>> GetWorkspaceDirectoryAsync(string id)
     {
         var workspace = await workspaceRepository.GetByIdAsync(id);
@@ -579,6 +619,9 @@ public sealed partial class WorkspaceService(
 
     [LoggerMessage(Level = LogLevel.Warning, Message = "Failed to delete clone/managed directory: {Dir}")]
     private partial void LogCloneDeleteFailed(Exception ex, string dir);
+
+    [LoggerMessage(Level = LogLevel.Information, Message = "Put the checkout {Dir} back on branch {Branch}")]
+    private partial void LogCheckoutRestored(string dir, string branch);
 
     [LoggerMessage(Level = LogLevel.Warning, Message = "Couldn't fetch origin/{Branch} in {Dir}; starting the worktree from the last fetched copy")]
     private partial void LogBaseFetchFailed(string dir, string branch);
