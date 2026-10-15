@@ -248,13 +248,35 @@ public sealed class AcpHarnessSessionTests
         };
         await using var session = NewSession(agent);
 
-        await session.LoadAsync(CancellationToken.None);
+        await session.LoadAsync(null, CancellationToken.None);
         await Task.Delay(50);
 
         (await session.GetMessagesAsync(null, CancellationToken.None)).Messages.Select(m => m.TextContent).ShouldBe(["Add a retry", "Done."]);
         session.Models.Single().Name.ShouldBe("Model One");
         using var none = new CancellationTokenSource(TimeSpan.FromMilliseconds(100));
         await Should.ThrowAsync<OperationCanceledException>(async () => { await foreach (var _ in session.SubscribeAsync(none.Token)) { } });
+    }
+
+    [Fact]
+    public async Task loading_a_session_passes_the_mcp_servers_and_ending_it_runs_OnEnded_once()
+    {
+        await using var agent = new FakeAcpAgent();
+        string? sent = null;
+        agent.Handle = (method, p) =>
+        {
+            if (method == "session/load")
+                sent = p.GetProperty("mcpServers").GetRawText();
+            return Task.FromResult<JsonNode?>(new JsonObject());
+        };
+        var ended = 0;
+        var session = new AcpHarnessSession("copilot", "copilot-1", "fleet-1", "acp-1", "/work", agent, NullLogger.Instance) { OnEnded = () => ended++ };
+
+        await session.LoadAsync(new JsonArray(new JsonObject { ["name"] = "fleet" }), CancellationToken.None);
+        await session.DisposeAsync();
+        await session.DisposeAsync();
+
+        JsonNode.Parse(sent!)!.AsArray().Single()!["name"]!.GetValue<string>().ShouldBe("fleet");
+        ended.ShouldBe(1);
     }
 
     private static JsonObject Ask() => new()

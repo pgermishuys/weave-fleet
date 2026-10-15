@@ -62,6 +62,9 @@ internal sealed partial class AcpHarnessSession : IHarnessSession
         agent.Client.Closed += OnClosed;
     }
 
+    /// <summary>Runs once when the session ends, for whoever issued it something that must not outlive it.</summary>
+    internal Action? OnEnded { get; init; }
+
     public string InstanceId { get; }
 
     public int? ProcessId => _agent.ProcessId;
@@ -116,13 +119,13 @@ internal sealed partial class AcpHarnessSession : IHarnessSession
     }
 
     /// <summary>Loads the conversation again from the agent, which replays it as updates; none of them reach Fleet as events.</summary>
-    internal async Task LoadAsync(CancellationToken ct)
+    internal async Task LoadAsync(JsonArray? mcpServers, CancellationToken ct)
     {
         _replaying = true;
         try
         {
             var result = await _agent.Client.RequestAsync("session/load",
-                new JsonObject { ["sessionId"] = ResumeToken, ["cwd"] = _workingDirectory, ["mcpServers"] = new JsonArray() }, ct).ConfigureAwait(false);
+                new JsonObject { ["sessionId"] = ResumeToken, ["cwd"] = _workingDirectory, ["mcpServers"] = mcpServers ?? [] }, ct).ConfigureAwait(false);
             ReadModels(result);
         }
         finally
@@ -400,6 +403,7 @@ internal sealed partial class AcpHarnessSession : IHarnessSession
         if (_disposed)
             return;
         _disposed = true;
+        OnEnded?.Invoke();
         foreach (var id in _asks.Keys)
             Settle(id, PermissionReplies.Gone, null);
         _events.Writer.TryComplete();
