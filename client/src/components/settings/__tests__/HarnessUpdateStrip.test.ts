@@ -139,4 +139,22 @@ describe("HarnessUpdateStrip", () => {
 
     expect(view.text()).toContain("OpenCode is already being updated.");
   });
+
+  it("offers to install a harness Fleet downloads itself, and shows the download's progress", async () => {
+    const plan = "Fleet downloads weave-copilot 0.1.0 and the Copilot CLI 1.0.98 from GitHub into ~/.weave/runtimes/copilot.";
+    const notInstalled = { state: "not-installed" as const, available: false, version: null, executablePath: null };
+    const view = mountStrip(openCode({ updateAvailable: false, canInstall: true, installPlan: plan }, notInstalled));
+
+    expect(view.text()).toContain("OpenCode isn't installed.");
+    expect(view.text()).toContain(plan);
+    expect(view.get("[data-testid='harness-update-start']").text()).toBe("Install");
+    await view.get("[data-testid='harness-update-start']").trigger("click");
+    expect(mocks.apiFetch).toHaveBeenCalledWith("/api/harnesses/opencode/update", { method: "POST" });
+
+    const running = mountStrip(openCode(
+      { updateAvailable: false, canInstall: true, installPlan: plan, job: { phase: "running", message: "Downloading the Copilot CLI 1.0.98… 42%", workingSessions: 0 } },
+      notInstalled,
+    ));
+    expect(running.text()).toContain("Downloading the Copilot CLI 1.0.98… 42%");
+  });
 });

@@ -77,6 +77,12 @@ internal sealed partial class HarnessUpdateService(
         var result = new Dictionary<string, HarnessUpdateInfo>(StringComparer.OrdinalIgnoreCase);
         foreach (var (harness, runtime) in runtimes)
         {
+            if (runtime!.Installer is { } installer)
+            {
+                result[harness.Type] = DescribeInstaller(harness, runtime, installer);
+                continue;
+            }
+
             var package = runtime!.LatestVersionPackage;
             var latestVersion = package is not null && latest.TryGetValue(package, out var found) ? found : null;
             var availability = AvailabilityOf(harness);
@@ -98,6 +104,17 @@ internal sealed partial class HarnessUpdateService(
         return Task.FromResult<IReadOnlyDictionary<string, HarnessUpdateInfo>>(result);
     }
 
+    /// <summary>A harness Fleet downloads itself needs no lookup: it updates to the version this Fleet pins.</summary>
+    private HarnessUpdateInfo DescribeInstaller(HarnessInfo harness, IHarnessRuntime runtime, IHarnessInstaller installer) => new()
+    {
+        LatestVersion = installer.TargetVersion,
+        UpdateAvailable = harness.ExecutablePath is not null && harness.Version is not null && HarnessVersion.IsOlder(harness.Version, installer.TargetVersion),
+        CanInstall = harness.State == HarnessStates.NotInstalled,
+        InstallPlan = installer.Plan,
+        MinimumVersion = runtime.MinimumVersion,
+        Job = _runs.TryGetValue(harness.Type, out var run) ? run.Job : null,
+    };
+
     public async Task<Result<HarnessUpdateJob>> StartAsync(string harnessType, CancellationToken ct)
     {
         var runtime = registry.GetRuntimeByType(harnessType);
@@ -106,15 +123,16 @@ internal sealed partial class HarnessUpdateService(
             return FleetError.NotFoundFor("Harness", harnessType);
 
         var availability = await runtime.CheckAvailabilityAsync(ct).ConfigureAwait(false);
-        if (availability.ExecutablePath is null)
+        var installer = runtime.Installer;
+        if (availability.ExecutablePath is null && (installer is null || availability.State != HarnessStates.NotInstalled))
             return FleetError.ValidationError("Harness", $"{harness.DisplayName} isn't installed, so there's nothing to update.");
 
         var package = runtime.LatestVersionPackage;
-        var latest = package is null
+        var latest = package is null || installer is not null
             ? null
             : await LatestVersionNowAsync(package).ConfigureAwait(false);
-        var command = runtime.GetUpdateCommand(availability, latest);
-        if (command is null)
+        var command = installer is null ? runtime.GetUpdateCommand(availability, latest) : null;
+        if (command is null && installer is null)
             return FleetError.ValidationError("Harness", $"Fleet can't update {harness.DisplayName}. Update it the way you installed it.");
 
         var run = new UpdateRun(new HarnessUpdateJob(HarnessUpdatePhases.Waiting, null, null, WorkingSessions(), availability.Version, null));
@@ -125,7 +143,7 @@ internal sealed partial class HarnessUpdateService(
         }
 
         // The update outlives the request that started it.
-        _ = Task.Run(() => RunAsync(harness.Type, harness.DisplayName, runtime, command, availability.Version, run), CancellationToken.None);
+        _ = Task.Run(() => RunAsync(harness.Type, harness.DisplayName, runtime, command, installer, availability.Version, run), CancellationToken.None);
         return run.Job;
     }
 
@@ -145,7 +163,8 @@ internal sealed partial class HarnessUpdateService(
         string harnessType,
         string displayName,
         IHarnessRuntime runtime,
-        HarnessCommand command,
+        HarnessCommand? command,
+        IHarnessInstaller? installer,
         string? fromVersion,
         UpdateRun run)
     {
@@ -160,22 +179,28 @@ internal sealed partial class HarnessUpdateService(
 
             run.Cancel.Token.ThrowIfCancellationRequested();
             run.Job = run.Job with { Phase = HarnessUpdatePhases.Running, WorkingSessions = 0 };
-            LogUpdating(logger, harnessType, command.Display);
-            var result = await RunUpdater(command, UpdateTimeout, CancellationToken.None).ConfigureAwait(false);
+            LogUpdating(logger, harnessType, command?.Display ?? "Fleet's own download");
+            var result = installer is not null
+                ? await InstallAsync(installer, run).ConfigureAwait(false)
+                : await RunUpdater(command!, UpdateTimeout, CancellationToken.None).ConfigureAwait(false);
 
             var after = await runtime.CheckAvailabilityAsync(CancellationToken.None).ConfigureAwait(false);
             var toVersion = after.Version;
-            if (result.TimedOut)
+            if (installer is not null && result.ExitCode != 0)
             {
-                run.Job = Failed($"The update didn't finish within {UpdateTimeout.TotalMinutes:0} minutes. Run it yourself: {command.Display}");
+                run.Job = Failed(result.Output) with { Output = null };
+            }
+            else if (result.TimedOut)
+            {
+                run.Job = Failed($"The update didn't finish within {UpdateTimeout.TotalMinutes:0} minutes. Run it yourself: {command!.Display}");
             }
             else if (result.ExitCode != 0)
             {
-                run.Job = Failed($"The update failed (exit code {result.ExitCode}). {displayName} is still on {fromVersion ?? "the old version"}. Run it yourself: {command.Display}");
+                run.Job = Failed($"The update failed (exit code {result.ExitCode}). {displayName} is still on {fromVersion ?? "the old version"}. Run it yourself: {command!.Display}");
             }
             else if (toVersion is not null && fromVersion is not null && !HarnessVersion.IsOlder(fromVersion, toVersion))
             {
-                run.Job = Failed($"The update finished, but {displayName} is still on {toVersion}. Run it yourself: {command.Display}");
+                run.Job = Failed($"The update finished, but {displayName} is still on {toVersion}. Run it yourself: {command!.Display}");
             }
             else
             {
@@ -183,7 +208,7 @@ internal sealed partial class HarnessUpdateService(
                 run.Job = run.Job with
                 {
                     Phase = HarnessUpdatePhases.Succeeded,
-                    Message = $"Updated {displayName} from {fromVersion} to {toVersion}.",
+                    Message = fromVersion is null ? $"Installed {displayName} {toVersion}." : $"Updated {displayName} from {fromVersion} to {toVersion}.",
                     Output = result.Output,
                     ToVersion = toVersion,
                 };
@@ -207,8 +232,27 @@ internal sealed partial class HarnessUpdateService(
             run.Job = run.Job with
             {
                 Phase = HarnessUpdatePhases.Failed,
-                Message = $"Fleet couldn't run the update: {ex.Message} Run it yourself: {command.Display}",
+                Message = $"Fleet couldn't run the update: {ex.Message}{(command is null ? "" : $" Run it yourself: {command.Display}")}",
             };
+        }
+    }
+
+    /// <summary>Runs the harness's own download, showing its progress line as the job's message. A failure's words are the output.</summary>
+    private static async Task<UpdaterResult> InstallAsync(IHarnessInstaller installer, UpdateRun run)
+    {
+        using var limit = new CancellationTokenSource(UpdateTimeout);
+        try
+        {
+            await installer.InstallAsync(new InlineProgress(line => run.Job = run.Job with { Message = line }), limit.Token).ConfigureAwait(false);
+            return new UpdaterResult(0, string.Empty, TimedOut: false);
+        }
+        catch (HarnessInstallException ex)
+        {
+            return new UpdaterResult(1, ex.Message, TimedOut: false);
+        }
+        catch (OperationCanceledException)
+        {
+            return new UpdaterResult(1, $"The download didn't finish within {UpdateTimeout.TotalMinutes:0} minutes.", TimedOut: false);
         }
     }
 
@@ -354,6 +398,12 @@ internal sealed partial class HarnessUpdateService(
         string output;
         lock (lines) output = string.Join('\n', lines);
         return new UpdaterResult(timedOut ? -1 : process.ExitCode, output, timedOut);
+    }
+
+    /// <summary>Reports on the caller's thread, so a late report can't overwrite the job's result.</summary>
+    private sealed class InlineProgress(Action<string> report) : IProgress<string>
+    {
+        public void Report(string value) => report(value);
     }
 
     /// <summary>One harness's update: its current job and the switch that cancels it while waiting.</summary>

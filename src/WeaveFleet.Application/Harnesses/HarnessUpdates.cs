@@ -45,6 +45,12 @@ public sealed record HarnessUpdateInfo
     /// <summary>The oldest version Fleet works with, when the harness has one.</summary>
     public string? MinimumVersion { get; init; }
 
+    /// <summary>Fleet downloads this harness itself, and it isn't installed: the install can start from here.</summary>
+    public bool CanInstall { get; init; }
+
+    /// <summary>For a harness Fleet downloads itself: what the install or update fetches and where it goes.</summary>
+    public string? InstallPlan { get; init; }
+
     /// <summary>The update command as the user would type it, to show or copy.</summary>
     public string? Command { get; init; }
 

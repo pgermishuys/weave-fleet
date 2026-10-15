@@ -35,6 +35,12 @@ public interface IHarnessRuntime
     /// </summary>
     HarnessCommand? GetUpdateCommand(HarnessAvailability availability, string? version) => null;
 
+    /// <summary>
+    /// For a harness Fleet downloads and installs itself, at versions it pins, instead of running the vendor's installer
+    /// or updater. <see langword="null"/> for the rest.
+    /// </summary>
+    IHarnessInstaller? Installer => null;
+
     /// <summary>Called after an update succeeded, e.g. to restart idle processes on the new version.</summary>
     Task AfterUpdateAsync(CancellationToken ct) => Task.CompletedTask;
 

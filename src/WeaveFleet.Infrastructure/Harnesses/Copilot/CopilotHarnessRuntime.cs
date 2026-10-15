@@ -18,7 +18,12 @@ namespace WeaveFleet.Infrastructure.Harnesses.Copilot;
 internal sealed record CopilotLaunchArtifacts(string? ModelId) : RuntimeLaunchArtifacts;
 
 /// <summary><see cref="IHarnessRuntime"/> for GitHub Copilot: one weave-copilot process per session, spoken to over ACP.</summary>
-public sealed class CopilotHarnessRuntime(IServiceScopeFactory scopes, ILoggerFactory loggers, IAnalyticsCollector? analytics = null) : IHarnessRuntime
+public sealed class CopilotHarnessRuntime(
+    IServiceScopeFactory scopes,
+    ILoggerFactory loggers,
+    IAnalyticsCollector? analytics = null,
+    IHttpClientFactory? httpClients = null,
+    string? home = null) : IHarnessRuntime
 {
     private static readonly TimeSpan AuthLife = TimeSpan.FromSeconds(30);
 
@@ -43,6 +48,20 @@ public sealed class CopilotHarnessRuntime(IServiceScopeFactory scopes, ILoggerFa
     public IHarnessProviderSignIn? ProviderSignIn => _signInInstance ??= new CopilotSignIn(
         StartPlainAsync, () => _auth = null, TimeProvider.System);
     private CopilotSignIn? _signInInstance;
+
+    private CopilotInstaller? _installer;
+
+    private CopilotInstaller InstallerInstance => _installer ??= new CopilotInstaller(
+        httpClients ?? new DefaultHttpClientFactory(), home ?? ExecutableResolver.HomeDirectory() ?? Environment.CurrentDirectory);
+
+    /// <inheritdoc />
+    /// <remarks>Fleet downloads weave-copilot and the Copilot CLI at the versions this release pins, rather than asking the user to.</remarks>
+    public IHarnessInstaller Installer => InstallerInstance;
+
+    private sealed class DefaultHttpClientFactory : IHttpClientFactory
+    {
+        public HttpClient CreateClient(string name) => new();
+    }
 
     /// <inheritdoc />
     public string HarnessType => CopilotHarness.TypeName;
@@ -169,6 +188,9 @@ public sealed class CopilotHarnessRuntime(IServiceScopeFactory scopes, ILoggerFa
         if (withHydraFusion && await IsOnAsync(ownerUserId, CopilotHarness.HydraFusionPreferenceKey).ConfigureAwait(false))
             arguments.Add("--hydrafusion");
 
+        if (InstallerInstance.ManagedCli() is { } cli && string.IsNullOrWhiteSpace(await ReadPreferenceAsync(ownerUserId, PathPreferenceKey).ConfigureAwait(false)))
+            arguments.AddRange(["--copilot-cli", cli]);
+
         var agent = AcpAgentProcess.Start(await ExecutableAsync(ownerUserId).ConfigureAwait(false), arguments, workingDirectory,
             new Dictionary<string, string>(), loggers.CreateLogger<AcpAgentProcess>());
         try
@@ -212,11 +234,12 @@ public sealed class CopilotHarnessRuntime(IServiceScopeFactory scopes, ILoggerFa
     private async Task<bool> IsOnAsync(string userId, string key)
         => string.Equals(await ReadPreferenceAsync(userId, key).ConfigureAwait(false), "true", StringComparison.OrdinalIgnoreCase);
 
-    /// <summary>weave-copilot's path: the user's setting, else the one named in <c>FLEET_WEAVE_COPILOT</c>, else PATH.</summary>
+    /// <summary>weave-copilot's path: the user's setting, else the copy Fleet installed, else the one named in <c>FLEET_WEAVE_COPILOT</c>, else PATH.</summary>
     private async Task<string> ExecutableAsync(string userId)
     {
         var saved = await ReadPreferenceAsync(userId, PathPreferenceKey).ConfigureAwait(false);
         var named = !string.IsNullOrWhiteSpace(saved) ? saved
+            : InstallerInstance.ManagedWeaveCopilot() is { } managed ? managed
             : Environment.GetEnvironmentVariable("FLEET_WEAVE_COPILOT") is { Length: > 0 } fromEnv ? fromEnv : Executable;
         // Resolved as the availability probe does, so a .cmd shim on Windows runs, not only a bare weave-copilot.exe.
         return ExecutableResolver.Resolve(named);
