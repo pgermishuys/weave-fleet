@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { Archive, ArchiveRestore, Ellipsis, GitFork, Loader2, OctagonX, Pencil, Trash2 } from "lucide-vue-next";
+import { Archive, ArchiveRestore, Copy, Ellipsis, GitFork, Loader2, OctagonX, Pencil, Trash2 } from "lucide-vue-next";
 import { Button } from "@/components/ui/button";
 import {
   DropdownMenu,
@@ -26,10 +26,13 @@ const props = withDefaults(defineProps<{
   isArchiving?: boolean;
   hasSession?: boolean;
   hasInstance?: boolean;
+  /** The session's working folder (the worktree in a worktree session): Copy folder path copies it. */
+  directory?: string | null;
   errors?: readonly string[];
 }>(), {
   canFork: true,
   forkDisabledReason: null,
+  directory: null,
   canDelete: true,
   canRename: true,
 });
@@ -42,6 +45,15 @@ const emit = defineEmits<{
   archive: [];
   restore: [];
 }>();
+
+async function copyDirectory(): Promise<void> {
+  if (!props.directory) return;
+  try {
+    await navigator.clipboard.writeText(props.directory);
+  } catch {
+    // Clipboard failures are non-fatal.
+  }
+}
 </script>
 
 <template>
@@ -116,6 +128,16 @@ const emit = defineEmits<{
         align="end"
         class="w-56"
       >
+        <!-- First, for windows too narrow for the header to show the path. -->
+        <DropdownMenuItem
+          v-if="props.directory"
+          data-testid="session-copy-directory-action"
+          :title="props.directory"
+          @select="copyDirectory"
+        >
+          <Copy class="size-3.5" />
+          Copy folder path
+        </DropdownMenuItem>
         <DropdownMenuItem
           v-if="props.canRename"
           data-testid="session-rename-action"

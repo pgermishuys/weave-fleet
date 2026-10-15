@@ -308,6 +308,18 @@ async function onMenu(action: MenuAction): Promise<void> {
     case "side":
       sheet.value = action;
       break;
+    case "copy-folder": {
+      sheet.value = null;
+      const folder = session.value?.workspaceDirectory;
+      if (!folder) break;
+      try {
+        await navigator.clipboard.writeText(folder);
+        showToast("Folder path copied");
+      } catch {
+        showToast("Couldn't copy the folder path.");
+      }
+      break;
+    }
     case "computer": {
       sheet.value = null;
       if (!computerLink.value) break;
@@ -637,6 +649,7 @@ onUnmounted(() => {
       :supports-shell="caps.supportsShell"
       :can-fork="session?.capabilities?.canFork ?? true"
       :can-open-on-computer="computerLink !== null"
+      :folder="session?.workspaceDirectory ?? null"
       :panes="sessionPanes"
       @pick="onMenu"
       @pane="openPane"
