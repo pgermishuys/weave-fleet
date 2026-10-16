@@ -295,7 +295,7 @@ defineExpose({ closeTerminal });
             Download {{ harness.displayName }}
           </a>
           <button
-            v-else-if="actionFor(harness)"
+            v-else-if="actionFor(harness) && !fleetInstalls(harness)"
             type="button"
             class="harness-setup-rows__btn"
             :class="{ 'harness-setup-rows__btn--primary': harness.type === props.defaultHarnessType || actionFor(harness) === 'sign-in' }"

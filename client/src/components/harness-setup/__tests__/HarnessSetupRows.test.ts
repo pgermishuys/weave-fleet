@@ -170,6 +170,8 @@ describe("HarnessSetupRows", () => {
       .toEqual(["harness-setup-row-opencode", "harness-setup-row-copilot"]);
     expect(view.get("[data-testid='harness-setup-row-copilot']").text()).toContain("Fleet downloads weave-copilot 0.1.0");
     expect(view.find("[data-testid='harness-setup-row-copilot'] [data-testid='harness-update']").exists()).toBe(true);
+    // Its install is the strip's, not a command typed in a terminal.
+    expect(view.find("[data-testid='harness-setup-install-copilot']").exists()).toBe(false);
   });
 
   it("says where OpenCode 2 goes and what to know before installing it", async () => {
