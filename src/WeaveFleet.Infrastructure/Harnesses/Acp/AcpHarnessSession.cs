@@ -5,6 +5,7 @@ using System.Text.Json.Nodes;
 using System.Threading.Channels;
 using Microsoft.Extensions.Logging;
 using WeaveFleet.Application.Analytics;
+using WeaveFleet.Application.FleetTools;
 using WeaveFleet.Domain.Events;
 using WeaveFleet.Domain.Harnesses;
 
@@ -45,7 +46,7 @@ internal sealed partial class AcpHarnessSession : IHarnessSession
 
     internal AcpHarnessSession(string harnessType, string instanceId, string fleetSessionId, string acpSessionId, string workingDirectory,
         IAcpAgent agent, ILogger logger, IAnalyticsCollector? analytics = null, string? projectId = null, string? projectName = null,
-        string ownerUserId = "local-user")
+        string ownerUserId = "local-user", FleetToolCallRecords? fleetToolCalls = null)
     {
         _analytics = analytics;
         _projectId = projectId;
@@ -58,7 +59,8 @@ internal sealed partial class AcpHarnessSession : IHarnessSession
         _workingDirectory = workingDirectory;
         _agent = agent;
         _logger = logger;
-        _mapper = new AcpMapper(fleetSessionId);
+        // A replayed call is an old one: what Fleet keeps now is for the calls of the turn running.
+        _mapper = new AcpMapper(fleetSessionId, (tool, arguments) => _replaying ? null : fleetToolCalls?.Take(fleetSessionId, tool, arguments));
         agent.Client.Notification += OnNotification;
         agent.Client.RequestHandler = OnRequestAsync;
         agent.Client.Closed += OnClosed;

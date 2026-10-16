@@ -276,6 +276,33 @@ public sealed class McpEndpointTests : IAsyncLifetime
     }
 
     [Fact]
+    public async Task A_call_its_harness_names_no_id_for_is_kept_under_its_session_tool_and_arguments()
+    {
+        var folder = Directory.CreateTempSubdirectory("fleet-mcp-page-");
+        try
+        {
+            var file = Path.Combine(folder.FullName, "times.html");
+            await File.WriteAllTextAsync(file, "<!doctype html><title>CI</title><p>Times</p>");
+
+            var result = await CallAsync("fleet_page_show", new { path = file, placement = "conversation", title = "CI test times" }, callId: null);
+
+            result.GetProperty("isError").GetBoolean().ShouldBeFalse();
+            var records = _factory!.Services.GetRequiredService<FleetToolCallRecords>();
+            // The arguments as the harness reports them on the call's row, in its own order.
+            var arguments = JsonSerializer.SerializeToElement(new { title = "CI test times", placement = "conversation", path = file });
+            records.Take(SessionId, "fleet_page_show", JsonSerializer.SerializeToElement(new { path = file, placement = "tab", title = "CI test times" })).ShouldBeNull();
+            var record = records.Take(SessionId, "fleet_page_show", arguments).ShouldNotBeNull();
+            record.Title.ShouldBe("CI test times");
+            PageIds.IsValid(record.Metadata.GetProperty("page").GetProperty("id").GetString()).ShouldBeTrue();
+            records.Take(SessionId, "fleet_page_show", arguments).ShouldBeNull();
+        }
+        finally
+        {
+            folder.Delete(recursive: true);
+        }
+    }
+
+    [Fact]
     public async Task A_tools_refusal_is_its_answer_for_the_model_to_read()
     {
         var result = await CallAsync("fleet_canvas_read", new { canvasId = "" });
@@ -355,13 +382,16 @@ public sealed class McpEndpointTests : IAsyncLifetime
     private async Task<List<JsonElement>> ToolsAsync()
         => [.. (await ResultAsync(2, "tools/list", new { })).GetProperty("tools").EnumerateArray()];
 
-    /// <summary>A call as Claude Code makes it: the arguments, and its own id for the call in <c>_meta</c>.</summary>
-    private Task<JsonElement> CallAsync(string name, object arguments, string callId = "toolu_1", bool subagent = false)
+    /// <summary>
+    /// A call as Claude Code makes it: the arguments, and its own id for the call in <c>_meta</c>. A null
+    /// <paramref name="callId"/> is a call as GitHub Copilot makes it, which names no call.
+    /// </summary>
+    private Task<JsonElement> CallAsync(string name, object arguments, string? callId = "toolu_1", bool subagent = false)
         => ResultAsync(3, "tools/call", new
         {
             name,
             arguments,
-            _meta = new Dictionary<string, object> { ["test/callId"] = callId, ["test/subagent"] = subagent },
+            _meta = new Dictionary<string, object?> { ["test/callId"] = callId, ["test/subagent"] = subagent },
         });
 
     private async Task SetPreferencesAsync(params (string Key, string Value)[] preferences)

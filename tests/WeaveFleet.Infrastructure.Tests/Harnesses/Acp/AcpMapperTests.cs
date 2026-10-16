@@ -1,4 +1,5 @@
 using System.Text.Json;
+using WeaveFleet.Application.FleetTools;
 using WeaveFleet.Domain.Harnesses;
 using WeaveFleet.Infrastructure.Harnesses.Acp;
 
@@ -249,6 +250,56 @@ public sealed class AcpMapperTests
         mapper.Update(J("""{"sessionUpdate":"tool_call","toolCallId":"c9","title":"fleet: Show page","kind":"other","status":"in_progress","_meta":{"toolName":"fleet_page_show"}}"""));
 
         mapper.Messages().Single().Parts.OfType<ToolUsePart>().Single().ToolName.ShouldBe("fleet_page_show");
+    }
+
+    [Fact]
+    public void A_finished_call_to_a_Fleet_tool_takes_the_title_and_page_Fleet_kept_for_it()
+    {
+        var asked = new List<(string Tool, string Arguments)>();
+        var metadata = J("""{"canvasId":null,"version":null,"page":{"id":"pg_0123456789abcdef0123456789abcdef","entry":"index.html"}}""");
+        var mapper = new AcpMapper("s1", (tool, arguments) =>
+        {
+            asked.Add((tool, arguments.GetRawText()));
+            return new FleetToolCallRecord("Simple button", metadata);
+        });
+        mapper.Update(J("""{"sessionUpdate":"tool_call","toolCallId":"c9","title":"fleet: Show page","kind":"other","status":"pending","rawInput":{"path":"/work/button/index.html","title":"Simple button","placement":"conversation"},"_meta":{"toolName":"fleet_page_show"}}"""));
+        asked.ShouldBeEmpty();
+
+        var done = mapper.Update(J("""{"sessionUpdate":"tool_call_update","toolCallId":"c9","status":"completed","content":[{"type":"content","content":{"type":"text","text":"Showing \"Simple button\" in the conversation."}}]}"""));
+
+        // The arguments the agent sent, not the row's (which gains a description from the title).
+        asked.ShouldBe([("fleet_page_show", """{"path":"/work/button/index.html","title":"Simple button","placement":"conversation"}""")]);
+        var tool = mapper.Messages().Single().Parts.OfType<ToolUsePart>().Single();
+        tool.Title.ShouldBe("Simple button");
+        tool.Metadata!.Value.GetProperty("page").GetProperty("entry").GetString().ShouldBe("index.html");
+        var state = done.Single(e => e.Type == EventTypes.MessagePartUpdated).Payload!.Value.GetProperty("part").GetProperty("state");
+        state.GetProperty("title").GetString().ShouldBe("Simple button");
+        state.GetProperty("metadata").GetProperty("page").GetProperty("id").GetString().ShouldBe("pg_0123456789abcdef0123456789abcdef");
+
+        // The finished message replaces its parts on the page: the call keeps what Fleet kept for it.
+        var finished = mapper.EndTurn("end_turn").Single(e => e.Type == EventTypes.MessageUpdated).Payload!.Value.GetProperty("parts");
+        var kept = finished.EnumerateArray().Single(part => part.GetProperty("type").GetString() == "tool").GetProperty("state");
+        kept.GetProperty("title").GetString().ShouldBe("Simple button");
+        kept.GetProperty("metadata").GetProperty("page").GetProperty("entry").GetString().ShouldBe("index.html");
+    }
+
+    [Fact]
+    public void Only_a_finished_call_to_one_of_Fleets_tools_asks_what_Fleet_kept()
+    {
+        var asked = 0;
+        var mapper = new AcpMapper("s1", (_, _) =>
+        {
+            asked++;
+            return null;
+        });
+        mapper.Update(J("""{"sessionUpdate":"tool_call","toolCallId":"c1","title":"Read a.ts","kind":"read","status":"in_progress","rawInput":{"path":"/work/a.ts"}}"""));
+        mapper.Update(J("""{"sessionUpdate":"tool_call_update","toolCallId":"c1","status":"completed"}"""));
+        mapper.Update(J("""{"sessionUpdate":"tool_call","toolCallId":"c2","title":"fleet: Show page","kind":"other","status":"in_progress","rawInput":{"path":"/work/x.html"},"_meta":{"toolName":"fleet_page_show"}}"""));
+        mapper.Update(J("""{"sessionUpdate":"tool_call_update","toolCallId":"c2","status":"failed","content":[{"type":"content","content":{"type":"text","text":"No such file."}}]}"""));
+
+        asked.ShouldBe(0);
+        var failed = mapper.Messages().Single().Parts.OfType<ToolUsePart>().Last();
+        failed.Metadata.ShouldBeNull();
     }
 
     [Fact]

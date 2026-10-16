@@ -71,8 +71,11 @@ public sealed class FleetToolCalls(
             return Failed(result.Error.Message);
 
         var output = result.Value;
+        var record = new FleetToolCallRecord(output.Title, Metadata(output));
         if (call.CallId is { } callId)
-            records.Record(callId, new FleetToolCallRecord(output.Title, Metadata(output)));
+            records.Record(callId, record);
+        else
+            records.Record(caller.FleetSessionId, tool.Name, args, record);
         return new FleetToolResult(output.Output, output.Attachments ?? [], IsError: false);
     }
 
