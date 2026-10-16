@@ -175,6 +175,8 @@ public sealed class SessionMessageEndpointTests : IAsyncLifetime
             await client.PostAsJsonAsync($"{agent}/api/harnesses/opencode/profiles", new { }),
             await client.PutAsJsonAsync($"{agent}/api/credentials", new { }),
             await client.PostAsJsonAsync($"{agent}/api/machine/pairing", new { }),
+            await client.PostAsync($"{agent}/api/harnesses/opencode/update", null),
+            await client.DeleteAsync($"{agent}/api/harnesses/opencode/update"),
         };
 
         foreach (var response in refused)
