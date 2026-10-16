@@ -5,6 +5,7 @@ using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging;
 using WeaveFleet.Application.Analytics;
 using WeaveFleet.Application.Configuration;
+using WeaveFleet.Application.FleetTools;
 using WeaveFleet.Application.Harnesses;
 using WeaveFleet.Domain.Entities;
 using WeaveFleet.Domain.Harnesses;
@@ -40,6 +41,20 @@ public sealed class CopilotHarnessRuntime(
 
     /// <summary>The tokens of the weave-copilot processes running a session, and the MCP server they use for Fleet's tools.</summary>
     internal CopilotFleetTools FleetTools { get; } = new();
+
+    private FleetToolCallRecords? _fleetToolCalls;
+
+    /// <summary>What Fleet's MCP server kept about its tool calls, for their rows; none where Fleet doesn't run one (tests).</summary>
+    private FleetToolCallRecords? FleetToolCalls()
+    {
+        if (_fleetToolCalls is null)
+        {
+            using var scope = scopes.CreateScope();
+            _fleetToolCalls = scope.ServiceProvider.GetService<FleetToolCallRecords>();
+        }
+
+        return _fleetToolCalls;
+    }
 
     private readonly ILogger _logger = loggers.CreateLogger<CopilotHarnessRuntime>();
     private readonly ConcurrentDictionary<bool, (DateTimeOffset At, HarnessCatalog Catalog)> _catalogs = new();
@@ -159,7 +174,8 @@ public sealed class CopilotHarnessRuntime(
         {
             var created = await NewSessionAsync(agent, options.WorkingDirectory, CopilotFleetTools.McpServers(LocalFleetUrl(), token), ct).ConfigureAwait(false);
             var session = new AcpHarnessSession(HarnessType, $"copilot-{Guid.NewGuid():N}", options.SessionId, AcpMapper.Str(created, "sessionId")!,
-                options.WorkingDirectory, agent, _logger, analytics, options.ProjectId, options.ProjectName, options.OwnerUserId) { OnEnded = () => FleetTools.Revoke(token) };
+                options.WorkingDirectory, agent, _logger, analytics, options.ProjectId, options.ProjectName, options.OwnerUserId, FleetToolCalls())
+            { OnEnded = () => FleetTools.Revoke(token) };
             session.ReadModels(created);
             if (options.InitialPrompt is not null)
             {
@@ -189,7 +205,8 @@ public sealed class CopilotHarnessRuntime(
         try
         {
             var session = new AcpHarnessSession(HarnessType, $"copilot-{Guid.NewGuid():N}", options.SessionId, options.ResumeToken, options.WorkingDirectory, agent, _logger,
-                analytics, options.ProjectId, options.ProjectName, options.OwnerUserId) { OnEnded = () => FleetTools.Revoke(token) };
+                analytics, options.ProjectId, options.ProjectName, options.OwnerUserId, FleetToolCalls())
+            { OnEnded = () => FleetTools.Revoke(token) };
             await session.LoadAsync(CopilotFleetTools.McpServers(LocalFleetUrl(), token), ct).ConfigureAwait(false);
             return session;
         }

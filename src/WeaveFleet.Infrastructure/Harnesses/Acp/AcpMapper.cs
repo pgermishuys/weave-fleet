@@ -2,6 +2,7 @@ using System.Globalization;
 using System.Text;
 using System.Text.Json;
 using System.Text.Json.Nodes;
+using WeaveFleet.Application.FleetTools;
 using WeaveFleet.Domain.Events;
 using WeaveFleet.Domain.Harnesses;
 using WeaveFleet.Domain.Identity;
@@ -19,7 +20,11 @@ namespace WeaveFleet.Infrastructure.Harnesses.Acp;
 /// part (<see cref="Usage"/>), which is where Fleet reads the session's tokens from. Messages have ascending ids, as the
 /// other harnesses' do, and a prompt keeps the id Fleet gave it: the client places a message by its id.
 /// </summary>
-internal sealed class AcpMapper(string sessionId)
+/// <param name="fleetToolCall">
+/// What Fleet's MCP server kept about one of its own tool calls (the card's title, and the canvas, screenshot or page it
+/// made), by the tool's name and the arguments the agent called it with; null when it kept nothing.
+/// </param>
+internal sealed class AcpMapper(string sessionId, Func<string, JsonElement, FleetToolCallRecord?>? fleetToolCall = null)
 {
     /// <summary>The tool name a HydraFusion pass is shown under; the client draws it as a row of its own.</summary>
     internal const string PassTool = "hydrafusion_pass";
@@ -32,6 +37,8 @@ internal sealed class AcpMapper(string sessionId)
     private readonly List<HarnessMessage> _history = [];
     private readonly List<MessagePart> _parts = [];
     private readonly Dictionary<string, int> _tools = [];
+    // The arguments each call to one of Fleet's tools was sent with, before Fleet adds a path or a description for the row.
+    private readonly Dictionary<string, JsonElement> _arguments = [];
     private readonly HashSet<string> _closedCalls = [];
     // Calls a steer left running in the message it closed: message id and where that message sits in the history.
     private readonly Dictionary<string, (string MessageId, int HistoryIndex)> _detached = [];
@@ -350,7 +357,11 @@ internal sealed class AcpMapper(string sessionId)
         var kind = Str(update, "kind");
         var name = kind is not null ? ToolNameOf(update) : prior?.ToolName ?? "tool";
         var input = prior?.Arguments ?? default;
-        var node = update.TryGetProperty("rawInput", out var raw) && raw.ValueKind == JsonValueKind.Object
+        var hasRaw = update.TryGetProperty("rawInput", out var raw) && raw.ValueKind == JsonValueKind.Object;
+        var fleetTool = FleetToolCatalog.Find(name) is not null;
+        if (hasRaw && fleetTool)
+            _arguments[callId] = raw.Clone();
+        var node = hasRaw
             ? JsonNode.Parse(raw.GetRawText())!.AsObject()
             : input.ValueKind == JsonValueKind.Object ? JsonNode.Parse(input.GetRawText())!.AsObject() : new JsonObject();
         if (node["path"] is null && node["filePath"] is null && FirstPath(update) is { } path)
@@ -360,15 +371,25 @@ internal sealed class AcpMapper(string sessionId)
 
         var status = Str(update, "status") ?? (prior is not null ? "in_progress" : "pending");
         var output = ToolOutput(update);
+        // One of Fleet's own tools: its card's title and what it made, which Fleet's MCP server kept for it, since the
+        // result the agent reports carries only what the model reads.
+        var fleet = status == "completed" && fleetTool
+            ? fleetToolCall?.Invoke(name, _arguments.GetValueOrDefault(callId))
+            : null;
+        if (status is "completed" or "failed")
+            _arguments.Remove(callId);
         ToolInvocationState state = status switch
         {
-            "completed" => new ToolCompletedState { Input = Json(node), Output = output is null ? null : Json(output), Title = Str(update, "title") },
+            "completed" => new ToolCompletedState
+            {
+                Input = Json(node), Output = output is null ? null : Json(output), Title = fleet?.Title ?? Str(update, "title"), Metadata = fleet?.Metadata,
+            },
             "failed" => new ToolErrorState { Input = Json(node), Output = output is null ? null : Json(output), Error = output ?? "The tool call failed." },
             "pending" => new ToolPendingState { Input = Json(node) },
             _ => new ToolRunningState { Input = Json(node) },
         };
         var useState = status switch { "completed" => ToolUseState.Completed, "failed" => ToolUseState.Error, "pending" => ToolUseState.Pending, _ => ToolUseState.Running };
-        UpsertTool(events, callId, name, node, state, useState, output);
+        UpsertTool(events, callId, name, node, state, useState, output, fleet);
 
         if (status == "completed" && name == "edit" && (FirstPath(update) ?? node["path"]?.GetValue<string>()) is { } written)
         {
@@ -380,7 +401,9 @@ internal sealed class AcpMapper(string sessionId)
         }
     }
 
-    private void UpsertTool(List<HarnessEvent> events, string callId, string name, JsonNode input, ToolInvocationState state, ToolUseState useState, string? output = null)
+    private void UpsertTool(
+        List<HarnessEvent> events, string callId, string name, JsonNode input, ToolInvocationState state, ToolUseState useState, string? output = null,
+        FleetToolCallRecord? fleet = null)
     {
         if (_detached.TryGetValue(callId, out var detached))
         {
@@ -398,6 +421,8 @@ internal sealed class AcpMapper(string sessionId)
             PartId = partId,
             Output = output is null ? null : Json(output),
             Error = useState == ToolUseState.Error ? output : null,
+            Title = fleet?.Title,
+            Metadata = fleet?.Metadata,
         };
         if (existing)
         {
@@ -579,7 +604,7 @@ internal sealed class AcpMapper(string sessionId)
                 case ToolUsePart { PartId: { } id } tool:
                     ToolInvocationState state = tool.State switch
                     {
-                        ToolUseState.Completed => new ToolCompletedState { Input = tool.Arguments, Output = tool.Output },
+                        ToolUseState.Completed => new ToolCompletedState { Input = tool.Arguments, Output = tool.Output, Title = tool.Title, Metadata = tool.Metadata },
                         ToolUseState.Error => new ToolErrorState { Input = tool.Arguments, Error = tool.Error },
                         ToolUseState.Running => new ToolRunningState { Input = tool.Arguments },
                         _ => new ToolPendingState { Input = tool.Arguments },
