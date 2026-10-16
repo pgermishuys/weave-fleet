@@ -389,6 +389,14 @@ describe("HarnessesSection", () => {
       expect(wrapper.find("[data-testid='harness-path-found']").text()).toContain("weave-copilot 0.1.0 · /opt/weave-copilot");
     });
 
+    it("says which weave-copilot and which Copilot CLI are installed", async () => {
+      mockApiResponses({ "copilot.enabled": "true" }, () => [createHarness("copilot", "GitHub Copilot", { version: "0.1.0", cliVersion: "1.0.98" })]);
+
+      const wrapper = await mountHarnessesSection();
+
+      expect(wrapper.text()).toContain("weave-copilot 0.1.0 · Copilot CLI 1.0.98 is installed and ready.");
+    });
+
     it("is not on other harnesses' cards", async () => {
       mockApiResponses({});
 

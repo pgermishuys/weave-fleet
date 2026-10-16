@@ -266,6 +266,9 @@ public sealed record HarnessAvailability(bool Available, string? Reason)
     /// <summary>Where Fleet found the executable.</summary>
     public string? ExecutablePath { get; init; }
 
+    /// <summary>The version of a program the harness drives (GitHub Copilot's CLI), when it has one and Fleet could run it.</summary>
+    public string? CliVersion { get; init; }
+
     public static HarnessAvailability Ready(string? version, string? executablePath) =>
         new(true, null) { Version = version, ExecutablePath = executablePath };
 

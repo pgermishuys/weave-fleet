@@ -53,6 +53,9 @@ public sealed class CopilotHarnessRuntimeTests
             // Fleet hands its own CLI over only to the weave-copilot it installed: a custom one has to find a CLI itself.
             CopilotHarnessRuntime.CliFound("/managed/copilot", "/opt/my/weave-copilot", null, null).ShouldBeFalse();
             CopilotHarnessRuntime.CliFound(null, null, cli, null).ShouldBeTrue();
+            CopilotHarnessRuntime.FindCli("/managed/copilot", null, cli, folder).ShouldBe("/managed/copilot");
+            CopilotHarnessRuntime.FindCli(null, null, cli, null).ShouldBe(cli);
+            CopilotHarnessRuntime.FindCli(null, "/opt/my/weave-copilot", null, folder).ShouldBe(cli);
             CopilotHarnessRuntime.CliFound(null, null, Path.Combine(folder, "gone"), folder).ShouldBeFalse();
             CopilotHarnessRuntime.CliFound(null, "/opt/my/weave-copilot", null, folder).ShouldBeTrue();
         }

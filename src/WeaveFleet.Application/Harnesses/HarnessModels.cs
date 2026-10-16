@@ -92,6 +92,9 @@ public sealed record HarnessInfo(
     /// <summary>Where Fleet found the harness executable.</summary>
     public string? ExecutablePath { get; init; }
 
+    /// <summary>The version of a program this harness drives (GitHub Copilot's CLI), when it has one.</summary>
+    public string? CliVersion { get; init; }
+
     /// <summary>How to install it or sign in to it here; <see langword="null"/> when Fleet can't help.</summary>
     public HarnessSetup? Setup { get; init; }
 
@@ -130,6 +133,7 @@ public sealed record HarnessInfo(
             State = availability.State,
             Version = availability.Version,
             ExecutablePath = availability.ExecutablePath,
+            CliVersion = availability.CliVersion,
             Setup = setup,
         };
 }
