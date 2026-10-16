@@ -134,6 +134,41 @@ public sealed class NewFolderEndpointTests
         done.ShouldBe("""{"type":"done","phase":null,"percent":null,"folder":{"path":"/src/recipe-box","isGitRepo":true,"addedToFleet":false,"warning":null},"error":null}""");
     }
 
+    [Fact]
+    public async Task find_lists_a_folder_for_at_references_before_a_session_exists()
+    {
+        await using var factory = new ApiWebApplicationFactory(authEnabled: false);
+        using var client = factory.CreateClient();
+        using var root = new TempRoot();
+        await RegisterRootAsync(factory, root.Path);
+        await File.WriteAllTextAsync(Path.Combine(root.Path, "notes.md"), "x");
+
+        var json = await client.GetFromJsonAsync<JsonElement>(
+            $"/api/directories/find?path={Uri.EscapeDataString(root.Path)}&q=notes", JsonSerializerOptions.Web);
+
+        json.GetProperty("directory").GetString().ShouldBe(root.Path);
+        json.GetProperty("files").EnumerateArray().Select(f => f.GetString()).ShouldBe(["notes.md"]);
+    }
+
+    [Fact]
+    public async Task find_refuses_a_missing_path_a_folder_that_isnt_there_and_one_outside_the_roots()
+    {
+        await using var factory = new ApiWebApplicationFactory(authEnabled: false);
+        using var client = factory.CreateClient();
+        using var root = new TempRoot();
+        using var outside = new TempRoot();
+        await RegisterRootAsync(factory, root.Path);
+
+        var blank = await client.GetAsync("/api/directories/find?path=%20");
+        var gone = await client.GetAsync($"/api/directories/find?path={Uri.EscapeDataString(Path.Combine(root.Path, "gone"))}");
+        var elsewhere = await client.GetAsync($"/api/directories/find?path={Uri.EscapeDataString(outside.Path)}");
+
+        blank.StatusCode.ShouldBe(HttpStatusCode.BadRequest);
+        (await blank.Content.ReadFromJsonAsync<JsonElement>(JsonSerializerOptions.Web)).GetProperty("error").GetString().ShouldBe("Path is required.");
+        gone.StatusCode.ShouldBe(HttpStatusCode.NotFound);
+        elsewhere.StatusCode.ShouldBe(HttpStatusCode.BadRequest);
+    }
+
     private static async Task RegisterRootAsync(ApiWebApplicationFactory factory, string path)
     {
         await using var scope = factory.Services.CreateAsyncScope();

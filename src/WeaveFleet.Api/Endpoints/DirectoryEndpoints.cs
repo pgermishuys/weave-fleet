@@ -2,6 +2,7 @@ using System.Text;
 using System.Text.Json;
 using System.Threading.Channels;
 using WeaveFleet.Application.Workspaces;
+using WeaveFleet.Domain.Common;
 
 namespace WeaveFleet.Api.Endpoints;
 
@@ -53,6 +54,29 @@ public static class DirectoryEndpoints
                 inspection.IsWithinRoots));
         })
         .WithName("InspectDirectory");
+
+        // GET /api/directories/find?path=&q= — files and folders in a folder, for @ references in the first message
+        // of a session that doesn't exist yet. Same search as a session's find/files; only a folder inside the
+        // workspace roots, as the listing is.
+        group.MapGet("/directories/find", async (
+            string? path,
+            string? q,
+            DirectoryService directoryService,
+            CancellationToken ct) =>
+        {
+            if (string.IsNullOrWhiteSpace(path))
+                return FleetError.ValidationError("Path", "Path is required.").ToErrorResult();
+
+            var inspection = await directoryService.InspectFolderAsync(path, ct);
+            if (!inspection.Exists)
+                return FleetError.NotFoundFor("Directory", path).ToErrorResult();
+            if (!inspection.IsWithinRoots)
+                return FleetError.ValidationError("Path", "Path is outside allowed workspace roots.").ToErrorResult();
+
+            var files = await WorkspaceFileSearch.FindAsync(inspection.Path, q ?? string.Empty, limit: 50, ct);
+            return Results.Ok(new DirectoryFilesResponse(inspection.Path, files));
+        })
+        .WithName("FindDirectoryFiles");
 
         // POST /api/directories — creates a folder to start a session in, optionally a git repository
         // with an empty first commit. One outside the workspace roots is added to them.
@@ -173,6 +197,10 @@ public sealed record DirectoryListingResponse(
     IReadOnlyList<string> Roots,
     bool Exists,
     string? NearestExisting);
+
+public sealed record DirectoryFilesResponse(
+    string Directory,
+    IReadOnlyList<string> Files);
 
 public sealed record FolderInspectionResponse(
     string Path,

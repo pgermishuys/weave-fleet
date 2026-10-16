@@ -105,6 +105,32 @@ public sealed class SessionReferenceExpander(
         IReadOnlyList<SessionReference>? references,
         CancellationToken ct = default)
     {
+        return await ExpandCoreAsync(async () =>
+        {
+            var target = await sessions.GetByIdAsync(targetSessionId).ConfigureAwait(false);
+            return target is null
+                ? FleetError.NotFoundFor("Session", targetSessionId)
+                : Result.Success(target.HarnessType);
+        }, text, references, ct).ConfigureAwait(false);
+    }
+
+    /// <summary>
+    /// The same for a session that doesn't exist yet: <paramref name="harnessType"/> is the harness it will run on,
+    /// which decides whether the agent gets links or recaps.
+    /// </summary>
+    public Task<Result<string>> ExpandForHarnessAsync(
+        string harnessType,
+        string text,
+        IReadOnlyList<SessionReference>? references,
+        CancellationToken ct = default) =>
+        ExpandCoreAsync(() => Task.FromResult(Result.Success(harnessType)), text, references, ct);
+
+    private async Task<Result<string>> ExpandCoreAsync(
+        Func<Task<Result<string>>> resolveHarnessType,
+        string text,
+        IReadOnlyList<SessionReference>? references,
+        CancellationToken ct)
+    {
         if (references is null || references.Count == 0)
             return text;
 
@@ -132,11 +158,11 @@ public sealed class SessionReferenceExpander(
                 $"A message can reference at most {SessionReferences.MaxReferences} sessions.");
         }
 
-        var target = await sessions.GetByIdAsync(targetSessionId).ConfigureAwait(false);
-        if (target is null)
-            return FleetError.NotFoundFor("Session", targetSessionId);
+        var harnessType = await resolveHarnessType().ConfigureAwait(false);
+        if (harnessType.IsFailure)
+            return harnessType.Error;
 
-        var withRecaps = harnessRegistry.GetByType(target.HarnessType)?.Capabilities.SupportsFleetTools != true;
+        var withRecaps = harnessRegistry.GetByType(harnessType.Value)?.Capabilities.SupportsFleetTools != true;
         var entries = new List<SessionReference>(wanted.Count);
         var titles = new Dictionary<string, string>(StringComparer.Ordinal);
         foreach (var reference in wanted)

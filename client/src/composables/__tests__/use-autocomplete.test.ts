@@ -110,6 +110,12 @@ function configureApiFetch(): void {
       } as any;
     }
 
+    if (url === "/api/directories/find") {
+      const files = ["src/billing/retry-policy.ts", "docs/billing/"];
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      return { data: { directory: "/work/harbor-api", files }, error: undefined, response: createJsonResponse({ files }) } as any;
+    }
+
     throw new Error(`Unhandled GET call: ${url}`);
   });
 
@@ -504,6 +510,72 @@ describe("useAutocomplete", () => {
       expect(sessionReferencesIn("instance-1", value.value)).toEqual([
         { token: "@t3code-what-can-we-learn", sessionId: "ses-a", title: "t3code: what can we learn?" },
       ]);
+    });
+
+    describe("before the session exists", () => {
+      async function mountNewSession(initialValue: string) {
+        const value = shallowRef(initialValue);
+        const cursorPosition = shallowRef(initialValue.length);
+        const inputRef = shallowRef<HTMLTextAreaElement | null>(document.createElement("textarea"));
+        const mounted = await mountComposable(() => useAutocomplete({
+          value,
+          setValue: (nextValue: string) => {
+            value.value = nextValue;
+          },
+          sessionId: null,
+          draftKey: "new-session-draft-1",
+          directory: "/work/harbor-api",
+          inputRef,
+          cursorPosition,
+          sessions,
+        }));
+        unmounts.push(() => mounted.wrapper.unmount());
+        return { ...mounted, value, cursorPosition };
+      }
+
+      it("offers sessions, then the files in the folder, and nothing that needs a session", async () => {
+        vi.useFakeTimers();
+
+        const { result } = await mountNewSession("Pick up where @");
+        await vi.advanceTimersByTimeAsync(0);
+        await flushAll();
+
+        expect(result.items.value.map((item) => item.group)).toEqual(["session", "session", "session", "file", "file"]);
+        expect(result.items.value.filter((item) => item.group === "session").map((item) => item.id))
+          .toEqual(["session:instance-1", "session:ses-a", "session:ses-b"]);
+        expect(mockApi.GET).toHaveBeenCalledWith("/api/directories/find", expect.objectContaining({
+          params: { query: { path: "/work/harbor-api", q: "" } },
+        }));
+        expect(mockApi.GET).not.toHaveBeenCalledWith("/api/sessions/{id}/commands", expect.anything());
+        expect(mockApi.GET).not.toHaveBeenCalledWith("/api/sessions/{id}/agents", expect.anything());
+      });
+
+      it("opens no / list", async () => {
+        const { result } = await mountNewSession("/hel");
+        await flushAll();
+
+        expect(result.isOpen.value).toBe(false);
+      });
+
+      it("keeps its picks under the draft's key", async () => {
+        vi.useFakeTimers();
+
+        const { result, value, cursorPosition } = await mountNewSession("Finish @retry");
+        await vi.advanceTimersByTimeAsync(300);
+        await flushAll();
+        result.onSelect("@src/billing/retry-policy.ts ");
+        value.value += "after @Survey";
+        cursorPosition.value = value.value.length;
+        await vi.advanceTimersByTimeAsync(300);
+        await flushAll();
+        result.onSelect("session:ses-b");
+
+        expect(value.value).toBe("Finish @src/billing/retry-policy.ts after @survey-t3code-features ");
+        expect([...pickedFileTokens("new-session-draft-1")]).toEqual(["@src/billing/retry-policy.ts"]);
+        expect(sessionReferencesIn("new-session-draft-1", value.value)).toEqual([
+          { token: "@survey-t3code-features", sessionId: "ses-b", title: "Survey t3code features" },
+        ]);
+      });
     });
   });
 

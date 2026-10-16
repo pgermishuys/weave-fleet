@@ -3,6 +3,7 @@ import { computed, nextTick, onMounted, onUnmounted, shallowRef, ref, useTemplat
 import { storeToRefs } from "pinia";
 import { ArrowUp, CornerDownRight, ListEnd, Paperclip, SquareTerminal, X, CircleX, MessageCircleQuestionMark, LoaderCircle } from "lucide-vue-next";
 import AutocompletePopup from "@/components/session/AutocompletePopup.vue";
+import ReferenceMirror from "@/components/session/ReferenceMirror.vue";
 import ComposerFrame from "@/components/session/ComposerFrame.vue";
 import ContextRing from "@/components/session/ContextRing.vue";
 import ImageLightbox from "@/components/session/ImageLightbox.vue";
@@ -17,6 +18,7 @@ import { useAgents } from "@/composables/use-agents";
 import { useAbortSession } from "@/composables/use-session-actions";
 import { composerStatus, harnessCapabilities } from "@/composables/use-composer-actions";
 import { useAutocomplete } from "@/composables/use-autocomplete";
+import { useDraftReferences } from "@/composables/use-draft-references";
 import { useReferableSessions } from "@/composables/use-referable-sessions";
 import { useDraftState } from "@/composables/use-draft-state";
 import { useInputHistory } from "@/composables/use-input-history";
@@ -49,15 +51,7 @@ import { usePreferencesStore } from "@/stores/preferences";
 import { useDraftTerminalContext } from "@/composables/use-draft-terminal-context";
 import { describeSessionDefaults, modelFromKey } from "@/lib/agent-model-choice";
 import { formatTerminalContext, terminalLineRange } from "@/lib/format-terminal-context";
-import {
-  caretOutsideReferences,
-  forgetFileReferencesNotIn,
-  pickedFileTokens,
-  pickedReferenceRanges,
-  referenceKeyAction,
-  splitDraftReferences,
-} from "@/lib/composer-references";
-import { rememberedSessionTokens, sessionReferencesIn } from "@/lib/session-references";
+import { sessionReferencesIn } from "@/lib/session-references";
 import { sessionSkillNames, skillDeliveries, skillListHint, skillNamesIn } from "@/lib/skill-mentions";
 import { useSendPrompt } from "@/composables/use-send-prompt";
 import { parseSlashCommand } from "@/lib/slash-command-utils";
@@ -496,11 +490,6 @@ function syncDisabledStateFromPage(): void {
 onMounted(() => {
   syncDisabledStateFromPage();
 
-  if (typeof ResizeObserver !== "undefined" && textareaRef.value) {
-    mirrorResizeObserver = new ResizeObserver(() => syncMirror());
-    mirrorResizeObserver.observe(textareaRef.value);
-  }
-
   if (typeof document === "undefined") {
     return;
   }
@@ -519,8 +508,6 @@ onMounted(() => {
 onUnmounted(() => {
   disabledStateObserver?.disconnect();
   disabledStateObserver = null;
-  mirrorResizeObserver?.disconnect();
-  mirrorResizeObserver = null;
   clearStatusIndicatorTimer();
   stopStatusIndicatorDots();
   clearPasteError();
@@ -584,25 +571,11 @@ function removeQueuedAt(index: number): void {
 }
 
 const textareaRef = useTemplateRef<HTMLTextAreaElement>("textarea");
-const mirrorRef = useTemplateRef<HTMLDivElement>("mirror");
-let mirrorResizeObserver: ResizeObserver | null = null;
+// Tints the draft's `@` references behind the text area (see ReferenceMirror).
+const mirrorRef = useTemplateRef<InstanceType<typeof ReferenceMirror>>("mirror");
 
-/**
- * The mirror sits behind the (transparent) text area with the same text laid out the same way, so
- * `@` references can be tinted where they sit. Keep its height, line width and scroll in step.
- */
 function syncMirror(): void {
-  const textarea = textareaRef.value;
-  const mirror = mirrorRef.value;
-  if (!textarea || !mirror) {
-    return;
-  }
-
-  mirror.style.height = `${textarea.offsetHeight}px`;
-  // A scrollbar narrows the text area's lines; narrow the mirror's to match.
-  const scrollbarWidth = textarea.offsetWidth - textarea.clientWidth;
-  mirror.style.paddingRight = `${parseFloat(getComputedStyle(textarea).paddingRight) + scrollbarWidth}px`;
-  mirror.scrollTop = textarea.scrollTop;
+  mirrorRef.value?.sync();
 }
 
 function focusPrompt(): void {
@@ -642,16 +615,14 @@ const skillHint = computed(() => {
 watch(() => autocomplete.isMentionOpen.value, (open) => {
   mentionOpen.value = open;
 });
-const draftSegments = computed(() => isShellMode.value
-  ? [{ text: draft.text }]
-  : splitDraftReferences(draft.text, cursorPosition.value, rememberedSessionTokens(props.sessionId), pickedFileTokens(props.sessionId), draftSkills.value));
 // References picked from the @ list are edited as one piece (see handleReferenceKey).
-const pickedRanges = computed(() => isShellMode.value
-  ? []
-  : pickedReferenceRanges(draft.text, rememberedSessionTokens(props.sessionId), pickedFileTokens(props.sessionId)));
-watch(() => draft.text, (text) => {
-  forgetFileReferencesNotIn(props.sessionId, text);
-}, { immediate: true });
+const { segments: draftSegments, handleReferenceKey, keepCaretOutside } = useDraftReferences({
+  text: () => draft.text,
+  caret: cursorPosition,
+  draftKey: () => props.sessionId,
+  skills: draftSkills,
+  plain: isShellMode,
+});
 
 const selectedAgentId = computed({
   get: () => draft.agentId,
@@ -808,43 +779,8 @@ function handleInput(event: Event): void {
 
 function handleCursorPositionChange(event: Event): void {
   const target = event.target as HTMLTextAreaElement;
-  // A click (or a word jump) never leaves the caret inside a picked reference.
-  if (target.selectionStart === target.selectionEnd) {
-    const caret = caretOutsideReferences(target.selectionStart, pickedRanges.value);
-    if (caret !== target.selectionStart) {
-      target.setSelectionRange(caret, caret);
-    }
-  }
+  keepCaretOutside(target);
   cursorPosition.value = target.selectionStart ?? target.value.length;
-}
-
-/**
- * Backspace and Delete next to a reference picked from the @ list select all of it and let the browser delete the
- * selection, so it goes in one piece and Undo brings it back; the left and right arrows step over it. True when the
- * key was about a reference.
- */
-function handleReferenceKey(event: KeyboardEvent): boolean {
-  const isDelete = event.key === "Backspace" || event.key === "Delete";
-  // Shift+arrows select, and Cmd+Backspace deletes the whole line: those stay the browser's.
-  if (event.isComposing || event.metaKey || (!isDelete && (event.shiftKey || event.altKey || event.ctrlKey))) {
-    return false;
-  }
-
-  const target = event.target as HTMLTextAreaElement;
-  if (target.selectionStart !== target.selectionEnd) {
-    return false;
-  }
-
-  const action = referenceKeyAction(event.key, target.selectionStart, pickedRanges.value);
-  if (!action) {
-    return false;
-  }
-
-  if (action.preventDefault) {
-    event.preventDefault();
-  }
-  target.setSelectionRange(action.selectionStart, action.selectionEnd);
-  return true;
 }
 
 /**
@@ -1218,29 +1154,12 @@ function handleKeydown(event: KeyboardEvent): void {
         class="composer-input"
         :class="{ 'composer-input--shell': isShellMode }"
       >
-        <!--
-          No whitespace between these nodes: the mirror lays text out as the text area does. The
-          trailing space gives a draft that ends in a newline its last line, as the text area has.
-        -->
-        <!-- eslint-disable vue/multiline-html-element-content-newline, vue/singleline-html-element-content-newline -->
-        <div
+        <ReferenceMirror
           ref="mirror"
-          class="composer-frame__textarea composer-input__mirror"
-          data-testid="prompt-references"
-          aria-hidden="true"
-        ><template
-          v-for="(segment, index) in draftSegments"
-          :key="index"
-        ><span
-          v-if="segment.reference"
-          class="composer-reference"
-          :class="{
-            'composer-reference--session': segment.reference === 'session',
-            'composer-reference--skill': segment.reference === 'skill' && !segment.note,
-            'composer-reference--skill-note': segment.note,
-          }"
-        >{{ segment.text }}</span><template v-else>{{ segment.text }}</template></template>{{ " " }}</div>
-        <!-- eslint-enable vue/multiline-html-element-content-newline, vue/singleline-html-element-content-newline -->
+          test-id="prompt-references"
+          :segments="draftSegments"
+          :textarea="textareaRef"
+        />
         <textarea
           ref="textarea"
           class="composer-frame__textarea"
@@ -1564,46 +1483,6 @@ function handleKeydown(event: KeyboardEvent): void {
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
-}
-
-.composer-input__mirror {
-  position: absolute;
-  top: 0;
-  right: 0;
-  left: 0;
-  min-height: 0;
-  max-height: none;
-  overflow: hidden;
-  color: transparent;
-  white-space: pre-wrap;
-  overflow-wrap: break-word;
-  pointer-events: none;
-  user-select: none;
-}
-
-.composer-reference {
-  --reference-tint: color-mix(in srgb, var(--accent) 28%, transparent);
-
-  border-radius: 4px;
-  background: var(--reference-tint);
-  /* Widen the tint past the text without moving it. */
-  box-shadow: -3px 0 0 var(--reference-tint), 3px 0 0 var(--reference-tint);
-  -webkit-box-decoration-break: clone;
-  box-decoration-break: clone;
-}
-
-/* A session picked from the @ list: the accent, as the chip it becomes in the sent message. */
-.composer-reference--session {
-  --reference-tint: color-mix(in srgb, var(--accent) 18%, transparent);
-}
-
-/* A skill: green when it goes with the message, amber when it goes as a note (see skillDeliveries). */
-.composer-reference--skill {
-  --reference-tint: color-mix(in srgb, var(--running) 22%, transparent);
-}
-
-.composer-reference--skill-note {
-  --reference-tint: color-mix(in srgb, var(--idle) 22%, transparent);
 }
 
 .input-history {

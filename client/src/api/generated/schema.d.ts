@@ -1717,6 +1717,22 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/directories/find": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get: operations["FindDirectoryFiles"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/directories/inspect": {
         parameters: {
             query?: never;
@@ -3704,6 +3720,7 @@ export interface components {
             harnessProfileId?: null | string;
             agent?: null | string;
             model?: unknown;
+            sessionReferences?: null | components["schemas"]["SessionReferenceDto"][];
         };
         CreateTerminalRequest: {
             /** Format: int32 */
@@ -8173,6 +8190,27 @@ export interface operations {
             query?: {
                 path?: string;
                 unconstrained?: boolean;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+        };
+    };
+    FindDirectoryFiles: {
+        parameters: {
+            query: {
+                path: string;
+                q?: string;
             };
             header?: never;
             path?: never;

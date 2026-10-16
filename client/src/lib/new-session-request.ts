@@ -39,6 +39,8 @@ export interface NewSessionState {
   agent?: string;
   /** The model to start with; null or absent for the agent's default. */
   model?: ModelReference | null;
+  /** Sessions picked from the `@` list whose tokens are in the message. */
+  sessionReferences?: readonly { token: string; sessionId: string }[];
 }
 
 export interface NewSessionRequest {
@@ -244,6 +246,9 @@ export function buildCreateSessionRequest(state: NewSessionState): BuildNewSessi
       ...(tags.length > 0 ? { tags } : {}),
       ...(state.agent ? { agent: state.agent } : {}),
       ...(state.model ? { model: state.model } : {}),
+      ...(message && state.sessionReferences?.length
+        ? { sessionReferences: state.sessionReferences.map(({ token, sessionId }) => ({ token, sessionId })) }
+        : {}),
     },
   };
 }

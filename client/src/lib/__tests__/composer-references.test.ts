@@ -82,6 +82,13 @@ describe("references picked from the @ list", () => {
     expect(splitDraftReferences(text, caret, sessions)[0]).toEqual({ text: "look at @src/app.ts and " });
   });
 
+  it("stay plain once their folder doesn't have them, until picked again", () => {
+    const plain = new Set(["@src/app.ts"]);
+
+    expect(splitDraftReferences(text, null, sessions, new Set(), new Map(), plain)[0]).toEqual({ text: "look at @src/app.ts and " });
+    expect(splitDraftReferences(text, null, sessions, files, new Map(), plain)[1]).toEqual({ text: "@src/app.ts", reference: "file", picked: true });
+  });
+
   it("are found where they are in the text", () => {
     expect(pickedReferenceRanges(text, sessions, files)).toEqual([{ start: 8, end: 19 }, { start: 24, end: 37 }]);
     expect(pickedReferenceRanges("look at @src/app.ts", new Set(), new Set())).toEqual([]);

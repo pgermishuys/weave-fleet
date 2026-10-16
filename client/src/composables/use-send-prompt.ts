@@ -340,7 +340,12 @@ export function confirmSentPrompt(sessionId: string, options: ConfirmSentPromptO
  * create request) as sent, so the session page has it before the session's history loads. It is
  * reconciled against that history like any other sent prompt, so it never shows twice.
  */
-export function seedSentPrompt(sessionId: string, body: string, createdAt: number = Date.now()): void {
+export function seedSentPrompt(
+  sessionId: string,
+  body: string,
+  createdAt: number = Date.now(),
+  sessionReferences: readonly SessionReference[] = [],
+): void {
   const text = body.trim();
   if (!text) {
     return;
@@ -359,6 +364,7 @@ export function seedSentPrompt(sessionId: string, body: string, createdAt: numbe
     modelName: "",
     effort: "medium",
     images: [],
+    ...(sessionReferences.length > 0 ? { sessionReferences: [...sessionReferences] } : {}),
   });
   incrementPendingPrompts(sessionId);
   schedulePromptConfirmationTimeout(sessionId, correlationId);

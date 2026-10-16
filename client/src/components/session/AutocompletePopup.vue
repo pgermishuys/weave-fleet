@@ -27,6 +27,8 @@ interface AutocompletePopupProps {
   skillHint?: string;
   /** What the list says when nothing matches. */
   emptyText?: string;
+  /** Said on the right of the files' heading: where they are ("in harbor-api"). */
+  fileHint?: string;
 }
 
 interface ItemGroup {
@@ -66,7 +68,7 @@ const groupedItems = computed<ItemGroup[]>(() => {
     .map((groupDefinition) => ({
       key: groupDefinition.key,
       label: groupDefinition.label,
-      hint: groupDefinition.hint,
+      hint: groupDefinition.key === "file" ? props.fileHint : groupDefinition.hint,
       items: props.items.filter((item) => item.group === groupDefinition.key),
     }))
     .filter((group) => group.items.length > 0);

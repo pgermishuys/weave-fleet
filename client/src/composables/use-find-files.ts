@@ -1,9 +1,9 @@
 import { computed, onUnmounted, readonly, ref, shallowRef, toValue, watch, type MaybeRefOrGetter, type Ref, type ShallowRef } from "vue";
 import { narrowFileMatches } from "@/lib/file-matches";
+import type { ApiClient } from "@/api/client";
 import { useMachineTarget } from "@/lib/machine-target";
 
 interface FindFilesResponse {
-  sessionId: string;
   files?: string[];
 }
 
@@ -17,17 +17,40 @@ export interface UseFindFilesResult {
 const SEARCH_DEBOUNCE_MS = 80;
 
 /**
- * Files and folders in the session's directory; folders end in "/". A null query asks for nothing.
- * An empty query, or one ending in "/", lists that folder straight away; anything else is a search,
- * debounced while typing. Until the answer comes, the last one is narrowed to what still matches the query.
+ * Files and folders in `directory` matching `query`, as the session composer's search finds them in a session's
+ * directory (see `useFindFiles`).
  */
-export function useFindFiles(sessionId: MaybeRefOrGetter<string | null | undefined>, query: MaybeRefOrGetter<string | null>): UseFindFilesResult {
+export async function findFilesInFolder(api: ApiClient, directory: string, query: string, signal?: AbortSignal): Promise<string[]> {
+  const { data, error, response } = await api.GET("/api/directories/find", {
+    params: { query: { path: directory, q: query } },
+    signal,
+  });
+  if (error || !response.ok) {
+    const payload = error as { error?: string } | undefined;
+    throw new Error(payload?.error ?? `HTTP ${response.status}`);
+  }
+
+  const files = (data as unknown as FindFilesResponse).files;
+  return Array.isArray(files) ? files : [];
+}
+
+/**
+ * Files and folders in the session's directory, or, with no session yet, in `directory`; folders end in "/". A null
+ * query asks for nothing. An empty query, or one ending in "/", lists that folder straight away; anything else is a
+ * search, debounced while typing. Until the answer comes, the last one is narrowed to what still matches the query.
+ */
+export function useFindFiles(
+  sessionId: MaybeRefOrGetter<string | null | undefined>,
+  query: MaybeRefOrGetter<string | null>,
+  directory: MaybeRefOrGetter<string | null | undefined> = null,
+): UseFindFilesResult {
   const { api } = useMachineTarget();
   // The server's last answer, and the query it answers.
   const answer = ref<{ query: string; files: string[] }>({ query: "", files: [] });
   const isLoading = shallowRef(false);
   const error = shallowRef<string | undefined>(undefined);
   const currentSessionId = computed(() => toValue(sessionId)?.trim() ?? "");
+  const currentDirectory = computed(() => (currentSessionId.value ? "" : toValue(directory)?.trim() ?? ""));
   const currentQuery = computed(() => toValue(query));
   const files = computed<readonly string[]>(() => {
     const typed = currentQuery.value?.trim();
@@ -51,7 +74,12 @@ export function useFindFiles(sessionId: MaybeRefOrGetter<string | null | undefin
     controller = undefined;
   }
 
-  async function fetchFiles(activeSessionId: string, trimmedQuery: string, signal: AbortSignal): Promise<void> {
+  async function fetchFiles(activeSessionId: string, activeDirectory: string, trimmedQuery: string, signal: AbortSignal): Promise<void> {
+    if (!activeSessionId) {
+      answer.value = { query: trimmedQuery, files: await findFilesInFolder(api, activeDirectory, trimmedQuery, signal) };
+      return;
+    }
+
     const { data, error, response } = await api.GET("/api/sessions/{id}/find/files", {
       params: {
         path: { id: activeSessionId },
@@ -69,15 +97,15 @@ export function useFindFiles(sessionId: MaybeRefOrGetter<string | null | undefin
   }
 
   watch(
-    [currentSessionId, currentQuery],
-    ([activeSessionId, nextQuery], previous) => {
+    [currentSessionId, currentDirectory, currentQuery],
+    ([activeSessionId, activeDirectory, nextQuery], previous) => {
       cleanupPending();
-      // Another session's files say nothing about this one's.
-      if (previous && previous[0] !== activeSessionId) {
+      // Another session's (or folder's) files say nothing about this one's.
+      if (previous && (previous[0] !== activeSessionId || previous[1] !== activeDirectory)) {
         answer.value = { query: "", files: [] };
       }
 
-      if (!activeSessionId || nextQuery === null) {
+      if ((!activeSessionId && !activeDirectory) || nextQuery === null) {
         answer.value = { query: "", files: [] };
         isLoading.value = false;
         error.value = undefined;
@@ -93,7 +121,7 @@ export function useFindFiles(sessionId: MaybeRefOrGetter<string | null | undefin
         controller = request;
         error.value = undefined;
 
-        void fetchFiles(activeSessionId, trimmedQuery, request.signal)
+        void fetchFiles(activeSessionId, activeDirectory, trimmedQuery, request.signal)
           .catch((fetchError: unknown) => {
             if (request.signal.aborted) {
               return;
