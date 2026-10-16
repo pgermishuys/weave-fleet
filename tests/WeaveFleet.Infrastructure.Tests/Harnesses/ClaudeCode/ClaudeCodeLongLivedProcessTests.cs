@@ -558,7 +558,9 @@ public sealed class ClaudeCodeLongLivedProcessTests : IAsyncDisposable
         await PromptAsync("one");
 
         var arguments = Arguments(0);
-        ShouldHaveArgument(arguments, "--mcp-config", """{"mcpServers":{"fleet":{"type":"http","url":"${FLEET_URL}/mcp"}}}""");
+        // Claude Code cuts a call to an MCP server at 60 s unless told otherwise; Fleet's calls are held for longer (a
+        // page's wait for a pick, fleet_app_start's wait for the app), so its server says a day.
+        ShouldHaveArgument(arguments, "--mcp-config", """{"mcpServers":{"fleet":{"type":"http","url":"${FLEET_URL}/mcp","timeout":86400000}}}""");
         arguments.ShouldNotContain("--strict-mcp-config");
         arguments.ShouldNotContain(argument => argument.Contains(Environment(0)["FLEET_BRIDGE_TOKEN"], StringComparison.Ordinal));
 
@@ -700,6 +702,7 @@ public sealed class ClaudeCodeLongLivedProcessTests : IAsyncDisposable
         services.AddSingleton<WeaveFleet.Application.Mods.ModsSafeMode>();
         services.AddSingleton<IUserContext>(new TestUserContext(TestUserContext.DefaultUserId));
         services.AddSingleton<WeaveFleet.Application.Mods.ModsFeature>();
+        services.AddSingleton<WeaveFleet.Application.Pages.PageChoiceFeature>();
         services.AddSingleton<FleetToolSettings>();
 
         _session = new ClaudeCodeHarnessSession(

@@ -3,6 +3,7 @@ using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging.Abstractions;
 using Microsoft.Extensions.Time.Testing;
 using Shouldly;
+using WeaveFleet.Application.Pages;
 using WeaveFleet.Application.Sessions;
 using WeaveFleet.Domain.Entities;
 using WeaveFleet.Domain.Events;
@@ -117,6 +118,30 @@ public sealed class SessionNotifierTests
         var payload = Payload(Single());
         payload.Kind.ShouldBe(SessionNotificationKinds.Question);
         payload.RequestId.ShouldBeNull();
+    }
+
+    [Fact]
+    public async Task a_page_waiting_for_a_pick_names_the_page()
+    {
+        var choices = new PageChoices(new FleetSessionEvents(), new SessionActivityTracker(), _time);
+        choices.Start(SessionId, "call-1", "Settings layouts");
+        var notifier = new SessionNotifier(
+            _focus,
+            [new BroadcastNotificationSink(_broadcaster)],
+            TestServiceScopeFactory.Create(services => services.AddSingleton<ISessionRepository>(_sessions)),
+            NullLogger<SessionNotifier>.Instance,
+            _pending,
+            time: _time,
+            pageChoices: choices);
+
+        notifier.OnActivityChanged(SessionId, ActivityStatuses.Busy);
+        notifier.OnActivityChanged(SessionId, ActivityStatuses.WaitingInput);
+        for (var i = 0; i < 20 && _broadcaster.Broadcasts.Count == 0; i++)
+            await Task.Delay(5);
+
+        var payload = Payload(Single());
+        payload.Kind.ShouldBe(SessionNotificationKinds.Question);
+        payload.Body.ShouldBe("Wants your pick on Settings layouts.");
     }
 
     [Fact]

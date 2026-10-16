@@ -303,6 +303,70 @@ public sealed class McpEndpointTests : IAsyncLifetime
     }
 
     [Fact]
+    public async Task A_page_that_waits_holds_the_call_until_the_user_sends_their_pick()
+    {
+        await SetPreferencesAsync((PageChoiceFeature.PreferenceKey, "true"));
+        var page = (await ToolsAsync()).Single(tool => tool.GetProperty("name").GetString() == "fleet_page_show");
+        page.GetProperty("inputSchema").GetProperty("properties").TryGetProperty("waitForChoice", out _).ShouldBeTrue();
+        var folder = Directory.CreateTempSubdirectory("fleet-mcp-pick-");
+        try
+        {
+            var file = Path.Combine(folder.FullName, "layouts.html");
+            await File.WriteAllTextAsync(file, "<!doctype html><title>Layouts</title><button data-fleet-choice=\"b\">Layout B</button>");
+
+            var call = CallAsync("fleet_page_show", new { path = file, placement = "tab", title = "Layouts", waitForChoice = true }, callId: "toolu_pick");
+            var choices = _factory!.Services.GetRequiredService<PageChoices>();
+            for (var tries = 0; choices.WaitingTitle(SessionId) is null && tries < 200; tries++)
+                await Task.Delay(25);
+            choices.WaitingTitle(SessionId).ShouldBe("Layouts");
+            call.IsCompleted.ShouldBeFalse();
+
+            choices.End(SessionId, "toolu_pick", PageChoiceAnswer.Picked("b", "Layout B")).ShouldBeTrue();
+            var result = await call;
+
+            result.GetProperty("isError").GetBoolean().ShouldBeFalse();
+            var text = result.GetProperty("content").EnumerateArray().ShouldHaveSingleItem().GetProperty("text").GetString()!;
+            text.ShouldStartWith("Showing \"Layouts\"");
+            text.ShouldContain("\n\n{\"answered\":true,\"value\":\"b\",\"summary\":\"Layout B\"}");
+            var record = _factory.Services.GetRequiredService<FleetToolCallRecords>().Take("toolu_pick").ShouldNotBeNull();
+            record.Title.ShouldBe("Picked Layout B");
+            record.Metadata.GetProperty("choice").GetProperty("summary").GetString().ShouldBe("Layout B");
+        }
+        finally
+        {
+            folder.Delete(recursive: true);
+        }
+    }
+
+    [Fact]
+    public async Task A_harness_that_cuts_held_calls_is_not_offered_the_wait_and_is_told_why()
+    {
+        await SetPreferencesAsync((PageChoiceFeature.PreferenceKey, "true"));
+        var folder = Directory.CreateTempSubdirectory("fleet-mcp-nowait-");
+        try
+        {
+            var file = Path.Combine(folder.FullName, "layouts.html");
+            await File.WriteAllTextAsync(file, "<!doctype html><title>Layouts</title>");
+
+            var page = (await ToolsAsync(CutsCalls)).Single(tool => tool.GetProperty("name").GetString() == "fleet_page_show");
+            var result = await ResultAsync(3, "tools/call", new
+            {
+                name = "fleet_page_show",
+                arguments = new { path = file, placement = "tab", title = "Layouts", waitForChoice = true },
+                _meta = new Dictionary<string, object> { ["test/callId"] = "toolu_nowait", ["test/cantWait"] = CutsCalls },
+            });
+
+            page.GetProperty("inputSchema").GetProperty("properties").TryGetProperty("waitForChoice", out _).ShouldBeFalse();
+            result.GetProperty("content")[0].GetProperty("text").GetString()!.ShouldEndWith($"{CutsCalls} {PageBridge.DidNotWait}");
+            _factory!.Services.GetRequiredService<PageChoices>().WaitingTitle(SessionId).ShouldBeNull();
+        }
+        finally
+        {
+            folder.Delete(recursive: true);
+        }
+    }
+
+    [Fact]
     public async Task A_tools_refusal_is_its_answer_for_the_model_to_read()
     {
         var result = await CallAsync("fleet_canvas_read", new { canvasId = "" });
@@ -379,8 +443,11 @@ public sealed class McpEndpointTests : IAsyncLifetime
     private async Task<JsonElement> ErrorAsync(int id, string method, object parameters)
         => (await SendAsync(id, method, parameters)).GetProperty("error");
 
-    private async Task<List<JsonElement>> ToolsAsync()
-        => [.. (await ResultAsync(2, "tools/list", new { })).GetProperty("tools").EnumerateArray()];
+    private const string CutsCalls = "This harness cuts a held call.";
+
+    private async Task<List<JsonElement>> ToolsAsync(string? cantWait = null)
+        => [.. (await ResultAsync(2, "tools/list", cantWait is null ? new { } : new { _meta = new Dictionary<string, object> { ["test/cantWait"] = cantWait } }))
+            .GetProperty("tools").EnumerateArray()];
 
     /// <summary>
     /// A call as Claude Code makes it: the arguments, and its own id for the call in <c>_meta</c>. A null
@@ -443,7 +510,10 @@ public sealed class McpEndpointTests : IAsyncLifetime
         public bool IsKnown(string bridgeToken) => bridgeToken == Token;
     }
 
-    /// <summary>A harness whose client names the call in <c>_meta["test/callId"]</c>, and says when a subagent made it.</summary>
+    /// <summary>
+    /// A harness whose client names the call in <c>_meta["test/callId"]</c>, says when a subagent made it, and, in
+    /// <c>_meta["test/cantWait"]</c>, why it cuts a held call.
+    /// </summary>
     private sealed class FakeMcpCalls : IHarnessMcpCalls
     {
         public Task<HarnessMcpCall?> PlaceAsync(string bridgeToken, JsonElement meta, CancellationToken ct = default)
@@ -452,7 +522,8 @@ public sealed class McpEndpointTests : IAsyncLifetime
                 return Task.FromResult<HarnessMcpCall?>(null);
             var callId = meta.ValueKind == JsonValueKind.Object && meta.TryGetProperty("test/callId", out var id) ? id.GetString() : null;
             var subagent = meta.ValueKind == JsonValueKind.Object && meta.TryGetProperty("test/subagent", out var flag) && flag.GetBoolean();
-            return Task.FromResult<HarnessMcpCall?>(new HarnessMcpCall(subagent ? "subagent" : HarnessSessionId, callId));
+            var cantWait = meta.ValueKind == JsonValueKind.Object && meta.TryGetProperty("test/cantWait", out var why) ? why.GetString() : null;
+            return Task.FromResult<HarnessMcpCall?>(new HarnessMcpCall(subagent ? "subagent" : HarnessSessionId, callId, cantWait));
         }
     }
 

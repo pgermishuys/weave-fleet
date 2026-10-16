@@ -41,11 +41,16 @@ public sealed class FleetToolCalls(
     ModBridge mods)
 {
     /// <summary>The tools the process with <paramref name="bridgeToken"/> has; null when Fleet can't place it.</summary>
-    public async Task<IReadOnlyList<FleetToolDefinition>?> ListAsync(string bridgeToken, CancellationToken ct = default)
+    public async Task<IReadOnlyList<FleetToolDefinition>?> ListAsync(string bridgeToken, JsonElement meta = default, CancellationToken ct = default)
     {
-        var call = await PlaceAsync(bridgeToken, default, ct).ConfigureAwait(false);
+        var call = await PlaceAsync(bridgeToken, meta, ct).ConfigureAwait(false);
         var caller = call is null ? null : await callers.ResolveAsync(bridgeToken, call.HarnessSessionId, ct).ConfigureAwait(false);
-        return caller is null ? null : FleetToolCatalog.For(await settings.ForSessionAsync(caller.UserId, caller.FleetSessionId).ConfigureAwait(false));
+        if (caller is null)
+            return null;
+
+        // A harness that cuts a held call isn't offered a page that waits for a pick.
+        var switches = await settings.ForSessionAsync(caller.UserId, caller.FleetSessionId).ConfigureAwait(false);
+        return FleetToolCatalog.For(call!.CantWait is null ? switches : switches with { PageChoice = false });
     }
 
     /// <summary>
@@ -101,8 +106,7 @@ public sealed class FleetToolCalls(
             "fleet_canvas_read" => canvases.ReadAsync(token, session, String(args, "canvasId"), ct),
             "fleet_canvas_patch" => canvases.PatchAsync(token, session, String(args, "canvasId"), Node(args, "ops"), ct),
             "fleet_canvas_focus" => canvases.FocusAsync(token, session, String(args, "canvasId"), ct),
-            "fleet_page_show" => pages.ShowAsync(
-                token, session, String(args, "path"), String(args, "title"), NonEmpty(args, "placement"), Boolean(args, "waitForChoice"), ct: ct),
+            "fleet_page_show" => ShowPageAsync(token, call, args, ct),
             "fleet_walkthrough_show" => walkthroughs.ShowAsync(token, session, String(args, "title"), Element(args, "guide"), ct),
             "fleet_app_start" => browser.AppStartAsync(token, session, String(args, "command"), String(args, "title"), ct),
             "fleet_browser_open" => browser.BrowserOpenAsync(token, session, String(args, "url"), String(args, "title"), ct),
@@ -141,6 +145,25 @@ public sealed class FleetToolCalls(
             "fleet_mod_keep" => mods.KeepAsync(token, session, String(args, "name"), NonEmpty(args, "note"), ct),
             _ => Task.FromResult(CanvasResult.Fail<CanvasToolOutput>(CanvasErrorKind.Invalid, $"Fleet has no tool {name}.")),
         };
+    }
+
+    /// <summary>
+    /// <c>fleet_page_show</c>. A page that waits for the user's pick holds this call until they pick: there's no plugin to
+    /// ask again, so Fleet takes the rounds itself, and the harness is set up not to cut the call (Claude Code's
+    /// <c>timeout</c> on Fleet's server). What the page's show said comes first, then the pick, as the plugins put it.
+    /// </summary>
+    private async Task<CanvasResult<CanvasToolOutput>> ShowPageAsync(string token, HarnessMcpCall call, JsonElement args, CancellationToken ct)
+    {
+        var shown = await pages.ShowAsync(
+            token, call.HarnessSessionId, String(args, "path"), String(args, "title"), NonEmpty(args, "placement"),
+            Boolean(args, "waitForChoice"), call.CallId, call.CantWait, ct).ConfigureAwait(false);
+        if (!shown.IsSuccess || shown.Value.Choice is not { Waiting: true } || shown.Value.CanvasId is not { } canvasId)
+            return shown;
+
+        var round = shown;
+        while (round.IsSuccess && round.Value.Choice is { Waiting: true })
+            round = await pages.WaitForChoiceAsync(token, call.HarnessSessionId, call.CallId, canvasId, ct).ConfigureAwait(false);
+        return round.IsSuccess ? CanvasResult.Ok(round.Value with { Output = shown.Value.Output + "\n\n" + round.Value.Output }) : round;
     }
 
     private static FleetToolResult Failed(string message) => new(message, [], IsError: true);
@@ -191,7 +214,7 @@ public sealed class FleetToolCalls(
         return JsonNode.Parse(value.GetRawText());
     }
 
-    /// <summary>The metadata the OpenCode plugins keep with the call: <c>{canvasId, version, screenshot?, page?}</c>.</summary>
+    /// <summary>The metadata the OpenCode plugins keep with the call: <c>{canvasId, version, screenshot?, page?, choice?}</c>.</summary>
     private static JsonElement Metadata(CanvasToolOutput output)
     {
         var buffer = new ArrayBufferWriter<byte>();
@@ -221,6 +244,20 @@ public sealed class FleetToolCalls(
                 json.WriteStartObject("page");
                 json.WriteString("id", page.Id);
                 json.WriteString("entry", page.Entry);
+                json.WriteEndObject();
+            }
+
+            // How a page's wait for a pick ended, which the call's row says.
+            if (output.Choice?.Answer is { } answer)
+            {
+                json.WriteStartObject("choice");
+                json.WriteBoolean("answered", answer.Answered);
+                foreach (var (key, value) in new[] { ("value", answer.Value), ("summary", answer.Summary), ("reason", answer.Reason) })
+                {
+                    if (value is not null)
+                        json.WriteString(key, value);
+                }
+
                 json.WriteEndObject();
             }
 

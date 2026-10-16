@@ -1,4 +1,5 @@
 using System.Threading.Channels;
+using Microsoft.Extensions.Hosting;
 using Microsoft.Extensions.Time.Testing;
 using WeaveFleet.Application.Canvases;
 using WeaveFleet.Application.Pages;
@@ -124,6 +125,24 @@ public sealed class PageChoiceTests : IDisposable
     }
 
     [Fact]
+    public async Task Fleet_shutting_down_ends_every_wait_as_a_restart()
+    {
+        var lifetime = new Lifetime();
+        var choices = new PageChoices(_events, _activity, _time, lifetime);
+        var bridge = new PageBridge(
+            [NewCallers()], new ScopedUser(), new CanvasService(_canvasRepository, new FakeEventBroadcaster(), new ScopedUser()),
+            new FakePageStore(), new InMemorySessionRepository(), choices: choices, choiceFeature: new PageChoiceFeature(_preferences));
+        var shown = await bridge.ShowAsync(Token, OpenCodeSessionId, Mockup(), "Layouts", waitForChoice: true, callId: CallId);
+        var round = bridge.WaitForChoiceAsync(Token, OpenCodeSessionId, CallId, shown.Value!.CanvasId);
+
+        await lifetime.Stopping.CancelAsync();
+
+        (await round).Value!.Choice!.Answer!.Reason.ShouldBe(PageChoiceReasons.Restarted);
+        (await PageAsync()).Choice!.Reason.ShouldBe(PageChoiceReasons.Restarted);
+        choices.CutReason.ShouldBe(PageChoiceReasons.Restarted);
+    }
+
+    [Fact]
     public async Task Nobody_picking_ends_the_wait_after_a_day()
     {
         var shown = await ShowAsync();
@@ -174,6 +193,19 @@ public sealed class PageChoiceTests : IDisposable
         var callers = new FakeCallers();
         callers.Add(Token, OpenCodeSessionId, new HarnessCanvasCaller(SessionId, "owner-user"));
         return callers;
+    }
+
+    private sealed class Lifetime : IHostApplicationLifetime
+    {
+        public CancellationTokenSource Stopping { get; } = new();
+
+        public CancellationToken ApplicationStarted => CancellationToken.None;
+
+        public CancellationToken ApplicationStopping => Stopping.Token;
+
+        public CancellationToken ApplicationStopped => CancellationToken.None;
+
+        public void StopApplication() => Stopping.Cancel();
     }
 
     private string Mockup()

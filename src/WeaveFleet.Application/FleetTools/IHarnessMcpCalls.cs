@@ -8,7 +8,11 @@ namespace WeaveFleet.Application.FleetTools;
 /// turns into a Fleet session, as it does the <c>harnessSessionId</c> the plugins send.
 /// </param>
 /// <param name="CallId">The harness's id for the call (the one its tool part has), or null when its client didn't say.</param>
-public sealed record HarnessMcpCall(string HarnessSessionId, string? CallId);
+/// <param name="CantWait">
+/// Why the harness's client can't hold a call while the user picks on a page (it cuts a call after a few minutes), or
+/// null when it can: the agent reads it when it asks to wait.
+/// </param>
+public sealed record HarnessMcpCall(string HarnessSessionId, string? CallId, string? CantWait = null);
 
 /// <summary>
 /// How a harness's MCP client names a call to Fleet's MCP server. An MCP request carries no session of its own, so each

@@ -11,6 +11,7 @@ import { getToolDisplayLabel } from "@/lib/tool-icons";
 import { getQuestionInput, isQuestionPart } from "@/lib/question-types";
 import { toShellCommandView, type ShellCommandView } from "@/lib/shell-commands";
 import { getToolLabel } from "@/lib/tool-labels";
+import { pageChoiceRowTitle } from "@/lib/page-choice";
 import { asRecord, getTool, parseToolInput, type ToolCategory } from "@/lib/tools";
 
 export type PhoneBlock =
@@ -226,9 +227,13 @@ export function stepRow(step: FoldedStep): StepRow {
   const input = asRecord(asRecord(step.part.state)?.input);
   const fields = parseToolInput(input);
   const pattern = getTool(step.tool).patternLabel && fields.pattern !== undefined;
-  const detail = step.category === "run" && fields.command !== undefined ? fields.command
+  // A page that waits for the user's pick says so, and then what they picked, as the desktop's row does.
+  const pick = getTool(step.tool).name === "fleet_page_show"
+    ? pageChoiceRowTitle(input, step.status, asRecord(asRecord(step.part.state)?.metadata))
+    : undefined;
+  const detail = pick ?? (step.category === "run" && fields.command !== undefined ? fields.command
     : pattern ? String(fields.pattern)
-      : fields.filePath ?? step.label;
+      : fields.filePath ?? step.label);
   const base = { label: getToolDisplayLabel(step.tool), detail, pattern, adds: 0, dels: 0 };
   if (step.status === "running" || step.status === "pending") return { ...base, result: "running" };
   if (step.status === "error") return { ...base, result: "failed" };

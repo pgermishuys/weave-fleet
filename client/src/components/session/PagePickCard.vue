@@ -1,8 +1,6 @@
 <script setup lang="ts">
-import { computed } from "vue";
 import { PanelsTopLeft } from "lucide-vue-next";
-import { useCanvasesStore } from "@/stores/canvases";
-import { useSessionsStore } from "@/stores/sessions";
+import { useWaitingPage } from "@/composables/use-waiting-page";
 
 /**
  * Shown while the agent waits for a pick on a page it showed: the session is stopped on you, and the page is in the
@@ -11,14 +9,7 @@ import { useSessionsStore } from "@/stores/sessions";
 const props = defineProps<{ sessionId: string }>();
 const emit = defineEmits<{ open: [canvasId: string] }>();
 
-const canvasesStore = useCanvasesStore();
-const sessionsStore = useSessionsStore();
-
-const waitingPage = computed(() => {
-  if (sessionsStore.sessionById(props.sessionId)?.activityStatus !== "waiting_input") return null;
-  return canvasesStore.sessionCanvases(props.sessionId).canvases
-    .find((canvas) => canvas.page?.choice?.status === "waiting") ?? null;
-});
+const waitingPage = useWaitingPage(() => props.sessionId);
 </script>
 
 <template>

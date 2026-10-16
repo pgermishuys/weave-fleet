@@ -23,6 +23,8 @@ import { useSessionsStore } from "@/stores/sessions";
 const props = defineProps<{
   sessionId: string;
   page: ShownPage & { title: string };
+  /** On the phone: no path or reload toolbar, and the choice bar's sentence sits on its own line. */
+  compact?: boolean;
 }>();
 
 const machine = useMachineTarget();
@@ -126,8 +128,14 @@ onBeforeUnmount(() => window.removeEventListener("message", onMessage));
 </script>
 
 <template>
-  <section class="page-canvas">
-    <div class="page-canvas__bar">
+  <section
+    class="page-canvas"
+    :class="{ 'page-canvas--compact': compact }"
+  >
+    <div
+      v-if="!compact"
+      class="page-canvas__bar"
+    >
       <button
         type="button"
         class="page-canvas__icon"
@@ -358,6 +366,22 @@ onBeforeUnmount(() => window.removeEventListener("message", onMessage));
   color: var(--text);
   border-top-color: color-mix(in srgb, var(--status-waiting) 40%, var(--border));
   background: color-mix(in srgb, var(--status-waiting) 6%, transparent);
+}
+
+.page-canvas--compact .page-canvas__choice {
+  flex-wrap: wrap;
+}
+
+.page-canvas--compact .page-canvas__choice-text {
+  flex-basis: 100%;
+}
+
+.page-canvas--compact .page-canvas__choice-btn {
+  min-height: 40px;
+}
+
+.page-canvas--compact .page-canvas__choice-btn--primary {
+  flex: 1;
 }
 
 .page-canvas__choice-text {

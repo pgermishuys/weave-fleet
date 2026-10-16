@@ -665,7 +665,7 @@ async function toggleBoardFeature(): Promise<void> {
           </span>
         </p>
         <p class="mt-1 text-xs text-muted">
-          The agent can show you a page and wait while you pick on it. Works with OpenCode for now.
+          The agent can show you a page and wait while you pick on it. Works with OpenCode and Claude Code; GitHub Copilot needs a weave-copilot update first.
         </p>
       </div>
 
