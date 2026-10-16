@@ -310,6 +310,35 @@ public sealed class HarnessEventRelayTests
         await relay.StopAsync(CancellationToken.None);
     }
 
+    // Fleet's own status for a session (a page waiting for the user's pick) goes on the session's stream with the harness's
+    // events: the tracker and the list see it, and the pump still ends when the harness's stream does.
+    [Fact]
+    public async Task A_status_Fleet_raises_for_a_session_goes_through_its_pump()
+    {
+        var (broadcaster, sessionRepo, scopeFactory, activityTracker) = BuildDependencies();
+        var tracker = new InstanceTracker();
+        var fleetEvents = new FleetSessionEvents();
+        var relay = new HarnessEventRelay(
+            tracker, broadcaster, new FakeEventPublisher(), activityTracker, scopeFactory, NullLogger<HarnessEventRelay>.Instance, fleetEvents: fleetEvents);
+        sessionRepo.Seed(new Session { Id = "fleet-9", InstanceId = "instance-9", UserId = "u" });
+
+        using var cts = new CancellationTokenSource();
+        await relay.StartAsync(cts.Token);
+        var instance = new FakeHarnessSession("instance-9");
+        tracker.Register("instance-9", instance);
+        for (int i = 0; i < 50 && !fleetEvents.RaiseStatus("fleet-9", ActivityStatuses.WaitingInput); i++) await Task.Delay(50);
+
+        for (int i = 0; i < 50 && activityTracker.Get("fleet-9")?.ActivityStatus != ActivityStatuses.WaitingInput; i++) await Task.Delay(50);
+        activityTracker.Get("fleet-9")!.ActivityStatus.ShouldBe(ActivityStatuses.WaitingInput);
+
+        instance.Complete();
+        for (int i = 0; i < 50 && fleetEvents.RaiseStatus("fleet-9", ActivityStatuses.Busy); i++) await Task.Delay(50);
+        fleetEvents.RaiseStatus("fleet-9", ActivityStatuses.Busy).ShouldBeFalse();
+
+        await cts.CancelAsync();
+        await relay.StopAsync(CancellationToken.None);
+    }
+
     [Fact]
     public async Task Pump_emitsIdleActivity_onSessionsTopic_afterDisconnect()
     {

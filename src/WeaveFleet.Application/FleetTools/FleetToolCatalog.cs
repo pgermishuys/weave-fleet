@@ -84,7 +84,11 @@ public static class FleetToolCatalog
 /// <param name="Walkthrough">The fleet-walkthrough skill is on: its page tool comes with it.</param>
 /// <param name="AgentHandoff">Agents may hand work to other machines (<c>AgentHandoffFeature</c>): its tools, and a machine on the message tools.</param>
 /// <param name="Mods">Mods are switched on (<c>ModsFeature</c>): the agent's <c>fleet_mod_*</c> tools. Safe mode doesn't hide them.</param>
-public sealed record FleetToolSwitches(bool SessionMessages, bool Memory, bool WorkflowStep, bool Browser, bool Walkthrough = false, bool AgentHandoff = false, bool Mods = false)
+/// <param name="PageChoice">
+/// Pages that wait for the user's pick (<c>PageChoiceFeature</c>): <c>waitForChoice</c> on <c>fleet_page_show</c>. Only the
+/// OpenCode plugins wait for now, so Fleet's MCP server leaves it off.
+/// </param>
+public sealed record FleetToolSwitches(bool SessionMessages, bool Memory, bool WorkflowStep, bool Browser, bool Walkthrough = false, bool AgentHandoff = false, bool Mods = false, bool PageChoice = false)
 {
     public const string SessionMessagesSwitch = "sessionMessages";
     public const string AgentHandoffSwitch = "agentHandoff";
@@ -93,6 +97,7 @@ public sealed record FleetToolSwitches(bool SessionMessages, bool Memory, bool W
     public const string WorkflowStepSwitch = "workflowStep";
     public const string BrowserSwitch = "browser";
     public const string WalkthroughSwitch = "walkthrough";
+    public const string PageChoiceSwitch = "pageChoice";
 
     /// <summary>The built-in skill whose page tool is behind <see cref="WalkthroughSwitch"/>.</summary>
     public const string WalkthroughSkill = "fleet-walkthrough";
@@ -108,6 +113,7 @@ public sealed record FleetToolSwitches(bool SessionMessages, bool Memory, bool W
         WalkthroughSwitch => Walkthrough,
         AgentHandoffSwitch => AgentHandoff,
         ModsSwitch => Mods,
+        PageChoiceSwitch => PageChoice,
         _ => false,
     };
 }

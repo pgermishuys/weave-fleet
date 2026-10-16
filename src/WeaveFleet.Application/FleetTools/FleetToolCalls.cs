@@ -98,7 +98,8 @@ public sealed class FleetToolCalls(
             "fleet_canvas_read" => canvases.ReadAsync(token, session, String(args, "canvasId"), ct),
             "fleet_canvas_patch" => canvases.PatchAsync(token, session, String(args, "canvasId"), Node(args, "ops"), ct),
             "fleet_canvas_focus" => canvases.FocusAsync(token, session, String(args, "canvasId"), ct),
-            "fleet_page_show" => pages.ShowAsync(token, session, String(args, "path"), String(args, "title"), NonEmpty(args, "placement"), ct),
+            "fleet_page_show" => pages.ShowAsync(
+                token, session, String(args, "path"), String(args, "title"), NonEmpty(args, "placement"), Boolean(args, "waitForChoice"), ct: ct),
             "fleet_walkthrough_show" => walkthroughs.ShowAsync(token, session, String(args, "title"), Element(args, "guide"), ct),
             "fleet_app_start" => browser.AppStartAsync(token, session, String(args, "command"), String(args, "title"), ct),
             "fleet_browser_open" => browser.BrowserOpenAsync(token, session, String(args, "url"), String(args, "title"), ct),

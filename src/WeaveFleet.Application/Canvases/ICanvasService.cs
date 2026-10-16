@@ -43,4 +43,11 @@ public interface ICanvasService
     Task<CanvasResult<Canvas>> FocusAsync(string sessionId, string canvasId, CancellationToken ct = default);
 
     Task<CanvasResult<Canvas>> CloseAsync(string sessionId, string canvasId, CancellationToken ct = default);
+
+    /// <summary>
+    /// Changes a page canvas for Fleet itself, such as the pick it waits for on the page: <paramref name="change"/> gets the
+    /// page as it is and returns it changed, or null to leave it. Unlike <see cref="OpenAsync"/> it never reopens or focuses
+    /// the canvas, and the page doesn't reload.
+    /// </summary>
+    Task<CanvasResult<Canvas>> UpdatePageAsync(string sessionId, string canvasId, Func<PageState, PageState?> change, CancellationToken ct = default);
 }

@@ -1,4 +1,5 @@
 import type { VisualPayload } from "@/lib/visual-payload";
+import { readPageChoice, type PageChoice } from "@/lib/page-choice";
 
 /**
  * Canvases the server stores for a session. The agent opens and changes them
@@ -37,6 +38,8 @@ export interface ShownPage {
   warnings: string[];
   /** Shown in the tab's bar instead of the source, for a page Fleet wrote itself, e.g. "Walkthrough · compared with main at 55650b2". */
   label?: string;
+  /** Set when the agent waits for a pick on the page (`waitForChoice`), and then says how it went. */
+  choice?: PageChoice;
 }
 
 type FlowDirection = "TB" | "LR" | "BT" | "RL";
@@ -84,6 +87,7 @@ export function shownPage(state: unknown): ShownPage {
     shownAt: text(record.shownAt),
     warnings: asArray(record.warnings).filter((warning): warning is string => typeof warning === "string"),
     label: typeof record.label === "string" && record.label ? record.label : undefined,
+    choice: readPageChoice(record.choice),
   };
 }
 

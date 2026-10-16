@@ -43,6 +43,8 @@ const props = withDefaults(
     canvasId?: string;
     /** A call that loaded one of Fleet's built-in skills: the card offers to improve the skill. */
     improvable?: boolean;
+    /** The call waits for the user (a page they pick on): the row is amber. */
+    waiting?: boolean;
   }>(),
   {
     callId: undefined,
@@ -58,6 +60,7 @@ const props = withDefaults(
     isPatternTool: false,
     canvasId: undefined,
     improvable: false,
+    waiting: false,
   },
 );
 
@@ -112,7 +115,7 @@ const TOOL_STATUS_TO_GLYPH: Record<string, string> = {
   Error: "error",
 };
 
-const glyphStatus = computed(() => TOOL_STATUS_TO_GLYPH[props.status] ?? "idle");
+const glyphStatus = computed(() => (props.waiting ? "waiting_input" : TOOL_STATUS_TO_GLYPH[props.status] ?? "idle"));
 
 const STATUS_COLOR: Record<string, string> = {
   Pending: "var(--muted)",
@@ -124,7 +127,7 @@ const STATUS_COLOR: Record<string, string> = {
   Error: "var(--error)",
 };
 
-const statusColor = computed(() => STATUS_COLOR[props.status] ?? "var(--muted)");
+const statusColor = computed(() => (props.waiting ? "var(--status-waiting)" : STATUS_COLOR[props.status] ?? "var(--muted)"));
 
 // Line counts shown on the right of the row for tools that changed a file.
 const diffStats = computed(() => {

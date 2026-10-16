@@ -1,5 +1,6 @@
 using System.Text.Json;
 using WeaveFleet.Application.Canvases;
+using WeaveFleet.Application.Pages;
 using WeaveFleet.Application.Sessions;
 using WeaveFleet.Domain.Entities;
 
@@ -78,7 +79,39 @@ public static class CanvasEndpoints
         .Produces(404)
         .WithName("FocusSessionCanvas");
 
+        // POST /api/sessions/{id}/page-choices/{callId}/send — the user sends the pick they made on a waiting page, from
+        // Fleet's bar under it. POST …/skip ends the wait without one. Only the user: an agent can't answer its own page.
+        group.MapPost("/{id}/page-choices/{callId}/send", (string id, string callId, PageChoiceSendRequest request, HttpContext http, SessionService sessionService, PageChoices choices)
+            => request.Value?.Trim() is not { Length: > 0 and <= MaxChoiceValue } value
+                ? Task.FromResult(Results.BadRequest(new ErrorResponse($"\"value\" must be 1-{MaxChoiceValue} characters.")))
+                : EndChoiceAsync(id, callId, http, sessionService, choices,
+                    PageChoiceAnswer.Picked(value, request.Summary?.Trim() is { Length: > 0 } summary ? Shorten(summary) : Shorten(value))))
+        .WithName("SendPageChoice");
+
+        group.MapPost("/{id}/page-choices/{callId}/skip", (string id, string callId, HttpContext http, SessionService sessionService, PageChoices choices)
+            => EndChoiceAsync(id, callId, http, sessionService, choices, PageChoiceAnswer.NotAnswered(PageChoiceReasons.Skipped)))
+        .WithName("SkipPageChoice");
+
         return app;
+    }
+
+    private const int MaxChoiceValue = 1000;
+
+    private static string Shorten(string summary) => summary.Length <= 200 ? summary : summary[..200];
+
+    private static async Task<IResult> EndChoiceAsync(
+        string id, string callId, HttpContext http, SessionService sessionService, PageChoices choices, PageChoiceAnswer answer)
+    {
+        if (http.IsAgentRequest())
+            return Results.Json(new ErrorResponse("Only the user answers a page."), ApiJsonContext.Default.ErrorResponse, statusCode: StatusCodes.Status403Forbidden);
+
+        var session = await sessionService.GetSessionAsync(id);
+        if (session.IsFailure)
+            return session.Error.ToSessionApiResult();
+
+        return choices.End(id, callId, answer)
+            ? Results.NoContent()
+            : Results.NotFound(new ErrorResponse("This page isn't waiting for a pick anymore."));
     }
 
     private static CanvasResponse ToResponse(Canvas canvas)

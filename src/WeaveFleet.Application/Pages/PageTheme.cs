@@ -17,6 +17,11 @@ namespace WeaveFleet.Application.Pages;
 /// so a page written for the conversation reads there as well. Any other page gets only the variables: pages written
 /// before there were any keep looking as they did.
 /// </para>
+/// <para>
+/// Every page also gets <c>fleet.choose(value, summary)</c>, and a click on an element with <c>data-fleet-choice</c> calls it:
+/// a <c>fleet:page-choice</c> message that proposes a pick when the agent waits for one (<c>waitForChoice</c>). Fleet's
+/// own bar under the page sends it; the page can't.
+/// </para>
 /// </summary>
 public static class PageTheme
 {
@@ -102,6 +107,13 @@ public static class PageTheme
           }
           addEventListener("message", (event) => {
             if (event.source === parent && event.data && event.data.type === "fleet:theme") apply(event.data);
+          });
+          window.fleet = {
+            choose: (value, summary) => parent.postMessage({ type: "fleet:page-choice", value: String(value), summary: summary == null ? undefined : String(summary) }, "*"),
+          };
+          addEventListener("click", (event) => {
+            const chosen = event.target instanceof Element && event.target.closest("[data-fleet-choice]");
+            if (chosen) window.fleet.choose(chosen.dataset.fleetChoice, chosen.dataset.fleetSummary || chosen.textContent.trim().slice(0, 200));
           });
         })();</script>
         """.ReplaceLineEndings("\n");

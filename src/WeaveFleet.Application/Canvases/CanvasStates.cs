@@ -230,6 +230,12 @@ public sealed class PageState
     /// <summary>What the tab's bar says in place of <see cref="Source"/>, for a page Fleet wrote itself (a walkthrough).</summary>
     public string? Label { get; set; }
 
+    /// <summary>
+    /// The pick the agent waits for on this page (<c>waitForChoice</c>), and how the wait ended. Only Fleet sets it:
+    /// an agent's state for a page never carries one.
+    /// </summary>
+    public PageChoiceState? Choice { get; set; }
+
     public static PageState Parse(string json)
     {
         var root = JsonNode.Parse(json)?.AsObject() ?? throw new FormatException("Page state is not a JSON object.");
@@ -243,6 +249,7 @@ public sealed class PageState
             ShownAt = (string?)root["shownAt"] ?? string.Empty,
             Warnings = root["warnings"] is JsonArray warnings ? [.. warnings.Select(item => (string?)item).OfType<string>()] : [],
             Label = (string?)root["label"],
+            Choice = root["choice"] is JsonObject choice ? PageChoiceState.Read(choice) : null,
         };
     }
 
@@ -264,9 +271,41 @@ public sealed class PageState
             writer.WriteEndArray();
             if (Label is not null)
                 writer.WriteString("label", Label);
+            Choice?.Write(writer);
             writer.WriteEndObject();
         }
 
         return Encoding.UTF8.GetString(buffer.WrittenSpan);
+    }
+}
+
+/// <summary>
+/// A page's wait for the user's pick: <see cref="Waiting"/> while the tool call is open, then <see cref="Answered"/>
+/// with what the user sent, or <see cref="NotAnswered"/> with why (<c>PageChoiceReasons</c>).
+/// </summary>
+public sealed record PageChoiceState(string CallId, string Status, string At, string? Value = null, string? Summary = null, string? Reason = null)
+{
+    public const string Waiting = "waiting";
+    public const string Answered = "answered";
+    public const string NotAnswered = "not-answered";
+
+    internal static PageChoiceState? Read(JsonObject choice)
+        => (string?)choice["callId"] is { Length: > 0 } callId && (string?)choice["status"] is { Length: > 0 } status
+            ? new PageChoiceState(callId, status, (string?)choice["at"] ?? string.Empty, (string?)choice["value"], (string?)choice["summary"], (string?)choice["reason"])
+            : null;
+
+    internal void Write(Utf8JsonWriter writer)
+    {
+        writer.WriteStartObject("choice");
+        writer.WriteString("callId", CallId);
+        writer.WriteString("status", Status);
+        writer.WriteString("at", At);
+        if (Value is not null)
+            writer.WriteString("value", Value);
+        if (Summary is not null)
+            writer.WriteString("summary", Summary);
+        if (Reason is not null)
+            writer.WriteString("reason", Reason);
+        writer.WriteEndObject();
     }
 }

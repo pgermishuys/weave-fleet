@@ -8,6 +8,7 @@ using WeaveFleet.Application.DTOs;
 using WeaveFleet.Application.Git;
 using WeaveFleet.Application.Mods;
 using WeaveFleet.Application.Progress;
+using WeaveFleet.Application.Pages;
 using WeaveFleet.Application.Sessions;
 using WeaveFleet.Application.Sessions.Asks;
 using WeaveFleet.Application.Sessions.Catalog;
@@ -334,15 +335,18 @@ public static class SessionEndpoints
         .WithName("AddSessionSource");
 
         // POST /api/sessions/{id}/prompt
-        group.MapPost("/{id}/prompt", async (string id, SendPromptApiRequest req, SessionPrompting sessionPrompting, SessionService sessionService, InstanceTracker tracker, HttpContext http, SessionMessagesFeature sessionMessages, SessionReferenceExpander references, ModFollowUps modFollowUps, CancellationToken ct) =>
+        group.MapPost("/{id}/prompt", async (string id, SendPromptApiRequest req, SessionPrompting sessionPrompting, SessionService sessionService, InstanceTracker tracker, HttpContext http, SessionMessagesFeature sessionMessages, SessionReferenceExpander references, ModFollowUps modFollowUps, PageChoices pageChoices, CancellationToken ct) =>
         {
             // With messages on, agents message sessions through fleet_message, which says who sent it; this path
             // would make the text look like the user's.
             if (http.IsAgentRequest() && await sessionMessages.IsEnabledAsync())
                 return Results.Conflict(new ErrorResponse(SessionMessages.UseTheToolMessage));
 
-            // The user speaking starts mods' count of follow-ups over.
+            // The user speaking starts mods' count of follow-ups over, and ends a page's wait for their pick, before the
+            // text reaches the harness: a turn held on the page can't take a steer or reach the queue's turn end.
             modFollowUps.UserSpoke(id);
+            if (!http.IsAgentRequest())
+                pageChoices.EndAll(id, PageChoiceAnswer.NotAnswered(PageChoiceReasons.WroteInstead));
 
             var modelResolution = await ResolveSessionModelAsync(id, req.Model, sessionService, tracker, ct);
             if (modelResolution.ErrorResult is not null)
@@ -381,13 +385,14 @@ public static class SessionEndpoints
         // POST /api/sessions/{id}/queue — queue a message, a slash command or a shell command. Fleet sends it when the
         // turn ends (at once, when the session turns out to be idle); the queue is Fleet's, so leaving the session or
         // closing the browser doesn't lose it. Gated as a prompt is.
-        group.MapPost("/{id}/queue", async (string id, QueuePromptApiRequest req, PromptQueueService queue, SessionService sessionService, InstanceTracker tracker, HttpContext http, SessionReferenceExpander references, ModFollowUps modFollowUps, CancellationToken ct) =>
+        group.MapPost("/{id}/queue", async (string id, QueuePromptApiRequest req, PromptQueueService queue, SessionService sessionService, InstanceTracker tracker, HttpContext http, SessionReferenceExpander references, ModFollowUps modFollowUps, PageChoices pageChoices, CancellationToken ct) =>
         {
             // The queue is the user's composer; agents message sessions with their own tool.
             if (http.IsAgentRequest())
                 return Results.Json(new ErrorResponse("Agents message sessions with their own tool."), ApiJsonContext.Default.ErrorResponse, statusCode: StatusCodes.Status403Forbidden);
 
             modFollowUps.UserSpoke(id);
+            pageChoices.EndAll(id, PageChoiceAnswer.NotAnswered(PageChoiceReasons.WroteInstead));
 
             var modelResolution = await ResolveSessionModelAsync(id, req.Model, sessionService, tracker, ct);
             if (modelResolution.ErrorResult is not null)
@@ -427,8 +432,9 @@ public static class SessionEndpoints
 
         // POST /api/sessions/{id}/queue/{itemId}/send — send a queued message now: into the running turn where the
         // harness can take it (a steer), or as usual when the session is idle.
-        group.MapPost("/{id}/queue/{itemId}/send", async (string id, string itemId, PromptQueueService queue, CancellationToken ct) =>
+        group.MapPost("/{id}/queue/{itemId}/send", async (string id, string itemId, PromptQueueService queue, PageChoices pageChoices, CancellationToken ct) =>
         {
+            pageChoices.EndAll(id, PageChoiceAnswer.NotAnswered(PageChoiceReasons.WroteInstead));
             var result = await queue.SendNowAsync(id, itemId, ct);
             return result.Match(_ => Results.Accepted(), err => err.ToSessionApiResult());
         })
@@ -463,8 +469,10 @@ public static class SessionEndpoints
         .WithName("SendSessionRetryNow");
 
         // POST /api/sessions/{id}/abort
-        group.MapPost("/{id}/abort", async (string id, SessionPrompting sessionPrompting) =>
+        group.MapPost("/{id}/abort", async (string id, SessionPrompting sessionPrompting, PageChoices pageChoices) =>
         {
+            // A plugin that can't see the stop (OpenCode 1) would otherwise ask again for a pick nobody waits for.
+            pageChoices.EndAll(id, PageChoiceAnswer.NotAnswered(PageChoiceReasons.Stopped));
             var result = await sessionPrompting.AbortSessionAsync(id);
             return result.Match(_ => Results.Ok(), err => err.ToSessionApiResult());
         })

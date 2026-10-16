@@ -1,7 +1,9 @@
 #pragma warning disable CA1848, CA1873 // Temporary diagnostic logging
 using System.Collections.Concurrent;
 using System.Diagnostics;
+using System.Runtime.CompilerServices;
 using System.Text.Json;
+using System.Threading.Channels;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Hosting;
 using Microsoft.Extensions.Logging;
@@ -10,6 +12,7 @@ using WeaveFleet.Application.Diagnostics;
 using WeaveFleet.Application.Events;
 using WeaveFleet.Application.Harnesses;
 using WeaveFleet.Application.Mods;
+using WeaveFleet.Application.Pages;
 using WeaveFleet.Application.Recaps;
 using WeaveFleet.Application.Sessions;
 using WeaveFleet.Application.Workflows;
@@ -105,6 +108,8 @@ public sealed class HarnessEventRelay : BackgroundService
     private readonly SessionCallbackDispatcher? _callbacks;
     private readonly StreamingReplies? _streaming;
     private readonly IModPermissionHook? _modPermissions;
+    private readonly FleetSessionEvents? _fleetEvents;
+    private readonly PageChoices? _pageChoices;
     private CancellationToken _stoppingToken;
 
     /// <summary>
@@ -136,8 +141,12 @@ public sealed class HarnessEventRelay : BackgroundService
         TurnRetryScheduler? retries = null,
         HarnessUsageLimits? usageLimits = null,
         StreamingReplies? streaming = null,
-        IModPermissionHook? modPermissions = null)
+        IModPermissionHook? modPermissions = null,
+        FleetSessionEvents? fleetEvents = null,
+        PageChoices? pageChoices = null)
     {
+        _fleetEvents = fleetEvents;
+        _pageChoices = pageChoices;
         _modPermissions = modPermissions;
         _streaming = streaming;
         _context = context;
@@ -383,7 +392,7 @@ public sealed class HarnessEventRelay : BackgroundService
         var outcome = PumpOutcome.Ended;
         try
         {
-            await foreach (var evt in instance.SubscribeAsync(ct).ConfigureAwait(false))
+            await foreach (var evt in WithFleetEvents(instance.SubscribeAsync(ct), fleetSessionId, ct).ConfigureAwait(false))
             {
                 _logger.LogDebug("[Relay:Pump] Received event type={Type} session={Session} instance={Instance}", evt.Type, evt.SessionId, instanceId);
                 var targetFleetSessionId = evt.FleetSessionId ?? fleetSessionId;
@@ -576,8 +585,9 @@ public sealed class HarnessEventRelay : BackgroundService
             _notifier?.Forget(fleetSessionId);
             _streaming?.Forget(fleetSessionId);
 
-            // Its asks went with it: nothing can answer them now.
+            // Its asks went with it: nothing can answer them now. Nor is any call left waiting for a pick on a page.
             await ForgetPermissionAsksAsync(fleetSessionId, sessionUserId).ConfigureAwait(false);
+            _pageChoices?.Forget(fleetSessionId);
             await _broadcaster.BroadcastAsync(
                 "sessions",
                 "activity_status",
@@ -623,6 +633,53 @@ public sealed class HarnessEventRelay : BackgroundService
         }
 
         return (shownOn, false);
+    }
+
+    /// <summary>
+    /// The harness's events with the ones Fleet raises for the session itself (<see cref="FleetSessionEvents"/>) merged
+    /// in, so they go where the harness's own go. It ends, or fails, when the harness's stream does.
+    /// </summary>
+    private async IAsyncEnumerable<HarnessEvent> WithFleetEvents(
+        IAsyncEnumerable<HarnessEvent> harness, string fleetSessionId, [EnumeratorCancellation] CancellationToken ct)
+    {
+        if (_fleetEvents is null)
+        {
+            await foreach (var evt in harness.ConfigureAwait(false))
+                yield return evt;
+            yield break;
+        }
+
+        // Bounded, so a harness that streams faster than the relay publishes still waits for it, as it did before.
+        var merged = Channel.CreateBounded<HarnessEvent>(new BoundedChannelOptions(256) { SingleReader = true });
+        using var stop = CancellationTokenSource.CreateLinkedTokenSource(ct);
+        using var attached = _fleetEvents.Attach(fleetSessionId, merged.Writer);
+        var copying = Task.Run(async () =>
+        {
+            try
+            {
+                await foreach (var evt in harness.WithCancellation(stop.Token).ConfigureAwait(false))
+                    await merged.Writer.WriteAsync(evt, stop.Token).ConfigureAwait(false);
+                merged.Writer.TryComplete();
+            }
+            catch (Exception ex)
+            {
+                merged.Writer.TryComplete(ex);
+            }
+        }, CancellationToken.None);
+
+        try
+        {
+            while (await merged.Reader.WaitToReadAsync(ct).ConfigureAwait(false))
+            {
+                while (merged.Reader.TryRead(out var evt))
+                    yield return evt;
+            }
+        }
+        finally
+        {
+            await stop.CancelAsync().ConfigureAwait(false);
+            await copying.ConfigureAwait(false);
+        }
     }
 
     private static bool IsWaitingInputStatus(HarnessEvent evt)

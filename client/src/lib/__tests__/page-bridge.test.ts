@@ -42,6 +42,25 @@ describe("readPageMessage", () => {
   });
 });
 
+describe("readPageMessage page-choice", () => {
+  it("reads a pick, defaulting the summary to the value", () => {
+    expect(readPageMessage({ type: "fleet:page-choice", value: "a", summary: " Layout A " }))
+      .toEqual({ type: "fleet:page-choice", value: "a", summary: "Layout A" });
+    expect(readPageMessage({ type: "fleet:page-choice", value: "b" }))
+      .toEqual({ type: "fleet:page-choice", value: "b", summary: "b" });
+    const long = "x".repeat(900);
+    expect((readPageMessage({ type: "fleet:page-choice", value: long, summary: "" }) as { summary: string }).summary).toHaveLength(200);
+  });
+
+  it("rejects an empty, oversized or mistyped pick", () => {
+    expect(readPageMessage({ type: "fleet:page-choice", value: "  " })).toBeNull();
+    expect(readPageMessage({ type: "fleet:page-choice", value: "x".repeat(1001) })).toBeNull();
+    expect(readPageMessage({ type: "fleet:page-choice", value: 3 })).toBeNull();
+    expect(readPageMessage({ type: "fleet:page-choice", value: "a", summary: "y".repeat(201) })).toBeNull();
+    expect(readPageMessage({ type: "fleet:page-choice", value: "a", summary: 4 })).toBeNull();
+  });
+});
+
 describe("kept page state", () => {
   afterEach(() => forgetPageStates());
 

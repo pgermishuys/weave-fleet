@@ -64,6 +64,7 @@ function handleExpandVisual(payload: VisualPayload): void {
         :is-pattern-tool="tool.isPatternTool"
         :canvas-id="tool.canvasId"
         :improvable="tool.improvable"
+        :waiting="tool.waiting"
         @expand-visual="handleExpandVisual"
         @show-canvas="emit('show-canvas', $event)"
         @improve="emit('improve-skill', tool.title, tool.id)"

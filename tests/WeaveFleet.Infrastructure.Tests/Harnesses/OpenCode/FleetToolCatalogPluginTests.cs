@@ -88,6 +88,7 @@ public sealed partial class FleetToolCatalogPluginTests
 
         switched.Select(p => (p.Tool, p.Switch, p.Name)).ShouldBe(
         [
+            ("fleet_page_show", "pageChoice", "waitForChoice"),
             ("fleet_session_read", "agentHandoff", "machine"),
             ("fleet_message", "agentHandoff", "machine"),
         ]);

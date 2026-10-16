@@ -2,12 +2,14 @@
 import { computed, onBeforeUnmount, onMounted, ref, watch } from "vue";
 import { ExternalLink, RotateCw, TriangleAlert } from "lucide-vue-next";
 import { appendDraftText } from "@/composables/use-draft-state";
-import { apiUrlOn } from "@/lib/api-client";
+import { apiFetchOn, apiUrlOn } from "@/lib/api-client";
 import { useMachineTarget } from "@/lib/machine-target";
 import { runSessionCommand } from "@/lib/session-commands";
 import { keepPageState, pageStateMessage, readPageMessage } from "@/lib/page-bridge";
 import { pageFrameName, pageThemeMessage, usePageTheme } from "@/lib/page-theme";
+import { isChoiceLive, pageChoiceBar } from "@/lib/page-choice";
 import { pageAddress, type ShownPage } from "@/lib/server-canvas";
+import { useSessionsStore } from "@/stores/sessions";
 
 /**
  * A page the agent wrote, from Fleet's copy of it (`fleet_page_show`). Every show is a new `shownAt`, which
@@ -24,6 +26,55 @@ const props = defineProps<{
 }>();
 
 const machine = useMachineTarget();
+
+const sessionsStore = useSessionsStore();
+
+// What the page proposed for a page that waits for a pick; the user sends it from the bar, or presses Change.
+const proposal = ref<{ value: string; summary: string } | null>(null);
+const sending = ref(false);
+const sendError = ref("");
+const choice = computed(() => props.page.choice);
+const live = computed(() => isChoiceLive(choice.value, sessionsStore.sessionById(props.sessionId)?.activityStatus ?? undefined));
+const bar = computed(() => (choice.value ? pageChoiceBar(choice.value, live.value, proposal.value) : null));
+const answeredAt = computed(() => {
+  const at = bar.value?.at ? new Date(bar.value.at) : null;
+  return at && !Number.isNaN(at.getTime()) && bar.value?.kind === "answered"
+    ? at.toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })
+    : "";
+});
+
+// A new wait starts clean.
+watch(() => choice.value?.callId, () => {
+  proposal.value = null;
+  sending.value = false;
+  sendError.value = "";
+});
+watch(() => choice.value?.status, () => {
+  sending.value = false;
+});
+
+async function answerChoice(event: MouseEvent, action: "send" | "skip"): Promise<void> {
+  // Only a real click on this bar answers; a page can't script one.
+  if (!event.isTrusted || !choice.value || sending.value) return;
+  if (action === "send" && !proposal.value) return;
+  sending.value = true;
+  sendError.value = "";
+  try {
+    const response = await apiFetchOn(
+      machine.connection,
+      `/api/sessions/${encodeURIComponent(props.sessionId)}/page-choices/${encodeURIComponent(choice.value.callId)}/${action}`,
+      action === "send"
+        ? { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(proposal.value) }
+        : { method: "POST" },
+    );
+    if (response.ok) return;
+    const body = (await response.json().catch(() => null)) as { error?: unknown } | null;
+    sendError.value = typeof body?.error === "string" ? body.error : "Couldn't send that. Try again.";
+  } catch {
+    sendError.value = "Couldn't send that. Try again.";
+  }
+  sending.value = false;
+}
 
 const reloads = ref(0);
 const frame = ref<HTMLIFrameElement | null>(null);
@@ -62,6 +113,10 @@ function onMessage(event: MessageEvent): void {
     case "fleet:page-reply":
       appendDraftText(props.sessionId, message.text);
       runSessionCommand("focus-prompt", props.sessionId);
+      return;
+    case "fleet:page-choice":
+      // Only while the agent waits, and only the first: Change clears it, so a page can't swap it under the user.
+      if (live.value && !proposal.value) proposal.value = { value: message.value, summary: message.summary };
       return;
   }
 }
@@ -137,6 +192,57 @@ onBeforeUnmount(() => window.removeEventListener("message", onMessage));
         referrerpolicy="no-referrer"
         @load="sendTheme"
       />
+    </div>
+
+    <div
+      v-if="bar"
+      class="page-canvas__choice"
+      :class="`page-canvas__choice--${bar.kind}`"
+      data-testid="page-choice-bar"
+    >
+      <p class="page-canvas__choice-text">
+        {{ bar.text }}<b v-if="bar.strong !== undefined">{{ bar.strong }}</b>{{ bar.after }}
+        <span
+          v-if="answeredAt"
+          class="page-canvas__choice-time"
+        >Answered {{ answeredAt }}</span>
+        <span
+          v-if="sendError"
+          class="page-canvas__choice-error"
+          role="alert"
+        >{{ sendError }}</span>
+      </p>
+      <template v-if="bar.kind === 'waiting' || bar.kind === 'proposed'">
+        <button
+          v-if="bar.kind === 'proposed'"
+          type="button"
+          class="page-canvas__choice-btn"
+          :disabled="sending"
+          data-testid="page-choice-change"
+          @click="proposal = null"
+        >
+          Change
+        </button>
+        <button
+          v-else
+          type="button"
+          class="page-canvas__choice-btn"
+          :disabled="sending"
+          data-testid="page-choice-skip"
+          @click="answerChoice($event, 'skip')"
+        >
+          Skip
+        </button>
+        <button
+          type="button"
+          class="page-canvas__choice-btn page-canvas__choice-btn--primary"
+          :disabled="sending || bar.kind === 'waiting'"
+          data-testid="page-choice-send"
+          @click="answerChoice($event, 'send')"
+        >
+          {{ sending ? "Sending…" : "Send to agent" }}
+        </button>
+      </template>
     </div>
   </section>
 </template>
@@ -234,6 +340,75 @@ onBeforeUnmount(() => window.removeEventListener("message", onMessage));
   flex: 1;
   min-height: 0;
   background: var(--panel-bg);
+}
+
+.page-canvas__choice {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-shrink: 0;
+  padding: 8px 12px;
+  border-top: 1px solid var(--border);
+  font-size: 12px;
+  color: var(--muted);
+}
+
+.page-canvas__choice--waiting,
+.page-canvas__choice--proposed {
+  color: var(--text);
+  border-top-color: color-mix(in srgb, var(--status-waiting) 40%, var(--border));
+  background: color-mix(in srgb, var(--status-waiting) 6%, transparent);
+}
+
+.page-canvas__choice-text {
+  flex: 1;
+  min-width: 0;
+  margin: 0;
+}
+
+.page-canvas__choice-text b {
+  color: var(--text);
+  font-weight: 600;
+}
+
+.page-canvas__choice-time,
+.page-canvas__choice-error {
+  margin-left: 8px;
+  font-size: 11px;
+}
+
+.page-canvas__choice-error {
+  color: var(--error);
+}
+
+.page-canvas__choice-btn {
+  flex-shrink: 0;
+  padding: 4px 10px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-btn);
+  font-size: 12px;
+  color: var(--text);
+  transition: background var(--transition);
+}
+
+.page-canvas__choice-btn:hover:not(:disabled) {
+  background: var(--accent-dim);
+}
+
+.page-canvas__choice-btn:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+.page-canvas__choice-btn--primary {
+  border-color: var(--accent);
+  background: var(--accent);
+  color: var(--accent-contrast, #fff);
+}
+
+.page-canvas__choice-btn--primary:hover:not(:disabled) {
+  background: var(--accent);
+  filter: brightness(1.1);
 }
 
 .page-canvas__frame {

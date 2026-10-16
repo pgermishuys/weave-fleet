@@ -351,7 +351,9 @@ public sealed record CanvasBridgeRequest(
     string? Url = null,
     string? Path = null,
     string? Viewport = null,
-    string? Placement = null);
+    string? Placement = null,
+    bool? WaitForChoice = null,
+    string? CallId = null);
 
 /// <summary>
 /// Body of a <c>fleet_message</c> call from a harness process: the harness's own id for the calling session, and the
@@ -414,7 +416,20 @@ public sealed record CanvasToolMetadata(
     // to the model, so the tool row finds the picture again after a reload at no cost in tokens.
     [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] CanvasToolScreenshotMetadata? Screenshot = null,
     // A page shown in the conversation, which the conversation loads under the call, as it does a screenshot.
-    [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] CanvasToolPageMetadata? Page = null);
+    [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] CanvasToolPageMetadata? Page = null,
+    // A page's wait for the user's pick: waiting, for the plugin to ask again, then how it ended, for the tool row.
+    [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] CanvasToolChoiceMetadata? Choice = null);
+
+/// <summary>Where a page's wait for the user's pick is: <c>Waiting</c>, or answered with a pick, or not with a reason.</summary>
+public sealed record CanvasToolChoiceMetadata(
+    [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] bool? Waiting,
+    [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] bool? Answered = null,
+    [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] string? Value = null,
+    [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] string? Summary = null,
+    [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] string? Reason = null);
+
+/// <summary>The pick the user sends from the bar under a waiting page.</summary>
+public sealed record PageChoiceSendRequest(string? Value, string? Summary);
 
 /// <summary>Where the conversation fetches a screenshot: <c>GET /api/sessions/{SessionId}/screenshots/{Id}</c>.</summary>
 public sealed record CanvasToolScreenshotMetadata(string SessionId, string Id, int Width, int Height);
