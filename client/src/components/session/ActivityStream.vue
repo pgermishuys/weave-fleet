@@ -352,6 +352,7 @@ const {
   showJumpToLatest,
   highlightedMessageId,
   updatePinnedState,
+  handleWheel,
   handleLoadOlder,
   handleJumpToLatest,
   scrollToBottom,
@@ -515,6 +516,7 @@ function handleImproveSkill(skill: string, toolId: string): void {
       aria-label="Activity stream"
       data-testid="activity-stream"
       @scroll.passive="updatePinnedState"
+      @wheel.passive="handleWheel"
     >
       <!-- Partial snapshot indicator -->
       <div

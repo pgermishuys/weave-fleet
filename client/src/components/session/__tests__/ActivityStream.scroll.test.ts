@@ -142,12 +142,12 @@ describe("ActivityStream scrolling and incremental mount", () => {
     expect(wrapper!.find(".jump-to-latest").exists()).toBe(false);
   });
 
-  it("offers Jump to latest once scrolled up past the threshold, and scrolls to the bottom when clicked", async () => {
+  it("offers Jump to latest once scrolled up, and scrolls to the bottom when clicked", async () => {
     const { geometry, scrollTo } = await open(conversation(6), { scrollHeight: 2000, clientHeight: 500, scrollTop: 0 });
 
-    // Within 80px of the bottom still counts as at the bottom.
+    // A scroll up of any size is the user leaving the bottom.
     await scrollTo(1500 - 70);
-    expect(wrapper!.find(".jump-to-latest").exists()).toBe(false);
+    expect(wrapper!.find(".jump-to-latest").exists()).toBe(true);
 
     await scrollTo(1500 - 90);
     expect(wrapper!.find(".jump-to-latest").exists()).toBe(true);
@@ -155,6 +155,164 @@ describe("ActivityStream scrolling and incremental mount", () => {
     await wrapper!.find(".jump-to-latest").trigger("click");
     expect(geometry.scrollTop).toBe(2000);
     expect(wrapper!.find(".jump-to-latest").exists()).toBe(false);
+  });
+
+  describe("while text streams", () => {
+    /** A streamed chunk: the content grows and text lands in it (the bubbles are stubbed, so the text is added to the box). */
+    async function chunk(geometry: Geometry, grow = 40) {
+      geometry.scrollHeight += grow;
+      wrapper!.find("[data-testid='activity-stream']").element.append(document.createTextNode(" more"));
+      await nextTick();
+      await nextTick();
+    }
+
+    /** jsdom has no ResizeObserver: the test calls its callback, as the browser would after layout. */
+    function stubResizeObserver(): () => void {
+      let callback: (() => void) | null = null;
+      vi.stubGlobal("ResizeObserver", class {
+        constructor(observed: () => void) { callback = observed; }
+        observe = vi.fn();
+        unobserve = vi.fn();
+        disconnect = vi.fn();
+      });
+      return () => callback!();
+    }
+
+    it("stays where you scrolled, even a small scroll up", async () => {
+      const { geometry, scrollTo, frame } = await open(conversation(6), { scrollHeight: 2000, clientHeight: 500, scrollTop: 0 });
+
+      await scrollTo(1500 - 30);
+      await chunk(geometry);
+      await frame();
+      await frame();
+
+      expect(geometry.scrollTop).toBe(1470);
+      expect(wrapper!.find(".jump-to-latest").exists()).toBe(true);
+    });
+
+    it("stays put through several small scroll ups, like a touchpad", async () => {
+      const { geometry, scrollTo, frame } = await open(conversation(6), { scrollHeight: 2000, clientHeight: 500, scrollTop: 0 });
+
+      let top = 1500;
+      for (let step = 0; step < 5; step++) {
+        top -= 10;
+        await scrollTo(top);
+        await chunk(geometry);
+        await frame();
+        expect(geometry.scrollTop).toBe(top);
+      }
+      expect(wrapper!.find(".jump-to-latest").exists()).toBe(true);
+    });
+
+    it("unpins on a wheel up before the scroll event", async () => {
+      const { box, geometry, frame } = await open(conversation(6), { scrollHeight: 2000, clientHeight: 500, scrollTop: 0 });
+      geometry.scrollTop = 1500;
+
+      box.dispatchEvent(new WheelEvent("wheel", { deltaY: -40 }));
+      await nextTick();
+      await chunk(geometry);
+      await frame();
+      await frame();
+
+      expect(geometry.scrollTop).toBe(1500);
+      expect(wrapper!.find(".jump-to-latest").exists()).toBe(true);
+    });
+
+    it("ignores a wheel up that is a zoom", async () => {
+      const { box, geometry, frame } = await open(conversation(6), { scrollHeight: 2000, clientHeight: 500, scrollTop: 0 });
+
+      box.dispatchEvent(new WheelEvent("wheel", { deltaY: -40, ctrlKey: true }));
+      await chunk(geometry);
+      await frame();
+
+      expect(geometry.scrollTop).toBe(2040);
+    });
+
+    it("doesn't snap back for a frame queued before the scroll up", async () => {
+      const { geometry, scrollTo, frame } = await open(conversation(6), { scrollHeight: 2000, clientHeight: 500, scrollTop: 0 });
+
+      await chunk(geometry);
+      await scrollTo(1500 - 20);
+      await frame();
+
+      expect(geometry.scrollTop).toBe(1480);
+    });
+
+    it("follows again when scrolling back down near the bottom", async () => {
+      const { geometry, scrollTo, frame } = await open(conversation(6), { scrollHeight: 2000, clientHeight: 500, scrollTop: 0 });
+      await scrollTo(1000);
+      expect(wrapper!.find(".jump-to-latest").exists()).toBe(true);
+
+      await scrollTo(1500 - 50);
+      await chunk(geometry);
+      await frame();
+
+      expect(geometry.scrollTop).toBe(2040);
+      expect(wrapper!.find(".jump-to-latest").exists()).toBe(false);
+    });
+
+    it("stays pinned when content shrinks at the bottom", async () => {
+      const { geometry, scrollTo, frame } = await open(conversation(6), { scrollHeight: 2000, clientHeight: 500, scrollTop: 0 });
+
+      // The browser clamps scrollTop down when the content gets shorter.
+      geometry.scrollHeight = 1800;
+      await scrollTo(1300);
+      await chunk(geometry);
+      await frame();
+
+      expect(geometry.scrollTop).toBe(1840);
+      expect(wrapper!.find(".jump-to-latest").exists()).toBe(false);
+    });
+
+    it("doesn't let a resize undo a scroll up whose scroll event hasn't come yet", async () => {
+      const resized = stubResizeObserver();
+      const { geometry } = await open(conversation(6), { scrollHeight: 2000, clientHeight: 500, scrollTop: 0 });
+
+      geometry.scrollTop = 1480;
+      geometry.scrollHeight += 40;
+      resized();
+      await nextTick();
+
+      expect(geometry.scrollTop).toBe(1480);
+      expect(wrapper!.find(".jump-to-latest").exists()).toBe(true);
+    });
+
+    it("still snaps to the bottom when a pinned box grows by a big chunk", async () => {
+      const resized = stubResizeObserver();
+      const { geometry, frame } = await open(conversation(6), { scrollHeight: 2000, clientHeight: 500, scrollTop: 0 });
+
+      geometry.scrollHeight += 300;
+      resized();
+      expect(geometry.scrollTop).toBe(2300);
+
+      await chunk(geometry, 300);
+      await frame();
+      expect(geometry.scrollTop).toBe(2600);
+      expect(wrapper!.find(".jump-to-latest").exists()).toBe(false);
+    });
+
+    it("doesn't let a resize move you after a small scroll up", async () => {
+      const resized = stubResizeObserver();
+      const { geometry, scrollTo } = await open(conversation(6), { scrollHeight: 2000, clientHeight: 500, scrollTop: 0 });
+
+      await scrollTo(1500 - 30);
+      geometry.scrollHeight += 40;
+      resized();
+
+      expect(geometry.scrollTop).toBe(1470);
+    });
+
+    it("turns the browser's scroll anchoring off only while following the bottom", async () => {
+      const { box, scrollTo } = await open(conversation(6), { scrollHeight: 2000, clientHeight: 500, scrollTop: 0 });
+      // Anchoring would move a pinned view up when something above shrinks, which reads as a scroll up.
+      expect(box.style.overflowAnchor).toBe("none");
+
+      await scrollTo(1000);
+      expect(box.style.overflowAnchor).toBe("");
+
+      await wrapper!.find(".jump-to-latest").trigger("click");
+      expect(box.style.overflowAnchor).toBe("none");
+    });
   });
 
   it("keeps the view pinned to the bottom as content grows", async () => {
