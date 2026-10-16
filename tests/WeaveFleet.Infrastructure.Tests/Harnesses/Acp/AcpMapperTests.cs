@@ -29,7 +29,7 @@ public sealed class AcpMapperTests
     public void the_finished_message_event_carries_its_parts_so_the_answer_doesnt_vanish()
     {
         var mapper = new AcpMapper("s1");
-        mapper.Fusion(J("""{"event":"phase_started","role":"solver","model":"m","index":0}"""));
+        mapper.Update(Chunk("agent_thought_chunk", "Thinking."));
         mapper.Update(Chunk("agent_message_chunk", "All done."));
 
         var finished = mapper.EndTurn("end_turn").Single(e => e.Type == EventTypes.MessageUpdated);
@@ -198,10 +198,10 @@ public sealed class AcpMapperTests
         mapper.Fusion(J("""{"event":"completed","pattern":"cascade","status":"completed","totalCredits":4.07,"requests":4}"""));
         mapper.Update(Chunk("agent_message_chunk", "Done."));
 
-        var turn = mapper.Messages()[1];
-        turn.Parts.OfType<ToolUsePart>().Select(r => r.State).ShouldAllBe(state => state == ToolUseState.Completed);
-        turn.Parts.OfType<ToolUsePart>().Count().ShouldBe(3);
-        turn.TextContent.ShouldBe("Done.");
+        var rows = mapper.Messages()[1];
+        rows.Parts.OfType<ToolUsePart>().Select(r => r.State).ShouldAllBe(state => state == ToolUseState.Completed);
+        rows.Parts.OfType<ToolUsePart>().Count().ShouldBe(3);
+        mapper.Messages()[2].TextContent.ShouldBe("Done.");
     }
 
     [Fact]
@@ -310,6 +310,83 @@ public sealed class AcpMapperTests
 
         State(end.First(e => e.Type == EventTypes.MessagePartUpdated)).ShouldBe("error");
         mapper.Messages()[0].Parts.OfType<ToolUsePart>().Single().State.ShouldBe(ToolUseState.Error);
+    }
+
+    [Fact]
+    public void the_reply_after_tool_calls_is_a_message_of_its_own_so_it_shows_below_them()
+    {
+        var mapper = new AcpMapper("s1");
+        mapper.Update(Chunk("agent_message_chunk", "Let me look."));
+        mapper.Update(J("""{"sessionUpdate":"tool_call","toolCallId":"c1","kind":"read","title":"Read README.md","status":"in_progress"}"""));
+        mapper.Update(J("""{"sessionUpdate":"tool_call_update","toolCallId":"c1","status":"completed"}"""));
+        mapper.Update(J("""{"sessionUpdate":"tool_call","toolCallId":"c2","kind":"execute","title":"ls","status":"in_progress"}"""));
+        mapper.Update(J("""{"sessionUpdate":"tool_call_update","toolCallId":"c2","status":"completed"}"""));
+
+        var reply = mapper.Update(Chunk("agent_message_chunk", "Here it is."));
+        mapper.Update(Chunk("agent_message_chunk", " Done."));
+
+        reply.Select(e => e.Type).ShouldBe([EventTypes.MessageUpdated, EventTypes.MessageCreated, EventTypes.MessagePartUpdated]);
+        reply[0].Payload!.Value.GetProperty("info").GetProperty("time").TryGetProperty("completed", out _).ShouldBeTrue();
+        var messages = mapper.Messages();
+        messages.Select(m => m.Role).ShouldBe(["assistant", "assistant"]);
+        messages[0].Parts.Select(p => p.GetType().Name).ShouldBe(["TextPart", "ToolUsePart", "ToolUsePart"]);
+        messages[1].Parts.Select(p => p.GetType().Name).ShouldBe(["TextPart"]);
+        messages[1].TextContent.ShouldBe("Here it is. Done.");
+        reply[^1].Payload!.Value.GetProperty("part").GetProperty("messageID").GetString().ShouldBe(messages[1].Id);
+    }
+
+    [Fact]
+    public void thinking_after_a_tool_call_starts_the_next_message_too()
+    {
+        var mapper = new AcpMapper("s1");
+        mapper.Update(J("""{"sessionUpdate":"tool_call","toolCallId":"c1","kind":"read","status":"completed"}"""));
+
+        mapper.Update(Chunk("agent_thought_chunk", "now what"));
+        mapper.Update(Chunk("agent_message_chunk", "ok"));
+
+        mapper.Messages().Select(m => m.Parts.Select(p => p.GetType().Name).ToList())
+            .ShouldBe([["ToolUsePart"], ["ReasoningPart", "TextPart"]]);
+    }
+
+    [Fact]
+    public void a_call_still_running_when_the_reply_starts_takes_its_result_in_its_own_message()
+    {
+        var mapper = new AcpMapper("s1");
+        mapper.Update(J("""{"sessionUpdate":"tool_call","toolCallId":"c1","kind":"execute","status":"in_progress"}"""));
+        var first = mapper.Messages().Single().Id;
+        mapper.Update(Chunk("agent_message_chunk", "Still going."));
+
+        var done = mapper.Update(J("""{"sessionUpdate":"tool_call_update","toolCallId":"c1","status":"completed"}"""));
+        var end = mapper.EndTurn("end_turn");
+
+        State(done.Single()).ShouldBe("completed");
+        done.Single().Payload!.Value.GetProperty("part").GetProperty("messageID").GetString().ShouldBe(first);
+        end.Select(e => e.Type).ShouldBe([EventTypes.MessageUpdated, EventTypes.SessionStatus]);
+        mapper.Messages().Count.ShouldBe(2);
+        mapper.Messages()[0].Parts.OfType<ToolUsePart>().Single().State.ShouldBe(ToolUseState.Completed);
+        mapper.Messages()[1].Parts.OfType<ToolUsePart>().ShouldBeEmpty();
+    }
+
+    [Fact]
+    public void a_fusion_turns_rows_stay_at_its_head_and_finish_there_when_the_answer_streams_below_them()
+    {
+        var mapper = new AcpMapper("s1");
+        mapper.Fusion(J("""{"event":"resolved","pattern":"cascade","model":"model-a","index":0}"""));
+        mapper.Fusion(J("""{"event":"phase_started","role":"solver","model":"model-a","index":0}"""));
+        mapper.Update(Chunk("agent_message_chunk", "The answer."));
+
+        var pass = mapper.Fusion(J("""{"event":"phase_completed","role":"solver","model":"model-a","index":0,"status":"succeeded","credits":1.5}"""));
+        mapper.Fusion(J("""{"event":"completed","pattern":"cascade","status":"completed","totalCredits":1.5,"requests":2}"""));
+        mapper.Usage(J("""{"inputTokens":10,"outputTokens":5,"credits":1.5}"""));
+
+        var head = mapper.Messages()[0].Id;
+        pass.Single().Payload!.Value.GetProperty("part").GetProperty("messageID").GetString().ShouldBe(head);
+        var messages = mapper.Messages();
+        messages.Count.ShouldBe(2);
+        messages[0].Parts.OfType<ToolUsePart>().Select(r => (r.ToolName, r.State))
+            .ShouldBe([(AcpMapper.TurnTool, ToolUseState.Completed), (AcpMapper.PassTool, ToolUseState.Completed)]);
+        messages[1].Parts.OfType<ToolUsePart>().ShouldBeEmpty();
+        messages[1].TextContent.ShouldBe("The answer.");
     }
 
     [Fact]

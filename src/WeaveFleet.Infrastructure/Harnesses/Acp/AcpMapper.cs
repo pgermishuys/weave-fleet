@@ -4,16 +4,20 @@ using System.Text.Json;
 using System.Text.Json.Nodes;
 using WeaveFleet.Domain.Events;
 using WeaveFleet.Domain.Harnesses;
+using WeaveFleet.Domain.Identity;
 
 namespace WeaveFleet.Infrastructure.Harnesses.Acp;
 
 /// <summary>
 /// Turns an ACP agent's <c>session/update</c>s into Fleet's harness events, and keeps the conversation they build so the
 /// session can show it again (<see cref="Messages"/>), including after <c>session/load</c> replays it. A turn is one
-/// assistant message: text and thinking grow in place, and each tool call is a part that moves from running to done.
+/// assistant message per step, as the other harnesses send them: text and thinking grow in place, each tool call is a part
+/// that moves from running to done, and text or thinking after a call starts the next message (Fleet draws a message's
+/// text above its calls, so a reply kept in the message of the calls it follows would show above them).
 /// The agent's <c>_fleet/fusion</c> notifications (HydraFusion passes) become tool rows named <see cref="PassTool"/>, and a
 /// turn's workflow and credits one row named <see cref="TurnTool"/> at its head. What a turn used comes as a step-finish
-/// part (<see cref="Usage"/>), which is where Fleet reads the session's tokens from.
+/// part (<see cref="Usage"/>), which is where Fleet reads the session's tokens from. Messages have ascending ids, as the
+/// other harnesses' do, and a prompt keeps the id Fleet gave it: the client places a message by its id.
 /// </summary>
 internal sealed class AcpMapper(string sessionId)
 {
@@ -38,7 +42,6 @@ internal sealed class AcpMapper(string sessionId)
     private string? _assistantId;
     private DateTimeOffset _assistantAt;
     private bool _userOpen;
-    private int _messageCount;
     private int _partCount;
     private int _stepCount;
     private bool _turnRow;
@@ -50,10 +53,14 @@ internal sealed class AcpMapper(string sessionId)
     internal IReadOnlyList<HarnessMessage> Messages() { lock (_lock) return [.. MessagesCore()]; }
 
     /// <summary>
-    /// The user's prompt, which starts a turn. Mid-turn (a steer) it closes the message in progress: that message is
-    /// completed and its calls still running are settled, so none of them reads as running forever.
+    /// The user's prompt, which starts a turn, under the id Fleet gave it (<paramref name="messageId"/>). Mid-turn (a
+    /// steer) it closes the message in progress: that message is completed and its calls still running are settled, so
+    /// none of them reads as running forever.
     /// </summary>
-    internal IReadOnlyList<HarnessEvent> UserPrompt(string text, IReadOnlyList<HarnessAttachment>? images = null) { lock (_lock) return UserPromptCore(text, images); }
+    internal IReadOnlyList<HarnessEvent> UserPrompt(string text, IReadOnlyList<HarnessAttachment>? images = null, string? messageId = null)
+    {
+        lock (_lock) return UserPromptCore(text, images, messageId);
+    }
 
     /// <summary>Maps one <c>session/update</c> body (<c>params.update</c>).</summary>
     internal IReadOnlyList<HarnessEvent> Update(JsonElement update) { lock (_lock) return UpdateCore(update); }
@@ -73,29 +80,36 @@ internal sealed class AcpMapper(string sessionId)
     /// <summary>The conversation so far, oldest first, with the turn still running as its last message.</summary>
     private List<HarnessMessage> MessagesCore() => _assistantId is null ? _history : [.. _history, Assistant()];
 
-    private List<HarnessEvent> UserPromptCore(string text, IReadOnlyList<HarnessAttachment>? images)
+    private List<HarnessEvent> UserPromptCore(string text, IReadOnlyList<HarnessAttachment>? images, string? messageId)
     {
         var events = new List<HarnessEvent>();
-        if (_assistantId is { } id)
-        {
-            // A call still running goes on running after a steer (Copilot moves a shell command to the background), so it
-            // stays as it is and takes the result the agent reports later; the rest are finished.
-            var historyIndex = _history.Count;
-            foreach (var part in _parts.OfType<ToolUsePart>())
-            {
-                if (part.State is ToolUseState.Pending or ToolUseState.Running)
-                    _detached[part.ToolCallId] = (id, historyIndex);
-                else
-                    _closedCalls.Add(part.ToolCallId);
-            }
-
-            events.Add(Event(EventTypes.MessageUpdated, Lifecycle(id, completed: true)));
-            CommitAssistant();
-        }
-
-        AddUser(text, images);
+        // A call still running goes on running after a steer (Copilot moves a shell command to the background).
+        CloseStep(events);
+        _turnRow = false;
+        AddUser(text, images, messageId);
         _userOpen = false;
         return events;
+    }
+
+    /// <summary>
+    /// Completes the message in progress and keeps it in the history. A call still running in it stays as it is and takes
+    /// the result the agent reports later, in that message; the rest are finished.
+    /// </summary>
+    private void CloseStep(List<HarnessEvent> events)
+    {
+        if (_assistantId is not { } id)
+            return;
+        var historyIndex = _history.Count;
+        foreach (var part in _parts.OfType<ToolUsePart>())
+        {
+            if (part.State is ToolUseState.Pending or ToolUseState.Running)
+                _detached[part.ToolCallId] = (id, historyIndex);
+            else
+                _closedCalls.Add(part.ToolCallId);
+        }
+
+        events.Add(Event(EventTypes.MessageUpdated, Lifecycle(id, completed: true)));
+        CommitAssistant();
     }
 
     /// <summary>Maps one <c>session/update</c> body (<c>params.update</c>).</summary>
@@ -108,6 +122,7 @@ internal sealed class AcpMapper(string sessionId)
                 if (!_userOpen)
                 {
                     CommitAssistant();
+                    _turnRow = false;
                     AddUser("");
                     _userOpen = true;
                 }
@@ -243,6 +258,7 @@ internal sealed class AcpMapper(string sessionId)
         }
 
         _closedCalls.Clear();
+        _turnRow = false;
         events.Add(Status(ActivityStatuses.Idle));
         return events;
     }
@@ -262,6 +278,7 @@ internal sealed class AcpMapper(string sessionId)
             CommitAssistant();
         }
 
+        _turnRow = false;
         events.Add(Status(ActivityStatuses.Idle));
         return events;
     }
@@ -276,6 +293,8 @@ internal sealed class AcpMapper(string sessionId)
         if (text.Length == 0)
             return;
 
+        if (_parts.Count > 0 && _parts[^1] is ToolUsePart)
+            CloseStep(events);
         EnsureAssistant(events);
         if (_openKind == kind && _openPartId is { } open && PartIndex(open) >= 0)
         {
@@ -363,6 +382,12 @@ internal sealed class AcpMapper(string sessionId)
 
     private void UpsertTool(List<HarnessEvent> events, string callId, string name, JsonNode input, ToolInvocationState state, ToolUseState useState, string? output = null)
     {
+        if (_detached.TryGetValue(callId, out var detached))
+        {
+            LateRow(events, callId, detached, input, state, useState, output);
+            return;
+        }
+
         EnsureAssistant(events);
         _openKind = null;
         _openPartId = null;
@@ -413,6 +438,23 @@ internal sealed class AcpMapper(string sessionId)
         }
     }
 
+    /// <summary>A HydraFusion row left running in a message that's closed (the answer streams below it) finishes there.</summary>
+    private void LateRow(List<HarnessEvent> events, string callId, (string MessageId, int HistoryIndex) at, JsonNode input, ToolInvocationState state, ToolUseState useState, string? output)
+    {
+        var message = _history[at.HistoryIndex];
+        var slot = message.Parts.ToList().FindIndex(p => p is ToolUsePart t && t.ToolCallId == callId);
+        if (slot < 0 || message.Parts[slot] is not ToolUsePart prior)
+            return;
+
+        ReplacePart(message, at.HistoryIndex, slot, prior with
+        {
+            Arguments = Json(input), State = useState, Output = output is null ? null : Json(output), Error = useState == ToolUseState.Error ? output : null,
+        });
+        events.Add(PartEvent(new ToolMessageEventPart { Id = prior.PartId!, SessionId = sessionId, MessageId = at.MessageId, ToolName = prior.ToolName, CallId = callId, State = state }));
+        if (useState is not (ToolUseState.Pending or ToolUseState.Running))
+            _detached.Remove(callId);
+    }
+
     private void ReplacePart(HarnessMessage message, int historyIndex, int slot, MessagePart part)
     {
         var parts = message.Parts.ToList();
@@ -460,7 +502,7 @@ internal sealed class AcpMapper(string sessionId)
     {
         if (_assistantId is not null)
             return;
-        _assistantId = $"acp-{sessionId}-{++_messageCount}";
+        _assistantId = AscendingMessageId.New();
         _assistantAt = DateTimeOffset.UtcNow;
         events.Add(Event(EventTypes.MessageCreated, Lifecycle(_assistantId, completed: false)));
     }
@@ -472,7 +514,6 @@ internal sealed class AcpMapper(string sessionId)
         if (_parts.Count > 0)
             _history.Add(Assistant());
         _assistantId = null;
-        _turnRow = false;
         _parts.Clear();
         _tools.Clear();
         _open.Clear();
@@ -482,9 +523,9 @@ internal sealed class AcpMapper(string sessionId)
     private HarnessMessage Assistant() => new() { Id = _assistantId!, Role = "assistant", Parts = [.. _parts], Timestamp = _assistantAt };
 
     /// <summary>The user's message: the text, then each attached image as a file part, as the other harnesses show them.</summary>
-    private void AddUser(string text, IReadOnlyList<HarnessAttachment>? images = null)
+    private void AddUser(string text, IReadOnlyList<HarnessAttachment>? images = null, string? messageId = null)
     {
-        var id = $"acp-{sessionId}-{++_messageCount}";
+        var id = messageId ?? AscendingMessageId.New();
         List<MessagePart> parts = [new TextPart(text)];
         parts.AddRange((images ?? []).Select((image, index) => new FilePart($"{id}-file-{index}", image.Mime, $"data:{image.Mime};base64,{image.Data}", image.Filename)));
         _history.Add(new HarnessMessage { Id = id, Role = "user", Parts = parts, Timestamp = DateTimeOffset.UtcNow });

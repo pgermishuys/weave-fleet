@@ -3,6 +3,7 @@ using System.Text.Json.Nodes;
 using Microsoft.Extensions.Logging.Abstractions;
 using WeaveFleet.Application.Analytics;
 using WeaveFleet.Domain.Harnesses;
+using WeaveFleet.Domain.Identity;
 using WeaveFleet.Infrastructure.Harnesses;
 using WeaveFleet.Infrastructure.Harnesses.Acp;
 
@@ -94,6 +95,29 @@ public sealed class AcpHarnessSessionTests
         prompt.GetProperty("sessionId").GetString().ShouldBe("acp-1");
         prompt.GetProperty("prompt")[0].GetProperty("text").GetString().ShouldBe("hello");
         (await session.GetMessagesAsync(null, CancellationToken.None)).Messages.Select(m => m.Role).ShouldBe(["user", "assistant"]);
+    }
+
+    [Fact]
+    public async Task the_prompt_keeps_fleets_message_id_and_the_answer_sorts_after_it()
+    {
+        // The client places a message by its id: the prompt Fleet shows has Fleet's id, so the answer's has to sort after it.
+        await using var agent = new FakeAcpAgent();
+        agent.Handle = (method, p) =>
+        {
+            if (method == "session/prompt")
+                agent.Update("acp-1", new JsonObject { ["sessionUpdate"] = "agent_message_chunk", ["content"] = new JsonObject { ["type"] = "text", ["text"] = "Hi" } });
+            return Task.FromResult<JsonNode?>(new JsonObject { ["stopReason"] = "end_turn" });
+        };
+        await using var session = NewSession(agent);
+        var promptId = AscendingMessageId.New();
+
+        await session.SendPromptAsync("hello", new PromptOptions { MessageId = promptId }, CancellationToken.None);
+        await ReadAsync(session, Idle);
+
+        var messages = (await session.GetMessagesAsync(null, CancellationToken.None)).Messages;
+        messages[0].Id.ShouldBe(promptId);
+        messages[1].Id.ShouldStartWith("msg_");
+        string.CompareOrdinal(messages[1].Id, promptId).ShouldBeGreaterThan(0);
     }
 
     [Fact]
