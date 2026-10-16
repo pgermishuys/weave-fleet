@@ -260,7 +260,7 @@ internal sealed partial class HarnessUpdateService(
         activity.GetAll().Values.Count(snapshot => SessionActivityTracker.IsWorking(snapshot.ActivityStatus));
 
     private static HarnessAvailability AvailabilityOf(HarnessInfo harness) =>
-        new(harness.Available, harness.Reason) { State = harness.State, Version = harness.Version, ExecutablePath = harness.ExecutablePath };
+        new(harness.Available, harness.Reason) { State = harness.State, Version = harness.Version, ExecutablePath = harness.ExecutablePath, CliVersion = harness.CliVersion };
 
     /// <summary>
     /// The latest version of each package as last looked up. One that's never been looked up, or was looked up over an

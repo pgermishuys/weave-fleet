@@ -656,6 +656,8 @@ export interface HarnessInfo {
   version?: string | null;
   /** Where Fleet found the harness executable. */
   executablePath?: string | null;
+  /** The version of a program the harness drives (GitHub Copilot's CLI). */
+  cliVersion?: string | null;
   /** How to install it or sign in to it here; missing when Fleet can't help. */
   setup?: HarnessSetup | null;
   update?: HarnessUpdateInfo | null;

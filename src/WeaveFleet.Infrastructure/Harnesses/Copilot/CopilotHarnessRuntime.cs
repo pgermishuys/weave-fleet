@@ -76,12 +76,14 @@ public sealed class CopilotHarnessRuntime(
         var installed = await HarnessProbe.CheckInstalledAsync("weave-copilot", await ExecutableAsync(LocalUser).ConfigureAwait(false), [], _logger, ct).ConfigureAwait(false);
         if (!installed.Available)
             return installed;
-        if (!CliFound(InstallerInstance.ManagedCli(), await ReadPreferenceAsync(LocalUser, PathPreferenceKey).ConfigureAwait(false),
-                Environment.GetEnvironmentVariable("WEAVE_COPILOT_CLI"), Environment.GetEnvironmentVariable("PATH")))
+        var cli = FindCli(InstallerInstance.ManagedCli(), await ReadPreferenceAsync(LocalUser, PathPreferenceKey).ConfigureAwait(false),
+            Environment.GetEnvironmentVariable("WEAVE_COPILOT_CLI"), Environment.GetEnvironmentVariable("PATH"));
+        if (cli is null)
             return HarnessAvailability.NotInstalled(CliMissingMessage);
+        installed = installed with { CliVersion = await CliVersionAsync(cli, ct).ConfigureAwait(false) };
         if (await IsSignedInAsync(ct).ConfigureAwait(false))
             return installed;
-        return HarnessAvailability.SignInRequired(SignInMessage, installed.Version, installed.ExecutablePath);
+        return HarnessAvailability.SignInRequired(SignInMessage, installed.Version, installed.ExecutablePath) with { CliVersion = installed.CliVersion };
     }
 
     /// <summary>
@@ -89,12 +91,30 @@ public sealed class CopilotHarnessRuntime(
     /// weave-copilot), the one <c>WEAVE_COPILOT_CLI</c> names, or <c>copilot</c> on PATH. The same order weave-copilot looks in.
     /// </summary>
     internal static bool CliFound(string? managedCli, string? customWeaveCopilotPath, string? envCli, string? pathEnv)
+        => FindCli(managedCli, customWeaveCopilotPath, envCli, pathEnv) is not null;
+
+    /// <summary>Where the Copilot CLI is, by the order <see cref="CliFound"/> describes; null when weave-copilot won't find one.</summary>
+    internal static string? FindCli(string? managedCli, string? customWeaveCopilotPath, string? envCli, string? pathEnv)
     {
         if (managedCli is not null && string.IsNullOrWhiteSpace(customWeaveCopilotPath))
-            return true;
+            return managedCli;
         if (!string.IsNullOrEmpty(envCli))
-            return File.Exists(envCli);
-        return ExecutableResolver.TryResolve("copilot", pathEnv, [], out _);
+            return File.Exists(envCli) ? envCli : null;
+        return ExecutableResolver.TryResolve("copilot", pathEnv, [], out var path) ? path : null;
+    }
+
+    /// <summary>What the CLI says for <c>--version</c> ("GitHub Copilot CLI 1.0.98."); null when it can't be run, which doesn't make the harness unavailable.</summary>
+    private static async Task<string?> CliVersionAsync(string cli, CancellationToken ct)
+    {
+        try
+        {
+            var result = await HarnessProbe.RunAsync(cli, ["--version"], ct).ConfigureAwait(false);
+            return result.ExitCode == 0 ? HarnessProbe.ParseVersion(result.StandardOutput) : null;
+        }
+        catch (Exception ex) when (ex is System.ComponentModel.Win32Exception or InvalidOperationException or IOException)
+        {
+            return null;
+        }
     }
 
     /// <summary>What weave-copilot said when it couldn't start, as Fleet says it: a missing CLI gets what to do about it.</summary>

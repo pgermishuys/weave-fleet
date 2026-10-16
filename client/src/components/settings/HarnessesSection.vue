@@ -180,8 +180,11 @@ function summaryForHarness(harness: HarnessInfo, enabled: boolean): string {
   if (!enabled) return "Disabled until enabled by the user.";
   if (!harness.available) return harness.reason ?? `${harness.displayName} is registered but not currently available.`;
 
-  // The version is weave-copilot's, the program Fleet runs for GitHub Copilot.
-  if (harness.type === "copilot" && harness.version) return `weave-copilot ${harness.version} is installed and ready.`;
+  // The version is weave-copilot's, the program Fleet runs for GitHub Copilot, and the CLI it drives has its own.
+  if (harness.type === "copilot" && harness.version) {
+    const cli = harness.cliVersion ? ` · Copilot CLI ${harness.cliVersion}` : "";
+    return `weave-copilot ${harness.version}${cli} is installed and ready.`;
+  }
   return `${harness.displayName} is installed and ready.`;
 }
 
