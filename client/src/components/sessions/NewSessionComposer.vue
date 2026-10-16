@@ -2,13 +2,15 @@
 import "@/components/sessions/new-session/new-session.css";
 import { computed, nextTick, onMounted, onUnmounted, shallowRef, toRefs, useTemplateRef, watch } from "vue";
 import { useNavigate, useSearch } from "@tanstack/vue-router";
-import { ArrowUp, CircleDot, GitPullRequest, LoaderCircle, X } from "lucide-vue-next";
+import { ArrowUp, CircleAlert, CircleDot, GitPullRequest, LoaderCircle, X } from "lucide-vue-next";
 import { storeToRefs } from "pinia";
 import { Button } from "@/components/ui/button";
 import AgentSelector from "@/components/session/AgentSelector.vue";
+import AutocompletePopup from "@/components/session/AutocompletePopup.vue";
 import ComposerFrame from "@/components/session/ComposerFrame.vue";
 import ModelSelector from "@/components/session/ModelSelector.vue";
 import MessageBubble from "@/components/session/MessageBubble.vue";
+import ReferenceMirror from "@/components/session/ReferenceMirror.vue";
 import BasePicker from "@/components/sessions/new-session/BasePicker.vue";
 import FolderPicker from "@/components/sessions/new-session/FolderPicker.vue";
 import GitHubItemPicker from "@/components/sessions/new-session/GitHubItemPicker.vue";
@@ -18,13 +20,17 @@ import MoreOptions from "@/components/sessions/new-session/MoreOptions.vue";
 import ProfilePicker from "@/components/sessions/new-session/ProfilePicker.vue";
 import StarterChips from "@/components/sessions/new-session/StarterChips.vue";
 import WorkspacePicker from "@/components/sessions/new-session/WorkspacePicker.vue";
+import { useAutocomplete } from "@/composables/use-autocomplete";
+import { useDraftReferences } from "@/composables/use-draft-references";
 import { useEnabledHarnesses } from "@/composables/use-enabled-harnesses";
+import { findFilesInFolder } from "@/composables/use-find-files";
 import { useGitHubPicker } from "@/composables/use-github-picker";
 import { useHarnessCatalog } from "@/composables/use-harness-catalog";
 import { useSettingsNav } from "@/composables/use-settings-nav";
 import { useIsMobile } from "@/composables/use-media-query";
 import { useNewSessionDefaults } from "@/composables/use-new-session-defaults";
 import { useProjects } from "@/composables/use-projects";
+import { useReferableSessions } from "@/composables/use-referable-sessions";
 import { useRepositories } from "@/composables/use-repositories";
 import { useRepositoryDetail } from "@/composables/use-repository-detail";
 import { seedSentPrompt } from "@/composables/use-send-prompt";
@@ -37,6 +43,8 @@ import { describeDefaults, keepOffered, modelFromKey } from "@/lib/agent-model-c
 import { findRepositoryForGitHubPreset } from "@/lib/github-session-source";
 import { itemResourceId, itemSessionPreset, type GitHubItemSummary } from "@/lib/github-items";
 import { findHashTrigger, parseGitHubRemote, removeTrigger } from "@/lib/github-reference";
+import { forgetFileReferences, pickedFileTokens } from "@/lib/composer-references";
+import { forgetSessionReferences, sessionReferencesIn, textHasToken } from "@/lib/session-references";
 import { describeNewSession } from "@/lib/new-session-plan";
 import { FIX_A_BUG_WORKFLOW_ID, STARTERS_PREFERENCE_KEY, starterSelection, type TextStarter } from "@/lib/starters";
 import {
@@ -64,7 +72,7 @@ const search = useSearch({ from: "/sessions/new" });
 const { config } = storeToRefs(useAppShellStore());
 const workspaceUiStore = useWorkspaceUiStore();
 const { newSessionInitialSource } = storeToRefs(workspaceUiStore);
-const { enabledHarnesses, defaultHarnessType, noHarnessReason } = useEnabledHarnesses();
+const { harnesses, enabledHarnesses, defaultHarnessType, noHarnessReason } = useEnabledHarnesses();
 const { setActiveSection } = useSettingsNav();
 // A new session starts on the machine you're working in, unless the draft picked another: the route provides it, and
 // everything in the box (folders, harnesses, agents and models, profiles) asks that machine.
@@ -143,6 +151,11 @@ if (search.value.projectId || !restored) {
 if (restored && folder.value) {
   hasChosenFolder.value = true;
 }
+// The draft's @ picks are kept under its row key; a fresh draft starts with none, whatever an earlier page left there.
+if (!restored) {
+  forgetSessionReferences(draft.rowKey);
+  forgetFileReferences(draft.rowKey);
+}
 // A GitHub "start session" hands its issue over through the store; the draft keeps it from here.
 if (newSessionInitialSource.value) {
   gitHubPreset.value = newSessionInitialSource.value;
@@ -155,6 +168,8 @@ const isFolderMenuOpen = shallowRef(false);
 /** The message being sent, shown as the conversation's first message while the session starts. */
 const sentMessage = computed(() => (draft.isStarting && message.value.trim()) || null);
 const sentAt = shallowRef<number | undefined>(undefined);
+/** The sessions the sent message references, drawn as chips in it. */
+const sentReferences = computed(() => (sentMessage.value ? sessionReferencesIn(draft.rowKey, sentMessage.value) : []));
 
 const textareaRef = useTemplateRef<HTMLTextAreaElement>("textarea");
 
@@ -201,6 +216,12 @@ watch(() => hashTrigger.value?.query, () => {
 
 function trackCaret(): void {
   caret.value = textareaRef.value?.selectionStart ?? null;
+}
+
+/** A click or arrow key: the caret never stays inside a picked reference. */
+function moveCaret(): void {
+  if (textareaRef.value) references.keepCaretOutside(textareaRef.value);
+  trackCaret();
 }
 
 /** Starts the session from the picked item, or opens the session already on it when asked. */
@@ -418,6 +439,103 @@ const catalogDirectory = computed(() => {
   }
   return selected.kind === "repository" && workspace.value.kind === "existing" ? workspace.value.path : selected.path;
 });
+// ── @ offers sessions, then the files and folders in the folder above ────────────
+const cursorPosition = computed({
+  get: () => caret.value ?? message.value.length,
+  set: (position: number) => {
+    caret.value = position;
+  },
+});
+// The Folder chip's folder: paths in it are relative, so they hold in a new worktree of it too.
+const filesDirectory = computed(() => (folder.value && folder.value.kind !== "none" ? folder.value.path : null));
+const mentionOpen = shallowRef(false);
+// On the machine the Machine chip names, which is where the session starts.
+const referableSessions = useReferableSessions(mentionOpen, target);
+const autocomplete = useAutocomplete({
+  value: computed(() => (isStarting.value ? "" : message.value)),
+  setValue: (value) => {
+    message.value = value;
+    validationError.value = null;
+    void nextTick(resizeTextarea);
+  },
+  sessionId: null,
+  draftKey: () => draft.rowKey,
+  directory: filesDirectory,
+  inputRef: textareaRef,
+  cursorPosition,
+  sessions: referableSessions,
+  harnessName: (type) => harnesses.value.find((harness) => harness.type === type)?.displayName,
+});
+watch(() => autocomplete.isMentionOpen.value, (open) => {
+  mentionOpen.value = open;
+});
+// Picks a new folder doesn't have, drawn as the plain text they now are.
+const unfoundTokens = shallowRef<ReadonlySet<string>>(new Set());
+const references = useDraftReferences({
+  text: () => (sentMessage.value ? "" : message.value),
+  caret,
+  draftKey: () => draft.rowKey,
+  plainTokens: unfoundTokens,
+});
+const mirrorRef = useTemplateRef<InstanceType<typeof ReferenceMirror>>("mirror");
+const folderLabel = computed(() => (filesDirectory.value ? folderName(filesDirectory.value) : null));
+const sessionNote = computed(() => (
+  enabledHarnesses.value.find((harness) => harness.type === resolvedHarnessType.value)?.capabilities?.supportsFleetTools
+    ? "The agent gets a link to the session, not a copy, and reads what it needs."
+    : "The agent gets the session's title and a recap of where it stands, not a copy."
+));
+
+function folderName(path: string): string {
+  return path.replace(/[\\/]+$/, "").split(/[\\/]/).pop() || path;
+}
+
+/** Arrow keys, Enter, Tab and Esc drive the @ list while it's open. Returns whether the key was its. */
+function handleMentionKeydown(event: KeyboardEvent): boolean {
+  if (!autocomplete.isOpen.value || event.isComposing) return false;
+  autocomplete.onKeyDown(event);
+  return ["Enter", "Tab", "Escape"].includes(event.key);
+}
+
+// A file picked in one folder may not be in the next: each is looked up there, and the ones that aren't go back to
+// plain text, with a line saying so. Nothing leaves the draft; sessions don't depend on the folder and stay.
+const folderNotice = shallowRef<string[] | null>(null);
+watch(filesDirectory, async (next, previous, onCleanup) => {
+  folderNotice.value = null;
+  const picks = [...pickedFileTokens(draft.rowKey)];
+  if (!previous || next === previous || picks.length === 0) return;
+  let replaced = false;
+  onCleanup(() => {
+    replaced = true;
+  });
+  const missing = next ? await picksMissingFrom(next, picks) : picks;
+  if (replaced || missing.length === 0) return;
+  forgetFileReferences(draft.rowKey, missing);
+  unfoundTokens.value = new Set([...unfoundTokens.value, ...missing]);
+  folderNotice.value = missing.map((token) => token.slice(1));
+});
+watch(message, (text) => {
+  const kept = [...unfoundTokens.value].filter((token) => textHasToken(text, token));
+  if (kept.length !== unfoundTokens.value.size) unfoundTokens.value = new Set(kept);
+});
+
+const folderNoticeTail = computed(() => {
+  const one = folderNotice.value?.length === 1;
+  return `${one ? "isn't" : "aren't"} in ${folderLabel.value ?? "a chat with no folder"}, so ${one ? "it stays" : "they stay"} as text.`;
+});
+
+/** The picked files and folders `directory` doesn't have. One Fleet can't look up stays picked. */
+async function picksMissingFrom(directory: string, picks: readonly string[]): Promise<string[]> {
+  const found = await Promise.all(picks.map(async (token) => {
+    const path = token.slice(1);
+    try {
+      return (await findFilesInFolder(target.api, directory, path.replace(/\/$/, ""))).includes(path);
+    } catch {
+      return true;
+    }
+  }));
+  return picks.filter((_, index) => !found[index]);
+}
+
 /** Asked on the profile the session would start with, which can bring agents and models of its own. */
 const catalogProfile = computed(() => (showProfilePicker.value ? selectedProfileId.value : undefined));
 const { catalog, agents, models, isSupported: offersAgentsAndModels, isCurrent: isCatalogCurrent } = useHarnessCatalog(
@@ -473,6 +591,7 @@ function resizeTextarea(): void {
   }
   textarea.style.height = "0px";
   textarea.style.height = `${Math.min(textarea.scrollHeight, MAX_TEXTAREA_HEIGHT)}px`;
+  mirrorRef.value?.sync();
 }
 
 function setFolder(next: NewSessionFolder, chosen: boolean): void {
@@ -568,6 +687,7 @@ async function submit(withoutMessage: boolean): Promise<void> {
     fetchOrigin: fetchOrigin.value,
     agent: sendsAgentAndModel.value ? agent.value : undefined,
     model: sendsAgentAndModel.value ? modelFromKey(model.value) : null,
+    sessionReferences: withoutMessage ? [] : sessionReferencesIn(draft.rowKey, message.value),
   });
 
   if (!request.ok) {
@@ -582,7 +702,10 @@ async function submit(withoutMessage: boolean): Promise<void> {
     ? { harnessType: resolvedHarnessType.value, agent: agent.value, model: model.value }
     : undefined;
   const firstMessage = request.options.initialPrompt ?? null;
+  const firstReferences = firstMessage ? sessionReferencesIn(draft.rowKey, firstMessage) : [];
+  const draftKey = draft.rowKey;
   sentAt.value = Date.now();
+  folderNotice.value = null;
 
   // The message moves into the conversation at once; the session catches up.
   draft.isStarting = true;
@@ -600,6 +723,8 @@ async function submit(withoutMessage: boolean): Promise<void> {
     // does. That's a reload, unless "Keep every machine live" opens it in place; the machine keeps the first message,
     // so the session page shows it.
     if (!target.isLive) machines.rememberSessions(target.key, [sessionId]);
+    forgetSessionReferences(draftKey);
+    forgetFileReferences(draftKey);
     if (!target.isLive && !machines.opensInPlace) {
       workspaceUiStore.handOffNewSessionDraft(sessionId);
       const instance = response.instanceId ? `?instanceId=${encodeURIComponent(response.instanceId)}` : "";
@@ -610,7 +735,7 @@ async function submit(withoutMessage: boolean): Promise<void> {
     // All in one tick: the session page has the message before its history loads, and the
     // session's row replaces the draft row where it stands.
     if (firstMessage) {
-      seedSentPrompt(sessionId, firstMessage, sentAt.value);
+      seedSentPrompt(sessionId, firstMessage, sentAt.value, firstReferences);
     }
     // The live machine's list holds only its own sessions.
     const row = buildCreatedSessionRow(response, request, projectForRow());
@@ -645,7 +770,8 @@ async function submit(withoutMessage: boolean): Promise<void> {
 }
 
 function handleKeydown(event: KeyboardEvent): void {
-  if (handlePickerKeydown(event)) {
+  // References picked from the @ list are edited as one piece.
+  if (references.handleReferenceKey(event) || handlePickerKeydown(event) || handleMentionKeydown(event)) {
     return;
   }
   if (event.key !== "Enter" || event.shiftKey || event.isComposing) {
@@ -797,6 +923,7 @@ onUnmounted(() => {
           author="You"
           role="user"
           :body="sentMessage"
+          :session-references="sentReferences"
           :created-at="sentAt"
           :show-identity="true"
           cluster-position="single"
@@ -870,6 +997,19 @@ onUnmounted(() => {
         />
 
         <ComposerFrame>
+          <AutocompletePopup
+            :open="autocomplete.isOpen.value"
+            :items="autocomplete.items.value"
+            :is-loading="autocomplete.isLoading.value"
+            :selected-value="autocomplete.selectedValue.value"
+            :error="autocomplete.error.value"
+            :on-select="autocomplete.onSelect"
+            :on-open-folder="autocomplete.onOpenFolder"
+            :query="autocomplete.query.value"
+            :file-hint="folderLabel ? `in ${folderLabel}` : undefined"
+            :session-note="sessionNote"
+          />
+
           <div
             v-if="gitHubPreset"
             class="new-session__attachments"
@@ -906,21 +1046,31 @@ onUnmounted(() => {
             </span>
           </div>
 
-          <textarea
-            ref="textarea"
-            class="composer-frame__textarea new-session__textarea"
-            data-testid="new-session-message"
-            aria-label="First message"
-            rows="2"
-            :value="sentMessage ? '' : message"
-            :placeholder="placeholder"
-            :readonly="isStarting"
-            @input="handleInput"
-            @keydown="handleKeydown"
-            @keyup="trackCaret"
-            @click="trackCaret"
-            @blur="dismissedAt = message"
-          />
+          <div class="new-session__input">
+            <ReferenceMirror
+              ref="mirror"
+              class="new-session__textarea"
+              test-id="new-session-references"
+              :segments="references.segments.value"
+              :textarea="textareaRef"
+            />
+            <textarea
+              ref="textarea"
+              class="composer-frame__textarea new-session__textarea"
+              data-testid="new-session-message"
+              aria-label="First message"
+              rows="2"
+              :value="sentMessage ? '' : message"
+              :placeholder="placeholder"
+              :readonly="isStarting"
+              @input="handleInput"
+              @keydown="handleKeydown"
+              @keyup="moveCaret"
+              @click="moveCaret"
+              @scroll="mirrorRef?.sync()"
+              @blur="dismissedAt = message"
+            />
+          </div>
 
           <template #toolbar>
             <HarnessPicker
@@ -1054,6 +1204,25 @@ onUnmounted(() => {
           />
         </div>
       </div>
+
+      <p
+        v-if="folderNotice"
+        class="new-session__folder-notice"
+        data-testid="new-session-folder-notice"
+        role="status"
+      >
+        <CircleAlert
+          class="new-session__folder-notice-icon"
+          aria-hidden="true"
+        />
+        <span>
+          <template
+            v-for="(path, index) in folderNotice"
+            :key="path"
+          >{{ index === 0 ? "" : index === folderNotice.length - 1 ? " and " : ", " }}<code>{{ path }}</code></template>
+          {{ folderNoticeTail }}
+        </span>
+      </p>
 
       <p
         class="new-session__plan"
@@ -1307,6 +1476,12 @@ onUnmounted(() => {
   min-height: 64px;
 }
 
+/* The text area sits over the mirror that tints its @ references. */
+.new-session__input,
+.new-session__input > textarea {
+  position: relative;
+}
+
 .new-session__strip {
   display: flex;
   flex-wrap: wrap;
@@ -1325,6 +1500,33 @@ onUnmounted(() => {
 .new-session__strip-end {
   display: flex;
   margin-left: auto;
+}
+
+/* A picked file the new folder doesn't have went back to text. */
+.new-session__folder-notice {
+  display: flex;
+  align-items: flex-start;
+  gap: 8px;
+  margin-top: 8px;
+  padding: 7px 10px;
+  border-radius: var(--radius-btn);
+  background: color-mix(in srgb, var(--status-waiting) 12%, transparent);
+  font-size: 12.5px;
+  line-height: 1.5;
+  overflow-wrap: anywhere;
+}
+
+.new-session__folder-notice-icon {
+  flex: none;
+  width: 14px;
+  height: 14px;
+  margin-top: 3px;
+  color: var(--status-waiting);
+}
+
+.new-session__folder-notice code {
+  font-family: var(--font-mono-stack);
+  font-size: 11.5px;
 }
 
 .new-session__plan {

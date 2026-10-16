@@ -1,3 +1,4 @@
+using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging.Abstractions;
 using WeaveFleet.Application.Browser;
 using WeaveFleet.Application.Configuration;
@@ -5,6 +6,7 @@ using WeaveFleet.Application.Events;
 using WeaveFleet.Application.Git;
 using WeaveFleet.Application.Harnesses;
 using WeaveFleet.Application.Memory;
+using WeaveFleet.Application.Recaps;
 using WeaveFleet.Application.Sessions;
 using WeaveFleet.Application.Sessions.Activation;
 using WeaveFleet.Application.Sessions.Asks;
@@ -24,6 +26,7 @@ using WeaveFleet.Application.Terminals;
 using WeaveFleet.Application.Users;
 using WeaveFleet.Application.Workspaces;
 using WeaveFleet.Domain.Harnesses;
+using WeaveFleet.Domain.Repositories;
 using WeaveFleet.Testing.Fakes;
 using WeaveFleet.Testing.Fakes.Repositories;
 
@@ -219,7 +222,14 @@ public sealed class SessionOrchestratorBuilder
             SessionRepository, SessionSourceUsageRepository, SessionCallbackRepository, ProjectRepository, EventBroadcaster,
             AnalyticsCollector, CredentialStore, UserPreferenceRepository, _userContext, Activation, Prompting,
             NullLogger<SessionCreation>.Instance, gitDiffService: gitDiffService, harnessProfiles: HarnessProfileRepository,
-            harnessAvailability: harnessAvailability);
+            harnessAvailability: harnessAvailability,
+            referenceExpander: new SessionReferenceExpander(
+                SessionRepository, HarnessRegistry,
+                new SessionRecapService(
+                    ActivityTracker, InstanceTracker, HarnessRegistry, EventBroadcaster, new RecapsNever(), new SessionFocusTracker(),
+                    TestServiceScopeFactory.Create(services => services.AddSingleton<ISessionRepository>(SessionRepository)),
+                    TimeProvider.System, NullLogger<SessionRecapService>.Instance),
+                SessionMessageProxy));
         Retention = new SessionRetention(
             workspaceService, instanceService, InstanceTracker, SessionRepository, DelegationRepository, SmartLinkRepository,
             EventBroadcaster, AnalyticsCollector, ActivityTracker, NullLogger<SessionRetention>.Instance,
@@ -277,5 +287,10 @@ public sealed class SessionOrchestratorBuilder
             sessionRetention: Retention,
             sessionForking: Forking,
             sessionSideConversations: SideConversations);
+    }
+
+    private sealed class RecapsNever : IRecapPreference
+    {
+        public Task<bool> IsEnabledAsync(string userId, CancellationToken ct) => Task.FromResult(false);
     }
 }

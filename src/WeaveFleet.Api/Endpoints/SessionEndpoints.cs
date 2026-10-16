@@ -293,6 +293,7 @@ public static class SessionEndpoints
                 HarnessType = req.HarnessType,
                 HarnessProfileId = req.HarnessProfileId,
                 InitialPrompt = req.InitialPrompt,
+                SessionReferences = ToSessionReferences(req.SessionReferences),
                 Source = req.Source,
                 OnCompleteTargetSessionId = req.OnComplete?.NotifySessionId,
                 OnCompleteTargetInstanceId = req.OnComplete?.NotifyInstanceId,
@@ -1417,7 +1418,8 @@ internal sealed record CreateSessionApiRequest(
     List<string>? Tags,
     string? HarnessProfileId = null,
     string? Agent = null,
-    ModelRef? Model = null);
+    ModelRef? Model = null,
+    SessionReferenceDto[]? SessionReferences = null);
 
 [JsonUnmappedMemberHandling(JsonUnmappedMemberHandling.Disallow)]
 internal sealed record OnCompleteInfo(string NotifySessionId, string NotifyInstanceId);

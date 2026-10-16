@@ -38,6 +38,13 @@ export interface UseAutocompleteParams {
   value: Ref<string>;
   setValue: (value: string) => void;
   sessionId: MaybeRefOrGetter<string | null | undefined>;
+  /**
+   * Whose picks these are, when it isn't `sessionId`: the New Session draft's row key. With no session, the `@` list
+   * offers sessions and the files in `directory`; there are no `/` commands, `$` skills or agents to offer.
+   */
+  draftKey?: MaybeRefOrGetter<string | null | undefined>;
+  /** Where files are found when there's no session yet: the New Session page's folder. */
+  directory?: MaybeRefOrGetter<string | null | undefined>;
   inputRef: Ref<HTMLTextAreaElement | null>;
   cursorPosition: Ref<number>;
   /** Fleet's own commands (`/btw`), listed before the harness's; a harness command of the same name is left out. */
@@ -192,6 +199,8 @@ export function useAutocomplete({
   value,
   setValue,
   sessionId,
+  draftKey = sessionId,
+  directory,
   inputRef,
   cursorPosition,
   fleetCommands = [],
@@ -215,7 +224,7 @@ export function useAutocomplete({
       return { type: "skill", startIndex: skill.start };
     }
 
-    if (value.value.startsWith("/") && cursorPosition.value >= 1) {
+    if (value.value.startsWith("/") && cursorPosition.value >= 1 && toValue(sessionId)) {
       const afterSlash = value.value.slice(1, cursorPosition.value);
       if (!afterSlash.includes(" ")) {
         return { type: "slash", startIndex: 0 };
@@ -241,7 +250,7 @@ export function useAutocomplete({
     }
 
     // The caret at the end of a reference picked from this list: it's done, not being typed.
-    const draftSessionId = toValue(sessionId);
+    const draftSessionId = toValue(draftKey);
     const token = `@${textBetween}`;
     if (draftSessionId && (pickedFileTokens(draftSessionId).has(token) || rememberedSessionTokens(draftSessionId).has(token))) {
       return null;
@@ -261,7 +270,7 @@ export function useAutocomplete({
   const { data: commands, isLoading: commandsLoading, error: commandsError } = useSessionCommands(sessionId);
   const { data: agents, isLoading: agentsLoading, error: agentsError } = useSessionAgents(sessionId);
   const mentionQuery = computed(() => (computedTrigger.value?.type === "mention" ? filterText.value : null));
-  const { files, isLoading: filesLoading, error: filesError } = useFindFiles(sessionId, mentionQuery);
+  const { files, isLoading: filesLoading, error: filesError } = useFindFiles(sessionId, mentionQuery, directory);
 
   const isSuppressed = computed(() => suppressedValue.value !== null && suppressedValue.value === value.value);
   const isOpen = computed(() => computedTrigger.value !== null && !isSuppressed.value);
@@ -386,7 +395,7 @@ export function useAutocomplete({
     if (selected.startsWith(SESSION_VALUE_PREFIX)) {
       // A session goes in as a token made from its title; the composer remembers which session the token names.
       const session = items.value.find((item) => item.value === selected)?.session;
-      const draftSessionId = toValue(sessionId);
+      const draftSessionId = toValue(draftKey);
       if (!session || !draftSessionId) {
         return;
       }
@@ -395,7 +404,7 @@ export function useAutocomplete({
       itemValue = `${token} `;
     } else {
       // A file or folder picked (not a folder opened to look inside): the composer edits it as one piece.
-      const draftSessionId = toValue(sessionId);
+      const draftSessionId = toValue(draftKey);
       const picked = items.value.find((item) => item.value === selected);
       if (picked?.group === "file" && draftSessionId) {
         rememberFileReference(draftSessionId, selected.trimEnd());

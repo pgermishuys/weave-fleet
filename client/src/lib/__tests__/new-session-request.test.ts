@@ -116,6 +116,14 @@ describe("buildCreateSessionRequest", () => {
       });
     });
 
+    it("sends the sessions the message references, and none without a message", () => {
+      const sessionReferences = [{ token: "@billing-notes", sessionId: "ses-1", title: "Billing notes" }];
+
+      expect(build({ message: "Read @billing-notes", sessionReferences }).options.sessionReferences)
+        .toEqual([{ token: "@billing-notes", sessionId: "ses-1" }]);
+      expect(build({ message: "", sessionReferences }).options).not.toHaveProperty("sessionReferences");
+    });
+
     it("new worktree without a message: still no branch", () => {
       const request = build({ message: "" });
 

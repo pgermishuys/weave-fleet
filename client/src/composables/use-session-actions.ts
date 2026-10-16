@@ -34,6 +34,8 @@ export interface CreateSessionOptions {
   agent?: string;
   /** The model to start with; left out for the agent's or the harness's default. */
   model?: ModelReference;
+  /** Sessions the first message `@`-references: Fleet adds the block naming them for the agent. */
+  sessionReferences?: { token: string; sessionId: string }[];
 }
 
 export interface UseCreateSessionResult {
@@ -249,6 +251,7 @@ export function useCreateSession(): UseCreateSessionResult {
         tags: opts?.tags ?? null,
         ...(opts?.agent ? { agent: opts.agent } : {}),
         ...(opts?.model ? { model: opts.model } : {}),
+        ...(opts?.sessionReferences?.length ? { sessionReferences: opts.sessionReferences } : {}),
       };
 
       const { data, error, response } = await api.POST("/api/sessions", {

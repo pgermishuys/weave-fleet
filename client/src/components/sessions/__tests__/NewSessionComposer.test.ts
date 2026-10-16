@@ -2,7 +2,7 @@ import { DOMWrapper, flushPromises, mount, type VueWrapper } from "@vue/test-uti
 import { computed, defineComponent, h, ref, shallowRef, watchEffect, type Ref } from "vue";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { api, NO_PROFILE } from "@/api/client";
-import type { BranchInfo, HarnessCatalog, HarnessInfo, HarnessProfile, RepositoryDetail, ScannedRepository, WorktreeInfo } from "@/api/client";
+import type { BranchInfo, HarnessCatalog, HarnessInfo, HarnessProfile, RepositoryDetail, ScannedRepository, SessionListItem, WorktreeInfo } from "@/api/client";
 import NewSessionComposer from "@/components/sessions/NewSessionComposer.vue";
 import { toAgentOptions } from "@/composables/use-agents";
 import { toModelOptions } from "@/composables/use-models";
@@ -161,6 +161,7 @@ vi.mock("@/composables/use-repository-detail", () => ({
 
 vi.mock("@/composables/use-enabled-harnesses", () => ({
   useEnabledHarnesses: () => ({
+    harnesses: computed(() => harnesses.value),
     enabledHarnesses: computed(() => harnesses.value),
     defaultHarnessType: computed(() => "opencode"),
     noHarnessReason: computed(() => noHarnessReason.value),
@@ -1149,6 +1150,139 @@ describe("NewSessionComposer", () => {
       expect(view.find("[data-testid='new-session-github-attachment']").exists()).toBe(false);
       expect(useWorkspaceUiStore().newSessionInitialSource).toBeNull();
       expect(view.get("[data-testid='create-session-submit']").attributes("disabled")).toBeDefined();
+    });
+  });
+
+  describe("@ references", () => {
+    const billing = {
+      instanceId: "inst-2",
+      workspaceId: "ws-2",
+      workspaceDirectory: "/home/me/src/rocket",
+      workspaceDisplayName: null,
+      isolationStrategy: "existing",
+      sessionStatus: "idle",
+      session: { id: "ses-billing", title: "Billing retries spike", time: { created: 1, updated: 1 } },
+      instanceStatus: "running",
+      lifecycleStatus: "running",
+      retentionStatus: "active",
+      typedInstanceStatus: "running",
+      isHidden: false,
+      harnessType: "opencode",
+      tags: [],
+    } as unknown as SessionListItem;
+    /** Each folder's files, as the server's search finds them. */
+    const folderFiles: Record<string, string[]> = {
+      [rocket.path]: ["src/billing/retry-policy.ts", "docs/billing/"],
+      [comet.path]: ["docs/billing/"],
+    };
+    const finds: { path: string; q: string }[] = [];
+
+    beforeEach(() => {
+      finds.length = 0;
+      rememberFolder({ kind: "repository", path: rocket.path });
+      useSessionsStore().upsertSession(billing);
+      const realGet = api.GET.bind(api);
+      vi.spyOn(api, "GET").mockImplementation(((url: string, init: { params?: { query?: { path: string; q: string } } }) => {
+        const response = (body: unknown) => Promise.resolve({ data: body, error: undefined, response: new Response(JSON.stringify(body)) });
+        if (url === "/api/sessions") return response([]);
+        if (url === "/api/directories/find") {
+          const { path, q } = init.params!.query!;
+          finds.push({ path, q });
+          const term = q.replace(/\/$/, "");
+          return response({ directory: path, files: (folderFiles[path] ?? []).filter((file) => file.includes(term)) });
+        }
+        return realGet(url as never, init as never);
+      }) as typeof api.GET);
+    });
+
+    afterEach(() => {
+      vi.restoreAllMocks();
+    });
+
+    /** Types `text` with the caret at its end, then waits for the @ list's answer. */
+    async function typeAndWait(view: VueWrapper, text: string): Promise<void> {
+      await type(view, text);
+      await new Promise((resolve) => setTimeout(resolve, 120));
+      await flushPromises();
+    }
+
+    async function press(view: VueWrapper, key: string): Promise<void> {
+      await textarea(view).trigger("keydown", { key });
+      await new Promise((resolve) => setTimeout(resolve, 0));
+      await flushPromises();
+    }
+
+    function tinted(view: VueWrapper): string[] {
+      return view.findAll("[data-testid='new-session-references'] .composer-reference").map((reference) => reference.text());
+    }
+
+    /** "Pick up where @billing-retries-spike left off: finish @src/billing/retry-policy.ts and @docs/billing/ " */
+    async function pickBoth(view: VueWrapper): Promise<void> {
+      await typeAndWait(view, "Pick up where @bill");
+      await press(view, "Tab");
+      await typeAndWait(view, `${textarea(view).element.value}left off: finish @retry`);
+      await press(view, "Enter");
+      await typeAndWait(view, `${textarea(view).element.value}and @docs/bil`);
+      await press(view, "Enter");
+    }
+
+    it("lists sessions, then the files in the Folder chip's folder", async () => {
+      const view = await mountComposer();
+      await typeAndWait(view, "Pick up where @bil");
+
+      const popup = view.get(".autocomplete-popup");
+      expect(popup.findAll(".autocomplete-popup__group-label").map((label) => label.text()))
+        .toEqual(["SessionsTab to attach", "Files & foldersin rocket"]);
+      expect(popup.text()).toContain("Billing retries spike");
+      expect(finds.at(-1)).toEqual({ path: rocket.path, q: "bil" });
+    });
+
+    it("tints the picks, sends the sessions with the request and shows them as chips in the first message", async () => {
+      const view = await mountComposer();
+      await pickBoth(view);
+
+      expect(textarea(view).element.value)
+        .toBe("Pick up where @billing-retries-spike left off: finish @src/billing/retry-policy.ts and @docs/billing/ ");
+      expect(tinted(view)).toEqual(["@billing-retries-spike", "@src/billing/retry-policy.ts", "@docs/billing/"]);
+
+      await pressEnter(view);
+
+      expect(lastCreateCall()[1]).toMatchObject({
+        initialPrompt: "Pick up where @billing-retries-spike left off: finish @src/billing/retry-policy.ts and @docs/billing/",
+        sessionReferences: [{ token: "@billing-retries-spike", sessionId: "ses-billing" }],
+      });
+      expect(useSentPrompts("session-1").sentPrompts.value[0]?.sessionReferences).toEqual([
+        { token: "@billing-retries-spike", sessionId: "ses-billing", title: "Billing retries spike" },
+      ]);
+    });
+
+    it("turns picks the new folder doesn't have back into text, and says so", async () => {
+      const view = await mountComposer();
+      await pickBoth(view);
+      const draft = textarea(view).element.value;
+
+      await openFolderMenu(view);
+      await folderOption("comet").trigger("click");
+      await flushPromises();
+
+      expect(finds.filter((find) => find.path === comet.path).map((find) => find.q).sort())
+        .toEqual(["docs/billing", "src/billing/retry-policy.ts"]);
+      expect(view.get("[data-testid='new-session-folder-notice']").text())
+        .toBe("src/billing/retry-policy.ts isn't in comet, so it stays as text.");
+      expect(textarea(view).element.value).toBe(draft);
+      expect(tinted(view)).toEqual(["@billing-retries-spike", "@docs/billing/"]);
+    });
+
+    it("Backspace takes a whole pick out", async () => {
+      const view = await mountComposer();
+      await typeAndWait(view, "Pick up where @bill");
+      await press(view, "Tab");
+      const input = textarea(view).element;
+      input.setSelectionRange(input.value.length - 1, input.value.length - 1);
+
+      await textarea(view).trigger("keydown", { key: "Backspace" });
+
+      expect([input.selectionStart, input.selectionEnd]).toEqual(["Pick up where ".length, input.value.length - 1]);
     });
   });
 

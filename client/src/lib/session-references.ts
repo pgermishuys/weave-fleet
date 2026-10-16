@@ -124,6 +124,12 @@ export function rememberedSessionTokens(draftSessionId: string): ReadonlySet<str
   return new Set(picksFor(draftSessionId).map((pick) => pick.token));
 }
 
+/** Forgets every session this composer picked: a New Session draft that's started, or a fresh one. */
+export function forgetSessionReferences(draftSessionId: string): void {
+  remembered[draftSessionId] = [];
+  writeStoredDraft(storageKey(draftSessionId), "");
+}
+
 /** For tests: forgets every composer's picks. */
 export function resetSessionReferences(): void {
   for (const key of Object.keys(remembered)) delete remembered[key];

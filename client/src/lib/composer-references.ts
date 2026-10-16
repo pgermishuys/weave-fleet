@@ -33,7 +33,7 @@ const TRAILING_PUNCTUATION = /[.,;:!?)\]}'"]+$/;
  * Splits a draft into plain text and references. A token the caret is in (or at the end of) is
  * still being typed, so it stays plain until you move past it, unless it was picked from the `@`
  * list: sessions in `sessionTokens`, files and folders in `fileTokens`. A `$` token is a reference only when it names
- * one of `skills` outside backticks.
+ * one of `skills` outside backticks. One in `plainTokens` (a pick the folder no longer has) is plain text.
  */
 export function splitDraftReferences(
   text: string,
@@ -41,6 +41,7 @@ export function splitDraftReferences(
   sessionTokens: ReadonlySet<string> = new Set(),
   fileTokens: ReadonlySet<string> = new Set(),
   skills: ReadonlyMap<string, SkillDelivery> = new Map(),
+  plainTokens: ReadonlySet<string> = new Set(),
 ): DraftSegment[] {
   const segments: DraftSegment[] = [];
   let plainStart = 0;
@@ -57,7 +58,7 @@ export function splitDraftReferences(
     const isSession = sessionTokens.has(token);
     const picked = isSession || fileTokens.has(token);
 
-    if (token.length < 2 || (!picked && caret !== null && caret > start && caret <= tokenEnd)) {
+    if (token.length < 2 || (!picked && (plainTokens.has(token) || (caret !== null && caret > start && caret <= tokenEnd)))) {
       continue;
     }
 
@@ -171,6 +172,15 @@ export function rememberFileReference(draftSessionId: string, token: string): vo
 export function forgetFileReferencesNotIn(draftSessionId: string, text: string): void {
   const picks = filePicksFor(draftSessionId);
   const kept = picks.filter((token) => textHasToken(text, token));
+  if (kept.length !== picks.length) {
+    storeFilePicks(draftSessionId, kept);
+  }
+}
+
+/** Forgets `tokens` (all of them when left out): typed again, they're plain text. */
+export function forgetFileReferences(draftSessionId: string, tokens?: readonly string[]): void {
+  const picks = filePicksFor(draftSessionId);
+  const kept = tokens ? picks.filter((token) => !tokens.includes(token)) : [];
   if (kept.length !== picks.length) {
     storeFilePicks(draftSessionId, kept);
   }

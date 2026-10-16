@@ -66,6 +66,16 @@ public sealed class SessionReferenceExpanderTests : IAsyncDisposable
     }
 
     [Fact]
+    public async Task for_a_session_not_made_yet_the_harness_type_decides_link_or_recap()
+    {
+        var link = await _sut.ExpandForHarnessAsync("opencode", Text, [Reference]);
+        var recap = await _sut.ExpandForHarnessAsync("claude-code", Text, [Reference]);
+
+        link.Value.ShouldContain(SessionReferences.LinkNote);
+        recap.Value.ShouldContain(SessionReferences.RecapNote);
+    }
+
+    [Fact]
     public async Task a_harness_without_fleet_tools_gets_a_recap_written_by_the_referenced_session()
     {
         // Running, idle and able to answer off the record: it writes one, though recaps are off for the user.

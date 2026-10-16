@@ -18,6 +18,11 @@ public sealed record CreateSessionRequest
     public string? HarnessProfileId { get; init; }
     public string? ProjectId { get; init; }
     public string? InitialPrompt { get; init; }
+    /// <summary>
+    /// The sessions <see cref="InitialPrompt"/> references by token. They are expanded into the prompt the harness gets,
+    /// before anything is created; the branch name and title still come from the typed text.
+    /// </summary>
+    public IReadOnlyList<SessionReference>? SessionReferences { get; init; }
     public SessionSourceSelection? Source { get; init; }
     /// <summary>If set, registers a completion callback to resume this target session.</summary>
     public string? OnCompleteTargetSessionId { get; init; }

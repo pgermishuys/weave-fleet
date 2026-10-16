@@ -49,7 +49,8 @@ public sealed partial class SessionCreation(
     SessionActivityWriteService? sessionActivityWriteService = null,
     GitDiffService? gitDiffService = null,
     IHarnessProfileRepository? harnessProfiles = null,
-    HarnessAvailabilityCache? harnessAvailability = null)
+    HarnessAvailabilityCache? harnessAvailability = null,
+    SessionReferenceExpander? referenceExpander = null)
 {
     private readonly GitDiffService _gitDiffService = gitDiffService ?? new GitDiffService();
     // Static because the session services are scoped: the harness announces a child from several places at once, each
@@ -113,13 +114,27 @@ public sealed partial class SessionCreation(
                 "SessionSource.WorkspaceIntent",
                 "The selected session source cannot start a workspace-backed session.");
 
-        var initialPrompt = BuildCreateSessionInitialPrompt(
-            request.InitialPrompt,
-            sourceResolutionResult.Value.Input.ContextEnvelope,
-            sourceResolutionResult.Value.Input.Provenance);
-
         // Resolve harness
         var harnessType = await ResolveHarnessTypeAsync(request, ct);
+
+        // The sessions the first message references, checked before anything is created so a bad one refuses the
+        // request whole. The block goes to the harness; the branch name below still comes from the typed text.
+        var prompt = request.InitialPrompt;
+        if (request.SessionReferences is { Count: > 0 })
+        {
+            if (referenceExpander is null)
+                return FleetError.Unexpected;
+            var expanded = await referenceExpander.ExpandForHarnessAsync(
+                harnessType, request.InitialPrompt ?? string.Empty, request.SessionReferences, ct).ConfigureAwait(false);
+            if (expanded.IsFailure)
+                return expanded.Error;
+            prompt = expanded.Value;
+        }
+
+        var initialPrompt = BuildCreateSessionInitialPrompt(
+            prompt,
+            sourceResolutionResult.Value.Input.ContextEnvelope,
+            sourceResolutionResult.Value.Input.Provenance);
         var runtimeMode = await ResolveRuntimeModeAsync(harnessType).ConfigureAwait(false);
         var harness = harnessRegistry.GetByType(harnessType);
         if (harness is null)
