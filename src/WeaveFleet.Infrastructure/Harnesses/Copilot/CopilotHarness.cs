@@ -33,6 +33,7 @@ public sealed class CopilotHarness : IHarness
         // Fleet's MCP server gives the agent Fleet's tools (CopilotFleetTools).
         SupportsFleetTools = true,
         SupportsSteering = true,
+        SupportsPermissionLevels = true,
         ReportsFileWrites = true,
         HistoryLivesInHarness = true,
         SupportsForking = false,
@@ -49,6 +50,10 @@ public sealed class CopilotHarness : IHarness
         Eyebrow = "Experimental",
         Description = "GitHub Copilot through weave-copilot, with HydraFusion's passes when you turn them on.",
         Icon = HarnessIcons.Hexagon,
+        PermissionModes = new(
+            Ask: "Fleet allows reading and asks you about edits and commands",
+            Edits: "Fleet allows reading and edits, and asks you about commands",
+            All: "Fleet allows everything Copilot asks about"),
     };
 
     /// <inheritdoc />

@@ -242,6 +242,15 @@ public sealed class AcpMapperTests
         new AcpMapper("s3").Usage(J("""{"inputTokens":0,"outputTokens":0}""")).ShouldBeEmpty();
     }
 
+    [Fact]
+    public void An_mcp_tool_takes_the_real_name_the_agent_gives_in_meta()
+    {
+        var mapper = new AcpMapper("s1");
+        mapper.Update(J("""{"sessionUpdate":"tool_call","toolCallId":"c9","title":"fleet: Show page","kind":"other","status":"in_progress","_meta":{"toolName":"fleet_page_show"}}"""));
+
+        mapper.Messages().Single().Parts.OfType<ToolUsePart>().Single().ToolName.ShouldBe("fleet_page_show");
+    }
+
     private static string State(HarnessEvent evt)
         => evt.Payload!.Value.GetProperty("part").GetProperty("state").GetProperty("status").GetString()!;
 

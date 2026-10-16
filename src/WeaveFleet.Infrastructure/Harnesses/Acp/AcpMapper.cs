@@ -329,7 +329,7 @@ internal sealed class AcpMapper(string sessionId)
 
         var prior = _tools.TryGetValue(callId, out var at) ? _parts[at] as ToolUsePart : null;
         var kind = Str(update, "kind");
-        var name = kind is not null ? ToolName(kind) : prior?.ToolName ?? "tool";
+        var name = kind is not null ? ToolNameOf(update) : prior?.ToolName ?? "tool";
         var input = prior?.Arguments ?? default;
         var node = update.TryGetProperty("rawInput", out var raw) && raw.ValueKind == JsonValueKind.Object
             ? JsonNode.Parse(raw.GetRawText())!.AsObject()
@@ -563,6 +563,18 @@ internal sealed class AcpMapper(string sessionId)
 
     private static MessagePart Part(string kind, string text, string partId)
         => kind == "text" ? new TextPart(text) { PartId = partId } : new ReasoningPart(text) { PartId = partId };
+
+    /// <summary>
+    /// The tool's name for a call or an ask: its ACP kind's name, or, for a kind ACP has no word for ("other": an MCP
+    /// tool), the real name an agent gives in <c>_meta.toolName</c> (weave-copilot does), so Fleet's tools read as such.
+    /// </summary>
+    internal static string ToolNameOf(JsonElement call)
+    {
+        var name = ToolName(Str(call, "kind"));
+        if (name == "tool" && call.TryGetProperty("_meta", out var meta) && meta.ValueKind == JsonValueKind.Object && Str(meta, "toolName") is { Length: > 0 } real)
+            return real;
+        return name;
+    }
 
     /// <summary>ACP's tool kinds under the names Fleet already treats (and asks about) the same way.</summary>
     internal static string ToolName(string? kind) => kind switch
