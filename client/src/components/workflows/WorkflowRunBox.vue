@@ -352,6 +352,8 @@ function handleKeydown(event: KeyboardEvent): void {
               v-if="offersModels"
               :model-value="overrides[role] ?? keyFromPath(choiceFor(harnessType, role).model)"
               :models="models"
+              :harness-type="harnessType"
+              :show-recent="false"
               default-label="Default model"
               default-description="The composer's default model"
               :test-id="`workflow-model-${role}`"

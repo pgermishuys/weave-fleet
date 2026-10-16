@@ -490,6 +490,8 @@ defineExpose({ focusMessage });
           <ModelSelector
             v-model="modelChoice"
             :models="models"
+            :harness-type="harnessType"
+            :show-recent="false"
             :default-label="defaultLabels.modelLabel"
             :default-description="defaultLabels.modelDescription"
             :disabled="busy"

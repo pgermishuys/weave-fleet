@@ -202,6 +202,8 @@ onMounted(() => {
             <ModelSelector
               :model-value="modelKey(role)"
               :models="models"
+              :harness-type="harnessType"
+              :show-recent="false"
               :default-label="defaultLabels.modelLabel === 'Default' ? 'Default model' : `Default model · ${defaultLabels.modelLabel.replace(/^Default \(|\)$/g, '')}`"
               default-description="The model the session composer uses when you don't pick one"
               :disabled="!isSupported || savingRole === role"

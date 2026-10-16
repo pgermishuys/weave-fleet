@@ -53,6 +53,7 @@ import { useSessionsStore } from "@/stores/sessions";
 import { useSmartLinksStore } from "@/stores/smart-links";
 import { useWorkspaceUiStore } from "@/stores/workspace-ui";
 import { useMachinesStore } from "@/stores/machines";
+import { modelPickerKey, useModelPickerStore } from "@/stores/model-picker";
 import { usePreferencesStore } from "@/stores/preferences";
 import { useMachineTarget } from "@/lib/machine-target";
 
@@ -88,6 +89,7 @@ watch(() => machines.hasMachines, (has) => {
 }, { immediate: true });
 const harnessSetup = useHarnessSetupStore();
 const defaults = useNewSessionDefaults();
+const modelPicker = useModelPickerStore();
 const isMobile = useIsMobile();
 
 const { repositories, scannedAt, error: repositoriesError, refresh: refreshRepositories } = useRepositories();
@@ -589,6 +591,10 @@ async function submit(withoutMessage: boolean): Promise<void> {
     const response = await createSession(request.directory, request.options);
     const sessionId = response.session.id;
     defaults.remember(chosenFolder, chosenWorkspace, chosenAgentAndModel);
+    const sentModel = chosenAgentAndModel ? modelFromKey(chosenAgentAndModel.model) : null;
+    if (sentModel && chosenAgentAndModel?.harnessType) {
+      modelPicker.recordRecent(modelPickerKey(chosenAgentAndModel.harnessType, sentModel.providerID, sentModel.modelID));
+    }
 
     // Started on another machine: the app moves there to show it, as opening one of its sessions from the sidebar
     // does. That's a reload, unless "Keep every machine live" opens it in place; the machine keeps the first message,
@@ -943,6 +949,7 @@ onUnmounted(() => {
               <ModelSelector
                 v-model="modelChoice"
                 :models="models"
+                :harness-type="resolvedHarnessType"
                 :default-label="defaultLabels.modelLabel"
                 :default-description="defaultLabels.modelDescription"
                 :disabled="isStarting"

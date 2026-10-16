@@ -1394,6 +1394,7 @@ function handleKeydown(event: KeyboardEvent): void {
           <ModelSelector
             v-model="selectedModelId"
             :models="models"
+            :harness-type="selectedSession?.harnessType"
             :default-label="defaultLabels.modelLabel"
             :default-description="defaultLabels.modelDescription"
           />

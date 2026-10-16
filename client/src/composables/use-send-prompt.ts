@@ -8,6 +8,7 @@ import { modelFromKey } from "@/lib/agent-model-choice";
 import { diagLog } from "@/lib/message-diagnostics";
 import { sessionReferencesIn, stripSessionReferences, type SessionReference } from "@/lib/session-references";
 import { sessionSkillNames, skillNamesIn } from "@/lib/skill-mentions";
+import { modelPickerKey, useModelPickerStore } from "@/stores/model-picker";
 import { useSessionsStore } from "@/stores/sessions";
 import { useMachineTarget } from "@/lib/machine-target";
 
@@ -460,6 +461,7 @@ async function readPromptErrorMessage(response: Response): Promise<string> {
 export function useSendPrompt(sessionId: string) {
   const { api } = useMachineTarget();
   const sessionsStore = useSessionsStore();
+  const modelPicker = useModelPickerStore();
   const { defaultAgentId, agentsById } = useAgents(sessionId);
   const { defaultModelKey, modelsByKey } = useModels(sessionId);
   const sendError = shallowRef<string | undefined>(undefined);
@@ -510,6 +512,11 @@ export function useSendPrompt(sessionId: string) {
       });
 
       sendError.value = undefined;
+      // Sent with, not just browsed, and taken: this is what Recent lists.
+      const harnessType = selectedSession.value?.harnessType;
+      if (request.model && harnessType) {
+        void modelPicker.recordRecent(modelPickerKey(harnessType, request.model.providerID, request.model.modelID));
+      }
     } catch (caughtError) {
       removeSentPromptByCorrelationId(sessionId, request.correlationId);
       decrementPendingPrompts(sessionId);

@@ -3,6 +3,8 @@ import type { ModelReference } from "@/api/client";
 import { onReconnect, useWeaveSocket } from "@/composables/use-weave-socket";
 import { stripSessionReferences, type SessionReference } from "@/lib/session-references";
 import { useMachineTarget } from "@/lib/machine-target";
+import { modelPickerKey, useModelPickerStore } from "@/stores/model-picker";
+import { useSessionsStore } from "@/stores/sessions";
 
 /** How a queued item goes out: a message, a slash command, or a shell command (`!git status`). */
 export type QueuedMessageKind = "prompt" | "command" | "shell";
@@ -130,6 +132,11 @@ export function useSessionQueue(sessionId: string) {
       if (!response.ok) {
         error.value = errorMessage(body, `The message couldn't be queued (HTTP ${response.status}).`);
         return false;
+      }
+      // Queued with a model is sent with it: Recent lists it, as it would a prompt sent at once.
+      const harnessType = useSessionsStore().sessionById(sessionId)?.harnessType;
+      if (options.model && harnessType) {
+        void useModelPickerStore().recordRecent(modelPickerKey(harnessType, options.model.providerID, options.model.modelID));
       }
       // The event usually says so first; this covers a socket that's down.
       const item = toQueuedMessage(data);
