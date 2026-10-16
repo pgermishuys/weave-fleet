@@ -102,7 +102,7 @@ describe("toToolCardItem", () => {
       output: "\x1b[?25l\n\x1b]0;bun test\x07\x1b[1mbun test\x1b[0m v1.3.2\nok\n",
     }));
 
-    expect(item.preview).toBe("└ bun test v1.3.2 (4 lines)");
+    expect(item.preview).toBe("└ bun test v1.3.2 (3 lines)");
   });
 
   it("points a screenshot call at the copy Fleet kept, under the session it names", () => {

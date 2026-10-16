@@ -101,7 +101,8 @@ const fallback_excluded_keys = new Set(["input", "status", "summary", "title", "
 
 function buildPreview(output: string | undefined, summary: string | undefined): string | undefined {
   if (output) {
-    const lines = output.split("\n");
+    // Trailing line ends aren't lines: the count agrees with the open row's.
+    const lines = output.replace(/\n+$/, "").split("\n");
     // The first line with text once its terminal codes are gone; only that far is parsed.
     let firstNonEmpty: string | undefined;
     for (const line of lines) {
