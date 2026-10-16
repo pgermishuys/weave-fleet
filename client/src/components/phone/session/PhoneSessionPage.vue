@@ -24,6 +24,11 @@ import PhoneToolRun from "@/components/phone/session/PhoneToolRun.vue";
 import PhoneRetryLine from "@/components/phone/session/PhoneRetryLine.vue";
 import DockedPermission from "@/components/phone/session/DockedPermission.vue";
 import DockedQuestion from "@/components/phone/session/DockedQuestion.vue";
+import DockedPagePick from "@/components/phone/session/DockedPagePick.vue";
+import PagePickSheet from "@/components/phone/session/PagePickSheet.vue";
+import { useServerCanvases } from "@/composables/use-server-canvases";
+import { useWaitingPage } from "@/composables/use-waiting-page";
+import { useSessionActivityUpdates } from "@/composables/use-session-activity-updates";
 import PhoneComposer from "@/components/phone/session/PhoneComposer.vue";
 import ModComposerBand from "@/components/mods/ModComposerBand.vue";
 import ModDraftCards from "@/components/mods/review/ModDraftCards.vue";
@@ -77,7 +82,12 @@ const sessionId = computed(() => props.sessionId);
 // The session's machine: the live one, or another opened in place (PhoneStack provides it from the address). The live
 // machine's row comes from its list; another machine's from the inbox's feed for that machine.
 const machine = useMachineTarget();
-if (machine.isLive) useSessions({ retentionStatus: "all" });
+// The live machine's statuses as they change, as the desktop's shell has them: the header can't say "Needs you"
+// for seconds after you answered.
+if (machine.isLive) {
+  useSessions({ retentionStatus: "all" });
+  useSessionActivityUpdates();
+}
 const sessionsStore = useSessionsStore();
 const inbox = inject(INBOX, null);
 const session = computed(() => machine.isLive
@@ -188,8 +198,20 @@ const dock = computed(() => chooseDock({
   focus: search.value.ask ?? null,
 }));
 
+// A page the agent waits on for a pick docks like a question, unless a question or permission is already docked. The
+// canvases load for this session (the desktop's right panel does it there), on this session's machine.
+useServerCanvases(sessionId);
+const waitingPage = useWaitingPage(sessionId);
+const pageOpen = shallowRef(false);
+const pickPage = computed(() => (dock.value.kind === "composer" ? waitingPage.value : null));
+// The wait ending (picked, skipped, typed over) leaves the page for the conversation, which shows the outcome.
+watch(waitingPage, (page) => {
+  if (!page) pageOpen.value = false;
+});
+
 /** The tool calls waiting on an ask, so their rows say "Needs you". */
-const waitingCalls = computed(() => new Set(asks.value.map((ask) => ask.callId).filter((id): id is string => !!id)));
+const waitingCalls = computed(() => new Set([...asks.value.map((ask) => ask.callId), waitingPage.value?.page?.choice?.callId]
+  .filter((id): id is string => !!id)));
 
 function putOff(id: string): void {
   later.value = new Set([...later.value, id]);
@@ -624,6 +646,13 @@ onUnmounted(() => {
             @later="putOff(dock.pending.requestId)"
           />
         </Transition>
+        <Transition name="ph-dock">
+          <DockedPagePick
+            v-if="pickPage?.page"
+            :title="pickPage.page.title"
+            @open="pageOpen = true"
+          />
+        </Transition>
         <ModComposerBand
           :session-id="sessionId"
           surface="phone"
@@ -655,6 +684,12 @@ onUnmounted(() => {
       @pane="openPane"
       @rename="onRename"
       @close="sheet = null"
+    />
+    <PagePickSheet
+      :open="pageOpen"
+      :session-id="sessionId"
+      :page="waitingPage?.page ?? null"
+      @close="pageOpen = false"
     />
     <ChangesSheet
       :open="sheet === 'changes'"

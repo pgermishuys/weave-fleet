@@ -30,7 +30,10 @@ public sealed class CopilotFleetToolsTests
 
         new CopilotBridgeTokens(tools).IsKnown(token).ShouldBeTrue();
         (await new CopilotCanvasCallerResolver(tools).ResolveAsync(token, "", CancellationToken.None))!.FleetSessionId.ShouldBe("sess-1");
-        (await new CopilotMcpCalls(tools).PlaceAsync(token, default, CancellationToken.None))!.HarnessSessionId.ShouldBe("sess-1");
+        var call = (await new CopilotMcpCalls(tools).PlaceAsync(token, default, CancellationToken.None))!;
+        call.HarnessSessionId.ShouldBe("sess-1");
+        // Copilot cuts a held call at three minutes until weave-copilot sets a longer timeout for Fleet's server.
+        call.CantWait.ShouldBe("GitHub Copilot cuts a call after three minutes, so Fleet can't wait for a pick there until a weave-copilot release lets it.");
 
         tools.Revoke(token);
         new CopilotBridgeTokens(tools).IsKnown(token).ShouldBeFalse();

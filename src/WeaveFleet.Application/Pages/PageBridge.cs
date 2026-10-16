@@ -43,6 +43,8 @@ public sealed class PageBridge(
 
     public const string CantWait = "Fleet can't wait for a pick in this session, so the call didn't wait. Ask the user to reply with their pick.";
 
+    public const string DidNotWait = "The call didn't wait: ask the user to reply with their pick.";
+
     private static readonly StringComparison PathComparison = OperatingSystem.IsWindows() ? StringComparison.OrdinalIgnoreCase : StringComparison.Ordinal;
 
     public Task<CanvasResult<CanvasToolOutput>> ShowAsync(
@@ -53,6 +55,7 @@ public sealed class PageBridge(
         string? placement = null,
         bool waitForChoice = false,
         string? callId = null,
+        string? cantWait = null,
         CancellationToken ct = default)
         => RunAsync(bridgeToken, harnessSessionId, async sessionId =>
         {
@@ -84,10 +87,11 @@ public sealed class PageBridge(
                 return await ShowInConversationAsync(sessionId, file, BrowserPreviews.TitleOr(title, Path.GetFileNameWithoutExtension(file)), warnings, ct);
 
             // The session waits on the user before the page says so, so the page's bar never reads as a wait that's over.
-            var waits = waitForChoice && callId is { Length: > 0 } && choices is not null
+            var pageTitle = BrowserPreviews.TitleOr(title, Path.GetFileNameWithoutExtension(file));
+            var waits = waitForChoice && cantWait is null && callId is { Length: > 0 } && choices is not null
                         && choiceFeature is not null && await choiceFeature.IsEnabledAsync()
-                        && choices.Start(sessionId, callId);
-            var published = await PublishAsync(sessionId, file, file, BrowserPreviews.TitleOr(title, Path.GetFileNameWithoutExtension(file)), warnings, ct);
+                        && choices.Start(sessionId, callId, pageTitle);
+            var published = await PublishAsync(sessionId, file, file, pageTitle, warnings, ct);
             if (!published.IsSuccess)
             {
                 if (waits)
@@ -112,7 +116,7 @@ public sealed class PageBridge(
             output.Append("\nAfter an edit, call fleet_page_show again with the same file: the user's tab reloads by itself.");
             output.Append('\n').Append(check);
             if (waitForChoice && !waits)
-                output.Append('\n').Append(CantWait);
+                output.Append('\n').Append(cantWait is null ? CantWait : $"{cantWait} {DidNotWait}");
 
             return CanvasResult.Ok(new CanvasToolOutput(
                 $"{canvas.Title} · {copy.Entry}", output.ToString(), canvas.Id, canvas.Version, Choice: waits ? PageChoiceOutput.StillWaiting : null));
@@ -137,7 +141,7 @@ public sealed class PageBridge(
             }
             catch (OperationCanceledException) when (ct.IsCancellationRequested)
             {
-                await SettleChoiceAsync(sessionId, canvasId, callId, PageChoiceAnswer.NotAnswered(PageChoiceReasons.Stopped));
+                await SettleChoiceAsync(sessionId, canvasId, callId, PageChoiceAnswer.NotAnswered(choices.CutReason));
                 throw;
             }
 

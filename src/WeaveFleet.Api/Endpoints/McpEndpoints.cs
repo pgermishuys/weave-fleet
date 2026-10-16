@@ -93,7 +93,7 @@ public static class McpEndpoints
             {
                 "initialize" => Initialize(id, parameters),
                 "ping" => Json(new McpResponse<McpEmptyResult>(id, new McpEmptyResult()), McpJsonContext.Default.McpResponseMcpEmptyResult),
-                "tools/list" => await ListAsync(id, tools, token, ct),
+                "tools/list" => await ListAsync(id, tools, token, parameters, ct),
                 "tools/call" => await CallAsync(id, tools, token, parameters, ct),
                 var method => Error(id, MethodNotFound, $"Fleet's MCP server has no method {method}."),
             };
@@ -114,10 +114,11 @@ public static class McpEndpoints
         return Json(new McpResponse<McpInitializeResult>(id, result), McpJsonContext.Default.McpResponseMcpInitializeResult);
     }
 
-    private static async Task<string> ListAsync(JsonElement id, FleetToolCalls tools, string token, CancellationToken ct)
+    private static async Task<string> ListAsync(JsonElement id, FleetToolCalls tools, string token, JsonElement parameters, CancellationToken ct)
     {
         // A process Fleet can't place any more (its session went) has no tools.
-        var listed = await tools.ListAsync(token, ct) ?? [];
+        var meta = parameters.ValueKind == JsonValueKind.Object && parameters.TryGetProperty("_meta", out var m) ? m : default;
+        var listed = await tools.ListAsync(token, meta, ct) ?? [];
         var result = new McpToolsListResult([.. listed.Select(tool => new McpTool(tool.Name, tool.Description, tool.InputSchema))]);
         return Json(new McpResponse<McpToolsListResult>(id, result), McpJsonContext.Default.McpResponseMcpToolsListResult);
     }

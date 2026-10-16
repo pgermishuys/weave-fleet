@@ -119,6 +119,16 @@ describe("tool rows", () => {
     expect(stepRow(running)).toMatchObject({ label: "Shell", detail: "dotnet ef migrations add X", result: "running" });
   });
 
+  it("says a page waits for the user's pick, then what they picked, on Claude Code's name for the tool too", () => {
+    const page = { path: "/tmp/layouts/index.html", placement: "tab", title: "Settings layouts", waitForChoice: true };
+    const [waiting, picked] = steps([
+      tool("w", "mcp__fleet__fleet_page_show", "running", page),
+      tool("p", "fleet_page_show", "completed", page, { choice: { answered: true, value: "b", summary: "Layout B" } }),
+    ]);
+    expect(stepRow(waiting)).toMatchObject({ detail: "Waiting for your pick · Settings layouts", result: "running" });
+    expect(stepRow(picked)).toMatchObject({ detail: "Picked Layout B", result: "done" });
+  });
+
   it("counts a unified diff the harness attached", () => {
     const [edit] = steps([tool("e", "edit", "completed", { filePath: "a.ts" }, { diff: "--- a/a.ts\n+++ b/a.ts\n@@ -1 +1,2 @@\n-old\n+new\n+more" })]);
     expect(stepRow(edit)).toMatchObject({ result: "diff", adds: 2, dels: 1 });

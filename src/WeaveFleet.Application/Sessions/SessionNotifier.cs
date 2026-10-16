@@ -2,6 +2,7 @@ using System.Collections.Concurrent;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging;
 using WeaveFleet.Application.Configuration;
+using WeaveFleet.Application.Pages;
 using WeaveFleet.Domain.Events;
 using WeaveFleet.Domain.Harnesses;
 using WeaveFleet.Domain.Repositories;
@@ -25,7 +26,8 @@ public sealed partial class SessionNotifier(
     ILogger<SessionNotifier> logger,
     IPendingPermissions? pendingPermissions = null,
     MachineIdentityStore? machine = null,
-    TimeProvider? time = null)
+    TimeProvider? time = null,
+    PageChoices? pageChoices = null)
 {
     /// <summary>The event type on the global sessions topic.</summary>
     public const string EventType = "session_notification";
@@ -60,11 +62,14 @@ public sealed partial class SessionNotifier(
 
         if (reason == SessionNotificationReasons.NeedsYou)
         {
-            // A permission ask names what the agent wants to do; anything else waiting is a question.
+            // A permission ask names what the agent wants to do, a page names itself; anything else waiting is a question.
+            // A page's pick is a question's kind, which phones already choose to get.
             var waiting = pendingPermissions?.WaitingIn(sessionId);
             var ask = waiting is { Count: > 0 } ? waiting[0] : null;
             if (ask is not null)
                 Send(sessionId, reason, SessionNotificationKinds.Permission, WantsTo(ask), ask.Id);
+            else if (pageChoices?.WaitingTitle(sessionId) is { } page)
+                Send(sessionId, reason, SessionNotificationKinds.Question, $"Wants your pick on {page}.");
             else
                 Send(sessionId, reason, SessionNotificationKinds.Question, "Asked you a question.");
             return;

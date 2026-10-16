@@ -85,8 +85,8 @@ public static class FleetToolCatalog
 /// <param name="AgentHandoff">Agents may hand work to other machines (<c>AgentHandoffFeature</c>): its tools, and a machine on the message tools.</param>
 /// <param name="Mods">Mods are switched on (<c>ModsFeature</c>): the agent's <c>fleet_mod_*</c> tools. Safe mode doesn't hide them.</param>
 /// <param name="PageChoice">
-/// Pages that wait for the user's pick (<c>PageChoiceFeature</c>): <c>waitForChoice</c> on <c>fleet_page_show</c>. Only the
-/// OpenCode plugins wait for now, so Fleet's MCP server leaves it off.
+/// Pages that wait for the user's pick (<c>PageChoiceFeature</c>): <c>waitForChoice</c> on <c>fleet_page_show</c>. Fleet's
+/// MCP server leaves it off for a harness that cuts a held call (<c>HarnessMcpCall.CantWait</c>).
 /// </param>
 public sealed record FleetToolSwitches(bool SessionMessages, bool Memory, bool WorkflowStep, bool Browser, bool Walkthrough = false, bool AgentHandoff = false, bool Mods = false, bool PageChoice = false)
 {

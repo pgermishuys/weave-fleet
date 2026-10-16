@@ -61,6 +61,12 @@ internal sealed class CopilotCanvasCallerResolver(CopilotFleetTools tools) : IHa
 
 internal sealed class CopilotMcpCalls(CopilotFleetTools tools) : IHarnessMcpCalls
 {
+    /// <summary>
+    /// Copilot cuts a call to an MCP server after three minutes unless the server is set up with a longer timeout,
+    /// which weave-copilot does when it hands Fleet's server to Copilot.
+    /// </summary>
+    internal const string CantWait = "GitHub Copilot cuts a call after three minutes, so Fleet can't wait for a pick there until a weave-copilot release lets it.";
+
     public Task<HarnessMcpCall?> PlaceAsync(string bridgeToken, JsonElement meta, CancellationToken ct = default)
-        => Task.FromResult(tools.Find(bridgeToken) is { } caller ? new HarnessMcpCall(caller.FleetSessionId, null) : null);
+        => Task.FromResult(tools.Find(bridgeToken) is { } caller ? new HarnessMcpCall(caller.FleetSessionId, null, CantWait) : null);
 }

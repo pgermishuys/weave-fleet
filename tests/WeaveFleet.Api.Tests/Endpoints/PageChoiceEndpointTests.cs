@@ -57,7 +57,7 @@ public sealed class PageChoiceEndpointTests : IAsyncLifetime
     [Fact]
     public async Task The_user_sends_the_pick_once()
     {
-        Choices.Start(Session, "call-1");
+        Choices.Start(Session, "call-1", "Layouts");
 
         var sent = await _client!.PostAsJsonAsync($"/api/sessions/{Session}/page-choices/call-1/send", new { value = "b", summary = "Layout B" });
         var again = await _client!.PostAsJsonAsync($"/api/sessions/{Session}/page-choices/call-1/send", new { value = "a", summary = "Layout A" });
@@ -70,7 +70,7 @@ public sealed class PageChoiceEndpointTests : IAsyncLifetime
     [Fact]
     public async Task An_agent_cannot_answer_its_own_page()
     {
-        Choices.Start(Session, "call-2");
+        Choices.Start(Session, "call-2", "Layouts");
 
         var sent = await _client!.PostAsJsonAsync($"/agent/{Token}/api/sessions/{Session}/page-choices/call-2/send", new { value = "b" });
         var skipped = await _client!.PostAsync($"/agent/{Token}/api/sessions/{Session}/page-choices/call-2/skip", null);

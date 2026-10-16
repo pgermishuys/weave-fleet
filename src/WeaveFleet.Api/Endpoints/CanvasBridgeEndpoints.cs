@@ -77,7 +77,7 @@ public static class CanvasBridgeEndpoints
 
         group.MapPost("/page-show", async (CanvasBridgeRequest request, HttpContext http, PageBridge bridge, CancellationToken ct)
             => ToResult(await bridge.ShowAsync(
-                BridgeToken(http), request.HarnessSessionId, request.Path, request.Title, request.Placement, request.WaitForChoice == true, request.CallId, ct)))
+                BridgeToken(http), request.HarnessSessionId, request.Path, request.Title, request.Placement, request.WaitForChoice == true, request.CallId, ct: ct)))
             .WithName("CanvasBridgePageShow");
 
         // One round of a page's wait for the user's pick: held up to PageChoices.Round, then the plugin asks again.

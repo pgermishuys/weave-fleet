@@ -1,4 +1,5 @@
 using System.Collections.Concurrent;
+using Microsoft.Extensions.Hosting;
 using WeaveFleet.Application.Sessions;
 using WeaveFleet.Domain.Harnesses;
 using WeaveFleet.Domain.Repositories;
@@ -42,29 +43,51 @@ public sealed class PageChoiceFeature(IUserPreferenceRepository preferences)
 /// The pages waiting for the user's pick, one per tool call. A wait outlives the requests the plugin makes for it: the
 /// plugin asks again every <see cref="Round"/>, since OpenCode cuts a request held for about five minutes. While a page
 /// waits, the session waits on the user (<c>waiting_input</c>), as it does on a harness's question. A wait ends when the
-/// user sends or skips the pick, writes a message instead or stops the turn, and after <see cref="Cap"/> at most.
+/// user sends or skips the pick, writes a message instead or stops the turn, and after <see cref="Cap"/> at most. When
+/// Fleet shuts down, every wait ends at once as <see cref="PageChoiceReasons.Restarted"/>, so the pages say so and the
+/// held calls don't keep Fleet from stopping.
 /// </summary>
-public sealed class PageChoices(FleetSessionEvents events, SessionActivityTracker activity, TimeProvider clock)
+public sealed class PageChoices
 {
     public static readonly TimeSpan Round = TimeSpan.FromSeconds(50);
 
     public static readonly TimeSpan Cap = TimeSpan.FromHours(24);
 
-    private sealed record Wait(DateTimeOffset Expires)
+    private sealed record Wait(DateTimeOffset Expires, string Title)
     {
         public TaskCompletionSource<PageChoiceAnswer> Answer { get; } = new(TaskCreationOptions.RunContinuationsAsynchronously);
     }
 
     private readonly ConcurrentDictionary<(string Session, string Call), Wait> _waits = new();
+    private readonly FleetSessionEvents _events;
+    private readonly SessionActivityTracker _activity;
+    private readonly TimeProvider _clock;
+    private readonly CancellationToken _stopping;
+
+    public PageChoices(FleetSessionEvents events, SessionActivityTracker activity, TimeProvider clock, IHostApplicationLifetime? lifetime = null)
+    {
+        _events = events;
+        _activity = activity;
+        _clock = clock;
+        _stopping = lifetime?.ApplicationStopping ?? CancellationToken.None;
+        _stopping.Register(() => EndAll(PageChoiceAnswer.NotAnswered(PageChoiceReasons.Restarted)));
+    }
+
+    /// <summary>Why a wait whose call went away ended: the turn stopped, or Fleet is shutting down.</summary>
+    public string CutReason => _stopping.IsCancellationRequested ? PageChoiceReasons.Restarted : PageChoiceReasons.Stopped;
 
     /// <summary>Starts the call's wait, and the session waits on the user. False when the call waits already.</summary>
-    public bool Start(string sessionId, string callId)
+    public bool Start(string sessionId, string callId, string title)
     {
-        if (!_waits.TryAdd((sessionId, callId), new Wait(clock.GetUtcNow() + Cap)))
+        if (!_waits.TryAdd((sessionId, callId), new Wait(_clock.GetUtcNow() + Cap, title)))
             return false;
-        events.RaiseStatus(sessionId, ActivityStatuses.WaitingInput);
+        _events.RaiseStatus(sessionId, ActivityStatuses.WaitingInput);
         return true;
     }
+
+    /// <summary>The title of a page that waits for the user's pick in the session, or null when none waits.</summary>
+    public string? WaitingTitle(string sessionId)
+        => _waits.FirstOrDefault(pair => pair.Key.Session == sessionId && !pair.Value.Answer.Task.IsCompleted).Value?.Title;
 
     /// <summary>Ends the call's wait with <paramref name="answer"/>. False when it isn't waiting, or has its answer already.</summary>
     public bool End(string sessionId, string callId, PageChoiceAnswer answer)
@@ -73,6 +96,12 @@ public sealed class PageChoices(FleetSessionEvents events, SessionActivityTracke
     /// <summary>Ends every wait in the session, as when the user writes instead; how many it ended.</summary>
     public int EndAll(string sessionId, PageChoiceAnswer answer)
         => _waits.Count(pair => pair.Key.Session == sessionId && pair.Value.Answer.TrySetResult(answer));
+
+    private void EndAll(PageChoiceAnswer answer)
+    {
+        foreach (var wait in _waits.Values)
+            wait.Answer.TrySetResult(answer);
+    }
 
     /// <summary>
     /// The call's answer when it comes within <paramref name="round"/>, or null when the call still waits. A call Fleet
@@ -83,11 +112,11 @@ public sealed class PageChoices(FleetSessionEvents events, SessionActivityTracke
         if (!_waits.TryGetValue((sessionId, callId), out var wait))
             return PageChoiceAnswer.NotAnswered(PageChoiceReasons.Restarted);
 
-        var left = wait.Expires - clock.GetUtcNow();
+        var left = wait.Expires - _clock.GetUtcNow();
         if (left > TimeSpan.Zero)
-            await Task.WhenAny(wait.Answer.Task, Task.Delay(left < round ? left : round, clock, ct)).ConfigureAwait(false);
+            await Task.WhenAny(wait.Answer.Task, Task.Delay(left < round ? left : round, _clock, ct)).ConfigureAwait(false);
         ct.ThrowIfCancellationRequested();
-        if (clock.GetUtcNow() >= wait.Expires)
+        if (_clock.GetUtcNow() >= wait.Expires)
             wait.Answer.TrySetResult(PageChoiceAnswer.NotAnswered(PageChoiceReasons.TimedOut));
         return wait.Answer.Task.IsCompleted ? await wait.Answer.Task.ConfigureAwait(false) : null;
     }
@@ -104,8 +133,8 @@ public sealed class PageChoices(FleetSessionEvents events, SessionActivityTracke
             return;
 
         // Only over Fleet's own status: whatever the harness said since is newer.
-        if (activity.Get(sessionId)?.ActivityStatus == ActivityStatuses.WaitingInput)
-            events.RaiseStatus(sessionId, ActivityStatuses.Busy);
+        if (_activity.Get(sessionId)?.ActivityStatus == ActivityStatuses.WaitingInput)
+            _events.RaiseStatus(sessionId, ActivityStatuses.Busy);
     }
 
     /// <summary>Forgets the session's waits: its harness process went away, and the calls with it.</summary>
@@ -114,7 +143,7 @@ public sealed class PageChoices(FleetSessionEvents events, SessionActivityTracke
         foreach (var key in _waits.Keys.Where(key => key.Session == sessionId))
         {
             if (_waits.TryRemove(key, out var wait))
-                wait.Answer.TrySetResult(PageChoiceAnswer.NotAnswered(PageChoiceReasons.Stopped));
+                wait.Answer.TrySetResult(PageChoiceAnswer.NotAnswered(CutReason));
         }
     }
 }
