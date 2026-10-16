@@ -2,6 +2,7 @@
 import { computed, shallowRef, watch, type Component } from "vue";
 import { Check } from "lucide-vue-next";
 import DiffView from "@/components/session/DiffView.vue";
+import ToolOutputBody from "@/components/session/ToolOutputBody.vue";
 import StatusGlyph from "@/components/sessions/StatusGlyph.vue";
 import { useWorkspaceUiStore } from "@/stores/workspace-ui";
 import { getToolIcon, getToolDisplayLabel } from "@/lib/tool-icons";
@@ -271,7 +272,9 @@ function handleExpandVisual(): void {
 
     <p v-if="preview && !useView.draws" class="tool-preview">{{ preview }}</p>
 
+    <!-- A closed row draws no body: a long conversation holds many rows, and most stay closed. -->
     <div
+      v-if="!isCollapsed"
       :id="`${id}-body`"
       class="tool-body"
       data-testid="tool-card-body"
@@ -309,11 +312,10 @@ function handleExpandVisual(): void {
             </button>
           </div>
 
-          <pre
+          <ToolOutputBody
             v-if="output && !visualPayload"
-            class="tool-output"
-            data-testid="tool-card-output"
-          ><code>{{ output }}</code></pre>
+            :output="output"
+          />
 
           <p
             v-if="!summary && !output && !shouldShowDiff"
@@ -531,20 +533,6 @@ function handleExpandVisual(): void {
   color: var(--muted);
   font-size: 12px;
   line-height: 1.6;
-}
-
-.tool-output {
-  margin: 0 0 4px;
-  padding: 8px 10px;
-  border: 1px solid var(--border);
-  border-radius: var(--radius-btn);
-  background: color-mix(in srgb, var(--main-bg) 60%, transparent);
-  color: var(--muted);
-  font-family: var(--font-mono-stack);
-  font-size: 12px;
-  line-height: 1.55;
-  white-space: pre-wrap;
-  word-break: break-word;
 }
 
 .tool-visual {
