@@ -14,6 +14,10 @@ public static class HarnessEndpoints
     {
         var group = app.MapGroup("/api").WithTags("Harnesses");
 
+        // Updating downloads and runs new harness binaries: the user's call, never an agent's. Its own statement, not chained (AOT).
+        var update = app.MapGroup("/api/harnesses/{type}/update").WithTags("Harnesses");
+        update.AddEndpointFilter<AgentRequests.WritesAreTheUsers>();
+
         // GET /api/harnesses?fresh= — the harnesses as last checked (at once), or after a check of their own with fresh=true
         group.MapGet("/harnesses", async (
             bool? fresh,
@@ -60,7 +64,7 @@ public static class HarnessEndpoints
         .Produces<List<HarnessUsage>>();
 
         // POST /api/harnesses/{type}/update — update the harness once no session is working; poll GET /api/harnesses
-        group.MapPost("/harnesses/{type}/update", async (
+        update.MapPost("/", async (
             string type,
             IHarnessUpdateService updates,
             FleetOptions fleetOptions,
@@ -79,7 +83,7 @@ public static class HarnessEndpoints
         .WithName("UpdateHarness");
 
         // DELETE /api/harnesses/{type}/update — cancel an update still waiting for sessions, or dismiss a finished one
-        group.MapDelete("/harnesses/{type}/update", (
+        update.MapDelete("/", (
             string type,
             IHarnessUpdateService updates) =>
         {
