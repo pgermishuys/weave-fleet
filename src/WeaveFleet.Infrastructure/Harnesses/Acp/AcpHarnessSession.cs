@@ -172,7 +172,7 @@ internal sealed partial class AcpHarnessSession : IHarnessSession
                 throw new HarnessBusyException("The turn had just ended, so the message can't steer it.");
             }
 
-            Emit(_mapper.UserPrompt(text));
+            Emit(_mapper.UserPrompt(text, messageId: options.MessageId));
             return;
         }
 
@@ -183,7 +183,7 @@ internal sealed partial class AcpHarnessSession : IHarnessSession
         }
 
         Status = HarnessSessionStatus.Running;
-        Emit(_mapper.UserPrompt(text, images));
+        Emit(_mapper.UserPrompt(text, images, options?.MessageId));
         Emit(_mapper.Status(ActivityStatuses.Busy));
         _ = RunPromptAsync(text, images);
     }
