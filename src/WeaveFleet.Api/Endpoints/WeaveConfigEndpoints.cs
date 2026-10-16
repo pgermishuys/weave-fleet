@@ -11,6 +11,7 @@ public static class WeaveConfigEndpoints
     public static IEndpointRouteBuilder MapWeaveConfigEndpoints(this IEndpointRouteBuilder app)
     {
         var group = app.MapGroup("/api/weave").WithTags("Weave");
+        group.AddEndpointFilter<AgentRequests.WritesAreTheUsers>();
 
         // GET /api/weave?redetect=true asks the harnesses again instead of using what they said last time.
         group.MapGet("/", async (bool? redetect, WeaveConfigService weave, CancellationToken ct) =>

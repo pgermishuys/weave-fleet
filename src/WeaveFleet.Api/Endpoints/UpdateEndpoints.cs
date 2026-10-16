@@ -11,6 +11,7 @@ public static class UpdateEndpoints
     public static IEndpointRouteBuilder MapUpdateEndpoints(this IEndpointRouteBuilder app)
     {
         var group = app.MapGroup("/api/update").WithTags("Update");
+        group.AddEndpointFilter<AgentRequests.WritesAreTheUsers>();
 
         // GET /api/update/status — current update state
         group.MapGet("/status", (UpdateStateHolder stateHolder) =>

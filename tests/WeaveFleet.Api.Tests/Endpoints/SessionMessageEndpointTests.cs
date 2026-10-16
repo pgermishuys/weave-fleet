@@ -153,6 +153,55 @@ public sealed class SessionMessageEndpointTests : IAsyncLifetime
     }
 
     [Fact]
+    public async Task An_agent_cannot_rewrite_skills_mods_memory_or_integrations_but_the_user_can()
+    {
+        var client = _client!;
+        await client.PutAsJsonAsync("/api/preferences/Mods", new { value = "true" });
+        var agent = $"/agent/{Token}";
+
+        var refused = new[]
+        {
+            await client.PutAsJsonAsync($"{agent}/api/skills/built-in/fleet-debug", new { enabled = true }),
+            await client.PostAsJsonAsync($"{agent}/api/skills/built-in/fleet-debug/versions", new { content = "---\nname: fleet-debug\n---\nx" }),
+            await client.PutAsJsonAsync($"{agent}/api/skills/built-in/fleet-debug/active", new { version = 1 }),
+            await client.PostAsync($"{agent}/api/sessions/{Sender}/mods/drafts/chips/keep", null),
+            await client.PutAsJsonAsync($"{agent}/api/mods/safe-mode", new { on = true }),
+            await client.PostAsync($"{agent}/api/mods/chips/on", null),
+            await client.PutAsJsonAsync($"{agent}/api/mods/chips/active", new { version = 1 }),
+            await client.PutAsJsonAsync($"{agent}/api/memory", new { enabled = true }),
+            await client.PostAsJsonAsync($"{agent}/api/memory/clear", new { scope = "all" }),
+            await client.PutAsJsonAsync($"{agent}/api/weave", new { }),
+            await client.PostAsync($"{agent}/api/weave/harnesses/opencode/plugin", null),
+            await client.PostAsJsonAsync($"{agent}/api/harnesses/opencode/profiles", new { }),
+            await client.PutAsJsonAsync($"{agent}/api/credentials", new { }),
+            await client.PostAsJsonAsync($"{agent}/api/machine/pairing", new { }),
+        };
+
+        foreach (var response in refused)
+        {
+            response.StatusCode.ShouldBe(HttpStatusCode.Forbidden, response.RequestMessage!.RequestUri!.AbsolutePath);
+            (await ErrorAsync(response))!.ShouldContain("Settings");
+        }
+
+        // The user's own writes still go through, and agents still read the same things.
+        var byUser = await client.PutAsJsonAsync("/api/skills/built-in/fleet-debug", new { enabled = true });
+        byUser.StatusCode.ShouldBe(HttpStatusCode.OK, await byUser.Content.ReadAsStringAsync());
+        (await client.PutAsJsonAsync("/api/memory", new { enabled = true })).StatusCode.ShouldBe(HttpStatusCode.OK);
+        (await client.GetAsync($"{agent}/api/skills/built-in")).StatusCode.ShouldBe(HttpStatusCode.OK);
+    }
+
+    [Fact]
+    public async Task An_agent_can_still_save_and_forget_its_own_memory_notes()
+    {
+        var client = _client!;
+        await client.PutAsJsonAsync("/api/memory", new { enabled = true });
+
+        var saved = await client.PostAsJsonAsync($"/agent/{Token}/api/memory/notes", new { list = "machine", text = "Use bun." });
+
+        saved.StatusCode.ShouldBe(HttpStatusCode.OK, await saved.Content.ReadAsStringAsync());
+    }
+
+    [Fact]
     public async Task With_messages_off_the_tool_is_refused_even_from_a_process_that_has_it()
     {
         var response = await MessageAsync(Receiver, "Update the docs.");

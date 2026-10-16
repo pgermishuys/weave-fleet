@@ -41,6 +41,7 @@ internal sealed partial class AcpHarnessSession : IHarnessSession
     private readonly string _ownerUserId;
     private bool _replaying;
     private bool _disposed;
+    private int _ended;
 
     internal AcpHarnessSession(string harnessType, string instanceId, string fleetSessionId, string acpSessionId, string workingDirectory,
         IAcpAgent agent, ILogger logger, IAnalyticsCollector? analytics = null, string? projectId = null, string? projectName = null,
@@ -65,6 +66,19 @@ internal sealed partial class AcpHarnessSession : IHarnessSession
 
     /// <summary>Runs once when the session ends, for whoever issued it something that must not outlive it.</summary>
     internal Action? OnEnded { get; init; }
+
+    private void End()
+    {
+        if (Interlocked.Exchange(ref _ended, 1) == 0)
+            OnEnded?.Invoke();
+    }
+
+    /// <summary>An archived session's agent can no longer call back into Fleet.</summary>
+    public Task ArchiveAsync(CancellationToken ct)
+    {
+        End();
+        return Task.CompletedTask;
+    }
 
     public string InstanceId { get; }
 
@@ -337,6 +351,7 @@ internal sealed partial class AcpHarnessSession : IHarnessSession
 
     private void OnClosed()
     {
+        End();
         if (_disposed)
             return;
         Status = HarnessSessionStatus.Error;
@@ -409,7 +424,7 @@ internal sealed partial class AcpHarnessSession : IHarnessSession
         if (_disposed)
             return;
         _disposed = true;
-        OnEnded?.Invoke();
+        End();
         foreach (var id in _asks.Keys)
             Settle(id, PermissionReplies.Gone, null);
         _events.Writer.TryComplete();

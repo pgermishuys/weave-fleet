@@ -11,6 +11,7 @@ public static class BuiltInSkillEndpoints
     public static IEndpointRouteBuilder MapBuiltInSkillEndpoints(this IEndpointRouteBuilder app)
     {
         var group = app.MapGroup("/api/skills/built-in").WithTags("Skills");
+        group.AddEndpointFilter<AgentRequests.WritesAreTheUsers>();
 
         group.MapGet("/", async (BuiltInSkillService skills) => Results.Ok(await skills.ListAsync()))
             .WithName("ListBuiltInSkills")

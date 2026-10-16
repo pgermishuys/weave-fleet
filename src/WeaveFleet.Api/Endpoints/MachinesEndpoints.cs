@@ -20,6 +20,7 @@ public static class MachinesEndpoints
             return app;
 
         var group = app.MapGroup("/api/machines").WithTags("Machines");
+        group.AddEndpointFilter<AgentRequests.WritesAreTheUsers>();
 
         group.MapGet("", async (HttpContext http, RemoteMachineService machines) =>
         {

@@ -16,6 +16,7 @@ public static class HarnessSignInEndpoints
     public static IEndpointRouteBuilder MapHarnessSignInEndpoints(this IEndpointRouteBuilder app)
     {
         var group = app.MapGroup("/api/harnesses/{harnessType}/sign-in").WithTags("Harness sign-in");
+        group.AddEndpointFilter<AgentRequests.WritesAreTheUsers>();
 
         // GET /api/harnesses/{harnessType}/sign-in — every provider, how to sign in to it, and its sign-ins
         group.MapGet("/", async (string harnessType, HarnessSignInService signIn, CancellationToken ct) =>

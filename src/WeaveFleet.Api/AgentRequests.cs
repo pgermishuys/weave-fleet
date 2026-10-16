@@ -37,6 +37,17 @@ public static class AgentRequests
                 ApiJsonContext.Default.ErrorResponse, statusCode: StatusCodes.Status403Forbidden)
             : null;
 
+    /// <summary>
+    /// For a route or group whose writes are the user's alone: 403 for any agent call that isn't a read. Added as its own
+    /// statement (not chained) so the endpoint source generator still sees the routes.
+    /// </summary>
+    public sealed class WritesAreTheUsers : IEndpointFilter
+    {
+        public async ValueTask<object?> InvokeAsync(EndpointFilterInvocationContext context, EndpointFilterDelegate next)
+            => HttpMethods.IsGet(context.HttpContext.Request.Method) ? await next(context)
+                : context.HttpContext.RefuseAgent("Fleet's settings, skills, mods or integrations") ?? await next(context);
+    }
+
     /// <summary>The bridge token of the agent process this request came from, or null when it isn't an agent's.</summary>
     public static string? AgentBridgeToken(this HttpContext http) => http.Items.TryGetValue(Key, out var token) ? token as string : null;
 

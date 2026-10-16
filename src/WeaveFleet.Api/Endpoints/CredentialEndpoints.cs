@@ -15,6 +15,7 @@ public static class CredentialEndpoints
     public static IEndpointRouteBuilder MapCredentialEndpoints(this IEndpointRouteBuilder app)
     {
         var group = app.MapGroup("/api/credentials").WithTags("Credentials");
+        group.AddEndpointFilter<AgentRequests.WritesAreTheUsers>();
 
         // GET /api/credentials — list stored credentials with metadata (no values)
         group.MapGet("/", async (ICredentialStore credentialStore) =>
