@@ -12,7 +12,7 @@
     <Version>0.56.0</Version>
   </PropertyGroup>
 
-  <!-- Suppress NuGet audit for MessagePack 2.5.192 pulled transitively by Aspire SDK -->
+  <!-- Suppress NuGet audit for MessagePack 2.5.x pulled transitively by the Aspire SDK (the dev-only AppHost) -->
   <ItemGroup>
     <NuGetAuditSuppress Include="https://github.com/advisories/GHSA-2f33-pr97-265q" />
     <NuGetAuditSuppress Include="https://github.com/advisories/GHSA-2x83-8g95-xh59" />
@@ -21,6 +21,7 @@
     <NuGetAuditSuppress Include="https://github.com/advisories/GHSA-hv8m-jj95-wg3x" />
     <NuGetAuditSuppress Include="https://github.com/advisories/GHSA-q2h6-ghwm-5qm8" />
     <NuGetAuditSuppress Include="https://github.com/advisories/GHSA-qhmf-xw27-6rqr" />
+    <NuGetAuditSuppress Include="https://github.com/advisories/GHSA-qhrr-8q5h-9q3h" />
     <NuGetAuditSuppress Include="https://github.com/advisories/GHSA-v72x-2h86-7f8m" />
     <NuGetAuditSuppress Include="https://github.com/advisories/GHSA-vh6j-jc39-fggf" />
     <NuGetAuditSuppress Include="https://github.com/advisories/GHSA-w567-gjr2-hm5j" />
