@@ -256,7 +256,7 @@ public sealed class OpenCodeSideBySideLiveTests
             var plugin = Path.Combine(_root, "no-op.ts");
             Directory.CreateDirectory(_root);
             File.WriteAllText(plugin, "export const NoOp = async () => ({})\n");
-            var environment = PooledOpenCodeLiveHost.WriteScratchOpenCodeHome(_root, Fleet.Llm.BaseUrl, plugin);
+            var environment = PooledOpenCodeLiveHost.WriteScratchOpenCodeHome(_root, Fleet.Llm.BaseUrl, plugin, seedPluginDependencies: false);
 
             var runtime = services.GetRequiredService<OpenCodeHarnessRuntime>();
             var prepared = await runtime.PrepareRuntimeAsync(
