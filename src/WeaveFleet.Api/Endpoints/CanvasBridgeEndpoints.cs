@@ -76,8 +76,14 @@ public static class CanvasBridgeEndpoints
             .WithName("CanvasBridgeBrowserAct");
 
         group.MapPost("/page-show", async (CanvasBridgeRequest request, HttpContext http, PageBridge bridge, CancellationToken ct)
-            => ToResult(await bridge.ShowAsync(BridgeToken(http), request.HarnessSessionId, request.Path, request.Title, request.Placement, ct)))
+            => ToResult(await bridge.ShowAsync(
+                BridgeToken(http), request.HarnessSessionId, request.Path, request.Title, request.Placement, request.WaitForChoice == true, request.CallId, ct)))
             .WithName("CanvasBridgePageShow");
+
+        // One round of a page's wait for the user's pick: held up to PageChoices.Round, then the plugin asks again.
+        group.MapPost("/page-choice", async (CanvasBridgeRequest request, HttpContext http, PageBridge bridge, CancellationToken ct)
+            => ToResult(await bridge.WaitForChoiceAsync(BridgeToken(http), request.HarnessSessionId, request.CallId, request.CanvasId, ct)))
+            .WithName("CanvasBridgePageChoice");
 
         group.MapPost("/walkthrough-show", async (WalkthroughBridgeRequest request, HttpContext http, WalkthroughBridge bridge, CancellationToken ct)
             => ToResult(await bridge.ShowAsync(BridgeToken(http), request.HarnessSessionId, request.Title, request.Guide ?? default, ct)))
@@ -179,7 +185,13 @@ public static class CanvasBridgeEndpoints
                 ? new CanvasToolScreenshotMetadata(shot.SessionId, shot.Id, shot.Width, shot.Height)
                 : null;
             var page = output.Page is { } shown ? new CanvasToolPageMetadata(shown.Id, shown.Entry) : null;
-            return Results.Ok(new CanvasToolResponse(output.Title, output.Output, new CanvasToolMetadata(output.CanvasId, output.Version, screenshot, page), attachments));
+            var choice = output.Choice switch
+            {
+                { Waiting: true } => new CanvasToolChoiceMetadata(Waiting: true),
+                { Answer: { } answer } => new CanvasToolChoiceMetadata(null, answer.Answered, answer.Value, answer.Summary, answer.Reason),
+                _ => null,
+            };
+            return Results.Ok(new CanvasToolResponse(output.Title, output.Output, new CanvasToolMetadata(output.CanvasId, output.Version, screenshot, page, choice), attachments));
         }
 
         var error = new ErrorResponse(result.Error.Message);

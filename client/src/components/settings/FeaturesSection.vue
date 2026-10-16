@@ -9,6 +9,7 @@ import { MODS_PREFERENCE_KEY } from "@/lib/mods";
 import { SESSION_MESSAGES_PREFERENCE_KEY } from "@/lib/session-messages";
 import { LARGE_PASTES_PREFERENCE_KEY } from "@/lib/attached-files";
 import { STARTERS_PREFERENCE_KEY } from "@/lib/starters";
+import { PAGE_CHOICE_PREFERENCE_KEY } from "@/lib/page-choice";
 import { AGENT_HANDOFF_PREFERENCE_KEY, LIVE_MACHINES_PREFERENCE_KEY } from "@/lib/machines";
 import {
   DESKTOP_NOTIFICATIONS_PREFERENCE_KEY,
@@ -152,6 +153,18 @@ const isAgentHandoffEnabled = computed(
   () => preferencesStore.get(AGENT_HANDOFF_PREFERENCE_KEY, "false") === "true",
 );
 const isSavingAgentHandoff = shallowRef(false);
+
+const isPageChoiceEnabled = computed(() => preferencesStore.get(PAGE_CHOICE_PREFERENCE_KEY, "false") === "true");
+const isSavingPageChoice = shallowRef(false);
+
+async function togglePageChoice(): Promise<void> {
+  isSavingPageChoice.value = true;
+  try {
+    await preferencesStore.set(PAGE_CHOICE_PREFERENCE_KEY, isPageChoiceEnabled.value ? "false" : "true");
+  } finally {
+    isSavingPageChoice.value = false;
+  }
+}
 
 async function toggleAgentHandoff(): Promise<void> {
   isSavingAgentHandoff.value = true;
@@ -639,6 +652,44 @@ async function toggleBoardFeature(): Promise<void> {
           <span
             class="pointer-events-none inline-block h-5 w-5 rounded-full bg-white shadow ring-0 transition duration-200 ease-in-out"
             :class="isAgentHandoffEnabled && isSessionMessagesEnabled ? 'translate-x-5' : 'translate-x-0'"
+          />
+        </button>
+      </div>
+    </div>
+    <div class="mt-3 flex items-start justify-between gap-4 rounded-card border border-border bg-main-bg p-4">
+      <div>
+        <p class="flex items-center gap-2 text-sm font-medium text-text">
+          Choose on a page
+          <span class="rounded-full border border-border px-2 py-px text-[0.7rem] font-medium uppercase tracking-wide text-muted">
+            Experimental
+          </span>
+        </p>
+        <p class="mt-1 text-xs text-muted">
+          The agent can show you a page and wait while you pick on it. Works with OpenCode for now.
+        </p>
+      </div>
+
+      <div class="flex items-center gap-2">
+        <LoaderCircle
+          v-if="isSavingPageChoice"
+          :size="16"
+          class="animate-spin text-muted"
+          aria-hidden="true"
+        />
+        <button
+          type="button"
+          role="switch"
+          :aria-checked="isPageChoiceEnabled"
+          :disabled="preferencesStore.isLoading || isSavingPageChoice"
+          aria-label="Enable choosing on a page"
+          data-testid="page-choice-switch"
+          class="relative inline-flex h-6 w-11 shrink-0 cursor-pointer rounded-full border-2 border-transparent transition-colors duration-200 ease-in-out focus:outline-none focus:ring-2 focus:ring-accent focus:ring-offset-2 focus:ring-offset-main-bg disabled:cursor-not-allowed disabled:opacity-60"
+          :class="isPageChoiceEnabled ? 'bg-accent' : 'bg-border'"
+          @click="togglePageChoice"
+        >
+          <span
+            class="pointer-events-none inline-block h-5 w-5 rounded-full bg-white shadow ring-0 transition duration-200 ease-in-out"
+            :class="isPageChoiceEnabled ? 'translate-x-5' : 'translate-x-0'"
           />
         </button>
       </div>

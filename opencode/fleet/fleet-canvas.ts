@@ -31,6 +31,10 @@ const MODS_PATH = "/api/bridge/mods/"
 // hand-off tools and a machine on fleet_message and fleet_session_read; without it they're as they always were.
 const HANDOFF = process.env.FLEET_AGENT_HANDOFF === "1"
 
+// Pages that wait for the user's pick: set only in processes started with it on. It adds waitForChoice to
+// fleet_page_show; without it the tool is as it always was.
+const PAGE_CHOICE = process.env.FLEET_PAGE_CHOICE === "1"
+
 type PermissionRequest = { permission: string; patterns: string[]; always: string[]; metadata: Record<string, unknown> }
 type ToolContext = { sessionID: string; callID?: string; ask?: (request: PermissionRequest) => Promise<void> }
 type Attachment = { type: "file"; mime: string; url: string; filename: string }
@@ -99,6 +103,28 @@ async function callFleet(
 const canvasId = {
   type: "string",
   description: "The canvas id (cv_…) from fleet_canvas_list or fleet_canvas_open.",
+}
+
+const waitForChoice = {
+  type: "boolean",
+  description: [
+    "true to show options on a page and wait for the user's pick before you carry on, with placement \"tab\".",
+    "The page proposes a pick with fleet.choose(value, summary), or a data-fleet-choice=\"value\" attribute on a button; the user sends it from Fleet's bar under the page.",
+    "The call returns {\"answered\": true, \"value\", \"summary\"}, or {\"answered\": false, \"reason\"} when the user skipped, wrote instead or stopped. false for a page that only shows something.",
+  ].join(" "),
+}
+
+/**
+ * Waits for the pick on a page shown with waitForChoice. Fleet holds each request for under a minute, since OpenCode
+ * cuts one held for about five, so this asks again until the wait ends. What the page's show said comes first.
+ */
+async function waitForPick(shown: ToolResult, context: ToolContext): Promise<ToolResult> {
+  const canvas = shown.metadata.canvasId
+  let round = shown
+  while ((round.metadata.choice as { waiting?: boolean } | undefined)?.waiting) {
+    round = await callFleet("page-choice", context, { callId: context.callID ?? null, canvasId: canvas })
+  }
+  return round === shown ? shown : { ...round, output: shown.output + "\n\n" + round.output }
 }
 
 type Config = { skills?: { paths?: string[] } }
@@ -272,9 +298,19 @@ export const FleetCanvasPlugin = async (input: { directory?: string }) => ({
           type: "string",
           description: "Short title for the page, e.g. \"Settings options\".",
         },
+        ...(PAGE_CHOICE ? { waitForChoice } : {}),
       },
-      execute: (args: { path: string; placement: string; title: string }, context: ToolContext) =>
-        callFleet("page-show", context, { path: args.path, placement: args.placement, title: args.title }),
+      execute: async (args: { path: string; placement: string; title: string; waitForChoice?: boolean | string }, context: ToolContext) => {
+        // OpenCode doesn't check args against the schema, and models sometimes send a boolean as a string.
+        const waits = args.waitForChoice === true || args.waitForChoice === "true"
+        const shown = await callFleet("page-show", context, {
+          path: args.path,
+          placement: args.placement,
+          title: args.title,
+          ...(waits ? { waitForChoice: true, callId: context.callID ?? null } : {}),
+        })
+        return waits ? waitForPick(shown, context) : shown
+      },
     },
 
     // Only in processes started with fleet-walkthrough on: the skill says how to write the guide.

@@ -23,7 +23,16 @@ public sealed record CanvasToolOutput(
     int? Version = null,
     IReadOnlyList<CanvasToolAttachment>? Attachments = null,
     ScreenshotReference? Screenshot = null,
-    Pages.PageReference? Page = null);
+    Pages.PageReference? Page = null,
+    PageChoiceOutput? Choice = null);
+
+/// <summary>
+/// A page's wait for the user's pick, for the plugin: <see cref="Waiting"/> while it should ask again, then the answer.
+/// </summary>
+public sealed record PageChoiceOutput(bool Waiting, Pages.PageChoiceAnswer? Answer = null)
+{
+    public static readonly PageChoiceOutput StillWaiting = new(true);
+}
 
 /// <summary>
 /// The agent's canvas tools (<c>fleet_canvas_*</c>) for calls that arrive from a harness process. Each call

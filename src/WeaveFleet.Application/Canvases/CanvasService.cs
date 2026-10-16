@@ -97,6 +97,31 @@ public sealed class CanvasService(
         throw new InvalidOperationException($"Canvas \"{title}\" kept changing while it was being opened.");
     }
 
+    public async Task<CanvasResult<Canvas>> UpdatePageAsync(string sessionId, string canvasId, Func<PageState, PageState?> change, CancellationToken ct = default)
+    {
+        for (var attempt = 0; attempt < MaxWriteAttempts; attempt++)
+        {
+            var existing = await canvasRepository.GetByIdAsync(sessionId, canvasId);
+            if (existing is not { Kind: CanvasKinds.Page })
+                return CanvasResult.Fail<Canvas>(CanvasErrorKind.NotFound, $"There's no page canvas {canvasId} in this session.");
+            if (change(PageState.Parse(existing.StateJson)) is not { } page)
+                return CanvasResult.Ok(existing);
+
+            var applied = CanvasOps.Apply(CanvasKinds.Page, CanvasActor.Agent, existing.StateJson, [new ShowPageOp(page)]);
+            if (!applied.IsSuccess)
+                return CanvasResult.Fail<Canvas>(applied.Error);
+
+            var updated = await TryWriteAsync(existing, applied.Value, CanvasActor.Agent, existing.AgentSeenVersion);
+            if (updated is null)
+                continue;
+
+            await BroadcastUpdatedAsync(updated, CanvasActor.Agent, applied.Value.Summary, ct);
+            return CanvasResult.Ok(updated);
+        }
+
+        throw new InvalidOperationException($"Canvas {canvasId} kept changing while Fleet updated its page.");
+    }
+
     public async Task<CanvasResult<string>> ReadAsync(string sessionId, string canvasId, bool full, CancellationToken ct = default)
     {
         var canvas = await canvasRepository.GetByIdAsync(sessionId, canvasId);

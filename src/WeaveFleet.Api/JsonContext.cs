@@ -202,6 +202,7 @@ internal sealed record ErrorResponse(string Error);
 [JsonSerializable(typeof(WeaveFleet.Application.Workflows.DraftWorkflowFromDescriptionRequest))]
 [JsonSerializable(typeof(WeaveFleet.Application.Workflows.DraftedWorkflowDto))]
 [JsonSerializable(typeof(CanvasToolResponse))]
+[JsonSerializable(typeof(PageChoiceSendRequest))]
 [JsonSerializable(typeof(List<CanvasToolAttachmentResponse>))]
 [JsonSerializable(typeof(CanvasToolScreenshotMetadata))]
 [JsonSerializable(typeof(CanvasToolPageMetadata))]

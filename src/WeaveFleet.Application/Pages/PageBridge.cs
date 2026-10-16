@@ -25,7 +25,9 @@ public sealed class PageBridge(
     IPageStore pages,
     ISessionRepository sessions,
     IPageChecker? checker = null,
-    ILocalFleetUrl? fleetUrl = null)
+    ILocalFleetUrl? fleetUrl = null,
+    PageChoices? choices = null,
+    PageChoiceFeature? choiceFeature = null)
 {
     public const string PathRequirement = "\"path\" must name an .html file you wrote, e.g. \"/tmp/mockups/settings/options.html\".";
 
@@ -37,6 +39,10 @@ public sealed class PageBridge(
 
     public const string PlacementRequirement = "\"placement\" must be \"conversation\" or \"tab\".";
 
+    public const string ChoiceNeedsTab = "waitForChoice needs placement \"tab\": Fleet's bar for sending the pick sits under a page tab.";
+
+    public const string CantWait = "Fleet can't wait for a pick in this session, so the call didn't wait. Ask the user to reply with their pick.";
+
     private static readonly StringComparison PathComparison = OperatingSystem.IsWindows() ? StringComparison.OrdinalIgnoreCase : StringComparison.Ordinal;
 
     public Task<CanvasResult<CanvasToolOutput>> ShowAsync(
@@ -45,11 +51,15 @@ public sealed class PageBridge(
         string? path,
         string? title,
         string? placement = null,
+        bool waitForChoice = false,
+        string? callId = null,
         CancellationToken ct = default)
         => RunAsync(bridgeToken, harnessSessionId, async sessionId =>
         {
             if (!TryReadPlacement(placement, out var inConversation))
                 return Invalid(PlacementRequirement);
+            if (waitForChoice && inConversation)
+                return Invalid(ChoiceNeedsTab);
 
             var file = await ResolveFileAsync(sessionId, path);
             if (file is null)
@@ -73,11 +83,27 @@ public sealed class PageBridge(
             if (inConversation)
                 return await ShowInConversationAsync(sessionId, file, BrowserPreviews.TitleOr(title, Path.GetFileNameWithoutExtension(file)), warnings, ct);
 
+            // The session waits on the user before the page says so, so the page's bar never reads as a wait that's over.
+            var waits = waitForChoice && callId is { Length: > 0 } && choices is not null
+                        && choiceFeature is not null && await choiceFeature.IsEnabledAsync()
+                        && choices.Start(sessionId, callId);
             var published = await PublishAsync(sessionId, file, file, BrowserPreviews.TitleOr(title, Path.GetFileNameWithoutExtension(file)), warnings, ct);
             if (!published.IsSuccess)
+            {
+                if (waits)
+                    choices!.Finish(sessionId, callId!, PageChoiceAnswer.NotAnswered(PageChoiceReasons.Stopped));
                 return CanvasResult.Fail<CanvasToolOutput>(published.Error);
+            }
 
             var (canvas, copy, updated, check) = published.Value;
+            if (waits)
+            {
+                var waiting = new PageChoiceState(callId!, PageChoiceState.Waiting, Now());
+                var marked = await canvases.UpdatePageAsync(sessionId, canvas.Id, page => { page.Choice = waiting; return page; }, ct);
+                if (marked.IsSuccess)
+                    canvas = marked.Value;
+            }
+
             var output = new StringBuilder()
                 .Append(updated ? "Updated " : "Showing ").Append(CanvasText.CanvasName(canvas))
                 .Append(" from ").Append(file).Append(" (").Append(CanvasText.PageSize(copy.Files, copy.Bytes)).Append(" copied from its folder).");
@@ -85,9 +111,84 @@ public sealed class PageBridge(
                 output.Append("\nWarning: ").Append(warning);
             output.Append("\nAfter an edit, call fleet_page_show again with the same file: the user's tab reloads by itself.");
             output.Append('\n').Append(check);
+            if (waitForChoice && !waits)
+                output.Append('\n').Append(CantWait);
 
-            return CanvasResult.Ok(new CanvasToolOutput($"{canvas.Title} · {copy.Entry}", output.ToString(), canvas.Id, canvas.Version));
+            return CanvasResult.Ok(new CanvasToolOutput(
+                $"{canvas.Title} · {copy.Entry}", output.ToString(), canvas.Id, canvas.Version, Choice: waits ? PageChoiceOutput.StillWaiting : null));
         }, ct);
+
+    /// <summary>
+    /// One round of the plugin's wait for the pick on a page shown with <c>waitForChoice</c>: the answer, or "still
+    /// waiting" after <see cref="PageChoices.Round"/>, when the plugin asks again. A request that goes away (the turn
+    /// stopped) ends the wait. Either way the page's bar says how it ended before the agent hears it.
+    /// </summary>
+    public Task<CanvasResult<CanvasToolOutput>> WaitForChoiceAsync(
+        string? bridgeToken, string? harnessSessionId, string? callId, string? canvasId, CancellationToken ct = default)
+        => RunAsync(bridgeToken, harnessSessionId, async sessionId =>
+        {
+            if (choices is null || string.IsNullOrWhiteSpace(callId) || string.IsNullOrWhiteSpace(canvasId))
+                return Invalid("\"callId\" and \"canvasId\" must name a page that waits for a pick.");
+
+            PageChoiceAnswer? answer;
+            try
+            {
+                answer = await choices.NextAsync(sessionId, callId, PageChoices.Round, ct);
+            }
+            catch (OperationCanceledException) when (ct.IsCancellationRequested)
+            {
+                await SettleChoiceAsync(sessionId, canvasId, callId, PageChoiceAnswer.NotAnswered(PageChoiceReasons.Stopped));
+                throw;
+            }
+
+            if (answer is null)
+                return CanvasResult.Ok(new CanvasToolOutput("Waiting for the user's pick", "The user hasn't picked yet.", canvasId, Choice: PageChoiceOutput.StillWaiting));
+
+            var canvas = await SettleChoiceAsync(sessionId, canvasId, callId, answer);
+            return CanvasResult.Ok(new CanvasToolOutput(
+                answer.Answered ? $"Picked {answer.Summary}" : $"Not picked: {answer.Reason}",
+                ChoiceText(answer),
+                canvasId,
+                canvas?.Version,
+                Choice: new PageChoiceOutput(false, answer)));
+        }, ct);
+
+    /// <summary>Says on the page how its wait ended, then lets the session work again.</summary>
+    private async Task<Canvas?> SettleChoiceAsync(string sessionId, string canvasId, string callId, PageChoiceAnswer answer)
+    {
+        choices!.End(sessionId, callId, answer);
+        var ended = answer.Answered
+            ? new PageChoiceState(callId, PageChoiceState.Answered, Now(), answer.Value, answer.Summary)
+            : new PageChoiceState(callId, PageChoiceState.NotAnswered, Now(), Reason: answer.Reason);
+        var settled = await canvases.UpdatePageAsync(
+            sessionId, canvasId, page => page.Choice?.CallId == callId ? Changed(page, ended) : null, CancellationToken.None);
+        choices.Finish(sessionId, callId, answer);
+        return settled.IsSuccess ? settled.Value : null;
+
+        static PageState Changed(PageState page, PageChoiceState choice)
+        {
+            page.Choice = choice;
+            return page;
+        }
+    }
+
+    /// <summary>What the agent reads: the answer as JSON, then what to do with it.</summary>
+    internal static string ChoiceText(PageChoiceAnswer answer)
+    {
+        var json = System.Text.Json.JsonSerializer.Serialize(answer, PagesJsonContext.Default.PageChoiceAnswer);
+        var next = answer.Reason switch
+        {
+            null => "The user picked this on the page and sent it to you. Carry on with it.",
+            PageChoiceReasons.Skipped => "The user skipped the pick. If you still need it, ask in your reply.",
+            PageChoiceReasons.WroteInstead => "The user wrote a message instead of picking. Don't guess a pick: their message comes next.",
+            PageChoiceReasons.Restarted => "Fleet restarted while the page waited, so the user didn't pick. Ask in your reply.",
+            PageChoiceReasons.TimedOut => "Nobody picked on the page in 24 hours.",
+            _ => "The turn stopped before the user picked.",
+        };
+        return json + "\n" + next;
+    }
+
+    private static string Now() => DateTimeOffset.UtcNow.ToString("O", CultureInfo.InvariantCulture);
 
     /// <summary>
     /// Shows <paramref name="file"/> in the conversation: a copy of its own, every time, so the page an answer showed

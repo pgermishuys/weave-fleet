@@ -11,7 +11,9 @@ export type PageMessage =
   /** The page's own state, kept by Fleet for the page and given back on the next hello. */
   | { type: "fleet:page-state"; state: unknown }
   /** The page has loaded. Fleet answers with `fleet:page-state` holding what it kept, or null. */
-  | { type: "fleet:page-hello" };
+  | { type: "fleet:page-hello" }
+  /** The page proposes a pick for a page that waits for one. Only Fleet's bar under the page sends it. */
+  | { type: "fleet:page-choice"; value: string; summary: string };
 
 /** Fleet's answer to a hello. */
 export interface PageStateMessage {
@@ -20,6 +22,8 @@ export interface PageStateMessage {
 }
 
 export const MAX_REPLY_LENGTH = 64 * 1024;
+export const MAX_CHOICE_LENGTH = 1000;
+export const MAX_CHOICE_SUMMARY_LENGTH = 200;
 export const MAX_STATE_LENGTH = 256 * 1024;
 const MAX_KEPT_PAGES = 50;
 
@@ -37,6 +41,13 @@ export function readPageMessage(data: unknown): PageMessage | null {
       return isSmallJson(message.state) ? { type: "fleet:page-state", state: message.state } : null;
     case "fleet:page-hello":
       return { type: "fleet:page-hello" };
+    case "fleet:page-choice": {
+      if (typeof message.value !== "string" || !message.value.trim() || message.value.length > MAX_CHOICE_LENGTH) return null;
+      const summary = message.summary;
+      if (summary !== undefined && summary !== null && typeof summary !== "string") return null;
+      if (typeof summary === "string" && summary.length > MAX_CHOICE_SUMMARY_LENGTH) return null;
+      return { type: "fleet:page-choice", value: message.value, summary: summary?.trim() || message.value.slice(0, MAX_CHOICE_SUMMARY_LENGTH) };
+    }
     default:
       return null;
   }

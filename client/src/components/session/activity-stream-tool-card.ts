@@ -6,6 +6,7 @@ import { getToolLabel } from "@/lib/tool-labels";
 import { parseToolOutput } from "@/lib/tool-output";
 import { asRecord, getTool } from "@/lib/tools";
 import { pageAddress } from "@/lib/server-canvas";
+import { pageChoiceRowTitle } from "@/lib/page-choice";
 
 export interface DiffLine {
   type: "add" | "remove" | "context";
@@ -73,6 +74,8 @@ export interface ToolCardItem {
   improvable?: boolean;
   /** What the harness passed the tool, as it sent it; undefined when the call carries none. */
   input?: Record<string, unknown>;
+  /** A page call that waits for the user's pick: the row reads as waiting. */
+  waiting?: boolean;
 }
 
 /** The kind of sub-agent a call asked for: OpenCode names it `subagent_type`, OpenCode 2 `agent`. */
@@ -249,7 +252,10 @@ export function toToolCardItem(
   const output = getToolOutput(state);
   const summary = getStringValue(state?.summary);
   const shownTitle = getTool(part.tool).titledFromAnswer ? getStringValue(state?.title) : undefined;
-  const title = shownTitle ?? (getToolLabel(part.tool, input) || part.tool);
+  const pickTitle = getTool(part.tool).name === "fleet_page_show"
+    ? pageChoiceRowTitle(input, toolStatus(part), asRecord(state?.metadata))
+    : undefined;
+  const title = pickTitle ?? shownTitle ?? (getToolLabel(part.tool, input) || part.tool);
   const canvasId = getStringValue(asRecord(state?.metadata)?.canvasId);
   const status = workStatus(work) ?? backgroundStatus(part, finishedBackgroundWork) ?? formatToolStatus(state?.status);
 
@@ -269,6 +275,7 @@ export function toToolCardItem(
     page: toolPage(part),
     callId: part.callId,
     input: input ?? undefined,
+    waiting: pickTitle !== undefined && toolStatus(part) !== "completed" && toolStatus(part) !== "error" ? true : undefined,
   };
 }
 

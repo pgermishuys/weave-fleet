@@ -124,6 +124,14 @@
           "placement",
           "title"
         ]
+      },
+      "switchedProperties": {
+        "pageChoice": {
+          "waitForChoice": {
+            "type": "boolean",
+            "description": "true to show options on a page and wait for the user's pick before you carry on, with placement \"tab\". The page proposes a pick with fleet.choose(value, summary), or a data-fleet-choice=\"value\" attribute on a button; the user sends it from Fleet's bar under the page. The call returns {\"answered\": true, \"value\", \"summary\"}, or {\"answered\": false, \"reason\"} when the user skipped, wrote instead or stopped. false for a page that only shows something."
+          }
+        }
       }
     },
     {

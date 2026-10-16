@@ -8,6 +8,13 @@ describe("shownPage", () => {
     expect(shownPage(null)).toEqual({ pageId: "", entry: "", source: "", files: 0, bytes: 0, shownAt: "", warnings: [] });
   });
 
+  it("reads the choice a page waits on, and drops a malformed one", () => {
+    const choice = { callId: "call_1", status: "answered", value: "a", summary: "Layout A", at: "2026-10-16T12:41:00Z" };
+    expect(shownPage({ choice }).choice).toEqual({ ...choice, reason: undefined });
+    expect(shownPage({ choice: { ...choice, status: "maybe" } }).choice).toBeUndefined();
+    expect(shownPage({ choice: { status: "waiting" } }).choice).toBeUndefined();
+  });
+
   it("addresses the page on Fleet, escaping each part of the file name", () => {
     expect(pageAddress({ pageId: "pg_1", entry: "options a.html" })).toBe("/pages/pg_1/options%20a.html");
     expect(pageAddress({ pageId: "pg_1", entry: "sub/b#c.html" })).toBe("/pages/pg_1/sub/b%23c.html");

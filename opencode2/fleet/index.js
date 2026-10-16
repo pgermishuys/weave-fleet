@@ -29,6 +29,10 @@ const MODS_PATH = "/api/bridge/mods/"
 // hand-off tools and a machine on fleet_message and fleet_session_read; without it they're as they always were.
 const HANDOFF = process.env.FLEET_AGENT_HANDOFF === "1"
 
+// Pages that wait for the user's pick: set only on servers started with it on. It adds waitForChoice to
+// fleet_page_show; without it the tool is as it always was.
+const PAGE_CHOICE = process.env.FLEET_PAGE_CHOICE === "1"
+
 const machine = {
   type: "string",
   description: "The machine the session is on, from fleet_machine_list. Leave it out for a session on this machine.",
@@ -92,6 +96,31 @@ async function callFleet(name, call, args, path = BRIDGE_PATH + name) {
 const canvasId = {
   type: "string",
   description: "The canvas id (cv_…) from fleet_canvas_list or fleet_canvas_open.",
+}
+
+const waitForChoice = {
+  type: "boolean",
+  description: [
+    "true to show options on a page and wait for the user's pick before you carry on, with placement \"tab\".",
+    "The page proposes a pick with fleet.choose(value, summary), or a data-fleet-choice=\"value\" attribute on a button; the user sends it from Fleet's bar under the page.",
+    "The call returns {\"answered\": true, \"value\", \"summary\"}, or {\"answered\": false, \"reason\"} when the user skipped, wrote instead or stopped. false for a page that only shows something.",
+  ].join(" "),
+}
+
+/**
+ * Waits for the pick on a page shown with waitForChoice. Fleet holds each request for under a minute, since OpenCode 2
+ * cuts one held for about five, so this asks again until the wait ends. What the page's show said comes first.
+ * `call.signal` ends the wait when the turn is interrupted: the request closes, and Fleet marks the page not answered.
+ */
+async function waitForPick(shown, call) {
+  const canvas = shown.metadata.canvasId
+  let round = shown
+  while (round.metadata.choice?.waiting) {
+    round = await callFleet("page-choice", call, { callId: call.id, canvasId: canvas })
+  }
+  if (round === shown) return shown
+  const [said, ...files] = shown.content
+  return { ...round, content: [{ type: "text", text: said.text + "\n\n" + round.content[0].text }, ...files] }
 }
 
 /**
@@ -216,8 +245,19 @@ const tools = [
         type: "string",
         description: "Short title for the page, e.g. \"Settings options\".",
       },
+      ...(PAGE_CHOICE ? { waitForChoice } : {}),
     },
-    (input, tool) => callFleet("page-show", tool, { path: input.path, placement: input.placement, title: input.title }),
+    async (input, tool) => {
+      const waits = input.waitForChoice === true
+      const shown = await callFleet("page-show", tool, {
+        path: input.path,
+        placement: input.placement,
+        title: input.title,
+        ...(waits ? { waitForChoice: true, callId: tool.id } : {}),
+      })
+      return waits ? waitForPick(shown, tool) : shown
+    },
+    { optional: ["waitForChoice"] },
   ),
 
   fleetTool(
