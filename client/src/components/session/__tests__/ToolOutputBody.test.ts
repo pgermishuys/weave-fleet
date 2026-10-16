@@ -10,7 +10,7 @@ function numbered(count: number): string {
   return Array.from({ length: count }, (_, i) => `${ESC}[32m✓${ESC}[0m case ${i + 1}`).join("\n");
 }
 
-function shown(wrapper: ReturnType<typeof mount>): string[] {
+function shown(wrapper: { get(selector: string): { text(): string } }): string[] {
   return wrapper.get("[data-testid='tool-card-output']").text().split("\n");
 }
 
