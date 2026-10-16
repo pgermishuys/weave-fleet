@@ -134,8 +134,10 @@ function sent(): SentRequest[] {
   });
 }
 
+/** Telemetry and the user's own preferences (starred models) belong to the home machine, whichever session is open. */
 function isTelemetry(request: SentRequest): boolean {
-  return new URL(request.url, window.location.href).pathname.startsWith("/api/telemetry/");
+  const path = new URL(request.url, window.location.href).pathname;
+  return path.startsWith("/api/telemetry/") || path.startsWith("/api/preferences");
 }
 
 async function run(call: SessionCall, machine: MachineConnection | null | undefined): Promise<SentRequest[]> {

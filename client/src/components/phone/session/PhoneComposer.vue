@@ -2,12 +2,14 @@
 import { computed, nextTick, onMounted, shallowRef, useTemplateRef, watch } from "vue";
 import { ArrowUp, ChevronDown, CornerDownRight, Plus, Square, X } from "lucide-vue-next";
 import PhoneChipSheet, { type ChipOption } from "@/components/phone/session/PhoneChipSheet.vue";
+import PhoneModelSheet from "@/components/phone/session/PhoneModelSheet.vue";
 import PhoneFilePickSheet from "@/components/phone/session/PhoneFilePickSheet.vue";
 import PhonePlusSheet, { type PlusChoice } from "@/components/phone/session/PhonePlusSheet.vue";
 import { useAgents } from "@/composables/use-agents";
 import { primaryAction, useComposerActions } from "@/composables/use-composer-actions";
 import { useDraftState } from "@/composables/use-draft-state";
 import { useModels } from "@/composables/use-models";
+import { useSessionsStore } from "@/stores/sessions";
 import type { ImageAttachment } from "@/lib/client-types";
 import { ALLOWED_IMAGE_MIMES, MAX_IMAGE_BYTES } from "@/lib/image-validation";
 import { autogrow } from "@/lib/phone/keyboard";
@@ -31,6 +33,9 @@ const { draft, setText } = actions;
 const { setAgentId, setModelId, setEffort } = useDraftState(props.sessionId, { agentId: "", modelId: "" });
 const { agents, defaultAgentId } = useAgents(props.sessionId);
 const { models, defaultModelKey, modelsByKey } = useModels(props.sessionId);
+// Stars are per harness; on another machine the row isn't in this store, so that sheet has none.
+const sessionsStore = useSessionsStore();
+const harnessType = computed(() => sessionsStore.sessionById(props.sessionId)?.harnessType);
 
 const textareaRef = useTemplateRef<HTMLTextAreaElement>("textarea");
 const photoInput = useTemplateRef<HTMLInputElement>("photoInput");
@@ -52,7 +57,6 @@ const offerSendNow = computed(() => props.reachable && actions.caps.value.canSte
 const agentId = computed(() => draft.agentId || defaultAgentId.value || "");
 const modelKey = computed(() => draft.modelId || defaultModelKey.value || "");
 const agentOptions = computed<ChipOption[]>(() => agents.value.map((agent) => ({ id: agent.id, label: agent.name, detail: agent.description })));
-const modelOptions = computed<ChipOption[]>(() => models.value.map((model) => ({ id: model.selectionKey, label: model.name, detail: model.provider })));
 const effortVariants = computed(() => modelsByKey.value[modelKey.value]?.variants ?? ["low", "medium", "high"]);
 const effortOptions = computed<ChipOption[]>(() => effortVariants.value.map((variant) => ({ id: variant, label: variant.charAt(0).toUpperCase() + variant.slice(1) })));
 const agentLabel = computed(() => agents.value.find((agent) => agent.id === agentId.value)?.name ?? "Agent");
@@ -174,7 +178,6 @@ function editHeld(item: HeldMessage): void {
 
 function pick(id: string): void {
   if (chip.value === "agent") setAgentId(id);
-  else if (chip.value === "model") setModelId(id);
   else if (chip.value === "effort") setEffort(id);
 }
 
@@ -327,7 +330,7 @@ defineExpose({ insert, flush, focus: () => textareaRef.value?.focus() });
           <span>{{ agentLabel }}</span><ChevronDown aria-hidden="true" />
         </button>
         <button
-          v-if="modelOptions.length"
+          v-if="models.length"
           type="button"
           class="ph-sel"
           data-testid="chip-model"
@@ -421,11 +424,19 @@ defineExpose({ insert, flush, focus: () => textareaRef.value?.focus() });
       @pick="(path) => insert(`@${path} `)"
       @close="filesOpen = false"
     />
+    <PhoneModelSheet
+      :open="chip === 'model'"
+      :models="models"
+      :selected="modelKey"
+      :harness-type="harnessType"
+      @pick="setModelId"
+      @close="chip = null"
+    />
     <PhoneChipSheet
-      :open="chip !== null"
-      :title="chip === 'agent' ? 'Agent' : chip === 'model' ? 'Model' : 'Effort'"
-      :options="chip === 'agent' ? agentOptions : chip === 'model' ? modelOptions : effortOptions"
-      :selected="chip === 'agent' ? agentId : chip === 'model' ? modelKey : draft.effort || 'medium'"
+      :open="chip === 'agent' || chip === 'effort'"
+      :title="chip === 'agent' ? 'Agent' : 'Effort'"
+      :options="chip === 'agent' ? agentOptions : effortOptions"
+      :selected="chip === 'agent' ? agentId : draft.effort || 'medium'"
       @pick="pick"
       @close="chip = null"
     />

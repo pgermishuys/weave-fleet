@@ -106,6 +106,19 @@ describe("useSessionQueue", () => {
     expect(result.queue.value.map((item) => item.text)).toEqual(["Run the linter"]);
   });
 
+  it("lists a model queued with as recent", async () => {
+    const { result, sessionId } = await mountQueue();
+    const { useSessionsStore } = await import("@/stores/sessions");
+    const { useModelPickerStore } = await import("@/stores/model-picker");
+    vi.spyOn(useSessionsStore(), "sessionById").mockReturnValue({ id: sessionId, harnessType: "opencode" } as never);
+    const record = vi.spyOn(useModelPickerStore(), "recordRecent").mockResolvedValue();
+    postMock.mockResolvedValue({ data: { id: "q8", kind: "prompt", text: "Tidy up" }, response: { ok: true, status: 200 } });
+
+    await result.enqueue("Tidy up", { kind: "prompt", model: { providerID: "openrouter", modelID: "qwen/qwen3-coder" } });
+
+    expect(record).toHaveBeenCalledWith("opencode:openrouter/qwen/qwen3-coder");
+  });
+
   it("reports why a message couldn't be queued", async () => {
     const { result } = await mountQueue();
     postMock.mockResolvedValue({ error: { error: "The queue is full." }, response: { ok: false, status: 409 } });

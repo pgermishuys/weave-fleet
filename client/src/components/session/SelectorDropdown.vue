@@ -1,18 +1,28 @@
 <script setup lang="ts">
 import { computed, nextTick, ref, shallowRef, useTemplateRef, watch } from "vue";
 import { onClickOutside } from "@vueuse/core";
-import { ChevronDown } from "lucide-vue-next";
+import { ChevronDown, Star } from "lucide-vue-next";
 
 interface SelectorItem {
   id: string;
   label: string;
   description?: string;
   meta?: string;
+  /** Defined: the row has a star to favourite it with. */
+  starred?: boolean;
+}
+
+interface SelectorSection {
+  title?: string;
+  level?: "group" | "provider";
+  items: readonly SelectorItem[];
 }
 
 const props = withDefaults(
   defineProps<{
     items: readonly SelectorItem[];
+    /** Shown with their headers while nothing is typed; typing falls back to the flat `items`. */
+    sections?: readonly SelectorSection[];
     label: string;
     placeholder?: string;
     disabled?: boolean;
@@ -22,8 +32,11 @@ const props = withDefaults(
     placeholder: "Select",
     disabled: false,
     testId: undefined,
+    sections: undefined,
   },
 );
+
+const emit = defineEmits<{ (event: "toggle-star", id: string): void }>();
 
 const selectedId = defineModel<string>({ required: true });
 
@@ -31,6 +44,8 @@ const isOpen = shallowRef(false);
 const rootRef = useTemplateRef<HTMLElement>("root");
 const filterInputRef = useTemplateRef<HTMLInputElement>("filterInput");
 const filterText = ref("");
+const activeIndex = shallowRef(0);
+const listRef = useTemplateRef<HTMLElement>("list");
 
 onClickOutside(rootRef, () => {
   closeDropdown();
@@ -64,12 +79,38 @@ const filteredItems = computed(() => {
   });
 });
 
+/** What is drawn, in order: sections while nothing is typed, else one headerless run. Rows are numbered across sections. */
+const view = computed(() => {
+  const shown: readonly SelectorSection[] = !filterText.value.trim() && props.sections
+    ? props.sections
+    : [{ items: filteredItems.value }];
+  let index = 0;
+  return shown.map((section, sectionIndex) => ({
+    title: section.title,
+    level: section.level ?? "group",
+    rows: section.items.map((item) => ({ item, key: `${sectionIndex}:${item.id}`, index: index++ })),
+  }));
+});
+const rows = computed(() => view.value.flatMap((section) => section.rows));
+
+// Typing puts Enter on the first match, not on "Default", which every filter keeps.
+watch(filterText, (text) => {
+  activeIndex.value = text.trim() ? Math.max(0, rows.value.findIndex((row) => row.item.id !== "")) : 0;
+});
+
+watch(activeIndex, async () => {
+  await nextTick();
+  // jsdom has no scrollIntoView.
+  listRef.value?.querySelector<HTMLElement>("[data-active='true']")?.scrollIntoView?.({ block: "nearest" });
+});
+
 watch(isOpen, async (open) => {
   if (!open) {
     filterText.value = "";
     return;
   }
 
+  activeIndex.value = Math.max(0, rows.value.findIndex((row) => row.item.id === selectedId.value));
   await nextTick();
   filterInputRef.value?.focus();
 });
@@ -81,6 +122,15 @@ function toggleOpen(): void {
 function closeDropdown(): void {
   isOpen.value = false;
   filterText.value = "";
+}
+
+function moveActive(step: 1 | -1): void {
+  activeIndex.value = Math.min(Math.max(activeIndex.value + step, 0), rows.value.length - 1);
+}
+
+function pickActive(): void {
+  const row = rows.value[activeIndex.value];
+  if (row) selectItem(row.item.id);
 }
 
 function selectItem(itemId: string): void {
@@ -114,6 +164,7 @@ function selectItem(itemId: string): void {
 
     <div
       v-if="isOpen"
+      ref="list"
       class="selector-dropdown"
       role="listbox"
       :aria-label="label"
@@ -127,33 +178,66 @@ function selectItem(itemId: string): void {
           :placeholder="filterPlaceholder"
           :aria-label="filterAriaLabel"
           @keydown.escape.prevent="closeDropdown"
+          @keydown.down.prevent="moveActive(1)"
+          @keydown.up.prevent="moveActive(-1)"
+          @keydown.enter.prevent="pickActive"
         >
       </div>
 
-      <button
-        v-for="item in filteredItems"
-        :key="item.id"
-        type="button"
-        class="selector-dropdown__item"
-        :class="{ 'selector-dropdown__item--selected': item.id === selectedId }"
-        :aria-selected="item.id === selectedId"
-        @click="selectItem(item.id)"
+      <template
+        v-for="(section, sectionIndex) in view"
+        :key="sectionIndex"
       >
-        <span class="selector-dropdown__copy">
-          <span class="selector-dropdown__item-label">{{ item.label }}</span>
-          <span
-            v-if="item.description"
-            class="selector-dropdown__item-description"
-          >{{ item.description }}</span>
-        </span>
-        <span
-          v-if="item.meta"
-          class="selector-dropdown__item-meta"
-        >{{ item.meta }}</span>
-      </button>
+        <div
+          v-if="section.title"
+          class="selector-dropdown__heading"
+          :class="{ 'selector-dropdown__heading--provider': section.level === 'provider' }"
+        >
+          {{ section.title }}
+        </div>
+        <div
+          v-for="{ item, key, index } in section.rows"
+          :key="key"
+          class="selector-dropdown__row"
+          :class="{ 'selector-dropdown__row--active': index === activeIndex }"
+          :data-active="index === activeIndex"
+          @mousemove="activeIndex = index"
+        >
+          <button
+            type="button"
+            class="selector-dropdown__item"
+            :class="{ 'selector-dropdown__item--selected': item.id === selectedId }"
+            :aria-selected="item.id === selectedId"
+            @click="selectItem(item.id)"
+          >
+            <span class="selector-dropdown__copy">
+              <span class="selector-dropdown__item-label">{{ item.label }}</span>
+              <span
+                v-if="item.description"
+                class="selector-dropdown__item-description"
+              >{{ item.description }}</span>
+            </span>
+            <span
+              v-if="item.meta"
+              class="selector-dropdown__item-meta"
+            >{{ item.meta }}</span>
+          </button>
+          <button
+            v-if="item.starred !== undefined"
+            type="button"
+            class="selector-dropdown__star"
+            :class="{ 'selector-dropdown__star--on': item.starred }"
+            :aria-label="item.starred ? 'Remove from favourites' : 'Add to favourites'"
+            :aria-pressed="item.starred"
+            @click.stop="emit('toggle-star', item.id)"
+          >
+            <Star aria-hidden="true" />
+          </button>
+        </div>
+      </template>
 
       <div
-        v-if="filteredItems.length === 0"
+        v-if="rows.length === 0"
         class="selector-dropdown__empty"
       >
         No matching options
@@ -225,7 +309,7 @@ function selectItem(itemId: string): void {
   position: absolute;
   bottom: calc(100% + 6px);
   left: 0;
-  min-width: 240px;
+  min-width: 280px;
   max-height: min(320px, 60vh);
   overflow-y: auto;
   overscroll-behavior: contain;
@@ -266,8 +350,71 @@ function selectItem(itemId: string): void {
   outline-offset: -1px;
 }
 
+.selector-dropdown__heading {
+  padding: 8px 10px 3px;
+  color: var(--muted);
+  font-size: 10px;
+  font-weight: 600;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+}
+
+.selector-dropdown__heading--provider {
+  padding-left: 16px;
+  font-size: 9.5px;
+  font-weight: 500;
+}
+
+.selector-dropdown__row {
+  display: flex;
+  align-items: stretch;
+  border-radius: calc(var(--radius-btn) - 2px);
+}
+
+.selector-dropdown__row--active {
+  background: color-mix(in srgb, var(--text) 6%, transparent);
+}
+
+.selector-dropdown__star {
+  display: flex;
+  flex-shrink: 0;
+  align-items: center;
+  padding: 0 8px;
+  border: 0;
+  background: transparent;
+  color: var(--muted);
+  cursor: pointer;
+  /* Only starred rows show it all the time. */
+  opacity: 0;
+}
+
+.selector-dropdown__star svg {
+  width: 14px;
+  height: 14px;
+}
+
+.selector-dropdown__star--on,
+.selector-dropdown__row--active .selector-dropdown__star,
+.selector-dropdown__row:focus-within .selector-dropdown__star {
+  opacity: 1;
+}
+
+.selector-dropdown__star--on {
+  color: var(--idle);
+}
+
+.selector-dropdown__star--on svg {
+  fill: currentColor;
+}
+
+.selector-dropdown__star:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: -2px;
+}
+
 .selector-dropdown__item {
-  width: 100%;
+  flex: 1;
+  min-width: 0;
   display: flex;
   align-items: flex-start;
   justify-content: space-between;
@@ -281,7 +428,6 @@ function selectItem(itemId: string): void {
   text-align: left;
 }
 
-.selector-dropdown__item:hover,
 .selector-dropdown__item--selected {
   background: color-mix(in srgb, var(--text) 6%, transparent);
 }

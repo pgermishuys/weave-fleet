@@ -10,6 +10,8 @@ import {
   useSentPrompts,
 } from "@/composables/use-send-prompt"
 import type { AccumulatedMessage } from "@/lib/client-types"
+import { useModelPickerStore } from "@/stores/model-picker"
+import { useSessionsStore } from "@/stores/sessions"
 import { rememberSessionSkills } from "@/lib/skill-mentions"
 import { rememberSessionReference } from "@/lib/session-references"
 
@@ -254,6 +256,32 @@ describe("use-send-prompt picks the harness no longer lists", () => {
     const [sent] = useSentPrompts(sessionId).sentPrompts.value
     expect(sent?.agentName).toBe("removed-agent")
     expect(sent?.modelName).toBe("gone-model")
+  })
+
+  it("records a picked model the server took as recent for the session's harness, and Default or a refusal as nothing", async () => {
+    const sessionId = "session-recent-pick"
+    vi.spyOn(useSessionsStore(), "sessionById").mockReturnValue({ harnessType: "opencode", lifecycleStatus: "running" } as never)
+    const record = vi.spyOn(useModelPickerStore(), "recordRecent").mockResolvedValue()
+    const draft = useDraftState(sessionId, { agentId: "", modelId: "" })
+    const taken = { data: { correlationId: "c" }, response: { ok: true, status: 200 } }
+    const send = async (text: string) => {
+      draft.setText(text)
+      useSendPrompt(sessionId).sendPrompt()
+      await new Promise((resolve) => setTimeout(resolve, 0))
+    }
+
+    mockApi.POST.mockResolvedValueOnce(taken)
+    await send("hello")
+    expect(record).not.toHaveBeenCalled()
+
+    draft.setModelId(JSON.stringify(["p", "m"]))
+    mockApi.POST.mockResolvedValueOnce({ error: { error: "Unknown model" }, response: new Response("{}", { status: 400 }) })
+    await send("refused")
+    expect(record).not.toHaveBeenCalled()
+
+    mockApi.POST.mockResolvedValueOnce(taken)
+    await send("again")
+    expect(record).toHaveBeenCalledWith("opencode:p/m")
   })
 
   it("sends neither when the draft is on Default", async () => {
