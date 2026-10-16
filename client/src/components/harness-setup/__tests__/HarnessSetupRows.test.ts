@@ -152,6 +152,28 @@ describe("HarnessSetupRows", () => {
     expect(view.text()).toContain("Claude Code isn't installed.");
   });
 
+  it("offers GitHub Copilot, which Fleet downloads itself, with an install button under its row", async () => {
+    const copilot = {
+      type: "copilot",
+      displayName: "GitHub Copilot",
+      available: false,
+      userEnabled: true,
+      state: "not-installed",
+      reason: "GitHub Copilot isn't installed.",
+      capabilities,
+      update: { updateAvailable: false, canInstall: true, installPlan: "Fleet downloads weave-copilot 0.1.0 and the Copilot CLI 1.0.98 from GitHub." },
+    } as HarnessInfo;
+
+    const view = await mountRows([openCode(), copilot]);
+
+    expect(view.findAll("[data-testid^='harness-setup-row-']").map((row) => row.attributes("data-testid")))
+      .toEqual(["harness-setup-row-opencode", "harness-setup-row-copilot"]);
+    expect(view.get("[data-testid='harness-setup-row-copilot']").text()).toContain("Fleet downloads weave-copilot 0.1.0");
+    expect(view.find("[data-testid='harness-setup-row-copilot'] [data-testid='harness-update']").exists()).toBe(true);
+    // Its install is the strip's, not a command typed in a terminal.
+    expect(view.find("[data-testid='harness-setup-install-copilot']").exists()).toBe(false);
+  });
+
   it("says where OpenCode 2 goes and what to know before installing it", async () => {
     const view = await mountRows([openCode2()]);
 

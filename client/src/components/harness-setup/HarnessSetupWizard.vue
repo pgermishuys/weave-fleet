@@ -93,7 +93,7 @@ function onOpenChange(open: boolean): void {
     >
       <DialogHeader class="sr-only">
         <DialogTitle>Set up a harness</DialogTitle>
-        <DialogDescription>Install OpenCode or Claude Code so Fleet can run sessions.</DialogDescription>
+        <DialogDescription>Install a harness such as OpenCode or Claude Code so Fleet can run sessions.</DialogDescription>
       </DialogHeader>
 
       <div class="harness-setup">
