@@ -162,6 +162,74 @@ public sealed class AcpHarnessSessionTests
         (await answered.Task).GetProperty("outcome").GetProperty("optionId").GetString().ShouldBe("allow");
     }
 
+    [Theory]
+    [InlineData(PermissionLevels.Ask, "edit", null, true)]
+    [InlineData(PermissionLevels.Ask, "execute", null, true)]
+    [InlineData(PermissionLevels.Ask, "read", null, false)]
+    [InlineData(PermissionLevels.Ask, "other", "fleet_page_show", false)]
+    [InlineData(PermissionLevels.Ask, "other", "some_mcp_tool", true)]
+    [InlineData(PermissionLevels.Edits, "edit", null, false)]
+    [InlineData(PermissionLevels.Edits, "execute", null, true)]
+    [InlineData(PermissionLevels.All, "edit", null, false)]
+    [InlineData(PermissionLevels.All, "execute", null, false)]
+    [InlineData(PermissionLevels.All, "other", "some_mcp_tool", false)]
+    public async Task each_level_asks_for_what_it_should_and_answers_the_rest(string level, string kind, string? realName, bool asks)
+    {
+        await using var agent = new FakeAcpAgent();
+        var answered = new TaskCompletionSource<JsonElement>();
+        var request = Ask();
+        request["toolCall"]!["kind"] = kind;
+        if (realName is not null)
+            request["toolCall"]!["_meta"] = new JsonObject { ["toolName"] = realName };
+        agent.Handle = async (method, _) =>
+        {
+            if (method == "session/prompt")
+                answered.SetResult(await agent.AskAsync("session/request_permission", request));
+            return new JsonObject { ["stopReason"] = "end_turn" };
+        };
+        await using var session = NewSession(agent);
+        await session.ApplyPermissionsAsync(new PermissionPolicy(level), CancellationToken.None);
+
+        await session.SendPromptAsync("go", null, CancellationToken.None);
+        if (asks)
+        {
+            var asked = (await ReadAsync(session, seen => seen.Any(e => e.Type == EventTypes.PermissionAsked))).Last();
+            await session.ReplyToPermissionAsync(PermissionEvents.ReadAsk(asked)!.Id, PermissionReplies.Reject, null, CancellationToken.None);
+            (await answered.Task.WaitAsync(TimeSpan.FromSeconds(5))).GetProperty("outcome").GetProperty("optionId").GetString().ShouldBe("deny");
+        }
+        else
+        {
+            var events = await ReadAsync(session, Idle);
+            events.ShouldNotContain(e => e.Type == EventTypes.PermissionAsked);
+            (await answered.Task).GetProperty("outcome").GetProperty("optionId").GetString().ShouldBe("allow");
+        }
+    }
+
+    [Fact]
+    public async Task a_level_change_applies_to_the_next_ask()
+    {
+        await using var agent = new FakeAcpAgent();
+        var answers = new List<TaskCompletionSource<JsonElement>> { new(), new() };
+        var turn = 0;
+        agent.Handle = async (method, _) =>
+        {
+            if (method == "session/prompt")
+                answers[turn++].SetResult(await agent.AskAsync("session/request_permission", Ask()));
+            return new JsonObject { ["stopReason"] = "end_turn" };
+        };
+        await using var session = NewSession(agent);
+
+        await session.SendPromptAsync("one", null, CancellationToken.None);
+        await ReadAsync(session, Idle);
+        (await answers[0].Task).GetProperty("outcome").GetProperty("optionId").GetString().ShouldBe("allow");
+
+        await session.ApplyPermissionsAsync(new PermissionPolicy(PermissionLevels.Ask), CancellationToken.None);
+        await session.SendPromptAsync("two", null, CancellationToken.None);
+        var asked = (await ReadAsync(session, seen => seen.Any(e => e.Type == EventTypes.PermissionAsked))).Last();
+        await session.ReplyToPermissionAsync(PermissionEvents.ReadAsk(asked)!.Id, PermissionReplies.Once, null, CancellationToken.None);
+        (await answers[1].Task.WaitAsync(TimeSpan.FromSeconds(5))).GetProperty("outcome").GetProperty("optionId").GetString().ShouldBe("allow");
+    }
+
     [Fact]
     public async Task a_prompt_during_a_turn_steers_through_the_fleet_extension()
     {

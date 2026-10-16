@@ -285,8 +285,7 @@ internal sealed partial class AcpHarnessSession : IHarnessSession
             throw new AcpException($"Fleet doesn't handle {method}.", -32601);
 
         var call = parameters.GetProperty("toolCall");
-        var kindName = AcpMapper.Str(call, "kind");
-        var tool = AcpMapper.ToolName(kindName);
+        var tool = AcpMapper.ToolNameOf(call);
         if (_permissions.Decide(tool, []) is { } decision)
             return Outcome(parameters, decision);
 
