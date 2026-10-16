@@ -137,10 +137,15 @@ describe("ToolCard open and closed", () => {
     expect(isOpen(w)).toBe(true);
   });
 
-  it("starts collapsed for a diff when inline diffs are off", () => {
+  it("starts collapsed for a diff when inline diffs are off", async () => {
     const w = card({ kind: "edit", initiallyCollapsed: true, diffLines: [{ type: "add", content: "+x" }] }, false);
 
     expect(isOpen(w)).toBe(false);
+    // A closed row draws no body.
+    expect(w.find("[data-testid='tool-card-body']").exists()).toBe(false);
+
+    (w.get("details").element as HTMLDetailsElement).open = true;
+    await w.get("details").trigger("toggle");
     expect(w.find("[data-testid='tool-card-diff']").exists()).toBe(false);
     // With the diff hidden and no output or summary, the body says so.
     expect(w.find("[data-testid='tool-card-empty-state']").exists()).toBe(true);
