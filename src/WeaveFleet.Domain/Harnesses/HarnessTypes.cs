@@ -633,6 +633,9 @@ public sealed record ShellCommandOptions
     public string? ModelId { get; init; }
 }
 
+/// <summary>The harness couldn't start a session, and <see cref="Exception.Message"/> says why and what to do, for the user to read.</summary>
+public sealed class HarnessStartException(string message, Exception? inner = null) : InvalidOperationException(message, inner);
+
 /// <summary>The harness won't run a shell command now: its turn is running. <see cref="Exception.Message"/> says so.</summary>
 public sealed class HarnessBusyException(string message) : Exception(message);
 

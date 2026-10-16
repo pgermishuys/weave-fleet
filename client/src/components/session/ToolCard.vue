@@ -72,6 +72,8 @@ const shouldShowDiff = computed(() => workspaceUiStore.inlineToolDiffs && props.
 const isCollapsed = shallowRef(props.initiallyCollapsed && !shouldShowDiff.value);
 
 const toolIcon = computed(() => getToolIcon(props.kind));
+/** Copilot's turn row and HydraFusion's pass rows are a sentence of facts (model, time, credits), not a path: they wrap rather than clip. */
+const wrapsDetail = computed(() => props.kind === "copilot_turn" || props.kind.startsWith("hydrafusion_"));
 const displayLabel = computed(() => getToolDisplayLabel(props.kind));
 
 const visualPayload = computed(() => parseVisualPayload(props.output));
@@ -194,7 +196,7 @@ function handleExpandVisual(): void {
   >
     <summary
       class="tool-header"
-      :class="{ 'tool-header--mod': useView.draws }"
+      :class="{ 'tool-header--mod': useView.draws, 'tool-header--wraps': wrapsDetail }"
       data-testid="tool-card-header"
     >
       <component :is="toolIcon" class="tool-header__icon" />
@@ -386,6 +388,18 @@ function handleExpandVisual(): void {
   text-overflow: ellipsis;
   white-space: nowrap;
   min-width: 0;
+}
+
+.tool-header--wraps {
+  align-items: flex-start;
+  padding-top: 6px;
+  padding-bottom: 6px;
+}
+
+.tool-header--wraps .tool-header__detail {
+  overflow: visible;
+  white-space: normal;
+  overflow-wrap: anywhere;
 }
 
 .tool-header__pattern {

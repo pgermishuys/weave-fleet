@@ -60,8 +60,8 @@ public sealed class AcpMapperTests
 
         State(started[^1]).ShouldBe("running");
         State(done.First(e => e.Type == EventTypes.MessagePartUpdated)).ShouldBe("completed");
-        done[^1].Type.ShouldBe(EventTypes.FilesWritten);
-        done[^1].Payload!.Value.GetProperty("paths")[0].GetString().ShouldBe("/work/notes.md");
+        done[^2].Type.ShouldBe(EventTypes.FilesWritten);
+        done[^2].Payload!.Value.GetProperty("paths")[0].GetString().ShouldBe("/work/notes.md");
         var tool = mapper.Messages().Single().Parts.OfType<ToolUsePart>().Single();
         tool.ToolName.ShouldBe("edit");
         tool.State.ShouldBe(ToolUseState.Completed);
@@ -249,6 +249,19 @@ public sealed class AcpMapperTests
         mapper.Update(J("""{"sessionUpdate":"tool_call","toolCallId":"c9","title":"fleet: Show page","kind":"other","status":"in_progress","_meta":{"toolName":"fleet_page_show"}}"""));
 
         mapper.Messages().Single().Parts.OfType<ToolUsePart>().Single().ToolName.ShouldBe("fleet_page_show");
+    }
+
+    [Fact]
+    public void A_finished_edit_also_tells_the_changes_panel_which_file_changed()
+    {
+        var mapper = new AcpMapper("s1");
+        mapper.Update(J("""{"sessionUpdate":"tool_call","toolCallId":"c1","title":"Edit a.ts","kind":"edit","status":"in_progress","locations":[{"path":"/work/a.ts"}]}"""));
+        var done = mapper.Update(J("""{"sessionUpdate":"tool_call_update","toolCallId":"c1","status":"completed"}"""));
+
+        done.Select(e => e.Type).ShouldContain(EventTypes.FilesWritten);
+        var changed = done.Single(e => e.Type == EventTypes.FileWatcherUpdated).Payload!.Value;
+        changed.GetProperty("file").GetString().ShouldBe("/work/a.ts");
+        changed.GetProperty("event").GetString().ShouldBe("change");
     }
 
     private static string State(HarnessEvent evt)

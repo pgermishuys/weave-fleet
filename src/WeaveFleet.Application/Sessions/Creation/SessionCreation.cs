@@ -210,6 +210,11 @@ public sealed partial class SessionCreation(
                 WorkflowStep = request.WorkflowRunId is not null && !request.WorkflowUserFinishes,
             }, ct);
         }
+        catch (HarnessStartException ex)
+        {
+            LogSpawnFailed(ex, harnessType);
+            return new FleetError("Harness.StartFailed", ex.Message);
+        }
         catch (Exception ex)
         {
             LogSpawnFailed(ex, harnessType);
