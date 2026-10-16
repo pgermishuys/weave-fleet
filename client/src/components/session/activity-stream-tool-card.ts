@@ -3,6 +3,7 @@ import { backgroundWorkId, type BackgroundState } from "@/lib/background-work";
 import { isWorkRunning, type RunningWorkItem } from "@/lib/running-work";
 import { parseUnifiedDiff } from "@/lib/diff-parser";
 import { getToolLabel } from "@/lib/tool-labels";
+import { parseToolOutput } from "@/lib/tool-output";
 import { asRecord, getTool } from "@/lib/tools";
 import { pageAddress } from "@/lib/server-canvas";
 
@@ -101,8 +102,17 @@ const fallback_excluded_keys = new Set(["input", "status", "summary", "title", "
 function buildPreview(output: string | undefined, summary: string | undefined): string | undefined {
   if (output) {
     const lines = output.split("\n");
-    const firstNonEmpty = lines.find((line) => line.trim());
-    
+    // The first line with text once its terminal codes are gone; only that far is parsed.
+    let firstNonEmpty: string | undefined;
+    for (const line of lines) {
+      if (!line.trim()) continue;
+      const plain = parseToolOutput(line).plain;
+      if (plain.trim()) {
+        firstNonEmpty = plain;
+        break;
+      }
+    }
+
     if (!firstNonEmpty) {
       return summary ? `└ ${summary}` : undefined;
     }

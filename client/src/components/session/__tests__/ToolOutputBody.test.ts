@@ -27,6 +27,14 @@ describe("ToolOutputBody", () => {
     expect(wrapper.html()).not.toContain(ESC);
   });
 
+  it("shows markup in the output as text", () => {
+    const wrapper = mount(ToolOutputBody, { props: { output: `${ESC}[31m<img src=x onerror="alert(1)">${ESC}[0m <script>bad()</script>` } });
+
+    expect(wrapper.find("img").exists()).toBe(false);
+    expect(wrapper.find("script").exists()).toBe(false);
+    expect(shown(wrapper)).toEqual(['<img src=x onerror="alert(1)"> <script>bad()</script>']);
+  });
+
   it("shows the last 12 lines until asked for the rest, then only the last 12 again", async () => {
     const wrapper = mount(ToolOutputBody, { props: { output: numbered(200) } });
 

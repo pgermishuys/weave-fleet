@@ -1,8 +1,7 @@
 /**
  * A tool's output as Fleet draws it: terminal colour codes (ANSI SGR) become styled spans in Fleet's palette, every
- * other escape sequence is dropped, and a line rewritten with `\r` (a progress bar) keeps only its last frame. The
- * text is never turned into HTML: a span is plain text plus a class (or, for 256-colour and true-colour codes, a
- * colour), drawn by Vue's text binding.
+ * other escape sequence is dropped, and a line rewritten with `\r` (a progress bar) keeps only its last frame. A span
+ * is plain text plus a class (or, for 256-colour and true-colour codes, a colour); `linesToHtml` escapes the text.
  */
 
 export interface OutputSpan {
@@ -215,6 +214,36 @@ export function lineText(line: OutputLine): string {
   let text = "";
   for (const span of line) text += span.text;
   return text;
+}
+
+const HTML_ESCAPES: Record<string, string> = { "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" };
+
+function escapeHtml(text: string): string {
+  return text.replace(/[&<>"']/g, (char) => HTML_ESCAPES[char] as string);
+}
+
+/**
+ * Lines as markup for the output box: every bit of text escaped, uncoloured text bare, coloured text in a span whose
+ * class and style Fleet built (palette names and numbers, never the output). One string per box keeps a 2,000-line
+ * box to a few thousand nodes and one parse by the browser.
+ */
+export function linesToHtml(lines: readonly OutputLine[]): string {
+  let html = "";
+  for (let i = 0; i < lines.length; i++) {
+    if (i > 0) html += "\n";
+    for (const span of lines[i] as OutputLine) {
+      const text = escapeHtml(span.text);
+      if (!span.className && !span.style) {
+        html += text;
+        continue;
+      }
+      html += "<span";
+      if (span.className) html += ` class="${span.className}"`;
+      if (span.style) html += ` style="${span.style}"`;
+      html += `>${text}</span>`;
+    }
+  }
+  return html;
 }
 
 const CACHE_SIZE = 32;

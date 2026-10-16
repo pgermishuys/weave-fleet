@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { lineText, parseToolOutput, parseToolOutputCached } from "@/lib/tool-output";
+import { linesToHtml, lineText, parseToolOutput, parseToolOutputCached } from "@/lib/tool-output";
 
 const ESC = "\x1b";
 
@@ -115,7 +115,20 @@ describe("parseToolOutput", () => {
     expect(lineText(parsed.lines[4999]!)).toBe("✓ ok  suite/case_4999 (52ms)");
     expect(lineText(parsed.lines[50]!)).toBe("retry 50");
     expect(parsed.plain).not.toContain(ESC);
-    expect(elapsed).toBeLessThan(250);
+    // Linear work takes well under 100 ms here; the bound is loose for busy CI machines and catches a quadratic slip.
+    expect(elapsed).toBeLessThan(1000);
+  });
+});
+
+describe("linesToHtml", () => {
+  it("escapes every bit of text, leaves uncoloured text bare and wraps coloured text in Fleet's span", () => {
+    const { lines } = parseToolOutput(`<b>&"'\n${ESC}[31m<img src=x onerror=alert(1)>${ESC}[0m ok\n${ESC}[38;2;1;2;3mx`);
+
+    expect(linesToHtml(lines)).toBe(
+      "&lt;b&gt;&amp;&quot;&#39;\n" +
+        '<span class="ansi-fg-red">&lt;img src=x onerror=alert(1)&gt;</span> ok\n' +
+        '<span style="color:rgb(1,2,3)">x</span>',
+    );
   });
 });
 
