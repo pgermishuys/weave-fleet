@@ -2,6 +2,8 @@
 import { computed, onBeforeUnmount, shallowRef, watch } from "vue";
 import { storeToRefs } from "pinia";
 import { Check, CheckCircle2, Copy, Download, ExternalLink, KeyRound, LoaderCircle, X } from "lucide-vue-next";
+import HarnessSignInPanel from "@/components/settings/HarnessSignInPanel.vue";
+import HarnessUpdateStrip from "@/components/settings/HarnessUpdateStrip.vue";
 import TerminalView from "@/components/terminal/TerminalView.vue";
 import type { HarnessInfo, HarnessInstallChoice } from "@/api/client";
 import { refreshAllHarnesses } from "@/composables/use-harnesses";
@@ -56,10 +58,15 @@ const copied = shallowRef(false);
 const picked = shallowRef<Readonly<Record<string, string>>>({});
 let checkTimer: ReturnType<typeof setInterval> | undefined;
 
+/** One Fleet downloads itself (GitHub Copilot) has no command to type: it installs from the row, and signs in below it. */
+function fleetInstalls(harness: HarnessInfo): boolean {
+  return !harness.setup?.installCommand && !harness.setup?.downloadUrl && Boolean(harness.update?.installPlan);
+}
+
 /** Harnesses Fleet has an installer or a download for, the default one first. */
 const rows = computed(() =>
   props.harnesses
-    .filter((harness) => Boolean(harness.setup?.installCommand || harness.setup?.downloadUrl))
+    .filter((harness) => Boolean(harness.setup?.installCommand || harness.setup?.downloadUrl) || fleetInstalls(harness))
     .sort((a, b) => Number(b.type === props.defaultHarnessType) - Number(a.type === props.defaultHarnessType)),
 );
 
@@ -348,6 +355,20 @@ defineExpose({ closeTerminal });
           </span>
         </label>
       </div>
+
+      <HarnessUpdateStrip
+        v-if="fleetInstalls(harness)"
+        class="mt-3"
+        :harness="harness"
+      />
+      <HarnessSignInPanel
+        v-if="fleetInstalls(harness) && harnessState(harness) === 'sign-in-required'"
+        class="mt-3"
+        :harness-type="harness.type"
+        :harness-name="harness.displayName"
+        :sign-in-command="null"
+        :auto-load="true"
+      />
 
       <ul
         v-if="notesFor(harness).length > 0"
