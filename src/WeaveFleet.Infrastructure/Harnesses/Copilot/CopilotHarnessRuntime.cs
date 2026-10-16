@@ -30,6 +30,8 @@ public sealed class CopilotHarnessRuntime(
     /// <summary>The preference for a path to weave-copilot, for when it isn't on PATH.</summary>
     public const string PathPreferenceKey = "copilot.path";
 
+    internal const string CliMissingMessage = "Install the Copilot CLI from Settings, or put copilot on PATH.";
+
     internal const string FeatureOffMessage = "GitHub Copilot is experimental: turn it on in Settings → Features.";
 
     private const string Executable = "weave-copilot";
@@ -72,10 +74,32 @@ public sealed class CopilotHarnessRuntime(
         if (!await IsOnAsync(LocalUser, CopilotHarness.FeaturePreferenceKey).ConfigureAwait(false))
             return HarnessAvailability.NotWorking(FeatureOffMessage);
         var installed = await HarnessProbe.CheckInstalledAsync("weave-copilot", await ExecutableAsync(LocalUser).ConfigureAwait(false), [], _logger, ct).ConfigureAwait(false);
-        if (!installed.Available || await IsSignedInAsync(ct).ConfigureAwait(false))
+        if (!installed.Available)
+            return installed;
+        if (!CliFound(InstallerInstance.ManagedCli(), await ReadPreferenceAsync(LocalUser, PathPreferenceKey).ConfigureAwait(false),
+                Environment.GetEnvironmentVariable("WEAVE_COPILOT_CLI"), Environment.GetEnvironmentVariable("PATH")))
+            return HarnessAvailability.NotInstalled(CliMissingMessage);
+        if (await IsSignedInAsync(ct).ConfigureAwait(false))
             return installed;
         return HarnessAvailability.SignInRequired(SignInMessage, installed.Version, installed.ExecutablePath);
     }
+
+    /// <summary>
+    /// Whether weave-copilot will find the Copilot CLI: the one Fleet installed (handed over unless the user runs their own
+    /// weave-copilot), the one <c>WEAVE_COPILOT_CLI</c> names, or <c>copilot</c> on PATH. The same order weave-copilot looks in.
+    /// </summary>
+    internal static bool CliFound(string? managedCli, string? customWeaveCopilotPath, string? envCli, string? pathEnv)
+    {
+        if (managedCli is not null && string.IsNullOrWhiteSpace(customWeaveCopilotPath))
+            return true;
+        if (!string.IsNullOrEmpty(envCli))
+            return File.Exists(envCli);
+        return ExecutableResolver.TryResolve("copilot", pathEnv, [], out _);
+    }
+
+    /// <summary>What weave-copilot said when it couldn't start, as Fleet says it: a missing CLI gets what to do about it.</summary>
+    internal static HarnessStartException StartFailure(Exception ex)
+        => new(ex.Message.Contains("Copilot CLI not found", StringComparison.Ordinal) ? CliMissingMessage : ex.Message, ex);
 
     internal const string SignInMessage = "Sign in to GitHub Copilot.";
 
@@ -125,10 +149,12 @@ public sealed class CopilotHarnessRuntime(
 
             return session;
         }
-        catch
+        catch (Exception ex)
         {
             FleetTools.Revoke(token);
             await agent.DisposeAsync().ConfigureAwait(false);
+            if (ex is AcpException)
+                throw StartFailure(ex);
             throw;
         }
     }
@@ -147,10 +173,12 @@ public sealed class CopilotHarnessRuntime(
             await session.LoadAsync(CopilotFleetTools.McpServers(LocalFleetUrl(), token), ct).ConfigureAwait(false);
             return session;
         }
-        catch
+        catch (Exception ex)
         {
             FleetTools.Revoke(token);
             await agent.DisposeAsync().ConfigureAwait(false);
+            if (ex is AcpException)
+                throw StartFailure(ex);
             throw;
         }
     }
@@ -211,7 +239,7 @@ public sealed class CopilotHarnessRuntime(
         {
             var stderr = agent.Stderr;
             await agent.DisposeAsync().ConfigureAwait(false);
-            throw new InvalidOperationException(stderr.Length > 0 ? $"{ex.Message} {stderr}" : ex.Message, ex);
+            throw StartFailure(stderr.Length > 0 ? new InvalidOperationException($"{ex.Message} {stderr}", ex) : ex);
         }
     }
 

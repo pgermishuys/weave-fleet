@@ -356,6 +356,8 @@ internal sealed class AcpMapper(string sessionId)
             events.Add(Event(EventTypes.FilesWritten, JsonSerializer.SerializeToElement(
                 new FilesWrittenPayload { SessionId = sessionId, MessageId = _assistantId, Paths = [written] },
                 InfrastructureJsonContext.Default.FilesWrittenPayload)));
+            // The Changes panel on an open page refreshes on files.changed (OpenCode's file watcher says it), not on files.written.
+            events.Add(Event(EventTypes.FileWatcherUpdated, Json(new JsonObject { ["file"] = written, ["event"] = "change" })));
         }
     }
 

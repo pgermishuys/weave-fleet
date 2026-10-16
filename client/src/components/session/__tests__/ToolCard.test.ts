@@ -23,6 +23,25 @@ describe("ToolCard", () => {
     expect(wrapper.get('[data-testid="tool-card"]').attributes("open")).toBeUndefined();
   });
 
+  it("lets a HydraFusion pass row wrap its facts and keeps a path row to one clipped line", () => {
+    const pass = mount(ToolCard, {
+      global: { plugins: [createPinia()] },
+      props: { id: "p-1", title: "Solver · gpt-5.6-sol · 2.5 s · 5.17 credits", kind: "hydrafusion_pass", status: "Completed" },
+    });
+    const turn = mount(ToolCard, {
+      global: { plugins: [createPinia()] },
+      props: { id: "t-1", title: "Cascade · 4.07 credits · 3 requests", kind: "copilot_turn", status: "Completed" },
+    });
+    const read = mount(ToolCard, {
+      global: { plugins: [createPinia()] },
+      props: { id: "r-1", title: "…/ledger.ts", kind: "read", status: "Completed" },
+    });
+
+    expect(pass.get('[data-testid="tool-card-header"]').classes()).toContain("tool-header--wraps");
+    expect(turn.get('[data-testid="tool-card-header"]').classes()).toContain("tool-header--wraps");
+    expect(read.get('[data-testid="tool-card-header"]').classes()).not.toContain("tool-header--wraps");
+  });
+
   it("leaves Improve off a skill that isn't Fleet's or hasn't finished loading", () => {
     const other = mount(ToolCard, {
       global: { plugins: [createPinia()] },

@@ -1748,7 +1748,7 @@ internal static class SessionFleetErrorExtensions
         error.Code switch
         {
             var c when c.EndsWith(".NotFound", StringComparison.Ordinal) => Results.NotFound(new ErrorResponse(error.Description)),
-            "General.Conflict" or "Session.CheckoutRemoved" => Results.Conflict(new ErrorResponse(error.Description)),
+            "General.Conflict" or "Session.CheckoutRemoved" or "Harness.StartFailed" => Results.Conflict(new ErrorResponse(error.Description)),
             var c when c.StartsWith("Validation.", StringComparison.Ordinal) => Results.BadRequest(new ErrorResponse(error.Description)),
             _ => Results.Problem(error.Description)
         };
