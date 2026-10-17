@@ -604,6 +604,9 @@ using (var scope = app.Services.CreateScope())
     // a Fleet that's gone started them (a pid alone can belong to anything by now). Then this Fleet records its own.
     WeaveFleet.Infrastructure.Harnesses.HarnessProcessStartup.StopLeftoversAndRecord(fleetOptions.Harness.ResolvedProcessRecordsDirectory, logger);
 
+    // Which sessions the last Fleet stopped in the middle of a turn, read before they are all marked stopped.
+    await scope.ServiceProvider.GetRequiredService<SessionInterruptions>().RecoverAsync();
+
     var instanceService = scope.ServiceProvider.GetRequiredService<InstanceService>();
     var instanceCount = await instanceService.MarkAllStoppedAsync();
     var sessionCount = await instanceService.MarkAllNonTerminalSessionsStoppedAsync();

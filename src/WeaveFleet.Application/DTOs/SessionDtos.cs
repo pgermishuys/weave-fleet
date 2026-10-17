@@ -76,6 +76,9 @@ public sealed record SessionListResponse(
 
     /// <summary>When Fleet tries a turn a model provider's limit stopped again, or null: the row says so.</summary>
     public WeaveFleet.Application.Sessions.ScheduledRetryView? ScheduledRetry { get; init; }
+
+    /// <summary>When a Fleet restart cut the session's turn off, or null: the row says so.</summary>
+    public WeaveFleet.Application.Sessions.SessionInterruptionView? Interrupted { get; init; }
 }
 
 /// <summary>A model as the harness names one.</summary>

@@ -2,6 +2,7 @@ import createClient from "openapi-fetch";
 import type { paths } from "./generated/schema";
 import type { SessionProgressSummary } from "@/lib/session-progress";
 import type { ScheduledRetry } from "@/lib/turn-retry";
+import type { SessionInterruption } from "@/lib/session-interruption";
 import { apiUrlOn, setApiBase } from "@/lib/api-client";
 import { getActiveMachine, machineRequestInit, type MachineConnection } from "@/lib/machines";
 
@@ -874,6 +875,8 @@ export interface SessionListItem {
   retryAttempt?: number | null;
   /** When Fleet tries a turn a model provider's limit stopped again; kept current by `session.retry` on `sessions`. */
   scheduledRetry?: ScheduledRetry | null;
+  /** When a Fleet restart cut off the session's turn and the user hasn't carried on; kept current by `session.interrupted` on `sessions`. */
+  interrupted?: SessionInterruption | null;
   /** How many attempts the harness makes in all, when it says. */
   retryMaxAttempts?: number | null;
   /** Why the model call failed, e.g. "API overloaded (529)". */

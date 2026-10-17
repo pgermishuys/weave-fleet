@@ -118,7 +118,8 @@ describe("ActivityStream and work Fleet stopped", () => {
     expect(note.text()).toContain("stopped");
     expect(note.classes()).toContain("background-note--cancelled");
     expect(bodies(wrapper).join()).not.toContain("Shell.NotFoundError");
-    expect(apiGet).not.toHaveBeenCalled();
+    // The conversation also reads the session's interruption; only the work list must stay unread.
+    expect(apiGet).not.toHaveBeenCalledWith("/api/sessions/{id}/work", expect.anything());
     wrapper.unmount();
   });
 

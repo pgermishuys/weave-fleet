@@ -637,6 +637,18 @@ export interface SessionRetryChanged extends EventCursorMetadata {
 }
 
 /**
+ * A Fleet restart cut a session's turn off, or the user carried on or dismissed it (`interruption` null). Sent on the
+ * session's topic and `sessions`. The same shape comes from `GET /api/sessions/{id}/interruption`.
+ */
+export interface SessionInterrupted extends EventCursorMetadata {
+  type: "session.interrupted";
+  payload: {
+    sessionId: string;
+    interruption: { at: string; waiting: boolean; lastCall: string | null; changedFiles: number | null } | null;
+  };
+}
+
+/**
  * The agent asks to do something the session's permission level doesn't allow. Sent on the topic of the session it's
  * shown on (a subagent's on the session it works for). Not persisted; waiting asks load from
  * `GET /api/sessions/{id}/permissions`.
@@ -910,6 +922,7 @@ export type DomainEvent =
   | SessionNotification
   | SessionQueueChanged
   | SessionRetryChanged
+  | SessionInterrupted
   | PermissionAsked
   | PermissionReplied
   | SessionMessaged

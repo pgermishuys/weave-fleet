@@ -41,6 +41,7 @@ import { splitTurnErrorMessage } from "@/lib/turn-error";
 import { limitTitle } from "@/lib/turn-retry";
 import { scheduledRetryOf } from "@/composables/use-session-retry";
 import TurnFailureRetry from "@/components/session/TurnFailureRetry.vue";
+import SessionInterruptedCard from "@/components/session/SessionInterruptedCard.vue";
 import ImproveSkillDialog from "@/components/skills/ImproveSkillDialog.vue";
 import { improveTurn, type ImproveTurn } from "@/lib/skill-versions";
 import { useBuiltInSkillsStore } from "@/stores/built-in-skills";
@@ -769,6 +770,9 @@ function handleImproveSkill(skill: string, toolId: string): void {
         class="activity-mod-drafts"
         :session-id="props.sessionId"
       />
+
+      <!-- A Fleet restart cut the turn off -->
+      <SessionInterruptedCard :session-id="props.sessionId" />
 
       <!-- Streaming indicator -->
       <div
