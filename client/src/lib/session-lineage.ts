@@ -183,12 +183,6 @@ export function layoutLineage(depths: readonly number[]): LineageConnector[] {
   }));
 }
 
-/** The top-level session whose family (itself and everything under it) holds `id`, or null. */
-export function familyRootOf(id: string | null | undefined, roots: readonly string[], membersOf: (rootId: string) => Iterable<string>): string | null {
-  if (!id) return null;
-  return roots.find((root) => root === id || [...membersOf(root)].includes(id)) ?? null;
-}
-
 /**
  * Running subagents that have a session of their own, by the session that started them: the session list nests them
  * under it. A finished subagent drops out (the Agents tab keeps it), as does one without a session (nothing to open).

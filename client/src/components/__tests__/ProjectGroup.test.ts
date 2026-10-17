@@ -290,14 +290,14 @@ describe("ProjectGroup", () => {
         .toEqual(["child-1", "child-3"]);
     });
 
-    it("lights the open session's family, and hovering another family doesn't light it", async () => {
+    it("never lights a family: not the open session's, not the one under the pointer", async () => {
       const wrapper = mountWithLineage({ activeSessionId: "quiet-fork" });
-      const lit = () => wrapper.findAll(".project-row--lit").map((row) => row.attributes("data-family"));
+      const lit = () => wrapper.findAll(".project-row--lit");
 
-      expect(lit()).toEqual(["quiet"]);
+      expect(lit()).toHaveLength(0);
       await wrapper.get(".project-row[data-family='parent']").trigger("mouseenter");
       await wrapper.get(".project-row[data-family='parent']").trigger("focusin");
-      expect(lit()).toEqual(["quiet"]);
+      expect(lit()).toHaveLength(0);
     });
 
     describe("dragging a session out of its parent", () => {
