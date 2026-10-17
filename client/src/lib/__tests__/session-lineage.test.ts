@@ -4,7 +4,6 @@ import type { AccumulatedMessage } from "@/lib/client-types";
 import { toRunningWorkItem, type RunningWorkItem } from "@/lib/running-work";
 import {
   buildAgentsLineage,
-  familyRootOf,
   layoutLineage,
   lineageDescendants,
   lineageOf,
@@ -261,19 +260,5 @@ describe("layoutLineage", () => {
     const rows = layoutLineage([1, 2, 3, 4, 5]);
     expect(rows.map((row) => row.depth)).toEqual([1, 2, 3, 3, 3]);
     expect(rows.map((row) => row.last)).toEqual([true, true, false, false, true]);
-  });
-});
-
-describe("familyRootOf", () => {
-  const members: Record<string, string[]> = { a: ["a1", "a2"], b: ["b1"] };
-
-  it("finds the top-level session a root or a descendant belongs to", () => {
-    expect(familyRootOf("a", ["a", "b"], (r) => members[r]!)).toBe("a");
-    expect(familyRootOf("b1", ["a", "b"], (r) => members[r]!)).toBe("b");
-  });
-
-  it("is null for nothing open or a session in no family", () => {
-    expect(familyRootOf(null, ["a"], (r) => members[r]!)).toBeNull();
-    expect(familyRootOf("zzz", ["a", "b"], (r) => members[r]!)).toBeNull();
   });
 });

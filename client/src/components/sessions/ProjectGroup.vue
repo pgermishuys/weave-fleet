@@ -27,7 +27,7 @@ import { groupRunSessions } from "@/lib/workflows";
 import { useWorkflowsStore } from "@/stores/workflows";
 import { heightEnter, heightLeave } from "@/lib/height-transition";
 import type { RunningWorkItem } from "@/lib/running-work";
-import { familyRootOf, layoutLineage, lineageDescendants, lineageKindLabel, movableOutOf, nestLineage, sessionAgentState } from "@/lib/session-lineage";
+import { layoutLineage, lineageDescendants, lineageKindLabel, movableOutOf, nestLineage, sessionAgentState } from "@/lib/session-lineage";
 
 interface ProjectGroupModel {
   id: string;
@@ -141,15 +141,6 @@ const familyRows = computed(() => new Map(entries.value.flatMap((entry) => {
   const lines = layoutLineage(rows.map((row) => row.depth));
   return [[entry.session.session.id, rows.map((row, i) => ({ ...row, line: lines[i]! }))] as const];
 })));
-
-/** The family that's lit: the open session's. */
-const litFamily = computed(() => familyRootOf(
-  props.activeSessionId,
-  [...familyRows.value.keys()],
-  (root) => familyRows.value.get(root)!.flatMap((row) => row.kind === "session"
-    ? [row.item.session.id]
-    : row.work.childSessionId ? [row.work.childSessionId] : []),
-));
 
 /** Where a level's line hangs from the row's left edge, and how far in its row's content starts. */
 const lineX = (level: number) => 13 + (level - 1) * 16;
@@ -685,7 +676,6 @@ async function handleDelete(mode: DeleteProjectMode): Promise<void> {
           class="project-row"
           :class="{
             'project-row--drop-before': entry.kind !== 'run' && pinDropBefore === entry.session.session.id,
-            'project-row--lit': entry.kind !== 'run' && litFamily === entry.session.session.id,
           }"
           :data-family="entry.kind === 'run' ? undefined : entry.session.session.id"
         >
@@ -871,13 +861,9 @@ async function handleDelete(mode: DeleteProjectMode): Promise<void> {
 }
 
 /* What a session started, under it: running subagents, forks, sessions its agent started, on a tree with elbow lines.
-   The lines are barely there; the open session's family lights up (colour only, nothing moves). */
+   The lines are barely there and stay that way. */
 .project-row {
   --lineage-line: color-mix(in srgb, var(--muted) 16%, transparent);
-}
-
-.project-row--lit {
-  --lineage-line: color-mix(in srgb, var(--accent) 85%, transparent);
 }
 
 .session-children {
@@ -902,7 +888,6 @@ async function handleDelete(mode: DeleteProjectMode): Promise<void> {
   left: var(--lx);
   background: var(--lineage-line);
   pointer-events: none;
-  transition: background var(--transition);
 }
 
 .lineage-line {
@@ -919,21 +904,6 @@ async function handleDelete(mode: DeleteProjectMode): Promise<void> {
   top: 50%;
   width: 9px;
   height: 1px;
-}
-
-.project-row :deep(.session-kind),
-.project-row :deep(.subagent-row__kind),
-.project-row :deep(.session-item--top .session-caret) {
-  transition: color var(--transition);
-}
-
-.project-row--lit :deep(.session-kind),
-.project-row--lit :deep(.subagent-row__kind) {
-  color: color-mix(in srgb, var(--accent) 70%, var(--muted));
-}
-
-.project-row--lit :deep(.session-item--top .session-caret) {
-  color: var(--accent);
 }
 
 .project-content {
