@@ -28,7 +28,6 @@ import { useWorkflowsStore } from "@/stores/workflows";
 import { heightEnter, heightLeave } from "@/lib/height-transition";
 import type { RunningWorkItem } from "@/lib/running-work";
 import { familyRootOf, layoutLineage, lineageDescendants, lineageKindLabel, movableOutOf, nestLineage, sessionAgentState } from "@/lib/session-lineage";
-import { hoveredFamily } from "@/composables/use-lineage-hover";
 
 interface ProjectGroupModel {
   id: string;
@@ -143,8 +142,8 @@ const familyRows = computed(() => new Map(entries.value.flatMap((entry) => {
   return [[entry.session.session.id, rows.map((row, i) => ({ ...row, line: lines[i]! }))] as const];
 })));
 
-/** The family that's lit: the one the pointer is on, else the open session's. */
-const litFamily = computed(() => hoveredFamily.value ?? familyRootOf(
+/** The family that's lit: the open session's. */
+const litFamily = computed(() => familyRootOf(
   props.activeSessionId,
   [...familyRows.value.keys()],
   (root) => familyRows.value.get(root)!.flatMap((row) => row.kind === "session"
@@ -689,10 +688,6 @@ async function handleDelete(mode: DeleteProjectMode): Promise<void> {
             'project-row--lit': entry.kind !== 'run' && litFamily === entry.session.session.id,
           }"
           :data-family="entry.kind === 'run' ? undefined : entry.session.session.id"
-          @mouseenter="entry.kind !== 'run' && (hoveredFamily = entry.session.session.id)"
-          @mouseleave="hoveredFamily = null"
-          @focusin="entry.kind !== 'run' && (hoveredFamily = entry.session.session.id)"
-          @focusout="hoveredFamily = null"
         >
           <WorkflowRunGroup
             v-if="entry.kind === 'run'"
@@ -876,7 +871,7 @@ async function handleDelete(mode: DeleteProjectMode): Promise<void> {
 }
 
 /* What a session started, under it: running subagents, forks, sessions its agent started, on a tree with elbow lines.
-   The lines are barely there; the family that's open or under the pointer lights up (colour only, nothing moves). */
+   The lines are barely there; the open session's family lights up (colour only, nothing moves). */
 .project-row {
   --lineage-line: color-mix(in srgb, var(--muted) 16%, transparent);
 }
