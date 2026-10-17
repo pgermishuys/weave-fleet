@@ -22,6 +22,7 @@ import SinceYouLookedMarker from "@/components/phone/session/SinceYouLookedMarke
 import StepsSheet from "@/components/phone/session/StepsSheet.vue";
 import PhoneToolRun from "@/components/phone/session/PhoneToolRun.vue";
 import PhoneRetryLine from "@/components/phone/session/PhoneRetryLine.vue";
+import SessionInterruptedCard from "@/components/session/SessionInterruptedCard.vue";
 import DockedPermission from "@/components/phone/session/DockedPermission.vue";
 import DockedQuestion from "@/components/phone/session/DockedQuestion.vue";
 import DockedPagePick from "@/components/phone/session/DockedPagePick.vue";
@@ -567,6 +568,11 @@ onUnmounted(() => {
             </p>
           </template>
           <PhoneRetryLine
+            :key="sessionId"
+            :session-id="sessionId"
+          />
+
+          <SessionInterruptedCard
             :key="sessionId"
             :session-id="sessionId"
           />

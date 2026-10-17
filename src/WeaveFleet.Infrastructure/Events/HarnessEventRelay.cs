@@ -98,6 +98,7 @@ public sealed class HarnessEventRelay : BackgroundService
     private readonly SessionUpdates? _updates;
     private readonly WorkflowRunner? _workflows;
     private readonly PromptQueueDispatcher? _queue;
+    private readonly TurnFlagger? _turns;
     private readonly TurnFailureRecorder? _failures;
     private readonly TurnRetryScheduler? _retries;
     private readonly PendingPermissionStore? _permissions;
@@ -143,8 +144,10 @@ public sealed class HarnessEventRelay : BackgroundService
         StreamingReplies? streaming = null,
         IModPermissionHook? modPermissions = null,
         FleetSessionEvents? fleetEvents = null,
-        PageChoices? pageChoices = null)
+        PageChoices? pageChoices = null,
+        TurnFlagger? turns = null)
     {
+        _turns = turns;
         _fleetEvents = fleetEvents;
         _pageChoices = pageChoices;
         _modPermissions = modPermissions;
@@ -462,6 +465,7 @@ public sealed class HarnessEventRelay : BackgroundService
                 // Before the queue: a limit's failure holds the queue before the idle after it reaches the queue.
                 _retries?.Observe(targetFleetSessionId, sessionUserId, domainEvent);
                 _queue?.Observe(targetFleetSessionId, sessionUserId, domainEvent);
+                _turns?.Observe(targetFleetSessionId, sessionUserId, domainEvent, StatusTypeOf(evt));
                 _callbacks?.Observe(targetFleetSessionId, sessionUserId, domainEvent);
                 _failures?.Observe(targetFleetSessionId, sessionUserId, domainEvent);
                 _context?.Observe(targetFleetSessionId, sessionUserId, domainEvent);
@@ -681,6 +685,17 @@ public sealed class HarnessEventRelay : BackgroundService
             await copying.ConfigureAwait(false);
         }
     }
+
+    /// <summary>The status a <c>session.status</c> event reports (<c>busy</c>, <c>idle</c>, <c>waiting_input</c>…), or null for any other event.</summary>
+    private static string? StatusTypeOf(HarnessEvent evt)
+        => evt.Type == EventTypes.SessionStatus
+            && evt.Payload is { ValueKind: JsonValueKind.Object } payload
+            && payload.TryGetProperty("status", out var status)
+            && status.ValueKind == JsonValueKind.Object
+            && status.TryGetProperty("type", out var type)
+            && type.ValueKind == JsonValueKind.String
+                ? type.GetString()
+                : null;
 
     private static bool IsWaitingInputStatus(HarnessEvent evt)
         => evt.Type == EventTypes.SessionStatus

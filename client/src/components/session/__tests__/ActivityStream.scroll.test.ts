@@ -14,6 +14,8 @@ const { stream, loadOlder } = vi.hoisted(() => ({
   loadOlder: vi.fn(),
 }));
 
+// The interruption card opens a socket of its own; these tests aren't about it.
+vi.mock("@/components/session/SessionInterruptedCard.vue", () => ({ default: { render: () => null } }));
 vi.mock("@/composables/use-session-stream", async () => {
   const { computed, shallowRef: ref } = await import("vue");
   stream.hasMore = ref(false);

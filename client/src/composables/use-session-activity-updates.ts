@@ -5,6 +5,7 @@ import { useSessionsStore } from "@/stores/sessions"
 import type { DomainEvent } from "@/lib/domain-events"
 import { deriveSessionStatus } from "@/lib/session-status"
 import { toScheduledRetry } from "@/lib/turn-retry"
+import { toSessionInterruption } from "@/lib/session-interruption"
 
 /**
  * Subscribes to global "sessions" topic to receive activity_status events
@@ -19,6 +20,12 @@ export function useSessionActivityUpdates(): void {
       // When Fleet tries a turn a limit stopped again: the session's row says so.
       if (event.type === "session.retry") {
         sessionsStore.patchSession(event.payload.sessionId, { scheduledRetry: toScheduledRetry(event.payload.retry) })
+        return
+      }
+
+      // A Fleet restart cut a turn off (or the user carried on): the session's row says so.
+      if (event.type === "session.interrupted") {
+        sessionsStore.patchSession(event.payload.sessionId, { interrupted: toSessionInterruption(event.payload.interruption) })
         return
       }
 

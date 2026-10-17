@@ -287,6 +287,9 @@ public static class DependencyInjection
         services.AddSingleton<StreamingReplies>();
         services.AddScoped<IQueuedPromptRepository, QueuedPromptRepository>();
         services.AddScoped<IScheduledRetryRepository, ScheduledRetryRepository>();
+        services.AddScoped<ISessionInterruptionRepository, SessionInterruptionRepository>();
+        services.AddScoped<SessionInterruptions>();
+        services.AddSingleton<TurnFlagger>();
         // Singleton: devices belong to the machine, not a user, and the auth handler reads them on every request.
         services.AddSingleton<IDeviceRepository, DeviceRepository>();
         services.AddSingleton<WeaveFleet.Application.Devices.DeviceTokenService>();

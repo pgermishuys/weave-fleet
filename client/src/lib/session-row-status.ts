@@ -6,6 +6,7 @@
  */
 import type { SessionListItem } from "@/api/client";
 import { formatRetryClock, formatRetryIn, limitName } from "@/lib/turn-retry";
+import { interruptionRowLabel } from "@/lib/session-interruption";
 import { describeRetry, retryShortLabel, type RetryStatus } from "@/lib/retry-status";
 
 export type SessionRowTone = "attention" | "working" | "retry" | "error" | "quiet";
@@ -99,6 +100,11 @@ export function sessionRowStatus(item: SessionListItem, now: number, machineAnsw
     case "disconnected":
       return { label: "Offline", tone: "quiet", description: "Offline" };
     default: {
+      // A Fleet restart cut the last turn off, and nobody has carried on yet.
+      if (item.interrupted) {
+        const label = interruptionRowLabel(item.interrupted);
+        return { label, tone: "retry", description: label };
+      }
       // A limit stopped its last turn and Fleet tries again by itself.
       const retry = item.scheduledRetry;
       if (retry) {

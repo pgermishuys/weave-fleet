@@ -13,6 +13,8 @@ const { stream, apiGet } = vi.hoisted(() => ({
   apiGet: vi.fn(),
 }));
 
+// The interruption card opens a socket of its own; these tests aren't about it.
+vi.mock("@/components/session/SessionInterruptedCard.vue", () => ({ default: { render: () => null } }));
 vi.mock("@/api/client", () => ({ api: { GET: apiGet } }));
 
 vi.mock("@/composables/use-session-stream", async () => {
@@ -118,7 +120,8 @@ describe("ActivityStream and work Fleet stopped", () => {
     expect(note.text()).toContain("stopped");
     expect(note.classes()).toContain("background-note--cancelled");
     expect(bodies(wrapper).join()).not.toContain("Shell.NotFoundError");
-    expect(apiGet).not.toHaveBeenCalled();
+    // The conversation also reads the session's interruption; only the work list must stay unread.
+    expect(apiGet).not.toHaveBeenCalledWith("/api/sessions/{id}/work", expect.anything());
     wrapper.unmount();
   });
 

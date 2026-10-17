@@ -49,6 +49,8 @@ public static class SessionEndpoints
             SessionProgressReader progressReader,
             IDelegationRepository delegationRepository,
             IScheduledRetryRepository scheduledRetries,
+            SessionInterruptions restartInterruptions,
+            ISessionInterruptionRepository interruptionRepository,
             CancellationToken ct,
             int limit = 100,
             int offset = 0,
@@ -104,11 +106,17 @@ public static class SessionEndpoints
                     var retriesBySessionId = (await scheduledRetries.ListForUserAsync())
                         .ToDictionary(retry => retry.SessionId, ScheduledRetryView.From, StringComparer.Ordinal);
 
+                    var interruptedBySessionId = restartInterruptions.Enabled
+                        ? (await interruptionRepository.ListForUserAsync())
+                            .ToDictionary(item => item.SessionId, SessionInterruptionView.From, StringComparer.Ordinal)
+                        : new Dictionary<string, SessionInterruptionView>(StringComparer.Ordinal);
+
                     return Results.Ok(sessions.Select(session => ToListResponse(session, parentIdsWithBusyChildren, projectNamesById, originsBySessionId, activityTracker, capabilitiesResolver, workspacesById) with
                     {
                         Progress = progressBySessionId.GetValueOrDefault(session.Id),
                         RunningWorkCount = runningWorkBySessionId.GetValueOrDefault(session.Id),
                         ScheduledRetry = retriesBySessionId.GetValueOrDefault(session.Id),
+                        Interrupted = interruptedBySessionId.GetValueOrDefault(session.Id),
                     }).ToList());
                 },
                 error => Task.FromResult(Results.Problem(error.Description) as IResult));
@@ -468,6 +476,34 @@ public static class SessionEndpoints
             return result.Match(_ => Results.Accepted(), err => err.ToSessionApiResult());
         })
         .WithName("SendSessionRetryNow");
+
+        // GET /api/sessions/{id}/interruption — that a Fleet restart cut the session's turn off; 204 when it didn't.
+        group.MapGet("/{id}/interruption", async (string id, SessionInterruptions interruptions) =>
+        {
+            var result = await interruptions.GetAsync(id);
+            return result.Match(
+                item => item is null
+                    ? Results.NoContent()
+                    : Results.Json(SessionInterruptionView.From(item), ApiJsonContext.Default.SessionInterruptionView),
+                err => err.ToSessionApiResult());
+        })
+        .WithName("GetSessionInterruption");
+
+        // POST /api/sessions/{id}/interruption/continue — sends "Continue where you left off." as the user's message.
+        group.MapPost("/{id}/interruption/continue", async (string id, SessionInterruptions interruptions, CancellationToken ct) =>
+        {
+            var result = await interruptions.ContinueAsync(id, ct);
+            return result.Match(_ => Results.Accepted(), err => err.ToSessionApiResult());
+        })
+        .WithName("ContinueInterruptedSession");
+
+        // DELETE /api/sessions/{id}/interruption — dismiss: the user takes it from here.
+        group.MapDelete("/{id}/interruption", async (string id, SessionInterruptions interruptions, CancellationToken ct) =>
+        {
+            var result = await interruptions.DismissAsync(id, ct);
+            return result.Match(_ => Results.NoContent(), err => err.ToSessionApiResult());
+        })
+        .WithName("DismissSessionInterruption");
 
         // POST /api/sessions/{id}/abort
         group.MapPost("/{id}/abort", async (string id, SessionPrompting sessionPrompting, PageChoices pageChoices) =>

@@ -691,6 +691,7 @@ function removeSessionFromStore(): void {
             <span
               v-else
               class="session-glyph-slot"
+              :class="{ 'session-glyph-slot--cut': session.interrupted }"
               aria-hidden="true"
             />
 
@@ -811,6 +812,7 @@ function removeSessionFromStore(): void {
           <span
             v-else
             class="session-glyph-slot"
+            :class="{ 'session-glyph-slot--cut': session.interrupted }"
             aria-hidden="true"
           />
 
@@ -1277,6 +1279,12 @@ function removeSessionFromStore(): void {
   width: 8px;
   height: 8px;
   flex-shrink: 0;
+}
+
+/* A Fleet restart cut the session's turn off. */
+.session-glyph-slot--cut {
+  border-radius: 50%;
+  background: var(--status-waiting);
 }
 
 .session-copy {
