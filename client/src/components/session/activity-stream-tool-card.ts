@@ -78,6 +78,17 @@ export interface ToolCardItem {
   waiting?: boolean;
 }
 
+/**
+ * Fleet's diagram and sequence canvas tools, retired with the canvases they drew (migration 064 deleted them). Old rows
+ * stay as history but have nothing left to show.
+ */
+const RETIRED_CANVAS_TOOLS: ReadonlySet<string> = new Set(["fleet_canvas_open", "fleet_canvas_patch"]);
+
+/** The call drew a diagram or sequence canvas, which Fleet no longer keeps; any harness's name for it. */
+export function isRetiredCanvasTool(toolName: string | undefined): boolean {
+  return toolName !== undefined && RETIRED_CANVAS_TOOLS.has(getTool(toolName).name);
+}
+
 /** The kind of sub-agent a call asked for: OpenCode names it `subagent_type`, OpenCode 2 `agent`. */
 export function subagentKind(part: AccumulatedToolPart): string {
   const input = toolInput(part);
@@ -256,7 +267,7 @@ export function toToolCardItem(
     ? pageChoiceRowTitle(input, toolStatus(part), asRecord(state?.metadata))
     : undefined;
   const title = pickTitle ?? shownTitle ?? (getToolLabel(part.tool, input) || part.tool);
-  const canvasId = getStringValue(asRecord(state?.metadata)?.canvasId);
+  const canvasId = isRetiredCanvasTool(part.tool) ? undefined : getStringValue(asRecord(state?.metadata)?.canvasId);
   const status = workStatus(work) ?? backgroundStatus(part, finishedBackgroundWork) ?? formatToolStatus(state?.status);
 
   return {

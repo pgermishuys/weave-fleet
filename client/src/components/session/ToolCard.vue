@@ -13,6 +13,7 @@ import { toolRowViewId, toolRowViews } from "@/lib/mods/points";
 import { useModToolRows } from "@/lib/mods/renders";
 import { useResolvedModView } from "@/lib/mods/resolve";
 import type { ModAction } from "@/lib/mods/types";
+import { isRetiredCanvasTool } from "@/components/session/activity-stream-tool-card";
 
 interface DiffLine {
   type: "add" | "remove" | "context";
@@ -79,6 +80,7 @@ const toolIcon = computed(() => getToolIcon(props.kind));
 /** Copilot's turn row and HydraFusion's pass rows are a sentence of facts (model, time, credits), not a path: they wrap rather than clip. */
 const wrapsDetail = computed(() => props.kind === "copilot_turn" || props.kind.startsWith("hydrafusion_"));
 const displayLabel = computed(() => getToolDisplayLabel(props.kind));
+const retired = computed(() => isRetiredCanvasTool(props.kind));
 
 const visualPayload = computed(() => parseVisualPayload(props.output));
 const visualRenderer = computed(() => {
@@ -207,8 +209,15 @@ function handleExpandVisual(): void {
       <span class="tool-header__label">{{ displayLabel }}</span>
       <span v-if="isPatternTool" class="tool-header__pattern">{{ title }}</span>
       <span v-else class="tool-header__detail">{{ title }}</span>
+      <span
+        v-if="retired && status === 'Completed'"
+        class="tool-header__retired"
+        data-testid="tool-card-retired"
+      >
+        Diagram retired
+      </span>
       <button
-        v-if="canvasId && status === 'Completed'"
+        v-else-if="canvasId && status === 'Completed'"
         type="button"
         class="tool-header__show"
         data-testid="tool-card-show"
@@ -428,6 +437,15 @@ function handleExpandVisual(): void {
   font-size: 12px;
   font-weight: 500;
   transition: background var(--transition);
+}
+
+/* Where Show was: the diagram the call drew is gone. */
+.tool-header__retired {
+  flex-shrink: 0;
+  margin-left: auto;
+  padding: 1px 8px;
+  color: var(--muted);
+  font-size: 12px;
 }
 
 .tool-header__show:hover {

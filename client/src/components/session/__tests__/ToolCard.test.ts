@@ -134,4 +134,15 @@ describe("ToolCard", () => {
     expect(done.emitted("show-canvas")).toEqual([["cv_1"]]);
     expect(done.get('[data-testid="tool-card"]').attributes("open")).toBeUndefined();
   });
+
+  it("says quietly that a retired diagram is gone instead of offering to show it", () => {
+    for (const kind of ["fleet_canvas_open", "mcp__fleet__fleet_canvas_patch"]) {
+      const card = mount(ToolCard, { props: { id: "tool-card-diagram", title: "Request path", kind, canvasId: "cv_1", status: "Completed", initiallyCollapsed: true } });
+
+      expect(card.find('[data-testid="tool-card-show"]').exists(), kind).toBe(false);
+      expect(card.get('[data-testid="tool-card-retired"]').text(), kind).toBe("Diagram retired");
+    }
+    const page = mount(ToolCard, { props: { id: "tool-card-page", title: "Charts", kind: "fleet_page_show", canvasId: "cv_2", status: "Completed" } });
+    expect(page.find('[data-testid="tool-card-retired"]').exists()).toBe(false);
+  });
 });
