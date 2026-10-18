@@ -1,5 +1,6 @@
 # .NET
 bin/
+!opencode/built-in-skills/fleet-diagrams/archify/bin/
 obj/
 *.user
 *.suo
