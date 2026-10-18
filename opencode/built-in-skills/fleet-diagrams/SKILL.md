@@ -47,7 +47,10 @@ and so on. Keep it to about ten boxes; leave detail for the chat.
 
 Read the schema before you write JSON for any type but `architecture`: most failed runs come from guessing a field.
 In a `workflow`, `col` runs 0 to 5 and each lane and column pair holds one node, so two nodes never share a cell; leave
-edge `route`, `fromSide` and `toSide` out and let archify route. Leave `meta.visual_preset` out: that is the classic look, the
+edge `route`, `fromSide` and `toSide` out and let archify route. A `sequence` has no automatic layout: keep it to five
+participants with short labels and no sublabels, about eight messages and few notes, and no self-messages (archify
+rejects them; put the participant's own work in a note on a real message). Space messages at least 44 px apart, 55 or
+66 px under a two- or three-line note. Leave `meta.visual_preset` out: that is the classic look, the
 one that suits Fleet. Set `meta.quality_profile` to `"showcase"`. Keep labels short, the way you would write them on
 a whiteboard. Component `type` and boundary `kind` take only the values in the schema's enums (`architecture.schema.json` lists
 them), and a boundary's frame must not cover a component that isn't inside it: give each frame its own area.
