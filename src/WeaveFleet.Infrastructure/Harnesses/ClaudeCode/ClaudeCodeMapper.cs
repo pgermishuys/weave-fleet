@@ -445,6 +445,42 @@ internal static class ClaudeCodeMapper
     };
 
     /// <summary>
+    /// A file tool's finished call as Fleet's two file events: <c>files.written</c> (what progress tracking reads) and
+    /// <c>file.watcher.updated</c> (which Fleet turns into <c>files.changed</c>, so open files and the Changes panel
+    /// reload). Claude Code has no file watcher of its own to say the second.
+    /// </summary>
+    internal static IReadOnlyList<HarnessEvent> CreateFileWrittenEvents(string sessionId, string? messageId, string path) =>
+    [
+        new()
+        {
+            Type = EventTypes.FilesWritten,
+            SessionId = sessionId,
+            Timestamp = DateTimeOffset.UtcNow,
+            Payload = JsonSerializer.SerializeToElement(
+                new FilesWrittenPayload { SessionId = sessionId, MessageId = messageId, Paths = [path] },
+                InfrastructureJsonContext.Default.FilesWrittenPayload),
+        },
+        new()
+        {
+            Type = EventTypes.FileWatcherUpdated,
+            SessionId = sessionId,
+            Timestamp = DateTimeOffset.UtcNow,
+            Payload = ClaudeCodeTools.FileChanged(path),
+        },
+    ];
+
+    /// <summary>The agent's whole todo list, as Fleet's <c>todos.reported</c>.</summary>
+    internal static HarnessEvent CreateTodosReportedEvent(string sessionId, IReadOnlyList<TodoEntry> items) => new()
+    {
+        Type = EventTypes.TodosReported,
+        SessionId = sessionId,
+        Timestamp = DateTimeOffset.UtcNow,
+        Payload = JsonSerializer.SerializeToElement(
+            new TodosReportedPayload { SessionId = sessionId, Items = items },
+            InfrastructureJsonContext.Default.TodosReportedPayload),
+    };
+
+    /// <summary>
     /// What one model call used, as Fleet's step-finish part: what it read fresh (not from the cache, so cache writes
     /// count), what it wrote less its thinking, and its thinking. <paramref name="cost"/> is the turn's, on its last
     /// message; Claude Code doesn't price each call.

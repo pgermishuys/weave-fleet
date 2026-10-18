@@ -144,6 +144,31 @@ internal static class ClaudeCodeTools
     }
 
     /// <summary>
+    /// The file a file tool's call wrote, as an absolute path: the one Claude Code reports (<paramref name="result"/>'s
+    /// <c>filePath</c>), else the one the call asked for, against <paramref name="workingDirectory"/> when relative. Null
+    /// for a tool that doesn't write a file.
+    /// </summary>
+    internal static string? WrittenFile(string claudeName, JsonElement input, JsonElement? result, string workingDirectory)
+    {
+        if (!Shapes.TryGetValue(claudeName, out var shape) || shape.Name is not ("edit" or "write"))
+            return null;
+
+        var path = (result is { } reported ? PermissionEvents.String(reported, "filePath") : null)
+            ?? PermissionEvents.String(input, "file_path")
+            ?? PermissionEvents.String(input, "notebook_path");
+        return path is null ? null : Path.GetFullPath(Path.IsPathRooted(path) ? path : Path.Combine(workingDirectory, path));
+    }
+
+    /// <summary>A <c>file.watcher.updated</c> payload saying <paramref name="path"/> changed, as OpenCode's watcher says it.</summary>
+    internal static JsonElement FileChanged(string path) => Write(json =>
+    {
+        json.WriteStartObject();
+        json.WriteString("file", path);
+        json.WriteString("event", "change");
+        json.WriteEndObject();
+    });
+
+    /// <summary>
     /// The facts Fleet keeps with a call for showing it: a file tool's diff (<c>diff</c>), and the answers to a question
     /// (<c>answers</c>, one list of labels per question). Null when there are none.
     /// </summary>

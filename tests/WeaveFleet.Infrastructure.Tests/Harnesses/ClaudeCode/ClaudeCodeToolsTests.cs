@@ -65,5 +65,16 @@ public sealed class ClaudeCodeToolsTests
         ClaudeCodeTools.Diff("Write", Json("""{"file_path":"/w/n.txt","content":"a\nb\n"}""")).ShouldBe("--- /w/n.txt\n+++ /w/n.txt\n@@ -0,0 +1,2 @@\n+a\n+b\n");
     }
 
+    [Theory]
+    [InlineData("Edit", """{"file_path":"/w/a.py","old_string":"a","new_string":"b"}""", """{"filePath":"/w/a.py"}""", "/w/a.py")]
+    [InlineData("Write", """{"file_path":"/w/n.txt","content":"x"}""", """{"type":"create","filePath":"/w/n.txt"}""", "/w/n.txt")]
+    // No result to read it from: the path the call asked for, against the session's folder when it's relative.
+    [InlineData("MultiEdit", """{"file_path":"src/b.cs","edits":[]}""", null, "/w/src/b.cs")]
+    [InlineData("NotebookEdit", """{"notebook_path":"/w/n.ipynb","new_source":"x"}""", null, "/w/n.ipynb")]
+    [InlineData("Read", """{"file_path":"/w/a.py"}""", """{"type":"text"}""", null)]
+    [InlineData("Bash", """{"command":"touch x"}""", null, null)]
+    public void A_file_tool_names_the_file_it_wrote(string claude, string input, string? result, string? expected)
+        => ClaudeCodeTools.WrittenFile(claude, Json(input), result is null ? null : Json(result), "/w").ShouldBe(expected);
+
     private static JsonElement Json(string json) => JsonDocument.Parse(json).RootElement.Clone();
 }
