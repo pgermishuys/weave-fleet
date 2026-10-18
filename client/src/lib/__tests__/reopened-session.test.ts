@@ -56,9 +56,9 @@ const snapshot: SessionSnapshot = {
         part({
           type: "tool",
           id: "prt_canvas",
-          tool: "fleet_canvas_open",
+          tool: "fleet_page_show",
           callID: "toolu_canvas",
-          state: { status: "completed", input: {}, output: "Opened it.", title: "Open canvas", metadata: { canvasId: "cv_1" } },
+          state: { status: "completed", input: {}, output: "Opened it.", title: "Request path", metadata: { canvasId: "cv_1" } },
         }),
         part({
           type: "tool",
@@ -103,7 +103,7 @@ describe("Reopened session", () => {
     const tools = toolParts(createSessionStreamState(snapshot)).map((part) => toToolCardItem(part))
 
     expect(tools.find((t) => t.kind === "search_code")?.output).toContain("authenticate")
-    expect(tools.find((t) => t.kind === "fleet_canvas_open")?.canvasId).toBe("cv_1")
+    expect(tools.find((t) => t.kind === "fleet_page_show")?.canvasId).toBe("cv_1")
   })
 
   it("updates a tool still running when reopened instead of adding a second card", () => {

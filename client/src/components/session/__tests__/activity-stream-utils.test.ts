@@ -82,6 +82,20 @@ describe("toToolCardItem", () => {
     expect(running).toMatchObject({ title: "Shop · npm run dev", canvasId: undefined });
   });
 
+  it("offers no canvas for a retired diagram call, by any harness's name for it", () => {
+    // Migration 064 deleted diagram and sequence canvases, so their old rows have nothing to show.
+    for (const tool of ["fleet_canvas_open", "fleet_canvas_patch", "mcp__fleet__fleet_canvas_open", "mcp__fleet__fleet_canvas_patch"]) {
+      const item = toToolCardItem(create_tool_part({
+        status: "completed",
+        input: { kind: "diagram", title: "Request path" },
+        output: "Opened diagram canvas cv_1.",
+        metadata: { canvasId: "cv_1", version: 1 },
+      }, tool));
+
+      expect(item.canvasId, tool).toBeUndefined();
+    }
+  });
+
   it("shows a saved note as the note itself, whatever the harness says the call was", () => {
     const done = toToolCardItem(create_tool_part({
       status: "completed",
