@@ -68,6 +68,8 @@ public static class ArchifyTheme
         html:root .diagram-container > svg { min-width: 0 !important; max-width: 100% !important; width: 100% !important; height: auto; }
         html:root svg text { font-family: var(--fleet-font-sans); }
         html:root .pulse-dot { display: none; }
+        /* archify's zoom and route bar doesn't fit a narrow panel; the diagram is already fitted there. */
+        @media (max-width: 560px) { html:root .diagram-nav { display: none !important; } }
         </style>
         <script id="fleet-archify-theme">(() => {
           // Follow Fleet's light or dark, not archify's own switch or the system setting.
