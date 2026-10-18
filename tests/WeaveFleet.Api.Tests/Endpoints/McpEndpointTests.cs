@@ -173,7 +173,7 @@ public sealed class McpEndpointTests : IAsyncLifetime
 
         tools.Select(tool => tool.GetProperty("name").GetString()).ShouldBe(
         [
-            "fleet_canvas_list", "fleet_canvas_open", "fleet_canvas_read", "fleet_canvas_patch", "fleet_canvas_focus",
+            "fleet_canvas_list", "fleet_canvas_read", "fleet_canvas_focus",
             "fleet_page_show", "fleet_app_start", "fleet_browser_open", "fleet_browser_read", "fleet_browser_act",
             "fleet_browser_screenshot", "fleet_session_read",
         ]);
@@ -206,22 +206,17 @@ public sealed class McpEndpointTests : IAsyncLifetime
     [Fact]
     public async Task A_call_runs_the_tool_for_the_callers_session_and_keeps_its_card_for_the_harness()
     {
-        var result = await CallAsync("fleet_canvas_open", new
-        {
-            kind = "diagram",
-            title = "Flow",
-            state = new { nodes = new[] { new { id = "a", label = "Agent" }, new { id = "f", label = "Fleet" } }, edges = new[] { new { id = "e", from = "a", to = "f" } } },
-        }, callId: "toolu_open");
+        var result = await CallAsync("fleet_browser_open", new { url = "http://localhost:5173/", title = "Flow" }, callId: "toolu_open");
 
         result.GetProperty("isError").GetBoolean().ShouldBeFalse();
         var text = result.GetProperty("content").EnumerateArray().ShouldHaveSingleItem();
         text.GetProperty("type").GetString().ShouldBe("text");
-        text.GetProperty("text").GetString()!.ShouldStartWith("Opened \"Flow\" (cv_");
+        text.GetProperty("text").GetString()!.ShouldStartWith("Showing http://localhost:5173/ in \"Flow\" (cv_");
         text.TryGetProperty("data", out _).ShouldBeFalse();
 
         // What the tool card shows: the plugins' title and metadata, by the harness's id for the call.
         var record = _factory!.Services.GetRequiredService<FleetToolCallRecords>().Take("toolu_open").ShouldNotBeNull();
-        record.Title.ShouldBe("Flow · +2 boxes, +1 edge · v1");
+        record.Title.ShouldBe("Flow · http://localhost:5173/");
         record.Metadata.GetProperty("canvasId").GetString()!.ShouldStartWith("cv_");
         record.Metadata.GetProperty("version").GetInt32().ShouldBe(1);
 

@@ -2,7 +2,7 @@ import { onBeforeUnmount, toValue, watch, type MaybeRefOrGetter } from "vue";
 import { apiFetchOn } from "@/lib/api-client";
 import { useMachineTarget, type MachineTarget } from "@/lib/machine-target";
 import { isAppEvent, isCanvasEvent, type AppUpdated, type CanvasEvent } from "@/lib/domain-events";
-import type { ServerCanvasSnapshot } from "@/lib/server-canvas";
+import { isServerCanvasKind, type ServerCanvasSnapshot } from "@/lib/server-canvas";
 import { useAppRunsStore } from "@/stores/app-runs";
 import { serverCanvasTabId, useCanvasesStore } from "@/stores/canvases";
 import { onReconnect, useWeaveSocket } from "@/composables/use-weave-socket";
@@ -15,7 +15,9 @@ export async function fetchServerCanvases(machine: MachineTarget, sessionId: str
   const response = await apiFetchOn(machine.connection, canvasesPath(sessionId));
   if (!response.ok) throw new Error(`HTTP ${response.status}`);
   const body: unknown = await response.json();
-  return Array.isArray(body) ? (body as ServerCanvasSnapshot[]) : [];
+  if (!Array.isArray(body)) return [];
+  // A kind this client doesn't show (a retired one from an older server) is left out, not turned into an empty tab.
+  return (body as ServerCanvasSnapshot[]).filter((canvas) => isServerCanvasKind(canvas?.kind));
 }
 
 /**

@@ -120,93 +120,19 @@ const MOCK_FILES: Record<string, string> = {
 };
 
 // Server canvases (Fleet Canvas step 2): what the agent has drawn in a session.
-// Every mock session starts with the same two; closes and revisions are kept
+// Every mock session starts with the same one; closes are kept
 // in memory until Vite restarts.
 interface MockCanvas {
   canvasId: string;
-  kind: "diagram" | "sequence" | "browser";
+  kind: "browser";
   title: string;
   version: number;
   state: Record<string, unknown>;
   closed: boolean;
-  revision: number;
 }
-
-const MOCK_DIAGRAM_NODES = [
-  { id: "n1", label: "NuCode session", detail: "NuCode/Sessions" },
-  { id: "n2", label: "EventBroadcaster", detail: "Infrastructure/Events" },
-  { id: "n3", label: "SessionEventsHub", detail: "Api/Hubs" },
-  { id: "n4", label: "useSessionStream", detail: "client/composables" },
-  { id: "n5", label: "use-sessions.ts", detail: "client/composables" },
-  { id: "n6", label: "GET /api/sessions", detail: "Api/Endpoints" },
-];
-
-const MOCK_DIAGRAM_EDGES = [
-  { id: "e1", from: "n1", to: "n2", label: "publishes", style: "solid" },
-  { id: "e2", from: "n2", to: "n3", label: "session:{id}", style: "solid" },
-  { id: "e3", from: "n3", to: "n4", label: "Event", style: "solid" },
-  { id: "e4", from: "n5", to: "n6", label: "polls every 15 s", style: "dashed" },
-];
-
-// Each revise applies the next step, the way an agent patches the same diagram.
-const MOCK_DIAGRAM_REVISIONS: Array<{ summary: string; apply: (state: { nodes: Array<Record<string, unknown>>; edges: Array<Record<string, unknown>> }) => void }> = [
-  {
-    summary: "+1 edge",
-    apply: (state) => {
-      state.edges.push({ id: "e5", from: "n3", to: "n5", label: "SessionListChanged", style: "planned" });
-    },
-  },
-  {
-    summary: "−1 box, +1 box",
-    apply: (state) => {
-      state.nodes = state.nodes.filter((node) => node.id !== "n6");
-      state.edges = state.edges.filter((edge) => edge.from !== "n6" && edge.to !== "n6");
-      state.nodes.push({ id: "n7", label: "SessionListCache", detail: "client/stores" });
-      state.edges.push({ id: "e6", from: "n5", to: "n7", label: "updates", style: "solid" });
-    },
-  },
-  {
-    summary: "1 box changed",
-    apply: (state) => {
-      const node = state.nodes.find((candidate) => candidate.id === "n5");
-      if (node) node.label = "use-sessions.ts (push)";
-    },
-  },
-];
-
-const MOCK_SEQUENCE_SOURCE = [
-  "sequenceDiagram",
-  "  participant Agent",
-  "  participant Plugin as fleet-canvas.ts",
-  "  participant Fleet",
-  "  participant Browser",
-  "  Agent->>Plugin: fleet_canvas_open",
-  "  Plugin->>Fleet: POST /api/bridge/canvas/open",
-  "  Fleet-->>Browser: canvas.updated",
-  "  Fleet-->>Browser: canvas.focused",
-  "  Fleet-->>Plugin: Opened at v1",
-].join("\n");
 
 function seedMockCanvases(): MockCanvas[] {
   return [
-    {
-      canvasId: "cv_mock_diagram",
-      kind: "diagram",
-      title: "Session event flow",
-      version: 1,
-      state: { direction: "TB", nodes: structuredClone(MOCK_DIAGRAM_NODES), edges: structuredClone(MOCK_DIAGRAM_EDGES) },
-      closed: false,
-      revision: 0,
-    },
-    {
-      canvasId: "cv_mock_sequence",
-      kind: "sequence",
-      title: "Canvas tool call",
-      version: 1,
-      state: { source: MOCK_SEQUENCE_SOURCE },
-      closed: false,
-      revision: 0,
-    },
     {
       canvasId: "cv_mock_browser",
       kind: "browser",
@@ -214,7 +140,6 @@ function seedMockCanvases(): MockCanvas[] {
       version: 2,
       state: { url: "http://localhost:5173/", appId: MOCK_APP_ID },
       closed: false,
-      revision: 0,
     },
   ];
 }
@@ -508,7 +433,7 @@ export function mockApiPlugin(options: MockApiOptions = {}): Plugin {
       canvas.closed = false;
       canvas.version += 1;
     } else {
-      canvas = { canvasId: `cv_mock_browser_${nextCanvasNumber++}`, kind: "browser", title, version: 1, state, closed: false, revision: 0 };
+      canvas = { canvasId: `cv_mock_browser_${nextCanvasNumber++}`, kind: "browser", title, version: 1, state, closed: false };
       canvases.push(canvas);
     }
     pushCanvasUpdated(sessionId, canvas, "opened");
@@ -795,8 +720,7 @@ export function mockApiPlugin(options: MockApiOptions = {}): Plugin {
 
     // ─── Canvases ───────────────────────────────────────────────────────────────
     // Try on 3099, with a mock session open:
-    //   curl -X POST localhost:3099/api/mock/sessions/<id>/canvases/cv_mock_diagram/revise
-    //   curl -X POST localhost:3099/api/mock/sessions/<id>/canvases/reopen
+        //   curl -X POST localhost:3099/api/mock/sessions/<id>/canvases/reopen
     {
       pattern: /^\/api\/sessions\/([^/]+)\/canvases$/,
       handler: (url) => {
@@ -836,34 +760,6 @@ export function mockApiPlugin(options: MockApiOptions = {}): Plugin {
           pushHubEvent(id, "canvas.closed", { sessionId: id, canvasId });
         }
         return new Response(null, { status: 204 });
-      },
-    },
-    {
-      pattern: /^\/api\/mock\/sessions\/([^/]+)\/canvases\/([^/]+)\/revise$/,
-      handler: (url) => {
-        const [, , , , rawId, , rawCanvasId] = url.pathname.split("/");
-        const id = decodeURIComponent(rawId);
-        const canvasId = decodeURIComponent(rawCanvasId);
-        const canvas = sessionCanvases(id).find((candidate) => candidate.canvasId === canvasId);
-        if (!canvas || canvas.closed) return json({ error: "No open canvas with that id" }, 404);
-
-        let summary: string;
-        if (canvas.kind === "diagram") {
-          const step = MOCK_DIAGRAM_REVISIONS[canvas.revision % MOCK_DIAGRAM_REVISIONS.length];
-          if (canvas.revision > 0 && canvas.revision % MOCK_DIAGRAM_REVISIONS.length === 0) {
-            canvas.state = { direction: "TB", nodes: structuredClone(MOCK_DIAGRAM_NODES), edges: structuredClone(MOCK_DIAGRAM_EDGES) };
-          }
-          step.apply(canvas.state as Parameters<typeof step.apply>[0]);
-          summary = step.summary;
-        } else {
-          canvas.state = { source: `${canvas.state.source as string}\n  Browser->>Browser: redraw in place (v${canvas.version + 1})` };
-          summary = `${(canvas.state.source as string).split("\n").length} lines`;
-        }
-        canvas.revision += 1;
-        canvas.version += 1;
-        console.log(`[mock-api] revised ${canvasId} in ${id} to v${canvas.version} (${summary})`);
-        pushCanvasUpdated(id, canvas, summary);
-        return json(toCanvasResponse(canvas));
       },
     },
     {

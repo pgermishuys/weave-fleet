@@ -30,13 +30,13 @@ vi.mock("@/composables/use-weave-socket", () => ({
 
 let onEvent: ((event: DomainEvent) => void) | null = null;
 
-function diagram(canvasId: string, version: number, labels: string[]): ServerCanvasSnapshot {
+function browserCanvas(canvasId: string, version: number, labels: string[]): ServerCanvasSnapshot {
   return {
     canvasId,
-    kind: "diagram",
-    title: `Diagram ${canvasId}`,
+    kind: "browser",
+    title: `Browser ${canvasId}`,
     version,
-    state: { direction: "TB", nodes: labels.map((label, i) => ({ id: `n${i}`, label })), edges: [] },
+    state: { url: `http://localhost:5173/${labels.join("-")}` },
   };
 }
 
@@ -72,7 +72,7 @@ describe("useServerCanvases", () => {
   });
 
   it("loads the session's canvases and applies its canvas events", async () => {
-    apiFetchMock.mockResolvedValue(jsonResponse([diagram("cv_1", 1, ["A"])]));
+    apiFetchMock.mockResolvedValue(jsonResponse([browserCanvas("cv_1", 1, ["A"])]));
     const { useServerCanvases } = await import("@/composables/use-server-canvases");
 
     const { wrapper } = await mountComposable(() => useServerCanvases(shallowRef("s1")));
@@ -81,8 +81,8 @@ describe("useServerCanvases", () => {
     expect(subscribeV2Mock).toHaveBeenCalledWith("session:s1", expect.any(Function), expect.any(Function));
     expect(serverTabs("s1").map((canvas) => canvas.id)).toEqual([serverCanvasTabId("cv_1")]);
 
-    onEvent?.(updated("s1", diagram("cv_1", 2, ["A", "B"])));
-    onEvent?.(updated("other-session", diagram("cv_9", 1, ["X"])));
+    onEvent?.(updated("s1", browserCanvas("cv_1", 2, ["A", "B"])));
+    onEvent?.(updated("other-session", browserCanvas("cv_9", 1, ["X"])));
 
     expect(serverTabs("s1")[0]?.server?.version).toBe(2);
     expect(serverTabs("other-session")).toHaveLength(0);
@@ -97,9 +97,9 @@ describe("useServerCanvases", () => {
     const { useServerCanvases } = await import("@/composables/use-server-canvases");
     const { wrapper } = await mountComposable(() => useServerCanvases(shallowRef("s1")));
 
-    onEvent?.(updated("s1", diagram("cv_1", 2, ["A", "B"])));
-    onEvent?.(updated("s1", diagram("cv_new", 1, ["N"])));
-    resolveList(jsonResponse([diagram("cv_1", 1, ["A"])]));
+    onEvent?.(updated("s1", browserCanvas("cv_1", 2, ["A", "B"])));
+    onEvent?.(updated("s1", browserCanvas("cv_new", 1, ["N"])));
+    resolveList(jsonResponse([browserCanvas("cv_1", 1, ["A"])]));
     await flushAll();
 
     expect(serverTabs("s1").map((canvas) => [canvas.id, canvas.server?.version])).toEqual([
@@ -109,8 +109,22 @@ describe("useServerCanvases", () => {
     wrapper.unmount();
   });
 
+  it("ignores canvases of a retired kind, from the list and from live events", async () => {
+    const retired = (kind: string): ServerCanvasSnapshot => ({ canvasId: `cv_${kind}`, kind, title: "Old", version: 1, state: {} });
+    apiFetchMock.mockResolvedValue(jsonResponse([retired("diagram"), browserCanvas("cv_1", 1, ["A"]), retired("sequence")]));
+    const { useServerCanvases } = await import("@/composables/use-server-canvases");
+    const { wrapper } = await mountComposable(() => useServerCanvases(shallowRef("s1")));
+    await flushAll();
+
+    onEvent?.(updated("s1", retired("diagram")));
+    onEvent?.(updated("s1", retired("sequence")));
+
+    expect(serverTabs("s1").map((canvas) => canvas.id)).toEqual([serverCanvasTabId("cv_1")]);
+    wrapper.unmount();
+  });
+
   it("loads again on reconnect, since canvas events aren't replayed", async () => {
-    apiFetchMock.mockResolvedValueOnce(jsonResponse([diagram("cv_1", 1, ["A"])]));
+    apiFetchMock.mockResolvedValueOnce(jsonResponse([browserCanvas("cv_1", 1, ["A"])]));
     const { useServerCanvases } = await import("@/composables/use-server-canvases");
     const { wrapper } = await mountComposable(() => useServerCanvases(shallowRef("s1")));
 
@@ -126,7 +140,7 @@ describe("useServerCanvases", () => {
 
   it("loads and subscribes again when the session changes", async () => {
     apiFetchMock.mockImplementation((path: string) =>
-      Promise.resolve(jsonResponse(path.includes("s2") ? [diagram("cv_2", 1, ["B"])] : [])));
+      Promise.resolve(jsonResponse(path.includes("s2") ? [browserCanvas("cv_2", 1, ["B"])] : [])));
     const sessionId = shallowRef("s1");
     const { useServerCanvases } = await import("@/composables/use-server-canvases");
     const { wrapper } = await mountComposable(() => useServerCanvases(sessionId));
@@ -148,7 +162,7 @@ describe("closeServerCanvas", () => {
 
   it("removes the tab at once and asks the server to close it", async () => {
     const store = useCanvasesStore();
-    store.setServerCanvases("s1", [diagram("cv_1", 1, ["A"])]);
+    store.setServerCanvases("s1", [browserCanvas("cv_1", 1, ["A"])]);
     apiFetchMock.mockResolvedValue(new Response(null, { status: 204 }));
     const { closeServerCanvas } = await import("@/composables/use-server-canvases");
 
@@ -161,10 +175,10 @@ describe("closeServerCanvas", () => {
 
   it("brings the tab back when the server refuses", async () => {
     const store = useCanvasesStore();
-    store.setServerCanvases("s1", [diagram("cv_1", 1, ["A"])]);
+    store.setServerCanvases("s1", [browserCanvas("cv_1", 1, ["A"])]);
     apiFetchMock
       .mockResolvedValueOnce(jsonResponse({ error: "nope" }, 500))
-      .mockResolvedValueOnce(jsonResponse([diagram("cv_1", 1, ["A"])]));
+      .mockResolvedValueOnce(jsonResponse([browserCanvas("cv_1", 1, ["A"])]));
     const warn = vi.spyOn(console, "warn").mockImplementation(() => {});
     const { closeServerCanvas } = await import("@/composables/use-server-canvases");
 
@@ -176,7 +190,7 @@ describe("closeServerCanvas", () => {
 
   it("keeps the session's apps current and pulses the tabs of a page Fleet reloaded", async () => {
     const shop: ServerCanvasSnapshot = { canvasId: "cv_shop", kind: "browser", title: "Shop", version: 1, state: { url: "http://localhost:5173/", appId: "app_1" } };
-    apiFetchMock.mockResolvedValue(jsonResponse([shop, diagram("cv_2", 1, ["A"])]));
+    apiFetchMock.mockResolvedValue(jsonResponse([shop, browserCanvas("cv_2", 1, ["A"])]));
     const { useServerCanvases } = await import("@/composables/use-server-canvases");
     const { wrapper } = await mountComposable(() => useServerCanvases(shallowRef("s1")));
     const app = { sessionId: "s1", appId: "app_1", command: "npm run dev", url: "http://localhost:5173/", ports: [5173], exitCode: null };
@@ -196,8 +210,8 @@ describe("closeServerCanvas", () => {
 
   it("brings a canvas forward here and through Fleet, which reopens a closed one", async () => {
     const store = useCanvasesStore();
-    store.setServerCanvases("s1", [diagram("cv_1", 1, ["A"]), diagram("cv_2", 1, ["B"])]);
-    apiFetchMock.mockResolvedValue(jsonResponse(diagram("cv_1", 1, ["A"])));
+    store.setServerCanvases("s1", [browserCanvas("cv_1", 1, ["A"]), browserCanvas("cv_2", 1, ["B"])]);
+    apiFetchMock.mockResolvedValue(jsonResponse(browserCanvas("cv_1", 1, ["A"])));
     const { focusServerCanvas } = await import("@/composables/use-server-canvases");
 
     await focusServerCanvas(home, "s1", "cv_1");

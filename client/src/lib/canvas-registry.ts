@@ -13,7 +13,6 @@ import {
   PanelsTopLeft,
   Paperclip,
   Puzzle,
-  Workflow,
 } from "lucide-vue-next";
 import BrowserCanvas from "@/components/canvas/BrowserCanvas.vue";
 import AgentsCanvas from "@/components/canvas/AgentsCanvas.vue";
@@ -64,7 +63,7 @@ canvasTypes.contribute("core", [
   { kind: "progress", label: "Progress", icon: ListChecks, component: ProgressCanvas },
   { kind: "turns", label: "Turns", icon: History, component: TurnsCanvas },
   { kind: "agents", label: "Agents", icon: Network, component: AgentsCanvas },
-  { kind: "visual", label: "Diagram", icon: Workflow, component: VisualCanvas },
+  { kind: "visual", label: "Document", icon: FileText, component: VisualCanvas },
   { kind: "browser", label: "Browser", icon: Globe, component: BrowserCanvas },
   { kind: "page", label: "Page", icon: PanelsTopLeft, component: PageCanvas },
   { kind: "file", label: "File", icon: File, component: FileCanvas },
@@ -82,8 +81,6 @@ export function canvasType(kind: CanvasKind): CanvasTypeDefinition {
 export const PICKABLE_CANVAS_KINDS = ["context", "progress", "changes", "files", "turns", "agents"] as const;
 
 const VISUAL_ICONS: Record<VisualPayload["$type"], Component> = {
-  "visual/flow": Workflow,
-  "visual/sequence": Workflow,
   markdown: FileText,
   html: Globe,
 };

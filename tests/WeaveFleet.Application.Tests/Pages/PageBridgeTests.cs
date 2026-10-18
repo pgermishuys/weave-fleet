@@ -253,7 +253,7 @@ public sealed class PageBridgeTests : IDisposable
     }
 
     [Fact]
-    public async Task A_file_that_is_not_a_page_points_diagrams_at_the_diagrams_skill()
+    public async Task A_file_that_is_not_a_page_points_diagrams_at_the_fleet_diagrams_skill()
     {
         var file = Mockup("flow.md", "# Flow");
 
@@ -317,14 +317,14 @@ public sealed class PageBridgeTests : IDisposable
     }
 
     [Fact]
-    public async Task A_title_taken_by_a_diagram_is_refused_and_the_new_copy_is_dropped()
+    public async Task A_title_taken_by_a_browser_canvas_is_refused_and_the_new_copy_is_dropped()
     {
-        var diagram = await _canvases.OpenAsync(SessionId, CanvasKinds.Diagram, "Plan", JsonNode.Parse("""{"nodes":[{"id":"n1","label":"A"}],"edges":[]}"""));
-        diagram.IsSuccess.ShouldBeTrue(diagram.Error?.Message);
+        var browser = await _canvases.OpenAsync(SessionId, CanvasKinds.Browser, "Plan", JsonNode.Parse("""{"url":"http://localhost:5173/"}"""));
+        browser.IsSuccess.ShouldBeTrue(browser.Error?.Message);
 
         var shown = await _bridge.ShowAsync(Token, OpenCodeSessionId, Mockup("index.html"), "Plan");
 
-        shown.Error!.Message.ShouldContain("is already a diagram canvas");
+        shown.Error!.Message.ShouldContain("is already a browser canvas");
         _pages.Deleted.ShouldBe([_pages.Copies.Single().PageId]);
     }
 

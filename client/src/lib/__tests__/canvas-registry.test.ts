@@ -10,7 +10,7 @@ describe("canvas kinds", () => {
       "changes", "files", "context", "progress", "turns", "agents", "visual", "browser", "page", "file", "mod",
     ]);
     expect(canvasTypes.items.value.map((type) => type.label)).toEqual([
-      "Changes", "Files", "Context", "Progress", "Turns", "Agents", "Diagram", "Browser", "Page", "File", "Mod",
+      "Changes", "Files", "Context", "Progress", "Turns", "Agents", "Document", "Browser", "Page", "File", "Mod",
     ]);
     for (const type of canvasTypes.items.value) {
       expect(type.component).toBeTruthy();
@@ -54,21 +54,23 @@ describe("a server canvas of a kind the client does not know", () => {
     store.setServerCanvases("s1", [
       { canvasId: "cv_new", kind: "hologram", title: "From the future", version: 1, state: {} },
       { canvasId: "cv_seq", kind: "sequence", title: "Calls", version: 1, state: { source: "sequenceDiagram" } },
+      { canvasId: "cv_dia", kind: "diagram", title: "Flow", version: 1, state: { nodes: [], edges: [] } },
+      { canvasId: "cv_page", kind: "page", title: "Options", version: 1, state: { pageId: "pg_1", entry: "a.html" } },
     ]);
 
-    expect(store.sessionCanvases("s1").canvases.map((canvas) => canvas.id)).toEqual(["changes", "files", "canvas:cv_seq"]);
+    expect(store.sessionCanvases("s1").canvases.map((canvas) => canvas.id)).toEqual(["changes", "files", "canvas:cv_page"]);
   });
 });
 
 describe("visual renderers", () => {
   it("has a different renderer for each payload type", () => {
-    const all = ["html", "markdown", "visual/flow", "visual/sequence"].map((type) => getVisualRenderer(type));
+    const all = ["html", "markdown"].map((type) => getVisualRenderer(type));
     expect(all.every(Boolean)).toBe(true);
-    expect(new Set(all).size).toBe(4);
+    expect(new Set(all).size).toBe(2);
   });
 
   it("has none for a type nobody handles", () => {
-    expect(getVisualRenderer("visual/hologram")).toBeNull();
+    expect(getVisualRenderer("visual/flow")).toBeNull();
     expect(getVisualRenderer("")).toBeNull();
   });
 });

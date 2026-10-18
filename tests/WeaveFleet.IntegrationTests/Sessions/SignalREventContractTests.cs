@@ -1060,25 +1060,16 @@ public sealed class SignalREventContractTests : IAsyncLifetime, IDisposable
         await _hub.InvokeAsync<JsonElement>("SubscribeToSessionAsync", sessionId);
         await WaitForBroadcasterSubscriberAsync();
 
-        // Act: the agent opens a diagram, then the user moves a box
+        // Act: Fleet opens a browser canvas, then points it at another page
         using var scope = _server.Services.CreateScope();
         var canvases = scope.ServiceProvider.GetRequiredService<ICanvasService>();
-        var opened = await canvases.OpenAsync(
-            sessionId,
-            CanvasKinds.Diagram,
-            "Session event flow",
-            JsonNode.Parse("""
-                {
-                  "nodes": [{ "id": "n1", "label": "NuCode session", "detail": "NuCode/Sessions" }, { "id": "n2", "label": "SessionEventsHub" }],
-                  "edges": [{ "id": "e1", "from": "n1", "to": "n2", "label": "publishes" }]
-                }
-                """));
+        var opened = await canvases.OpenAsync(sessionId, CanvasKinds.Browser, "Shop", JsonNode.Parse("""{"url":"http://localhost:5173/"}"""));
         opened.IsSuccess.ShouldBeTrue(opened.Error?.Message);
         var canvasId = opened.Value.Canvas.Id;
-        var moved = await canvases.ApplyAsync(sessionId, canvasId, CanvasActor.User, JsonNode.Parse("""[{"op":"moveNode","id":"n1","x":20,"y":44.5}]"""));
+        var moved = await canvases.OpenAsync(sessionId, CanvasKinds.Browser, "Shop", JsonNode.Parse("""{"url":"http://localhost:5173/cart"}"""));
         moved.IsSuccess.ShouldBeTrue(moved.Error?.Message);
 
-        // Assert: canvas.updated (open), canvas.focused, canvas.updated (move), exactly as the client receives them
+        // Assert: canvas.updated (open), canvas.focused, canvas.updated (new page), canvas.focused, exactly as the client receives them
         // Read the received list rather than WaitForEventAsync, which returns the latest event and can
         // skip one when two arrive together.
         List<ReceivedEvent> canvasEvents = [];
@@ -1088,18 +1079,18 @@ public sealed class SignalREventContractTests : IAsyncLifetime, IDisposable
             canvasEvents = _receivedEvents.ToArray()
                 .Where(e => e.Data.GetProperty("type").GetString()?.StartsWith("canvas.", StringComparison.Ordinal) == true)
                 .ToList();
-            if (canvasEvents.Count >= 3)
+            if (canvasEvents.Count >= 4)
                 break;
             await _eventReceived.WaitAsync(TimeSpan.FromMilliseconds(100));
         }
 
-        canvasEvents.Count.ShouldBe(3, $"Raw events: {string.Join("; ", _rawEvents)}");
+        canvasEvents.Count.ShouldBe(4, $"Raw events: {string.Join("; ", _rawEvents)}");
         canvasEvents.ShouldAllBe(e => e.Topic == $"session:{sessionId}");
         canvasEvents[1].Data.GetRawText().ShouldBe(
             $$$"""{"type":"canvas.focused","eventId":null,"properties":{"sessionId":"{{{sessionId}}}","canvasId":"{{{canvasId}}}"}}""");
         canvasEvents[2].Data.GetRawText().ShouldBe(
-            $$$"""{"type":"canvas.updated","eventId":null,"properties":{"sessionId":"{{{sessionId}}}","canvasId":"{{{canvasId}}}","kind":"diagram","title":"Session event flow","version":2,"actor":"user","state":{"direction":"TB","nodes":[{"id":"n1","label":"NuCode session","detail":"NuCode/Sessions","x":20,"y":44.5,"placedByUser":true},{"id":"n2","label":"SessionEventsHub"}],"edges":[{"id":"e1","from":"n1","to":"n2","label":"publishes","style":"solid"}]},"summary":"1 box moved"}}""");
-        canvasEvents[0].Data.GetProperty("properties").GetProperty("summary").GetString().ShouldBe("+2 boxes, +1 edge");
+            $$$"""{"type":"canvas.updated","eventId":null,"properties":{"sessionId":"{{{sessionId}}}","canvasId":"{{{canvasId}}}","kind":"browser","title":"Shop","version":2,"actor":"agent","state":{"url":"http://localhost:5173/cart"},"summary":"http://localhost:5173/cart"}}""");
+        canvasEvents[0].Data.GetProperty("properties").GetProperty("summary").GetString().ShouldBe("http://localhost:5173/");
     }
 
     [Fact]

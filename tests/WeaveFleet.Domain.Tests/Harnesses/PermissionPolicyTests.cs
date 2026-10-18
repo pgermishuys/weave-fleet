@@ -33,7 +33,7 @@ public sealed class PermissionPolicyTests
     [InlineData("Read", PermissionKinds.Read)]
     [InlineData("TodoWrite", PermissionKinds.Read)]
     [InlineData("task", PermissionKinds.Read)]
-    [InlineData("fleet_canvas_open", PermissionKinds.Read)]
+    [InlineData("fleet_canvas_read", PermissionKinds.Read)]
     [InlineData("edit", PermissionKinds.Edit)]
     [InlineData("Write", PermissionKinds.Edit)]
     [InlineData("MultiEdit", PermissionKinds.Edit)]

@@ -303,7 +303,7 @@ const activeProps = computed(() => {
     return { sessionId: props.sessionId, page: canvas.page };
   }
   if (canvas.kind !== "visual" || !canvas.payload) return { sessionId: props.sessionId };
-  return canvas.server ? { payload: canvas.payload, readonly: true } : { payload: canvas.payload };
+  return { payload: canvas.payload };
 });
 </script>
 

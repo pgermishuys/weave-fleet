@@ -5,28 +5,21 @@ namespace WeaveFleet.Application.Canvases;
 
 public static class CanvasKinds
 {
-    /// <summary>Boxes and edges. The agent edits the content; the user moves and removes boxes.</summary>
-    public const string Diagram = "diagram";
-
-    /// <summary>Mermaid sequence diagram source. Only the agent edits it.</summary>
-    public const string Sequence = "sequence";
-
     /// <summary>A page of a web app running on this machine, shown through Fleet's preview proxy. Only the agent sets the page.</summary>
     public const string Browser = "browser";
 
     /// <summary>
     /// An HTML page the agent wrote, which Fleet copied and serves itself (<c>fleet_page_show</c>). Only that tool
-    /// sets the page: not <c>fleet_canvas_open</c> or patch, and not the user.
+    /// sets the page, not the user.
     /// </summary>
     public const string Page = "page";
 
-    public static bool IsKnown(string kind) => kind is Diagram or Sequence or Browser or Page;
+    public static bool IsKnown(string kind) => kind is Browser or Page;
 }
 
 public static class CanvasLimits
 {
     public const int MaxStateBytes = 256 * 1024;
-    public const int MaxDiagramNodes = 200;
     public const int MaxTitleLength = 120;
 }
 

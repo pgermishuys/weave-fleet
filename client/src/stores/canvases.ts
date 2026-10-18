@@ -3,7 +3,6 @@ import { shallowRef } from "vue";
 import type { CanvasEvent } from "@/lib/domain-events";
 import {
   browserPage,
-  serverCanvasPayload,
   shownPage,
   type BrowserPage,
   type ServerCanvasKind,
@@ -59,9 +58,9 @@ export interface ServerCanvasRef {
 export interface CanvasInstance {
   id: string;
   kind: CanvasKind;
-  /** Present on visual canvases: the diagram or document to render. */
+  /** Present on visual canvases: the document to render. */
   payload?: VisualPayload;
-  /** Present on server canvases, which are visual or browser canvases the agent keeps up to date. */
+  /** Present on server canvases, which are browser or page canvases the agent keeps up to date. */
   server?: ServerCanvasRef;
   /** Present on browser canvases: the page and its tab title. */
   browser?: BrowserPage & { title: string };
@@ -104,7 +103,7 @@ export function visualCanvasTitle(payload: VisualPayload): string {
   const path = payload.sourceFilePath?.trim();
   if (path) return path.split("/").pop() || path;
 
-  return "Diagram";
+  return "Document";
 }
 
 export function visualCanvasId(payload: VisualPayload): string {
@@ -163,15 +162,8 @@ function toServerCanvasInstance(canvas: ServerCanvasSnapshot): CanvasInstance | 
     };
   }
 
-  const payload = serverCanvasPayload(canvas);
-  if (!payload) return null;
-
-  return {
-    id: serverCanvasTabId(canvas.canvasId),
-    kind: "visual",
-    payload,
-    server: { canvasId: canvas.canvasId, kind: canvas.kind as ServerCanvasKind, version: canvas.version },
-  };
+  // A kind this client doesn't show (a retired one from an older server or a stale cache): no tab.
+  return null;
 }
 
 function withoutCanvas(current: SessionCanvases, canvasId: string): SessionCanvases {

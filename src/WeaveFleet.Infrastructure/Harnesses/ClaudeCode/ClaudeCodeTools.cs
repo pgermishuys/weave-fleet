@@ -55,13 +55,13 @@ internal static class ClaudeCodeTools
     /// <summary>The MCP server Fleet gives every claude process for Fleet's own tools (<see cref="ClaudeCodeFleetTools"/>).</summary>
     internal const string FleetServer = "fleet";
 
-    /// <summary>What Claude Code puts before the name of a tool from Fleet's MCP server: <c>mcp__fleet__fleet_canvas_open</c>.</summary>
+    /// <summary>What Claude Code puts before the name of a tool from Fleet's MCP server: <c>mcp__fleet__fleet_canvas_list</c>.</summary>
     private const string FleetToolPrefix = "mcp__" + FleetServer + "__";
 
     /// <summary>Claude Code's name for Fleet's tool <paramref name="fleetName"/>.</summary>
     internal static string ClaudeName(string fleetName) => FleetToolPrefix + fleetName;
 
-    /// <summary>Fleet's name for a tool from Fleet's MCP server (<c>fleet_canvas_open</c>), or null for any other tool.</summary>
+    /// <summary>Fleet's name for a tool from Fleet's MCP server (<c>fleet_canvas_list</c>), or null for any other tool.</summary>
     internal static string? FleetTool(string? claudeName)
         => claudeName is not null && claudeName.StartsWith(FleetToolPrefix, StringComparison.Ordinal) && claudeName.Length > FleetToolPrefix.Length
             ? claudeName[FleetToolPrefix.Length..]

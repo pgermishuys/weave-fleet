@@ -14,16 +14,6 @@ public sealed class CanvasBridgeTests
     private const string SessionId = "ses-1";
     private const string Owner = "owner-user";
 
-    private const string Flow = """
-        {
-          "nodes": [
-            { "id": "n1", "label": "NuCode session" },
-            { "id": "n2", "label": "SessionEventsHub" }
-          ],
-          "edges": [{ "id": "e1", "from": "n1", "to": "n2", "label": "publishes" }]
-        }
-        """;
-
     private readonly InMemoryCanvasRepository _repository = new();
     private readonly FakeEventBroadcaster _broadcaster = new();
     private readonly ScopedUser _user = new();
@@ -42,37 +32,11 @@ public sealed class CanvasBridgeTests
         _bridge = new CanvasBridge([_callers], _user, _canvases, new AppRunService(_apps, _runs, new InMemorySessionRepository(), _user));
     }
 
-    [Fact]
-    public async Task The_agent_cannot_open_a_page_canvas_except_through_fleet_page_show()
+    private async Task<Canvas> OpenShopAsync(string title = "Shop")
     {
-        var opened = await _bridge.OpenAsync(Token, OpenCodeSessionId, CanvasKinds.Page, "Mockup", JsonNode.Parse("""{"pageId":"pg_x"}"""));
-
-        opened.Error!.Kind.ShouldBe(CanvasErrorKind.Invalid);
-        opened.Error.Message.ShouldContain("fleet_page_show");
-        (await _repository.ListBySessionIdAsync(SessionId)).ShouldBeEmpty();
-    }
-
-    [Fact]
-    public async Task The_agent_cannot_patch_a_page_canvas()
-    {
-        var state = new PageState
-        {
-            PageId = "pg_" + new string('b', 32), Entry = "index.html", Source = "/tmp/m/index.html", Files = 1, Bytes = 10,
-            ShownAt = "2026-09-28T10:00:00.0000000+00:00",
-        };
-        var page = (await _canvases.OpenAsync(SessionId, CanvasKinds.Page, "Mockup", JsonNode.Parse(state.ToJson()))).Value!.Canvas;
-
-        var patched = await _bridge.PatchAsync(Token, OpenCodeSessionId, page.Id, JsonNode.Parse("""[{"op":"showPage","pageId":"pg_x"}]"""));
-
-        patched.Error!.Message.ShouldContain("fleet_page_show");
-        (await _canvases.GetAsync(SessionId, page.Id))!.Version.ShouldBe(page.Version);
-    }
-
-    private async Task<CanvasToolOutput> OpenFlowAsync()
-    {
-        var opened = await _bridge.OpenAsync(Token, OpenCodeSessionId, "diagram", "Flow", JsonNode.Parse(Flow));
+        var opened = await _canvases.OpenAsync(SessionId, CanvasKinds.Browser, title, JsonNode.Parse("""{ "url": "http://localhost:5173/" }"""));
         opened.IsSuccess.ShouldBeTrue(opened.Error?.Message);
-        return opened.Value;
+        return opened.Value.Canvas;
     }
 
     [Theory]
@@ -86,9 +50,7 @@ public sealed class CanvasBridgeTests
         var results = new[]
         {
             await _bridge.ListAsync(token, openCodeSessionId),
-            await _bridge.OpenAsync(token, openCodeSessionId, "diagram", "Flow", JsonNode.Parse(Flow)),
             await _bridge.ReadAsync(token, openCodeSessionId, "cv_1"),
-            await _bridge.PatchAsync(token, openCodeSessionId, "cv_1", JsonNode.Parse("[]")),
             await _bridge.FocusAsync(token, openCodeSessionId, "cv_1"),
         };
 
@@ -103,111 +65,71 @@ public sealed class CanvasBridgeTests
         otherHarness.Add("token-2", "v2-1", new HarnessCanvasCaller("ses-2", "other-owner"));
         _repository.AddSession("ses-2");
         var bridge = new CanvasBridge([_callers, otherHarness], _user, _canvases, new AppRunService(_apps, _runs, new InMemorySessionRepository(), _user));
+        await OpenShopAsync();
+        using (_user.Begin("other-owner"))
+            (await _canvases.OpenAsync("ses-2", CanvasKinds.Browser, "Theirs", JsonNode.Parse("""{ "url": "http://localhost:3000/" }"""))).IsSuccess.ShouldBeTrue();
 
-        (await bridge.OpenAsync("token-2", "v2-1", "diagram", "Flow", JsonNode.Parse(Flow))).IsSuccess.ShouldBeTrue();
-        (await bridge.OpenAsync(Token, OpenCodeSessionId, "diagram", "Flow", JsonNode.Parse(Flow))).IsSuccess.ShouldBeTrue();
-
-        (await _repository.ListBySessionIdAsync("ses-2")).ShouldHaveSingleItem().UserId.ShouldBe("other-owner");
-        (await _repository.ListBySessionIdAsync(SessionId)).ShouldHaveSingleItem().UserId.ShouldBe(Owner);
+        (await bridge.ListAsync("token-2", "v2-1")).Value!.Output.ShouldContain("\"Theirs\"");
+        (await bridge.ListAsync(Token, OpenCodeSessionId)).Value!.Output.ShouldContain("\"Shop\"");
         (await bridge.ListAsync("token-2", OpenCodeSessionId)).Error
             .ShouldBe(new CanvasError(CanvasErrorKind.NotFound, CanvasBridge.UnknownCallerMessage));
     }
 
     [Fact]
-    public async Task Open_creates_the_canvas_as_the_session_owner_and_says_where_it_is()
-    {
-        var opened = await OpenFlowAsync();
-
-        var canvas = (await _repository.ListBySessionIdAsync(SessionId)).ShouldHaveSingleItem();
-        canvas.UserId.ShouldBe(Owner);
-        opened.ShouldBe(new CanvasToolOutput(
-            "Flow · +2 boxes, +1 edge · v1",
-            $"Opened \"Flow\" ({canvas.Id}) at v1.",
-            canvas.Id,
-            1));
-        _user.UserId.ShouldBe(ScopedUser.RequestUser);
-    }
-
-    [Fact]
-    public async Task Opening_the_same_title_again_reports_what_changed()
-    {
-        var first = await OpenFlowAsync();
-
-        var same = await _bridge.OpenAsync(Token, OpenCodeSessionId, "diagram", "Flow", JsonNode.Parse(Flow));
-        var changed = await _bridge.OpenAsync(
-            Token,
-            OpenCodeSessionId,
-            "diagram",
-            "Flow",
-            JsonNode.Parse("""{ "nodes": [{ "id": "n1", "label": "NuCode session" }, { "id": "n2", "label": "SessionEventsHub" }, { "id": "n3", "label": "Client" }], "edges": [] }"""));
-
-        same.Value!.Output.ShouldBe($"Opened \"Flow\" ({first.CanvasId}) at v1 (no changes).");
-        changed.Value!.Output.ShouldBe($"Opened \"Flow\" ({first.CanvasId}) at v2 (+1 box, −1 edge).");
-        changed.Value.Title.ShouldBe("Flow · +1 box, −1 edge · v2");
-    }
-
-    [Fact]
-    public async Task List_shows_one_line_per_open_canvas_without_user_edit_flags()
+    public async Task List_shows_one_line_per_open_canvas()
     {
         (await _bridge.ListAsync(Token, OpenCodeSessionId)).Value.ShouldBe(new CanvasToolOutput("0 canvases", "No open canvases."));
 
-        var opened = await OpenFlowAsync();
-        (await _canvases.ApplyAsync(SessionId, opened.CanvasId!, CanvasActor.User, JsonNode.Parse("""[{ "op": "removeNode", "id": "n2" }]""")))
-            .IsSuccess.ShouldBeTrue();
+        var shop = await OpenShopAsync();
 
+        (await _bridge.ListAsync(Token, OpenCodeSessionId)).Value.ShouldBe(new CanvasToolOutput("1 canvas", $"{shop.Id} browser \"Shop\" v1"));
+
+        var second = await OpenShopAsync("Admin");
         var listed = await _bridge.ListAsync(Token, OpenCodeSessionId);
+        listed.Value!.Title.ShouldBe("2 canvases");
+        listed.Value.Output.ShouldBe($"{shop.Id} browser \"Shop\" v1\n{second.Id} browser \"Admin\" v1");
+    }
 
-        listed.Value.ShouldBe(new CanvasToolOutput("1 canvas", $"{opened.CanvasId} diagram \"Flow\" v2"));
+    [Fact]
+    public async Task List_leaves_out_closed_canvases_and_retired_kinds()
+    {
+        var shop = await OpenShopAsync();
+        var closed = await OpenShopAsync("Closed");
+        await _canvases.CloseAsync(SessionId, closed.Id);
+        await _repository.InsertAsync(
+            new Canvas { Id = "cv_old", SessionId = SessionId, UserId = Owner, Kind = "diagram", Title = "Old", StateJson = "{}", Version = 1, AgentSeenVersion = 1, CreatedAt = "2026-09-12T10:00:00Z", UpdatedAt = "2026-09-12T10:00:00Z" },
+            new CanvasRevision { CanvasId = "cv_old", Version = 1, Actor = "agent", OpsJson = "[]", CreatedAt = "2026-09-12T10:00:00Z" });
+
+        (await _bridge.ListAsync(Token, OpenCodeSessionId)).Value!.Output.ShouldBe($"{shop.Id} browser \"Shop\" v1");
+        (await _bridge.ReadAsync(Token, OpenCodeSessionId, "cv_old")).IsSuccess.ShouldBeFalse();
     }
 
     [Fact]
     public async Task Read_returns_the_whole_canvas_as_text()
     {
-        var opened = await OpenFlowAsync();
+        var shop = await OpenShopAsync();
 
-        var read = await _bridge.ReadAsync(Token, OpenCodeSessionId, opened.CanvasId);
+        var read = await _bridge.ReadAsync(Token, OpenCodeSessionId, shop.Id);
 
-        read.Value.ShouldBe(new CanvasToolOutput(
-            "Flow · v1",
-            $"diagram {opened.CanvasId} \"Flow\" v1 TB\nn1 NuCode session\nn2 SessionEventsHub\ne1 n1 -> n2 publishes",
-            opened.CanvasId,
-            1));
+        read.Value.ShouldBe(new CanvasToolOutput("Shop · v1", $"browser {shop.Id} \"Shop\" v1\nurl http://localhost:5173/", shop.Id, 1));
     }
 
     [Fact]
-    public async Task Patch_applies_agent_ops_and_reports_the_new_version()
+    public async Task Read_of_an_unknown_canvas_points_at_the_list()
     {
-        var opened = await OpenFlowAsync();
+        var read = await _bridge.ReadAsync(Token, OpenCodeSessionId, "cv_missing");
 
-        var patched = await _bridge.PatchAsync(
-            Token,
-            OpenCodeSessionId,
-            opened.CanvasId,
-            JsonNode.Parse("""[{ "op": "addNode", "id": "n3", "label": "Client" }, { "op": "addEdge", "id": "e2", "from": "n2", "to": "n3" }]"""));
-
-        patched.Value.ShouldBe(new CanvasToolOutput("Flow · +1 box, +1 edge · v2", "Updated to v2 (+1 box, +1 edge).", opened.CanvasId, 2));
-        _broadcaster.Broadcasts.Last().Type.ShouldBe("canvas.updated");
-    }
-
-    [Fact]
-    public async Task Patch_passes_the_canvas_error_through_for_the_agent_to_read()
-    {
-        var opened = await OpenFlowAsync();
-
-        var patched = await _bridge.PatchAsync(Token, OpenCodeSessionId, opened.CanvasId, JsonNode.Parse("""[{ "op": "updateNode", "id": "n9", "label": "x" }]"""));
-
-        patched.Error!.Kind.ShouldBe(CanvasErrorKind.UnknownId);
-        patched.Error.Message.ShouldEndWith(CanvasText.ReadHint);
+        read.Error.ShouldBe(new CanvasError(CanvasErrorKind.NotFound, "No canvas cv_missing in this session. Call fleet_canvas_list to see the open canvases."));
     }
 
     [Fact]
     public async Task Focus_brings_the_canvas_forward()
     {
-        var opened = await OpenFlowAsync();
+        var shop = await OpenShopAsync();
 
-        var focused = await _bridge.FocusAsync(Token, OpenCodeSessionId, opened.CanvasId);
+        var focused = await _bridge.FocusAsync(Token, OpenCodeSessionId, shop.Id);
 
-        focused.Value.ShouldBe(new CanvasToolOutput("Flow · v1", $"Showing \"Flow\" ({opened.CanvasId}) at v1.", opened.CanvasId, 1));
+        focused.Value.ShouldBe(new CanvasToolOutput("Shop · v1", $"Showing \"Shop\" ({shop.Id}) at v1.", shop.Id, 1));
         _broadcaster.Broadcasts.Last().Type.ShouldBe("canvas.focused");
     }
 
@@ -219,21 +141,10 @@ public sealed class CanvasBridgeTests
         var results = new[]
         {
             await _bridge.ReadAsync(Token, OpenCodeSessionId, canvasId),
-            await _bridge.PatchAsync(Token, OpenCodeSessionId, canvasId, JsonNode.Parse("[]")),
             await _bridge.FocusAsync(Token, OpenCodeSessionId, canvasId),
         };
 
         results.ShouldAllBe(result => result.Error!.Kind == CanvasErrorKind.Invalid && result.Error.Message.StartsWith("\"canvasId\" is required."));
-    }
-
-    [Fact]
-    public async Task Open_without_a_kind_or_title_is_rejected_with_the_service_message()
-    {
-        var noKind = await _bridge.OpenAsync(Token, OpenCodeSessionId, null, "Flow", JsonNode.Parse(Flow));
-        var noTitle = await _bridge.OpenAsync(Token, OpenCodeSessionId, "diagram", null, JsonNode.Parse(Flow));
-
-        noKind.Error!.Kind.ShouldBe(CanvasErrorKind.Invalid);
-        noTitle.Error!.Message.ShouldBe("\"title\" must be 1-120 characters.");
     }
 
     [Fact]

@@ -49,9 +49,9 @@ public sealed class OpenCodeReopenedSessionTests
                          "metadata": { "truncated": false }, "time": { "start": 1, "end": 2 } } }
             """,
         ["canvas"] = """
-            { "type": "tool", "id": "prt_canvas", "sessionID": "ses_1", "messageID": "msg_1", "callID": "toolu_canvas", "tool": "fleet_canvas_open",
-              "state": { "status": "completed", "input": { "kind": "diagram" }, "title": "Open canvas",
-                         "output": "Opened \"Architecture\" (cv_1) at v1.",
+            { "type": "tool", "id": "prt_canvas", "sessionID": "ses_1", "messageID": "msg_1", "callID": "toolu_canvas", "tool": "fleet_browser_open",
+              "state": { "status": "completed", "input": { "url": "http://localhost:5173/" }, "title": "Open canvas",
+                         "output": "Showing http://localhost:5173/ in \"Architecture\" (cv_1).",
                          "metadata": { "canvasId": "cv_1", "version": 1, "truncated": false }, "time": { "start": 1, "end": 2 } } }
             """,
         ["failed"] = """

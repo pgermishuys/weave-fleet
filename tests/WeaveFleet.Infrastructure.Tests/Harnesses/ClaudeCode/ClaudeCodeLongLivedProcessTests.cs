@@ -568,8 +568,8 @@ public sealed class ClaudeCodeLongLivedProcessTests : IAsyncDisposable
         // Memory, messages between sessions and workflows are off, and the session isn't a workflow step.
         AllowedTools(0).ShouldBe(
         [
-            "mcp__fleet__fleet_canvas_list", "mcp__fleet__fleet_canvas_open", "mcp__fleet__fleet_canvas_read",
-            "mcp__fleet__fleet_canvas_patch", "mcp__fleet__fleet_canvas_focus", "mcp__fleet__fleet_page_show",
+            "mcp__fleet__fleet_canvas_list", "mcp__fleet__fleet_canvas_read",
+            "mcp__fleet__fleet_canvas_focus", "mcp__fleet__fleet_page_show",
             "mcp__fleet__fleet_browser_open", "mcp__fleet__fleet_browser_read", "mcp__fleet__fleet_browser_act",
             "mcp__fleet__fleet_browser_screenshot", "mcp__fleet__fleet_session_read",
         ]);

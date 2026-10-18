@@ -5,102 +5,68 @@ namespace WeaveFleet.Application.Tests.Canvases;
 
 public sealed class CanvasTextTests
 {
-    private static Canvas Diagram(string stateJson, string title = "Session event flow") => new()
+    private static Canvas Browser(string stateJson, string title = "Shop") => new()
     {
         Id = "cv_01J",
-        Kind = CanvasKinds.Diagram,
+        Kind = CanvasKinds.Browser,
         Title = title,
         Version = 5,
         StateJson = stateJson,
     };
 
     [Fact]
-    public void RenderFull_Diagram_IsCompactAndLeavesOutPositions()
+    public void RenderFull_Browser_IsThePageAndItsApp()
     {
-        var canvas = Diagram("""
-            {"direction":"TB",
-             "nodes":[{"id":"n1","label":"NuCode session","detail":"NuCode/Sessions","x":20,"y":44,"placedByUser":true},
-                      {"id":"n3","label":"SessionEventsHub","detail":"Api/Hubs"},
-                      {"id":"n5","label":"Client\nstore"}],
-             "edges":[{"id":"e1","from":"n1","to":"n3","label":"publishes","style":"solid"},
-                      {"id":"e9","from":"n3","to":"n5","label":"SessionListChanged","style":"planned"},
-                      {"id":"e10","from":"n5","to":"n1","style":"dashed"}]}
-            """);
-
-        CanvasText.RenderFull(canvas).ShouldBe("""
-            diagram cv_01J "Session event flow" v5 TB
-            n1 NuCode session · NuCode/Sessions
-            n3 SessionEventsHub · Api/Hubs
-            n5 Client store
-            e1 n1 -> n3 publishes
-            e9 n3 -> n5 SessionListChanged [planned]
-            e10 n5 -> n1 [dashed]
-            """.ReplaceLineEndings("\n"));
+        CanvasText.RenderFull(Browser("""{"url":"http://localhost:5173/","appId":"app_1"}"""))
+            .ShouldBe("browser cv_01J \"Shop\" v5\nurl http://localhost:5173/\napp app_1");
     }
 
     [Fact]
-    public void RenderFull_EmptyDiagram_SaysSo()
+    public void RenderFull_Browser_WithoutAnApp_LeavesTheAppLineOut()
     {
-        CanvasText.RenderFull(Diagram("""{"direction":"LR","nodes":[],"edges":[]}""", title: "Say \"hi\""))
-            .ShouldBe("diagram cv_01J \"Say \\\"hi\\\"\" v5 LR\n(no boxes)");
+        CanvasText.RenderFull(Browser("""{"url":"http://localhost:5173/"}""", title: "Say \"hi\""))
+            .ShouldBe("browser cv_01J \"Say \\\"hi\\\"\" v5\nurl http://localhost:5173/");
     }
 
     [Fact]
-    public void RenderFull_Sequence_IsHeaderAndSource()
+    public void RenderFull_Page_ListsTheSourceTheCopyAndItsWarnings()
     {
         var canvas = new Canvas
         {
             Id = "cv_02",
-            Kind = CanvasKinds.Sequence,
-            Title = "Open flow",
+            Kind = CanvasKinds.Page,
+            Title = "Mockup",
             Version = 3,
-            StateJson = """{"source":"sequenceDiagram\n  Agent->>Fleet: fleet_canvas_open"}""",
+            StateJson = new PageState
+            {
+                PageId = "pg_" + new string('a', 32), Entry = "index.html", Source = "/tmp/m/index.html",
+                Files = 4, Bytes = 38 * 1024, ShownAt = "2026-09-28T10:00:00.0000000+00:00", Warnings = ["missing.png"],
+            }.ToJson(),
         };
 
-        CanvasText.RenderFull(canvas).ShouldBe("sequence cv_02 \"Open flow\" v3\nsequenceDiagram\n  Agent->>Fleet: fleet_canvas_open");
+        CanvasText.RenderFull(canvas).ShouldBe(
+            "page cv_02 \"Mockup\" v3\nsource /tmp/m/index.html\ncopied 4 files, 38 KB at 2026-09-28T10:00:00.0000000+00:00\nwarning missing.png");
     }
 
     [Fact]
-    public void RenderChangesSince_ListsRemovedBoxesAndTheirEdges()
+    public void RenderListLine_IsIdKindTitleAndVersion()
     {
-        CanvasText.RenderChangesSince(5, []).ShouldBe("No changes since v5.");
-        CanvasText.RenderChangesSince(5, [
-            new CanvasUserRemoval(6, "n7", "use-sessions.ts", ["e3", "e4"]),
-            new CanvasUserRemoval(8, "n2", "Api", []),
-            new CanvasUserRemoval(9, "n9", null, ["e5"]),
-        ]).ShouldBe("""
-            Since v5 the user removed:
-            box "use-sessions.ts" (n7), with edges e3, e4
-            box "Api" (n2)
-            box n9, with edge e5
-            """.ReplaceLineEndings("\n"));
+        CanvasText.RenderListLine(Browser("{}")).ShouldBe("cv_01J browser \"Shop\" v5");
     }
 
     [Fact]
-    public void RenderListLine_FlagsCanvasesTheUserChanged()
+    public void Summarize_NamesThePageOrTheCopy()
     {
-        var canvas = Diagram("{}");
-
-        CanvasText.RenderListLine(canvas, changedByUser: false).ShouldBe("cv_01J diagram \"Session event flow\" v5");
-        CanvasText.RenderListLine(canvas, changedByUser: true).ShouldBe("cv_01J diagram \"Session event flow\" v5 (changed by user)");
-    }
-
-    [Fact]
-    public void Summarize_CountsEachKindOfChange()
-    {
-        CanvasText.Summarize([
-            new AddNodeOp("n1", "A", null),
-            new AddNodeOp("n2", "B", null),
-            new RemoveEdgeOp("e1"),
-        ]).ShouldBe("+2 boxes, −1 edge");
-
-        CanvasText.Summarize([
-            new RemoveNodeOp("n1") { RemovedEdgeIds = ["e1", "e2"] },
-            new MoveNodeOp("n2", 0, 0),
-            new MoveNodeOp("n2", 1, 1),
-            new MoveNodeOp("n3", 1, 1),
-        ]).ShouldBe("−1 box, 2 boxes moved, −2 edges");
-
+        CanvasText.Summarize([new SetPageOp("http://localhost:5173/", null)]).ShouldBe("http://localhost:5173/");
+        CanvasText.Summarize([new ShowPageOp(new PageState { Files = 1, Bytes = 10 })]).ShouldBe("1 file, 10 bytes");
         CanvasText.Summarize([]).ShouldBe("no changes");
     }
+
+    [Theory]
+    [InlineData(1, 0L, "1 file, 0 bytes")]
+    [InlineData(2, 1023L, "2 files, 1023 bytes")]
+    [InlineData(3, 1025L, "3 files, 2 KB")]
+    [InlineData(1, 3L * 1024 * 1024, "1 file, 3 MB")]
+    public void PageSize_PicksAUnit(int files, long bytes, string expected)
+        => CanvasText.PageSize(files, bytes).ShouldBe(expected);
 }
