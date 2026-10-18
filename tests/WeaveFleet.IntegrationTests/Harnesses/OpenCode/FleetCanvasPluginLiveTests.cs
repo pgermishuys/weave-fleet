@@ -26,8 +26,8 @@ namespace WeaveFleet.IntegrationTests.Harnesses.OpenCode;
 
 /// <summary>
 /// The canvas tools end to end with a real <c>opencode</c>: Fleet on Kestrel spawns a pooled process, which
-/// loads the Fleet plugin next to the user's own. A scripted model calls <c>fleet_canvas_open</c>, then
-/// <c>fleet_canvas_patch</c> with the id the first call returned. The pooled process runs with a scratch
+/// loads the Fleet plugin next to the user's own. A scripted model calls <c>fleet_browser_open</c>, then
+/// <c>fleet_canvas_focus</c> with the id the first call returned. The pooled process runs with a scratch
 /// HOME and scratch XDG dirs, so it never reads or writes the real user's OpenCode or Fleet data.
 /// </summary>
 [Trait("Category", "Integration")]
@@ -38,7 +38,7 @@ public sealed partial class FleetCanvasPluginLiveTests
     private static readonly TimeSpan Timeout = TimeSpan.FromMinutes(3);
 
     [OpenCodeFact]
-    public async Task A_pooled_session_opens_and_patches_a_canvas_through_the_plugin()
+    public async Task A_pooled_session_opens_and_focuses_a_canvas_through_the_plugin()
     {
         using var cts = new CancellationTokenSource(Timeout);
         var ct = cts.Token;
@@ -76,14 +76,14 @@ public sealed partial class FleetCanvasPluginLiveTests
                 },
                 ct);
 
-            await session.SendPromptAsync("Draw the session event flow, then add the client.", null, ct);
+            await session.SendPromptAsync("Show the app, then bring it forward.", null, ct);
 
             List<BroadcastEvent> updated;
             try
             {
                 using var wait = CancellationTokenSource.CreateLinkedTokenSource(ct);
                 wait.CancelAfter(TimeSpan.FromSeconds(60));
-                updated = await WaitForAsync(() => events.Where(e => e.Type == "canvas.updated").ToList(), list => list.Count >= 2, wait.Token);
+                updated = await WaitForAsync(() => events.Where(e => e.Type == "canvas.updated").ToList(), list => list.Count >= 1, wait.Token);
             }
             catch (TimeoutException)
             {
@@ -94,27 +94,25 @@ public sealed partial class FleetCanvasPluginLiveTests
                     $"LLM requests: {llm.Queue.Requests.Count}");
             }
 
-            // Two canvas.updated events on session:{id}: the open at v1, then the patch at v2.
-            updated.Select(e => e.Payload.GetProperty("version").GetInt32()).ShouldBe([1, 2]);
+            // One canvas.updated event on session:{id}: the open at v1. The focus after it changes nothing.
+            updated.Select(e => e.Payload.GetProperty("version").GetInt32()).ShouldBe([1]);
             updated.ShouldAllBe(e => e.Topic == $"session:{SessionId}" && e.Payload.GetProperty("actor").GetString() == "agent");
-            updated[1].Payload.GetProperty("summary").GetString().ShouldBe("+1 box");
 
-            // The stored canvas is at v2, owned by the session owner.
+            // The stored canvas is at v1, owned by the session owner.
             using (var scope = services.CreateScope())
             using (scope.ServiceProvider.GetRequiredService<IBackgroundUserScope>().Begin(Owner))
             {
                 var canvas = (await scope.ServiceProvider.GetRequiredService<ICanvasService>().ListAsync(SessionId, ct)).ShouldHaveSingleItem().Canvas;
-                canvas.Version.ShouldBe(2);
+                canvas.Version.ShouldBe(1);
                 canvas.UserId.ShouldBe(Owner);
-                DiagramState.Parse(canvas.StateJson).Nodes.Select(n => n.Id).ShouldBe(["n1", "n2", "n3"]);
+                BrowserState.Parse(canvas.StateJson).Url.ShouldBe("http://localhost:5173/");
             }
 
             // The model saw Fleet's tools and the user's own plugin tool side by side.
             var offered = OfferedToolNames(llm.Queue.Requests);
             offered.ShouldContain("fleet_canvas_list");
-            offered.ShouldContain("fleet_canvas_open");
+            offered.ShouldContain("fleet_browser_open");
             offered.ShouldContain("fleet_canvas_read");
-            offered.ShouldContain("fleet_canvas_patch");
             offered.ShouldContain("fleet_canvas_focus");
             offered.ShouldContain("fleet_session_read");
             offered.ShouldContain("user_probe");
@@ -459,21 +457,21 @@ public sealed partial class FleetCanvasPluginLiveTests
             StopReason = "tool_calls",
             ToolCalls =
             [
-                new ScriptedToolCall("call_open", "fleet_canvas_open", """
-                    {"kind":"diagram","title":"Session event flow","state":{"nodes":[{"id":"n1","label":"NuCode session"},{"id":"n2","label":"SessionEventsHub"}],"edges":[{"id":"e1","from":"n1","to":"n2","label":"publishes"}]}}
+                new ScriptedToolCall("call_open", "fleet_browser_open", """
+                    {"url":"http://localhost:5173/","title":"Session event flow"}
                     """),
             ],
         });
 
-        // The patch needs the canvas id, which only the open's tool result knows.
+        // The focus needs the canvas id, which only the open's tool result knows.
         queue.Enqueue(request => CanvasId().Match(request) is { Success: true } match
             ? new ScriptedLlmResponse
             {
                 StopReason = "tool_calls",
                 ToolCalls =
                 [
-                    new ScriptedToolCall("call_patch", "fleet_canvas_patch", $$"""
-                        {"canvasId":"{{match.Value}}","ops":[{"op":"addNode","id":"n3","label":"Client"}]}
+                    new ScriptedToolCall("call_focus", "fleet_canvas_focus", $$"""
+                        {"canvasId":"{{match.Value}}"}
                         """),
                 ],
             }

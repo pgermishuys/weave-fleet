@@ -102,9 +102,7 @@ public sealed class FleetToolCalls(
         return name switch
         {
             "fleet_canvas_list" => canvases.ListAsync(token, session, ct),
-            "fleet_canvas_open" => canvases.OpenAsync(token, session, String(args, "kind"), String(args, "title"), Node(args, "state"), ct),
             "fleet_canvas_read" => canvases.ReadAsync(token, session, String(args, "canvasId"), ct),
-            "fleet_canvas_patch" => canvases.PatchAsync(token, session, String(args, "canvasId"), Node(args, "ops"), ct),
             "fleet_canvas_focus" => canvases.FocusAsync(token, session, String(args, "canvasId"), ct),
             "fleet_page_show" => ShowPageAsync(token, call, args, ct),
             "fleet_walkthrough_show" => walkthroughs.ShowAsync(token, session, String(args, "title"), Element(args, "guide"), ct),
@@ -194,25 +192,6 @@ public sealed class FleetToolCalls(
     /// <summary>An object or list argument as the bridge takes it; a model that sent it as JSON text gets it read.</summary>
     private static JsonElement Element(JsonElement args, string name)
         => args.ValueKind == JsonValueKind.Object && args.TryGetProperty(name, out var value) ? value : default;
-
-    private static JsonNode? Node(JsonElement args, string name)
-    {
-        if (args.ValueKind != JsonValueKind.Object || !args.TryGetProperty(name, out var value))
-            return null;
-        if (value.ValueKind == JsonValueKind.String)
-        {
-            try
-            {
-                return JsonNode.Parse(value.GetString()!);
-            }
-            catch (JsonException)
-            {
-                return JsonValue.Create(value.GetString());
-            }
-        }
-
-        return JsonNode.Parse(value.GetRawText());
-    }
 
     /// <summary>The metadata the OpenCode plugins keep with the call: <c>{canvasId, version, screenshot?, page?, choice?}</c>.</summary>
     private static JsonElement Metadata(CanvasToolOutput output)

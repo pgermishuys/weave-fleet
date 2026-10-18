@@ -419,4 +419,27 @@ public sealed class CanvasRepositoryTests
         (await conn.QueryAsync<string>("SELECT id FROM canvases")).ShouldBe([kept.Id]);
         (await conn.QueryAsync<string>("SELECT canvas_id FROM canvas_revisions")).ShouldBe([kept.Id]);
     }
+
+    [Fact]
+    public async Task Migration064_DropsDiagramAndSequenceCanvases_AndTheirRevisions_AndKeepsTheRest()
+    {
+        var (keeper, factory, repo, session) = await CreateAsync();
+        using var _ = keeper;
+        var (diagram, diagramRevision) = NewCanvas(session.Id, title: "Flow");
+        var (sequence, sequenceRevision) = NewCanvas(session.Id, title: "Calls");
+        sequence.Kind = "sequence";
+        var (browser, browserRevision) = NewCanvas(session.Id, title: "Shop");
+        browser.Kind = "browser";
+        foreach (var (canvas, revision) in new[] { (diagram, diagramRevision), (sequence, sequenceRevision), (browser, browserRevision) })
+            (await repo.InsertAsync(canvas, revision)).ShouldBeTrue();
+
+        var assembly = typeof(CanvasRepository).Assembly;
+        var resource = assembly.GetManifestResourceNames().Single(name => name.EndsWith("064_drop_diagram_canvases.sql", StringComparison.Ordinal));
+        using var reader = new StreamReader(assembly.GetManifestResourceStream(resource)!);
+        using var conn = factory.CreateConnection();
+        await conn.ExecuteAsync(await reader.ReadToEndAsync());
+
+        (await conn.QueryAsync<string>("SELECT id FROM canvases")).ShouldBe([browser.Id]);
+        (await conn.QueryAsync<string>("SELECT canvas_id FROM canvas_revisions")).ShouldBe([browser.Id]);
+    }
 }

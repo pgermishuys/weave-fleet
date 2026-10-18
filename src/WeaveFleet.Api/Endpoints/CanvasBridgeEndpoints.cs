@@ -39,17 +39,9 @@ public static class CanvasBridgeEndpoints
             => ToResult(await bridge.ListAsync(BridgeToken(http), request.HarnessSessionId, ct)))
             .WithName("CanvasBridgeList");
 
-        group.MapPost("/open", async (CanvasBridgeRequest request, HttpContext http, CanvasBridge bridge, CancellationToken ct)
-            => ToResult(await bridge.OpenAsync(BridgeToken(http), request.HarnessSessionId, request.Kind, request.Title, request.State, ct)))
-            .WithName("CanvasBridgeOpen");
-
         group.MapPost("/read", async (CanvasBridgeRequest request, HttpContext http, CanvasBridge bridge, CancellationToken ct)
             => ToResult(await bridge.ReadAsync(BridgeToken(http), request.HarnessSessionId, request.CanvasId, ct)))
             .WithName("CanvasBridgeRead");
-
-        group.MapPost("/patch", async (CanvasBridgeRequest request, HttpContext http, CanvasBridge bridge, CancellationToken ct)
-            => ToResult(await bridge.PatchAsync(BridgeToken(http), request.HarnessSessionId, request.CanvasId, request.Ops, ct)))
-            .WithName("CanvasBridgePatch");
 
         group.MapPost("/focus", async (CanvasBridgeRequest request, HttpContext http, CanvasBridge bridge, CancellationToken ct)
             => ToResult(await bridge.FocusAsync(BridgeToken(http), request.HarnessSessionId, request.CanvasId, ct)))

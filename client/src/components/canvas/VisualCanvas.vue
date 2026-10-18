@@ -8,13 +8,9 @@ import { visualCanvasTitle } from "@/stores/canvases";
 
 const props = defineProps<{
   payload: VisualPayload;
-  /** Set on server canvases: the agent changes them, the user only looks. */
-  readonly?: boolean;
 }>();
 
 const KIND_LABELS: Record<VisualPayload["$type"], string> = {
-  "visual/flow": "Flow diagram",
-  "visual/sequence": "Sequence diagram",
   markdown: "Document",
   html: "HTML",
 };
@@ -24,8 +20,6 @@ const title = computed(() => visualCanvasTitle(props.payload));
 const kindLabel = computed(() => KIND_LABELS[props.payload.$type]);
 const renderer = computed(() => getVisualRenderer(props.payload.$type));
 const isMarkdown = computed(() => props.payload.$type === "markdown");
-// Only the flow renderer takes readonly; the others render nothing editable.
-const rendererProps = computed(() => (props.payload.$type === "visual/flow" ? { readonly: props.readonly } : {}));
 
 function handleAnnotate(anchor: AnnotationAnchor, position: { x: number; y: number }): void {
   annotate(anchor, position, props.payload.sourceFilePath ?? title.value);
@@ -50,7 +44,6 @@ function handleAnnotate(anchor: AnnotationAnchor, position: { x: number; y: numb
         v-if="renderer"
         :content="payload.content"
         :annotatable="isMarkdown"
-        v-bind="rendererProps"
         @annotate="handleAnnotate"
       />
     </div>
@@ -97,13 +90,6 @@ function handleAnnotate(anchor: AnnotationAnchor, position: { x: number; y: numb
   overflow: auto;
   background-image: radial-gradient(color-mix(in srgb, var(--text) 7%, transparent) 1px, transparent 1px);
   background-size: 16px 16px;
-}
-
-/* The canvas frames the diagram, so the renderer drops its own card chrome. */
-.visual-canvas__content :deep(.flow-renderer),
-.visual-canvas__content :deep(.mermaid-container) {
-  border: 0;
-  border-radius: 0;
 }
 
 .visual-canvas__content--document {

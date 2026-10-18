@@ -30,7 +30,7 @@ public sealed class ClaudeCodeFleetToolsTests
     // ── Names ──────────────────────────────────────────────────────────────────
 
     [Theory]
-    [InlineData("mcp__fleet__fleet_canvas_open", "fleet_canvas_open")]
+    [InlineData("mcp__fleet__fleet_canvas_list", "fleet_canvas_list")]
     [InlineData("mcp__fleet__fleet_browser_screenshot", "fleet_browser_screenshot")]
     [InlineData("mcp__fleet__fleet_step_done", "fleet_step_done")]
     [InlineData("mcp__github__create_issue", "mcp__github__create_issue")]
@@ -186,16 +186,16 @@ public sealed class ClaudeCodeFleetToolsTests
         var (registry, _) = Registry();
         var records = new FleetToolCallRecords();
         var metadata = JsonDocument.Parse("""{"canvasId":"cv_01M4955T6VP903WQWAPD7A1ZEZ","version":1}""").RootElement;
-        records.Record(AgentCall, new FleetToolCallRecord("Flow · +2 boxes, +1 edge · v1", metadata));
+        records.Record(AgentCall, new FleetToolCallRecord("Flow · http://localhost:5173/", metadata));
         var messages = new InMemoryMessageRepository();
 
         await PumpAsync(messages, registry, records, File.ReadAllLines(Path.Combine(AppContext.BaseDirectory, "Fixtures", "ClaudeCode", "fleet-mcp-tools.jsonl")));
 
         var open = Conversation(messages).SelectMany(m => m.Parts).OfType<ToolUsePart>().Single(tool => tool.ToolCallId == AgentCall);
-        open.ToolName.ShouldBe("fleet_canvas_open");
+        open.ToolName.ShouldBe("fleet_browser_open");
         open.State.ShouldBe(ToolUseState.Completed);
-        open.Arguments.GetProperty("kind").GetString().ShouldBe("diagram");
-        open.Title.ShouldBe("Flow · +2 boxes, +1 edge · v1");
+        open.Arguments.GetProperty("url").GetString().ShouldBe("http://localhost:5173/");
+        open.Title.ShouldBe("Flow · http://localhost:5173/");
         open.Metadata!.Value.GetProperty("canvasId").GetString().ShouldBe("cv_01M4955T6VP903WQWAPD7A1ZEZ");
         records.Take(AgentCall).ShouldBeNull();
 

@@ -102,7 +102,7 @@ async function callFleet(
 
 const canvasId = {
   type: "string",
-  description: "The canvas id (cv_…) from fleet_canvas_list or fleet_canvas_open.",
+  description: "The canvas id (cv_…) from fleet_canvas_list.",
 }
 
 const waitForChoice = {
@@ -204,62 +204,11 @@ export const FleetCanvasPlugin = async (input: { directory?: string }) => ({
       execute: (_args: Record<string, never>, context: ToolContext) => callFleet("list", context, {}),
     },
 
-    fleet_canvas_open: {
-      description: [
-        "Show the user a simple boxes-and-arrows diagram in a canvas beside the chat. Don't use this tool when the fleet-diagrams skill is among your skills: load that skill for every diagram (architecture, a flow, dependencies, a sequence), which draws an HTML page in Fleet's theme that you show with fleet_page_show.",
-        "For a mockup or any HTML page, use fleet_page_show.",
-        "Use it only when the user asks for a diagram and the fleet-diagrams skill isn't listed; then draw it here rather than as text or Mermaid in chat.",
-        "Don't open one for your own notes or progress, or when you're working on a task delegated by another agent: your result goes to that agent, not to the user.",
-        "Read a canvas before you describe it or change it.",
-        "Opening a title that already exists updates that canvas to the new state, and reopens it if it was closed. To change part of a canvas, use fleet_canvas_patch.",
-      ].join(" "),
-      args: {
-        kind: {
-          type: "string",
-          enum: ["diagram", "sequence"],
-          description: "diagram: boxes and arrows (architecture, flows, dependencies). sequence: a Mermaid sequence diagram.",
-        },
-        title: {
-          type: "string",
-          description: "Short title for the canvas tab, e.g. \"Session event flow\".",
-        },
-        state: {
-          type: "object",
-          description: [
-            "For diagram: {\"direction\"?: \"TB\"|\"LR\"|\"BT\"|\"RL\", \"nodes\": [{\"id\", \"label\", \"detail\"?}], \"edges\": [{\"id\", \"from\", \"to\", \"label\"?, \"style\"?: \"solid\"|\"dashed\"|\"planned\"}]}.",
-            "Ids use letters, digits and _ . : - and are unique across boxes and edges. Don't give positions; the canvas lays boxes out.",
-            "For sequence: {\"source\": \"sequenceDiagram\\n  Agent->>Fleet: open\"}, Mermaid source without code fences.",
-          ].join(" "),
-        },
-      },
-      execute: (args: { kind: string; title: string; state: unknown }, context: ToolContext) =>
-        callFleet("open", context, { kind: args.kind, title: args.title, state: args.state }),
-    },
-
     fleet_canvas_read: {
-      description: "Read a canvas as compact text: every box and edge by id, the Mermaid source, a browser canvas's page with its app's status and recent output, or the file a page canvas shows.",
+      description: "Read a canvas as compact text: a browser canvas's page with its app's status and recent output, or the file a page canvas shows.",
       args: { canvasId },
       execute: (args: { canvasId: string }, context: ToolContext) =>
         callFleet("read", context, { canvasId: args.canvasId }),
-    },
-
-    fleet_canvas_patch: {
-      description: [
-        "Change part of a canvas. Ops apply in order, all or nothing, and name boxes and edges by id.",
-        "Diagram ops: addNode {id, label, detail?}; updateNode {id, label?, detail?}; removeNode {id} (removes its edges too);",
-        "addEdge {id, from, to, label?, style?}; updateEdge {id, label?, style?}; removeEdge {id}; setDirection {direction}.",
-        "Sequence op: setSource {source}.",
-      ].join(" "),
-      args: {
-        canvasId,
-        ops: {
-          type: "array",
-          items: { type: "object" },
-          description: "The ops, each an object whose \"op\" field names it.",
-        },
-      },
-      execute: (args: { canvasId: string; ops: unknown }, context: ToolContext) =>
-        callFleet("patch", context, { canvasId: args.canvasId, ops: args.ops }),
     },
 
     fleet_canvas_focus: {

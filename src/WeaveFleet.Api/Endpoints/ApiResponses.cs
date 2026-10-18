@@ -343,10 +343,7 @@ public sealed record WalkthroughBridgeRequest(string? HarnessSessionId, string? 
 public sealed record CanvasBridgeRequest(
     string? HarnessSessionId,
     string? CanvasId = null,
-    string? Kind = null,
     string? Title = null,
-    JsonNode? State = null,
-    JsonNode? Ops = null,
     string? Command = null,
     string? Url = null,
     string? Path = null,

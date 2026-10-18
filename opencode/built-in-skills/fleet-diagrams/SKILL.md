@@ -1,6 +1,6 @@
 ---
 name: fleet-diagrams
-description: Draw a diagram as an HTML page and show it beside the chat, in Fleet's colours and type. Architecture, flows and workflows, sequences, data flow, state machines, database tables, class contracts, trees, timelines. Use it for every diagram, instead of the fleet_canvas_open canvas, when the user asks for a diagram or a picture of how something is built or flows, or asks for fleet-diagrams by name. Not for how something works over time as an animation (fleet-explain), UI mockups (fleet-mockups) or numeric charts.
+description: Draw a diagram as an HTML page and show it beside the chat, in Fleet's colours and type. Architecture, flows and workflows, sequences, data flow, state machines, database tables, class contracts, trees, timelines. Use it for every diagram, when the user asks for a diagram or a picture of how something is built or flows, or asks for fleet-diagrams by name. Not for how something works over time as an animation (fleet-explain), UI mockups (fleet-mockups) or numeric charts.
 ---
 
 # Draw a diagram

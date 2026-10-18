@@ -19,8 +19,10 @@ namespace WeaveFleet.Api.Tests.Endpoints;
 public sealed class CanvasEndpointTests : IAsyncLifetime
 #pragma warning restore CA1001
 {
-    private const string DiagramState = """{"direction":"LR","nodes":[{"id":"n1","label":"NuCode session","detail":"NuCode/Sessions","x":20,"y":44.5,"placedByUser":true},{"id":"n2","label":"SessionEventsHub"}],"edges":[{"id":"e1","from":"n1","to":"n2","label":"publishes","style":"solid"}]}""";
-    private const string SequenceState = """{"source":"sequenceDiagram\n  Agent->>Fleet: fleet_canvas_open"}""";
+    private const string ShopState = """{"url":"http://localhost:5173/","appId":"app_1"}""";
+    private const string AdminState = """{"url":"http://localhost:3000/admin"}""";
+    // A retired kind: a diagram saved before diagrams went away.
+    private const string DiagramState = """{"direction":"LR","nodes":[{"id":"n1","label":"NuCode session"}],"edges":[]}""";
 
     private ApiWebApplicationFactory? _factory;
     private HttpClient? _client;
@@ -53,15 +55,18 @@ public sealed class CanvasEndpointTests : IAsyncLifetime
                     'stopped', 'active', '2026-09-01T10:00:00+00:00', 'test-user'),
                    ('sess-mine-2', 'ws-mine', 'inst-mine', 'oc-mine-2', 'Mine too', 'stopped', '/ws-mine',
                     'stopped', 'active', '2026-09-01T11:00:00+00:00', 'test-user'),
+                   ('sess-diagram', 'ws-mine', 'inst-mine', 'oc-diagram', 'Has a diagram', 'stopped', '/ws-mine',
+                    'stopped', 'active', '2026-09-01T11:30:00+00:00', 'test-user'),
                    ('sess-other', 'ws-other', 'inst-other', 'oc-other', 'Other', 'stopped', '/ws-other',
                     'stopped', 'active', '2026-09-01T12:00:00+00:00', 'other-user');
             """);
 
-        await InsertCanvasAsync(connection, "cv_diagram", "sess-mine", "test-user", "diagram", "Session event flow", DiagramState, version: 2, createdAt: "2026-09-12T10:00:00.0000000Z");
-        await InsertCanvasAsync(connection, "cv_sequence", "sess-mine", "test-user", "sequence", "Open flow", SequenceState, version: 1, createdAt: "2026-09-12T10:05:00.0000000Z");
-        await InsertCanvasAsync(connection, "cv_closed", "sess-mine", "test-user", "diagram", "Old sketch", DiagramState, version: 1, createdAt: "2026-09-12T09:00:00.0000000Z", closedAt: "2026-09-12T09:30:00.0000000Z");
-        await InsertCanvasAsync(connection, "cv_mine_2", "sess-mine-2", "test-user", "diagram", "Other session", DiagramState, version: 1, createdAt: "2026-09-12T10:00:00.0000000Z");
-        await InsertCanvasAsync(connection, "cv_other", "sess-other", "other-user", "diagram", "Theirs", DiagramState, version: 1, createdAt: "2026-09-12T10:00:00.0000000Z");
+        await InsertCanvasAsync(connection, "cv_diagram", "sess-diagram", "test-user", "diagram", "Session event flow", DiagramState, version: 2, createdAt: "2026-09-12T10:00:00.0000000Z");
+        await InsertCanvasAsync(connection, "cv_shop", "sess-mine", "test-user", "browser", "Shop", ShopState, version: 2, createdAt: "2026-09-12T10:00:00.0000000Z");
+        await InsertCanvasAsync(connection, "cv_admin", "sess-mine", "test-user", "browser", "Admin", AdminState, version: 1, createdAt: "2026-09-12T10:05:00.0000000Z");
+        await InsertCanvasAsync(connection, "cv_closed", "sess-mine", "test-user", "browser", "Old tab", AdminState, version: 1, createdAt: "2026-09-12T09:00:00.0000000Z", closedAt: "2026-09-12T09:30:00.0000000Z");
+        await InsertCanvasAsync(connection, "cv_mine_2", "sess-mine-2", "test-user", "browser", "Other session", AdminState, version: 1, createdAt: "2026-09-12T10:00:00.0000000Z");
+        await InsertCanvasAsync(connection, "cv_other", "sess-other", "other-user", "browser", "Theirs", AdminState, version: 1, createdAt: "2026-09-12T10:00:00.0000000Z");
     }
 
     public async Task DisposeAsync()
@@ -78,7 +83,39 @@ public sealed class CanvasEndpointTests : IAsyncLifetime
 
         response.StatusCode.ShouldBe(HttpStatusCode.OK);
         (await response.Content.ReadAsStringAsync()).ShouldBe(
-            $$"""[{"canvasId":"cv_diagram","kind":"diagram","title":"Session event flow","version":2,"state":{{DiagramState}}},{"canvasId":"cv_sequence","kind":"sequence","title":"Open flow","version":1,"state":{{SequenceState}}}]""");
+            $$"""[{"canvasId":"cv_shop","kind":"browser","title":"Shop","version":2,"state":{{ShopState}}},{"canvasId":"cv_admin","kind":"browser","title":"Admin","version":1,"state":{{AdminState}}}]""");
+    }
+
+    [Fact]
+    public async Task List_leaves_out_a_canvas_of_a_retired_kind_that_is_still_saved()
+    {
+        var response = await _client!.GetAsync("/api/sessions/sess-diagram/canvases");
+
+        response.StatusCode.ShouldBe(HttpStatusCode.OK);
+        (await response.Content.ReadAsStringAsync()).ShouldBe("[]");
+
+        using var scope = _factory!.Services.CreateScope();
+        using var connection = scope.ServiceProvider.GetRequiredService<IDbConnectionFactory>().CreateConnection();
+        (await connection.ExecuteScalarAsync<int>("SELECT COUNT(*) FROM canvases WHERE id = 'cv_diagram'")).ShouldBe(1);
+    }
+
+    [Fact]
+    public async Task Focus_reopens_a_closed_canvas_and_returns_it()
+    {
+        var response = await FocusAsync("sess-mine", "cv_closed");
+
+        response.StatusCode.ShouldBe(HttpStatusCode.OK);
+        var body = await response.Content.ReadFromJsonAsync<JsonElement>(JsonSerializerOptions.Web);
+        body.GetProperty("canvasId").GetString().ShouldBe("cv_closed");
+        (await ListCanvasIdsAsync("sess-mine")).ShouldBe(["cv_closed", "cv_shop", "cv_admin"]);
+    }
+
+    [Fact]
+    public async Task Focus_returns_not_found_for_an_unknown_canvas_or_another_users_session()
+    {
+        (await FocusAsync("sess-mine", "cv_missing")).StatusCode.ShouldBe(HttpStatusCode.NotFound);
+        (await FocusAsync("sess-mine", "cv_mine_2")).StatusCode.ShouldBe(HttpStatusCode.NotFound);
+        (await FocusAsync("sess-other", "cv_other")).StatusCode.ShouldBe(HttpStatusCode.NotFound);
     }
 
     [Fact]
@@ -101,15 +138,15 @@ public sealed class CanvasEndpointTests : IAsyncLifetime
         // The subscription registers when the enumerator first runs, so start it before the request.
         var next = events.MoveNextAsync().AsTask();
 
-        var response = await CloseAsync("sess-mine", "cv_diagram");
+        var response = await CloseAsync("sess-mine", "cv_shop");
 
         response.StatusCode.ShouldBe(HttpStatusCode.NoContent);
         (await next).ShouldBeTrue();
         events.Current.Type.ShouldBe("canvas.closed");
-        events.Current.Payload.GetRawText().ShouldBe("""{"sessionId":"sess-mine","canvasId":"cv_diagram"}""");
+        events.Current.Payload.GetRawText().ShouldBe("""{"sessionId":"sess-mine","canvasId":"cv_shop"}""");
 
         var canvases = await ListCanvasIdsAsync("sess-mine");
-        canvases.ShouldBe(["cv_sequence"]);
+        canvases.ShouldBe(["cv_admin"]);
     }
 
     [Fact]
@@ -144,6 +181,13 @@ public sealed class CanvasEndpointTests : IAsyncLifetime
     private async Task<HttpResponseMessage> CloseAsync(string sessionId, string canvasId)
     {
         using var request = new HttpRequestMessage(HttpMethod.Delete, $"/api/sessions/{sessionId}/canvases/{canvasId}");
+        request.Headers.Add("X-CSRF-Token", _csrfToken);
+        return await _client!.SendAsync(request);
+    }
+
+    private async Task<HttpResponseMessage> FocusAsync(string sessionId, string canvasId)
+    {
+        using var request = new HttpRequestMessage(HttpMethod.Post, $"/api/sessions/{sessionId}/canvases/{canvasId}/focus");
         request.Headers.Add("X-CSRF-Token", _csrfToken);
         return await _client!.SendAsync(request);
     }

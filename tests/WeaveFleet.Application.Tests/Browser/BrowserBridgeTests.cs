@@ -368,17 +368,6 @@ public sealed class BrowserBridgeTests : IDisposable
     }
 
     [Fact]
-    public async Task A_screenshot_of_a_diagram_canvas_says_to_open_a_page_first()
-    {
-        var canvases = new CanvasService(_canvasRepository, new FakeEventBroadcaster(), _user);
-        var diagram = await canvases.OpenAsync(SessionId, CanvasKinds.Sequence, "Flow", JsonNode.Parse("{\"source\":\"sequenceDiagram\"}"));
-
-        var shot = await _bridge.ScreenshotAsync(Token, OpenCodeSessionId, diagram.Value!.Canvas.Id, "", "desktop");
-
-        shot.Error!.Message.ShouldBe($"\"Flow\" ({diagram.Value.Canvas.Id}) is a sequence canvas. Screenshots are of pages: use fleet_page_show, fleet_app_start or fleet_browser_open first.");
-    }
-
-    [Fact]
     public async Task A_screenshot_without_a_browser_on_the_machine_says_what_to_install()
     {
         var canvasId = await ShownAppAsync();

@@ -1,13 +1,13 @@
 export interface VisualPayload {
-  $type: 'visual/sequence' | 'visual/flow' | 'html' | 'markdown'
-  content: string | Record<string, unknown>
+  $type: 'html' | 'markdown'
+  content: string
   title?: string
   sourceFilePath?: string
   sourceText?: string
   viewMode?: 'rendered' | 'source'
 }
 
-const VALID_TYPES = new Set(['visual/sequence', 'visual/flow', 'html', 'markdown'])
+const VALID_TYPES = new Set(['html', 'markdown'])
 const JSON_OBJECT_START = /^\s*\{/
 
 /**
@@ -58,21 +58,13 @@ export function parseVisualPayload(raw: string): VisualPayload | null {
       return null
     }
 
-    if (cleaned.$type === 'visual/flow') {
-      if (typeof cleaned.content !== 'string' && (typeof cleaned.content !== 'object' || cleaned.content === null || Array.isArray(cleaned.content))) {
-        return null
-      }
-    } else {
-      if (typeof cleaned.content !== 'string') {
-        return null
-      }
+    if (typeof cleaned.content !== 'string') {
+      return null
     }
 
     const payload: VisualPayload = {
       $type: cleaned.$type as VisualPayload['$type'],
-      content: cleaned.$type === 'visual/flow' && typeof cleaned.content === 'object'
-        ? cleaned.content as Record<string, unknown>
-        : cleaned.content as string,
+      content: cleaned.content,
     }
 
     if (typeof cleaned.title === 'string') {

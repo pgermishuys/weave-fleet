@@ -20,14 +20,12 @@ public sealed class CanvasService(
     public async Task<IReadOnlyList<CanvasListItem>> ListAsync(string sessionId, CancellationToken ct = default)
     {
         var canvases = await canvasRepository.ListBySessionIdAsync(sessionId);
-        var items = new List<CanvasListItem>(canvases.Count);
-        foreach (var canvas in canvases)
-            items.Add(new CanvasListItem(canvas, (await UserRemovalsSinceSeenAsync(canvas)).Count > 0));
-        return items;
+        // Diagram and sequence canvases were retired; migration 064 deletes them, and this keeps any that slip through off the panel.
+        return canvases.Where(canvas => CanvasKinds.IsKnown(canvas.Kind)).Select(canvas => new CanvasListItem(canvas)).ToList();
     }
 
-    public Task<Canvas?> GetAsync(string sessionId, string canvasId, CancellationToken ct = default)
-        => canvasRepository.GetByIdAsync(sessionId, canvasId);
+    public async Task<Canvas?> GetAsync(string sessionId, string canvasId, CancellationToken ct = default)
+        => await canvasRepository.GetByIdAsync(sessionId, canvasId) is { } canvas && CanvasKinds.IsKnown(canvas.Kind) ? canvas : null;
 
     public async Task<CanvasResult<CanvasOutcome>> OpenAsync(
         string sessionId,
@@ -70,15 +68,10 @@ public sealed class CanvasService(
                 return CanvasResult.Ok(new CanvasOutcome(current, "no changes", Created: false));
             }
 
-            var refusal = CanvasConflicts.FindRefusal(ops.Value, await UserRemovalsSinceSeenAsync(existing));
-            if (refusal is not null)
-                return CanvasResult.Fail<CanvasOutcome>(refusal);
-
-            var change = CanvasOps.Apply(kind, CanvasActor.Agent, existing.StateJson, ops.Value);
+            var change = CanvasOps.Apply(kind, existing.StateJson, ops.Value);
             if (!change.IsSuccess)
                 return CanvasResult.Fail<CanvasOutcome>(change.Error);
 
-            // The agent sent the whole canvas, so after an open it has seen all of it.
             var updated = await TryWriteAsync(existing, change.Value, CanvasActor.Agent, agentSeenVersion: existing.Version + 1);
             if (updated is null)
                 continue;
@@ -107,7 +100,7 @@ public sealed class CanvasService(
             if (change(PageState.Parse(existing.StateJson)) is not { } page)
                 return CanvasResult.Ok(existing);
 
-            var applied = CanvasOps.Apply(CanvasKinds.Page, CanvasActor.Agent, existing.StateJson, [new ShowPageOp(page)]);
+            var applied = CanvasOps.Apply(CanvasKinds.Page, existing.StateJson, [new ShowPageOp(page)]);
             if (!applied.IsSuccess)
                 return CanvasResult.Fail<Canvas>(applied.Error);
 
@@ -122,72 +115,14 @@ public sealed class CanvasService(
         throw new InvalidOperationException($"Canvas {canvasId} kept changing while Fleet updated its page.");
     }
 
-    public async Task<CanvasResult<string>> ReadAsync(string sessionId, string canvasId, bool full, CancellationToken ct = default)
+    public async Task<CanvasResult<string>> ReadAsync(string sessionId, string canvasId, CancellationToken ct = default)
     {
-        var canvas = await canvasRepository.GetByIdAsync(sessionId, canvasId);
+        var canvas = await GetAsync(sessionId, canvasId, ct);
         if (canvas is null)
             return CanvasResult.Fail<string>(NotFound(canvasId));
 
-        var text = full
-            ? CanvasText.RenderFull(canvas)
-            : CanvasText.RenderChangesSince(canvas.AgentSeenVersion, await UserRemovalsSinceSeenAsync(canvas));
-
-        // Only the version that was read counts as seen, even if the user changed it again since.
         await canvasRepository.MarkAgentSeenAsync(sessionId, canvasId, canvas.Version);
-        return CanvasResult.Ok(text);
-    }
-
-    public async Task<CanvasResult<CanvasOutcome>> ApplyAsync(
-        string sessionId,
-        string canvasId,
-        CanvasActor actor,
-        JsonNode? ops,
-        CancellationToken ct = default)
-    {
-        for (var attempt = 0; attempt < MaxWriteAttempts; attempt++)
-        {
-            var canvas = await canvasRepository.GetByIdAsync(sessionId, canvasId);
-            if (canvas is null)
-                return CanvasResult.Fail<CanvasOutcome>(NotFound(canvasId));
-
-            if (actor == CanvasActor.Agent && canvas.ClosedAt is not null)
-            {
-                return CanvasResult.Fail<CanvasOutcome>(
-                    CanvasErrorKind.Refused,
-                    $"Refused: the user closed {CanvasText.CanvasName(canvas)}. Call fleet_canvas_open with its title to reopen it.");
-            }
-
-            var parsed = CanvasOps.Parse(canvas.Kind, actor, ops);
-            if (!parsed.IsSuccess)
-                return CanvasResult.Fail<CanvasOutcome>(parsed.Error);
-
-            IReadOnlyList<CanvasUserRemoval> removals = [];
-            if (actor == CanvasActor.Agent)
-            {
-                removals = await UserRemovalsSinceSeenAsync(canvas);
-                if (CanvasConflicts.FindRefusal(parsed.Value, removals) is { } refusal)
-                    return CanvasResult.Fail<CanvasOutcome>(refusal);
-            }
-
-            var change = CanvasOps.Apply(canvas.Kind, actor, canvas.StateJson, parsed.Value);
-            if (!change.IsSuccess)
-                return CanvasResult.Fail<CanvasOutcome>(change.Error);
-
-            // An agent write counts as seeing the canvas only when the user removed nothing it hasn't read.
-            // Otherwise a patch that happens to miss a removed box would use up the refusal.
-            var agentSeenVersion = actor == CanvasActor.Agent && removals.Count == 0
-                ? canvas.Version + 1
-                : canvas.AgentSeenVersion;
-
-            var updated = await TryWriteAsync(canvas, change.Value, actor, agentSeenVersion);
-            if (updated is null)
-                continue;
-
-            await BroadcastUpdatedAsync(updated, actor, change.Value.Summary, ct);
-            return CanvasResult.Ok(new CanvasOutcome(updated, change.Value.Summary, Created: false));
-        }
-
-        throw new InvalidOperationException($"Canvas {canvasId} kept changing while a change was being applied.");
+        return CanvasResult.Ok(CanvasText.RenderFull(canvas));
     }
 
     public async Task<CanvasResult<Canvas>> FocusAsync(string sessionId, string canvasId, CancellationToken ct = default)
@@ -292,9 +227,6 @@ public sealed class CanvasService(
 
         return await canvasRepository.TryUpdateAsync(next, current.Version, revision) ? next : null;
     }
-
-    private async Task<IReadOnlyList<CanvasUserRemoval>> UserRemovalsSinceSeenAsync(Canvas canvas)
-        => CanvasConflicts.UserRemovals(await canvasRepository.ListRevisionsAsync(canvas.Id, canvas.AgentSeenVersion));
 
     private Task BroadcastUpdatedAsync(Canvas canvas, CanvasActor actor, string summary, CancellationToken ct)
     {

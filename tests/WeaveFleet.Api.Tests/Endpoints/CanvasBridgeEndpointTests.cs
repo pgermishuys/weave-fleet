@@ -28,12 +28,6 @@ public sealed class CanvasBridgeEndpointTests : IAsyncLifetime
     private const string Owner = "owner-user";
     private const string BridgeUrl = "/api/bridge/canvas";
 
-    private static readonly object Flow = new
-    {
-        nodes = new[] { new { id = "n1", label = "NuCode session" }, new { id = "n2", label = "SessionEventsHub" } },
-        edges = new[] { new { id = "e1", from = "n1", to = "n2", label = "publishes" } },
-    };
-
     private ApiWebApplicationFactory? _factory;
     private HttpClient? _client;
 
@@ -52,22 +46,30 @@ public sealed class CanvasBridgeEndpointTests : IAsyncLifetime
     }
 
     [Fact]
-    public async Task Open_stores_the_canvas_for_the_session_owner_and_returns_the_tool_result()
+    public async Task Browser_open_stores_the_canvas_for_the_session_owner_and_returns_the_tool_result()
     {
-        var response = await PostAsync("open", Token, new { harnessSessionId = HarnessSessionId, kind = "diagram", title = "Flow", state = Flow });
+        var response = await PostAsync("browser-open", Token, new { harnessSessionId = HarnessSessionId, url = "http://localhost:5173/", title = "Shop" });
 
         response.StatusCode.ShouldBe(HttpStatusCode.OK);
         var body = await response.Content.ReadFromJsonAsync<JsonElement>();
         var canvasId = body.GetProperty("metadata").GetProperty("canvasId").GetString();
         canvasId.ShouldNotBeNull();
-        body.EnumerateObject().Select(property => property.Name).ShouldBe(["title", "output", "metadata"]);
-        body.GetProperty("title").GetString().ShouldBe("Flow · +2 boxes, +1 edge · v1");
-        body.GetProperty("output").GetString().ShouldBe($"Opened \"Flow\" ({canvasId}) at v1.");
+        body.GetProperty("title").GetString().ShouldStartWith("Shop");
         body.GetProperty("metadata").GetProperty("version").GetInt32().ShouldBe(1);
 
         using var scope = _factory!.Services.CreateScope();
         using var connection = scope.ServiceProvider.GetRequiredService<IDbConnectionFactory>().CreateConnection();
         (await connection.ExecuteScalarAsync<string>("SELECT user_id FROM canvases WHERE id = @canvasId", new { canvasId })).ShouldBe(Owner);
+    }
+
+    [Theory]
+    [InlineData("open")]
+    [InlineData("patch")]
+    public async Task The_retired_open_and_patch_routes_are_gone(string tool)
+    {
+        var response = await PostAsync(tool, Token, new { harnessSessionId = HarnessSessionId, kind = "diagram", title = "Flow" });
+
+        response.StatusCode.ShouldBeOneOf(HttpStatusCode.NotFound, HttpStatusCode.MethodNotAllowed);
     }
 
     [Fact]
@@ -129,31 +131,26 @@ public sealed class CanvasBridgeEndpointTests : IAsyncLifetime
     [Fact]
     public async Task Other_tools_carry_no_screenshot_in_their_metadata()
     {
-        var response = await PostAsync("open", Token, new { harnessSessionId = HarnessSessionId, kind = "diagram", title = "Flow", state = Flow });
+        var canvasId = await OpenShopAsync();
+
+        var response = await PostAsync("read", Token, new { harnessSessionId = HarnessSessionId, canvasId });
 
         var metadata = (await response.Content.ReadFromJsonAsync<JsonElement>()).GetProperty("metadata");
         metadata.EnumerateObject().Select(property => property.Name).ShouldBe(["canvasId", "version"]);
     }
 
     [Fact]
-    public async Task Patch_read_list_and_focus_answer_with_tool_text()
+    public async Task Read_list_and_focus_answer_with_tool_text()
     {
-        var canvasId = await OpenFlowAsync();
+        var canvasId = await OpenShopAsync();
 
-        var patched = await ReadToolAsync(await PostAsync("patch", Token, new
-        {
-            harnessSessionId = HarnessSessionId,
-            canvasId,
-            ops = new object[] { new { op = "addNode", id = "n3", label = "Client" } },
-        }));
         var read = await ReadToolAsync(await PostAsync("read", Token, new { harnessSessionId = HarnessSessionId, canvasId }));
         var listed = await ReadToolAsync(await PostAsync("list", Token, new { harnessSessionId = HarnessSessionId }));
         var focused = await ReadToolAsync(await PostAsync("focus", Token, new { harnessSessionId = HarnessSessionId, canvasId }));
 
-        patched.ShouldBe("Updated to v2 (+1 box).");
-        read.ShouldBe($"diagram {canvasId} \"Flow\" v2 TB\nn1 NuCode session\nn2 SessionEventsHub\nn3 Client\ne1 n1 -> n2 publishes");
-        listed.ShouldBe($"{canvasId} diagram \"Flow\" v2");
-        focused.ShouldBe($"Showing \"Flow\" ({canvasId}) at v2.");
+        read.ShouldBe($"browser {canvasId} \"Shop\" v1\nurl http://localhost:5173/");
+        listed.ShouldBe($"{canvasId} browser \"Shop\" v1");
+        focused.ShouldBe($"Showing \"Shop\" ({canvasId}) at v1.");
     }
 
     [Theory]
@@ -188,20 +185,13 @@ public sealed class CanvasBridgeEndpointTests : IAsyncLifetime
     [Fact]
     public async Task Canvas_errors_come_back_with_their_message_and_a_matching_status()
     {
-        var canvasId = await OpenFlowAsync();
-        using (var scope = _factory!.Services.CreateScope())
-        using (scope.ServiceProvider.GetRequiredService<IBackgroundUserScope>().Begin(Owner))
-            (await scope.ServiceProvider.GetRequiredService<ICanvasService>().CloseAsync(SessionId, canvasId)).IsSuccess.ShouldBeTrue();
-
-        var badKind = await PostAsync("open", Token, new { harnessSessionId = HarnessSessionId, kind = "chart", title = "Other", state = Flow });
         var missing = await PostAsync("read", Token, new { harnessSessionId = HarnessSessionId, canvasId = "cv_missing" });
-        var closed = await PostAsync("patch", Token, new { harnessSessionId = HarnessSessionId, canvasId, ops = Array.Empty<object>() });
+        var noId = await PostAsync("focus", Token, new { harnessSessionId = HarnessSessionId });
 
-        badKind.StatusCode.ShouldBe(HttpStatusCode.UnprocessableEntity);
         missing.StatusCode.ShouldBe(HttpStatusCode.NotFound);
         (await ErrorAsync(missing)).ShouldBe("No canvas cv_missing in this session. Call fleet_canvas_list to see the open canvases.");
-        closed.StatusCode.ShouldBe(HttpStatusCode.Conflict);
-        (await ErrorAsync(closed)).ShouldBe($"Refused: the user closed \"Flow\" ({canvasId}). Call fleet_canvas_open with its title to reopen it.");
+        noId.StatusCode.ShouldBe(HttpStatusCode.UnprocessableEntity);
+        (await ErrorAsync(noId)).ShouldStartWith("\"canvasId\" is required.");
     }
 
     private static ApiWebApplicationFactory CreateFactory(bool simulateLocalhostRequest)
@@ -240,9 +230,9 @@ public sealed class CanvasBridgeEndpointTests : IAsyncLifetime
             """);
     }
 
-    private async Task<string> OpenFlowAsync()
+    private async Task<string> OpenShopAsync()
     {
-        var response = await PostAsync("open", Token, new { harnessSessionId = HarnessSessionId, kind = "diagram", title = "Flow", state = Flow });
+        var response = await PostAsync("browser-open", Token, new { harnessSessionId = HarnessSessionId, url = "http://localhost:5173/", title = "Shop" });
         response.StatusCode.ShouldBe(HttpStatusCode.OK);
         return (await response.Content.ReadFromJsonAsync<JsonElement>()).GetProperty("metadata").GetProperty("canvasId").GetString()!;
     }

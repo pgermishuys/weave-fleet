@@ -7,9 +7,9 @@ import { fileCanvasId, serverCanvasTabId, useCanvasesStore, visualCanvasId, visu
 import { useFileBuffersStore } from "@/stores/file-buffers";
 
 const flow: VisualPayload = {
-  $type: "visual/flow",
+  $type: "markdown",
   title: "Session event flow",
-  content: { nodes: [], edges: [] },
+  content: "# Session event flow",
 };
 
 describe("useCanvasesStore", () => {
@@ -42,7 +42,7 @@ describe("useCanvasesStore", () => {
 
     store.openVisual("s1", flow);
     store.activate("s1", "changes");
-    const revised: VisualPayload = { ...flow, content: { nodes: [{ id: "n1", label: "Hub" }], edges: [] } };
+    const revised: VisualPayload = { ...flow, content: "# Hub" };
     store.openVisual("s1", revised);
 
     const state = store.sessionCanvases("s1");
@@ -121,7 +121,7 @@ describe("useCanvasesStore", () => {
   it("titles visuals by title, then file name, then a generic label", () => {
     expect(visualCanvasTitle(flow)).toBe("Session event flow");
     expect(visualCanvasTitle({ $type: "markdown", content: "", sourceFilePath: "docs/plan.md" })).toBe("plan.md");
-    expect(visualCanvasTitle({ $type: "visual/sequence", content: "sequenceDiagram" })).toBe("Diagram");
+    expect(visualCanvasTitle({ $type: "html", content: "<p/>" })).toBe("Document");
   });
 });
 
@@ -134,9 +134,9 @@ function wire<T extends CanvasEvent>(json: string): T {
   return toDomainEvent(null, JSON.parse(json)) as T;
 }
 
-const opened = wire<CanvasUpdated>(`{"type":"canvas.updated","eventId":null,"properties":{"sessionId":"${SESSION}","canvasId":"${CANVAS}","kind":"diagram","title":"Session event flow","version":1,"actor":"agent","state":{"direction":"TB","nodes":[{"id":"n1","label":"NuCode session","detail":"NuCode/Sessions"},{"id":"n2","label":"SessionEventsHub"}],"edges":[{"id":"e1","from":"n1","to":"n2","label":"publishes","style":"solid"}]},"summary":"+2 boxes, +1 edge"}}`);
+const opened = wire<CanvasUpdated>(`{"type":"canvas.updated","eventId":null,"properties":{"sessionId":"${SESSION}","canvasId":"${CANVAS}","kind":"browser","title":"Storefront","version":1,"actor":"agent","state":{"url":"http://localhost:5173/","appId":"app_1"},"summary":"http://localhost:5173/"}}`);
 const focused = wire<CanvasFocused>(`{"type":"canvas.focused","eventId":null,"properties":{"sessionId":"${SESSION}","canvasId":"${CANVAS}"}}`);
-const moved = wire<CanvasUpdated>(`{"type":"canvas.updated","eventId":null,"properties":{"sessionId":"${SESSION}","canvasId":"${CANVAS}","kind":"diagram","title":"Session event flow","version":2,"actor":"user","state":{"direction":"TB","nodes":[{"id":"n1","label":"NuCode session","detail":"NuCode/Sessions","x":20,"y":44.5,"placedByUser":true},{"id":"n2","label":"SessionEventsHub"}],"edges":[{"id":"e1","from":"n1","to":"n2","label":"publishes","style":"solid"}]},"summary":"1 box moved"}}`);
+const moved = wire<CanvasUpdated>(`{"type":"canvas.updated","eventId":null,"properties":{"sessionId":"${SESSION}","canvasId":"${CANVAS}","kind":"browser","title":"Storefront","version":2,"actor":"agent","state":{"url":"http://localhost:5173/cart","appId":"app_1"},"summary":"http://localhost:5173/cart"}}`);
 const closed = wire<CanvasClosed>(`{"type":"canvas.closed","eventId":null,"properties":{"sessionId":"${SESSION}","canvasId":"${CANVAS}"}}`);
 
 const TAB = serverCanvasTabId(CANVAS);
@@ -159,9 +159,9 @@ describe("useCanvasesStore server canvases", () => {
     expect(store.sessionCanvases(SESSION).canvases.map((canvas) => canvas.id)).toEqual(["changes", "files", TAB]);
     expect(store.sessionCanvases(SESSION).activeId).toBe("changes");
     expect(serverTab(store)).toMatchObject({
-      kind: "visual",
-      server: { canvasId: CANVAS, kind: "diagram", version: 1 },
-      payload: { $type: "visual/flow", title: "Session event flow" },
+      kind: "browser",
+      server: { canvasId: CANVAS, kind: "browser", version: 1 },
+      browser: { url: "http://localhost:5173/", appId: "app_1", title: "Storefront" },
     });
 
     store.applyCanvasEvent(focused);
@@ -169,7 +169,7 @@ describe("useCanvasesStore server canvases", () => {
     expect(store.sessionCanvases(SESSION).activeId).toBe(TAB);
   });
 
-  it("redraws the same tab in place on a later version, positions included", () => {
+  it("redraws the same tab in place on a later version", () => {
     const store = useCanvasesStore();
     store.applyCanvasEvent(opened);
     store.activate(SESSION, "files");
@@ -179,9 +179,7 @@ describe("useCanvasesStore server canvases", () => {
     const tabs = store.sessionCanvases(SESSION).canvases.filter((canvas) => canvas.server);
     expect(tabs).toHaveLength(1);
     expect(tabs[0]?.server?.version).toBe(2);
-    expect((tabs[0]?.payload?.content as { nodes: unknown[] }).nodes[0]).toEqual({
-      id: "n1", label: "NuCode session", detail: "NuCode/Sessions", x: 20, y: 44.5,
-    });
+    expect(tabs[0]?.browser?.url).toBe("http://localhost:5173/cart");
     expect(store.sessionCanvases(SESSION).activeId).toBe("files");
   });
 
@@ -212,6 +210,16 @@ describe("useCanvasesStore server canvases", () => {
     store.applyCanvasEvent(focused);
 
     expect(store.sessionCanvases(SESSION).activeId).toBe("changes");
+  });
+
+  it("skips the retired diagram and sequence kinds, which an older server may still send", () => {
+    const store = useCanvasesStore();
+    for (const kind of ["diagram", "sequence"]) {
+      const retired = wire<CanvasUpdated>(`{"type":"canvas.updated","eventId":null,"properties":{"sessionId":"${SESSION}","canvasId":"cv_${kind}","kind":"${kind}","title":"Old","version":1,"actor":"agent","state":{"source":"sequenceDiagram"},"summary":""}}`);
+      store.applyCanvasEvent(retired);
+    }
+
+    expect(store.sessionCanvases(SESSION).canvases.map((canvas) => canvas.id)).toEqual(["changes", "files"]);
   });
 
   it("skips a canvas kind it can't show", () => {
@@ -268,13 +276,15 @@ describe("useCanvasesStore server canvases", () => {
     store.activate(SESSION, serverCanvasTabId("cv_gone"));
 
     store.setServerCanvases(SESSION, [
-      { canvasId: CANVAS, kind: "diagram", title: "Session event flow", version: 2, state: moved.payload.state },
+      { canvasId: CANVAS, kind: "browser", title: "Storefront", version: 2, state: moved.payload.state },
       { canvasId: "cv_seq", kind: "sequence", title: "Calls", version: 1, state: { source: "sequenceDiagram" } },
+      { canvasId: "cv_dia", kind: "diagram", title: "Flow", version: 1, state: { nodes: [], edges: [] } },
+      { canvasId: "cv_b2", kind: "browser", title: "Admin", version: 1, state: { url: "http://localhost:5174/" } },
     ]);
 
     const state = store.sessionCanvases(SESSION);
     expect(state.canvases.map((canvas) => canvas.id)).toEqual([
-      "changes", "files", visualCanvasId(flow), TAB, serverCanvasTabId("cv_seq"),
+      "changes", "files", visualCanvasId(flow), TAB, serverCanvasTabId("cv_b2"),
     ]);
     expect(serverTab(store)?.server?.version).toBe(2);
     expect(state.activeId).toBe("changes");

@@ -176,21 +176,21 @@ public sealed partial class OpenCode2LiveTests(OpenCode2LiveFleet fleet) : IClas
     }
 
     [OpenCode2Fact]
-    public async Task The_agent_opens_a_canvas_with_Fleets_tool()
+    public async Task The_agent_opens_a_browser_canvas_with_Fleets_tool()
     {
-        const string prompt = "Draw the flow. (canvas)";
+        const string prompt = "Show the app. (canvas)";
         fleet.Answer(request => LlmRequest.Starts(request, prompt)
             ? new ScriptedLlmResponse
             {
                 StopReason = "tool_calls",
                 ToolCalls =
                 [
-                    new ScriptedToolCall("call_open", "fleet_canvas_open", """
-                        {"kind":"diagram","title":"Session flow","state":{"nodes":[{"id":"n1","label":"Client"},{"id":"n2","label":"Fleet"}],"edges":[{"id":"e1","from":"n1","to":"n2","label":"prompts"}]}}
+                    new ScriptedToolCall("call_open", "fleet_browser_open", """
+                        {"url":"http://localhost:5173/","title":"Session flow"}
                         """),
                 ],
             }
-            : LlmRequest.Continues(request, prompt) ? new ScriptedLlmResponse { Text = "Drawn." }
+            : LlmRequest.Continues(request, prompt) ? new ScriptedLlmResponse { Text = "Shown." }
             : null);
 
         using var cts = new CancellationTokenSource(Timeout);
@@ -209,7 +209,7 @@ public sealed partial class OpenCode2LiveTests(OpenCode2LiveFleet fleet) : IClas
         {
             var canvas = (await scope.ServiceProvider.GetRequiredService<ICanvasService>().ListAsync(id, cts.Token)).ShouldHaveSingleItem().Canvas;
             canvas.UserId.ShouldBe(OpenCode2LiveFleet.Owner);
-            DiagramState.Parse(canvas.StateJson).Nodes.Select(n => n.Id).ShouldBe(["n1", "n2"]);
+            BrowserState.Parse(canvas.StateJson).Url.ShouldBe("http://localhost:5173/");
         }
 
         // The tool's result told the model the canvas it opened.

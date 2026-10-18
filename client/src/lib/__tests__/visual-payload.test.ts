@@ -3,18 +3,6 @@ import { parseVisualPayload } from '../visual-payload'
 
 describe('parseVisualPayload', () => {
   describe('valid payloads', () => {
-    it('parses visual/sequence payload', () => {
-      const raw = JSON.stringify({
-        $type: 'visual/sequence',
-        content: 'some content',
-      })
-      const result = parseVisualPayload(raw)
-      expect(result).toEqual({
-        $type: 'visual/sequence',
-        content: 'some content',
-      })
-    })
-
     it('parses html payload', () => {
       const raw = JSON.stringify({
         $type: 'html',
@@ -36,50 +24,6 @@ describe('parseVisualPayload', () => {
       expect(result).toEqual({
         $type: 'markdown',
         content: '# Title\n\nContent',
-      })
-    })
-
-    it('parses visual/flow payload with string content', () => {
-      const raw = JSON.stringify({
-        $type: 'visual/flow',
-        content: 'A -> B -> C',
-      })
-      const result = parseVisualPayload(raw)
-      expect(result).toEqual({
-        $type: 'visual/flow',
-        content: 'A -> B -> C',
-      })
-    })
-
-    it('parses visual/flow payload with object content', () => {
-      const raw = JSON.stringify({
-        $type: 'visual/flow',
-        content: {
-          nodes: ['A', 'B', 'C'],
-          edges: [['A', 'B'], ['B', 'C']],
-        },
-      })
-      const result = parseVisualPayload(raw)
-      expect(result).toEqual({
-        $type: 'visual/flow',
-        content: {
-          nodes: ['A', 'B', 'C'],
-          edges: [['A', 'B'], ['B', 'C']],
-        },
-      })
-    })
-
-    it('parses visual/flow payload with object content and title', () => {
-      const raw = JSON.stringify({
-        $type: 'visual/flow',
-        content: { diagram: 'data' },
-        title: 'Flow Diagram',
-      })
-      const result = parseVisualPayload(raw)
-      expect(result).toEqual({
-        $type: 'visual/flow',
-        content: { diagram: 'data' },
-        title: 'Flow Diagram',
       })
     })
 
@@ -123,6 +67,12 @@ describe('parseVisualPayload', () => {
       expect(result).toBeNull()
     })
 
+    it('returns null for the retired diagram and sequence types', () => {
+      for (const $type of ['visual/flow', 'visual/sequence']) {
+        expect(parseVisualPayload(JSON.stringify({ $type, content: 'A -> B' }))).toBeNull()
+      }
+    })
+
     it('returns null for unknown $type', () => {
       const raw = JSON.stringify({
         $type: 'unknown',
@@ -152,33 +102,6 @@ describe('parseVisualPayload', () => {
       const raw = JSON.stringify({
         $type: 'html',
         content: 123,
-      })
-      const result = parseVisualPayload(raw)
-      expect(result).toBeNull()
-    })
-
-    it('returns null for visual/flow with number content', () => {
-      const raw = JSON.stringify({
-        $type: 'visual/flow',
-        content: 123,
-      })
-      const result = parseVisualPayload(raw)
-      expect(result).toBeNull()
-    })
-
-    it('returns null for visual/flow with null content', () => {
-      const raw = JSON.stringify({
-        $type: 'visual/flow',
-        content: null,
-      })
-      const result = parseVisualPayload(raw)
-      expect(result).toBeNull()
-    })
-
-    it('returns null for visual/flow with array content', () => {
-      const raw = JSON.stringify({
-        $type: 'visual/flow',
-        content: ['A', 'B', 'C'],
       })
       const result = parseVisualPayload(raw)
       expect(result).toBeNull()

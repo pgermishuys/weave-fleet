@@ -27,6 +27,7 @@ function stubCanvas(name: string, prop: "sessionId" | "payload") {
 }
 
 vi.mock("@/components/canvas/ChangesCanvas.vue", () => stubCanvas("ChangesCanvas", "sessionId"));
+vi.mock("@/components/canvas/BrowserCanvas.vue", () => stubCanvas("BrowserCanvas", "sessionId"));
 vi.mock("@/components/canvas/FilesCanvas.vue", () => stubCanvas("FilesCanvas", "sessionId"));
 vi.mock("@/components/canvas/VisualCanvas.vue", () => stubCanvas("VisualCanvas", "payload"));
 vi.mock("@/components/session-context/SessionContextCanvas.vue", () => stubCanvas("SessionContextCanvas", "sessionId"));
@@ -65,9 +66,9 @@ const { closeServerCanvasMock } = vi.hoisted(() => ({ closeServerCanvasMock: vi.
 vi.mock("@/composables/use-server-canvases", () => ({ closeServerCanvas: closeServerCanvasMock }));
 
 const diagram: VisualPayload = {
-  $type: "visual/flow",
+  $type: "markdown",
   title: "Session event flow",
-  content: { nodes: [], edges: [] },
+  content: "# Session event flow",
 };
 
 const sharedDiffs = {
@@ -126,7 +127,7 @@ describe("CanvasHost", () => {
     wrapper.unmount();
   });
 
-  it("adds a tab for a visual the agent rendered and closes it again", async () => {
+  it("adds a tab for a document the agent rendered and closes it again", async () => {
     const wrapper = mountHost();
     const store = useCanvasesStore();
     await flushPromises();
@@ -146,24 +147,24 @@ describe("CanvasHost", () => {
     wrapper.unmount();
   });
 
-  it("shows a server canvas read-only and closes it through the server", async () => {
+  it("closes a server canvas through the server", async () => {
     const wrapper = mountHost();
     const store = useCanvasesStore();
     await flushPromises();
 
     store.setServerCanvases("s1", [{
       canvasId: "cv_1",
-      kind: "diagram",
-      title: "Agent diagram",
+      kind: "browser",
+      title: "Agent browser",
       version: 3,
-      state: { nodes: [{ id: "n1", label: "Hub" }], edges: [] },
+      state: { url: "http://localhost:5173/" },
     }]);
     store.activate("s1", serverCanvasTabId("cv_1"));
     await flushPromises();
 
     const tab = wrapper.get(`#tab-canvas-cv_1`);
-    expect(tab.find(".canvas-tab__label").text()).toBe("Agent diagram");
-    expect(wrapper.get(".stub-VisualCanvas").attributes("readonly")).toBeDefined();
+    expect(tab.find(".canvas-tab__label").text()).toBe("Agent browser");
+    expect(wrapper.find(".stub-BrowserCanvas").exists()).toBe(true);
 
     await tab.get(".canvas-tab__close").trigger("click");
 
