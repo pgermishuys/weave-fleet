@@ -41,8 +41,13 @@ The diagram comes from what you know and what you read in the project: read the 
 guess from names. Leave out `meta.repository` and `sources` (archify's source links need a clean, committed checkout)
 unless the user asks for links to the code. If they do, read `archify/references/repository-authoring.md` first.
 
-Pick the type from the question: `workflow` for steps and decisions, `sequence` for who calls whom in order,
-`architecture` for what a system is made of, and so on. Leave `meta.visual_preset` out: that is the classic look, the
+Pick the type from the question: `sequence` for how something travels between parts in order ("how a request reaches
+the database"), `architecture` for what a system is made of, `workflow` only for steps with decisions or approvals,
+and so on. Keep it to about ten boxes; leave detail for the chat.
+
+Read the schema before you write JSON for any type but `architecture`: most failed runs come from guessing a field.
+In a `workflow`, `col` runs 0 to 5 and each lane and column pair holds one node, so two nodes never share a cell; leave
+edge `route`, `fromSide` and `toSide` out and let archify route. Leave `meta.visual_preset` out: that is the classic look, the
 one that suits Fleet. Set `meta.quality_profile` to `"showcase"`. Keep labels short, the way you would write them on
 a whiteboard. Component `type` and boundary `kind` take only the values in the schema's enums (`architecture.schema.json` lists
 them), and a boundary's frame must not cover a component that isn't inside it: give each frame its own area.
