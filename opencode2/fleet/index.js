@@ -153,9 +153,9 @@ const tools = [
   fleetTool(
     "fleet_canvas_open",
     [
-      "Show the user a diagram (architecture, a flow, dependencies, a sequence) in a canvas beside the chat.",
+      "Show the user a simple boxes-and-arrows diagram in a canvas beside the chat. Don't use this tool when the fleet-diagrams skill is among your skills: load that skill for every diagram (architecture, a flow, dependencies, a sequence), which draws an HTML page in Fleet's theme that you show with fleet_page_show.",
       "For a mockup or any HTML page, use fleet_page_show.",
-      "Use it only when the user asks for a diagram, or when a diagram is clearly the best way to answer them; then draw it here rather than as text or Mermaid in chat.",
+      "Use it only when the user asks for a diagram and the fleet-diagrams skill isn't listed; then draw it here rather than as text or Mermaid in chat.",
       "Don't open one for your own notes or progress, or when you're working on a task delegated by another agent: your result goes to that agent, not to the user.",
       "Read a canvas before you describe it or change it.",
       "Opening a title that already exists updates that canvas to the new state, and reopens it if it was closed. To change part of a canvas, use fleet_canvas_patch.",
@@ -229,7 +229,7 @@ const tools = [
       "Use relative links, and keep the page's files in its folder: paths starting with / or ../ don't load. Pages run sandboxed: localStorage isn't available.",
       "Not for the project's own app, or anything that needs a build or a dev server: use fleet_app_start.",
       "Not for a page already running at a localhost address: use fleet_browser_open.",
-      "Not for diagrams of boxes and arrows or sequences: use fleet_canvas_open.",
+      "Not for diagrams of boxes and arrows or sequences: use the fleet-diagrams skill, which makes the page.",
     ].join(" "),
     {
       path: {

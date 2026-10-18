@@ -28,6 +28,20 @@ public sealed class ClaudeCodeFleetSkillsTests : IDisposable
     }
 
     [Fact]
+    public void Fleet_diagrams_arrives_with_archify_beside_it_and_is_the_only_skill_in_its_folder()
+    {
+        var skills = ClaudeCodeFleetSkills.Sync(_dataDirectory, "local-user", ["fleet-diagrams"]).ShouldNotBeNull();
+
+        var folder = Path.Combine(skills.Folder, ".claude", "skills", "fleet-diagrams");
+        File.Exists(Path.Combine(folder, "archify", "bin", "archify.mjs")).ShouldBeTrue();
+        File.Exists(Path.Combine(folder, "archify", "examples", "web-app.architecture.json")).ShouldBeTrue();
+        File.Exists(Path.Combine(folder, "archify", "LICENSE")).ShouldBeTrue();
+        Directory.EnumerateFiles(folder, "*.html", SearchOption.AllDirectories).Select(Path.GetFileName).ShouldBe(["template.html"]);
+        // archify's own SKILL.md is ARCHIFY.md, so a harness that scans for skills finds only ours.
+        Directory.EnumerateFiles(folder, "SKILL.md", SearchOption.AllDirectories).ShouldBe([Path.Combine(folder, "SKILL.md")]);
+    }
+
+    [Fact]
     public void A_skill_the_owner_made_their_own_version_of_gets_their_text()
     {
         var name = BuiltInSkillFiles.Names.Order(StringComparer.Ordinal).First();
