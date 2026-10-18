@@ -70,7 +70,7 @@ public sealed class PageBridge(
             if (!File.Exists(file))
                 return Invalid($"There's no file at {file}. {PathRequirement}");
             if (!PageRules.IsPageFile(file))
-                return Invalid($"{file} isn't an HTML page. {PathRequirement} For a diagram, use fleet_canvas_open.");
+                return Invalid($"{file} isn't an HTML page. {PathRequirement} For a diagram, use the fleet-diagrams skill.");
 
             var folder = Path.GetDirectoryName(file)!;
             if (PageRules.FindProjectFile(folder) is { } projectFile)

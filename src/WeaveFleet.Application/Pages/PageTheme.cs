@@ -126,6 +126,7 @@ public static class PageTheme
     /// <paramref name="html"/> with <see cref="Bootstrap"/> at the start of its head, or <see cref="ThemedBootstrap"/>
     /// when the page uses a <c>var(--fleet-…)</c>: after <c>&lt;head&gt;</c>, else after
     /// <c>&lt;html&gt;</c>, else after the doctype (before it, the page would lose standards mode), else at the start.
+    /// A page archify made (its generator meta) also gets <see cref="ArchifyTheme.Layer"/> before its head closes.
     /// Tags are ASCII, so the page's own bytes stay as they are whatever its encoding, except UTF-16, which is
     /// served as it is.
     /// </summary>
@@ -136,19 +137,48 @@ public static class PageTheme
 
         var start = html.StartsWith(Utf8Bom) ? Utf8Bom.Length : 0;
         var at = InsertionPoint(html, start);
-        var bootstrap = html.IndexOf("var(--fleet-"u8) >= 0 ? ThemedBootstrapBytes : BootstrapBytes;
-        var result = new byte[html.Length + bootstrap.Length];
+        // An archify diagram is drawn with Fleet's variables, so it gets the themed bootstrap, and its layer goes last in the head.
+        var archify = ArchifyTheme.IsArchify(html[..HeadEnd(html, start)]);
+        var layerAt = archify ? LayerPoint(html, start) : -1;
+        var bootstrap = archify || html.IndexOf("var(--fleet-"u8) >= 0 ? ThemedBootstrapBytes : BootstrapBytes;
+        var layer = layerAt >= 0 ? ArchifyTheme.LayerBytes : [];
+        var result = new byte[html.Length + bootstrap.Length + layer.Length];
         html[..at].CopyTo(result);
         bootstrap.CopyTo(result, at);
-        html[at..].CopyTo(result.AsSpan(at + bootstrap.Length));
+        var rest = at + bootstrap.Length;
+        if (layerAt < 0)
+        {
+            html[at..].CopyTo(result.AsSpan(rest));
+            return result;
+        }
+
+        html[at..layerAt].CopyTo(result.AsSpan(rest));
+        layer.CopyTo(result, rest + layerAt - at);
+        html[layerAt..].CopyTo(result.AsSpan(rest + layerAt - at + layer.Length));
         return result;
+    }
+
+    /// <summary>Where the page's body starts, or its end: what comes before it is the head.</summary>
+    private static int HeadEnd(ReadOnlySpan<byte> html, int start)
+    {
+        var body = IndexOfTag(html, start, "body"u8);
+        return body < 0 ? html.Length : body;
+    }
+
+    /// <summary>Where an archify page's layer goes: just before the head closes, else before the body, else nowhere (-1).</summary>
+    private static int LayerPoint(ReadOnlySpan<byte> html, int start)
+    {
+        var head = html[..HeadEnd(html, start)];
+        var close = -1;
+        for (var from = start; IndexOfIgnoreCase(head, from, "</head"u8) is var at and >= 0; from = at + 1)
+            close = at;
+        return close >= 0 ? close : head.Length < html.Length ? head.Length : -1;
     }
 
     private static int InsertionPoint(ReadOnlySpan<byte> html, int start)
     {
         // Only what comes before the body: a "<head" in the page's own text or scripts isn't its head.
-        var body = IndexOfTag(html, start, "body"u8);
-        var head = html[..(body < 0 ? html.Length : body)];
+        var head = html[..HeadEnd(html, start)];
         foreach (var tag in new[] { "head"u8.ToArray(), "html"u8.ToArray() })
         {
             var open = IndexOfTag(head, start, tag);

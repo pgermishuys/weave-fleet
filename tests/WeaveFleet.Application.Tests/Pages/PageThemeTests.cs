@@ -82,4 +82,50 @@ public sealed class PageThemeTests
     [InlineData("styles.css", false)]
     [InlineData("chart.js", false)]
     public void Only_html_files_get_the_theme(string file, bool themed) => PageTheme.Themes(file).ShouldBe(themed);
+
+    private const string ArchifyHead = "<meta charset=\"utf-8\"><meta name=\"generator\" content=\"archify 3.1.0\"><style>:root{--bg:#000}</style>";
+
+    [Fact]
+    public void An_archify_page_gets_the_themed_bootstrap_and_the_layer_after_its_own_styles()
+    {
+        var page = Inject("<!doctype html><html><head>" + ArchifyHead + "</head><body><svg></svg></body></html>");
+
+        page.ShouldStartWith("<!doctype html><html><head>" + PageTheme.ThemedBootstrap + "<meta charset");
+        page.ShouldContain("<style>:root{--bg:#000}</style>" + ArchifyTheme.Layer + "</head><body>");
+        page.Split("id=\"fleet-archify\"").Length.ShouldBe(2);
+        ArchifyTheme.Layer.ShouldContain("--bg: var(--fleet-bg);");
+        ArchifyTheme.Layer.ShouldContain(".toolbar");
+    }
+
+    [Fact]
+    public void A_page_that_is_not_archify_s_is_served_without_the_layer_even_if_it_mentions_archify()
+    {
+        var page = Inject("<html><head><title>T</title></head><body><p>&lt;meta name=\"generator\" content=\"archify\"&gt;</p></body></html>");
+
+        page.ShouldNotContain("fleet-archify");
+        page.ShouldStartWith("<html><head>" + PageTheme.Bootstrap + "<title>T");
+        Inject("<html><head><meta name=\"generator\" content=\"hugo\"></head><body></body></html>").ShouldNotContain("fleet-archify");
+        Inject("<html><head></head><body><meta name=\"generator\" content=\"archify 3\"></body></html>").ShouldNotContain("fleet-archify");
+    }
+
+    [Fact]
+    public void An_archify_page_without_a_closing_head_gets_the_layer_before_the_body_and_without_a_body_none()
+    {
+        Inject("<html><head>" + ArchifyHead + "<body><p>Hi</p></body></html>")
+            .ShouldContain("--bg:#000}</style>" + ArchifyTheme.Layer + "<body>");
+
+        var bare = Inject("<html><head>" + ArchifyHead);
+        bare.ShouldNotContain("fleet-archify");
+        bare.ShouldStartWith("<html><head>" + PageTheme.ThemedBootstrap);
+    }
+
+    [Fact]
+    public void The_layer_goes_before_the_real_head_end_and_keeps_the_bytes_of_the_page()
+    {
+        byte[] latin1 = [.. "<html><head>"u8, .. Encoding.UTF8.GetBytes(ArchifyHead), .. "<script>x='</head>'</script></head><body>caf"u8, 0xE9, .. "</body></html>"u8];
+
+        var page = Encoding.Latin1.GetString(PageTheme.Inject(latin1));
+
+        page.ShouldContain("x='</head>'</script>" + ArchifyTheme.Layer + "</head><body>caf\u00e9");
+    }
 }

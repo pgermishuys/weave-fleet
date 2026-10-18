@@ -49,7 +49,7 @@ serves the copy itself and shows it in a page canvas beside the chat. There's no
 
 ## 4. Diagrams aren't mockups
 
-Use Fleet's diagram canvas (`fleet_canvas_open`) for flows, architecture and sequence diagrams, not an HTML page.
+Use the `fleet-diagrams` skill for flows, architecture and sequence diagrams, not a hand-written HTML page.
 
 ## 5. Hand it over
 

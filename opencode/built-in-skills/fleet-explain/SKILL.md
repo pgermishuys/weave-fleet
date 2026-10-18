@@ -1,6 +1,6 @@
 ---
 name: fleet-explain
-description: Show how something works over time as a short animation, 30 seconds at most, in a page canvas beside the chat. For a flow, a request moving through layers, a change as data moving, a race or a retry. Use when the user asks to see, or be shown, how something works or flows, or asks for an animation. Not for static structure (use the diagram canvas) or reading a diff (fleet-walkthrough).
+description: Show how something works over time as a short animation, 30 seconds at most, in a page canvas beside the chat. For a flow, a request moving through layers, a change as data moving, a race or a retry. Use when the user asks to see, or be shown, how something works or flows, or asks for an animation. Not for static structure (use fleet-diagrams) or reading a diff (fleet-walkthrough).
 ---
 
 # Show it with a short animation
@@ -140,7 +140,7 @@ Offer to change the depth or make a second one for the part it left out.
 
 ## Not this skill
 
-- What connects to what, with no order: Fleet's diagram canvas (`fleet_canvas_open`).
+- What connects to what, with no order: the `fleet-diagrams` skill.
 - Reading a diff or pull request: fleet-walkthrough. An animation can follow one when the change is to a flow.
 - How a screen will look: fleet-mockups.
 - A question the user only wants answered: answer it in words, and offer the animation if the order matters.

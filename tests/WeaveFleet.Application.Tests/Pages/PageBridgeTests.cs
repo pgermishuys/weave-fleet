@@ -253,14 +253,14 @@ public sealed class PageBridgeTests : IDisposable
     }
 
     [Fact]
-    public async Task A_file_that_is_not_a_page_points_diagrams_at_the_diagram_canvas()
+    public async Task A_file_that_is_not_a_page_points_diagrams_at_the_diagrams_skill()
     {
         var file = Mockup("flow.md", "# Flow");
 
         var shown = await _bridge.ShowAsync(Token, OpenCodeSessionId, file, "Flow");
 
         shown.Error!.Message.ShouldContain("isn't an HTML page");
-        shown.Error.Message.ShouldContain("fleet_canvas_open");
+        shown.Error.Message.ShouldContain("fleet-diagrams");
     }
 
     [Fact]
