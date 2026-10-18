@@ -36,6 +36,9 @@ public sealed class ClaudeCodeHarness : IHarness
         SupportsImageAttachments = true,
         SupportsStreaming = true,
         SupportsDelegation = false,
+        // From its finished file tools and its TaskCreate/TaskUpdate/TaskList (TodoWrite on older CLIs) calls.
+        ReportsTodos = true,
+        ReportsFileWrites = true,
         // A message sent mid-turn goes to the claude process at once, and Claude Code reads it when the agent's current
         // step ends, in the same turn.
         SupportsSteering = true,

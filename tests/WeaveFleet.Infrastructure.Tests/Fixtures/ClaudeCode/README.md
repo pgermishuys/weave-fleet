@@ -42,3 +42,8 @@ replaced with `<WORKDIR>`.
   (`CLAUDE_CODE_OAUTH_TOKEN`) through an endpoint that adds the `anthropic-ratelimit-unified-*` headers, which Claude
   Code reads only for a claude.ai login, giving a `rate_limit_event`. The headers' values (82% of the 5-hour window, 63%
   of the weekly) were the stand-in's; the line's shape is Claude Code's.
+- `tasks.jsonl` (Claude Code 2.1.290, 2026-10-18, `--model haiku`, `--permission-mode bypassPermissions`): the agent's
+  todo list as this build keeps it, with no `TodoWrite`: three `TaskCreate` calls (each result carries the new
+  `task.id`), `TaskUpdate` calls that set a status, delete an item (`status: deleted`) and rename one (`subject`), a
+  `Write` in between, and a `TaskList` whose result is the whole list. Thinking blocks, usage, the tool list and
+  `memory_paths` dropped, `originalFile` too; the working directory is `/work`.

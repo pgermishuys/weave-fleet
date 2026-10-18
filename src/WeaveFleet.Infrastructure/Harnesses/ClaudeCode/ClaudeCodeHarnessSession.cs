@@ -131,6 +131,9 @@ internal sealed class ClaudeCodeHarnessSession : IHarnessSession
     // it ends anyway.
     private readonly ClaudeCodeTasks _tasks = new();
 
+    /// <summary>The agent's todo list, from its calls in every conversation: subagents keep the session's list too.</summary>
+    private readonly ClaudeCodeTodos _todos = new();
+
     // A subagent's child session: Claude Code can't prompt it, so this instance only reads what its parent saved.
     private readonly bool _readOnlyChild;
 
@@ -2195,7 +2198,24 @@ internal sealed class ClaudeCodeHarnessSession : IHarnessSession
                 message,
                 [ClaudeCodeMapper.CreatePartUpdatedEvent(message.Id, conversation.FleetSessionId, finished, index, isError ? null : content)])
                 .ConfigureAwait(false);
+
+            if (!isError && conversation.ToolCalls.TryGetValue(callId, out var call))
+                await ReportToolEffectsAsync(conversation, message.Id, call, userMsg.ToolUseResult).ConfigureAwait(false);
         }
+    }
+
+    /// <summary>What a finished call changed beyond its card: the file it wrote, the agent's todo list.</summary>
+    private async Task ReportToolEffectsAsync(Conversation conversation, string messageId, ClaudeCodeToolUseBlock call, System.Text.Json.JsonElement? result)
+    {
+        var name = call.Name ?? string.Empty;
+        if (ClaudeCodeTools.WrittenFile(name, call.Input, result, _workingDirectory) is { } written)
+        {
+            foreach (var evt in ClaudeCodeMapper.CreateFileWrittenEvents(conversation.FleetSessionId, messageId, written))
+                await _eventChannel.Writer.WriteAsync(evt, CancellationToken.None).ConfigureAwait(false);
+        }
+
+        if (_todos.Apply(name, call.Input, result) is { } todos)
+            await _eventChannel.Writer.WriteAsync(ClaudeCodeMapper.CreateTodosReportedEvent(_fleetSessionId, todos), CancellationToken.None).ConfigureAwait(false);
     }
 
     /// <summary>What Fleet's MCP server kept about its tool calls; none where Fleet doesn't run one (tests).</summary>

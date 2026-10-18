@@ -144,6 +144,49 @@ public sealed class ClaudeCodeConversationShapeTests : IAsyncLifetime
     }
 
     [Fact]
+    public async Task Each_finished_file_tool_reports_the_file_it_wrote_and_that_it_changed()
+    {
+        var events = await PumpAsync(Fixture("file-tools.jsonl"));
+
+        // Three edits of calc.py and the new notes.txt; Read and Bash write nothing Fleet can name.
+        var written = events.Where(e => e.Type == EventTypes.FilesWritten).Select(e => e.Payload!.Value).ToList();
+        written.Select(p => p.GetProperty("paths").EnumerateArray().Single().GetString())
+            .ShouldBe(["/work/calc.py", "/work/calc.py", "/work/calc.py", "/work/notes.txt"]);
+        written.ShouldAllBe(p => p.GetProperty("sessionId").GetString() == SessionId);
+
+        // Under the Fleet message that holds the call, so progress can tie the file to the step.
+        var edits = Conversation().Where(m => m.Parts.OfType<ToolUsePart>().Any(t => t.ToolName is "edit" or "write")).Select(m => m.Id).ToList();
+        written.Select(p => p.GetProperty("messageId").GetString()).ShouldAllBe(id => edits.Contains(id!));
+
+        // And the change, which Fleet sends on as files.changed so open files and the Changes panel reload.
+        events.Where(e => e.Type == EventTypes.FileWatcherUpdated)
+            .Select(e => (e.Payload!.Value.GetProperty("file").GetString(), e.Payload!.Value.GetProperty("event").GetString()))
+            .ShouldBe([("/work/calc.py", "change"), ("/work/calc.py", "change"), ("/work/calc.py", "change"), ("/work/notes.txt", "change")]);
+    }
+
+    [Fact]
+    public async Task The_agents_task_calls_report_its_whole_todo_list_each_time_it_changes()
+    {
+        var events = await PumpAsync(Fixture("tasks.jsonl"));
+
+        var lists = events.Where(e => e.Type == EventTypes.TodosReported)
+            .Select(e => e.Payload!.Value.GetProperty("items").EnumerateArray()
+                .Select(i => $"{i.GetProperty("content").GetString()}: {i.GetProperty("status").GetString()}").ToList())
+            .ToList();
+
+        // Three TaskCreates, four TaskUpdates (one of them deleting "Tidy up", one renaming), then TaskList as it is.
+        lists.Count.ShouldBe(8);
+        lists[0].ShouldBe(["Write a.txt: pending"]);
+        lists[2].ShouldBe(["Write a.txt: pending", "Write b.txt: pending", "Tidy up: pending"]);
+        lists[3].ShouldBe(["Write a.txt: in_progress", "Write b.txt: pending", "Tidy up: pending"]);
+        lists[5].ShouldBe(["Write a.txt: completed", "Write b.txt: pending"]);
+        lists[6].ShouldBe(["Write a.txt: completed", "Write b.md: pending"]);
+        lists[7].ShouldBe(lists[6]);
+        events.Where(e => e.Type == EventTypes.TodosReported)
+            .ShouldAllBe(e => e.Payload!.Value.GetProperty("sessionId").GetString() == SessionId);
+    }
+
+    [Fact]
     public async Task AskUserQuestion_is_Fleets_question_and_waits_on_the_user_without_a_permission_ask()
     {
         var events = await PumpAsync(Fixture("ask-user-question.jsonl").TakeWhile(line => !line.Contains("\"tool_result\"")).ToArray());
