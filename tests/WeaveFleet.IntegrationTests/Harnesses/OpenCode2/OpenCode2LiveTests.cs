@@ -595,7 +595,22 @@ public sealed partial class OpenCode2LiveTests(OpenCode2LiveFleet fleet) : IClas
 
         foreach (var server in servers)
             (await HasExitedAsync(server, TimeSpan.FromSeconds(10))).ShouldBeTrue($"OpenCode 2 server {server} outlived Fleet.");
-        ProcessGroupHelper.RunningProcesses.ShouldNotContain(p => servers.Contains(p.Pid));
+        (await IsForgottenAsync(servers.Contains, TimeSpan.FromSeconds(10))).ShouldBeTrue("Fleet still lists a stopped server as running.");
+    }
+
+    // Fleet forgets a harness process from Process.Exited, which .NET raises on a thread-pool thread after the
+    // process is gone, so the registry can still list it for a moment after the OS says it has exited.
+    private static async Task<bool> IsForgottenAsync(Func<int, bool> pids, TimeSpan timeout)
+    {
+        var deadline = DateTime.UtcNow + timeout;
+        while (DateTime.UtcNow < deadline)
+        {
+            if (!ProcessGroupHelper.RunningProcesses.Any(p => pids(p.Pid)))
+                return true;
+            await Task.Delay(50);
+        }
+
+        return !ProcessGroupHelper.RunningProcesses.Any(p => pids(p.Pid));
     }
 
     private static async Task<bool> HasExitedAsync(int processId, TimeSpan timeout)
