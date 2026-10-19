@@ -10,6 +10,7 @@ import ImageLightbox from "@/components/session/ImageLightbox.vue";
 import AgentSelector from "@/components/session/AgentSelector.vue";
 import ModelSelector from "@/components/session/ModelSelector.vue";
 import EffortToggle from "@/components/session/EffortToggle.vue";
+import AllowedChip from "@/components/session/AllowedChip.vue";
 import QueuedMessages from "@/components/session/QueuedMessages.vue";
 import BackgroundStrip from "@/components/session/BackgroundStrip.vue";
 import ModComposerBand from "@/components/mods/ModComposerBand.vue";
@@ -1321,6 +1322,11 @@ function handleKeydown(event: KeyboardEvent): void {
             v-if="supportsReasoning"
             v-model="selectedEffort"
             :variants="selectedModelVariants"
+          />
+          <AllowedChip
+            v-if="!isSideMode"
+            :session-id="sessionId"
+            :harness-type="selectedSession?.harnessType"
           />
         </template>
         <Button

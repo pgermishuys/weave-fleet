@@ -1,8 +1,10 @@
 <script setup lang="ts">
 import { computed, nextTick, onMounted, shallowRef, useTemplateRef, watch } from "vue";
-import { ArrowUp, ChevronDown, CornerDownRight, Plus, Square, X } from "lucide-vue-next";
+import { ArrowUp, ChevronDown, CornerDownRight, Plus, ShieldCheck, Square, X } from "lucide-vue-next";
+import { useSessionPermissionRules } from "@/composables/use-session-permission-rules";
 import PhoneChipSheet, { type ChipOption } from "@/components/phone/session/PhoneChipSheet.vue";
 import PhoneModelSheet from "@/components/phone/session/PhoneModelSheet.vue";
+import PhoneAllowedSheet from "@/components/phone/session/PhoneAllowedSheet.vue";
 import PhoneFilePickSheet from "@/components/phone/session/PhoneFilePickSheet.vue";
 import PhonePlusSheet, { type PlusChoice } from "@/components/phone/session/PhonePlusSheet.vue";
 import { useAgents } from "@/composables/use-agents";
@@ -36,6 +38,9 @@ const { models, defaultModelKey, modelsByKey } = useModels(props.sessionId);
 // Stars are per harness; on another machine the row isn't in this store, so that sheet has none.
 const sessionsStore = useSessionsStore();
 const harnessType = computed(() => sessionsStore.sessionById(props.sessionId)?.harnessType);
+// What "Don't ask again" allowed: a chip appears once there is a rule.
+const { rules: allowedRules, remove: removeAllowed, removeAll: removeAllAllowed } = useSessionPermissionRules(props.sessionId);
+const allowedOpen = shallowRef(false);
 
 const textareaRef = useTemplateRef<HTMLTextAreaElement>("textarea");
 const photoInput = useTemplateRef<HTMLInputElement>("photoInput");
@@ -349,6 +354,17 @@ defineExpose({ insert, flush, focus: () => textareaRef.value?.focus() });
         >
           <span>{{ effortLabel }}</span><ChevronDown aria-hidden="true" />
         </button>
+        <button
+          v-if="allowedRules.length"
+          type="button"
+          class="ph-sel pc__allowed"
+          :aria-label="`Allowed in this session, ${allowedRules.length}`"
+          data-testid="chip-allowed"
+          @mousedown.prevent
+          @click="allowedOpen = true"
+        >
+          <ShieldCheck aria-hidden="true" /><span>{{ allowedRules.length }}</span>
+        </button>
         <span class="pc__spacer" />
         <button
           v-if="offerSendNow"
@@ -432,6 +448,14 @@ defineExpose({ insert, flush, focus: () => textareaRef.value?.focus() });
       @pick="setModelId"
       @close="chip = null"
     />
+    <PhoneAllowedSheet
+      :open="allowedOpen && allowedRules.length > 0"
+      :rules="allowedRules"
+      :harness-type="harnessType"
+      @remove="removeAllowed"
+      @remove-all="removeAllAllowed"
+      @close="allowedOpen = false"
+    />
     <PhoneChipSheet
       :open="chip === 'agent' || chip === 'effort'"
       :title="chip === 'agent' ? 'Agent' : 'Effort'"
@@ -510,6 +534,11 @@ defineExpose({ insert, flush, focus: () => textareaRef.value?.focus() });
 
 .pc__spacer {
   flex: 1;
+}
+
+.pc__allowed {
+  flex: none;
+  gap: 4px;
 }
 
 .pc__now {

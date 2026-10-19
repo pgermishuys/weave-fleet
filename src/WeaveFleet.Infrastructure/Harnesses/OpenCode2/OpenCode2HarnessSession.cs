@@ -1104,6 +1104,9 @@ internal sealed partial class OpenCode2HarnessSession : IHarnessSession, IOpenCo
     }
 
     /// <inheritdoc />
+    public Task BindPermissionRulesAsync(IPermissionRules rules, CancellationToken ct) => _permissions.BindAsync(rules, ct);
+
+    /// <inheritdoc />
     /// <remarks>
     /// V2 keeps the rules on the session, so they're set for the level when it changes; Fleet answers whatever V2 still
     /// asks (a subagent's child keeps its agent's rules). The workflow step tool stays denied where it was.
@@ -1142,7 +1145,7 @@ internal sealed partial class OpenCode2HarnessSession : IHarnessSession, IOpenCo
         var entry = _permissions.Pending.Get(requestId)
             ?? throw new KeyNotFoundException($"Permission request '{requestId}' isn't waiting for an answer.");
         if (reply == PermissionReplies.Always)
-            _permissions.AllowFromNowOn(entry.Ask);
+            await _permissions.AllowFromNowOnAsync(entry.Ask, ct).ConfigureAwait(false);
 
         var rejected = reply == PermissionReplies.Reject;
         var server = await AttachedServerAsync(ct).ConfigureAwait(false);

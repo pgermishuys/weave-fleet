@@ -264,20 +264,22 @@ internal sealed partial class AcpHarnessSession : IHarnessSession
         await _agent.Client.NotifyAsync("session/cancel", new JsonObject { ["sessionId"] = ResumeToken }, ct).ConfigureAwait(false);
     }
 
+    /// <inheritdoc />
+    public Task BindPermissionRulesAsync(IPermissionRules rules, CancellationToken ct) => _permissions.BindAsync(rules, ct);
+
     public Task ApplyPermissionsAsync(PermissionPolicy policy, CancellationToken ct)
     {
         _permissions.Policy = policy;
         return Task.CompletedTask;
     }
 
-    public Task ReplyToPermissionAsync(string requestId, string reply, string? message, CancellationToken ct)
+    public async Task ReplyToPermissionAsync(string requestId, string reply, string? message, CancellationToken ct)
     {
         var entry = _permissions.Pending.Get(requestId)
             ?? throw new KeyNotFoundException($"Permission request '{requestId}' isn't waiting for an answer.");
         if (reply == PermissionReplies.Always)
-            _permissions.AllowFromNowOn(entry.Ask);
+            await _permissions.AllowFromNowOnAsync(entry.Ask, ct).ConfigureAwait(false);
         Settle(requestId, reply, null);
-        return Task.CompletedTask;
     }
 
     /// <summary>The agent's <c>session/request_permission</c>: answered by the level at once, or by the user when they get to it.</summary>

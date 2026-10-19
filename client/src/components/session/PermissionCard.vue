@@ -249,6 +249,7 @@ function openSettings(): void {
 
     <footer class="pcard__foot">
       <span aria-hidden="true">1 or 2 answers · 3 then Enter denies · Esc denies</span>
+      <span data-testid="permission-undo-hint">You can undo option 2 from Allowed in the composer.</span>
       <button
         type="button"
         class="pcard__settings"

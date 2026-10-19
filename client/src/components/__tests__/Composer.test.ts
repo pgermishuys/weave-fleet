@@ -196,7 +196,7 @@ function configureApiFetch(): void {
       } as any;
     }
 
-    if (url === "/api/sessions/{id}/queue") {
+    if (url === "/api/sessions/{id}/queue" || url === "/api/sessions/{id}/permission-rules") {
       return { data: [], error: undefined, response: new Response() } as never;
     }
 

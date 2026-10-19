@@ -564,6 +564,52 @@ public static class SessionEndpoints
         })
         .WithName("ReplyToPermission");
 
+        // GET /api/sessions/{id}/permission-rules — what "Don't ask again" allowed in this session, oldest first. Live
+        // changes come as session.permission-rules on the session's topic.
+        group.MapGet("/{id}/permission-rules", async (string id, ISessionRepository sessionRepository, SessionPermissionRules rules) =>
+        {
+            if (await sessionRepository.GetByIdAsync(id) is null)
+                return Results.NotFound();
+            var items = (await rules.ListAsync(id)).Select(PermissionRuleView.From).ToList();
+            return Results.Json(items, ApiJsonContext.Default.ListPermissionRuleView);
+        })
+        .WithName("ListSessionPermissionRules");
+
+        // DELETE /api/sessions/{id}/permission-rules/{ruleId} — asks again about what that rule allowed, from the next ask.
+        group.MapDelete("/{id}/permission-rules/{ruleId}", async (
+            string id,
+            string ruleId,
+            ISessionRepository sessionRepository,
+            SessionPermissionRules rules,
+            HttpContext http,
+            CancellationToken ct) =>
+        {
+            // The user decides what is allowed, never the agent.
+            if (http.RefuseAgent("a permission rule") is { } refused)
+                return refused;
+            if (await sessionRepository.GetByIdAsync(id) is null)
+                return Results.NotFound();
+            return await rules.RemoveAsync(id, ruleId, ct) ? Results.NoContent() : Results.NotFound();
+        })
+        .WithName("DeleteSessionPermissionRule");
+
+        // DELETE /api/sessions/{id}/permission-rules — removes every rule of the session.
+        group.MapDelete("/{id}/permission-rules", async (
+            string id,
+            ISessionRepository sessionRepository,
+            SessionPermissionRules rules,
+            HttpContext http,
+            CancellationToken ct) =>
+        {
+            if (http.RefuseAgent("a permission rule") is { } refused)
+                return refused;
+            if (await sessionRepository.GetByIdAsync(id) is null)
+                return Results.NotFound();
+            await rules.ClearAsync(id, ct);
+            return Results.NoContent();
+        })
+        .WithName("ClearSessionPermissionRules");
+
         // POST /api/sessions/{id}/fork
         group.MapPost("/{id}/fork", async (string id, ForkSessionApiRequest req, SessionForking sessionForking) =>
         {
