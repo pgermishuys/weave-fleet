@@ -1349,7 +1349,12 @@ internal sealed class ClaudeCodeHarnessSession : IHarnessSession
                 }
                 else if (msg is ClaudeCodeSystemMessage system)
                 {
-                    if (system.ParentToolUseId is null && ClaudeCodeMapper.TryMapRetry(system, _fleetSessionId) is { } retry)
+                    if (ClaudeCodeMapper.DescribeBlockedPrompt(system) is { } blocked)
+                    {
+                        JoinTurn(processManager);
+                        await PersistNoticeAsync(blocked).ConfigureAwait(false);
+                    }
+                    else if (system.ParentToolUseId is null && ClaudeCodeMapper.TryMapRetry(system, _fleetSessionId) is { } retry)
                     {
                         JoinTurn(processManager);
                         _retrying = true;
