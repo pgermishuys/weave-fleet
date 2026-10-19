@@ -2,8 +2,6 @@ import { nextTick, onMounted, onUnmounted, ref, watch, type Ref } from "vue";
 
 const SCROLL_BOTTOM_THRESHOLD = 80;
 const SCROLL_TOP_THRESHOLD = 100;
-/** Distance that counts as exactly at the bottom; scrollTop is fractional at some zoom levels. */
-const AT_BOTTOM_EPSILON = 2;
 /** How long every message stays laid out for a jump to one, where the browser doesn't report the scroll's end. */
 const SHOW_MESSAGE_LAYOUT_MS = 2000;
 
@@ -35,7 +33,6 @@ export function useStreamScroll(options: StreamScrollOptions) {
   let mutationObserver: MutationObserver | null = null;
   let resizeObserver: ResizeObserver | null = null;
   let keepPinnedToBottom = true;
-  let lastScrollTop = 0;
   let scrollFrame: number | null = null;
   let isRestoringScroll = false;
   let preUpdateScrollHeight = 0;
@@ -43,18 +40,8 @@ export function useStreamScroll(options: StreamScrollOptions) {
   let wasLoadingOlder = false;
   let highlightTimer: ReturnType<typeof setTimeout> | undefined;
 
-  // The user's scroll can be ahead of its scroll event; a callback about to snap to the bottom checks for it first.
-  // Only the move up counts: pinned content that just grew a lot is far from the bottom until the snap.
-  function unpinIfScrolledUp(element: HTMLElement): boolean {
-    const distance = element.scrollHeight - element.scrollTop - element.clientHeight;
-    if (element.scrollTop >= lastScrollTop - 1 || distance <= AT_BOTTOM_EPSILON) {
-      return false;
-    }
-
-    keepPinnedToBottom = false;
-    showJumpToLatest.value = true;
-    lastScrollTop = element.scrollTop;
-    return true;
+  function isNearBottom(element: HTMLElement): boolean {
+    return element.scrollHeight - element.scrollTop - element.clientHeight <= SCROLL_BOTTOM_THRESHOLD;
   }
 
   function updatePinnedState(): void {
@@ -63,36 +50,13 @@ export function useStreamScroll(options: StreamScrollOptions) {
       return;
     }
 
-    // Decide by direction, not only position: text streaming in at the bottom must not undo a small scroll up.
-    const distance = element.scrollHeight - element.scrollTop - element.clientHeight;
-    const movedUp = element.scrollTop < lastScrollTop - 1;
-    const movedDown = element.scrollTop > lastScrollTop + 1;
-    lastScrollTop = element.scrollTop;
-
-    if (distance <= AT_BOTTOM_EPSILON) {
-      keepPinnedToBottom = true;
-    } else if (distance > SCROLL_BOTTOM_THRESHOLD || movedUp) {
-      keepPinnedToBottom = false;
-    } else if (movedDown) {
-      keepPinnedToBottom = true;
-    }
+    keepPinnedToBottom = isNearBottom(element);
     showJumpToLatest.value = !keepPinnedToBottom;
 
     // Trigger loading older messages when scrolled near the top
     if (!isRestoringScroll && element.scrollTop <= SCROLL_TOP_THRESHOLD) {
       handleLoadOlder();
     }
-  }
-
-  // A smooth wheel scroll reaches the scroll event a frame or two late; a streamed chunk can land in between.
-  function handleWheel(event: WheelEvent): void {
-    const element = streamRef.value;
-    if (!element || event.deltaY >= 0 || event.ctrlKey || element.scrollTop <= 0) {
-      return;
-    }
-
-    keepPinnedToBottom = false;
-    showJumpToLatest.value = true;
   }
 
   function handleLoadOlder(): void {
@@ -113,7 +77,6 @@ export function useStreamScroll(options: StreamScrollOptions) {
     }
 
     element.scrollTop = element.scrollHeight;
-    lastScrollTop = element.scrollTop;
     keepPinnedToBottom = true;
     showJumpToLatest.value = false;
   }
@@ -165,9 +128,7 @@ export function useStreamScroll(options: StreamScrollOptions) {
 
     scrollFrame = window.requestAnimationFrame(() => {
       scrollFrame = null;
-      if (keepPinnedToBottom && !(streamRef.value && unpinIfScrolledUp(streamRef.value))) {
-        scrollToBottom();
-      }
+      scrollToBottom();
     });
   }
 
@@ -180,7 +141,7 @@ export function useStreamScroll(options: StreamScrollOptions) {
     // it scrolls into view, and images and diagrams finish loading later. Runs after layout and before paint, so the
     // pinned view never shows the gap.
     resizeObserver = typeof ResizeObserver === "undefined" ? null : new ResizeObserver(() => {
-      if (keepPinnedToBottom && !(streamRef.value && unpinIfScrolledUp(streamRef.value))) {
+      if (keepPinnedToBottom) {
         scrollToBottom();
       }
     });
@@ -251,16 +212,6 @@ export function useStreamScroll(options: StreamScrollOptions) {
     },
   );
 
-  // While following the bottom the view is placed here; the browser's scroll anchoring would only move it up when
-  // something above shrinks, which unpinIfScrolledUp would take for the user scrolling away.
-  watch(
-    [streamRef, showJumpToLatest],
-    ([element, away]) => {
-      if (element) element.style.overflowAnchor = away ? "" : "none";
-    },
-    { immediate: true, flush: "sync" },
-  );
-
   // Capture scroll position before older messages start loading
   watch(
     options.isLoadingOlder,
@@ -287,7 +238,6 @@ export function useStreamScroll(options: StreamScrollOptions) {
     showJumpToLatest,
     highlightedMessageId,
     updatePinnedState,
-    handleWheel,
     handleLoadOlder,
     handleJumpToLatest,
     scrollToBottom,
