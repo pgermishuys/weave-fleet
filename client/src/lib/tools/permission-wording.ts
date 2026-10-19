@@ -51,3 +51,30 @@ export function askPreviewWording(ask: Pick<Ask, "kind" | "tool" | "title">): { 
     default: return { lead: `Wants to use ${ask.tool}`, detail: ask.title ?? null, code: !!ask.title };
   }
 }
+
+/** A rule from the Allowed list, as the server sends it (`PermissionRuleView`). */
+export interface AllowedRule {
+  id: string;
+  kind: PermissionKindName | string;
+  tool: string;
+  patterns: readonly string[];
+  createdAt: string;
+}
+
+/**
+ * One row of the Allowed list, in plain words: "Run `bun test*` without asking". `broad` is set when the rule covers
+ * every use of the kind of thing (no pattern), which the list tints as a warning.
+ */
+export function allowedRuleWording(rule: Pick<AllowedRule, "kind" | "tool" | "patterns">): { lead: string; code: string | null; tail: string; broad: boolean } {
+  const patterns = rule.patterns.filter((pattern) => pattern !== "*");
+  const broad = patterns.length === 0;
+  const tail = " without asking";
+  const code = broad ? null : patterns.join(", ");
+  switch (rule.kind) {
+    case "shell": return { lead: broad ? "Run any command" : "Run", code, tail, broad };
+    case "edit": return { lead: broad ? "Edit files" : "Edit", code, tail, broad };
+    case "web": return { lead: broad ? "Go online" : "Go online:", code, tail, broad };
+    // Another tool: named, with the patterns when there are any.
+    default: return { lead: "Use", code: broad ? rule.tool : `${rule.tool} on ${patterns.join(", ")}`, tail, broad };
+  }
+}

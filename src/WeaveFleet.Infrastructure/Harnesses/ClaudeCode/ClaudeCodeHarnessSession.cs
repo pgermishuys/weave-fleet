@@ -740,6 +740,9 @@ internal sealed class ClaudeCodeHarnessSession : IHarnessSession
     }
 
     /// <inheritdoc />
+    public Task BindPermissionRulesAsync(IPermissionRules rules, CancellationToken ct) => _permissions.BindAsync(rules, ct);
+
+    /// <inheritdoc />
     /// <remarks>
     /// Applies from the next prompt: Fleet switches the running process's permission mode then, or starts another
     /// (resuming the conversation) when Claude Code can't switch, e.g. into <c>bypassPermissions</c>, or when Fleet's
@@ -761,7 +764,7 @@ internal sealed class ClaudeCodeHarnessSession : IHarnessSession
         var entry = _permissions.Pending.Get(requestId)
             ?? throw new KeyNotFoundException($"Permission request '{requestId}' isn't waiting for an answer.");
         if (reply == PermissionReplies.Always)
-            _permissions.AllowFromNowOn(entry.Ask);
+            await _permissions.AllowFromNowOnAsync(entry.Ask, ct).ConfigureAwait(false);
 
         var line = reply == PermissionReplies.Reject
             ? ClaudeCodeInput.Deny(requestId, string.IsNullOrWhiteSpace(message)

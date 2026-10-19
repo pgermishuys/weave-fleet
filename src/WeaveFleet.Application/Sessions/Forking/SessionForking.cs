@@ -39,7 +39,8 @@ public sealed partial class SessionForking(
     ICredentialStore credentialStore,
     SessionActivation activation,
     ILogger<SessionForking> logger,
-    GitDiffService? gitDiffService = null)
+    GitDiffService? gitDiffService = null,
+    SessionPermissionRules? permissionRules = null)
 {
     private readonly GitDiffService _gitDiffService = gitDiffService ?? new GitDiffService();
 
@@ -121,6 +122,10 @@ public sealed partial class SessionForking(
             await SafeDeleteAsync(instance, ct).ConfigureAwait(false);
             throw;
         }
+
+        // The copy carries on the parent's line of work, so it doesn't ask again about what the parent was told not to.
+        if (permissionRules is not null)
+            await permissionRules.CopyAsync(parent.Id, session.Id, ct).ConfigureAwait(false);
 
         instanceTracker.Register(instance.InstanceId, instance);
         LogSessionForked(session.Id, parent.Id, fork.BoundaryMessageId);

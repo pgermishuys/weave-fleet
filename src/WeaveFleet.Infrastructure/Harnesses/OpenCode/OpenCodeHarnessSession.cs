@@ -1158,6 +1158,9 @@ internal sealed partial class OpenCodeHarnessSession : IHarnessSession
     }
 
     /// <inheritdoc />
+    public Task BindPermissionRulesAsync(IPermissionRules rules, CancellationToken ct) => _permissions.BindAsync(rules, ct);
+
+    /// <inheritdoc />
     public Task ApplyPermissionsAsync(PermissionPolicy policy, CancellationToken ct)
     {
         _permissions.Policy = policy;
@@ -1174,7 +1177,7 @@ internal sealed partial class OpenCodeHarnessSession : IHarnessSession
         var entry = _permissions.Pending.Get(requestId)
             ?? throw new KeyNotFoundException($"Permission request '{requestId}' isn't waiting for an answer.");
         if (reply == PermissionReplies.Always)
-            _permissions.AllowFromNowOn(entry.Ask);
+            await _permissions.AllowFromNowOnAsync(entry.Ask, ct).ConfigureAwait(false);
 
         var rejected = reply == PermissionReplies.Reject;
         await _instanceHandle.HttpClient.ReplyPermissionAsync(

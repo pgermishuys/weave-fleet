@@ -624,6 +624,18 @@ export interface SessionQueueChanged extends EventCursorMetadata {
 }
 
 /**
+ * What "Don't ask again" allowed in a session changed: the whole list, oldest first. Not persisted; it loads from
+ * `GET /api/sessions/{id}/permission-rules`.
+ */
+export interface SessionPermissionRulesChanged extends EventCursorMetadata {
+  type: "session.permission-rules";
+  payload: {
+    sessionId: string;
+    items: { id: string; kind: string; tool: string; patterns: string[]; createdAt: string }[];
+  };
+}
+
+/**
  * When Fleet tries a turn a model provider's limit stopped again changed: scheduled, sent, or called off. Sent on the
  * session's topic and on `sessions`. `retry` is null when none waits. Not persisted; it loads from
  * `GET /api/sessions/{id}/retry`.
@@ -921,6 +933,7 @@ export type DomainEvent =
   | SessionRecap
   | SessionNotification
   | SessionQueueChanged
+  | SessionPermissionRulesChanged
   | SessionRetryChanged
   | SessionInterrupted
   | PermissionAsked

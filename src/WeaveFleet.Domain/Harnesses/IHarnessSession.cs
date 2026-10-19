@@ -117,6 +117,12 @@ public interface IHarnessSession : IAsyncDisposable
     Task ApplyPermissionsAsync(PermissionPolicy policy, CancellationToken ct) => Task.CompletedTask;
 
     /// <summary>
+    /// Gives the harness session the "Don't ask again" rules Fleet keeps for it. Fleet calls it before
+    /// <see cref="ApplyPermissionsAsync"/>. A harness that can't ask ignores it.
+    /// </summary>
+    Task BindPermissionRulesAsync(IPermissionRules rules, CancellationToken ct) => Task.CompletedTask;
+
+    /// <summary>
     /// Answers the pending ask <paramref name="requestId"/> with <paramref name="reply"/> (<see cref="PermissionReplies"/>);
     /// <paramref name="message"/> goes to the agent with a refusal. Throws <see cref="KeyNotFoundException"/> when no
     /// such ask waits: it was answered, or its turn ended.

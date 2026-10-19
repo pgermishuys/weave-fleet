@@ -141,6 +141,7 @@ internal sealed class PendingPermissionAsks
 internal sealed class PermissionGate
 {
     private readonly List<(string Tool, string Pattern)> _allowed = [];
+    private IPermissionRules? _rules;
 
     /// <summary>What the session may do without asking; everything until Fleet says otherwise.</summary>
     public PermissionPolicy Policy { get; set; } = PermissionPolicy.AllowAll;
@@ -163,28 +164,61 @@ internal sealed class PermissionGate
         return decision;
     }
 
-    /// <summary>Remembers "Don't ask again" for <paramref name="ask"/>: its tool on its patterns, for the rest of the session.</summary>
-    public void AllowFromNowOn(PermissionAsk ask)
+    /// <summary>
+    /// Uses the rules Fleet keeps for the session in its database, so they outlast this gate and can be listed and
+    /// removed. Without them (a harness session no one bound) the gate remembers in memory only.
+    /// </summary>
+    public async Task BindAsync(IPermissionRules rules, CancellationToken ct)
     {
-        var patterns = ask.Always.Count > 0 ? ask.Always : ["*"];
+        await rules.LoadAsync(ct).ConfigureAwait(false);
+        List<(string Tool, string Pattern)> clickedBefore;
         lock (_allowed)
         {
-            foreach (var pattern in patterns)
-                _allowed.Add((ask.Tool, pattern));
+            clickedBefore = [.. _allowed];
+            _allowed.Clear();
+            _rules = rules;
         }
+
+        // What was clicked before the rules were bound is kept in them.
+        foreach (var group in clickedBefore.GroupBy(rule => rule.Tool, StringComparer.OrdinalIgnoreCase))
+            await rules.AddAsync(group.Key, [.. group.Select(rule => rule.Pattern)], ct).ConfigureAwait(false);
+    }
+
+    /// <summary>Remembers "Don't ask again" for <paramref name="ask"/>: its tool on its patterns, for the rest of the session.</summary>
+    public async Task AllowFromNowOnAsync(PermissionAsk ask, CancellationToken ct)
+    {
+        var patterns = ask.Always.Count > 0 ? ask.Always : ["*"];
+        IPermissionRules? rules;
+        lock (_allowed)
+        {
+            rules = _rules;
+            if (rules is null)
+            {
+                foreach (var pattern in patterns)
+                    _allowed.Add((ask.Tool, pattern));
+            }
+        }
+
+        if (rules is not null)
+            await rules.AddAsync(ask.Tool, patterns, ct).ConfigureAwait(false);
     }
 
     private bool AllowedBefore(string tool, IReadOnlyList<string> patterns)
     {
+        List<(string Tool, string Pattern)> all;
         lock (_allowed)
         {
-            var rules = _allowed.Where(rule => string.Equals(rule.Tool, tool, StringComparison.OrdinalIgnoreCase)).ToList();
-            if (rules.Count == 0)
-                return false;
-            if (patterns.Count == 0)
-                return rules.Any(rule => rule.Pattern == "*");
-            return patterns.All(pattern => rules.Any(rule => Wildcard.Matches(pattern, rule.Pattern)));
+            all = _rules is { } rules
+                ? [.. rules.Current.SelectMany(rule => rule.Patterns.Select(pattern => (rule.Tool, pattern)))]
+                : [.. _allowed];
         }
+
+        var matching = all.Where(rule => string.Equals(rule.Tool, tool, StringComparison.OrdinalIgnoreCase)).ToList();
+        if (matching.Count == 0)
+            return false;
+        if (patterns.Count == 0)
+            return matching.Any(rule => rule.Pattern == "*");
+        return patterns.All(pattern => matching.Any(rule => Wildcard.Matches(pattern, rule.Pattern)));
     }
 }
 

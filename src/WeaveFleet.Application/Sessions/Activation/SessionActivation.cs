@@ -33,7 +33,8 @@ public sealed partial class SessionActivation(
     IUserPreferenceRepository userPreferenceRepository,
     ILogger<SessionActivation> logger,
     IHarnessProfileRepository? harnessProfiles = null,
-    SessionNotifier? sessionNotifier = null) : ISessionActivator
+    SessionNotifier? sessionNotifier = null,
+    SessionPermissionRules? permissionRules = null) : ISessionActivator
 {
     // Static because the session services are scoped: opening a session wakes it from several requests at once, and a
     // per-request lock let each of them start its own harness for the same session.
@@ -273,6 +274,19 @@ public sealed partial class SessionActivation(
         try
         {
             var policy = await SessionPermissions.ResolveAsync(userPreferenceRepository, sessionRepository, session).ConfigureAwait(false);
+            // The rules the user said not to ask again about. When they can't be read the session still asks as the level says.
+            if (permissionRules is not null)
+            {
+                try
+                {
+                    await instance.BindPermissionRulesAsync(permissionRules.ForSession(session.Id), ct).ConfigureAwait(false);
+                }
+                catch (Exception ex) when (ex is not OperationCanceledException)
+                {
+                    LogPermissionsNotApplied(ex, session.Id);
+                }
+            }
+
             await instance.ApplyPermissionsAsync(policy, ct).ConfigureAwait(false);
         }
         catch (Exception ex) when (ex is not OperationCanceledException)

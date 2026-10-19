@@ -289,6 +289,9 @@ public static class DependencyInjection
         services.AddScoped<IScheduledRetryRepository, ScheduledRetryRepository>();
         services.AddScoped<ISessionInterruptionRepository, SessionInterruptionRepository>();
         services.AddScoped<SessionInterruptions>();
+        // Singleton: harness sessions read the rules outside any request, and the API shares their in-memory copy.
+        services.AddSingleton<ISessionPermissionRuleRepository, SessionPermissionRuleRepository>();
+        services.AddSingleton<SessionPermissionRules>();
         services.AddSingleton<TurnFlagger>();
         // Singleton: devices belong to the machine, not a user, and the auth handler reads them on every request.
         services.AddSingleton<IDeviceRepository, DeviceRepository>();
