@@ -1,7 +1,6 @@
 <script setup lang="ts">
 import { computed, nextTick, onMounted, shallowRef, useTemplateRef, watch } from "vue";
 import { ArrowUp, ChevronDown, CornerDownRight, Plus, ShieldCheck, Square, X } from "lucide-vue-next";
-import { usePermissionLevel } from "@/composables/use-permission-level";
 import { useSessionPermissionRules } from "@/composables/use-session-permission-rules";
 import PhoneChipSheet, { type ChipOption } from "@/components/phone/session/PhoneChipSheet.vue";
 import PhoneModelSheet from "@/components/phone/session/PhoneModelSheet.vue";
@@ -41,7 +40,6 @@ const sessionsStore = useSessionsStore();
 const harnessType = computed(() => sessionsStore.sessionById(props.sessionId)?.harnessType);
 // What "Don't ask again" allowed: a chip appears once there is a rule.
 const { rules: allowedRules, remove: removeAllowed, removeAll: removeAllAllowed } = useSessionPermissionRules(props.sessionId);
-const permissionLevel = usePermissionLevel(harnessType);
 const allowedOpen = shallowRef(false);
 
 const textareaRef = useTemplateRef<HTMLTextAreaElement>("textarea");
@@ -453,7 +451,7 @@ defineExpose({ insert, flush, focus: () => textareaRef.value?.focus() });
     <PhoneAllowedSheet
       :open="allowedOpen && allowedRules.length > 0"
       :rules="allowedRules"
-      :level="permissionLevel"
+      :harness-type="harnessType"
       @remove="removeAllowed"
       @remove-all="removeAllAllowed"
       @close="allowedOpen = false"

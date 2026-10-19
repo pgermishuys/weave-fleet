@@ -3,8 +3,7 @@ import { computed, ref, watch } from "vue";
 import { ShieldCheck } from "lucide-vue-next";
 import { Button } from "@/components/ui/button";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
-import AllowedRulesList from "@/components/session/AllowedRulesList.vue";
-import { usePermissionLevel } from "@/composables/use-permission-level";
+import AllowedRulesPanel from "@/components/session/AllowedRulesPanel.vue";
 import { useSessionPermissionRules } from "@/composables/use-session-permission-rules";
 
 defineOptions({
@@ -21,7 +20,6 @@ const props = defineProps<{
 }>();
 
 const { rules, remove, removeAll } = useSessionPermissionRules(props.sessionId);
-const level = usePermissionLevel(() => props.harnessType);
 const open = ref(false);
 const flash = ref(false);
 const count = computed(() => rules.value.length);
@@ -60,9 +58,9 @@ watch(count, (now, before) => {
       class="w-[22rem]"
       data-testid="allowed-popover"
     >
-      <AllowedRulesList
+      <AllowedRulesPanel
         :rules="rules"
-        :level="level"
+        :harness-type="harnessType"
         @remove="remove"
         @remove-all="removeAll"
       />

@@ -1,11 +1,10 @@
 <script setup lang="ts">
 import BottomSheet from "@/components/phone/BottomSheet.vue";
-import AllowedRulesList from "@/components/session/AllowedRulesList.vue";
-import type { PermissionLevel } from "@/lib/permissions";
+import AllowedRulesPanel from "@/components/session/AllowedRulesPanel.vue";
 import type { AllowedRule } from "@/lib/tools";
 
 /** What "Don't ask again" allowed in the session, in a sheet from the bottom, as the composer's Allowed chip opens on the desktop. */
-defineProps<{ open: boolean; rules: readonly AllowedRule[]; level: PermissionLevel }>();
+defineProps<{ open: boolean; rules: readonly AllowedRule[]; harnessType?: string }>();
 const emit = defineEmits<{ (event: "remove", ruleId: string): void; (event: "removeAll"): void; (event: "close"): void }>();
 </script>
 
@@ -17,9 +16,9 @@ const emit = defineEmits<{ (event: "remove", ruleId: string): void; (event: "rem
     @close="emit('close')"
   >
     <div class="ph-card allowed-sheet">
-      <AllowedRulesList
+      <AllowedRulesPanel
         :rules="rules"
-        :level="level"
+        :harness-type="harnessType"
         @remove="emit('remove', $event)"
         @remove-all="emit('removeAll')"
       />
