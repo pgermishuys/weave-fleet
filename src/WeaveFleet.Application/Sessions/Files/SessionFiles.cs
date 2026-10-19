@@ -34,6 +34,34 @@ public sealed partial class SessionFiles(
         return Result.Success(matches);
     }
 
+    /// <summary>Text inside the files of the session's folder (see <see cref="GitGrepSearch"/>); a bad regex is a validation error.</summary>
+    public async Task<Result<TextSearchResult>> FindSessionTextAsync(
+        string sessionId,
+        string query,
+        bool regex,
+        bool matchCase,
+        int limit,
+        CancellationToken ct = default)
+    {
+        using var _ = logger.BeginSessionScope(sessionId);
+        var sessionResult = await sessionRepository.GetSessionAsync(sessionId);
+        if (sessionResult.IsFailure)
+            return sessionResult.Error;
+
+        // Only the filesystem is read, so the session's harness stays asleep.
+        if (!Directory.Exists(sessionResult.Value.Directory))
+            return FleetError.ValidationError("Session.Directory", "Session directory does not exist.");
+
+        try
+        {
+            return await GitGrepSearch.SearchAsync(sessionResult.Value.Directory, query, regex, matchCase, limit, ct).ConfigureAwait(false);
+        }
+        catch (InvalidSearchPatternException exception)
+        {
+            return FleetError.ValidationError("Session.Find", exception.Message);
+        }
+    }
+
     public async Task<Result<BrowseDirectoryResult>> BrowseSessionDirectoryAsync(
         string sessionId,
         string? path,

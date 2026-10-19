@@ -1109,6 +1109,22 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/sessions/{id}/find/text": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get: operations["FindSessionText"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/sessions/{id}/files/browse": {
         parameters: {
             query?: never;
@@ -7038,6 +7054,31 @@ export interface operations {
         parameters: {
             query?: {
                 q?: string;
+            };
+            header?: never;
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+        };
+    };
+    FindSessionText: {
+        parameters: {
+            query?: {
+                q?: string;
+                regex?: boolean;
+                matchCase?: boolean;
+                limit?: number;
             };
             header?: never;
             path: {

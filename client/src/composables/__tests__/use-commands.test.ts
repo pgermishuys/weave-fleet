@@ -20,7 +20,9 @@ vi.mock("@tanstack/vue-router", async () => {
 vi.mock("@/api/client", () => ({ api: { GET: vi.fn(async () => ({ data: [], response: { ok: true } })) } }));
 
 import { useCommands } from "@/composables/use-commands";
+import { useCanvasesStore } from "@/stores/canvases";
 import { useCommandStore } from "@/stores/commands";
+import { useFindInFilesStore } from "@/stores/find-in-files";
 import { useKeybindingsStore } from "@/stores/keybindings";
 import { useNoticesStore } from "@/stores/notices";
 import { useModsStore } from "@/stores/mods";
@@ -92,6 +94,7 @@ describe("useCommands", () => {
         "Session: Clear draft",
         "Session: Copy session ID",
         "Session: Export conversation",
+        "Session: Find in files…",
         "Session: Focus prompt",
         "Session: Fork session",
         "Session: Go to file…",
@@ -121,6 +124,25 @@ describe("useCommands", () => {
         "Fleet: Open marketplace panel",
         "Fleet: Report a problem",
       ]);
+    });
+
+    it("find_in_files_opens_the_files_tab_and_asks_it_to_search_inside_files_on_ctrl_shift_f", async () => {
+      pathname.value = "/sessions/s1";
+      await start();
+      const command = byId("find-in-files");
+
+      expect(command.globalShortcut).toMatchObject({ key: "f", platformModifier: true, shiftKey: true });
+      expect(command.disabled).toBe(false);
+      command.action?.();
+
+      expect(useCanvasesStore().sessionCanvases("s1").activeId).toBe("files");
+      expect(useFindInFilesStore().request).toEqual({ sessionId: "s1" });
+    });
+
+    it("find_in_files_is_off_with_no_session_open", async () => {
+      await start();
+
+      expect(byId("find-in-files").disabled).toBe(true);
     });
 
     it("carries the keybinding's palette hotkey and global shortcut on the command", async () => {

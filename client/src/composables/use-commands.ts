@@ -9,6 +9,7 @@ import {
   Download,
   Eraser,
   FileSearch,
+  TextSearch,
   FolderPlus,
   Focus,
   GitBranchPlus,
@@ -47,6 +48,8 @@ import { useSessionsStore } from "@/stores/sessions";
 import { useSidebarStore } from "@/stores/sidebar";
 import { useAppShellStore } from "@/stores/app-shell";
 import { useGoToFileStore } from "@/stores/go-to-file";
+import { useFindInFilesStore } from "@/stores/find-in-files";
+import { useCanvasesStore } from "@/stores/canvases";
 import { useTerminalsStore } from "@/stores/terminals";
 import { useThemeStore, type ThemeSelection } from "@/stores/theme";
 import { useWorkspaceUiStore } from "@/stores/workspace-ui";
@@ -92,7 +95,9 @@ export function useCommands() {
   const appShellStore = useAppShellStore();
   const terminalsStore = useTerminalsStore();
   const goToFileStore = useGoToFileStore();
-  const { toggleSidebar, isMobileNav, mobileDrawerOpen, isRightPanelVisible, toggleRightPanel } = useSidebarMobile();
+  const findInFilesStore = useFindInFilesStore();
+  const canvasesStore = useCanvasesStore();
+  const { toggleSidebar, isMobileNav, mobileDrawerOpen, isRightPanelVisible, toggleRightPanel, showRightPanel } = useSidebarMobile();
   // The commands work on the open session, which may be on another machine (opened in place); they ask its machine.
   const machines = useMachinesStore();
   const sessionMachine = (sessionId: string) => machines.sessionTarget(sessionId);
@@ -402,6 +407,26 @@ export function useCommands() {
         disabled: fileSessionId.value === null,
         action: () => {
           if (fileSessionId.value) goToFileStore.show(fileSessionId.value);
+        },
+      },
+      {
+        id: "find-in-files",
+        label: "Find in files…",
+        description: fileSessionId.value ? "Search inside the files of this session's folder." : "Open a session to search its files.",
+        icon: TextSearch,
+        category: "Session",
+        paletteHotkey: bindingFor("find-in-files")?.paletteHotkey ?? undefined,
+        globalShortcut: bindingFor("find-in-files")?.globalShortcut ?? undefined,
+        // Works from the editor and the composer too.
+        allowInEditable: true,
+        keywords: ["search", "grep", "text", "contents", "inside", "files"],
+        disabled: fileSessionId.value === null,
+        action: () => {
+          const id = fileSessionId.value;
+          if (!id) return;
+          canvasesStore.open(id, "files");
+          showRightPanel();
+          findInFilesStore.ask(id);
         },
       },
       {
