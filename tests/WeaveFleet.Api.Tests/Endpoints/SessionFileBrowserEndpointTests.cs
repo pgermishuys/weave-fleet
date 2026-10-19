@@ -268,6 +268,37 @@ public sealed class SessionFileBrowserEndpointTests : IAsyncDisposable
     }
 
     [Fact]
+    public async Task find_text_returns_matches_grouped_by_file_and_a_bad_regex_is_a_400_with_the_reason()
+    {
+        Directory.CreateDirectory(Path.Combine(_tempDirectory.Path, "src"));
+        await File.WriteAllTextAsync(Path.Combine(_tempDirectory.Path, "src", "Retry.cs"), "const int MaxAttempts = 5;\nint other;\n");
+        await File.WriteAllTextAsync(Path.Combine(_tempDirectory.Path, "README.md"), "Up to MaxAttempts times.\n");
+
+        var createResponse = await _client.PostAsJsonAsync("/api/sessions", new { directory = _tempDirectory.Path, title = "Find Text Test" });
+        var sessionId = (await createResponse.Content.ReadFromJsonAsync<CreateSessionApiResponse>())!.Session.Id;
+
+        var found = await _client.GetFromJsonAsync<JsonElement>($"/api/sessions/{sessionId}/find/text?q=maxattempts");
+        found.GetProperty("matches").GetInt32().ShouldBe(2);
+        found.GetProperty("engine").GetString().ShouldBe("walk");
+        found.GetProperty("stopped").ValueKind.ShouldBe(JsonValueKind.Null);
+        var first = found.GetProperty("files")[0];
+        first.GetProperty("path").GetString().ShouldBe("README.md");
+        first.GetProperty("total").GetInt32().ShouldBe(1);
+        var match = first.GetProperty("matches")[0];
+        match.GetProperty("line").GetInt32().ShouldBe(1);
+        match.GetProperty("ranges")[0].GetProperty("start").GetInt32().ShouldBe(6);
+
+        var strict = await _client.GetFromJsonAsync<JsonElement>($"/api/sessions/{sessionId}/find/text?q=maxattempts&matchCase=true");
+        strict.GetProperty("matches").GetInt32().ShouldBe(0);
+
+        var bad = await _client.GetAsync($"/api/sessions/{sessionId}/find/text?q={Uri.EscapeDataString("a[")}&regex=true");
+        bad.StatusCode.ShouldBe(HttpStatusCode.BadRequest);
+        (await bad.Content.ReadAsStringAsync()).ShouldContain("regex");
+
+        (await _client.GetAsync("/api/sessions/nope/find/text?q=x")).StatusCode.ShouldBe(HttpStatusCode.NotFound);
+    }
+
+    [Fact]
     public async Task saving_a_file_returns_the_new_hash_and_a_stale_save_returns_409_with_the_current_file()
     {
         var path = Path.Combine(_tempDirectory.Path, "app.ts");

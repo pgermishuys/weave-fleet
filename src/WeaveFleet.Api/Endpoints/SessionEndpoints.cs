@@ -18,6 +18,7 @@ using WeaveFleet.Application.Sessions.Files;
 using WeaveFleet.Application.Sessions.Forking;
 using WeaveFleet.Application.Sessions.History;
 using WeaveFleet.Application.Sessions.Prompting;
+using WeaveFleet.Application.Workspaces;
 using WeaveFleet.Application.Sessions.Shell;
 using WeaveFleet.Application.Sessions.Side;
 using WeaveFleet.Application.Sessions.Work;
@@ -1034,6 +1035,17 @@ public static class SessionEndpoints
                 err => err.ToSessionApiResult());
         })
         .WithName("FindSessionFiles");
+
+        // GET /api/sessions/{id}/find/text?q=&regex=&matchCase=&limit= — text inside the files of the session's folder.
+        // A bad pattern is a 400 with the reason; a search that stopped early says so in "stopped".
+        group.MapGet("/{id}/find/text", async (string id, string? q, bool? regex, bool? matchCase, int? limit, SessionFiles sessionFiles, CancellationToken ct) =>
+        {
+            var result = await sessionFiles.FindSessionTextAsync(id, q ?? string.Empty, regex ?? false, matchCase ?? false, limit ?? GitGrepSearch.DefaultLimit, ct);
+            return result.Match(
+                found => Results.Json(found, ApiJsonContext.Default.TextSearchResult),
+                err => err.ToSessionApiResult());
+        })
+        .WithName("FindSessionText");
 
         // GET /api/sessions/{id}/files/browse?path= — session directory browser
         group.MapGet("/{id}/files/browse", async (string id, [FromQuery] string? path, SessionFiles sessionFiles, CancellationToken ct) =>

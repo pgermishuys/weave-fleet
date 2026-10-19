@@ -14,6 +14,7 @@ export const COMMAND_IDS = [
   "new-session-in-folder",
   "refresh-sessions",
   "go-to-file",
+  "find-in-files",
   "focus-prompt",
   "interrupt-session",
   "copy-session-id",

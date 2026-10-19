@@ -139,6 +139,7 @@ internal sealed record ErrorResponse(string Error);
 [JsonSerializable(typeof(HarnessCatalogResponse))]
 [JsonSerializable(typeof(InstanceAgentModelRef))]
 [JsonSerializable(typeof(InstanceFilesResponse))]
+[JsonSerializable(typeof(WeaveFleet.Application.Workspaces.TextSearchResult))]
 [JsonSerializable(typeof(List<InstanceProviderItem>))]
 // Sessions
 [JsonSerializable(typeof(GetSessionResponse))]
