@@ -211,6 +211,12 @@ internal sealed record ClaudeCodeSystemMessage : ClaudeCodeStreamMessage
     /// </summary>
     [JsonPropertyName("status")] public string? Status { get; init; }
 
+    /// <summary>
+    /// On an <c>informational</c> line about a submitted prompt: what became of it, e.g. <c>kind</c> <c>blocked_by_hook</c>
+    /// with the hook's <c>reason</c>.
+    /// </summary>
+    [JsonPropertyName("prompt_submit_outcome")] public JsonElement? PromptSubmitOutcome { get; init; }
+
     /// <summary>On the <c>status</c> line that ends a compaction: <c>success</c> or <c>failed</c>.</summary>
     [JsonPropertyName("compact_result")] public string? CompactResult { get; init; }
 

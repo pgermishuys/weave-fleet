@@ -190,6 +190,23 @@ internal static class ClaudeCodeMapper
     }
 
     /// <summary>
+    /// Why a <c>UserPromptSubmit</c> hook turned the prompt away, from Claude Code's <c>informational</c> line; the result
+    /// that follows says <c>success</c>, so this is the only place it shows. Null for any other system line.
+    /// </summary>
+    internal static string? DescribeBlockedPrompt(ClaudeCodeSystemMessage system)
+    {
+        if (system.Subtype != "informational"
+            || system.PromptSubmitOutcome is not { ValueKind: JsonValueKind.Object } outcome
+            || !outcome.TryGetProperty("kind", out var kind) || kind.GetString() != "blocked_by_hook")
+            return null;
+
+        var reason = outcome.TryGetProperty("reason", out var r) && r.ValueKind == JsonValueKind.String ? r.GetString() : null;
+        return string.IsNullOrWhiteSpace(reason)
+            ? "Claude Code blocked the prompt: a hook turned it away."
+            : $"Claude Code blocked the prompt: {reason.Trim()}";
+    }
+
+    /// <summary>
     /// Claude Code's <c>api_retry</c> line as Fleet's retry status (<see cref="ActivityStatuses.Retry"/>, as OpenCode 2's
     /// <c>session.retry.scheduled</c> is): the attempt out of how many, why, and how long until it tries again. Null for
     /// any other system line.

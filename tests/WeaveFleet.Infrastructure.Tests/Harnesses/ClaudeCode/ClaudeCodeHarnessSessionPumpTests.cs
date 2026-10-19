@@ -203,6 +203,14 @@ public sealed class ClaudeCodeHarnessSessionPumpTests : IAsyncLifetime
     }
 
     [Fact]
+    public async Task PromptBlockedByHook_SaysWhy()
+    {
+        await PumpAsync(Fixture("prompt-blocked-by-hook.jsonl"));
+
+        AllText().ShouldBe(["Claude Code blocked the prompt: blocked by policy xyz"]);
+    }
+
+    [Fact]
     public async Task NotLoggedIn_ShowsClaudesMessageOnce()
     {
         await PumpAsync(Fixture("not-logged-in.jsonl"));

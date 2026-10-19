@@ -7,6 +7,7 @@ replaced with `<WORKDIR>`.
 
 - `two-tools.jsonl`: a prompt that reads a file, runs a Bash command, then answers.
 - `max-turns.jsonl`: the same kind of prompt run with `--max-turns 1`; ends in an `error_max_turns` result.
+- `prompt-blocked-by-hook.jsonl`: a `UserPromptSubmit` hook exits 2; Claude Code answers with an `informational` line and a `success` result with zero turns.
 - `not-logged-in.jsonl`: a run that can't use the login (`--bare` with a claude.ai subscription);
   Claude Code writes "Not logged in · Please run /login" as the assistant's reply.
 - `background-wake.jsonl`: one process with stream-json input (Claude Code 2.1.289). The first prompt starts
