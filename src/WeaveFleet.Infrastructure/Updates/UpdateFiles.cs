@@ -48,6 +48,16 @@ public sealed class UpdateFiles
 
         Delete(TrialPath);
         Delete(FailedPath);
+        // The database copy is only for going back while the new version is on trial.
+        try
+        {
+            Directory.Delete(Path.Combine(_root!, "update.prev"), recursive: true);
+        }
+        catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
+        {
+            // Best effort; the launcher replaces it at the next update.
+        }
+
         return true;
     }
 

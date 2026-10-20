@@ -30,7 +30,13 @@ public sealed class UpdateFilesTests : IDisposable
         var files = new UpdateFiles(_root);
 
         files.ReadTrial()!.To.ShouldBe("0.59.1");
+        Directory.CreateDirectory(Path.Combine(_root, "update.prev"));
+        File.WriteAllText(Path.Combine(_root, "update.prev", "fleet.db"), "old");
+        Directory.CreateDirectory(Path.Combine(_root, "app.prev"));
         files.ConfirmTrial("0.59.1").ShouldBeTrue();
+
+        Directory.Exists(Path.Combine(_root, "update.prev")).ShouldBeFalse("the database copy goes once the new version is confirmed");
+        Directory.Exists(Path.Combine(_root, "app.prev")).ShouldBeTrue();
 
         files.ReadTrial().ShouldBeNull();
         files.ReadFailure().ShouldBeNull();

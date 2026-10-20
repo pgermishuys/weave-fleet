@@ -33,7 +33,8 @@ public sealed partial class UpdateRestartService(
     Action<int>? setExitCode = null,
     Func<string, string?>? environment = null,
     Func<string?>? stagedVersion = null,
-    Func<Task<int>>? workingSessions = null) : IHostedService
+    Func<Task<int>>? workingSessions = null,
+    Func<string?>? readCgroup = null) : IHostedService
 {
     /// <summary>"Restart to update": the launcher starts itself again on it. 75 (another Fleet) and 1 (errors) are taken.</summary>
     public const int ExitCode = 85;
@@ -72,11 +73,31 @@ public sealed partial class UpdateRestartService(
         if (!files.IsInstalled)
             return new RestartCapability(false, "Not an installed Fleet, so it can't restart itself.");
         if (_environment(LauncherVariable) == ExitCode.ToString(System.Globalization.CultureInfo.InvariantCulture)
-            || !string.IsNullOrEmpty(_environment("INVOCATION_ID"))
+            || RunsInNodeUnit()
             || (_environment("XPC_SERVICE_NAME") ?? "").StartsWith("io.tryweave.fleet", StringComparison.Ordinal))
             return new RestartCapability(true, null);
 
         return new RestartCapability(false, "Restart Fleet once by hand; after that it can restart itself.");
+    }
+
+    /// <summary>
+    /// Whether this process runs inside the fleet-node systemd unit (which restarts it on any exit). INVOCATION_ID can't
+    /// say: a terminal started as a systemd unit or scope hands it to every shell in it.
+    /// </summary>
+    private bool RunsInNodeUnit()
+    {
+        string? cgroup;
+        try
+        {
+            cgroup = (readCgroup ?? (() => OperatingSystem.IsLinux() ? File.ReadAllText("/proc/self/cgroup") : null))();
+        }
+        catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
+        {
+            return false;
+        }
+
+        return cgroup is not null
+            && cgroup.Split('\n').Any(line => line.Split('/').Any(segment => segment.Trim() == "fleet-node.service"));
     }
 
     /// <summary>Agrees to restart, when it can: something is staged, nothing is in a turn, and it has a way back up.</summary>
