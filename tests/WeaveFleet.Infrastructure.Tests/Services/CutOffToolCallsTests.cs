@@ -41,6 +41,18 @@ public sealed class CutOffToolCallsTests
         tools["call-pending"].ShouldBeOfType<ToolErrorState>().Error.ShouldBe(CutOffToolCalls.Message);
     }
 
+    [Fact]
+    public async Task A_command_the_user_ran_and_is_still_running_is_not_cut_off()
+    {
+        // A `!` command runs outside any turn, so an idle session with one running isn't a sign it was cut off.
+        var proxy = LiveProxy(SessionActivity("idle"), new InMemoryDelegationRepository(), ShellCommands.Role,
+            new ToolUsePart("sh_1", "shell", Args, ToolUseState.Running));
+
+        var tools = Tools(await proxy.GetSnapshotAsync(SessionId));
+
+        tools["sh_1"].ShouldBeOfType<ToolRunningState>();
+    }
+
     [Theory]
     [InlineData("busy")]
     [InlineData("retry")]
@@ -171,9 +183,23 @@ public sealed class CutOffToolCallsTests
         return LiveProxy(tracker, new InMemoryDelegationRepository(), tools);
     }
 
+    private static SessionActivityTracker SessionActivity(string activity)
+    {
+        var tracker = new SessionActivityTracker();
+        tracker.Update(SessionId, activity, "user-1");
+        return tracker;
+    }
+
     private static OpenCodeSessionMessageProxy LiveProxy(
         SessionActivityTracker activity,
         InMemoryDelegationRepository delegations,
+        params ToolUsePart[] tools)
+        => LiveProxy(activity, delegations, "assistant", tools);
+
+    private static OpenCodeSessionMessageProxy LiveProxy(
+        SessionActivityTracker activity,
+        InMemoryDelegationRepository delegations,
+        string role,
         params ToolUsePart[] tools)
     {
         var sessions = new InMemorySessionRepository();
@@ -182,7 +208,7 @@ public sealed class CutOffToolCallsTests
         instances.Register(InstanceId, new FakeHarnessSession(InstanceId)
         {
             GetMessagesBehavior = (_, _) => Task.FromResult(new MessagePage(
-                [new HarnessMessage { Id = "msg-1", Role = "assistant", Parts = [.. tools], Timestamp = DateTimeOffset.UtcNow }],
+                [new HarnessMessage { Id = "msg-1", Role = role, Parts = [.. tools], Timestamp = DateTimeOffset.UtcNow }],
                 false)),
         });
 

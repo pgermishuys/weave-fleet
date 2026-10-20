@@ -12,7 +12,9 @@ namespace WeaveFleet.Infrastructure.Sessions;
 /// <para>
 /// Two kinds of call legitimately outlive their turn and are left alone: a call the harness moved into the
 /// background (it says so, <see cref="ToolRunningState.Background"/>), and a sub-agent call whose child session is
-/// still working or was moved into the background.
+/// still working or was moved into the background. A command the user ran with <c>!</c> is the third: it runs
+/// outside any turn, so a session that's idle with one running is the normal case. The harness's adapter ends the
+/// ones it knows are gone (OpenCode 2 does when its server stops).
 /// </para>
 /// </summary>
 public static class CutOffToolCalls
@@ -32,6 +34,9 @@ public static class CutOffToolCalls
         for (var i = 0; i < messages.Count; i++)
         {
             var message = messages[i];
+            if (message.Info.Role == ShellCommands.Role)
+                continue;
+
             var parts = SettleParts(message.Parts, stillWorking);
             if (parts is null)
                 continue;
@@ -50,6 +55,9 @@ public static class CutOffToolCalls
         for (var i = 0; i < messages.Count; i++)
         {
             var message = messages[i];
+            if (message.Role == ShellCommands.Role)
+                continue;
+
             List<MessagePart>? parts = null;
             for (var j = 0; j < message.Parts.Count; j++)
             {

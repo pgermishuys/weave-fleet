@@ -60,7 +60,7 @@ internal sealed class OpenCode2Mapper(string fleetSessionId, string? workingDire
     /// The user's shell commands this mapper saw start, by shell id: their message, and when it started. The end
     /// names only the shell. V2's notice that one finished is for the model; the command's own message shows it.
     /// </summary>
-    private readonly Dictionary<string, (string MessageId, long Created)> _userShells = new(StringComparer.Ordinal);
+    private readonly Dictionary<string, (string MessageId, long Created, string Command)> _userShells = new(StringComparer.Ordinal);
     private int _nextStepIndex;
 
     /// <summary>
@@ -388,7 +388,8 @@ internal sealed class OpenCode2Mapper(string fleetSessionId, string? workingDire
 
     /// <summary>
     /// The server stopped: the work still going on in the background stopped with it, and no notice will say so, so
-    /// each call's card ends failed (<see cref="BackgroundWorkLost"/>), as history reads it from then on.
+    /// each call's card ends failed (<see cref="BackgroundWorkLost"/>), as history reads it from then on, and each
+    /// command the user ran that was still going ends killed.
     /// </summary>
     public IReadOnlyList<HarnessEvent> BackgroundWorkEnded()
     {
@@ -407,6 +408,12 @@ internal sealed class OpenCode2Mapper(string fleetSessionId, string? workingDire
             .Where(entry => entry.Value.Name == ShellTool)
             .Select(entry => WorkEvents.Ended(ShellWork(entry.Key, entry.Value.CallId, entry.Value.Input), WorkEndedReasons.Lost, fleetSessionId)));
         _backgroundCalls.Clear();
+
+        // A command the user ran with `!` that was still going lived in the server too, and V2 never sends its end.
+        var stopped = DateTimeOffset.UtcNow.ToUnixTimeMilliseconds();
+        foreach (var (shellId, started) in _userShells)
+            events.AddRange(ShellCommand(started.MessageId, shellId, started.Created, stopped, started.Command, "killed", exit: null, output: null, truncated: null));
+        _userShells.Clear();
         return events;
     }
 
@@ -662,7 +669,7 @@ internal sealed class OpenCode2Mapper(string fleetSessionId, string? workingDire
         }
 
         var created = evt.Created ?? DateTimeOffset.UtcNow.ToUnixTimeMilliseconds();
-        _userShells[shellId] = (messageId, created);
+        _userShells[shellId] = (messageId, created, ReadString(shell, "command") ?? string.Empty);
         return ShellCommand(messageId, shellId, created, completed: null, ReadString(shell, "command") ?? string.Empty,
             status: "running", exit: null, output: null, truncated: null);
     }
@@ -761,7 +768,7 @@ internal sealed class OpenCode2Mapper(string fleetSessionId, string? workingDire
         {
             var shellCreated = message.Time?.Created ?? DateTimeOffset.UtcNow.ToUnixTimeMilliseconds();
             if (message.Status == "running")
-                _userShells[shellId] = (shellMessageId, shellCreated);
+                _userShells[shellId] = (shellMessageId, shellCreated, message.Command ?? string.Empty);
             else
                 _userShells.Remove(shellId);
             return ShellCommand(shellMessageId, shellId, shellCreated, message.Time?.Completed, message.Command ?? string.Empty,

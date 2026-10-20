@@ -48,12 +48,16 @@ internal static class OpenCode2History
     /// <summary>The handles of the background work the calls in <paramref name="history"/> are still waiting on (<see cref="OpenCode2Mapper.BackgroundHandle"/>).</summary>
     public static HashSet<string> BackgroundHandles(IEnumerable<HarnessMessage> history)
         => history
-            .SelectMany(message => message.Parts)
-            .OfType<ToolUsePart>()
-            .Where(tool => tool.Background)
-            .Select(tool => OpenCode2Mapper.BackgroundHandle(tool.Metadata ?? default))
+            .SelectMany(message => message.Parts.Select(part => (message, part)))
+            .Select(entry => entry.part is ToolUsePart tool
+                ? tool.Background ? OpenCode2Mapper.BackgroundHandle(tool.Metadata ?? default) : IsRunningUserShell(entry.message, tool) ? tool.ToolCallId : null
+                : null)
             .OfType<string>()
             .ToHashSet(StringComparer.Ordinal);
+
+    /// <summary>A command the user ran with <c>!</c> that history says is still running.</summary>
+    private static bool IsRunningUserShell(HarnessMessage message, ToolUsePart tool)
+        => message.Role == ShellCommands.Role && tool.State == ToolUseState.Running;
 
     /// <summary>The handles of the background work these messages' completion notices say finished.</summary>
     public static IEnumerable<string> NoticeHandles(IEnumerable<OpenCode2Message> messages)
@@ -75,20 +79,30 @@ internal static class OpenCode2History
     /// </summary>
     public static IReadOnlyList<HarnessMessage> SettleLostBackgroundWork(IReadOnlyList<HarnessMessage> history, IReadOnlySet<string> lost)
         => history
-            .Select(message => message.Parts.Any(part => IsLost(part, lost))
+            .Select(message => message.Parts.Any(part => IsLost(message, part, lost))
                 ? message with
                 {
-                    Parts = [.. message.Parts.Select(part => IsLost(part, lost) && part is ToolUsePart tool
-                        ? tool with { State = ToolUseState.Error, Background = false, Output = null, Error = OpenCode2Mapper.BackgroundWorkLost }
-                        : part)],
+                    Parts = [.. message.Parts.Select(part => IsLost(message, part, lost) && part is ToolUsePart tool ? Settled(tool) : part)],
                 }
                 : message)
             .ToList();
 
-    private static bool IsLost(MessagePart part, IReadOnlySet<string> lost)
-        => part is ToolUsePart { Background: true } tool
-            && OpenCode2Mapper.BackgroundHandle(tool.Metadata ?? default) is { } handle
-            && lost.Contains(handle);
+    /// <summary>A lost call fails; a lost command of the user's ends killed, the way V2 ends one it stops.</summary>
+    private static ToolUsePart Settled(ToolUsePart tool)
+        => tool.Background
+            ? tool with { State = ToolUseState.Error, Background = false, Output = null, Error = OpenCode2Mapper.BackgroundWorkLost }
+            : tool with
+            {
+                State = ToolUseState.Completed,
+                Output = JsonSerializer.SerializeToElement(string.Empty, OpenCode2JsonContext.Default.String),
+                Metadata = JsonSerializer.SerializeToElement(new OpenCode2ShellMetadata { Status = "killed" }, OpenCode2JsonContext.Default.OpenCode2ShellMetadata),
+            };
+
+    private static bool IsLost(HarnessMessage message, MessagePart part, IReadOnlySet<string> lost)
+        => part is ToolUsePart tool
+            && (tool.Background
+                ? OpenCode2Mapper.BackgroundHandle(tool.Metadata ?? default) is { } handle && lost.Contains(handle)
+                : IsRunningUserShell(message, tool) && lost.Contains(tool.ToolCallId));
 
     private static HarnessMessage? ToHarnessMessage(OpenCode2Message message)
     {
