@@ -5,7 +5,8 @@ import { nextTick, shallowRef } from "vue";
 import type { AccumulatedMessage } from "@/lib/client-types";
 import { runSessionCommand } from "@/lib/session-commands";
 
-const { stream, loadOlder } = vi.hoisted(() => ({
+const { stream, loadOlder, sent } = vi.hoisted(() => ({
+  sent: { prompts: null as unknown as import("vue").ShallowRef<unknown[]> },
   stream: {
     messages: null as unknown as import("vue").ShallowRef<readonly AccumulatedMessage[]>,
     hasMore: null as unknown as import("vue").ShallowRef<boolean>,
@@ -44,8 +45,9 @@ vi.mock("@/composables/use-models", async () => {
 
 vi.mock("@/composables/use-send-prompt", async () => {
   const { shallowRef: ref } = await import("vue");
+  sent.prompts = ref<unknown[]>([]);
   return {
-    useSentPrompts: () => ({ sentPrompts: ref([]) }),
+    useSentPrompts: () => ({ sentPrompts: sent.prompts }),
     useSendPrompt: () => ({ canSend: ref(true), retryPrompt: vi.fn() }),
     reconcileSentPrompts: vi.fn(),
     clearSentPrompts: vi.fn(),
@@ -120,6 +122,7 @@ async function open(messages: AccumulatedMessage[], geometry: Geometry) {
 describe("ActivityStream scrolling and incremental mount", () => {
   beforeEach(() => {
     setActivePinia(createPinia());
+    if (sent.prompts) sent.prompts.value = [];
     if (stream.hasMore) stream.hasMore.value = false;
     if (stream.isLoadingOlder) stream.isLoadingOlder.value = false;
     loadOlder.mockClear();
@@ -184,6 +187,73 @@ describe("ActivityStream scrolling and incremental mount", () => {
 
     expect(geometry.scrollTop).toBe(600);
     expect(wrapper!.find(".jump-to-latest").exists()).toBe(true);
+  });
+
+  it("a small move up that is not the user's (layout shift, rounding) leaves the view pinned", async () => {
+    const { geometry, scrollTo, frame } = await open(conversation(6), { scrollHeight: 2000, clientHeight: 500, scrollTop: 0 });
+
+    await scrollTo(1500 - 40);
+    expect(wrapper!.find(".jump-to-latest").exists()).toBe(false);
+
+    geometry.scrollHeight = 2100;
+    stream.messages.value = [...stream.messages.value, message(7)];
+    await nextTick();
+    await nextTick();
+    await frame();
+
+    expect(geometry.scrollTop).toBe(2100);
+  });
+
+  it("a small scroll up by wheel stays put while text streams in", async () => {
+    const { box, geometry, scrollTo, frame } = await open(conversation(6), { scrollHeight: 2000, clientHeight: 500, scrollTop: 0 });
+
+    box.dispatchEvent(new WheelEvent("wheel", { deltaY: -100, bubbles: true }));
+    await scrollTo(1500 - 30.5);
+    expect(wrapper!.find(".jump-to-latest").exists()).toBe(true);
+
+    geometry.scrollHeight = 2050;
+    stream.messages.value = [...stream.messages.value, message(7)];
+    await nextTick();
+    await nextTick();
+    await frame();
+    await frame();
+
+    expect(geometry.scrollTop).toBe(1500 - 30.5);
+  });
+
+  it("a wheel up inside a code block scrolling on its own is not leaving the bottom", async () => {
+    const { box, scrollTo } = await open(conversation(6), { scrollHeight: 2000, clientHeight: 500, scrollTop: 0 });
+    const code = document.createElement("pre");
+    code.style.overflowY = "auto";
+    Object.defineProperty(code, "scrollHeight", { value: 400 });
+    Object.defineProperty(code, "clientHeight", { value: 100 });
+    code.scrollTop = 50;
+    box.appendChild(code);
+
+    code.dispatchEvent(new WheelEvent("wheel", { deltaY: -100, bubbles: true }));
+    await scrollTo(1500 - 30);
+
+    expect(wrapper!.find(".jump-to-latest").exists()).toBe(false);
+  });
+
+  it("sending a prompt pins again after a nudge up, so the reply is followed", async () => {
+    const { box, geometry, scrollTo, frame } = await open(conversation(6), { scrollHeight: 2000, clientHeight: 500, scrollTop: 0 });
+    box.dispatchEvent(new WheelEvent("wheel", { deltaY: -100, bubbles: true }));
+    await scrollTo(1500 - 30);
+    expect(wrapper!.find(".jump-to-latest").exists()).toBe(true);
+
+    sent.prompts.value = [{ id: "p1", images: [] }];
+    await nextTick();
+    await nextTick();
+    expect(geometry.scrollTop).toBe(2000);
+    expect(wrapper!.find(".jump-to-latest").exists()).toBe(false);
+
+    geometry.scrollHeight = 2300;
+    stream.messages.value = [...stream.messages.value, message(7)];
+    await nextTick();
+    await nextTick();
+    await frame();
+    expect(geometry.scrollTop).toBe(2300);
   });
 
   it("pins again for a session switch", async () => {

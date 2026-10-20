@@ -2,6 +2,10 @@ import { nextTick, onMounted, onUnmounted, ref, watch, type Ref } from "vue";
 
 const SCROLL_BOTTOM_THRESHOLD = 80;
 const SCROLL_TOP_THRESHOLD = 100;
+/** Distance that counts as exactly at the bottom; scrollTop is fractional at some zoom levels. */
+const AT_BOTTOM_EPSILON = 2;
+/** How long after wheel, touch or key input a move up is taken as the user's (a smooth scroll lands frames later). */
+const USER_INTENT_MS = 700;
 /** How long every message stays laid out for a jump to one, where the browser doesn't report the scroll's end. */
 const SHOW_MESSAGE_LAYOUT_MS = 2000;
 
@@ -33,6 +37,8 @@ export function useStreamScroll(options: StreamScrollOptions) {
   let mutationObserver: MutationObserver | null = null;
   let resizeObserver: ResizeObserver | null = null;
   let keepPinnedToBottom = true;
+  let lastScrollTop = 0;
+  let userIntentUntil = 0;
   let scrollFrame: number | null = null;
   let isRestoringScroll = false;
   let preUpdateScrollHeight = 0;
@@ -50,13 +56,47 @@ export function useStreamScroll(options: StreamScrollOptions) {
       return;
     }
 
-    keepPinnedToBottom = isNearBottom(element);
+    // Only the user's own input (wheel, touch, keys, scrollbar) turns a small move up into leaving the bottom.
+    // Our scrolls, layout shifts and rounding at fractional zoom also move scrollTop and must not.
+    const movedUp = element.scrollTop < lastScrollTop - 1;
+    lastScrollTop = element.scrollTop;
+    if (element.scrollHeight - element.scrollTop - element.clientHeight <= AT_BOTTOM_EPSILON) {
+      keepPinnedToBottom = true;
+    } else if (!isNearBottom(element) || (movedUp && performance.now() < userIntentUntil)) {
+      keepPinnedToBottom = false;
+    }
     showJumpToLatest.value = !keepPinnedToBottom;
 
     // Trigger loading older messages when scrolled near the top
     if (!isRestoringScroll && element.scrollTop <= SCROLL_TOP_THRESHOLD) {
       handleLoadOlder();
     }
+  }
+
+  function noteUserIntent(): void {
+    userIntentUntil = performance.now() + USER_INTENT_MS;
+  }
+
+  /** Wheel up in the conversation itself, not in a code block or table scrolling inside it. */
+  function handleWheel(event: WheelEvent): void {
+    const element = streamRef.value;
+    if (!element || event.deltaY >= 0 || event.ctrlKey) return;
+    for (let node = event.target as HTMLElement | null; node && node !== element; node = node.parentElement) {
+      const overflowY = node.nodeType === 1 ? getComputedStyle(node).overflowY : "";
+      if ((overflowY === "auto" || overflowY === "scroll") && node.scrollHeight > node.clientHeight && node.scrollTop > 0) return;
+    }
+    noteUserIntent();
+  }
+
+  function handleKeydown(event: KeyboardEvent): void {
+    if (["ArrowUp", "PageUp", "Home"].includes(event.key)) noteUserIntent();
+  }
+
+  /** A prompt was sent: follow the reply, wherever the view was left. */
+  function pinToBottom(): void {
+    keepPinnedToBottom = true;
+    showJumpToLatest.value = false;
+    void nextTick(scrollToBottom);
   }
 
   function handleLoadOlder(): void {
@@ -77,6 +117,7 @@ export function useStreamScroll(options: StreamScrollOptions) {
     }
 
     element.scrollTop = element.scrollHeight;
+    lastScrollTop = element.scrollTop;
     keepPinnedToBottom = true;
     showJumpToLatest.value = false;
   }
@@ -238,6 +279,10 @@ export function useStreamScroll(options: StreamScrollOptions) {
     showJumpToLatest,
     highlightedMessageId,
     updatePinnedState,
+    handleWheel,
+    handleKeydown,
+    noteUserIntent,
+    pinToBottom,
     handleLoadOlder,
     handleJumpToLatest,
     scrollToBottom,

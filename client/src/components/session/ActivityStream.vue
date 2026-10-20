@@ -207,6 +207,11 @@ const { messages, deliveredMessages } = useActivityMessages({
   machine,
 });
 
+// Sending a prompt follows the reply from the bottom, wherever the view was left.
+watch(() => sentPrompts.value.length, (count, before) => {
+  if (count > before) pinToBottom();
+});
+
 // The header names the model that answers next. A session that was never given one explicitly has only
 // the stream to go on, and the stream is open here — so it puts the last answer's model in the store.
 const lastAssistantModelId = computed(() => {
@@ -355,6 +360,10 @@ const {
   showJumpToLatest,
   highlightedMessageId,
   updatePinnedState,
+  handleWheel,
+  handleKeydown,
+  noteUserIntent,
+  pinToBottom,
   handleLoadOlder,
   handleJumpToLatest,
   scrollToBottom,
@@ -523,6 +532,10 @@ function handleImproveSkill(skill: string, toolId: string): void {
       aria-label="Activity stream"
       data-testid="activity-stream"
       @scroll.passive="updatePinnedState"
+      @wheel.passive="handleWheel"
+      @touchmove.passive="noteUserIntent"
+      @pointerdown.self="noteUserIntent"
+      @keydown="handleKeydown"
     >
       <!-- Partial snapshot indicator -->
       <div
