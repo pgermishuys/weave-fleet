@@ -41,20 +41,20 @@ public sealed class UsageEndpointsTests : IDisposable
     public async Task On_it_lists_the_sign_in_it_found_and_never_the_token()
     {
         Directory.CreateDirectory(Path.Combine(_home, ".claude"));
-        await File.WriteAllTextAsync(Path.Combine(_home, ".claude", ".credentials.json"), """{"claudeAiOauth":{"accessToken":"invented-secret"}}""");
+        await File.WriteAllTextAsync(Path.Combine(_home, ".claude", ".credentials.json"), """{"claudeAiOauth":{"accessToken":"invented-secret","expiresAt":1000}}""");
         await using var factory = Factory();
         using var client = factory.CreateClient();
         await using (var scope = factory.Services.CreateAsyncScope())
             await scope.ServiceProvider.GetRequiredService<IUserPreferenceRepository>().SetAsync("UsageLimits", "true");
 
-        // No watch: nothing is asked, so the sign-in shows as not read yet.
+        // The first read happens by itself; this token expired long ago, so it answers signed out without any request.
         var text = await client.GetStringAsync("/api/usage/limits");
         using var body = JsonDocument.Parse(text);
 
         body.RootElement.GetProperty("enabled").GetBoolean().ShouldBeTrue();
         var claude = body.RootElement.GetProperty("providers").EnumerateArray().Single(p => p.GetProperty("provider").GetString() == "claude");
         claude.GetProperty("name").GetString().ShouldBe("Claude");
-        claude.GetProperty("state").GetString().ShouldBe("unreadable");
+        claude.GetProperty("state").GetString().ShouldBe("signed_out");
         claude.GetProperty("source").GetString().ShouldBe("Claude Code");
         text.ShouldNotContain("invented-secret");
     }

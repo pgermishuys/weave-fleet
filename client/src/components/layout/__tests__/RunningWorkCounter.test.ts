@@ -100,7 +100,7 @@ describe("the status bar's running-work counter", () => {
     }
     await flushPromises();
     expect(counter(wrapper).exists()).toBe(false);
-    expect(apiGet).toHaveBeenCalledTimes(1);
+    expect(apiGet.mock.calls.filter(([path]) => String(path).includes("/work"))).toHaveLength(1);
   });
 
   it("opens the work grouped by session, this session first", async () => {
