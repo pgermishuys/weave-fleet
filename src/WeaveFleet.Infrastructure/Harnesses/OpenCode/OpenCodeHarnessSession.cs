@@ -40,6 +40,10 @@ internal sealed partial class OpenCodeHarnessSession : IHarnessSession
         LoggerMessage.Define<string, int>(LogLevel.Error, new EventId(4, "ProcessExited"),
             "OpenCode instance {InstanceId} process exited unexpectedly with code {ExitCode}.");
 
+    private static readonly Action<ILogger, string, Exception?> LogRecoverySubscriptionTimedOut =
+        LoggerMessage.Define<string>(LogLevel.Warning, new EventId(900, "RecoverySubscriptionTimedOut"),
+            "OpenCode instance {InstanceId} didn't report its event subscription ready after the process restarted; sending anyway.");
+
     private static readonly Action<ILogger, string, Exception?> LogSessionCreated =
         LoggerMessage.Define<string>(LogLevel.Debug, new EventId(5, "SessionCreated"),
             "Created OpenCode session {SessionId}.");
@@ -1619,11 +1623,23 @@ internal sealed partial class OpenCodeHarnessSession : IHarnessSession
 
     private async Task WaitForPostRecoveryEventSubscriptionAsync(string openCodeSessionId, CancellationToken ct)
     {
-        if (Interlocked.Exchange(ref _waitForSubscriptionBeforeNextOperation, 0) != 0)
+        if (Interlocked.Exchange(ref _waitForSubscriptionBeforeNextOperation, 0) == 0)
+            return;
+
+        // The session was made afresh on the restarted server; if its subscription never reports ready (the server was
+        // replaced under it), the prompt carries on, as it does when a session is activated, rather than hang.
+        try
         {
-            await _instanceHandle.WaitForEventSubscriptionAsync(openCodeSessionId, ct).ConfigureAwait(false);
+            await _instanceHandle.WaitForEventSubscriptionAsync(openCodeSessionId, ct).WaitAsync(PostRecoverySubscriptionWait, ct).ConfigureAwait(false);
+        }
+        catch (TimeoutException)
+        {
+            LogRecoverySubscriptionTimedOut(_logger, InstanceId, null);
         }
     }
+
+    /// <summary>How long the first operation after a restart waits for the event subscription before going ahead.</summary>
+    private static readonly TimeSpan PostRecoverySubscriptionWait = TimeSpan.FromSeconds(5);
 
     private void OnProcessExited(object? sender, int exitCode)
     {
