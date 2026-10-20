@@ -1,3 +1,4 @@
+import { useExportMarkdown } from "@/composables/use-export-markdown";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { mount } from "@vue/test-utils";
 import { createPinia, setActivePinia } from "pinia";
@@ -148,7 +149,18 @@ describe("ActivityStream answering commands", () => {
     expect(writeText).toHaveBeenCalledExactlyOnceWith("s1");
   });
 
-  it("export-conversation downloads the messages as JSON named after the session", async () => {
+  it("export-conversation opens the Markdown export dialog for this session only", async () => {
+    await open();
+
+    await fire("export-conversation", { sessionId: "other" });
+    expect(useExportMarkdown().sessionId.value).toBeNull();
+
+    await fire("export-conversation", { sessionId: "s1" });
+    expect(useExportMarkdown().sessionId.value).toBe("s1");
+    useExportMarkdown().close();
+  });
+
+  it("export-raw-messages downloads the messages as JSON named after the session", async () => {
     let blob: Blob | undefined;
     URL.createObjectURL = vi.fn((value: Blob) => {
       blob = value;
@@ -161,10 +173,10 @@ describe("ActivityStream answering commands", () => {
     });
     await open();
 
-    await fire("export-conversation", { sessionId: "other" });
+    await fire("export-raw-messages", { sessionId: "other" });
     expect(downloads).toEqual([]);
 
-    await fire("export-conversation", { sessionId: "s1" });
+    await fire("export-raw-messages", { sessionId: "s1" });
     expect(downloads).toEqual(["s1-conversation.json"]);
     const payload = JSON.parse(await blob!.text());
     expect(payload.sessionId).toBe("s1");

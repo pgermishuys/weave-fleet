@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { Archive, ArchiveRestore, Copy, Ellipsis, GitFork, Loader2, OctagonX, Pencil, Trash2 } from "lucide-vue-next";
+import { Archive, ArchiveRestore, Copy, Ellipsis, FileDown, GitFork, Loader2, OctagonX, Pencil, Trash2 } from "lucide-vue-next";
 import { Button } from "@/components/ui/button";
 import {
   DropdownMenu,
@@ -44,6 +44,7 @@ const emit = defineEmits<{
   delete: [];
   archive: [];
   restore: [];
+  export: [];
 }>();
 
 async function copyDirectory(): Promise<void> {
@@ -149,6 +150,13 @@ async function copyDirectory(): Promise<void> {
           <DropdownMenuShortcut class="tracking-normal">
             Double-click title
           </DropdownMenuShortcut>
+        </DropdownMenuItem>
+        <DropdownMenuItem
+          data-testid="session-export-markdown-action"
+          @select="emit('export')"
+        >
+          <FileDown class="size-3.5" />
+          Export as Markdown…
         </DropdownMenuItem>
         <DropdownMenuItem
           v-if="props.canArchive"

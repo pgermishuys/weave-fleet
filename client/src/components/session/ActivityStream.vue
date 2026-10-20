@@ -13,6 +13,7 @@ import WorkingIndicator from "@/components/session/WorkingIndicator.vue";
 import ModDraftCards from "@/components/mods/review/ModDraftCards.vue";
 import PagePickCard from "@/components/session/PagePickCard.vue";
 import PermissionCard from "@/components/session/PermissionCard.vue";
+import { openExportMarkdown } from "@/composables/use-export-markdown";
 import { useSessionPermissions } from "@/composables/use-session-permissions";
 import { useSessionStream } from "@/composables/use-session-stream";
 import { useModels } from "@/composables/use-models";
@@ -419,6 +420,10 @@ function handleFocusPromptCommand(): void {
 }
 
 function handleExportConversationCommand(): void {
+  openExportMarkdown(props.sessionId);
+}
+
+function handleExportRawMessagesCommand(): void {
   const title = (selectedSession.value?.session.title ?? props.sessionId)
     .replace(/[^a-z0-9-_]+/gi, "-")
     .replace(/^-+|-+$/g, "");
@@ -469,6 +474,7 @@ onMounted(() => {
           "focus-prompt": handleFocusPromptCommand,
           "copy-session-id": handleCopySessionIdCommand,
           "export-conversation": handleExportConversationCommand,
+          "export-raw-messages": handleExportRawMessagesCommand,
         },
       }]));
     },

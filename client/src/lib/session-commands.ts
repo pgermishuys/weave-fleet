@@ -11,6 +11,7 @@ export interface SessionCommands {
   "focus-prompt": void;
   "copy-session-id": void;
   "export-conversation": void;
+  "export-raw-messages": void;
   "scroll-top": void;
   "scroll-bottom": void;
   /** Scroll to a message and mark it briefly: by its id, or by the tool call it holds. */

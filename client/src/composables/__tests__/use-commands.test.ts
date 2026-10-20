@@ -93,7 +93,8 @@ describe("useCommands", () => {
       expect(commands.commands.map((command) => `${command.category}: ${command.label}`)).toEqual([
         "Session: Clear draft",
         "Session: Copy session ID",
-        "Session: Export conversation",
+        "Session: Export as Markdown",
+        "Session: Export raw messages (JSON)",
         "Session: Find in files…",
         "Session: Focus prompt",
         "Session: Fork session",
@@ -321,13 +322,14 @@ describe("useCommands", () => {
 
   describe("what the session commands send to the conversation", () => {
     it("sends each one with the open session's id, and nothing while none is open", async () => {
-      const heard = listenFor("focus-prompt", "copy-session-id", "export-conversation", "scroll-top", "scroll-bottom");
+      const heard = listenFor("focus-prompt", "copy-session-id", "export-conversation", "export-raw-messages", "scroll-top", "scroll-bottom");
       useSessionsStore().setSessions([item("s1", "First")]);
       await start();
 
       byId("focus-prompt").action();
       byId("copy-session-id").action();
       byId("export-conversation").action();
+      byId("export-raw-messages").action();
       byId("scroll-to-top").action();
       byId("scroll-to-bottom").action();
       expect(Object.values(heard.calls).flat()).toEqual([]);
@@ -336,6 +338,7 @@ describe("useCommands", () => {
       byId("focus-prompt").action();
       byId("copy-session-id").action();
       byId("export-conversation").action();
+      byId("export-raw-messages").action();
       byId("scroll-to-top").action();
       byId("scroll-to-bottom").action();
 
@@ -343,6 +346,7 @@ describe("useCommands", () => {
         "focus-prompt": [{ sessionId: "s1" }],
         "copy-session-id": [{ sessionId: "s1" }],
         "export-conversation": [{ sessionId: "s1" }],
+        "export-raw-messages": [{ sessionId: "s1" }],
         "scroll-top": [{ sessionId: "s1" }],
         "scroll-bottom": [{ sessionId: "s1" }],
       });

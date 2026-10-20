@@ -10,6 +10,7 @@ import SideConversationPanel from "@/components/session/SideConversationPanel.vu
 import SubagentPromptLine from "@/components/session/SubagentPromptLine.vue";
 import DiffsTray from "@/components/session/DiffsTray.vue";
 import FilesChangedView from "@/components/session/FilesChangedView.vue";
+import ExportMarkdownDialog from "@/components/session/ExportMarkdownDialog.vue";
 import ForkSessionDialog from "@/components/session/ForkSessionDialog.vue";
 import SessionActionToolbar from "@/components/session/SessionActionToolbar.vue";
 import SessionDetailHeader from "@/components/session/SessionDetailHeader.vue";
@@ -19,6 +20,7 @@ import WorkflowRunCard from "@/components/workflows/WorkflowRunCard.vue";
 import WorkflowStepper from "@/components/workflows/WorkflowStepper.vue";
 import TerminalToggleButton from "@/components/terminal/TerminalToggleButton.vue";
 import RightPanelSheetButton from "@/components/layout/RightPanelSheetButton.vue";
+import { closeExportMarkdown, openExportMarkdown, useExportMarkdown } from "@/composables/use-export-markdown";
 import { useDiffs } from "@/composables/use-diffs";
 import { useSessionDetail } from "@/composables/use-session-detail";
 import { useSessionDetailActions } from "@/composables/use-session-detail-actions";
@@ -386,6 +388,8 @@ const SessionDetailPage = defineComponent({
       };
     }
 
+    const exportMarkdown = useExportMarkdown();
+
     const {
       isAborting,
       isDeleting,
@@ -520,6 +524,7 @@ const SessionDetailPage = defineComponent({
                   errors={actionErrors.value}
                   onAbort={() => void handleAbort()}
                   onFork={handleFork}
+                  onExport={() => openExportMarkdown(params.value.id ?? "")}
                   onRename={() => { isEditingTitle.value = true; }}
                   onDelete={handleDelete}
                   onArchive={handleArchive}
@@ -688,6 +693,16 @@ const SessionDetailPage = defineComponent({
           }}
           onSelect={handleFilesChangedFileSelected}
           onRetry={retryFilesChanged}
+        />
+        <ExportMarkdownDialog
+          open={exportMarkdown.sessionId.value === params.value.id}
+          sessionId={params.value.id ?? ""}
+          title={selectedSession.value?.session.title ?? remoteSession.value?.title ?? "Untitled session"}
+          harness={selectedSession.value?.harnessType ?? remoteSession.value?.harnessType ?? null}
+          directory={selectedSession.value?.workspaceDirectory ?? remoteSession.value?.workspaceDirectory ?? null}
+          onUpdate:open={(value: boolean) => {
+            if (!value) closeExportMarkdown();
+          }}
         />
         {canFork.value ? (
           <ForkSessionDialog
