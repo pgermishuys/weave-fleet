@@ -5,7 +5,9 @@ using WeaveFleet.Api.Auth;
 using WeaveFleet.Application.Configuration;
 using WeaveFleet.Application.Diagnostics;
 using WeaveFleet.Application.Machines;
+using WeaveFleet.Application.Updates;
 using WeaveFleet.Application.Users;
+using WeaveFleet.Infrastructure.Updates;
 
 namespace WeaveFleet.Api.Endpoints;
 
@@ -33,8 +35,12 @@ public static class MachineEndpoints
     {
         var group = app.MapGroup("/api/machine").WithTags("Machine");
 
-        group.MapGet("", async (MachineIdentityStore store, LoopbackAuthPolicy policy, MachineCapabilitiesReader capabilities) =>
-            Results.Ok(ToResponse(store.Get(), fleetOptions, policy) with { Capabilities = await capabilities.ReadAsync() }))
+        group.MapGet("", async (MachineIdentityStore store, LoopbackAuthPolicy policy, MachineCapabilitiesReader capabilities, UpdateStateHolder updates, UpdateDownloadService downloads) =>
+            Results.Ok(ToResponse(store.Get(), fleetOptions, policy) with
+            {
+                Capabilities = await capabilities.ReadAsync(),
+                Update = ToUpdate(updates.State, downloads),
+            }))
             .Produces<MachineResponse>(200)
             .WithName("GetMachine");
 
@@ -122,6 +128,13 @@ public static class MachineEndpoints
             options.ServeUi,
             identity.PublicUrl);
     }
+
+    /// <summary>What a Fleet knows about its own updates, from memory and one small file, for the Updates page.</summary>
+    internal static MachineUpdate ToUpdate(UpdateState state, UpdateDownloadService downloads) => new(
+        state.Status.ToString().ToLowerInvariant(),
+        state.LatestVersion,
+        state.Status == UpdateStatus.Managed ? null : downloads.StagedVersion(),
+        state.CheckedAt?.ToString("O"));
 
     private static MachineAccessResponse ToAccessResponse(ILocalTokenAuthService tokens, FleetOptions options, LoopbackAuthPolicy policy)
         => new(
@@ -232,6 +245,7 @@ public static class MachineEndpoints
 /// <param name="WebApp">Whether it serves the web app at its own address; a node (<c>fleet node</c>) doesn't.</param>
 /// <param name="PublicUrl">The address phones should use for this machine, when someone set one; pairing puts it in the QR code.</param>
 /// <param name="Capabilities">What it can run and how busy it is; only <c>GET</c> and <c>PUT /api/machine</c> fill it in.</param>
+/// <param name="Update">Where it is with Fleet updates; only <c>GET /api/machine</c> fills it in. Absent from older Fleets.</param>
 public sealed record MachineResponse(
     string Id,
     string Name,
@@ -244,7 +258,15 @@ public sealed record MachineResponse(
     bool RequiresToken,
     bool WebApp,
     string? PublicUrl = null,
-    MachineCapabilities? Capabilities = null);
+    MachineCapabilities? Capabilities = null,
+    MachineUpdate? Update = null);
+
+/// <summary>Where a Fleet is with updating itself.</summary>
+/// <param name="Status">The same words as <c>GET /api/update/status</c>: <c>unknown</c>, <c>uptodate</c>, <c>available</c>, <c>downloading</c>, <c>staged</c>, <c>error</c> or <c>managed</c> (the desktop app updates it).</param>
+/// <param name="LatestVersion">The newest release the last check found.</param>
+/// <param name="StagedVersion">The version downloaded and waiting for a restart, if any.</param>
+/// <param name="CheckedAt">When it last checked for a release, ISO 8601.</param>
+public sealed record MachineUpdate(string Status, string? LatestVersion, string? StagedVersion, string? CheckedAt);
 
 /// <summary>Changes this machine's name or phone address. A field left out stays; an empty one goes back to the default.</summary>
 public sealed record UpdateMachineRequest(string? Name, string? PublicUrl = null);

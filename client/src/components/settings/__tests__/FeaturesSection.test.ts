@@ -71,6 +71,18 @@ describe("FeaturesSection", () => {
     expect(toggle.attributes("aria-checked")).toBe("true");
   });
 
+  it("keeps the Updates page off until it's turned on, and saves the choice", async () => {
+    const wrapper = await mountSection();
+    const toggle = wrapper.get("[data-testid='fleet-updates-switch']");
+    expect(toggle.attributes("aria-checked")).toBe("false");
+
+    await toggle.trigger("click");
+    await flushPromises();
+
+    expect(putMock).toHaveBeenCalledWith("/api/preferences/{key}", { params: { path: { key: "FleetUpdates" } }, body: { value: "true" } });
+    expect(toggle.attributes("aria-checked")).toBe("true");
+  });
+
   it("keeps Usage limits off, with no status bar switch, until it's turned on", async () => {
     const wrapper = await mountSection();
     const toggle = wrapper.get("[data-testid='usage-limits-switch']");

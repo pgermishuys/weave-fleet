@@ -11,6 +11,7 @@ import { SESSION_MESSAGES_PREFERENCE_KEY } from "@/lib/session-messages";
 import { LARGE_PASTES_PREFERENCE_KEY } from "@/lib/attached-files";
 import { STARTERS_PREFERENCE_KEY } from "@/lib/starters";
 import { PAGE_CHOICE_PREFERENCE_KEY } from "@/lib/page-choice";
+import { FLEET_UPDATES_PREFERENCE_KEY } from "@/lib/fleet-updates";
 import { AGENT_HANDOFF_PREFERENCE_KEY, LIVE_MACHINES_PREFERENCE_KEY } from "@/lib/machines";
 import {
   DESKTOP_NOTIFICATIONS_PREFERENCE_KEY,
@@ -149,6 +150,20 @@ const largePastes = computed(() => preferencesStore.get(LARGE_PASTES_PREFERENCE_
 
 async function setLargePastes(event: Event): Promise<void> {
   await preferencesStore.set(LARGE_PASTES_PREFERENCE_KEY, (event.target as HTMLSelectElement).value);
+}
+
+const isFleetUpdatesEnabled = computed(
+  () => preferencesStore.get(FLEET_UPDATES_PREFERENCE_KEY, "false") === "true",
+);
+const isSavingFleetUpdates = shallowRef(false);
+
+async function toggleFleetUpdates(): Promise<void> {
+  isSavingFleetUpdates.value = true;
+  try {
+    await preferencesStore.set(FLEET_UPDATES_PREFERENCE_KEY, isFleetUpdatesEnabled.value ? "false" : "true");
+  } finally {
+    isSavingFleetUpdates.value = false;
+  }
 }
 
 const isLiveMachinesEnabled = computed(
@@ -652,6 +667,46 @@ async function toggleBoardFeature(): Promise<void> {
           <span
             class="pointer-events-none inline-block h-5 w-5 rounded-full bg-white shadow ring-0 transition duration-200 ease-in-out"
             :class="isLiveMachinesEnabled ? 'translate-x-5' : 'translate-x-0'"
+          />
+        </button>
+      </div>
+    </div>
+
+    <div class="mt-3 flex items-start justify-between gap-4 rounded-card border border-border bg-main-bg p-4">
+      <div>
+        <p class="flex items-center gap-2 text-sm font-medium text-text">
+          Updates page
+          <span class="rounded-full border border-border px-2 py-px text-[0.7rem] font-medium uppercase tracking-wide text-muted">
+            Experimental
+          </span>
+        </p>
+        <p class="mt-1 text-xs text-muted">
+          Adds Settings → Updates, which lists every Fleet you run (this app, this machine and each machine in
+          Settings → Machines) with its version and whether an update is waiting.
+        </p>
+      </div>
+
+      <div class="flex items-center gap-2">
+        <LoaderCircle
+          v-if="isSavingFleetUpdates"
+          :size="16"
+          class="animate-spin text-muted"
+          aria-hidden="true"
+        />
+        <button
+          type="button"
+          role="switch"
+          :aria-checked="isFleetUpdatesEnabled"
+          :disabled="preferencesStore.isLoading || isSavingFleetUpdates"
+          aria-label="Show the Updates page"
+          data-testid="fleet-updates-switch"
+          class="relative inline-flex h-6 w-11 shrink-0 cursor-pointer rounded-full border-2 border-transparent transition-colors duration-200 ease-in-out focus:outline-none focus:ring-2 focus:ring-accent focus:ring-offset-2 focus:ring-offset-main-bg disabled:cursor-not-allowed disabled:opacity-60"
+          :class="isFleetUpdatesEnabled ? 'bg-accent' : 'bg-border'"
+          @click="toggleFleetUpdates"
+        >
+          <span
+            class="pointer-events-none inline-block h-5 w-5 rounded-full bg-white shadow ring-0 transition duration-200 ease-in-out"
+            :class="isFleetUpdatesEnabled ? 'translate-x-5' : 'translate-x-0'"
           />
         </button>
       </div>

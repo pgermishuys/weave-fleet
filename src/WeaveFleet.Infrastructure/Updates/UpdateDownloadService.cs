@@ -109,6 +109,37 @@ public sealed partial class UpdateDownloadService(
         }
     }
 
+    private (DateTime WrittenAt, string? Version)? _stagedRead;
+
+    /// <summary>
+    /// The version waiting in the staging directory for the next restart, if any. Machines read this every few
+    /// seconds through <c>GET /api/machine</c>, so the manifest is only parsed again when its file changes.
+    /// </summary>
+    public string? StagedVersion()
+    {
+        try
+        {
+            var manifestPath = Path.Combine(GetStagingDirectory(), "update-manifest.json");
+            var info = new FileInfo(manifestPath);
+            if (!info.Exists)
+            {
+                _stagedRead = null;
+                return null;
+            }
+
+            if (_stagedRead is { } known && known.WrittenAt == info.LastWriteTimeUtc)
+                return known.Version;
+
+            var manifest = JsonSerializer.Deserialize(File.ReadAllText(manifestPath), UpdateManifestJsonContext.Default.UpdateManifest);
+            _stagedRead = (info.LastWriteTimeUtc, manifest?.Version);
+            return manifest?.Version;
+        }
+        catch (Exception ex) when (ex is IOException or UnauthorizedAccessException or JsonException)
+        {
+            return null;
+        }
+    }
+
     private static string GetStagingDirectory()
     {
         // The app binary lives at <install>/app/. Stage one level up, alongside the app dir.

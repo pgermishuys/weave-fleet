@@ -414,6 +414,14 @@ public sealed class UpdateOptions
     /// <summary>GitHub repository to check for releases. Default: pgermishuys/fleet-releases.</summary>
     public string GitHubRepo { get; set; } = "pgermishuys/fleet-releases";
 
+    /// <summary>
+    /// Where Fleet looks for releases instead of GitHub, for a live check or a test. <c>{ReleasesBaseUrl}/releases</c>
+    /// answers like GitHub's list-releases call, and an archive is read from
+    /// <c>{ReleasesBaseUrl}/download/v{version}/{asset}</c> (with its <c>.sha256</c> beside it). Set it with
+    /// <c>Fleet__Update__ReleasesBaseUrl</c>. Empty uses GitHub. Default: empty.
+    /// </summary>
+    public string ReleasesBaseUrl { get; set; } = "";
+
     /// <summary>Check for updates automatically on startup. Default: true.</summary>
     public bool CheckOnStartup { get; set; } = true;
 

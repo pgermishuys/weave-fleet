@@ -32,7 +32,9 @@ public sealed partial class ReleaseNotesStore(
     private ReleaseNotes? _cached;
 
     /// <summary>The GitHub API address of the recent releases, for the update check and for a fetch here.</summary>
-    public string ReleasesUrl => $"https://api.github.com/repos/{options.Update.GitHubRepo}/releases?per_page={ReleaseCount}";
+    public string ReleasesUrl => options.Update.ReleasesBaseUrl is { Length: > 0 } feed
+        ? $"{feed.TrimEnd('/')}/releases"
+        : $"https://api.github.com/repos/{options.Update.GitHubRepo}/releases?per_page={ReleaseCount}";
 
     /// <summary>The saved notes, fetched first when there are none or they're older than the update check's interval.</summary>
     public async Task<ReleaseNotes> GetAsync(CancellationToken ct)

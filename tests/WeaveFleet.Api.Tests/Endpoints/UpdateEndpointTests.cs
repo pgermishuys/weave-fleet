@@ -58,6 +58,39 @@ public sealed class UpdateEndpointTests
     }
 
     [Fact]
+    public async Task get_machine_says_where_the_fleet_is_with_updates()
+    {
+        await using var factory = new ApiWebApplicationFactory(
+            authEnabled: false,
+            configureTestServices: services =>
+            {
+                var holder = new UpdateStateHolder();
+                holder.SetState(new UpdateState(
+                    UpdateStatus.Staged,
+                    LatestVersion: "99.0.0",
+                    DownloadUrl: null,
+                    AssetName: null,
+                    CheckedAt: new DateTimeOffset(2026, 10, 20, 8, 0, 0, TimeSpan.Zero),
+                    Error: null));
+
+                services.AddSingleton(holder);
+            });
+        using var client = factory.CreateClient();
+
+        var machine = await client.GetFromJsonAsync<JsonElement>("/api/machine");
+
+        var update = machine.GetProperty("update");
+        update.GetProperty("status").GetString().ShouldBe("staged");
+        update.GetProperty("latestVersion").GetString().ShouldBe("99.0.0");
+        update.GetProperty("checkedAt").GetString().ShouldStartWith("2026-10-20T08:00:00");
+        // Nothing is staged on disk in a test run.
+        update.GetProperty("stagedVersion").ValueKind.ShouldBe(JsonValueKind.Null);
+        // The status words are the ones /api/update/status uses.
+        var status = await client.GetFromJsonAsync<UpdateStatusDto>("/api/update/status", JsonSerializerOptions.Web);
+        status!.Status.ShouldBe(update.GetProperty("status").GetString());
+    }
+
+    [Fact]
     public async Task post_update_check_returns_accepted()
     {
         await using var factory = new ApiWebApplicationFactory(authEnabled: false);
