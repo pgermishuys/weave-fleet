@@ -215,6 +215,23 @@ public sealed class OpenCodeOffTheRecordPromptTests
     }
 
     [Fact]
+    public async Task The_first_prompt_after_the_server_died_goes_even_when_the_new_subscription_never_comes_ready()
+    {
+        // The pooled server was killed (out of memory) and restarted. The prompt waits for the event subscription of the
+        // session it makes afresh, and that wait had no end: the prompt hung until the browser gave up.
+        var http = new ScriptedHandler()
+            .On("POST /session", """{"id":"oc-2","time":{"created":1,"updated":1}}""")
+            .On("POST /session/oc-2/prompt_async", "");
+        await using var session = CreateSession(http, out var handle);
+        handle.SubscriptionNeverReady = true;
+        handle.Exit(137);
+
+        await session.SendPromptAsync("hello", null, CancellationToken.None).WaitAsync(TimeSpan.FromSeconds(20));
+
+        http.Requests.Select(r => r.Key).ShouldContain("POST /session/oc-2/prompt_async");
+    }
+
+    [Fact]
     public async Task a_workflow_step_keeps_the_step_tool()
     {
         var http = new ScriptedHandler().On("POST /session/oc-1/prompt_async", "");
@@ -354,9 +371,12 @@ public sealed class OpenCodeOffTheRecordPromptTests
     }
 
     private static OpenCodeHarnessSession CreateSession(ScriptedHandler handler, string? openCodeSessionId = "oc-1", bool hideStepTool = false)
+        => CreateSession(handler, out _, openCodeSessionId, hideStepTool);
+
+    private static OpenCodeHarnessSession CreateSession(ScriptedHandler handler, out FakeInstanceHandle handle, string? openCodeSessionId = "oc-1", bool hideStepTool = false)
     {
         var httpClient = new HttpClient(handler) { BaseAddress = new Uri("http://localhost:1234") };
-        var handle = new FakeInstanceHandle(new OpenCodeHttpClient(httpClient, NullLogger<OpenCodeHttpClient>.Instance));
+        handle = new FakeInstanceHandle(new OpenCodeHttpClient(httpClient, NullLogger<OpenCodeHttpClient>.Instance));
         return new OpenCodeHarnessSession(
             instanceId: "test-instance",
             fleetSessionId: "fleet-session-1",
@@ -475,9 +495,16 @@ public sealed class OpenCodeOffTheRecordPromptTests
         }
     }
 
-    private sealed class FakeInstanceHandle(OpenCodeHttpClient httpClient) : IOpenCodeInstanceHandle
+    internal sealed class FakeInstanceHandle(OpenCodeHttpClient httpClient) : IOpenCodeInstanceHandle
     {
-        public event EventHandler<int>? ProcessExited { add { } remove { } }
+        private EventHandler<int>? _exited;
+
+        public event EventHandler<int>? ProcessExited { add => _exited += value; remove => _exited -= value; }
+
+        /// <summary>A subscription that never comes ready, as when the pooled server was replaced.</summary>
+        public bool SubscriptionNeverReady { get; set; }
+
+        public void Exit(int code) => _exited?.Invoke(this, code);
 
         public OpenCodeHttpClient HttpClient { get; } = httpClient;
 
@@ -487,7 +514,8 @@ public sealed class OpenCodeOffTheRecordPromptTests
 
         public Task EnsureConnectedAsync(CancellationToken ct) => Task.CompletedTask;
 
-        public Task WaitForEventSubscriptionAsync(string openCodeSessionId, CancellationToken ct) => Task.CompletedTask;
+        public Task WaitForEventSubscriptionAsync(string openCodeSessionId, CancellationToken ct)
+            => SubscriptionNeverReady ? Task.Delay(Timeout.Infinite, ct) : Task.CompletedTask;
 
         public Task SendCommandAsync(string openCodeSessionId, OpenCodeCommandRequest request, CancellationToken ct) => Task.CompletedTask;
 
