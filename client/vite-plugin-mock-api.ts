@@ -1843,7 +1843,7 @@ export function mockApiPlugin(options: MockApiOptions = {}): Plugin {
       },
     },
     {
-      pattern: /^\/api\/instances\/([^/]+)\/models$/,
+      pattern: /^\/api\/(?:instances|sessions)\/([^/]+)\/models$/,
       handler: (url) => {
         const id = url.pathname.split("/")[3];
         console.log(`[mock-api] GET /api/instances/${id}/models`);
@@ -1863,6 +1863,16 @@ export function mockApiPlugin(options: MockApiOptions = {}): Plugin {
             models: [
               { id: "gpt-4o", name: "GPT-4o" },
               { id: "gpt-4o-mini", name: "GPT-4o Mini" },
+              { id: "o3", name: "o3" },
+              { id: "o4-mini", name: "o4 Mini" },
+            ],
+          },
+          {
+            id: "google",
+            name: "Google",
+            models: [
+              { id: "gemini-2-5-pro", name: "Gemini 2.5 Pro" },
+              { id: "gemini-2-5-flash", name: "Gemini 2.5 Flash" },
             ],
           },
         ]), {
