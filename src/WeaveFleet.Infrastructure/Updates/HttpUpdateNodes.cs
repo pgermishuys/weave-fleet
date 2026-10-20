@@ -36,7 +36,9 @@ public sealed class HttpUpdateNodes(RemoteMachineService machines, IHttpClientFa
                 working,
                 update.ValueKind == JsonValueKind.Object && update.TryGetProperty("canRestart", out var can) && can.ValueKind == JsonValueKind.True,
                 update.ValueKind == JsonValueKind.Object ? Text(update, "restartUnavailableReason") ?? (update.TryGetProperty("canRestart", out _) ? null : "too old to restart itself") : null,
-                rolledBack);
+                rolledBack,
+                update.ValueKind == JsonValueKind.Object ? Text(update, "rule") : null,
+                !(root.TryGetProperty("webApp", out var web) && web.ValueKind == JsonValueKind.False));
         }
         catch (Exception ex) when (ex is JsonException or HttpRequestException or TaskCanceledException && !ct.IsCancellationRequested)
         {
@@ -48,7 +50,7 @@ public sealed class HttpUpdateNodes(RemoteMachineService machines, IHttpClientFa
     {
         try
         {
-            using var response = await SendAsync(machine, HttpMethod.Post, "/api/update/apply", ct);
+            using var response = await SendAsync(machine, HttpMethod.Post, "/api/update/apply?trigger=rollout", ct);
             if (response is null)
                 return new NodeApplyResult(NodeApplyOutcome.Unreachable);
             if (response.IsSuccessStatusCode)
@@ -66,12 +68,25 @@ public sealed class HttpUpdateNodes(RemoteMachineService machines, IHttpClientFa
         }
     }
 
-    private async Task<HttpResponseMessage?> SendAsync(RemoteMachine machine, HttpMethod method, string path, CancellationToken ct)
+    public async Task<bool> PushRuleAsync(RemoteMachine machine, string rule, CancellationToken ct)
+    {
+        try
+        {
+            using var response = await SendAsync(machine, HttpMethod.Put, "/api/update/rule", ct, new StringContent($"{{\"rule\":\"{rule}\"}}", System.Text.Encoding.UTF8, "application/json"));
+            return response is { IsSuccessStatusCode: true };
+        }
+        catch (Exception ex) when (ex is HttpRequestException or TaskCanceledException && !ct.IsCancellationRequested)
+        {
+            return false;
+        }
+    }
+
+    private async Task<HttpResponseMessage?> SendAsync(RemoteMachine machine, HttpMethod method, string path, CancellationToken ct, HttpContent? body = null)
     {
         if (machines.TryTokenOf(machine) is not { } token)
             return null;
 
-        using var request = new HttpRequestMessage(method, machine.BaseUrl + path);
+        using var request = new HttpRequestMessage(method, machine.BaseUrl + path) { Content = body };
         request.Headers.Authorization = new AuthenticationHeaderValue("Bearer", token);
         return await httpClients.CreateClient(RemoteMachineService.HttpClientName).SendAsync(request, ct);
     }

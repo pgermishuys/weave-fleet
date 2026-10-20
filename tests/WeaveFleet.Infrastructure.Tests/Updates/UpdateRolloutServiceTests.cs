@@ -156,6 +156,8 @@ public sealed class UpdateRolloutServiceTests
 
         private readonly RemoteMachineService _machines;
 
+        public Task<bool> PushRuleAsync(RemoteMachine machine, string rule, CancellationToken ct) => Task.FromResult(true);
+
         public FakeNode Node(string name, int[]? working = null) => Nodes[name] = new FakeNode(name) { Working = working ?? [0] };
 
         public async Task AddMachinesAsync()

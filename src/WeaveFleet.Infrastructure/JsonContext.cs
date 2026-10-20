@@ -299,6 +299,7 @@ internal sealed partial class ClaudeCodeJsonContext : JsonSerializerContext
 [JsonSerializable(typeof(WeaveFleet.Application.DTOs.SmartLinkDto))]
 [JsonSerializable(typeof(WeaveFleet.Infrastructure.Analytics.SessionTokensDto))]
 [JsonSerializable(typeof(WeaveFleet.Infrastructure.Updates.RolloutRun))]
+[JsonSerializable(typeof(Dictionary<string, string>))]
 internal sealed partial class InfrastructureJsonContext : JsonSerializerContext
 {
     /// <summary>Returns a serialized activity-status payload.</summary>

@@ -3,6 +3,10 @@ import type { DesktopUpdateState } from "@/lib/desktop";
 import {
   describeDesktopUpdate,
   describeMachineUpdate,
+  describeUpdateChip,
+  describeUpdatedNotice,
+  effectiveRule,
+  parseRuleOverrides,
   describeRolloutOutcome,
   describeRolloutStep,
   restartOffer,
@@ -103,7 +107,7 @@ describe("describeDesktopUpdate", () => {
 
 describe("summarizeRows", () => {
   function row(key: string, state: FleetUpdateRow["state"], latest: string | null = "0.59.1"): FleetUpdateRow {
-    return { key, name: key, kind: "node", os: null, version: "0.59.0", latest, where: key, isLive: false, state, restart: null, isHome: false };
+    return { key, name: key, kind: "node", os: null, version: "0.59.0", latest, where: key, isLive: false, state, restart: null, isHome: false, rule: null };
   }
 
   it("counts the Fleets with an update waiting, the ones that have it downloaded, and the ones it can't reach", () => {
@@ -187,5 +191,52 @@ describe("rollout progress", () => {
   it("says why it stopped and who it left alone", () => {
     const outcome = describeRolloutOutcome(run("stopped", [step({ name: "heron", state: "rolled-back" }), step({ name: "falcon", state: "pending" })], "heron didn't start on 0.59.2 and went back to 0.59.0."));
     expect(outcome).toEqual({ text: "heron didn't start on 0.59.2 and went back to 0.59.0. falcon was left alone.", tone: "bad" });
+  });
+});
+
+describe("update rules", () => {
+  it("a machine follows its own rule, then the one chosen for all, then what suits its kind", () => {
+    expect(effectiveRule(null, null, "node")).toBe("idle");
+    expect(effectiveRule(null, null, "fleet")).toBe("ask");
+    expect(effectiveRule(null, "overnight", "node")).toBe("overnight");
+    expect(effectiveRule("ask", "overnight", "node")).toBe("ask");
+  });
+
+  it("keeps only the overrides that name a known rule", () => {
+    expect(parseRuleOverrides('{"falcon":"idle","heron":"whenever","kestrel":3}')).toEqual({ falcon: "idle" });
+    expect(parseRuleOverrides("not json")).toEqual({});
+    expect(parseRuleOverrides(undefined)).toEqual({});
+  });
+});
+
+describe("a Fleet that updated itself", () => {
+  const now = new Date("2026-10-20T12:00:00Z");
+  const last = { from: "0.59.0", to: "0.59.1", at: "2026-10-20T03:12:00Z", trigger: "idle" as const };
+
+  it("says so for the machine and version it is running now", () => {
+    const news = describeUpdatedNotice("falcon-id", "falcon", "0.59.1", last, now);
+
+    expect(news?.title).toBe("falcon updated to 0.59.1");
+    expect(news?.id).toBe("fleet-updated:falcon-id:0.59.1");
+    expect(news?.body).toMatch(/^At \d{2}:\d{2}, when nothing was working\.$/);
+  });
+
+  it("stays quiet when it runs another version, has no record, or updated days ago", () => {
+    expect(describeUpdatedNotice("f", "falcon", "0.59.0", last, now)).toBeNull();
+    expect(describeUpdatedNotice("f", "falcon", "0.59.1", null, now)).toBeNull();
+    expect(describeUpdatedNotice("f", "falcon", "0.59.1", last, new Date("2026-10-30T12:00:00Z"))).toBeNull();
+  });
+
+  it("names a different notice for the next version", () => {
+    const next = describeUpdatedNotice("falcon-id", "falcon", "0.60.0", { ...last, to: "0.60.0" }, now);
+    expect(next?.id).toBe("fleet-updated:falcon-id:0.60.0");
+  });
+});
+
+describe("the status bar chip", () => {
+  it("counts the Fleets that can update", () => {
+    expect(describeUpdateChip(0)).toBeNull();
+    expect(describeUpdateChip(1)).toBe("↑ 1 Fleet can update");
+    expect(describeUpdateChip(3)).toBe("↑ 3 Fleets can update");
   });
 });

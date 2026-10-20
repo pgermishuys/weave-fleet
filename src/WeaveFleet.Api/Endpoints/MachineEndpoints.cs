@@ -35,11 +35,11 @@ public static class MachineEndpoints
     {
         var group = app.MapGroup("/api/machine").WithTags("Machine");
 
-        group.MapGet("", async (MachineIdentityStore store, LoopbackAuthPolicy policy, MachineCapabilitiesReader capabilities, UpdateStateHolder updates, UpdateDownloadService downloads, UpdateRestartService restart) =>
+        group.MapGet("", async (MachineIdentityStore store, LoopbackAuthPolicy policy, MachineCapabilitiesReader capabilities, UpdateStateHolder updates, UpdateDownloadService downloads, UpdateRestartService restart, UpdateRuleStore rules) =>
             Results.Ok(ToResponse(store.Get(), fleetOptions, policy) with
             {
                 Capabilities = await capabilities.ReadAsync(),
-                Update = ToUpdate(updates.State, downloads, restart),
+                Update = ToUpdate(updates.State, downloads, restart, rules),
             }))
             .Produces<MachineResponse>(200)
             .WithName("GetMachine");
@@ -130,7 +130,7 @@ public static class MachineEndpoints
     }
 
     /// <summary>What a Fleet knows about its own updates, from memory and one small file, for the Updates page.</summary>
-    internal static MachineUpdate ToUpdate(UpdateState state, UpdateDownloadService downloads, UpdateRestartService restart)
+    internal static MachineUpdate ToUpdate(UpdateState state, UpdateDownloadService downloads, UpdateRestartService restart, UpdateRuleStore rules)
     {
         var capability = restart.Capability();
         return new(
@@ -140,7 +140,10 @@ public static class MachineEndpoints
             state.CheckedAt?.ToString("O"),
             capability.CanRestart,
             capability.Reason,
-            restart.RolledBack());
+            restart.RolledBack(),
+            rules.Rule ?? UpdateRules.Ask,
+            rules.Rule is null ? "default" : "set",
+            rules.Last);
     }
 
     private static MachineAccessResponse ToAccessResponse(ILocalTokenAuthService tokens, FleetOptions options, LoopbackAuthPolicy policy)
@@ -276,6 +279,9 @@ public sealed record MachineResponse(
 /// <param name="CanRestart">Whether it can restart itself into a staged update (<c>POST /api/update/apply</c>). Absent from older Fleets.</param>
 /// <param name="RestartUnavailableReason">Why not, in words for the Updates page.</param>
 /// <param name="RolledBack">An update that failed to start here and was undone, until a later one succeeds.</param>
+/// <param name="Rule">When it restarts itself into an update: <c>ask</c> (waits for a click), <c>idle</c> or <c>overnight</c>. Absent from older Fleets.</param>
+/// <param name="RuleSource"><c>set</c> when someone gave it the rule, <c>default</c> when it follows its own default (ask).</param>
+/// <param name="LastUpdate">The update it last restarted into and what started it, kept until the next one.</param>
 public sealed record MachineUpdate(
     string Status,
     string? LatestVersion,
@@ -283,7 +289,10 @@ public sealed record MachineUpdate(
     string? CheckedAt,
     bool CanRestart = false,
     string? RestartUnavailableReason = null,
-    UpdateFailure? RolledBack = null);
+    UpdateFailure? RolledBack = null,
+    string? Rule = null,
+    string? RuleSource = null,
+    LastUpdate? LastUpdate = null);
 
 /// <summary>Changes this machine's name or phone address. A field left out stays; an empty one goes back to the default.</summary>
 public sealed record UpdateMachineRequest(string? Name, string? PublicUrl = null);

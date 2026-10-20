@@ -13,7 +13,10 @@ public sealed record NodeUpdateInfo(
     int Working,
     bool CanRestart,
     string? RestartUnavailableReason,
-    UpdateFailure? RolledBack);
+    UpdateFailure? RolledBack,
+    // The rule it follows and whether it serves the web app (a Fleet, not a node); null/true from one too old to say.
+    string? Rule = null,
+    bool WebApp = true);
 
 public enum NodeApplyOutcome { Accepted, Busy, Refused, Unreachable }
 
@@ -26,6 +29,9 @@ public interface IUpdateNodes
     Task<NodeUpdateInfo?> ReadAsync(RemoteMachine machine, CancellationToken ct);
 
     Task<NodeApplyResult> ApplyAsync(RemoteMachine machine, CancellationToken ct);
+
+    /// <summary>Gives the machine the rule it follows (PUT /api/update/rule); false when it didn't take it.</summary>
+    Task<bool> PushRuleAsync(RemoteMachine machine, string rule, CancellationToken ct);
 }
 
 /// <summary>One machine's part of a rollout. <c>State</c> is <c>pending</c>, <c>checking</c>, <c>waiting</c>, <c>restarting</c>, <c>done</c>, <c>rolled-back</c>, <c>no-return</c> or <c>skipped</c>.</summary>

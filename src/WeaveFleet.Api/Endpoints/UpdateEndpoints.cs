@@ -78,15 +78,28 @@ public static class UpdateEndpoints
 
         // POST /api/update/apply — restart into the staged update, now. 409 when nothing is staged, a turn is running,
         // or this Fleet has no way back up; the launcher applies the update and starts the new version.
-        group.MapPost("/apply", async (UpdateRestartService restart) =>
+        group.MapPost("/apply", async (UpdateRestartService restart, string? trigger) =>
         {
-            var result = await restart.BeginAsync();
+            // The rollout says it is the one asking; anything else is a click.
+            var result = await restart.BeginAsync(trigger == "rollout" ? "rollout" : "manual");
             return result.Outcome == RestartOutcome.Accepted
                 ? Results.Json(new RestartingResponse(result.To), ApiJsonContext.Default.RestartingResponse, statusCode: StatusCodes.Status202Accepted)
                 : Results.Conflict(new ApiErrorResponse(result.Message ?? "Fleet can't restart now."));
         })
         .RequireAuthorization(FleetClaims.MachineOwnerPolicy)
         .WithName("ApplyUpdate");
+
+        // PUT /api/update/rule — when this Fleet restarts itself into an update; null goes back to asking.
+        group.MapPut("/rule", (SetUpdateRuleRequest request, UpdateRuleStore rules) =>
+        {
+            if (request.Rule is not null && !UpdateRules.IsKnown(request.Rule))
+                return Results.BadRequest(new ApiErrorResponse("The rule is ask, idle or overnight."));
+
+            rules.SetRule(request.Rule);
+            return Results.NoContent();
+        })
+        .RequireAuthorization(FleetClaims.MachineOwnerPolicy)
+        .WithName("SetUpdateRule");
 
         // POST /api/update/rollout — restart the other machines into their staged update, one at a time.
         group.MapPost("/rollout", async (RolloutRequest? request, UpdateRolloutService rollout) =>
@@ -117,5 +130,7 @@ public static class UpdateEndpoints
         return app;
     }
 }
+
+public sealed record SetUpdateRuleRequest(string? Rule);
 
 #pragma warning restore IL2026

@@ -34,7 +34,9 @@ public sealed partial class UpdateRestartService(
     Func<string, string?>? environment = null,
     Func<string?>? stagedVersion = null,
     Func<Task<int>>? workingSessions = null,
-    Func<string?>? readCgroup = null) : IHostedService
+    Func<string?>? readCgroup = null,
+    // Where the reason for a restart is written down before exiting, so the new version can say what happened.
+    UpdateRuleStore? rules = null) : IHostedService
 {
     /// <summary>"Restart to update": the launcher starts itself again on it. 75 (another Fleet) and 1 (errors) are taken.</summary>
     public const int ExitCode = 85;
@@ -55,6 +57,7 @@ public sealed partial class UpdateRestartService(
         {
             if (files.ConfirmTrial(CurrentVersion))
                 LogTrialConfirmed(CurrentVersion);
+            rules?.CompleteUpdate(CurrentVersion);
         });
         return Task.CompletedTask;
     }
@@ -100,15 +103,22 @@ public sealed partial class UpdateRestartService(
             && cgroup.Split('\n').Any(line => line.Split('/').Any(segment => segment.Trim() == "fleet-node.service"));
     }
 
-    /// <summary>Agrees to restart, when it can: something is staged, nothing is in a turn, and it has a way back up.</summary>
-    public async Task<RestartResult> BeginAsync()
+    /// <summary>The version downloaded and newer than this one, or null.</summary>
+    public string? PendingUpdate()
+        => (stagedVersion ?? downloads.StagedVersion)() is { } staged && UpdateCheckService.IsNewerVersion(staged, CurrentVersion) ? staged : null;
+
+    /// <summary>
+    /// Agrees to restart, when it can: something is staged, nothing is in a turn, and it has a way back up.
+    /// <paramref name="trigger"/> is what started it (<c>manual</c>, <c>rollout</c>, <c>idle</c> or <c>overnight</c>).
+    /// </summary>
+    public async Task<RestartResult> BeginAsync(string trigger = "manual")
     {
         var capability = Capability();
         if (!capability.CanRestart)
             return new RestartResult(RestartOutcome.CannotRestart, capability.Reason);
 
-        var staged = (stagedVersion ?? downloads.StagedVersion)();
-        if (staged is null || !UpdateCheckService.IsNewerVersion(staged, CurrentVersion))
+        var staged = PendingUpdate();
+        if (staged is null)
             return new RestartResult(RestartOutcome.NothingStaged, "No update is downloaded yet.");
 
         // Closed first, so a prompt arriving while the sessions are counted is turned away rather than cut off.
@@ -123,6 +133,7 @@ public sealed partial class UpdateRestartService(
         }
 
         LogRestarting(CurrentVersion, staged);
+        rules?.RecordRestart(new LastUpdate(CurrentVersion, staged, time.GetUtcNow().ToString("O"), trigger));
         _ = Task.Run(async () =>
         {
             await Task.Delay(s_replyGrace, time).ConfigureAwait(false);
