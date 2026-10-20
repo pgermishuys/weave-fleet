@@ -27,7 +27,16 @@ public sealed record UpdateStatusResponse(
     string? CheckedAt,
     string? Error,
     long? DownloadBytesReceived = null,
-    long? DownloadBytesTotal = null);
+    long? DownloadBytesTotal = null,
+    bool CanRestart = false,
+    string? RestartUnavailableReason = null,
+    WeaveFleet.Infrastructure.Updates.UpdateFailure? RolledBack = null);
+
+/// <summary>This Fleet agreed to restart into <paramref name="To"/>.</summary>
+public sealed record RestartingResponse(string? To);
+
+/// <summary>Which machines to roll an update out to; empty or absent is all of them.</summary>
+public sealed record RolloutRequest(IReadOnlyList<string>? MachineIds);
 
 /// <summary>Fleet's recent releases, newest first, for What's new in Settings → System.</summary>
 public sealed record ReleaseNotesResponse(

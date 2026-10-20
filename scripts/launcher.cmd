@@ -43,7 +43,15 @@ if exist "%PACKAGE_BIN%" (
     exit /b 1
 )
 
-if "%INSTALL_LAYOUT%"=="1" call :apply_staged_update
+rem Applying an update replaces bin\fleet.cmd, and cmd reads a running batch file by offset, so after it nothing in this
+rem file may run: the new launcher starts again from inside this one block (read whole before it runs).
+if "%INSTALL_LAYOUT%"=="1" if exist "%ROOT_DIR%\update\update-manifest.json" (
+    call :apply_staged_update
+    if not exist "%ROOT_DIR%\update\update-manifest.json" (
+        call "%LAUNCHER_PATH%" %*
+        exit /b !ERRORLEVEL!
+    )
+)
 
 goto :parse_args
 
@@ -87,18 +95,22 @@ echo Checking for staged Fleet update...
   "  Remove-Item '%UPDATE_DIR%' -Recurse -Force -ErrorAction SilentlyContinue;" ^
   "  exit 1" ^
   "};" ^
+  "$root = '%ROOT_DIR%'; $binDir = $root + '\bin';" ^
+  "foreach ($n in 'app.prev', 'bin.prev', 'VERSION.prev', 'update.prev') { Remove-Item ($root + '\' + $n) -Recurse -Force -ErrorAction SilentlyContinue };" ^
+  "$was = Get-Content ($root + '\VERSION') -TotalCount 1;" ^
+  "Move-Item $appBak ($root + '\app.prev');" ^
+  "if (Test-Path $binDir) { Copy-Item $binDir ($root + '\bin.prev') -Recurse };" ^
+  "if (Test-Path ($root + '\VERSION')) { Copy-Item ($root + '\VERSION') ($root + '\VERSION.prev') };" ^
   "Remove-Item $appDir -Recurse -Force;" ^
   "Copy-Item ($extracted.FullName + '\app') $appDir -Recurse;" ^
-  "$binDir = '%ROOT_DIR%\bin';" ^
   "if (Test-Path ($extracted.FullName + '\bin')) {" ^
   "  if (Test-Path $binDir) { Remove-Item $binDir -Recurse -Force };" ^
   "  Copy-Item ($extracted.FullName + '\bin') $binDir -Recurse" ^
   "};" ^
   "Set-Content -Path '%ROOT_DIR%\VERSION' -Value $v;" ^
-  "Remove-Item $appBak -Recurse -Force -ErrorAction SilentlyContinue;" ^
+  "@{ from = $was; to = $v; startedAt = (Get-Date).ToUniversalTime().ToString('o') } | ConvertTo-Json -Compress | Set-Content ($root + '\update-trial.json');" ^
   "Remove-Item '%UPDATE_DIR%' -Recurse -Force -ErrorAction SilentlyContinue;" ^
-  "Write-Host ('Fleet updated to v' + $v + '.')"
-goto :eof
+  "Write-Host ('Fleet updated to v' + $v + '.')" & goto :eof
 
 :read_version
 set "VERSION=unknown"
@@ -422,12 +434,73 @@ if defined NODE (
 ) else (
     echo Fleet v!VERSION! starting on %LISTEN_URL%
 )
+if "%INSTALL_LAYOUT%"=="1" goto :run_app
 if defined EXTRA_ARGS (
     "%APP_BIN%" --urls "%LISTEN_URL%" --contentRoot "%APP_CONTENT_ROOT%" !EXTRA_ARGS!
 ) else (
     "%APP_BIN%" --urls "%LISTEN_URL%" --contentRoot "%APP_CONTENT_ROOT%"
 )
 exit /b %ERRORLEVEL%
+
+rem An installed Fleet restarts itself: exit code 85 means "restart to update", and this launcher starts again (the one
+rem that came with the update applies it). A version that was just applied is on trial: if it exits before deleting
+rem update-trial.json, or doesn't within FLEET_UPDATE_TRIAL_SECONDS, the old version and its database files come back.
+rem Whatever replaces bin\ is followed by a block that ends this script, so no line is read from a replaced file.
+:run_app
+set "FLEET_LAUNCHER_RESTART=85"
+if not defined FLEET_UPDATE_TRIAL_SECONDS set "FLEET_UPDATE_TRIAL_SECONDS=120"
+set "RESTART_ARGS=--port %WEAVE_FLEET_PORT% --host %WEAVE_FLEET_HOST% --data-dir "%DATA_DIR%""
+if defined NODE set "RESTART_ARGS=node !RESTART_ARGS!"
+if defined REQUIRE_TOKEN set "RESTART_ARGS=!RESTART_ARGS! --require-token"
+set "APP_ARGS=--urls "%LISTEN_URL%" --contentRoot "%APP_CONTENT_ROOT%" !EXTRA_ARGS!"
+if exist "%ROOT_DIR%\update-trial.json" (
+    call :run_on_trial
+) else (
+    "%APP_BIN%" !APP_ARGS!
+)
+set "APP_CODE=!ERRORLEVEL!"
+if exist "%ROOT_DIR%\update-trial.json" (
+    call :rollback_update
+    call "%LAUNCHER_PATH%" !RESTART_ARGS!
+    exit /b !ERRORLEVEL!
+)
+if "!APP_CODE!"=="85" (
+    echo Restarting Fleet to finish updating...
+    call "%LAUNCHER_PATH%" !RESTART_ARGS!
+    exit /b !ERRORLEVEL!
+)
+exit /b !APP_CODE!
+
+:run_on_trial
+%PS_CMD% -NoProfile -ExecutionPolicy Bypass -Command ^
+  "$prev = '%ROOT_DIR%\update.prev'; $db = $env:Fleet__DatabasePath; $trial = '%ROOT_DIR%\update-trial.json';" ^
+  "if (-not (Test-Path ($prev + '\.copied'))) {" ^
+  "  New-Item -ItemType Directory -Force -Path $prev | Out-Null;" ^
+  "  foreach ($s in '', '-wal', '-shm') { if (Test-Path ($db + $s)) { Copy-Item ($db + $s) ($prev + '\fleet.db' + $s) } };" ^
+  "  New-Item -ItemType File -Path ($prev + '\.copied') | Out-Null" ^
+  "};" ^
+  "Remove-Item ($prev + '\.timeout') -ErrorAction SilentlyContinue;" ^
+  "$p = Start-Process -FilePath $env:APP_BIN -ArgumentList $env:APP_ARGS -NoNewWindow -PassThru; $null = $p.Handle;" ^
+  "$waited = 0;" ^
+  "while (-not $p.WaitForExit(1000)) {" ^
+  "  $waited++;" ^
+  "  if (-not (Test-Path $trial)) { $p.WaitForExit(); break };" ^
+  "  if ($waited -ge [int]$env:FLEET_UPDATE_TRIAL_SECONDS) { New-Item -ItemType File -Path ($prev + '\.timeout') | Out-Null; $p.Kill(); $p.WaitForExit(); break }" ^
+  "};" ^
+  "exit $p.ExitCode" & goto :eof
+
+:rollback_update
+%PS_CMD% -NoProfile -ExecutionPolicy Bypass -Command ^
+  "$root = '%ROOT_DIR%'; $prev = $root + '\update.prev'; $db = $env:Fleet__DatabasePath;" ^
+  "$t = Get-Content ($root + '\update-trial.json') | ConvertFrom-Json;" ^
+  "if (Test-Path ($prev + '\.timeout')) { $why = 'it wasn''t ready after ' + $env:FLEET_UPDATE_TRIAL_SECONDS + ' seconds' } else { $why = 'it exited with code ' + $env:APP_CODE + ' before it was ready' };" ^
+  "Write-Host ('Fleet v' + $t.to + ' didn''t start properly (' + $why + '). Going back to v' + $t.from + '.');" ^
+  "if (Test-Path ($root + '\app.prev')) { Remove-Item ($root + '\app') -Recurse -Force; Move-Item ($root + '\app.prev') ($root + '\app') };" ^
+  "if (Test-Path ($root + '\VERSION.prev')) { Move-Item ($root + '\VERSION.prev') ($root + '\VERSION') -Force };" ^
+  "if (Test-Path ($prev + '\.copied')) { foreach ($s in '', '-wal', '-shm') { if (Test-Path ($prev + '\fleet.db' + $s)) { Copy-Item ($prev + '\fleet.db' + $s) ($db + $s) -Force } else { Remove-Item ($db + $s) -ErrorAction SilentlyContinue } } };" ^
+  "@{ from = $t.from; to = $t.to; reason = $why; at = (Get-Date).ToUniversalTime().ToString('o') } | ConvertTo-Json -Compress | Set-Content ($root + '\update-failed.json');" ^
+  "Remove-Item ($root + '\update-trial.json');" ^
+  "if (Test-Path ($root + '\bin.prev')) { Remove-Item ($root + '\bin') -Recurse -Force; Move-Item ($root + '\bin.prev') ($root + '\bin') }" & goto :eof
 
 rem fleet node install-service / uninstall-service: a scheduled task named "Fleet node" that runs this launcher as
 rem you at log on, hidden, and starts it again when it stops (not after exit code 75: another Fleet already uses the

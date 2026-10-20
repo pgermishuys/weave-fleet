@@ -480,6 +480,12 @@ public static class DependencyInjection
 
         // Auto-update services
         services.AddSingleton<UpdateStateHolder>();
+        services.AddSingleton<UpdateFiles>();
+        services.AddSingleton<WeaveFleet.Application.Updates.UpdateRestartGate>();
+        services.AddSingleton<UpdateRestartService>();
+        services.AddHostedService(sp => sp.GetRequiredService<UpdateRestartService>());
+        services.AddSingleton<IUpdateNodes, HttpUpdateNodes>();
+        services.AddSingleton<UpdateRolloutService>();
         services.AddSingleton<UpdateDownloadService>();
         services.AddSingleton<ReleaseNotesStore>();
         services.AddSingleton<UpdateCheckService>();

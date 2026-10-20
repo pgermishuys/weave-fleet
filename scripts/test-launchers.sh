@@ -257,6 +257,109 @@ for option in $APP_OPTIONS; do
   grep -q -- "\"$option\"" "$SCRIPT_DIR/launcher.cmd" || fail "the app reads $option but scripts/launcher.cmd rejects it"
 done
 
+# ── Restarting into an update, and going back when it doesn't start ─────────────────────────────────────────────────
+# A fresh install per scenario: the old app (0.0.0-test) stages 0.0.1-test and exits 85; the launcher starts itself
+# again, applies it, and runs the new app, which behaves as the scenario says.
+make_install() {
+  root=$1
+  new_behaviour=$2
+  rm -rf "$root" "$WORK/rel"
+  mkdir -p "$root/bin" "$root/app" "$WORK/rel/pkg/fleet-v0.0.1-test/app" "$WORK/rel/pkg/fleet-v0.0.1-test/bin"
+  cp "$SCRIPT_DIR/launcher.sh" "$root/bin/fleet"
+  cp "$SCRIPT_DIR/launcher.sh" "$WORK/rel/pkg/fleet-v0.0.1-test/bin/fleet"
+  echo "0.0.0-test" > "$root/VERSION"
+  # Both apps log how they were started; the old one stages the release, once, and asks for a restart.
+  cat > "$root/app/WeaveFleet.Api" <<'APP'
+#!/bin/sh
+ROOT="$(cd "$(dirname "$0")/.." && pwd)"
+echo "old restart=$FLEET_LAUNCHER_RESTART" >> "$FLEET_TEST_LOG"
+if [ "$FLEET_TEST_STAGE" = 1 ] && [ ! -f "$ROOT/staged-once" ]; then
+  touch "$ROOT/staged-once"
+  echo "old-database" > "$Fleet__DatabasePath"
+  mkdir -p "$ROOT/update"
+  cp "$FLEET_TEST_RELEASE" "$ROOT/update/"
+  printf '{"version":"0.0.1-test","assetFileName":"release.tar.gz"}\n' > "$ROOT/update/update-manifest.json"
+  exit 85
+fi
+exit 0
+APP
+  cat > "$WORK/rel/pkg/fleet-v0.0.1-test/app/WeaveFleet.Api" <<APP
+#!/bin/sh
+ROOT="\$(cd "\$(dirname "\$0")/.." && pwd)"
+echo "new restart=\$FLEET_LAUNCHER_RESTART" >> "\$FLEET_TEST_LOG"
+case "$new_behaviour" in
+  ok) rm -f "\$ROOT/update-trial.json"; exit 0 ;;
+  crash) echo "migrated" > "\$Fleet__DatabasePath"; exit 1 ;;
+  hang) exec sleep 300 ;;
+esac
+APP
+  chmod +x "$root/app/WeaveFleet.Api" "$root/bin/fleet" "$WORK/rel/pkg/fleet-v0.0.1-test/app/WeaveFleet.Api" "$WORK/rel/pkg/fleet-v0.0.1-test/bin/fleet"
+  echo "0.0.1-test" > "$WORK/rel/pkg/fleet-v0.0.1-test/VERSION"
+  tar -czf "$WORK/rel/release.tar.gz" -C "$WORK/rel/pkg" fleet-v0.0.1-test
+}
+
+run_install() {
+  rm -f "$WORK/log"
+  install_root=$1
+  shift
+  env HOME="$WORK/home" WEAVE_FLEET_DATA_DIR="$WORK/updata" FLEET_TEST_LOG="$WORK/log" FLEET_TEST_STAGE=1 \
+    FLEET_TEST_RELEASE="$WORK/rel/release.tar.gz" FLEET_UPDATE_TRIAL_SECONDS="${TRIAL_SECONDS_FOR_TEST:-120}" \
+    "$install_root/bin/fleet" "$@" > "$WORK/stdout" 2>&1
+}
+
+expect_log() {
+  [ "$(cat "$WORK/log" 2>/dev/null)" = "$1" ] || fail "$2: expected the app to start as [$(echo "$1" | tr '\n' ',')], got [$(tr '\n' ',' < "$WORK/log" 2>/dev/null)]"
+}
+
+# The new version starts, confirms, and stays: restarted once, onto the new version, with the launcher's exit code.
+make_install "$WORK/up" ok
+mkdir -p "$WORK/updata"
+run_install "$WORK/up" --port 2113 || fail "restart into an update: exit code $?: $(cat "$WORK/stdout")"
+expect_log "old restart=85
+new restart=85" "restart into an update"
+[ "$(cat "$WORK/up/VERSION")" = "0.0.1-test" ] || fail "restart into an update: VERSION is $(cat "$WORK/up/VERSION")"
+[ -f "$WORK/up/update-trial.json" ] && fail "restart into an update: the trial was never confirmed"
+[ -f "$WORK/up/update-failed.json" ] && fail "restart into an update: reported a failure"
+[ -d "$WORK/up/app.prev" ] && [ "$(cat "$WORK/up/VERSION.prev")" = "0.0.0-test" ] || fail "restart into an update: the old version wasn't kept"
+
+# The new version exits before it is ready: the old version, its database and a note about it come back, once.
+make_install "$WORK/up" crash
+rm -rf "$WORK/updata"; mkdir -p "$WORK/updata"
+run_install "$WORK/up" --port 2113 || fail "failed update: exit code $?: $(cat "$WORK/stdout")"
+expect_log "old restart=85
+new restart=85
+old restart=85" "failed update"
+[ "$(cat "$WORK/up/VERSION")" = "0.0.0-test" ] || fail "failed update: VERSION is $(cat "$WORK/up/VERSION")"
+[ "$(cat "$WORK/updata/fleet.db")" = "old-database" ] || fail "failed update: the database is $(cat "$WORK/updata/fleet.db")"
+grep -q '"from":"0.0.0-test","to":"0.0.1-test","reason":"it exited with code 1 before it was ready"' "$WORK/up/update-failed.json" \
+  || fail "failed update: update-failed.json is $(cat "$WORK/up/update-failed.json" 2>/dev/null)"
+[ -f "$WORK/up/update-trial.json" ] && fail "failed update: the trial file stayed"
+[ -f "$WORK/up/update/update-manifest.json" ] && fail "failed update: the update was staged again"
+
+# The new version never says it started: the launcher stops it after FLEET_UPDATE_TRIAL_SECONDS and goes back.
+make_install "$WORK/up" hang
+rm -rf "$WORK/updata"; mkdir -p "$WORK/updata"
+TRIAL_SECONDS_FOR_TEST=2 run_install "$WORK/up" --port 2113 || fail "update that hangs: exit code $?: $(cat "$WORK/stdout")"
+[ "$(cat "$WORK/up/VERSION")" = "0.0.0-test" ] || fail "update that hangs: VERSION is $(cat "$WORK/up/VERSION")"
+grep -q 'wasn.t ready after 2 seconds' "$WORK/up/update-failed.json" || fail "update that hangs: update-failed.json is $(cat "$WORK/up/update-failed.json" 2>/dev/null)"
+
+# Stopping the launcher stops the app, and the launcher leaves with the app's exit code.
+cat > "$WORK/up/app/WeaveFleet.Api" <<'APP'
+#!/bin/sh
+trap 'echo stopped > "$FLEET_TEST_LOG"; exit 3' TERM
+echo started > "$FLEET_TEST_LOG"
+while true; do sleep 1; done
+APP
+rm -f "$WORK/log"
+env HOME="$WORK/home" WEAVE_FLEET_DATA_DIR="$WORK/updata" FLEET_TEST_LOG="$WORK/log" "$WORK/up/bin/fleet" --port 2113 > "$WORK/stdout" 2>&1 &
+LAUNCHER_PID=$!
+for _ in 1 2 3 4 5 6 7 8 9 10; do [ "$(cat "$WORK/log" 2>/dev/null)" = started ] && break; sleep 1; done
+kill -TERM "$LAUNCHER_PID"
+STOP_CODE=0
+wait "$LAUNCHER_PID" || STOP_CODE=$?
+[ "$(cat "$WORK/log")" = stopped ] || fail "stopping the launcher didn't stop the app: $(cat "$WORK/log")"
+[ "$STOP_CODE" -eq 3 ] || fail "stopping the launcher: exit code $STOP_CODE, expected the app's 3"
+
 if [ "$FAILURES" -gt 0 ]; then
   echo "$FAILURES launcher check(s) failed." >&2
   exit 1

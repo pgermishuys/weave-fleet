@@ -3,19 +3,32 @@ import { getDesktopBridge } from "@/lib/desktop";
 import {
   describeDesktopUpdate,
   describeMachineUpdate,
+  describeRolloutOutcome,
+  describeRolloutStep,
   FLEET_UPDATES_PREFERENCE_KEY,
   hasUpdateWaiting,
   osLabel,
+  restartOffer,
   summarizeRows,
   type FleetUpdateRow,
+  type Rollout,
 } from "@/lib/fleet-updates";
-import { fetchOnMachine } from "@/lib/machines";
+import { onDomainEvent } from "@/composables/on-domain-event";
+import { liveTarget } from "@/lib/machine-target";
+import { fetchOnMachine, HOME_MACHINE_KEY } from "@/lib/machines";
 import { useDesktopUpdates } from "@/composables/use-desktop-updates";
 import { useMachinesStore, type MachineEntry } from "@/stores/machines";
 import { usePreferencesStore } from "@/stores/preferences";
 
 /** While a check or a download is under way, the page asks again this often; otherwise the machine store's own poll is enough. */
 const BUSY_REFRESH_MS = 3_000;
+
+/** While a rollout runs, the page reads it this often as well as taking what the Fleet pushes (a push can be missed across a reconnect). */
+const ROLLOUT_POLL_MS = 3_000;
+
+/** After this Fleet restarts itself, the page asks whether it is back this often, for at most this long. */
+const COME_BACK_POLL_MS = 1_500;
+const COME_BACK_LIMIT_MS = 3 * 60_000;
 
 const DESKTOP_PLATFORMS: Record<string, string> = { darwin: "macos", win32: "windows", linux: "linux" };
 
@@ -36,6 +49,13 @@ export function useFleetUpdates() {
   const desktop = useDesktopUpdates();
   const bridge = getDesktopBridge();
   const isChecking = shallowRef(false);
+  /** The rollout the home Fleet is running, or its last; the Fleet pushes each change. */
+  const rollout = shallowRef<Rollout | null>(null);
+  const actionError = shallowRef<string | null>(null);
+  /** Set from the moment this Fleet is asked to restart until it answers again. */
+  const restartingSelf = shallowRef<{ from: string | null; to: string | null } | null>(null);
+  let rolloutTimer: ReturnType<typeof setInterval> | null = null;
+  let unsubscribeRollout: (() => void) | null = null;
 
   function machineRow(entry: MachineEntry): FleetUpdateRow {
     const info = entry.info ?? null;
@@ -48,6 +68,10 @@ export function useFleetUpdates() {
         working: entry.capabilities?.sessions.working ?? 0,
         reachable,
       });
+    const step = rollout.value?.status === "running" ? rollout.value.steps.find((candidate) => candidate.machineId === entry.key) : undefined;
+    const shown = entry.isHome && restartingSelf.value
+      ? { kind: "restarting" as const, label: "restarting · this page reconnects when it's back", tone: "info" as const, target: restartingSelf.value.to }
+      : step ? describeRolloutStep(step) : state;
     return {
       key: entry.key,
       name: entry.name,
@@ -57,7 +81,9 @@ export function useFleetUpdates() {
       latest: info?.update?.latestVersion ?? null,
       where: entry.isHome ? "this machine" : entry.baseUrl,
       isLive: entry.isLive,
-      state,
+      state: shown,
+      restart: step || restartingSelf.value ? null : restartOffer(state, info?.update ?? null, entry.isHome),
+      isHome: entry.isHome,
     };
   }
 
@@ -74,12 +100,18 @@ export function useFleetUpdates() {
         where: "desktop app",
         isLive: false,
         state: describeDesktopUpdate(desktop.state.value),
+        restart: null,
+        isHome: false,
       });
     }
     return [...list, ...machines.entries.map(machineRow)];
   });
 
   const summary = computed(() => summarizeRows(rows.value));
+  const rolloutRunning = computed(() => rollout.value?.status === "running");
+  const outcome = computed(() => describeRolloutOutcome(rollout.value));
+  /** Machines (not this one) that have an update downloaded and can restart into it: what Update machines now would do. */
+  const readyMachines = computed(() => rows.value.filter((row) => !row.isHome && row.restart?.kind === "button").length);
   const isBusy = computed(() => isChecking.value || rows.value.some((row) => row.state.kind === "downloading" || row.state.kind === "checking"));
 
   /** Asks every reachable Fleet to check for a release now (a node that finds one downloads it), then reads them again. */
@@ -100,7 +132,116 @@ export function useFleetUpdates() {
     }
   }
 
-  return { rows, summary, isBusy, isChecking, checkNow, openDownload: desktop.install, desktopInApp: desktop.inApp };
+  async function loadRollout(): Promise<void> {
+    try {
+      const response = await fetchOnMachine(null, "/api/update/rollout");
+      if (response.status === 200) rollout.value = (await response.json()) as Rollout;
+    } catch {
+      // The next poll or push tries again.
+    }
+  }
+
+  function followRollout(): void {
+    if (rolloutTimer) return;
+    void loadRollout();
+    unsubscribeRollout = onDomainEvent(liveTarget(), "sessions", "update.rollout", (event) => {
+      rollout.value = event.payload;
+    });
+    rolloutTimer = setInterval(() => {
+      if (rolloutRunning.value) {
+        void loadRollout();
+        void machines.refreshUpdates();
+      }
+    }, ROLLOUT_POLL_MS);
+  }
+
+  /** Reads a refusal's words from the Fleet (`{ error }`), or says what happened. */
+  async function postOnHome(path: string, body?: unknown): Promise<Response | null> {
+    actionError.value = null;
+    try {
+      const response = await fetchOnMachine(null, path, {
+        method: "POST",
+        headers: body ? { "Content-Type": "application/json" } : undefined,
+        body: body ? JSON.stringify(body) : undefined,
+      });
+      if (!response.ok) {
+        const text = (await response.json().catch(() => null)) as { error?: string } | null;
+        actionError.value = text?.error ?? `The Fleet answered ${response.status}.`;
+        return null;
+      }
+      return response;
+    } catch {
+      actionError.value = "Couldn't reach this Fleet.";
+      return null;
+    }
+  }
+
+  /** Restarts the machines (all that can, or just `machineIds`) one at a time, from the home Fleet. */
+  async function startRollout(machineIds: string[] = []): Promise<void> {
+    const response = await postOnHome("/api/update/rollout", { machineIds });
+    if (response) rollout.value = (await response.json()) as Rollout;
+  }
+
+  async function stopRollout(): Promise<void> {
+    await fetchOnMachine(null, "/api/update/rollout", { method: "DELETE" }).catch(() => undefined);
+  }
+
+  /** Restarts this Fleet, then waits for it to answer again and reloads the page onto what it came back as. */
+  async function restartSelf(row: FleetUpdateRow): Promise<void> {
+    const response = await postOnHome("/api/update/apply");
+    if (!response) return;
+    restartingSelf.value = { from: row.version, to: row.state.target };
+    const started = Date.now();
+    let wentDown = false;
+    const poll = setInterval(async () => {
+      let answered = false;
+      try {
+        answered = (await fetchOnMachine(null, "/api/machine")).ok;
+      } catch {
+        answered = false;
+      }
+      if (!answered) wentDown = true;
+      if (answered && wentDown) {
+        clearInterval(poll);
+        window.location.reload();
+      } else if (Date.now() - started > COME_BACK_LIMIT_MS) {
+        clearInterval(poll);
+        restartingSelf.value = null;
+        actionError.value = "This Fleet didn't come back within 3 minutes.";
+      }
+    }, COME_BACK_POLL_MS);
+  }
+
+  /** The button on a row: this machine restarts itself; any other is a rollout of that one machine. */
+  function restart(row: FleetUpdateRow): Promise<void> {
+    return row.key === HOME_MACHINE_KEY ? restartSelf(row) : startRollout([row.key]);
+  }
+
+  onMounted(followRollout);
+  onUnmounted(() => {
+    if (rolloutTimer) clearInterval(rolloutTimer);
+    rolloutTimer = null;
+    unsubscribeRollout?.();
+  });
+
+  return {
+    rows,
+    summary,
+    isBusy,
+    isChecking,
+    checkNow,
+    openDownload: desktop.install,
+    desktopInApp: desktop.inApp,
+    rollout,
+    rolloutRunning,
+    outcome,
+    readyMachines,
+    actionError,
+    restartingSelf,
+    startRollout,
+    stopRollout,
+    restart,
+  };
 }
 
 /**

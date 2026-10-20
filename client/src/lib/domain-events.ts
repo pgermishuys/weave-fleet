@@ -1,5 +1,6 @@
 import type { MemorySavedPayload } from "@/lib/agent-memory";
 import type { SessionProgressDetail, SessionProgressSummary } from "@/lib/session-progress";
+import type { Rollout } from "@/lib/fleet-updates";
 import type { SmartLinkWire } from "@/lib/smart-links";
 import type { WorkflowRun } from "@/lib/workflows";
 
@@ -800,6 +801,12 @@ export interface SmartLinkUpdated extends EventCursorMetadata {
   payload: SmartLinkWire;
 }
 
+/** The update rollout on this Fleet moved on: a machine's step changed, or it ended. Sent on the `sessions` topic. */
+export interface UpdateRolloutChanged extends EventCursorMetadata {
+  type: "update.rollout";
+  payload: Rollout;
+}
+
 /** An agent saved a memory note. Sent on the `sessions` topic. */
 export interface MemorySaved extends EventCursorMetadata {
   type: "memory.saved";
@@ -958,6 +965,7 @@ export type DomainEvent =
   | ProgressUpdated
   | SessionTokensCounted
   | SmartLinkUpdated
+  | UpdateRolloutChanged
   | MemorySaved
   | WorkflowRunChanged
   | HarnessUsageChanged

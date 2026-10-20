@@ -10,6 +10,7 @@ using WeaveFleet.Application.Mods;
 using WeaveFleet.Application.Progress;
 using WeaveFleet.Application.Pages;
 using WeaveFleet.Application.Sessions;
+using WeaveFleet.Application.Updates;
 using WeaveFleet.Application.Sessions.Asks;
 using WeaveFleet.Application.Sessions.Catalog;
 using WeaveFleet.Application.Sessions.Compaction;
@@ -345,8 +346,12 @@ public static class SessionEndpoints
         .WithName("AddSessionSource");
 
         // POST /api/sessions/{id}/prompt
-        group.MapPost("/{id}/prompt", async (string id, SendPromptApiRequest req, SessionPrompting sessionPrompting, SessionService sessionService, InstanceTracker tracker, HttpContext http, SessionMessagesFeature sessionMessages, SessionReferenceExpander references, ModFollowUps modFollowUps, PageChoices pageChoices, CancellationToken ct) =>
+        group.MapPost("/{id}/prompt", async (string id, SendPromptApiRequest req, SessionPrompting sessionPrompting, SessionService sessionService, InstanceTracker tracker, HttpContext http, SessionMessagesFeature sessionMessages, SessionReferenceExpander references, ModFollowUps modFollowUps, PageChoices pageChoices, UpdateRestartGate restartGate, CancellationToken ct) =>
         {
+            // Restarting into an update: a turn started now would be cut off a moment later.
+            if (restartGate.IsRestarting)
+                return Results.Json(new ErrorResponse("Fleet is restarting to update. Try again in a moment."), ApiJsonContext.Default.ErrorResponse, statusCode: StatusCodes.Status503ServiceUnavailable);
+
             // With messages on, agents message sessions through fleet_message, which says who sent it; this path
             // would make the text look like the user's.
             if (http.IsAgentRequest() && await sessionMessages.IsEnabledAsync())
