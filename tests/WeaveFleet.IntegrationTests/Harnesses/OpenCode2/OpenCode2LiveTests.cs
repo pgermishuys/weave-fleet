@@ -19,6 +19,7 @@ using WeaveFleet.Domain.Repositories;
 using WeaveFleet.Infrastructure;
 using WeaveFleet.Infrastructure.Harnesses;
 using WeaveFleet.Infrastructure.Harnesses.OpenCode2;
+using WeaveFleet.Infrastructure.Sessions;
 using WeaveFleet.Infrastructure.Users;
 
 namespace WeaveFleet.IntegrationTests.Harnesses.OpenCode2;
@@ -422,10 +423,15 @@ public sealed partial class OpenCode2LiveTests(OpenCode2LiveFleet fleet) : IClas
 
         // The child finishes, the notice says so, and only then is the delegation done.
         await WaitForAsync(events, async () => (await Delegations(id)).Single(d => d.ParentToolCallId == "call_bg_sub").Status == "completed", cts.Token);
+        // The status is written before the child is let go, both off the relay's pump: wait for the end to be handled.
+        await fleet.Services.GetRequiredService<RunningWorkRecorder>().Idle(id).WaitAsync(cts.Token);
         (await child.GetActivityStatusAsync(cts.Token)).ShouldBe(ActivityStatuses.Idle);
         tracker.IsChildInBackground(delegation.ChildSessionId!).ShouldBeFalse();
-        LatestParts<TextMessageEventPart>(events, id)
-            .ShouldContain(p => p.Text.StartsWith("<subagent", StringComparison.Ordinal) && p.Text.Contains("The child is done.", StringComparison.Ordinal));
+        // The delegation is recorded off the relay's pump (RunningWorkRecorder), so the notice may reach the
+        // conversation a moment after the delegation reads completed.
+        var notice = await WaitForAsync(events, () => Task.FromResult(LatestParts<TextMessageEventPart>(events, id)
+            .FirstOrDefault(p => p.Text.StartsWith("<subagent", StringComparison.Ordinal))), cts.Token);
+        notice.Text.ShouldContain("The child is done.");
         await WaitForAsync(events, () => LatestParts<TextMessageEventPart>(events, id).Any(p => p.Text == "The helper came back."), cts.Token);
     }
 
