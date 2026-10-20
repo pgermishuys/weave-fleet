@@ -218,15 +218,46 @@ public sealed class OpenCodeOffTheRecordPromptTests
     public async Task The_first_prompt_after_the_server_died_goes_even_when_the_new_subscription_never_comes_ready()
     {
         // The pooled server was killed (out of memory) and restarted. The prompt waits for the event subscription of the
-        // session it makes afresh, and that wait had no end: the prompt hung until the browser gave up.
+        // session, and that wait had no end: the prompt hung until the browser gave up.
         var http = new ScriptedHandler()
-            .On("POST /session", """{"id":"oc-2","time":{"created":1,"updated":1}}""")
-            .On("POST /session/oc-2/prompt_async", "");
+            .On("GET /session/oc-1", """{"id":"oc-1"}""")
+            .On("POST /session/oc-1/prompt_async", "");
         await using var session = CreateSession(http, out var handle);
         handle.SubscriptionNeverReady = true;
         handle.Exit(137);
 
         await session.SendPromptAsync("hello", null, CancellationToken.None).WaitAsync(TimeSpan.FromSeconds(20));
+
+        http.Requests.Select(r => r.Key).ShouldContain("POST /session/oc-1/prompt_async");
+    }
+
+    [Fact]
+    public async Task After_the_server_died_the_prompt_carries_on_in_the_same_OpenCode_session()
+    {
+        // The restarted server reads the same data directory; a new session would lose the conversation before the kill.
+        var http = new ScriptedHandler()
+            .On("GET /session/oc-1", """{"id":"oc-1"}""")
+            .On("POST /session/oc-1/prompt_async", "");
+        await using var session = CreateSession(http, out var handle);
+        handle.Exit(137);
+
+        await session.SendPromptAsync("hello", null, CancellationToken.None);
+
+        http.Requests.Select(r => r.Key).ShouldNotContain("POST /session");
+        http.Requests.Select(r => r.Key).ShouldContain("POST /session/oc-1/prompt_async");
+    }
+
+    [Fact]
+    public async Task After_the_server_died_a_session_it_no_longer_knows_is_made_afresh()
+    {
+        var http = new ScriptedHandler()
+            .On("GET /session/oc-1", "{}", HttpStatusCode.NotFound)
+            .On("POST /session", """{"id":"oc-2","time":{"created":1,"updated":1}}""")
+            .On("POST /session/oc-2/prompt_async", "");
+        await using var session = CreateSession(http, out var handle);
+        handle.Exit(137);
+
+        await session.SendPromptAsync("hello", null, CancellationToken.None);
 
         http.Requests.Select(r => r.Key).ShouldContain("POST /session/oc-2/prompt_async");
     }

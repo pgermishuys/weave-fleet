@@ -1614,10 +1614,32 @@ internal sealed partial class OpenCodeHarnessSession : IHarnessSession
 
         if (_status == HarnessSessionStatus.Error)
         {
-            ClearOpenCodeSessionId();
+            // The restarted server reads the same data directory, so the conversation is still there: carry on in it.
+            // Only when the server no longer knows the session is a new one made.
+            if (!await RestartedServerKnowsSessionAsync(ct).ConfigureAwait(false))
+            {
+                ClearOpenCodeSessionId();
+            }
+
             _agentModelCache = null;
             _toolCallToQuestionId.Clear();
             _status = HarnessSessionStatus.Idle;
+        }
+    }
+
+    private async Task<bool> RestartedServerKnowsSessionAsync(CancellationToken ct)
+    {
+        var openCodeSessionId = _openCodeSessionId;
+        if (openCodeSessionId is null) return false;
+
+        try
+        {
+            await _instanceHandle.HttpClient.GetSessionAsync(openCodeSessionId, _workingDirectory, ct).ConfigureAwait(false);
+            return true;
+        }
+        catch (HttpRequestException)
+        {
+            return false;
         }
     }
 
