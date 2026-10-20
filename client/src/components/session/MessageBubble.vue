@@ -12,7 +12,7 @@ import { useQuestionAnswer } from "@/composables/use-question-answer";
 import { useRelativeTime } from "@/composables/use-relative-time";
 import type { FileReferenceEnv } from "@/lib/file-references";
 import { formatRelativeTime, formatAbsoluteTimestamp } from "@/lib/format-utils";
-import { sharedMarkdownRenderer } from "@/lib/markdown-renderer";
+import { rememberFoldClick, sharedMarkdownRenderer, type FoldEnv } from "@/lib/markdown-renderer";
 import { withSessionReferenceChips, type SessionReference } from "@/lib/session-references";
 import { sessionSkillNames, skillDeliveries, skillNamesIn, withSkillChips } from "@/lib/skill-mentions";
 import { formatSlashCommand } from "@/lib/slash-command-utils";
@@ -44,6 +44,8 @@ const props = defineProps<{
   command?: SlashCommand;
   /** Sessions referenced with `@` in a message of yours: each token shows as a chip with the session's title. */
   sessionReferences?: SessionReference[];
+  /** The agent is still writing this message: an unfinished fold draws open, and folds when the message settles. */
+  streaming?: boolean;
 }>();
 
 const emit = defineEmits<{
@@ -93,9 +95,14 @@ const sessions = useSessionsStore();
 const parsedBody = computed(() => props.role === "user" ? parseAttachedNote(props.body) : { text: props.body, files: [] });
 const attachedFiles = computed(() => parsedBody.value.files);
 
+// What you opened or closed in this message, by position: the body is redrawn as text arrives and must not undo it.
+const folds = new Map<string, boolean>();
+
 const rendered = computed(() => {
   const sessionId = props.sessionId;
-  const env: FileReferenceEnv = sessionId ? { fileRefs: [], resolveFileRef: (path) => fileLinks.resolve(sessionId, path) } : {};
+  const env: FileReferenceEnv & FoldEnv = sessionId ? { fileRefs: [], resolveFileRef: (path) => fileLinks.resolve(sessionId, path) } : {};
+  env.folds = folds;
+  env.streaming = props.streaming;
   const rawHtml = markdownRenderer.render(parsedBody.value.text, env);
   const html = props.sessionReferences?.length ? withSessionReferenceChips(rawHtml, props.sessionReferences) : rawHtml;
   // Your `$` skills are in the text as typed: each one the session offers shows as a chip, tinted as it was sent.
@@ -116,6 +123,7 @@ watch(() => rendered.value.fileRefs, (paths) => {
 
 /** A click on a file or a session chip opens it in the app, not as a page load. */
 function handleBodyClick(event: MouseEvent): void {
+  rememberFoldClick(event, folds);
   const file = (event.target as Element | null)?.closest?.("[data-file-path]");
   if (file) {
     openFile(event, file);

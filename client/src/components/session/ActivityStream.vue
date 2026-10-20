@@ -672,6 +672,7 @@ function handleImproveSkill(skill: string, toolId: string): void {
           :cluster-position="message.clusterPosition"
           :command="message.command"
           :session-references="message.sessionReferences"
+          :streaming="isStreaming && message.id === mountedMessages.at(-1)?.id"
           @open-session="openReferencedSession"
           @open-file="openReferencedFile"
           @expand-visual="handleExpandVisual"

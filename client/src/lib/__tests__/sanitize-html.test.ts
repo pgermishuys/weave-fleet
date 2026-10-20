@@ -180,3 +180,22 @@ describe('sanitizeHtml', () => {
     })
   })
 })
+
+describe('folds', () => {
+  it('keeps the renderer\'s <details> with its class, open state and position', async () => {
+    const { createMarkdownRenderer } = await import('@/lib/markdown-renderer')
+    const html = createMarkdownRenderer().render('<details open>\n<summary>Why</summary>\nbody\n</details>')
+    const clean = sanitizeHtml(html)
+
+    expect(clean).toContain('<details class="md-details" data-fold="0" open="">')
+    expect(clean).toContain('<summary>Why</summary>')
+    expect(clean).toContain('md-details__body')
+  })
+
+  it('still drops event handlers on a <details>', () => {
+    const clean = sanitizeHtml('<details onclick="alert(1)" class="md-details"><summary>x</summary>y</details>')
+
+    expect(clean).not.toContain('onclick')
+    expect(clean).toContain('<details')
+  })
+})

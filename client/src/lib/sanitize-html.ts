@@ -8,6 +8,8 @@ const SANITIZE_CONFIG: Config = {
     'a', 'strong', 'em', 'code', 'span', 'img',
     // Lists
     'ul', 'ol', 'li',
+    // Folds (<details> from the Markdown renderer's fixed tokens)
+    'details', 'summary',
     // Tables
     'table', 'thead', 'tbody', 'tr', 'th', 'td',
     // SVG (for Mermaid output)
@@ -16,7 +18,7 @@ const SANITIZE_CONFIG: Config = {
   ],
   ALLOWED_ATTR: [
     // HTML
-    'href', 'title', 'target', 'rel', 'class', 'src', 'alt', 'width', 'height',
+    'href', 'title', 'target', 'rel', 'class', 'open', 'data-fold', 'src', 'alt', 'width', 'height',
     // SVG
     'd', 'fill', 'stroke', 'stroke-width', 'transform', 'viewBox', 'xmlns',
     'x', 'y', 'cx', 'cy', 'r', 'rx', 'ry', 'x1', 'y1', 'x2', 'y2',
