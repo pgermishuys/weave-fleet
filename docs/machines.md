@@ -94,7 +94,8 @@ fleet node install-service --host 0.0.0.0 --port 2113
 - **It runs as you**, so harness sign-ins, git credentials and repositories work as they do in your shell. On
   Linux and macOS it keeps the `PATH` you installed it with. On a Linux machine nobody logs in to, also run
   `loginctl enable-linger "$USER"`, or it stops when you log out.
-- **It runs the launcher**, so a staged update applies when the node restarts.
+- **It runs the launcher**, so a staged update applies when the node restarts. A node updates itself when nothing
+  is working on it (see [Updating your machines](#updating-your-machines)).
 - **It's always called fleet-node.** It never touches a `fleet.service` you run for the full Fleet. Running it again
   updates it.
 - **A node needs its own data directory.** If the full Fleet also runs on that machine, add `--profile node`.
@@ -112,6 +113,81 @@ systemctl --user daemon-reload
 systemctl --user enable --now fleet.service
 loginctl enable-linger "$USER"   # keep it running when you're logged out
 ```
+
+## Updating your machines
+
+Every Fleet downloads a new release by itself and switches to it when it restarts. With the Updates page on, you
+can see all your machines at once and restart them into the update. The page is Experimental: turn on **Updates
+page** in Settings → Features, and **Updates** appears in Settings.
+
+### What the page shows
+
+Settings → Updates lists the desktop app (when you're in it), this machine, and every machine in Settings →
+Machines. Each row has the machine's version and where it is: up to date, downloading, downloaded and waiting for a
+restart, busy, can't be reached, or went back to its old version. A machine too old to report its updates says so.
+**Check now** asks every Fleet for a release. A chip in the status bar counts the Fleets that can update, and opens
+the page.
+
+### Restarting into an update
+
+- **Restart** on a row restarts that Fleet into the update it has downloaded. On this machine the page reloads when
+  it's back.
+- **Update machines now** restarts the other machines that have an update downloaded, one at a time, from this
+  Fleet, so it carries on if you close the tab. This machine is never part of it. It skips a machine that can't be
+  reached, has nothing newer or can't restart itself. If sessions are working or waiting for your answer, it waits
+  for them (up to 30 minutes, then leaves that machine for later). Then it restarts the machine and waits up to 3
+  minutes for it to come back on the new version.
+- It **stops at the first failure**: a machine that doesn't come back, or that comes back on its old version. The
+  machines after it are left alone. **Stop after this one** ends a rollout early.
+
+A restart never cuts off work. A Fleet with a session in a turn, including one stopped on a question or a permission
+ask, answers `409` and stays up. Prompts that arrive while it counts are turned away, not cut off.
+
+### How a Fleet restarts itself
+
+The Fleet exits with code `85`, and the launcher (`scripts/launcher.sh`, or `launcher.cmd` on Windows) starts itself
+again, which applies the staged update first. Any other exit code is passed on as it is. A node service restarts on
+any exit, so it comes back the same way.
+
+Restart isn't offered, and the row says why, when:
+
+- it's the desktop app, which installs its own updates;
+- it isn't an installed Fleet (for example one run from source);
+- it wasn't started by the launcher or a node service. Restart it by hand once; after that it can restart itself.
+
+### Going back
+
+A new version is on trial after it's applied. It has to finish starting (migrations run, listening) within 120
+seconds (`FLEET_UPDATE_TRIAL_SECONDS` changes that), and not exit before then. If it doesn't, the launcher puts the
+old version back, along with the database files as they were before the new version ran, and starts that. It writes
+`update-failed.json` next to the install, with the version it kept, the one that failed and why. The row says the
+update didn't start and that the machine went back. A Fleet whose rule restarts it by itself doesn't try that
+version again. The note goes when a later version starts.
+
+### Rules
+
+A rule says when a Fleet restarts itself into an update it has downloaded:
+
+| Rule | What it does |
+|---|---|
+| Ask me first | Waits until you press Restart. |
+| When nothing is working | Restarts once no session has worked or waited for you for a minute. It looks every 15 seconds. |
+| Only overnight | The same, but only between 02:00 and 05:00 on that machine's clock. |
+
+Until you choose, a node updates when nothing is working and a full Fleet asks. Choose a default for every machine
+at the top of the page, and give a machine its own rule from the menu on its row. **Update machines now** doesn't
+wait for the rule. The desktop app always asks, because you're using it.
+
+The Fleet you're using gives each machine its rule and checks every 30 seconds, so a machine that reports a
+different rule gets the right one back. A node keeps its rule next to its database (`<database name>.update.json`),
+so it acts on it even when that Fleet is off. After a machine updated itself, the web app tells you once ("falcon
+updated to 0.59.1, at 03:12, overnight") for 3 days, with a **What's new** button.
+
+### Who can do it
+
+Only the machine's owner token can restart a Fleet, change its rule or start a rollout. An agent gets `403`, and so
+does a paired phone. A hosted Fleet updates itself and has none of this. The other machines are called with the
+token this Fleet keeps for each of them.
 
 ## Adding a machine to a client
 
@@ -168,6 +244,18 @@ This is what any client relies on. The web app is one client. A native app would
     ],
     "sessions": { "working": 2, "needsYou": 1 },
     "peerMessages": true
+  },
+  "update": {
+    "status": "staged",
+    "latestVersion": "0.37.0",
+    "stagedVersion": "0.37.0",
+    "checkedAt": "2026-10-20T08:00:00.0000000+00:00",
+    "canRestart": true,
+    "restartUnavailableReason": null,
+    "rolledBack": null,
+    "rule": "idle",
+    "ruleSource": "set",
+    "lastUpdate": { "from": "0.36.0", "to": "0.37.0", "at": "2026-10-19T03:12:00.0000000+00:00", "trigger": "overnight" }
   }
 }
 ```
@@ -196,6 +284,22 @@ This is what any client relies on. The web app is one client. A native app would
   - `peerMessages`: whether the machine takes messages from sessions on other machines
     ([`/api/machine/peer`](#sessions-on-other-machines-apimachinepeer)). `true` in local mode. Fleets before it
     leave it out, and don't.
+
+- `update` is where the machine is with updating itself (only `GET` fills it in; Fleets before it leave it out).
+  Adding it didn't bump `apiVersion`.
+  - `status`: `unknown`, `uptodate`, `available`, `downloading`, `staged`, `error` or `managed` (the desktop app
+    updates it). `latestVersion`, `stagedVersion` (downloaded, waiting for a restart) and `checkedAt` come with it.
+  - `canRestart` says whether it can restart itself into a staged update; `restartUnavailableReason` says why not.
+    Fleets that predate restarting leave both out.
+  - `rolledBack`: `{ from, to, reason, at }` for an update that didn't start and was undone, until a later one starts.
+  - `rule`: `ask`, `idle` or `overnight`. `ruleSource` is `set` when someone gave it one, `default` otherwise.
+  - `lastUpdate`: `{ from, to, at, trigger }` for the update it last restarted into, kept until the next.
+    `trigger` is `manual`, `rollout`, `idle` or `overnight`.
+
+  Local mode, owner only: `POST /api/update/apply` restarts into the staged update (`202`, or `409` when nothing is
+  staged, a session is working or waiting for you, or it can't restart itself), `PUT /api/update/rule` with
+  `{ "rule": "ask" | "idle" | "overnight" | null }`, and `POST`, `GET` and `DELETE /api/update/rollout` for a rollout.
+  An agent or a device token gets `403`.
 
 `PUT /api/machine` with `{ "name": "…", "publicUrl": "…" }` changes either for every client (local mode only, owner
 only: `403` for a device token or an agent). A
