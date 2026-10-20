@@ -238,7 +238,7 @@ export function rememberFoldClick(event: MouseEvent, folds: Map<string, boolean>
   const summary = (event.target as Element | null)?.closest?.("summary");
   const details = summary?.parentElement;
   const key = details?.getAttribute("data-fold");
-  if (details?.matches("details.md-details") && key !== null && key !== undefined) folds.set(key, !details.open);
+  if (details instanceof HTMLDetailsElement && details.matches(".md-details") && key) folds.set(key, !details.open);
 }
 
 export function createMarkdownRenderer(): MarkdownIt {
