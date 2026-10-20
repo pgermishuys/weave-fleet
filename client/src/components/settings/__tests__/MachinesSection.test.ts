@@ -118,6 +118,16 @@ describe("Settings → Machines", () => {
     expect(capabilitiesOf(wrapper, mini.id)).toBeNull();
   });
 
+  it("says '1 session' for a reachable machine with one session", async () => {
+    routes["http://100.64.12.40:2113/api/machine"] = () => json(miniInfo);
+    routes["http://100.64.12.40:2113/api/sessions"] = () => json([{ session: { id: "s1", title: "One", time: { created: 1, updated: 1 } }, instanceId: "i1", sessionStatus: "idle", activityStatus: "idle", retentionStatus: "active" }]);
+
+    const wrapper = mount(MachinesSection);
+    await flushPromises();
+    const state = wrapper.find(`[data-testid='machine-card'][data-machine='${mini.id}'] .machine-card__state`);
+    expect(state.text()).toBe("reachable · 1 session");
+  });
+
   describe("updates in Machines", () => {
     const MINI_URL = "http://100.64.12.40:2113";
     const downloaded = { status: "staged", latestVersion: "0.59.1", stagedVersion: "0.59.1", checkedAt: "2026-10-20T08:00:00Z", canRestart: true, rule: "idle" };
