@@ -40,6 +40,17 @@ public sealed record UsageReading(
 {
     /// <summary>True for a 429 or a 401: Fleet asks this provider less often for a while.</summary>
     public bool BackOff { get; init; }
+
+    /// <summary>The account's raw id when only the answer knows it (Copilot's login). Never sent: the service hashes it into <c>accountKey</c>.</summary>
+    public string? AccountId { get; init; }
+}
+
+/// <summary>The opaque key two Fleets compare to tell they hold the same account. Derived from the account id only, never a token or key.</summary>
+public static class AccountKey
+{
+    public static string? For(string provider, string? accountId)
+        => string.IsNullOrWhiteSpace(accountId) ? null
+            : Convert.ToHexStringLower(System.Security.Cryptography.SHA256.HashData(System.Text.Encoding.UTF8.GetBytes(provider + ":" + accountId)))[..16];
 }
 
 /// <summary>One provider's usage as clients get it.</summary>
@@ -52,7 +63,8 @@ public sealed record ProviderUsage(
     [property: JsonIgnore(Condition = JsonIgnoreCondition.Never)] string? Account,
     [property: JsonIgnore(Condition = JsonIgnoreCondition.Never)] string? Source,
     [property: JsonIgnore(Condition = JsonIgnoreCondition.Never)] DateTimeOffset? ReadAt,
-    [property: JsonIgnore(Condition = JsonIgnoreCondition.Never)] UsageCredits? Credits);
+    [property: JsonIgnore(Condition = JsonIgnoreCondition.Never)] UsageCredits? Credits,
+    [property: JsonIgnore(Condition = JsonIgnoreCondition.Never)] string? AccountKey = null);
 
 /// <summary>The body of <c>GET /api/usage/limits</c> and of the <c>usage.limits</c> event.</summary>
 public sealed record UsageLimitsSnapshot(bool Enabled, IReadOnlyList<ProviderUsage> Providers);

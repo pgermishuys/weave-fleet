@@ -1,10 +1,11 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { flushPromises } from "@vue/test-utils";
 import type { DomainEvent } from "@/lib/domain-events";
+import type { MachineTarget } from "@/lib/machine-target";
 
-const { apiFetch, handlers } = vi.hoisted(() => ({ apiFetch: vi.fn(), handlers: [] as Array<(event: DomainEvent) => void> }));
+const { apiFetch, apiFetchOn, handlers } = vi.hoisted(() => ({ apiFetch: vi.fn(), apiFetchOn: vi.fn(), handlers: [] as Array<(event: DomainEvent) => void> }));
 
-vi.mock("@/lib/api-client", () => ({ apiFetch }));
+vi.mock("@/lib/api-client", () => ({ apiFetch, apiFetchOn }));
 vi.mock("@/composables/use-signalr-socket", () => ({
   onGlobalEvent: (_m: unknown, _t: string, handler: (event: DomainEvent) => void) => {
     handlers.push(handler);
@@ -24,6 +25,7 @@ describe("useUsageLimits", () => {
     resetUsageLimitsForTests();
     handlers.length = 0;
     apiFetch.mockReset();
+    apiFetchOn.mockReset();
     apiFetch.mockResolvedValue(json(body("claude")));
   });
   afterEach(() => vi.useRealTimers());
@@ -53,6 +55,33 @@ describe("useUsageLimits", () => {
     stop();
     await vi.advanceTimersByTimeAsync(120_000);
     expect(apiFetch).toHaveBeenCalledTimes(2);
+  });
+
+  it("asks the other machines only while watched, keeps the live one's answer apart, and keeps a last answer on failure", async () => {
+    vi.useFakeTimers();
+    const laptop = { key: "laptop", isLive: false, connection: { id: "laptop" } } as unknown as MachineTarget;
+    const live = { key: "home", isLive: true, connection: null } as unknown as MachineTarget;
+    apiFetchOn.mockResolvedValue(json(body("codex")));
+    const { watch, otherProviders, providers } = useUsageLimits();
+    await vi.advanceTimersByTimeAsync(0);
+    expect(apiFetchOn).not.toHaveBeenCalled();
+
+    const stop = watch(() => [live, laptop]);
+    await vi.advanceTimersByTimeAsync(0);
+    expect(apiFetchOn).toHaveBeenCalledTimes(1);
+    expect(apiFetchOn).toHaveBeenCalledWith(laptop.connection, "/api/usage/limits?watch=true");
+    expect(otherProviders.value.laptop?.map((p) => p.provider)).toEqual(["codex"]);
+    expect(providers.value.map((p) => p.provider)).toEqual(["claude"]);
+
+    apiFetchOn.mockRejectedValue(new Error("away"));
+    vi.spyOn(console, "warn").mockImplementation(() => undefined);
+    await vi.advanceTimersByTimeAsync(60_000);
+    expect(apiFetchOn).toHaveBeenCalledTimes(2);
+    expect(otherProviders.value.laptop?.map((p) => p.provider)).toEqual(["codex"]);
+
+    stop();
+    await vi.advanceTimersByTimeAsync(120_000);
+    expect(apiFetchOn).toHaveBeenCalledTimes(2);
   });
 
   it("allows and revokes a provider, then reloads", async () => {

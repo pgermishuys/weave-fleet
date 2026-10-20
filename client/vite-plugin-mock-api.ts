@@ -854,6 +854,23 @@ export function mockApiPlugin(options: MockApiOptions = {}): Plugin {
       },
     },
     {
+      // Enough models from three providers for the model menu to head each one: Anthropic's bar is at 84%, OpenAI's
+      // at 97% (dimmed, with its reset time), Google has no usage to read.
+      pattern: /^\/api\/harnesses\/[^/]+\/catalog$/,
+      handler: () => {
+        const models = (...names: string[]) => names.map((name) => ({ id: name.toLowerCase().replaceAll(" ", "-"), name }));
+        return json({
+          supported: true,
+          agents: [],
+          providers: [
+            { id: "anthropic", name: "Anthropic", models: models("Claude Sonnet 4.5", "Claude Opus 4", "Claude Haiku 4") },
+            { id: "openai", name: "OpenAI", models: models("GPT-4o", "GPT-4o Mini", "o3", "o4 Mini") },
+            { id: "google", name: "Google", models: models("Gemini 2.5 Pro", "Gemini 2.5 Flash") },
+          ],
+        });
+      },
+    },
+    {
       pattern: /^\/api\/harnesses$/,
       handler: () => {
         console.log("[mock-api] GET /api/harnesses");
@@ -951,7 +968,7 @@ export function mockApiPlugin(options: MockApiOptions = {}): Plugin {
       },
     },
     {
-      // Usage limits: one provider ready, one waiting for Allow, one that is pay-per-token.
+      // Usage limits: Claude and Codex (nearly used up) ready, OpenRouter waiting for Allow. The mock has no second machine, so no machine grouping.
       pattern: /^\/api\/usage\/limits$/,
       handler: () => {
         const at = (hours: number) => new Date(Date.now() + hours * 3_600_000).toISOString();
@@ -960,7 +977,7 @@ export function mockApiPlugin(options: MockApiOptions = {}): Plugin {
           providers: [
             {
               provider: "claude", account: "Max plan", name: "Claude", state: "ok", source: "Claude Code",
-              harnesses: ["claude-code"], readAt: at(0), credits: null,
+              harnesses: ["claude-code"], readAt: at(0), credits: null, accountKey: "c1a0de5f00d1b2c3",
               windows: [
                 // 3.5 of 5 hours gone, 84% used: ahead of pace, so the tick and the note show.
                 { window: "five_hour", utilization: 0.84, resetsAt: at(1.5), windowSeconds: 18000, status: "warning" },
@@ -972,8 +989,13 @@ export function mockApiPlugin(options: MockApiOptions = {}): Plugin {
               harnesses: ["opencode"], readAt: null, windows: [], credits: null,
             },
             {
-              provider: "codex", account: null, name: "Codex", state: "no_window", source: "Codex CLI",
-              harnesses: ["codex"], readAt: at(0), windows: [], credits: null,
+              // 97% used: the model menu dims OpenAI's models and says when they reset.
+              provider: "codex", account: "Plus plan", name: "Codex", state: "ok", source: "OpenCode",
+              harnesses: ["opencode"], readAt: at(0), credits: null, accountKey: "9f3b2a17c4d5e6f7",
+              windows: [
+                { window: "primary", utilization: 0.97, resetsAt: at(1.2), windowSeconds: 18000, status: "warning" },
+                { window: "secondary", utilization: 0.4, resetsAt: at(90), windowSeconds: 604800, status: "allowed" },
+              ],
             },
           ],
         };
@@ -984,7 +1006,7 @@ export function mockApiPlugin(options: MockApiOptions = {}): Plugin {
       pattern: /^\/api\/preferences$/,
       handler: () => {
         console.log("[mock-api] GET /api/preferences");
-        return new Response(JSON.stringify({ UsageLimits: "true" }), {
+        return new Response(JSON.stringify({}), {
           status: 200,
           headers: { "Content-Type": "application/json" },
         });

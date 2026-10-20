@@ -38,7 +38,6 @@ public sealed class UsageLimitsServiceTests
             services.AddSingleton<ISessionRepository>(_sessions);
         });
         _service = new UsageLimitsService([_claude, _codex], _live, _activity, _broadcaster, scopes, _time, NullLogger<UsageLimitsService>.Instance);
-        _prefs.Seed(UsageLimitsService.FlagKey, "true");
         _claude.Next = Ok("claude-account", 0.4);
         _codex.Next = Ok("codex-account", 0.6);
     }
@@ -49,17 +48,44 @@ public sealed class UsageLimitsServiceTests
     private static ProviderUsage Find(UsageLimitsSnapshot snapshot, string provider) => snapshot.Providers.Single(p => p.Provider == provider);
 
     [Fact]
-    public async Task With_the_switch_off_nothing_is_read_and_nothing_is_sent()
+    public async Task Without_consent_a_provider_is_listed_but_never_read_while_Claude_is()
     {
-        _prefs.Seed(UsageLimitsService.FlagKey, "false");
-
         var snapshot = await _service.GetAsync(User, watch: true, default);
         await _service.PollBusyAsync(User, default);
 
-        snapshot.Enabled.ShouldBeFalse();
-        snapshot.Providers.ShouldBeEmpty();
-        (_claude.Signins + _claude.Reads + _codex.Signins + _codex.Reads).ShouldBe(0);
-        _broadcaster.Broadcasts.Count.ShouldBe(0);
+        snapshot.Enabled.ShouldBeTrue();
+        Find(snapshot, "codex").State.ShouldBe(UsageStates.NotAllowed);
+        _codex.Reads.ShouldBe(0);
+        _claude.Reads.ShouldBe(1);
+    }
+
+    [Fact]
+    public async Task The_account_key_is_a_hash_of_the_account_id_alone()
+    {
+        _prefs.Seed("UsageAllow.codex", "true");
+        _codex.AccountId = "acct-1";
+        _claude.AccountId = null;
+
+        var snapshot = await _service.GetAsync(User, watch: true, default);
+
+        Find(snapshot, "codex").AccountKey.ShouldBe(AccountKey.For("codex", "acct-1"));
+        Find(snapshot, "codex").AccountKey!.Length.ShouldBe(16);
+        Find(snapshot, "codex").AccountKey!.ShouldNotContain("acct-1");
+        Find(snapshot, "claude").AccountKey.ShouldBeNull();
+        AccountKey.For("codex", "acct-2").ShouldNotBe(AccountKey.For("codex", "acct-1"));
+        AccountKey.For("codex", "acct-1").ShouldNotBe(AccountKey.For("copilot", "acct-1"));
+        AccountKey.For("codex", null).ShouldBeNull();
+    }
+
+    [Fact]
+    public async Task A_reading_can_name_the_account_when_the_file_cannot()
+    {
+        _prefs.Seed("UsageAllow.codex", "true");
+        _codex.Next = Ok("plus", 0.1) with { AccountId = "octocat" };
+
+        var snapshot = await _service.GetAsync(User, watch: true, default);
+
+        Find(snapshot, "codex").AccountKey.ShouldBe(AccountKey.For("codex", "octocat"));
     }
 
     [Fact]
@@ -296,6 +322,7 @@ public sealed class UsageLimitsServiceTests
         public string Source => provider == "claude" ? "Claude Code" : "OpenCode";
         public IReadOnlyList<string> Harnesses { get; } = harnesses;
         public bool NeedsConsent => needsConsent;
+        public string? AccountId { get; set; }
         public bool SignedIn { get; set; } = true;
         public UsageReading Next { get; set; } = new(UsageStates.Ok);
         public int Signins { get; private set; }

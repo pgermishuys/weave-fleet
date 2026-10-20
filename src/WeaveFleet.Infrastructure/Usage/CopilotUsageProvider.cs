@@ -75,7 +75,7 @@ internal sealed class CopilotUsageProvider(
                     quotas.Add(new Quota(id, UsageRead.Number(q, "entitlement"), UsageRead.Number(q, "remaining"), UsageRead.Number(q, "percentRemaining"), q.TryGetProperty("unlimited", out var u) && u.ValueKind == JsonValueKind.True));
         }
 
-        return Build(UsageRead.Text(reply, "plan") ?? UsageRead.Text(reply, "login"), ParseDate(UsageRead.Text(reply, "resetAt")), quotas);
+        return Build(UsageRead.Text(reply, "plan") ?? UsageRead.Text(reply, "login"), ParseDate(UsageRead.Text(reply, "resetAt")), quotas) with { AccountId = UsageRead.Text(reply, "login") };
     }
 
     /// <summary>GitHub's own answer: <c>{ login, copilot_plan, quota_reset_date, quota_snapshots: { premium_interactions: { entitlement, remaining, percent_remaining, unlimited }, … } }</c>.</summary>
@@ -95,7 +95,7 @@ internal sealed class CopilotUsageProvider(
         }
 
         return Build(UsageRead.Text(root, "copilot_plan") ?? UsageRead.Text(root, "login"),
-            ParseDate(UsageRead.Text(root, "quota_reset_date_utc") ?? UsageRead.Text(root, "quota_reset_date")), quotas);
+            ParseDate(UsageRead.Text(root, "quota_reset_date_utc") ?? UsageRead.Text(root, "quota_reset_date")), quotas) with { AccountId = UsageRead.Text(root, "login") };
     }
 
     private static UsageReading Build(string? account, DateTimeOffset? resetsAt, List<Quota> quotas)

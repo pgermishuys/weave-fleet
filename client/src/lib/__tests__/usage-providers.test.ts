@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { expectedShare, formatDuration, paceNote, providerWindowLabel, tightestWindow, toUsageLimits, usageTone, windowPercent } from "@/lib/usage-providers";
+import { expectedShare, groupUsageByMachine, modelProviderUsage, usageProviderForModelProvider, type ProviderUsage, formatDuration, paceNote, providerWindowLabel, tightestWindow, toUsageLimits, usageTone, windowPercent } from "@/lib/usage-providers";
 
 const at = (hours: number) => new Date(Date.now() + hours * 3_600_000).toISOString();
 
@@ -114,5 +114,76 @@ describe("pace", () => {
     expect(formatDuration(2 * 3600)).toBe("2 h");
     expect(formatDuration(27 * 3600)).toBe("1 d 3 h");
     expect(formatDuration(48 * 3600)).toBe("2 d");
+  });
+});
+
+const NOW = Date.parse("2026-10-20T12:00:00Z");
+const usage = (over: Partial<ProviderUsage>): ProviderUsage => ({
+  provider: "claude", account: null, accountKey: null, name: "Claude", state: "ok", source: null, harnesses: [], readAt: null, windows: [], credits: null, ...over,
+});
+const window = (utilization: number, status: "allowed" | "warning" | "rejected" = "allowed") =>
+  ({ window: "five_hour", utilization, resetsAt: NOW + 3_600_000, windowSeconds: 18000, status }) as ProviderUsage["windows"][number];
+
+describe("accountKey", () => {
+  it("reads when sent, and is null when missing or not text", () => {
+    const body = (accountKey: unknown) => toUsageLimits({ enabled: true, providers: [{ provider: "codex", accountKey }] });
+    expect(body("ab12")?.providers[0]?.accountKey).toBe("ab12");
+    expect(body(undefined)?.providers[0]?.accountKey).toBeNull();
+    expect(body(7)?.providers[0]?.accountKey).toBeNull();
+    expect(body("")?.providers[0]?.accountKey).toBeNull();
+  });
+});
+
+describe("usageProviderForModelProvider", () => {
+  it("maps the model providers that have limits", () => {
+    expect(usageProviderForModelProvider("anthropic")).toBe("claude");
+    expect(usageProviderForModelProvider("claude-code")).toBe("claude");
+    expect(usageProviderForModelProvider("openai")).toBe("codex");
+    expect(usageProviderForModelProvider("openrouter")).toBe("openrouter");
+    expect(usageProviderForModelProvider("github-copilot")).toBe("copilot");
+    expect(usageProviderForModelProvider("copilot")).toBe("copilot");
+    expect(usageProviderForModelProvider("google")).toBeNull();
+  });
+});
+
+describe("modelProviderUsage", () => {
+  it("gives the tightest window and does not dim below 95%", () => {
+    const result = modelProviderUsage([usage({ windows: [window(0.4), { ...window(0.9), window: "seven_day" }] })], "anthropic", NOW);
+    expect(result).toMatchObject({ percent: 90, tone: "warn", dimmed: false, resetText: null });
+  });
+
+  it("dims from 95% and when rejected, with the reset time", () => {
+    const at95 = modelProviderUsage([usage({ windows: [window(0.95)] })], "anthropic", NOW);
+    expect(at95?.dimmed).toBe(true);
+    expect(at95?.resetText).toMatch(/^resets \d{2}:\d{2}$/);
+    expect(modelProviderUsage([usage({ windows: [window(0.2, "rejected")] })], "claude-code", NOW)).toMatchObject({ percent: 100, tone: "used", dimmed: true });
+  });
+
+  it("is null for an unmapped provider, another provider's data, or an unreadable one", () => {
+    expect(modelProviderUsage([usage({ windows: [window(0.5)] })], "google", NOW)).toBeNull();
+    expect(modelProviderUsage([usage({ windows: [window(0.5)] })], "openai", NOW)).toBeNull();
+    expect(modelProviderUsage([usage({ state: "not_allowed", windows: [] })], "anthropic", NOW)).toBeNull();
+  });
+});
+
+describe("groupUsageByMachine", () => {
+  const codex = (accountKey: string | null) => usage({ provider: "codex", name: "Codex", accountKey });
+
+  it("shows an account once, on the first machine, with where else it is", () => {
+    const groups = groupUsageByMachine([
+      { key: "home", name: "Desk", providers: [codex("k1"), usage({})] },
+      { key: "m2", name: "Laptop", providers: [codex("k1"), usage({ provider: "openrouter" })] },
+      { key: "m3", name: "Server", providers: [codex("k1")] },
+    ]);
+    expect(groups.map((g) => g.rows.map((r) => r.provider.provider))).toEqual([["codex", "claude"], ["openrouter"], []]);
+    expect(groups[0]?.rows[0]?.alsoOn).toEqual(["Laptop", "Server"]);
+  });
+
+  it("keeps providers without an account key, or with different ones, on every machine", () => {
+    const groups = groupUsageByMachine([
+      { key: "a", name: "A", providers: [codex(null), codex("x")] },
+      { key: "b", name: "B", providers: [codex(null), codex("y")] },
+    ]);
+    expect(groups.map((g) => g.rows.length)).toEqual([2, 2]);
   });
 });

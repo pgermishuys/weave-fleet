@@ -15,8 +15,8 @@ namespace WeaveFleet.Application.Usage;
 /// provider only when someone could be looking (the popover is open: every 60 seconds) or the work is running (a session
 /// on one of its harnesses is busy: every 5 minutes); otherwise the last answer stays, with when it was read. The user
 /// allows each provider but Claude, whose sign-in belongs to Claude Code. A 429 or a 401 makes Fleet ask less often for a
-/// while. Claude's own live report (<see cref="HarnessUsageLimits"/>) wins over a polled answer when it's newer. Off unless
-/// the <c>UsageLimits</c> switch is on: then nothing is read and nothing is sent. Tokens stay in the readers.
+/// while. Claude's own live report (<see cref="HarnessUsageLimits"/>) wins over a polled answer when it's newer. Always on;
+/// nothing is read from a provider that needs the user's Allow until they give it. Tokens stay in the readers.
 /// </summary>
 public sealed partial class UsageLimitsService(
     IEnumerable<IUsageProvider> providers,
@@ -27,9 +27,6 @@ public sealed partial class UsageLimitsService(
     TimeProvider time,
     ILogger<UsageLimitsService> logger)
 {
-    /// <summary>The preference that turns usage limits on.</summary>
-    public const string FlagKey = "UsageLimits";
-
     /// <summary>Prefix of the preference holding the user's Allow for one provider.</summary>
     public const string AllowPrefix = "UsageAllow.";
 
@@ -62,9 +59,6 @@ public sealed partial class UsageLimitsService(
     /// <summary>The usage as it is. With <paramref name="watch"/> (the popover is open) any answer over 60 seconds old is asked for again.</summary>
     public async Task<UsageLimitsSnapshot> GetAsync(string userId, bool watch, CancellationToken ct)
     {
-        if (!await IsOnAsync(ct).ConfigureAwait(false))
-            return new UsageLimitsSnapshot(false, []);
-
         // Popover open: anything over 60 s old is asked again. Otherwise only a provider never asked yet, so the chip
         // has something to show on a fresh page without polling for it.
         var refreshed = false;
@@ -87,9 +81,6 @@ public sealed partial class UsageLimitsService(
             await scope.ServiceProvider.GetRequiredService<IUserPreferenceRepository>()
                 .SetAsync(AllowPrefix + provider, allowed ? "true" : "false").ConfigureAwait(false);
 
-        if (!await IsOnAsync(ct).ConfigureAwait(false))
-            return true;
-
         if (allowed)
             await RefreshAsync(found, CacheFor, force: true, ct).ConfigureAwait(false);
 
@@ -105,9 +96,6 @@ public sealed partial class UsageLimitsService(
     /// <summary>The background tick for one user: asks every provider whose harness has a busy session and whose answer is 5 minutes old.</summary>
     public async Task PollBusyAsync(string userId, CancellationToken ct)
     {
-        if (!await IsOnAsync(ct).ConfigureAwait(false))
-            return;
-
         var busy = await BusyHarnessesAsync(userId, ct).ConfigureAwait(false);
         var refreshed = false;
         foreach (var provider in providers.Where(p => p.Harnesses.Any(busy.Contains)))
@@ -130,14 +118,6 @@ public sealed partial class UsageLimitsService(
         }
 
         return harnesses;
-    }
-
-    private async Task<bool> IsOnAsync(CancellationToken ct)
-    {
-        ct.ThrowIfCancellationRequested();
-        using var scope = scopeFactory.CreateScope();
-        var value = await scope.ServiceProvider.GetRequiredService<IUserPreferenceRepository>().GetAsync(FlagKey).ConfigureAwait(false);
-        return string.Equals(value, "true", StringComparison.OrdinalIgnoreCase);
     }
 
     private async Task<bool> IsAllowedAsync(IUsageProvider provider)
@@ -231,7 +211,8 @@ public sealed partial class UsageLimitsService(
             }
 
             result.Add(new ProviderUsage(provider.Provider, provider.Name, state, provider.Harnesses, windows,
-                reading.Account, provider.Source, readAt, reading.Credits));
+                reading.Account, provider.Source, readAt, reading.Credits,
+                allowed ? AccountKey.For(provider.Provider, reading.AccountId ?? provider.AccountId) : AccountKey.For(provider.Provider, provider.AccountId)));
         }
 
         return new UsageLimitsSnapshot(true, result);

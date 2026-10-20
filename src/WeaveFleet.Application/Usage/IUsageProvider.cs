@@ -21,6 +21,9 @@ public interface IUsageProvider
     /// <summary>False when the user needn't press Allow before Fleet asks (Claude: Claude Code's own sign-in).</summary>
     bool NeedsConsent { get; }
 
+    /// <summary>The account's raw id as the sign-in file names it (Codex accountId), or null. Never a token; only <see cref="AccountKey"/> leaves the server.</summary>
+    string? AccountId => null;
+
     /// <summary>Whether a sign-in is there. Looks at the files only: no network, no token kept.</summary>
     Task<bool> HasSignInAsync(CancellationToken ct);
 
