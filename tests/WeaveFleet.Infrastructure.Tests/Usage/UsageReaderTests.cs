@@ -1,7 +1,10 @@
 using System.Net;
+using System.Text.Json;
 using System.Text;
+using Microsoft.Data.Sqlite;
 using Microsoft.Extensions.Time.Testing;
 using WeaveFleet.Application.Usage;
+using WeaveFleet.Infrastructure.Harnesses.Acp;
 using WeaveFleet.Infrastructure.Usage;
 
 namespace WeaveFleet.Infrastructure.Tests.Usage;
@@ -19,7 +22,13 @@ public sealed class UsageReaderTests : IDisposable
     private UsageSources Sources() => new(_home, name => _env.GetValueOrDefault(name));
     private ClaudeUsageProvider Claude() => new(_api, Sources(), _time);
     private CodexUsageProvider Codex() => new(_api, Sources(), _time);
-    private OpenRouterUsageProvider OpenRouter() => new(_api, Sources());
+    private OpenRouterUsageProvider OpenRouter() => new(_api, Sources(), _time);
+
+    private bool _copilotReady = true;
+    private string? _githubToken;
+    private Func<CancellationToken, Task<JsonElement>> _askCopilot = _ => throw new InvalidOperationException("not asked");
+    private CopilotUsageProvider Copilot() => new(_api, Sources(), _ => Task.FromResult(_copilotReady), ct => _askCopilot(ct), _ => Task.FromResult(_githubToken));
+    private void CopilotReplies(string json) => _askCopilot = _ => Task.FromResult(JsonDocument.Parse(json).RootElement.Clone());
 
     private void Write(string relative, string json)
     {
@@ -58,6 +67,7 @@ public sealed class UsageReaderTests : IDisposable
             ("five_hour", 0.425, "allowed"), ("seven_day", 0.85, "warning"), ("seven_day_sonnet", 1.0, "rejected"),
         ]);
         reading.Windows![0].ResetsAt.ShouldBe(new DateTimeOffset(2026, 10, 20, 15, 0, 0, TimeSpan.Zero));
+        reading.Windows!.Select(w => w.WindowSeconds).ShouldBe([18000, 604800, 604800]);
         _api.Requests.Single().Uri.ShouldBe("https://api.anthropic.com/api/oauth/usage");
         _api.Requests.Single().Authorization.ShouldBe("Bearer claude-secret");
         _api.Requests.Single().Headers["anthropic-beta"].ShouldBe("oauth-2025-04-20");
@@ -142,6 +152,7 @@ public sealed class UsageReaderTests : IDisposable
         reading.Windows![1].Window.ShouldBe("secondary");
         reading.Windows![1].Status.ShouldBe("warning");
         reading.Windows![1].ResetsAt.ShouldBe(_time.GetUtcNow().AddHours(1));
+        reading.Windows!.Select(w => w.WindowSeconds).ShouldBe([18000, 604800]);
         _api.Requests.Single().Uri.ShouldBe("https://chatgpt.com/backend-api/wham/usage");
         _api.Requests.Single().Authorization.ShouldBe("Bearer codex-secret");
         _api.Requests.Single().Headers["ChatGPT-Account-Id"].ShouldBe("acct-9");
@@ -246,7 +257,260 @@ public sealed class UsageReaderTests : IDisposable
         (await Claude().ReadAsync(default)).State.ShouldBe(UsageStates.Unreadable);
     }
 
+    private const string CopilotBody = """
+        {"authenticated":true,"login":"octo-invented","plan":"pro","resetAt":"2026-11-01T00:00:00Z","quotas":[
+          {"id":"premium_interactions","entitlement":300,"remaining":75,"percentRemaining":25,"unlimited":false},
+          {"id":"chat","entitlement":null,"remaining":null,"percentRemaining":null,"unlimited":true},
+          {"id":"completions","entitlement":null,"remaining":null,"percentRemaining":50,"unlimited":false}]}
+        """;
+
+    [Fact]
+    public async Task copilot_reads_one_window_per_limited_quota_and_skips_unlimited()
+    {
+        CopilotReplies(CopilotBody);
+
+        var reading = await Copilot().ReadAsync(default);
+
+        reading.State.ShouldBe(UsageStates.Ok);
+        reading.Account.ShouldBe("pro");
+        reading.Windows!.Select(w => (w.Window, w.Utilization, w.Status)).ShouldBe([("premium_interactions", 0.75, "allowed"), ("completions", 0.5, "allowed")]);
+        reading.Windows![0].ResetsAt.ShouldBe(new DateTimeOffset(2026, 11, 1, 0, 0, 0, TimeSpan.Zero));
+        // October has 31 days.
+        reading.Windows![0].WindowSeconds.ShouldBe(31 * 86400);
+        _api.Requests.ShouldBeEmpty();
+    }
+
+    [Fact]
+    public async Task copilot_not_authenticated_is_signed_out()
+    {
+        CopilotReplies("""{"authenticated":false,"login":null,"plan":null,"resetAt":null,"quotas":[]}""");
+
+        (await Copilot().ReadAsync(default)).State.ShouldBe(UsageStates.SignedOut);
+    }
+
+    [Fact]
+    public async Task copilot_method_not_found_in_an_older_weave_copilot_is_unreadable_and_quiet()
+    {
+        _askCopilot = _ => throw new AcpException("Method not found", -32601);
+
+        var reading = await Copilot().ReadAsync(default);
+
+        reading.State.ShouldBe(UsageStates.Unreadable);
+        reading.BackOff.ShouldBeTrue();
+    }
+
+    [Theory]
+    [InlineData("[]")]
+    [InlineData("""{"authenticated":true,"quotas":[]}""")]
+    [InlineData("""{"authenticated":true,"quotas":[{"id":"chat","unlimited":true}]}""")]
+    public async Task copilot_an_answer_without_limited_quotas_is_unreadable(string body)
+    {
+        CopilotReplies(body);
+
+        (await Copilot().ReadAsync(default)).State.ShouldBe(UsageStates.Unreadable);
+    }
+
+    [Fact]
+    public async Task copilot_has_a_sign_in_when_the_harness_is_ready_or_pi_has_a_github_token()
+    {
+        _copilotReady = false;
+        (await Copilot().HasSignInAsync(default)).ShouldBeFalse();
+        _githubToken = "gh-secret";
+        (await Copilot().HasSignInAsync(default)).ShouldBeTrue();
+        _githubToken = null;
+        _copilotReady = true;
+        (await Copilot().HasSignInAsync(default)).ShouldBeTrue();
+    }
+
+    [Fact]
+    public async Task copilot_for_pi_asks_github_directly_with_the_token()
+    {
+        _copilotReady = false;
+        _githubToken = "gh-secret";
+        _api.Reply = (HttpStatusCode.OK, """
+            {"login":"octo-invented","copilot_plan":"individual","quota_reset_date":"2026-12-01","quota_snapshots":{
+              "premium_interactions":{"quota_id":"premium_interactions","entitlement":300,"remaining":0,"percent_remaining":0,"unlimited":false},
+              "chat":{"quota_id":"chat","unlimited":true,"entitlement":0,"remaining":0}}}
+            """);
+
+        var reading = await Copilot().ReadAsync(default);
+
+        reading.State.ShouldBe(UsageStates.Ok);
+        reading.Account.ShouldBe("individual");
+        var window = reading.Windows!.Single();
+        (window.Window, window.Utilization, window.Status).ShouldBe(("premium_interactions", 1.0, "rejected"));
+        window.WindowSeconds.ShouldBe(30 * 86400);
+        _api.Requests.Single().Uri.ShouldBe("https://api.github.com/copilot_internal/user");
+        _api.Requests.Single().Authorization.ShouldBe("Bearer gh-secret");
+    }
+
+    [Fact]
+    public async Task copilot_github_base_address_follows_the_environment_variable()
+    {
+        _copilotReady = false;
+        _githubToken = "t";
+        _env["FLEET_USAGE_GITHUB_URL"] = "http://127.0.0.1:9100/";
+        _api.Reply = (HttpStatusCode.OK, "{}");
+
+        await Copilot().ReadAsync(default);
+
+        _api.Requests.Single().Uri.ShouldBe("http://127.0.0.1:9100/copilot_internal/user");
+    }
+
+    [Theory]
+    [InlineData(HttpStatusCode.Unauthorized, UsageStates.SignedOut)]
+    [InlineData(HttpStatusCode.TooManyRequests, UsageStates.Unreadable)]
+    [InlineData(HttpStatusCode.OK, UsageStates.Unreadable)]
+    public async Task copilot_for_pi_failures_are_states_and_the_token_is_not_in_them(HttpStatusCode status, string state)
+    {
+        _copilotReady = false;
+        _githubToken = "gh-secret";
+        _api.Reply = (status, "{}");
+
+        var reading = await Copilot().ReadAsync(default);
+
+        reading.State.ShouldBe(state);
+        reading.Account.ShouldBeNull();
+    }
+
+    [Fact]
+    public async Task copilot_prefers_the_harness_when_both_exist()
+    {
+        CopilotReplies(CopilotBody);
+        _githubToken = "gh-secret";
+
+        (await Copilot().ReadAsync(default)).State.ShouldBe(UsageStates.Ok);
+        _api.Requests.ShouldBeEmpty();
+    }
+
     /// <summary>A fake provider API: one canned reply, and a record of what was asked.</summary>
+
+    // ---- OpenCode 2: sign-ins in its credential table ----
+
+    private string Oc2Db => Path.Combine(_home, ".weave", "harnesses", "opencode2", "data", "opencode.db");
+
+    private void Oc2Credential(string integration, string value, bool active = true, string? db = null)
+    {
+        db ??= Oc2Db;
+        Directory.CreateDirectory(Path.GetDirectoryName(db)!);
+        using var connection = new SqliteConnection($"Data Source={db};Pooling=False");
+        connection.Open();
+        using var command = connection.CreateCommand();
+        command.CommandText = """
+            CREATE TABLE IF NOT EXISTS credential (id TEXT PRIMARY KEY, integration_id TEXT, label TEXT NOT NULL, value TEXT NOT NULL,
+              connector_id TEXT, method_id TEXT, active INTEGER, time_created INTEGER, time_updated INTEGER);
+            INSERT INTO credential (id, integration_id, label, value, active) VALUES ($id, $i, 'x', $v, $a);
+            """;
+        command.Parameters.AddWithValue("$id", Guid.NewGuid().ToString());
+        command.Parameters.AddWithValue("$i", integration);
+        command.Parameters.AddWithValue("$v", value);
+        command.Parameters.AddWithValue("$a", active ? 1 : 0);
+        command.ExecuteNonQuery();
+    }
+
+    private static string Oc2OAuth(long expiresMs) => "{\"type\":\"oauth\",\"methodID\":\"chatgpt\",\"refresh\":\"oc2-refresh\",\"access\":\"oc2-secret\",\"expires\":" + expiresMs + ",\"metadata\":{\"accountID\":\"acct-oc2\"}}";
+    private long InAnHour => _time.GetUtcNow().AddHours(1).ToUnixTimeMilliseconds();
+
+    private const string CodexBody = """{"plan_type":"pro","rate_limit":{"primary_window":{"used_percent":10,"limit_window_seconds":18000,"reset_after_seconds":60}}}""";
+
+    [Fact]
+    public async Task codex_reads_the_opencode2_sign_in_from_its_database()
+    {
+        Oc2Credential("openai", Oc2OAuth(InAnHour));
+        _api.Reply = (HttpStatusCode.OK, CodexBody);
+
+        var codex = Codex();
+        (await codex.HasSignInAsync(default)).ShouldBeTrue();
+        codex.Harnesses.ShouldBe(["opencode2"]);
+        codex.Source.ShouldBe("OpenCode 2");
+        var reading = await codex.ReadAsync(default);
+
+        reading.State.ShouldBe(UsageStates.Ok);
+        _api.Requests.Single().Authorization.ShouldBe("Bearer oc2-secret");
+        _api.Requests.Single().Headers["ChatGPT-Account-Id"].ShouldBe("acct-oc2");
+        JsonSerializer.Serialize(reading).ShouldNotContain("oc2-secret");
+    }
+
+    [Fact]
+    public async Task codex_with_both_opencodes_lists_both_and_prefers_the_unexpired_token()
+    {
+        OpenCodeAuth("""{"openai":{"type":"oauth","access":"oc1-secret"}}""");
+        Oc2Credential("openai", Oc2OAuth(InAnHour));
+        _api.Reply = (HttpStatusCode.OK, CodexBody);
+
+        var codex = Codex();
+        codex.Harnesses.ShouldBe(["opencode", "opencode2"]);
+        codex.Source.ShouldBe("OpenCode");
+        await codex.ReadAsync(default);
+        _api.Requests.Single().Authorization.ShouldBe("Bearer oc1-secret");
+    }
+
+    [Fact]
+    public async Task codex_with_an_expired_opencode2_token_is_unreadable_not_signed_out_and_asks_nothing()
+    {
+        Oc2Credential("openai", Oc2OAuth(_time.GetUtcNow().AddMinutes(-1).ToUnixTimeMilliseconds()));
+
+        var reading = await Codex().ReadAsync(default);
+
+        reading.State.ShouldBe(UsageStates.Unreadable);
+        _api.Requests.ShouldBeEmpty();
+    }
+
+    [Fact]
+    public async Task codex_ignores_an_inactive_row_a_missing_table_and_a_garbled_value()
+    {
+        (await Codex().HasSignInAsync(default)).ShouldBeFalse();   // no database at all
+        Oc2Credential("openai", Oc2OAuth(InAnHour), active: false);
+        (await Codex().HasSignInAsync(default)).ShouldBeFalse();
+        Oc2Credential("openai", "{ not json");
+        (await Codex().HasSignInAsync(default)).ShouldBeFalse();
+
+        var other = Path.Combine(_home, "no-table.db");
+        using (var connection = new SqliteConnection($"Data Source={other};Pooling=False"))
+        {
+            connection.Open();
+            using var command = connection.CreateCommand();
+            command.CommandText = "CREATE TABLE unrelated (x TEXT)";
+            command.ExecuteNonQuery();
+        }
+        _env["OPENCODE_DB"] = other;
+        (await Codex().HasSignInAsync(default)).ShouldBeFalse();
+    }
+
+    [Fact]
+    public async Task codex_honors_opencode_db_and_never_writes_to_it()
+    {
+        var custom = Path.Combine(_home, "custom", "opencode.db");
+        Oc2Credential("openai", Oc2OAuth(InAnHour), db: custom);
+        _env["OPENCODE_DB"] = custom;
+        var before = File.ReadAllBytes(custom);
+
+        (await Codex().HasSignInAsync(default)).ShouldBeTrue();
+
+        File.ReadAllBytes(custom).ShouldBe(before);
+    }
+
+    [Fact]
+    public async Task openrouter_reads_the_opencode2_key_and_lists_both_harnesses()
+    {
+        OpenCodeAuth("""{"openrouter":{"type":"api","key":"or-oc1"}}""");
+        Oc2Credential("openrouter", """{"type":"key","key":"or-oc2"}""");
+        _api.Reply = (HttpStatusCode.OK, """{"data":{"usage":1.5,"limit":10,"limit_remaining":8.5}}""");
+
+        var provider = OpenRouter();
+        provider.Harnesses.ShouldBe(["opencode", "opencode2"]);
+        var reading = await provider.ReadAsync(default);
+
+        reading.State.ShouldBe(UsageStates.Ok);
+        reading.Credits!.Used.ShouldBe(1.5);
+
+        File.Delete(Path.Combine(_home, ".local/share/opencode/auth.json"));
+        provider = OpenRouter();
+        provider.Harnesses.ShouldBe(["opencode2"]);
+        await provider.ReadAsync(default);
+        _api.Requests.Last().Authorization.ShouldBe("Bearer or-oc2");
+    }
+
     private sealed class FakeApi : IHttpClientFactory
     {
         public (HttpStatusCode Status, string Body) Reply { get; set; } = (HttpStatusCode.OK, "{}");

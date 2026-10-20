@@ -23,6 +23,9 @@ public sealed record UsageLimitWindow
     /// <summary>When it resets, when the harness says.</summary>
     public DateTimeOffset? ResetsAt { get; init; }
 
+    /// <summary>How long the window is, in seconds, when known (only the polled Usage readers say); lets clients show how far through it we are.</summary>
+    public int? WindowSeconds { get; init; }
+
     /// <summary>One of <see cref="UsageLimitStatuses"/>.</summary>
     public string Status { get; init; } = UsageLimitStatuses.Allowed;
 }

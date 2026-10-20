@@ -215,6 +215,42 @@ public sealed class UsageLimitsServiceTests
     }
 
     [Fact]
+    public async Task A_live_report_keeps_the_window_length_the_poll_found_and_the_payload_carries_it()
+    {
+        _claude.Next = new UsageReading(UsageStates.Ok, "max", [new UsageLimitWindow { Window = "five_hour", Utilization = 0.4, WindowSeconds = 18000 }]);
+        await _service.GetAsync(User, watch: true, default);
+        _time.Advance(TimeSpan.FromMinutes(1));
+        await _live.ObserveAsync(User, "claude-code", new UsageLimitReport { Windows = [new UsageLimitWindow { Window = "five_hour", Utilization = 0.5 }] });
+
+        var merged = Find(await _service.GetAsync(User, watch: false, default), "claude").Windows.Single();
+
+        (merged.Utilization, merged.WindowSeconds).ShouldBe((0.5, 18000));
+        var first = _broadcaster.Broadcasts[0].Payload.GetProperty("providers")[0].GetProperty("windows")[0];
+        first.GetProperty("windowSeconds").GetInt32().ShouldBe(18000);
+    }
+
+    [Theory]
+    [InlineData("pi")]
+    [InlineData("copilot")]
+    public async Task A_busy_Pi_or_Copilot_session_makes_the_copilot_provider_poll(string harness)
+    {
+        var copilot = new FakeProvider("copilot", "GitHub Copilot", needsConsent: true, "copilot", "pi") { Next = Ok("pro", 0.2) };
+        _prefs.Seed(UsageLimitsService.AllowPrefix + "copilot", "true");
+        var service = new UsageLimitsService([copilot], _live, _activity, _broadcaster,
+            TestServiceScopeFactory.Create(services =>
+            {
+                services.AddSingleton<IUserPreferenceRepository>(_prefs);
+                services.AddSingleton<ISessionRepository>(_sessions);
+            }), _time, NullLogger<UsageLimitsService>.Instance);
+        _sessions.Seed(new Session { Id = "ses_1", HarnessType = harness, UserId = User });
+        _activity.Update("ses_1", "busy", User);
+
+        await service.PollBusyAsync(User, default);
+
+        copilot.Reads.ShouldBe(1);
+    }
+
+    [Fact]
     public async Task Clients_are_told_once_per_change_and_never_see_a_token()
     {
         _claude.Next = new UsageReading(UsageStates.Ok, "max", [new UsageLimitWindow { Window = "five_hour", Utilization = 0.4 }]);
@@ -253,12 +289,12 @@ public sealed class UsageLimitsServiceTests
         json.GetProperty("windows").GetArrayLength().ShouldBe(0);
     }
 
-    private sealed class FakeProvider(string provider, string name, bool needsConsent, string harness) : IUsageProvider
+    private sealed class FakeProvider(string provider, string name, bool needsConsent, params string[] harnesses) : IUsageProvider
     {
         public string Provider => provider;
         public string Name => name;
         public string Source => provider == "claude" ? "Claude Code" : "OpenCode";
-        public IReadOnlyList<string> Harnesses { get; } = [harness];
+        public IReadOnlyList<string> Harnesses { get; } = harnesses;
         public bool NeedsConsent => needsConsent;
         public bool SignedIn { get; set; } = true;
         public UsageReading Next { get; set; } = new(UsageStates.Ok);

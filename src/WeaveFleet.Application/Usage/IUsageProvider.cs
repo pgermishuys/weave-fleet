@@ -6,7 +6,7 @@ namespace WeaveFleet.Application.Usage;
 /// </summary>
 public interface IUsageProvider
 {
-    /// <summary>The id on the wire: <c>claude</c>, <c>codex</c>, <c>openrouter</c>, <c>opencode2</c>.</summary>
+    /// <summary>The id on the wire: <c>claude</c>, <c>codex</c>, <c>openrouter</c>, <c>copilot</c>.</summary>
     string Provider { get; }
 
     /// <summary>What the user knows it as.</summary>

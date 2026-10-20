@@ -3,8 +3,10 @@ import { computed, onBeforeUnmount, shallowRef, watch } from "vue";
 import { Gauge } from "lucide-vue-next";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { useUsageLimits } from "@/composables/use-usage-limits";
-import { resetLabel } from "@/lib/usage-limits";
+import { resetLabel, type UsageLimitWindow } from "@/lib/usage-limits";
 import {
+  expectedShare,
+  paceNote,
   providerWindowLabel,
   providerWindows,
   providerWindowShortLabel,
@@ -64,6 +66,11 @@ function readLine(provider: ProviderUsage): string | null {
   if (provider.source) parts.push(`read from ${provider.source}`);
   if (provider.readAt !== null) parts.push(`last asked ${clock(provider.readAt)}`);
   return parts.length ? parts.join(", ") : null;
+}
+
+function tickPercent(window: UsageLimitWindow): number | null {
+  const share = expectedShare(window, now.value);
+  return share === null ? null : Math.round(share * 100);
 }
 
 const credits = (provider: ProviderUsage) => {
@@ -155,9 +162,25 @@ async function onAllow(provider: string): Promise<void> {
               :aria-valuenow="windowPercent(window)"
               aria-valuemin="0"
               aria-valuemax="100"
-            ><i :style="{ width: `${windowPercent(window)}%` }" /></span>
+            >
+              <i :style="{ width: `${windowPercent(window)}%` }" />
+              <b
+                v-if="tickPercent(window) !== null"
+                class="usage-pop__tick"
+                :style="{ left: `${tickPercent(window)}%` }"
+                :title="`An even share of this window by now: ${tickPercent(window)}%`"
+                data-testid="usage-pace-tick"
+              />
+            </span>
             <span class="usage-pop__percent">{{ windowPercent(window) }}%</span>
             <span class="usage-pop__reset">{{ resetLabel(window.resetsAt, now) ?? "" }}</span>
+            <p
+              v-if="paceNote(window, now)"
+              class="usage-pop__pace"
+              data-testid="usage-pace-note"
+            >
+              {{ paceNote(window, now)?.text }}
+            </p>
           </div>
           <p
             v-if="credits(provider)"
@@ -284,7 +307,7 @@ async function onAllow(provider: string): Promise<void> {
 .usage-pop {
   width: 380px;
   max-width: calc(100vw - 16px);
-  max-height: 430px;
+  max-height: min(560px, var(--reka-popover-content-available-height, 560px));
   overflow: auto;
   padding: 12px 14px;
   border-radius: var(--radius-panel);
@@ -342,7 +365,26 @@ async function onAllow(provider: string): Promise<void> {
 }
 
 .usage-pop__bar {
+  position: relative;
   height: 6px;
+}
+
+/* A thin mark at an even share of the window; the ring keeps it visible on both the filled and unfilled parts. */
+.usage-pop__tick {
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  width: 2px;
+  margin-left: -1px;
+  background: #fff;
+  box-shadow: 0 0 0 1px color-mix(in srgb, #000 45%, transparent);
+}
+
+.usage-pop__pace {
+  grid-column: 1 / -1;
+  margin: 0;
+  color: var(--status-waiting);
+  font-size: 11px;
 }
 
 .usage-pop__percent {

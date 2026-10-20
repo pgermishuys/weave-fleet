@@ -962,8 +962,9 @@ export function mockApiPlugin(options: MockApiOptions = {}): Plugin {
               provider: "claude", account: "Max plan", name: "Claude", state: "ok", source: "Claude Code",
               harnesses: ["claude-code"], readAt: at(0), credits: null,
               windows: [
-                { window: "five_hour", utilization: 0.84, resetsAt: at(1.5), status: "warning" },
-                { window: "seven_day", utilization: 0.31, resetsAt: at(70), status: "allowed" },
+                // 3.5 of 5 hours gone, 84% used: ahead of pace, so the tick and the note show.
+                { window: "five_hour", utilization: 0.84, resetsAt: at(1.5), windowSeconds: 18000, status: "warning" },
+                { window: "seven_day", utilization: 0.31, resetsAt: at(70), windowSeconds: 604800, status: "allowed" },
               ],
             },
             {

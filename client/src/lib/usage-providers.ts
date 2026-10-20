@@ -91,11 +91,13 @@ function toWindow(raw: unknown): UsageLimitWindow | null {
   const wire = raw as Record<string, unknown>;
   if (typeof wire.window !== "string") return null;
   const utilization = num(wire.utilization);
+  const windowSeconds = num(wire.windowSeconds);
   const status: UsageLimitStatus = wire.status === "rejected" || wire.status === "warning" ? wire.status : "allowed";
   return {
     window: wire.window,
     utilization: utilization === null ? null : Math.min(1, Math.max(0, utilization)),
     resetsAt: time(wire.resetsAt),
+    windowSeconds: windowSeconds !== null && windowSeconds > 0 ? windowSeconds : null,
     status,
   };
 }
@@ -155,4 +157,50 @@ export function usageTone(window: UsageLimitWindow): "quiet" | "warn" | "used" {
 
 export function providerWindows(provider: ProviderUsage, now: number): UsageLimitWindow[] {
   return liveWindows(provider, now);
+}
+
+/** Share of the window gone by now (0 to 1), or null when the window's length or reset time isn't known. */
+export function expectedShare(window: UsageLimitWindow, now: number): number | null {
+  const length = window.windowSeconds;
+  if (!length || length <= 0 || window.resetsAt === null) return null;
+  const span = length * 1000;
+  return Math.min(1, Math.max(0, (now - (window.resetsAt - span)) / span));
+}
+
+const MIN_AHEAD_SECONDS = 15 * 60;
+const MIN_ELAPSED_SHARE = 0.05;
+
+/** "45 min", "2 h", "1 d 3 h". */
+export function formatDuration(seconds: number): string {
+  const minutes = Math.max(1, Math.round(seconds / 60));
+  if (minutes < 60) return `${minutes} min`;
+  const hours = Math.round(minutes / 60);
+  if (hours < 24) return `${hours} h`;
+  const days = Math.floor(hours / 24);
+  const rest = hours % 24;
+  return rest ? `${days} d ${rest} h` : `${days} d`;
+}
+
+export interface PaceNote {
+  aheadBySeconds: number;
+  text: string;
+}
+
+/**
+ * Set only when the user is over an even pace and, at this rate, would run out at least 15 minutes before the window
+ * resets. Quiet for a window under 5% gone, a used-up one and one with no length.
+ */
+export function paceNote(window: UsageLimitWindow, now: number): PaceNote | null {
+  const share = expectedShare(window, now);
+  const u = window.utilization;
+  if (share === null || u === null || window.windowSeconds == null || window.resetsAt === null) return null;
+  if (u <= 0 || u >= 1 || window.status === "rejected" || u <= share || share < MIN_ELAPSED_SHARE) return null;
+  const elapsed = share * window.windowSeconds;
+  const remaining = (window.resetsAt - now) / 1000;
+  const aheadBySeconds = remaining - (elapsed * (1 - u)) / u;
+  if (aheadBySeconds < MIN_AHEAD_SECONDS) return null;
+  return {
+    aheadBySeconds,
+    text: `Ahead of pace: at this rate it runs out about ${formatDuration(aheadBySeconds)} before it resets`,
+  };
 }
