@@ -6,6 +6,9 @@ import ModStatusChip from "@/components/mods/ModStatusChip.vue";
 import NoticeChips from "@/components/notices/NoticeChips.vue";
 import RunningWorkCounter from "@/components/layout/RunningWorkCounter.vue";
 import UsageLimitChip from "@/components/layout/UsageLimitChip.vue";
+import UsageLimitsPopover from "@/components/layout/UsageLimitsPopover.vue";
+import { usePreferencesStore } from "@/stores/preferences";
+import { USAGE_LIMITS_CHIP_PREFERENCE_KEY, USAGE_LIMITS_PREFERENCE_KEY } from "@/lib/usage-providers";
 import { useAppShellStore } from "@/stores/app-shell";
 import type { CommandId } from "@/lib/command-ids";
 import { useCommandStore } from "@/stores/commands";
@@ -16,6 +19,10 @@ const sessionsStore = useSessionsStore();
 const { activeSessionId } = storeToRefs(sessionsStore);
 const appShell = useAppShellStore();
 const commandStore = useCommandStore();
+const preferences = usePreferencesStore();
+preferences.ensureLoaded();
+const usageLimitsOn = computed(() => preferences.get(USAGE_LIMITS_PREFERENCE_KEY, "false") === "true");
+const usageLimitsChipShown = computed(() => preferences.get(USAGE_LIMITS_CHIP_PREFERENCE_KEY, "true") !== "false");
 const { focused: terminalFocused } = storeToRefs(useTerminalsStore());
 
 const isMac = navigator.platform.toUpperCase().indexOf("MAC") >= 0;
@@ -221,8 +228,11 @@ const tokenCount = computed(() => {
       <!-- Work left running in the background, in every session. -->
       <RunningWorkCounter />
 
-      <!-- A harness's usage limit, only while it's close or used up. -->
-      <UsageLimitChip />
+      <!-- With Usage limits on: every provider's tightest window, opening to the details. Otherwise a harness's limit, only while it's close or used up. -->
+      <template v-if="usageLimitsOn">
+        <UsageLimitsPopover v-if="usageLimitsChipShown" />
+      </template>
+      <UsageLimitChip v-else />
 
       <!-- On the right, under the corner a notice card settles from. -->
       <NoticeChips />

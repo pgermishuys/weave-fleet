@@ -1,7 +1,11 @@
-import { mount } from "@vue/test-utils";
+import { flushPromises, mount } from "@vue/test-utils";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import type { SessionListItem } from "@/api/client";
 import StatusBar from "@/components/layout/StatusBar.vue";
+import UsageLimitChip from "@/components/layout/UsageLimitChip.vue";
+import UsageLimitsPopover from "@/components/layout/UsageLimitsPopover.vue";
+import { USAGE_LIMITS_CHIP_PREFERENCE_KEY, USAGE_LIMITS_PREFERENCE_KEY } from "@/lib/usage-providers";
+import { usePreferencesStore } from "@/stores/preferences";
 import type { CommandId } from "@/lib/command-ids";
 import { commandPoint, type Command } from "@/lib/command-registry";
 import { useAppShellStore } from "@/stores/app-shell";
@@ -183,5 +187,35 @@ describe("command store", () => {
 
     expect(enabled.action).toHaveBeenCalledTimes(1);
     expect(disabled.action).not.toHaveBeenCalled();
+  });
+});
+
+describe("StatusBar usage limits", () => {
+  beforeEach(() => {
+    commandPoint.clear();
+    vi.stubGlobal("fetch", vi.fn(async () => new Response("{}", { status: 404 })));
+  });
+
+  afterEach(() => {
+    for (const wrapper of mounted.splice(0)) wrapper.unmount();
+    vi.unstubAllGlobals();
+  });
+
+  it("keeps today's chip with the flag off, and the new one with it on (unless hidden)", async () => {
+    const preferences = usePreferencesStore();
+    const wrapper = mountBar();
+    await flushPromises();
+    expect(wrapper.findComponent(UsageLimitChip).exists()).toBe(true);
+    expect(wrapper.findComponent(UsageLimitsPopover).exists()).toBe(false);
+
+    preferences.preferences = { [USAGE_LIMITS_PREFERENCE_KEY]: "true" };
+    await wrapper.vm.$nextTick();
+    expect(wrapper.findComponent(UsageLimitChip).exists()).toBe(false);
+    expect(wrapper.findComponent(UsageLimitsPopover).exists()).toBe(true);
+
+    preferences.preferences = { [USAGE_LIMITS_PREFERENCE_KEY]: "true", [USAGE_LIMITS_CHIP_PREFERENCE_KEY]: "false" };
+    await wrapper.vm.$nextTick();
+    expect(wrapper.findComponent(UsageLimitChip).exists()).toBe(false);
+    expect(wrapper.findComponent(UsageLimitsPopover).exists()).toBe(false);
   });
 });

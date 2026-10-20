@@ -69,6 +69,7 @@ internal sealed record ErrorResponse(string Error);
 [JsonSerializable(typeof(SessionSnapshot))]
 [JsonSerializable(typeof(SessionContextUsage))]
 [JsonSerializable(typeof(List<WeaveFleet.Application.Harnesses.HarnessUsage>))]
+[JsonSerializable(typeof(WeaveFleet.Application.Usage.UsageLimitsSnapshot))]
 [JsonSerializable(typeof(WeaveFleet.Api.Hubs.SessionHistoryPage))]
 [JsonSerializable(typeof(DomainEvent))]
 [JsonSerializable(typeof(MessageLifecyclePayload))]

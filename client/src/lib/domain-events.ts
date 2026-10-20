@@ -821,6 +821,12 @@ export interface HarnessUsageChanged extends EventCursorMetadata {
   };
 }
 
+/** The usage limits of every provider changed (`GET /api/usage/limits`'s body). Sent on the `sessions` topic. */
+export interface UsageLimitsChanged extends EventCursorMetadata {
+  type: "usage.limits";
+  payload: { enabled: boolean; providers: unknown[] };
+}
+
 /** What a harness offers in a folder (agents, models, commands) changed while it ran. Sent on the `sessions` topic. */
 export interface HarnessCatalogChanged extends EventCursorMetadata {
   type: "harness.catalog_changed";
@@ -955,6 +961,7 @@ export type DomainEvent =
   | MemorySaved
   | WorkflowRunChanged
   | HarnessUsageChanged
+  | UsageLimitsChanged
   | HarnessCatalogChanged
   | ModsChanged
   | ModsRuntime
