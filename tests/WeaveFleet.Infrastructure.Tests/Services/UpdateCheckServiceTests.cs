@@ -36,6 +36,36 @@ public sealed class UpdateCheckServiceTests
         Should.NotThrow(() => UpdateCheckService.IsNewerVersion(latest, current));
     }
 
+    // ── Release feed ───────────────────────────────────────────────────────────
+
+    [Fact]
+    public void download_url_points_at_github_unless_a_release_feed_is_set()
+    {
+        var github = new UpdateOptions { GitHubRepo = "acme/fleet-releases" };
+        UpdateCheckService.DownloadUrl(github, "0.2.0", "fleet-v0.2.0-linux-x64.tar.gz")
+            .ShouldBe("https://github.com/acme/fleet-releases/releases/download/v0.2.0/fleet-v0.2.0-linux-x64.tar.gz");
+
+        var feed = new UpdateOptions { GitHubRepo = "acme/fleet-releases", ReleasesBaseUrl = "http://127.0.0.1:8099/" };
+        UpdateCheckService.DownloadUrl(feed, "0.2.0", "fleet-v0.2.0-linux-x64.tar.gz")
+            .ShouldBe("http://127.0.0.1:8099/download/v0.2.0/fleet-v0.2.0-linux-x64.tar.gz");
+    }
+
+    [Fact]
+    public void the_releases_list_is_read_from_the_release_feed_when_one_is_set()
+    {
+        var factory = new FeedlessHttpClientFactory();
+        using var github = new ReleaseNotesStore(factory, new FleetOptions { Update = new UpdateOptions { GitHubRepo = "acme/fleet-releases" } }, NullLogger<ReleaseNotesStore>.Instance);
+        github.ReleasesUrl.ShouldStartWith("https://api.github.com/repos/acme/fleet-releases/releases");
+
+        using var feed = new ReleaseNotesStore(factory, new FleetOptions { Update = new UpdateOptions { ReleasesBaseUrl = "http://127.0.0.1:8099" } }, NullLogger<ReleaseNotesStore>.Instance);
+        feed.ReleasesUrl.ShouldBe("http://127.0.0.1:8099/releases");
+    }
+
+    private sealed class FeedlessHttpClientFactory : IHttpClientFactory
+    {
+        public HttpClient CreateClient(string name) => throw new InvalidOperationException("No request is made.");
+    }
+
     // ── GetAssetName ───────────────────────────────────────────────────────────
 
     [Fact]

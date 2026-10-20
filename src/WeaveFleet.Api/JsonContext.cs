@@ -321,6 +321,7 @@ internal sealed record ErrorResponse(string Error);
 [JsonSerializable(typeof(AuthStatusResponse))]
 // Machine
 [JsonSerializable(typeof(MachineResponse))]
+[JsonSerializable(typeof(MachineUpdate))]
 [JsonSerializable(typeof(UpdateMachineRequest))]
 [JsonSerializable(typeof(MachineAccessResponse))]
 [JsonSerializable(typeof(MachineAddress))]

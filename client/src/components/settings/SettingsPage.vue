@@ -15,6 +15,7 @@ import PermissionsSection from "@/components/settings/PermissionsSection.vue";
 import ToolsSection from "@/components/settings/ToolsSection.vue";
 import HarnessesSection from "@/components/settings/HarnessesSection.vue";
 import MachinesSection from "@/components/settings/MachinesSection.vue";
+import UpdatesSection from "@/components/settings/UpdatesSection.vue";
 import WeaveSection from "@/components/settings/WeaveSection.vue";
 import WorkflowsSection from "@/components/settings/WorkflowsSection.vue";
 import StorageSection from "@/components/settings/StorageSection.vue";
@@ -94,6 +95,8 @@ const pluginSections = computed<readonly DecoratedSettingsSection[]>(() => {
     <HarnessesSection v-else-if="activeSection === 'harnesses'" />
 
     <MachinesSection v-else-if="activeSection === 'machines'" />
+
+    <UpdatesSection v-else-if="activeSection === 'updates'" />
 
     <WeaveSection v-else-if="activeSection === 'weave'" />
 

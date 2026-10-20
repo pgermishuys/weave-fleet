@@ -133,7 +133,7 @@ public sealed partial class UpdateCheckService(
             }
 
             var assetName = GetAssetName(latestVersion);
-            var downloadUrl = $"https://github.com/{options.Update.GitHubRepo}/releases/download/v{latestVersion}/{assetName}";
+            var downloadUrl = DownloadUrl(options.Update, latestVersion, assetName);
 
             var available = new UpdateState(
                 UpdateStatus.Available,
@@ -177,6 +177,11 @@ public sealed partial class UpdateCheckService(
         // Fall back to string comparison if parsing fails.
         return !string.Equals(latest, current, StringComparison.OrdinalIgnoreCase);
     }
+
+    internal static string DownloadUrl(UpdateOptions update, string version, string assetName) =>
+        update.ReleasesBaseUrl is { Length: > 0 } feed
+            ? $"{feed.TrimEnd('/')}/download/v{version}/{assetName}"
+            : $"https://github.com/{update.GitHubRepo}/releases/download/v{version}/{assetName}";
 
     internal static string GetAssetName(string version)
     {

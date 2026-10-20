@@ -1,7 +1,8 @@
 <script setup lang="ts">
 import type { Component } from "vue";
 import { computed, onMounted } from "vue";
-import { Blocks, Cable, FolderGit2, Globe, HardDrive, Info, Lightbulb, Palette, Puzzle, Server, ShieldCheck, SlidersHorizontal, Waves, Workflow, Wrench } from "lucide-vue-next";
+import { Blocks, Cable, FolderGit2, Globe, HardDrive, Info, Lightbulb, Palette, Puzzle, Server, ShieldCheck, SlidersHorizontal, Waves, Workflow, Wrench, ArrowUpCircle } from "lucide-vue-next";
+import { useFleetUpdatesWatch } from "@/composables/use-fleet-updates";
 import { useUpdateStatus } from "@/composables/use-update-status";
 import { useModsStore } from "@/stores/mods";
 
@@ -19,6 +20,7 @@ type SettingsSectionId =
   | "features"
   | "harnesses"
   | "machines"
+  | "updates"
   | "weave"
   | "workflows"
   | "plugins"
@@ -45,6 +47,9 @@ const { isUpdateAvailable, isUpdateStaged } = useUpdateStatus();
 
 const showUpdateDot = computed(() => isUpdateAvailable.value || isUpdateStaged.value);
 
+// Settings → Updates exists once its switch in Features is on; its badge counts the Fleets with an update waiting.
+const { enabled: updatesEnabled, waiting: updatesWaiting } = useFleetUpdatesWatch();
+
 const mods = useModsStore();
 // The switch decides whether Mods has a place in the nav; read it once here so the entry is right on first paint.
 onMounted(() => { void mods.loadSwitch(); });
@@ -62,12 +67,13 @@ const allItems: readonly SettingsNavItem[] = [
   { id: "tools", label: "Tools", icon: Puzzle },
   { id: "harnesses", label: "Harnesses", icon: Cable },
   { id: "machines", label: "Machines", icon: Server },
+  { id: "updates", label: "Updates", icon: ArrowUpCircle },
   { id: "weave", label: "Weave", icon: Waves },
   { id: "workflows", label: "Workflows", icon: Workflow },
   { id: "system", label: "System", icon: Info },
 ];
 
-const items = computed(() => allItems.filter((item) => item.id !== "mods" || mods.isSwitchedOn));
+const items = computed(() => allItems.filter((item) => (item.id !== "mods" || mods.isSwitchedOn) && (item.id !== "updates" || updatesEnabled.value)));
 
 function selectSection(sectionId: SettingsSectionId): void {
   emit("update:modelValue", sectionId);
@@ -112,6 +118,12 @@ function selectSection(sectionId: SettingsSectionId): void {
           :class="isUpdateStaged ? 'bg-warn' : 'bg-accent'"
           aria-label="Update available"
         />
+        <span
+          v-if="item.id === 'updates' && updatesWaiting"
+          class="ml-auto rounded-full bg-accent px-1.5 text-[10px] font-semibold leading-4 text-white"
+          :aria-label="`${updatesWaiting} Fleets can update`"
+          data-testid="updates-badge"
+        >{{ updatesWaiting }}</span>
       </button>
     </nav>
   </section>

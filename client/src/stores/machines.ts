@@ -20,6 +20,7 @@ import {
   type MachineConnection,
 } from "@/lib/machines";
 import { readCredentialsSync } from "@/lib/device-credentials";
+import type { MachineUpdate } from "@/lib/fleet-updates";
 import { FeedError, HIDDEN_CLOSE_MS, MachineFeed, type FeedRequest } from "@/lib/machine-feed";
 import { usePreferencesStore } from "@/stores/preferences";
 import { useSessionsStore } from "@/stores/sessions";
@@ -44,6 +45,8 @@ export interface MachineInfo {
   publicUrl?: string | null;
   /** What it can run and how busy it is; missing on a Fleet older than this field. */
   capabilities?: MachineCapabilities | null;
+  /** Where it is with Fleet updates; missing on a Fleet older than this field. */
+  update?: MachineUpdate | null;
 }
 
 /** A harness as a machine last checked it. */
@@ -87,6 +90,8 @@ export interface MachineEntry {
   connection: MachineConnection | null;
   /** What it last said it can run; null until it answers, or when it's too old to say. */
   capabilities: MachineCapabilities | null;
+  /** All it last said about itself (`GET /api/machine`); null until it answers. */
+  info?: MachineInfo | null;
 }
 
 /** A machine that isn't live, as its sidebar group shows it: the last session and project lists it returned. */
@@ -392,6 +397,7 @@ export const useMachinesStore = defineStore("machines", () => {
       isLive: liveKey === HOME_MACHINE_KEY,
       connection: null,
       capabilities: home.value?.capabilities ?? null,
+      info: home.value,
     },
     ...connections.value.map((connection) => ({
       key: connection.id,
@@ -402,6 +408,7 @@ export const useMachinesStore = defineStore("machines", () => {
       isLive: liveKey === connection.id,
       connection,
       capabilities: identities.value[connection.id]?.capabilities ?? null,
+      info: identities.value[connection.id] ?? null,
     })),
   ]);
 
@@ -589,6 +596,11 @@ export const useMachinesStore = defineStore("machines", () => {
       if (!entries.value.some((candidate) => candidate.key === key)) return;
       markUnreachable(key, describeFailure(error, entry.name));
     }
+  }
+
+  /** Reads every machine's `GET /api/machine` again (home, the live one, and the others), for Settings → Updates. */
+  async function refreshUpdates(): Promise<void> {
+    await Promise.all([loadHome(), checkLive(), refreshOthers()]);
   }
 
   async function refreshOthers(): Promise<void> {
@@ -837,6 +849,7 @@ export const useMachinesStore = defineStore("machines", () => {
     replaceHomeToken,
     refreshMachine,
     refreshOthers,
+    refreshUpdates,
     rememberLiveSessions,
     rememberSessions,
     startPolling,
