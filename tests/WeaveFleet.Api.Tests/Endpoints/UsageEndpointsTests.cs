@@ -24,17 +24,37 @@ public sealed class UsageEndpointsTests : IDisposable
     });
 
     [Fact]
-    public async Task Off_by_default_it_answers_enabled_false_and_reads_nothing()
+    public async Task It_is_always_enabled_and_a_provider_without_consent_is_not_read()
     {
-        Directory.CreateDirectory(Path.Combine(_home, ".claude"));
-        await File.WriteAllTextAsync(Path.Combine(_home, ".claude", ".credentials.json"), """{"claudeAiOauth":{"accessToken":"invented"}}""");
+        Directory.CreateDirectory(Path.Combine(_home, ".local", "share", "opencode"));
+        await File.WriteAllTextAsync(Path.Combine(_home, ".local", "share", "opencode", "auth.json"),
+            """{"openai":{"type":"oauth","access":"invented-secret","accountId":"acct-77"}}""");
         await using var factory = Factory();
         using var client = factory.CreateClient();
 
-        var body = await client.GetFromJsonAsync<JsonElement>("/api/usage/limits?watch=true");
+        var text = await client.GetStringAsync("/api/usage/limits?watch=true");
+        using var body = JsonDocument.Parse(text);
 
-        body.GetProperty("enabled").GetBoolean().ShouldBeFalse();
-        body.GetProperty("providers").GetArrayLength().ShouldBe(0);
+        body.RootElement.GetProperty("enabled").GetBoolean().ShouldBeTrue();
+        var codex = body.RootElement.GetProperty("providers").EnumerateArray().Single(p => p.GetProperty("provider").GetString() == "codex");
+        codex.GetProperty("state").GetString().ShouldBe("not_allowed");
+        codex.GetProperty("accountKey").GetString().ShouldBe(WeaveFleet.Application.Usage.AccountKey.For("codex", "acct-77"));
+        text.ShouldNotContain("invented-secret");
+        text.ShouldNotContain("acct-77");
+    }
+
+    [Fact]
+    public async Task A_provider_with_no_account_id_has_a_null_key_that_is_still_sent()
+    {
+        Directory.CreateDirectory(Path.Combine(_home, ".claude"));
+        await File.WriteAllTextAsync(Path.Combine(_home, ".claude", ".credentials.json"), """{"claudeAiOauth":{"accessToken":"invented-secret","expiresAt":1000}}""");
+        await using var factory = Factory();
+        using var client = factory.CreateClient();
+
+        var body = await client.GetFromJsonAsync<JsonElement>("/api/usage/limits");
+
+        body.GetProperty("providers").EnumerateArray().Single(p => p.GetProperty("provider").GetString() == "claude")
+            .GetProperty("accountKey").ValueKind.ShouldBe(JsonValueKind.Null);
     }
 
     [Fact]
@@ -44,8 +64,6 @@ public sealed class UsageEndpointsTests : IDisposable
         await File.WriteAllTextAsync(Path.Combine(_home, ".claude", ".credentials.json"), """{"claudeAiOauth":{"accessToken":"invented-secret","expiresAt":1000}}""");
         await using var factory = Factory();
         using var client = factory.CreateClient();
-        await using (var scope = factory.Services.CreateAsyncScope())
-            await scope.ServiceProvider.GetRequiredService<IUserPreferenceRepository>().SetAsync("UsageLimits", "true");
 
         // The first read happens by itself; this token expired long ago, so it answers signed out without any request.
         var text = await client.GetStringAsync("/api/usage/limits");
@@ -72,8 +90,6 @@ public sealed class UsageEndpointsTests : IDisposable
                 .ConfigurePrimaryHttpMessageHandler(() => new CannedHandler("""{"five_hour":{"utilization":40,"resets_at":"2030-01-01T00:00:00Z"}}"""));
         });
         using var client = factory.CreateClient();
-        await using (var scope = factory.Services.CreateAsyncScope())
-            await scope.ServiceProvider.GetRequiredService<IUserPreferenceRepository>().SetAsync("UsageLimits", "true");
 
         var body = await client.GetFromJsonAsync<JsonElement>("/api/usage/limits?watch=true");
 

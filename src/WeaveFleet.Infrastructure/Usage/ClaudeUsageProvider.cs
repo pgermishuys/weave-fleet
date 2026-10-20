@@ -18,6 +18,16 @@ internal sealed class ClaudeUsageProvider(IHttpClientFactory http, UsageSources 
     public IReadOnlyList<string> Harnesses { get; } = ["claude-code"];
     public bool NeedsConsent => false;
 
+    /// <summary>The credentials file has no stable account id today; use one only if Claude Code ever writes it (<c>accountUuid</c>). Never the token.</summary>
+    public string? AccountId
+    {
+        get
+        {
+            using var file = UsageRead.ReadJsonFile(sources.ClaudeCredentialsFile);
+            return file is null ? null : UsageRead.Text(file.RootElement, "accountUuid") ?? (OAuth(file.RootElement) is { } oauth ? UsageRead.Text(oauth, "accountUuid") : null);
+        }
+    }
+
     public Task<bool> HasSignInAsync(CancellationToken ct)
     {
         using var file = UsageRead.ReadJsonFile(sources.ClaudeCredentialsFile);

@@ -1,9 +1,29 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { flushPromises, mount } from "@vue/test-utils";
 
-const { apiFetch } = vi.hoisted(() => ({ apiFetch: vi.fn() }));
+const { apiFetch, apiFetchOn, machinesState, phone } = vi.hoisted(() => ({
+  apiFetch: vi.fn(),
+  apiFetchOn: vi.fn(),
+  machinesState: {
+    entries: [{ key: "home", name: "Desk", isLive: true, connection: null }] as Array<Record<string, unknown>>,
+    others: {} as Record<string, unknown>,
+  },
+  phone: { value: false },
+}));
 
-vi.mock("@/lib/api-client", () => ({ apiFetch }));
+vi.mock("@/lib/api-client", () => ({ apiFetch, apiFetchOn }));
+vi.mock("@/stores/machines", () => ({
+  useMachinesStore: () => ({
+    get entries() { return machinesState.entries; },
+    get others() { return machinesState.others; },
+    get live() { return machinesState.entries.find((entry) => entry.isLive); },
+  }),
+}));
+vi.mock("@/composables/use-media-query", () => ({ useMediaQuery: () => ({ get value() { return phone.value; } }) }));
+vi.mock("@/lib/machine-target", () => ({
+  liveTarget: () => ({ key: "home", isLive: true, connection: null }),
+  targetFor: (connection: { id: string } | null) => ({ key: connection?.id ?? "home", isLive: false, connection }),
+}));
 vi.mock("@/composables/use-signalr-socket", () => ({ onGlobalEvent: () => () => undefined, onReconnect: () => () => undefined }));
 vi.mock("@/composables/use-weave-socket", () => ({ onReconnect: () => () => undefined }));
 
@@ -36,6 +56,10 @@ describe("UsageLimitsPopover", () => {
   beforeEach(() => {
     resetUsageLimitsForTests();
     apiFetch.mockReset();
+    apiFetchOn.mockReset();
+    phone.value = false;
+    machinesState.entries = [{ key: "home", name: "Desk", isLive: true, connection: null }];
+    machinesState.others = {};
   });
   afterEach(() => {
     document.body.innerHTML = "";
@@ -155,6 +179,58 @@ describe("UsageLimitsPopover", () => {
     ]);
     expect(document.body.querySelectorAll("[data-testid=usage-pace-tick]")).toHaveLength(1);
     expect(document.body.querySelector("[data-testid=usage-pace-note]")).toBeNull();
+    wrapper.unmount();
+  });
+
+  it("shows no machine headings with one machine", async () => {
+    const wrapper = await mountOpen([provider({ windows: [{ window: "five_hour", utilization: 0.4, resetsAt: inHours(1), status: "allowed" }] })]);
+    expect(document.body.querySelector("[data-testid=usage-machine]")).toBeNull();
+    wrapper.unmount();
+  });
+
+  describe("two machines", () => {
+    const twoMachines = () => {
+      machinesState.entries = [
+        { key: "home", name: "Desk", isLive: true, connection: null },
+        { key: "lap", name: "Laptop", isLive: false, connection: { id: "lap" } },
+        { key: "off", name: "Away", isLive: false, connection: { id: "off" } },
+      ];
+      machinesState.others = { lap: { loadedAt: 1, error: null }, off: { loadedAt: 1, error: "down" } };
+    };
+    const codex = (over: Record<string, unknown> = {}) =>
+      provider({ provider: "codex", name: "Codex", accountKey: "k1", windows: [{ window: "primary", utilization: 0.3, resetsAt: inHours(1), status: "allowed" }], ...over });
+
+    it("groups by connected machine, shows a shared account once with also-on, and asks the other lazily", async () => {
+      twoMachines();
+      apiFetchOn.mockResolvedValue({ ok: true, json: async () => ({ enabled: true, providers: [codex(), provider({ provider: "openrouter", name: "OpenRouter" })] }) });
+      const wrapper = await mountOpen([codex(), provider({})]);
+      const headings = [...document.body.querySelectorAll("[data-testid=usage-machine]")].map((h) => h.textContent?.trim());
+      expect(headings).toEqual(["Desk", "Laptop"]);
+      expect(apiFetchOn).toHaveBeenCalledTimes(1);
+      expect(apiFetchOn).toHaveBeenCalledWith({ id: "lap" }, "/api/usage/limits?watch=true");
+      expect(document.body.querySelectorAll("[data-testid=usage-provider-codex]")).toHaveLength(1);
+      expect(document.body.querySelector("[data-testid=usage-also-on]")!.textContent).toContain("also on Laptop");
+      expect(document.body.querySelector("[data-testid=usage-provider-openrouter]")).not.toBeNull();
+      wrapper.unmount();
+    });
+
+    it("sends Allow only for the live machine's providers", async () => {
+      twoMachines();
+      apiFetchOn.mockResolvedValue({ ok: true, json: async () => ({ enabled: true, providers: [provider({ provider: "openrouter", name: "OpenRouter", state: "not_allowed" })] }) });
+      const wrapper = await mountOpen([provider({})]);
+      expect(document.body.querySelector("[data-testid=usage-allow-openrouter]")).toBeNull();
+      expect(document.body.textContent).toContain("Open Laptop to allow it there.");
+      wrapper.unmount();
+    });
+  });
+
+  it("is a bottom sheet on a phone, with the same list", async () => {
+    phone.value = true;
+    const wrapper = await mountOpen([provider({ windows: [{ window: "five_hour", utilization: 0.4, resetsAt: inHours(1), status: "allowed" }] })]);
+    expect(document.body.querySelector("[data-testid=usage-limits-popover]")).toBeNull();
+    const sheet = document.body.querySelector("[data-testid=usage-limits-sheet]")!;
+    expect(sheet.querySelector("[data-testid=usage-provider-claude]")).not.toBeNull();
+    expect(sheet.querySelectorAll("[role=progressbar]")).toHaveLength(1);
     wrapper.unmount();
   });
 });

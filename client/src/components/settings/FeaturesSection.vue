@@ -5,7 +5,7 @@ import { apiFetch } from "@/lib/api-client";
 import { useBoardFeature } from "@/composables/use-board-feature";
 import { SESSION_RECAP_PREFERENCE_KEY } from "@/composables/use-session-recap";
 import { RETRY_AFTER_LIMITS_PREFERENCE_KEY } from "@/composables/use-session-retry";
-import { USAGE_LIMITS_CHIP_PREFERENCE_KEY, USAGE_LIMITS_PREFERENCE_KEY } from "@/lib/usage-providers";
+import { USAGE_LIMITS_CHIP_PREFERENCE_KEY } from "@/lib/usage-providers";
 import { MODS_PREFERENCE_KEY } from "@/lib/mods";
 import { SESSION_MESSAGES_PREFERENCE_KEY } from "@/lib/session-messages";
 import { LARGE_PASTES_PREFERENCE_KEY } from "@/lib/attached-files";
@@ -63,19 +63,9 @@ async function toggleRetryAfterLimits(): Promise<void> {
   }
 }
 
-const isUsageLimitsEnabled = computed(() => preferencesStore.get(USAGE_LIMITS_PREFERENCE_KEY, "false") === "true");
-// On unless turned off, and only meant while Usage limits is on.
+// On unless turned off.
 const isUsageChipShown = computed(() => preferencesStore.get(USAGE_LIMITS_CHIP_PREFERENCE_KEY, "true") !== "false");
 const isSavingUsageLimits = shallowRef(false);
-
-async function toggleUsageLimits(): Promise<void> {
-  isSavingUsageLimits.value = true;
-  try {
-    await preferencesStore.set(USAGE_LIMITS_PREFERENCE_KEY, isUsageLimitsEnabled.value ? "false" : "true");
-  } finally {
-    isSavingUsageLimits.value = false;
-  }
-}
 
 async function toggleUsageChip(): Promise<void> {
   isSavingUsageLimits.value = true;
@@ -414,44 +404,10 @@ async function toggleBoardFeature(): Promise<void> {
     <div class="mt-3 flex items-start justify-between gap-4 rounded-card border border-border bg-main-bg p-4">
       <div>
         <p class="text-sm font-medium text-text">
-          Usage limits
-        </p>
-        <p class="mt-1 text-xs text-muted">
-          Fleet asks your providers (Claude, Codex, OpenRouter) how much you've used, and shows it in the status bar.
-          It reads the sign-ins your harnesses already hold, read-only and never saved, and only for a provider you
-          press Allow on (Claude is allowed already).
-        </p>
-      </div>
-      <div class="flex items-center gap-2">
-        <button
-          type="button"
-          role="switch"
-          :aria-checked="isUsageLimitsEnabled"
-          :disabled="preferencesStore.isLoading || isSavingUsageLimits"
-          aria-label="Show usage limits"
-          data-testid="usage-limits-switch"
-          class="relative inline-flex h-6 w-11 shrink-0 cursor-pointer rounded-full border-2 border-transparent transition-colors duration-200 ease-in-out focus:outline-none focus:ring-2 focus:ring-accent focus:ring-offset-2 focus:ring-offset-main-bg disabled:cursor-not-allowed disabled:opacity-60"
-          :class="isUsageLimitsEnabled ? 'bg-accent' : 'bg-border'"
-          @click="toggleUsageLimits"
-        >
-          <span
-            class="pointer-events-none inline-block h-5 w-5 rounded-full bg-white shadow ring-0 transition duration-200 ease-in-out"
-            :class="isUsageLimitsEnabled ? 'translate-x-5' : 'translate-x-0'"
-          />
-        </button>
-      </div>
-    </div>
-
-    <div
-      v-if="isUsageLimitsEnabled"
-      class="mt-3 flex items-start justify-between gap-4 rounded-card border border-border bg-main-bg p-4"
-    >
-      <div>
-        <p class="text-sm font-medium text-text">
           Show usage in the status bar
         </p>
         <p class="mt-1 text-xs text-muted">
-          The tightest limit, grey until 80%. Turn it off to hide the chip; nothing else changes.
+          Fleet asks the providers you've signed in to how much you've used, read-only: Claude automatically, the others after you press Allow. The chip shows the tightest limit, grey until 80%. Turn it off to hide it; nothing else changes.
         </p>
       </div>
       <div class="flex items-center gap-2">
@@ -727,7 +683,12 @@ async function toggleBoardFeature(): Promise<void> {
       </div>
 
       <div class="flex items-center gap-2">
-        <LoaderCircle v-if="isSavingCopilot" :size="16" class="animate-spin text-muted" aria-hidden="true" />
+        <LoaderCircle
+          v-if="isSavingCopilot"
+          :size="16"
+          class="animate-spin text-muted"
+          aria-hidden="true"
+        />
         <button
           type="button"
           role="switch"

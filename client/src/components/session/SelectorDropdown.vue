@@ -12,9 +12,18 @@ interface SelectorItem {
   starred?: boolean;
 }
 
+/** A provider heading's quota: a small bar, and the rows below dim (still pickable) when it's nearly used up. */
+interface SectionUsage {
+  percent: number;
+  tone: "quiet" | "warn" | "used";
+  dimmed: boolean;
+  resetText?: string | null;
+}
+
 interface SelectorSection {
   title?: string;
   level?: "group" | "provider";
+  usage?: SectionUsage | null;
   items: readonly SelectorItem[];
 }
 
@@ -88,6 +97,7 @@ const view = computed(() => {
   return shown.map((section, sectionIndex) => ({
     title: section.title,
     level: section.level ?? "group",
+    usage: section.usage ?? null,
     rows: section.items.map((item) => ({ item, key: `${sectionIndex}:${item.id}`, index: index++ })),
   }));
 });
@@ -194,12 +204,28 @@ function selectItem(itemId: string): void {
           :class="{ 'selector-dropdown__heading--provider': section.level === 'provider' }"
         >
           {{ section.title }}
+          <span
+            v-if="section.usage"
+            class="selector-dropdown__usage"
+            :class="`selector-dropdown__usage--${section.usage.tone}`"
+            :title="`${section.usage.percent}% of the limit used`"
+            data-testid="model-provider-usage"
+          >
+            <span
+              v-if="section.usage.dimmed && section.usage.resetText"
+              data-testid="model-provider-resets"
+            >{{ section.usage.resetText }}</span>
+            <span
+              class="selector-dropdown__usage-bar"
+              aria-hidden="true"
+            ><i :style="{ width: `${section.usage.percent}%` }" /></span>
+          </span>
         </div>
         <div
           v-for="{ item, key, index } in section.rows"
           :key="key"
           class="selector-dropdown__row"
-          :class="{ 'selector-dropdown__row--active': index === activeIndex }"
+          :class="{ 'selector-dropdown__row--active': index === activeIndex, 'selector-dropdown__row--dim': section.usage?.dimmed }"
           :data-active="index === activeIndex"
           @mousemove="activeIndex = index"
         >
@@ -247,6 +273,45 @@ function selectItem(itemId: string): void {
 </template>
 
 <style scoped>
+.selector-dropdown__usage {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  float: right;
+  color: var(--muted);
+  font-weight: 400;
+  text-transform: none;
+  letter-spacing: 0;
+}
+
+.selector-dropdown__usage--warn {
+  color: var(--status-waiting);
+}
+
+.selector-dropdown__usage--used {
+  color: var(--error);
+}
+
+.selector-dropdown__usage-bar {
+  display: inline-block;
+  overflow: hidden;
+  width: 28px;
+  height: 4px;
+  border-radius: 999px;
+  background: color-mix(in srgb, currentColor 22%, transparent);
+}
+
+.selector-dropdown__usage-bar i {
+  display: block;
+  height: 100%;
+  border-radius: inherit;
+  background: currentColor;
+}
+
+.selector-dropdown__row--dim {
+  opacity: 0.55;
+}
+
 .selector-dropdown-root {
   position: relative;
   /* A long label ("Default (Claude Opus 4.7)") gives way in a tight toolbar instead of pushing it wider. */

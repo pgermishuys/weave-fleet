@@ -344,7 +344,7 @@ public static class DependencyInjection
         services.AddSingleton<SessionContextRecorder>();
         services.TryAddSingleton(TimeProvider.System);
         services.AddSingleton<HarnessUsageLimits>();
-        // Usage limits (the UsageLimits switch): readers of the sign-ins already here, the service that gates them, a tick for busy sessions.
+        // Usage limits: readers of the sign-ins already here, the service that gates them, a tick for busy sessions.
         services.AddHttpClient(WeaveFleet.Infrastructure.Usage.UsageSources.HttpClientName, client => client.Timeout = TimeSpan.FromSeconds(8));
         services.AddSingleton(_ => WeaveFleet.Infrastructure.Usage.UsageSources.FromEnvironment());
         services.AddSingleton<WeaveFleet.Application.Usage.IUsageProvider, WeaveFleet.Infrastructure.Usage.ClaudeUsageProvider>();

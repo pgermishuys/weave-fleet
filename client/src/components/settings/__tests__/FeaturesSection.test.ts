@@ -83,16 +83,9 @@ describe("FeaturesSection", () => {
     expect(toggle.attributes("aria-checked")).toBe("true");
   });
 
-  it("keeps Usage limits off, with no status bar switch, until it's turned on", async () => {
+  it("has no Usage limits switch, and a status bar switch that is on until turned off", async () => {
     const wrapper = await mountSection();
-    const toggle = wrapper.get("[data-testid='usage-limits-switch']");
-    expect(toggle.attributes("aria-checked")).toBe("false");
-    expect(wrapper.find("[data-testid='usage-limits-chip-switch']").exists()).toBe(false);
-
-    await toggle.trigger("click");
-    await flushPromises();
-
-    expect(putMock).toHaveBeenCalledWith("/api/preferences/{key}", { params: { path: { key: "UsageLimits" } }, body: { value: "true" } });
+    expect(wrapper.find("[data-testid='usage-limits-switch']").exists()).toBe(false);
     const chip = wrapper.get("[data-testid='usage-limits-chip-switch']");
     expect(chip.attributes("aria-checked")).toBe("true");
 

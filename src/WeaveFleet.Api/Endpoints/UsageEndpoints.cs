@@ -11,7 +11,7 @@ public static class UsageEndpoints
     {
         var group = app.MapGroup("/api/usage/limits").WithTags("Usage");
 
-        // GET /api/usage/limits?watch= — each provider's usage limits; watch=true when the popover is open. Off: {enabled:false}.
+        // GET /api/usage/limits?watch= — each provider's usage limits; watch=true when the popover is open. Always enabled.
         group.MapGet("/", async (bool? watch, UsageLimitsService usage, IUserContext user, CancellationToken ct)
             => Results.Ok(await usage.GetAsync(user.UserId, watch == true, ct)))
         .WithName("GetUsageLimits")

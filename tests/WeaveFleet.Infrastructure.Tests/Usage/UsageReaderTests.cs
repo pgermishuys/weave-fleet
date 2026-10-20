@@ -533,4 +533,48 @@ public sealed class UsageReaderTests : IDisposable
             }
         }
     }
+
+    [Fact]
+    public void codex_account_id_comes_from_the_auth_file_and_is_never_the_token()
+    {
+        OpenCodeAuth("""{"openai":{"type":"oauth","access":"codex-secret","accountId":"acct-1"}}""");
+        var first = Codex().AccountId;
+        OpenCodeAuth("""{"openai":{"type":"oauth","access":"other-secret","accountId":"acct-2"}}""");
+        var second = Codex().AccountId;
+
+        first.ShouldBe("acct-1");
+        second.ShouldBe("acct-2");
+        AccountKey.For("codex", first).ShouldBe(AccountKey.For("codex", "acct-1"));
+        AccountKey.For("codex", first).ShouldNotBe(AccountKey.For("codex", second));
+        AccountKey.For("codex", first)!.ShouldNotContain("secret");
+    }
+
+    [Fact]
+    public void openrouter_has_no_account_id()
+    {
+        OpenCodeAuth("""{"openrouter":{"type":"api","key":"or-secret"}}""");
+
+        ((IUsageProvider)OpenRouter()).AccountId.ShouldBeNull();
+    }
+
+    [Fact]
+    public void claude_has_no_account_id_unless_the_file_names_one()
+    {
+        ClaudeSignIn();
+        Claude().AccountId.ShouldBeNull();
+
+        Write(".claude/.credentials.json", """{"claudeAiOauth":{"accessToken":"claude-secret","accountUuid":"uuid-9"}}""");
+        Claude().AccountId.ShouldBe("uuid-9");
+    }
+
+    [Fact]
+    public async Task copilot_reading_carries_the_login_as_the_account_id()
+    {
+        CopilotReplies("""{"authenticated":true,"login":"octocat","plan":"pro","resetAt":"2026-11-01T00:00:00Z","quotas":[{"id":"premium_interactions","entitlement":300,"remaining":150,"percentRemaining":50,"unlimited":false}]}""");
+
+        var reading = await Copilot().ReadAsync(default);
+
+        reading.AccountId.ShouldBe("octocat");
+        AccountKey.For("copilot", reading.AccountId).ShouldBe(AccountKey.For("copilot", "octocat"));
+    }
 }

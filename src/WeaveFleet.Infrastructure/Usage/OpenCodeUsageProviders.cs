@@ -15,6 +15,7 @@ internal sealed class CodexUsageProvider(IHttpClientFactory http, UsageSources s
     public string Source => Choose().Chosen?.Source ?? "OpenCode";
     public IReadOnlyList<string> Harnesses => Choose().Harnesses is { Count: > 0 } found ? found : ["opencode"];
     public bool NeedsConsent => true;
+    public string? AccountId => Choose().Chosen?.AccountId;
 
     /// <summary>OpenCode's sign-in, then OpenCode 2's (ids as OpenCode 2 might name ChatGPT's).</summary>
     private (SignIn? Chosen, IReadOnlyList<string> Harnesses) Choose()

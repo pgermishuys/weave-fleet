@@ -1,11 +1,17 @@
 <script setup lang="ts">
 import { computed, onBeforeUnmount, shallowRef, watch } from "vue";
 import { Gauge } from "lucide-vue-next";
+import { createReusableTemplate } from "@vueuse/core";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
+import { Sheet, SheetContent, SheetDescription, SheetTitle } from "@/components/ui/sheet";
+import { useMediaQuery } from "@/composables/use-media-query";
 import { useUsageLimits } from "@/composables/use-usage-limits";
+import { targetFor } from "@/lib/machine-target";
+import { useMachinesStore } from "@/stores/machines";
 import { resetLabel, type UsageLimitWindow } from "@/lib/usage-limits";
 import {
   expectedShare,
+  groupUsageByMachine,
   paceNote,
   providerWindowLabel,
   providerWindows,
@@ -13,6 +19,7 @@ import {
   tightestWindow,
   usageTone,
   windowPercent,
+  type MachineProviders,
   type ProviderUsage,
 } from "@/lib/usage-providers";
 
@@ -21,7 +28,29 @@ import {
  * grey until 80%, amber from there and red when used up. Click for every provider: bars, reset times, where each
  * sign-in was read from, and an Allow button for the ones Fleet hasn't been told it may read.
  */
-const { providers, watch: watchLimits, allow } = useUsageLimits();
+const { providers, otherProviders, watch: watchLimits, allow } = useUsageLimits();
+const machines = useMachinesStore();
+
+// The chip and the details are each drawn once and placed in a popover, or in a bottom sheet on a phone.
+const [DefineChip, ReuseChip] = createReusableTemplate();
+const [DefineBody, ReuseBody] = createReusableTemplate();
+const isPhone = useMediaQuery("(max-width: 600px)");
+
+/** Machines other than the live one that answered their last check: only these are asked, and only while open. */
+const connectedOthers = computed(() => machines.entries.filter((entry) => {
+  const state = machines.others[entry.key];
+  return !entry.isLive && state !== undefined && state.loadedAt !== null && !state.error;
+}));
+
+// The live machine's data first and primary; the others as they last answered.
+const groups = computed(() => {
+  const live = machines.live;
+  const list: MachineProviders[] = [{ key: liveKey.value, name: live?.name ?? "This machine", providers: providers.value }];
+  for (const entry of connectedOthers.value) list.push({ key: entry.key, name: entry.name, providers: otherProviders.value[entry.key] ?? [] });
+  return groupUsageByMachine(list);
+});
+const liveKey = computed(() => machines.live?.key ?? "live");
+const showMachines = computed(() => groups.value.length >= 2);
 
 // Once a minute: a window that resets drops off without waiting for the server to say so.
 const now = shallowRef(Date.now());
@@ -34,7 +63,7 @@ let stopWatching: (() => void) | null = null;
 watch(open, (isOpen) => {
   now.value = Date.now();
   stopWatching?.();
-  stopWatching = isOpen ? watchLimits() : null;
+  stopWatching = isOpen ? watchLimits(() => connectedOthers.value.map((entry) => targetFor(entry.connection))) : null;
 });
 onBeforeUnmount(() => stopWatching?.());
 
@@ -95,44 +124,43 @@ async function onAllow(provider: string): Promise<void> {
 </script>
 
 <template>
-  <Popover
-    v-if="chip"
-    v-model:open="open"
-  >
-    <PopoverTrigger as-child>
-      <button
-        type="button"
-        class="usage-chip"
-        :class="`usage-chip--${chip.tone}`"
-        :title="chip.title"
-        :aria-label="chip.title"
-        data-testid="usage-limits-chip"
-      >
-        <Gauge
-          class="usage-chip__icon"
+  <DefineChip>
+    <template v-if="chip">
+      <Gauge
+        class="usage-chip__icon"
+        aria-hidden="true"
+      />
+      {{ chip.name }}
+      <template v-if="chip.percent !== null">
+        <span
+          class="usage-chip__bar"
           aria-hidden="true"
-        />
-        {{ chip.name }}
-        <template v-if="chip.percent !== null">
-          <span
-            class="usage-chip__bar"
-            aria-hidden="true"
-          ><i :style="{ width: `${chip.percent}%` }" /></span>
-          <span>{{ chip.percent }}%</span>
-        </template>
-      </button>
-    </PopoverTrigger>
+        ><i :style="{ width: `${chip.percent}%` }" /></span>
+        <span>{{ chip.percent }}%</span>
+      </template>
+    </template>
+  </DefineChip>
 
-    <PopoverContent
-      side="top"
-      align="end"
-      :side-offset="8"
-      :collision-padding="8"
-      class="usage-pop"
-      data-testid="usage-limits-popover"
+  <DefineBody>
+    <template
+      v-for="group in groups"
+      :key="group.key"
     >
+      <h3
+        v-if="showMachines"
+        class="usage-pop__machine"
+        data-testid="usage-machine"
+      >
+        {{ group.name }}
+      </h3>
+      <p
+        v-if="showMachines && group.rows.length === 0"
+        class="usage-pop__note"
+      >
+        No provider sign-ins found.
+      </p>
       <section
-        v-for="provider in providers"
+        v-for="{ provider, alsoOn } in group.rows"
         :key="`${provider.provider}:${provider.account ?? ''}`"
         class="usage-pop__provider"
         :data-testid="`usage-provider-${provider.provider}`"
@@ -141,6 +169,13 @@ async function onAllow(provider: string): Promise<void> {
           <span>{{ provider.name }}</span>
           <span v-if="provider.account">{{ provider.account }}</span>
         </h4>
+        <p
+          v-if="alsoOn.length"
+          class="usage-pop__note"
+          data-testid="usage-also-on"
+        >
+          also on {{ alsoOn.join(", ") }}
+        </p>
         <p
           v-if="readLine(provider)"
           class="usage-pop__note"
@@ -195,7 +230,14 @@ async function onAllow(provider: string): Promise<void> {
             Fleet found a sign-in{{ provider.source ? ` in ${provider.source}` : "" }}. Allow it to ask {{ provider.name }}
             how much you've used? It reads the sign-in read-only, never saves it, and sends it nowhere but {{ provider.name }}.
           </p>
+          <p
+            v-if="group.key !== liveKey"
+            class="usage-pop__note"
+          >
+            Open {{ group.name }} to allow it there.
+          </p>
           <button
+            v-else
             type="button"
             class="usage-pop__allow"
             :disabled="allowing === provider.provider"
@@ -230,14 +272,73 @@ async function onAllow(provider: string): Promise<void> {
           Can't read this right now.
         </p>
       </section>
-      <p
-        v-if="providers.length === 0"
-        class="usage-pop__note"
+    </template>
+    <p
+      v-if="!showMachines && providers.length === 0"
+      class="usage-pop__note"
+    >
+      No provider sign-ins found.
+    </p>
+  </DefineBody>
+
+  <template v-if="chip">
+    <Sheet
+      v-if="isPhone"
+      v-model:open="open"
+    >
+      <button
+        type="button"
+        class="usage-chip"
+        :class="`usage-chip--${chip.tone}`"
+        :title="chip.title"
+        :aria-label="chip.title"
+        data-testid="usage-limits-chip"
+        @click="open = !open"
       >
-        No provider sign-ins found.
-      </p>
-    </PopoverContent>
-  </Popover>
+        <ReuseChip />
+      </button>
+      <SheetContent
+        side="bottom"
+        class="usage-sheet max-h-[calc(var(--visual-vh,100dvh)*0.8)] overflow-y-auto px-4 pb-[env(safe-area-inset-bottom,0px)]"
+        data-testid="usage-limits-sheet"
+      >
+        <SheetTitle>Usage limits</SheetTitle>
+        <SheetDescription class="sr-only">
+          How much of each provider's limits you've used.
+        </SheetDescription>
+        <div class="usage-pop usage-pop--sheet">
+          <ReuseBody />
+        </div>
+      </SheetContent>
+    </Sheet>
+    <Popover
+      v-else
+      v-model:open="open"
+    >
+      <PopoverTrigger as-child>
+        <button
+          type="button"
+          class="usage-chip"
+          :class="`usage-chip--${chip.tone}`"
+          :title="chip.title"
+          :aria-label="chip.title"
+          data-testid="usage-limits-chip"
+        >
+          <ReuseChip />
+        </button>
+      </PopoverTrigger>
+      <PopoverContent
+        side="top"
+        align="end"
+        :side-offset="8"
+        :collision-padding="8"
+        class="usage-pop"
+        data-testid="usage-limits-popover"
+      >
+        <ReuseBody />
+      </PopoverContent>
+    </Popover>
+  </template>
 </template>
 
 <style scoped>
@@ -413,6 +514,29 @@ async function onAllow(provider: string): Promise<void> {
 
 .usage-pop__allow:disabled {
   opacity: 0.6;
+}
+
+/* On a phone the same list sits in a bottom sheet, which brings its own width and shadow. */
+.usage-pop--sheet {
+  width: auto;
+  max-width: none;
+  max-height: none;
+  padding: 0 0 12px;
+  background: transparent;
+  box-shadow: none;
+}
+
+.usage-pop__machine {
+  margin: 0 0 6px;
+  color: var(--muted);
+  font-size: 10px;
+  font-weight: 600;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+}
+
+.usage-pop__machine:not(:first-child) {
+  margin-top: 14px;
 }
 
 @media (max-width: 600px) {

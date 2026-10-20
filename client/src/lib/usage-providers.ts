@@ -12,8 +12,6 @@ import {
 } from "@/lib/usage-limits";
 
 export const USAGE_LIMITS_EVENT = "usage.limits";
-/** Preference: the whole feature, off until the user turns it on. */
-export const USAGE_LIMITS_PREFERENCE_KEY = "UsageLimits";
 /** Preference: "false" hides the status bar chip (the feature stays on). */
 export const USAGE_LIMITS_CHIP_PREFERENCE_KEY = "UsageLimitsChip";
 
@@ -32,6 +30,8 @@ export interface ProviderUsage {
   provider: string;
   /** Plan or account to tell two sign-ins apart; display only. */
   account: string | null;
+  /** Opaque stable key of the account: the same on two machines signed in to the same account. Null when unknown. */
+  accountKey: string | null;
   name: string;
   state: ProviderUsageState;
   /** Where the sign-in was read from: "Claude Code", "OpenCode". */
@@ -73,6 +73,7 @@ function toProvider(raw: unknown): ProviderUsage | null {
   return {
     provider: wire.provider,
     account: typeof wire.account === "string" ? wire.account : null,
+    accountKey: typeof wire.accountKey === "string" && wire.accountKey ? wire.accountKey : null,
     name: typeof wire.name === "string" && wire.name ? wire.name : wire.provider,
     // A state this client doesn't know reads as unreadable rather than as a lie.
     state: STATES.includes(wire.state as ProviderUsageState) ? (wire.state as ProviderUsageState) : "unreadable",
@@ -203,4 +204,93 @@ export function paceNote(window: UsageLimitWindow, now: number): PaceNote | null
     aheadBySeconds,
     text: `Ahead of pace: at this rate it runs out about ${formatDuration(aheadBySeconds)} before it resets`,
   };
+}
+
+/** Which usage provider a model provider id draws on, or null when none has windows to show. */
+export function usageProviderForModelProvider(modelProviderId: string): string | null {
+  switch (modelProviderId.toLowerCase()) {
+    case "anthropic":
+    case "claude-code":
+      return "claude";
+    case "openai":
+      return "codex";
+    case "openrouter":
+      return "openrouter";
+    case "github-copilot":
+    case "copilot":
+      return "copilot";
+    default:
+      return null;
+  }
+}
+
+const DIM_FROM_PERCENT = 95;
+
+export interface ModelProviderUsage {
+  percent: number;
+  tone: "quiet" | "warn" | "used";
+  /** Used up or nearly: the models dim, but can still be picked. */
+  dimmed: boolean;
+  /** "resets 14:05" while dimmed and the reset time is known. */
+  resetText: string | null;
+}
+
+/** The tightest live window of the usage provider behind a model provider, for the model menu's heading. */
+export function modelProviderUsage(
+  providers: readonly ProviderUsage[],
+  modelProviderId: string,
+  now: number,
+): ModelProviderUsage | null {
+  const usageProvider = usageProviderForModelProvider(modelProviderId);
+  if (!usageProvider) return null;
+  const found = tightestWindow(providers.filter((p) => p.provider === usageProvider), now);
+  if (!found) return null;
+  const percent = windowPercent(found.window);
+  const dimmed = found.window.status === "rejected" || percent >= DIM_FROM_PERCENT;
+  const resetsAt = found.window.resetsAt;
+  const clock = resetsAt === null
+    ? null
+    : new Date(resetsAt).toLocaleTimeString(undefined, { hour: "2-digit", minute: "2-digit", hour12: false });
+  return { percent, tone: usageTone(found.window), dimmed, resetText: dimmed && clock ? `resets ${clock}` : null };
+}
+
+export interface MachineProviders {
+  key: string;
+  name: string;
+  providers: readonly ProviderUsage[];
+}
+
+export interface UsageRow {
+  provider: ProviderUsage;
+  /** Names of the later machines signed in to the same account. */
+  alsoOn: string[];
+}
+
+export interface MachineUsageGroup {
+  key: string;
+  name: string;
+  rows: UsageRow[];
+}
+
+/**
+ * One group per machine, in the order given (the live machine first). A provider whose `accountKey` an earlier
+ * machine already has is dropped from the later group and noted on the first as "also on".
+ */
+export function groupUsageByMachine(machines: readonly MachineProviders[]): MachineUsageGroup[] {
+  const seen = new Map<string, UsageRow>();
+  return machines.map((machine) => {
+    const rows: UsageRow[] = [];
+    for (const provider of machine.providers) {
+      const id = provider.accountKey ? `${provider.provider}:${provider.accountKey}` : null;
+      const first = id ? seen.get(id) : undefined;
+      if (first) {
+        first.alsoOn.push(machine.name);
+        continue;
+      }
+      const row = { provider, alsoOn: [] };
+      if (id) seen.set(id, row);
+      rows.push(row);
+    }
+    return { key: machine.key, name: machine.name, rows };
+  });
 }

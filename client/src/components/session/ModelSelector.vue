@@ -3,6 +3,8 @@ import { computed } from "vue";
 import SelectorDropdown from "@/components/session/SelectorDropdown.vue";
 import type { ModelOption } from "@/composables/use-models";
 import { modelFromKey } from "@/lib/agent-model-choice";
+import { useUsageLimits } from "@/composables/use-usage-limits";
+import { modelProviderUsage } from "@/lib/usage-providers";
 import { groupModels } from "@/lib/model-picker-groups";
 import { modelPickerKey, useModelPickerStore } from "@/stores/model-picker";
 
@@ -30,6 +32,7 @@ const props = withDefaults(
 );
 
 const picker = useModelPickerStore();
+const { providers: usageProviders } = useUsageLimits();
 
 const selectedModelId = defineModel<string>({ required: true });
 
@@ -64,7 +67,14 @@ const sections = computed(() => {
   const groups = groupModels(props.models, props.harnessType, picker.favourites, picker.recent, props.showRecent);
   return [
     { items: [defaultItem.value] },
-    ...groups.map((group) => ({ ...group, items: group.items.map(itemFor) })),
+    ...groups.map((group) => ({
+      ...group,
+      // A provider heading shows how much of that provider's limit is used; picking is never blocked.
+      usage: group.level === "provider" && group.items[0]
+        ? modelProviderUsage(usageProviders.value, group.items[0].providerId, Date.now())
+        : null,
+      items: group.items.map(itemFor),
+    })),
   ];
 });
 
