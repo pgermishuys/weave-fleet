@@ -40,6 +40,14 @@ internal sealed partial class OpenCodeHarnessSession : IHarnessSession
         LoggerMessage.Define<string, int>(LogLevel.Error, new EventId(4, "ProcessExited"),
             "OpenCode instance {InstanceId} process exited unexpectedly with code {ExitCode}.");
 
+    private static readonly Action<ILogger, string, Exception?> LogSessionReattached =
+        LoggerMessage.Define<string>(LogLevel.Information, new EventId(90, "SessionReattached"),
+            "OpenCode restarted; reattaching existing OpenCode session {OpenCodeSessionId}.");
+
+    private static readonly Action<ILogger, string, Exception?> LogSessionGoneAfterRestart =
+        LoggerMessage.Define<string>(LogLevel.Warning, new EventId(91, "SessionGoneAfterRestart"),
+            "OpenCode restarted and no longer has session {OpenCodeSessionId}; a new one will be created and earlier history is lost.");
+
     private static readonly Action<ILogger, string, Exception?> LogRecoverySubscriptionTimedOut =
         LoggerMessage.Define<string>(LogLevel.Warning, new EventId(900, "RecoverySubscriptionTimedOut"),
             "OpenCode instance {InstanceId} didn't report its event subscription ready after the process restarted; sending anyway.");
@@ -1614,10 +1622,39 @@ internal sealed partial class OpenCodeHarnessSession : IHarnessSession
 
         if (_status == HarnessSessionStatus.Error)
         {
-            ClearOpenCodeSessionId();
+            // OpenCode keeps its sessions on disk, so the restarted server still has this one: keep it (and the
+            // conversation and the model's context with it) unless the server says it is really gone.
+            if (_openCodeSessionId is { } previous && !await OpenCodeSessionIsGoneAsync(previous, ct).ConfigureAwait(false))
+            {
+                LogSessionReattached(_logger, previous, null);
+            }
+            else
+            {
+                ClearOpenCodeSessionId();
+            }
+
             _agentModelCache = null;
             _toolCallToQuestionId.Clear();
             _status = HarnessSessionStatus.Idle;
+        }
+    }
+
+    /// <summary>True only when the restarted server answers that the session does not exist; any other failure keeps it.</summary>
+    private async Task<bool> OpenCodeSessionIsGoneAsync(string openCodeSessionId, CancellationToken ct)
+    {
+        try
+        {
+            await _instanceHandle.HttpClient.GetSessionAsync(openCodeSessionId, _workingDirectory, ct).ConfigureAwait(false);
+            return false;
+        }
+        catch (HttpRequestException ex) when (ex.StatusCode == System.Net.HttpStatusCode.NotFound)
+        {
+            LogSessionGoneAfterRestart(_logger, openCodeSessionId, null);
+            return true;
+        }
+        catch (Exception ex) when (ex is not OperationCanceledException)
+        {
+            return false;
         }
     }
 
