@@ -12,6 +12,9 @@ REPO_BIN="$REPO_APP_DIR/WeaveFleet.Api"
 REPO_CONTENT_ROOT="$ROOT_DIR/src/WeaveFleet.Api"
 VERSION_FILE="$ROOT_DIR/VERSION"
 DEV_VERSION_FILE="$ROOT_DIR/Directory.Build.props"
+TRIAL_FILE="$ROOT_DIR/update-trial.json"
+FAILED_FILE="$ROOT_DIR/update-failed.json"
+PREV_DB_DIR="$ROOT_DIR/update.prev"
 INSTALL_SCRIPT_URL="${WEAVE_FLEET_INSTALL_SCRIPT_URL:-https://github.com/pgermishuys/fleet-releases/releases/latest/download/install.sh}"
 
 # ── Apply staged update (if any) ─────────────────────────────────────────────
@@ -95,6 +98,13 @@ apply_staged_update() {
     return 0
   fi
 
+  # Keep what is being replaced, so a version that doesn't start can be undone (see rollback_update).
+  rm -rf "$ROOT_DIR/app.prev" "$ROOT_DIR/bin.prev" "$ROOT_DIR/VERSION.prev" "$PREV_DB_DIR"
+  mv "$APP_BAK" "$ROOT_DIR/app.prev"
+  [ -d "$ROOT_DIR/bin" ] && cp -a "$ROOT_DIR/bin" "$ROOT_DIR/bin.prev"
+  [ -f "$VERSION_FILE" ] && cp "$VERSION_FILE" "$ROOT_DIR/VERSION.prev"
+  PREV_VERSION="$(sed -n '1p' "$VERSION_FILE" 2>/dev/null || true)"
+
   # Replace app dir.
   rm -rf "$ROOT_DIR/app"
   cp -a "${EXTRACTED_ROOT}app" "$ROOT_DIR/app"
@@ -109,8 +119,11 @@ apply_staged_update() {
   # Update VERSION file.
   printf '%s\n' "$UPDATE_VERSION" > "$ROOT_DIR/VERSION"
 
+  # The new version is on trial until it says it started (the app deletes this file); run_app watches it.
+  printf '{"from":"%s","to":"%s","startedAt":"%s"}\n' "$PREV_VERSION" "$UPDATE_VERSION" "$(date -u +%Y-%m-%dT%H:%M:%SZ)" > "$TRIAL_FILE"
+
   # Clean up.
-  rm -rf "$APP_BAK" "$UPDATE_DIR"
+  rm -rf "$UPDATE_DIR"
 
   echo "Fleet updated to v${UPDATE_VERSION}."
 }
@@ -672,4 +685,115 @@ if [ "$NODE" -eq 1 ]; then
 else
   echo "Fleet v${VERSION} starting on ${LISTEN_URL}"
 fi
-exec "$APP_BIN" --urls "$LISTEN_URL" --contentRoot "$APP_CONTENT_ROOT" $EXTRA_ARGS
+
+if [ "$INSTALL_LAYOUT" -ne 1 ]; then
+  exec "$APP_BIN" --urls "$LISTEN_URL" --contentRoot "$APP_CONTENT_ROOT" $EXTRA_ARGS
+fi
+
+# ── Run the app, and restart it into an update when it asks ──────────────────
+# An installed Fleet runs as a child so it can restart itself: exit code 85 means "restart to update", and the launcher
+# starts itself again, so the launcher that comes with the update applies it. Any other exit code is passed on as it is.
+# A version that was just applied is on trial: if it exits before deleting update-trial.json, or doesn't within
+# FLEET_UPDATE_TRIAL_SECONDS, the launcher puts the old version back (and its database files) and starts that.
+TRIAL_SECONDS="${FLEET_UPDATE_TRIAL_SECONDS:-120}"
+export FLEET_LAUNCHER_RESTART=85
+
+json_field() {
+  sed -n "s/.*\"$1\"[[:space:]]*:[[:space:]]*\"\([^\"]*\)\".*/\1/p" "$2" | sed -n '1p'
+}
+
+# The database files as they were before the new version first ran (and may have migrated them).
+backup_database() {
+  if [ -f "$TRIAL_FILE" ] && [ ! -f "$PREV_DB_DIR/.copied" ]; then
+    mkdir -p "$PREV_DB_DIR"
+    for suffix in "" "-wal" "-shm"; do
+      [ -f "$Fleet__DatabasePath$suffix" ] && cp -p "$Fleet__DatabasePath$suffix" "$PREV_DB_DIR/fleet.db$suffix"
+    done
+    : > "$PREV_DB_DIR/.copied"
+  fi
+  return 0
+}
+
+rollback_update() {
+  trial_from="$(json_field from "$TRIAL_FILE")"
+  trial_to="$(json_field to "$TRIAL_FILE")"
+  echo "Fleet v${trial_to} didn't start properly ($1). Going back to v${trial_from}." >&2
+  if [ -d "$ROOT_DIR/app.prev" ]; then rm -rf "$ROOT_DIR/app"; mv "$ROOT_DIR/app.prev" "$ROOT_DIR/app"; fi
+  if [ -d "$ROOT_DIR/bin.prev" ]; then rm -rf "$ROOT_DIR/bin"; mv "$ROOT_DIR/bin.prev" "$ROOT_DIR/bin"; fi
+  if [ -f "$ROOT_DIR/VERSION.prev" ]; then mv "$ROOT_DIR/VERSION.prev" "$VERSION_FILE"; fi
+  if [ -f "$PREV_DB_DIR/.copied" ]; then
+    for suffix in "" "-wal" "-shm"; do
+      if [ -f "$PREV_DB_DIR/fleet.db$suffix" ]; then
+        cp -p "$PREV_DB_DIR/fleet.db$suffix" "$Fleet__DatabasePath$suffix"
+      else
+        rm -f "$Fleet__DatabasePath$suffix"
+      fi
+    done
+  fi
+  printf '{"from":"%s","to":"%s","reason":"%s","at":"%s"}\n' "$trial_from" "$trial_to" "$1" "$(date -u +%Y-%m-%dT%H:%M:%SZ)" > "$FAILED_FILE"
+  rm -f "$TRIAL_FILE"
+}
+
+# Stops the app when it hasn't confirmed the trial in time.
+trial_watchdog() {
+  elapsed=0
+  while [ "$elapsed" -lt "$TRIAL_SECONDS" ]; do
+    sleep 1
+    elapsed=$((elapsed + 1))
+    [ -f "$TRIAL_FILE" ] || return 0
+    kill -0 "$APP_PID" 2>/dev/null || return 0
+  done
+  : > "$PREV_DB_DIR/.timeout"
+  kill -TERM "$APP_PID" 2>/dev/null
+  sleep 10
+  kill -KILL "$APP_PID" 2>/dev/null
+  return 0
+}
+
+# What it takes to start this launcher again the way this run was started.
+restart_launcher() {
+  if [ "$NODE" -eq 1 ]; then set -- node; else set --; fi
+  set -- "$@" --port "$PORT" --host "$HOST" --data-dir "$DATA_DIR"
+  if [ "$REQUIRE_TOKEN" -eq 1 ]; then set -- "$@" --require-token; fi
+  echo "Restarting Fleet to finish updating..."
+  exec "$SCRIPT_DIR/$(basename "$0")" "$@"
+}
+
+APP_PID=""
+SIGNALLED=0
+# Stopping the launcher stops the app, and the launcher waits for it to finish.
+trap 'SIGNALLED=1; [ -z "$APP_PID" ] || kill -TERM "$APP_PID" 2>/dev/null' TERM INT
+
+while true; do
+  backup_database
+  rm -f "$PREV_DB_DIR/.timeout"
+  "$APP_BIN" --urls "$LISTEN_URL" --contentRoot "$APP_CONTENT_ROOT" $EXTRA_ARGS &
+  APP_PID=$!
+  WATCHDOG=""
+  if [ -f "$TRIAL_FILE" ]; then
+    trial_watchdog &
+    WATCHDOG=$!
+  fi
+
+  APP_CODE=0
+  wait "$APP_PID" || APP_CODE=$?
+  # A signal ends the first wait early; the app is still shutting down.
+  while kill -0 "$APP_PID" 2>/dev/null; do
+    wait "$APP_PID" || APP_CODE=$?
+  done
+  [ -z "$WATCHDOG" ] || kill "$WATCHDOG" 2>/dev/null || true
+  APP_PID=""
+
+  if [ -f "$TRIAL_FILE" ] && [ "$SIGNALLED" -eq 0 ]; then
+    if [ -f "$PREV_DB_DIR/.timeout" ]; then
+      rollback_update "it wasn't ready after ${TRIAL_SECONDS} seconds"
+    else
+      rollback_update "it exited with code ${APP_CODE} before it was ready"
+    fi
+    continue
+  fi
+  if [ "$APP_CODE" -eq 85 ] && [ "$SIGNALLED" -eq 0 ]; then
+    restart_launcher
+  fi
+  exit "$APP_CODE"
+done

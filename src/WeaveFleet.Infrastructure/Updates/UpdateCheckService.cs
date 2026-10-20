@@ -22,7 +22,8 @@ public sealed partial class UpdateCheckService(
     UpdateStateHolder stateHolder,
     UpdateDownloadService downloadService,
     ReleaseNotesStore releaseNotes,
-    ILogger<UpdateCheckService> logger) : BackgroundService
+    ILogger<UpdateCheckService> logger,
+    UpdateFiles? files = null) : BackgroundService
 {
 
     protected override async Task ExecuteAsync(CancellationToken stoppingToken)
@@ -129,6 +130,13 @@ public sealed partial class UpdateCheckService(
                     AssetName: null,
                     CheckedAt: DateTimeOffset.UtcNow,
                     Error: null));
+                return;
+            }
+
+            // A version that failed to start here and was undone isn't fetched again; a newer one is.
+            if (files?.ReadFailure() is { } failure && string.Equals(failure.To, latestVersion, StringComparison.OrdinalIgnoreCase))
+            {
+                stateHolder.SetState(new UpdateState(UpdateStatus.Available, latestVersion, null, null, DateTimeOffset.UtcNow, null));
                 return;
             }
 

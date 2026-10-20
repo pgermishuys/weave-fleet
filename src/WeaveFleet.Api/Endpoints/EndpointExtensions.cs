@@ -52,7 +52,7 @@ public static class EndpointExtensions
         apiScope.MapAgentBrowserEndpoints();
         apiScope.MapProjectEndpoints();
         apiScope.MapFleetSummaryEndpoints();
-        apiScope.MapUpdateEndpoints();
+        apiScope.MapUpdateEndpoints(fleetOptions);
         apiScope.MapDesktopEndpoints();
         apiScope.MapSessionSourceEndpoints();
         apiScope.MapConfigEndpoints();

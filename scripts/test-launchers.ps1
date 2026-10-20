@@ -199,6 +199,77 @@ foreach ($option in $helpOptions) {
     Test-Started $arguments $output | Out-Null
 }
 
+# Restarting into an update, and going back when it doesn't start. The old app (0.0.0-test) stages 0.0.1-test and exits
+# 85; the launcher starts again, applies it, and runs the new app, which behaves as FLEET_TEST_BEHAVIOUR says.
+$upExe = Join-Path $work 'updater.exe'
+Add-Type -OutputType ConsoleApplication -OutputAssembly $upExe -TypeDefinition @'
+using System;
+using System.IO;
+public static class Program
+{
+    public static int Main(string[] args)
+    {
+        string root = Path.GetFullPath(Path.Combine(AppDomain.CurrentDomain.BaseDirectory, ".."));
+        string version = File.ReadAllLines(Path.Combine(root, "VERSION"))[0].Trim();
+        string db = Environment.GetEnvironmentVariable("Fleet__DatabasePath");
+        File.AppendAllText(Environment.GetEnvironmentVariable("FLEET_TEST_LOG"), version + " restart=" + Environment.GetEnvironmentVariable("FLEET_LAUNCHER_RESTART") + "\n");
+        if (version == "0.0.0-test")
+        {
+            string once = Path.Combine(root, "staged-once");
+            if (Environment.GetEnvironmentVariable("FLEET_TEST_STAGE") != "1" || File.Exists(once)) return 0;
+            File.WriteAllText(once, "");
+            File.WriteAllText(db, "old-database");
+            Directory.CreateDirectory(Path.Combine(root, "update"));
+            File.Copy(Environment.GetEnvironmentVariable("FLEET_TEST_RELEASE"), Path.Combine(root, "update", "release.zip"), true);
+            File.WriteAllText(Path.Combine(root, "update", "update-manifest.json"), "{\n  \"version\": \"0.0.1-test\",\n  \"assetFileName\": \"release.zip\"\n}\n");
+            return 85;
+        }
+        if (Environment.GetEnvironmentVariable("FLEET_TEST_BEHAVIOUR") == "ok") { File.Delete(Path.Combine(root, "update-trial.json")); return 0; }
+        File.WriteAllText(db, "migrated");
+        return 1;
+    }
+}
+'@
+
+function New-Install([string]$behaviour) {
+    $root = Join-Path $work 'up'
+    Remove-Item $root, (Join-Path $work 'rel'), (Join-Path $work 'upx'), (Join-Path $work 'log.txt') -Recurse -Force -ErrorAction SilentlyContinue
+    $pkg = Join-Path $work 'rel\fleet-v0.0.1-test'
+    New-Item -ItemType Directory -Force -Path "$root\bin", "$root\app", "$pkg\bin", "$pkg\app", (Join-Path $work 'data') | Out-Null
+    Copy-Item (Join-Path $PSScriptRoot 'launcher.cmd') "$root\bin\fleet.cmd"
+    Copy-Item (Join-Path $PSScriptRoot 'launcher.cmd') "$pkg\bin\fleet.cmd"
+    Copy-Item $upExe "$root\app\WeaveFleet.Api.exe"
+    Copy-Item $upExe "$pkg\app\WeaveFleet.Api.exe"
+    Set-Content "$root\VERSION" '0.0.0-test'
+    Set-Content "$pkg\VERSION" '0.0.1-test'
+    Remove-Item (Join-Path $work 'data\fleet.db') -ErrorAction SilentlyContinue
+    Compress-Archive -Path $pkg -DestinationPath (Join-Path $work 'release.zip') -Force
+    $env:FLEET_TEST_BEHAVIOUR = $behaviour
+    $env:FLEET_TEST_STAGE = '1'
+    $env:FLEET_TEST_RELEASE = Join-Path $work 'release.zip'
+    $env:FLEET_TEST_LOG = Join-Path $work 'log.txt'
+    return $root
+}
+
+foreach ($behaviour in 'ok', 'crash') {
+    $root = New-Install $behaviour
+    $output = & cmd.exe /d /c "`"$root\bin\fleet.cmd`" --port 2113 2>&1"
+    $log = (Get-Content $env:FLEET_TEST_LOG) -join ','
+    $version = (Get-Content "$root\VERSION" -TotalCount 1).Trim()
+    if ($behaviour -eq 'ok') {
+        if ($log -ne '0.0.0-test restart=85,0.0.1-test restart=85') { Fail "restart into an update: the app started as [$log]: $output" }
+        if ($version -ne '0.0.1-test') { Fail "restart into an update: VERSION is $version" }
+        if (Test-Path "$root\update-trial.json") { Fail 'restart into an update: the trial was never confirmed' }
+    } else {
+        if ($log -ne '0.0.0-test restart=85,0.0.1-test restart=85,0.0.0-test restart=85') { Fail "failed update: the app started as [$log]: $output" }
+        if ($version -ne '0.0.0-test') { Fail "failed update: VERSION is $version" }
+        if ((Get-Content (Join-Path $work 'data\fleet.db') -Raw).Trim() -ne 'old-database') { Fail 'failed update: the database was not put back' }
+        $failed = Get-Content "$root\update-failed.json" -Raw | ConvertFrom-Json
+        if ($failed.from -ne '0.0.0-test' -or $failed.to -ne '0.0.1-test' -or $failed.reason -notmatch 'exited with code 1') { Fail "failed update: update-failed.json says $($failed | ConvertTo-Json -Compress)" }
+    }
+}
+Remove-Item Env:\FLEET_TEST_BEHAVIOUR, Env:\FLEET_TEST_STAGE, Env:\FLEET_TEST_RELEASE, Env:\FLEET_TEST_LOG -ErrorAction SilentlyContinue
+
 Remove-Item $work -Recurse -Force -ErrorAction SilentlyContinue
 
 if ($script:failures -gt 0) {
