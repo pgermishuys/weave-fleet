@@ -4,6 +4,11 @@ import { storeToRefs } from "pinia";
 import { AlertCircle, Check, Copy, Eye, EyeOff, LoaderCircle, Plus, RefreshCw } from "lucide-vue-next";
 import { useMachinesStore, type MachineAccess, type MachineEntry, type MachineHarness } from "@/stores/machines";
 import AddPhonePanel from "@/components/settings/AddPhonePanel.vue";
+import MachineUpdatesStrip from "@/components/settings/MachineUpdatesStrip.vue";
+import MachineVersionLine from "@/components/settings/MachineVersionLine.vue";
+import { useFleetUpdates } from "@/composables/use-fleet-updates";
+import { useWhatsNew } from "@/composables/use-whats-new";
+import type { FleetUpdateRow } from "@/lib/fleet-updates";
 import DevicesList from "@/components/settings/DevicesList.vue";
 import { listDevices, type PairedDevice } from "@/lib/devices-api";
 import { AGENT_HANDOFF_PREFERENCE_KEY } from "@/lib/machines";
@@ -25,6 +30,26 @@ const machines = useMachinesStore();
 const { entries, others, home, liveReachable, source } = storeToRefs(machines);
 const preferencesStore = usePreferencesStore();
 preferencesStore.ensureLoaded();
+
+// ── Updates (Settings → Features → Updates in Machines) ──────────────────────
+// Everything here does nothing with the switch off: no request, no timer, nothing drawn.
+const fleetUpdates = useFleetUpdates();
+const { enabled: updatesOn } = fleetUpdates;
+const { openWhatsNew } = useWhatsNew();
+const updateRows = computed(() => new Map(fleetUpdates.machineRows.value.map((row) => [row.key, row])));
+
+const unreachableKeys = computed(() => new Set(fleetUpdates.machineRows.value.filter((row) => row.state.kind === "unreachable").map((row) => row.key)));
+
+function updateRow(entry: MachineEntry): FleetUpdateRow | null {
+  return updatesOn.value ? updateRows.value.get(entry.key) ?? null : null;
+}
+
+/** "Restart into X" on a card whose machine has an update downloaded; the reason it can't is in the version line. */
+function restartButton(entry: MachineEntry): { label: string; disabled: boolean } | null {
+  const offer = updateRow(entry)?.restart;
+  if (offer?.kind !== "button") return null;
+  return { label: offer.label, disabled: offer.disabled || fleetUpdates.rolloutRunning.value || !!fleetUpdates.restartingSelf.value };
+}
 
 // ── Add ──────────────────────────────────────────────────────────────────────
 const showAddForm = shallowRef(false);
@@ -367,6 +392,25 @@ onUnmounted(() => stopPolling?.());
       Added {{ justAdded }}. Its sessions are in the sessions list.
     </p>
 
+    <MachineUpdatesStrip
+      v-if="updatesOn"
+      :summary="fleetUpdates.summary.value"
+      :checked-at="fleetUpdates.checkedAt.value"
+      :rollout="fleetUpdates.rollout.value"
+      :rollout-running="fleetUpdates.rolloutRunning.value"
+      :is-checking="fleetUpdates.isChecking.value"
+      :ready-machines="fleetUpdates.readyMachines.value"
+      :unreachable="unreachableKeys"
+      :chosen-rule="fleetUpdates.chosenRule.value"
+      :outcome="fleetUpdates.outcome.value"
+      :action-error="fleetUpdates.actionError.value"
+      @check="fleetUpdates.checkNow()"
+      @update="fleetUpdates.startRollout()"
+      @stop="fleetUpdates.stopRollout()"
+      @choose="fleetUpdates.chooseRule($event)"
+      @whats-new="openWhatsNew"
+    />
+
     <ul
       class="mt-5 grid gap-2"
       aria-label="Machines"
@@ -496,6 +540,16 @@ onUnmounted(() => stopPolling?.());
           class="machine-card__actions"
         >
           <button
+            v-if="restartButton(entry)"
+            type="button"
+            :class="buttonSecondaryClass"
+            :disabled="restartButton(entry)!.disabled"
+            data-testid="update-restart"
+            @click="fleetUpdates.restart(updateRow(entry)!)"
+          >
+            {{ restartButton(entry)!.label }}
+          </button>
+          <button
             v-if="!entry.isLive"
             type="button"
             :class="buttonSecondaryClass"
@@ -529,6 +583,14 @@ onUnmounted(() => stopPolling?.());
             Forget
           </button>
         </div>
+
+        <MachineVersionLine
+          v-if="updateRow(entry)"
+          :row="updateRow(entry)!"
+          :rollout="fleetUpdates.rollout.value"
+          :chosen-rule="fleetUpdates.chosenRule.value"
+          @override="fleetUpdates.overrideRule(entry.key, $event)"
+        />
       </li>
     </ul>
 

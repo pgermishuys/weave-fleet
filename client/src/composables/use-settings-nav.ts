@@ -14,7 +14,6 @@ export type SettingsSectionId =
   | "features"
   | "harnesses"
   | "machines"
-  | "updates"
   | "weave"
   | "workflows"
   | "plugins"

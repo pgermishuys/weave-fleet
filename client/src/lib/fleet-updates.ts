@@ -1,17 +1,39 @@
 /**
- * Settings → Updates: what each Fleet you run says about its own version. Pure mapping from what a machine reported
+ * Updates in Settings → Machines: what each Fleet you run says about its own version. Pure mapping from what a machine reported
  * (`update` in `GET /api/machine`, or the desktop app's bridge) to the row the page draws, so every state has one test.
  */
 import type { DesktopUpdateState } from "@/lib/desktop";
+import { formatRelativeTime } from "@/lib/format-utils";
 
-/** Settings → Features: shows Settings → Updates. Off until turned on. */
+/** Settings → Features: shows each machine's version, update rule and Restart in Settings → Machines. Off until turned on. */
 export const FLEET_UPDATES_PREFERENCE_KEY = "FleetUpdates";
 
-/** Settings → Updates: the rule the user chose for every machine, unless one has its own. */
+/** Settings → Machines: the rule the user chose for every machine, unless one has its own. */
 export const UPDATE_RULE_DEFAULT_KEY = "FleetUpdateRule";
 
 /** A JSON object: machine key (`home` for this one) to the rule that machine follows. */
 export const UPDATE_RULE_OVERRIDES_KEY = "FleetUpdateRules";
+
+/** This device's note of the version each machine last reported, so a machine that can't be reached still says what it was on. */
+const LAST_SEEN_VERSIONS_KEY = "fleet.machineVersions";
+
+export function readLastSeenVersions(): Record<string, string> {
+  try {
+    const parsed: unknown = JSON.parse(globalThis.localStorage?.getItem(LAST_SEEN_VERSIONS_KEY) ?? "{}");
+    if (!parsed || typeof parsed !== "object") return {};
+    return Object.fromEntries(Object.entries(parsed).filter((entry): entry is [string, string] => typeof entry[1] === "string"));
+  } catch {
+    return {};
+  }
+}
+
+export function writeLastSeenVersions(versions: Record<string, string>): void {
+  try {
+    globalThis.localStorage?.setItem(LAST_SEEN_VERSIONS_KEY, JSON.stringify(versions));
+  } catch {
+    // No storage (private window, quota): an unreachable machine just won't say its version.
+  }
+}
 
 /** When a Fleet restarts itself into an update it has downloaded. */
 export type UpdateRule = "ask" | "idle" | "overnight";
@@ -240,6 +262,8 @@ export interface FleetUpdateRow {
   isHome: boolean;
   /** The rule this row follows and the override on it; null where there is none to set (the desktop app always asks; an old Fleet can't take one). */
   rule: { effective: UpdateRule; overridden: UpdateRule | null } | null;
+  /** Sessions in a turn on that machine (working or waiting for an answer); missing where unknown. */
+  working?: number;
 }
 
 const OS_NAMES: Record<string, string> = { linux: "Linux", macos: "macOS", windows: "Windows" };
@@ -349,7 +373,201 @@ export function describeUpdatedNotice(
   };
 }
 
-/** The status bar chip: how many Fleets can update. Null when none. */
-export function describeUpdateChip(waiting: number): string | null {
-  return waiting > 0 ? `↑ ${waiting} ${waiting === 1 ? "Fleet" : "Fleets"} can update` : null;
+/** The steps of a rollout that are done with, one way or another. */
+const FINISHED_STEPS: RolloutStep["state"][] = ["done", "rolled-back", "no-return", "skipped"];
+const ACTIVE_STEPS: RolloutStep["state"][] = ["checking", "waiting", "restarting"];
+
+/**
+ * The one status bar chip for machine updates: how many machines can update, or where a rollout is. Null when neither.
+ * Counts machines only (the desktop app's own update has its own notice).
+ */
+export function describeUpdateChip(waiting: number, rollout: Rollout | null = null): string | null {
+  if (rollout?.status === "running" && rollout.steps.length > 0) {
+    const finished = rollout.steps.filter((step) => FINISHED_STEPS.includes(step.state)).length;
+    return `Updating machines · ${Math.min(finished + 1, rollout.steps.length)} of ${rollout.steps.length}`;
+  }
+  return waiting > 0 ? `↑ ${waiting} ${waiting === 1 ? "machine" : "machines"} can update` : null;
+}
+
+function sessionCount(count: number): string {
+  return `${count} ${count === 1 ? "session" : "sessions"}`;
+}
+
+/** The step a rollout is working on now, if any. */
+function activeStep(rollout: Rollout | null): RolloutStep | undefined {
+  return rollout?.status === "running" ? rollout.steps.find((step) => ACTIVE_STEPS.includes(step.state)) : undefined;
+}
+
+export interface VersionLine {
+  /** "Fleet 0.59.0", or "Fleet" when the machine won't say. */
+  version: string;
+  /** The version it would move to; null when it isn't moving. */
+  target: string | null;
+  text: string;
+  tone: FleetUpdateState["tone"];
+  /** Whether the per-machine rule menu belongs on the line: the machine reports a rule and can be reached. */
+  ruleMenu: boolean;
+}
+
+/** What a machine downloaded does by itself under its rule. */
+function selfUpdateText(rule: UpdateRule, working: number, state: FleetUpdateState): string {
+  if (rule === "ask") return "waiting for you to restart it";
+  if (rule === "overnight") return "updates itself tonight, 02:00–05:00";
+  return state.kind === "busy" && working > 0
+    ? `updates itself when ${working === 1 ? "its session finishes" : `its ${working} sessions finish`}`
+    : "updates itself in a minute";
+}
+
+/** The line along the bottom of a machine card in Settings → Machines: its version, and where it is with updating. */
+export function describeVersionLine(row: FleetUpdateRow, rollout: Rollout | null): VersionLine {
+  const { state } = row;
+  const step = rollout?.status === "running" ? rollout.steps.find((candidate) => candidate.machineId === row.key) : undefined;
+  const base = (version: string | null, target: string | null, text: string, tone: FleetUpdateState["tone"]): VersionLine => ({
+    version: version ? `Fleet ${version}` : "Fleet",
+    target,
+    text,
+    tone,
+    ruleMenu: row.rule !== null && state.kind !== "unreachable",
+  });
+
+  if (state.kind === "unreachable") {
+    return base(row.version, null, row.version ? `can't be reached · last seen on ${row.version}` : "can't be reached", "muted");
+  }
+  if (step) {
+    const target = step.toVersion ?? state.target;
+    switch (step.state) {
+      case "waiting":
+        return base(row.version, target, `Updating: ${step.detail ?? (step.waitingSessions > 0 ? `waiting for ${sessionCount(step.waitingSessions)} to finish` : "waiting for its sessions to finish")}`, "warn");
+      case "restarting":
+        return base(row.version, target, `Updating: ${step.detail ?? "restarting…"}`, "info");
+      case "checking":
+        return base(row.version, target, "Updating: checking…", "info");
+      case "pending": {
+        // The machine before it in the queue: the one being handled now, or another still waiting its turn.
+        const before = rollout!.steps[rollout!.steps.indexOf(step) - 1];
+        const ahead = before && (before.state === "pending" || ACTIVE_STEPS.includes(before.state)) ? before : activeStep(rollout);
+        return base(row.version, target, ahead ? `Updating: next, after ${ahead.name}` : "Updating: waiting its turn", "info");
+      }
+      case "done":
+        return base(step.toVersion ?? row.version, null, describeRolloutStep(step).label, "ok");
+      default:
+        return base(row.version, null, describeRolloutStep(step).label, describeRolloutStep(step).tone);
+    }
+  }
+  if (state.kind === "ready" || state.kind === "busy") {
+    const downloaded = `${state.target ?? "the update"} downloaded`;
+    if (row.restart?.kind === "unavailable") return base(row.version, state.target, `${downloaded} · ${row.restart.reason}`, state.tone);
+    if (!row.rule) return base(row.version, state.target, state.label, state.tone);
+    return base(row.version, state.target, `${downloaded} · ${selfUpdateText(row.rule.effective, row.working ?? 0, state)}`, state.tone);
+  }
+  return base(row.version, state.target, state.label, state.tone);
+}
+
+/** The newest `checkedAt` any machine reported, or null when none has checked. */
+export function newestCheckedAt(times: readonly (string | null | undefined)[]): string | null {
+  let newest: string | null = null;
+  let newestMs = -Infinity;
+  for (const time of times) {
+    const ms = time ? Date.parse(time) : Number.NaN;
+    if (!Number.isNaN(ms) && ms > newestMs) {
+      newest = time ?? null;
+      newestMs = ms;
+    }
+  }
+  return newest;
+}
+
+export interface ReleaseLine {
+  kind: "available" | "current" | "none";
+  /** The bold start of the line; empty when there is none. */
+  lead: string;
+  text: string;
+}
+
+/** The strip at the top of Settings → Machines when no rollout runs. `checkedAt` is the newest check any machine made. */
+export function describeReleaseLine(
+  summary: { latest: string | null; waiting: number; downloaded: number },
+  checkedAt: string | null,
+  now?: number,
+): ReleaseLine {
+  const { latest, waiting, downloaded } = summary;
+  if (!latest) return { kind: "none", lead: "", text: "Fleet hasn't found a release yet." };
+  if (waiting === 0) {
+    const checked = checkedAt ? ` Checked ${formatRelativeTime(checkedAt, now)}.` : "";
+    return { kind: "current", lead: "", text: `Every machine that can be reached is on Fleet ${latest}.${checked}` };
+  }
+  const lead = `Fleet ${latest} is out.`;
+  if (downloaded === 0) {
+    return { kind: "available", lead, text: `${waiting} ${waiting === 1 ? "machine" : "machines"} can update; ${waiting === 1 ? "it isn't" : "they aren't"} downloaded yet.` };
+  }
+  if (downloaded === waiting) {
+    return {
+      kind: "available",
+      lead,
+      text: waiting === 1
+        ? "1 machine has it downloaded and switches when it restarts."
+        : `${waiting} machines have it downloaded and switch when they restart.`,
+    };
+  }
+  return {
+    kind: "available",
+    lead,
+    text: `${downloaded} of ${waiting} machines that can update ${downloaded === 1 ? "has" : "have"} it downloaded and switch when they restart.`,
+  };
+}
+
+/**
+ * The strip while a rollout runs: its headline, who is being handled (for "Stop after falcon"), and a sentence on each
+ * machine. `unreachable` holds the machines that can't be reached now: the rollout will skip them when it gets there.
+ */
+export function describeRolloutNarrative(rollout: Rollout, unreachable: ReadonlySet<string> = new Set()): { title: string; active: string | null; text: string } {
+  const to = rollout.steps.find((step) => step.toVersion)?.toVersion;
+  const title = `Updating machines${to ? ` to ${to}` : ""}, one at a time.`;
+  const sentences: string[] = [];
+  let live: string[] = [];
+  let firstPending = true;
+  const flush = () => {
+    if (live.length) sentences.push(`${live.join("; ")}.`);
+    live = [];
+  };
+  for (const step of rollout.steps) {
+    switch (step.state) {
+      case "waiting":
+        live.push(step.waitingSessions > 0 ? `${step.name} is waiting for ${sessionCount(step.waitingSessions)}` : `${step.name} is waiting for its sessions`);
+        break;
+      case "checking":
+        live.push(`${step.name} is being checked`);
+        break;
+      case "restarting":
+        live.push(`${step.name} is restarting`);
+        break;
+      case "pending":
+        if (unreachable.has(step.machineId)) {
+          flush();
+          sentences.push(`${step.name} can't be reached, so it'll be skipped.`);
+          break;
+        }
+        live.push(firstPending ? `${step.name} is next` : `${step.name} is queued`);
+        firstPending = false;
+        break;
+      case "done":
+        flush();
+        sentences.push(`${step.name} is done.`);
+        break;
+      case "skipped":
+        flush();
+        sentences.push(step.detail && /reach/i.test(step.detail) ? `${step.name} can't be reached, so it's skipped.` : `${step.name} is skipped${step.detail ? `: ${step.detail}` : ""}.`);
+        break;
+      case "rolled-back":
+        flush();
+        sentences.push(`${step.name} went back to its old version.`);
+        break;
+      case "no-return":
+        flush();
+        sentences.push(`${step.name} didn't come back.`);
+        break;
+    }
+  }
+  flush();
+  return { title, active: activeStep(rollout)?.name ?? null, text: sentences.join(" ") };
 }

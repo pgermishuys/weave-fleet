@@ -116,29 +116,38 @@ loginctl enable-linger "$USER"   # keep it running when you're logged out
 
 ## Updating your machines
 
-Every Fleet downloads a new release by itself and switches to it when it restarts. With the Updates page on, you
-can see all your machines at once and restart them into the update. The page is Experimental: turn on **Updates
-page** in Settings → Features, and **Updates** appears in Settings.
+Every Fleet downloads a new release by itself and switches to it when it restarts. With updates in Machines on,
+Settings → Machines shows every machine's version next to whether it can be reached, and you can restart them into
+the update. It's Experimental: turn on **Updates in Machines** in Settings → Features.
 
-### What the page shows
+### What Machines shows
 
-Settings → Updates lists the desktop app (when you're in it), this machine, and every machine in Settings →
-Machines. Each row has the machine's version and where it is: up to date, downloading, downloaded and waiting for a
-restart, busy, can't be reached, or went back to its old version. A machine too old to report its updates says so.
-**Check now** asks every Fleet for a release. A chip in the status bar counts the Fleets that can update, and opens
-the page.
+Each machine's card gets a version line: the version it runs, the one it would move to, and where it is: up to date,
+downloading, downloaded and when it will switch ("updates itself when its 2 sessions finish"), or went back to its
+old version. A machine that can't be reached shows the version it was last seen on. A machine too old to report its
+updates says so. The menu on the right of the line is that machine's rule (see [Rules](#rules)).
+
+A line above the cards is about the release: "Fleet 0.59.1 is out" with **What's new**, how many machines have it
+downloaded, the rule every machine follows by default, **Check now** (asks every Fleet for a release) and **Update
+machines now**. When there's nothing to do it's one quiet line saying every machine that can be reached is on the
+latest version, and when it last checked.
+
+A chip in the status bar counts the machines that can update ("↑ 2 machines can update"), or follows a rollout
+("Updating machines · 1 of 3"), and opens Settings → Machines. The desktop app's own update stays in Settings →
+System, whose Fleet line points to Machines when an update is waiting.
 
 ### Restarting into an update
 
-- **Restart** on a row restarts that Fleet into the update it has downloaded. On this machine the page reloads when
-  it's back.
+- **Restart into 0.59.1** on a machine's card restarts that Fleet into the update it has downloaded. On this machine
+  the page reloads when it's back.
 - **Update machines now** restarts the other machines that have an update downloaded, one at a time, from this
   Fleet, so it carries on if you close the tab. This machine is never part of it. It skips a machine that can't be
   reached, has nothing newer or can't restart itself. If sessions are working or waiting for your answer, it waits
   for them (up to 30 minutes, then leaves that machine for later). Then it restarts the machine and waits up to 3
   minutes for it to come back on the new version.
 - It **stops at the first failure**: a machine that doesn't come back, or that comes back on its old version. The
-  machines after it are left alone. **Stop after this one** ends a rollout early.
+  machines after it are left alone. While it runs, the release line says which machine it's on and which come
+  next, and **Stop after falcon** (the machine it's on) ends it early.
 
 A restart never cuts off work. A Fleet with a session in a turn, including one stopped on a question or a permission
 ask, answers `409` and stays up. Prompts that arrive while it counts are turned away, not cut off.
@@ -149,7 +158,7 @@ The Fleet exits with code `85`, and the launcher (`scripts/launcher.sh`, or `lau
 again, which applies the staged update first. Any other exit code is passed on as it is. A node service restarts on
 any exit, so it comes back the same way.
 
-Restart isn't offered, and the row says why, when:
+Restart isn't offered, and the card says why, when:
 
 - it's the desktop app, which installs its own updates;
 - it isn't an installed Fleet (for example one run from source);
@@ -160,7 +169,7 @@ Restart isn't offered, and the row says why, when:
 A new version is on trial after it's applied. It has to finish starting (migrations run, listening) within 120
 seconds (`FLEET_UPDATE_TRIAL_SECONDS` changes that), and not exit before then. If it doesn't, the launcher puts the
 old version back, along with the database files as they were before the new version ran, and starts that. It writes
-`update-failed.json` next to the install, with the version it kept, the one that failed and why. The row says the
+`update-failed.json` next to the install, with the version it kept, the one that failed and why. The machine's card says the
 update didn't start and that the machine went back. A Fleet whose rule restarts it by itself doesn't try that
 version again. The note goes when a later version starts.
 
@@ -175,7 +184,7 @@ A rule says when a Fleet restarts itself into an update it has downloaded:
 | Only overnight | The same, but only between 02:00 and 05:00 on that machine's clock. |
 
 Until you choose, a node updates when nothing is working and a full Fleet asks. Choose a default for every machine
-at the top of the page, and give a machine its own rule from the menu on its row. **Update machines now** doesn't
+from **Machines update** on the release line, and give a machine its own rule from the menu on its card. **Update machines now** doesn't
 wait for the rule. The desktop app always asks, because you're using it.
 
 The Fleet you're using gives each machine its rule and checks every 30 seconds, so a machine that reports a

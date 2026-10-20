@@ -8,10 +8,13 @@ import {
   busySessions,
   FLEET_UPDATES_PREFERENCE_KEY,
   hasUpdateWaiting,
+  readLastSeenVersions,
+  writeLastSeenVersions,
   osLabel,
   restartOffer,
   effectiveRule,
   isUpdateRule,
+  newestCheckedAt,
   parseRuleOverrides,
   summarizeRows,
   UPDATE_RULE_DEFAULT_KEY,
@@ -39,7 +42,7 @@ const COME_BACK_LIMIT_MS = 3 * 60_000;
 
 const DESKTOP_PLATFORMS: Record<string, string> = { darwin: "macos", win32: "windows", linux: "linux" };
 
-/** Settings → Features: whether Settings → Updates exists at all. */
+/** Settings → Features: whether Settings → Machines shows each machine's version, update rule and Restart. */
 export function useFleetUpdatesEnabled() {
   const preferences = usePreferencesStore();
   preferences.ensureLoaded();
@@ -62,6 +65,7 @@ export function useFleetUpdates() {
     return isUpdateRule(value) ? value : null;
   });
   const ruleOverrides = computed(() => parseRuleOverrides(preferences.get(UPDATE_RULE_OVERRIDES_KEY, "{}")));
+  const enabled = useFleetUpdatesEnabled();
   const isChecking = shallowRef(false);
   /** The rollout the home Fleet is running, or its last; the Fleet pushes each change. */
   const rollout = shallowRef<Rollout | null>(null);
@@ -70,14 +74,17 @@ export function useFleetUpdates() {
   const restartingSelf = shallowRef<{ from: string | null; to: string | null } | null>(null);
   let rolloutTimer: ReturnType<typeof setInterval> | null = null;
   let unsubscribeRollout: (() => void) | null = null;
+  /** The version each machine last reported to this device: what an unreachable machine was last seen on. */
+  const lastSeen = shallowRef(readLastSeenVersions());
 
   function machineRow(entry: MachineEntry): FleetUpdateRow {
     const info = entry.info ?? null;
     const reachable = entry.isLive ? entry.isHome || machines.liveReachable : !machines.others[entry.key]?.error;
+    const version = info?.version ?? (reachable ? null : lastSeen.value[entry.key] ?? null);
     const state = reachable && !info
       ? { kind: "checking" as const, label: "checking…", tone: "muted" as const, target: null }
       : describeMachineUpdate({
-        version: info?.version ?? null,
+        version,
         update: info?.update ?? null,
         working: busySessions(entry.capabilities?.sessions),
         reachable,
@@ -85,7 +92,8 @@ export function useFleetUpdates() {
     const step = rollout.value?.status === "running" ? rollout.value.steps.find((candidate) => candidate.machineId === entry.key) : undefined;
     const shown = entry.isHome && restartingSelf.value
       ? { kind: "restarting" as const, label: "restarting · this page reconnects when it's back", tone: "info" as const, target: restartingSelf.value.to }
-      : step ? describeRolloutStep(step) : state;
+      // A machine that can't be reached says so, even while a rollout waits to get to it (it will skip it).
+      : step && state.kind !== "unreachable" ? describeRolloutStep(step) : state;
     const kind = info?.webApp === false ? "node" : "fleet";
     const overridden = ruleOverrides.value[entry.key] ?? null;
     return {
@@ -95,13 +103,14 @@ export function useFleetUpdates() {
       // The home Fleet reports its rule; a Fleet older than the rule can't take one.
       rule: info?.update?.rule === undefined ? null : { effective: effectiveRule(overridden, chosenRule.value, kind), overridden },
       os: osLabel(entry.os),
-      version: info?.version ?? null,
+      version,
       latest: info?.update?.latestVersion ?? null,
       where: entry.isHome ? "this machine" : entry.baseUrl,
       isLive: entry.isLive,
       state: shown,
       restart: step || restartingSelf.value ? null : restartOffer(state, info?.update ?? null, entry.isHome),
       isHome: entry.isHome,
+      working: busySessions(entry.capabilities?.sessions),
     };
   }
 
@@ -126,7 +135,10 @@ export function useFleetUpdates() {
     return [...list, ...machines.entries.map(machineRow)];
   });
 
-  const summary = computed(() => summarizeRows(rows.value));
+  /** The machines alone: the desktop app's row belongs to System. */
+  const machineRows = computed(() => rows.value.filter((row) => row.kind !== "app"));
+  const summary = computed(() => summarizeRows(machineRows.value));
+  const checkedAt = computed(() => newestCheckedAt(machines.entries.map((entry) => entry.info?.update?.checkedAt)));
   const rolloutRunning = computed(() => rollout.value?.status === "running");
   const outcome = computed(() => describeRolloutOutcome(rollout.value));
   /** Machines (not this one) that have an update downloaded and can restart into it: what Update machines now would do. */
@@ -160,8 +172,16 @@ export function useFleetUpdates() {
     }
   }
 
+  function stopFollowingRollout(): void {
+    if (rolloutTimer) clearInterval(rolloutTimer);
+    rolloutTimer = null;
+    unsubscribeRollout?.();
+    unsubscribeRollout = null;
+  }
+
+  /** Reads the rollout and follows it, but only with the switch on: with it off this asks the Fleet for nothing. */
   function followRollout(): void {
-    if (rolloutTimer) return;
+    if (rolloutTimer || !enabled.value) return;
     void loadRollout();
     unsubscribeRollout = onDomainEvent(liveTarget(), "sessions", "update.rollout", (event) => {
       rollout.value = event.payload;
@@ -236,9 +256,9 @@ export function useFleetUpdates() {
     return row.key === HOME_MACHINE_KEY ? restartSelf(row) : startRollout([row.key]);
   }
 
-  /** Chooses the rule for every machine that has no rule of its own; the home Fleet gives it to them within a minute. */
-  async function chooseRule(rule: UpdateRule): Promise<void> {
-    await preferences.set(UPDATE_RULE_DEFAULT_KEY, rule);
+  /** Chooses the rule for every machine that has no rule of its own (null: none chosen, each kind follows its own default); the home Fleet gives it to them within a minute. */
+  async function chooseRule(rule: UpdateRule | null): Promise<void> {
+    await preferences.set(UPDATE_RULE_DEFAULT_KEY, rule ?? "");
   }
 
   /** Gives one machine its own rule, or (null) puts it back on the chosen one. */
@@ -250,15 +270,27 @@ export function useFleetUpdates() {
   }
 
   onMounted(followRollout);
-  onUnmounted(() => {
-    if (rolloutTimer) clearInterval(rolloutTimer);
-    rolloutTimer = null;
-    unsubscribeRollout?.();
-  });
+  watch(enabled, (on) => (on ? followRollout() : stopFollowingRollout()));
+  watch(
+    () => (enabled.value ? machines.entries.map((entry) => [entry.key, entry.info?.version] as const) : []),
+    (reported) => {
+      const next = { ...lastSeen.value };
+      for (const [key, version] of reported) if (version) next[key] = version;
+      if (reported.some(([key, version]) => version && lastSeen.value[key] !== version)) {
+        lastSeen.value = next;
+        writeLastSeenVersions(next);
+      }
+    },
+    { immediate: true },
+  );
+  onUnmounted(stopFollowingRollout);
 
   return {
+    enabled,
     rows,
+    machineRows,
     summary,
+    checkedAt,
     isBusy,
     isChecking,
     checkNow,
@@ -280,14 +312,14 @@ export function useFleetUpdates() {
 }
 
 /**
- * Follows the machines while the Updates page or its nav entry is on screen, and says how many Fleets have an update
- * waiting. Only does anything while the switch is on.
+ * Follows the machines while Settings or the status bar chip needs them, and says how many machines have an update
+ * waiting (the desktop app's own row isn't one). Only does anything while the switch is on.
  */
 export function useFleetUpdatesWatch() {
   const enabled = useFleetUpdatesEnabled();
   const machines = useMachinesStore();
-  const { rows } = useFleetUpdates();
-  const waiting = computed(() => (enabled.value ? rows.value.filter((row) => hasUpdateWaiting(row.state)).length : 0));
+  const { rows, rollout } = useFleetUpdates();
+  const waiting = computed(() => (enabled.value ? rows.value.filter((row) => row.kind !== "app" && hasUpdateWaiting(row.state)).length : 0));
   let stop: (() => void) | null = null;
 
   function sync(): void {
@@ -301,5 +333,5 @@ export function useFleetUpdatesWatch() {
   onMounted(sync);
   watch(enabled, sync);
   onUnmounted(() => stop?.());
-  return { enabled, waiting, rows };
+  return { enabled, waiting, rows, rollout };
 }

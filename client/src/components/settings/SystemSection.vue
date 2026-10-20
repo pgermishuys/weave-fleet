@@ -5,9 +5,18 @@ import { useUpdateStatus } from "@/composables/use-update-status";
 import DesktopAppUpdates from "@/components/settings/DesktopAppUpdates.vue";
 import { getDesktopBridge } from "@/lib/desktop";
 import { useWhatsNew } from "@/composables/use-whats-new";
+import { useFleetUpdatesEnabled } from "@/composables/use-fleet-updates";
+import { useSettingsNav } from "@/composables/use-settings-nav";
 
 const { updateStatus, isLoading, checkForUpdate, downloadUpdate } = useUpdateStatus();
 const { openWhatsNew } = useWhatsNew();
+const { setActiveSection } = useSettingsNav();
+// With Updates in Machines on, this Fleet's own update is one of the machines' updates: this line points there.
+const machinesShowUpdates = useFleetUpdatesEnabled();
+const updateWaiting = computed(() => {
+  const status = updateStatus.value?.status;
+  return machinesShowUpdates.value && (status === "available" || status === "downloading" || status === "staged");
+});
 const inApp = getDesktopBridge() !== null;
 // In the app's window, a Fleet the app started is updated with the app, so its row says so instead of the server's.
 const showServerUpdates = computed(() => !(inApp && updateStatus.value?.status === "managed"));
@@ -111,7 +120,16 @@ const downloadProgressLabel = computed(() => {
             v-if="updateStatus"
             class="mt-0.5 font-mono text-xs text-muted"
           >
-            v{{ updateStatus.currentVersion }}
+            v{{ updateStatus.currentVersion }}{{ updateWaiting ? ", update waiting ·" : "" }}
+            <button
+              v-if="updateWaiting"
+              type="button"
+              class="underline underline-offset-2 transition-colors hover:text-text"
+              data-testid="system-see-machines"
+              @click="setActiveSection('machines')"
+            >
+              see Machines
+            </button>
           </p>
           <p
             v-else
