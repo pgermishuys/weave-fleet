@@ -34,6 +34,7 @@ public sealed class UpdateApplyEndpointTests : IDisposable
     private readonly UpdateRestartGate _gate = new();
     private string? _staged = "99.0.0";
     private int _working;
+    private int _needsYou;
     private bool _launcher = true;
 
     public void Dispose() => Directory.Delete(_root, recursive: true);
@@ -59,7 +60,8 @@ public sealed class UpdateApplyEndpointTests : IDisposable
                 code => _exited.TrySetResult(code),
                 name => _launcher && name == UpdateRestartService.LauncherVariable ? "85" : null,
                 () => _staged,
-                () => Task.FromResult(_working)));
+                () => Task.FromResult(new MachineSessionCounts(_working, _needsYou)),
+                rules: sp.GetRequiredService<UpdateRuleStore>()));
         });
 
     private static HttpClient Client(ApiWebApplicationFactory factory, string token)
@@ -101,10 +103,15 @@ public sealed class UpdateApplyEndpointTests : IDisposable
 
         _staged = "99.0.0";
         _working = 2;
-        await ConflictAsync(owner, "2 sessions are working.");
+        await ConflictAsync(owner, "2 sessions are working or waiting for you.");
         _gate.IsRestarting.ShouldBeFalse("a refused restart leaves the gate open");
 
         _working = 0;
+        _needsYou = 1;
+        await ConflictAsync(owner, "1 session is working or waiting for you.");
+        _gate.IsRestarting.ShouldBeFalse("a session stopped on a question is still in its turn");
+
+        _needsYou = 0;
         _launcher = false;
         await ConflictAsync(owner, "Restart Fleet once by hand; after that it can restart itself.");
         _exited.Task.IsCompleted.ShouldBeFalse();
@@ -138,6 +145,58 @@ public sealed class UpdateApplyEndpointTests : IDisposable
 
         response.StatusCode.ShouldBe(HttpStatusCode.Forbidden);
         _gate.IsRestarting.ShouldBeFalse();
+    }
+
+    [Fact]
+    public async Task The_owner_sets_the_rule_and_the_machine_reports_it_as_set()
+    {
+        await using var factory = Fleet();
+        using var owner = Client(factory, OwnerToken(factory));
+
+        var before = (await owner.GetFromJsonAsync<JsonElement>("/api/machine")).GetProperty("update");
+        before.GetProperty("rule").GetString().ShouldBe("ask");
+        before.GetProperty("ruleSource").GetString().ShouldBe("default");
+
+        (await owner.PutAsJsonAsync("/api/update/rule", new { rule = "idle" })).StatusCode.ShouldBe(HttpStatusCode.NoContent);
+        var after = (await owner.GetFromJsonAsync<JsonElement>("/api/machine")).GetProperty("update");
+        after.GetProperty("rule").GetString().ShouldBe("idle");
+        after.GetProperty("ruleSource").GetString().ShouldBe("set");
+
+        (await owner.PutAsJsonAsync("/api/update/rule", new { rule = "whenever" })).StatusCode.ShouldBe(HttpStatusCode.BadRequest);
+        (await owner.PutAsJsonAsync("/api/update/rule", new { rule = (string?)null })).StatusCode.ShouldBe(HttpStatusCode.NoContent);
+        (await owner.GetFromJsonAsync<JsonElement>("/api/machine")).GetProperty("update").GetProperty("ruleSource").GetString().ShouldBe("default");
+    }
+
+    [Fact]
+    public async Task An_agent_and_a_paired_phone_cannot_change_the_rule()
+    {
+        await using var factory = Fleet();
+        using var agent = factory.CreateClient();
+        var (_, deviceToken) = await factory.Services.GetRequiredService<DeviceTokenService>().IssueAsync("Pixel", "android");
+        using var phone = Client(factory, deviceToken);
+
+        (await agent.PutAsJsonAsync($"/agent/{BridgeToken}/api/update/rule", new { rule = "idle" })).StatusCode.ShouldBe(HttpStatusCode.Forbidden);
+        (await phone.PutAsJsonAsync("/api/update/rule", new { rule = "idle" })).StatusCode.ShouldBe(HttpStatusCode.Forbidden);
+
+        using var owner = Client(factory, OwnerToken(factory));
+        (await owner.GetFromJsonAsync<JsonElement>("/api/machine")).GetProperty("update").GetProperty("ruleSource").GetString().ShouldBe("default");
+    }
+
+    [Fact]
+    public async Task A_restart_is_written_down_and_the_new_version_reports_it_as_the_last_update()
+    {
+        await using var factory = Fleet();
+        using var owner = Client(factory, OwnerToken(factory));
+        var rules = factory.Services.GetRequiredService<UpdateRuleStore>();
+
+        (await owner.PostAsync("/api/update/apply?trigger=rollout", content: null)).StatusCode.ShouldBe(HttpStatusCode.Accepted);
+        (await owner.GetFromJsonAsync<JsonElement>("/api/machine")).GetProperty("update").TryGetProperty("lastUpdate", out var notYet).ShouldBeTrue();
+        notYet.ValueKind.ShouldBe(JsonValueKind.Null, "it only counts once the new version is up");
+
+        rules.CompleteUpdate("99.0.0");
+        var last = (await owner.GetFromJsonAsync<JsonElement>("/api/machine")).GetProperty("update").GetProperty("lastUpdate");
+        last.GetProperty("to").GetString().ShouldBe("99.0.0");
+        last.GetProperty("trigger").GetString().ShouldBe("rollout");
     }
 
     [Fact]

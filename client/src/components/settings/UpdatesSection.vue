@@ -3,7 +3,7 @@ import { computed } from "vue";
 import { LoaderCircle, RefreshCw } from "lucide-vue-next";
 import { useFleetUpdates } from "@/composables/use-fleet-updates";
 import { useWhatsNew } from "@/composables/use-whats-new";
-import type { FleetUpdateRow } from "@/lib/fleet-updates";
+import { effectiveRule, isUpdateRule, UPDATE_RULES, type FleetUpdateRow } from "@/lib/fleet-updates";
 
 /**
  * Settings → Updates: every Fleet you run, with its version and where it is with updating. A Fleet downloads a release
@@ -14,6 +14,7 @@ import type { FleetUpdateRow } from "@/lib/fleet-updates";
 const {
   rows, summary, isBusy, isChecking, checkNow, openDownload,
   rolloutRunning, outcome, readyMachines, actionError, restartingSelf, startRollout, stopRollout, restart,
+  chosenRule, chooseRule, overrideRule,
 } = useFleetUpdates();
 const { openWhatsNew } = useWhatsNew();
 
@@ -60,6 +61,16 @@ const outcomeClass: Record<FleetUpdateRow["state"]["tone"], string> = {
   muted: "border-border text-muted",
 };
 
+/** What "Default" means on a row: the rule chosen above, or the one that suits its kind. */
+function defaultRuleLabel(row: FleetUpdateRow): string {
+  const rule = effectiveRule(null, chosenRule.value, row.kind === "node" ? "node" : "fleet");
+  return UPDATE_RULES.find((candidate) => candidate.value === rule)?.short ?? rule;
+}
+
+function onOverride(row: FleetUpdateRow, value: string): void {
+  void overrideRule(row.key, isUpdateRule(value) ? value : null);
+}
+
 const KIND_LABELS = { app: "desktop app", fleet: "Fleet", node: "node" } as const;
 </script>
 
@@ -90,6 +101,45 @@ const KIND_LABELS = { app: "desktop app", fleet: "Fleet", node: "node" } as cons
         </p>
       </div>
     </div>
+
+    <fieldset
+      class="mt-5"
+      data-testid="updates-rule"
+    >
+      <legend class="mb-2 text-[10px] font-semibold uppercase tracking-wider text-muted">
+        When a new Fleet is out
+      </legend>
+      <div class="grid gap-2">
+        <label
+          v-for="rule in UPDATE_RULES"
+          :key="rule.value"
+          class="flex cursor-pointer items-start gap-3 rounded-card border border-border bg-main-bg px-4 py-3 has-[:checked]:border-accent/60"
+        >
+          <input
+            type="radio"
+            name="update-rule"
+            class="mt-1 accent-[var(--accent)]"
+            :value="rule.value"
+            :checked="chosenRule === rule.value"
+            :data-testid="`updates-rule-${rule.value}`"
+            @change="chooseRule(rule.value)"
+          >
+          <span class="flex flex-col gap-0.5">
+            <span class="text-sm font-medium text-text">
+              {{ rule.label }}
+              <span
+                v-if="rule.value === 'idle'"
+                class="ml-1 rounded bg-[color-mix(in_srgb,var(--accent)_14%,transparent)] px-1.5 py-px text-[9.5px] font-bold uppercase tracking-widest text-accent"
+              >Recommended</span>
+            </span>
+            <span class="text-xs text-muted">{{ rule.detail }}</span>
+          </span>
+        </label>
+      </div>
+      <p class="mt-2 text-xs text-muted">
+        Until you choose, a node updates when nothing is working on it and a full Fleet asks first. Update machines now doesn't wait for the rule.
+      </p>
+    </fieldset>
 
     <div class="mt-5 flex flex-wrap items-center justify-between gap-3">
       <p
@@ -213,6 +263,25 @@ const KIND_LABELS = { app: "desktop app", fleet: "Fleet", node: "node" } as cons
                 />{{ row.state.label }}<template v-if="row.state.kind === 'unreachable' && row.version"> · last seen on {{ row.version }}</template>
               </span>
             </div>
+            <select
+              v-if="row.rule"
+              :value="row.rule.overridden ?? 'default'"
+              class="rounded-btn border border-border bg-card-bg px-2 py-1.5 text-xs text-text"
+              :aria-label="`Rule for ${row.name}`"
+              data-testid="update-rule-select"
+              @change="onOverride(row, ($event.target as HTMLSelectElement).value)"
+            >
+              <option value="default">
+                Default ({{ defaultRuleLabel(row) }})
+              </option>
+              <option
+                v-for="rule in UPDATE_RULES"
+                :key="rule.value"
+                :value="rule.value"
+              >
+                {{ rule.short }}
+              </option>
+            </select>
             <button
               v-if="row.restart?.kind === 'button'"
               type="button"

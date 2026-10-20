@@ -324,6 +324,7 @@ internal sealed record ErrorResponse(string Error);
 [JsonSerializable(typeof(MachineUpdate))]
 [JsonSerializable(typeof(WeaveFleet.Infrastructure.Updates.RolloutRun))]
 [JsonSerializable(typeof(RolloutRequest))]
+[JsonSerializable(typeof(SetUpdateRuleRequest))]
 [JsonSerializable(typeof(RestartingResponse))]
 [JsonSerializable(typeof(UpdateMachineRequest))]
 [JsonSerializable(typeof(MachineAccessResponse))]

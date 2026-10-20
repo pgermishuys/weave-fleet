@@ -24,7 +24,11 @@ public sealed record MachineHarness(string Type, string Name, bool Available, bo
 
 /// <param name="Working">Sessions in a turn.</param>
 /// <param name="NeedsYou">Sessions stopped on a question or a permission ask.</param>
-public sealed record MachineSessionCounts(int Working, int NeedsYou);
+public sealed record MachineSessionCounts(int Working, int NeedsYou)
+{
+    /// <summary>Sessions in a turn, whether running or stopped on a question: what a restart would cut off.</summary>
+    public int Busy => Working + NeedsYou;
+}
 
 /// <summary>
 /// Reads <see cref="MachineCapabilities"/> for the caller. Other machines ask for it every few seconds, so it never

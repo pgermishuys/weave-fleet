@@ -40,6 +40,7 @@ import { useSmartLinkUpdates } from "@/composables/use-smart-link-updates";
 import { useMemoryNotices } from "@/composables/use-memory-notices";
 import { useModsRuntimeStore } from "@/stores/mods-runtime";
 import { useUpdateNotices } from "@/composables/use-update-notices";
+import { useFleetUpdateNotices } from "@/composables/use-fleet-update-notices";
 import { useSidebarMobile } from "@/composables/use-sidebar-mobile";
 import { useVisualViewport } from "@/composables/use-visual-viewport";
 import { useKeyboardScroll } from "@/composables/use-keyboard-scroll";
@@ -61,6 +62,7 @@ useMemoryNotices();
 // Keeps the Mods row current: an install runs on after Settings closes.
 useModsRuntimeStore().listen();
 useUpdateNotices();
+useFleetUpdateNotices();
 useVisualViewport();
 useKeyboardScroll();
 

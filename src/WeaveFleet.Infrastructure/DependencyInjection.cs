@@ -499,6 +499,10 @@ public static class DependencyInjection
         services.AddSingleton<WeaveFleet.Application.Updates.UpdateRestartGate>();
         services.AddSingleton<UpdateRestartService>();
         services.AddHostedService(sp => sp.GetRequiredService<UpdateRestartService>());
+        services.TryAddSingleton(sp => new WeaveFleet.Application.Updates.UpdateRuleStore(WeaveFleet.Application.Updates.UpdateRuleStore.GetFilePath(sp.GetRequiredService<FleetOptions>().DatabasePath)));
+        services.AddHostedService<SelfUpdateService>();
+        services.AddSingleton<UpdateRulePushService>();
+        services.AddHostedService(sp => sp.GetRequiredService<UpdateRulePushService>());
         services.AddSingleton<IUpdateNodes, HttpUpdateNodes>();
         services.AddSingleton<UpdateRolloutService>();
         services.AddSingleton<UpdateDownloadService>();

@@ -7,6 +7,54 @@ import type { DesktopUpdateState } from "@/lib/desktop";
 /** Settings → Features: shows Settings → Updates. Off until turned on. */
 export const FLEET_UPDATES_PREFERENCE_KEY = "FleetUpdates";
 
+/** Settings → Updates: the rule the user chose for every machine, unless one has its own. */
+export const UPDATE_RULE_DEFAULT_KEY = "FleetUpdateRule";
+
+/** A JSON object: machine key (`home` for this one) to the rule that machine follows. */
+export const UPDATE_RULE_OVERRIDES_KEY = "FleetUpdateRules";
+
+/** When a Fleet restarts itself into an update it has downloaded. */
+export type UpdateRule = "ask" | "idle" | "overnight";
+
+export const UPDATE_RULES: { value: UpdateRule; label: string; short: string; detail: string }[] = [
+  { value: "ask", label: "Ask me first", short: "Ask me", detail: "Each Fleet waits here until you restart it." },
+  {
+    value: "idle",
+    label: "Update each machine when nothing is working on it",
+    short: "When nothing is working",
+    detail: "It waits for its turns to finish, restarts within a minute or two, and tells you after. Desktop apps still ask, because you're using them.",
+  },
+  { value: "overnight", label: "Only overnight, 02:00–05:00 on that machine's clock", short: "Overnight", detail: "For machines that run long jobs during the day." },
+];
+
+export function isUpdateRule(value: unknown): value is UpdateRule {
+  return value === "ask" || value === "idle" || value === "overnight";
+}
+
+/** The overrides as the preference keeps them; anything that isn't a known rule is dropped. */
+export function parseRuleOverrides(json: string | null | undefined): Record<string, UpdateRule> {
+  try {
+    const parsed: unknown = JSON.parse(json || "{}");
+    if (!parsed || typeof parsed !== "object") return {};
+    return Object.fromEntries(Object.entries(parsed).filter((entry): entry is [string, UpdateRule] => isUpdateRule(entry[1])));
+  } catch {
+    return {};
+  }
+}
+
+/** The rule a machine follows: its own, else the one chosen for all, else what suits its kind (a node updates when idle, a Fleet asks). */
+export function effectiveRule(overridden: UpdateRule | null, chosenDefault: UpdateRule | null, kind: "fleet" | "node"): UpdateRule {
+  return overridden ?? chosenDefault ?? (kind === "node" ? "idle" : "ask");
+}
+
+/** The update a Fleet last restarted into, and what started the restart. */
+export interface LastUpdate {
+  from: string;
+  to: string;
+  at: string;
+  trigger: "idle" | "overnight" | "manual" | "rollout";
+}
+
 /** What `update` in `GET /api/machine` says: the words are the ones `GET /api/update/status` uses. */
 export interface MachineUpdate {
   status: "unknown" | "uptodate" | "available" | "downloading" | "staged" | "error" | "managed";
@@ -20,6 +68,11 @@ export interface MachineUpdate {
   restartUnavailableReason?: string | null;
   /** An update that failed to start there and was undone, until a later one succeeds. */
   rolledBack?: { from: string; to: string; reason: string; at: string } | null;
+  /** When it restarts itself into an update; missing on a Fleet older than the rule. */
+  rule?: UpdateRule;
+  ruleSource?: "default" | "set";
+  /** The update it last restarted into; kept until the next one. */
+  lastUpdate?: LastUpdate | null;
 }
 
 /** A machine's part of a rollout, as `GET /api/update/rollout` and its `update.rollout` event say it. */
@@ -78,7 +131,7 @@ export interface FleetUpdateInput {
   version: string | null;
   /** Null from a Fleet older than the field. */
   update: MachineUpdate | null;
-  /** Sessions in a turn on that machine. */
+  /** Sessions in a turn on that machine, including ones waiting for an answer (see `busySessions`). */
   working: number;
   reachable: boolean;
 }
@@ -95,7 +148,12 @@ export function isNewerVersion(a: string | null | undefined, b: string | null | 
 }
 
 function sessionsWorking(count: number): string {
-  return `${count} ${count === 1 ? "session" : "sessions"} working`;
+  return `${count} ${count === 1 ? "session" : "sessions"} working or waiting for you`;
+}
+
+/** Sessions a restart would cut off: working, or stopped on a question or a permission ask (still in their turn). */
+export function busySessions(sessions: { working: number; needsYou?: number } | null | undefined): number {
+  return (sessions?.working ?? 0) + (sessions?.needsYou ?? 0);
 }
 
 /** The state of a Fleet reached through `GET /api/machine`. */
@@ -180,6 +238,8 @@ export interface FleetUpdateRow {
   restart: RestartOffer | null;
   /** Home is the Fleet this page belongs to; it restarts only from its own row. */
   isHome: boolean;
+  /** The rule this row follows and the override on it; null where there is none to set (the desktop app always asks; an old Fleet can't take one). */
+  rule: { effective: UpdateRule; overridden: UpdateRule | null } | null;
 }
 
 const OS_NAMES: Record<string, string> = { linux: "Linux", macos: "macOS", windows: "Windows" };
@@ -257,4 +317,39 @@ export function describeRolloutOutcome(rollout: Rollout | null): { text: string;
   }
   const why = rollout.summary ?? "The rollout stopped.";
   return { text: left.length ? `${why} ${left.join(" and ")} ${left.length === 1 ? "was" : "were"} left alone.` : why, tone: rollout.status === "stopped" ? "bad" : "muted" };
+}
+
+/** How long after a Fleet updated itself the home page still says so. */
+const UPDATED_NOTICE_DAYS = 3;
+
+const UPDATED_BY: Record<LastUpdate["trigger"], string> = {
+  idle: "when nothing was working",
+  overnight: "overnight",
+  manual: "when you restarted it",
+  rollout: "by Update machines now",
+};
+
+/** The notice for a Fleet that has updated: "falcon updated to 0.59.1", once per machine and version. Null when it isn't news. */
+export function describeUpdatedNotice(
+  machineKey: string,
+  name: string,
+  runningVersion: string | null,
+  last: LastUpdate | null | undefined,
+  now: Date,
+): { id: string; title: string; body: string; version: string } | null {
+  if (!last || !runningVersion || last.to.replace(/^v/, "") !== runningVersion.replace(/^v/, "")) return null;
+  const at = new Date(last.at);
+  if (Number.isNaN(at.getTime()) || now.getTime() - at.getTime() > UPDATED_NOTICE_DAYS * 86_400_000) return null;
+  const clock = at.toLocaleTimeString([], { hour: "2-digit", minute: "2-digit", hour12: false });
+  return {
+    id: `fleet-updated:${machineKey}:${last.to}`,
+    title: `${name} updated to ${last.to}`,
+    body: `At ${clock}, ${UPDATED_BY[last.trigger] ?? "by itself"}.`,
+    version: last.to,
+  };
+}
+
+/** The status bar chip: how many Fleets can update. Null when none. */
+export function describeUpdateChip(waiting: number): string | null {
+  return waiting > 0 ? `↑ ${waiting} ${waiting === 1 ? "Fleet" : "Fleets"} can update` : null;
 }

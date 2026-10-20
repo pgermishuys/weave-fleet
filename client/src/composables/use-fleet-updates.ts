@@ -5,13 +5,20 @@ import {
   describeMachineUpdate,
   describeRolloutOutcome,
   describeRolloutStep,
+  busySessions,
   FLEET_UPDATES_PREFERENCE_KEY,
   hasUpdateWaiting,
   osLabel,
   restartOffer,
+  effectiveRule,
+  isUpdateRule,
+  parseRuleOverrides,
   summarizeRows,
+  UPDATE_RULE_DEFAULT_KEY,
+  UPDATE_RULE_OVERRIDES_KEY,
   type FleetUpdateRow,
   type Rollout,
+  type UpdateRule,
 } from "@/lib/fleet-updates";
 import { onDomainEvent } from "@/composables/on-domain-event";
 import { liveTarget } from "@/lib/machine-target";
@@ -48,6 +55,13 @@ export function useFleetUpdates() {
   const machines = useMachinesStore();
   const desktop = useDesktopUpdates();
   const bridge = getDesktopBridge();
+  const preferences = usePreferencesStore();
+  /** The rule chosen for every machine (null until the user chooses one), and the machines that follow their own. */
+  const chosenRule = computed(() => {
+    const value = preferences.get(UPDATE_RULE_DEFAULT_KEY, "");
+    return isUpdateRule(value) ? value : null;
+  });
+  const ruleOverrides = computed(() => parseRuleOverrides(preferences.get(UPDATE_RULE_OVERRIDES_KEY, "{}")));
   const isChecking = shallowRef(false);
   /** The rollout the home Fleet is running, or its last; the Fleet pushes each change. */
   const rollout = shallowRef<Rollout | null>(null);
@@ -65,17 +79,21 @@ export function useFleetUpdates() {
       : describeMachineUpdate({
         version: info?.version ?? null,
         update: info?.update ?? null,
-        working: entry.capabilities?.sessions.working ?? 0,
+        working: busySessions(entry.capabilities?.sessions),
         reachable,
       });
     const step = rollout.value?.status === "running" ? rollout.value.steps.find((candidate) => candidate.machineId === entry.key) : undefined;
     const shown = entry.isHome && restartingSelf.value
       ? { kind: "restarting" as const, label: "restarting · this page reconnects when it's back", tone: "info" as const, target: restartingSelf.value.to }
       : step ? describeRolloutStep(step) : state;
+    const kind = info?.webApp === false ? "node" : "fleet";
+    const overridden = ruleOverrides.value[entry.key] ?? null;
     return {
       key: entry.key,
       name: entry.name,
-      kind: info?.webApp === false ? "node" : "fleet",
+      kind,
+      // The home Fleet reports its rule; a Fleet older than the rule can't take one.
+      rule: info?.update?.rule === undefined ? null : { effective: effectiveRule(overridden, chosenRule.value, kind), overridden },
       os: osLabel(entry.os),
       version: info?.version ?? null,
       latest: info?.update?.latestVersion ?? null,
@@ -102,6 +120,7 @@ export function useFleetUpdates() {
         state: describeDesktopUpdate(desktop.state.value),
         restart: null,
         isHome: false,
+        rule: null,
       });
     }
     return [...list, ...machines.entries.map(machineRow)];
@@ -217,6 +236,19 @@ export function useFleetUpdates() {
     return row.key === HOME_MACHINE_KEY ? restartSelf(row) : startRollout([row.key]);
   }
 
+  /** Chooses the rule for every machine that has no rule of its own; the home Fleet gives it to them within a minute. */
+  async function chooseRule(rule: UpdateRule): Promise<void> {
+    await preferences.set(UPDATE_RULE_DEFAULT_KEY, rule);
+  }
+
+  /** Gives one machine its own rule, or (null) puts it back on the chosen one. */
+  async function overrideRule(key: string, rule: UpdateRule | null): Promise<void> {
+    const next = { ...ruleOverrides.value };
+    if (rule) next[key] = rule;
+    else delete next[key];
+    await preferences.set(UPDATE_RULE_OVERRIDES_KEY, JSON.stringify(next));
+  }
+
   onMounted(followRollout);
   onUnmounted(() => {
     if (rolloutTimer) clearInterval(rolloutTimer);
@@ -241,6 +273,9 @@ export function useFleetUpdates() {
     startRollout,
     stopRollout,
     restart,
+    chosenRule,
+    chooseRule,
+    overrideRule,
   };
 }
 
@@ -266,5 +301,5 @@ export function useFleetUpdatesWatch() {
   onMounted(sync);
   watch(enabled, sync);
   onUnmounted(() => stop?.());
-  return { enabled, waiting };
+  return { enabled, waiting, rows };
 }
