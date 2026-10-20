@@ -125,6 +125,51 @@ public sealed class OpenCode2ShellCommandTests
         mapped.Select(Translate).OfType<MessageUpdated>().ShouldHaveSingleItem().Payload.Info.Role.ShouldBe(OpenCode2Mapper.NoticeRole);
     }
 
+    private const string RunningShell = """
+        {"sessionID":"ses_1","shell":{"id":"sh_run","status":"running","command":"sleep 600","cwd":"/work"}}
+        """;
+
+    [Fact]
+    public void A_command_still_running_when_the_server_stops_ends_killed()
+    {
+        // The command went with the server, and V2 never sends the end: without this its block reads Running for good.
+        var mapper = new OpenCode2Mapper(FleetSession);
+        mapper.Map(Event("session.shell.started", RunningShell));
+
+        var ended = ToolParts(mapper.BackgroundWorkEnded()).ShouldHaveSingleItem();
+
+        ended.CallId.ShouldBe("sh_run");
+        ended.State.ShouldBeOfType<ToolCompletedState>().Metadata!.Value.GetProperty("status").GetString().ShouldBe("killed");
+        mapper.BackgroundWorkEnded().ShouldBeEmpty();
+    }
+
+    [Fact]
+    public void A_command_that_ended_is_not_ended_again_when_the_server_stops()
+    {
+        var mapper = new OpenCode2Mapper(FleetSession);
+        mapper.Map(Event("session.shell.started", RunningShell));
+        mapper.Map(Event("session.shell.ended", """
+            {"sessionID":"ses_1","shell":{"id":"sh_run","status":"exited","command":"sleep 600","exit":0},"output":{"output":"","truncated":false}}
+            """));
+
+        mapper.BackgroundWorkEnded().ShouldBeEmpty();
+    }
+
+    [Fact]
+    public void A_command_the_server_no_longer_runs_reads_back_killed()
+    {
+        var running = new OpenCode2Message { Id = "msg_1", Type = "shell", ShellId = "sh_run", Command = "sleep 600", Status = "running" };
+        var history = OpenCode2History.ToHarnessMessages([running]);
+
+        var waiting = OpenCode2History.BackgroundHandles(history);
+        waiting.ShouldBe(["sh_run"]);
+
+        var settled = OpenCode2History.SettleLostBackgroundWork(history, waiting);
+        var part = settled.ShouldHaveSingleItem().Parts.OfType<ToolUsePart>().ShouldHaveSingleItem();
+        part.State.ShouldBe(ToolUseState.Completed);
+        part.Metadata!.Value.GetProperty("status").GetString().ShouldBe("killed");
+    }
+
     [Fact]
     public async Task Running_a_command_posts_it_under_the_id_fleet_gave_it()
     {
