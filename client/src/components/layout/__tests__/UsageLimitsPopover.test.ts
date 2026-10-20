@@ -129,4 +129,32 @@ describe("UsageLimitsPopover", () => {
     expect(apiFetch).toHaveBeenCalledWith("/api/usage/limits?watch=true");
     wrapper.unmount();
   });
+
+  it("draws a tick at an even share and the pace note only when ahead of pace", async () => {
+    // 3 of 5 hours gone (60%), 90% used: ahead of pace. The 7-day has no length: no tick.
+    const wrapper = await mountOpen([
+      provider({
+        windows: [
+          { window: "five_hour", utilization: 0.9, resetsAt: inHours(2), windowSeconds: 18000, status: "warning" },
+          { window: "seven_day", utilization: 0.1, resetsAt: inHours(80), status: "allowed" },
+        ],
+      }),
+    ]);
+    const ticks = [...document.body.querySelectorAll("[data-testid=usage-pace-tick]")];
+    expect(ticks).toHaveLength(1);
+    expect(ticks[0].getAttribute("title")).toMatch(/^An even share of this window by now: 6\d%$/);
+    const notes = document.body.querySelectorAll("[data-testid=usage-pace-note]");
+    expect(notes).toHaveLength(1);
+    expect(notes[0].textContent).toContain("Ahead of pace");
+    wrapper.unmount();
+  });
+
+  it("shows a tick but no note when under pace", async () => {
+    const wrapper = await mountOpen([
+      provider({ windows: [{ window: "five_hour", utilization: 0.2, resetsAt: inHours(2), windowSeconds: 18000, status: "allowed" }] }),
+    ]);
+    expect(document.body.querySelectorAll("[data-testid=usage-pace-tick]")).toHaveLength(1);
+    expect(document.body.querySelector("[data-testid=usage-pace-note]")).toBeNull();
+    wrapper.unmount();
+  });
 });

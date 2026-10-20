@@ -155,6 +155,13 @@ public sealed class CopilotHarnessRuntime(
         }
     }
 
+    /// <summary>Copilot's premium-request quotas, from weave-copilot's <c>_fleet/usage</c>; throws <see cref="AcpException"/> (code -32601 when this weave-copilot is too old to know it).</summary>
+    internal async Task<JsonElement> RequestUsageAsync(CancellationToken ct)
+    {
+        await using var agent = await StartPlainAsync(ct).ConfigureAwait(false);
+        return await agent.Client.RequestAsync("_fleet/usage", new JsonObject(), ct).ConfigureAwait(false);
+    }
+
     /// <summary>weave-copilot for the sign-in, without HydraFusion's flag: it only asks about and changes the sign-in.</summary>
     private async Task<IAcpAgent> StartPlainAsync(CancellationToken ct)
         => await StartAsync(LocalUser, Environment.CurrentDirectory, ct, withHydraFusion: false).ConfigureAwait(false);

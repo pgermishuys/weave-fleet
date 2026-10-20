@@ -223,7 +223,9 @@ public sealed partial class UsageLimitsService(
             {
                 var merged = windows.ToDictionary(w => w.Window, StringComparer.Ordinal);
                 foreach (var window in liveWindows.SelectMany(h => h.Windows))
-                    merged[window.Window] = window;
+                    // A live report doesn't know the window's length: keep what the poll said.
+                    merged[window.Window] = window.WindowSeconds is null && merged.TryGetValue(window.Window, out var polled) && polled.WindowSeconds is { } seconds
+                        ? window with { WindowSeconds = seconds } : window;
                 windows = [.. merged.Values.OrderBy(w => w.Window, StringComparer.Ordinal)];
                 state = UsageStates.Ok;
             }

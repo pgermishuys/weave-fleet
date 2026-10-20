@@ -56,7 +56,7 @@ internal sealed class ClaudeUsageProvider(IHttpClientFactory http, UsageSources 
                     continue;
                 var used = Math.Clamp(percent / 100, 0, 1);
                 DateTimeOffset? resets = UsageRead.Text(window, "resets_at") is { } text && DateTimeOffset.TryParse(text, null, System.Globalization.DateTimeStyles.AssumeUniversal, out var at) ? at : null;
-                windows.Add(new UsageLimitWindow { Window = name, Utilization = used, ResetsAt = resets, Status = UsageRead.StatusFor(used) });
+                windows.Add(new UsageLimitWindow { Window = name, Utilization = used, ResetsAt = resets, WindowSeconds = name == "five_hour" ? 18000 : 604800, Status = UsageRead.StatusFor(used) });
             }
 
             return windows.Count == 0 ? new UsageReading(UsageStates.Unreadable) : new UsageReading(UsageStates.Ok, plan, windows);

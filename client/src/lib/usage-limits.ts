@@ -18,6 +18,8 @@ export interface UsageLimitWindow {
   utilization: number | null;
   /** Epoch milliseconds, when the harness says. */
   resetsAt: number | null;
+  /** Length of the window in seconds, when the server knows it; the pace tick needs it. */
+  windowSeconds?: number | null;
   status: UsageLimitStatus;
 }
 

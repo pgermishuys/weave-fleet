@@ -60,6 +60,35 @@ public sealed class UsageEndpointsTests : IDisposable
     }
 
     [Fact]
+    public async Task A_polled_window_carries_its_length()
+    {
+        Directory.CreateDirectory(Path.Combine(_home, ".claude"));
+        await File.WriteAllTextAsync(Path.Combine(_home, ".claude", ".credentials.json"), """{"claudeAiOauth":{"accessToken":"invented-secret"}}""");
+        await using var factory = new ApiWebApplicationFactory(authEnabled: false, configureTestServices: services =>
+        {
+            services.RemoveAll<UsageSources>();
+            services.AddSingleton(new UsageSources(_home, _ => null));
+            services.AddHttpClient(UsageSources.HttpClientName)
+                .ConfigurePrimaryHttpMessageHandler(() => new CannedHandler("""{"five_hour":{"utilization":40,"resets_at":"2030-01-01T00:00:00Z"}}"""));
+        });
+        using var client = factory.CreateClient();
+        await using (var scope = factory.Services.CreateAsyncScope())
+            await scope.ServiceProvider.GetRequiredService<IUserPreferenceRepository>().SetAsync("UsageLimits", "true");
+
+        var body = await client.GetFromJsonAsync<JsonElement>("/api/usage/limits?watch=true");
+
+        var window = body.GetProperty("providers").EnumerateArray().Single(p => p.GetProperty("provider").GetString() == "claude").GetProperty("windows")[0];
+        window.GetProperty("window").GetString().ShouldBe("five_hour");
+        window.GetProperty("windowSeconds").GetInt32().ShouldBe(18000);
+    }
+
+    private sealed class CannedHandler(string body) : HttpMessageHandler
+    {
+        protected override Task<HttpResponseMessage> SendAsync(HttpRequestMessage request, CancellationToken cancellationToken)
+            => Task.FromResult(new HttpResponseMessage(HttpStatusCode.OK) { Content = new StringContent(body, System.Text.Encoding.UTF8, "application/json") });
+    }
+
+    [Fact]
     public async Task Allow_and_revoke_answer_204_and_an_unknown_provider_404()
     {
         await using var factory = Factory();

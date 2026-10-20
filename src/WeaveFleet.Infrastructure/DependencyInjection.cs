@@ -350,7 +350,22 @@ public static class DependencyInjection
         services.AddSingleton<WeaveFleet.Application.Usage.IUsageProvider, WeaveFleet.Infrastructure.Usage.ClaudeUsageProvider>();
         services.AddSingleton<WeaveFleet.Application.Usage.IUsageProvider, WeaveFleet.Infrastructure.Usage.CodexUsageProvider>();
         services.AddSingleton<WeaveFleet.Application.Usage.IUsageProvider, WeaveFleet.Infrastructure.Usage.OpenRouterUsageProvider>();
-        services.AddSingleton<WeaveFleet.Application.Usage.IUsageProvider, WeaveFleet.Infrastructure.Usage.OpenCode2UsageProvider>();
+        services.AddSingleton<WeaveFleet.Application.Usage.IUsageProvider>(sp => new WeaveFleet.Infrastructure.Usage.CopilotUsageProvider(
+            sp.GetRequiredService<IHttpClientFactory>(), sp.GetRequiredService<WeaveFleet.Infrastructure.Usage.UsageSources>(),
+            async ct => (await sp.GetRequiredService<WeaveFleet.Application.Harnesses.HarnessAvailabilityCache>().GetAsync(false, ct)).Harnesses.Any(h => h.Type == "copilot" && h.Available),
+            ct => sp.GetRequiredService<CopilotHarnessRuntime>().RequestUsageAsync(ct),
+            async ct =>
+            {
+                // The GitHub token Fleet keeps for Pi (the same credential Pi's sessions are handed).
+                using var user = WeaveFleet.Infrastructure.Users.BackgroundUserContext.BeginScope("local-user");
+                using var scope = sp.GetRequiredService<IServiceScopeFactory>().CreateScope();
+                var found = await scope.ServiceProvider.GetRequiredService<WeaveFleet.Domain.Repositories.IUserCredentialRepository>()
+                    .ListByUserNamespaceAndKindAsync("github", "oauth-access-token").ConfigureAwait(false);
+                if (found.Count == 0)
+                    return null;
+                try { return scope.ServiceProvider.GetRequiredService<WeaveFleet.Application.Credentials.ICredentialProtector>().Decrypt(found[0].EncryptedValue); }
+                catch (System.Security.Cryptography.CryptographicException) { return null; }
+            }));
         services.AddSingleton<WeaveFleet.Application.Usage.UsageLimitsService>();
         services.AddHostedService<WeaveFleet.Infrastructure.Usage.UsagePollingService>();
         services.AddSingleton<IPendingPermissions>(sp => sp.GetRequiredService<PendingPermissionStore>());
