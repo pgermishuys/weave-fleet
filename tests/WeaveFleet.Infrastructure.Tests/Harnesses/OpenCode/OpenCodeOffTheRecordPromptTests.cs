@@ -218,17 +218,51 @@ public sealed class OpenCodeOffTheRecordPromptTests
     public async Task The_first_prompt_after_the_server_died_goes_even_when_the_new_subscription_never_comes_ready()
     {
         // The pooled server was killed (out of memory) and restarted. The prompt waits for the event subscription of the
-        // session it makes afresh, and that wait had no end: the prompt hung until the browser gave up.
+        // session it reattaches, and that wait had no end: the prompt hung until the browser gave up.
         var http = new ScriptedHandler()
-            .On("POST /session", """{"id":"oc-2","time":{"created":1,"updated":1}}""")
-            .On("POST /session/oc-2/prompt_async", "");
+            .On("GET /session/oc-1", """{"id":"oc-1","time":{"created":1,"updated":1}}""")
+            .On("POST /session/oc-1/prompt_async", "");
         await using var session = CreateSession(http, out var handle);
         handle.SubscriptionNeverReady = true;
         handle.Exit(137);
 
         await session.SendPromptAsync("hello", null, CancellationToken.None).WaitAsync(TimeSpan.FromSeconds(20));
 
+        http.Requests.Select(r => r.Key).ShouldContain("POST /session/oc-1/prompt_async");
+    }
+
+    [Fact]
+    public async Task After_the_server_was_killed_the_session_keeps_its_OpenCode_session_and_so_its_history()
+    {
+        // OpenCode keeps its sessions on disk, so the restarted server still has the session. A new one made here would
+        // empty the conversation and the model's context.
+        var http = new ScriptedHandler()
+            .On("GET /session/oc-1", """{"id":"oc-1","time":{"created":1,"updated":1}}""")
+            .On("POST /session/oc-1/prompt_async", "");
+        await using var session = CreateSession(http, out var handle);
+        handle.Exit(137);
+
+        await session.SendPromptAsync("hello again", null, CancellationToken.None);
+
+        http.Requests.Select(r => r.Key).ShouldNotContain("POST /session");
+        http.Requests.Select(r => r.Key).ShouldContain("POST /session/oc-1/prompt_async");
+        session.ResumeToken.ShouldBe("oc-1");
+    }
+
+    [Fact]
+    public async Task After_the_server_was_killed_a_session_OpenCode_no_longer_has_gets_a_new_one()
+    {
+        var http = new ScriptedHandler()
+            .On("GET /session/oc-1", """{"name":"NotFoundError"}""", HttpStatusCode.NotFound)
+            .On("POST /session", """{"id":"oc-2","time":{"created":1,"updated":1}}""")
+            .On("POST /session/oc-2/prompt_async", "");
+        await using var session = CreateSession(http, out var handle);
+        handle.Exit(137);
+
+        await session.SendPromptAsync("hello again", null, CancellationToken.None);
+
         http.Requests.Select(r => r.Key).ShouldContain("POST /session/oc-2/prompt_async");
+        session.ResumeToken.ShouldBe("oc-2");
     }
 
     [Fact]
