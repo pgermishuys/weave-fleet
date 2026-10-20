@@ -69,6 +69,7 @@ public static class EndpointExtensions
         apiScope.MapToolEndpoints();
         apiScope.MapInstanceEndpoints();
         apiScope.MapHarnessEndpoints();
+        apiScope.MapUsageEndpoints();
         apiScope.MapHarnessProfileEndpoints();
         apiScope.MapWeaveConfigEndpoints();
         apiScope.MapHarnessSignInEndpoints();

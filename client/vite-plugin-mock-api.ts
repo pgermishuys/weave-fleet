@@ -951,10 +951,39 @@ export function mockApiPlugin(options: MockApiOptions = {}): Plugin {
       },
     },
     {
+      // Usage limits: one provider ready, one waiting for Allow, one that is pay-per-token.
+      pattern: /^\/api\/usage\/limits$/,
+      handler: () => {
+        const at = (hours: number) => new Date(Date.now() + hours * 3_600_000).toISOString();
+        const body = {
+          enabled: true,
+          providers: [
+            {
+              provider: "claude", account: "Max plan", name: "Claude", state: "ok", source: "Claude Code",
+              harnesses: ["claude-code"], readAt: at(0), credits: null,
+              windows: [
+                { window: "five_hour", utilization: 0.84, resetsAt: at(1.5), status: "warning" },
+                { window: "seven_day", utilization: 0.31, resetsAt: at(70), status: "allowed" },
+              ],
+            },
+            {
+              provider: "openrouter", account: null, name: "OpenRouter", state: "not_allowed", source: "OpenCode",
+              harnesses: ["opencode"], readAt: null, windows: [], credits: null,
+            },
+            {
+              provider: "codex", account: null, name: "Codex", state: "no_window", source: "Codex CLI",
+              harnesses: ["codex"], readAt: at(0), windows: [], credits: null,
+            },
+          ],
+        };
+        return new Response(JSON.stringify(body), { status: 200, headers: { "Content-Type": "application/json" } });
+      },
+    },
+    {
       pattern: /^\/api\/preferences$/,
       handler: () => {
         console.log("[mock-api] GET /api/preferences");
-        return new Response(JSON.stringify({}), {
+        return new Response(JSON.stringify({ UsageLimits: "true" }), {
           status: 200,
           headers: { "Content-Type": "application/json" },
         });

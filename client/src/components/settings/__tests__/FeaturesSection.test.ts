@@ -71,6 +71,24 @@ describe("FeaturesSection", () => {
     expect(toggle.attributes("aria-checked")).toBe("true");
   });
 
+  it("keeps Usage limits off, with no status bar switch, until it's turned on", async () => {
+    const wrapper = await mountSection();
+    const toggle = wrapper.get("[data-testid='usage-limits-switch']");
+    expect(toggle.attributes("aria-checked")).toBe("false");
+    expect(wrapper.find("[data-testid='usage-limits-chip-switch']").exists()).toBe(false);
+
+    await toggle.trigger("click");
+    await flushPromises();
+
+    expect(putMock).toHaveBeenCalledWith("/api/preferences/{key}", { params: { path: { key: "UsageLimits" } }, body: { value: "true" } });
+    const chip = wrapper.get("[data-testid='usage-limits-chip-switch']");
+    expect(chip.attributes("aria-checked")).toBe("true");
+
+    await chip.trigger("click");
+    await flushPromises();
+    expect(putMock).toHaveBeenLastCalledWith("/api/preferences/{key}", { params: { path: { key: "UsageLimitsChip" } }, body: { value: "false" } });
+  });
+
   describe("Large pastes", () => {
     it("always shows, and saves the choice", async () => {
       const wrapper = await mountSection();
