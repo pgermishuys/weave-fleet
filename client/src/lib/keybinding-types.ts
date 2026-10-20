@@ -28,6 +28,7 @@ export const DEFAULT_KEYBINDINGS: Partial<Record<CommandId, KeyBinding>> = {
   "fork-session":       { paletteHotkey: null, globalShortcut: null },
   "new-session-in-folder": { paletteHotkey: null, globalShortcut: null },
   "export-conversation":{ paletteHotkey: null, globalShortcut: null },
+  "export-raw-messages": { paletteHotkey: null, globalShortcut: null },
   "scroll-to-top":      { paletteHotkey: null, globalShortcut: null },
   "scroll-to-bottom":   { paletteHotkey: null, globalShortcut: null },
   "clear-conversation": { paletteHotkey: null, globalShortcut: null },

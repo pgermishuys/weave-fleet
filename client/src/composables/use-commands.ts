@@ -268,6 +268,14 @@ export function useCommands() {
     runSessionCommand("export-conversation", activeSessionId.value);
   }
 
+  function exportRawMessages(): void {
+    if (!activeSessionId.value) {
+      return;
+    }
+
+    runSessionCommand("export-raw-messages", activeSessionId.value);
+  }
+
   function scrollActivityToTop(): void {
     runSessionCommand("scroll-top", activeSessionId.value);
   }
@@ -563,15 +571,27 @@ export function useCommands() {
       },
       {
         id: "export-conversation",
-        label: "Export conversation",
-        description: activeSessionId.value ? "Download the active conversation as JSON." : "No active session selected.",
+        label: "Export as Markdown",
+        description: activeSessionId.value ? "Copy or save the active conversation as Markdown." : "No active session selected.",
         icon: Download,
         category: "Session",
         paletteHotkey: bindingFor("export-conversation")?.paletteHotkey ?? undefined,
         globalShortcut: bindingFor("export-conversation")?.globalShortcut ?? undefined,
-        keywords: ["export", "download", "conversation", "json"],
+        keywords: ["export", "download", "conversation", "markdown", "copy", "transcript"],
         disabled: activeSessionId.value === null,
         action: exportCurrentConversation,
+      },
+      {
+        id: "export-raw-messages",
+        label: "Export raw messages (JSON)",
+        description: activeSessionId.value ? "Download the loaded messages of the active conversation as JSON." : "No active session selected.",
+        icon: Download,
+        category: "Session",
+        paletteHotkey: bindingFor("export-raw-messages")?.paletteHotkey ?? undefined,
+        globalShortcut: bindingFor("export-raw-messages")?.globalShortcut ?? undefined,
+        keywords: ["export", "download", "raw", "json", "messages"],
+        disabled: activeSessionId.value === null,
+        action: exportRawMessages,
       },
       {
         id: "scroll-to-top",

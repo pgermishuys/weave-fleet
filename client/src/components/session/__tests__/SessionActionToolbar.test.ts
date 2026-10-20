@@ -113,4 +113,13 @@ describe("SessionActionToolbar", () => {
 
     expect(wrapper.find("[data-testid='session-copy-directory-action']").exists()).toBe(false);
   });
+
+  it("asks_to_export_from_the_more_menu", async () => {
+    const wrapper = mountToolbar({});
+
+    await wrapper.get("[data-testid='session-export-markdown-action']").trigger("click");
+
+    expect(wrapper.text()).toContain("Export as Markdown…");
+    expect(wrapper.emitted("export")).toHaveLength(1);
+  });
 });

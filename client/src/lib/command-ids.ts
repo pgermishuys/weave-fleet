@@ -20,6 +20,7 @@ export const COMMAND_IDS = [
   "copy-session-id",
   "fork-session",
   "export-conversation",
+  "export-raw-messages",
   "scroll-to-top",
   "scroll-to-bottom",
   "clear-conversation",

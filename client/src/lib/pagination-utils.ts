@@ -34,6 +34,9 @@ export interface FleetMessagePart {
   toolName?: string;
   arguments?: unknown;
   state?: number;        // ToolUseState enum: 0=Pending, 1=Running, 2=Completed, 3=Error
+  /** What the call returned, on the part itself (OpenCode 2 and Claude Code keep it here, not in a tool-result part). */
+  output?: unknown;
+  error?: string | null;
   metadata?: unknown;    // Extra tool state fields (output, summary, diffLines) passed through to rendering
   // FilePart fields
   partId?: string;
@@ -217,7 +220,10 @@ export function convertFleetMessageToAccumulated(msg: FleetMessage): Accumulated
         type: "tool",
         tool: part.toolName ?? "",
         callId: part.toolCallId ?? "",
-        state: mapToolState(part.state, part.arguments, part.metadata as Record<string, unknown> | undefined, toolResults.get(part.toolCallId ?? "")),
+        state: withOwnResult(
+          mapToolState(part.state, part.arguments, part.metadata as Record<string, unknown> | undefined, toolResults.get(part.toolCallId ?? "")),
+          part,
+        ),
       });
     } else if (part.type === "file") {
       parts.push({
@@ -253,6 +259,15 @@ export function convertFleetMessageToAccumulated(msg: FleetMessage): Accumulated
         ? { input: tokensInput, output: tokensOutput, reasoning: tokensReasoning }
         : undefined,
   };
+}
+
+/** The call's own `output` and `error`, when no tool-result part gave them. */
+function withOwnResult(state: unknown, part: FleetMessagePart): unknown {
+  if (state === null || typeof state !== "object") return state;
+  const result = state as Record<string, unknown>;
+  if (result.output === undefined && part.output != null) result.output = part.output;
+  if (result.error === undefined && typeof part.error === "string" && part.error !== "") result.error = part.error;
+  return result;
 }
 
 function mapToolState(state?: number, toolArguments?: unknown, extra?: Record<string, unknown>, toolResult?: { content: string; isError: boolean }): unknown {
