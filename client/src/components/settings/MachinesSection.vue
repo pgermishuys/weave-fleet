@@ -149,7 +149,7 @@ function stateLine(entry: MachineEntry): { text: string; tone: "ok" | "bad" | "m
   if (entry.isLive) return { text: "live", tone: "ok" };
   const state = others.value[entry.key];
   if (state?.error) return { text: state.error, tone: "bad" };
-  if (state?.loadedAt) return { text: `reachable · ${state.sessions.length} sessions`, tone: "ok" };
+  if (state?.loadedAt) return { text: `reachable · ${state.sessions.length} ${state.sessions.length === 1 ? "session" : "sessions"}`, tone: "ok" };
   return { text: "checking…", tone: "muted" };
 }
 
