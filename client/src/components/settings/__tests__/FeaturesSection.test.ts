@@ -71,10 +71,12 @@ describe("FeaturesSection", () => {
     expect(toggle.attributes("aria-checked")).toBe("true");
   });
 
-  it("keeps the Updates page off until it's turned on, and saves the choice", async () => {
+  it("keeps Updates in Machines off until it's turned on, and saves the choice", async () => {
     const wrapper = await mountSection();
     const toggle = wrapper.get("[data-testid='fleet-updates-switch']");
     expect(toggle.attributes("aria-checked")).toBe("false");
+    expect(toggle.attributes("aria-label")).toBe("Show updates in Machines");
+    expect(wrapper.text()).toContain("Updates in Machines");
 
     await toggle.trigger("click");
     await flushPromises();

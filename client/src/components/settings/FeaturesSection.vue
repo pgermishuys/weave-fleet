@@ -631,14 +631,14 @@ async function toggleBoardFeature(): Promise<void> {
     <div class="mt-3 flex items-start justify-between gap-4 rounded-card border border-border bg-main-bg p-4">
       <div>
         <p class="flex items-center gap-2 text-sm font-medium text-text">
-          Updates page
+          Updates in Machines
           <span class="rounded-full border border-border px-2 py-px text-[0.7rem] font-medium uppercase tracking-wide text-muted">
             Experimental
           </span>
         </p>
         <p class="mt-1 text-xs text-muted">
-          Adds Settings → Updates, which lists every Fleet you run (this app, this machine and each machine in
-          Settings → Machines) with its version and whether an update is waiting.
+          Shows each machine's version, update rule and Restart in Settings → Machines, plus Update machines now,
+          which restarts every machine that has an update downloaded, one at a time.
         </p>
       </div>
 
@@ -654,7 +654,7 @@ async function toggleBoardFeature(): Promise<void> {
           role="switch"
           :aria-checked="isFleetUpdatesEnabled"
           :disabled="preferencesStore.isLoading || isSavingFleetUpdates"
-          aria-label="Show the Updates page"
+          aria-label="Show updates in Machines"
           data-testid="fleet-updates-switch"
           class="relative inline-flex h-6 w-11 shrink-0 cursor-pointer rounded-full border-2 border-transparent transition-colors duration-200 ease-in-out focus:outline-none focus:ring-2 focus:ring-accent focus:ring-offset-2 focus:ring-offset-main-bg disabled:cursor-not-allowed disabled:opacity-60"
           :class="isFleetUpdatesEnabled ? 'bg-accent' : 'bg-border'"

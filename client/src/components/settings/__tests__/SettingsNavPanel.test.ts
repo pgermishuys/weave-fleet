@@ -30,16 +30,18 @@ describe("SettingsNavPanel", () => {
     expect(store.state.loadSwitch).toHaveBeenCalled();
   });
 
-  it("shows Updates only when its switch is on, with the number of Fleets that can update", async () => {
-    updates.enabled.value = false;
-    expect((await mountNav(false)).text()).not.toContain("Updates");
+  it("puts the number of machines that can update on Machines, and no Updates entry of its own", async () => {
+    updates.waiting.value = 0;
+    const none = await mountNav(false);
+    expect(none.find("[data-testid='updates-badge']").exists()).toBe(false);
+    expect(none.text()).not.toContain("Updates");
 
-    updates.enabled.value = true;
     updates.waiting.value = 3;
     const wrapper = await mountNav(false);
-    const entry = wrapper.findAll("button").find((b) => b.text().startsWith("Updates"))!;
-    expect(wrapper.get("[data-testid='updates-badge']").text()).toBe("3");
+    const entry = wrapper.findAll("button").find((b) => b.text().startsWith("Machines"))!;
+    expect(entry.get("[data-testid='updates-badge']").text()).toBe("3");
+    expect(wrapper.text()).not.toContain("Updates");
     await entry.trigger("click");
-    expect(wrapper.emitted("update:modelValue")![0]).toEqual(["updates"]);
+    expect(wrapper.emitted("update:modelValue")![0]).toEqual(["machines"]);
   });
 });

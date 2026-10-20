@@ -4,7 +4,11 @@ import {
   describeDesktopUpdate,
   busySessions,
   describeMachineUpdate,
+  describeReleaseLine,
+  describeRolloutNarrative,
   describeUpdateChip,
+  describeVersionLine,
+  newestCheckedAt,
   describeUpdatedNotice,
   effectiveRule,
   parseRuleOverrides,
@@ -244,10 +248,121 @@ describe("a Fleet that updated itself", () => {
   });
 });
 
+function mrow(patch: Partial<FleetUpdateRow> & { state: FleetUpdateRow["state"] }): FleetUpdateRow {
+  return { key: "falcon-id", name: "falcon", kind: "node", os: null, version: "0.59.0", latest: "0.59.1", where: "falcon", isLive: false, restart: null, isHome: false, rule: { effective: "idle", overridden: null }, ...patch };
+}
+
+function rollout(steps: Partial<RolloutStep>[], status: Rollout["status"] = "running"): Rollout {
+  return {
+    id: "r1",
+    status,
+    startedAt: "2026-10-20T09:00:00Z",
+    steps: steps.map((step, i) => ({ machineId: `m${i}`, name: `m${i}`, state: "pending", waitingSessions: 0, ...step })),
+  };
+}
+
+describe("the version line on a machine card", () => {
+  const ready = machine({ status: "staged", stagedVersion: "0.59.1" });
+
+  it("says a downloaded update waits for the machine's rule", () => {
+    const idle = describeVersionLine(mrow({ state: machine({ status: "staged", stagedVersion: "0.59.1" }, "0.59.0", 2), working: 2 }), null);
+    expect(idle).toMatchObject({ version: "Fleet 0.59.0", target: "0.59.1", text: "0.59.1 downloaded · updates itself when its 2 sessions finish", tone: "warn", ruleMenu: true });
+    expect(describeVersionLine(mrow({ state: machine({ status: "staged", stagedVersion: "0.59.1" }, "0.59.0", 1), working: 1 }), null).text).toContain("when its session finishes");
+    expect(describeVersionLine(mrow({ state: ready }), null).text).toBe("0.59.1 downloaded · updates itself in a minute");
+    expect(describeVersionLine(mrow({ state: ready, rule: { effective: "overnight", overridden: "overnight" } }), null).text).toBe("0.59.1 downloaded · updates itself tonight, 02:00–05:00");
+    expect(describeVersionLine(mrow({ state: ready, rule: { effective: "ask", overridden: null } }), null).text).toBe("0.59.1 downloaded · waiting for you to restart it");
+  });
+
+  it("puts the reason a machine can't restart itself in the line", () => {
+    const line = describeVersionLine(mrow({ state: ready, restart: { kind: "unavailable", reason: "managed by systemd" } }), null);
+    expect(line.text).toBe("0.59.1 downloaded · managed by systemd");
+  });
+
+  it("says where a rollout has the machine", () => {
+    const run = rollout([{ name: "heron", state: "done" }, { machineId: "falcon-id", name: "falcon", state: "waiting", waitingSessions: 2 }, { name: "kestrel", state: "pending" }]);
+    expect(describeVersionLine(mrow({ state: ready }), run).text).toBe("Updating: waiting for 2 sessions to finish");
+    const next = rollout([{ name: "falcon", state: "waiting" }, { machineId: "falcon-id", name: "kestrel", state: "pending" }]);
+    expect(describeVersionLine(mrow({ state: ready }), next).text).toBe("Updating: next, after falcon");
+    const queued = rollout([{ name: "falcon", state: "waiting" }, { name: "heron", state: "pending" }, { machineId: "falcon-id", name: "kestrel", state: "pending" }]);
+    expect(describeVersionLine(mrow({ state: ready }), queued).text).toBe("Updating: next, after heron");
+    expect(describeVersionLine(mrow({ state: ready }), rollout([{ machineId: "falcon-id", state: "pending" }])).text).toBe("Updating: waiting its turn");
+    expect(describeVersionLine(mrow({ state: ready }), rollout([{ machineId: "falcon-id", state: "restarting" }])).text).toBe("Updating: restarting…");
+    expect(describeVersionLine(mrow({ state: ready }), rollout([{ machineId: "falcon-id", state: "done", toVersion: "0.59.1" }]))).toMatchObject({ version: "Fleet 0.59.1", text: "updated to 0.59.1 · healthy", tone: "ok" });
+  });
+
+  it("says when it can't be reached, with the version last seen and no rule menu", () => {
+    const line = describeVersionLine(mrow({ version: "0.58.2", state: machine({}, "0.58.2", 0, false) }), null);
+    expect(line).toMatchObject({ version: "Fleet 0.58.2", text: "can't be reached · last seen on 0.58.2", ruleMenu: false });
+  });
+
+  it("says up to date, and reuses the other states' words", () => {
+    expect(describeVersionLine(mrow({ version: "0.59.1", state: machine({}, "0.59.1") }), null)).toMatchObject({ version: "Fleet 0.59.1", target: null, text: "up to date", tone: "ok" });
+    expect(describeVersionLine(mrow({ state: machine({ status: "downloading" }) }), null).text).toBe("downloading 0.59.1…");
+    expect(describeVersionLine(mrow({ state: machine({ status: "available" }) }), null).text).toBe("0.59.1 is out, not downloaded yet");
+  });
+
+  it("offers no rule menu for a Fleet too old to take one", () => {
+    expect(describeVersionLine(mrow({ rule: null, state: machine({}, "0.59.1") }), null).ruleMenu).toBe(false);
+  });
+});
+
+describe("the release line", () => {
+  it("says how many machines have the release downloaded", () => {
+    expect(describeReleaseLine({ latest: "0.59.1", waiting: 3, downloaded: 3 }, null)).toEqual({ kind: "available", lead: "Fleet 0.59.1 is out.", text: "3 machines have it downloaded and switch when they restart." });
+    expect(describeReleaseLine({ latest: "0.59.1", waiting: 1, downloaded: 1 }, null).text).toBe("1 machine has it downloaded and switches when it restarts.");
+    expect(describeReleaseLine({ latest: "0.59.1", waiting: 3, downloaded: 2 }, null).text).toBe("2 of 3 machines that can update have it downloaded and switch when they restart.");
+    expect(describeReleaseLine({ latest: "0.59.1", waiting: 2, downloaded: 0 }, null).text).toBe("2 machines can update; they aren't downloaded yet.");
+  });
+
+  it("is one quiet line when there is nothing to do, or no release", () => {
+    const now = Date.parse("2026-10-20T12:00:00Z");
+    expect(describeReleaseLine({ latest: "0.59.1", waiting: 0, downloaded: 0 }, "2026-10-20T11:56:00Z", now))
+      .toEqual({ kind: "current", lead: "", text: "Every machine that can be reached is on Fleet 0.59.1. Checked 4m ago." });
+    expect(describeReleaseLine({ latest: null, waiting: 0, downloaded: 0 }, null)).toMatchObject({ kind: "none", text: "Fleet hasn't found a release yet." });
+  });
+
+  it("finds the newest check across machines", () => {
+    expect(newestCheckedAt([null, "2026-10-20T08:00:00Z", undefined, "2026-10-20T11:00:00Z", "nonsense"])).toBe("2026-10-20T11:00:00Z");
+    expect(newestCheckedAt([null])).toBeNull();
+  });
+});
+
+describe("the rollout narrative", () => {
+  it("tells each machine's part in a sentence", () => {
+    const run = rollout([
+      { name: "heron", state: "done", toVersion: "0.59.1" },
+      { name: "falcon", state: "waiting", waitingSessions: 2 },
+      { name: "kestrel", state: "pending" },
+      { name: "osprey", state: "skipped", detail: "can't be reached" },
+    ]);
+    expect(describeRolloutNarrative(run)).toEqual({
+      title: "Updating machines to 0.59.1, one at a time.",
+      active: "falcon",
+      text: "heron is done. falcon is waiting for 2 sessions; kestrel is next. osprey can't be reached, so it's skipped.",
+    });
+  });
+
+  it("has nobody active before the first machine starts", () => {
+    expect(describeRolloutNarrative(rollout([{ name: "a" }, { name: "b" }])).active).toBeNull();
+  });
+
+  it("says a machine that can't be reached will be skipped, and the next one is the next reachable machine", () => {
+    const run = rollout([{ name: "falcon", state: "waiting", waitingSessions: 1 }, { machineId: "osprey-id", name: "osprey" }, { name: "heron" }]);
+    expect(describeRolloutNarrative(run, new Set(["osprey-id"])).text).toBe("falcon is waiting for 1 session. osprey can't be reached, so it'll be skipped. heron is next.");
+  });
+});
+
 describe("the status bar chip", () => {
-  it("counts the Fleets that can update", () => {
+  it("counts the machines that can update", () => {
     expect(describeUpdateChip(0)).toBeNull();
-    expect(describeUpdateChip(1)).toBe("↑ 1 Fleet can update");
-    expect(describeUpdateChip(3)).toBe("↑ 3 Fleets can update");
+    expect(describeUpdateChip(1)).toBe("↑ 1 machine can update");
+    expect(describeUpdateChip(3)).toBe("↑ 3 machines can update");
+  });
+
+  it("says where a rollout is while it runs, one step ahead of the finished ones and never past the last", () => {
+    const steps: Partial<RolloutStep>[] = [{ state: "done" }, { state: "waiting" }, { state: "pending" }];
+    expect(describeUpdateChip(3, rollout(steps))).toBe("Updating machines · 2 of 3");
+    expect(describeUpdateChip(0, rollout([{ state: "done" }, { state: "skipped" }, { state: "done" }]))).toBe("Updating machines · 3 of 3");
+    expect(describeUpdateChip(2, rollout(steps, "done"))).toBe("↑ 2 machines can update");
   });
 });

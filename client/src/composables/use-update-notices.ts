@@ -4,6 +4,7 @@ import { api } from "@/api/client";
 import { useReleaseNotes } from "@/composables/use-release-notes";
 import { useUpdateStatus, type UpdateStatus } from "@/composables/use-update-status";
 import { useWhatsNew } from "@/composables/use-whats-new";
+import { useFleetUpdatesEnabled } from "@/composables/use-fleet-updates";
 import { getDesktopBridge, releaseNotesUrl, type DesktopUpdateState } from "@/lib/desktop";
 import { changeSummary, compareVersions, parseReleaseNotes, whatsNewSummary, type WhatsNewSummary } from "@/lib/release-notes";
 import { useNoticesStore, type Notice } from "@/stores/notices";
@@ -101,6 +102,9 @@ export function useUpdateNotices(): void {
   const notices = useNoticesStore();
   const bridge = getDesktopBridge();
   const { updateStatus } = useUpdateStatus();
+  // With Updates in Machines on, one status bar chip counts every machine (this Fleet included), so this Fleet's own
+  // "ready" notice stays away. The desktop app's own updater is a different thing and keeps its notice.
+  const machinesCoverServer = useFleetUpdatesEnabled();
   let stopListening: (() => void) | undefined;
   let stopShowUpdate: (() => void) | undefined;
   let appNoticeId: string | null = null;
@@ -224,6 +228,10 @@ export function useUpdateNotices(): void {
   // ── The server's updates (the `fleet` CLI) ─────────────────────────────
   function syncServer(status: UpdateStatus | null): void {
     if (!status || status.status === "managed") return;
+    if (machinesCoverServer.value) {
+      notices.removeWhere(SERVER);
+      return;
+    }
     if (status.status === "staged" && status.latestVersion) {
       const version = status.latestVersion;
       const id = `${SERVER}${version}`;
@@ -293,8 +301,8 @@ export function useUpdateNotices(): void {
   }
 
   watch(
-    updateStatus,
-    (status) => {
+    [updateStatus, machinesCoverServer],
+    ([status]) => {
       syncServer(status);
       // A Fleet the app runs has the app's version, which the app's own source reports.
       if (status && status.status !== "managed" && status.currentVersion && !bridge) void noteRunningVersion("server", status.currentVersion);

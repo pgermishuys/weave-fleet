@@ -11,7 +11,8 @@ const CHIP_ID = "fleet-updates-waiting";
 
 /**
  * With the Updates switch on: tells the user once when a machine has updated itself ("falcon updated to 0.59.1"), and
- * keeps a chip in the status bar that counts the Fleets that can update and opens Settings → Updates.
+ * keeps ONE chip in the status bar that counts the machines that can update (or says where a rollout is) and opens
+ * Settings → Machines.
  */
 export function useFleetUpdateNotices(): void {
   const notices = useNoticesStore();
@@ -19,22 +20,22 @@ export function useFleetUpdateNotices(): void {
   const router = useRouter();
   const { setActiveSection } = useSettingsNav();
   const { openWhatsNew } = useWhatsNew();
-  const { enabled, waiting } = useFleetUpdatesWatch();
+  const { enabled, waiting, rollout } = useFleetUpdatesWatch();
 
-  function openUpdates(): void {
-    setActiveSection("updates");
+  function openMachines(): void {
+    setActiveSection("machines");
     void router.navigate({ to: "/settings" });
   }
 
   watch(
-    [enabled, waiting],
-    ([on, count]) => {
-      const chip = on ? describeUpdateChip(count) : null;
+    [enabled, waiting, rollout],
+    ([on, count, current]) => {
+      const chip = on ? describeUpdateChip(count, current) : null;
       if (!chip) {
         notices.remove(CHIP_ID);
         return;
       }
-      notices.post({ id: CHIP_ID, title: chip, chip, quiet: true, onChipClick: openUpdates });
+      notices.post({ id: CHIP_ID, title: chip, chip, quiet: true, onChipClick: openMachines });
     },
     { immediate: true },
   );

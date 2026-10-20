@@ -36,6 +36,13 @@ vi.mock("@/composables/use-update-status", async () => {
   return { useUpdateStatus: () => ({ updateStatus: status }) };
 });
 
+const machinesCover = vi.hoisted(() => ({ value: null as unknown }));
+vi.mock("@/composables/use-fleet-updates", async () => {
+  const { shallowRef: ref } = await import("vue");
+  machinesCover.value = ref(false);
+  return { useFleetUpdatesEnabled: () => machinesCover.value };
+});
+
 const { isNewerVersion, useUpdateNotices } = await import("@/composables/use-update-notices");
 const { useNoticesStore } = await import("@/stores/notices");
 
@@ -116,6 +123,7 @@ describe("update notices", () => {
     getMock.mockReset();
     openWhatsNew.mockReset();
     server().value = null;
+    (machinesCover.value as ReturnType<typeof shallowRef<boolean>>).value = false;
     savedNotes.releases = [];
     savedNotes.loaded.value = [];
   });
@@ -356,6 +364,19 @@ describe("update notices", () => {
       store.openNext();
       expect(store.open).toMatchObject({ title: "Fleet 0.37.0 is ready", body: "It installs the next time you start Fleet." });
       expect(store.open?.actions?.map((action) => action.label)).toEqual(["Got it"]);
+    });
+
+    it("says nothing about this Fleet's update with Updates in Machines on: the machines chip covers it", async () => {
+      (machinesCover.value as ReturnType<typeof shallowRef<boolean>>).value = true;
+      const store = await mountHost();
+      server().value = status({ status: "staged", latestVersion: "0.37.0" });
+      await flushPromises();
+      expect(store.notices.map((notice) => notice.id)).toEqual([]);
+
+      // Turning the switch off brings the notice back.
+      (machinesCover.value as ReturnType<typeof shallowRef<boolean>>).value = false;
+      await flushPromises();
+      expect(store.notices.map((notice) => notice.title)).toEqual(["Fleet 0.37.0 is ready"]);
     });
 
     it("says nothing while it downloads, or when the desktop app manages updates", async () => {

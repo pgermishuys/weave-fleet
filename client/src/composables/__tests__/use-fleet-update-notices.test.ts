@@ -4,7 +4,8 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { defineComponent, nextTick, shallowRef } from "vue";
 import type { MachineEntry } from "@/stores/machines";
 
-const { entries, enabled, waiting, openWhatsNew } = vi.hoisted(() => ({
+const { entries, enabled, waiting, rollout, openWhatsNew } = vi.hoisted(() => ({
+  rollout: { value: null as unknown },
   entries: { value: null as unknown },
   enabled: { value: null as unknown },
   waiting: { value: null as unknown },
@@ -17,7 +18,8 @@ vi.mock("@/composables/use-fleet-updates", async () => {
   const { shallowRef: ref } = await import("vue");
   enabled.value = ref(true);
   waiting.value = ref(0);
-  return { useFleetUpdatesWatch: () => ({ enabled: enabled.value, waiting: waiting.value }) };
+  rollout.value = ref(null);
+  return { useFleetUpdatesWatch: () => ({ enabled: enabled.value, waiting: waiting.value, rollout: rollout.value }) };
 });
 vi.mock("@/stores/machines", async () => {
   const { shallowRef: ref } = await import("vue");
@@ -31,6 +33,7 @@ const { useNoticesStore } = await import("@/stores/notices");
 enableAutoUnmount(afterEach);
 
 const entriesRef = () => entries.value as ReturnType<typeof shallowRef<MachineEntry[]>>;
+const rolloutRef = () => rollout.value as ReturnType<typeof shallowRef<unknown>>;
 const waitingRef = () => waiting.value as ReturnType<typeof shallowRef<number>>;
 
 function falcon(version: string, lastUpdate: unknown): MachineEntry {
@@ -50,6 +53,7 @@ describe("useFleetUpdateNotices", () => {
     setActivePinia(createPinia());
     entriesRef().value = [];
     waitingRef().value = 0;
+    rolloutRef().value = null;
     (enabled.value as ReturnType<typeof shallowRef<boolean>>).value = true;
     openWhatsNew.mockClear();
     vi.useFakeTimers({ now: new Date("2026-10-20T12:00:00Z") });
@@ -85,14 +89,27 @@ describe("useFleetUpdateNotices", () => {
 
     waitingRef().value = 2;
     await nextTick();
-    expect(notices.chips.map((chip) => chip.chip)).toEqual(["↑ 2 Fleets can update"]);
+    expect(notices.chips.map((chip) => chip.chip)).toEqual(["↑ 2 machines can update"]);
 
     waitingRef().value = 1;
     await nextTick();
-    expect(notices.chips.map((chip) => chip.chip)).toEqual(["↑ 1 Fleet can update"]);
+    expect(notices.chips.map((chip) => chip.chip)).toEqual(["↑ 1 machine can update"]);
 
     (enabled.value as ReturnType<typeof shallowRef<boolean>>).value = false;
     await nextTick();
     expect(notices.chips).toHaveLength(0);
+  });
+
+  it("turns the one chip into the rollout's progress while machines update, and a click opens Settings → Machines", async () => {
+    const { useSettingsNav } = await import("@/composables/use-settings-nav");
+    mountIt();
+    const notices = useNoticesStore();
+    waitingRef().value = 3;
+    rolloutRef().value = { id: "r", status: "running", startedAt: "", steps: [{ state: "done" }, { state: "waiting" }, { state: "pending" }] };
+    await nextTick();
+    expect(notices.chips.map((chip) => chip.chip)).toEqual(["Updating machines · 2 of 3"]);
+
+    notices.chips[0]!.onChipClick?.();
+    expect(useSettingsNav().activeSection.value).toBe("machines");
   });
 });

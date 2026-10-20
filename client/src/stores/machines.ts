@@ -598,7 +598,7 @@ export const useMachinesStore = defineStore("machines", () => {
     }
   }
 
-  /** Reads every machine's `GET /api/machine` again (home, the live one, and the others), for Settings → Updates. */
+  /** Reads every machine's `GET /api/machine` again (home, the live one, and the others), for Settings → Machines. */
   async function refreshUpdates(): Promise<void> {
     await Promise.all([loadHome(), checkLive(), refreshOthers()]);
   }
