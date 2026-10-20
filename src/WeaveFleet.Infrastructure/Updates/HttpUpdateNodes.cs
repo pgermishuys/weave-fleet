@@ -24,8 +24,9 @@ public sealed class HttpUpdateNodes(RemoteMachineService machines, IHttpClientFa
                 return null;
 
             var update = root.TryGetProperty("update", out var u) && u.ValueKind == JsonValueKind.Object ? u : default;
-            var working = root.TryGetProperty("capabilities", out var c) && c.ValueKind == JsonValueKind.Object
-                && c.TryGetProperty("sessions", out var s) && s.TryGetProperty("working", out var w) && w.TryGetInt32(out var n) ? n : 0;
+            var sessions = root.TryGetProperty("capabilities", out var c) && c.ValueKind == JsonValueKind.Object
+                && c.TryGetProperty("sessions", out var s) && s.ValueKind == JsonValueKind.Object ? s : default;
+            var working = Count(sessions, "working");
             UpdateFailure? rolledBack = null;
             if (update.ValueKind == JsonValueKind.Object && update.TryGetProperty("rolledBack", out var r) && r.ValueKind == JsonValueKind.Object)
                 rolledBack = new UpdateFailure(Text(r, "from") ?? "", Text(r, "to") ?? "", Text(r, "reason") ?? "", Text(r, "at") ?? "");
@@ -38,7 +39,8 @@ public sealed class HttpUpdateNodes(RemoteMachineService machines, IHttpClientFa
                 update.ValueKind == JsonValueKind.Object ? Text(update, "restartUnavailableReason") ?? (update.TryGetProperty("canRestart", out _) ? null : "too old to restart itself") : null,
                 rolledBack,
                 update.ValueKind == JsonValueKind.Object ? Text(update, "rule") : null,
-                !(root.TryGetProperty("webApp", out var web) && web.ValueKind == JsonValueKind.False));
+                !(root.TryGetProperty("webApp", out var web) && web.ValueKind == JsonValueKind.False),
+                Count(sessions, "needsYou"));
         }
         catch (Exception ex) when (ex is JsonException or HttpRequestException or TaskCanceledException && !ct.IsCancellationRequested)
         {
@@ -103,6 +105,9 @@ public sealed class HttpUpdateNodes(RemoteMachineService machines, IHttpClientFa
             return null;
         }
     }
+
+    private static int Count(JsonElement sessions, string name)
+        => sessions.ValueKind == JsonValueKind.Object && sessions.TryGetProperty(name, out var value) && value.TryGetInt32(out var n) ? n : 0;
 
     private static string? Text(JsonElement element, string name)
         => element.TryGetProperty(name, out var value) && value.ValueKind == JsonValueKind.String ? value.GetString() : null;

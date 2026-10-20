@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 import type { DesktopUpdateState } from "@/lib/desktop";
 import {
   describeDesktopUpdate,
+  busySessions,
   describeMachineUpdate,
   describeUpdateChip,
   describeUpdatedNotice,
@@ -63,8 +64,8 @@ describe("describeMachineUpdate", () => {
   });
 
   it("says busy, with how many sessions are working, when the download waits on a busy machine", () => {
-    expect(machine({ status: "staged", stagedVersion: "0.59.1" }, "0.59.0", 2).label).toBe("0.59.1 downloaded · busy: 2 sessions working");
-    expect(machine({ status: "staged", stagedVersion: "0.59.1" }, "0.59.0", 1)).toMatchObject({ kind: "busy", label: "0.59.1 downloaded · busy: 1 session working" });
+    expect(machine({ status: "staged", stagedVersion: "0.59.1" }, "0.59.0", 2).label).toBe("0.59.1 downloaded · busy: 2 sessions working or waiting for you");
+    expect(machine({ status: "staged", stagedVersion: "0.59.1" }, "0.59.0", 1)).toMatchObject({ kind: "busy", label: "0.59.1 downloaded · busy: 1 session working or waiting for you" });
   });
 
   it("says it can't be reached, whatever it last said", () => {
@@ -191,6 +192,16 @@ describe("rollout progress", () => {
   it("says why it stopped and who it left alone", () => {
     const outcome = describeRolloutOutcome(run("stopped", [step({ name: "heron", state: "rolled-back" }), step({ name: "falcon", state: "pending" })], "heron didn't start on 0.59.2 and went back to 0.59.0."));
     expect(outcome).toEqual({ text: "heron didn't start on 0.59.2 and went back to 0.59.0. falcon was left alone.", tone: "bad" });
+  });
+});
+
+describe("a session waiting on an answer", () => {
+  it("keeps the row busy like a working one", () => {
+    expect(busySessions({ working: 0, needsYou: 1 })).toBe(1);
+    expect(busySessions({ working: 2, needsYou: 1 })).toBe(3);
+    expect(busySessions(null)).toBe(0);
+    const row = machine({ status: "staged", stagedVersion: "0.59.1" }, "0.59.0", busySessions({ working: 0, needsYou: 1 }));
+    expect(row).toMatchObject({ kind: "busy", label: "0.59.1 downloaded · busy: 1 session working or waiting for you" });
   });
 });
 

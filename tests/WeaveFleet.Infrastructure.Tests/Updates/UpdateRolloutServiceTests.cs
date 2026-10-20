@@ -32,6 +32,21 @@ public sealed class UpdateRolloutServiceTests
     }
 
     [Fact]
+    public async Task A_machine_with_a_session_waiting_on_an_answer_is_waited_for_like_a_working_one()
+    {
+        var rig = new Rig();
+        rig.Node("falcon").NeedsYou = [1, 1, 0];
+        await rig.AddMachinesAsync();
+
+        await rig.RunAsync();
+
+        rig.Run.Status.ShouldBe("done");
+        rig.Published.ShouldContain(step => step.Name == "falcon" && step.State == "waiting" && step.WaitingSessions == 1
+            && step.Detail!.Contains("or for you to answer"));
+        rig.Log.ShouldBe(["apply falcon", "falcon back on 0.59.1"]);
+    }
+
+    [Fact]
     public async Task A_machine_that_is_off_or_has_nothing_new_is_skipped_and_the_rest_carry_on()
     {
         var rig = new Rig();
@@ -126,6 +141,7 @@ public sealed class UpdateRolloutServiceTests
         public string Version = "0.59.0";
         public string? Staged = "0.59.1";
         public int[] Working = [0];
+        public int[] NeedsYou = [0];
         public Comeback AfterApply = Comeback.Updates;
         public UpdateFailure? RolledBack;
         public int WorkingWhenApplied = -1;
@@ -233,8 +249,10 @@ public sealed class UpdateRolloutServiceTests
                 node.ReadsSinceApply = -1;
             }
 
-            var working = node.Working[Math.Min(node.Reads++, node.Working.Length - 1)];
-            return Task.FromResult<NodeUpdateInfo?>(new NodeUpdateInfo(node.Version, node.Staged, working, node.CanRestart, node.CanRestart ? null : "Restart Fleet once by hand.", node.RolledBack));
+            var read = node.Reads++;
+            var working = node.Working[Math.Min(read, node.Working.Length - 1)];
+            var needsYou = node.NeedsYou[Math.Min(read, node.NeedsYou.Length - 1)];
+            return Task.FromResult<NodeUpdateInfo?>(new NodeUpdateInfo(node.Version, node.Staged, working, node.CanRestart, node.CanRestart ? null : "Restart Fleet once by hand.", node.RolledBack, NeedsYou: needsYou));
         }
 
         public Task<NodeApplyResult> ApplyAsync(RemoteMachine machine, CancellationToken ct)

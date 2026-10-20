@@ -3,6 +3,7 @@ using Microsoft.Extensions.Hosting;
 using Microsoft.Extensions.Logging.Abstractions;
 using Microsoft.Extensions.Time.Testing;
 using WeaveFleet.Application.Configuration;
+using WeaveFleet.Application.Machines;
 using WeaveFleet.Application.Updates;
 using WeaveFleet.Infrastructure.Updates;
 
@@ -18,6 +19,7 @@ public sealed class SelfUpdateServiceTests : IDisposable
     private readonly UpdateRuleStore _rules;
     private string? _staged = "99.0.0";
     private int _working;
+    private int _needsYou;
     private bool _canRestart = true;
 
     public SelfUpdateServiceTests()
@@ -35,8 +37,8 @@ public sealed class SelfUpdateServiceTests : IDisposable
             new FleetOptions(), new UpdateFiles(_root), null!, new UpdateRestartGate(), null!, new StubLifetime(), _time,
             NullLogger<UpdateRestartService>.Instance, code => { _exits.Add(code); _exited.TrySetResult(); },
             name => _canRestart && name == UpdateRestartService.LauncherVariable ? "85" : null,
-            () => _staged, () => Task.FromResult(_working), rules: _rules);
-        return new SelfUpdateService(_rules, restart, new ServiceCollection().BuildServiceProvider().GetRequiredService<IServiceScopeFactory>(), _time, NullLogger<SelfUpdateService>.Instance, () => Task.FromResult(_working));
+            () => _staged, () => Task.FromResult(new MachineSessionCounts(_working, _needsYou)), rules: _rules);
+        return new SelfUpdateService(_rules, restart, new ServiceCollection().BuildServiceProvider().GetRequiredService<IServiceScopeFactory>(), _time, NullLogger<SelfUpdateService>.Instance, () => Task.FromResult(new MachineSessionCounts(_working, _needsYou)));
     }
 
     [Theory]
@@ -82,6 +84,21 @@ public sealed class SelfUpdateServiceTests : IDisposable
         _rules.CompleteUpdate("99.0.0");
         _rules.Last.ShouldNotBeNull().Trigger.ShouldBe("idle");
         _rules.Last.To.ShouldBe("99.0.0");
+    }
+
+    [Fact]
+    public async Task A_session_waiting_on_an_answer_keeps_it_from_restarting_like_a_working_one()
+    {
+        _rules.SetRule("idle");
+        var service = Service();
+        _needsYou = 1;
+        _time.Advance(TimeSpan.FromMinutes(5));
+
+        (await service.TickAsync()).ShouldBeFalse("a question is open");
+        _needsYou = 0;
+        _time.Advance(TimeSpan.FromSeconds(30));
+        (await service.TickAsync()).ShouldBeFalse("the quiet minute starts when it is answered");
+        _exits.ShouldBeEmpty();
     }
 
     [Fact]

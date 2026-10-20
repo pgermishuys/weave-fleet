@@ -33,7 +33,7 @@ public sealed partial class UpdateRestartService(
     Action<int>? setExitCode = null,
     Func<string, string?>? environment = null,
     Func<string?>? stagedVersion = null,
-    Func<Task<int>>? workingSessions = null,
+    Func<Task<MachineSessionCounts>>? workingSessions = null,
     Func<string?>? readCgroup = null,
     // Where the reason for a restart is written down before exiting, so the new version can say what happened.
     UpdateRuleStore? rules = null) : IHostedService
@@ -125,11 +125,13 @@ public sealed partial class UpdateRestartService(
         if (!gate.TryClose())
             return new RestartResult(RestartOutcome.Accepted, To: staged);
 
-        var working = workingSessions is null ? (await capabilities.ReadAsync()).Sessions.Working : await workingSessions();
+        // A session stopped on a question or a permission ask is still in its turn: a restart would cut it off.
+        var counts = workingSessions is null ? (await capabilities.ReadAsync()).Sessions : await workingSessions();
+        var working = counts.Busy;
         if (working > 0)
         {
             gate.Reopen();
-            return new RestartResult(RestartOutcome.Busy, $"{working} {(working == 1 ? "session is" : "sessions are")} working.", Working: working);
+            return new RestartResult(RestartOutcome.Busy, $"{working} {(working == 1 ? "session is" : "sessions are")} working or waiting for you.", Working: working);
         }
 
         LogRestarting(CurrentVersion, staged);

@@ -34,6 +34,7 @@ public sealed class UpdateApplyEndpointTests : IDisposable
     private readonly UpdateRestartGate _gate = new();
     private string? _staged = "99.0.0";
     private int _working;
+    private int _needsYou;
     private bool _launcher = true;
 
     public void Dispose() => Directory.Delete(_root, recursive: true);
@@ -59,7 +60,7 @@ public sealed class UpdateApplyEndpointTests : IDisposable
                 code => _exited.TrySetResult(code),
                 name => _launcher && name == UpdateRestartService.LauncherVariable ? "85" : null,
                 () => _staged,
-                () => Task.FromResult(_working),
+                () => Task.FromResult(new MachineSessionCounts(_working, _needsYou)),
                 rules: sp.GetRequiredService<UpdateRuleStore>()));
         });
 
@@ -102,10 +103,15 @@ public sealed class UpdateApplyEndpointTests : IDisposable
 
         _staged = "99.0.0";
         _working = 2;
-        await ConflictAsync(owner, "2 sessions are working.");
+        await ConflictAsync(owner, "2 sessions are working or waiting for you.");
         _gate.IsRestarting.ShouldBeFalse("a refused restart leaves the gate open");
 
         _working = 0;
+        _needsYou = 1;
+        await ConflictAsync(owner, "1 session is working or waiting for you.");
+        _gate.IsRestarting.ShouldBeFalse("a session stopped on a question is still in its turn");
+
+        _needsYou = 0;
         _launcher = false;
         await ConflictAsync(owner, "Restart Fleet once by hand; after that it can restart itself.");
         _exited.Task.IsCompleted.ShouldBeFalse();

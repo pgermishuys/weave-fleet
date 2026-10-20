@@ -18,8 +18,8 @@ public sealed partial class SelfUpdateService(
     IServiceScopeFactory scopes,
     TimeProvider time,
     ILogger<SelfUpdateService> logger,
-    // For tests: how many sessions are working.
-    Func<Task<int>>? workingSessions = null) : BackgroundService
+    // For tests: how many sessions are working or waiting for an answer.
+    Func<Task<MachineSessionCounts>>? workingSessions = null) : BackgroundService
 {
     public static readonly TimeSpan Tick = TimeSpan.FromSeconds(15);
 
@@ -62,7 +62,7 @@ public sealed partial class SelfUpdateService(
         try
         {
             using var background = BackgroundUserContext.BeginScope("local-user");
-            if (await WorkingAsync() > 0)
+            if ((await WorkingAsync()).Busy > 0)
             {
                 _lastWorking = now;
                 return false;
@@ -87,13 +87,13 @@ public sealed partial class SelfUpdateService(
         }
     }
 
-    private async Task<int> WorkingAsync()
+    private async Task<MachineSessionCounts> WorkingAsync()
     {
         if (workingSessions is not null)
             return await workingSessions();
 
         using var scope = scopes.CreateScope();
-        return (await scope.ServiceProvider.GetRequiredService<MachineCapabilitiesReader>().ReadAsync()).Sessions.Working;
+        return (await scope.ServiceProvider.GetRequiredService<MachineCapabilitiesReader>().ReadAsync()).Sessions;
     }
 
     [LoggerMessage(Level = LogLevel.Information, Message = "Updating itself ({Rule} rule): restarting into v{To}.")]

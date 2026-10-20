@@ -5,6 +5,7 @@ import {
   describeMachineUpdate,
   describeRolloutOutcome,
   describeRolloutStep,
+  busySessions,
   FLEET_UPDATES_PREFERENCE_KEY,
   hasUpdateWaiting,
   osLabel,
@@ -78,7 +79,7 @@ export function useFleetUpdates() {
       : describeMachineUpdate({
         version: info?.version ?? null,
         update: info?.update ?? null,
-        working: entry.capabilities?.sessions.working ?? 0,
+        working: busySessions(entry.capabilities?.sessions),
         reachable,
       });
     const step = rollout.value?.status === "running" ? rollout.value.steps.find((candidate) => candidate.machineId === entry.key) : undefined;

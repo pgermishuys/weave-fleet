@@ -16,7 +16,13 @@ public sealed record NodeUpdateInfo(
     UpdateFailure? RolledBack,
     // The rule it follows and whether it serves the web app (a Fleet, not a node); null/true from one too old to say.
     string? Rule = null,
-    bool WebApp = true);
+    bool WebApp = true,
+    // Sessions stopped on a question or a permission ask: still in a turn, so a restart waits for them too.
+    int NeedsYou = 0)
+{
+    /// <summary>Sessions a restart would cut off.</summary>
+    public int Busy => Working + NeedsYou;
+}
 
 public enum NodeApplyOutcome { Accepted, Busy, Refused, Unreachable }
 
@@ -167,9 +173,9 @@ public sealed partial class UpdateRolloutService(
         var waitingSince = time.GetTimestamp();
         while (true)
         {
-            if (info!.Working > 0)
+            if (info!.Busy > 0)
             {
-                await SetAsync(machine, "waiting", $"waiting for {info.Working} {(info.Working == 1 ? "session" : "sessions")} to finish", from, target, info.Working);
+                await SetAsync(machine, "waiting", $"waiting for {info.Busy} {(info.Busy == 1 ? "session" : "sessions")} to finish or for you to answer", from, target, info.Busy);
                 if (time.GetElapsedTime(waitingSince) > BusyLimit)
                     return await SkipAsync(machine, "still busy, left for later", from);
 
@@ -186,7 +192,7 @@ public sealed partial class UpdateRolloutService(
             if (applied.Outcome == NodeApplyOutcome.Busy)
             {
                 // A turn started between looking and asking: back to waiting.
-                info = info with { Working = Math.Max(1, info.Working) };
+                info = info with { Working = Math.Max(1, info.Busy), NeedsYou = 0 };
                 continue;
             }
 

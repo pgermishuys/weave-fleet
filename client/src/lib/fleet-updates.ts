@@ -131,7 +131,7 @@ export interface FleetUpdateInput {
   version: string | null;
   /** Null from a Fleet older than the field. */
   update: MachineUpdate | null;
-  /** Sessions in a turn on that machine. */
+  /** Sessions in a turn on that machine, including ones waiting for an answer (see `busySessions`). */
   working: number;
   reachable: boolean;
 }
@@ -148,7 +148,12 @@ export function isNewerVersion(a: string | null | undefined, b: string | null | 
 }
 
 function sessionsWorking(count: number): string {
-  return `${count} ${count === 1 ? "session" : "sessions"} working`;
+  return `${count} ${count === 1 ? "session" : "sessions"} working or waiting for you`;
+}
+
+/** Sessions a restart would cut off: working, or stopped on a question or a permission ask (still in their turn). */
+export function busySessions(sessions: { working: number; needsYou?: number } | null | undefined): number {
+  return (sessions?.working ?? 0) + (sessions?.needsYou ?? 0);
 }
 
 /** The state of a Fleet reached through `GET /api/machine`. */
