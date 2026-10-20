@@ -322,9 +322,10 @@ public sealed class ClaudeCodeLongLivedProcessTests : IAsyncDisposable
         var session = Start();
         await PromptAsync("start lasting background");
         System.Diagnostics.Process.GetProcessById(session.ProcessId!.Value).Kill();
-        await WaitForAsync(() => session.ProcessId is null);
 
-        _log.Messages.ShouldContain(m => m.Contains("it exited", StringComparison.Ordinal) && m.Contains("work is lost", StringComparison.Ordinal));
+        // The session lets the process go first and logs the lost work after, so wait for the log line, not ProcessId.
+        await WaitForAsync(() => _log.Messages.Any(m => m.Contains("it exited", StringComparison.Ordinal) && m.Contains("work is lost", StringComparison.Ordinal)));
+        session.ProcessId.ShouldBeNull();
         Count(EventTypes.SessionIdle).ShouldBe(1);
 
         await PromptAsync("two");
