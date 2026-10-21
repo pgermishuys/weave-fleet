@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { computed, nextTick, ref, shallowRef, useTemplateRef, watch } from "vue";
+import { computed, nextTick, ref, shallowRef, useId, useTemplateRef, watch } from "vue";
 import { onClickOutside } from "@vueuse/core";
 import { ChevronDown, Star } from "lucide-vue-next";
 
@@ -54,6 +54,8 @@ const rootRef = useTemplateRef<HTMLElement>("root");
 const filterInputRef = useTemplateRef<HTMLInputElement>("filterInput");
 const filterText = ref("");
 const activeIndex = shallowRef(0);
+const listboxId = `selector-listbox-${useId()}`;
+const optionId = (index: number) => `${listboxId}-option-${index}`;
 const listRef = useTemplateRef<HTMLElement>("list");
 
 onClickOutside(rootRef, () => {
@@ -176,8 +178,6 @@ function selectItem(itemId: string): void {
       v-if="isOpen"
       ref="list"
       class="selector-dropdown"
-      role="listbox"
-      :aria-label="label"
     >
       <div class="selector-dropdown__filter-wrap">
         <input
@@ -185,6 +185,12 @@ function selectItem(itemId: string): void {
           v-model="filterText"
           type="text"
           class="selector-dropdown__filter"
+          role="combobox"
+          aria-expanded="true"
+          aria-haspopup="listbox"
+          aria-autocomplete="list"
+          :aria-controls="listboxId"
+          :aria-activedescendant="rows.length > 0 ? optionId(activeIndex) : undefined"
           :placeholder="filterPlaceholder"
           :aria-label="filterAriaLabel"
           @keydown.escape.prevent="closeDropdown"
@@ -194,6 +200,13 @@ function selectItem(itemId: string): void {
         >
       </div>
 
+      <!-- display: contents keeps the scrolling box as it was; the listbox holds only the options and their headings. -->
+      <div
+        :id="listboxId"
+        class="selector-dropdown__listbox"
+        role="listbox"
+        :aria-label="label"
+      >
       <template
         v-for="(section, sectionIndex) in view"
         :key="sectionIndex"
@@ -201,6 +214,7 @@ function selectItem(itemId: string): void {
         <div
           v-if="section.title"
           class="selector-dropdown__heading"
+          role="presentation"
           :class="{ 'selector-dropdown__heading--provider': section.level === 'provider' }"
         >
           {{ section.title }}
@@ -225,12 +239,15 @@ function selectItem(itemId: string): void {
           v-for="{ item, key, index } in section.rows"
           :key="key"
           class="selector-dropdown__row"
+          role="presentation"
           :class="{ 'selector-dropdown__row--active': index === activeIndex, 'selector-dropdown__row--dim': section.usage?.dimmed }"
           :data-active="index === activeIndex"
           @mousemove="activeIndex = index"
         >
           <button
+            :id="optionId(index)"
             type="button"
+            role="option"
             class="selector-dropdown__item"
             :class="{ 'selector-dropdown__item--selected': item.id === selectedId }"
             :aria-selected="item.id === selectedId"
@@ -261,6 +278,7 @@ function selectItem(itemId: string): void {
           </button>
         </div>
       </template>
+      </div>
 
       <div
         v-if="rows.length === 0"
@@ -368,6 +386,10 @@ function selectItem(itemId: string): void {
 
 .selector-btn__icon--open {
   transform: rotate(180deg);
+}
+
+.selector-dropdown__listbox {
+  display: contents;
 }
 
 .selector-dropdown {
