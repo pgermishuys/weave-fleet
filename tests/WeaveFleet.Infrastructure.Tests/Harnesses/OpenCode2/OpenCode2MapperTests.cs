@@ -167,6 +167,21 @@ public sealed class OpenCode2MapperTests
     }
 
     [Fact]
+    public void V2_2_1s_quota_error_is_a_usage_limit_that_resets_when_V2_says()
+    {
+        var mapper = new OpenCode2Mapper(FleetSession);
+        var translator = new DomainEventTranslator(NullLogger<DomainEventTranslator>.Instance);
+        translator.Translate(mapper.Map(Event("session.execution.started", """{"sessionID":"ses_1"}"""))[0]);
+
+        var events = mapper.Map(Event("session.execution.failed",
+            """{"sessionID":"ses_1","error":{"type":"provider.quota","message":"Quota reached for this window.","retryAfterMs":3600000}}"""));
+
+        var failed = translator.Translate(events[0] with { FleetSessionId = FleetSession }).ShouldBeOfType<TurnFailed>();
+        failed.Payload.Error.Kind.ShouldBe(TurnErrorKinds.UsageLimit);
+        failed.Payload.Error.RetryAt.ShouldNotBeNull().ShouldBeInRange(DateTimeOffset.UtcNow.AddMinutes(59), DateTimeOffset.UtcNow.AddMinutes(61));
+    }
+
+    [Fact]
     public void V2_2_1s_rate_limit_keeps_the_retry_time_it_forwards()
     {
         var mapper = new OpenCode2Mapper(FleetSession);

@@ -60,7 +60,7 @@ internal static partial class ProviderLimitReader
         {
             case "ratelimit" or "ratelimiterror" or "rate_limit" or "rate_limit_error" or "ratelimitexceeded" or "too_many_requests":
                 return UsageText().IsMatch(text) ? TurnErrorKinds.UsageLimit : TurnErrorKinds.RateLimit;
-            case "quotaexceeded" or "usage_limit" or "usage_limit_reached" or "usagelimitexceeded" or "usagelimiterror"
+            case "quota" or "quotaexceeded" or "usage_limit" or "usage_limit_reached" or "usagelimitexceeded" or "usagelimiterror"
                 or "gousagelimiterror":
                 return TurnErrorKinds.UsageLimit;
             case "overloaded" or "overloaded_error" or "serveroverloaded" or "server_is_overloaded":
