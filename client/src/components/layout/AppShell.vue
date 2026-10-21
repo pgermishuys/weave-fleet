@@ -41,6 +41,7 @@ import { useMemoryNotices } from "@/composables/use-memory-notices";
 import { useModsRuntimeStore } from "@/stores/mods-runtime";
 import { useUpdateNotices } from "@/composables/use-update-notices";
 import { useFleetUpdateNotices } from "@/composables/use-fleet-update-notices";
+import { useStaleWindowNotice } from "@/composables/use-stale-window-notice";
 import { useSidebarMobile } from "@/composables/use-sidebar-mobile";
 import { useVisualViewport } from "@/composables/use-visual-viewport";
 import { useKeyboardScroll } from "@/composables/use-keyboard-scroll";
@@ -63,6 +64,7 @@ useMemoryNotices();
 useModsRuntimeStore().listen();
 useUpdateNotices();
 useFleetUpdateNotices();
+useStaleWindowNotice();
 useVisualViewport();
 useKeyboardScroll();
 
