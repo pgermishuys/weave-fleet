@@ -18,7 +18,7 @@ import { Button } from "@/components/ui/button";
 import { useAgents } from "@/composables/use-agents";
 import { useAbortSession } from "@/composables/use-session-actions";
 import { composerStatus, harnessCapabilities } from "@/composables/use-composer-actions";
-import { useAutocomplete } from "@/composables/use-autocomplete";
+import { AUTOCOMPLETE_LISTBOX_ID, useAutocomplete } from "@/composables/use-autocomplete";
 import { useDraftReferences } from "@/composables/use-draft-references";
 import { useReferableSessions } from "@/composables/use-referable-sessions";
 import { useDraftState } from "@/composables/use-draft-state";
@@ -1165,6 +1165,8 @@ function handleKeydown(event: KeyboardEvent): void {
           ref="textarea"
           class="composer-frame__textarea"
           data-testid="prompt-input"
+          :aria-controls="hasValidSessionId && autocomplete.activeOptionId.value ? AUTOCOMPLETE_LISTBOX_ID : undefined"
+          :aria-activedescendant="hasValidSessionId ? autocomplete.activeOptionId.value : undefined"
           :value="draft.text"
           :disabled="isDisabled"
           rows="1"

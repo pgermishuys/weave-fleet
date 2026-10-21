@@ -2,7 +2,7 @@
 import { computed, ref, watch, nextTick } from "vue";
 import { AlertCircle, Bot, ChevronRight, FileText, Folder, LoaderCircle, ScrollText, Terminal } from "lucide-vue-next";
 import StatusGlyph from "@/components/sessions/StatusGlyph.vue";
-import type { AutocompleteItem } from "@/composables/use-autocomplete";
+import { AUTOCOMPLETE_LISTBOX_ID, autocompleteOptionId, type AutocompleteItem } from "@/composables/use-autocomplete";
 import { useRelativeTime } from "@/composables/use-relative-time";
 import { formatCompactAge } from "@/lib/session-row-status";
 
@@ -108,6 +108,7 @@ function handleSelect(value: string): void {
   <div
     v-if="open"
     ref="popupRef"
+    :id="AUTOCOMPLETE_LISTBOX_ID"
     class="autocomplete-popup"
     role="listbox"
     aria-label="Autocomplete suggestions"
@@ -118,8 +119,9 @@ function handleSelect(value: string): void {
         v-for="group in groupedItems"
         :key="group.key"
         class="autocomplete-popup__group"
+        role="presentation"
       >
-        <div class="autocomplete-popup__group-label">
+        <div class="autocomplete-popup__group-label" role="presentation">
           <span>{{ group.label }}</span>
           <span
             v-if="group.hint"
@@ -131,11 +133,14 @@ function handleSelect(value: string): void {
           v-for="item in group.items"
           :key="item.id"
           class="autocomplete-popup__row"
+          role="presentation"
           :class="{ 'autocomplete-popup__row--selected': isSelected(item), 'autocomplete-popup__row--disabled': item.disabledReason }"
         >
           <button
+            :id="autocompleteOptionId(items.indexOf(item))"
             :data-value="item.value"
             type="button"
+            role="option"
             class="autocomplete-popup__item"
             :aria-selected="isSelected(item)"
             :disabled="Boolean(item.disabledReason)"

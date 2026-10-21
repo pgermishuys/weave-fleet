@@ -20,7 +20,7 @@ import MoreOptions from "@/components/sessions/new-session/MoreOptions.vue";
 import ProfilePicker from "@/components/sessions/new-session/ProfilePicker.vue";
 import StarterChips from "@/components/sessions/new-session/StarterChips.vue";
 import WorkspacePicker from "@/components/sessions/new-session/WorkspacePicker.vue";
-import { useAutocomplete } from "@/composables/use-autocomplete";
+import { AUTOCOMPLETE_LISTBOX_ID, useAutocomplete } from "@/composables/use-autocomplete";
 import { useDraftReferences } from "@/composables/use-draft-references";
 import { useEnabledHarnesses } from "@/composables/use-enabled-harnesses";
 import { findFilesInFolder } from "@/composables/use-find-files";
@@ -1059,6 +1059,8 @@ onUnmounted(() => {
               class="composer-frame__textarea new-session__textarea"
               data-testid="new-session-message"
               aria-label="First message"
+              :aria-controls="autocomplete.activeOptionId.value ? AUTOCOMPLETE_LISTBOX_ID : undefined"
+              :aria-activedescendant="autocomplete.activeOptionId.value"
               rows="2"
               :value="sentMessage ? '' : message"
               :placeholder="placeholder"

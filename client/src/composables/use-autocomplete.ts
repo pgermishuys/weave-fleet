@@ -14,6 +14,12 @@ import {
 import { useMachineTarget } from "@/lib/machine-target";
 import { rememberSessionSkills, sessionSkillNames, sessionSkills, skillNamesIn, skillTrigger } from "@/lib/skill-mentions";
 
+/** The popup's listbox, which the composer's textarea names in `aria-controls` while it's open. */
+export const AUTOCOMPLETE_LISTBOX_ID = "autocomplete-listbox";
+
+/** The id of the popup's option for the item at <paramref name="index"/> in `items`. */
+export const autocompleteOptionId = (index: number): string => `autocomplete-option-${index}`;
+
 export interface AutocompleteItem {
   id: string;
   label: string;
@@ -70,6 +76,8 @@ export interface UseAutocompleteResult {
   error: ComputedRef<string | undefined>;
   selectedValue: ComputedRef<string | null>;
   selectedIndex: Readonly<Ref<number>>;
+  /** The id of the highlighted option while the popup lists any, for the textarea's `aria-activedescendant`. */
+  activeOptionId: ComputedRef<string | undefined>;
   onKeyDown: (event: KeyboardEvent) => void;
   onSelect: (value: string) => void;
   onOpenFolder: (value: string) => void;
@@ -547,6 +555,7 @@ export function useAutocomplete({
     error,
     selectedValue,
     selectedIndex: readonly(selectedIndex),
+    activeOptionId: computed(() => isOpen.value && items.value.length > 0 ? autocompleteOptionId(clampedIndex.value) : undefined),
     onKeyDown,
     onSelect,
     onOpenFolder,
