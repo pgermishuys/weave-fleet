@@ -308,3 +308,17 @@ describe("SessionDetailHeader folder path", () => {
     }
   });
 });
+
+describe("SessionDetailHeader composer state", () => {
+  it("runs no timer or DOM polling while an archived session stays open", () => {
+    const setIntervalSpy = vi.spyOn(globalThis, "setInterval");
+    const querySpy = vi.spyOn(document, "querySelector");
+    const wrapper = mountHeader({ retentionStatus: "archived", lifecycleStatus: "stopped" });
+
+    expect(setIntervalSpy).not.toHaveBeenCalled();
+    expect(querySpy).not.toHaveBeenCalledWith('[data-testid="prompt-input"]');
+    wrapper.unmount();
+    setIntervalSpy.mockRestore();
+    querySpy.mockRestore();
+  });
+});

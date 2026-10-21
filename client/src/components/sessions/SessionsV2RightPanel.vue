@@ -13,7 +13,8 @@ import { useSendPrompt } from "@/composables/use-send-prompt";
 import { useSidebarMobile } from "@/composables/use-sidebar-mobile";
 import { useDraftState } from "@/composables/use-draft-state";
 import { provideCanvasAnnotate } from "@/composables/use-canvas-annotation";
-import { useDiffs } from "@/composables/use-diffs";
+import { useDiffs, type UseDiffsResult } from "@/composables/use-diffs";
+import { useSessionDiffsContext } from "@/composables/use-session-diffs-context";
 import { useFileLiveUpdates } from "@/composables/use-file-live-updates";
 import { useServerCanvases } from "@/composables/use-server-canvases";
 import { useSessionLineage } from "@/composables/use-session-lineage";
@@ -51,8 +52,22 @@ const canvasesStore = useCanvasesStore();
 const { rightPanelCollapsed } = storeToRefs(sidebarStore);
 const activeSessionId = computed(() => props.sessionId);
 
-// Create shared diffs instance and fetch on mount
-const sharedDiffs = useDiffs(activeSessionId);
+// One diffs instance per session: the open session's route already holds one, so this panel reads that and only
+// runs its own (no /diffs fetch, no topic listener) when no route does.
+const routeDiffs = useSessionDiffsContext();
+const ownDiffs = useDiffs(() => (routeDiffs.value ? null : activeSessionId.value));
+const activeDiffs = computed(() => routeDiffs.value?.diffState ?? ownDiffs);
+const sharedDiffs: UseDiffsResult = {
+  diffs: computed(() => activeDiffs.value.diffs.value),
+  byFile: computed(() => activeDiffs.value.byFile.value),
+  available: computed(() => activeDiffs.value.available.value),
+  base: computed(() => activeDiffs.value.base.value),
+  isLoading: computed(() => activeDiffs.value.isLoading.value),
+  isStale: computed(() => activeDiffs.value.isStale.value),
+  error: computed(() => activeDiffs.value.error.value),
+  fetchDiffs: () => activeDiffs.value.fetchDiffs(),
+  markStale: () => activeDiffs.value.markStale(),
+};
 provide('sharedDiffs', sharedDiffs);
 
 // Watch session ID and fetch diffs when it changes to a non-null value

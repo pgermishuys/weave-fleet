@@ -113,7 +113,6 @@ const runsOn = computed(() => machines.entries.find((entry) => entry.key === mac
 /** Its machine stopped answering: a turn it was running when it went quiet reads so, not "Working". */
 const answering = computed(() => machines.isAnswering(machine.key));
 const { sessionListShown } = storeToRefs(useSidebarStore());
-let composerDisabledSyncTimer: ReturnType<typeof setInterval> | null = null;
 
 const isAddingTag = ref(false);
 const newTagInput = ref("");
@@ -306,47 +305,6 @@ const showStoppedBanner = computed(() => {
   }
 });
 
-function syncComposerDisabledState(): void {
-  if (typeof document === "undefined") {
-    return;
-  }
-
-  const shouldDisable = isArchived.value;
-  const promptInput = document.querySelector('[data-testid="prompt-input"]') as HTMLTextAreaElement | null;
-  const sendButton = document.querySelector('[data-testid="prompt-send-button"]') as HTMLButtonElement | null;
-
-  if (promptInput) {
-    promptInput.disabled = shouldDisable;
-    if (shouldDisable) {
-      promptInput.setAttribute("disabled", "");
-    } else {
-      promptInput.removeAttribute("disabled");
-    }
-  }
-
-  if (sendButton) {
-    sendButton.disabled = shouldDisable || sendButton.disabled;
-    if (shouldDisable) {
-      sendButton.setAttribute("disabled", "");
-    }
-  }
-}
-
-watch([isArchived, showStoppedBanner], () => {
-  if (composerDisabledSyncTimer !== null) {
-    clearInterval(composerDisabledSyncTimer);
-    composerDisabledSyncTimer = null;
-  }
-
-  if (isArchived.value || showStoppedBanner.value) {
-    composerDisabledSyncTimer = setInterval(() => {
-      syncComposerDisabledState();
-    }, 100);
-  }
-
-  syncComposerDisabledState();
-}, { immediate: true });
-
 async function removeTag(tagToRemove: string): Promise<void> {
   if (!props.tags) return;
   
@@ -449,10 +407,6 @@ async function copyDirectory(): Promise<void> {
 
 onUnmounted(() => {
   clearTimeout(directoryCopiedTimer);
-  if (composerDisabledSyncTimer !== null) {
-    clearInterval(composerDisabledSyncTimer);
-    composerDisabledSyncTimer = null;
-  }
 });
 </script>
 
