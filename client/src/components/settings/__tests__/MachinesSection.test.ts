@@ -130,8 +130,8 @@ describe("Settings → Machines", () => {
 
   describe("updates in Machines", () => {
     const MINI_URL = "http://100.64.12.40:2113";
-    const downloaded = { status: "staged", latestVersion: "0.59.1", stagedVersion: "0.59.1", checkedAt: "2026-10-20T08:00:00Z", canRestart: true, rule: "idle" };
-    const current = { status: "uptodate", latestVersion: "0.59.1", stagedVersion: null, checkedAt: "2026-10-20T08:00:00Z", canRestart: true, rule: "idle" };
+    const downloaded = { status: "staged", latestVersion: "0.59.1", stagedVersion: "0.59.1", checkedAt: new Date(Date.now() - 2 * 3600_000).toISOString(), canRestart: true, rule: "idle" };
+    const current = { status: "uptodate", latestVersion: "0.59.1", stagedVersion: null, checkedAt: new Date(Date.now() - 2 * 3600_000).toISOString(), canRestart: true, rule: "idle" };
     let fetched: string[];
 
     function setUp(options: { switchOn: boolean; home?: object; mini?: object }): void {
