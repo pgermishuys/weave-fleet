@@ -196,6 +196,7 @@ public static class DependencyInjection
         services.AddScoped<ICanvasRepository, CanvasRepository>();
         services.AddScoped<IAppRunRepository, AppRunRepository>();
         services.AddScoped<IAutomationRepository, AutomationRepository>();
+        services.AddSingleton<IEventAutomationIndex, EventAutomationIndex>();
         services.AddScoped<IAutomationEventLedgerRepository, AutomationEventLedgerRepository>();
         services.AddScoped<IAutomationRunRepository, AutomationRunRepository>();
 

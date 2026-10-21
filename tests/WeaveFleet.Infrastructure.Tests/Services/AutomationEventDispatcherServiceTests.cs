@@ -188,6 +188,71 @@ public sealed class AutomationEventDispatcherServiceTests
         try { await executeTask; } catch (OperationCanceledException) { }
     }
 
+    [Fact]
+    public async Task ProcessEvent_WithNoEventAutomations_QueriesRepositoryOnceNotPerEvent()
+    {
+        var channel = Channel.CreateUnbounded<AutomationEventNotification>();
+        var automationRepo = new FakeAutomationRepository();
+        var scopeFactory = BuildScopeFactory(automationRepo, new FakeLedgerRepository(), new FakeAutomationExecutionService());
+        var index = new EventAutomationIndex(scopeFactory);
+        var sut = new AutomationEventDispatcherService(channel, scopeFactory, NullLogger<AutomationEventDispatcherService>.Instance, index);
+
+        using var cts = new CancellationTokenSource();
+        var executeTask = StartBackgroundService(sut, cts.Token);
+
+        for (var i = 0; i < 50; i++)
+            await channel.Writer.WriteAsync(new AutomationEventNotification("message.part.delta", $"evt-{i}", null, null));
+        await Task.Delay(500);
+
+        automationRepo.EnabledQueryCount.ShouldBeLessThanOrEqualTo(1);
+
+        await cts.CancelAsync();
+        try { await executeTask; } catch (OperationCanceledException) { }
+    }
+
+    [Fact]
+    public async Task ProcessEvent_AfterInvalidate_NewEventAutomationStillFires()
+    {
+        var channel = Channel.CreateUnbounded<AutomationEventNotification>();
+        var automationRepo = new FakeAutomationRepository();
+        var ledgerRepo = new FakeLedgerRepository();
+        var scopeFactory = BuildScopeFactory(automationRepo, ledgerRepo, new FakeAutomationExecutionService());
+        var index = new EventAutomationIndex(scopeFactory);
+        var sut = new AutomationEventDispatcherService(channel, scopeFactory, NullLogger<AutomationEventDispatcherService>.Instance, index);
+
+        using var cts = new CancellationTokenSource();
+        var executeTask = StartBackgroundService(sut, cts.Token);
+
+        // Warm the index while nothing is configured.
+        await channel.Writer.WriteAsync(new AutomationEventNotification("session.started", "evt-before", null, null));
+        await Task.Delay(300);
+        ledgerRepo.RecordedEvents.ShouldBeEmpty();
+
+        // A new automation is created (the service invalidates the index).
+        automationRepo.Seed(new Automation
+        {
+            Id = "auto-new",
+            Name = "New",
+            TriggerType = "event",
+            TriggerConfig = """{"eventType":"session.started"}""",
+            IsEnabled = true,
+            UserId = "user-1",
+            CreatedAt = DateTime.UtcNow.ToString("O")
+        });
+        index.Invalidate();
+
+        await channel.Writer.WriteAsync(new AutomationEventNotification("session.started", "evt-after", null, null));
+        await Task.Delay(500);
+
+        // The index reloaded after the invalidation and now lets the event through to the dispatcher's scope
+        // (the run service is not registered in this harness, so execution itself is not reached).
+        (await index.AnyListensToAsync("session.started", CancellationToken.None)).ShouldBeTrue();
+        automationRepo.EnabledQueryCount.ShouldBe(2);
+
+        await cts.CancelAsync();
+        try { await executeTask; } catch (OperationCanceledException) { }
+    }
+
     // ── Test Helpers ─────────────────────────────────────────────────────────
 
     private static IServiceScopeFactory BuildScopeFactory(
@@ -260,8 +325,11 @@ internal sealed class FakeAutomationRepository : IAutomationRepository
         return Task.FromResult<IReadOnlyList<Automation>>(results);
     }
 
+    public int EnabledQueryCount;
+
     public Task<IReadOnlyList<Automation>> ListEnabledByTriggerTypeAsync(string triggerType)
     {
+        Interlocked.Increment(ref EnabledQueryCount);
         var results = _store.Values
             .Where(a => a.IsEnabled && !a.IsDeleted && a.TriggerType == triggerType)
             .ToList();
