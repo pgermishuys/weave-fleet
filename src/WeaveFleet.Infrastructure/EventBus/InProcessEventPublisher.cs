@@ -28,6 +28,7 @@ internal sealed class InProcessEventPublisher : IEventPublisher
     private readonly InProcessMetrics _metrics;
     private readonly PipelineLatencyMetrics _pipelineMetrics;
     private readonly ILogger<InProcessEventPublisher> _logger;
+    private readonly WeaveFleet.Application.Automations.IEventAutomationIndex? _automationIndex;
 
     /// <summary>
     /// Monotonic counter for provisional event IDs used during broadcast before SQLite persistence.
@@ -39,8 +40,10 @@ internal sealed class InProcessEventPublisher : IEventPublisher
         InProcessChannels channels,
         InProcessMetrics metrics,
         PipelineLatencyMetrics pipelineMetrics,
-        ILogger<InProcessEventPublisher> logger)
+        ILogger<InProcessEventPublisher> logger,
+        WeaveFleet.Application.Automations.IEventAutomationIndex? automationIndex = null)
     {
+        _automationIndex = automationIndex;
         _channels = channels;
         _metrics = metrics;
         _pipelineMetrics = pipelineMetrics;
@@ -182,6 +185,10 @@ internal sealed class InProcessEventPublisher : IEventPublisher
 
     private void WriteToAutomationChannel(InProcessEnvelope envelope)
     {
+        // No enabled event automation listens for this type (e.g. text deltas): don't queue it.
+        if (_automationIndex is not null && !_automationIndex.MayMatch(envelope.EventType))
+            return;
+
         // Map envelope to AutomationEventNotification
         // EventId: use the envelope's EventId if available (durable), otherwise generate from messageId
         var eventId = envelope.EventId?.ToString(CultureInfo.InvariantCulture) ?? envelope.MessageId;

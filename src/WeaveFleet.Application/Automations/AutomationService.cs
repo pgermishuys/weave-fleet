@@ -25,7 +25,8 @@ public static class AutomationTargets
 public sealed class AutomationService(
     IAutomationRepository automationRepository,
     IUserContext userContext,
-    IRemoteMachineRepository? machines = null)
+    IRemoteMachineRepository? machines = null,
+    IEventAutomationIndex? eventIndex = null)
 {
     /// <summary>
     /// Creates a new automation with the specified configuration, switched on: the person just asked for it.
@@ -94,6 +95,7 @@ public sealed class AutomationService(
         };
 
         await automationRepository.InsertAsync(automation);
+        eventIndex?.Invalidate();
         return automation;
     }
 
@@ -162,6 +164,7 @@ public sealed class AutomationService(
         existing.UpdatedAt = DateTime.UtcNow.ToString("O");
 
         await automationRepository.UpdateAsync(existing);
+        eventIndex?.Invalidate();
         return existing;
     }
 
@@ -182,6 +185,7 @@ public sealed class AutomationService(
         }
 
         await automationRepository.SetEnabledAsync(id, true);
+        eventIndex?.Invalidate();
         return Unit.Value;
     }
 
@@ -195,6 +199,7 @@ public sealed class AutomationService(
             return FleetError.NotFoundFor(nameof(Automation), id);
 
         await automationRepository.SetEnabledAsync(id, false);
+        eventIndex?.Invalidate();
         return Unit.Value;
     }
 
@@ -208,6 +213,7 @@ public sealed class AutomationService(
             return FleetError.NotFoundFor(nameof(Automation), id);
 
         await automationRepository.DeleteAsync(id);
+        eventIndex?.Invalidate();
         return Unit.Value;
     }
 

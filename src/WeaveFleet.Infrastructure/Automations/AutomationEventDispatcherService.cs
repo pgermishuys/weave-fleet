@@ -30,12 +30,15 @@ public sealed partial class AutomationEventDispatcherService : BackgroundService
     private readonly Channel<AutomationEventNotification> _eventChannel;
     private readonly IServiceScopeFactory _scopeFactory;
     private readonly ILogger<AutomationEventDispatcherService> _logger;
+    private readonly IEventAutomationIndex? _index;
 
     public AutomationEventDispatcherService(
         Channel<AutomationEventNotification> eventChannel,
         IServiceScopeFactory scopeFactory,
-        ILogger<AutomationEventDispatcherService> logger)
+        ILogger<AutomationEventDispatcherService> logger,
+        IEventAutomationIndex? index = null)
     {
+        _index = index;
         _eventChannel = eventChannel;
         _scopeFactory = scopeFactory;
         _logger = logger;
@@ -68,6 +71,10 @@ public sealed partial class AutomationEventDispatcherService : BackgroundService
             LogSkippedAutomationLoop(notification.EventType, notification.EventId, notification.SessionSourceReference);
             return;
         }
+
+        // Nothing listens for this event type: no scope, no SQLite.
+        if (_index is not null && !await _index.AnyListensToAsync(notification.EventType, ct).ConfigureAwait(false))
+            return;
 
         using var scope = _scopeFactory.CreateScope();
         var matcher = scope.ServiceProvider.GetRequiredService<EventTriggerMatcher>();
