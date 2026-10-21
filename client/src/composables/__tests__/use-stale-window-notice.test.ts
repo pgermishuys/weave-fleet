@@ -4,12 +4,12 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { defineComponent, nextTick, shallowRef } from "vue";
 import type { MachineEntry } from "@/stores/machines";
 
-const { entries } = vi.hoisted(() => ({ entries: { value: null as unknown } }));
+const { entries, loadHome } = vi.hoisted(() => ({ entries: { value: null as unknown }, loadHome: vi.fn() }));
 
 vi.mock("@/stores/machines", async () => {
   const { shallowRef: ref } = await import("vue");
   entries.value = ref<MachineEntry[]>([]);
-  return { useMachinesStore: () => ({ get entries() { return (entries.value as { value: MachineEntry[] }).value; } }) };
+  return { useMachinesStore: () => ({ loadHome, get entries() { return (entries.value as { value: MachineEntry[] }).value; } }) };
 });
 
 const { useStaleWindowNotice } = await import("@/composables/use-stale-window-notice");
@@ -22,7 +22,7 @@ const home = (version: string | null) => [{ key: "home", isHome: true, info: ver
 describe("useStaleWindowNotice", () => {
   beforeEach(() => {
     setActivePinia(createPinia());
-    sessionStorage.clear();
+    loadHome.mockClear();
     entriesRef().value = [];
   });
 
@@ -51,5 +51,16 @@ describe("useStaleWindowNotice", () => {
     entriesRef().value = home("0.52.0");
     await nextTick();
     expect(useNoticesStore().notices).toHaveLength(0);
+  });
+
+  it("reads the Fleet again when the window comes back to the front, and every minute while it shows", () => {
+    vi.useFakeTimers();
+    mount(defineComponent({ setup() { useStaleWindowNotice(); return () => null; } }));
+    expect(loadHome).toHaveBeenCalledTimes(1);
+    vi.advanceTimersByTime(60_000);
+    expect(loadHome).toHaveBeenCalledTimes(2);
+    document.dispatchEvent(new Event("visibilitychange"));
+    expect(loadHome).toHaveBeenCalledTimes(3);
+    vi.useRealTimers();
   });
 });
