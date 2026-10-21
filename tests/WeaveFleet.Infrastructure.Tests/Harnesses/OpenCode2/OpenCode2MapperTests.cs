@@ -152,6 +152,36 @@ public sealed class OpenCode2MapperTests
     }
 
     [Fact]
+    public void V2_2_1s_free_limit_is_a_usage_limit_that_resets_when_V2_says()
+    {
+        var mapper = new OpenCode2Mapper(FleetSession);
+        var translator = new DomainEventTranslator(NullLogger<DomainEventTranslator>.Instance);
+        translator.Translate(mapper.Map(Event("session.execution.started", """{"sessionID":"ses_1"}"""))[0]);
+
+        var events = mapper.Map(Event("session.execution.failed",
+            """{"sessionID":"ses_1","error":{"type":"provider.free-limit","message":"Free usage limit reached. Connect a provider or subscribe to OpenCode Go to keep going.","status":429,"retryAfterMs":7200000}}"""));
+
+        var failed = translator.Translate(events[0] with { FleetSessionId = FleetSession }).ShouldBeOfType<TurnFailed>();
+        failed.Payload.Error.Kind.ShouldBe(TurnErrorKinds.UsageLimit);
+        failed.Payload.Error.RetryAt.ShouldNotBeNull().ShouldBeInRange(DateTimeOffset.UtcNow.AddMinutes(119), DateTimeOffset.UtcNow.AddMinutes(121));
+    }
+
+    [Fact]
+    public void V2_2_1s_rate_limit_keeps_the_retry_time_it_forwards()
+    {
+        var mapper = new OpenCode2Mapper(FleetSession);
+        var translator = new DomainEventTranslator(NullLogger<DomainEventTranslator>.Instance);
+        translator.Translate(mapper.Map(Event("session.execution.started", """{"sessionID":"ses_1"}"""))[0]);
+
+        var events = mapper.Map(Event("session.execution.failed",
+            """{"sessionID":"ses_1","error":{"type":"provider.rate-limit","message":"Slow down.","retryAfterMs":90000}}"""));
+
+        var failed = translator.Translate(events[0] with { FleetSessionId = FleetSession }).ShouldBeOfType<TurnFailed>();
+        failed.Payload.Error.Kind.ShouldBe(TurnErrorKinds.RateLimit);
+        failed.Payload.Error.RetryAt.ShouldNotBeNull().ShouldBeInRange(DateTimeOffset.UtcNow.AddSeconds(85), DateTimeOffset.UtcNow.AddSeconds(95));
+    }
+
+    [Fact]
     public void A_scheduled_retry_shows_as_retrying_with_the_attempt_and_the_reason()
     {
         var at = DateTimeOffset.UtcNow.AddSeconds(30).ToUnixTimeMilliseconds();
