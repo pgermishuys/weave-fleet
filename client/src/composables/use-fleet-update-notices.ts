@@ -2,6 +2,8 @@ import { watch } from "vue";
 import { useRouter } from "@tanstack/vue-router";
 import { describeUpdatedNotice, describeUpdateChip } from "@/lib/fleet-updates";
 import { useFleetUpdatesWatch } from "@/composables/use-fleet-updates";
+import { isWindowStale, reloadAction } from "@/composables/use-stale-window-notice";
+import { HOME_MACHINE_KEY } from "@/lib/machines";
 import { useMachinesStore } from "@/stores/machines";
 import { useNoticesStore } from "@/stores/notices";
 import { useSettingsNav } from "@/composables/use-settings-nav";
@@ -48,14 +50,17 @@ export function useFleetUpdateNotices(): void {
       for (const entry of entries) {
         const news = describeUpdatedNotice(entry.key, entry.name, entry.info?.version ?? null, entry.info?.update?.lastUpdate, new Date());
         if (!news || notices.has(news.id)) continue;
+        // A window that loaded before this update is still running the old version: Reload leads, What's new steps back.
+        const stale = entry.key === HOME_MACHINE_KEY && isWindowStale(entry.info?.version);
         notices.post({
           id: news.id,
           title: news.title,
           body: news.body,
           actions: [
+            ...(stale ? [reloadAction()] : []),
             {
               label: "What's new",
-              tone: "primary",
+              tone: stale ? "quiet" : "primary",
               run: () => {
                 openWhatsNew(news.version);
                 notices.settle(news.id);
