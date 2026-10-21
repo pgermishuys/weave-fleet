@@ -1239,7 +1239,7 @@ internal sealed class OpenCode2Mapper(string fleetSessionId, string? workingDire
             OpenCode2JsonContext.Default.OpenCode2StatusPayload));
     }
 
-    /// <summary>V2's <c>Session.StructuredError</c>: <c>{ type, message, status? }</c>.</summary>
+    /// <summary>V2's <c>Session.StructuredError</c>: <c>{ type, message, status?, retryAfterMs? }</c>.</summary>
     private static OpenCode2ErrorInfo ReadError(JsonElement data)
     {
         var error = data.TryGetProperty("error", out var e) && e.ValueKind == JsonValueKind.Object ? e : default;
@@ -1251,6 +1251,9 @@ internal sealed class OpenCode2Mapper(string fleetSessionId, string? workingDire
             Message = message ?? type ?? "OpenCode 2 stopped the turn without saying why.",
             Status = error.ValueKind == JsonValueKind.Object && error.TryGetProperty("status", out var s) && s.TryGetInt32(out var status)
                 ? status
+                : null,
+            RetryAt = error.ValueKind == JsonValueKind.Object && ReadDouble(error, "retryAfterMs") is > 0 and var ms
+                ? DateTimeOffset.UtcNow.AddMilliseconds(ms).ToString("O", System.Globalization.CultureInfo.InvariantCulture)
                 : null,
         };
     }

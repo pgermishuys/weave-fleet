@@ -44,11 +44,19 @@ internal static partial class ProviderLimitReader
     /// <summary>Which limit the failure is, or <see langword="null"/> when it isn't one a wait gets past.</summary>
     internal static string? ReadKind(string? name, string? message, int? status, string? body)
     {
+        // OpenCode 2.1 types its errors "provider.free-limit", "provider.rate-limit": the part after the dot is the name.
+        var typed = name?.Trim().ToLowerInvariant().Replace('-', '_');
+        if (typed is not null && typed.StartsWith("provider.", StringComparison.Ordinal))
+            typed = typed["provider.".Length..];
+        // Its free allowance runs out until the reset, though the message also says to subscribe.
+        if (typed == "free_limit")
+            return TurnErrorKinds.UsageLimit;
+
         var text = $"{name}\n{message}\n{body}";
         if (NotResetting().IsMatch(text))
             return null;
 
-        switch (name?.Trim().ToLowerInvariant())
+        switch (typed)
         {
             case "ratelimit" or "ratelimiterror" or "rate_limit" or "rate_limit_error" or "ratelimitexceeded" or "too_many_requests":
                 return UsageText().IsMatch(text) ? TurnErrorKinds.UsageLimit : TurnErrorKinds.RateLimit;

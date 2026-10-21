@@ -628,6 +628,8 @@ internal sealed record OpenCode2ErrorInfo
     public required string Name { get; init; }
     public required string Message { get; init; }
     public int? Status { get; init; }
+    /// <summary>When V2 said the provider can be asked again (<c>retryAfterMs</c> on its error), as Fleet's <c>retryAt</c>.</summary>
+    public string? RetryAt { get; init; }
 }
 
 internal sealed record OpenCode2MessageUpdatedPayload
