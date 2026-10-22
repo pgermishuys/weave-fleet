@@ -5,9 +5,9 @@ describe("createMarkdownRenderer", () => {
   it("draws GitHub task lists as checklist items", () => {
     const html = createMarkdownRenderer().render("## Test plan\n\n- [x] unit tests\n- [ ] live on a scratch Fleet\n- plain item\n");
 
-    expect(html).toContain('<li class="task-list-item task-list-item--done">unit tests</li>');
-    expect(html).toContain('<li class="task-list-item">live on a scratch Fleet</li>');
-    expect(html).toContain("<li>plain item</li>");
+    expect(html).toContain('<li class="task-list-item task-list-item--done" dir="auto">unit tests</li>');
+    expect(html).toContain('<li class="task-list-item" dir="auto">live on a scratch Fleet</li>');
+    expect(html).toContain('<li dir="auto">plain item</li>');
     expect(html).not.toContain("[x]");
   });
 
@@ -29,7 +29,7 @@ describe("folds", () => {
     expect(html).toContain('<details class="md-details" data-fold="0">');
     expect(html).toContain("<summary>Why a <strong>map</strong></summary>");
     expect(html).toContain('<div class="md-details__body">');
-    expect(html).toContain("<li>one</li>");
+    expect(html).toContain("<li dir=\"auto\">one</li>");
     expect(html).not.toContain("&lt;details");
   });
 
@@ -100,8 +100,8 @@ describe("folds", () => {
     expect(render("intro\n\n<details>", { streaming: true })).not.toContain("details");
     expect(render("<details>\n<summary>Wh", { streaming: true })).toBe("");
     expect(render("<details>\n<summary>Why</summ", { streaming: true })).toBe("");
-    expect(render("text\n\n<deta", { streaming: true })).toBe("<p>text</p>\n");
-    expect(render("text\n\n</detai", { streaming: true })).toBe("<p>text</p>\n");
+    expect(render("text\n\n<deta", { streaming: true })).toBe("<p dir=\"auto\">text</p>\n");
+    expect(render("text\n\n</detai", { streaming: true })).toBe("<p dir=\"auto\">text</p>\n");
     expect(render("<details>\n<summary>Why</summary>", { streaming: true })).toContain("<summary>Why</summary>");
   });
 
@@ -149,5 +149,17 @@ describe("languages", () => {
 
     expect(unknown).not.toContain("hljs-");
     expect(none).not.toContain("hljs-");
+  });
+});
+
+describe("text direction", () => {
+  it("lets each block of prose take its direction from its text, and leaves code alone", () => {
+    const html = createMarkdownRenderer().render("مرحبا بالعالم\n\n- بند أول\n\n> اقتباس\n\n## عنوان\n\n```js\nconst a = 1;\n```\n");
+    expect(html).toContain('<p dir="auto">');
+    expect(html).toContain('<li dir="auto">');
+    expect(html).toContain('<blockquote dir="auto">');
+    expect(html).toContain('<h2 dir="auto">');
+    expect(html).not.toMatch(/<pre[^>]*dir=/);
+    expect(html).not.toMatch(/<code[^>]*dir=/);
   });
 });

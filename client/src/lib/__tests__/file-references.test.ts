@@ -81,7 +81,7 @@ describe("file references in rendered Markdown", () => {
   });
 
   it("marks nothing without a session to resolve against", () => {
-    expect(md.render("`src/billing/tax.ts`")).toBe("<p><code>src/billing/tax.ts</code></p>\n");
+    expect(md.render("`src/billing/tax.ts`")).toBe("<p dir=\"auto\"><code>src/billing/tax.ts</code></p>\n");
   });
 });
 

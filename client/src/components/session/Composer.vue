@@ -1169,6 +1169,7 @@ function handleKeydown(event: KeyboardEvent): void {
         <textarea
           ref="textarea"
           class="composer-frame__textarea"
+          dir="auto"
           data-testid="prompt-input"
           :aria-controls="hasValidSessionId && autocomplete.activeOptionId.value ? AUTOCOMPLETE_LISTBOX_ID : undefined"
           :aria-activedescendant="hasValidSessionId ? autocomplete.activeOptionId.value : undefined"

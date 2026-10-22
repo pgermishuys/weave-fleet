@@ -432,12 +432,14 @@ onUnmounted(() => {
             placeholder="Session name"
             data-testid="session-title-input"
             class="session-detail-header__title-input"
+            dir="auto"
             @blur="finishTitleEdit(true)"
             @keydown="handleTitleInputKeydown"
           >
           <h2
             v-else
             class="session-detail-header__title"
+            dir="auto"
             :class="{ 'session-detail-header__title--editable': !props.renameDisabled && !isArchived }"
             :title="!props.renameDisabled && !isArchived ? 'Double-click to rename' : undefined"
             :tabindex="!props.renameDisabled && !isArchived ? 0 : undefined"

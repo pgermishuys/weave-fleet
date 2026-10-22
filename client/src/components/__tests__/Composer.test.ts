@@ -1453,7 +1453,8 @@ describe("Composer big paste", () => {
   });
 });
 
-describe("Composer steering", () => {
+// Each test mounts the whole composer (about 1-2 s on a fast machine), so on a loaded CI runner the default 5 s is too close.
+describe("Composer steering", { timeout: 20_000 }, () => {
   const harnesses = [
     { type: "opencode", displayName: "OpenCode", available: true, userEnabled: true, capabilities: { supportsSteering: true } },
     { type: "claude-code", displayName: "Claude Code", available: true, userEnabled: true, capabilities: { supportsSteering: false } },
@@ -1515,6 +1516,12 @@ describe("Composer steering", () => {
 
     expect(promptBodies()).toEqual([expect.objectContaining({ text: "stop, that's the wrong file", delivery: "steer" })]);
     expect(wrapper.findAll("[data-testid='queued-message']")).toHaveLength(1);
+  });
+
+  it("lets the prompt box take its direction from what is typed, for right-to-left languages", async () => {
+    const wrapper = mountComposer({ session: createSession({ activityStatus: "idle" }) });
+    await flushPromises();
+    expect(wrapper.get("[data-testid='prompt-input']").attributes("dir")).toBe("auto");
   });
 
   it("does not queue a message that has an image: the queue holds text only, so the image would end up on the next message", async () => {

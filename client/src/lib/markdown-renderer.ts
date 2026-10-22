@@ -241,6 +241,19 @@ export function rememberFoldClick(event: MouseEvent, folds: Map<string, boolean>
   if (details instanceof HTMLDetailsElement && details.matches(".md-details") && key) folds.set(key, !details.open);
 }
 
+const TEXT_BLOCKS = new Set([
+  "paragraph_open", "heading_open", "blockquote_open", "list_item_open", "th_open", "td_open",
+]);
+
+/** Each block of prose takes its own direction from its first strong letter, so Arabic and Hebrew read right to left. Code stays as it is. */
+function textDirection(md: MarkdownIt): void {
+  md.core.ruler.push("text_direction", (state) => {
+    for (const token of state.tokens) {
+      if (TEXT_BLOCKS.has(token.type)) token.attrSet("dir", "auto");
+    }
+  });
+}
+
 export function createMarkdownRenderer(): MarkdownIt {
   return new MarkdownIt({
     html: false,
@@ -261,5 +274,5 @@ export function createMarkdownRenderer(): MarkdownIt {
 
       return `<pre class="hljs"><code>${escapeHtml(code)}</code></pre>`;
     },
-  }).use(folds).use(taskLists).use(bareFileNamesAreText).use(fileReferences);
+  }).use(folds).use(taskLists).use(bareFileNamesAreText).use(fileReferences).use(textDirection);
 }
