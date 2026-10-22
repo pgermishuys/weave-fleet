@@ -1,0 +1,82 @@
+# Every screen of the app against the scratch Fleet, after pair.yaml. Run once per colour scheme; RUN is 1 for the
+# first and 2 for the second, so the wait for the suite's reply is for a new one, not the earlier run's.
+# maestro test -e RUN=1 --test-output-dir shots flows/walk.yaml
+appId: io.tryweave.fleet
+---
+- launchApp
+- extendedWaitUntil:
+    visible: ".*Fix pagination off-by-one.*"
+    timeout: 90000
+- takeScreenshot: 01-sessions
+
+- tapOn: ".*Fix pagination off-by-one.*"
+- extendedWaitUntil:
+    visible: "Here's the plan.*"
+    timeout: 90000
+- takeScreenshot: 02-conversation
+
+# A command waits for approval.
+- tapOn:
+    id: "composer"
+- inputText: "run-tests please"
+- tapOn:
+    id: "send"
+- extendedWaitUntil:
+    visible: "Allow once"
+    timeout: 90000
+- takeScreenshot: 03-permission
+- tapOn: "Allow once"
+- extendedWaitUntil:
+    visible: ".*run ${RUN} of the suite.*"
+    timeout: 90000
+- takeScreenshot: 04-tool-box
+
+# The Changes sheet pulls up, then closes; Back returns to the list.
+# The dock swaps from the permission card back to the composer as the turn ends, moving the strip; a tap that
+# lands mid-move misses, so tap until the sheet is up.
+- retry:
+    maxRetries: 3
+    commands:
+      - tapOn:
+          id: "panel-open"
+      - extendedWaitUntil:
+          visible: ".*Changes, Files and Pages.*"
+          timeout: 10000
+- takeScreenshot: 05-changes
+- tapOn:
+    id: "sheet-close"
+- tapOn: "Back"
+- extendedWaitUntil:
+    visible: "Sessions"
+    timeout: 30000
+
+- tapOn: "Workflows"
+- takeScreenshot: 06-workflows
+- tapOn: "Automations"
+- takeScreenshot: 07-automations
+- tapOn: "Machines"
+- extendedWaitUntil:
+    visible: "Pair another machine"
+    timeout: 30000
+- takeScreenshot: 08-machines
+- tapOn: "Sessions"
+
+# The Kit, by its deep link; iOS asks before opening the app.
+- openLink: fleet://kit
+- tapOn:
+    text: "Open"
+    optional: true
+- extendedWaitUntil:
+    visible: "Kit"
+    timeout: 30000
+- takeScreenshot: 09-kit
+- scroll
+- scroll
+- takeScreenshot: 10-kit-middle
+- scroll
+- scroll
+- takeScreenshot: 11-kit-lower
+- scroll
+- scroll
+- scroll
+- takeScreenshot: 12-kit-end

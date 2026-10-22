@@ -1,0 +1,48 @@
+# Pairs a fresh install with the scratch Fleet from start-fleet.sh.
+# maestro test -e FLEET_URL=… -e PAIR_CODE=… flows/pair.yaml
+appId: io.tryweave.fleet
+---
+- launchApp:
+    clearState: true
+- extendedWaitUntil:
+    visible: "Pair with Fleet"
+    timeout: 90000
+# Typing on the iOS simulator sometimes drops characters; retry until the field holds what was typed.
+- retry:
+    maxRetries: 3
+    commands:
+      - tapOn:
+          id: "address"
+      - eraseText: 60
+      - inputText: ${FLEET_URL}
+      - assertVisible: ${FLEET_URL}
+- retry:
+    maxRetries: 3
+    commands:
+      - tapOn:
+          id: "code"
+      - eraseText: 20
+      - inputText: ${PAIR_CODE}
+      - assertVisible: ${PAIR_CODE}
+# hideKeyboard is unreliable on iOS; Continue sits above the keyboard.
+- hideKeyboard:
+    optional: true
+# On iOS Maestro sometimes taps, the screen moves on, and it then fails looking for the button it just tapped;
+# the wait after each tap is the check.
+- tapOn:
+    text: "Continue"
+    optional: true
+- extendedWaitUntil:
+    visible: "Connect this phone to.*"
+    timeout: 90000
+- tapOn:
+    text: "Connect"
+    optional: true
+# A system notification prompt may follow on a first launch.
+- tapOn:
+    text: "Allow"
+    optional: true
+# A pressable row reads as one accessibility label on iOS, so match around the title.
+- extendedWaitUntil:
+    visible: ".*Fix pagination off-by-one.*"
+    timeout: 90000
