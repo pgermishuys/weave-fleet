@@ -1453,7 +1453,8 @@ describe("Composer big paste", () => {
   });
 });
 
-describe("Composer steering", () => {
+// Each test mounts the whole composer (about 1-2 s on a fast machine), so on a loaded CI runner the default 5 s is too close.
+describe("Composer steering", { timeout: 20_000 }, () => {
   const harnesses = [
     { type: "opencode", displayName: "OpenCode", available: true, userEnabled: true, capabilities: { supportsSteering: true } },
     { type: "claude-code", displayName: "Claude Code", available: true, userEnabled: true, capabilities: { supportsSteering: false } },
