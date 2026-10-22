@@ -1,5 +1,6 @@
 using System.Net.Http.Json;
 using System.Text.Json;
+using System.Text.RegularExpressions;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Playwright;
 using WeaveFleet.Application.Configuration;
@@ -97,7 +98,7 @@ public abstract class PhoneE2ETestBase : IAsyncLifetime
         var url = (await created.Content.ReadFromJsonAsync<JsonElement>()).GetProperty("url").GetString()!;
         await phone.GotoAsync(url);
         await phone.GetByTestId("pair-connect").ClickAsync();
-        await phone.WaitForURLAsync("**/phone/setup");
+        await Assertions.Expect(phone).ToHaveURLAsync(new Regex("/phone/setup$"), new() { Timeout = 10_000 });
     }
 
     /// <summary>An HTTP client presenting the machine token.</summary>
