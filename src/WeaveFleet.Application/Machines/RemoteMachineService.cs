@@ -112,6 +112,9 @@ public sealed class RemoteMachineService(
             var normalized = baseUrl is null ? current.BaseUrl : NormalizeBaseUrl(baseUrl);
             if (normalized is null)
                 return (null, "That isn't an address.");
+            // The saved token belongs to the old address. Sending it to a different one would hand it to whoever is there.
+            if (string.IsNullOrWhiteSpace(token) && !string.Equals(normalized, current.BaseUrl, StringComparison.OrdinalIgnoreCase))
+                return (null, "Give the machine's token again when you change its address. The saved one is only sent to the address it was made for.");
             var plainToken = string.IsNullOrWhiteSpace(token) ? TokenOf(current) : token.Trim();
             var (info, error) = await IdentifyAsync(normalized, plainToken, cancellationToken);
             if (info is null)
