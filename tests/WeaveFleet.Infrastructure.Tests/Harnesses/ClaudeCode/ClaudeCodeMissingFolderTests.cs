@@ -38,6 +38,22 @@ public sealed class ClaudeCodeMissingFolderTests : IDisposable
         ex.Message.ToLowerInvariant().ShouldNotContain("not found");
     }
 
+    [Fact]
+    public async Task A_prompt_when_the_claude_binary_is_missing_says_claude_is_missing()
+    {
+        var work = Path.Combine(_directory, "work");
+        Directory.CreateDirectory(work);
+        var missing = Path.Combine(_directory, "no-such-claude");
+        var session = Session(missing, work);
+        await using var _ = session;
+
+        var ex = await Should.ThrowAsync<Exception>(() => session.SendPromptAsync("hi", null, CancellationToken.None));
+
+        Console.WriteLine($"TYPE={ex.GetType().Name} MESSAGE={ex.Message}");
+        ex.Message.ShouldNotContain("No process is associated");
+        ex.Message.ShouldContain(missing);
+    }
+
     private static ClaudeCodeHarnessSession Session(string binary, string work)
     {
         var messages = new InMemoryMessageRepository();

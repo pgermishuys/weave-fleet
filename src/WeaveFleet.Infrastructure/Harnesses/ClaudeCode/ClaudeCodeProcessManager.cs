@@ -277,7 +277,19 @@ internal sealed class ClaudeCodeProcessManager : IAsyncDisposable
         };
 
         _started = true;
-        _process.Start();
+        try
+        {
+            _process.Start();
+        }
+        catch
+        {
+            // A claude that can't start (missing, not executable) leaves a Process that never ran; the cleanup after this
+            // failure would trip over it ("No process is associated with this object") and hide why.
+            _process.Dispose();
+            _process = null;
+            throw;
+        }
+
         var job = ProcessGroupHelper.AssignToProcessGroup(_process, _logger, options.ProcessGroup);
         if (options.ProcessGroup is null)
             _jobObjectHandle = job; // Its own: it ends with the process.
