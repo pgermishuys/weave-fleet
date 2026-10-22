@@ -1,4 +1,8 @@
+using Microsoft.Extensions.DependencyInjection;
+using Microsoft.Extensions.Logging.Abstractions;
 using Shouldly;
+using WeaveFleet.Application.Users;
+using WeaveFleet.Domain.Events;
 using WeaveFleet.Application.Sessions;
 using WeaveFleet.Application.SessionSources;
 using WeaveFleet.Domain.Common;
@@ -81,6 +85,36 @@ public sealed class SessionOrchestratorStopAndSourceTests : IAsyncDisposable
     }
 
     [Fact]
+    public async Task stop_tells_a_session_waiting_on_the_turn_that_it_was_stopped_not_finished()
+    {
+        var sender = new RecordingSender();
+        var updates = new SessionUpdates(
+            _builder.ActivityTracker,
+            TestServiceScopeFactory.Create(services =>
+            {
+                services.AddSingleton<IBackgroundUserScope>(new NoUserScope());
+                services.AddSingleton<ISessionUpdateSender>(sender);
+            }),
+            NullLogger<SessionUpdates>.Instance);
+        _builder.WithSessionUpdates(updates);
+        var sut = Build();
+        updates.Watch(new SessionUpdateWatch("s-asker", SessionId, "user-1", "msg-1"));
+
+        updates.Observe(SessionId, new MessageUpdated
+        {
+            Payload = new MessageLifecyclePayload
+            {
+                Info = new MessageEventInfo { Id = "reply-1", Role = "assistant", SessionId = SessionId, ParentId = "msg-1", Time = new MessageEventTime { Created = 0 } },
+            },
+        });
+        (await sut.AbortSessionAsync(SessionId)).IsSuccess.ShouldBeTrue();
+        updates.Observe(SessionId, new SessionIdled { Payload = new SessionIdledPayload { SessionId = SessionId } });
+        await updates.Pending;
+
+        sender.Sent.ShouldHaveSingleItem().Outcome.ShouldBe(SessionUpdates.Stopped);
+    }
+
+    [Fact]
     public async Task stop_on_an_archived_session_is_refused()
     {
         var sut = Build(retention: "archived");
@@ -148,5 +182,31 @@ public sealed class SessionOrchestratorStopAndSourceTests : IAsyncDisposable
 
         public Task<Result<ResolvedSessionSource>> ResolveAsync(SessionSourceSelection selection, CancellationToken cancellationToken)
             => Task.FromResult<Result<ResolvedSessionSource>>(resolved);
+    }
+}
+
+file sealed class RecordingSender : ISessionUpdateSender
+{
+    public List<SessionUpdate> Sent { get; } = [];
+
+    public Task<SessionUpdate?> ReadAsync(SessionUpdateWatch watch, TurnError? failure, CancellationToken ct)
+        => Task.FromResult<SessionUpdate?>(new SessionUpdate(watch.AskerId, watch.TargetId, watch.UserId, "…", SessionUpdates.OutcomeOf(failure)));
+
+    public Task<bool> SendAsync(SessionUpdate update, CancellationToken ct)
+    {
+        Sent.Add(update);
+        return Task.FromResult(true);
+    }
+}
+
+file sealed class NoUserScope : IBackgroundUserScope
+{
+    public IDisposable Begin(string userId) => new Nothing();
+
+    private sealed class Nothing : IDisposable
+    {
+        public void Dispose()
+        {
+        }
     }
 }
