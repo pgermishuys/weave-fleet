@@ -23,6 +23,31 @@ public sealed class MachineIdentityStoreTests : IDisposable
     }
 
     [Fact]
+    public void Stores_created_at_the_same_moment_over_one_file_all_save_it()
+    {
+        // Two hosts in one process (or two processes) share a data directory but not a lock, so a fixed
+        // temporary file name let one writer move the other's file away mid-save.
+        for (var round = 0; round < 50; round++)
+        {
+            var path = DatabasePath($"race-{round}.db");
+            using var start = new ManualResetEventSlim();
+            var writers = Enumerable.Range(0, 8)
+                .Select(_ => Task.Run(() =>
+                {
+                    var store = new MachineIdentityStore(path);
+                    start.Wait();
+                    store.Get();
+                }))
+                .ToArray();
+
+            start.Set();
+
+            Should.NotThrow(() => Task.WaitAll(writers));
+            Directory.GetFiles(_directory, $"race-{round}*").Length.ShouldBe(1);
+        }
+    }
+
+    [Fact]
     public void A_restart_keeps_the_id_and_the_token()
     {
         var first = new MachineIdentityStore(DatabasePath()).Get();

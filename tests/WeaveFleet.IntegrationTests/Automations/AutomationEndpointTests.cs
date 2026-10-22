@@ -561,6 +561,7 @@ internal sealed class AutomationTestServer : IAsyncDisposable
         TryDelete(_dbPath);
         TryDelete($"{_dbPath}-wal");
         TryDelete($"{_dbPath}-shm");
+        TryDelete(Path.ChangeExtension(_dbPath, ".machine.json"));
         TryDelete(_analyticsDbPath);
         TryDelete($"{_analyticsDbPath}-wal");
         TryDelete($"{_analyticsDbPath}-shm");
@@ -661,6 +662,9 @@ internal sealed class AutomationTestServer : IAsyncDisposable
 
             builder.UseUrls("http://127.0.0.1:0");
             builder.UseSetting("Urls", "http://127.0.0.1:0");
+            // The machine identity file is placed from this at startup, before the options above are swapped in.
+            builder.UseSetting("Fleet:DatabasePath", _dbPath);
+            builder.UseSetting("Fleet:AnalyticsDatabasePath", _analyticsDbPath);
             builder.UseSetting("Fleet:Auth:Enabled", "false");
             builder.UseSetting("Fleet:Auth:TokenAuthEnabled", "false");
             builder.UseSetting("Fleet:AnalyticsEnabled", "false");
