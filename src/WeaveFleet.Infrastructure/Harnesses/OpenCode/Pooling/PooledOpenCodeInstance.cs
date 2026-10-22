@@ -91,11 +91,20 @@ internal sealed class PooledOpenCodeInstance : IAsyncDisposable
     /// </summary>
     public string? BridgeToken { get; init; }
 
+    /// <summary>
+    /// Finishes when OpenCode has loaded the folder the process started in, which on a first run includes installing
+    /// its plugin packages (see <see cref="OpenCodeFirstRunPreparation"/>). It never faults.
+    /// </summary>
+    public Task Preparation { get; init; } = Task.CompletedTask;
+
     public bool IsFaulted => Volatile.Read(ref _faulted) != 0;
 
     public bool IsDisposed => Volatile.Read(ref _disposed) != 0;
 
     public bool IsAvailable => !IsFaulted && !IsDisposed;
+
+    /// <summary>Waits for <see cref="Preparation"/>; the wait ends early if <paramref name="ct"/> is cancelled, the preparation carries on.</summary>
+    internal Task WhenPreparedAsync(CancellationToken ct) => Preparation.WaitAsync(ct);
 
     internal ICollection<InstanceLease> Leases => _leases.Values;
 
