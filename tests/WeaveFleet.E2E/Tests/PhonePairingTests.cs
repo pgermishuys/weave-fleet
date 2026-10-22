@@ -1,4 +1,5 @@
 using System.Text.Json;
+using System.Text.RegularExpressions;
 using WeaveFleet.E2E.Infrastructure;
 
 namespace WeaveFleet.E2E.Tests;
@@ -32,7 +33,7 @@ public sealed class PhonePairingTests(PhoneFleetWebApplicationFactory factory, P
         (await phone.EvaluateAsync<string>("() => location.hash")).ShouldBeEmpty("the secret leaves the address bar");
         await phone.GetByTestId("pair-device-name").FillAsync("Test Pixel");
         await phone.GetByTestId("pair-connect").ClickAsync();
-        await phone.WaitForURLAsync("**/phone/setup");
+        await Assertions.Expect(phone).ToHaveURLAsync(new Regex("/phone/setup$"), new() { Timeout = 10_000 });
 
         (await FetchStatusAsync(phone, "/api/sessions")).ShouldBe(200);
         (await FetchStatusAsync(phone, "/api/machine/access")).ShouldBe(403);
@@ -47,7 +48,7 @@ public sealed class PhonePairingTests(PhoneFleetWebApplicationFactory factory, P
 
         (await FetchStatusAsync(phone, "/api/sessions")).ShouldBe(401);
         await phone.GotoAsync("/phone");
-        await phone.WaitForURLAsync("**/pair");
+        await Assertions.Expect(phone).ToHaveURLAsync(new Regex("/pair$"), new() { Timeout = 10_000 });
     }
 
     [Fact]
@@ -62,7 +63,7 @@ public sealed class PhonePairingTests(PhoneFleetWebApplicationFactory factory, P
         await phone.GetByTestId("pair-code").FillAsync(manualCode.ToLowerInvariant());
         await phone.GetByTestId("pair-code-continue").ClickAsync();
         await phone.GetByTestId("pair-connect").ClickAsync();
-        await phone.WaitForURLAsync("**/phone/setup");
+        await Assertions.Expect(phone).ToHaveURLAsync(new Regex("/phone/setup$"), new() { Timeout = 10_000 });
     }
 
     private static Task<int> FetchStatusAsync(IPage page, string path) =>
