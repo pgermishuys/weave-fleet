@@ -91,7 +91,8 @@ public sealed class MachineIdentityStore
         Directory.CreateDirectory(Path.GetDirectoryName(FilePath)!);
 
         var json = JsonSerializer.Serialize(identity, MachineIdentityJsonContext.Default.MachineIdentity);
-        var temporaryPath = FilePath + ".tmp";
+        // Unique per write: another store (a second host in the same data directory) may be saving at this moment.
+        var temporaryPath = $"{FilePath}.{Guid.NewGuid():N}.tmp";
         var options = new FileStreamOptions { Mode = FileMode.Create, Access = FileAccess.Write };
         if (!OperatingSystem.IsWindows())
             options.UnixCreateMode = UnixFileMode.UserRead | UnixFileMode.UserWrite;
