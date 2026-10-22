@@ -284,20 +284,39 @@ internal sealed class PooledOpenCodeInstanceRegistry : IAsyncDisposable
     /// by <see cref="CredentialHasher.HashEnvironment"/> over
     /// <paramref name="authoritativeEnvironment"/>; the registry re-validates this invariant.
     /// </summary>
+    /// <remarks>
+    /// The lease comes back once the process has finished loading its first folder, which on a first run includes OpenCode
+    /// installing its plugin packages (see <see cref="OpenCodeFirstRunPreparation"/>), so callers' ordinary requests don't
+    /// run into that. <paramref name="waitUntilPrepared"/> false is for warmup, which must not hold up startup.
+    /// </remarks>
     public async Task<InstanceLease> AcquireAsync(
         string ownerIdentity,
         string credentialHashKey,
         IReadOnlyDictionary<string, string> authoritativeEnvironment,
         string directory,
-        CancellationToken ct)
+        CancellationToken ct,
+        bool waitUntilPrepared = true)
     {
-        return await AcquireAsync(
+        var lease = await AcquireAsync(
             ownerIdentity,
             credentialHashKey,
             authoritativeEnvironment,
             directory,
             validateCredentialHash: true,
             ct).ConfigureAwait(false);
+        if (!waitUntilPrepared)
+            return lease;
+
+        try
+        {
+            await lease.Instance.WhenPreparedAsync(ct).ConfigureAwait(false);
+            return lease;
+        }
+        catch
+        {
+            await lease.DisposeAsync().ConfigureAwait(false);
+            throw;
+        }
     }
 
     /// <summary>
