@@ -104,6 +104,30 @@ public sealed class SessionUpdatesTests
     }
 
     [Fact]
+    public async Task a_turn_that_ended_before_the_watch_was_registered_is_still_reported()
+    {
+        await ReplyAsync(Target, parentId: MessageId);
+        await IdleAsync(Target);
+
+        _sut.Watch(new SessionUpdateWatch(Asker, Target, UserId, MessageId));
+        await _sut.Pending;
+
+        _sender.Sent.ShouldHaveSingleItem().Outcome.ShouldBe(SessionUpdates.Finished);
+    }
+
+    [Fact]
+    public async Task a_watch_registered_after_the_reply_but_before_the_idle_is_armed_by_it()
+    {
+        await ReplyAsync(Target, parentId: MessageId);
+        _sut.Watch(new SessionUpdateWatch(Asker, Target, UserId, MessageId));
+        _sender.Sent.ShouldBeEmpty();
+
+        await IdleAsync(Target);
+
+        _sender.Sent.ShouldHaveSingleItem();
+    }
+
+    [Fact]
     public async Task tells_it_once()
     {
         _sut.Watch(new SessionUpdateWatch(Asker, Target, UserId, MessageId));
