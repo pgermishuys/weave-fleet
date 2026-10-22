@@ -2,6 +2,13 @@ import { shallowRef } from "vue";
 import type { components } from "@/api/generated/schema";
 import { useMachineTarget } from "@/lib/machine-target";
 
+const ALREADY_ANSWERED = "This question was already answered.";
+
+/** A question answered from another device is gone by the time this one answers (404, or 409): say so, not "Not Found". */
+function failure(response: Response, fallback: string): Error {
+  return new Error(response.status === 404 || response.status === 409 ? ALREADY_ANSWERED : `${fallback}: ${response.statusText}`);
+}
+
 /**
  * Composable for answering or rejecting question tool requests.
  * Each call returns fresh `loading` and `error` state.
@@ -23,7 +30,7 @@ export function useQuestionAnswer(sessionId: string) {
       });
 
       if (apiError || !response.ok) {
-        throw new Error(`Failed to answer question: ${response.statusText}`);
+        throw failure(response, "Failed to answer question");
       }
     } finally {
       loading.value = false;
@@ -41,7 +48,7 @@ export function useQuestionAnswer(sessionId: string) {
       });
 
       if (apiError || !response.ok) {
-        throw new Error(`Failed to reject question: ${response.statusText}`);
+        throw failure(response, "Failed to reject question");
       }
     } finally {
       loading.value = false;
