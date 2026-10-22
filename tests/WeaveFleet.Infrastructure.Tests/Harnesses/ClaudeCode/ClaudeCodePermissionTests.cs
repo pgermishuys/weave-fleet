@@ -43,6 +43,21 @@ public sealed class ClaudeCodePermissionTests : IDisposable
     }
 
     [Fact]
+    public void A_shell_ask_with_no_suggestion_is_not_allowed_for_every_command()
+    {
+        // As recorded from claude 2.1.306: a command it can't check sends an empty list, so offers no standing rule.
+        const string Recorded = """
+            {"type":"control_request","request_id":"r9","request":{"subtype":"can_use_tool","tool_name":"Bash","display_name":"Bash","input":{"command":"echo $(whoami) > ../outside.txt","description":"Write"},"description":"Write","permission_suggestions":[],"decision_reason":"A nested command in this command can't be checked before it runs","decision_reason_type":"other","tool_use_id":"toolu_01"}}
+            """;
+        var request = JsonSerializer.Deserialize(Recorded, ClaudeCodeJsonContext.Default.ClaudeCodeStreamMessage)
+            .ShouldBeOfType<ClaudeCodeControlRequest>();
+
+        var ask = ClaudeCodePermissions.ToAsk(request.RequestId!, "fleet-1", request.Request!);
+
+        ask.Always.ShouldBe(["echo $(whoami) > ../outside.txt"]);
+    }
+
+    [Fact]
     public void An_edit_ask_shows_what_changes()
     {
         var request = new ClaudeCodeControlRequestBody
