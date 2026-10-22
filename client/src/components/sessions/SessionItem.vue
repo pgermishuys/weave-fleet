@@ -696,7 +696,7 @@ function removeSessionFromStore(): void {
             />
 
             <span class="session-copy">
-              <span class="session-title">{{ displayTitle }}</span>
+              <span class="session-title" dir="auto">{{ displayTitle }}</span>
             </span>
 
             <span

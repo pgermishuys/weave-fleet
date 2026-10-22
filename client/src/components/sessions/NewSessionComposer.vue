@@ -1057,6 +1057,7 @@ onUnmounted(() => {
             <textarea
               ref="textarea"
               class="composer-frame__textarea new-session__textarea"
+              dir="auto"
               data-testid="new-session-message"
               aria-label="First message"
               :aria-controls="autocomplete.activeOptionId.value ? AUTOCOMPLETE_LISTBOX_ID : undefined"
