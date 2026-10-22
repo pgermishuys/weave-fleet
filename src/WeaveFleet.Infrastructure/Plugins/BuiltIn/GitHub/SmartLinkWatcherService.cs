@@ -311,7 +311,7 @@ internal sealed partial class SmartLinkWatcherService(
     private async Task RefreshLinkAsync(ISmartLinkRepository repository, Cycle cycle, SmartLink link, CancellationToken ct)
     {
         var before = VisibleState(link);
-        // A manual refresh clears last_checked_at; the panel's "checked ago" only moves if we say so.
+        // A manual refresh clears last_checked_at; that link is checked even without a GitHub connection.
         var wasRequested = link.LastCheckedAt is null;
         var token = await cycle.GetTokenAsync(link.UserId, ct).ConfigureAwait(false);
 
@@ -351,8 +351,8 @@ internal sealed partial class SmartLinkWatcherService(
             link.UpdatedAt = checkedAt;
 
         await repository.UpdateEnrichmentAsync(link, ct).ConfigureAwait(false);
-        if (changed || wasRequested)
-            await BroadcastAsync(link, ct).ConfigureAwait(false);
+        // Every completed check is pushed, changed or not: the panel's "checked ago" follows last_checked_at.
+        await BroadcastAsync(link, ct).ConfigureAwait(false);
     }
 
     private enum EnrichOutcome

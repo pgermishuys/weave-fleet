@@ -156,6 +156,23 @@ public sealed class SmartLinkWatcherCycleTests : IDisposable
         _broadcaster.Broadcasts.Count.ShouldBe(broadcasts + 1);
     }
 
+    [Fact]
+    public async Task An_automatic_check_that_finds_nothing_new_still_reports_the_check()
+    {
+        _links.Seed(Link("s1", 7));
+        await _watcher.RunCycleAsync(CancellationToken.None);
+        var link = _links.All.Single();
+        var firstCheck = link.LastCheckedAt;
+        var broadcasts = _broadcaster.Broadcasts.Count;
+
+        _detector.Observe("s1", UserId, "session.status", null);
+        _clock.Now = _clock.Now.AddMinutes(1);
+        await _watcher.RunCycleAsync(CancellationToken.None);
+
+        link.LastCheckedAt.ShouldNotBe(firstCheck);
+        _broadcaster.Broadcasts.Count.ShouldBe(broadcasts + 1);
+    }
+
     private void OnBranch(string sessionId, string branch)
         => _links.BranchTargets.Add(new SmartLinkBranchTarget(sessionId, UserId, branch, _git.Path, null));
 
