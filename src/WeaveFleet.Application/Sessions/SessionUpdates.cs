@@ -68,6 +68,14 @@ public sealed partial class SessionUpdates(
 {
     public const string Finished = "finished";
     public const string Failed = "failed";
+    public const string Stopped = "stopped";
+
+    /// <summary>The <see cref="TurnError.Name"/> of a turn the user stopped.</summary>
+    public const string StoppedErrorName = "Stopped";
+
+    /// <summary>The outcome an update reports for a turn that ended with <paramref name="failure"/> (<see langword="null"/>: it finished).</summary>
+    public static string OutcomeOf(TurnError? failure)
+        => failure is null ? Finished : failure.Name == StoppedErrorName ? Stopped : Failed;
 
     /// <summary>How long a watch is kept: a message the target never gets to (aborted, deleted) would otherwise be watched for good.</summary>
     public static readonly TimeSpan WatchLifetime = TimeSpan.FromDays(1);
@@ -150,6 +158,19 @@ public sealed partial class SessionUpdates(
             case SessionIdled:
                 OnIdle(sessionId);
                 break;
+        }
+    }
+
+    /// <summary>
+    /// The user stopped <paramref name="targetId"/>'s turn. Harnesses follow Stop with an ordinary idle, so without
+    /// this a watched turn cut off half way would be reported as finished, with the reply it had got to.
+    /// </summary>
+    public void MarkStopped(string targetId)
+    {
+        lock (_gate)
+        {
+            foreach (var w in _watches.Where(w => w.Armed && w.Watch.TargetId == targetId))
+                w.Failure ??= new TurnError { Name = StoppedErrorName, Message = "It was stopped before it finished. What follows is the reply it had written so far." };
         }
     }
 
@@ -320,17 +341,20 @@ public sealed class SessionUpdateSender(
             return null;
 
         string body;
-        if (failure is not null)
+        if (failure is not null && failure.Name != SessionUpdates.StoppedErrorName)
         {
             body = failure.Message;
         }
         else
         {
             var page = await messages.GetMessagesAsync(watch.TargetId, limit: 30, ct: ct).ConfigureAwait(false);
-            body = LastReply(page.Messages, watch.MessageId) ?? "It finished without writing a reply.";
+            var reply = LastReply(page.Messages, watch.MessageId);
+            body = failure is null
+                ? reply ?? "It finished without writing a reply."
+                : reply is null ? "It was stopped before it wrote a reply." : $"{failure.Message}\n{reply}";
         }
 
-        var outcome = failure is null ? SessionUpdates.Finished : SessionUpdates.Failed;
+        var outcome = SessionUpdates.OutcomeOf(failure);
         return new SessionUpdate(
             watch.AskerId,
             watch.TargetId,
@@ -343,7 +367,7 @@ public sealed class SessionUpdateSender(
     private async Task<SessionUpdate?> ReadOnMachineAsync(SessionUpdateWatch watch, SessionMessageMachine machine, TurnError? failure, CancellationToken ct)
     {
         string body;
-        if (failure is not null)
+        if (failure is not null && failure.Name != SessionUpdates.StoppedErrorName)
         {
             body = failure.Message;
         }
@@ -354,9 +378,11 @@ public sealed class SessionUpdateSender(
                 ? (null, error)
                 : await remote.LastReplyAsync(found, token!, watch.TargetId, watch.MessageId, ct).ConfigureAwait(false);
             body = reply ?? (readError is null ? "It finished without writing a reply." : $"It finished, but Fleet couldn't read its reply: {readError}");
+            if (failure is not null)
+                body = $"{failure.Message}\n{body}";
         }
 
-        var outcome = failure is null ? SessionUpdates.Finished : SessionUpdates.Failed;
+        var outcome = SessionUpdates.OutcomeOf(failure);
         return new SessionUpdate(
             watch.AskerId,
             watch.TargetId,

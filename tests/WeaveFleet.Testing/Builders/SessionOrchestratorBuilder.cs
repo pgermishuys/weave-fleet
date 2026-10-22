@@ -94,6 +94,7 @@ public sealed class SessionOrchestratorBuilder
     private WeaveFleet.Application.Pages.IPageStore? _sessionPages;
     private AgentMemoryService? _agentMemory;
     private WeaveFleet.Application.Mods.ModPromptHook? _modPrompts;
+    private SessionUpdates? _updates;
     private readonly List<ISessionSourceProvider> _additionalSourceProviders = [];
 
     /// <summary>Adds a session source provider beyond the local-directory one Build() always registers.</summary>
@@ -148,6 +149,12 @@ public sealed class SessionOrchestratorBuilder
     public SessionOrchestratorBuilder WithModPrompts(WeaveFleet.Application.Mods.ModPromptHook modPrompts)
     {
         _modPrompts = modPrompts;
+        return this;
+    }
+
+    public SessionOrchestratorBuilder WithSessionUpdates(SessionUpdates updates)
+    {
+        _updates = updates;
         return this;
     }
 
@@ -210,7 +217,7 @@ public sealed class SessionOrchestratorBuilder
         Prompting = new SessionPrompting(
             SessionRepository, HarnessRegistry, Activation, ActivityTracker, delegationService, sessionSourceResolutionService,
             SessionSourceUsageRepository, EventBroadcaster, _userContext, NullLogger<SessionPrompting>.Instance,
-            MessageRepository, agentMemory: _agentMemory, modPrompts: _modPrompts);
+            MessageRepository, agentMemory: _agentMemory, modPrompts: _modPrompts, updates: _updates);
         Asks = new SessionAsks(SessionRepository, InstanceTracker, Activation, NullLogger<SessionAsks>.Instance);
         Catalog = new SessionCatalog(SessionRepository, Activation, NullLogger<SessionCatalog>.Instance);
         History = new SessionHistory(SessionRepository, SessionMessageProxy, _options, NullLogger<SessionHistory>.Instance);

@@ -79,6 +79,31 @@ public sealed class SessionUpdatesTests
     }
 
     [Fact]
+    public async Task says_so_when_the_turn_was_stopped_half_way()
+    {
+        _sut.Watch(new SessionUpdateWatch(Asker, Target, UserId, MessageId));
+
+        await ReplyAsync(Target, parentId: MessageId);
+        _sut.MarkStopped(Target);
+        await IdleAsync(Target);
+
+        _sender.Sent.ShouldHaveSingleItem().Outcome.ShouldBe(SessionUpdates.Stopped);
+    }
+
+    [Fact]
+    public async Task a_stop_before_the_turn_answers_the_message_is_not_that_messages_stop()
+    {
+        _sut.Watch(new SessionUpdateWatch(Asker, Target, UserId, MessageId));
+
+        // The target's earlier turn is stopped; the watched message hasn't been answered yet.
+        _sut.MarkStopped(Target);
+        await ReplyAsync(Target, parentId: MessageId);
+        await IdleAsync(Target);
+
+        _sender.Sent.ShouldHaveSingleItem().Outcome.ShouldBe(SessionUpdates.Finished);
+    }
+
+    [Fact]
     public async Task tells_it_once()
     {
         _sut.Watch(new SessionUpdateWatch(Asker, Target, UserId, MessageId));
@@ -234,7 +259,7 @@ public sealed class SessionUpdatesTests
         public Task<SessionUpdate?> ReadAsync(SessionUpdateWatch watch, TurnError? failure, CancellationToken ct)
         {
             Read.Add((watch, failure));
-            var outcome = failure is null ? SessionUpdates.Finished : SessionUpdates.Failed;
+            var outcome = SessionUpdates.OutcomeOf(failure);
             return Task.FromResult<SessionUpdate?>(new SessionUpdate(watch.AskerId, watch.TargetId, watch.UserId, "…", outcome));
         }
 

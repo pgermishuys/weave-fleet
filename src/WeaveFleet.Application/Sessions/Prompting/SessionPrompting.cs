@@ -41,7 +41,8 @@ public sealed partial class SessionPrompting(
     SessionRecapService? sessionRecaps = null,
     AgentMemoryService? agentMemory = null,
     ModPromptHook? modPrompts = null,
-    ModTurnHook? modTurns = null)
+    ModTurnHook? modTurns = null,
+    SessionUpdates? updates = null)
 {
     public async Task<Result<Unit>> PromptSessionAsync(
         string id,
@@ -396,6 +397,8 @@ public sealed partial class SessionPrompting(
 
         // So a mod hearing the turn end knows the user stopped it.
         modTurns?.Aborted(id);
+        // So a session that asked to hear when this turn ends isn't told it finished.
+        updates?.MarkStopped(id);
         await instanceResult.Value.AbortAsync(ct);
         return Unit.Value;
     }
