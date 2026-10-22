@@ -10,23 +10,24 @@ namespace WeaveFleet.IntegrationTests.Harnesses.OpenCode;
 /// 100 s here and went past Fleet's 100 s request timeout on CI. Every live test starts from an empty scratch
 /// config folder, so each one paid it. This installs them once per test run, in a throwaway OpenCode, and the
 /// scratch folders start with a copy: OpenCode finds the packages and doesn't install again.
+/// Seeding is for tests whose subject is not the first run, so they are deterministic. The install itself is
+/// Fleet's job to survive, and <c>FirstSessionLiveTests</c> proves that from an unseeded folder. If the one-time
+/// install fails, every test that wants seeding fails with that error, rather than quietly going back to the slow path.
 /// </summary>
 internal static partial class OpenCodePluginDependencies
 {
     private static readonly string[] Entries = ["package.json", "package-lock.json", ".gitignore", "node_modules"];
     private static readonly object Gate = new();
     private static string? _installed;
-    private static bool _tried;
+    private static Exception? _failure;
 
     [GeneratedRegex(@"opencode server listening on http://(?<host>[^:]+):(?<port>\d+)")]
     private static partial Regex ListeningLine();
 
-    /// <summary>Copies the installed packages into <paramref name="configDir"/>; does nothing if they couldn't be installed.</summary>
+    /// <summary>Copies the installed packages into <paramref name="configDir"/>; throws, with the install's error, if they couldn't be installed.</summary>
     public static void Seed(string configDir)
     {
         var source = Installed();
-        if (source is null)
-            return;
 
         foreach (var entry in Entries)
         {
@@ -39,22 +40,25 @@ internal static partial class OpenCodePluginDependencies
         }
     }
 
-    private static string? Installed()
+    private static string Installed()
     {
         lock (Gate)
         {
-            if (_tried)
+            if (_installed is not null)
                 return _installed;
 
-            _tried = true;
+            // A failed install stays failed for the run: each test reports the same cause instead of retrying for minutes.
+            if (_failure is not null)
+                throw new InvalidOperationException("Installing OpenCode's plugin packages for the live tests failed earlier in this run.", _failure);
+
             try
             {
                 _installed = Install();
             }
-            catch (Exception)
+            catch (Exception ex)
             {
-                // Without them each test installs its own, as before.
-                _installed = null;
+                _failure = ex;
+                throw new InvalidOperationException("Installing OpenCode's plugin packages for the live tests failed.", ex);
             }
 
             return _installed;
