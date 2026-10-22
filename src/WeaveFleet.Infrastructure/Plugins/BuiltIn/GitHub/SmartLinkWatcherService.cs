@@ -311,11 +311,13 @@ internal sealed partial class SmartLinkWatcherService(
     private async Task RefreshLinkAsync(ISmartLinkRepository repository, Cycle cycle, SmartLink link, CancellationToken ct)
     {
         var before = VisibleState(link);
+        // A manual refresh clears last_checked_at; the panel's "checked ago" only moves if we say so.
+        var wasRequested = link.LastCheckedAt is null;
         var token = await cycle.GetTokenAsync(link.UserId, ct).ConfigureAwait(false);
 
         if (token is null)
         {
-            if (link.EnrichmentStatus == SmartLinkEnrichmentStatuses.NotConnected)
+            if (link.EnrichmentStatus == SmartLinkEnrichmentStatuses.NotConnected && !wasRequested)
                 return;
 
             link.EnrichmentStatus = SmartLinkEnrichmentStatuses.NotConnected;
@@ -349,7 +351,7 @@ internal sealed partial class SmartLinkWatcherService(
             link.UpdatedAt = checkedAt;
 
         await repository.UpdateEnrichmentAsync(link, ct).ConfigureAwait(false);
-        if (changed)
+        if (changed || wasRequested)
             await BroadcastAsync(link, ct).ConfigureAwait(false);
     }
 
