@@ -217,7 +217,7 @@ internal static class ClaudeCodePermissions
             Tool = tool,
             Title = Relative(Target(tool, request.Input), workingDirectory) ?? request.Description,
             Detail = Detail(tool, request.Input),
-            Always = Rules(tool, request.PermissionSuggestions),
+            Always = Rules(tool, request.PermissionSuggestions) is { Count: > 0 } rules ? rules : OnlyThisCommand(tool, request.Input),
             CallId = request.ToolUseId,
         };
     }
@@ -257,6 +257,13 @@ internal static class ClaudeCodePermissions
         var lines = text.Split('\n');
         return lines.Length <= DetailLinesShown ? text : string.Join('\n', lines.Take(DetailLinesShown)) + $"\n… {lines.Length - DetailLinesShown} more lines";
     }
+
+    /// <summary>
+    /// With no suggestion (Claude Code sends <c>[]</c> when it can't name a safe rule, e.g. for <c>echo $(whoami)</c>),
+    /// "Don't ask again" on a command covers that exact command, never every command.
+    /// </summary>
+    private static List<string> OnlyThisCommand(string tool, JsonElement input)
+        => PermissionKinds.Classify(tool) == PermissionKinds.Shell && PermissionEvents.String(input, "command") is { } command ? [command] : [];
 
     /// <summary>The rules Claude Code suggests for not asking again about this tool, e.g. <c>git push *</c> for Bash.</summary>
     private static List<string> Rules(string tool, JsonElement? suggestions)
