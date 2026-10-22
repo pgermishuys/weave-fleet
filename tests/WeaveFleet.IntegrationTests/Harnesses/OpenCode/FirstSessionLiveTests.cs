@@ -31,8 +31,8 @@ public sealed class FirstSessionLiveTests
         var plugin = Path.Combine(root, "no-op.ts");
         File.WriteAllText(plugin, "export const NoOp = async () => ({})\n");
 
-        // Nothing from a previous run: this is the only place the install is allowed to happen.
-        var processEnvironment = PooledOpenCodeLiveHost.WriteScratchOpenCodeHome(root, new Uri("http://127.0.0.1:9"), plugin);
+        // Not seeded, unlike every other live test: this is the one place the install is meant to happen.
+        var processEnvironment = PooledOpenCodeLiveHost.WriteScratchOpenCodeHome(root, new Uri("http://127.0.0.1:9"), plugin, seedPluginDependencies: false);
         var packages = Path.Combine(processEnvironment["XDG_CONFIG_HOME"], "opencode", "node_modules");
         Directory.Exists(packages).ShouldBeFalse("the config folder must start without OpenCode's plugin packages");
 
