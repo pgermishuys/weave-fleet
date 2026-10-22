@@ -142,6 +142,10 @@ internal sealed class ClaudeCodeProcessManager : IAsyncDisposable
 
         ct.ThrowIfCancellationRequested();
 
+        // A folder that's gone makes the start fail the same way a missing claude does; say which it is.
+        if (!Directory.Exists(options.WorkingDirectory))
+            throw new DirectoryNotFoundException($"The session's folder is gone: {options.WorkingDirectory}");
+
         var utf8 = new UTF8Encoding(encoderShouldEmitUTF8Identifier: false);
         var psi = new ProcessStartInfo
         {
