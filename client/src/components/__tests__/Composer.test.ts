@@ -1517,6 +1517,12 @@ describe("Composer steering", () => {
     expect(wrapper.findAll("[data-testid='queued-message']")).toHaveLength(1);
   });
 
+  it("lets the prompt box take its direction from what is typed, for right-to-left languages", async () => {
+    const wrapper = mountComposer({ session: createSession({ activityStatus: "idle" }) });
+    await flushPromises();
+    expect(wrapper.get("[data-testid='prompt-input']").attributes("dir")).toBe("auto");
+  });
+
   it("does not queue a message that has an image: the queue holds text only, so the image would end up on the next message", async () => {
     const wrapper = mountComposer({ session: createSession({ activityStatus: "busy" }) });
     await flushPromises();
