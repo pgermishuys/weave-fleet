@@ -69,6 +69,9 @@ public sealed class OpenCodeHarnessRuntime : IHarnessRuntime, IDisposable, IAsyn
             "Pooled OpenCode stale resume token detected for fleet session {FleetSessionId}. " +
             "The OpenCode session was not found in the live process; a fresh session has been created and the persisted token updated.");
 
+    /// <summary>The named HTTP client with no request timeout, for <see cref="OpenCodeFirstRunPreparation"/>.</summary>
+    internal const string PreparationHttpClientName = "OpenCodePreparation";
+
     private static readonly Action<ILogger, Exception?> LogCanvasToolsWithoutFleetUrl =
         LoggerMessage.Define(LogLevel.Information, new EventId(9, "CanvasToolsWithoutFleetUrl"),
             "Starting a pooled OpenCode process without canvas tools or Fleet's skills: Fleet's port isn't known yet.");
@@ -1068,6 +1071,18 @@ public sealed class OpenCodeHarnessRuntime : IHarnessRuntime, IDisposable, IAsyn
 
             await CheckOpenCodeHealthAsync(openCodeHttpClient, ct).ConfigureAwait(false);
 
+            // The first folder a new process loads can take OpenCode a minute or more on a first run (it installs its
+            // plugin packages), longer than the ordinary client waits. This loads it on a client that waits long
+            // enough, and the registry makes callers wait for it. See OpenCodeFirstRunPreparation.
+            var preparationHttpClient = _httpClientFactory.CreateClient(PreparationHttpClientName);
+            preparationHttpClient.BaseAddress = processInfo.BaseUrl;
+            preparationHttpClient.DefaultRequestHeaders.Authorization = httpClient.DefaultRequestHeaders.Authorization;
+            var preparation = OpenCodeFirstRunPreparation.RunAsync(
+                new OpenCodeHttpClient(preparationHttpClient, _loggerFactory.CreateLogger<OpenCodeHttpClient>()),
+                directory,
+                _logger,
+                OpenCodeFirstRunPreparation.Timeout);
+
             var ownedProcessManager = processManager;
             processManager = null;
 
@@ -1080,6 +1095,7 @@ public sealed class OpenCodeHarnessRuntime : IHarnessRuntime, IDisposable, IAsyn
                 async () => await ownedProcessManager.DisposeAsync().ConfigureAwait(false))
             {
                 BridgeToken = bridgeToken,
+                Preparation = preparation,
             };
         }
         catch
@@ -1756,8 +1772,10 @@ public sealed class OpenCodeHarnessRuntime : IHarnessRuntime, IDisposable, IAsyn
         }
 
         var credentialHash = CredentialHasher.HashEnvironment(environmentVariables);
+        // Warmup doesn't wait for the process to finish its first-run install: startup must not block on it, and
+        // the first real use of the process waits for it instead.
         var lease = await _pooledInstanceRegistry
-            .AcquireAsync(ownerUserId, credentialHash, environmentVariables, Environment.CurrentDirectory, ct)
+            .AcquireAsync(ownerUserId, credentialHash, environmentVariables, Environment.CurrentDirectory, ct, waitUntilPrepared: false)
             .ConfigureAwait(false);
 
         // Release immediately so the idle-TTL timer starts; the process stays alive until it expires.
