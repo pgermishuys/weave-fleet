@@ -97,6 +97,36 @@ describe("useSessionTerminals", () => {
     wrapper.unmount();
   });
 
+  it("closes a drawer left open on a session with no terminals left", async () => {
+    enableTerminals(true);
+    const store = useTerminalsStore();
+    store.setOpen("s1", true);
+    apiFetchMock.mockResolvedValue(jsonResponse([]));
+    const { useSessionTerminals } = await import("@/composables/use-session-terminals");
+    const { wrapper } = await mountComposable(() => useSessionTerminals(shallowRef("s1")));
+    await flushAll();
+
+    expect(store.isOpen("s1")).toBe(false);
+    wrapper.unmount();
+  });
+
+  it("keeps a drawer opened while the empty list was loading, so it starts a shell", async () => {
+    enableTerminals(true);
+    let answer: (response: Response) => void = () => {};
+    apiFetchMock.mockReturnValue(new Promise<Response>((resolve) => { answer = resolve; }));
+    const { useSessionTerminals } = await import("@/composables/use-session-terminals");
+    const { wrapper } = await mountComposable(() => useSessionTerminals(shallowRef("s1")));
+    const store = useTerminalsStore();
+
+    store.setOpen("s1", true);
+    answer(jsonResponse([]));
+    await flushAll();
+
+    expect(store.isOpen("s1")).toBe(true);
+    expect(store.isLoaded("s1")).toBe(true);
+    wrapper.unmount();
+  });
+
   it("does nothing when Fleet has terminals turned off", async () => {
     enableTerminals(false);
     const { useSessionTerminals } = await import("@/composables/use-session-terminals");
