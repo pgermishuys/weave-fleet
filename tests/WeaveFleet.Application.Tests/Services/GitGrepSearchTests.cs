@@ -133,6 +133,31 @@ public sealed class GitGrepSearchTests
         Slice(match, match.Ranges.Single()).ShouldBe("needle");
     }
 
+    [Theory]
+    [InlineData("fatal: not a git repository (or any of the parent directories): .git")]
+    [InlineData("fatal: not a git repository: /srv/main/.git/worktrees/feature")]
+    [InlineData("fatal: gitfile does not point to a valid repository: /srv/feature/.git")]
+    public void A_folder_git_cannot_use_is_told_from_a_bad_pattern_in_every_wording(string stderr) =>
+        GitGrepSearch.IsFolderGitCannotUse(stderr).ShouldBeTrue();
+
+    [Fact]
+    public void A_bad_pattern_is_not_a_folder_git_cannot_use() =>
+        GitGrepSearch.IsFolderGitCannotUse("fatal: command line, 'a(': Unmatched ( or \\(").ShouldBeFalse();
+
+    [Fact]
+    public async Task A_worktree_whose_main_repository_is_gone_is_searched_by_walking()
+    {
+        using var repository = new RealGitRepository();
+        var worktree = repository.CreateWorktree("feature");
+        Write(worktree, "a.txt", "needle\n");
+        Directory.Delete(repository.Path, recursive: true);
+
+        var result = await GitGrepSearch.SearchAsync(worktree, "needle", false, false);
+
+        result.Engine.ShouldBe("walk");
+        result.Files.Select(f => f.Path).ShouldBe(["a.txt"]);
+    }
+
     [Fact]
     public async Task Walk_OutsideGit_FindsTextSkippingNoiseFoldersBigFilesAndBinaries()
     {
