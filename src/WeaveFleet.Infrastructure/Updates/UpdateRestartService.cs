@@ -1,3 +1,4 @@
+using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Hosting;
 using Microsoft.Extensions.Logging;
 using WeaveFleet.Application.Configuration;
@@ -25,7 +26,7 @@ public sealed partial class UpdateRestartService(
     UpdateFiles files,
     UpdateDownloadService downloads,
     UpdateRestartGate gate,
-    MachineCapabilitiesReader capabilities,
+    IServiceScopeFactory scopes,
     IHostApplicationLifetime lifetime,
     TimeProvider time,
     ILogger<UpdateRestartService> logger,
@@ -63,6 +64,13 @@ public sealed partial class UpdateRestartService(
     }
 
     public Task StopAsync(CancellationToken cancellationToken) => Task.CompletedTask;
+
+    // The reader is scoped (it holds scoped repositories), so a singleton resolves it per use.
+    private async Task<MachineSessionCounts> ReadWorkingAsync()
+    {
+        using var scope = scopes.CreateScope();
+        return (await scope.ServiceProvider.GetRequiredService<MachineCapabilitiesReader>().ReadAsync()).Sessions;
+    }
 
     private static string CurrentVersion => FleetInstrumentation.ServiceVersion.Split('+')[0].TrimStart('v');
 
@@ -126,7 +134,7 @@ public sealed partial class UpdateRestartService(
             return new RestartResult(RestartOutcome.Accepted, To: staged);
 
         // A session stopped on a question or a permission ask is still in its turn: a restart would cut it off.
-        var counts = workingSessions is null ? (await capabilities.ReadAsync()).Sessions : await workingSessions();
+        var counts = workingSessions is null ? await ReadWorkingAsync() : await workingSessions();
         var working = counts.Busy;
         if (working > 0)
         {

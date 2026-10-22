@@ -53,7 +53,7 @@ public sealed class UpdateApplyEndpointTests : IDisposable
                 new UpdateFiles(_root),
                 sp.GetRequiredService<UpdateDownloadService>(),
                 _gate,
-                sp.GetRequiredService<MachineCapabilitiesReader>(),
+                sp.GetRequiredService<IServiceScopeFactory>(),
                 new StubLifetime(),
                 _time,
                 NullLogger<UpdateRestartService>.Instance,
