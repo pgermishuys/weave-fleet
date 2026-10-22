@@ -11,6 +11,7 @@ import { pickedFileTokens, resetFileReferences } from "@/lib/composer-references
 import { forgetHarnessLists } from "@/composables/use-harnesses";
 import { usePreferencesStore } from "@/stores/preferences";
 import { useDraftFiles } from "@/composables/use-draft-files";
+import { useDraftAttachments, clearDraftAttachments } from "@/composables/use-draft-attachments";
 
 vi.mock("@/api/client", () => ({
   api: {
@@ -1514,6 +1515,23 @@ describe("Composer steering", () => {
 
     expect(promptBodies()).toEqual([expect.objectContaining({ text: "stop, that's the wrong file", delivery: "steer" })]);
     expect(wrapper.findAll("[data-testid='queued-message']")).toHaveLength(1);
+  });
+
+  it("does not queue a message that has an image: the queue holds text only, so the image would end up on the next message", async () => {
+    const wrapper = mountComposer({ session: createSession({ activityStatus: "busy" }) });
+    await flushPromises();
+    const textarea = wrapper.get("[data-testid='prompt-input']");
+    useDraftAttachments("session-1").addAttachment({ id: "img-1", mime: "image/png", filename: "shot.png", data: "AAAA", previewUrl: "blob:x" });
+
+    await textarea.setValue("what is wrong here?");
+    pressKey(textarea.element, "Enter");
+    await flushPromises();
+
+    expect(queuedBodies()).toHaveLength(0);
+    expect(wrapper.text()).toContain("Images can't wait in the queue");
+    expect((textarea.element as HTMLTextAreaElement).value).toBe("what is wrong here?");
+    expect(useDraftAttachments("session-1").attachments.value).toHaveLength(1);
+    clearDraftAttachments("session-1");
   });
 
   it("on OpenCode 2, Enter sends into the turn and Ctrl+Enter or Queue waits for it to end", async () => {

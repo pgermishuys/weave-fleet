@@ -905,6 +905,11 @@ function handleSend(steer = false): void {
   const slashCommand = parseSlashCommand(draft.text);
   const steering = steer && showSendNow.value && !slashCommand;
   if (sessionStatus.value === "busy" && !steering) {
+    // Fleet's queue holds text only. Queueing would leave the image here to ride on the next message, so keep both.
+    if (pendingAttachments.value.length > 0 && !slashCommand) {
+      sideDraftError.value = "Images can't wait in the queue yet. Send now with Ctrl+Enter, or send once the turn ends.";
+      return;
+    }
     queueDraft(
       draft.text,
       slashCommand ? text : formatTerminalContext(terminalContexts.value, text),
