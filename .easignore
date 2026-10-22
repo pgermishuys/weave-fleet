@@ -1,0 +1,14 @@
+# EAS uploads the repository to build the phone app (mobile/). It needs only the app and the web client's sources it
+# imports (client/src); this file replaces .gitignore for EAS, so the app's own ignores are repeated here.
+/*
+!/mobile
+!/client
+/client/*
+!/client/src
+!/client/package.json
+**/__tests__
+/mobile/node_modules
+/mobile/android
+/mobile/ios
+/mobile/.expo
+/mobile/dist

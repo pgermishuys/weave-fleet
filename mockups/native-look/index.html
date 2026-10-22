@@ -1,0 +1,617 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Fleet on a phone</title>
+<script>
+  (function () {
+    var t = matchMedia("(prefers-color-scheme: dark)").matches ? "dark" : "light";
+    document.documentElement.dataset.theme = t;
+  })();
+</script>
+<style>
+@font-face { font-family: "Inter Fleet"; src: url("fonts/inter-latin-wght-normal.woff2") format("woff2"); font-weight: 100 900; }
+@font-face { font-family: "JetBrains Mono Fleet"; src: url("fonts/jetbrains-mono-latin-wght-normal.woff2") format("woff2"); font-weight: 100 800; }
+
+/* Fleet's own tokens (client/src/assets/main.css), dark then light */
+:root {
+  --chrome: #0d0d10; --panel: #141418; --card: #1b1b20;
+  --border: rgba(255,255,255,0.075); --text: #e8e8ec; --muted: #8e8e9a;
+  --accent: #6366f1; --accent-dim: rgba(99,102,241,0.15); --on-accent: #fff;
+  --running: #22c55e; --waiting: #f59e0b; --complete: #3b82f6; --error: #ef4444; --queued: #8b5cf6;
+  --panel-shadow: none; --panel-edge: var(--border);
+  --code-bg: #101014;
+  --syn-k: #c792ea; --syn-s: #c3e88d; --syn-n: #f78c6c; --syn-f: #82aaff; --syn-c: #6b6b78;
+  --page-bg: #09090b; --page-text: #e8e8ec;
+  color-scheme: dark;
+}
+:root[data-theme="light"] {
+  --chrome: #F3F2EF; --panel: #FFFFFF; --card: #FFFFFF;
+  --border: rgba(26,25,24,0.09); --text: #1A1918; --muted: #6E6A65;
+  --accent: #5B6EC7; --accent-dim: rgba(91,110,199,0.12);
+  --running: #16a34a; --waiting: #d97706; --complete: #2563eb; --error: #dc2626; --queued: #7c3aed;
+  --panel-shadow: 0 1px 2px rgba(26,25,24,0.04), 0 12px 32px -18px rgba(26,25,24,0.18); --panel-edge: transparent;
+  --code-bg: #F7F6F3;
+  --syn-k: #8b3fc9; --syn-s: #2f7d32; --syn-n: #c25418; --syn-f: #2457c5; --syn-c: #9a958f;
+  --page-bg: #E9E7E2; --page-text: #1A1918;
+  color-scheme: light;
+}
+:root {
+  --tint-3: color-mix(in srgb, var(--text) 3%, transparent);
+  --tint-5: color-mix(in srgb, var(--text) 5%, transparent);
+  --tint-9: color-mix(in srgb, var(--text) 9%, transparent);
+  --row-text: color-mix(in srgb, var(--text) 86%, transparent);
+  --waiting-bg: color-mix(in srgb, var(--waiting) 5%, var(--card));
+  --waiting-edge: color-mix(in srgb, var(--waiting) 40%, var(--border));
+  --font: "Inter Fleet", Inter, system-ui, sans-serif;
+  --mono: "JetBrains Mono Fleet", "JetBrains Mono", ui-monospace, monospace;
+}
+
+* { box-sizing: border-box; }
+html, body { margin: 0; }
+body { background: var(--page-bg); color: var(--page-text); font-family: var(--font); -webkit-font-smoothing: antialiased; font-feature-settings: "cv11", "ss01"; line-height: 1.45; }
+svg { display: block; flex: none; }
+.mono, code { font-family: var(--mono); }
+button { font: inherit; color: inherit; background: none; border: 0; padding: 0; cursor: pointer; }
+
+/* ── The document around the phones ─────────────────────────────── */
+.doc { max-width: 1240px; margin: 0 auto; padding: 28px 16px 64px; display: flex; flex-direction: column; gap: 36px; }
+.doc-head { display: flex; flex-direction: column; gap: 10px; max-width: 70ch; }
+.doc-head .row { display: flex; align-items: center; gap: 10px; }
+.doc-head img { width: 34px; height: 26px; }
+.doc h1 { margin: 0; font-size: 26px; font-weight: 600; letter-spacing: -0.015em; text-wrap: balance; }
+.doc h2 { margin: 0; font-size: 17px; font-weight: 600; text-wrap: balance; }
+.doc-head p, .group > p { margin: 0; color: color-mix(in srgb, var(--page-text) 72%, transparent); max-width: 70ch; }
+.theme { display: inline-flex; border: 1px solid color-mix(in srgb, var(--page-text) 14%, transparent); border-radius: 8px; padding: 2px; gap: 2px; align-self: flex-start; }
+.theme button { padding: 5px 12px; border-radius: 6px; font-size: 13px; font-weight: 500; color: color-mix(in srgb, var(--page-text) 65%, transparent); }
+.theme button[aria-pressed="true"] { background: color-mix(in srgb, var(--page-text) 10%, transparent); color: var(--page-text); }
+.group { display: flex; flex-direction: column; gap: 16px; }
+.group > p { font-size: 14px; }
+.frames { display: grid; grid-template-columns: repeat(auto-fill, minmax(300px, 1fr)); gap: 28px 20px; align-items: start; }
+.shot { display: flex; flex-direction: column; gap: 12px; min-width: 0; }
+.cap { display: flex; flex-direction: column; gap: 6px; padding: 0 4px; }
+.cap b { font-size: 14px; font-weight: 600; display: flex; gap: 8px; align-items: baseline; }
+.cap b span { font-variant-numeric: tabular-nums; color: color-mix(in srgb, var(--page-text) 50%, transparent); font-weight: 600; font-size: 12px; }
+.cap ul { margin: 0; padding-left: 16px; font-size: 13px; color: color-mix(in srgb, var(--page-text) 70%, transparent); display: flex; flex-direction: column; gap: 3px; }
+
+/* ── Phone ─────────────────────────────────────────────────────────── */
+.phone { position: relative; width: 300px; height: 640px; margin: 0 auto; border-radius: 42px; padding: 7px; background: #050506;
+  box-shadow: 0 0 0 1px rgba(255,255,255,0.08) inset, 0 30px 60px -30px rgba(0,0,0,0.5); }
+.phone--android { border-radius: 30px; }
+.screen { position: relative; width: 100%; height: 100%; border-radius: 35px; overflow: hidden; background: var(--chrome); color: var(--text); font-size: 13px; }
+.phone--android .screen { border-radius: 24px; }
+.status { height: 40px; display: flex; align-items: center; justify-content: space-between; padding: 0 26px 0 30px; font-size: 13px; font-weight: 600; position: relative; z-index: 5; }
+.status .island { position: absolute; left: 50%; top: 9px; transform: translateX(-50%); width: 92px; height: 26px; border-radius: 14px; background: #000; }
+.status .sig { display: flex; gap: 4px; align-items: center; }
+.status .sig i { display: block; width: 15px; height: 9px; border-radius: 2px; background: currentColor; }
+.status .sig i:first-child { width: 14px; height: 8px; clip-path: polygon(0 100%, 100% 0, 100% 100%); border-radius: 0; }
+.phone--android .status { padding: 0 20px; height: 32px; font-size: 12px; font-weight: 500; }
+.phone--android .status .punch { position: absolute; left: 50%; top: 9px; width: 12px; height: 12px; border-radius: 50%; background: #000; transform: translateX(-50%); }
+.home-ind { position: absolute; left: 50%; bottom: 6px; width: 104px; height: 4px; border-radius: 3px; background: var(--text); opacity: 0.55; transform: translateX(-50%); z-index: 9; }
+
+/* App chrome: bar on the window's chrome, a panel floating on it */
+.bar { height: 40px; display: flex; align-items: center; gap: 6px; padding: 0 8px 0 12px; }
+.bar img { width: 30px; height: 23px; }
+.bar .sp { flex: 1; }
+.ib { width: 32px; height: 32px; display: grid; place-items: center; color: var(--muted); border-radius: 8px; }
+.ib svg { width: 17px; height: 17px; }
+.btn { height: 32px; padding: 0 11px; border-radius: 8px; display: inline-flex; align-items: center; gap: 6px; font-size: 12.5px; font-weight: 500; border: 1px solid var(--border); background: var(--panel); white-space: nowrap; }
+.btn svg { width: 14px; height: 14px; }
+.btn--primary { background: var(--accent); color: var(--on-accent); border-color: transparent; }
+.panel { position: absolute; left: 5px; right: 5px; top: 80px; bottom: 58px; background: var(--panel); border-radius: 14px; box-shadow: var(--panel-shadow), inset 0 0 0 1px var(--panel-edge); overflow: hidden; }
+.panel--full { top: 44px; bottom: 22px; }
+.phone--android .panel--full { top: 36px; bottom: 16px; }
+.tabs { position: absolute; left: 0; right: 0; bottom: 14px; height: 44px; display: grid; grid-template-columns: repeat(4, 1fr); }
+.tab { display: flex; flex-direction: column; align-items: center; gap: 2px; font-size: 9.5px; font-weight: 500; color: var(--muted); position: relative; }
+.tab .ic { width: 40px; height: 24px; display: grid; place-items: center; border-radius: 8px; }
+.tab .ic svg { width: 17px; height: 17px; }
+.tab.on { color: var(--text); }
+.tab.on .ic { background: var(--tint-9); }
+.count { position: absolute; top: -4px; left: calc(50% + 8px); min-width: 15px; height: 15px; border-radius: 8px; background: var(--waiting); color: #fff; font-size: 9.5px; font-weight: 600; display: grid; place-items: center; padding: 0 4px; }
+
+/* Glyphs: StatusGlyph.vue */
+.g { width: 9px; height: 9px; flex: none; display: inline-block; }
+.g--work { display: inline-grid; grid-template-columns: repeat(2, 3.5px); grid-auto-rows: 3.5px; gap: 2px; color: var(--text); width: 9px; height: 9px; }
+.g--work i { display: block; border-radius: 50%; background: currentColor; animation: quad 800ms steps(1,end) infinite; }
+.g--work i:nth-child(1) { animation-delay: -800ms; } .g--work i:nth-child(2) { animation-delay: -600ms; }
+.g--work i:nth-child(4) { animation-delay: -400ms; } .g--work i:nth-child(3) { animation-delay: -200ms; }
+@keyframes quad { 0% { opacity: 0.16; } 25%, 100% { opacity: 1; } }
+.g--wait { background: var(--waiting); clip-path: polygon(50% 4%, 96% 50%, 50% 96%, 4% 50%); }
+.g--err { background: var(--error); clip-path: polygon(50% 4%, 96% 94%, 4% 94%); }
+.g--quiet { width: 6px; height: 6px; border-radius: 50%; background: color-mix(in srgb, var(--muted) 45%, transparent); margin: 0 1.5px; }
+@media (prefers-reduced-motion: reduce) { .g--work i, .shimmer { animation: none !important; } }
+
+/* Shared bits */
+.label { font-size: 10.5px; font-weight: 600; letter-spacing: 0.05em; text-transform: uppercase; color: var(--muted); }
+.muted { color: var(--muted); }
+.add { color: var(--running); font-variant-numeric: tabular-nums; font-family: var(--mono); font-size: 11px; }
+.del { color: var(--error); font-variant-numeric: tabular-nums; font-family: var(--mono); font-size: 11px; }
+.pill { display: inline-flex; align-items: center; gap: 4px; height: 20px; padding: 0 7px; border-radius: 6px; font-size: 11px; font-weight: 500; border: 1px solid var(--border); white-space: nowrap; color: var(--muted); }
+.pill svg { width: 11px; height: 11px; }
+.pill--pr { color: var(--waiting); background: color-mix(in srgb, var(--waiting) 10%, transparent); border-color: transparent; }
+.pill--prok { color: var(--running); background: color-mix(in srgb, var(--running) 10%, transparent); border-color: transparent; }
+.pill--fail { color: var(--error); background: color-mix(in srgb, var(--error) 9%, transparent); border-color: transparent; }
+.mchip { display: inline-flex; align-items: center; height: 18px; padding: 0 7px; border-radius: 9px; background: var(--tint-5); font-size: 10.5px; color: var(--muted); }
+.chips { display: inline-flex; gap: 4px; }
+.mod { display: inline-flex; align-items: center; height: 17px; padding: 0 6px; border-radius: 9px; font-size: 10px; font-weight: 500; border: 1px solid; white-space: nowrap; }
+.mod--ok { color: var(--running); background: color-mix(in srgb, var(--running) 12%, transparent); border-color: color-mix(in srgb, var(--running) 35%, transparent); }
+.mod--bad { color: var(--error); background: color-mix(in srgb, var(--error) 10%, transparent); border-color: color-mix(in srgb, var(--error) 35%, transparent); }
+.mod--skip { color: var(--muted); background: var(--tint-5); border-color: var(--border); }
+
+/* Home */
+.ph { padding: 14px 14px 6px; }
+.ph h1 { margin: 0; font-size: 20px; font-weight: 600; letter-spacing: -0.01em; }
+.ph p { margin: 2px 0 0; font-size: 11.5px; color: var(--muted); display: flex; gap: 6px; align-items: center; }
+.mdot { width: 6px; height: 6px; border-radius: 50%; background: var(--running); display: inline-block; }
+.scroll { position: absolute; inset: 0; overflow: hidden; }
+.sec { padding: 8px 14px 2px; display: flex; align-items: center; gap: 6px; }
+.pcard { margin: 6px 10px; padding: 11px; border-radius: 10px; background: var(--waiting-bg); border: 1px solid var(--waiting-edge); display: flex; flex-direction: column; gap: 8px; }
+.pcard__h { display: flex; align-items: center; gap: 7px; font-size: 12.5px; font-weight: 600; }
+.pcard__h svg { width: 15px; height: 15px; color: var(--waiting); }
+.pcard__h .sp { flex: 1; }
+.pcard__h .t { font-weight: 400; color: var(--muted); font-size: 11px; }
+.pcard__s { font-size: 12.5px; font-weight: 500; display: flex; align-items: center; justify-content: space-between; }
+.cmd { font-family: var(--mono); font-size: 11px; padding: 7px 9px; border-radius: 7px; background: var(--panel); border: 1px solid var(--border); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.pcard__a { display: grid; grid-template-columns: 1fr 1fr; gap: 7px; }
+.pcard__a .btn { justify-content: center; height: 32px; }
+.srow { display: grid; grid-template-columns: 12px minmax(0,1fr) auto; gap: 2px 9px; padding: 6px 14px; align-items: center; }
+.srow .t { font-size: 13px; font-weight: 500; color: var(--row-text); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.srow .r { font-size: 11px; color: var(--muted); font-variant-numeric: tabular-nums; justify-self: end; }
+.srow .s { grid-column: 2 / 4; font-size: 11px; color: var(--muted); display: flex; gap: 6px; align-items: center; white-space: nowrap; overflow: hidden; }
+.srow .s .step { color: var(--text); opacity: 0.8; }
+.steps { grid-column: 2 / 4; display: grid; grid-template-columns: repeat(5, 1fr); gap: 3px; margin-top: 3px; }
+.steps i { height: 3px; border-radius: 2px; background: var(--tint-9); }
+.steps i.d { background: color-mix(in srgb, var(--text) 55%, transparent); }
+.steps i.n { background: linear-gradient(90deg, color-mix(in srgb, var(--text) 55%, transparent) 40%, var(--tint-9) 40%); }
+.srow--quiet .t { color: var(--muted); }
+.usage { position: absolute; left: 0; right: 0; bottom: 0; padding: 7px 14px 9px; border-top: 1px solid var(--border); display: flex; flex-direction: column; gap: 5px; background: var(--panel); }
+.usage .l { display: flex; justify-content: space-between; font-size: 10.5px; color: var(--muted); }
+.usage .l b { color: var(--text); font-weight: 500; }
+.ubar { height: 4px; border-radius: 2px; background: var(--tint-9); overflow: hidden; }
+.ubar i { display: block; height: 100%; width: 62%; background: var(--text); opacity: 0.55; border-radius: 2px; }
+
+/* Session */
+.sh { display: flex; align-items: flex-start; gap: 4px; padding: 8px 6px 8px 4px; border-bottom: 1px solid var(--border); }
+.sh .ib { color: var(--text); margin-top: 1px; }
+.sh__m { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 3px; }
+.sh__t { font-size: 13.5px; font-weight: 600; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.sh__s { font-size: 11px; color: var(--muted); display: flex; gap: 5px; align-items: center; white-space: nowrap; overflow: hidden; }
+.sh__s .w { color: var(--text); display: inline-flex; gap: 5px; align-items: center; }
+.sh__chips { display: flex; gap: 5px; margin-top: 3px; }
+.stepbar { display: flex; align-items: center; gap: 8px; padding: 7px 12px; border-bottom: 1px solid var(--border); font-size: 11.5px; }
+.stepbar b { font-weight: 500; }
+.stepbar .sp { flex: 1; }
+.stepbar .steps { width: 70px; margin: 0; grid-column: auto; }
+.conv { padding: 10px 12px; display: flex; flex-direction: column; gap: 8px; font-size: 13px; line-height: 1.5; }
+.ububble { align-self: flex-end; max-width: 84%; padding: 7px 10px; border-radius: 12px; background: var(--tint-5); border: 1px solid var(--border); }
+.conv p { margin: 0; }
+.conv code { font-size: 11.5px; padding: 1px 4px; border-radius: 4px; background: var(--tint-5); }
+.tools { display: flex; flex-direction: column; padding: 3px; border: 1px solid var(--border); border-radius: 10px; background: var(--tint-3); }
+.tool { display: flex; align-items: center; gap: 7px; min-height: 30px; padding: 0 7px; border-radius: 7px; font-size: 12px; width: 100%; text-align: left; }
+.tool > svg { width: 13px; height: 13px; color: var(--muted); }
+.tool .n { font-weight: 500; }
+.tool .d { font-family: var(--mono); font-size: 11px; color: var(--muted); flex: 1; min-width: 52px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.tool .who { font-family: var(--mono); font-size: 11px; color: var(--accent); font-weight: 500; }
+.tool .dd { flex: 1; min-width: 0; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; font-size: 12px; }
+.tool .ok { color: var(--running); }
+.tool .ok svg { width: 13px; height: 13px; }
+.out { margin: 2px 7px 6px 27px; padding: 7px 9px; border-radius: 7px; background: var(--code-bg); border: 1px solid var(--border); font-family: var(--mono); font-size: 10.5px; line-height: 1.55; white-space: pre; overflow: hidden; }
+.out .f { color: var(--error); }
+.out .c { color: var(--muted); }
+.out .o { color: var(--running); }
+.working { display: flex; align-items: center; gap: 8px; color: var(--muted); font-size: 12px; }
+.shimmer { background: linear-gradient(90deg, var(--muted) 0%, var(--muted) 40%, var(--text) 50%, var(--muted) 60%, var(--muted) 100%); background-size: 250% 100%; -webkit-background-clip: text; background-clip: text; color: transparent; animation: sh 2.2s linear infinite; }
+@keyframes sh { from { background-position: 100% 0; } to { background-position: -150% 0; } }
+.dock { position: absolute; left: 0; right: 0; bottom: 0; padding: 0 8px 8px; display: flex; flex-direction: column; gap: 6px; background: linear-gradient(transparent, var(--panel) 18px); padding-top: 14px; }
+.changes { display: flex; align-items: center; gap: 7px; height: 30px; padding: 0 10px; border-radius: 8px; border: 1px solid var(--border); background: var(--panel); font-size: 11.5px; font-weight: 500; }
+.changes svg { width: 13px; height: 13px; color: var(--muted); }
+.changes .sp { flex: 1; }
+.changes .sep { width: 1px; height: 14px; background: var(--border); }
+.composer { border: 1px solid color-mix(in srgb, var(--text) 13%, transparent); border-radius: 12px; background: var(--card); padding: 9px 10px 7px; display: flex; flex-direction: column; gap: 6px; box-shadow: 0 10px 28px -18px rgba(0,0,0,0.45); }
+.composer .ph2 { color: var(--muted); font-size: 12.5px; }
+.composer .r { display: flex; align-items: center; gap: 10px; font-size: 11.5px; color: var(--muted); }
+.composer .r svg { width: 13px; height: 13px; }
+.composer .r .sp { flex: 1; }
+.composer .send { width: 26px; height: 26px; border-radius: 50%; background: var(--accent); color: #fff; display: grid; place-items: center; }
+.chev { display: inline-flex; gap: 2px; align-items: center; }
+.chev svg { width: 10px; height: 10px; }
+
+/* Sheet over a dimmed session */
+.dimmed { position: absolute; inset: 0; background: rgba(0,0,0,0.38); z-index: 6; }
+:root[data-theme="light"] .dimmed { background: rgba(26,25,24,0.28); }
+.sheet { position: absolute; left: 0; right: 0; bottom: 0; top: 118px; z-index: 7; background: var(--card); border-radius: 16px 16px 0 0; display: flex; flex-direction: column; border-top: 1px solid var(--border); }
+.grab { width: 36px; height: 4px; border-radius: 2px; background: var(--tint-9); margin: 7px auto 4px; flex: none; }
+.seg { display: flex; gap: 2px; margin: 4px 12px 8px; padding: 2px; border-radius: 9px; background: var(--tint-5); }
+.seg button { flex: 1; height: 28px; border-radius: 7px; font-size: 11.5px; font-weight: 500; color: var(--muted); display: inline-flex; align-items: center; justify-content: center; gap: 5px; }
+.seg button.on { background: var(--panel); color: var(--text); box-shadow: 0 1px 2px rgba(0,0,0,0.12), inset 0 0 0 1px var(--border); }
+.seg .n { font-size: 10px; color: var(--muted); }
+.since { display: flex; justify-content: space-between; font-size: 11px; color: var(--muted); padding: 0 14px 6px; }
+.frow { display: flex; align-items: center; gap: 8px; padding: 7px 14px; font-size: 12px; }
+.frow svg { width: 14px; height: 14px; color: var(--muted); }
+.frow .p { font-size: 10.5px; color: var(--muted); flex: 1; min-width: 0; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.frow.on { background: var(--tint-5); }
+.diff { margin: 6px 10px 0; border: 1px solid var(--border); border-radius: 9px; overflow: hidden; font-family: var(--mono); font-size: 10.5px; line-height: 1.6; background: var(--code-bg); }
+.diff .hh { padding: 4px 9px; color: var(--muted); border-bottom: 1px solid var(--border); font-size: 10px; }
+.dl { display: grid; grid-template-columns: 22px 10px 1fr; padding-right: 8px; white-space: pre; }
+.dl .ln { color: var(--muted); opacity: 0.6; text-align: right; padding-right: 4px; }
+.dl.a { background: color-mix(in srgb, var(--running) 11%, transparent); }
+.dl.r { background: color-mix(in srgb, var(--error) 10%, transparent); }
+.dl.a .sg { color: var(--running); } .dl.r .sg { color: var(--error); }
+.sx-k { color: var(--syn-k); } .sx-s { color: var(--syn-s); } .sx-n { color: var(--syn-n); } .sx-f { color: var(--syn-f); } .sx-c { color: var(--syn-c); }
+.note { margin: 2px 6px 6px 32px; font-family: var(--font); font-size: 11.5px; line-height: 1.45; background: var(--panel); border: 1px solid var(--border); border-radius: 8px; padding: 7px 9px; display: flex; flex-direction: column; gap: 6px; white-space: normal; }
+.note .who { font-size: 10.5px; color: var(--muted); }
+.note .a { display: flex; gap: 6px; }
+.note .btn { height: 26px; font-size: 11px; padding: 0 9px; }
+
+/* A page shown by the agent, full-screen */
+.pagehead { display: flex; align-items: center; gap: 6px; padding: 6px 8px 6px 4px; border-bottom: 1px solid var(--border); }
+.pagehead .t { flex: 1; min-width: 0; display: flex; flex-direction: column; }
+.pagehead .t b { font-size: 13px; font-weight: 600; }
+.pagehead .t span { font-size: 10.5px; color: var(--muted); }
+.pagebody { padding: 14px; display: flex; flex-direction: column; gap: 12px; }
+.pagebody h3 { margin: 0; font-size: 15px; font-weight: 600; letter-spacing: -0.01em; }
+.pagebody p { margin: 0; font-size: 12px; color: var(--muted); }
+.kpis { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
+.kpi { border: 1px solid var(--border); border-radius: 9px; padding: 9px; display: flex; flex-direction: column; gap: 2px; }
+.kpi span { font-size: 10.5px; color: var(--muted); }
+.kpi b { font-size: 18px; font-weight: 600; font-variant-numeric: tabular-nums; letter-spacing: -0.01em; }
+.kpi i { font-style: normal; font-size: 10.5px; color: var(--running); }
+.chart { border: 1px solid var(--border); border-radius: 9px; padding: 10px 10px 6px; }
+.chart .lg { display: flex; gap: 10px; font-size: 10.5px; color: var(--muted); margin-bottom: 6px; }
+.chart .lg i { display: inline-block; width: 8px; height: 8px; border-radius: 2px; margin-right: 4px; vertical-align: -1px; }
+.bars { display: grid; grid-template-columns: 34px 1fr; gap: 7px 6px; align-items: center; font-size: 10.5px; color: var(--muted); }
+.bars .b { display: flex; flex-direction: column; gap: 2px; }
+.bars .b i { display: block; height: 7px; border-radius: 2px; }
+.c1 { background: color-mix(in srgb, var(--muted) 55%, transparent); }
+.c2 { background: var(--accent); }
+
+/* Workflow run */
+.wf { padding: 4px 14px 10px; display: flex; flex-direction: column; }
+.wstep { display: grid; grid-template-columns: 18px 1fr; gap: 0 10px; }
+.wstep .rail { display: flex; flex-direction: column; align-items: center; }
+.wstep .dot { width: 18px; height: 18px; border-radius: 50%; display: grid; place-items: center; border: 1.5px solid var(--border); background: var(--panel); margin-top: 1px; }
+.wstep .dot svg { width: 11px; height: 11px; }
+.wstep .line { flex: 1; width: 1.5px; background: var(--border); min-height: 12px; }
+.wstep.done .dot { border-color: transparent; background: color-mix(in srgb, var(--running) 14%, transparent); color: var(--running); }
+.wstep.now .dot { border-color: transparent; background: var(--tint-9); }
+.wstep .b { padding-bottom: 14px; display: flex; flex-direction: column; gap: 3px; min-width: 0; }
+.wstep .b b { font-size: 12.5px; font-weight: 600; }
+.wstep .b span { font-size: 11px; color: var(--muted); }
+.wstep .b .sub { margin-top: 4px; display: flex; align-items: center; gap: 7px; padding: 6px 8px; border: 1px solid var(--border); border-radius: 8px; font-size: 11.5px; background: var(--tint-3); }
+.wstep .b .sub .x { flex: 1; min-width: 0; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.wstep.later .b b { color: var(--muted); font-weight: 500; }
+
+/* Lock screen and notifications */
+.lock { position: absolute; inset: 0; background: radial-gradient(120% 70% at 30% 0%, #2a2f55 0%, #121222 55%, #08080c 100%); color: #fff; }
+:root[data-theme="light"] .lock { background: radial-gradient(120% 70% at 30% 0%, #8fa0e6 0%, #5865a8 50%, #2d3266 100%); }
+.lock .time { text-align: center; font-size: 62px; font-weight: 600; letter-spacing: -0.03em; line-height: 1; margin-top: 30px; }
+.lock .date { text-align: center; font-size: 13px; font-weight: 500; opacity: 0.85; margin-top: 18px; }
+.lock .island-big { position: absolute; left: 50%; transform: translateX(-50%); top: 7px; height: 30px; border-radius: 16px; background: #000; display: flex; align-items: center; justify-content: space-between; padding: 0 11px; width: 150px; z-index: 6; color: #fff; font-size: 11px; font-weight: 600; }
+.lock .island-big .g--work { color: #fff; }
+.la { margin: 0 8px; border-radius: 20px; padding: 12px 13px; background: rgba(20,20,24,0.62); backdrop-filter: blur(20px); -webkit-backdrop-filter: blur(20px); color: #e8e8ec; display: flex; flex-direction: column; gap: 8px; }
+.la .top { display: flex; align-items: center; gap: 7px; font-size: 11px; color: #a2a2ae; }
+.la .top img { width: 18px; height: 14px; }
+.la .top .sp { flex: 1; }
+.la .t { font-size: 13.5px; font-weight: 600; color: #fff; }
+.la .s { font-size: 12px; display: flex; align-items: center; gap: 7px; }
+.la .g--work { color: #fff; }
+.la .steps { grid-column: auto; margin: 0; }
+.la .steps i { background: rgba(255,255,255,0.14); }
+.la .steps i.d { background: rgba(255,255,255,0.75); }
+.la .steps i.n { background: linear-gradient(90deg, rgba(255,255,255,0.75) 40%, rgba(255,255,255,0.14) 40%); }
+.la .row { display: flex; align-items: center; justify-content: space-between; font-size: 11px; color: #a2a2ae; }
+.la .mod--ok { color: #4ade80; } .la .mod--bad { color: #f87171; }
+.notif { margin: 8px 8px 0; border-radius: 20px; padding: 11px 13px; background: rgba(245,245,248,0.82); color: #1a1918; backdrop-filter: blur(20px); -webkit-backdrop-filter: blur(20px); display: flex; flex-direction: column; gap: 4px; }
+.notif .top { display: flex; align-items: center; gap: 7px; font-size: 11px; color: #6e6a65; }
+.notif .top img { width: 18px; height: 14px; }
+.notif .top .sp { flex: 1; }
+.notif b { font-size: 12.5px; }
+.notif p { margin: 0; font-size: 12px; }
+.notif code { font-size: 11px; }
+.nacts { margin: 6px 8px 0; display: grid; grid-template-columns: 1fr 1fr; gap: 6px; }
+.nacts span { height: 36px; border-radius: 14px; background: rgba(245,245,248,0.82); color: #1a1918; display: grid; place-items: center; font-size: 12.5px; font-weight: 500; backdrop-filter: blur(20px); }
+.nacts span:first-child { color: #3f4fb0; font-weight: 600; }
+
+/* Android: shade and home screen */
+.wall { position: absolute; inset: 0; background: linear-gradient(160deg, #3b3f6b 0%, #1d1f36 60%, #0e0f1a 100%); }
+:root[data-theme="light"] .wall { background: linear-gradient(160deg, #c9cff0 0%, #8f98cf 60%, #5e679f 100%); }
+.shade { position: absolute; left: 0; right: 0; top: 0; padding: 34px 8px 10px; background: color-mix(in srgb, var(--chrome) 94%, transparent); border-radius: 0 0 22px 22px; display: flex; flex-direction: column; gap: 6px; z-index: 3; }
+.shade .qs { display: grid; grid-template-columns: repeat(4,1fr); gap: 6px; padding: 0 4px 6px; }
+.shade .qs i { height: 34px; border-radius: 17px; background: var(--tint-9); }
+.an { border-radius: 16px; padding: 11px 12px; background: var(--card); border: 1px solid var(--border); display: flex; flex-direction: column; gap: 7px; }
+.an .top { display: flex; align-items: center; gap: 6px; font-size: 10.5px; color: var(--muted); }
+.an .top img { width: 16px; height: 12px; }
+.an .t { font-size: 12.5px; font-weight: 600; }
+.an .s { font-size: 11.5px; display: flex; gap: 7px; align-items: center; }
+.an .acts { display: flex; gap: 14px; font-size: 12px; font-weight: 600; color: var(--accent); padding-top: 2px; }
+.prog { height: 4px; border-radius: 2px; background: var(--tint-9); position: relative; }
+.prog i { position: absolute; left: 0; top: 0; bottom: 0; width: 52%; background: var(--accent); border-radius: 2px; }
+.widget { position: absolute; left: 12px; right: 12px; bottom: 96px; border-radius: 22px; background: var(--panel); padding: 12px; display: flex; flex-direction: column; gap: 6px; z-index: 2; box-shadow: 0 16px 40px -20px rgba(0,0,0,0.5); }
+.widget .h { display: flex; align-items: center; gap: 7px; font-size: 12px; font-weight: 600; }
+.widget .h img { width: 20px; height: 15px; }
+.widget .h .sp { flex: 1; }
+.widget .h .btn { height: 26px; font-size: 11px; padding: 0 8px; }
+.widget .wr { display: grid; grid-template-columns: 12px 1fr auto; gap: 8px; align-items: center; font-size: 11.5px; padding: 4px 2px; }
+.widget .wr .x { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; font-weight: 500; }
+.widget .wr .r { font-size: 10.5px; color: var(--muted); font-variant-numeric: tabular-nums; }
+.widget .wr--wait .r { color: var(--waiting); font-weight: 500; }
+.dockapps { position: absolute; left: 22px; right: 22px; bottom: 26px; display: grid; grid-template-columns: repeat(5, 1fr); gap: 10px; z-index: 2; }
+.dockapps i { aspect-ratio: 1; border-radius: 50%; background: rgba(255,255,255,0.22); }
+.dockapps i.fleet { background: #0d0d10 url("img/weave-logo.png") center/62% no-repeat; }
+.androidnav { position: absolute; left: 50%; bottom: 8px; transform: translateX(-50%); width: 96px; height: 4px; border-radius: 2px; background: rgba(255,255,255,0.7); z-index: 4; }
+
+@media (max-width: 420px) { .doc { padding-top: 18px; } .frames { grid-template-columns: minmax(0,1fr); } }
+</style>
+</head>
+<body>
+<svg width="0" height="0" style="position:absolute" aria-hidden="true">
+  <defs>
+    <symbol id="i-back" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m15 18-6-6 6-6"/></symbol>
+    <symbol id="i-more" viewBox="0 0 24 24" fill="currentColor"><circle cx="5" cy="12" r="1.7"/><circle cx="12" cy="12" r="1.7"/><circle cx="19" cy="12" r="1.7"/></symbol>
+    <symbol id="i-plus" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M12 5v14M5 12h14"/></symbol>
+    <symbol id="i-bell" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M6 8a6 6 0 0 1 12 0c0 7 3 9 3 9H3s3-2 3-9"/><path d="M10.3 21a1.94 1.94 0 0 0 3.4 0"/></symbol>
+    <symbol id="i-shield" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M20 13c0 5-3.5 7.5-7.7 8.9a1 1 0 0 1-.6 0C7.5 20.5 4 18 4 13V6a1 1 0 0 1 1-1c2 0 4.5-1.2 6.2-2.7a1.2 1.2 0 0 1 1.6 0C14.5 3.8 17 5 19 5a1 1 0 0 1 1 1z"/><path d="M12 8v4M12 16h.01"/></symbol>
+    <symbol id="i-chat" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linejoin="round"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/></symbol>
+    <symbol id="i-flow" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linejoin="round"><rect x="3" y="3" width="7" height="7" rx="1.5"/><rect x="14" y="14" width="7" height="7" rx="1.5"/><path d="M10 6.5h4a3 3 0 0 1 3 3V14"/></symbol>
+    <symbol id="i-bolt" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linejoin="round"><path d="M13 2 4 14h7l-1 8 9-12h-7z"/></symbol>
+    <symbol id="i-server" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><rect x="3" y="4" width="18" height="7" rx="2"/><rect x="3" y="13" width="18" height="7" rx="2"/><path d="M7 7.5h.01M7 16.5h.01" stroke-linecap="round" stroke-width="2.4"/></symbol>
+    <symbol id="i-term" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m5 7 5 5-5 5M12 19h7"/></symbol>
+    <symbol id="i-pencil" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M17 3a2.8 2.8 0 1 1 4 4L7.5 20.5 2 22l1.5-5.5z"/></symbol>
+    <symbol id="i-file" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linejoin="round"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><path d="M14 2v6h6"/></symbol>
+    <symbol id="i-search" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"><circle cx="11" cy="11" r="7"/><path d="m20 20-3.5-3.5"/></symbol>
+    <symbol id="i-branch" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"><circle cx="6" cy="6" r="2.5"/><circle cx="6" cy="18" r="2.5"/><circle cx="18" cy="8" r="2.5"/><path d="M6 8.5v7M18 10.5c0 4-4 4-10 6.5"/></symbol>
+    <symbol id="i-pr" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"><circle cx="6" cy="6" r="2.5"/><circle cx="6" cy="18" r="2.5"/><circle cx="18" cy="18" r="2.5"/><path d="M6 8.5v7M18 15.5V9a3 3 0 0 0-3-3h-4m2-2-2 2 2 2"/></symbol>
+    <symbol id="i-diff" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"><path d="M12 3v8M8 7h8M8 17h8M5 21h14"/></symbol>
+    <symbol id="i-clip" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="m21.4 11-8.8 8.8a6 6 0 0 1-8.5-8.5l8.6-8.6a4 4 0 0 1 5.7 5.7l-8.6 8.6a2 2 0 0 1-2.8-2.8l8-8"/></symbol>
+    <symbol id="i-up" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 19V5M5 12l7-7 7 7"/></symbol>
+    <symbol id="i-down" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m6 9 6 6 6-6"/></symbol>
+    <symbol id="i-check" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="M20 6 9 17l-5-5"/></symbol>
+    <symbol id="i-page" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linejoin="round"><rect x="3" y="4" width="18" height="16" rx="2"/><path d="M3 9h18"/></symbol>
+    <symbol id="i-globe" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><circle cx="12" cy="12" r="9"/><path d="M3 12h18M12 3a14 14 0 0 1 0 18M12 3a14 14 0 0 0 0 18"/></symbol>
+    <symbol id="i-share" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3v12M8 7l4-4 4 4M5 12v7a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2v-7"/></symbol>
+  </defs>
+</svg>
+
+<main class="doc">
+  <header class="doc-head">
+    <div class="row"><img src="img/weave-logo.png" alt=""><h1>Fleet on a phone</h1></div>
+    <p>What a native Fleet app could look like if it carries over what makes Fleet different from a chat app: status at a glance, steps, folded tool rows with their mod chips, changes and diffs, pages the agent shows, workflows, and asks you can answer from the lock screen. Desktop Fleet's tokens, Inter, glyphs and cards throughout. All data is invented.</p>
+    <div class="theme" role="group" aria-label="Theme">
+      <button type="button" data-t="light">Light</button><button type="button" data-t="dark">Dark</button>
+    </div>
+  </header>
+
+  <section class="group">
+    <h2>Inside the app</h2>
+    <div class="frames">
+
+      <!-- 1 Fleet home -->
+      <div class="shot">
+        <div class="phone"><div class="screen">
+          <div class="status"><span>9:41</span><span class="island"></span><span class="sig"><i></i><i></i></span></div>
+          <div class="bar"><img src="img/weave-logo.png" alt="Fleet"><span class="sp"></span><span class="ib"><svg><use href="#i-bell"/></svg></span><span class="btn"><svg><use href="#i-plus"/></svg>New session</span></div>
+          <div class="panel"><div class="scroll">
+            <div class="ph"><h1>Fleet</h1><p><span class="mdot"></span>hangar <span class="mdot"></span>falcon · 5 sessions</p></div>
+                        <div class="pcard">
+              <div class="pcard__h"><svg><use href="#i-shield"/></svg>Run a command<span class="sp"></span><span class="mchip">hangar</span><span class="t">2m</span></div>
+              <div class="pcard__s">Add a retry budget to webhooks<svg width="12" height="12" style="color:var(--muted);transform:rotate(180deg)"><use href="#i-back"/></svg></div>
+              <div class="cmd">$ bun run db:migrate --to 0031_retry_budget</div>
+              <div class="pcard__a"><span class="btn btn--primary">Allow once</span><span class="btn">More…</span></div>
+            </div>
+            <div class="sec"><span class="label">Working · 2</span></div>
+            <div class="srow"><span class="g g--work"><i></i><i></i><i></i><i></i></span><span class="t">Fix the burst window in the limiter</span><span class="r">4m 12s</span>
+              <span class="s"><span class="step">Step 3 of 5 · Run the tests</span>· <span class="add">+42</span><span class="del">−7</span></span>
+              <span class="steps"><i class="d"></i><i class="d"></i><i class="n"></i><i></i><i></i></span></div>
+            <div class="srow"><span class="g g--work"><i></i><i></i><i></i><i></i></span><span class="t">Speed up the ledger export</span><span class="r">38s</span>
+              <span class="s">falcon · <span class="mono" style="font-size:10.5px">perf/ledger-stream</span> · <span class="who" style="color:var(--accent);font-family:var(--mono);font-size:10.5px">shuttle</span> ×2</span></div>
+            <div class="sec"><span class="label">Finished</span></div>
+            <div class="srow srow--quiet"><span class="g g--quiet"></span><span class="t">Paginate the audit log</span><span class="r">1h</span>
+              <span class="s"><span class="pill pill--prok"><svg><use href="#i-pr"/></svg>#608 checks passed</span></span></div>
+                        <div class="usage"><div class="l"><span>Claude · 5-hour limit</span><b>62% · resets 14:20</b></div><div class="ubar"><i></i></div></div>
+          </div></div>
+          <nav class="tabs"><span class="tab on"><span class="ic"><svg><use href="#i-chat"/></svg></span>Sessions<span class="count">1</span></span><span class="tab"><span class="ic"><svg><use href="#i-flow"/></svg></span>Workflows</span><span class="tab"><span class="ic"><svg><use href="#i-bolt"/></svg></span>Automations</span><span class="tab"><span class="ic"><svg><use href="#i-server"/></svg></span>Machines</span></nav>
+          <span class="home-ind"></span>
+        </div></div>
+        <div class="cap"><b><span>01</span>Fleet, not an inbox</b><ul><li>Desktop's glyphs: quad dots working, amber diamond needs you, triangle failed</li><li>Each row says where it's up to: step, diff size, PR checks, sub-agents</li><li>The ask is the desktop permission card, answerable here</li><li>Usage limit as on the desktop model menu; the rail becomes four tabs</li></ul></div>
+      </div>
+
+      <!-- 2 Session -->
+      <div class="shot">
+        <div class="phone"><div class="screen">
+          <div class="status"><span>9:41</span><span class="island"></span><span class="sig"><i></i><i></i></span></div>
+          <div class="panel panel--full"><div class="scroll">
+            <div class="sh"><span class="ib"><svg><use href="#i-back"/></svg></span>
+              <div class="sh__m"><span class="sh__t">Fix the burst window in the limiter</span>
+                <span class="sh__s"><span class="w"><span class="g g--work"><i></i><i></i><i></i><i></i></span>Working</span>· hangar · sonnet-5</span>
+                <span class="sh__chips"><span class="pill pill--pr"><svg><use href="#i-pr"/></svg>#612</span><span class="pill pill--fail">1 failing</span><span class="pill"><svg><use href="#i-branch"/></svg>fix/burst</span></span></div>
+              <span class="ib"><svg><use href="#i-more"/></svg></span></div>
+            <div class="stepbar"><span class="label" style="letter-spacing:.04em">Step 3 of 5</span><b>Run the tests</b><span class="sp"></span><span class="steps"><i class="d"></i><i class="d"></i><i class="n"></i><i></i><i></i></span></div>
+            <div class="conv">
+              <div class="ububble">A burst of requests gets 200 where it should get 429. Find out why and fix it.</div>
+              <p>A burst across the window's edge gets a fresh budget. I moved the reset to the window's start.</p>
+              <div class="tools">
+                <div class="tool"><svg><use href="#i-search"/></svg><span class="n">Read 4 files</span><span class="d">· searched 2</span><svg style="width:11px;height:11px;color:var(--muted)"><use href="#i-down"/></svg></div>
+                <div class="tool"><svg><use href="#i-pencil"/></svg><span class="n">Edit</span><span class="d">src/limiter/window.ts</span><span class="add">+12</span><span class="del">−3</span></div>
+                <div class="tool"><svg><use href="#i-term"/></svg><span class="n">Bash</span><span class="d">bun test</span><span class="chips"><span class="mod mod--ok">41 passed</span><span class="mod mod--bad">1 failed</span></span></div>
+                <div class="out"><span class="f">✗ limiter &gt; burst at the window edge</span>
+  expected <span class="o">429</span>, got <span class="f">200</span>
+<span class="c">  at limiter.test.ts:88:14</span></div>
+                <div class="tool"><svg><use href="#i-branch"/></svg><span class="who">shuttle</span><span class="dd">Check other limiters for the same reset</span><span class="g g--work"><i></i><i></i><i></i><i></i></span></div>
+              </div>
+              <div class="working"><span class="g g--work"><i></i><i></i><i></i><i></i></span><span class="shimmer">Running the tests again</span><span>0:38</span></div>
+            </div>
+          </div>
+          <div class="dock">
+            <div class="changes"><svg><use href="#i-diff"/></svg>Changes<span class="muted">3</span><span class="add">+42</span><span class="del">−7</span><span class="sep"></span><svg><use href="#i-page"/></svg>Pages<span class="muted">1</span><span class="sp"></span><svg style="width:11px;height:11px"><use href="#i-up"/></svg></div>
+            <div class="composer"><span class="ph2">Message hangar…</span><div class="r"><svg><use href="#i-clip"/></svg><span class="chev">Loom<svg><use href="#i-down"/></svg></span><span class="chev">sonnet-5<svg><use href="#i-down"/></svg></span><span class="sp"></span><span class="send"><svg width="13" height="13"><use href="#i-up"/></svg></span></div></div>
+          </div></div>
+          <span class="home-ind"></span>
+        </div></div>
+        <div class="cap"><b><span>02</span>A session reads like Fleet</b><ul><li>Header carries the PR and its checks, branch, machine, harness and model</li><li>The plan's step is pinned under it, with progress</li><li>Tool rows fold into one box; mods add their chips (41 passed, 1 failed); the failure shows inline</li><li>Sub-agents are rows with their own glyph; the right panel becomes the Changes · Pages strip</li></ul></div>
+      </div>
+
+      <!-- 3 Changes sheet -->
+      <div class="shot">
+        <div class="phone"><div class="screen">
+          <div class="status"><span>9:41</span><span class="island"></span><span class="sig"><i></i><i></i></span></div>
+          <div class="panel panel--full">
+            <div class="sh"><span class="ib"><svg><use href="#i-back"/></svg></span><div class="sh__m"><span class="sh__t">Fix the burst window in the limiter</span><span class="sh__s">Working · hangar</span></div></div>
+          </div>
+          <div class="dimmed"></div>
+          <div class="sheet">
+            <div class="grab"></div>
+            <div class="seg"><button class="on">Changes <span class="n">3</span></button><button>Files</button><button>Pages <span class="n">1</span></button><button>Browser</button></div>
+            <div class="since"><span>Since this session started</span><span><span class="add">+42</span> <span class="del">−7</span></span></div>
+            <div class="frow on"><svg><use href="#i-file"/></svg>window.ts<span class="p">src/limiter</span><span class="add">+12</span><span class="del">−3</span></div>
+            <div class="frow"><svg><use href="#i-file"/></svg>limiter.test.ts<span class="p">src/limiter</span><span class="add">+28</span><span class="del">−2</span></div>
+            <div class="frow"><svg><use href="#i-file"/></svg>CHANGELOG.md<span class="p"></span><span class="add">+2</span><span class="del">−2</span></div>
+            <div class="diff">
+              <div class="hh">@@ -31,9 +31,12 @@ export class SlidingWindow</div>
+              <div class="dl"><span class="ln">31</span><span class="sg"> </span><span>  <span class="sx-f">take</span>(now: <span class="sx-k">number</span>) {</span></div>
+              <div class="dl r"><span class="ln">32</span><span class="sg">−</span><span>    <span class="sx-k">if</span> (now &gt; <span class="sx-k">this</span>.end) {</span></div>
+              <div class="dl r"><span class="ln">33</span><span class="sg">−</span><span>      <span class="sx-k">this</span>.start = now</span></div>
+              <div class="dl a"><span class="ln">32</span><span class="sg">+</span><span>    <span class="sx-k">while</span> (now &gt;= <span class="sx-k">this</span>.end) {</span></div>
+              <div class="dl a"><span class="ln">33</span><span class="sg">+</span><span>      <span class="sx-k">this</span>.start += <span class="sx-k">this</span>.size</span></div>
+              <div class="note"><span class="who">You · on line 33</span>What if the gap is hours? Jump straight to the current window.<span class="a"><span class="btn btn--primary">Send to agent</span><span class="btn">Edit</span></span></div>
+              <div class="dl a"><span class="ln">34</span><span class="sg">+</span><span>      <span class="sx-k">this</span>.used = <span class="sx-n">0</span></span></div>
+              <div class="dl"><span class="ln">35</span><span class="sg"> </span><span>    }</span></div>
+            </div>
+          </div>
+          <span class="home-ind" style="z-index:10"></span>
+        </div></div>
+        <div class="cap"><b><span>03</span>The right panel, as a sheet</b><ul><li>Pull up the strip: Changes, Files, Pages and Browser, the desktop's content tabs</li><li>Real diffs with syntax colours, line numbers and per-file +/−</li><li>Long-press a line to comment; Send to agent puts it in the conversation</li></ul></div>
+      </div>
+
+      <!-- 4 A page the agent showed -->
+      <div class="shot">
+        <div class="phone"><div class="screen">
+          <div class="status"><span>9:41</span><span class="island"></span><span class="sig"><i></i><i></i></span></div>
+          <div class="panel panel--full">
+            <div class="pagehead"><span class="ib" style="color:var(--text)"><svg><use href="#i-back"/></svg></span><span class="t"><b>Export, before and after</b><span>Page from Speed up the ledger export</span></span><span class="ib"><svg><use href="#i-share"/></svg></span></div>
+            <div class="pagebody">
+              <h3>Streaming the ledger export</h3>
+              <p>Rows go out as they're read instead of after the whole query. Measured on the 2.1 M-row fixture.</p>
+              <div class="kpis"><div class="kpi"><span>Time to first byte</span><b>0.4 s</b><i>was 41 s</i></div><div class="kpi"><span>Peak memory</span><b>86 MB</b><i>was 1.9 GB</i></div></div>
+              <div class="chart">
+                <div class="lg"><span><i class="c1"></i>Before</span><span><i class="c2"></i>After</span></div>
+                <div class="bars">
+                  <span>10k</span><span class="b"><i class="c1" style="width:12%"></i><i class="c2" style="width:4%"></i></span>
+                  <span>100k</span><span class="b"><i class="c1" style="width:31%"></i><i class="c2" style="width:9%"></i></span>
+                  <span>500k</span><span class="b"><i class="c1" style="width:58%"></i><i class="c2" style="width:17%"></i></span>
+                  <span>2.1M</span><span class="b"><i class="c1" style="width:96%"></i><i class="c2" style="width:31%"></i></span>
+                </div>
+                <div class="lg" style="margin:8px 0 0;justify-content:space-between"><span>Export time by ledger size</span><span>max 63 s</span></div>
+              </div>
+              <div class="composer" style="margin-top:2px"><span class="ph2">Reply about this page…</span><div class="r"><svg><use href="#i-clip"/></svg><span class="sp"></span><span class="send"><svg width="13" height="13"><use href="#i-up"/></svg></span></div></div>
+            </div>
+          </div>
+          <span class="home-ind"></span>
+        </div></div>
+        <div class="cap"><b><span>04</span>Pages full screen</b><ul><li>A page an agent shows with fleet_page_show opens edge to edge, in Fleet's theme</li><li>Reply about it without leaving it; share it like any document</li><li>The same viewer takes mockups, explainers and walkthroughs</li></ul></div>
+      </div>
+
+      <!-- 5 Workflow run -->
+      <div class="shot">
+        <div class="phone"><div class="screen">
+          <div class="status"><span>9:41</span><span class="island"></span><span class="sig"><i></i><i></i></span></div>
+          <div class="bar"><img src="img/weave-logo.png" alt="Fleet"><span class="sp"></span><span class="btn"><svg><use href="#i-plus"/></svg>Run</span></div>
+          <div class="panel"><div class="scroll">
+            <div class="ph"><h1>Fix a bug</h1><p>Run 14 · started 18 min ago from your phone</p></div>
+            <div class="wf" style="margin-top:10px">
+              <div class="wstep done"><div class="rail"><span class="dot"><svg><use href="#i-check"/></svg></span><span class="line"></span></div><div class="b"><b>Reproduce</b><span>Failing test written · 3 min</span></div></div>
+              <div class="wstep done"><div class="rail"><span class="dot"><svg><use href="#i-check"/></svg></span><span class="line"></span></div><div class="b"><b>Find the root cause</b><span>Reset on first request after expiry</span></div></div>
+              <div class="wstep now"><div class="rail"><span class="dot"><span class="g g--work"><i></i><i></i><i></i><i></i></span></span><span class="line"></span></div><div class="b"><b>Fix it</b><span>Running the tests again</span>
+                <div class="sub"><span class="g g--work"><i></i><i></i><i></i><i></i></span><span class="x">Fix the burst window in the limiter</span><span class="mod mod--bad">1 failed</span></div></div></div>
+              <div class="wstep later"><div class="rail"><span class="dot"></span><span class="line"></span></div><div class="b"><b>Review</b><span>fleet-code-review</span></div></div>
+              <div class="wstep later"><div class="rail"><span class="dot"></span></div><div class="b"><b>Open the PR</b><span>Finish together: you approve the PR text</span></div></div>
+            </div>
+            <div class="sec" style="padding-top:0"><span class="label">Earlier runs</span></div>
+            <div class="srow srow--quiet"><span class="g g--quiet"></span><span class="t">Run 13 · Timeout on cold start</span><span class="r">Tue</span></div>
+            <div class="srow srow--quiet"><span class="g g--quiet"></span><span class="t">Run 12 · Wrong currency rounding</span><span class="r">Mon</span></div>
+          </div></div>
+          <nav class="tabs"><span class="tab"><span class="ic"><svg><use href="#i-chat"/></svg></span>Sessions<span class="count">1</span></span><span class="tab on"><span class="ic"><svg><use href="#i-flow"/></svg></span>Workflows</span><span class="tab"><span class="ic"><svg><use href="#i-bolt"/></svg></span>Automations</span><span class="tab"><span class="ic"><svg><use href="#i-server"/></svg></span>Machines</span></nav>
+          <span class="home-ind"></span>
+        </div></div>
+        <div class="cap"><b><span>05</span>Workflows and automations</b><ul><li>A run as its steps, each one a session you can open</li><li>Steps you finish together come to the phone as an ask</li><li>Start a run or an automation from here; it runs on your machines</li></ul></div>
+      </div>
+
+    </div>
+  </section>
+
+  <section class="group">
+    <h2>Outside the app</h2>
+    <p>This is what a web app can't do. Fleet stays with you while the phone is locked or you're in another app.</p>
+    <div class="frames">
+
+      <!-- 6 iPhone lock screen -->
+      <div class="shot">
+        <div class="phone"><div class="screen">
+          <div class="lock">
+            <div class="island-big"><span class="g g--work"><i></i><i></i><i></i><i></i></span><span>3 / 5</span></div>
+            <div class="status" style="color:#fff"><span></span><span></span><span class="sig"><i></i><i></i></span></div>
+            <div class="date">Thursday 22 October</div>
+            <div class="time">9:41</div>
+            <div style="height:30px"></div>
+            <div class="la">
+              <div class="top"><img src="img/weave-logo.png" alt="">Fleet · hangar<span class="sp"></span>4m 12s</div>
+              <div class="t">Fix the burst window in the limiter</div>
+              <div class="s"><span class="g g--work"><i></i><i></i><i></i><i></i></span>Step 3 of 5 · Running the tests</div>
+              <span class="steps"><i class="d"></i><i class="d"></i><i class="n"></i><i></i><i></i></span>
+              <div class="row"><span class="chips"><span class="mod mod--ok">41 passed</span><span class="mod mod--bad">1 failed</span></span><span>+42 −7</span></div>
+            </div>
+            <div class="notif">
+              <div class="top"><img src="img/weave-logo.png" alt="">FLEET<span class="sp"></span>now</div>
+              <b>Needs you · Add a retry budget to webhooks</b>
+              <p>Wants to run <code>bun run db:migrate --to 0031_retry_budget</code></p>
+            </div>
+            <div class="nacts"><span>Allow once</span><span>Deny</span></div>
+          </div>
+          <span class="home-ind" style="background:#fff"></span>
+        </div></div>
+        <div class="cap"><b><span>06</span>iPhone: Live Activity and asks</b><ul><li>The Dynamic Island shows the quad glyph and the step; it turns amber when a session needs you</li><li>Lock screen: step progress, test chips, diff size, live</li><li>Allow once and Deny on the notification itself; questions get their choices</li></ul></div>
+      </div>
+
+      <!-- 7 Android shade -->
+      <div class="shot">
+        <div class="phone phone--android"><div class="screen">
+          <div class="wall"></div>
+          <div class="shade">
+            <div class="qs"><i></i><i></i><i></i><i></i></div>
+            <div class="an">
+              <div class="top"><img src="img/weave-logo.png" alt="">Fleet · hangar · 4m</div>
+              <div class="t">Fix the burst window in the limiter</div>
+              <div class="s"><span class="g g--work"><i></i><i></i><i></i><i></i></span>Step 3 of 5 · Running the tests</div>
+              <div class="prog"><i></i></div>
+            </div>
+            <div class="an" style="border-color:var(--waiting-edge);background:var(--waiting-bg)">
+              <div class="top"><img src="img/weave-logo.png" alt="">Fleet · falcon · now</div>
+              <div class="t">Question · Per-device tokens</div>
+              <div class="s" style="display:block">When a removed phone calls in, should it get a plain 401 or a page that says it was removed?</div>
+              <div class="acts"><span>Plain 401</span><span>Explain page</span><span>Reply</span></div>
+            </div>
+          </div>
+          <div class="widget">
+            <div class="h"><img src="img/weave-logo.png" alt="">Fleet<span class="sp"></span><span class="btn"><svg><use href="#i-plus"/></svg>New</span></div>
+            <div class="wr wr--wait"><span class="g g--wait"></span><span class="x">Add a retry budget to webhooks</span><span class="r">Needs you</span></div>
+            <div class="wr"><span class="g g--work"><i></i><i></i><i></i><i></i></span><span class="x">Fix the burst window…</span><span class="r">3 / 5</span></div>
+            <div class="wr"><span class="g g--work"><i></i><i></i><i></i><i></i></span><span class="x">Speed up the ledger export</span><span class="r">38s</span></div>
+          </div>
+          <div class="dockapps"><i></i><i></i><i class="fleet"></i><i></i><i></i></div>
+          <span class="androidnav"></span>
+        </div></div>
+        <div class="cap"><b><span>07</span>Android: Live Update, replies, widget</b><ul><li>A Live Update for the session that's working, with its step</li><li>Questions answered from the shade, or Reply to type your own</li><li>A home-screen widget in Fleet's panel style: what needs you, what's working</li></ul></div>
+      </div>
+
+    </div>
+  </section>
+</main>
+<script>
+  document.querySelectorAll(".theme button").forEach(function (b) {
+    var sync = function () { document.querySelectorAll(".theme button").forEach(function (x) { x.setAttribute("aria-pressed", String(x.dataset.t === document.documentElement.dataset.theme)); }); };
+    b.addEventListener("click", function () { document.documentElement.dataset.theme = b.dataset.t; sync(); });
+    sync();
+  });
+</script>
+</body>
+</html>
