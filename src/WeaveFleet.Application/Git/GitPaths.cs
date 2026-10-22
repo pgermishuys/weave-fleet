@@ -14,7 +14,7 @@ public static class GitPaths
     public static bool IsRepository(string path)
     {
         var dotGit = Path.Combine(path, ".git");
-        return Directory.Exists(dotGit) || ReadGitDirPointer(dotGit) is not null;
+        return Directory.Exists(dotGit) || PointedGitDir(path) is not null;
     }
 
     /// <summary>
@@ -23,7 +23,7 @@ public static class GitPaths
     /// </summary>
     public static bool IsLinkedWorktree(string path)
     {
-        var gitDir = ReadGitDirPointer(Path.Combine(path, ".git"));
+        var gitDir = PointedGitDir(path);
         if (gitDir is null)
             return false;
 
@@ -65,11 +65,11 @@ public static class GitPaths
             if (Directory.Exists(dotGit))
                 return current;
 
-            if (ReadGitDirPointer(dotGit) is not { } gitDir)
+            // A .git file whose target is gone (its main repository was deleted) is no checkout.
+            if (PointedGitDir(current) is not { } target)
                 continue;
 
             // A worktree's .git file points at {main}/.git/worktrees/{name}.
-            var target = Path.GetFullPath(Path.IsPathRooted(gitDir) ? gitDir : Path.Combine(current, gitDir));
             var worktrees = Path.GetDirectoryName(target.TrimEnd('/', '\\'));
             var mainGit = worktrees is null ? null : Path.GetDirectoryName(worktrees);
             return worktrees is not null
@@ -82,6 +82,23 @@ public static class GitPaths
         }
 
         return null;
+    }
+
+    /// <summary>The git dir the <c>.git</c> file in <paramref name="folder"/> points at, or null when there's no such file or the dir is gone.</summary>
+    private static string? PointedGitDir(string folder)
+    {
+        if (ReadGitDirPointer(Path.Combine(folder, ".git")) is not { } pointer)
+            return null;
+
+        try
+        {
+            var target = Path.GetFullPath(Path.IsPathRooted(pointer) ? pointer : Path.Combine(folder, pointer));
+            return Directory.Exists(target) ? target : null;
+        }
+        catch (Exception ex) when (ex is ArgumentException or NotSupportedException or PathTooLongException)
+        {
+            return null;
+        }
     }
 
     private static string? ReadGitDirPointer(string dotGitFile)

@@ -56,4 +56,18 @@ public sealed class GitPathsTests : IDisposable
         if (GitPaths.MainCheckoutOf(_root) is null)
             GitPaths.MainCheckoutOf(folder).ShouldBeNull();
     }
+
+    [Fact]
+    public void A_worktree_whose_main_repository_was_deleted_is_not_a_repository()
+    {
+        var gitDir = Path.Combine(_root, "weave-fleet", ".git", "worktrees", "feature"); // never created: the repository is gone
+        var worktree = Path.Combine(_root, "weave-fleet-worktrees", "feature");
+        Directory.CreateDirectory(worktree);
+        File.WriteAllText(Path.Combine(worktree, ".git"), $"gitdir: {gitDir}\n");
+
+        GitPaths.IsRepository(worktree).ShouldBeFalse();
+        GitPaths.IsLinkedWorktree(worktree).ShouldBeFalse();
+        if (GitPaths.MainCheckoutOf(_root) is null)
+            GitPaths.MainCheckoutOf(worktree).ShouldBeNull();
+    }
 }
