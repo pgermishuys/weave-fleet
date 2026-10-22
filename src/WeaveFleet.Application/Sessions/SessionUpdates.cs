@@ -86,6 +86,11 @@ public sealed partial class SessionUpdates(
     private readonly HashSet<string> _startedByUpdate = new(StringComparer.Ordinal);
     private readonly List<Task> _inFlight = [];
 
+    /// <summary>Per session, the messages its replies have named since its last idle, and the ones whose turn has ended (newest last).</summary>
+    private readonly Dictionary<string, HashSet<string>> _answering = new(StringComparer.Ordinal);
+    private readonly Dictionary<string, Queue<string>> _answered = new(StringComparer.Ordinal);
+    private const int AnsweredKept = 32;
+
     /// <summary>Finished when every update in flight has been read and sent or held. Tests wait on it.</summary>
     internal Task Pending
     {
@@ -103,7 +108,19 @@ public sealed partial class SessionUpdates(
         {
             var cutoff = DateTimeOffset.UtcNow - WatchLifetime;
             _watches.RemoveAll(w => w.At < cutoff);
-            _watches.Add(new Watched(watch, DateTimeOffset.UtcNow));
+            var added = new Watched(watch, DateTimeOffset.UtcNow);
+
+            // A turn quick enough to end before this was called: its events came and went with nothing to arm.
+            if (_answered.TryGetValue(watch.TargetId, out var done) && done.Contains(watch.MessageId))
+            {
+                added.Armed = true;
+                Track(Task.Run(() => ReportAsync(added)));
+                return;
+            }
+
+            // A reply to it already seen: the idle after it ends the watch.
+            added.Armed = _answering.TryGetValue(watch.TargetId, out var answering) && answering.Contains(watch.MessageId);
+            _watches.Add(added);
         }
     }
 
@@ -181,6 +198,10 @@ public sealed partial class SessionUpdates(
 
         lock (_gate)
         {
+            if (!_answering.TryGetValue(sessionId, out var parents))
+                _answering[sessionId] = parents = new HashSet<string>(StringComparer.Ordinal);
+            parents.Add(info.ParentId);
+
             foreach (var w in _watches.Where(w => w.Watch.TargetId == sessionId && w.Watch.MessageId == info.ParentId))
                 w.Armed = true;
         }
@@ -193,6 +214,16 @@ public sealed partial class SessionUpdates(
         {
             ended = _watches.Where(w => w.Armed && w.Watch.TargetId == sessionId).ToList();
             _watches.RemoveAll(ended.Contains);
+
+            if (_answering.Remove(sessionId, out var parents))
+            {
+                if (!_answered.TryGetValue(sessionId, out var done))
+                    _answered[sessionId] = done = new Queue<string>();
+                foreach (var parent in parents)
+                    done.Enqueue(parent);
+                while (done.Count > AnsweredKept)
+                    done.Dequeue();
+            }
 
             // The turn an update started is over; the next one is someone else's.
             _startedByUpdate.Remove(sessionId);
