@@ -30,6 +30,7 @@ public sealed class SmartLinkWatcherCycleTests : IDisposable
     private readonly StubClock _clock = new(DateTimeOffset.Parse("2026-09-14T09:00:00Z", CultureInfo.InvariantCulture));
     private readonly FakeGitHub _gitHub = new();
     private readonly InMemorySmartLinkRepository _links = new();
+    private readonly FakeEventBroadcaster _broadcaster = new();
     private readonly SmartLinkDetector _detector;
     private readonly SmartLinkWatcherService _watcher;
 
@@ -62,7 +63,7 @@ public sealed class SmartLinkWatcherCycleTests : IDisposable
             scopeFactory,
             new GitHubApiProxy(httpClientFactory),
             _detector,
-            new FakeEventBroadcaster(),
+            _broadcaster,
             new RepositoryService(scopeFactory, NullLogger<RepositoryService>.Instance),
             NullLogger<SmartLinkWatcherService>.Instance,
             _clock);
@@ -136,6 +137,23 @@ public sealed class SmartLinkWatcherCycleTests : IDisposable
 
         _gitHub.Count(PullRequest7).ShouldBe(1);
         _links.All.Single().EnrichmentStatus.ShouldBe(SmartLinkEnrichmentStatuses.NotConnected);
+    }
+
+    [Fact]
+    public async Task A_manual_refresh_that_finds_nothing_new_still_reports_the_check()
+    {
+        _links.Seed(Link("s1", 7));
+        await _watcher.RunCycleAsync(CancellationToken.None);
+        var link = _links.All.Single();
+        var broadcasts = _broadcaster.Broadcasts.Count;
+
+        // What the Refresh button does: clear last_checked_at so the link is due now.
+        _clock.Now = _clock.Now.AddHours(15);
+        link.LastCheckedAt = null;
+        await _watcher.RunCycleAsync(CancellationToken.None);
+
+        link.LastCheckedAt.ShouldNotBeNull();
+        _broadcaster.Broadcasts.Count.ShouldBe(broadcasts + 1);
     }
 
     private void OnBranch(string sessionId, string branch)
