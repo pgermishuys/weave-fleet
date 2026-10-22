@@ -116,7 +116,7 @@ public static class GitGrepSearch
 
         if (result.ExitCode != 0)
         {
-            if (result.StandardError.Contains("not a git repository", StringComparison.OrdinalIgnoreCase))
+            if (IsFolderGitCannotUse(result.StandardError))
                 return null;
 
             throw new InvalidSearchPatternException(PatternMessage(result.StandardError, "git extended regex"));
@@ -125,6 +125,15 @@ public static class GitGrepSearch
         var matcher = RangeFinder(query, regex, ignoreCase);
         return Group(ParseGit(result.StandardOutput, matcher, query.Length), limit, "git");
     }
+
+    /// <summary>
+    /// Whether git's complaint is about the folder, not the pattern: not a repository, or a worktree whose main
+    /// repository is gone. Git words that second case by version ("not a git repository: /main/.git/worktrees/x" up to
+    /// 2.53, "gitfile does not point to a valid repository" from 2.56), so both are matched.
+    /// </summary>
+    internal static bool IsFolderGitCannotUse(string stderr) =>
+        stderr.Contains("not a git repository", StringComparison.OrdinalIgnoreCase)
+        || stderr.Contains("gitfile does not point to a valid repository", StringComparison.OrdinalIgnoreCase);
 
     /// <summary>
     /// Git's reason as one sentence: its first line, without "fatal:" or the pattern it quotes, and the flavour named.
