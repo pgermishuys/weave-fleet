@@ -45,6 +45,10 @@ internal sealed partial class ClaudeCodeCatalog(ClaudeCodeOptions config, ILogge
     // By folder and the built-in skills turned on: a project's settings, and those skills, change the answer.
     private readonly ConcurrentDictionary<(string Directory, string? Skills), (DateTimeOffset At, Task<JsonElement?> Answer)> _answers = new();
 
+    // The last answer Claude Code gave for each key. A later ask that fails hands this back, so a timeout doesn't
+    // swap the folder's real models and commands for the three aliases.
+    private readonly ConcurrentDictionary<(string Directory, string? Skills), JsonElement> _lastGood = new();
+
     private readonly ILogger _logger = loggerFactory.CreateLogger<ClaudeCodeCatalog>();
 
     /// <summary>The clock for the cache; the system's unless a test says otherwise.</summary>
@@ -73,13 +77,15 @@ internal sealed partial class ClaudeCodeCatalog(ClaudeCodeOptions config, ILogge
             (_, known) => now - known.At < CacheFor && !known.Answer.IsFaulted ? known : (now, LoadAsync(directory, skills?.Folder)));
 
         var answer = await entry.Answer.WaitAsync(ct).ConfigureAwait(false);
-        if (answer is null)
+        if (answer is { } good)
         {
-            // Asked again next time rather than kept.
-            _answers.TryRemove(new KeyValuePair<(string, string?), (DateTimeOffset, Task<JsonElement?>)>(key, entry));
+            _lastGood[key] = good;
+            return good;
         }
 
-        return answer;
+        // Asked again next time rather than kept; meanwhile the last good answer, if there was one.
+        _answers.TryRemove(new KeyValuePair<(string, string?), (DateTimeOffset, Task<JsonElement?>)>(key, entry));
+        return _lastGood.TryGetValue(key, out var previous) ? previous : null;
     }
 
     private async Task<JsonElement?> LoadAsync(string directory, string? skillsDirectory)

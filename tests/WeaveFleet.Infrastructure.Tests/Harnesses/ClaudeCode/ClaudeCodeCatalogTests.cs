@@ -63,6 +63,31 @@ public sealed class ClaudeCodeCatalogTests
         (await catalog.GetProvidersAsync("/work", CancellationToken.None))[0].Models.Count.ShouldBe(5);
     }
 
+    [Fact]
+    public async Task When_a_refresh_fails_the_last_good_list_is_kept_not_the_aliases()
+    {
+        var time = new FakeTimeProvider();
+        var asked = 0;
+        var catalog = new ClaudeCodeCatalog(new ClaudeCodeOptions(), NullLoggerFactory.Instance)
+        {
+            Time = time,
+            Ask = (_, _, _) => ++asked == 1 ? Task.FromResult<JsonElement?>(WithCommands2) : throw new IOException("claude timed out"),
+        };
+
+        (await catalog.GetProvidersAsync("/work", CancellationToken.None))[0].Models.Count.ShouldBe(5);
+        (await catalog.GetCommandsAsync("/work", null, CancellationToken.None)).ShouldNotBeEmpty();
+
+        time.Advance(ClaudeCodeCatalog.CacheFor + TimeSpan.FromSeconds(1));
+        (await catalog.GetProvidersAsync("/work", CancellationToken.None))[0].Models.Count.ShouldBe(5);
+        (await catalog.GetCommandsAsync("/work", null, CancellationToken.None)).ShouldNotBeEmpty();
+    }
+
+    private static JsonElement WithCommands2 => JsonSerializer.SerializeToElement(new Dictionary<string, JsonElement>
+    {
+        ["models"] = Initialize.GetProperty("models"),
+        ["commands"] = WithCommands.GetProperty("commands"),
+    });
+
     // Commands from Claude Code 2.1.290's answers, descriptions cut, with Fleet's built-in skills in an --add-dir folder
     // (which has no "builtin").
     private static readonly JsonElement WithCommands = JsonDocument.Parse("""
