@@ -1,4 +1,4 @@
-import { flushPromises, mount } from "@vue/test-utils";
+import { enableAutoUnmount, flushPromises, mount } from "@vue/test-utils";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { useSessionsStore } from "@/stores/sessions";
 import Composer from "@/components/session/Composer.vue";
@@ -311,6 +311,11 @@ function mountComposer(options: MountComposerOptions = {}) {
   });
 }
 
+
+// Every test mounts a composer into document.body. One left mounted keeps reacting to the module-level drafts, queues and
+// harness lists the next tests share, and each leftover slowed every later test (the last of this file took 14 s of 60),
+// which is what timed the steering tests out.
+enableAutoUnmount(afterEach);
 
 // Each block answers /api/harnesses its own way; a list kept from the last test would answer for it.
 beforeEach(() => {
@@ -1453,8 +1458,7 @@ describe("Composer big paste", () => {
   });
 });
 
-// Each test mounts the whole composer (about 1-2 s on a fast machine), so on a loaded CI runner the default 5 s is too close.
-describe("Composer steering", { timeout: 20_000 }, () => {
+describe("Composer steering", () => {
   const harnesses = [
     { type: "opencode", displayName: "OpenCode", available: true, userEnabled: true, capabilities: { supportsSteering: true } },
     { type: "claude-code", displayName: "Claude Code", available: true, userEnabled: true, capabilities: { supportsSteering: false } },
