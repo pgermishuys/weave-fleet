@@ -82,8 +82,21 @@ jobs:
       - name: Install OpenCode 2
         run: |
           # Downloaded first: piped, a failed download runs an empty script and the step passes.
-          curl -fsSL --retry 5 --retry-all-errors -o "$RUNNER_TEMP/opencode2-install.sh" https://opencode.ai/v2/install
-          env -u GITHUB_ACTIONS HOME="$HOME/.weave/harnesses/opencode2" bash "$RUNNER_TEMP/opencode2-install.sh" --version "$OPENCODE2_VERSION" --no-modify-path
+          # The installer downloads the package itself and fails transiently ("Failed to fetch package information",
+          # "Connection reset by peer"), so the whole download-and-install retries with backoff, like OpenCode 1 above.
+          # Each attempt starts from an empty install home so a partial install can't poison the next one.
+          opencode2_home="$HOME/.weave/harnesses/opencode2"
+          for attempt in 1 2 3 4; do
+            rm -rf "$opencode2_home" "$RUNNER_TEMP/opencode2-install.sh"
+            mkdir -p "$opencode2_home"
+            if curl -fsSL --retry 5 --retry-all-errors -o "$RUNNER_TEMP/opencode2-install.sh" https://opencode.ai/v2/install \
+              && env -u GITHUB_ACTIONS HOME="$opencode2_home" bash "$RUNNER_TEMP/opencode2-install.sh" --version "$OPENCODE2_VERSION" --no-modify-path; then
+              break
+            fi
+            if [ "$attempt" -eq 4 ]; then echo "OpenCode 2 install failed after $attempt attempts"; exit 1; fi
+            echo "OpenCode 2 install attempt $attempt failed; retrying in $((attempt * 10))s"
+            sleep $((attempt * 10))
+          done
 
       - name: Check OpenCode versions
         run: |
