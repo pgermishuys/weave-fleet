@@ -32,9 +32,10 @@ internal static class PooledOpenCodeLiveHost
     /// <summary>
     /// A user config that points OpenCode at the fake model and loads <paramref name="pluginPath"/> as a plugin of
     /// the user's own. Returns the env that points the pooled process at it. A <paramref name="contextLimit"/> gives the
-    /// fake model a context window, so OpenCode compacts once a turn reports more tokens than that.
+    /// fake model a context window, so OpenCode compacts once a turn reports more tokens than that. The config folder
+    /// starts with the packages OpenCode would otherwise install on its first request (see <see cref="OpenCodePluginDependencies"/>).
     /// </summary>
-    public static Dictionary<string, string> WriteScratchOpenCodeHome(string root, Uri llmBaseUrl, string pluginPath, int? contextLimit = null)
+    public static Dictionary<string, string> WriteScratchOpenCodeHome(string root, Uri llmBaseUrl, string pluginPath, int? contextLimit = null, bool seedPluginDependencies = true)
     {
         var dirs = new Dictionary<string, string>
         {
@@ -57,6 +58,8 @@ internal static class PooledOpenCodeLiveHost
 
         var configDir = Path.Combine(dirs["XDG_CONFIG_HOME"], "opencode");
         Directory.CreateDirectory(configDir);
+        if (seedPluginDependencies)
+            OpenCodePluginDependencies.Seed(configDir);
         var baseUrl = llmBaseUrl.ToString().TrimEnd('/') + "/v1";
         var limit = contextLimit is { } context ? $$""", "limit": { "context": {{context}}, "output": 1000 }""" : "";
         File.WriteAllText(Path.Combine(configDir, "opencode.json"), $$"""
@@ -78,7 +81,11 @@ internal static class PooledOpenCodeLiveHost
     }
 
     /// <summary>Fleet on a real Kestrel port, so the pooled process can call the bridge.</summary>
-    internal sealed class KestrelFleetFactory(string dbPath) : WebApplicationFactory<Program>
+    /// <param name="openCodeRequestTimeout">
+    /// How long Fleet's ordinary OpenCode requests wait, when a test needs it shorter than the default 100 s (a slow
+    /// first request then fails in seconds, instead of only on a slow machine).
+    /// </param>
+    internal sealed class KestrelFleetFactory(string dbPath, TimeSpan? openCodeRequestTimeout = null) : WebApplicationFactory<Program>
     {
         private IHost? _host;
 
@@ -100,6 +107,9 @@ internal static class PooledOpenCodeLiveHost
             builder.UseSetting("Fleet:Auth:TokenAuthEnabled", "false");
             builder.ConfigureServices(services =>
             {
+                if (openCodeRequestTimeout is { } timeout)
+                    services.AddHttpClient("OpenCode").ConfigureHttpClient(client => client.Timeout = timeout);
+
                 // Warmup would start an extra opencode process before Fleet knows its port.
                 foreach (var descriptor in services.Where(d => d.ImplementationType == typeof(OpenCodeWarmupHostedService)).ToList())
                     services.Remove(descriptor);

@@ -63,13 +63,16 @@ export function useSessionTerminals(sessionId: MaybeRefOrGetter<string | null | 
     const current = ++loadId;
     const pending = { sessionId: id, buffered: [] as TerminalEvent[] };
     loading = pending;
+    // A drawer left open on a session whose shells are gone shouldn't show empty. One opened while this list is on its
+    // way is the user asking for a shell, and the list coming back empty doesn't answer that.
+    const openedBefore = store.isOpen(id);
 
     try {
       const list = await listTerminals(machine, id);
       if (current !== loadId) return;
       store.setTerminals(id, list);
       for (const event of pending.buffered) store.applyEvent(event);
-      if (list.length === 0) store.setOpen(id, false);
+      if (list.length === 0 && openedBefore) store.setOpen(id, false);
     } catch (error) {
       console.warn(`Failed to load terminals for session ${id}:`, error);
     } finally {

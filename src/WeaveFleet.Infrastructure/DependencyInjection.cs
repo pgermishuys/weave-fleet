@@ -645,6 +645,10 @@ public static class DependencyInjection
         // Named HttpClient used by OpenCodeHarnessRuntime.SpawnAsync to create per-instance clients.
         services.AddHttpClient("OpenCode");
 
+        // A new OpenCode process's first request can take over the default 100 s while OpenCode installs its plugin
+        // packages; OpenCodeFirstRunPreparation applies its own limit.
+        services.AddHttpClient(OpenCodeHarnessRuntime.PreparationHttpClientName, client => client.Timeout = Timeout.InfiniteTimeSpan);
+
         // Register OpenCodeHarness (descriptor) and OpenCodeHarnessRuntime (provisioning) as separate singletons.
         services.AddSingleton<OpenCodeHarness>();
         services.AddSingleton<IHarness>(sp => sp.GetRequiredService<OpenCodeHarness>());
