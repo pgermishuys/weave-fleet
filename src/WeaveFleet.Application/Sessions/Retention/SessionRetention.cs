@@ -236,6 +236,11 @@ public sealed partial class SessionRetention(
         foreach (var side in await sessionRepository.ListSideConversationsAsync(id).ConfigureAwait(false))
             await DiscardSideConversationAsync(side, ct).ConfigureAwait(false);
 
+        // The sessions the agent delegated to are hidden, so nothing lists them once this one is gone: they go with it.
+        var children = await ListDescendantsAsync(id).ConfigureAwait(false);
+        foreach (var child in children)
+            await StopChildAsync(child, ct).ConfigureAwait(false);
+
         var delegation = await delegationRepository.GetByChildSessionIdAsync(id);
         var parentDelegations = await delegationRepository.GetByParentSessionIdAsync(id);
 
@@ -300,8 +305,16 @@ public sealed partial class SessionRetention(
                     ct);
             }
 
+            foreach (var child in children)
+                await delegationRepository.DeleteByParentSessionIdAsync(child.Id);
             if (parentDelegations.Count > 0)
                 await delegationRepository.DeleteByParentSessionIdAsync(id);
+
+            foreach (var child in children)
+            {
+                await smartLinkRepository.DeleteBySessionIdAsync(child.Id);
+                await sessionRepository.DeleteAsync(child.Id);
+            }
 
             await smartLinkRepository.DeleteBySessionIdAsync(id);
             await sessionRepository.DeleteAsync(id);
@@ -365,9 +378,9 @@ public sealed partial class SessionRetention(
                             UpdatedAt = deletedAtText
                         }]
                         : [],
-                    DelegationDeletesByParentSessionId = parentDelegations.Count > 0 ? [id] : [],
-                    SmartLinkDeletesBySessionId = [id],
-                    SessionDeletes = [id],
+                    DelegationDeletesByParentSessionId = [id, .. children.Select(c => c.Id)],
+                    SmartLinkDeletesBySessionId = [id, .. children.Select(c => c.Id)],
+                    SessionDeletes = [.. children.Select(c => c.Id), id],
                     OutboxMessages = outboxMessages
                 },
                 ct);
@@ -423,6 +436,47 @@ public sealed partial class SessionRetention(
         await instanceService.UpdateInstanceStatusAsync(side.InstanceId, "stopped", DateTime.UtcNow.ToString("O")).ConfigureAwait(false);
         await sessionRepository.DeleteAsync(side.Id).ConfigureAwait(false);
         LogSideConversationClosed(side.Id, side.SideOfSessionId ?? string.Empty);
+    }
+
+    /// <summary>Every session delegated from <paramref name="id"/>, and from those in turn, nearest first.</summary>
+    private async Task<List<Session>> ListDescendantsAsync(string id)
+    {
+        var found = new List<Session>();
+        var seen = new HashSet<string>(StringComparer.Ordinal) { id };
+        var queue = new Queue<string>([id]);
+        while (queue.Count > 0)
+        {
+            foreach (var child in await sessionRepository.ListChildrenAsync(queue.Dequeue()).ConfigureAwait(false))
+            {
+                if (!seen.Add(child.Id))
+                    continue;
+                found.Add(child);
+                queue.Enqueue(child.Id);
+            }
+        }
+
+        return found;
+    }
+
+    /// <summary>Stops a delegated child's harness session, after a turn it's in, and marks its instance stopped. Its rows go with its parent's.</summary>
+    private async Task StopChildAsync(Session child, CancellationToken ct)
+    {
+        var instance = instanceTracker.Get(child.InstanceId);
+        if (instance is not null)
+        {
+            if (SessionActivityTracker.IsInTurn(sessionActivityTracker.GetEffectiveActivityStatus(child.Id)))
+            {
+                try { await instance.AbortAsync(ct).ConfigureAwait(false); }
+                catch (Exception ex) when (ex is not OperationCanceledException) { LogStopFailed(ex, child.InstanceId); }
+            }
+
+            await SafeDeleteAsync(instance, ct).ConfigureAwait(false);
+            instanceTracker.Remove(child.InstanceId);
+        }
+
+        sessionRecaps?.Forget(child.Id);
+        sessionNotifier?.Forget(child.Id);
+        await instanceService.UpdateInstanceStatusAsync(child.InstanceId, "stopped", DateTime.UtcNow.ToString("O")).ConfigureAwait(false);
     }
 
     private static string GetDelegationTerminalStatus(string sessionStatus) => sessionStatus switch

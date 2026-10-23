@@ -88,6 +88,9 @@ public sealed class InMemorySessionRepository : ISessionRepository
             .OrderByDescending(s => s.SideDiscardedAt, StringComparer.Ordinal)
             .FirstOrDefault());
 
+    public Task<IReadOnlyList<Session>> ListChildrenAsync(string parentSessionId)
+        => Task.FromResult<IReadOnlyList<Session>>([.. _store.Values.Where(s => s.ParentSessionId == parentSessionId && s.SideOfSessionId is null)]);
+
     public Task<IReadOnlyList<Session>> ListSideConversationsAsync(string sessionId)
         => Task.FromResult<IReadOnlyList<Session>>([.. _store.Values.Where(s => s.SideOfSessionId == sessionId)]);
 
