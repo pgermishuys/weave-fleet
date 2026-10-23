@@ -76,6 +76,10 @@ export const useSmartLinksStore = defineStore("smart-links", () => {
   /** Loads every session's header links once; pushed updates keep them current afterwards. */
   function ensureHeaderLinksLoaded(): Promise<void> {
     if (headerLinksLoaded.value) return Promise.resolve()
+    return loadHeaderLinks()
+  }
+
+  function loadHeaderLinks(): Promise<void> {
     if (loadingAll) return loadingAll
 
     loadingAll = (async () => {
@@ -97,10 +101,13 @@ export const useSmartLinksStore = defineStore("smart-links", () => {
     return loadingAll
   }
 
-  /** Loads every session's header links again, e.g. after missing pushed updates while disconnected. */
+  /**
+   * Loads every session's header links again, e.g. after missing pushed updates while disconnected. The links
+   * already held stay, and pushes keep applying to them, until the answer arrives: a server that isn't answering yet
+   * must not leave the badges frozen.
+   */
   function reloadHeaderLinks(): Promise<void> {
-    headerLinksLoaded.value = false
-    return ensureHeaderLinksLoaded()
+    return loadHeaderLinks()
   }
 
   /** A session's header links: its full list when it's been opened, otherwise the ones loaded for every session. */

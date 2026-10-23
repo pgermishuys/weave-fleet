@@ -138,6 +138,25 @@ describe("useSmartLinksStore", () => {
     expect(store.sessionPullRequest("s2")).toBeNull();
   });
 
+  it("keeps the badges and keeps applying pushes when the reload after a reconnect fails", async () => {
+    apiFetchMock.mockResolvedValueOnce(json([wire("1", "own")]));
+    const store = useSmartLinksStore();
+    await store.ensureHeaderLinksLoaded();
+
+    // The socket is back but the server isn't answering yet.
+    apiFetchMock.mockResolvedValueOnce(json({}, 503));
+    await store.reloadHeaderLinks();
+    expect(store.sessionPullRequest("s1")?.id).toBe("1");
+
+    store.applyPushed(wire("1", "own", { status: "merged", isTerminal: true }));
+    expect(store.sessionPullRequest("s1")?.status).toBe("merged");
+
+    apiFetchMock.mockRejectedValueOnce(new Error("offline"));
+    await store.reloadHeaderLinks();
+    store.applyPushed(wire("2", "pinned"));
+    expect(store.headerBySession.s1.map((l) => l.id)).toContain("2");
+  });
+
   it("picks the session's own open pull request before one it started from or pinned, and open before merged", () => {
     const store = useSmartLinksStore();
     store.setLinks("s1", [
