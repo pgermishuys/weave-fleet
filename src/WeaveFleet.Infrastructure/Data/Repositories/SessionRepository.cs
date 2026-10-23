@@ -150,6 +150,19 @@ public sealed class SessionRepository(
             ReadSession);
     }
 
+    public async Task<IReadOnlyList<Session>> ListChildrenAsync(string parentSessionId)
+    {
+        using var conn = connectionFactory.CreateConnection();
+        return await conn.QueryAsync(
+            "SELECT * FROM sessions WHERE parent_session_id = @ParentId AND side_of_session_id IS NULL AND user_id = @UserId",
+            cmd =>
+            {
+                cmd.AddParameter("ParentId", parentSessionId);
+                cmd.AddParameter("UserId", userContext.UserId);
+            },
+            ReadSession);
+    }
+
     public async Task<IReadOnlyList<Session>> ListSideConversationsAsync(string sessionId)
     {
         using var conn = connectionFactory.CreateConnection();

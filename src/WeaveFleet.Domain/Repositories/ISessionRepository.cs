@@ -16,6 +16,9 @@ public interface ISessionRepository
     /// <summary>The side conversation of session <paramref name="sessionId"/> discarded most recently, still in its undo window.</summary>
     Task<Session?> GetDiscardedSideConversationAsync(string sessionId);
 
+    /// <summary>Every session delegated from session <paramref name="parentSessionId"/> (its children, whatever their status), side conversations not included.</summary>
+    Task<IReadOnlyList<Session>> ListChildrenAsync(string parentSessionId);
+
     /// <summary>Every side conversation of session <paramref name="sessionId"/>, discarded ones included.</summary>
     Task<IReadOnlyList<Session>> ListSideConversationsAsync(string sessionId);
 

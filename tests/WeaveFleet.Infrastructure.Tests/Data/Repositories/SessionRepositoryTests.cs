@@ -281,6 +281,36 @@ public sealed class SessionRepositoryTests
         kept.SpawnKind.ShouldBe(SpawnKinds.Fork);
     }
 
+    [Fact]
+    public async Task Children_of_a_session_are_listed_whatever_their_status_but_not_its_side_conversations()
+    {
+        var (conn, repo, factory) = await CreateAsync();
+        using var _ = conn;
+
+        var (ws, inst) = await InsertDependenciesAsync(factory);
+        Session Make(string id, Action<Session> change) => Apply(new Session
+        {
+            Id = id,
+            WorkspaceId = ws.Id,
+            InstanceId = inst.Id,
+            OpencodeSessionId = "oc-" + id,
+            Title = id,
+            Status = "active",
+            Directory = "/tmp/ws",
+            CreatedAt = DateTime.UtcNow.ToString("O"),
+            UserId = TestUserContext.DefaultUserId,
+        }, change);
+        await repo.InsertAsync(Make("parent", _ => { }));
+        await repo.InsertAsync(Make("running", x => { x.ParentSessionId = "parent"; x.IsHidden = true; }));
+        await repo.InsertAsync(Make("finished", x => { x.ParentSessionId = "parent"; x.IsHidden = true; x.Status = "stopped"; }));
+        await repo.InsertAsync(Make("side", x => { x.SideOfSessionId = "parent"; x.IsHidden = true; }));
+        await repo.InsertAsync(Make("other", x => x.ParentSessionId = "elsewhere"));
+
+        var children = await repo.ListChildrenAsync("parent");
+
+        children.Select(c => c.Id).OrderBy(i => i, StringComparer.Ordinal).ShouldBe(["finished", "running"]);
+    }
+
     private static Session Apply(Session session, Action<Session> change)
     {
         change(session);
