@@ -301,6 +301,54 @@ public sealed class ProcessGroupHelperTests
         }
     }
 
+    [Fact]
+    public async Task A_harness_and_its_children_are_killed_when_the_Fleet_that_started_them_is_killed()
+    {
+        if (!OperatingSystem.IsLinux())
+            return;
+
+        // "Fleet" is a stand-in process; the harness is a shell with a child of its own, as opencode and claude have.
+        using var fleet = SpawnSleepProcess();
+        using var harness = Process.Start(new ProcessStartInfo("sh") { UseShellExecute = false, ArgumentList = { "-c", "sleep 300 & echo $! ; wait" }, RedirectStandardOutput = true })!;
+        var grandchildPid = int.Parse((await harness.StandardOutput.ReadLineAsync())!, CultureInfo.InvariantCulture);
+        using var watcher = ProcessGroupHelper.WatchParent(fleet.Id, harness);
+        try
+        {
+            await Task.Delay(500);
+            harness.HasExited.ShouldBeFalse("it must not be killed while Fleet is alive");
+
+            fleet.Kill();   // SIGKILL: nothing in Fleet gets to run
+            await fleet.WaitForExitAsync();
+
+            await harness.WaitForExitAsync(new CancellationTokenSource(TimeSpan.FromSeconds(15)).Token);
+            for (var i = 0; i < 50 && ProcessIdentity.Read(grandchildPid) is not null; i++)
+                await Task.Delay(100);
+            ProcessIdentity.Read(grandchildPid).ShouldBeNull("the harness's own child went with it");
+        }
+        finally
+        {
+            SafeKill(harness);
+            SafeKill(grandchildPid);
+        }
+    }
+
+    [Fact]
+    public async Task The_watcher_leaves_a_harness_alone_while_Fleet_lives_and_ends_with_the_harness()
+    {
+        if (!OperatingSystem.IsLinux())
+            return;
+
+        using var harness = SpawnSleepProcess();
+        using var watcher = ProcessGroupHelper.WatchParent(Environment.ProcessId, harness);
+        await Task.Delay(500);
+        harness.HasExited.ShouldBeFalse();
+
+        harness.Kill();
+        await harness.WaitForExitAsync();
+
+        await watcher.ShouldNotBeNull().WaitForExitAsync(new CancellationTokenSource(TimeSpan.FromSeconds(15)).Token);
+    }
+
     private static void SafeKill(int pid)
     {
         try

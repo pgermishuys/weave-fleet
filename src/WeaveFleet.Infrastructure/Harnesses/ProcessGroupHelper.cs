@@ -19,9 +19,10 @@ namespace WeaveFleet.Infrastructure.Harnesses;
 /// has exec'd, so <c>setpgid</c> fails with <c>EACCES</c> and the child stays in Fleet's process group. So Fleet keeps
 /// track of them instead. <see cref="KillProcessGroup"/> kills a harness and its children when Fleet stops it; any
 /// still running when Fleet's process exits (normally, or on an unhandled exception) are killed then
-/// (<see cref="KillRunning"/>); and each is recorded on disk (<see cref="HarnessProcessRecords"/>), so the ones a
-/// Fleet that was killed outright (<c>SIGKILL</c>, the out-of-memory killer, a crash in native code) left running are
-/// stopped by the next Fleet to start.
+/// (<see cref="KillRunning"/>); on Linux each also has a small watcher process (<see cref="WatchParent"/>) that ends it
+/// within a couple of seconds if Fleet is killed outright (<c>SIGKILL</c>, the out-of-memory killer, a crash in native
+/// code); and each is recorded on disk (<see cref="HarnessProcessRecords"/>), so on macOS, or if a watcher couldn't
+/// start, the ones a killed Fleet left running are stopped by the next Fleet to start.
 /// </para>
 /// </summary>
 internal static class ProcessGroupHelper
@@ -155,6 +156,52 @@ internal static class ProcessGroupHelper
         }
     }
 
+    // Polls Fleet (and the harness) by pid and start time, so a reused pid isn't taken for either. When Fleet is gone it
+    // ends the harness and what the harness started, TERM first, then KILL. It ends by itself once the harness has.
+    // sh, ps and /proc are on every Linux Fleet runs on; if one isn't, the watcher does nothing.
+    private const string ParentWatcherScript = """
+        exec </dev/null >/dev/null 2>&1
+        stamp() { set -- $(sed -n 's/.*) //p' "/proc/$1/stat" 2>/dev/null); case "$1" in ""|Z|X) return 1;; esac; echo "${20}"; }
+        tree() { echo "$1"; for c in $(ps -o pid= --ppid "$1" 2>/dev/null); do tree "$c"; done; }
+        fleet=$1; child=$2
+        fs=$(stamp "$fleet") || exit 0
+        cs=$(stamp "$child") || exit 0
+        while [ "$(stamp "$fleet")" = "$fs" ] && [ "$(stamp "$child")" = "$cs" ]; do sleep 2; done
+        [ "$(stamp "$child")" = "$cs" ] || exit 0
+        pids=$(tree "$child")
+        kill -TERM $pids 2>/dev/null
+        sleep 2
+        kill -KILL $pids 2>/dev/null
+        """;
+
+    /// <summary>
+    /// Linux: starts a small watcher that kills <paramref name="child"/> and its children if the process
+    /// <paramref name="parentPid"/> (Fleet) dies without stopping it: <c>SIGKILL</c>, the out-of-memory killer, a crash
+    /// in native code, none of which run <see cref="KillRunning"/>. The watcher is a process of its own, so it outlives
+    /// Fleet. Null elsewhere or when it can't start.
+    /// </summary>
+    internal static Process? WatchParent(int parentPid, Process child)
+    {
+        ArgumentNullException.ThrowIfNull(child);
+        if (!OperatingSystem.IsLinux())
+            return null;
+
+        try
+        {
+            var start = new ProcessStartInfo("sh") { UseShellExecute = false, CreateNoWindow = true };
+            start.ArgumentList.Add("-c");
+            start.ArgumentList.Add(ParentWatcherScript);
+            start.ArgumentList.Add("fleet-harness-watcher");
+            start.ArgumentList.Add(parentPid.ToString(System.Globalization.CultureInfo.InvariantCulture));
+            start.ArgumentList.Add(child.Id.ToString(System.Globalization.CultureInfo.InvariantCulture));
+            return Process.Start(start);
+        }
+        catch (Exception ex) when (ex is InvalidOperationException or System.ComponentModel.Win32Exception)
+        {
+            return null;
+        }
+    }
+
     private static void Track(Process process, ILogger? logger)
     {
         int pid;
@@ -183,8 +230,14 @@ internal static class ProcessGroupHelper
                 records?.Remove(identity);
         }
 
+        var watcher = WatchParent(Environment.ProcessId, process);
         process.EnableRaisingEvents = true;
-        process.Exited += (_, _) => Forget();
+        process.Exited += (_, _) =>
+        {
+            Forget();
+            try { watcher?.Kill(); } catch (Exception ex) when (ex is InvalidOperationException or System.ComponentModel.Win32Exception) { }
+            watcher?.Dispose();
+        };
         if (HasExited(process))
             Forget();
     }
