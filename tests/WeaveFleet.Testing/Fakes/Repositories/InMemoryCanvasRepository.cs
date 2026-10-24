@@ -140,6 +140,23 @@ public sealed class InMemoryCanvasRepository : ICanvasRepository
         }
     }
 
+    public Task<IReadOnlyDictionary<string, SessionPages>> SummarizePagesAsync(string? sessionId = null)
+    {
+        lock (_gate)
+        {
+            IReadOnlyDictionary<string, SessionPages> result = _canvases
+                .Where(c => c.Kind == "page" && c.ClosedAt is null && (sessionId is null || c.SessionId == sessionId))
+                .GroupBy(c => c.SessionId, StringComparer.Ordinal)
+                .ToDictionary(
+                    group => group.Key,
+                    group => new SessionPages(group.Count(), group
+                        .Select(c => System.Text.Json.Nodes.JsonNode.Parse(c.StateJson)?["shownAt"]?.GetValue<string>())
+                        .Max(StringComparer.Ordinal)),
+                    StringComparer.Ordinal);
+            return Task.FromResult(result);
+        }
+    }
+
     private Canvas? Find(string sessionId, string canvasId)
         => _canvases.Find(c => c.SessionId == sessionId && c.Id == canvasId);
 

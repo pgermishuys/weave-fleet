@@ -650,6 +650,15 @@ export interface SessionRetryChanged extends EventCursorMetadata {
 }
 
 /**
+ * A session's open pages changed: one was shown, reopened or closed. Sent on `sessions`, so its row stays current.
+ * Pages shown in the conversation aren't counted. The same fields come with the session list item.
+ */
+export interface SessionPagesChanged extends EventCursorMetadata {
+  type: "session.pages";
+  payload: { sessionId: string; pageCount: number; lastPageShownAt: string | null };
+}
+
+/**
  * A Fleet restart cut a session's turn off, or the user carried on or dismissed it (`interruption` null). Sent on the
  * session's topic and `sessions`. The same shape comes from `GET /api/sessions/{id}/interruption`.
  */
@@ -948,6 +957,7 @@ export type DomainEvent =
   | SessionQueueChanged
   | SessionPermissionRulesChanged
   | SessionRetryChanged
+  | SessionPagesChanged
   | SessionInterrupted
   | PermissionAsked
   | PermissionReplied

@@ -4389,6 +4389,9 @@ export interface components {
             workflowRunId?: null | string;
             /** Format: int32 */
             runningWorkCount?: number | string;
+            /** Format: int32 */
+            pageCount?: number | string;
+            lastPageShownAt?: null | string;
             forkedFromSessionId?: null | string;
             spawnedBySessionId?: null | string;
             spawnKind?: null | string;

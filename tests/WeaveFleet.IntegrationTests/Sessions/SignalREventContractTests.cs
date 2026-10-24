@@ -435,6 +435,79 @@ public sealed class SignalREventContractTests : IAsyncLifetime, IDisposable
     }
 
     [Fact]
+    public async Task Pages_shown_and_closed_reach_the_session_list_live_and_on_reload()
+    {
+        var sessionId = await CreateSessionAsync();
+        var quietId = await CreateSessionAsync();
+        await _hub.InvokeAsync("SubscribeToSessionsTopicAsync");
+        await WaitForBroadcasterSubscriberAsync();
+
+        var firstShown = new DateTimeOffset(2026, 10, 24, 9, 0, 0, TimeSpan.Zero);
+        var secondShown = firstShown.AddMinutes(5);
+        string closing;
+        using (var scope = _server.Services.CreateScope())
+        {
+            var canvases = scope.ServiceProvider.GetRequiredService<ICanvasService>();
+            (await canvases.OpenAsync(sessionId, CanvasKinds.Page, "Billing options", Page("/tmp/billing/options.html", firstShown))).IsSuccess.ShouldBeTrue();
+            var second = await canvases.OpenAsync(sessionId, CanvasKinds.Page, "Refund flow", Page("/tmp/refunds/flow.html", secondShown));
+            second.IsSuccess.ShouldBeTrue();
+            closing = second.Value.Canvas.Id;
+        }
+
+        // Each page shown says so on the sessions topic, with the session's count and newest page.
+        var shown = await WaitForPagesEventsAsync(2);
+        shown[0].GetProperty("sessionId").GetString().ShouldBe(sessionId);
+        shown[0].GetProperty("pageCount").GetInt32().ShouldBe(1);
+        shown[1].GetProperty("pageCount").GetInt32().ShouldBe(2);
+        DateTimeOffset.Parse(shown[1].GetProperty("lastPageShownAt").GetString()!, System.Globalization.CultureInfo.InvariantCulture).ShouldBe(secondShown);
+
+        // A page loaded now reads the same off the list; a session with no pages has none.
+        using var http = new HttpClient { BaseAddress = new Uri(_server.ServerUrl) };
+        var listed = JsonDocument.Parse(await http.GetStringAsync("/api/sessions")).RootElement.EnumerateArray().ToList();
+        var row = listed.Single(item => item.GetProperty("session").GetProperty("id").GetString() == sessionId);
+        row.GetProperty("pageCount").GetInt32().ShouldBe(2);
+        DateTimeOffset.Parse(row.GetProperty("lastPageShownAt").GetString()!, System.Globalization.CultureInfo.InvariantCulture).ShouldBe(secondShown);
+        var quiet = listed.Single(item => item.GetProperty("session").GetProperty("id").GetString() == quietId);
+        quiet.GetProperty("pageCount").GetInt32().ShouldBe(0);
+        (quiet.TryGetProperty("lastPageShownAt", out var none) ? none.ValueKind : JsonValueKind.Null).ShouldBe(JsonValueKind.Null);
+
+        // Closing the newest page takes it off the count, and the newest is the one still open.
+        using (var scope = _server.Services.CreateScope())
+            (await scope.ServiceProvider.GetRequiredService<ICanvasService>().CloseAsync(sessionId, closing)).IsSuccess.ShouldBeTrue();
+        var closed = (await WaitForPagesEventsAsync(3))[2];
+        closed.GetProperty("pageCount").GetInt32().ShouldBe(1);
+        DateTimeOffset.Parse(closed.GetProperty("lastPageShownAt").GetString()!, System.Globalization.CultureInfo.InvariantCulture).ShouldBe(firstShown);
+
+        static JsonNode Page(string source, DateTimeOffset shownAt) => JsonNode.Parse(new PageState
+        {
+            PageId = WeaveFleet.Application.Pages.PageIds.New(),
+            Entry = Path.GetFileName(source),
+            Source = source,
+            Files = 1,
+            Bytes = 1200,
+            ShownAt = shownAt.ToString("O", System.Globalization.CultureInfo.InvariantCulture),
+        }.ToJson())!;
+    }
+
+    /// <summary>Waits for <paramref name="count"/> <c>session.pages</c> events on the sessions topic; their payloads, in order.</summary>
+    private async Task<List<JsonElement>> WaitForPagesEventsAsync(int count)
+    {
+        var deadline = DateTime.UtcNow.AddSeconds(10);
+        while (true)
+        {
+            var events = Received()
+                .Where(e => e.Topic == "sessions" && e.Data.GetProperty("type").GetString() == CanvasService.PagesChangedEvent)
+                .Select(e => e.Data.GetProperty("properties"))
+                .ToList();
+            if (events.Count >= count)
+                return events;
+            if (DateTime.UtcNow >= deadline)
+                throw new ShouldAssertException($"{events.Count} of {count} session.pages events. Received: {string.Join("; ", _rawEvents)}");
+            await _eventReceived.WaitAsync(TimeSpan.FromMilliseconds(200));
+        }
+    }
+
+    [Fact]
     public async Task A_mods_runtime_event_carries_the_job_and_why_it_was_raised()
     {
         await _hub.InvokeAsync("SubscribeToSessionsTopicAsync");

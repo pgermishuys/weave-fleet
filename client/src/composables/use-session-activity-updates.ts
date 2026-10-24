@@ -23,6 +23,15 @@ export function useSessionActivityUpdates(): void {
         return
       }
 
+      // A page was shown, reopened or closed: the row's page count and newest page.
+      if (event.type === "session.pages") {
+        sessionsStore.patchSession(event.payload.sessionId, {
+          pageCount: event.payload.pageCount,
+          lastPageShownAt: event.payload.lastPageShownAt,
+        })
+        return
+      }
+
       // A Fleet restart cut a turn off (or the user carried on): the session's row says so.
       if (event.type === "session.interrupted") {
         sessionsStore.patchSession(event.payload.sessionId, { interrupted: toSessionInterruption(event.payload.interruption) })
