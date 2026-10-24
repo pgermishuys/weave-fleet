@@ -122,6 +122,7 @@ $nodeValues = @{
 }
 foreach ($option in ([regex]::Matches($nodeHelp, '--[a-z][a-z-]*') | ForEach-Object { $_.Value } | Sort-Object -Unique)) {
     if ($option -eq '--print') { continue }  # install-service only; checked below
+    if ($option -eq '--json') { continue }  # pair only; checked below
     if (-not $nodeValues.ContainsKey($option)) {
         Fail "fleet node help lists $option, which this test doesn't know how to run"
         continue
@@ -130,6 +131,17 @@ foreach ($option in ([regex]::Matches($nodeHelp, '--[a-z][a-z-]*') | ForEach-Obj
     $output = Invoke-Fleet $arguments
     if ((Test-Started $arguments $output) -and -not (Test-StartedAsNode)) { Fail "fleet $arguments didn't pass --node" }
 }
+
+# `fleet node pair --json` asks the running node for a code as one line of JSON; --json only works with pair.
+$output = Invoke-Fleet 'node pair --json --port 5512'
+if (Test-Started 'node pair --json --port 5512' $output) {
+    $argsLine = ((Get-Content $out | Where-Object { $_ -like 'args=*' }) -replace '^args=', '') -split ' '
+    if ($argsLine -notcontains '--node-pair') { Fail "fleet node pair didn't pass --node-pair" }
+    if ($argsLine -notcontains '--json') { Fail "fleet node pair --json didn't pass --json" }
+}
+$output = Invoke-Fleet 'node --json'
+if ($script:fleetExitCode -eq 0) { Fail "fleet node --json should fail" }
+if (Test-Path $out) { Fail "fleet node --json started the app" }
 
 # install-service --print shows the scheduled task it would register, and changes nothing.
 $taskName = 'Fleet node'
