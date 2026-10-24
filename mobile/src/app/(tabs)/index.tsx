@@ -3,6 +3,7 @@ import { router } from "expo-router";
 import { useEffect, useState } from "react";
 import { Pressable, RefreshControl, SectionList, View } from "react-native";
 import { manager, useFleet } from "~/fleet/hooks";
+import { newPagesOf, pagesSeen, usePagesSeen } from "~/fleet/pages-seen";
 import { rowAge, rowDetail } from "~/fleet/session-list";
 import { EmptyState, FleetMark, SectionHeader, SessionRow, Text, glyphStatusOf } from "~/kit";
 import { Heading, PanelPage } from "~/ui/page";
@@ -14,6 +15,7 @@ export default function Sessions() {
   const { machines, sections, loading } = useFleet();
   const [refreshing, setRefreshing] = useState(false);
   const [now, setNow] = useState(Date.now());
+  usePagesSeen();
   useEffect(() => {
     const timer = setInterval(() => setNow(Date.now()), 30_000);
     return () => clearInterval(timer);
@@ -60,6 +62,7 @@ export default function Sessions() {
             status={glyphStatusOf(entry.item.activityStatus, entry.item.sessionStatus)}
             age={rowAge(entry.item, now)}
             machine={machines.length > 1 ? entry.machineName : undefined}
+            newPages={entry.item.pageCount ? newPagesOf(entry.item, pagesSeen.get(entry.machineId, entry.item.session.id), pagesSeen.since) : 0}
             onPress={() => router.push(`/s/${entry.machineId}/${entry.item.session.id}`)}
           />
         )}

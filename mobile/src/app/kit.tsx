@@ -157,6 +157,7 @@ function Gallery({ override, setOverride }: { override: Scheme | null; setOverri
             <SessionRow title="Speed up the ledger export" detail="Rate limited, retrying" status="retry" age="38s" machine="falcon" onPress={noop} />
             <SessionRow title="Run the nightly benchmarks" detail="bun bench" status="running" age="1m" onPress={noop} />
             <SectionHeader label="Recent" />
+            <SessionRow title="Redesign the invoice email" status="done" age="12m" machine="falcon" newPages={2} onPress={noop} />
             <SessionRow title="Paginate the audit log" detail="#608 checks passed" status="done" age="1h" machine="hangar" onPress={noop} />
             <SessionRow title="Rename the shuttle config keys" status="idle" age="3h" machine="falcon" onPress={noop} />
             <SessionRow title="Upgrade the queue client" detail="Stopped with an error" status="error" age="1d" onPress={noop} />
