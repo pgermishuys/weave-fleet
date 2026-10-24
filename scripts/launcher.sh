@@ -211,7 +211,7 @@ show_node_help() {
   echo "Usage: fleet node [--port <port>] [--host <host>] [--data-dir <path>] [--profile <name>]"
   echo "       fleet node install-service [--port <port>] [--host <host>] [--data-dir <path>] [--profile <name>] [--print]"
   echo "       fleet node uninstall-service"
-  echo "       fleet node pair [--port <port>] [--data-dir <path>] [--profile <name>]"
+  echo "       fleet node pair [--port <port>] [--data-dir <path>] [--profile <name>] [--json]"
   echo ""
   echo "Starts Fleet as a node: the API without the web app. Every request needs the access token,"
   echo "even from this machine. Add the node to another Fleet in Settings > Machines > Add a machine."
@@ -228,6 +228,7 @@ show_node_help() {
   echo "  --host <host>       Override the bind host (0.0.0.0 lets other machines connect)"
   echo "  --data-dir <path>   Override the data directory (default: ~/.weave)"
   echo "  --profile <name>    Use a profile-specific data directory"
+  echo "  --json              With pair: print the code and addresses as one line of JSON, for another Fleet over SSH"
   echo "  --print             With install-service: show what it would write and run, and change nothing"
 }
 
@@ -451,6 +452,7 @@ uninstall_service() {
 # `fleet node …` takes the same server options; it only has to come first.
 NODE=0
 NODE_PAIR=0
+NODE_PAIR_JSON=""
 SERVICE_ACTION=""
 if [ "${1:-}" = "node" ]; then
   NODE=1
@@ -598,6 +600,13 @@ while [ "$#" -gt 0 ]; do
     --require-token)
       REQUIRE_TOKEN=1
       ;;
+    --json)
+      if [ "$NODE_PAIR" -ne 1 ]; then
+        echo "Error: --json only works with fleet node pair." >&2
+        exit 1
+      fi
+      NODE_PAIR_JSON="--json"
+      ;;
     --print)
       if [ "$SERVICE_ACTION" != "install-service" ]; then
         echo "Error: --print only works with fleet node install-service." >&2
@@ -689,7 +698,7 @@ if [ "$REQUIRE_TOKEN" -eq 1 ]; then
 fi
 if [ "$NODE_PAIR" -eq 1 ]; then
   # Asks the node already running with these settings for a code, prints it and stops.
-  exec "$APP_BIN" --node-pair --urls "$LISTEN_URL" --contentRoot "$APP_CONTENT_ROOT"
+  exec "$APP_BIN" --node-pair $NODE_PAIR_JSON --urls "$LISTEN_URL" --contentRoot "$APP_CONTENT_ROOT"
 fi
 if [ "$NODE" -eq 1 ]; then
   EXTRA_ARGS="$EXTRA_ARGS --node"

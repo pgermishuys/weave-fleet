@@ -59,7 +59,7 @@ public sealed class RemoteMachineService(
     }
 
     /// <summary>Checks the address and token against the machine and saves it. Error is what to tell the user.</summary>
-    public async Task<(RemoteMachine? Machine, string? Error)> AddAsync(string baseUrl, string token, CancellationToken cancellationToken)
+    public async Task<(RemoteMachine? Machine, string? Error)> AddAsync(string baseUrl, string token, CancellationToken cancellationToken, string? sshDestination = null)
     {
         var normalized = NormalizeBaseUrl(baseUrl);
         if (normalized is null)
@@ -85,6 +85,7 @@ public sealed class RemoteMachineService(
             LastSeenAt = time.GetUtcNow(),
             Status = RemoteMachineStatuses.Online,
             AgentsAllowed = existing?.AgentsAllowed ?? false,
+            SshDestination = sshDestination,
         };
         await machines.UpsertAsync(machine);
         Changed?.Invoke(machine.Id);
@@ -96,7 +97,7 @@ public sealed class RemoteMachineService(
     /// answers first (the code isn't used up), refuses this machine, then redeems the code for a token of its own
     /// that the machine lists and can remove. The master token stays where it is.
     /// </summary>
-    public async Task<(RemoteMachine? Machine, string? Error)> AddByCodeAsync(string baseUrl, string code, CancellationToken cancellationToken)
+    public async Task<(RemoteMachine? Machine, string? Error)> AddByCodeAsync(string baseUrl, string code, CancellationToken cancellationToken, string? sshDestination = null)
     {
         var normalized = NormalizeBaseUrl(baseUrl);
         if (normalized is null)
@@ -127,7 +128,7 @@ public sealed class RemoteMachineService(
         var token = redeemed.Value.TryGetProperty("token", out var tokenElement) ? tokenElement.GetString() : null;
         if (string.IsNullOrEmpty(token))
             return (null, "That isn't a Fleet.");
-        return await AddAsync(normalized, token, cancellationToken);
+        return await AddAsync(normalized, token, cancellationToken, sshDestination);
     }
 
     private static string ToJson(Dictionary<string, string> values)
@@ -215,6 +216,8 @@ public sealed class RemoteMachineService(
                 Os = info.Os,
                 Status = RemoteMachineStatuses.Online,
                 LastSeenAt = time.GetUtcNow(),
+                // A new address isn't the tunnel's any more.
+                SshDestination = string.Equals(normalized, current.BaseUrl, StringComparison.OrdinalIgnoreCase) ? current.SshDestination : null,
             };
         }
 
@@ -252,6 +255,7 @@ public sealed class RemoteMachineService(
                 AddedAt = existing?.AddedAt ?? entry.AddedAt ?? time.GetUtcNow(),
                 Status = existing?.Status ?? RemoteMachineStatuses.Unknown,
                 AgentsAllowed = existing?.AgentsAllowed ?? false,
+                SshDestination = existing?.SshDestination,
             });
             Changed?.Invoke(entry.Id);
         }
@@ -266,6 +270,19 @@ public sealed class RemoteMachineService(
             Changed?.Invoke(id);
         return deleted;
     }
+
+    /// <summary>Points a machine at a new address (its SSH tunnel got another local port). Nothing else changes.</summary>
+    public async Task MoveAsync(string id, string baseUrl)
+    {
+        if (await machines.GetAsync(id) is { } current)
+        {
+            await machines.UpsertAsync(current with { BaseUrl = baseUrl });
+            Changed?.Invoke(id);
+        }
+    }
+
+    /// <summary>Tells listeners (the watcher, the client's poll) that something about a machine changed, e.g. its tunnel.</summary>
+    public void NotifyChanged(string id) => Changed?.Invoke(id);
 
     /// <summary>Records what the watcher saw of a machine.</summary>
     public Task SetStatusAsync(string id, string status, bool seen) =>

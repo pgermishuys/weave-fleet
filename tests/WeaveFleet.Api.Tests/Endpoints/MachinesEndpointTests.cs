@@ -43,6 +43,35 @@ public sealed class MachinesEndpointTests
     }
 
     [Fact]
+    public async Task Over_ssh_lists_config_hosts_for_the_owner_and_refuses_a_destination_that_could_be_an_ssh_option()
+    {
+        await using var hangar = Fleet();
+        using var owner = Client(hangar, Token(hangar));
+
+        var hosts = await owner.GetAsync("/api/machines/ssh-hosts");
+        hosts.StatusCode.ShouldBe(HttpStatusCode.OK);
+        (await hosts.Content.ReadFromJsonAsync<JsonElement>()).GetProperty("hosts").ValueKind.ShouldBe(JsonValueKind.Array);
+
+        var refused = await owner.PostAsJsonAsync("/api/machines/ssh", new { destination = "-oProxyCommand=touch-pwned" });
+        refused.StatusCode.ShouldBe(HttpStatusCode.BadRequest);
+        (await refused.Content.ReadFromJsonAsync<JsonElement>()).GetProperty("error").GetString()!.ShouldContain("isn't an SSH host");
+    }
+
+    [Fact]
+    public async Task A_machine_reached_by_address_has_no_ssh_fields()
+    {
+        await using var falcon = Fleet();
+        await using var hangar = Fleet(routeTo: falcon);
+        using var owner = Client(hangar, Token(hangar));
+
+        var body = await (await owner.PostAsJsonAsync("/api/machines", new { baseUrl = FalconUrl, token = Token(falcon) })).Content.ReadFromJsonAsync<JsonElement>();
+
+        body.TryGetProperty("sshDestination", out var ssh).ShouldBeTrue();
+        ssh.ValueKind.ShouldBe(JsonValueKind.Null);
+        body.GetProperty("tunnelUp").ValueKind.ShouldBe(JsonValueKind.Null);
+    }
+
+    [Fact]
     public async Task A_wrong_token_or_address_is_refused_with_a_reason()
     {
         await using var falcon = Fleet();

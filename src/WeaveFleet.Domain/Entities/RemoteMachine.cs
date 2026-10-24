@@ -28,6 +28,12 @@ public sealed record RemoteMachine
     /// to other machines" on. Off until the owner turns it on for this machine.
     /// </summary>
     public bool AgentsAllowed { get; init; }
+
+    /// <summary>
+    /// Set when the machine was added Over SSH: an <c>~/.ssh/config</c> alias or <c>user@host[:port]</c>. Fleet keeps a
+    /// tunnel to it open and <see cref="BaseUrl"/> is the tunnel's local address. Null otherwise.
+    /// </summary>
+    public string? SshDestination { get; init; }
 }
 
 public static class RemoteMachineStatuses

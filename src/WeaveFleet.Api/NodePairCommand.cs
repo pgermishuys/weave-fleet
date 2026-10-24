@@ -22,6 +22,7 @@ public static class NodePairCommand
         HttpClient http,
         TextWriter output,
         TextWriter error,
+        bool asJson = false,
         CancellationToken cancellationToken = default)
     {
         var token = !string.IsNullOrWhiteSpace(tokenFromEnvironment)
@@ -63,6 +64,26 @@ public static class NodePairCommand
         var addresses = root.GetProperty("addresses").EnumerateArray().Select(a => a.GetString()!).ToList();
         if (addresses.Count == 0)
             addresses.Add($"http://localhost:{port}");
+
+        if (asJson)
+        {
+            // One line for another Fleet reading it over SSH (Add a machine → Over SSH).
+            using var stream = new MemoryStream();
+            using (var writer = new Utf8JsonWriter(stream))
+            {
+                writer.WriteStartObject();
+                writer.WriteString("code", code);
+                writer.WriteString("machineName", name);
+                writer.WriteStartArray("addresses");
+                foreach (var address in addresses)
+                    writer.WriteStringValue(address);
+                writer.WriteEndArray();
+                writer.WriteEndObject();
+            }
+
+            await output.WriteLineAsync(System.Text.Encoding.UTF8.GetString(stream.ToArray()));
+            return 0;
+        }
 
         await output.WriteLineAsync($"Pairing code for {name}");
         await output.WriteLineAsync();

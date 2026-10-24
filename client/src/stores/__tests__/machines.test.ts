@@ -77,7 +77,7 @@ describe("machines store", () => {
 
   describe("the list on the server", () => {
     function serverMachine(connection: MachineConnection, withToken = true) {
-      return { id: connection.id, name: connection.name, baseUrl: connection.baseUrl, os: connection.os ?? null, status: "online", addedAt: connection.addedAt, lastSeenAt: null, token: withToken ? connection.token : null };
+      return { id: connection.id, name: connection.name, baseUrl: connection.baseUrl, os: connection.os ?? null, status: "online", addedAt: connection.addedAt, lastSeenAt: null, token: withToken ? connection.token : null, sshDestination: connection.sshDestination, tunnelUp: connection.tunnelUp };
     }
 
     it("copies this browser's machines to home once, then reads them from there", async () => {
@@ -182,6 +182,50 @@ describe("machines store", () => {
       await store.ready;
 
       await expect(store.pairMachine("http://100.64.90.72:2113", "ABCD-EFGH")).rejects.toThrow("Add it by address");
+    });
+
+    it("adds a machine over SSH through home and keeps how it is reached", async () => {
+      const calls: unknown[] = [];
+      routes["/api/machines"] = () => json({ machines: [] });
+      routes["/api/machines/ssh"] = (_, init) => {
+        calls.push(JSON.parse(String(init.body)));
+        return json(serverMachine({ ...falcon, token: "fdt_d1.secret", sshDestination: "alice@falcon", tunnelUp: true }));
+      };
+      const store = useMachinesStore();
+      await store.ready;
+
+      const added = await store.addOverSsh(" falcon ");
+
+      expect(calls).toEqual([{ destination: "falcon" }]);
+      expect(added).toMatchObject({ id: falcon.id, sshDestination: "alice@falcon", tunnelUp: true });
+      expect(store.entries.find((e) => e.key === falcon.id)).toMatchObject({ sshDestination: "alice@falcon", tunnelUp: true });
+      expect(loadMachines().map((m) => m.id)).toEqual([falcon.id]);
+    });
+
+    it("says what went wrong when home can't add over SSH, and keeps nothing", async () => {
+      routes["/api/machines"] = () => json({ machines: [] });
+      routes["/api/machines/ssh"] = () => json({ error: "Fleet isn't installed there." }, 400);
+      const store = useMachinesStore();
+      await store.ready;
+
+      await expect(store.addOverSsh("falcon")).rejects.toThrow("Fleet isn't installed there");
+      expect(store.connections).toEqual([]);
+    });
+
+    it("loads the ssh hosts, and reads a failure as none", async () => {
+      routes["/api/machines"] = () => json({ machines: [] });
+      const host = { alias: "falcon", destination: "falcon", hostName: "100.64.90.72", user: "alice", port: null };
+      routes["/api/machines/ssh-hosts"] = () => json({ hosts: [host] });
+      const store = useMachinesStore();
+      await store.ready;
+      expect(store.sshHosts).toBeNull();
+
+      await store.loadSshHosts();
+      expect(store.sshHosts).toEqual([host]);
+
+      routes["/api/machines/ssh-hosts"] = () => json({ error: "no" }, 500);
+      await store.loadSshHosts();
+      expect(store.sshHosts).toEqual([]);
     });
 
     it("on a paired phone, lists only machines it has a key for", async () => {

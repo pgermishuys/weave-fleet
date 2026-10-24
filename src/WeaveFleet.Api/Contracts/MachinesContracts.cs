@@ -15,7 +15,9 @@ public sealed record MachineEntryResponse(
     DateTimeOffset AddedAt,
     DateTimeOffset? LastSeenAt,
     string? Token,
-    bool AgentsAllowed);
+    bool AgentsAllowed,
+    string? SshDestination = null,
+    bool? TunnelUp = null);
 
 public sealed record MachineListResponse(IReadOnlyList<MachineEntryResponse> Machines);
 
@@ -31,3 +33,11 @@ public sealed record ImportMachinesRequest(IReadOnlyList<ImportMachineEntry>? Ma
 
 /// <summary>The phone's own token on another machine. Kept by the phone; home keeps only the other machine's id for it.</summary>
 public sealed record DeviceGrantResponse(string MachineId, string BaseUrl, string Token);
+
+/// <summary>A host from <c>~/.ssh/config</c> on the machine running Fleet. <paramref name="Destination"/> is what to send back.</summary>
+public sealed record SshHostResponse(string Alias, string Destination, string? HostName, string? User, int? Port);
+
+public sealed record SshHostListResponse(IReadOnlyList<SshHostResponse> Hosts);
+
+/// <param name="Destination">An <c>~/.ssh/config</c> alias or <c>user@host[:port]</c>.</param>
+public sealed record AddSshMachineRequest(string? Destination);
