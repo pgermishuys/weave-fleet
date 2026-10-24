@@ -49,6 +49,7 @@ string? harnessMode = Environment.GetEnvironmentVariable("FLEET_HARNESS");
 var importLegacySessions = false;
 string? legacyImportSourcePath = null;
 string? cliArgumentError = null;
+var nodePair = false;
 for (var i = 0; i < args.Length; i++)
 {
     if (args[i] is "--host" && i + 1 < args.Length)
@@ -69,6 +70,8 @@ for (var i = 0; i < args.Length; i++)
         harnessMode = args[i]["--harness=".Length..];
     else if (args[i] is "--transport" && i + 1 < args.Length)
         cliOverrides[$"{FleetOptions.SectionName}:EventBus:Transport"] = args[++i];
+    else if (args[i] is NodePairCommand.Flag)
+        nodePair = true;
     else if (args[i] is "--import-legacy-sessions")
         importLegacySessions = true;
     else if (args[i] is "--source")
@@ -84,6 +87,26 @@ if (cliArgumentError is not null)
 {
     Console.Error.WriteLine(cliArgumentError);
     Environment.Exit(1);
+}
+
+if (nodePair)
+{
+    // `fleet node pair`: ask the node running on this machine for a code, print it, and stop. Never starts a host.
+    var pairOptions = new ConfigurationBuilder()
+        .AddEnvironmentVariables()
+        .AddInMemoryCollection(cliOverrides!)
+        .Build()
+        .GetSection(FleetOptions.SectionName)
+        .Get<FleetOptions>() ?? new FleetOptions();
+    using var pairClient = new HttpClient { Timeout = TimeSpan.FromSeconds(10) };
+    Environment.Exit(await NodePairCommand.RunAsync(
+        pairOptions.Host,
+        pairOptions.Port,
+        pairOptions.DatabasePath,
+        Environment.GetEnvironmentVariable("WEAVE_FLEET_AUTH_TOKEN"),
+        pairClient,
+        Console.Out,
+        Console.Error));
 }
 
 var builder = WebApplication.CreateBuilder(args);

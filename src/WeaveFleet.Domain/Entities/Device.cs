@@ -14,6 +14,9 @@ public sealed record Device
     /// <summary><c>ios</c>, <c>android</c> or <c>other</c>; null when unknown.</summary>
     public string? Platform { get; init; }
 
+    /// <summary><c>device</c> (a phone or browser) or <c>machine</c> (another Fleet paired with a code).</summary>
+    public string Kind { get; init; } = DeviceKinds.Device;
+
     /// <summary>SHA-256 of the token's secret.</summary>
     public required byte[] TokenHash { get; init; }
 
@@ -27,4 +30,11 @@ public sealed record Device
 
     /// <summary>When the device was removed; null while it has access.</summary>
     public DateTimeOffset? RevokedAt { get; init; }
+}
+
+/// <summary>What a <see cref="Device"/> is.</summary>
+public static class DeviceKinds
+{
+    public const string Device = "device";
+    public const string Machine = "machine";
 }

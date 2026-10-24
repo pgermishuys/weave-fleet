@@ -5,6 +5,7 @@ using WeaveFleet.Api.Auth;
 using WeaveFleet.Api.Contracts;
 using WeaveFleet.Application.Configuration;
 using WeaveFleet.Application.Devices;
+using WeaveFleet.Domain.Entities;
 
 namespace WeaveFleet.Api.Endpoints;
 
@@ -68,6 +69,24 @@ public static class DeviceEndpoints
         .RequireAuthorization(FleetClaims.MachineOwnerPolicy)
         .Produces<CreatePairingResponse>(200)
         .WithName("CreatePairingCode");
+
+        // A code for another Fleet (kind "machine"), made by `fleet node pair` on the machine itself. Unlike the phone
+        // code it needs no web app, so a node can make one.
+        machine.MapPost("/pairing/code", (
+            PairingCodeStore codes,
+            MachineIdentityStore identities,
+            LoopbackAuthPolicy policy) =>
+        {
+            var identity = identities.Get();
+            var code = codes.Create();
+            var addresses = policy.IsRemoteReachable
+                ? MachineEndpoints.ReachableAddresses(fleetOptions).Select(address => address.Url).ToList()
+                : [];
+            return Results.Ok(new MachinePairingCodeResponse(code.ManualCode, code.ExpiresAt, identity.Id, identity.Name ?? Environment.MachineName, addresses));
+        })
+        .RequireAuthorization(FleetClaims.MachineOwnerPolicy)
+        .Produces<MachinePairingCodeResponse>(200)
+        .WithName("CreateMachinePairingCode");
 
         machine.MapGet("/devices", async (DeviceTokenService devices) =>
             Results.Ok(new DeviceListResponse(await devices.ListAsync())))
@@ -170,14 +189,19 @@ public static class DeviceEndpoints
             // Check the request before using the code up, so a typo in the name doesn't cost the code.
             if (ValidateDevice(request.DeviceName, request.Platform) is { } invalid)
                 return invalid;
+            var isMachine = string.Equals(request.Kind, DeviceKinds.Machine, StringComparison.OrdinalIgnoreCase);
+            if (request.Kind is not null && !isMachine && !string.Equals(request.Kind, DeviceKinds.Device, StringComparison.OrdinalIgnoreCase))
+                return Results.BadRequest(new ErrorResponse("kind must be device or machine."));
 
             if (codes.TryConsume(request.Secret, request.ManualCode) is null)
                 return Results.NotFound(new ErrorResponse(CodeNotFound));
 
-            var (device, token) = await devices.IssueAsync(request.DeviceName!.Trim(), NormalizePlatform(request.Platform));
+            var (device, token) = await devices.IssueAsync(request.DeviceName!.Trim(), NormalizePlatform(request.Platform), kind: isMachine ? DeviceKinds.Machine : DeviceKinds.Device);
 
-            // Same-origin features that ride on the cookie (images, pages, the hub) work for the phone at once.
-            await LocalSignIn.DeviceAsync(http, device.Id);
+            // Same-origin features that ride on the cookie (images, pages, the hub) work for the phone at once. A
+            // machine talks with its token and never holds a browser session.
+            if (!isMachine)
+                await LocalSignIn.DeviceAsync(http, device.Id);
 
             return Results.Ok(new PairingRedeemResponse(device.Id, token, MachineEndpoints.ToResponse(identities.Get(), fleetOptions, policy)));
         })

@@ -33,7 +33,21 @@ public sealed record PairingPreviewResponse(string MachineId, string MachineName
 /// <summary>Redeems a pairing code for a device token.</summary>
 /// <param name="DeviceName">What the device is called in Settings: 1–60 characters.</param>
 /// <param name="Platform"><c>ios</c>, <c>android</c> or <c>other</c>.</param>
-public sealed record PairingRedeemRequest(string? Secret, string? ManualCode, string? DeviceName, string? Platform);
+/// <param name="Kind"><c>machine</c> when another Fleet redeems the code; leave it out for a phone or browser.</param>
+public sealed record PairingRedeemRequest(string? Secret, string? ManualCode, string? DeviceName, string? Platform, string? Kind = null);
+
+/// <summary>A pairing code for another Fleet to redeem (<c>fleet node pair</c>), and where to find this machine.</summary>
+/// <param name="ManualCode">The code, <c>XXXX-XXXX</c>.</param>
+/// <param name="Addresses">URLs another machine might use, best first. Empty when Fleet only listens on loopback.</param>
+public sealed record MachinePairingCodeResponse(
+    string ManualCode,
+    DateTimeOffset ExpiresAt,
+    string MachineId,
+    string MachineName,
+    IReadOnlyList<string> Addresses);
+
+/// <summary>Adds a machine by the address it listens on and a code from <c>fleet node pair</c>.</summary>
+public sealed record PairMachineRequest(string? BaseUrl, string? Code);
 
 /// <summary>A paired device's token. Returned once; Fleet keeps only a hash.</summary>
 public sealed record PairingRedeemResponse(string DeviceId, string Token, MachineResponse Machine);

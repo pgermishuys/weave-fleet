@@ -1,0 +1,160 @@
+2026-10-24 13:02:48.946 [INF] [Program] Legacy data migration: scanning for relocatable data. Target: WeaveFleet. CWD: /home/pgermishuys/source/weave-fleet-worktrees/fleet-session-00dc5765/src/WeaveFleet.Api.
+2026-10-24 13:02:48.947 [INF] [Program] Legacy data migration: Fleet:DatabasePath is overridden (/home/pgermishuys/.cache/fleet-pairing-live/home/data/fleet.db); skipping migration for this path.
+2026-10-24 13:02:48.947 [INF] [Program] Legacy data migration: Fleet:AnalyticsDatabasePath is overridden (/home/pgermishuys/.cache/fleet-pairing-live/home/data/fleet-analytics.db); skipping migration for this path.
+2026-10-24 13:02:48.958 [INF] [Program] Legacy data migration: scan complete. 0 item(s) relocated.
+2026-10-24 13:02:48.963 [INF] [Program] Legacy agent DB backup: source /home/pgermishuys/.cache/fleet-pairing-live/home/home/.weave/fleet.db not present, nothing to back up.
+2026-10-24 13:02:49.076 [INF] [WeaveFleet.Infrastructure.Data.MigrationRunner] Beginning database upgrade
+2026-10-24 13:02:49.081 [INF] [WeaveFleet.Infrastructure.Data.MigrationRunner] Checking whether journal table exists
+2026-10-24 13:02:49.082 [INF] [WeaveFleet.Infrastructure.Data.MigrationRunner] Journal table does not exist
+2026-10-24 13:02:49.099 [INF] [WeaveFleet.Infrastructure.Data.MigrationRunner] Executing Database Server script 'WeaveFleet.Infrastructure.Migrations.001_initial_schema.sql'
+2026-10-24 13:02:49.102 [INF] [WeaveFleet.Infrastructure.Data.MigrationRunner] Checking whether journal table exists
+2026-10-24 13:02:49.103 [INF] [WeaveFleet.Infrastructure.Data.MigrationRunner] Creating the [schema_versions] table
+2026-10-24 13:02:49.103 [INF] [WeaveFleet.Infrastructure.Data.MigrationRunner] The [schema_versions] table has been created
+2026-10-24 13:02:49.127 [INF] [WeaveFleet.Infrastructure.Data.MigrationRunner] Executing Database Server script 'WeaveFleet.Infrastructure.Migrations.002_add_messages_table.sql'
+2026-10-24 13:02:49.146 [INF] [WeaveFleet.Infrastructure.Data.MigrationRunner] Executing Database Server script 'WeaveFleet.Infrastructure.Migrations.003_add_harness_type.sql'
+2026-10-24 13:02:49.157 [INF] [WeaveFleet.Infrastructure.Data.MigrationRunner] Executing Database Server script 'WeaveFleet.Infrastructure.Migrations.004_add_harness_resume_token.sql'
+2026-10-24 13:02:49.169 [INF] [WeaveFleet.Infrastructure.Data.MigrationRunner] Executing Database Server script 'WeaveFleet.Infrastructure.Migrations.005_add_message_agent.sql'
+2026-10-24 13:02:49.181 [INF] [WeaveFleet.Infrastructure.Data.MigrationRunner] Executing Database Server script 'WeaveFleet.Infrastructure.Migrations.006_add_delegations_table.sql'
+2026-10-24 13:02:49.193 [INF] [WeaveFleet.Infrastructure.Data.MigrationRunner] Executing Database Server script 'WeaveFleet.Infrastructure.Migrations.007_add_sessions_hidden_flag.sql'
+2026-10-24 13:02:49.205 [INF] [WeaveFleet.Infrastructure.Data.MigrationRunner] Executing Database Server script 'WeaveFleet.Infrastructure.Migrations.008_add_session_retention_status.sql'
+2026-10-24 13:02:49.218 [INF] [WeaveFleet.Infrastructure.Data.MigrationRunner] Executing Database Server script 'WeaveFleet.Infrastructure.Migrations.009_add_session_source_metadata.sql'
+2026-10-24 13:02:49.230 [INF] [WeaveFleet.Infrastructure.Data.MigrationRunner] Executing Database Server script 'WeaveFleet.Infrastructure.Migrations.010_add_users_table.sql'
+2026-10-24 13:02:49.243 [INF] [WeaveFleet.Infrastructure.Data.MigrationRunner] Executing Database Server script 'WeaveFleet.Infrastructure.Migrations.011_add_user_id_columns.sql'
+2026-10-24 13:02:49.255 [INF] [WeaveFleet.Infrastructure.Data.MigrationRunner] Executing Database Server script 'WeaveFleet.Infrastructure.Migrations.012_add_user_credentials.sql'
+2026-10-24 13:02:49.268 [INF] [WeaveFleet.Infrastructure.Data.MigrationRunner] Executing Database Server script 'WeaveFleet.Infrastructure.Migrations.013_add_outbox_table.sql'
+2026-10-24 13:02:49.280 [INF] [WeaveFleet.Infrastructure.Data.MigrationRunner] Executing Database Server script 'WeaveFleet.Infrastructure.Migrations.014_add_message_model_id.sql'
+2026-10-24 13:02:49.293 [INF] [WeaveFleet.Infrastructure.Data.MigrationRunner] Executing Database Server script 'WeaveFleet.Infrastructure.Migrations.015_add_board_tables.sql'
+2026-10-24 13:02:49.306 [INF] [WeaveFleet.Infrastructure.Data.MigrationRunner] Executing Database Server script 'WeaveFleet.Infrastructure.Migrations.016_add_board_sources.sql'
+2026-10-24 13:02:49.319 [INF] [WeaveFleet.Infrastructure.Data.MigrationRunner] Executing Database Server script 'WeaveFleet.Infrastructure.Migrations.017_add_harness_events_log.sql'
+2026-10-24 13:02:49.333 [INF] [WeaveFleet.Infrastructure.Data.MigrationRunner] Executing Database Server script 'WeaveFleet.Infrastructure.Migrations.018_add_inproc_events.sql'
+2026-10-24 13:02:49.345 [INF] [WeaveFleet.Infrastructure.Data.MigrationRunner] Executing Database Server script 'WeaveFleet.Infrastructure.Migrations.018_add_session_selected_model.sql'
+2026-10-24 13:02:49.360 [INF] [WeaveFleet.Infrastructure.Data.MigrationRunner] Executing Database Server script 'WeaveFleet.Infrastructure.Migrations.019_add_smart_links_table.sql'
+2026-10-24 13:02:49.373 [INF] [WeaveFleet.Infrastructure.Data.MigrationRunner] Executing Database Server script 'WeaveFleet.Infrastructure.Migrations.019_add_user_preferences.sql'
+2026-10-24 13:02:49.381 [INF] [WeaveFleet.Infrastructure.Data.MigrationRunner] Executing Database Server script 'WeaveFleet.Infrastructure.Migrations.020_add_session_view_mode.sql'
+2026-10-24 13:02:49.395 [INF] [WeaveFleet.Infrastructure.Data.MigrationRunner] Executing Database Server script 'WeaveFleet.Infrastructure.Migrations.021_drop_session_view_mode.sql'
+2026-10-24 13:02:49.413 [INF] [WeaveFleet.Infrastructure.Data.MigrationRunner] Executing Database Server script 'WeaveFleet.Infrastructure.Migrations.022_add_harness_event_store_id.sql'
+2026-10-24 13:02:49.425 [INF] [WeaveFleet.Infrastructure.Data.MigrationRunner] Executing Database Server script 'WeaveFleet.Infrastructure.Migrations.022_add_session_git_baseline.sql'
+2026-10-24 13:02:49.437 [INF] [WeaveFleet.Infrastructure.Data.MigrationRunner] Executing Database Server script 'WeaveFleet.Infrastructure.Migrations.023_add_legacy_imports_table.sql'
+2026-10-24 13:02:49.450 [INF] [WeaveFleet.Infrastructure.Data.MigrationRunner] Executing Database Server script 'WeaveFleet.Infrastructure.Migrations.024_add_session_runtime_mode.sql'
+2026-10-24 13:02:49.461 [INF] [WeaveFleet.Infrastructure.Data.MigrationRunner] Executing Database Server script 'WeaveFleet.Infrastructure.Migrations.025_add_automation_event_ledger.sql'
+2026-10-24 13:02:49.475 [INF] [WeaveFleet.Infrastructure.Data.MigrationRunner] Executing Database Server script 'WeaveFleet.Infrastructure.Migrations.025_add_automations_table.sql'
+2026-10-24 13:02:49.486 [INF] [WeaveFleet.Infrastructure.Data.MigrationRunner] Executing Database Server script 'WeaveFleet.Infrastructure.Migrations.025_add_session_source_reference.sql'
+2026-10-24 13:02:49.498 [INF] [WeaveFleet.Infrastructure.Data.MigrationRunner] Executing Database Server script 'WeaveFleet.Infrastructure.Migrations.026_add_tags_columns.sql'
+2026-10-24 13:02:49.510 [INF] [WeaveFleet.Infrastructure.Data.MigrationRunner] Executing Database Server script 'WeaveFleet.Infrastructure.Migrations.027_add_automation_target_type.sql'
+2026-10-24 13:02:49.524 [INF] [WeaveFleet.Infrastructure.Data.MigrationRunner] Executing Database Server script 'WeaveFleet.Infrastructure.Migrations.028_add_canvases.sql'
+2026-10-24 13:02:49.536 [INF] [WeaveFleet.Infrastructure.Data.MigrationRunner] Executing Database Server script 'WeaveFleet.Infrastructure.Migrations.029_add_smart_link_relationship.sql'
+2026-10-24 13:02:49.548 [INF] [WeaveFleet.Infrastructure.Data.MigrationRunner] Executing Database Server script 'WeaveFleet.Infrastructure.Migrations.030_add_app_runs.sql'
+2026-10-24 13:02:49.560 [INF] [WeaveFleet.Infrastructure.Data.MigrationRunner] Executing Database Server script 'WeaveFleet.Infrastructure.Migrations.031_add_preview_commands.sql'
+2026-10-24 13:02:49.572 [INF] [WeaveFleet.Infrastructure.Data.MigrationRunner] Executing Database Server script 'WeaveFleet.Infrastructure.Migrations.032_add_session_progress.sql'
+2026-10-24 13:02:49.584 [INF] [WeaveFleet.Infrastructure.Data.MigrationRunner] Executing Database Server script 'WeaveFleet.Infrastructure.Migrations.033_add_automation_time_zone.sql'
+2026-10-24 13:02:49.596 [INF] [WeaveFleet.Infrastructure.Data.MigrationRunner] Executing Database Server script 'WeaveFleet.Infrastructure.Migrations.034_add_automation_runs.sql'
+2026-10-24 13:02:49.609 [INF] [WeaveFleet.Infrastructure.Data.MigrationRunner] Executing Database Server script 'WeaveFleet.Infrastructure.Migrations.035_add_session_harness_profile.sql'
+2026-10-24 13:02:49.623 [INF] [WeaveFleet.Infrastructure.Data.MigrationRunner] Executing Database Server script 'WeaveFleet.Infrastructure.Migrations.036_add_agent_choices.sql'
+2026-10-24 13:02:49.634 [INF] [WeaveFleet.Infrastructure.Data.MigrationRunner] Executing Database Server script 'WeaveFleet.Infrastructure.Migrations.037_add_weave_configs.sql'
+2026-10-24 13:02:49.648 [INF] [WeaveFleet.Infrastructure.Data.MigrationRunner] Executing Database Server script 'WeaveFleet.Infrastructure.Migrations.038_add_workflow_runs.sql'
+2026-10-24 13:02:49.659 [INF] [WeaveFleet.Infrastructure.Data.MigrationRunner] Executing Database Server script 'WeaveFleet.Infrastructure.Migrations.039_add_workflow_finish_you.sql'
+2026-10-24 13:02:49.674 [INF] [WeaveFleet.Infrastructure.Data.MigrationRunner] Executing Database Server script 'WeaveFleet.Infrastructure.Migrations.040_add_workflow_files_commit.sql'
+2026-10-24 13:02:49.685 [INF] [WeaveFleet.Infrastructure.Data.MigrationRunner] Executing Database Server script 'WeaveFleet.Infrastructure.Migrations.041_add_automation_workflows.sql'
+2026-10-24 13:02:49.699 [INF] [WeaveFleet.Infrastructure.Data.MigrationRunner] Executing Database Server script 'WeaveFleet.Infrastructure.Migrations.042_add_message_commands.sql'
+2026-10-24 13:02:49.711 [INF] [WeaveFleet.Infrastructure.Data.MigrationRunner] Executing Database Server script 'WeaveFleet.Infrastructure.Migrations.043_add_side_conversations.sql'
+2026-10-24 13:02:49.723 [INF] [WeaveFleet.Infrastructure.Data.MigrationRunner] Executing Database Server script 'WeaveFleet.Infrastructure.Migrations.044_add_queued_prompts.sql'
+2026-10-24 13:02:49.735 [INF] [WeaveFleet.Infrastructure.Data.MigrationRunner] Executing Database Server script 'WeaveFleet.Infrastructure.Migrations.045_add_side_seen_answer.sql'
+2026-10-24 13:02:49.745 [INF] [WeaveFleet.Infrastructure.Data.MigrationRunner] Executing Database Server script 'WeaveFleet.Infrastructure.Migrations.046_add_message_errors.sql'
+2026-10-24 13:02:49.753 [INF] [WeaveFleet.Infrastructure.Data.MigrationRunner] Executing Database Server script 'WeaveFleet.Infrastructure.Migrations.047_add_agent_browser_steps.sql'
+2026-10-24 13:02:49.761 [INF] [WeaveFleet.Infrastructure.Data.MigrationRunner] Executing Database Server script 'WeaveFleet.Infrastructure.Migrations.048_add_running_work_and_lineage.sql'
+2026-10-24 13:02:49.781 [INF] [WeaveFleet.Infrastructure.Data.MigrationRunner] Executing Database Server script 'WeaveFleet.Infrastructure.Migrations.049_add_lost_work_reported.sql'
+2026-10-24 13:02:49.792 [INF] [WeaveFleet.Infrastructure.Data.MigrationRunner] Executing Database Server script 'WeaveFleet.Infrastructure.Migrations.050_add_lineage_detached.sql'
+2026-10-24 13:02:49.804 [INF] [WeaveFleet.Infrastructure.Data.MigrationRunner] Executing Database Server script 'WeaveFleet.Infrastructure.Migrations.051_add_devices.sql'
+2026-10-24 13:02:49.818 [INF] [WeaveFleet.Infrastructure.Data.MigrationRunner] Executing Database Server script 'WeaveFleet.Infrastructure.Migrations.052_add_push_subscriptions.sql'
+2026-10-24 13:02:49.830 [INF] [WeaveFleet.Infrastructure.Data.MigrationRunner] Executing Database Server script 'WeaveFleet.Infrastructure.Migrations.053_add_machines.sql'
+2026-10-24 13:02:49.842 [INF] [WeaveFleet.Infrastructure.Data.MigrationRunner] Executing Database Server script 'WeaveFleet.Infrastructure.Migrations.054_add_message_steered.sql'
+2026-10-24 13:02:49.853 [INF] [WeaveFleet.Infrastructure.Data.MigrationRunner] Executing Database Server script 'WeaveFleet.Infrastructure.Migrations.055_add_session_context.sql'
+2026-10-24 13:02:49.868 [INF] [WeaveFleet.Infrastructure.Data.MigrationRunner] Executing Database Server script 'WeaveFleet.Infrastructure.Migrations.056_add_session_pin_order.sql'
+2026-10-24 13:02:49.879 [INF] [WeaveFleet.Infrastructure.Data.MigrationRunner] Executing Database Server script 'WeaveFleet.Infrastructure.Migrations.057_add_scheduled_retries.sql'
+2026-10-24 13:02:49.890 [INF] [WeaveFleet.Infrastructure.Data.MigrationRunner] Executing Database Server script 'WeaveFleet.Infrastructure.Migrations.058_add_workflow_run_project.sql'
+2026-10-24 13:02:49.903 [INF] [WeaveFleet.Infrastructure.Data.MigrationRunner] Executing Database Server script 'WeaveFleet.Infrastructure.Migrations.059_add_automation_machine.sql'
+2026-10-24 13:02:49.915 [INF] [WeaveFleet.Infrastructure.Data.MigrationRunner] Executing Database Server script 'WeaveFleet.Infrastructure.Migrations.060_add_machine_agents_allowed.sql'
+2026-10-24 13:02:49.928 [INF] [WeaveFleet.Infrastructure.Data.MigrationRunner] Executing Database Server script 'WeaveFleet.Infrastructure.Migrations.061_add_prompt_mods.sql'
+2026-10-24 13:02:49.940 [INF] [WeaveFleet.Infrastructure.Data.MigrationRunner] Executing Database Server script 'WeaveFleet.Infrastructure.Migrations.062_add_queued_prompt_skills.sql'
+2026-10-24 13:02:49.951 [INF] [WeaveFleet.Infrastructure.Data.MigrationRunner] Executing Database Server script 'WeaveFleet.Infrastructure.Migrations.063_add_session_interruptions.sql'
+2026-10-24 13:02:49.963 [INF] [WeaveFleet.Infrastructure.Data.MigrationRunner] Executing Database Server script 'WeaveFleet.Infrastructure.Migrations.064_drop_diagram_canvases.sql'
+2026-10-24 13:02:49.974 [INF] [WeaveFleet.Infrastructure.Data.MigrationRunner] Executing Database Server script 'WeaveFleet.Infrastructure.Migrations.065_add_session_permission_rules.sql'
+2026-10-24 13:02:49.985 [INF] [WeaveFleet.Infrastructure.Data.MigrationRunner] Executing Database Server script 'WeaveFleet.Infrastructure.Migrations.066_add_device_kind.sql'
+2026-10-24 13:02:49.996 [INF] [WeaveFleet.Infrastructure.Data.MigrationRunner] Upgrade successful
+2026-10-24 13:02:50.029 [INF] [WeaveFleet.Infrastructure.Data.MigrationRunner] Beginning database upgrade
+2026-10-24 13:02:50.029 [INF] [WeaveFleet.Infrastructure.Data.MigrationRunner] Checking whether journal table exists
+2026-10-24 13:02:50.029 [INF] [WeaveFleet.Infrastructure.Data.MigrationRunner] Journal table does not exist
+2026-10-24 13:02:50.030 [INF] [WeaveFleet.Infrastructure.Data.MigrationRunner] Executing Database Server script 'WeaveFleet.Infrastructure.AnalyticsMigrations.001_analytics_initial.sql'
+2026-10-24 13:02:50.030 [INF] [WeaveFleet.Infrastructure.Data.MigrationRunner] Checking whether journal table exists
+2026-10-24 13:02:50.031 [INF] [WeaveFleet.Infrastructure.Data.MigrationRunner] Creating the [analytics_schema_versions] table
+2026-10-24 13:02:50.031 [INF] [WeaveFleet.Infrastructure.Data.MigrationRunner] The [analytics_schema_versions] table has been created
+2026-10-24 13:02:50.053 [INF] [WeaveFleet.Infrastructure.Data.MigrationRunner] Executing Database Server script 'WeaveFleet.Infrastructure.AnalyticsMigrations.002_token_events_upsert.sql'
+2026-10-24 13:02:50.064 [INF] [WeaveFleet.Infrastructure.Data.MigrationRunner] Executing Database Server script 'WeaveFleet.Infrastructure.AnalyticsMigrations.003_add_user_id.sql'
+2026-10-24 13:02:50.072 [INF] [WeaveFleet.Infrastructure.Data.MigrationRunner] Upgrade successful
+2026-10-24 13:02:50.602 [INF] [WeaveFleet.Application.Mods.Host.ModHostService] The mod host for 3477cdab157537bd is stopped (pid (null)): Mods are off.
+2026-10-24 13:02:50.671 [INF] [WeaveFleet.Infrastructure.Harnesses.OpenCode.Pooling.PooledOpenCodeInstanceRegistry] Acquiring pooled OpenCode instance for key fingerprint 4fa14df9db23.
+2026-10-24 13:02:50.671 [INF] [WeaveFleet.Infrastructure.Harnesses.OpenCode.Pooling.PooledOpenCodeInstanceRegistry] Credential boundary decision for pooled OpenCode key fingerprint 4fa14df9db23: authoritative_hash_matched.
+2026-10-24 13:02:50.673 [INF] [WeaveFleet.Infrastructure.Harnesses.OpenCode.Pooling.PooledOpenCodeInstanceRegistry] Credential boundary decision for pooled OpenCode key fingerprint 4fa14df9db23: new_or_recovered_boundary_spawn.
+2026-10-24 13:02:50.675 [INF] [WeaveFleet.Infrastructure.Harnesses.OpenCode.Pooling.PooledOpenCodeInstanceRegistry] Spawning pooled OpenCode instance for key fingerprint 4fa14df9db23.
+2026-10-24 13:02:50.675 [INF] [WeaveFleet.Infrastructure.Harnesses.OpenCode.Pooling.PooledOpenCodeInstanceRegistry] Spawning pooled OpenCode process for key fingerprint 4fa14df9db23; reason: initial_acquire.
+2026-10-24 13:02:53.884 [INF] [WeaveFleet.Infrastructure.Harnesses.OpenCode.OpenCodeProcessManager] opencode process started: http://127.0.0.1:34181/
+2026-10-24 13:02:53.933 [INF] [System.Net.Http.HttpClient.OpenCode.LogicalHandler] Start processing HTTP request GET http://127.0.0.1:34181/global/health
+2026-10-24 13:02:53.934 [INF] [System.Net.Http.HttpClient.OpenCode.ClientHandler] Sending HTTP request GET http://127.0.0.1:34181/global/heal2022026-10-24 13:02:54.021 [INF] [System.Net.Http.HttpClient.OpenCode.ClientHandler] Received HTTP response headers after 78.4471ms - 200
+2026-10-24 13:02:54.022 [INF] [System.Net.Http.HttpClient.OpenCode.LogicalHandler] End processing HTTP request after 93.3458ms - 200
+2026-10-24 13:02:54.037 [INF] [System.Net.Http.HttpClient.OpenCodePreparation.LogicalHandler] Start processing HTTP request GET http://127.0.0.1:34181/config?*
+2026-10-24 13:02:54.037 [INF] [System.Net.Http.HttpClient.OpenCodePreparation.ClientHandler] Sending HTTP request GET http://127.0.0.1:34181/config?*
+2026-10-24 13:02:54.046 [INF] [WeaveFleet.Infrastructure.Harnesses.OpenCode.Pooling.PooledOpenCodeInstanceRegistry] Pooled OpenCode ref-count changed for key fingerprint 4fa14df9db23: 0 -> 1; reason: acquire.
+2026-10-24 13:02:54.046 [INF] [WeaveFleet.Infrastructure.Harnesses.OpenCode.Pooling.PooledOpenCodeInstanceRegistry] Acquired pooled OpenCode instance for key fingerprint 4fa14df9db23.
+2026-10-24 13:02:54.049 [INF] [WeaveFleet.Infrastructure.Harnesses.OpenCode.Pooling.PooledOpenCodeInstanceRegistry] Releasing pooled OpenCode instance for key fingerprint 4fa14df9db23; mode: IdleTtl.
+2026-10-24 13:02:54.050 [INF] [WeaveFleet.Infrastructure.Harnesses.OpenCode.Pooling.PooledOpenCodeInstanceRegistry] Pooled OpenCode ref-count changed for key fingerprint 4fa14df9db23: 1 -> 0; reason: release.
+2026-10-24 13:02:54.060 [INF] [WeaveFleet.Infrastructure.Harnesses.OpenCode.Pooling.PooledOpenCodeInstanceRegistry] Scheduled pooled OpenCode idle TTL for key fingerprint 4fa14df9db23; ttl_ms: 60000.
+2026-10-24 13:02:54.065 [INF] [WeaveFleet.Infrastructure.Harnesses.OpenCode.OpenCodeWarmupHostedService] OpenCode startup warmup completed: pooled process pre-warmed for local owne2022026-10-24 13:02:54.168 [INF] [WeaveFleet.Infrastructure.EventBus.OutboxDispatchBackgroundService] Outbox dispatch background service started.
+2026-10-24 13:02:54.175 [INF] [WeaveFleet.Infrastructure.EventBus.OutboxCleanupBackgroundService] Outbox cleanup background service started.
+2026-10-24 13:02:54.180 [INF] [WeaveFleet.Infrastructure.Plugins.BuiltIn.GitHub.SmartLinkWatcherService] SmartLinkWatcherService started.
+2026-10-24 13:02:54.212 [INF] [WeaveFleet.Infrastructure.Automations.AutomationEventDispatcherService] Automation event dispatcher service started.
+2026-10-24 13:02:54.244 [INF] [WeaveFleet.Infrastructure.Analytics.AnalyticsRollupService] AnalyticsRollupService started (interval=00:05:00)
+2026-10-24 13:02:54.247 [WRN] [Microsoft.AspNetCore.DataProtection.KeyManagement.XmlKeyManager] No XML encryptor configured. Key {b9877275-b5c4-4c41-8d3c-1cdea3b93481} may be persisted to storage in unencrypted form.
+2026-10-24 13:02:54.273 [INF] [WeaveFleet.Infrastructure.Analytics.AnalyticsWriterService] AnalyticsWriterService started (flushInterval=00:00:02, maxBatch=52026-10-24 13:02:58.763 [INF] [Microsoft.Hosting.Lifetime] Now listening on: http://127.0.0.1:5542
+2026-10-24 13:02:58.773 [INF] [Microsoft.Hosting.Lifetime] Application started. Press Ctrl+C to shut down.
+2026-10-24 13:02:58.773 [INF] [Microsoft.Hosting.Lifetime] Hosting environment: Production
+2026-10-24 13:02:58.773 [INF] [Microsoft.Hosting.Lifetime] Content root path: /home/pgermishuys/source/weave-fleet-worktrees/fleet-session-00dc5765/src/WeaveFleet.Api
+2022026-10-24 13:03:09.721 [INF] [System.Net.Http.HttpClient.OpenCodePreparation.ClientHandler] Received HTTP response headers after 15684.0004ms - 200
+2026-10-24 13:03:09.721 [INF] [System.Net.Http.HttpClient.OpenCodePreparation.LogicalHandler] End processing HTTP request after 15684.2664ms - 200
+2026-10-24 13:03:09.728 [INF] [WeaveFleet.Infrastructure.Harnesses.OpenCode.OpenCodeHarnessRuntime] A new OpenCode process loaded its first folder in 15.7s (a first run installs OpenCode's plugin packages2026-10-24 13:03:54.037 [INF] [WeaveFleet.Infrastructure.Harnesses.OpenCode.Pooling.PooledOpenCodeInstanceRegistry] Pooled OpenCode idle TTL expired for key fingerprint 4fa14df9db23.
+2026-10-24 13:03:54.040 [INF] [WeaveFleet.Infrastructure.Harnesses.OpenCode.Pooling.PooledOpenCodeInstanceRegistry] Stopping idle pooled OpenCode instance for key fingerprint 4fa14df9db23.
+2026-10-24 13:03:54.040 [INF] [WeaveFleet.Infrastructure.Harnesses.OpenCode.Pooling.PooledOpenCodeInstanceRegistry] Stopping pooled OpenCode process for key fingerprint 4fa14df9db23; reason: idle_ttl.
+2026-10-24 13:03:54.165 [INF] [WeaveFleet.Infrastructure.Harnesses.OpenCode.OpenCodeProcessManager] opencode process exited with code 137.
+2026-10-24 13:04:13.769 [INF] [Microsoft.Hosting.Lifetime] Application is shutting down...
+2026-10-24 13:04:13.785 [INF] [WeaveFleet.Infrastructure.Plugins.BuiltIn.GitHub.SmartLinkWatcherService] SmartLinkWatcherService stopped.
+2026-10-24 13:04:13.824 [INF] [WeaveFleet.Application.Mods.Host.ModHostService] The mod host for 3477cdab157537bd is stopped (pid (null)): Fleet is stopping.
+s.org/opencode-ai/latest
+2026-10-24 13:03:19.387 [INF] [System.Net.Http.HttpClient.Default.ClientHandler] Received HTTP response headers after 160.8717ms - 200
+2026-10-24 13:03:19.387 [INF] [System.Net.Http.HttpClient.Default.LogicalHandler] End processing HTTP request after 161.129ms - 200
+2026-10-24 13:03:19.563 [INF] [System.Net.Http.HttpClient.Default.ClientHandler] Received HTTP response headers after 340.2029ms - 200
+2026-10-24 13:03:19.563 [INF] [System.Net.Http.HttpClient.Default.LogicalHandler] End processing HTTP request after 340.4269ms - 200
+2026-10-24 13:03:19.569 [INF] [System.Net.Http.HttpClient.Default.ClientHandler] Received HTTP response headers after 346.6832ms - 200
+2026-10-24 13:03:19.569 [INF] [System.Net.Http.HttpClient.Default.LogicalHandler] End processing HTTP request after 347.0249ms - 200
+2026-10-24 13:03:54.062 [INF] [WeaveFleet.Infrastructure.Harnesses.OpenCode.Pooling.PooledOpenCodeInstanceRegistry] Pooled OpenCode idle TTL expired for key fingerprint 4fa14df9db23.
+2026-10-24 13:03:54.064 [INF] [WeaveFleet.Infrastructure.Harnesses.OpenCode.Pooling.PooledOpenCodeInstanceRegistry] Stopping idle pooled OpenCode instance for key fingerprint 4fa14df9db23.
+2026-10-24 13:03:54.065 [INF] [WeaveFleet.Infrastructure.Harnesses.OpenCode.Pooling.PooledOpenCodeInstanceRegistry] Stopping pooled OpenCode process for key fingerprint 4fa14df9db23; reason: idle_ttl.
+2026-10-24 13:03:54.159 [INF] [WeaveFleet.Infrastructure.Harnesses.OpenCode.OpenCodeProcessManager] opencode process exited with code 137.
+2026-10-24 13:03:59.977 [INF] [System.Net.Http.HttpClient.RemoteMachines.LogicalHandler] Start processing HTTP request POST http://127.0.0.1:5542/api/pairing/preview
+2026-10-24 13:03:59.977 [INF] [System.Net.Http.HttpClient.RemoteMachines.ClientHandler] Sending HTTP request POST http://127.0.0.1:5542/api/pairing/preview
+2026-10-24 13:04:00.015 [INF] [System.Net.Http.HttpClient.RemoteMachines.ClientHandler] Received HTTP response headers after 38.3641ms - 200
+2026-10-24 13:04:00.015 [INF] [System.Net.Http.HttpClient.RemoteMachines.LogicalHandler] End processing HTTP request after 38.5951ms - 200
+2026-10-24 13:04:00.020 [INF] [System.Net.Http.HttpClient.RemoteMachines.LogicalHandler] Start processing HTTP request POST http://127.0.0.1:5542/api/pairing/redeem
+2026-10-24 13:04:00.020 [INF] [System.Net.Http.HttpClient.RemoteMachines.ClientHandler] Sending HTTP request POST http://127.0.0.1:5542/api/pairing/redeem
+2026-10-24 13:04:00.058 [INF] [System.Net.Http.HttpClient.RemoteMachines.ClientHandler] Received HTTP response headers after 37.563ms - 200
+2026-10-24 13:04:00.058 [INF] [System.Net.Http.HttpClient.RemoteMachines.LogicalHandler] End processing HTTP request after 37.9044ms - 200
+2026-10-24 13:04:00.065 [INF] [System.Net.Http.HttpClient.RemoteMachines.LogicalHandler] Start processing HTTP request GET http://127.0.0.1:5542/api/machine
+2026-10-24 13:04:00.065 [INF] [System.Net.Http.HttpClient.RemoteMachines.ClientHandler] Sending HTTP request GET http://127.0.0.1:5542/api/machine
+2026-10-24 13:04:00.121 [INF] [System.Net.Http.HttpClient.RemoteMachines.ClientHandler] Received HTTP response headers after 55.3543ms - 200
+2026-10-24 13:04:00.121 [INF] [System.Net.Http.HttpClient.RemoteMachines.LogicalHandler] End processing HTTP request after 55.6158ms - 200
+2026-10-24 13:04:00.424 [INF] [WeaveFleet.Infrastructure.Machines.RemoteMachineConnection] Listening to falcon for notifications.
+2026-10-24 13:04:01.776 [INF] [System.Net.Http.HttpClient.RemoteMachines.LogicalHandler] Start processing HTTP request POST http://127.0.0.1:5542/api/pairing/preview
+2026-10-24 13:04:01.776 [INF] [System.Net.Http.HttpClient.RemoteMachines.ClientHandler] Sending HTTP request POST http://127.0.0.1:5542/api/pairing/preview
+2026-10-24 13:04:01.785 [INF] [System.Net.Http.HttpClient.RemoteMachines.ClientHandler] Received HTTP response headers after 9.3409ms - 404
+2026-10-24 13:04:01.785 [INF] [System.Net.Http.HttpClient.RemoteMachines.LogicalHandler] End processing HTTP request after 9.5383ms - 404
+2026-10-24 13:04:13.769 [INF] [Microsoft.Hosting.Lifetime] Application is shutting down...
+2026-10-24 13:04:13.783 [INF] [WeaveFleet.Infrastructure.Plugins.BuiltIn.GitHub.SmartLinkWatcherService] SmartLinkWatcherService stopped.
+2026-10-24 13:04:13.827 [INF] [WeaveFleet.Application.Mods.Host.ModHostService] The mod host for 3477cdab157537bd is stopped (pid (null)): Fleet is stopping.

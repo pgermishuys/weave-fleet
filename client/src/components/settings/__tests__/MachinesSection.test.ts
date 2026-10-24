@@ -54,7 +54,7 @@ function capabilitiesOf(wrapper: VueWrapper, key: string): string | null {
 }
 
 describe("Settings → Machines", () => {
-  let routes: Record<string, () => Response>;
+  let routes: Record<string, (url?: string, init?: RequestInit) => Response>;
 
   beforeEach(() => {
     localStorage.clear();
@@ -66,9 +66,9 @@ describe("Settings → Machines", () => {
       "/api/machine": () => json({ ...atlasInfo, capabilities: atlasCapabilities }),
       "http://100.64.12.40:2113/api/sessions": () => json([]),
     };
-    vi.stubGlobal("fetch", vi.fn(async (input: RequestInfo | URL) => {
+    vi.stubGlobal("fetch", vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
       const route = routes[String(input).split("?")[0]];
-      return route ? route() : json({ error: "no route" }, 404);
+      return route ? route(String(input), init) : json({ error: "no route" }, 404);
     }));
   });
 
@@ -300,6 +300,72 @@ describe("Settings → Machines", () => {
       setUp({ switchOn: true, home: { ...current, latestVersion: null, status: "unknown" }, mini: { ...current, latestVersion: null, status: "unknown" } });
       const wrapper = await mountIt();
       expect(wrapper.get("[data-testid='machines-updates-strip']").text()).toContain("Fleet hasn't found a release yet.");
+    });
+  });
+
+  describe("Add a machine", () => {
+    async function openAddForm() {
+      routes["/api/machines"] = () => json({ machines: [] });
+      const wrapper = mount(MachinesSection);
+      await flushPromises();
+      await wrapper.find("[data-testid='machines-add']").trigger("click");
+      return wrapper;
+    }
+
+    it("starts with a pairing code, and keeps the token form under Advanced", async () => {
+      const wrapper = await openAddForm();
+
+      expect(wrapper.find("[data-testid='machines-add-mode-code']").attributes("aria-selected")).toBe("true");
+      expect(wrapper.find("[data-testid='machines-add-code']").exists()).toBe(true);
+      expect(wrapper.find("[data-testid='machines-add-code-help']").text()).toContain("fleet node pair");
+      expect(wrapper.find("[data-testid='machines-add-token']").exists()).toBe(false);
+
+      await wrapper.find("[data-testid='machines-add-mode-address']").trigger("click");
+      expect(wrapper.find("[data-testid='machines-add-code']").exists()).toBe(false);
+      expect(wrapper.find("[data-testid='machines-add-token']").exists()).toBe(false);
+      await wrapper.find("[data-testid='machines-add-advanced']").trigger("click");
+      expect(wrapper.find("[data-testid='machines-add-token']").exists()).toBe(true);
+    });
+
+    it("needs an address and a code before it can add", async () => {
+      const wrapper = await openAddForm();
+      const submit = wrapper.find("[data-testid='machines-add-submit']");
+      expect(submit.attributes("disabled")).toBeDefined();
+
+      await wrapper.find("[data-testid='machines-add-url']").setValue("http://100.64.90.72:2113");
+      expect(submit.attributes("disabled")).toBeDefined();
+      await wrapper.find("[data-testid='machines-add-code']").setValue("ABCD-EFGH");
+      expect(submit.attributes("disabled")).toBeUndefined();
+    });
+
+    it("adds the machine with the code and says so", async () => {
+      const wrapper = await openAddForm();
+      let sent: unknown = null;
+      routes["/api/machines/pair"] = (_, init) => {
+        sent = JSON.parse(String(init?.body));
+        return json({ id: "ffffffffffffffffffffffffffffffff", name: "falcon", baseUrl: "http://100.64.90.72:2113", os: "linux", status: "online", addedAt: "2026-10-24T00:00:00.000Z", lastSeenAt: null, token: "fdt_d1.secret" });
+      };
+
+      await wrapper.find("[data-testid='machines-add-url']").setValue("http://100.64.90.72:2113");
+      await wrapper.find("[data-testid='machines-add-code']").setValue("ABCD-EFGH");
+      await wrapper.find("[data-testid='machines-add-form']").trigger("submit");
+      await flushPromises();
+
+      expect(sent).toEqual({ baseUrl: "http://100.64.90.72:2113", code: "ABCD-EFGH" });
+      expect(wrapper.text()).toContain("Added falcon");
+      expect(wrapper.find("[data-testid='machines-add-form']").exists()).toBe(false);
+    });
+
+    it("shows the error from a code that was used", async () => {
+      const wrapper = await openAddForm();
+      routes["/api/machines/pair"] = () => json({ error: "That code has expired or was already used. Run fleet node pair on the other machine for a new one." }, 400);
+
+      await wrapper.find("[data-testid='machines-add-url']").setValue("http://100.64.90.72:2113");
+      await wrapper.find("[data-testid='machines-add-code']").setValue("ABCD-EFGH");
+      await wrapper.find("[data-testid='machines-add-form']").trigger("submit");
+      await flushPromises();
+
+      expect(wrapper.find("[data-testid='machines-add-error']").text()).toContain("already used");
     });
   });
 });

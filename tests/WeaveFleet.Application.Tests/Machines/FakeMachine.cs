@@ -22,6 +22,8 @@ internal sealed class FakeMachine : HttpMessageHandler, IHttpClientFactory
     /// <summary>For services that need the way to other machines, in tests that never use it.</summary>
     public static RemoteAutomationRuns Unused { get; } = new FakeMachine().Runs;
 
+    private readonly MachineIdentityStore _identity = new(Path.Combine(Path.GetTempPath(), $"fleet-{Guid.NewGuid():N}.db"));
+
     public FakeMachine(FakeTimeProvider? time = null)
     {
         Time = time ?? new FakeTimeProvider(new DateTimeOffset(2026, 10, 8, 7, 30, 0, TimeSpan.Zero));
@@ -30,7 +32,7 @@ internal sealed class FakeMachine : HttpMessageHandler, IHttpClientFactory
             Machines,
             this,
             protection,
-            new MachineIdentityStore(Path.Combine(Path.GetTempPath(), $"fleet-{Guid.NewGuid():N}.db")),
+            _identity,
             Time);
         Machines.UpsertAsync(new RemoteMachine
         {
@@ -42,6 +44,9 @@ internal sealed class FakeMachine : HttpMessageHandler, IHttpClientFactory
         }).GetAwaiter().GetResult();
         Runs = new RemoteAutomationRuns(Service, this, Time);
     }
+
+    /// <summary>The id of the Fleet that owns this list.</summary>
+    public string SelfId => _identity.Get().Id;
 
     public FakeTimeProvider Time { get; }
     public InMemoryRemoteMachineRepository Machines { get; } = new();

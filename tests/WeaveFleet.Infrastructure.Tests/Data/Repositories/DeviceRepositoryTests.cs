@@ -20,6 +20,19 @@ public sealed class DeviceRepositoryTests
     };
 
     [Fact]
+    public async Task a_machine_keeps_its_kind()
+    {
+        var (keeper, factory) = await TestDbHelper.CreateSharedDbAsync();
+        using var _ = keeper;
+        var repo = new DeviceRepository(factory);
+
+        await repo.InsertAsync(Phone("01JDEVICE0000000000000000M", "studio-mac") with { Kind = DeviceKinds.Machine });
+
+        (await repo.GetAsync("01JDEVICE0000000000000000M"))!.Kind.ShouldBe("machine");
+        (await repo.ListActiveAsync()).Single().Kind.ShouldBe("machine");
+    }
+
+    [Fact]
     public async Task a_device_round_trips_with_its_hash()
     {
         var (keeper, factory) = await TestDbHelper.CreateSharedDbAsync();
@@ -37,6 +50,7 @@ public sealed class DeviceRepositoryTests
         read.CreatedAt.ShouldBe(Paired);
         read.LastUsedAt.ShouldBe(Paired);
         read.RevokedAt.ShouldBeNull();
+        read.Kind.ShouldBe("device");
         (await repo.GetAsync("missing")).ShouldBeNull();
     }
 

@@ -149,6 +149,41 @@ describe("machines store", () => {
       expect(calls[0]).toBe(`import ${falcon.id}`);
     });
 
+    it("pairs a machine with a code through home, which keeps the token it was given", async () => {
+      const calls: unknown[] = [];
+      routes["/api/machines"] = () => json({ machines: [] });
+      routes["/api/machines/pair"] = (_, init) => {
+        calls.push(JSON.parse(String(init.body)));
+        return json(serverMachine({ ...falcon, token: "fdt_d1.secret" }));
+      };
+      const store = useMachinesStore();
+      await store.ready;
+
+      const added = await store.pairMachine(" http://100.64.90.72:2113 ", " abcd-efgh ");
+
+      expect(calls).toEqual([{ baseUrl: "http://100.64.90.72:2113", code: "abcd-efgh" }]);
+      expect(added).toMatchObject({ id: falcon.id, name: "falcon", token: "fdt_d1.secret" });
+      expect(store.connections.map((c) => c.id)).toEqual([falcon.id]);
+      expect(loadMachines().map((m) => m.token)).toEqual(["fdt_d1.secret"]);
+    });
+
+    it("says what went wrong when home can't pair, and keeps nothing", async () => {
+      routes["/api/machines"] = () => json({ machines: [] });
+      routes["/api/machines/pair"] = () => json({ error: "That code has expired or was already used. Run fleet node pair on the other machine for a new one." }, 400);
+      const store = useMachinesStore();
+      await store.ready;
+
+      await expect(store.pairMachine("http://100.64.90.72:2113", "ABCD-EFGH")).rejects.toThrow("fleet node pair");
+      expect(store.connections).toEqual([]);
+    });
+
+    it("won't pair from a Fleet that doesn't keep the list", async () => {
+      const store = useMachinesStore();
+      await store.ready;
+
+      await expect(store.pairMachine("http://100.64.90.72:2113", "ABCD-EFGH")).rejects.toThrow("Add it by address");
+    });
+
     it("on a paired phone, lists only machines it has a key for", async () => {
       const osprey = { ...falcon, id: "oooooooooooooooooooooooooooooooo", name: "osprey", baseUrl: "https://osprey.ts.net" };
       routes["/api/machines"] = () => json({ machines: [serverMachine(falcon, false), serverMachine(osprey, false)] });

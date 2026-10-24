@@ -211,6 +211,7 @@ show_node_help() {
   echo "Usage: fleet node [--port <port>] [--host <host>] [--data-dir <path>] [--profile <name>]"
   echo "       fleet node install-service [--port <port>] [--host <host>] [--data-dir <path>] [--profile <name>] [--print]"
   echo "       fleet node uninstall-service"
+  echo "       fleet node pair [--port <port>] [--data-dir <path>] [--profile <name>]"
   echo ""
   echo "Starts Fleet as a node: the API without the web app. Every request needs the access token,"
   echo "even from this machine. Add the node to another Fleet in Settings > Machines > Add a machine."
@@ -219,6 +220,8 @@ show_node_help() {
   echo "  install-service     Keep the node running as you: now, when you log in, and if it stops"
   echo "                      (a systemd user service on Linux, a LaunchAgent on macOS)"
   echo "  uninstall-service   Stop the node and remove that service"
+  echo "  pair                Print a one-time code (10 minutes, works once) and this node's address, so another"
+  echo "                      Fleet can add it without the master token. Run it while the node is running."
   echo ""
   echo "Options:"
   echo "  --port <port>       Override the server port"
@@ -447,6 +450,7 @@ uninstall_service() {
 
 # `fleet node …` takes the same server options; it only has to come first.
 NODE=0
+NODE_PAIR=0
 SERVICE_ACTION=""
 if [ "${1:-}" = "node" ]; then
   NODE=1
@@ -454,6 +458,10 @@ if [ "${1:-}" = "node" ]; then
   case "${1:-}" in
     install-service|uninstall-service)
       SERVICE_ACTION="$1"
+      shift
+      ;;
+    pair)
+      NODE_PAIR=1
       shift
       ;;
   esac
@@ -678,6 +686,10 @@ export Fleet__AnalyticsDatabasePath="${Fleet__AnalyticsDatabasePath:-$ANALYTICS_
 export Fleet__DataProtection__KeyPath="${Fleet__DataProtection__KeyPath:-$KEY_DIR_DEFAULT}"
 if [ "$REQUIRE_TOKEN" -eq 1 ]; then
   export Fleet__Auth__RequireToken=true
+fi
+if [ "$NODE_PAIR" -eq 1 ]; then
+  # Asks the node already running with these settings for a code, prints it and stops.
+  exec "$APP_BIN" --node-pair --urls "$LISTEN_URL" --contentRoot "$APP_CONTENT_ROOT"
 fi
 if [ "$NODE" -eq 1 ]; then
   EXTRA_ARGS="$EXTRA_ARGS --node"
