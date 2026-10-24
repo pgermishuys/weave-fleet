@@ -54,6 +54,9 @@ The screenshots are the artifacts `mobile-android-shots` and `mobile-ios-shots`,
 - `e2e/start-fleet.sh` starts Fleet on 127.0.0.1:5431 with a scripted model (`e2e/fakellm.py`), one session titled
   "Fix pagination off-by-one", "ask before changes" on, and a pairing code. It makes its own scratch `HOME`. Never
   point it at your real one.
+- The walk also has the agent show a page (`show-page`: `fleet_page_show` on the demo repo's `pages/paging.html`, waiting
+  for a pick), opens it, picks in the WebView and sends the pick. `e2e/check-pages.sh` runs the same exchange against the
+  scratch Fleet's API, without a phone.
 - `e2e/flows/pair.yaml` and `walk.yaml` are the flows; `e2e/walk-all.sh` runs them and switches the appearance.
 - `FLEET_E2E=1` at prebuild time lets the app talk plain http to `localhost` and `127.0.0.1` only (Android network
   security config, iOS `NSAllowsLocalNetworking`). Without it the app is https only.
