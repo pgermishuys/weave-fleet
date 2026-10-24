@@ -3,8 +3,9 @@ import { useState, type ReactNode } from "react";
 import { Pressable, ScrollView, View } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import {
-  Button, Card, Chip, Composer, EmptyState, FleetMark, glyphStatusOf, Markdown, PermissionCard, Pill, QuestionCard,
-  SectionHeader, SessionRow, Sheet, StatusGlyph, Text, ToolBox, ToolRow, UserBubble, type GlyphStatus,
+  Button, Card, Chip, Composer, EmptyState, FleetMark, glyphStatusOf, Markdown, PageCard, PageChoiceBar, PagePickCard,
+  PageReplyBar, PageRow, PermissionCard, Pill, QuestionCard, SectionHeader, Segments, SessionRow, Sheet, StatusGlyph, Text,
+  ToolBox, ToolRow, UserBubble, type GlyphStatus,
 } from "~/kit";
 import { ThemeProvider, useTheme, type Scheme } from "~/theme";
 
@@ -57,6 +58,7 @@ function Gallery({ override, setOverride }: { override: Scheme | null; setOverri
   const { color } = useTheme();
   const [text, setText] = useState("Add a retry budget to the webhooks");
   const [sheet, setSheet] = useState(false);
+  const [segment, setSegment] = useState<"changes" | "pages">("pages");
   const noop = () => {};
   const variants = ["primary", "secondary", "ghost", "danger"] as const;
   const insets = useSafeAreaInsets();
@@ -164,6 +166,24 @@ function Gallery({ override, setOverride }: { override: Scheme | null; setOverri
         <Section label="Conversation">
           <UserBubble text="A burst of requests gets 200 where it should get 429. Find out why and fix it." />
           <Markdown text={MARKDOWN} />
+        </Section>
+
+        <Section label="Pages">
+          <Segments value={segment} onChange={setSegment} options={[{ value: "changes", label: "Changes", count: 4 }, { value: "pages", label: "Pages", count: 3 }]} />
+          <View>
+            <PageRow title="Three ways to page the ledger" detail="Waiting for your pick" age="now" waiting onPress={noop} />
+            <PageRow title="Walkthrough: streaming the export" detail="Page" age="10:36" isNew onPress={noop} />
+            <PageRow title="Export, before and after" detail="Page" age="10:31" onPress={noop} />
+          </View>
+          <PageCard title="Export, before and after" detail="Page · 10:31" onPress={noop} />
+          <PageCard title="Three ways to page the ledger" detail="Waiting for your pick" waiting onPress={noop} />
+          <PagePickCard title="Three ways to page the ledger" onOpen={noop} />
+          <View style={{ marginHorizontal: -16 }}>
+            <PageChoiceBar text="The agent is waiting for your pick." canSend={false} onSend={noop} onSkip={noop} onReply={noop} />
+            <PageChoiceBar text="You picked " strong="Paged table" after="." canSend onSend={noop} onSkip={noop} onReply={noop} />
+            <PageChoiceBar text="Sent: " strong="Paged table" after="." canSend={false} />
+            <PageReplyBar onPress={noop} />
+          </View>
         </Section>
 
         <Section label="Empty state">

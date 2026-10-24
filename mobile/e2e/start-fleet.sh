@@ -23,7 +23,7 @@ export XDG_CONFIG_HOME="$HOME/.config" XDG_DATA_HOME="$HOME/.local/share" XDG_CA
 unset OPENCODE_CONFIG OPENCODE_CONFIG_DIR OPENCODE_CONFIG_CONTENT
 # dotnet keeps its first-run files and NuGet cache under HOME; the built Fleet doesn't need either.
 export DOTNET_CLI_HOME="$HOME" DOTNET_NOLOGO=1 DOTNET_SKIP_FIRST_TIME_EXPERIENCE=1
-mkdir -p "$WORK/fleet" "$HOME/.config/opencode" "$HOME/src/demo-app"
+mkdir -p "$WORK/fleet" "$HOME/.config/opencode" "$HOME/src/demo-app/pages"
 
 cat > "$HOME/.config/opencode/opencode.json" <<JSON
 {
@@ -34,6 +34,39 @@ cat > "$HOME/.config/opencode/opencode.json" <<JSON
 JSON
 
 python3 "$ROOT/mobile/e2e/fakellm.py" $LLM_PORT "$WORK/fakellm.log" > /dev/null 2>&1 &
+
+# A page the agent shows with fleet_page_show: three options, a click on one is a pick Fleet's bar can send.
+cat > "$HOME/src/demo-app/pages/paging.html" <<'HTML'
+<!doctype html>
+<html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">
+<title>How should the results table page?</title>
+<style>
+  /* Fleet gives a page that uses its variables its ground, text and padding; the page adds none of its own. */
+  body { margin: 0; font: var(--fleet-font-size, 15px)/1.45 var(--fleet-font-sans, system-ui, sans-serif); color: var(--fleet-text, #222); background: var(--fleet-bg, #fff); }
+  h1 { font-size: 1.25em; margin: 0 0 4px; }
+  p.lead { margin: 0 0 16px; color: var(--fleet-muted, #666); }
+  .option { display: block; width: 100%; box-sizing: border-box; text-align: left; margin: 0 0 10px; padding: 12px 14px; cursor: pointer;
+    font: inherit; color: inherit; background: var(--fleet-surface, #f5f5f5); border: 1px solid var(--fleet-border, #ddd); border-radius: var(--fleet-radius, 8px); }
+  .option b { display: block; }
+  .option span { color: var(--fleet-muted, #666); }
+  .option.selected { background: var(--fleet-accent-surface, #e6efff); border-color: var(--fleet-accent, #2f6fed); box-shadow: 0 0 0 1px var(--fleet-accent, #2f6fed); }
+</style></head>
+<body>
+  <h1>How should the results table page?</h1>
+  <p class="lead">Tap one; the bar below sends it.</p>
+  <button class="option" data-fleet-choice="infinite" data-fleet-summary="Infinite scroll"><b>A. Infinite scroll</b><span>Rows load as you reach the bottom.</span></button>
+  <button class="option" data-fleet-choice="paged" data-fleet-summary="Paged table"><b>B. Paged table</b><span>Twenty rows a page, with next and previous.</span></button>
+  <button class="option" data-fleet-choice="monthly" data-fleet-summary="Month by month"><b>C. Month by month</b><span>One month at a time, newest first.</span></button>
+  <script>
+    document.addEventListener("click", function (e) {
+      var o = e.target.closest("[data-fleet-choice]");
+      if (!o) return;
+      document.querySelectorAll(".option.selected").forEach(function (x) { x.classList.remove("selected"); });
+      o.classList.add("selected");
+    });
+  </script>
+</body></html>
+HTML
 
 ( cd "$HOME/src/demo-app" && git init -q && echo "# demo" > README.md && git add . && git -c user.email=e2e@example.com -c user.name=e2e commit -qm init )
 
@@ -50,6 +83,8 @@ api() { curl -fsS -H "Authorization: Bearer $TOKEN" -H "content-type: applicatio
 BASE=http://127.0.0.1:$PORT
 
 api -X POST $BASE/api/workspace-roots -d "{\"path\":\"$HOME/src\"}" > /dev/null
+# On before the first session: OpenCode's process reads it when it starts, to offer waitForChoice.
+api -X PUT $BASE/api/preferences/PageChoice -d '{"value":"true"}' > /dev/null
 SESSION=$(api -X POST $BASE/api/sessions -d "{\"directory\":\"$HOME/src/demo-app\",\"title\":\"Fix pagination off-by-one\",\"isolationStrategy\":\"existing\",\"harnessType\":\"opencode\",\"initialPrompt\":\"The pagination test fails on the last page. Can you look?\"}" \
   | python3 -c "import json,sys;print(json.load(sys.stdin)['session']['id'])")
 for _ in $(seq 90); do

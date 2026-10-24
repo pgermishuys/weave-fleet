@@ -1,6 +1,7 @@
 // Fleet's REST API on one machine, with that machine's device key. No React Native in here.
 import type { SessionListItem } from "@fleet/api/client";
 import type { PermissionAsk } from "@fleet/composables/use-session-permissions";
+import type { ServerCanvasSnapshot } from "@fleet/lib/server-canvas";
 import type { Machine } from "~/fleet/machines-core";
 
 export type { SessionListItem, PermissionAsk };
@@ -51,6 +52,11 @@ export function machineApi(machine: Pick<Machine, "baseUrl" | "token">, onSigned
       post(`/api/sessions/${id(sessionId)}/permissions/${id(requestId)}`, { reply }),
     answerQuestion: (sessionId: string, requestId: string, answers: string[][]) =>
       post(`/api/sessions/${id(sessionId)}/questions/${id(requestId)}/answer`, { answers }),
+    canvases: (sessionId: string) => request<ServerCanvasSnapshot[]>(`/api/sessions/${id(sessionId)}/canvases`),
+    /** Sends the pick made on a waiting page, as the desktop's bar under the page does. */
+    sendPageChoice: (sessionId: string, callId: string, value: string, summary: string) =>
+      post(`/api/sessions/${id(sessionId)}/page-choices/${id(callId)}/send`, { value, summary }),
+    skipPageChoice: (sessionId: string, callId: string) => post(`/api/sessions/${id(sessionId)}/page-choices/${id(callId)}/skip`, {}),
   };
 }
 
