@@ -21,8 +21,22 @@ maestro_run() {
   maestro "${args[@]}" test -e FLEET_URL="$FLEET_URL" -e PAIR_CODE="$PAIR_CODE" "${@}"
 }
 
+# The emulator can drop to "device offline" for a moment just after boot, which kills Maestro's device server
+# mid-command. Wait for adb to see it booted, and pair once more if the first try dies; pair starts from a cleared app.
+ready() {
+  [ "$PLATFORM" = ios ] && return 0
+  adb wait-for-device
+  for _ in $(seq 60); do [ "$(adb shell getprop sys.boot_completed 2>/dev/null | tr -d '\r')" = 1 ] && adb shell pm path io.tryweave.fleet > /dev/null 2>&1 && return 0; sleep 2; done
+}
+
 appearance light
-maestro_run --test-output-dir "$OUT/pair" flows/pair.yaml || { echo "pair failed"; exit 1; }
+ready
+if ! maestro_run --test-output-dir "$OUT/pair" flows/pair.yaml; then
+  echo "pair failed; once more"
+  sleep 10
+  ready
+  maestro_run --test-output-dir "$OUT/pair-again" flows/pair.yaml || { echo "pair failed"; exit 1; }
+fi
 for i in 1 2; do
   scheme=$([ "$i" = 1 ] && echo light || echo dark)
   appearance "$scheme"
