@@ -263,6 +263,21 @@ public sealed class SshTunnelsTests : IAsyncLifetime
     }
 
     [Fact]
+    public async Task A_slow_command_is_stopped_at_the_timeout_it_was_given()
+    {
+        if (OperatingSystem.IsWindows())
+            return; // The fake ssh is a shell script.
+
+        var ssh = FakeSsh("sleep 30");
+        var runner = new SshProcessRunner(new SshOptions { Executable = ssh });
+
+        var result = await runner.RunAsync(SshDestination.Parse("falcon")!, "curl | sh", CancellationToken.None, TimeSpan.FromMilliseconds(300));
+
+        result.ExitCode.ShouldBe(255);
+        result.Error.ShouldContain("timed out");
+    }
+
+    [Fact]
     public async Task A_missing_ssh_is_reported_not_thrown()
     {
         if (OperatingSystem.IsWindows())

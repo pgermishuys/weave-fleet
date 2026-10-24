@@ -41,3 +41,6 @@ public sealed record SshHostListResponse(IReadOnlyList<SshHostResponse> Hosts);
 
 /// <param name="Destination">An <c>~/.ssh/config</c> alias or <c>user@host[:port]</c>.</param>
 public sealed record AddSshMachineRequest(string? Destination);
+
+/// <summary>Fleet isn't on the other machine: what installing it would run (nothing has run), or that it can't be automated.</summary>
+public sealed record SshNotInstalledResponse(string Error, string Host, string Os, bool CanInstall, IReadOnlyList<string> Commands, string Docs);

@@ -58,6 +58,18 @@ public sealed class MachinesEndpointTests
     }
 
     [Fact]
+    public async Task Installing_over_ssh_refuses_a_destination_that_could_be_an_ssh_option()
+    {
+        await using var hangar = Fleet();
+        using var owner = Client(hangar, Token(hangar));
+
+        var refused = await owner.PostAsJsonAsync("/api/machines/ssh/install", new { destination = "-oProxyCommand=touch-pwned" });
+
+        refused.StatusCode.ShouldBe(HttpStatusCode.BadRequest);
+        (await refused.Content.ReadFromJsonAsync<JsonElement>()).GetProperty("error").GetString()!.ShouldContain("isn't an SSH host");
+    }
+
+    [Fact]
     public async Task A_machine_reached_by_address_has_no_ssh_fields()
     {
         await using var falcon = Fleet();

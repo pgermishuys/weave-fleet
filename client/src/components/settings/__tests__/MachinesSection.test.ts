@@ -441,6 +441,90 @@ describe("Settings → Machines", () => {
       expect(wrapper.find("[data-testid='machines-add-error']").text()).toContain("Fleet isn't installed there");
     });
 
+    const plan = { error: "Fleet isn't installed there.", host: "falcon", os: "linux", canInstall: true, docs: "https://fleet.tryweave.io/docs", commands: [
+      "curl -fsSL https://github.com/pgermishuys/fleet-releases/releases/latest/download/install.sh | sh",
+      "$HOME/.weave/fleet/bin/fleet node install-service",
+    ] };
+
+    async function submitHost(wrapper: VueWrapper, host = "falcon") {
+      await wrapper.find("[data-testid='machines-add-ssh-host']").setValue(host);
+      await wrapper.find("[data-testid='machines-add-form']").trigger("submit");
+      await flushPromises();
+    }
+
+    it("shows what installing would run when Fleet isn't there, and runs nothing until the click", async () => {
+      const wrapper = await openForm(true);
+      let installed = 0;
+      routes["/api/machines/ssh"] = () => json(plan, 409);
+      routes["/api/machines/ssh/install"] = () => { installed++; return json(falconMachine); };
+
+      await submitHost(wrapper);
+
+      const card = wrapper.find("[data-testid='machines-install-plan']");
+      expect(card.exists()).toBe(true);
+      expect(wrapper.find("[data-testid='machines-install-commands']").text()).toContain("$ curl -fsSL https://github.com/pgermishuys/fleet-releases/releases/latest/download/install.sh | sh");
+      expect(card.text()).toContain("$ $HOME/.weave/fleet/bin/fleet node install-service");
+      expect(card.text()).toContain("127.0.0.1 only");
+      expect(card.text()).toContain("fleet node uninstall-service");
+      expect(card.text()).toContain("Harnesses (OpenCode, Claude Code…) aren't installed");
+      expect(card.text()).toContain("Nothing runs until you click");
+      expect(wrapper.find("[data-testid='machines-add-error']").exists()).toBe(false);
+      expect(installed).toBe(0);
+    });
+
+    it("installs and pairs on Install and pair, then says it was added", async () => {
+      const wrapper = await openForm(true);
+      let sent: unknown = null;
+      routes["/api/machines/ssh"] = () => json(plan, 409);
+      routes["/api/machines/ssh/install"] = (_, init) => { sent = JSON.parse(String(init?.body)); return json(falconMachine); };
+      await submitHost(wrapper, "alice@falcon");
+
+      await wrapper.find("[data-testid='machines-install-run']").trigger("click");
+      await flushPromises();
+
+      expect(sent).toEqual({ destination: "alice@falcon" });
+      expect(wrapper.text()).toContain("Added falcon");
+      expect(wrapper.find("[data-testid='machines-install-plan']").exists()).toBe(false);
+    });
+
+    it("goes back on I'll do it myself, and shows an install that failed in plain words", async () => {
+      const wrapper = await openForm(true);
+      routes["/api/machines/ssh"] = () => json(plan, 409);
+      routes["/api/machines/ssh/install"] = () => json({ error: "falcon has no curl." }, 400);
+      await submitHost(wrapper);
+
+      await wrapper.find("[data-testid='machines-install-run']").trigger("click");
+      await flushPromises();
+      expect(wrapper.find("[data-testid='machines-add-error']").text()).toContain("has no curl");
+      expect(wrapper.find("[data-testid='machines-install-plan']").exists()).toBe(true);
+
+      await wrapper.find("[data-testid='machines-install-cancel']").trigger("click");
+      expect(wrapper.find("[data-testid='machines-install-plan']").exists()).toBe(false);
+      expect(wrapper.find("[data-testid='machines-add-submit']").exists()).toBe(true);
+    });
+
+    it("offers no install on a Windows machine, only the docs", async () => {
+      const wrapper = await openForm(true);
+      routes["/api/machines/ssh"] = () => json({ ...plan, os: "unsupported", canInstall: false, commands: [] }, 409);
+
+      await submitHost(wrapper);
+
+      expect(wrapper.find("[data-testid='machines-install-run']").exists()).toBe(false);
+      expect(wrapper.find("[data-testid='machines-install-commands']").exists()).toBe(false);
+      expect(wrapper.find("[data-testid='machines-install-docs']").attributes("href")).toBe("https://fleet.tryweave.io/docs");
+    });
+
+    it("drops the plan when the host is changed", async () => {
+      const wrapper = await openForm(true);
+      routes["/api/machines/ssh"] = () => json(plan, 409);
+      await submitHost(wrapper);
+      expect(wrapper.find("[data-testid='machines-install-plan']").exists()).toBe(true);
+
+      await wrapper.find("[data-testid='machines-add-ssh-host']").setValue("atlas");
+
+      expect(wrapper.find("[data-testid='machines-install-plan']").exists()).toBe(false);
+    });
+
     it("says how an SSH machine is reached, and when its tunnel is down", async () => {
       routes["/api/machines"] = () => json({ machines: [falconMachine, { ...falconMachine, id: "cccccccccccccccccccccccccccccccc", name: "osprey", sshDestination: "alice@osprey", tunnelUp: false }] });
       const wrapper = mount(MachinesSection);

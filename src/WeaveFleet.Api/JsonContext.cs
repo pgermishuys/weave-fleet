@@ -355,6 +355,7 @@ internal sealed record ErrorResponse(string Error);
 // Machines (server-side list)
 [JsonSerializable(typeof(WeaveFleet.Api.Contracts.MachineEntryResponse))]
 [JsonSerializable(typeof(WeaveFleet.Api.Contracts.SshHostListResponse))]
+[JsonSerializable(typeof(WeaveFleet.Api.Contracts.SshNotInstalledResponse))]
 [JsonSerializable(typeof(WeaveFleet.Api.Contracts.AddSshMachineRequest))]
 [JsonSerializable(typeof(WeaveFleet.Api.Contracts.MachineListResponse))]
 [JsonSerializable(typeof(WeaveFleet.Api.Contracts.AddMachineRequest))]

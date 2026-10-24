@@ -275,6 +275,41 @@ onUnmounted(stopTimer);
           notifications. Step by step: docs/phone.md.
         </p>
       </div>
+      <details
+        class="mt-4 max-w-prose text-sm"
+        data-testid="add-phone-outside"
+      >
+        <summary class="cursor-pointer text-text">
+          Reach it from outside your network
+        </summary>
+        <div class="mt-2 grid gap-2 text-xs text-muted">
+          <p>
+            The phone opens one address, the one saved for {{ machineName }}{{ publicUrl ? ` (${publicUrl})` : "" }}. Any
+            https:// address that reaches this computer will do: Tailscale, a tunnel you run yourself, or a domain of
+            your own.
+          </p>
+          <p>
+            Fleet runs no relay of its own. The phone talks to your address, and nothing goes through Weave.
+            <a
+              href="https://fleet.tryweave.io/docs/phone"
+              target="_blank"
+              rel="noopener"
+              class="text-accent underline-offset-2 hover:underline"
+            >Phone setup</a>
+          </p>
+          <div>
+            <Button
+              variant="outline"
+              size="sm"
+              type="button"
+              data-testid="add-phone-set-address"
+              @click="editingUrl = true"
+            >
+              {{ publicUrl ? "Change the address" : "Set the address" }}
+            </Button>
+          </div>
+        </div>
+      </details>
       <div class="mt-4 flex flex-wrap items-center gap-3">
         <Button
           variant="outline"

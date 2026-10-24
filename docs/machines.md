@@ -111,8 +111,8 @@ never asks for a password and never trusts an unknown host key on its own (run `
    machine's address;
 3. redeems the code through the tunnel, exactly like **With a pairing code**. No token is pasted.
 
-If SSH works but `fleet` isn't there, or nothing answers on the node port, Fleet says "Fleet isn't installed there"
-and stops. It never installs anything on the other machine.
+If SSH works but `fleet` isn't there, or nothing answers on the node port, Fleet says so and shows what it could
+install (see [Install the node over SSH](#install-the-node-over-ssh)). It installs nothing until you click.
 
 Fleet keeps the tunnel open: when ssh exits it starts it again after 1 s, doubling up to 30 s. The machine's row says
 "Over SSH as user@host" and shows "Tunnel down" while it's down. Removing the machine, or stopping Fleet, ends the
@@ -121,6 +121,29 @@ The saved destination (`ssh_destination`, migration 067) brings the tunnel back 
 if it's still free. `GET /api/machines/ssh-hosts` lists the config hosts; `POST /api/machines/ssh` with
 `{"destination": "falcon"}` adds one. For a node that listens on another port than 2113, start Fleet with
 `FLEET_SSH_NODE_PORT`; `FLEET_SSH_EXECUTABLE` picks another `ssh`.
+
+#### Install the node over SSH
+
+When SSH works but Fleet isn't on the other machine, **Add a machine** shows the commands it would run there, and
+waits:
+
+```sh
+curl -fsSL https://github.com/pgermishuys/fleet-releases/releases/latest/download/install.sh | sh
+$HOME/.weave/fleet/bin/fleet node install-service
+```
+
+The first is the install command from the [README](../README.md#install). The second starts a background service
+named `fleet-node` (a systemd user service on Linux, a LaunchAgent on macOS) that listens on `127.0.0.1` only, so it
+opens no port and leaves other services alone; see [Keep a node running](#keep-a-node-running). To remove it, run
+`fleet node uninstall-service` there. Nothing runs until you click **Install and pair**; **I'll do it myself** goes
+back.
+
+After the click, Fleet runs both over the same non-interactive `ssh` as the tunnel (`BatchMode=yes`: no sudo, no
+password prompts, your keys only), waits up to 30 seconds for the node to answer, then pairs as above. If something
+needs a prompt, such as a missing `curl` or a Linux machine with no user systemd, it stops and says what. It installs Fleet only, never a harness: set OpenCode, Claude Code and the rest up
+there the way you would anywhere. A remote Windows machine isn't automated: Fleet says so and links the
+[install docs](https://fleet.tryweave.io/docs). `POST /api/machines/ssh` answers `409` with `host`, `os`,
+`canInstall` and `commands` for this case, and `POST /api/machines/ssh/install` runs them.
 
 ### Keep a node running
 

@@ -1,7 +1,7 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { createPinia, setActivePinia } from "pinia";
 import { HOME_MACHINE_KEY, loadMachines, loadSessionMachines, saveMachines, setActiveMachine, switchToMachine, type MachineConnection } from "@/lib/machines";
-import { useMachinesStore, type MachineCapabilities, type MachineInfo } from "@/stores/machines";
+import { SshNotInstalledError, useMachinesStore, type MachineCapabilities, type MachineInfo } from "@/stores/machines";
 
 // Switching machines reloads the page; here it only records where it went.
 vi.mock("@/lib/machines", async (original) => ({ ...await original<typeof import("@/lib/machines")>(), switchToMachine: vi.fn() }));
@@ -210,6 +210,46 @@ describe("machines store", () => {
 
       await expect(store.addOverSsh("falcon")).rejects.toThrow("Fleet isn't installed there");
       expect(store.connections).toEqual([]);
+    });
+
+    it("reports a machine with no Fleet as a plan to show, and keeps nothing", async () => {
+      routes["/api/machines"] = () => json({ machines: [] });
+      const commands = ["curl -fsSL https://example.test/install.sh | sh", "fleet node install-service"];
+      routes["/api/machines/ssh"] = () => json({ error: "Fleet isn't installed there.", host: "falcon", os: "linux", canInstall: true, commands, docs: "https://fleet.tryweave.io/docs" }, 409);
+      const store = useMachinesStore();
+      await store.ready;
+
+      const failure = await store.addOverSsh("falcon").catch((error: unknown) => error);
+
+      expect(failure).toBeInstanceOf(SshNotInstalledError);
+      expect((failure as SshNotInstalledError).plan).toEqual({ host: "falcon", os: "linux", canInstall: true, commands, docs: "https://fleet.tryweave.io/docs" });
+      expect(store.connections).toEqual([]);
+    });
+
+    it("installs over SSH through its own endpoint and keeps the machine", async () => {
+      routes["/api/machines"] = () => json({ machines: [] });
+      const calls: unknown[] = [];
+      routes["/api/machines/ssh/install"] = (_, init) => {
+        calls.push(JSON.parse(String(init?.body)));
+        return json(serverMachine({ ...falcon, id: "ffffffffffffffffffffffffffffffff", token: "fdt_d1.secret", sshDestination: "alice@falcon", tunnelUp: true }));
+      };
+      const store = useMachinesStore();
+      await store.ready;
+
+      const added = await store.installOverSsh(" alice@falcon ");
+
+      expect(calls).toEqual([{ destination: "alice@falcon" }]);
+      expect(added.id).toBe("ffffffffffffffffffffffffffffffff");
+      expect(store.connections.map((c) => c.id)).toEqual(["ffffffffffffffffffffffffffffffff"]);
+    });
+
+    it("says a failed install in the server's words", async () => {
+      routes["/api/machines"] = () => json({ machines: [] });
+      routes["/api/machines/ssh/install"] = () => json({ error: "falcon has no curl." }, 400);
+      const store = useMachinesStore();
+      await store.ready;
+
+      await expect(store.installOverSsh("falcon")).rejects.toThrow("falcon has no curl.");
     });
 
     it("loads the ssh hosts, and reads a failure as none", async () => {

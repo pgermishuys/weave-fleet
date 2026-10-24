@@ -44,7 +44,7 @@ public sealed class SshOptions
 /// <summary>Runs one command over SSH (<see cref="ISshRunner"/>) with the user's own <c>ssh</c>.</summary>
 public sealed class SshProcessRunner(SshOptions options) : ISshRunner
 {
-    public async Task<SshResult> RunAsync(SshDestination destination, string command, CancellationToken cancellationToken)
+    public async Task<SshResult> RunAsync(SshDestination destination, string command, CancellationToken cancellationToken, TimeSpan? timeout = null)
     {
         var start = SshProcess.Start(options.Executable);
         foreach (var argument in options.BaseArguments())
@@ -59,8 +59,8 @@ public sealed class SshProcessRunner(SshOptions options) : ISshRunner
         start.ArgumentList.Add(destination.Target);
         start.ArgumentList.Add(command);
 
-        using var timeout = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
-        timeout.CancelAfter(TimeSpan.FromSeconds(options.ConnectTimeoutSeconds + 20));
+        using var limit = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
+        limit.CancelAfter(timeout ?? TimeSpan.FromSeconds(options.ConnectTimeoutSeconds + 20));
         Process process;
         try
         {
@@ -75,11 +75,11 @@ public sealed class SshProcessRunner(SshOptions options) : ISshRunner
         {
             ProcessGroupHelper.AssignToProcessGroup(process);
             process.StandardInput.Close();
-            var output = process.StandardOutput.ReadToEndAsync(timeout.Token);
-            var error = process.StandardError.ReadToEndAsync(timeout.Token);
+            var output = process.StandardOutput.ReadToEndAsync(limit.Token);
+            var error = process.StandardError.ReadToEndAsync(limit.Token);
             try
             {
-                await process.WaitForExitAsync(timeout.Token);
+                await process.WaitForExitAsync(limit.Token);
                 return new SshResult(process.ExitCode, await output, await error);
             }
             catch (OperationCanceledException)
