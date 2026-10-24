@@ -50,3 +50,7 @@ client/coverage/
 
 # OpenAPI spec (generated build artifact)
 client/openapi.json
+
+# Fleet runtime files (a Fleet started from a source folder must never leave these behind)
+**/WeaveFleet/harness-processes/
+**/WeaveFleet/logs/
