@@ -1,0 +1,974 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Pages on the phone</title>
+<script>
+  (function () {
+    var t = matchMedia("(prefers-color-scheme: dark)").matches ? "dark" : "light";
+    document.documentElement.dataset.theme = t;
+  })();
+</script>
+<style>
+@font-face { font-family: "Inter Fleet"; src: url("fonts/inter-latin-wght-normal.woff2") format("woff2"); font-weight: 100 900; }
+@font-face { font-family: "JetBrains Mono Fleet"; src: url("fonts/jetbrains-mono-latin-wght-normal.woff2") format("woff2"); font-weight: 100 800; }
+
+/* Fleet's tokens (mobile/src/theme/tokens.generated.ts, from client/src/assets/main.css). A phone can carry its own
+   data-theme, so the light and dark frames sit side by side whatever the page's toggle says. */
+:root, [data-theme="dark"] {
+  --chrome: #0d0d10; --panel: #141418; --card: #1b1b20;
+  --border: rgba(255,255,255,0.075); --text: #e8e8ec; --muted: #8e8e9a;
+  --accent: #6366f1; --accent-dim: rgba(99,102,241,0.15); --on-accent: #fff;
+  --running: #22c55e; --waiting: #f59e0b; --complete: #3b82f6; --error: #ef4444;
+  --panel-shadow: none; --panel-edge: var(--border);
+  --code-bg: #101014;
+  --syn-k: #c792ea; --syn-s: #c3e88d; --syn-n: #f78c6c; --syn-f: #82aaff;
+  --chart-1: #8e8e9a; --chart-2: #6366f1;
+  --dim: rgba(0,0,0,0.38);
+  --page-bg: #09090b; --page-text: #e8e8ec;
+  color-scheme: dark;
+}
+:root[data-theme="light"], [data-theme="light"] {
+  --chrome: #F3F2EF; --panel: #FFFFFF; --card: #FFFFFF;
+  --border: rgba(26,25,24,0.09); --text: #1A1918; --muted: #6E6A65;
+  --accent: #5B6EC7; --accent-dim: rgba(91,110,199,0.12);
+  --running: #16a34a; --waiting: #d97706; --complete: #2563eb; --error: #dc2626;
+  --panel-shadow: 0 1px 2px rgba(26,25,24,0.04), 0 12px 32px -18px rgba(26,25,24,0.18); --panel-edge: transparent;
+  --code-bg: #F7F6F3;
+  --syn-k: #8b3fc9; --syn-s: #2f7d32; --syn-n: #c25418; --syn-f: #2457c5;
+  --chart-1: #b4afa8; --chart-2: #5B6EC7;
+  --dim: rgba(26,25,24,0.28);
+  --page-bg: #E9E7E2; --page-text: #1A1918;
+  color-scheme: light;
+}
+:root, [data-theme] {
+  --tint-3: color-mix(in srgb, var(--text) 3%, transparent);
+  --tint-5: color-mix(in srgb, var(--text) 5%, transparent);
+  --tint-9: color-mix(in srgb, var(--text) 9%, transparent);
+  --row-text: color-mix(in srgb, var(--text) 86%, transparent);
+  --waiting-bg: color-mix(in srgb, var(--waiting) 5%, var(--card));
+  --waiting-edge: color-mix(in srgb, var(--waiting) 40%, var(--border));
+  --font: "Inter Fleet", Inter, system-ui, sans-serif;
+  --mono: "JetBrains Mono Fleet", "JetBrains Mono", ui-monospace, monospace;
+}
+
+* { box-sizing: border-box; }
+html, body { margin: 0; }
+body { background: var(--page-bg); color: var(--page-text); font-family: var(--font); -webkit-font-smoothing: antialiased; font-feature-settings: "cv11", "ss01"; line-height: 1.45; }
+svg { display: block; flex: none; }
+.mono, code { font-family: var(--mono); }
+button { font: inherit; color: inherit; background: none; border: 0; padding: 0; cursor: pointer; }
+:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; border-radius: 6px; }
+
+/* ── The document around the phones ─────────────────────────────── */
+.doc { max-width: 1240px; margin: 0 auto; padding: 28px 16px 64px; display: flex; flex-direction: column; gap: 44px; }
+.doc-head { display: flex; flex-direction: column; gap: 10px; max-width: 72ch; }
+.doc-head .row { display: flex; align-items: center; gap: 10px; }
+.doc-head img { width: 34px; height: 26px; }
+.doc h1 { margin: 0; font-size: 26px; font-weight: 600; letter-spacing: -0.015em; text-wrap: balance; }
+.doc h2 { margin: 0; font-size: 18px; font-weight: 600; text-wrap: balance; display: flex; gap: 10px; align-items: baseline; }
+.doc h2 span { font-size: 12px; font-variant-numeric: tabular-nums; color: color-mix(in srgb, var(--page-text) 50%, transparent); }
+.lede, .group > p { margin: 0; color: color-mix(in srgb, var(--page-text) 74%, transparent); max-width: 72ch; font-size: 14px; }
+.theme { display: inline-flex; border: 1px solid color-mix(in srgb, var(--page-text) 14%, transparent); border-radius: 8px; padding: 2px; gap: 2px; align-self: flex-start; }
+.theme button { padding: 5px 12px; border-radius: 6px; font-size: 13px; font-weight: 500; color: color-mix(in srgb, var(--page-text) 65%, transparent); }
+.theme button[aria-pressed="true"] { background: color-mix(in srgb, var(--page-text) 10%, transparent); color: var(--page-text); }
+.group { display: flex; flex-direction: column; gap: 18px; }
+.frames { display: grid; grid-template-columns: repeat(auto-fill, minmax(300px, 1fr)); gap: 28px 20px; align-items: start; }
+.shot { display: flex; flex-direction: column; gap: 12px; min-width: 0; }
+.cap { display: flex; flex-direction: column; gap: 6px; padding: 0 4px; }
+.cap b { font-size: 14px; font-weight: 600; }
+.cap ul { margin: 0; padding-left: 16px; font-size: 13px; color: color-mix(in srgb, var(--page-text) 72%, transparent); display: flex; flex-direction: column; gap: 3px; }
+.tag { display: inline-flex; align-items: center; height: 18px; padding: 0 7px; border-radius: 9px; font-size: 10.5px; font-weight: 600; letter-spacing: 0.02em; vertical-align: 1px; white-space: nowrap; }
+.tag--srv { color: var(--waiting); background: color-mix(in srgb, var(--waiting) 13%, transparent); }
+.tag--app { color: var(--accent); background: color-mix(in srgb, var(--accent) 14%, transparent); }
+.tag--now { color: var(--running); background: color-mix(in srgb, var(--running) 13%, transparent); }
+.legend { display: flex; flex-wrap: wrap; gap: 8px 16px; font-size: 12.5px; color: color-mix(in srgb, var(--page-text) 72%, transparent); }
+.legend span { display: inline-flex; gap: 6px; align-items: center; }
+
+/* Facts */
+.facts { display: grid; grid-template-columns: repeat(auto-fill, minmax(340px, 1fr)); gap: 12px; }
+.fact { border: 1px solid color-mix(in srgb, var(--page-text) 11%, transparent); border-radius: 10px; padding: 13px 14px; display: flex; flex-direction: column; gap: 6px; min-width: 0; background: color-mix(in srgb, var(--page-text) 2.5%, transparent); }
+.fact b { font-size: 14px; font-weight: 600; }
+.fact p { margin: 0; font-size: 13px; color: color-mix(in srgb, var(--page-text) 74%, transparent); }
+.fact code { font-size: 11.5px; padding: 1px 4px; border-radius: 4px; background: color-mix(in srgb, var(--page-text) 7%, transparent); overflow-wrap: anywhere; }
+.fact .src { font-family: var(--mono); font-size: 11px; color: color-mix(in srgb, var(--page-text) 50%, transparent); overflow-wrap: anywhere; }
+
+/* Options */
+.opts { display: grid; grid-template-columns: repeat(auto-fill, minmax(320px, 1fr)); gap: 14px; align-items: stretch; }
+.opt { border: 1px solid color-mix(in srgb, var(--page-text) 11%, transparent); border-radius: 12px; padding: 16px; display: flex; flex-direction: column; gap: 10px; min-width: 0; }
+.opt--rec { border-color: color-mix(in srgb, var(--accent) 55%, transparent); background: color-mix(in srgb, var(--accent) 5%, transparent); }
+.opt h3 { margin: 0; font-size: 15px; font-weight: 600; display: flex; gap: 8px; align-items: center; flex-wrap: wrap; }
+.opt h3 .k { font-family: var(--mono); font-size: 12px; color: color-mix(in srgb, var(--page-text) 55%, transparent); }
+.opt p { margin: 0; font-size: 13px; color: color-mix(in srgb, var(--page-text) 76%, transparent); }
+.opt dl { margin: 0; display: grid; grid-template-columns: 76px 1fr; gap: 6px 10px; font-size: 12.5px; }
+.opt dt { color: color-mix(in srgb, var(--page-text) 55%, transparent); font-weight: 500; }
+.opt dd { margin: 0; color: color-mix(in srgb, var(--page-text) 84%, transparent); min-width: 0; }
+.opt code { font-size: 11.5px; overflow-wrap: anywhere; }
+.flow { display: flex; align-items: center; gap: 6px; flex-wrap: wrap; font-size: 11.5px; font-family: var(--mono); }
+.flow span { padding: 3px 7px; border-radius: 6px; background: color-mix(in srgb, var(--page-text) 7%, transparent); }
+.flow i { font-style: normal; color: color-mix(in srgb, var(--page-text) 45%, transparent); }
+.mini-row { display: flex; gap: 14px; flex-wrap: wrap; justify-content: center; }
+
+.qs { margin: 0; padding-left: 20px; display: flex; flex-direction: column; gap: 10px; max-width: 80ch; font-size: 14px; }
+.qs li::marker { font-variant-numeric: tabular-nums; color: color-mix(in srgb, var(--page-text) 50%, transparent); }
+.qs b { font-weight: 600; }
+.qs span { color: color-mix(in srgb, var(--page-text) 72%, transparent); }
+
+/* ── Phone (Android first) ─────────────────────────────────────────── */
+.phone { position: relative; width: 300px; height: 640px; margin: 0 auto; border-radius: 30px; padding: 7px; background: #050506;
+  box-shadow: 0 0 0 1px rgba(255,255,255,0.08) inset, 0 30px 60px -30px rgba(0,0,0,0.5); flex: none; }
+.screen { position: relative; width: 100%; height: 100%; border-radius: 24px; overflow: hidden; background: var(--chrome); color: var(--text); font-size: 13px; font-family: var(--font); }
+.status { height: 32px; display: flex; align-items: center; justify-content: space-between; padding: 0 20px; font-size: 12px; font-weight: 500; position: relative; z-index: 5; }
+.status .punch { position: absolute; left: 50%; top: 9px; width: 12px; height: 12px; border-radius: 50%; background: #000; transform: translateX(-50%); }
+.status .sig { display: flex; gap: 4px; align-items: center; }
+.status .sig i { display: block; width: 15px; height: 9px; border-radius: 2px; background: currentColor; }
+.status .sig i:first-child { width: 14px; height: 8px; clip-path: polygon(0 100%, 100% 0, 100% 100%); border-radius: 0; }
+.nav { position: absolute; left: 50%; bottom: 6px; width: 96px; height: 4px; border-radius: 2px; background: var(--text); opacity: 0.5; transform: translateX(-50%); z-index: 20; }
+
+.bar { height: 40px; display: flex; align-items: center; gap: 6px; padding: 0 8px 0 12px; }
+.bar img { width: 30px; height: 23px; }
+.bar .sp { flex: 1; }
+.ib { width: 32px; height: 32px; display: grid; place-items: center; color: var(--muted); border-radius: 8px; flex: none; }
+.ib svg { width: 17px; height: 17px; }
+.btn { height: 32px; padding: 0 11px; border-radius: 8px; display: inline-flex; align-items: center; justify-content: center; gap: 6px; font-size: 12.5px; font-weight: 500; border: 1px solid var(--border); background: var(--panel); white-space: nowrap; color: var(--text); }
+.btn svg { width: 14px; height: 14px; }
+.btn--primary { background: var(--accent); color: var(--on-accent); border-color: transparent; }
+.panel { position: absolute; left: 5px; right: 5px; top: 72px; bottom: 58px; background: var(--panel); border-radius: 12px; box-shadow: var(--panel-shadow), inset 0 0 0 1px var(--panel-edge); overflow: hidden; }
+.panel--full { top: 36px; bottom: 16px; }
+.tabs { position: absolute; left: 0; right: 0; bottom: 12px; height: 44px; display: grid; grid-template-columns: repeat(4, 1fr); }
+.tab { display: flex; flex-direction: column; align-items: center; gap: 2px; font-size: 9.5px; font-weight: 500; color: var(--muted); position: relative; }
+.tab .ic { width: 40px; height: 24px; display: grid; place-items: center; border-radius: 8px; }
+.tab .ic svg { width: 17px; height: 17px; }
+.tab.on { color: var(--text); }
+.tab.on .ic { background: var(--tint-9); }
+.count { position: absolute; top: -4px; left: calc(50% + 8px); min-width: 15px; height: 15px; border-radius: 8px; background: var(--waiting); color: #fff; font-size: 9.5px; font-weight: 600; display: grid; place-items: center; padding: 0 4px; }
+
+/* Glyphs: StatusGlyph */
+.g { width: 9px; height: 9px; flex: none; display: inline-block; }
+.g--work { display: inline-grid; grid-template-columns: repeat(2, 3.5px); grid-auto-rows: 3.5px; gap: 2px; color: var(--text); }
+.g--work i { display: block; border-radius: 50%; background: currentColor; animation: quad 800ms steps(1,end) infinite; }
+.g--work i:nth-child(1) { animation-delay: -800ms; } .g--work i:nth-child(2) { animation-delay: -600ms; }
+.g--work i:nth-child(4) { animation-delay: -400ms; } .g--work i:nth-child(3) { animation-delay: -200ms; }
+@keyframes quad { 0% { opacity: 0.16; } 25%, 100% { opacity: 1; } }
+.g--wait { background: var(--waiting); clip-path: polygon(50% 4%, 96% 50%, 50% 96%, 4% 50%); }
+.g--quiet { width: 6px; height: 6px; border-radius: 50%; background: color-mix(in srgb, var(--muted) 45%, transparent); margin: 0 1.5px; }
+@media (prefers-reduced-motion: reduce) { .g--work i { animation: none !important; } .pager-track { transition: none !important; } }
+
+.label { font-size: 10.5px; font-weight: 600; letter-spacing: 0.05em; text-transform: uppercase; color: var(--muted); }
+.muted { color: var(--muted); }
+.add { color: var(--running); font-variant-numeric: tabular-nums; font-family: var(--mono); font-size: 11px; }
+.del { color: var(--error); font-variant-numeric: tabular-nums; font-family: var(--mono); font-size: 11px; }
+.mchip { display: inline-flex; align-items: center; gap: 4px; height: 18px; padding: 0 7px; border-radius: 9px; background: var(--tint-5); font-size: 10.5px; color: var(--muted); white-space: nowrap; }
+.mchip svg { width: 11px; height: 11px; }
+.mchip--new { color: var(--accent); background: var(--accent-dim); }
+
+/* Home */
+.ph { padding: 14px 14px 6px; }
+.ph h1 { margin: 0; font-size: 20px; font-weight: 600; letter-spacing: -0.01em; }
+.ph p { margin: 2px 0 0; font-size: 11.5px; color: var(--muted); display: flex; gap: 6px; align-items: center; }
+.mdot { width: 6px; height: 6px; border-radius: 50%; background: var(--running); display: inline-block; }
+.sec { padding: 10px 14px 2px; display: flex; align-items: center; gap: 6px; }
+.srow { display: grid; grid-template-columns: 12px minmax(0,1fr) auto; gap: 2px 9px; padding: 7px 14px; align-items: center; }
+.srow .t { font-size: 13px; font-weight: 500; color: var(--row-text); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.srow .r { font-size: 11px; color: var(--muted); font-variant-numeric: tabular-nums; justify-self: end; }
+.srow .s { grid-column: 2 / 4; font-size: 11px; color: var(--muted); display: flex; gap: 6px; align-items: center; white-space: nowrap; overflow: hidden; min-width: 0; }
+.srow .s .x { overflow: hidden; text-overflow: ellipsis; min-width: 0; }
+.srow .s svg { width: 12px; height: 12px; }
+.srow--wait .s { color: var(--waiting); }
+.srow--quiet .t { color: var(--muted); }
+.srow--hl { background: var(--tint-5); }
+
+/* Session */
+.sh { display: flex; align-items: center; gap: 4px; padding: 6px 6px 6px 2px; border-bottom: 1px solid var(--border); }
+.sh .ib { color: var(--text); }
+.sh__m { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 2px; }
+.sh__t { font-size: 13.5px; font-weight: 600; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.sh__s { font-size: 11px; color: var(--muted); display: flex; gap: 6px; align-items: center; white-space: nowrap; overflow: hidden; }
+.sh__s--wait { color: var(--waiting); }
+.conv { padding: 10px 12px; display: flex; flex-direction: column; gap: 9px; font-size: 12.5px; line-height: 1.5; }
+.ububble { align-self: flex-end; max-width: 84%; padding: 7px 10px; border-radius: 12px; background: var(--tint-5); border: 1px solid var(--border); }
+.conv p { margin: 0; }
+.tools { display: flex; flex-direction: column; padding: 3px; border: 1px solid var(--border); border-radius: 10px; background: var(--tint-3); }
+.tool { display: flex; align-items: center; gap: 7px; min-height: 28px; padding: 0 7px; border-radius: 7px; font-size: 12px; }
+.tool > svg { width: 13px; height: 13px; color: var(--muted); }
+.tool .n { font-weight: 500; }
+.tool .d { font-family: var(--mono); font-size: 11px; color: var(--muted); flex: 1; min-width: 0; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.pgcard { display: grid; grid-template-columns: 34px minmax(0,1fr) auto; gap: 2px 10px; align-items: center; padding: 9px 10px; border: 1px solid var(--border); border-radius: 10px; background: var(--card); }
+.pgcard .ic { grid-row: 1 / 3; width: 34px; height: 34px; border-radius: 8px; display: grid; place-items: center; background: var(--tint-5); color: var(--muted); }
+.pgcard .ic svg { width: 17px; height: 17px; }
+.pgcard b, .pgcard > span:not(.ic):not(.go) { grid-column: 2; }
+.pgcard b { font-size: 12.5px; font-weight: 600; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.pgcard span { font-size: 11px; color: var(--muted); }
+.pgcard .go { grid-column: 3; grid-row: 1 / 3; color: var(--muted); }
+.pgcard .go svg { width: 14px; height: 14px; transform: rotate(180deg); }
+.pgcard--wait { border-color: var(--waiting-edge); background: var(--waiting-bg); }
+.pgcard--wait .ic { color: var(--waiting); background: color-mix(in srgb, var(--waiting) 12%, transparent); }
+.pgcard--wait span { color: var(--waiting); }
+.dock { position: absolute; left: 0; right: 0; bottom: 0; padding: 14px 8px 8px; display: flex; flex-direction: column; gap: 6px; background: linear-gradient(transparent, var(--panel) 16px); }
+.changes { display: flex; align-items: center; gap: 7px; height: 32px; padding: 0 10px; border-radius: 8px; background: var(--tint-5); font-size: 11.5px; font-weight: 500; }
+.changes svg { width: 13px; height: 13px; color: var(--muted); }
+.changes .sp { flex: 1; }
+.changes .sep { width: 1px; height: 14px; background: var(--border); }
+.changes .new { color: var(--accent); }
+.dpick { border-radius: 10px; background: var(--waiting-bg); border: 1px solid var(--waiting-edge); padding: 9px 10px; display: flex; gap: 10px; align-items: center; }
+.dpick .x { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 1px; }
+.dpick .x b { font-size: 12px; color: var(--waiting); font-weight: 600; }
+.dpick .x span { font-size: 12px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.composer { border: 1px solid color-mix(in srgb, var(--text) 13%, transparent); border-radius: 12px; background: var(--card); padding: 9px 10px 7px; display: flex; flex-direction: column; gap: 6px; }
+.composer .ph2 { color: var(--muted); font-size: 12.5px; }
+.composer .typed { font-size: 12.5px; }
+.composer .typed::after { content: ""; display: inline-block; width: 1.5px; height: 14px; background: var(--accent); vertical-align: -2px; margin-left: 1px; }
+.composer .r { display: flex; align-items: center; gap: 10px; font-size: 11.5px; color: var(--muted); }
+.composer .r svg { width: 13px; height: 13px; }
+.composer .r .sp { flex: 1; }
+.composer .send { width: 26px; height: 26px; border-radius: 50%; background: var(--accent); color: #fff; display: grid; place-items: center; }
+.about { align-self: flex-start; display: inline-flex; align-items: center; gap: 5px; height: 22px; padding: 0 8px; border-radius: 6px; background: var(--accent-dim); color: var(--accent); font-size: 11px; font-weight: 500; max-width: 100%; }
+.about svg { width: 12px; height: 12px; }
+.about .x { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+
+/* Sheet */
+.dimmed { position: absolute; inset: 0; background: var(--dim); z-index: 6; }
+.sheet { position: absolute; left: 0; right: 0; bottom: 0; top: 150px; z-index: 7; background: var(--card); border-radius: 16px 16px 0 0; display: flex; flex-direction: column; border-top: 1px solid var(--border); }
+.grab { width: 36px; height: 4px; border-radius: 2px; background: var(--tint-9); margin: 7px auto 4px; flex: none; }
+.seg { display: flex; gap: 2px; margin: 4px 12px 8px; padding: 2px; border-radius: 9px; background: var(--tint-5); }
+.seg button, .seg span { flex: 1; height: 28px; border-radius: 7px; font-size: 11.5px; font-weight: 500; color: var(--muted); display: inline-flex; align-items: center; justify-content: center; gap: 5px; }
+.seg .on { background: var(--panel); color: var(--text); box-shadow: 0 1px 2px rgba(0,0,0,0.12), inset 0 0 0 1px var(--border); }
+.seg .n { font-size: 10px; color: var(--muted); }
+.prow { display: grid; grid-template-columns: 30px minmax(0,1fr) auto; gap: 1px 10px; align-items: center; padding: 8px 14px; }
+.prow .ic { grid-row: 1 / 3; width: 30px; height: 30px; border-radius: 8px; display: grid; place-items: center; background: var(--tint-5); color: var(--muted); }
+.prow .ic svg { width: 15px; height: 15px; }
+.prow b, .prow > span:not(.ic):not(.r) { grid-column: 2; }
+.prow b { font-size: 12.5px; font-weight: 500; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.prow span { font-size: 11px; color: var(--muted); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.prow .r { grid-column: 3; grid-row: 1 / 3; font-size: 11px; color: var(--muted); font-variant-numeric: tabular-nums; }
+.prow--wait .ic { color: var(--waiting); background: color-mix(in srgb, var(--waiting) 12%, transparent); }
+.prow--wait span { color: var(--waiting); }
+.prow--on { background: var(--tint-5); }
+
+/* A page full screen: Fleet's thin bar, then the page itself in a WebView, edge to edge */
+.pbar { height: 44px; display: flex; align-items: center; gap: 2px; padding: 0 4px 0 2px; background: var(--panel); border-bottom: 1px solid var(--border); position: relative; z-index: 3; }
+.pbar .ib { color: var(--text); }
+.pbar .t { flex: 1; min-width: 0; display: flex; flex-direction: column; }
+.pbar .t b { font-size: 13px; font-weight: 600; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.pbar .t span { font-size: 10.5px; color: var(--muted); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.web { position: absolute; left: 0; right: 0; top: 76px; bottom: 0; overflow: hidden; background: var(--panel); color: var(--text); }
+.web--edge::before { content: "WebView"; position: absolute; right: 6px; top: 6px; font-family: var(--mono); font-size: 9px; letter-spacing: 0.04em; color: var(--muted); opacity: 0.7; z-index: 2; }
+.reply { position: absolute; left: 0; right: 0; bottom: 0; z-index: 4; padding: 8px 10px 18px; background: var(--panel); border-top: 1px solid var(--border); display: flex; align-items: center; gap: 8px; }
+.reply .in { flex: 1; height: 36px; border-radius: 18px; background: var(--tint-5); border: 1px solid var(--border); display: flex; align-items: center; padding: 0 12px; font-size: 12.5px; color: var(--muted); }
+.reply .ib { width: 36px; height: 36px; }
+
+/* The agent's page content (written with --fleet-* variables, which the app fills from its own tokens) */
+.pg { padding: 16px 16px 90px; display: flex; flex-direction: column; gap: 12px; font-size: 12.5px; line-height: 1.5; }
+.pg h3 { margin: 0; font-size: 17px; font-weight: 600; letter-spacing: -0.01em; text-wrap: balance; }
+.pg p { margin: 0; color: var(--muted); }
+.kpis { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
+.kpi { border: 1px solid var(--border); border-radius: 10px; padding: 9px; display: flex; flex-direction: column; gap: 2px; background: var(--card); }
+.kpi span { font-size: 10.5px; color: var(--muted); }
+.kpi b { font-size: 19px; font-weight: 600; font-variant-numeric: tabular-nums; letter-spacing: -0.01em; }
+.kpi i { font-style: normal; font-size: 10.5px; color: var(--running); }
+.chart { border: 1px solid var(--border); border-radius: 10px; padding: 10px 10px 8px; background: var(--card); }
+.chart .lg { display: flex; gap: 10px; font-size: 10.5px; color: var(--muted); margin-bottom: 7px; }
+.chart .lg i { display: inline-block; width: 8px; height: 8px; border-radius: 2px; margin-right: 4px; vertical-align: -1px; }
+.bars { display: grid; grid-template-columns: 34px 1fr; gap: 8px 6px; align-items: center; font-size: 10.5px; color: var(--muted); font-variant-numeric: tabular-nums; }
+.bars .b { display: flex; flex-direction: column; gap: 2px; }
+.bars .b i { display: block; height: 7px; border-radius: 2px; }
+.c1 { background: var(--chart-1); } .c2 { background: var(--chart-2); }
+.tbl { width: 100%; border-collapse: collapse; font-size: 11.5px; font-variant-numeric: tabular-nums; }
+.tbl th { text-align: left; font-weight: 500; color: var(--muted); font-size: 10.5px; padding: 0 0 5px; }
+.tbl td { padding: 5px 0; border-top: 1px solid var(--border); }
+.tbl td:last-child, .tbl th:last-child { text-align: right; }
+
+.choices { display: flex; flex-direction: column; gap: 8px; }
+.choice { text-align: left; border: 1.5px solid var(--border); border-radius: 11px; padding: 10px 11px; display: grid; grid-template-columns: 22px minmax(0,1fr); gap: 2px 9px; background: var(--card); width: 100%; }
+.choice .k { grid-row: 1 / 3; width: 22px; height: 22px; border-radius: 6px; display: grid; place-items: center; background: var(--tint-5); font-size: 11px; font-weight: 600; color: var(--muted); }
+.choice b { font-size: 12.5px; font-weight: 600; }
+.choice span { font-size: 11.5px; color: var(--muted); }
+.choice .sk { grid-column: 2; display: flex; gap: 3px; margin-top: 5px; }
+.choice .sk i { display: block; height: 14px; border-radius: 3px; background: var(--tint-9); flex: 1; }
+.choice[aria-pressed="true"] { border-color: var(--accent); background: color-mix(in srgb, var(--accent) 6%, var(--card)); }
+.choice[aria-pressed="true"] .k { background: var(--accent); color: var(--on-accent); }
+.cbar { position: absolute; left: 0; right: 0; bottom: 0; z-index: 4; padding: 10px 10px 18px; background: var(--waiting-bg); border-top: 1px solid var(--waiting-edge); display: flex; flex-direction: column; gap: 8px; }
+.cbar .l { font-size: 12px; }
+.cbar .l b { font-weight: 600; }
+.cbar .a { display: grid; grid-template-columns: 1fr auto auto; gap: 6px; }
+.cbar .a .btn { height: 34px; }
+.cbar--sent { background: var(--panel); border-top-color: var(--border); }
+.cbar--sent .l { color: var(--muted); display: flex; align-items: center; gap: 6px; }
+.cbar--sent .l svg { width: 13px; height: 13px; color: var(--running); }
+
+.wt-top { display: flex; align-items: center; gap: 8px; font-size: 11px; color: var(--muted); }
+.wt-top .dots { display: flex; gap: 4px; flex: 1; }
+.wt-top .dots i { height: 3px; flex: 1; border-radius: 2px; background: var(--tint-9); }
+.wt-top .dots i.d { background: var(--accent); }
+.diff { border: 1px solid var(--border); border-radius: 9px; overflow: hidden; font-family: var(--mono); font-size: 10.5px; line-height: 1.6; background: var(--code-bg); }
+.diff .hh { padding: 4px 9px; color: var(--muted); border-bottom: 1px solid var(--border); font-size: 10px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.dl { display: grid; grid-template-columns: 22px 10px 1fr; padding-right: 8px; white-space: pre; overflow: hidden; }
+.dl .ln { color: var(--muted); opacity: 0.6; text-align: right; padding-right: 4px; }
+.dl.a { background: color-mix(in srgb, var(--running) 11%, transparent); }
+.dl.r { background: color-mix(in srgb, var(--error) 10%, transparent); }
+.dl.a .sg { color: var(--running); } .dl.r .sg { color: var(--error); }
+.sx-k { color: var(--syn-k); } .sx-s { color: var(--syn-s); } .sx-n { color: var(--syn-n); } .sx-f { color: var(--syn-f); }
+.wt-nav { display: flex; gap: 8px; }
+.wt-nav .btn { flex: 1; height: 34px; }
+.ask { display: inline-flex; align-items: center; gap: 6px; font-size: 12px; font-weight: 500; color: var(--accent); }
+.ask svg { width: 13px; height: 13px; }
+
+.ex-stage { height: 210px; border-radius: 12px; border: 1px solid var(--border); background: var(--card); position: relative; overflow: hidden; }
+.lane { position: absolute; left: 12px; right: 12px; height: 34px; border-radius: 8px; border: 1px dashed var(--border); display: flex; align-items: center; padding: 0 10px; font-size: 10.5px; color: var(--muted); }
+.lane b { color: var(--text); font-weight: 500; margin-right: 6px; }
+.pkt { position: absolute; width: 26px; height: 16px; border-radius: 4px; background: var(--accent); }
+.pkt--b { background: var(--chart-1); }
+.ex-cap { font-size: 12.5px; }
+.ex-ctl { display: flex; align-items: center; gap: 10px; }
+.ex-ctl .play { width: 34px; height: 34px; border-radius: 50%; background: var(--accent); color: #fff; display: grid; place-items: center; flex: none; }
+.ex-ctl .play svg { width: 14px; height: 14px; }
+.ex-ctl .scrub { flex: 1; height: 4px; border-radius: 2px; background: var(--tint-9); position: relative; }
+.ex-ctl .scrub i { position: absolute; left: 0; top: 0; bottom: 0; width: 50%; background: var(--accent); border-radius: 2px; }
+.ex-ctl .scrub i::after { content: ""; position: absolute; right: -6px; top: -4px; width: 12px; height: 12px; border-radius: 50%; background: var(--accent); }
+.ex-ctl .tm { font-size: 11px; color: var(--muted); font-variant-numeric: tabular-nums; }
+
+/* Pager: pages side by side, swipe between them */
+.pager { position: absolute; left: 0; right: 0; top: 76px; bottom: 0; overflow: hidden; }
+.pager-track { display: flex; height: 100%; width: 300%; transform: translateX(calc(-33.333% + 0px)); transition: transform 300ms ease; }
+.pager-track > div { width: 33.333%; height: 100%; position: relative; background: var(--panel); border-right: 1px solid var(--border); overflow: hidden; }
+.pager--peek .pager-track { transform: translateX(calc(-33.333% - 96px)); }
+.pdots { position: absolute; left: 50%; transform: translateX(-50%); bottom: 74px; z-index: 5; display: flex; gap: 5px; padding: 5px 8px; border-radius: 10px; background: color-mix(in srgb, var(--card) 90%, transparent); border: 1px solid var(--border); }
+.pdots i { width: 6px; height: 6px; border-radius: 50%; background: var(--tint-9); }
+.pdots i.on { background: var(--text); }
+.pdots i.w { background: var(--waiting); }
+
+/* Menus and states */
+.menu { position: absolute; left: 0; right: 0; bottom: 0; z-index: 8; background: var(--card); border-radius: 16px 16px 0 0; border-top: 1px solid var(--border); padding-bottom: 18px; }
+.mi { display: flex; align-items: center; gap: 12px; min-height: 44px; padding: 0 16px; font-size: 13px; }
+.mi svg { width: 17px; height: 17px; color: var(--muted); }
+.mi .sp { flex: 1; }
+.mi .hint { font-size: 11px; color: var(--muted); }
+.mnote { margin: 6px 16px 4px; padding: 9px 10px; border-radius: 8px; background: var(--tint-5); font-size: 11px; color: var(--muted); line-height: 1.45; }
+.mnote b { color: var(--text); font-weight: 500; }
+.empty { position: absolute; inset: 0; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 10px; padding: 0 30px 60px; text-align: center; }
+.empty .ic { width: 44px; height: 44px; border-radius: 12px; background: var(--tint-5); display: grid; place-items: center; color: var(--muted); }
+.empty .ic svg { width: 22px; height: 22px; }
+.empty b { font-size: 14px; font-weight: 600; }
+.empty p { margin: 0; font-size: 12px; color: var(--muted); }
+.offline { display: flex; align-items: center; gap: 7px; padding: 6px 12px; font-size: 11px; color: var(--muted); background: var(--tint-5); border-bottom: 1px solid var(--border); }
+.offline i { width: 6px; height: 6px; border-radius: 50%; background: var(--muted); }
+.toast { position: absolute; left: 10px; right: 10px; bottom: 70px; z-index: 9; border-radius: 12px; background: var(--card); border: 1px solid var(--border); box-shadow: 0 12px 30px -14px rgba(0,0,0,0.5); padding: 9px 11px; display: flex; gap: 9px; align-items: center; font-size: 12px; }
+.toast .x { flex: 1; min-width: 0; }
+.toast .x b { display: block; font-weight: 600; font-size: 12px; }
+.toast .x span { color: var(--muted); font-size: 11.5px; display: block; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.toast .act { color: var(--accent); font-weight: 600; font-size: 12px; }
+.kbd { position: absolute; left: 0; right: 0; bottom: 0; height: 196px; background: color-mix(in srgb, var(--chrome) 90%, var(--text)); z-index: 9; padding: 10px 5px 22px; display: grid; grid-template-rows: repeat(4, 1fr); gap: 7px; }
+.kbd div { display: flex; gap: 5px; justify-content: center; }
+.kbd i { flex: 1; max-width: 25px; border-radius: 5px; background: var(--card); box-shadow: 0 1px 0 var(--border); }
+.kbd .wide { max-width: 140px; }
+
+/* Smaller phones for the option comparisons */
+.mini { width: 220px; height: 452px; border-radius: 24px; padding: 5px; }
+.mini .screen { border-radius: 19px; font-size: 11px; }
+.mini-wrap { display: flex; flex-direction: column; gap: 8px; align-items: center; min-width: 0; }
+.mini-wrap > b { font-size: 13px; font-weight: 600; }
+.hdrtabs { display: flex; gap: 2px; margin: 6px 8px; padding: 2px; border-radius: 8px; background: var(--tint-5); }
+.hdrtabs span { flex: 1; height: 24px; border-radius: 6px; display: grid; place-items: center; font-size: 10.5px; font-weight: 500; color: var(--muted); }
+.hdrtabs .on { background: var(--panel); color: var(--text); box-shadow: inset 0 0 0 1px var(--border); }
+.thumb { border: 1px solid var(--border); border-radius: 9px; overflow: hidden; background: var(--card); }
+.thumb .tt { padding: 6px 8px; font-size: 10.5px; font-weight: 600; border-top: 1px solid var(--border); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.thumb .tt span { display: block; font-weight: 400; color: var(--muted); font-size: 10px; }
+.thumb .tv { height: 64px; padding: 7px; display: flex; flex-direction: column; gap: 4px; background: var(--panel); }
+.thumb .tv i { display: block; height: 6px; border-radius: 2px; background: var(--tint-9); }
+.thumb .tv i.a { background: var(--accent); width: 40%; }
+.grid2 { display: grid; grid-template-columns: 1fr 1fr; gap: 6px; padding: 4px 8px; }
+
+@media (max-width: 420px) { .doc { padding-top: 18px; } .frames, .opts, .facts { grid-template-columns: minmax(0,1fr); } }
+</style>
+</head>
+<body>
+<svg width="0" height="0" style="position:absolute" aria-hidden="true">
+  <defs>
+    <symbol id="i-back" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m15 18-6-6 6-6"/></symbol>
+    <symbol id="i-more" viewBox="0 0 24 24" fill="currentColor"><circle cx="5" cy="12" r="1.7"/><circle cx="12" cy="12" r="1.7"/><circle cx="19" cy="12" r="1.7"/></symbol>
+    <symbol id="i-plus" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M12 5v14M5 12h14"/></symbol>
+    <symbol id="i-bell" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M6 8a6 6 0 0 1 12 0c0 7 3 9 3 9H3s3-2 3-9"/><path d="M10.3 21a1.94 1.94 0 0 0 3.4 0"/></symbol>
+    <symbol id="i-chat" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linejoin="round"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/></symbol>
+    <symbol id="i-flow" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linejoin="round"><rect x="3" y="3" width="7" height="7" rx="1.5"/><rect x="14" y="14" width="7" height="7" rx="1.5"/><path d="M10 6.5h4a3 3 0 0 1 3 3V14"/></symbol>
+    <symbol id="i-bolt" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linejoin="round"><path d="M13 2 4 14h7l-1 8 9-12h-7z"/></symbol>
+    <symbol id="i-server" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><rect x="3" y="4" width="18" height="7" rx="2"/><rect x="3" y="13" width="18" height="7" rx="2"/><path d="M7 7.5h.01M7 16.5h.01" stroke-linecap="round" stroke-width="2.4"/></symbol>
+    <symbol id="i-search" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"><circle cx="11" cy="11" r="7"/><path d="m20 20-3.5-3.5"/></symbol>
+    <symbol id="i-pencil" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M17 3a2.8 2.8 0 1 1 4 4L7.5 20.5 2 22l1.5-5.5z"/></symbol>
+    <symbol id="i-diff" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"><path d="M12 3v8M8 7h8M8 17h8M5 21h14"/></symbol>
+    <symbol id="i-clip" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="m21.4 11-8.8 8.8a6 6 0 0 1-8.5-8.5l8.6-8.6a4 4 0 0 1 5.7 5.7l-8.6 8.6a2 2 0 0 1-2.8-2.8l8-8"/></symbol>
+    <symbol id="i-up" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 19V5M5 12l7-7 7 7"/></symbol>
+    <symbol id="i-down" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m6 9 6 6 6-6"/></symbol>
+    <symbol id="i-check" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="M20 6 9 17l-5-5"/></symbol>
+    <symbol id="i-page" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linejoin="round"><rect x="3" y="4" width="18" height="16" rx="2"/><path d="M3 9h18"/></symbol>
+    <symbol id="i-pick" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="4" width="18" height="16" rx="2"/><path d="m8 12 3 3 5-6"/></symbol>
+    <symbol id="i-steps" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M4 6h16M4 12h10M4 18h6"/></symbol>
+    <symbol id="i-playc" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linejoin="round"><circle cx="12" cy="12" r="9"/><path d="m10 8.5 5.5 3.5-5.5 3.5z"/></symbol>
+    <symbol id="i-play" viewBox="0 0 24 24" fill="currentColor"><path d="M8 5.5v13l10.5-6.5z"/></symbol>
+    <symbol id="i-chart" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"><path d="M4 20V10M10 20V4M16 20v-7M22 20H2"/></symbol>
+    <symbol id="i-globe" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><circle cx="12" cy="12" r="9"/><path d="M3 12h18M12 3a14 14 0 0 1 0 18M12 3a14 14 0 0 0 0 18"/></symbol>
+    <symbol id="i-share" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3v12M8 7l4-4 4 4M5 12v7a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2v-7"/></symbol>
+    <symbol id="i-link" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M10 13a5 5 0 0 0 7.5.5l3-3a5 5 0 0 0-7-7l-1.7 1.7"/><path d="M14 11a5 5 0 0 0-7.5-.5l-3 3a5 5 0 0 0 7 7l1.7-1.7"/></symbol>
+    <symbol id="i-reload" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M21 12a9 9 0 1 1-3-6.7L21 8"/><path d="M21 3v5h-5"/></symbol>
+    <symbol id="i-x" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M6 6l12 12M18 6 6 18"/></symbol>
+    <symbol id="i-cloudoff" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M2 2l20 20"/><path d="M5.8 8.6A5 5 0 0 0 7 18h10.5M20.5 15.7A4 4 0 0 0 17 9h-.6a7 7 0 0 0-6.6-5c-.9 0-1.7.2-2.5.5"/></symbol>
+    <symbol id="i-list" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"><path d="M9 6h12M9 12h12M9 18h12M4 6h.01M4 12h.01M4 18h.01"/></symbol>
+  </defs>
+</svg>
+
+<main class="doc">
+  <header class="doc-head">
+    <div class="row"><img src="img/weave-logo.png" alt=""><h1>Pages on the phone</h1></div>
+    <p class="lede">How the pages agents show (mockups, reports, choices, walkthroughs, explainers) could look and behave in Fleet's Android app. Every frame is drawn from how pages really work in Fleet today, read from the code. A few things need a small server change; those are marked. This is a proposal: nothing is built. All data is invented.</p>
+    <div class="legend">
+      <span><span class="tag tag--now">works today</span>Fleet already does this; the app only uses it</span>
+      <span><span class="tag tag--app">app</span>built in the phone app</span>
+      <span><span class="tag tag--srv">server</span>needs a small change in Fleet</span>
+    </div>
+    <div class="theme" role="group" aria-label="Theme">
+      <button type="button" data-t="light">Light</button><button type="button" data-t="dark">Dark</button>
+    </div>
+  </header>
+
+  <!-- ─── What's real ───────────────────────────────────────────── -->
+  <section class="group">
+    <h2><span>00</span>How a page really gets to a screen</h2>
+    <p>The design below rests on these facts. They decide what the phone can do cheaply and what it can't.</p>
+    <div class="facts">
+      <div class="fact"><b>A page is a URL on the machine</b><p>fleet_page_show copies the page's folder into Fleet and serves it at <code>{machine}/pages/{pageId}/</code>, the same address and port as the API. It survives restarts and is deleted with its session.</p><span class="src">PageEndpoints.cs · PageStore.cs</span></div>
+      <div class="fact"><b>The phone needs no extra sign-in for it</b><p>Page routes are open by design: the random 128-bit page id is the key, as with previews. A WebView loads the URL as it is, with no device key, cookie or token. The flip side: anyone with the link who can reach the machine can open the page.</p><span class="src">PageEndpoints.cs:11-33 AllowAnonymous</span></div>
+      <div class="fact"><b>It stays sandboxed in a WebView too</b><p>Fleet sends the sandbox as a CSP header, not only as an iframe attribute. So a page opened in a WebView still has an opaque origin, can't read Fleet's cookies, and can't call Fleet as you. Scripts, forms and CDNs work.</p><span class="src">PageEndpoints.cs:56 Content-Security-Policy</span></div>
+      <div class="fact"><b>The theme goes in through window.name</b><p>Fleet puts a small script at the top of every page. It reads <code>window.name = "fleet:{appearance, variables}"</code> and listens for <code>fleet:theme</code> messages. The app sets the name before the page loads, from its own tokens (bg = panel, surface = card, accent, and so on). No DOM is needed to work them out.</p><span class="src">PageTheme.cs · page-theme.ts FROM_APP</span></div>
+      <div class="fact"><b>Pages talk to their host by postMessage</b><p>A page posts <code>fleet:page-choice</code>, <code>fleet:page-reply</code>, <code>fleet:page-state</code> and <code>fleet:page-hello</code> to <code>parent</code>. In a full-screen WebView, <code>parent</code> is the page itself. The app adds a short shim that forwards those to React Native, and replies the way the desktop canvas does.</p><span class="src">page-bridge.ts · walkthrough.html:290</span></div>
+      <div class="fact"><b>The host sends a choice, never the page</b><p>When the agent waits on a pick, the session reads <b>Needs you</b> (waiting_input). The page only proposes a pick. The host's bar sends it: <code>POST /api/sessions/{id}/page-choices/{callId}/send</code>, which the phone can call with its device key.</p><span class="src">PageChoices.cs:84 · CanvasEndpoints.cs:84</span></div>
+      <div class="fact"><b>The app hears about pages on the socket it already has</b><p>Tab pages arrive as <code>canvas.updated</code> (kind page) on the session's topic, and <code>GET /api/sessions/{id}/canvases</code> lists them. Conversation pages arrive as a tool call whose metadata has <code>page: {id, entry}</code>. The session list carries nothing about pages yet.</p><span class="src">CanvasEndpoints.cs:22 · canvases.ts:461</span></div>
+      <div class="fact"><b>One native module, one new build</b><p>The app has no WebView yet. <code>react-native-webview</code> is native code, so it ships in a new EAS build installed once. An over-the-air update can't add it. After that, page changes go out over the air as usual.</p><span class="src">mobile/package.json (mobile/shell)</span></div>
+    </div>
+  </section>
+
+  <!-- ─── 01 Arrival ─────────────────────────────────────────────── -->
+  <section class="group">
+    <h2><span>01</span>You learn a page arrived</h2>
+    <p>Three places, from the furthest away to the closest. A page that waits on your pick is an ask, like a question. Any other page is news and stays quiet.</p>
+    <div class="frames">
+
+      <div class="shot">
+        <div class="phone"><div class="screen">
+          <div class="status"><span>10:42</span><span class="punch"></span><span class="sig"><i></i><i></i></span></div>
+          <div class="bar"><img src="img/weave-logo.png" alt="Fleet"><span class="sp"></span><span class="ib"><svg><use href="#i-bell"/></svg></span><span class="btn"><svg><use href="#i-plus"/></svg>New session</span></div>
+          <div class="panel">
+            <div class="ph"><h1>Fleet</h1><p><span class="mdot"></span>hangar <span class="mdot"></span>falcon · 5 sessions</p></div>
+            <div class="sec"><span class="label">Needs you · 1</span></div>
+            <div class="srow srow--wait srow--hl"><span class="g g--wait"></span><span class="t">Speed up the ledger export</span><span class="r">now</span>
+              <span class="s"><svg><use href="#i-pick"/></svg><span class="x">Pick on the page · Three ways to page the ledger</span></span></div>
+            <div class="sec"><span class="label">Working · 1</span></div>
+            <div class="srow"><span class="g g--work"><i></i><i></i><i></i><i></i></span><span class="t">Fix the burst window in the limiter</span><span class="r">4m</span>
+              <span class="s"><span class="x">Step 3 of 5 · Run the tests</span></span></div>
+            <div class="sec"><span class="label">Finished</span></div>
+            <div class="srow srow--quiet"><span class="g g--quiet"></span><span class="t">Redesign the invoice email</span><span class="r">12m</span>
+              <span class="s"><span class="mchip mchip--new"><svg><use href="#i-page"/></svg>2 new pages</span><span class="mchip">falcon</span></span></div>
+            <div class="srow srow--quiet"><span class="g g--quiet"></span><span class="t">Paginate the audit log</span><span class="r">1h</span>
+              <span class="s"><span class="x">PR #608 · checks passed</span></span></div>
+          </div>
+          <nav class="tabs"><span class="tab on"><span class="ic"><svg><use href="#i-chat"/></svg></span>Sessions<span class="count">1</span></span><span class="tab"><span class="ic"><svg><use href="#i-flow"/></svg></span>Workflows</span><span class="tab"><span class="ic"><svg><use href="#i-bolt"/></svg></span>Automations</span><span class="tab"><span class="ic"><svg><use href="#i-server"/></svg></span>Machines</span></nav>
+          <span class="nav"></span>
+        </div></div>
+        <div class="cap"><b>Sessions list</b><ul>
+          <li><span class="tag tag--now">works today</span> A waiting pick turns the row amber, Needs you, and counts on the tab. Fleet's push for asks covers it too.</li>
+          <li><span class="tag tag--srv">server</span> "2 new pages" on a quiet row needs a page count on the session list item; today the list doesn't carry one.</li>
+          <li>Tap the row: the session opens on the waiting page, not the conversation.</li>
+        </ul></div>
+      </div>
+
+      <div class="shot">
+        <div class="phone"><div class="screen">
+          <div class="status"><span>10:42</span><span class="punch"></span><span class="sig"><i></i><i></i></span></div>
+          <div class="panel panel--full">
+            <div class="sh"><span class="ib"><svg><use href="#i-back"/></svg></span>
+              <div class="sh__m"><span class="sh__t">Speed up the ledger export</span><span class="sh__s sh__s--wait"><span class="g g--wait"></span>Needs you · hangar</span></div>
+              <span class="ib"><svg><use href="#i-more"/></svg></span></div>
+            <div class="conv">
+              <div class="ububble">The export page times out on big ledgers. Make it stream, and show me the numbers.</div>
+              <p>Streaming cut the 2.1 M-row export from 63 s to 19 s. Here are the numbers.</p>
+              <div class="pgcard"><span class="ic"><svg><use href="#i-chart"/></svg></span><b>Export, before and after</b><span class="go"><svg><use href="#i-back"/></svg></span><span>Page · 10:31</span></div>
+              <p>The table screen needs to change too. Which way should it page?</p>
+              <div class="pgcard pgcard--wait"><span class="ic"><svg><use href="#i-pick"/></svg></span><b>Three ways to page the ledger</b><span class="go"><svg><use href="#i-back"/></svg></span><span>Waiting for your pick</span></div>
+            </div>
+            <div class="dock">
+              <div class="dpick"><span class="x"><b>Pick on the page</b><span>Three ways to page the ledger</span></span><span class="btn btn--primary">Open page</span></div>
+              <div class="changes"><svg><use href="#i-diff"/></svg>Changes<span class="muted">4</span><span class="add">+186</span><span class="del">−41</span><span class="sep"></span><svg><use href="#i-page"/></svg>Pages<span class="new">4</span><span class="sp"></span><svg style="width:11px;height:11px"><use href="#i-up"/></svg></div>
+            </div>
+          </div>
+          <span class="nav"></span>
+        </div></div>
+        <div class="cap"><b>In the conversation</b><ul>
+          <li><span class="tag tag--app">app</span> The page card sits where the agent showed it, as the desktop's tool row does. Tap to open it full screen.</li>
+          <li>The waiting pick docks like a question, as the phone web client's DockedPagePick already does.</li>
+          <li>The strip gains a Pages count; it goes accent when a page is new to you.</li>
+        </ul></div>
+      </div>
+
+      <div class="shot">
+        <div class="phone"><div class="screen">
+          <div class="status"><span>10:42</span><span class="punch"></span><span class="sig"><i></i><i></i></span></div>
+          <div class="panel panel--full">
+            <div class="sh"><span class="ib"><svg><use href="#i-back"/></svg></span><div class="sh__m"><span class="sh__t">Speed up the ledger export</span><span class="sh__s">Needs you · hangar</span></div></div>
+          </div>
+          <div class="dimmed"></div>
+          <div class="sheet">
+            <div class="grab"></div>
+            <div class="seg"><span>Changes <span class="n">4</span></span><span>Files</span><span class="on">Pages <span class="n">4</span></span></div>
+            <div class="prow prow--wait prow--on"><span class="ic"><svg><use href="#i-pick"/></svg></span><b>Three ways to page the ledger</b><span class="r">now</span><span>Waiting for your pick</span></div>
+            <div class="prow"><span class="ic"><svg><use href="#i-steps"/></svg></span><b>Walkthrough: streaming the export</b><span class="r">10:36</span><span>Walkthrough · 4 chapters</span></div>
+            <div class="prow"><span class="ic"><svg><use href="#i-playc"/></svg></span><b>How a row reaches the file</b><span class="r">10:33</span><span>Explainer · 0:24</span></div>
+            <div class="prow"><span class="ic"><svg><use href="#i-chart"/></svg></span><b>Export, before and after</b><span class="r">10:31</span><span>Page · shown 3 times</span></div>
+            <div class="sec" style="padding-top:14px"><span class="label">In the conversation</span></div>
+            <div class="prow"><span class="ic"><svg><use href="#i-page"/></svg></span><b>Row count by month</b><span class="r">10:29</span><span>Shown inline</span></div>
+          </div>
+          <span class="nav"></span>
+        </div></div>
+        <div class="cap"><b>The session's Pages</b><ul>
+          <li><span class="tag tag--now">works today</span> The list is <code>GET …/canvases</code>, kind page, and stays live from <code>canvas.updated</code>.</li>
+          <li>The kind (choice, walkthrough, explainer) comes from the tool that showed it; "shown 3 times" counts re-shows of one page.</li>
+          <li>Pages shown inline in the conversation have no canvas row; the app lists them from their tool calls.</li>
+        </ul></div>
+      </div>
+
+    </div>
+  </section>
+
+  <!-- ─── 02 Full screen ─────────────────────────────────────────── -->
+  <section class="group">
+    <h2><span>02</span>Full screen, edge to edge, in Fleet's theme</h2>
+    <p>The page fills the screen below one thin Fleet bar. The page draws its own ground from <code>--fleet-bg</code>, so it reads as part of the app in both themes. These two frames ignore the toggle above: the first is dark, the second light.</p>
+    <div class="frames">
+      <div class="shot">
+        <div class="phone" data-theme="dark"><div class="screen" id="report-dark"></div></div>
+        <div class="cap"><b>Dark</b><ul>
+          <li><span class="tag tag--app">app</span> The bar is Fleet's: back, the page's title, "4 of 4" and the session it came from, and ⋯ for Open in browser and Reload.</li>
+          <li>Below it the WebView runs to the screen's edges. No panel inset: a page needs every pixel on a phone.</li>
+          <li>The reply bar stays at the bottom; scrolling the page down hides the Fleet bar, scrolling up brings it back.</li>
+        </ul></div>
+      </div>
+      <div class="shot">
+        <div class="phone" data-theme="light"><div class="screen" id="report-light"></div></div>
+        <div class="cap"><b>Light</b><ul>
+          <li><span class="tag tag--now">works today</span> The same page, same URL: only the variables in <code>window.name</code> differ. Fleet's theme script applies them before the page paints.</li>
+          <li>Switch the phone to dark while it's open: the app posts <code>fleet:theme</code> and the page follows without reloading.</li>
+          <li>A page that sets its own colours keeps them; the desktop canvas behaves the same.</li>
+        </ul></div>
+      </div>
+    </div>
+  </section>
+
+  <!-- ─── 03 Interacting ─────────────────────────────────────────── -->
+  <section class="group">
+    <h2><span>03</span>Interacting with a page</h2>
+    <p>Choices, walkthroughs and explainers work by touch inside the page. Only the choice needs Fleet's own bar, because only the host may send it. Try the choice frame: tap an option, then Send pick.</p>
+    <div class="frames">
+
+      <div class="shot">
+        <div class="phone"><div class="screen">
+          <div class="status"><span>10:43</span><span class="punch"></span><span class="sig"><i></i><i></i></span></div>
+          <div class="pbar"><span class="ib"><svg><use href="#i-back"/></svg></span><span class="t"><b>Three ways to page the ledger</b><span>1 of 4 · Speed up the ledger export</span></span><span class="ib"><svg><use href="#i-more"/></svg></span></div>
+          <div class="web web--edge">
+            <div class="pg">
+              <h3>How should the ledger table page?</h3>
+              <p>A ledger can hold 2 million rows. Each option keeps the export as it is now.</p>
+              <div class="choices" id="choices">
+                <button type="button" class="choice" data-v="scroll" data-s="Infinite scroll" aria-pressed="false"><span class="k">A</span><b>Infinite scroll</b><span>Loads 200 rows as you near the end</span><span class="sk"><i></i><i></i><i></i><i></i></span></button>
+                <button type="button" class="choice" data-v="paged" data-s="Paged table" aria-pressed="true"><span class="k">B</span><b>Paged table</b><span>50 rows a page, jump to a date</span><span class="sk"><i></i><i style="flex:.3"></i><i style="flex:.3"></i><i style="flex:.3"></i></span></button>
+                <button type="button" class="choice" data-v="month" data-s="Month by month" aria-pressed="false"><span class="k">C</span><b>Month by month</b><span>One month at a time, totals on top</span><span class="sk"><i style="flex:.5"></i><i></i><i></i></span></button>
+              </div>
+            </div>
+          </div>
+          <div class="cbar" id="cbar">
+            <div class="l" id="cbar-l">You picked <b>Paged table</b>.</div>
+            <div class="a"><button type="button" class="btn btn--primary" id="send-pick">Send pick</button><button type="button" class="btn" id="skip-pick">Skip</button><span class="btn" aria-hidden="true" style="width:34px;padding:0"><svg><use href="#i-chat"/></svg></span></div>
+          </div>
+          <span class="nav"></span>
+        </div></div>
+        <div class="cap"><b>Answering a choice</b><ul>
+          <li>Tapping an option in the page posts <code>fleet:page-choice</code>; the app's bar shows "You picked …". Nothing is sent yet.</li>
+          <li><span class="tag tag--now">works today</span> Send pick calls <code>…/page-choices/{callId}/send</code> with the device key; the agent's turn carries on. Skip calls <code>…/skip</code>.</li>
+          <li>The speech button opens the reply sheet: answering in words ends the pick as "wrote instead", as on the desktop.</li>
+        </ul></div>
+      </div>
+
+      <div class="shot">
+        <div class="phone"><div class="screen">
+          <div class="status"><span>10:44</span><span class="punch"></span><span class="sig"><i></i><i></i></span></div>
+          <div class="pbar"><span class="ib"><svg><use href="#i-back"/></svg></span><span class="t"><b>Walkthrough: streaming the export</b><span>2 of 4 · Speed up the ledger export</span></span><span class="ib"><svg><use href="#i-more"/></svg></span></div>
+          <div class="web web--edge">
+            <div class="pg">
+              <div class="wt-top"><span>Chapter 2 of 4</span><span class="dots"><i class="d"></i><i class="d"></i><i></i><i></i></span></div>
+              <h3>Rows go out as they're read</h3>
+              <p>The query used to fill a list before writing anything. Now each row goes to the response as it arrives, so memory stays flat.</p>
+              <div class="diff">
+                <div class="hh">src/ledger/export.ts · @@ -18,7 +18,8 @@</div>
+                <div class="dl r"><span class="ln">19</span><span class="sg">−</span><span>  <span class="sx-k">const</span> rows = <span class="sx-k">await</span> q.<span class="sx-f">all</span>()</span></div>
+                <div class="dl r"><span class="ln">20</span><span class="sg">−</span><span>  res.<span class="sx-f">send</span>(<span class="sx-f">toCsv</span>(rows))</span></div>
+                <div class="dl a"><span class="ln">19</span><span class="sg">+</span><span>  <span class="sx-k">for await</span> (<span class="sx-k">const</span> row <span class="sx-k">of</span> q.<span class="sx-f">stream</span>())</span></div>
+                <div class="dl a"><span class="ln">20</span><span class="sg">+</span><span>    res.<span class="sx-f">write</span>(<span class="sx-f">csvLine</span>(row))</span></div>
+                <div class="dl a"><span class="ln">21</span><span class="sg">+</span><span>  res.<span class="sx-f">end</span>()</span></div>
+              </div>
+              <span class="ask"><svg><use href="#i-chat"/></svg>Ask about this chapter</span>
+              <div class="wt-nav"><span class="btn">Back</span><span class="btn btn--primary">Next chapter</span></div>
+            </div>
+          </div>
+          <div class="reply"><span class="in">Reply about this page…</span><span class="ib"><svg><use href="#i-clip"/></svg></span></div>
+          <span class="nav"></span>
+        </div></div>
+        <div class="cap"><b>Stepping through a walkthrough</b><ul>
+          <li><span class="tag tag--now">works today</span> Fleet bakes the diff into the page, so it needs nothing from the app to show the code.</li>
+          <li>Its chapters, Back and Next are the page's own; the app adds nothing.</li>
+          <li>Ask about this chapter posts <code>fleet:page-reply</code>; the app opens the reply sheet with the text filled in, as the desktop fills the composer.</li>
+          <li>Which chapters you've read is <code>fleet:page-state</code>; the app keeps it while the app is open, as the desktop does.</li>
+        </ul></div>
+      </div>
+
+      <div class="shot">
+        <div class="phone"><div class="screen">
+          <div class="status"><span>10:44</span><span class="punch"></span><span class="sig"><i></i><i></i></span></div>
+          <div class="pbar"><span class="ib"><svg><use href="#i-back"/></svg></span><span class="t"><b>How a row reaches the file</b><span>3 of 4 · Speed up the ledger export</span></span><span class="ib"><svg><use href="#i-more"/></svg></span></div>
+          <div class="web web--edge">
+            <div class="pg">
+              <h3>How a row reaches the file</h3>
+              <div class="ex-stage">
+                <div class="lane" style="top:14px"><b>Database</b>cursor</div>
+                <div class="lane" style="top:62px"><b>Export</b>CSV lines</div>
+                <div class="lane" style="top:110px"><b>Response</b>streamed</div>
+                <div class="lane" style="top:158px"><b>Browser</b>downloading…</div>
+                <span class="pkt" style="left:160px;top:23px"></span><span class="pkt pkt--b" style="left:200px;top:23px"></span>
+                <span class="pkt" style="left:180px;top:71px"></span>
+                <span class="pkt pkt--b" style="left:205px;top:119px"></span>
+              </div>
+              <p class="ex-cap">0:12. The first rows are already in the download while the database is still reading.</p>
+              <div class="ex-ctl"><span class="play"><svg><use href="#i-play"/></svg></span><span class="scrub"><i></i></span><span class="tm">0:12 / 0:24</span></div>
+            </div>
+          </div>
+          <div class="reply"><span class="in">Reply about this page…</span><span class="ib"><svg><use href="#i-clip"/></svg></span></div>
+          <span class="nav"></span>
+        </div></div>
+        <div class="cap"><b>Playing an explainer</b><ul>
+          <li><span class="tag tag--now">works today</span> An explainer is a page with its own play and scrub controls; it needs nothing from the host.</li>
+          <li>Turn the phone sideways and the bar and reply hide, so the drawing gets the whole screen.</li>
+          <li>The design skill already checks every page at 390 px, so most pages fit a phone before they reach it.</li>
+        </ul></div>
+      </div>
+
+    </div>
+  </section>
+
+  <!-- ─── 04 Reply ───────────────────────────────────────────────── -->
+  <section class="group">
+    <h2><span>04</span>Replying about a page without leaving it</h2>
+    <p>The reply bar opens a short sheet over the bottom of the page. The page stays live above it, and the agent's answer arrives as a notice on the page.</p>
+    <div class="frames">
+      <div class="shot">
+        <div class="phone"><div class="screen">
+          <div class="status"><span>10:46</span><span class="punch"></span><span class="sig"><i></i><i></i></span></div>
+          <div class="pbar"><span class="ib"><svg><use href="#i-back"/></svg></span><span class="t"><b>Export, before and after</b><span>4 of 4 · Speed up the ledger export</span></span><span class="ib"><svg><use href="#i-more"/></svg></span></div>
+          <div class="web" id="report-reply"></div>
+          <div class="menu" style="z-index:10;bottom:196px;border-radius:16px 16px 0 0;padding:8px 10px 10px;display:flex;flex-direction:column;gap:7px">
+            <span class="about"><svg><use href="#i-page"/></svg><span class="x">About: Export, before and after</span></span>
+            <div class="composer"><span class="typed">Use the 2.1 M-row numbers in the PR description, and drop the 10k row</span><div class="r"><svg><use href="#i-clip"/></svg><span class="chev">Loom</span><span class="sp"></span><span class="send"><svg width="13" height="13"><use href="#i-up"/></svg></span></div></div>
+          </div>
+          <div class="kbd" aria-hidden="true"><div><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i></div><div><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i></div><div><i></i><i></i><i></i><i></i><i></i><i></i><i></i></div><div><i></i><i class="wide"></i><i></i></div></div>
+        </div></div>
+        <div class="cap"><b>Writing</b><ul>
+          <li><span class="tag tag--app">app</span> The reply goes to the session as an ordinary prompt, with "About: Export, before and after" naming the page. The agent gets the title and page id, not the page's HTML.</li>
+          <li>The keyboard pushes the sheet up; the page above stays where it was.</li>
+          <li>The agent and model are the session's; no picker here.</li>
+        </ul></div>
+      </div>
+      <div class="shot">
+        <div class="phone"><div class="screen">
+          <div class="status"><span>10:47</span><span class="punch"></span><span class="sig"><i></i><i></i></span></div>
+          <div class="pbar"><span class="ib"><svg><use href="#i-back"/></svg></span><span class="t"><b>Export, before and after</b><span>4 of 4 · Speed up the ledger export</span></span><span class="ib"><svg><use href="#i-more"/></svg></span></div>
+          <div class="web" id="report-after"></div>
+          <div class="toast"><span class="g g--work"><i></i><i></i><i></i><i></i></span><span class="x"><b>Working on your reply</b><span>Updating the page and the PR description</span></span><span class="act">Chat</span></div>
+          <div class="reply"><span class="in">Reply about this page…</span><span class="ib"><svg><use href="#i-clip"/></svg></span></div>
+          <span class="nav"></span>
+        </div></div>
+        <div class="cap"><b>After sending</b><ul>
+          <li>A notice on the page says the agent is working, with Chat to jump to the conversation.</li>
+          <li><span class="tag tag--now">works today</span> When the agent shows the page again, <code>canvas.updated</code> brings a new ShownAt and the WebView reloads in place, keeping your scroll if it can.</li>
+          <li>When the turn ends the notice reads "Answered" with the first line of the reply.</li>
+        </ul></div>
+      </div>
+    </div>
+  </section>
+
+  <!-- ─── 05 Between pages, sharing, offline ─────────────────────── -->
+  <section class="group">
+    <h2><span>05</span>Between pages, sharing, and when the machine is away</h2>
+    <div class="frames">
+
+      <div class="shot">
+        <div class="phone"><div class="screen">
+          <div class="status"><span>10:48</span><span class="punch"></span><span class="sig"><i></i><i></i></span></div>
+          <div class="pbar"><span class="ib"><svg><use href="#i-back"/></svg></span><span class="t"><b>How a row reaches the file</b><span>3 of 4 · Speed up the ledger export</span></span><span class="ib"><svg><use href="#i-list"/></svg></span></div>
+          <div class="pager pager--peek" id="pager">
+            <div class="pager-track">
+              <div><div class="pg"><h3>Walkthrough: streaming the export</h3><p>Chapter 2 of 4</p></div></div>
+              <div><div class="pg"><h3>How a row reaches the file</h3><div class="ex-stage" style="height:180px"><div class="lane" style="top:14px"><b>Database</b>cursor</div><div class="lane" style="top:62px"><b>Export</b>CSV lines</div><div class="lane" style="top:110px"><b>Response</b>streamed</div><span class="pkt" style="left:150px;top:23px"></span><span class="pkt pkt--b" style="left:175px;top:71px"></span></div><p>Press play to watch a row move.</p></div></div>
+              <div><div class="pg"><h3>Export, before and after</h3><p>Streaming the ledger export.</p><div class="kpis"><div class="kpi"><span>Time to first byte</span><b>0.4 s</b></div><div class="kpi"><span>Peak memory</span><b>86 MB</b></div></div></div></div>
+            </div>
+          </div>
+          <div class="pdots"><i class="w"></i><i></i><i class="on"></i><i></i></div>
+          <div class="reply"><span class="in">Reply about this page…</span><span class="ib"><svg><use href="#i-clip"/></svg></span></div>
+          <span class="nav"></span>
+        </div></div>
+        <div class="cap"><b>Swiping between a session's pages</b><ul>
+          <li><span class="tag tag--app">app</span> Swipe from the screen's edge for the next or previous page; the dots show where you are, amber for the one waiting on you.</li>
+          <li>A page that scrolls sideways itself (a wide table) keeps those swipes; only edge swipes change page.</li>
+          <li>The list button opens the Pages sheet from frame 01 over the page.</li>
+          <li>Each page loads when you reach it, so four pages don't mean four WebViews running at once.</li>
+        </ul></div>
+      </div>
+
+      <div class="shot">
+        <div class="phone"><div class="screen">
+          <div class="status"><span>10:48</span><span class="punch"></span><span class="sig"><i></i><i></i></span></div>
+          <div class="pbar"><span class="ib"><svg><use href="#i-back"/></svg></span><span class="t"><b>Export, before and after</b><span>4 of 4 · Speed up the ledger export</span></span><span class="ib"><svg><use href="#i-more"/></svg></span></div>
+          <div class="web" id="report-share"></div>
+          <div class="dimmed" style="z-index:7"></div>
+          <div class="menu">
+            <div class="grab"></div>
+            <div class="mi"><svg><use href="#i-globe"/></svg>Open in browser<span class="sp"></span><span class="hint">Chrome</span></div>
+            <div class="mi"><svg><use href="#i-reload"/></svg>Reload</div>
+            <div class="mnote"><b>Chrome shows the page on its own.</b> It has Fleet's default dark look there, and picks and Ask about this don't work. The app offers no Share or Copy link: the link opens without signing in for anyone who can reach hangar.</div>
+          </div>
+          <span class="nav"></span>
+        </div></div>
+        <div class="cap"><b>Open in the browser, no sharing</b><ul>
+          <li><span class="tag tag--now">works today</span> The link is the page's own URL on the machine, the same one the desktop's "Open in a new tab" uses.</li>
+          <li>In the browser there's no host, so the page takes Fleet's default dark look, and choices and replies don't work.</li>
+          <li>Decided: no Share or Copy link on the phone, so the link isn't passed on from here.</li>
+        </ul></div>
+      </div>
+
+      <div class="shot">
+        <div class="phone"><div class="screen">
+          <div class="status"><span>18:05</span><span class="punch"></span><span class="sig"><i></i><i></i></span></div>
+          <div class="pbar"><span class="ib"><svg><use href="#i-back"/></svg></span><span class="t"><b>Export, before and after</b><span>4 of 4 · Speed up the ledger export</span></span><span class="ib"><svg><use href="#i-more"/></svg></span></div>
+          <div class="web" style="top:76px">
+            <div class="offline"><i></i>hangar is offline · last seen 17:12</div>
+            <div class="empty">
+              <span class="ic"><svg><use href="#i-cloudoff"/></svg></span>
+              <b>This page is on hangar</b>
+              <p>Fleet keeps pages on the computer that made them. It opens again as soon as hangar is back.</p>
+              <span class="btn">Try again</span>
+            </div>
+          </div>
+          <span class="nav"></span>
+        </div></div>
+        <div class="cap"><b>Offline, or the machine is away</b><ul>
+          <li><span class="tag tag--app">app</span> The app already knows a machine is unreachable from its socket, so it says so before trying, instead of a WebView error page.</li>
+          <li>Titles and the Pages list still show; only the page itself needs the machine.</li>
+          <li>When the socket reconnects, the open page loads by itself.</li>
+          <li>Decided: no copy is kept, so offline means this screen (option A in 06).</li>
+        </ul></div>
+      </div>
+
+    </div>
+  </section>
+
+  <!-- ─── 06 Choices ─────────────────────────────────────────────── -->
+  <section class="group">
+    <h2><span>06</span>Choices to make</h2>
+    <p><b>How the app loads a page.</b> The facts in 00 make one of these much cheaper than the others.</p>
+    <div class="opts">
+      <div class="opt opt--rec">
+        <h3><span class="k">A</span>WebView on the page's URL <span class="tag tag--now">Chosen</span></h3>
+        <div class="flow"><span>app</span><i>→</i><span>WebView</span><i>→</i><span>hangar/pages/{id}/</span></div>
+        <p>The app loads the same URL the desktop's iframe does, sets <code>window.name</code> to the theme first, and adds a shim that hands the page's messages to the app.</p>
+        <dl>
+          <dt>Build</dt><dd><code>react-native-webview</code>, a page screen, a shim of about 40 lines, the choice bar and the reply sheet.</dd>
+          <dt>Ships</dt><dd>One new EAS build, installed once; then over the air.</dd>
+          <dt>Safety</dt><dd>Same sandbox as the desktop, from Fleet's CSP header.</dd>
+          <dt>Offline</dt><dd>Nothing to read when the machine is away.</dd>
+          <dt>Server</dt><dd>None, apart from the page count on the list.</dd>
+        </dl>
+      </div>
+      <div class="opt">
+        <h3><span class="k">B</span>The app downloads the page, the WebView shows its copy</h3>
+        <div class="flow"><span>app</span><i>→</i><span>fetch files</span><i>→</i><span>phone storage</span><i>→</i><span>WebView</span></div>
+        <p>The app fetches the entry and every file listed in the page's state, saves them on the phone and opens the copy.</p>
+        <dl>
+          <dt>Build</dt><dd>Everything in A, plus a downloader, a cache with a size limit, and clearing pages when sessions go.</dd>
+          <dt>Ships</dt><dd>The same one new build.</dd>
+          <dt>Safety</dt><dd>Weaker. A CSP sandbox can't be set from a file or a meta tag, so pages saved on the phone could read each other.</dd>
+          <dt>Offline</dt><dd>Pages you opened before can be read anywhere.</dd>
+          <dt>Server</dt><dd>None.</dd>
+        </dl>
+      </div>
+      <div class="opt">
+        <h3><span class="k">C</span>Open every page in the phone's browser</h3>
+        <div class="flow"><span>app</span><i>→</i><span>Chrome Custom Tab</span><i>→</i><span>hangar/pages/{id}/</span></div>
+        <p>The app just opens the URL in a Chrome tab over the app.</p>
+        <dl>
+          <dt>Build</dt><dd>A link. No new build if <code>expo-web-browser</code> is in it; it isn't yet.</dd>
+          <dt>Ships</dt><dd>Fastest.</dd>
+          <dt>Safety</dt><dd>Same sandbox.</dd>
+          <dt>Gaps</dt><dd>No theme (it falls back to Fleet's dark defaults), and no choices, no Ask about this, no remembered state. It leaves the app.</dd>
+          <dt>Server</dt><dd>None.</dd>
+        </dl>
+      </div>
+    </div>
+
+    <p style="margin-top:10px"><b>Where a session's pages live.</b> Same session, same four pages.</p>
+    <div class="mini-row">
+      <div class="mini-wrap">
+        <div class="phone mini"><div class="screen">
+          <div class="status"><span>10:42</span><span class="punch"></span></div>
+          <div class="panel panel--full">
+            <div class="sh"><span class="ib"><svg><use href="#i-back"/></svg></span><div class="sh__m"><span class="sh__t">Speed up the ledger export</span></div></div>
+          </div>
+          <div class="dimmed"></div>
+          <div class="sheet" style="top:110px">
+            <div class="grab"></div>
+            <div class="seg"><span>Changes</span><span>Files</span><span class="on">Pages <span class="n">4</span></span></div>
+            <div class="prow prow--wait"><span class="ic"><svg><use href="#i-pick"/></svg></span><b>Three ways to page…</b><span class="r">now</span><span>Waiting</span></div>
+            <div class="prow"><span class="ic"><svg><use href="#i-steps"/></svg></span><b>Walkthrough</b><span class="r">10:36</span><span>4 chapters</span></div>
+            <div class="prow"><span class="ic"><svg><use href="#i-playc"/></svg></span><b>How a row reaches…</b><span class="r">10:33</span><span>Explainer</span></div>
+            <div class="prow"><span class="ic"><svg><use href="#i-chart"/></svg></span><b>Export, before and after</b><span class="r">10:31</span><span>Page</span></div>
+          </div>
+        </div></div>
+        <b>1 · In the session sheet (Chosen)</b>
+      </div>
+      <div class="mini-wrap">
+        <div class="phone mini"><div class="screen">
+          <div class="status"><span>10:42</span><span class="punch"></span></div>
+          <div class="panel panel--full">
+            <div class="sh"><span class="ib"><svg><use href="#i-back"/></svg></span><div class="sh__m"><span class="sh__t">Speed up the ledger export</span></div></div>
+            <div class="hdrtabs"><span>Conversation</span><span class="on">Pages 4</span></div>
+            <div class="grid2">
+              <div class="thumb"><div class="tv"><i class="a"></i><i></i><i style="width:70%"></i><i></i></div><div class="tt">Three ways to page…<span style="color:var(--waiting)">Waiting</span></div></div>
+              <div class="thumb"><div class="tv"><i style="width:50%"></i><i></i><i></i><i style="width:60%"></i></div><div class="tt">Walkthrough<span>4 chapters</span></div></div>
+              <div class="thumb"><div class="tv"><i></i><i style="width:80%"></i><i class="a" style="width:30%"></i></div><div class="tt">How a row reaches…<span>Explainer</span></div></div>
+              <div class="thumb"><div class="tv"><i style="width:60%"></i><i class="a" style="width:70%"></i><i></i></div><div class="tt">Export, before…<span>Page</span></div></div>
+            </div>
+          </div>
+        </div></div>
+        <b>2 · A Pages tab in the session</b>
+      </div>
+      <div class="mini-wrap">
+        <div class="phone mini"><div class="screen">
+          <div class="status"><span>10:42</span><span class="punch"></span></div>
+          <div class="panel panel--full">
+            <div class="sh"><span class="ib"><svg><use href="#i-back"/></svg></span><div class="sh__m"><span class="sh__t">Speed up the ledger export</span></div></div>
+            <div class="conv">
+              <p>Streaming cut the 2.1 M-row export from 63 s to 19 s.</p>
+              <div class="pgcard"><span class="ic"><svg><use href="#i-chart"/></svg></span><b>Export, before…</b><span class="go"><svg><use href="#i-back"/></svg></span><span>Page</span></div>
+              <p>Which way should it page?</p>
+              <div class="pgcard pgcard--wait"><span class="ic"><svg><use href="#i-pick"/></svg></span><b>Three ways to…</b><span class="go"><svg><use href="#i-back"/></svg></span><span>Waiting</span></div>
+            </div>
+          </div>
+        </div></div>
+        <b>3 · Only as cards in the conversation</b>
+      </div>
+    </div>
+    <div class="opts">
+      <div class="opt opt--rec"><h3><span class="k">1</span>In the session sheet <span class="tag tag--now">Chosen</span></h3><p>Pages join Changes and Files, as on the desktop's right panel. Nothing new to learn, one more segment to build. A page is two taps away, or one from the strip's Pages count.</p></div>
+      <div class="opt"><h3><span class="k">2</span>A Pages tab in the session</h3><p>One tap, and thumbnails help you find the right page. It takes header room in every session, even the many with no pages, and thumbnails need Fleet to save a picture when it checks each page.</p></div>
+      <div class="opt"><h3><span class="k">3</span>Only as cards</h3><p>Nothing to build beyond the card. In a long session, the page you want has scrolled far up, and re-shown pages appear several times.</p></div>
+    </div>
+  </section>
+
+  <!-- ─── Questions ─────────────────────────────────────────────── -->
+  <section class="group">
+    <h2><span>07</span>Decided, 24 October 2026</h2>
+    <ol class="qs">
+      <li><b>Loading: A.</b> <span>A WebView on the page's own URL, with the theme in window.name and a shim for the page's messages.</span></li>
+      <li><b>Where pages live: 1.</b> <span>A Pages segment in the session sheet, next to Changes and Files, plus cards in the conversation.</span></li>
+      <li><b>Sharing: Open in browser only.</b> <span>No Share or Copy link on the phone.</span></li>
+      <li><b>Offline: say so.</b> <span>Follows from A. No copy is kept; the app says the page is on hangar and opens it when hangar is back.</span></li>
+      <li><b>Notifications: the session row only.</b> <span>A page that asks nothing shows "2 new pages" on its row (needs the server's page count). A waiting pick still notifies as an ask.</span></li>
+      <li><b>Inline pages: a card.</b> <span>Pages shown inline on the desktop are cards on the phone that open full screen.</span></li>
+    </ol>
+  </section>
+</main>
+
+<template id="report">
+  <div class="status"><span>10:45</span><span class="punch"></span><span class="sig"><i></i><i></i></span></div>
+  <div class="pbar"><span class="ib"><svg><use href="#i-back"/></svg></span><span class="t"><b>Export, before and after</b><span>4 of 4 · Speed up the ledger export</span></span><span class="ib"><svg><use href="#i-more"/></svg></span></div>
+  <div class="web web--edge" data-slot="body"></div>
+  <div class="reply"><span class="in">Reply about this page…</span><span class="ib"><svg><use href="#i-clip"/></svg></span></div>
+  <span class="nav"></span>
+</template>
+<template id="report-body">
+  <div class="pg">
+    <h3>Streaming the ledger export</h3>
+    <p>Rows go out as they're read instead of after the whole query. Measured on the 2.1 M-row fixture, on hangar.</p>
+    <div class="kpis"><div class="kpi"><span>Time to first byte</span><b>0.4 s</b><i>was 41 s</i></div><div class="kpi"><span>Peak memory</span><b>86 MB</b><i>was 1.9 GB</i></div></div>
+    <div class="chart">
+      <div class="lg"><span><i class="c1"></i>Before</span><span><i class="c2"></i>After</span></div>
+      <div class="bars">
+        <span>10k</span><span class="b"><i class="c1" style="width:6%"></i><i class="c2" style="width:3%"></i></span>
+        <span>100k</span><span class="b"><i class="c1" style="width:16%"></i><i class="c2" style="width:6%"></i></span>
+        <span>500k</span><span class="b"><i class="c1" style="width:42%"></i><i class="c2" style="width:14%"></i></span>
+        <span>2.1M</span><span class="b"><i class="c1" style="width:100%"></i><i class="c2" style="width:30%"></i></span>
+      </div>
+      <div class="lg" style="margin:8px 0 0;justify-content:space-between"><span>Export time by ledger size</span><span>63 s at 2.1M</span></div>
+    </div>
+    <table class="tbl"><thead><tr><th>Ledger</th><th>Before</th><th>After</th></tr></thead>
+      <tbody><tr><td>2.1M rows</td><td>63.0 s</td><td>19.1 s</td></tr><tr><td>500k rows</td><td>26.4 s</td><td>8.7 s</td></tr><tr><td>100k rows</td><td>9.8 s</td><td>3.6 s</td></tr></tbody></table>
+  </div>
+</template>
+
+<script>
+  // Theme toggle for the document and the frames that follow it.
+  const buttons = document.querySelectorAll(".theme button");
+  function setTheme(t) {
+    document.documentElement.dataset.theme = t;
+    buttons.forEach((b) => b.setAttribute("aria-pressed", String(b.dataset.t === t)));
+  }
+  buttons.forEach((b) => b.addEventListener("click", () => setTheme(b.dataset.t)));
+  setTheme(document.documentElement.dataset.theme);
+
+  // The report page, drawn in several frames.
+  const frame = document.getElementById("report").content;
+  const body = document.getElementById("report-body").content;
+  for (const id of ["report-dark", "report-light"]) {
+    const screen = document.getElementById(id);
+    screen.appendChild(frame.cloneNode(true));
+    screen.querySelector('[data-slot="body"]').appendChild(body.cloneNode(true));
+  }
+  for (const id of ["report-reply", "report-after", "report-share"]) document.getElementById(id).appendChild(body.cloneNode(true));
+
+  // The choice: the page proposes, Fleet's bar sends.
+  const choices = document.querySelectorAll("#choices .choice");
+  const bar = document.getElementById("cbar");
+  let picked = "Paged table", sent = false;
+  choices.forEach((c) => c.addEventListener("click", () => {
+    if (sent) return;
+    choices.forEach((o) => o.setAttribute("aria-pressed", String(o === c)));
+    picked = c.dataset.s;
+    const label = document.getElementById("cbar-l");
+    label.innerHTML = "You picked <b></b>.";
+    label.querySelector("b").textContent = picked;
+  }));
+  function settle(text) {
+    sent = true;
+    bar.classList.add("cbar--sent");
+    bar.innerHTML = '<div class="l"><svg><use href="#i-check"/></svg><span></span></div><div class="a"><button type="button" class="btn" id="undo-pick" style="grid-column:1/4">Reset this demo</button></div>';
+    bar.querySelector("span").textContent = text;
+    bar.querySelector("#undo-pick").addEventListener("click", reset);
+  }
+  function reset() {
+    sent = false;
+    bar.classList.remove("cbar--sent");
+    bar.innerHTML = '<div class="l" id="cbar-l">You picked <b></b>.</div><div class="a"><button type="button" class="btn btn--primary" id="send-pick">Send pick</button><button type="button" class="btn" id="skip-pick">Skip</button><span class="btn" aria-hidden="true" style="width:34px;padding:0"><svg><use href="#i-chat"/></svg></span></div>';
+    bar.querySelector("b").textContent = picked;
+    wire();
+  }
+  function wire() {
+    document.getElementById("send-pick").addEventListener("click", () => settle("Sent: " + picked + ". The agent carries on."));
+    document.getElementById("skip-pick").addEventListener("click", () => settle("Not answered. You skipped it."));
+  }
+  wire();
+</script>
+</body>
+</html>
