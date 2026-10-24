@@ -24,6 +24,12 @@ export function useForegroundConnections() {
 
 export const useFleet = () => useSyncExternalStore(manager.subscribe, manager.snapshot);
 
+/** The session's activity status: the list's (which keeps `waiting_input`), else its stream's. */
+export function useSessionActivity(machineId: string, sessionId: string, streamStatus: string | undefined): string | undefined {
+  useFleet();
+  return manager.activityOf(machineId, sessionId) ?? streamStatus;
+}
+
 /**
  * A session's live conversation: the web client's own reducer (client/src/lib/domain-event-reducer.ts), fed by the
  * machine's hub, with events applied once per frame like the web client does.

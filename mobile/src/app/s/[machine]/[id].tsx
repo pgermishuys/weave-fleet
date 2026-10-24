@@ -11,7 +11,7 @@ import { foldMessages, groupTools, stepDetail, stepRow, type FoldedStep, type Ph
 import { headerStatus, type HeaderTone } from "@fleet/lib/phone/session-status";
 import { duration, short } from "@fleet/lib/phone/time";
 import { dontAskAgainWording, permissionHeading } from "@fleet/lib/tools/permission-wording";
-import { manager, useFleet, useSessionPages, useSessionStream } from "~/fleet/hooks";
+import { manager, useFleet, useSessionActivity, useSessionPages, useSessionStream } from "~/fleet/hooks";
 import { conversationPages, waitingPage, type SessionPage } from "~/fleet/pages";
 import type { PermissionAsk } from "~/fleet/api";
 import {
@@ -62,7 +62,8 @@ export default function Session() {
   const inConversation = useMemo(() => conversationPages(messages), [messages]);
   const pages = sessionPages.pages;
   const allPages = useMemo(() => [...pages, ...inConversation], [pages, inConversation]);
-  const pick = waitingPage(pages, streamStatus ?? undefined);
+  const activity = useSessionActivity(machine, id, streamStatus ?? undefined);
+  const pick = waitingPage(pages, activity);
   const newPages = allPages.filter((page) => page.shownAt > seenAt).length;
   const openPage = (page: SessionPage) => router.push({ pathname: "/page/[machine]/[session]", params: { machine, session: id, key: page.key } });
   const lastUser = [...messages].reverse().find((m) => m.role === "user");
