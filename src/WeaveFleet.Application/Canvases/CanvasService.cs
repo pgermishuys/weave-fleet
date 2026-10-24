@@ -8,6 +8,15 @@ using WeaveFleet.Domain.Repositories;
 
 namespace WeaveFleet.Application.Canvases;
 
+/// <summary>
+/// The <c>session.pages</c> event on the sessions topic: the session's open pages after one was shown, reopened or
+/// closed, so its row in the session list stays current. Same fields as the list item's.
+/// </summary>
+public sealed record SessionPagesChanged(
+    string SessionId,
+    int PageCount,
+    [property: System.Text.Json.Serialization.JsonIgnore(Condition = System.Text.Json.Serialization.JsonIgnoreCondition.Never)] string? LastPageShownAt);
+
 public sealed class CanvasService(
     ICanvasRepository canvasRepository,
     IEventBroadcaster eventBroadcaster,
@@ -16,6 +25,9 @@ public sealed class CanvasService(
     // Writers only collide when the user and the agent change the same canvas at the same moment.
     private const int MaxWriteAttempts = 5;
     private const string ReopenedSummary = "reopened";
+
+    /// <summary>The event carrying a session's open pages after they changed (<see cref="SessionPagesChanged"/>).</summary>
+    public const string PagesChangedEvent = "session.pages";
 
     public async Task<IReadOnlyList<CanvasListItem>> ListAsync(string sessionId, CancellationToken ct = default)
     {
@@ -63,7 +75,10 @@ public sealed class CanvasService(
                 await canvasRepository.MarkAgentSeenAsync(sessionId, existing.Id, existing.Version);
                 var current = await canvasRepository.GetByIdAsync(sessionId, existing.Id) ?? existing;
                 if (wasClosed)
+                {
                     await BroadcastUpdatedAsync(current, CanvasActor.Agent, ReopenedSummary, ct);
+                    await BroadcastPagesAsync(current, ct);
+                }
                 await BroadcastFocusedAsync(current, ct);
                 return CanvasResult.Ok(new CanvasOutcome(current, "no changes", Created: false));
             }
@@ -83,6 +98,7 @@ public sealed class CanvasService(
             }
 
             await BroadcastUpdatedAsync(updated, CanvasActor.Agent, change.Value.Summary, ct);
+            await BroadcastPagesAsync(updated, ct);
             await BroadcastFocusedAsync(updated, ct);
             return CanvasResult.Ok(new CanvasOutcome(updated, change.Value.Summary, Created: false));
         }
@@ -136,6 +152,7 @@ public sealed class CanvasService(
             await canvasRepository.SetClosedAtAsync(sessionId, canvasId, null);
             canvas.ClosedAt = null;
             await BroadcastUpdatedAsync(canvas, CanvasActor.Agent, ReopenedSummary, ct);
+            await BroadcastPagesAsync(canvas, ct);
         }
 
         await BroadcastFocusedAsync(canvas, ct);
@@ -153,6 +170,7 @@ public sealed class CanvasService(
         canvas.ClosedAt = DateTime.UtcNow.ToString("O");
         await canvasRepository.SetClosedAtAsync(sessionId, canvasId, canvas.ClosedAt);
         await BroadcastClosedAsync(canvas, ct);
+        await BroadcastPagesAsync(canvas, ct);
         return CanvasResult.Ok(canvas);
     }
 
@@ -194,6 +212,7 @@ public sealed class CanvasService(
             return CanvasResult.Fail<CanvasOutcome>(CanvasErrorKind.NotFound, $"No session {sessionId}.");
 
         await BroadcastUpdatedAsync(canvas, CanvasActor.Agent, change.Value.Summary, ct);
+        await BroadcastPagesAsync(canvas, ct);
         await BroadcastFocusedAsync(canvas, ct);
         return CanvasResult.Ok(new CanvasOutcome(canvas, change.Value.Summary, Created: true));
     }
@@ -253,6 +272,19 @@ public sealed class CanvasService(
             domainEvent,
             canvas.UserId,
             ct);
+    }
+
+    /// <summary>A page was shown, reopened or closed: the session's row in the list hears its pages now.</summary>
+    private async Task BroadcastPagesAsync(Canvas canvas, CancellationToken ct)
+    {
+        if (canvas.Kind != CanvasKinds.Page)
+            return;
+
+        var pages = (await canvasRepository.SummarizePagesAsync(canvas.SessionId)).GetValueOrDefault(canvas.SessionId);
+        var payload = JsonSerializer.SerializeToElement(
+            new SessionPagesChanged(canvas.SessionId, pages?.Count ?? 0, pages?.LastShownAt),
+            ApplicationJsonContext.Default.SessionPagesChanged);
+        await eventBroadcaster.BroadcastAsync("sessions", PagesChangedEvent, payload, canvas.UserId, ct);
     }
 
     private Task BroadcastFocusedAsync(Canvas canvas, CancellationToken ct)

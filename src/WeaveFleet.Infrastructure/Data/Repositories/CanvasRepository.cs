@@ -1,5 +1,6 @@
 using System.Data;
 using System.Data.Common;
+using WeaveFleet.Application.Canvases;
 using WeaveFleet.Application.Data;
 using WeaveFleet.Application.Users;
 using WeaveFleet.Domain.Entities;
@@ -211,6 +212,31 @@ public sealed class CanvasRepository(
                 cmd.AddParameter("UserId", userContext.UserId);
             },
             ReadRevision);
+    }
+
+    public async Task<IReadOnlyDictionary<string, SessionPages>> SummarizePagesAsync(string? sessionId = null)
+    {
+        using var conn = connectionFactory.CreateConnection();
+        var rows = await conn.QueryAsync(
+            """
+            SELECT session_id, COUNT(*) AS pages, MAX(json_extract(state_json, '$.shownAt')) AS last_shown_at
+            FROM canvases
+            WHERE user_id = @UserId
+              AND kind = @Kind
+              AND closed_at IS NULL
+              AND (@SessionId IS NULL OR session_id = @SessionId)
+            GROUP BY session_id
+            """,
+            cmd =>
+            {
+                cmd.AddParameter("UserId", userContext.UserId);
+                cmd.AddParameter("Kind", CanvasKinds.Page);
+                cmd.AddParameter("SessionId", sessionId);
+            },
+            r => (SessionId: r.GetString(0), Pages: new SessionPages((int)r.GetInt64(1), r.IsDBNull(2) ? null : r.GetString(2))));
+
+        // One query for all of the user's open pages: a list of ids would need one parameter each, and few sessions have pages.
+        return rows.ToDictionary(row => row.SessionId, row => row.Pages, StringComparer.Ordinal);
     }
 
     private static async Task InsertRevisionAsync(IDbConnection conn, IDbTransaction tx, CanvasRevision revision)

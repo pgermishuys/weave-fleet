@@ -50,6 +50,7 @@ public static class SessionEndpoints
             SessionCapabilitiesResolver capabilitiesResolver,
             SessionProgressReader progressReader,
             IDelegationRepository delegationRepository,
+            ICanvasRepository canvasRepository,
             IScheduledRetryRepository scheduledRetries,
             SessionInterruptions restartInterruptions,
             ISessionInterruptionRepository interruptionRepository,
@@ -105,6 +106,8 @@ public static class SessionEndpoints
                     var runningWorkBySessionId = await delegationRepository.CountRunningAsync(
                         sessions.Select(session => session.Id).ToArray());
 
+                    var pagesBySessionId = await canvasRepository.SummarizePagesAsync();
+
                     var retriesBySessionId = (await scheduledRetries.ListForUserAsync())
                         .ToDictionary(retry => retry.SessionId, ScheduledRetryView.From, StringComparer.Ordinal);
 
@@ -117,6 +120,8 @@ public static class SessionEndpoints
                     {
                         Progress = progressBySessionId.GetValueOrDefault(session.Id),
                         RunningWorkCount = runningWorkBySessionId.GetValueOrDefault(session.Id),
+                        PageCount = pagesBySessionId.GetValueOrDefault(session.Id)?.Count ?? 0,
+                        LastPageShownAt = pagesBySessionId.GetValueOrDefault(session.Id)?.LastShownAt,
                         ScheduledRetry = retriesBySessionId.GetValueOrDefault(session.Id),
                         Interrupted = interruptedBySessionId.GetValueOrDefault(session.Id),
                     }).ToList());
