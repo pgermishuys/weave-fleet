@@ -96,6 +96,32 @@ and `--profile` like `fleet node`: use the ones the node was started with.
 
 "By address" is still there, with the token form under **Advanced**.
 
+### Add a node over SSH
+
+No Tailscale and no open port: if you can `ssh` to the machine, Fleet can add it. Settings → Machines → **Add a
+machine** → **Over SSH**. Pick a host from `~/.ssh/config` on the machine running Fleet (wildcard entries are skipped),
+or type `user@host[:port]`. The tab comes first when that file has hosts; otherwise the pairing code stays first.
+
+Fleet runs your own `ssh`, so your keys, agent and `StrictHostKeyChecking` apply. It always uses `BatchMode=yes`: it
+never asks for a password and never trusts an unknown host key on its own (run `ssh host` once to accept it). It then:
+
+1. runs `fleet node pair --json` on the node through SSH to get a one-time code (one line of JSON: `code`,
+   `machineName`, `addresses`);
+2. opens a tunnel, `ssh -N -L 127.0.0.1:<free port>:127.0.0.1:2113 host`, and uses `http://127.0.0.1:<port>` as the
+   machine's address;
+3. redeems the code through the tunnel, exactly like **With a pairing code**. No token is pasted.
+
+If SSH works but `fleet` isn't there, or nothing answers on the node port, Fleet says "Fleet isn't installed there"
+and stops. It never installs anything on the other machine.
+
+Fleet keeps the tunnel open: when ssh exits it starts it again after 1 s, doubling up to 30 s. The machine's row says
+"Over SSH as user@host" and shows "Tunnel down" while it's down. Removing the machine, or stopping Fleet, ends the
+tunnel; on Linux a Fleet that is killed outright also ends it within seconds, and on Windows a Job Object does.
+The saved destination (`ssh_destination`, migration 067) brings the tunnel back when Fleet starts, on the same local port
+if it's still free. `GET /api/machines/ssh-hosts` lists the config hosts; `POST /api/machines/ssh` with
+`{"destination": "falcon"}` adds one. For a node that listens on another port than 2113, start Fleet with
+`FLEET_SSH_NODE_PORT`; `FLEET_SSH_EXECUTABLE` picks another `ssh`.
+
 ### Keep a node running
 
 `fleet node install-service` keeps the node running: now, when you log in, and after a crash. It takes the same

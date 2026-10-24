@@ -92,6 +92,9 @@ export interface MachineEntry {
   capabilities: MachineCapabilities | null;
   /** All it last said about itself (`GET /api/machine`); null until it answers. */
   info?: MachineInfo | null;
+  /** `user@host` when it is reached over SSH; the tunnel's state is `tunnelUp`. */
+  sshDestination?: string | null;
+  tunnelUp?: boolean | null;
 }
 
 /** A machine that isn't live, as its sidebar group shows it: the last session and project lists it returned. */
@@ -120,6 +123,18 @@ interface ServerMachine {
   token: string | null;
   /** Agents here may hand work to it. Missing from a home too old to say, where it can't. */
   agentsAllowed?: boolean;
+  /** Missing from a home too old to reach machines over SSH. */
+  sshDestination?: string | null;
+  tunnelUp?: boolean | null;
+}
+
+/** A host from the ~/.ssh/config of the machine running Fleet. `destination` is what to send back to add it. */
+export interface SshHost {
+  alias: string;
+  destination: string;
+  hostName: string | null;
+  user: string | null;
+  port: number | null;
 }
 
 /**
@@ -288,7 +303,7 @@ export const useMachinesStore = defineStore("machines", () => {
   function fromServer(machine: ServerMachine): MachineConnection | null {
     const token = machine.token ?? readCredentialsSync()?.grants.find((grant) => grant.machineId === machine.id)?.token ?? null;
     if (!token) return null;
-    return { id: machine.id, name: machine.name, baseUrl: machine.baseUrl, token, os: machine.os ?? undefined, addedAt: machine.addedAt };
+    return { id: machine.id, name: machine.name, baseUrl: machine.baseUrl, token, os: machine.os ?? undefined, addedAt: machine.addedAt, sshDestination: machine.sshDestination ?? null, tunnelUp: machine.tunnelUp ?? null };
   }
 
   /**
@@ -407,6 +422,8 @@ export const useMachinesStore = defineStore("machines", () => {
       isHome: false,
       isLive: liveKey === connection.id,
       connection,
+      sshDestination: connection.sshDestination ?? null,
+      tunnelUp: connection.tunnelUp ?? null,
       capabilities: identities.value[connection.id]?.capabilities ?? null,
       info: identities.value[connection.id] ?? null,
     })),
@@ -474,6 +491,42 @@ export const useMachinesStore = defineStore("machines", () => {
     if (!response.ok) throw new Error(await readError(response, "Couldn't pair the machine."));
     const connection = fromServer(await response.json() as ServerMachine);
     if (!connection) throw new Error("Couldn't pair the machine.");
+
+    connections.value = connections.value.some((candidate) => candidate.id === connection.id)
+      ? connections.value.map((candidate) => candidate.id === connection.id ? connection : candidate)
+      : [...connections.value, connection];
+    persist();
+    void refreshMachine(connection.id);
+    return connection;
+  }
+
+  /** The hosts in ~/.ssh/config on the machine running Fleet; null until loaded. Empty when it has none or can't say. */
+  const sshHosts = shallowRef<SshHost[] | null>(null);
+
+  async function loadSshHosts(): Promise<void> {
+    try {
+      const response = await fetchOnMachine(null, "/api/machines/ssh-hosts");
+      const body = response.ok ? await response.json() as { hosts?: SshHost[] } : null;
+      sshHosts.value = Array.isArray(body?.hosts) ? body.hosts : [];
+    } catch {
+      sshHosts.value = [];
+    }
+  }
+
+  /**
+   * Adds a machine over SSH: home logs in with the user's own keys, asks the other machine for a pairing code and
+   * redeems it. `destination` is a host from ~/.ssh/config or a typed `user@host[:port]`. Takes several seconds.
+   */
+  async function addOverSsh(destination: string): Promise<MachineConnection> {
+    if (source.value !== "server") throw new Error("This Fleet can't add a machine over SSH from here. Add it by address with its token instead.");
+    const response = await fetchOnMachine(null, "/api/machines/ssh", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ destination: destination.trim() }),
+    });
+    if (!response.ok) throw new Error(await readError(response, "Couldn't add the machine over SSH."));
+    const connection = fromServer(await response.json() as ServerMachine);
+    if (!connection) throw new Error("Couldn't add the machine over SSH.");
 
     connections.value = connections.value.some((candidate) => candidate.id === connection.id)
       ? connections.value.map((candidate) => candidate.id === connection.id ? connection : candidate)
@@ -866,6 +919,9 @@ export const useMachinesStore = defineStore("machines", () => {
     loadHome,
     addMachine,
     pairMachine,
+    sshHosts,
+    loadSshHosts,
+    addOverSsh,
     forgetMachine,
     renameMachine,
     updateToken,

@@ -25,6 +25,10 @@ export interface MachineConnection {
   /** `linux`, `macos`, `windows` or `other`, when known. */
   os?: string;
   addedAt: string;
+  /** `user@host` when home reaches it over SSH; missing for a machine added another way, or from an older home. */
+  sshDestination?: string | null;
+  /** Whether the SSH tunnel is up; null or missing when it isn't an SSH machine. */
+  tunnelUp?: boolean | null;
 }
 
 const CATALOG_KEY = "weave:machines";

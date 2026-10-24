@@ -22,43 +22,62 @@ public static class MachinesEndpoints
         var group = app.MapGroup("/api/machines").WithTags("Machines");
         group.AddEndpointFilter<AgentRequests.WritesAreTheUsers>();
 
-        group.MapGet("", async (HttpContext http, RemoteMachineService machines) =>
+        group.MapGet("", async (HttpContext http, RemoteMachineService machines, ISshTunnels tunnels) =>
         {
             var owner = FleetClaims.IsOwner(http.User);
             var list = await machines.ListAsync();
-            return Results.Ok(new MachineListResponse(list.Select(m => ToResponse(m, owner ? machines.TryTokenOf(m) : null)).ToList()));
+            return Results.Ok(new MachineListResponse(list.Select(m => ToResponse(m, owner ? machines.TryTokenOf(m) : null, tunnels)).ToList()));
         })
         .Produces<MachineListResponse>(200)
         .WithName("ListMachines");
 
-        group.MapPost("", async (AddMachineRequest request, RemoteMachineService machines, CancellationToken cancellationToken) =>
+        group.MapPost("", async (AddMachineRequest request, RemoteMachineService machines, ISshTunnels tunnels, CancellationToken cancellationToken) =>
         {
             var (machine, error) = await machines.AddAsync(request.BaseUrl ?? "", request.Token ?? "", cancellationToken);
             return machine is null
                 ? Results.BadRequest(new ErrorResponse(error!))
-                : Results.Ok(ToResponse(machine, machines.TokenOf(machine)));
+                : Results.Ok(ToResponse(machine, machines.TokenOf(machine), tunnels));
         })
         .RequireAuthorization(FleetClaims.MachineOwnerPolicy)
         .Produces<MachineEntryResponse>(200)
         .WithName("AddMachine");
 
-        group.MapPost("/pair", async (PairMachineRequest request, RemoteMachineService machines, CancellationToken cancellationToken) =>
+        group.MapPost("/pair", async (PairMachineRequest request, RemoteMachineService machines, ISshTunnels tunnels, CancellationToken cancellationToken) =>
         {
             var (machine, error) = await machines.AddByCodeAsync(request.BaseUrl ?? "", request.Code ?? "", cancellationToken);
             return machine is null
                 ? Results.BadRequest(new ErrorResponse(error!))
-                : Results.Ok(ToResponse(machine, machines.TokenOf(machine)));
+                : Results.Ok(ToResponse(machine, machines.TokenOf(machine), tunnels));
         })
         .RequireAuthorization(FleetClaims.MachineOwnerPolicy)
         .Produces<MachineEntryResponse>(200)
         .WithName("PairMachine");
 
-        group.MapPut("/{id}", async (string id, UpdateRemoteMachineRequest request, RemoteMachineService machines, CancellationToken cancellationToken) =>
+        // Hosts from ~/.ssh/config on this machine, for Add a machine → Over SSH.
+        group.MapGet("/ssh-hosts", () =>
+            Results.Ok(new SshHostListResponse(SshConfigHosts.ReadDefault()
+                .Select(h => new SshHostResponse(h.Alias, h.Alias, h.HostName, h.User, h.Port)).ToList())))
+        .RequireAuthorization(FleetClaims.MachineOwnerPolicy)
+        .Produces<SshHostListResponse>(200)
+        .WithName("ListSshHosts");
+
+        group.MapPost("/ssh", async (AddSshMachineRequest request, SshMachineService ssh, RemoteMachineService machines, ISshTunnels tunnels, CancellationToken cancellationToken) =>
+        {
+            var (machine, error) = await ssh.AddAsync(request.Destination ?? "", cancellationToken);
+            return machine is null
+                ? Results.BadRequest(new ErrorResponse(error!))
+                : Results.Ok(ToResponse(machine, machines.TokenOf(machine), tunnels));
+        })
+        .RequireAuthorization(FleetClaims.MachineOwnerPolicy)
+        .Produces<MachineEntryResponse>(200)
+        .WithName("AddMachineOverSsh");
+
+        group.MapPut("/{id}", async (string id, UpdateRemoteMachineRequest request, RemoteMachineService machines, ISshTunnels tunnels, CancellationToken cancellationToken) =>
         {
             var (machine, error) = await machines.UpdateAsync(id, request.BaseUrl, request.Token, request.Name, cancellationToken, request.AgentsAllowed);
             if (machine is null)
                 return error == "No such machine." ? Results.NotFound(new ErrorResponse(error)) : Results.BadRequest(new ErrorResponse(error!));
-            return Results.Ok(ToResponse(machine, machines.TokenOf(machine)));
+            return Results.Ok(ToResponse(machine, machines.TokenOf(machine), tunnels));
         })
         .RequireAuthorization(FleetClaims.MachineOwnerPolicy)
         .Produces<MachineEntryResponse>(200)
@@ -98,13 +117,13 @@ public static class MachinesEndpoints
         .Produces<DeviceGrantResponse>(200)
         .WithName("CreateDeviceGrant");
 
-        group.MapPost("/import", async (ImportMachinesRequest request, RemoteMachineService machines) =>
+        group.MapPost("/import", async (ImportMachinesRequest request, RemoteMachineService machines, ISshTunnels tunnels) =>
         {
             var imported = (request.Machines ?? [])
                 .Where(m => m.Id is not null && m.BaseUrl is not null && m.Token is not null)
                 .Select(m => new ImportedMachine(m.Id!, m.Name, m.BaseUrl!, m.Token!, m.Os, m.AddedAt));
             var list = await machines.ImportAsync(imported);
-            return Results.Ok(new MachineListResponse(list.Select(m => ToResponse(m, machines.TryTokenOf(m))).ToList()));
+            return Results.Ok(new MachineListResponse(list.Select(m => ToResponse(m, machines.TryTokenOf(m), tunnels)).ToList()));
         })
         .RequireAuthorization(FleetClaims.MachineOwnerPolicy)
         .Produces<MachineListResponse>(200)
@@ -113,7 +132,8 @@ public static class MachinesEndpoints
         return app;
     }
 
-    private static MachineEntryResponse ToResponse(RemoteMachine machine, string? token) =>
-        new(machine.Id, machine.Name, machine.BaseUrl, machine.Os, machine.Status, machine.AddedAt, machine.LastSeenAt, token, machine.AgentsAllowed);
+    private static MachineEntryResponse ToResponse(RemoteMachine machine, string? token, ISshTunnels tunnels) =>
+        new(machine.Id, machine.Name, machine.BaseUrl, machine.Os, machine.Status, machine.AddedAt, machine.LastSeenAt, token, machine.AgentsAllowed,
+            machine.SshDestination, machine.SshDestination is null ? null : tunnels.IsUp(machine.Id));
 }
 #pragma warning restore IL2026

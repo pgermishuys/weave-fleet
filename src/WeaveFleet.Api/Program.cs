@@ -50,6 +50,7 @@ var importLegacySessions = false;
 string? legacyImportSourcePath = null;
 string? cliArgumentError = null;
 var nodePair = false;
+var nodePairJson = false;
 for (var i = 0; i < args.Length; i++)
 {
     if (args[i] is "--host" && i + 1 < args.Length)
@@ -72,6 +73,8 @@ for (var i = 0; i < args.Length; i++)
         cliOverrides[$"{FleetOptions.SectionName}:EventBus:Transport"] = args[++i];
     else if (args[i] is NodePairCommand.Flag)
         nodePair = true;
+    else if (args[i] is "--json")
+        nodePairJson = true;
     else if (args[i] is "--import-legacy-sessions")
         importLegacySessions = true;
     else if (args[i] is "--source")
@@ -106,7 +109,8 @@ if (nodePair)
         Environment.GetEnvironmentVariable("WEAVE_FLEET_AUTH_TOKEN"),
         pairClient,
         Console.Out,
-        Console.Error));
+        Console.Error,
+        asJson: nodePairJson));
 }
 
 var builder = WebApplication.CreateBuilder(args);

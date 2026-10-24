@@ -367,6 +367,90 @@ describe("Settings → Machines", () => {
 
       expect(wrapper.find("[data-testid='machines-add-error']").text()).toContain("already used");
     });
+
+  describe("Add a machine over SSH", () => {
+    const hosts = { hosts: [
+      { alias: "falcon", destination: "falcon", hostName: "100.64.90.72", user: "alice", port: null },
+      { alias: "atlas", destination: "atlas", hostName: null, user: null, port: null },
+    ] };
+    const falconMachine = { id: "ffffffffffffffffffffffffffffffff", name: "falcon", baseUrl: "http://100.64.90.72:2113", os: "linux", status: "online", addedAt: "2026-10-24T00:00:00.000Z", lastSeenAt: null, token: "fdt_d1.secret", sshDestination: "alice@falcon", tunnelUp: true };
+
+    async function openForm(withHosts: boolean) {
+      routes["/api/machines"] = () => json({ machines: [] });
+      routes["/api/machines/ssh-hosts"] = () => json(withHosts ? hosts : { hosts: [] });
+      const wrapper = mount(MachinesSection);
+      await flushPromises();
+      await wrapper.find("[data-testid='machines-add']").trigger("click");
+      await flushPromises();
+      return wrapper;
+    }
+
+    function tabs(wrapper: VueWrapper): string[] {
+      return wrapper.findAll("[role='tab']").map((tab) => tab.attributes("data-testid")!);
+    }
+
+    it("puts Over SSH first and selected when ~/.ssh/config has hosts", async () => {
+      const wrapper = await openForm(true);
+
+      expect(tabs(wrapper)).toEqual(["machines-add-mode-ssh", "machines-add-mode-code", "machines-add-mode-address"]);
+      expect(wrapper.find("[data-testid='machines-add-mode-ssh']").attributes("aria-selected")).toBe("true");
+      expect(wrapper.find("[data-testid='machines-add-ssh-host']").exists()).toBe(true);
+      expect(wrapper.find("[data-testid='machines-add-url']").exists()).toBe(false);
+      // The token form is the By address tab's own.
+      expect(wrapper.find("[data-testid='machines-add-advanced']").exists()).toBe(false);
+      expect(wrapper.findAll("datalist option").map((option) => option.attributes("label"))).toEqual(["falcon (alice@100.64.90.72)", "atlas"]);
+    });
+
+    it("keeps the pairing code first and Over SSH last when there are no hosts", async () => {
+      const wrapper = await openForm(false);
+
+      expect(tabs(wrapper)).toEqual(["machines-add-mode-code", "machines-add-mode-address", "machines-add-mode-ssh"]);
+      expect(wrapper.find("[data-testid='machines-add-mode-code']").attributes("aria-selected")).toBe("true");
+      await wrapper.find("[data-testid='machines-add-mode-ssh']").trigger("click");
+      expect(wrapper.find("[data-testid='machines-add-ssh-host']").exists()).toBe(true);
+    });
+
+    it("sends the typed destination and says it was added", async () => {
+      const wrapper = await openForm(true);
+      let sent: unknown = null;
+      routes["/api/machines/ssh"] = (_, init) => {
+        sent = JSON.parse(String(init?.body));
+        return json(falconMachine);
+      };
+      const submit = wrapper.find("[data-testid='machines-add-submit']");
+      expect(submit.attributes("disabled")).toBeDefined();
+
+      await wrapper.find("[data-testid='machines-add-ssh-host']").setValue("alice@falcon:2222");
+      expect(submit.attributes("disabled")).toBeUndefined();
+      await wrapper.find("[data-testid='machines-add-form']").trigger("submit");
+      await flushPromises();
+
+      expect(sent).toEqual({ destination: "alice@falcon:2222" });
+      expect(wrapper.text()).toContain("Added falcon");
+      expect(wrapper.text()).toContain("Over SSH as alice@falcon");
+    });
+
+    it("shows the error, including when Fleet isn't installed there", async () => {
+      const wrapper = await openForm(true);
+      routes["/api/machines/ssh"] = () => json({ error: "Fleet isn't installed there (falcon). Install it first." }, 400);
+
+      await wrapper.find("[data-testid='machines-add-ssh-host']").setValue("falcon");
+      await wrapper.find("[data-testid='machines-add-form']").trigger("submit");
+      await flushPromises();
+
+      expect(wrapper.find("[data-testid='machines-add-error']").text()).toContain("Fleet isn't installed there");
+    });
+
+    it("says how an SSH machine is reached, and when its tunnel is down", async () => {
+      routes["/api/machines"] = () => json({ machines: [falconMachine, { ...falconMachine, id: "cccccccccccccccccccccccccccccccc", name: "osprey", sshDestination: "alice@osprey", tunnelUp: false }] });
+      const wrapper = mount(MachinesSection);
+      await flushPromises();
+
+      expect(wrapper.findAll("[data-testid='machine-ssh-line']").map((line) => line.text())).toEqual(["Over SSH as alice@falcon", "Over SSH as alice@osprey"]);
+      expect(wrapper.findAll("[data-testid='machine-tunnel-down']")).toHaveLength(1);
+      expect(wrapper.get("[data-testid='machine-tunnel-down']").text()).toBe("Tunnel down");
+    });
+  });
   });
 });
 

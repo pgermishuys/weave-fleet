@@ -316,6 +316,23 @@ public static class DependencyInjection
         services.AddSingleton<WeaveFleet.Application.Machines.RemoteAutomationRuns>();
         services.AddHttpClient(WeaveFleet.Application.Machines.RemoteAutomationRuns.HttpClientName, client => client.Timeout = TimeSpan.FromMinutes(2))
             .ConfigurePrimaryHttpMessageHandler(() => new System.Net.Http.SocketsHttpHandler { AllowAutoRedirect = false, ConnectTimeout = TimeSpan.FromSeconds(5) });
+        // Machines added Over SSH: the user's own ssh, one tunnel each. Registered before the watcher, which connects through them.
+        // FLEET_SSH_EXECUTABLE / FLEET_SSH_NODE_PORT: another ssh, or a node that listens on another port than 2113.
+        services.AddSingleton(_ => new WeaveFleet.Infrastructure.Machines.SshOptions
+        {
+            Executable = Environment.GetEnvironmentVariable("FLEET_SSH_EXECUTABLE") is { Length: > 0 } ssh ? ssh : "ssh",
+            RemotePort = int.TryParse(Environment.GetEnvironmentVariable("FLEET_SSH_NODE_PORT"), out var nodePort) && nodePort is > 0 and < 65536
+                ? nodePort
+                : WeaveFleet.Application.Machines.SshMachineService.NodePort,
+        });
+        services.AddSingleton<WeaveFleet.Application.Machines.ISshRunner, WeaveFleet.Infrastructure.Machines.SshProcessRunner>();
+        services.AddSingleton<WeaveFleet.Infrastructure.Machines.SshTunnels>(sp => new WeaveFleet.Infrastructure.Machines.SshTunnels(
+            sp.GetRequiredService<WeaveFleet.Infrastructure.Machines.SshOptions>(),
+            sp.GetRequiredService<WeaveFleet.Application.Machines.RemoteMachineService>(),
+            sp.GetRequiredService<Microsoft.Extensions.Logging.ILogger<WeaveFleet.Infrastructure.Machines.SshTunnels>>()));
+        services.AddSingleton<WeaveFleet.Application.Machines.ISshTunnels>(sp => sp.GetRequiredService<WeaveFleet.Infrastructure.Machines.SshTunnels>());
+        services.AddHostedService(sp => sp.GetRequiredService<WeaveFleet.Infrastructure.Machines.SshTunnels>());
+        services.AddSingleton<WeaveFleet.Application.Machines.SshMachineService>();
         services.AddSingleton<WeaveFleet.Infrastructure.Machines.RemoteMachineWatcher>();
         // Sessions there that a session here waits to hear from are followed over the watcher's connections.
         services.AddSingleton<WeaveFleet.Application.Machines.RemoteSessionTurns>();

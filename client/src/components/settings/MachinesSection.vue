@@ -27,7 +27,7 @@ const buttonDangerClass = "inline-flex items-center justify-center gap-2 rounded
 const inputClass = "w-full rounded-btn border border-border bg-main-bg px-3 py-2 text-sm text-text outline-none transition-colors placeholder:text-muted focus:border-accent";
 
 const machines = useMachinesStore();
-const { entries, others, home, liveReachable, source } = storeToRefs(machines);
+const { entries, others, home, liveReachable, source, sshHosts } = storeToRefs(machines);
 const preferencesStore = usePreferencesStore();
 preferencesStore.ensureLoaded();
 
@@ -53,9 +53,36 @@ function restartButton(entry: MachineEntry): { label: string; disabled: boolean 
 
 // ── Add ──────────────────────────────────────────────────────────────────────
 const showAddForm = shallowRef(false);
-const addForm = reactive({ url: "", token: "", code: "" });
-/** How the machine is added. A code is the default: no token is typed and the master token never moves. */
-const addMode = shallowRef<"code" | "address">("code");
+const addForm = reactive({ url: "", token: "", code: "", ssh: "" });
+type AddMode = "ssh" | "code" | "address";
+/**
+ * How the machine is added. With hosts in ~/.ssh/config, Over SSH comes first and is the default; otherwise a code is
+ * the default (no token is typed and the master token never moves) and Over SSH, still open to a typed user@host, is last.
+ */
+const addMode = shallowRef<AddMode>("code");
+const hasSshHosts = computed(() => (sshHosts.value?.length ?? 0) > 0);
+const addModes = computed<AddMode[]>(() => hasSshHosts.value ? ["ssh", "code", "address"] : ["code", "address", "ssh"]);
+const modeLabels: Record<AddMode, string> = { ssh: "Over SSH", code: "With a pairing code", address: "By address" };
+/** Moves to the first tab once the hosts arrive, unless the user already picked one. */
+const pickedMode = shallowRef(false);
+function pickMode(mode: AddMode): void {
+  addMode.value = mode;
+  pickedMode.value = true;
+  addError.value = null;
+}
+async function openAddForm(): Promise<void> {
+  showAddForm.value = true;
+  addError.value = null;
+  justAdded.value = null;
+  pickedMode.value = false;
+  addMode.value = addModes.value[0]!;
+  await machines.loadSshHosts();
+  if (!pickedMode.value && showAddForm.value) addMode.value = addModes.value[0]!;
+}
+function hostLabel(host: { alias: string; hostName: string | null; user: string | null }): string {
+  const target = host.hostName ? (host.user ? `${host.user}@${host.hostName}` : host.hostName) : null;
+  return target && target !== host.alias ? `${host.alias} (${target})` : host.alias;
+}
 const showAdvanced = shallowRef(false);
 const isAdding = shallowRef(false);
 const addError = shallowRef<string | null>(null);
@@ -65,13 +92,16 @@ async function addMachine(): Promise<void> {
   isAdding.value = true;
   addError.value = null;
   try {
-    const machine = addMode.value === "code"
-      ? await machines.pairMachine(addForm.url, addForm.code)
-      : await machines.addMachine(addForm.url, addForm.token);
+    const machine = addMode.value === "ssh"
+      ? await machines.addOverSsh(addForm.ssh)
+      : addMode.value === "code"
+        ? await machines.pairMachine(addForm.url, addForm.code)
+        : await machines.addMachine(addForm.url, addForm.token);
     justAdded.value = machine.name;
     addForm.url = "";
     addForm.token = "";
     addForm.code = "";
+    addForm.ssh = "";
     showAddForm.value = false;
   } catch (error) {
     addError.value = error instanceof Error ? error.message : String(error);
@@ -152,6 +182,7 @@ function forget(entry: MachineEntry): void {
 }
 
 function stateLine(entry: MachineEntry): { text: string; tone: "ok" | "bad" | "muted" } {
+  if (entry.tunnelUp === false) return { text: "Tunnel down", tone: "bad" };
   if (entry.isLive) return { text: "live", tone: "ok" };
   const state = others.value[entry.key];
   if (state?.error) return { text: state.error, tone: "bad" };
@@ -293,7 +324,7 @@ onUnmounted(() => stopPolling?.());
         type="button"
         :class="buttonPrimaryClass"
         data-testid="machines-add"
-        @click="showAddForm = true; addError = null; justAdded = null"
+        @click="openAddForm()"
       >
         <Plus
           :size="16"
@@ -320,30 +351,29 @@ onUnmounted(() => stopPolling?.());
         aria-label="How to add the machine"
       >
         <button
+          v-for="mode in addModes"
+          :key="mode"
           type="button"
           role="tab"
-          :aria-selected="addMode === 'code'"
+          :aria-selected="addMode === mode"
           class="flex-1 rounded-btn px-3 py-1.5 font-medium transition-colors"
-          :class="addMode === 'code' ? 'bg-accent/15 text-text' : 'text-muted hover:text-text'"
-          data-testid="machines-add-mode-code"
-          @click="addMode = 'code'; addError = null"
+          :class="addMode === mode ? 'bg-accent/15 text-text' : 'text-muted hover:text-text'"
+          :data-testid="`machines-add-mode-${mode}`"
+          @click="pickMode(mode)"
         >
-          With a pairing code
-        </button>
-        <button
-          type="button"
-          role="tab"
-          :aria-selected="addMode === 'address'"
-          class="flex-1 rounded-btn px-3 py-1.5 font-medium transition-colors"
-          :class="addMode === 'address' ? 'bg-accent/15 text-text' : 'text-muted hover:text-text'"
-          data-testid="machines-add-mode-address"
-          @click="addMode = 'address'; addError = null"
-        >
-          By address
+          {{ modeLabels[mode] }}
         </button>
       </div>
       <p
-        v-if="addMode === 'code'"
+        v-if="addMode === 'ssh'"
+        class="text-xs text-muted"
+        data-testid="machines-add-ssh-help"
+      >
+        Fleet logs in with your own SSH keys and asks the other machine for a pairing code. No password is asked, no
+        token is pasted.
+      </p>
+      <p
+        v-else-if="addMode === 'code'"
         class="text-xs text-muted"
         data-testid="machines-add-code-help"
       >
@@ -358,7 +388,36 @@ onUnmounted(() => stopPolling?.());
         The other machine has to listen beyond 127.0.0.1: start it with <code class="machine-code">--host 0.0.0.0</code>,
         or behind <code class="machine-code">tailscale serve</code> with <code class="machine-code">--require-token</code>.
       </p>
-      <label class="grid gap-1 text-sm text-text">
+      <label
+        v-if="addMode === 'ssh'"
+        class="grid gap-1 text-sm text-text"
+      >
+        <span class="text-xs font-medium uppercase tracking-wide text-muted">Host</span>
+        <input
+          v-model="addForm.ssh"
+          type="text"
+          list="machines-ssh-hosts"
+          autocomplete="off"
+          autocapitalize="none"
+          spellcheck="false"
+          :class="inputClass"
+          placeholder="falcon or alice@falcon"
+          :disabled="isAdding"
+          data-testid="machines-add-ssh-host"
+        >
+        <datalist id="machines-ssh-hosts">
+          <option
+            v-for="host in sshHosts ?? []"
+            :key="host.alias"
+            :value="host.destination"
+            :label="hostLabel(host)"
+          />
+        </datalist>
+      </label>
+      <label
+        v-else
+        class="grid gap-1 text-sm text-text"
+      >
         <span class="text-xs font-medium uppercase tracking-wide text-muted">Address</span>
         <input
           v-model="addForm.url"
@@ -389,7 +448,7 @@ onUnmounted(() => stopPolling?.());
           data-testid="machines-add-code"
         >
       </label>
-      <template v-else>
+      <template v-else-if="addMode === 'address'">
         <button
           v-if="!showAdvanced"
           type="button"
@@ -434,7 +493,7 @@ onUnmounted(() => stopPolling?.());
         <button
           type="submit"
           :class="buttonPrimaryClass"
-          :disabled="isAdding || !addForm.url.trim() || !(addMode === 'code' ? addForm.code.trim() : addForm.token.trim())"
+          :disabled="isAdding || (addMode === 'ssh' ? !addForm.ssh.trim() : !addForm.url.trim() || !(addMode === 'code' ? addForm.code.trim() : addForm.token.trim()))"
           data-testid="machines-add-submit"
         >
           <LoaderCircle
@@ -549,10 +608,19 @@ onUnmounted(() => stopPolling?.());
               class="machine-card__live"
             >Live</span>
           </span>
-          <span class="machine-card__url">{{ location(entry) }}</span>
+          <span
+            v-if="entry.sshDestination"
+            class="machine-card__url"
+            data-testid="machine-ssh-line"
+          >Over SSH as {{ entry.sshDestination }}</span>
+          <span
+            v-else
+            class="machine-card__url"
+          >{{ location(entry) }}</span>
           <span
             class="machine-card__state"
             :class="`machine-card__state--${stateLine(entry).tone}`"
+            :data-testid="entry.tunnelUp === false ? 'machine-tunnel-down' : undefined"
           >{{ stateLine(entry).text }}</span>
           <span
             v-if="capabilityLine(entry)"

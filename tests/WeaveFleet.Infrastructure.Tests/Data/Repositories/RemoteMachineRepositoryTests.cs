@@ -31,4 +31,21 @@ public sealed class RemoteMachineRepositoryTests
         (await repo.GetAsync("machine-mini"))!.AgentsAllowed.ShouldBeTrue();
         (await repo.ListAsync()).ShouldHaveSingleItem().AgentsAllowed.ShouldBeTrue();
     }
+
+    [Fact]
+    public async Task the_ssh_destination_is_kept_and_cleared_with_the_machine()
+    {
+        var (keeper, factory) = await TestDbHelper.CreateSharedDbAsync();
+        using var _ = keeper;
+        var repo = new RemoteMachineRepository(factory);
+
+        await repo.UpsertAsync(Mini());
+        (await repo.GetAsync("machine-mini"))!.SshDestination.ShouldBeNull();
+
+        await repo.UpsertAsync(Mini() with { SshDestination = "alice@mini:2222" });
+        (await repo.GetAsync("machine-mini"))!.SshDestination.ShouldBe("alice@mini:2222");
+
+        await repo.UpsertAsync(Mini());
+        (await repo.GetAsync("machine-mini"))!.SshDestination.ShouldBeNull();
+    }
 }

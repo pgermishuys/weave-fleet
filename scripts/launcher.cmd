@@ -293,6 +293,12 @@ if /i "%~1"=="--require-token" (
     goto :parse_args_loop
 )
 
+if /i "%~1"=="--json" (
+    if not defined NODE_PAIR goto :json_without_pair
+    set "NODE_PAIR_JSON=--json"
+    shift
+    goto :parse_args_loop
+)
 if /i "%~1"=="--print" (
     if not "%SERVICE_ACTION%"=="install-service" goto :print_without_install
     set "PRINT_ONLY=1"
@@ -437,7 +443,7 @@ if defined REQUIRE_TOKEN set "Fleet__Auth__RequireToken=true"
 
 if defined NODE_PAIR (
     rem Asks the node already running with these settings for a code, prints it and stops.
-    "%APP_BIN%" --node-pair --urls "%LISTEN_URL%" --contentRoot "%APP_CONTENT_ROOT%"
+    "%APP_BIN%" --node-pair %NODE_PAIR_JSON% --urls "%LISTEN_URL%" --contentRoot "%APP_CONTENT_ROOT%"
     exit /b !ERRORLEVEL!
 )
 
@@ -613,6 +619,10 @@ exit /b %ERRORLEVEL%
 
 :service_no_options
 echo Error: uninstall-service does not accept options. >&2
+exit /b 1
+
+:json_without_pair
+echo Error: --json only works with fleet node pair. >&2
 exit /b 1
 
 :print_without_install

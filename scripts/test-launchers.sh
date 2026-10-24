@@ -119,6 +119,7 @@ NODE_HELP_OPTIONS="$(grep -o -- '--[a-z][a-z-]*' "$WORK/stdout" | sort -u)"
 for option in $NODE_HELP_OPTIONS; do
   case "$option" in
     --print) continue ;;  # install-service only; checked below
+    --json) continue ;;  # pair only; checked below
     --port) run_fleet node "$option" 2113 ;;
     --host) run_fleet node "$option" 127.0.0.1 ;;
     --profile) run_fleet node "$option" test ;;
@@ -127,6 +128,23 @@ for option in $NODE_HELP_OPTIONS; do
   esac || true
   expect_started node "$option" && { started_as_node || fail "fleet node $option didn't pass --node"; }
 done
+
+# `fleet node pair [--json]` asks the running node for a code instead of starting one; --json only works there.
+run_fleet node pair --json --port 5512 || true
+if expect_started node pair --json --port 5512; then
+  grep '^args=' "$WORK/out" | grep -q -- '--node-pair' || fail "fleet node pair didn't pass --node-pair: $(tr '\n' ' ' < "$WORK/out")"
+  grep '^args=' "$WORK/out" | tr ' ' '\n' | grep -qx -- "--json" || fail "fleet node pair --json didn't pass --json: $(tr '\n' ' ' < "$WORK/out")"
+  expect_record "port=5512" "node pair --json --port 5512"
+fi
+run_fleet node pair --port 5512 || true
+if expect_started node pair --port 5512 && grep '^args=' "$WORK/out" | tr ' ' '\n' | grep -qx -- "--json"; then
+  fail "fleet node pair passed --json on its own"
+fi
+if run_fleet node --json; then
+  fail "fleet node --json should fail"
+elif [ -f "$WORK/out" ]; then
+  fail "fleet node --json started the app"
+fi
 
 # install-service and uninstall-service, against stand-ins for systemctl, loginctl and launchctl that record their
 # calls. A uname that says Darwin turns the same launcher to its macOS branch.

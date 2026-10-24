@@ -25,6 +25,24 @@ public sealed class NodePairCommandTests
     }
 
     [Fact]
+    public async Task With_json_it_prints_one_line_for_another_fleet_to_read_over_ssh()
+    {
+        var output = new StringWriter();
+        using var http = new HttpClient(new Handler(HttpStatusCode.OK, Answer));
+
+        var exit = await NodePairCommand.RunAsync("0.0.0.0", 2113, Path.Combine(Path.GetTempPath(), $"fleet-{Guid.NewGuid():N}.db"),
+            "env-token-0123456789", http, output, new StringWriter(), asJson: true);
+
+        exit.ShouldBe(0);
+        var line = output.ToString().TrimEnd();
+        line.ShouldNotContain("\n");
+        using var json = System.Text.Json.JsonDocument.Parse(line);
+        json.RootElement.GetProperty("code").GetString().ShouldBe("7K3M-Q9ZD");
+        json.RootElement.GetProperty("machineName").GetString().ShouldBe("falcon");
+        json.RootElement.GetProperty("addresses").GetArrayLength().ShouldBe(2);
+    }
+
+    [Fact]
     public async Task It_reads_the_saved_machine_token_when_the_environment_has_none()
     {
         var handler = new Handler(HttpStatusCode.OK, Answer);
