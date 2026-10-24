@@ -5,15 +5,17 @@ import { StatusGlyph, type GlyphStatus } from "./glyph";
 import { Icon } from "./icons";
 import { Text } from "./text";
 
-export function SessionRow({ title, detail, status, age, machine, onPress, onLongPress, testID }: {
-  title: string; detail?: string; status: GlyphStatus; age?: string; machine?: string;
+/** `newPages`: pages the agent showed since the phone last opened the session's Pages, as an accent chip. */
+export function SessionRow({ title, detail, status, age, machine, newPages, onPress, onLongPress, testID }: {
+  title: string; detail?: string; status: GlyphStatus; age?: string; machine?: string; newPages?: number;
   onPress: () => void; onLongPress?: () => void; testID?: string;
 }) {
   const { color } = useTheme();
   const quiet = status === "idle" || status === "done";
+  const pagesLabel = newPages === 1 ? "1 new page" : `${newPages} new pages`;
   return (
     <Pressable
-      onPress={onPress} onLongPress={onLongPress} testID={testID} accessibilityRole="button" accessibilityLabel={title}
+      onPress={onPress} onLongPress={onLongPress} testID={testID} accessibilityRole="button" accessibilityLabel={newPages ? `${title}, ${pagesLabel}` : title}
       style={({ pressed }) => ({
         minHeight: 56, paddingHorizontal: 16, paddingVertical: 9, flexDirection: "row", gap: 11, alignItems: "flex-start",
         backgroundColor: pressed ? color.tint5 : "transparent",
@@ -25,8 +27,14 @@ export function SessionRow({ title, detail, status, age, machine, onPress, onLon
           <Text weight="medium" numberOfLines={1} style={{ flex: 1, color: quiet ? color.muted : color.rowText }}>{title}</Text>
           {age ? <Text size={12} tone="muted" style={{ fontVariant: ["tabular-nums"] }}>{age}</Text> : null}
         </View>
-        {detail || machine ? (
+        {detail || machine || newPages ? (
           <View style={{ flexDirection: "row", alignItems: "center", gap: 7 }}>
+            {newPages ? (
+              <View testID="new-pages" style={{ height: 18, paddingHorizontal: 7, borderRadius: 9, backgroundColor: color.accentDim, flexDirection: "row", alignItems: "center", gap: 4 }}>
+                <Icon name="page" size={11} color={color.accent} />
+                <Text size={11} tone="accent">{pagesLabel}</Text>
+              </View>
+            ) : null}
             {detail ? <Text size={12.5} tone="muted" numberOfLines={1} style={{ flexShrink: 1 }}>{detail}</Text> : null}
             {machine ? (
               <View style={{ height: 18, paddingHorizontal: 7, borderRadius: 9, backgroundColor: color.tint5, justifyContent: "center" }}>

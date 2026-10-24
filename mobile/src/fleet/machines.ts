@@ -5,7 +5,7 @@ import { Platform } from "react-native";
 import { MachinesStore, type KeyValueStorage } from "~/fleet/machines-core";
 
 const web = Platform.OS === "web";
-const storage: KeyValueStorage = {
+export const storage: KeyValueStorage = {
   get: async (key) => (web ? globalThis.localStorage?.getItem(key) ?? null : SecureStore.getItemAsync(key)),
   set: async (key, value) => {
     if (web) globalThis.localStorage?.setItem(key, value);
