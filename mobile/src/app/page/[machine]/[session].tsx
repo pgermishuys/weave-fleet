@@ -8,9 +8,9 @@ import { KeyboardAvoidingView, PanResponder, Platform, Pressable, View, type Sty
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { WebView, type WebViewMessageEvent } from "react-native-webview";
 import { keepPageState, pageStateMessage } from "@fleet/lib/page-bridge";
-import { pageChoiceBar } from "@fleet/lib/page-choice";
+import { isChoiceLive, pageChoiceBar } from "@fleet/lib/page-choice";
 import { pageThemeMessage } from "@fleet/lib/page-theme-core";
-import { manager, useFleet, useSessionPages, useSessionStream } from "~/fleet/hooks";
+import { manager, useFleet, useSessionActivity, useSessionPages, useSessionStream } from "~/fleet/hooks";
 import { conversationPages, pagePrompt, pageShim, pageTheme, pageUrl, postToPage, readBridgeMessage } from "~/fleet/pages";
 import { Button, Composer, Icon, PageChoiceBar, PageReplyBar, Sheet, Text } from "~/kit";
 import { useTheme } from "~/theme";
@@ -50,7 +50,8 @@ export default function PageScreen() {
   const theme = useMemo(() => pageTheme(scheme), [scheme]);
   const shim = useMemo(() => pageShim(theme), [theme]);
   const online = machineView?.state === "connected";
-  const live = !!page?.choice && page.choice.status === "waiting" && !!state && state.sessionStatus !== "idle";
+  const activity = useSessionActivity(machine, session, state?.sessionStatus);
+  const live = isChoiceLive(page?.choice, activity);
   const bar = page?.choice ? pageChoiceBar(page.choice, live, proposal) : null;
 
   // The theme changed while the page is open: the page follows without a reload.
