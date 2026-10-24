@@ -31,7 +31,37 @@ appId: io.tryweave.fleet
     timeout: 90000
 - takeScreenshot: 04-tool-box
 
-# The Changes sheet pulls up, then closes; Back returns to the list.
+# An agent shows a page and waits for the pick: the docked card opens it full screen, a tap in the page picks, the bar sends.
+- tapOn:
+    id: "composer"
+- inputText: "show-page please"
+- tapOn:
+    id: "send"
+- extendedWaitUntil:
+    visible: "Pick on the page"
+    timeout: 90000
+- takeScreenshot: 05-page-pick
+- tapOn:
+    id: "page-pick-open"
+# Android's WebView reads each option as one node ("B. Paged table Twenty rows…"), so match inside it.
+- extendedWaitUntil:
+    visible: ".*Infinite scroll.*"
+    timeout: 30000
+- takeScreenshot: 06-page
+- tapOn: ".*Paged table.*"
+# Send pick is there from the start, waiting; the sentence says the page proposed a pick.
+- extendedWaitUntil:
+    visible: "You picked Paged table."
+    timeout: 30000
+- takeScreenshot: 07-page-picked
+- tapOn:
+    id: "page-choice-send"
+- extendedWaitUntil:
+    visible: ".*Going with.*run ${RUN}.*"
+    timeout: 90000
+- takeScreenshot: 08-page-sent
+
+# The Changes sheet pulls up, then shows the page under Pages, then closes; Back returns to the list.
 # The dock swaps from the permission card back to the composer as the turn ends, moving the strip; a tap that
 # lands mid-move misses, so tap until the sheet is up.
 - retry:
@@ -40,9 +70,16 @@ appId: io.tryweave.fleet
       - tapOn:
           id: "panel-open"
       - extendedWaitUntil:
-          visible: ".*Changes, Files and Pages.*"
+          visible:
+            id: "segment-pages"
           timeout: 10000
-- takeScreenshot: 05-changes
+- takeScreenshot: 09-changes
+- tapOn:
+    id: "segment-pages"
+- extendedWaitUntil:
+    visible: "Three ways to page the results"
+    timeout: 30000
+- takeScreenshot: 10-pages
 - tapOn:
     id: "sheet-close"
 - tapOn: "Back"
@@ -51,14 +88,14 @@ appId: io.tryweave.fleet
     timeout: 30000
 
 - tapOn: "Workflows"
-- takeScreenshot: 06-workflows
+- takeScreenshot: 11-workflows
 - tapOn: "Automations"
-- takeScreenshot: 07-automations
+- takeScreenshot: 12-automations
 - tapOn: "Machines"
 - extendedWaitUntil:
     visible: "Pair another machine"
     timeout: 30000
-- takeScreenshot: 08-machines
+- takeScreenshot: 13-machines
 - tapOn: "Sessions"
 
 # The Kit, by its deep link; iOS asks before opening the app.
@@ -69,14 +106,14 @@ appId: io.tryweave.fleet
 - extendedWaitUntil:
     visible: "Kit"
     timeout: 30000
-- takeScreenshot: 09-kit
+- takeScreenshot: 14-kit
 - scroll
 - scroll
-- takeScreenshot: 10-kit-middle
+- takeScreenshot: 15-kit-middle
 - scroll
 - scroll
-- takeScreenshot: 11-kit-lower
+- takeScreenshot: 16-kit-lower
 - scroll
 - scroll
 - scroll
-- takeScreenshot: 12-kit-end
+- takeScreenshot: 17-kit-end

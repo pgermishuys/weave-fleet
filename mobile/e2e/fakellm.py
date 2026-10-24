@@ -3,10 +3,11 @@
 Replies word by word (so streaming shows), and on keywords in the last user text:
   run-tests -> calls the bash tool once (`ls -la && echo tests passed`), then says "run N of the suite, All 42 tests pass"
   ask-me    -> calls the question tool with two choices
+  show-page -> calls fleet_page_show on pages/paging.html (waitForChoice), then says "Going with **<pick>**, run N"
   slow-task -> calls the bash tool with a 45 s command, so the session stays working
 Anything else gets a short Markdown reply.
 """
-import json, sys, time
+import json, os, re, sys, time
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 
 PORT = int(sys.argv[1])
@@ -22,6 +23,7 @@ REPLY = (
 
 
 RUNS = [0]
+PAGES = [0]  # its own count: the walk waits for the page reply of run 1, then run 2
 
 
 def last_user_text(msgs):
@@ -32,6 +34,16 @@ def last_user_text(msgs):
                 return c
             if isinstance(c, list):
                 return " ".join(p.get("text", "") for p in c if isinstance(p, dict))
+    return ""
+
+
+def tool_call_name(msgs):
+    """The name of the tool call the last tool message answers."""
+    want = msgs[-1].get("tool_call_id")
+    for m in reversed(msgs):
+        for c in m.get("tool_calls") or []:
+            if c.get("id") == want:
+                return c["function"]["name"]
     return ""
 
 
@@ -51,11 +63,16 @@ class H(BaseHTTPRequestHandler):
         last_role = msgs[-1]["role"] if msgs else "?"
         text = last_user_text(msgs)
         tools = [t["function"]["name"] for t in req.get("tools", [])]
-        LOG.write(f"{time.strftime('%H:%M:%S')} last={last_role} text={text[:60]!r} tools={len(tools)}\n"); LOG.flush()
+        LOG.write(f"{time.strftime('%H:%M:%S')} last={last_role} text={text[:60]!r} tools={len(tools)} {tools}\n"); LOG.flush()
+        page_tool = next((t for t in tools if t.endswith("fleet_page_show")), None)
 
         call, reply = None, None
         slow = "slow-task" in text and "bash" in tools
-        if last_role == "tool":
+        if last_role == "tool" and page_tool and "fleet_page_show" in str(msgs[-1].get("name", "")) + tool_call_name(msgs):
+            PAGES[0] += 1
+            m = re.search(r'"[Ss]ummary"\s*:\s*"([^"]*)"', str(msgs[-1].get("content", "")))
+            reply = f"Going with **{m.group(1) if m else 'nothing'}**, run {PAGES[0]} of the suite."
+        elif last_role == "tool":
             # The walk runs twice (light, dark) in one conversation; the number lets it wait for the new reply.
             RUNS[0] += 1
             reply = f"Ran it, run {RUNS[0]} of the suite. **All 42 tests pass** and the build is clean."
@@ -63,6 +80,9 @@ class H(BaseHTTPRequestHandler):
             reply = "Fix pagination off-by-one"
         elif slow:
             call = ("bash", {"command": "sleep 45 && echo migrated", "description": "Migrate the cache"})
+        elif "show-page" in text and page_tool:
+            call = (page_tool, {"path": os.path.join(os.environ["HOME"], "src/demo-app/pages/paging.html"),
+                                "placement": "tab", "title": "Three ways to page the results", "waitForChoice": True})
         elif "run-tests" in text and "bash" in tools:
             call = ("bash", {"command": "ls -la && echo tests passed", "description": "Run the tests"})
         elif "ask-me" in text and "question" in tools:
