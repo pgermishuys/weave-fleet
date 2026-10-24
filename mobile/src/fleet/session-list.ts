@@ -30,6 +30,16 @@ export function applySessionsEvent(list: SessionListItem[], event: DomainEvent):
       }),
     };
   }
+  // A page was shown, reopened or closed: the row's "N new pages" reads these.
+  if (type === "session.pages" && payload.sessionId) {
+    const pages = event.payload as { pageCount?: number; lastPageShownAt?: string | null };
+    return {
+      refetch: !list.some((item) => item.session.id === payload.sessionId),
+      list: list.map((item) => item.session.id !== payload.sessionId ? item : {
+        ...item, pageCount: pages.pageCount ?? 0, lastPageShownAt: pages.lastPageShownAt ?? null,
+      }),
+    };
+  }
   if (type === "session_archived" || type === "session_deleted") {
     return { list: list.filter((item) => item.session.id !== payload.sessionId), refetch: false };
   }
