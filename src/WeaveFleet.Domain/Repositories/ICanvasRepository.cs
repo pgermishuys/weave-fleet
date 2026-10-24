@@ -49,4 +49,13 @@ public interface ICanvasRepository
     /// Lists a canvas's revisions after <paramref name="afterVersion"/>, oldest first.
     /// </summary>
     Task<IReadOnlyList<CanvasRevision>> ListRevisionsAsync(string canvasId, int afterVersion);
+
+    /// <summary>
+    /// How many open page canvases each of the user's sessions has, and when the newest was shown, in one query: all
+    /// of the user's sessions with a page, or only <paramref name="sessionId"/>'s. A session with none isn't listed.
+    /// </summary>
+    Task<IReadOnlyDictionary<string, SessionPages>> SummarizePagesAsync(string? sessionId = null);
 }
+
+/// <summary>A session's open pages: how many, and when the newest was shown (ISO 8601).</summary>
+public sealed record SessionPages(int Count, string? LastShownAt);

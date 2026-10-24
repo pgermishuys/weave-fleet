@@ -56,6 +56,12 @@ public sealed record SessionListResponse(
     /// <summary>How much work the session's agent left running (subagents, background shells, monitors): the list's chip.</summary>
     public int RunningWorkCount { get; init; }
 
+    /// <summary>How many pages the session's agent has open in page tabs (pages shown in the conversation aren't counted).</summary>
+    public int PageCount { get; init; }
+
+    /// <summary>When the newest of those pages was shown (ISO 8601), or null when there are none.</summary>
+    public string? LastPageShownAt { get; init; }
+
     /// <summary>When Clean now removed the session's worktree checkout, or null; its next wake puts it back.</summary>
     public string? CheckoutRemovedAt { get; init; }
 

@@ -90,6 +90,20 @@ describe("useSessionActivityUpdates", () => {
     expect(find(store, "s1")?.scheduledRetry ?? null).toBeNull();
   });
 
+  it("puts the session's page count and newest page on the row for session.pages", async () => {
+    const store = useSessionsStore();
+    store.upsertSession(row("s1", "idle"));
+    await mountUpdates();
+
+    send("session.pages", { sessionId: "s1", pageCount: 2, lastPageShownAt: "2026-10-24T09:30:00.0000000+00:00" });
+    expect(find(store, "s1")?.pageCount).toBe(2);
+    expect(find(store, "s1")?.lastPageShownAt).toBe("2026-10-24T09:30:00.0000000+00:00");
+
+    send("session.pages", { sessionId: "s1", pageCount: 0, lastPageShownAt: null });
+    expect(find(store, "s1")?.pageCount).toBe(0);
+    expect(find(store, "s1")?.lastPageShownAt).toBeNull();
+  });
+
   it("ignores other events and activity without a session or status", async () => {
     const store = useSessionsStore();
     store.upsertSession(row("s1", "idle"));

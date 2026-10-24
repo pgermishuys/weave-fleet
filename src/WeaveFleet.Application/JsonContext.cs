@@ -123,6 +123,7 @@ internal sealed record QuickChatSourceInput;
 [JsonSerializable(typeof(SessionQueueChanged))]
 [JsonSerializable(typeof(SessionPermissionRulesChanged))]
 [JsonSerializable(typeof(ScheduledRetryChanged))]
+[JsonSerializable(typeof(WeaveFleet.Application.Canvases.SessionPagesChanged))]
 [JsonSerializable(typeof(SessionInterruptionChanged))]
 [JsonSerializable(typeof(HarnessUsage))]
 [JsonSerializable(typeof(WeaveFleet.Application.Usage.UsageLimitsSnapshot))]
