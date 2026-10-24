@@ -137,6 +137,23 @@ export interface SshHost {
   port: number | null;
 }
 
+/** What Fleet would run on a machine with no Fleet on it (the 409 of adding Over SSH). Nothing has run yet. */
+export interface SshInstallPlan {
+  host: string;
+  os: "linux" | "macos" | "unsupported";
+  canInstall: boolean;
+  commands: string[];
+  docs: string;
+}
+
+/** Adding Over SSH found no Fleet on the other machine: `plan` is what installing it would run. */
+export class SshNotInstalledError extends Error {
+  constructor(message: string, readonly plan: SshInstallPlan) {
+    super(message);
+    this.name = "SshNotInstalledError";
+  }
+}
+
 /**
  * Where the list lives: `server` (home keeps it; this browser caches it), `device` (a paired phone reads it without
  * tokens and uses its own grants), or `local` (home is too old to keep one: this browser's own list, as before).
@@ -516,17 +533,39 @@ export const useMachinesStore = defineStore("machines", () => {
   /**
    * Adds a machine over SSH: home logs in with the user's own keys, asks the other machine for a pairing code and
    * redeems it. `destination` is a host from ~/.ssh/config or a typed `user@host[:port]`. Takes several seconds.
+   * Throws `SshNotInstalledError` when there is no Fleet there; `installOverSsh` is the click that installs it.
    */
-  async function addOverSsh(destination: string): Promise<MachineConnection> {
+  function addOverSsh(destination: string): Promise<MachineConnection> {
+    return postOverSsh("/api/machines/ssh", destination, "Couldn't add the machine over SSH.");
+  }
+
+  /** Installs the node on the other machine (Linux, macOS) with the commands the plan showed, then pairs. Takes up to a minute or two. */
+  function installOverSsh(destination: string): Promise<MachineConnection> {
+    return postOverSsh("/api/machines/ssh/install", destination, "Couldn't install Fleet over SSH.");
+  }
+
+  async function postOverSsh(path: string, destination: string, fallback: string): Promise<MachineConnection> {
     if (source.value !== "server") throw new Error("This Fleet can't add a machine over SSH from here. Add it by address with its token instead.");
-    const response = await fetchOnMachine(null, "/api/machines/ssh", {
+    const response = await fetchOnMachine(null, path, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ destination: destination.trim() }),
     });
-    if (!response.ok) throw new Error(await readError(response, "Couldn't add the machine over SSH."));
+    if (response.status === 409) {
+      const body = await response.clone().json().catch(() => null) as (Partial<SshInstallPlan> & { error?: string }) | null;
+      if (body && Array.isArray(body.commands) && typeof body.host === "string") {
+        throw new SshNotInstalledError(body.error ?? "Fleet isn't installed there.", {
+          host: body.host,
+          os: body.os ?? "unsupported",
+          canInstall: body.canInstall === true,
+          commands: body.commands,
+          docs: body.docs ?? "",
+        });
+      }
+    }
+    if (!response.ok) throw new Error(await readError(response, fallback));
     const connection = fromServer(await response.json() as ServerMachine);
-    if (!connection) throw new Error("Couldn't add the machine over SSH.");
+    if (!connection) throw new Error(fallback);
 
     connections.value = connections.value.some((candidate) => candidate.id === connection.id)
       ? connections.value.map((candidate) => candidate.id === connection.id ? connection : candidate)
@@ -922,6 +961,7 @@ export const useMachinesStore = defineStore("machines", () => {
     sshHosts,
     loadSshHosts,
     addOverSsh,
+    installOverSsh,
     forgetMachine,
     renameMachine,
     updateToken,

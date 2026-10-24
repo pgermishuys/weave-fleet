@@ -108,6 +108,21 @@ machines (a machine that's off gets the removal when it's next reachable).
 Removing a machine from home's list removes the phones' keys on it too, if it answers. If it doesn't, remove them in
 that machine's own Settings → Machines → Devices with access.
 
+## Reach it from outside your network
+
+Tailscale is the easiest way, not the only one. The phone opens one address: the one saved as the machine's phone
+address (Settings → Machines → This machine → **Add a phone** asks for it, and **Reach it from outside** there lets
+you change it). Any `https://` address that reaches this computer will do:
+
+- Tailscale with `tailscale serve`, as above.
+- A tunnel you run yourself, for example a reverse SSH tunnel to a server of yours, or a tunnel service, that ends
+  in HTTPS.
+- A domain of your own pointing at this computer behind a reverse proxy that has a certificate.
+
+Fleet runs no relay: the phone talks to your address and nothing goes through Weave. Keep `--require-token` on
+whatever address is reachable from the internet. The phone needs `https://` to install the app and get notifications.
+Over Wi-Fi at home the phone can still pair on an `http://` address.
+
 ## Troubleshooting
 
 - **No notifications at all.** On the phone: Fleet → bell → is it on, and does the test arrive? iPhone: Fleet must be

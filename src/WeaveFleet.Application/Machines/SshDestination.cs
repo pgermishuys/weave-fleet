@@ -149,7 +149,8 @@ public sealed record SshResult(int ExitCode, string Output, string Error);
 /// <summary>Runs one command on another machine with the user's own <c>ssh</c>: keys and agent, never a password prompt.</summary>
 public interface ISshRunner
 {
-    Task<SshResult> RunAsync(SshDestination destination, string command, CancellationToken cancellationToken);
+    /// <param name="timeout">How long the command may run; a short default fits a quick question, an install needs more.</param>
+    Task<SshResult> RunAsync(SshDestination destination, string command, CancellationToken cancellationToken, TimeSpan? timeout = null);
 }
 
 /// <summary>The <c>ssh -N -L</c> tunnels to machines added Over SSH. The machine's address is the tunnel's local port.</summary>

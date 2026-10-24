@@ -62,15 +62,18 @@ public static class MachinesEndpoints
         .WithName("ListSshHosts");
 
         group.MapPost("/ssh", async (AddSshMachineRequest request, SshMachineService ssh, RemoteMachineService machines, ISshTunnels tunnels, CancellationToken cancellationToken) =>
-        {
-            var (machine, error) = await ssh.AddAsync(request.Destination ?? "", cancellationToken);
-            return machine is null
-                ? Results.BadRequest(new ErrorResponse(error!))
-                : Results.Ok(ToResponse(machine, machines.TokenOf(machine), tunnels));
-        })
+            ToResult(await ssh.AddAsync(request.Destination ?? "", cancellationToken), machines, tunnels))
         .RequireAuthorization(FleetClaims.MachineOwnerPolicy)
         .Produces<MachineEntryResponse>(200)
+        .Produces<SshNotInstalledResponse>(409)
         .WithName("AddMachineOverSsh");
+
+        // Runs the install commands that 409 above showed. Only called after the user clicked.
+        group.MapPost("/ssh/install", async (AddSshMachineRequest request, SshMachineService ssh, RemoteMachineService machines, ISshTunnels tunnels, CancellationToken cancellationToken) =>
+            ToResult(await ssh.InstallAndAddAsync(request.Destination ?? "", cancellationToken), machines, tunnels))
+        .RequireAuthorization(FleetClaims.MachineOwnerPolicy)
+        .Produces<MachineEntryResponse>(200)
+        .WithName("InstallNodeOverSsh");
 
         group.MapPut("/{id}", async (string id, UpdateRemoteMachineRequest request, RemoteMachineService machines, ISshTunnels tunnels, CancellationToken cancellationToken) =>
         {
@@ -131,6 +134,13 @@ public static class MachinesEndpoints
 
         return app;
     }
+
+    private static IResult ToResult(SshAddResult result, RemoteMachineService machines, ISshTunnels tunnels) =>
+        result.Machine is not null
+            ? Results.Ok(ToResponse(result.Machine, machines.TokenOf(result.Machine), tunnels))
+            : result.Plan is { } plan
+                ? Results.Conflict(new SshNotInstalledResponse(result.Error!, plan.Host, plan.Os, plan.CanInstall, plan.Commands, plan.Docs))
+                : Results.BadRequest(new ErrorResponse(result.Error!));
 
     private static MachineEntryResponse ToResponse(RemoteMachine machine, string? token, ISshTunnels tunnels) =>
         new(machine.Id, machine.Name, machine.BaseUrl, machine.Os, machine.Status, machine.AddedAt, machine.LastSeenAt, token, machine.AgentsAllowed,
