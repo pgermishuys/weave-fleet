@@ -42,6 +42,17 @@ public static class MachinesEndpoints
         .Produces<MachineEntryResponse>(200)
         .WithName("AddMachine");
 
+        group.MapPost("/pair", async (PairMachineRequest request, RemoteMachineService machines, CancellationToken cancellationToken) =>
+        {
+            var (machine, error) = await machines.AddByCodeAsync(request.BaseUrl ?? "", request.Code ?? "", cancellationToken);
+            return machine is null
+                ? Results.BadRequest(new ErrorResponse(error!))
+                : Results.Ok(ToResponse(machine, machines.TokenOf(machine)));
+        })
+        .RequireAuthorization(FleetClaims.MachineOwnerPolicy)
+        .Produces<MachineEntryResponse>(200)
+        .WithName("PairMachine");
+
         group.MapPut("/{id}", async (string id, UpdateRemoteMachineRequest request, RemoteMachineService machines, CancellationToken cancellationToken) =>
         {
             var (machine, error) = await machines.UpdateAsync(id, request.BaseUrl, request.Token, request.Name, cancellationToken, request.AgentsAllowed);

@@ -182,6 +182,7 @@ echo.
 echo Usage: fleet node [--port ^<port^>] [--host ^<host^>] [--data-dir ^<path^>] [--profile ^<name^>]
 echo        fleet node install-service [--port ^<port^>] [--host ^<host^>] [--data-dir ^<path^>] [--profile ^<name^>] [--print]
 echo        fleet node uninstall-service
+echo        fleet node pair [--port ^<port^>] [--data-dir ^<path^>] [--profile ^<name^>]
 echo.
 echo Starts Fleet as a node: the API without the web app. Every request needs the access token,
 echo even from this machine. Add the node to another Fleet in Settings ^> Machines ^> Add a machine.
@@ -190,6 +191,8 @@ echo Commands:
 echo   install-service     Keep the node running as you: now, when you log on, and if it stops
 echo                       ^(a scheduled task named "Fleet node"^)
 echo   uninstall-service   Stop the node and remove that task
+echo   pair                Print a one-time code ^(10 minutes, works once^) and this node's address, so another
+echo                       Fleet can add it without the master token. Run it while the node is running.
 echo.
 echo Options:
 echo   --port ^<port^>       Override the server port
@@ -207,6 +210,7 @@ set "PROFILE_NAME="
 set "REQUIRE_TOKEN="
 set "NODE="
 set "SERVICE_ACTION="
+set "NODE_PAIR="
 set "PRINT_ONLY="
 
 rem "fleet node ..." takes the same server options; it only has to come first.
@@ -220,6 +224,9 @@ if defined NODE (
         shift
     ) else if /i "%~1"=="uninstall-service" (
         set "SERVICE_ACTION=uninstall-service"
+        shift
+    ) else if /i "%~1"=="pair" (
+        set "NODE_PAIR=1"
         shift
     )
 )
@@ -427,6 +434,12 @@ if not defined Fleet__DatabasePath set "Fleet__DatabasePath=%DB_PATH_DEFAULT%"
 if not defined Fleet__AnalyticsDatabasePath set "Fleet__AnalyticsDatabasePath=%ANALYTICS_DB_PATH_DEFAULT%"
 if not defined Fleet__DataProtection__KeyPath set "Fleet__DataProtection__KeyPath=%KEY_DIR_DEFAULT%"
 if defined REQUIRE_TOKEN set "Fleet__Auth__RequireToken=true"
+
+if defined NODE_PAIR (
+    rem Asks the node already running with these settings for a code, prints it and stops.
+    "%APP_BIN%" --node-pair --urls "%LISTEN_URL%" --contentRoot "%APP_CONTENT_ROOT%"
+    exit /b !ERRORLEVEL!
+)
 
 if defined NODE (
     set "EXTRA_ARGS=!EXTRA_ARGS! --node"

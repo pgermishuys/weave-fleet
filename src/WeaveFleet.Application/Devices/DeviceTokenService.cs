@@ -33,7 +33,7 @@ public sealed class DeviceTokenService(IDeviceRepository devices, TimeProvider t
     public event Action<string>? Revoked;
 
     /// <summary>Makes a device and its token. The token is returned once and never stored.</summary>
-    public async Task<(DeviceSummary Device, string Token)> IssueAsync(string name, string? platform, string? pairedVia = null)
+    public async Task<(DeviceSummary Device, string Token)> IssueAsync(string name, string? platform, string? pairedVia = null, string kind = DeviceKinds.Device)
     {
         var id = Ulid.NewUlid().ToString();
         var (token, hash) = DeviceToken.Create(id);
@@ -43,6 +43,7 @@ public sealed class DeviceTokenService(IDeviceRepository devices, TimeProvider t
             Id = id,
             Name = name,
             Platform = platform,
+            Kind = kind,
             TokenHash = hash,
             PairedVia = pairedVia,
             CreatedAt = now,

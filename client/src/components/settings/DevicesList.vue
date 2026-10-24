@@ -21,6 +21,7 @@ const error = shallowRef<string | null>(null);
 
 function added(device: PairedDevice): string {
   const date = new Date(device.createdAt).toLocaleDateString(undefined, { day: "numeric", month: "short" });
+  if (device.kind === "machine") return `Machine, paired ${date}`;
   return device.pairedVia ? `Added ${date} from another machine` : `Added ${date}`;
 }
 

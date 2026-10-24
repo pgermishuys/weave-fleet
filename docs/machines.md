@@ -76,6 +76,26 @@ machine**, and work in its sessions from there. The token is kept next to its da
 A node can't pair a phone itself (`POST /api/machine/pairing` returns `409`), because the pairing link opens a page
 it doesn't serve. Pair the phone with the Fleet that has the node in its list; the phone reaches the node through it.
 
+### Add a node with a pairing code
+
+You don't have to paste the node's master token. On the node, while it is running:
+
+```sh
+fleet node pair
+```
+
+It prints a code like `7K3M-Q9ZD` and the node's address. In the other Fleet, open Settings → Machines → **Add a
+machine** → **With a pairing code**, and enter the address and the code. The code works once and expires after 10
+minutes.
+
+What the other Fleet gets is a token of its own, a device of kind `machine` (named after that Fleet's machine). The
+node lists it in `GET /api/machine/devices` and removes it with `DELETE /api/machine/devices/{id}`; the other Fleet
+loses access at once and nothing else changes. The master token never leaves the node. Like a phone's token, a
+machine token can't manage access (no pairing codes, no device list). `fleet node pair` takes `--port`, `--data-dir`
+and `--profile` like `fleet node`: use the ones the node was started with.
+
+"By address" is still there, with the token form under **Advanced**.
+
 ### Keep a node running
 
 `fleet node install-service` keeps the node running: now, when you log in, and after a crash. It takes the same
@@ -371,8 +391,13 @@ Local mode only.
 - `POST /api/pairing/redeem` (anyone) with the code and `{ "deviceName", "platform" }` (`ios`, `android`, `other`;
   a name of 1–60 characters): `{ deviceId, token, machine }`, where `machine` is the `GET /api/machine` shape. It also
   signs the browser in with a device cookie. `404` for a used or expired code; a bad name doesn't use the code up.
-  `/api/pairing/*` takes 10 requests a minute in all, and typed codes 5 a minute.
-- `GET /api/machine/devices` (owner): `{ devices: [{ id, name, platform, createdAt, lastUsedAt, pairedVia }] }`.
+  `/api/pairing/*` takes 10 requests a minute in all, and typed codes 5 a minute. `"kind": "machine"` (another
+  Fleet redeeming) makes a device of kind `machine` and sets no cookie; any other kind is `400`.
+- `POST /api/machine/pairing/code` (owner): `{ manualCode, expiresAt, machineId, machineName, addresses }`, a code for
+  another Fleet to redeem. Works on a node too (`fleet node pair` calls it).
+- `POST /api/machines/pair` (owner) with `{ baseUrl, code }`: this Fleet previews the code at that address, refuses its
+  own id, redeems it as a machine and saves the machine with the token it got.
+- `GET /api/machine/devices` (owner): `{ devices: [{ id, name, platform, createdAt, lastUsedAt, pairedVia, kind }] }`.
 - `DELETE /api/machine/devices/{id}` (owner): removes the device. Its token stops working at once, its open hub
   connections and terminals are closed, its push subscriptions go, and the tokens its home got it on other machines
   are removed there.

@@ -53,7 +53,10 @@ function restartButton(entry: MachineEntry): { label: string; disabled: boolean 
 
 // ── Add ──────────────────────────────────────────────────────────────────────
 const showAddForm = shallowRef(false);
-const addForm = reactive({ url: "", token: "" });
+const addForm = reactive({ url: "", token: "", code: "" });
+/** How the machine is added. A code is the default: no token is typed and the master token never moves. */
+const addMode = shallowRef<"code" | "address">("code");
+const showAdvanced = shallowRef(false);
 const isAdding = shallowRef(false);
 const addError = shallowRef<string | null>(null);
 const justAdded = shallowRef<string | null>(null);
@@ -62,10 +65,13 @@ async function addMachine(): Promise<void> {
   isAdding.value = true;
   addError.value = null;
   try {
-    const machine = await machines.addMachine(addForm.url, addForm.token);
+    const machine = addMode.value === "code"
+      ? await machines.pairMachine(addForm.url, addForm.code)
+      : await machines.addMachine(addForm.url, addForm.token);
     justAdded.value = machine.name;
     addForm.url = "";
     addForm.token = "";
+    addForm.code = "";
     showAddForm.value = false;
   } catch (error) {
     addError.value = error instanceof Error ? error.message : String(error);
@@ -307,12 +313,51 @@ onUnmounted(() => stopPolling?.());
         <h3 class="text-sm font-semibold text-text">
           Add a machine
         </h3>
-        <p class="mt-1 text-xs text-muted">
-          On the other machine, open Settings → Machines and copy its address and token. It has to listen beyond
-          127.0.0.1: start it with <code class="machine-code">--host 0.0.0.0</code>, or behind
-          <code class="machine-code">tailscale serve</code> with <code class="machine-code">--require-token</code>.
-        </p>
       </div>
+      <div
+        class="flex gap-1 rounded-btn border border-border bg-main-bg p-1 text-sm"
+        role="tablist"
+        aria-label="How to add the machine"
+      >
+        <button
+          type="button"
+          role="tab"
+          :aria-selected="addMode === 'code'"
+          class="flex-1 rounded-btn px-3 py-1.5 font-medium transition-colors"
+          :class="addMode === 'code' ? 'bg-accent/15 text-text' : 'text-muted hover:text-text'"
+          data-testid="machines-add-mode-code"
+          @click="addMode = 'code'; addError = null"
+        >
+          With a pairing code
+        </button>
+        <button
+          type="button"
+          role="tab"
+          :aria-selected="addMode === 'address'"
+          class="flex-1 rounded-btn px-3 py-1.5 font-medium transition-colors"
+          :class="addMode === 'address' ? 'bg-accent/15 text-text' : 'text-muted hover:text-text'"
+          data-testid="machines-add-mode-address"
+          @click="addMode = 'address'; addError = null"
+        >
+          By address
+        </button>
+      </div>
+      <p
+        v-if="addMode === 'code'"
+        class="text-xs text-muted"
+        data-testid="machines-add-code-help"
+      >
+        On the other machine, run <code class="machine-code">fleet node pair</code>. It prints an address and a code
+        that works once for 10 minutes. The other machine keeps a token of its own for this one, which you can remove
+        there.
+      </p>
+      <p
+        v-else
+        class="text-xs text-muted"
+      >
+        The other machine has to listen beyond 127.0.0.1: start it with <code class="machine-code">--host 0.0.0.0</code>,
+        or behind <code class="machine-code">tailscale serve</code> with <code class="machine-code">--require-token</code>.
+      </p>
       <label class="grid gap-1 text-sm text-text">
         <span class="text-xs font-medium uppercase tracking-wide text-muted">Address</span>
         <input
@@ -327,19 +372,51 @@ onUnmounted(() => stopPolling?.());
           data-testid="machines-add-url"
         >
       </label>
-      <label class="grid gap-1 text-sm text-text">
-        <span class="text-xs font-medium uppercase tracking-wide text-muted">Access token</span>
+      <label
+        v-if="addMode === 'code'"
+        class="grid gap-1 text-sm text-text"
+      >
+        <span class="text-xs font-medium uppercase tracking-wide text-muted">Pairing code</span>
         <input
-          v-model="addForm.token"
-          type="password"
+          v-model="addForm.code"
+          type="text"
           autocomplete="off"
+          autocapitalize="characters"
           spellcheck="false"
-          :class="inputClass"
-          placeholder="Paste the machine's token"
+          :class="[inputClass, 'font-mono tracking-widest']"
+          placeholder="ABCD-EFGH"
           :disabled="isAdding"
-          data-testid="machines-add-token"
+          data-testid="machines-add-code"
         >
       </label>
+      <template v-else>
+        <button
+          v-if="!showAdvanced"
+          type="button"
+          class="justify-self-start text-xs text-muted underline-offset-2 hover:text-text hover:underline"
+          data-testid="machines-add-advanced"
+          @click="showAdvanced = true"
+        >
+          Advanced: use the machine's access token
+        </button>
+        <label
+          v-else
+          class="grid gap-1 text-sm text-text"
+        >
+          <span class="text-xs font-medium uppercase tracking-wide text-muted">Access token</span>
+          <input
+            v-model="addForm.token"
+            type="password"
+            autocomplete="off"
+            spellcheck="false"
+            :class="inputClass"
+            placeholder="Paste the machine's token"
+            :disabled="isAdding"
+            data-testid="machines-add-token"
+          >
+          <span class="text-xs text-muted">This is the machine's full-access token. A pairing code is safer.</span>
+        </label>
+      </template>
       <div
         v-if="addError"
         class="flex items-start gap-2 rounded-card border border-red-500/30 bg-red-500/10 px-3 py-2 text-sm text-red-300"
@@ -357,7 +434,7 @@ onUnmounted(() => stopPolling?.());
         <button
           type="submit"
           :class="buttonPrimaryClass"
-          :disabled="isAdding || !addForm.url.trim() || !addForm.token.trim()"
+          :disabled="isAdding || !addForm.url.trim() || !(addMode === 'code' ? addForm.code.trim() : addForm.token.trim())"
           data-testid="machines-add-submit"
         >
           <LoaderCircle

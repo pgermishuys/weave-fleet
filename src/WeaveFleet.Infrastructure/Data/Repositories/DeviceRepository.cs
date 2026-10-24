@@ -9,7 +9,7 @@ namespace WeaveFleet.Infrastructure.Data.Repositories;
 /// <summary>The <c>devices</c> table (migration 051).</summary>
 public sealed class DeviceRepository(IDbConnectionFactory connectionFactory) : IDeviceRepository
 {
-    private const string Columns = "id, name, platform, token_hash, paired_via, created_at, last_used_at, revoked_at";
+    private const string Columns = "id, name, platform, kind, token_hash, paired_via, created_at, last_used_at, revoked_at";
 
     public async Task<Device?> GetAsync(string id)
     {
@@ -34,14 +34,15 @@ public sealed class DeviceRepository(IDbConnectionFactory connectionFactory) : I
         using var conn = connectionFactory.CreateConnection();
         await conn.ExecuteNonQueryAsync(
             """
-            INSERT INTO devices (id, name, platform, token_hash, paired_via, created_at, last_used_at, revoked_at)
-            VALUES (@Id, @Name, @Platform, @TokenHash, @PairedVia, @CreatedAt, @LastUsedAt, @RevokedAt)
+            INSERT INTO devices (id, name, platform, kind, token_hash, paired_via, created_at, last_used_at, revoked_at)
+            VALUES (@Id, @Name, @Platform, @Kind, @TokenHash, @PairedVia, @CreatedAt, @LastUsedAt, @RevokedAt)
             """,
             cmd =>
             {
                 cmd.AddParameter("Id", device.Id);
                 cmd.AddParameter("Name", device.Name);
                 cmd.AddParameter("Platform", device.Platform);
+                cmd.AddParameter("Kind", device.Kind);
                 cmd.AddParameter("TokenHash", device.TokenHash);
                 cmd.AddParameter("PairedVia", device.PairedVia);
                 cmd.AddParameter("CreatedAt", Format(device.CreatedAt));
@@ -99,6 +100,7 @@ public sealed class DeviceRepository(IDbConnectionFactory connectionFactory) : I
         Id = r.GetString(r.GetOrdinal("id")),
         Name = r.GetString(r.GetOrdinal("name")),
         Platform = r.GetNullableString(r.GetOrdinal("platform")),
+        Kind = r.GetString(r.GetOrdinal("kind")),
         TokenHash = (byte[])r.GetValue(r.GetOrdinal("token_hash")),
         PairedVia = r.GetNullableString(r.GetOrdinal("paired_via")),
         CreatedAt = Parse(r.GetString(r.GetOrdinal("created_at"))),

@@ -3,6 +3,7 @@ using System.Net.Http.Headers;
 using System.Text.Json;
 using Microsoft.AspNetCore.DataProtection;
 using WeaveFleet.Application.Configuration;
+using WeaveFleet.Application.Devices;
 using WeaveFleet.Domain.Entities;
 using WeaveFleet.Domain.Repositories;
 
@@ -88,6 +89,90 @@ public sealed class RemoteMachineService(
         await machines.UpsertAsync(machine);
         Changed?.Invoke(machine.Id);
         return (machine, null);
+    }
+
+    /// <summary>
+    /// Adds a machine with a one-time code from <c>fleet node pair</c> on it, so no token is typed or moved. Asks who
+    /// answers first (the code isn't used up), refuses this machine, then redeems the code for a token of its own
+    /// that the machine lists and can remove. The master token stays where it is.
+    /// </summary>
+    public async Task<(RemoteMachine? Machine, string? Error)> AddByCodeAsync(string baseUrl, string code, CancellationToken cancellationToken)
+    {
+        var normalized = NormalizeBaseUrl(baseUrl);
+        if (normalized is null)
+            return (null, "That isn't an address. Try something like http://100.64.90.72:2113.");
+        if (PairingCodeStore.NormalizeManualCode(code) is null)
+            return (null, "That isn't a pairing code. It looks like ABCD-EFGH; run fleet node pair on the other machine.");
+
+        var (preview, previewError) = await PostPairingAsync(normalized, "preview", new Dictionary<string, string> { ["manualCode"] = code }, cancellationToken);
+        if (preview is null)
+            return (null, previewError);
+        if (preview.Value.TryGetProperty("machineId", out var machineId) && machineId.GetString() == identity.Get().Id)
+            return (null, "That's this machine.");
+
+        var (redeemed, redeemError) = await PostPairingAsync(
+            normalized,
+            "redeem",
+            new Dictionary<string, string>
+            {
+                ["manualCode"] = code,
+                ["deviceName"] = identity.Get().Name ?? Environment.MachineName,
+                ["platform"] = "other",
+                ["kind"] = DeviceKinds.Machine,
+            },
+            cancellationToken);
+        if (redeemed is null)
+            return (null, redeemError);
+
+        var token = redeemed.Value.TryGetProperty("token", out var tokenElement) ? tokenElement.GetString() : null;
+        if (string.IsNullOrEmpty(token))
+            return (null, "That isn't a Fleet.");
+        return await AddAsync(normalized, token, cancellationToken);
+    }
+
+    private static string ToJson(Dictionary<string, string> values)
+    {
+        using var stream = new MemoryStream();
+        using (var writer = new Utf8JsonWriter(stream))
+        {
+            writer.WriteStartObject();
+            foreach (var (key, value) in values)
+                writer.WriteString(key, value);
+            writer.WriteEndObject();
+        }
+
+        return System.Text.Encoding.UTF8.GetString(stream.ToArray());
+    }
+
+    // The pairing endpoints take no token. Fleet sends only the code, which is good for one use.
+    private async Task<(JsonElement? Body, string? Error)> PostPairingAsync(string baseUrl, string action, Dictionary<string, string> body, CancellationToken cancellationToken)
+    {
+        using var request = new HttpRequestMessage(HttpMethod.Post, $"{baseUrl}/api/pairing/{action}")
+        {
+            Content = new StringContent(ToJson(body), System.Text.Encoding.UTF8, "application/json"),
+        };
+
+        try
+        {
+            using var response = await httpClients.CreateClient(HttpClientName).SendAsync(request, cancellationToken);
+            if (response.StatusCode == HttpStatusCode.NotFound)
+                return (null, "That code has expired or was already used. Run fleet node pair on the other machine for a new one.");
+            if (response.StatusCode == HttpStatusCode.TooManyRequests)
+                return (null, "Too many codes tried on that machine. Wait a minute and try again.");
+            if (!response.IsSuccessStatusCode)
+                return (null, $"The machine answered {(int)response.StatusCode}.");
+
+            using var document = JsonDocument.Parse(await response.Content.ReadAsStringAsync(cancellationToken));
+            return (document.RootElement.Clone(), null);
+        }
+        catch (Exception ex) when (ex is HttpRequestException or TaskCanceledException)
+        {
+            return (null, $"Couldn't reach {baseUrl}. Check the address, that Fleet is running there, and that this machine can reach it.");
+        }
+        catch (JsonException)
+        {
+            return (null, "That isn't a Fleet.");
+        }
     }
 
     /// <summary>

@@ -460,6 +460,29 @@ export const useMachinesStore = defineStore("machines", () => {
     return connection;
   }
 
+  /**
+   * Adds a machine with the one-time code `fleet node pair` printed on it. Home redeems the code (a browser can't call
+   * the other machine without its token), so no token is typed and the master token never moves.
+   */
+  async function pairMachine(url: string, code: string): Promise<MachineConnection> {
+    if (source.value !== "server") throw new Error("This Fleet can't pair a machine from here. Add it by address with its token instead.");
+    const response = await fetchOnMachine(null, "/api/machines/pair", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ baseUrl: url.trim(), code: code.trim() }),
+    });
+    if (!response.ok) throw new Error(await readError(response, "Couldn't pair the machine."));
+    const connection = fromServer(await response.json() as ServerMachine);
+    if (!connection) throw new Error("Couldn't pair the machine.");
+
+    connections.value = connections.value.some((candidate) => candidate.id === connection.id)
+      ? connections.value.map((candidate) => candidate.id === connection.id ? connection : candidate)
+      : [...connections.value, connection];
+    persist();
+    void refreshMachine(connection.id);
+    return connection;
+  }
+
   function forgetMachine(id: string): void {
     connections.value = connections.value.filter((connection) => connection.id !== id);
     const rest = { ...others.value };
@@ -842,6 +865,7 @@ export const useMachinesStore = defineStore("machines", () => {
     live,
     loadHome,
     addMachine,
+    pairMachine,
     forgetMachine,
     renameMachine,
     updateToken,

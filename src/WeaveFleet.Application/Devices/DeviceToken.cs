@@ -77,8 +77,9 @@ public sealed record DeviceSummary(
     string? Platform,
     DateTimeOffset CreatedAt,
     DateTimeOffset LastUsedAt,
-    string? PairedVia)
+    string? PairedVia,
+    string Kind = DeviceKinds.Device)
 {
     public static DeviceSummary From(Device device) =>
-        new(device.Id, device.Name, device.Platform, device.CreatedAt, device.LastUsedAt, device.PairedVia);
+        new(device.Id, device.Name, device.Platform, device.CreatedAt, device.LastUsedAt, device.PairedVia, device.Kind);
 }

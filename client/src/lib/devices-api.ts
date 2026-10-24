@@ -14,6 +14,8 @@ export interface PairedDevice {
   lastUsedAt: string;
   /** The machine that asked for this device's token on its behalf; null when it paired here. */
   pairedVia: string | null;
+  /** `machine` for another Fleet paired with a code; a phone or browser is `device`. Missing from an older Fleet. */
+  kind?: "device" | "machine";
 }
 
 /** A new one-time pairing code. */
