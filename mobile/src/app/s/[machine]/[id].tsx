@@ -23,6 +23,8 @@ import { useTheme } from "~/theme";
 
 const GLYPH: Record<HeaderTone, GlyphStatus> = { working: "working", "needs-you": "needs-you", finished: "done", error: "error", unreachable: "idle", idle: "idle" };
 const TOOL = { read: "read", edit: "edit", run: "bash", search: "search", other: "other" } as const;
+/** How close to the newest message the conversation still follows new ones (the web client's SCROLL_BOTTOM_THRESHOLD). */
+const FOLLOW_THRESHOLD = 80;
 
 export default function Session() {
   const { machine, id } = useLocalSearchParams<{ machine: string; id: string }>();
@@ -135,6 +137,9 @@ export default function Session() {
         keyExtractor={(item) => item.key}
         renderItem={({ item }) => <Item item={item} pages={allPages} waiting={pick} onOpen={openPage} />}
         ItemSeparatorComponent={Gap}
+        // As the web client's conversation: within 80 px of the newest message it follows new ones, further up it keeps
+        // your place while they arrive.
+        maintainVisibleContentPosition={{ minIndexForVisible: 0, autoscrollToTopThreshold: FOLLOW_THRESHOLD }}
         // The header sits under the newest message; flex-end keeps a short conversation at the top, not the bottom.
         ListHeaderComponent={working && dock.kind === "composer" && !pick ? (
           <View style={{ flexDirection: "row", alignItems: "center", gap: 8, paddingTop: 14 }}>
