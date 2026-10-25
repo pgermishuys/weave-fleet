@@ -13,6 +13,7 @@ import { duration, short } from "@fleet/lib/phone/time";
 import { dontAskAgainWording, permissionHeading } from "@fleet/lib/tools/permission-wording";
 import { manager, useFleet, useSessionActivity, useSessionPages, useSessionStream } from "~/fleet/hooks";
 import { conversationPages, waitingPage, type SessionPage } from "~/fleet/pages";
+import { pagesSeen, usePagesSeen } from "~/fleet/pages-seen";
 import type { PermissionAsk } from "~/fleet/api";
 import {
   Composer, Icon, Panel, Markdown, PageCard, PagePickCard, PageRow, PermissionCard, QuestionCard, SectionHeader, Segments, Sheet,
@@ -37,8 +38,11 @@ export default function Session() {
   const [error, setError] = useState<string | null>(null);
   const [panel, setPanel] = useState(false);
   const [segment, setSegment] = useState<"changes" | "pages">("changes");
-  // Pages shown after this, or after the Pages list was last open, are new to you.
-  const [seenAt, setSeenAt] = useState(() => new Date().toISOString());
+  // Pages shown after the phone last opened this session's Pages are new to you (kept on the phone, as the list's
+  // "N new pages" reads it). Nothing is new until that's been read.
+  usePagesSeen();
+  const seen = pagesSeen.get(machine, id);
+  const seenAt = seen === undefined ? "\uffff" : seen?.at ?? pagesSeen.since;
   const [now, setNow] = useState(Date.now());
 
   const refreshAsks = useCallback(() => void api?.permissions(id).then(setPermissions).catch(() => {}), [api, id]);
@@ -65,6 +69,7 @@ export default function Session() {
   const activity = useSessionActivity(machine, id, streamStatus ?? undefined);
   const pick = waitingPage(pages, activity);
   const newPages = allPages.filter((page) => page.shownAt > seenAt).length;
+  const markPagesSeen = () => void pagesSeen.markSeen(machine, id, pages.length);
   const openPage = (page: SessionPage) => router.push({ pathname: "/page/[machine]/[session]", params: { machine, session: id, key: page.key } });
   const lastUser = [...messages].reverse().find((m) => m.role === "user");
   const lastMessage = messages[messages.length - 1];
@@ -184,11 +189,11 @@ export default function Session() {
         )}
       </View>
 
-      <Sheet open={panel} onClose={() => { setPanel(false); if (segment === "pages") setSeenAt(new Date().toISOString()); }} title={title} testID="panel">
+      <Sheet open={panel} onClose={() => { setPanel(false); if (segment === "pages") markPagesSeen(); }} title={title} testID="panel">
         <View style={{ gap: 12 }}>
           <Segments
             value={segment}
-            onChange={(next) => { if (segment === "pages") setSeenAt(new Date().toISOString()); setSegment(next); }}
+            onChange={(next) => { if (segment === "pages") markPagesSeen(); setSegment(next); }}
             options={[{ value: "changes", label: "Changes" }, { value: "pages", label: "Pages", count: allPages.length }]}
           />
           {segment === "changes" ? (
@@ -201,14 +206,14 @@ export default function Session() {
                 <PageRow
                   key={page.key} testID="page-row" title={page.title} age={clock(page.shownAt)} isNew={page.shownAt > seenAt}
                   waiting={page.key === pick?.key} detail={pageDetail(page, page.key === pick?.key)}
-                  onPress={() => { setPanel(false); openPage(page); }}
+                  onPress={() => { markPagesSeen(); setPanel(false); openPage(page); }}
                 />
               ))}
               {inConversation.length ? (
                 <>
                   <View style={{ marginHorizontal: -16 }}><SectionHeader label="In the conversation" /></View>
                   {[...inConversation].reverse().map((page) => (
-                    <PageRow key={page.key} testID="page-row" title={page.title} age={clock(page.shownAt)} detail="Shown in the conversation" isNew={page.shownAt > seenAt} onPress={() => { setPanel(false); openPage(page); }} />
+                    <PageRow key={page.key} testID="page-row" title={page.title} age={clock(page.shownAt)} detail="Shown in the conversation" isNew={page.shownAt > seenAt} onPress={() => { markPagesSeen(); setPanel(false); openPage(page); }} />
                   ))}
                 </>
               ) : null}

@@ -35,6 +35,12 @@ describe("applySessionsEvent", () => {
     expect(applySessionsEvent([item("a")], event("session_deleted", { sessionId: "a" })).list).toEqual([]);
     expect(applySessionsEvent([], event("session_created", { sessionId: "n" })).refetch).toBe(true);
   });
+  test("session.pages puts the page count and newest page on the row; an unknown session refetches", () => {
+    const { list, refetch } = applySessionsEvent([item("a"), item("b")], event("session.pages", { sessionId: "a", pageCount: 2, lastPageShownAt: "2026-10-24T10:00:00Z" }));
+    expect([list[0].pageCount, list[0].lastPageShownAt, list[1].pageCount]).toEqual([2, "2026-10-24T10:00:00Z", undefined]);
+    expect(refetch).toBe(false);
+    expect(applySessionsEvent([], event("session.pages", { sessionId: "z", pageCount: 1, lastPageShownAt: "2026-10-24T10:00:00Z" })).refetch).toBe(true);
+  });
   test("other events change nothing", () => {
     const list = [item("a")];
     expect(applySessionsEvent(list, event("work.started", {}))).toEqual({ list, refetch: false });

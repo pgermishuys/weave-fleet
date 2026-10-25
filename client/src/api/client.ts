@@ -912,6 +912,10 @@ export interface SessionListItem {
   lastAssistantModelId?: string | null;
   /** How much work the session's agent left running (subagents, background shells, monitors), when the list was loaded. */
   runningWorkCount?: number;
+  /** How many pages the agent has open in page tabs; kept current by `session.pages` on `sessions`. Pages in the conversation aren't counted. */
+  pageCount?: number;
+  /** When the newest of those pages was shown (ISO); null when there are none. */
+  lastPageShownAt?: string | null;
   /** The session this one is a fork of. */
   forkedFromSessionId?: string | null;
   /** The session whose agent started this one. */
