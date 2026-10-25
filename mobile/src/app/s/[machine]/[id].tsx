@@ -64,6 +64,12 @@ export default function Session() {
   const messages = useMemo(() => state?.messages ?? [], [state]);
   // Newest first, for a list drawn upside down: it opens on the latest message, and older ones are up the screen.
   const items = useMemo(() => groupTools(foldMessages(messages)).reverse(), [messages]);
+  // As the web client's conversation: within 80 px of the newest message it follows new ones, further up it keeps your
+  // place while they arrive. The list holds still the first item on screen from minIndexForVisible on; following, that
+  // may be the newest message, and its growing doesn't move it, so the view follows. Scrolled up, it must skip the
+  // newest message, or a sliver of a streaming reply on screen would carry the view along with it.
+  const [following, setFollowing] = useState(true);
+  const keepPlace = useMemo(() => ({ minIndexForVisible: following ? 0 : 1, autoscrollToTopThreshold: FOLLOW_THRESHOLD }), [following]);
   const working = state ? isStreamWorking(state.sessionStatus) : false;
   const dock = chooseDock({ permissions, question: pendingQuestion(messages), later: new Set() });
   const inConversation = useMemo(() => conversationPages(messages), [messages]);
@@ -137,9 +143,8 @@ export default function Session() {
         keyExtractor={(item) => item.key}
         renderItem={({ item }) => <Item item={item} pages={allPages} waiting={pick} onOpen={openPage} />}
         ItemSeparatorComponent={Gap}
-        // As the web client's conversation: within 80 px of the newest message it follows new ones, further up it keeps
-        // your place while they arrive.
-        maintainVisibleContentPosition={{ minIndexForVisible: 0, autoscrollToTopThreshold: FOLLOW_THRESHOLD }}
+        onScroll={(e) => setFollowing(e.nativeEvent.contentOffset.y <= FOLLOW_THRESHOLD)}
+        maintainVisibleContentPosition={keepPlace}
         // The header sits under the newest message; flex-end keeps a short conversation at the top, not the bottom.
         ListHeaderComponent={working && dock.kind === "composer" && !pick ? (
           <View style={{ flexDirection: "row", alignItems: "center", gap: 8, paddingTop: 14 }}>

@@ -69,15 +69,20 @@ appId: io.tryweave.fleet
 - inputText: "long-reply please"
 - tapOn:
     id: "send"
-# The reply takes about 100 s: scroll up as soon as the turn starts, with the keyboard down so the swipe is on the list.
+# The reply takes about 100 s: scroll up as soon as the turn starts. The swipes stay in the top of the screen, on the
+# conversation above the keyboard (Maestro's hideKeyboard fails on iOS).
 - extendedWaitUntil:
     notVisible: "Finished.*"
     timeout: 30000
-- hideKeyboard
-- scrollUntilVisible:
-    element: "show-page please"
-    direction: UP
-    centerElement: true
+- repeat:
+    times: 8
+    while:
+      notVisible: "show-page please"
+    commands:
+      - swipe:
+          start: 50%, 15%
+          end: 50%, 38%
+- assertVisible: "show-page please"
 # Still streaming, or the check below proves nothing.
 - assertNotVisible: "Finished.*"
 - extendedWaitUntil:
