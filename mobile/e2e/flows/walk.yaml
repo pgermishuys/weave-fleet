@@ -10,8 +10,9 @@ appId: io.tryweave.fleet
 - takeScreenshot: 01-sessions
 
 - tapOn: ".*Fix pagination off-by-one.*"
+# It opens on the newest message: the first reply, or in the second walk the end of the first walk's long reply.
 - extendedWaitUntil:
-    visible: "Here's the plan.*"
+    visible: "(Here's the plan|That's every step, run 1).*"
     timeout: 90000
 - takeScreenshot: 02-conversation
 
@@ -68,9 +69,11 @@ appId: io.tryweave.fleet
 - inputText: "long-reply please"
 - tapOn:
     id: "send"
+# The reply takes about 15 s: scroll up as soon as the turn starts, with the keyboard down so the swipe is on the list.
 - extendedWaitUntil:
-    visible: "Every step:"
-    timeout: 90000
+    notVisible: "Finished.*"
+    timeout: 30000
+- hideKeyboard
 - scrollUntilVisible:
     element: "show-page please"
     direction: UP
