@@ -26,11 +26,21 @@ maestro_run() {
 ready() {
   [ "$PLATFORM" = ios ] && return 0
   adb wait-for-device
-  for _ in $(seq 60); do [ "$(adb shell getprop sys.boot_completed 2>/dev/null | tr -d '\r')" = 1 ] && adb shell pm path io.tryweave.fleet > /dev/null 2>&1 && return 0; sleep 2; done
+  for _ in $(seq 60); do [ "$(adb shell getprop sys.boot_completed 2>/dev/null | tr -d '\r')" = 1 ] && adb shell pm path io.tryweave.fleet > /dev/null 2>&1 && break; sleep 2; done
+  # The emulator runner presses a key to unlock as soon as boot completes. When the launcher is still loading, that key
+  # times out and "Pixel Launcher isn't responding" sits over every app for the rest of the run, so no flow sees the
+  # app. With error dialogs hidden Android restarts a hung app instead; a dialog already up goes with its process.
+  adb shell settings put global hide_error_dialogs 1
+  local anr
+  for anr in $(adb shell dumpsys window windows | tr -d '\r' | grep -o 'Window{.* Application Not Responding: [A-Za-z0-9._:]*}' | sed 's/.*: //; s/}$//' | sort -u); do
+    echo "closing \"$anr isn't responding\""
+    adb shell am force-stop "$anr"
+  done
+  return 0
 }
 
-appearance light
 ready
+appearance light
 if ! maestro_run --test-output-dir "$OUT/pair" flows/pair.yaml; then
   echo "pair failed; once more"
   sleep 10
