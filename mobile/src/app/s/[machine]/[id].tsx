@@ -3,7 +3,7 @@
 // the dock pulls up the session's Changes and Pages.
 import { router, useLocalSearchParams } from "expo-router";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { KeyboardAvoidingView, Platform, Pressable, ScrollView, View } from "react-native";
+import { FlatList, KeyboardAvoidingView, Platform, Pressable, View } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { isStreamWorking } from "@fleet/lib/domain-event-reducer";
 import { chooseDock, pendingQuestion } from "@fleet/lib/phone/dock-state";
@@ -31,7 +31,7 @@ export default function Session() {
   const { machines } = useFleet();
   const machineName = machines.find((m) => m.machineId === machine)?.machineName ?? "";
   const api = manager.apiFor(machine);
-  const scroll = useRef<{ scrollToEnd: (options?: { animated?: boolean }) => void } | null>(null);
+  const list = useRef<FlatList<PhoneItem>>(null);
   const [permissions, setPermissions] = useState<PermissionAsk[]>([]);
   const [draft, setDraft] = useState("");
   const [sending, setSending] = useState(false);
@@ -60,7 +60,8 @@ export default function Session() {
   }, []);
 
   const messages = useMemo(() => state?.messages ?? [], [state]);
-  const items = useMemo(() => groupTools(foldMessages(messages)), [messages]);
+  // Newest first, for a list drawn upside down: it opens on the latest message, and older ones are up the screen.
+  const items = useMemo(() => groupTools(foldMessages(messages)).reverse(), [messages]);
   const working = state ? isStreamWorking(state.sessionStatus) : false;
   const dock = chooseDock({ permissions, question: pendingQuestion(messages), later: new Set() });
   const inConversation = useMemo(() => conversationPages(messages), [messages]);
@@ -99,6 +100,7 @@ export default function Session() {
     if (!text) return;
     setSending(true);
     setError(null);
+    list.current?.scrollToOffset({ offset: 0, animated: true });
     try {
       await api?.prompt(id, text);
       setDraft("");
@@ -125,22 +127,25 @@ export default function Session() {
         </View>
       </View>
 
-      <ScrollView
-        ref={(instance) => { scroll.current = instance; }}
+      <FlatList
+        ref={list}
         testID="conversation"
-        style={{ flex: 1 }}
-        contentContainerStyle={{ padding: 16, gap: 14 }}
-        onContentSizeChange={() => scroll.current?.scrollToEnd({ animated: true })}
-      >
-        {!state && <Text tone="muted">Loading…</Text>}
-        {items.map((item) => <Item key={item.key} item={item} pages={allPages} waiting={pick} onOpen={openPage} />)}
-        {working && dock.kind === "composer" && !pick && (
-          <View style={{ flexDirection: "row", alignItems: "center", gap: 8 }}>
+        inverted
+        data={items}
+        keyExtractor={(item) => item.key}
+        renderItem={({ item }) => <Item item={item} pages={allPages} waiting={pick} onOpen={openPage} />}
+        ItemSeparatorComponent={Gap}
+        // The header sits under the newest message; flex-end keeps a short conversation at the top, not the bottom.
+        ListHeaderComponent={working && dock.kind === "composer" && !pick ? (
+          <View style={{ flexDirection: "row", alignItems: "center", gap: 8, paddingTop: 14 }}>
             <StatusGlyph status="working" size={10} />
             <Text tone="muted" size={13}>Working · {duration(lastUser?.createdAt ?? null, now)}</Text>
           </View>
-        )}
-      </ScrollView>
+        ) : undefined}
+        ListFooterComponent={state ? undefined : <Text tone="muted">Loading…</Text>}
+        style={{ flex: 1 }}
+        contentContainerStyle={{ padding: 16, flexGrow: 1, justifyContent: "flex-end" }}
+      />
 
       <Pressable
         testID="panel-open" accessibilityRole="button" accessibilityLabel="Changes and pages" onPress={() => { setSegment(newPages ? "pages" : "changes"); setPanel(true); }}
@@ -224,6 +229,10 @@ export default function Session() {
       </Panel>
     </KeyboardAvoidingView>
   );
+}
+
+function Gap() {
+  return <View style={{ height: 14 }} />;
 }
 
 function toolRow(step: FoldedStep) {
