@@ -61,6 +61,16 @@ appId: io.tryweave.fleet
     timeout: 90000
 - takeScreenshot: 08-page-sent
 
+# A reply taller than the screen, so the reopen below has to land on its end.
+- tapOn:
+    id: "composer"
+- inputText: "long-reply please"
+- tapOn:
+    id: "send"
+- extendedWaitUntil:
+    visible: "That's every step, run ${RUN}."
+    timeout: 90000
+
 # A page shown since the phone last opened this session's Pages: back on the list, its row says so.
 # By id: with the keyboard up, Android's own "Back" (the keyboard's collapse key) matches the text too.
 - tapOn:
@@ -69,10 +79,13 @@ appId: io.tryweave.fleet
     visible: ".*Fix pagination off-by-one.*1 new page.*"
     timeout: 30000
 - takeScreenshot: 08b-new-pages
+# Opening a session shows its newest message, with no scrolling: the end of that reply, and not its start.
 - tapOn: ".*Fix pagination off-by-one.*"
 - extendedWaitUntil:
-    visible: ".*Going with.*run ${RUN}.*"
-    timeout: 90000
+    visible: "That's every step, run ${RUN}."
+    timeout: 30000
+- assertNotVisible: "Every step:"
+- takeScreenshot: 08c-reopened
 
 # The Changes sheet pulls up, then shows the page under Pages, then closes; Back returns to the list.
 # The dock swaps from the permission card back to the composer as the turn ends, moving the strip; a tap that
