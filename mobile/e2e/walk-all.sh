@@ -32,7 +32,7 @@ ready() {
   # app. With error dialogs hidden Android restarts a hung app instead; a dialog already up goes with its process.
   adb shell settings put global hide_error_dialogs 1
   local anr
-  for anr in $(adb shell dumpsys window windows | tr -d '\r' | grep -o 'Application Not Responding: [^ }]*' | awk '{print $NF}' | sort -u); do
+  for anr in $(adb shell dumpsys window windows | tr -d '\r' | grep -o 'Window{.* Application Not Responding: [A-Za-z0-9._:]*}' | sed 's/.*: //; s/}$//' | sort -u); do
     echo "closing \"$anr isn't responding\""
     adb shell am force-stop "$anr"
   done
