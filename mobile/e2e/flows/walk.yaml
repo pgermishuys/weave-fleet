@@ -61,15 +61,26 @@ appId: io.tryweave.fleet
     timeout: 90000
 - takeScreenshot: 08-page-sent
 
-# A reply taller than the screen, so the reopen below has to land on its end.
+# A reply taller than the screen. Scrolled up to an older message while it streams, the conversation stays there,
+# as the web client's does; at the newest message it follows (every wait for a reply above relies on that).
 - tapOn:
     id: "composer"
 - inputText: "long-reply please"
 - tapOn:
     id: "send"
 - extendedWaitUntil:
-    visible: "That's every step, run ${RUN}."
+    visible: "Every step:"
     timeout: 90000
+- scrollUntilVisible:
+    element: "show-page please"
+    direction: UP
+    centerElement: true
+- extendedWaitUntil:
+    visible: "Finished.*"
+    timeout: 90000
+- assertVisible: "show-page please"
+- assertNotVisible: "That's every step, run ${RUN}."
+- takeScreenshot: 08a-kept-place
 
 # A page shown since the phone last opened this session's Pages: back on the list, its row says so.
 # By id: with the keyboard up, Android's own "Back" (the keyboard's collapse key) matches the text too.

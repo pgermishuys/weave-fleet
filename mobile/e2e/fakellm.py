@@ -5,7 +5,7 @@ Replies word by word (so streaming shows), and on keywords in the last user text
   ask-me    -> calls the question tool with two choices
   show-page -> calls fleet_page_show on pages/paging.html (waitForChoice), then says "Going with **<pick>**, run N"
   slow-task -> calls the bash tool with a 45 s command, so the session stays working
-  long-reply -> a reply taller than the screen, ending "That's every step, run N."
+  long-reply -> a reply taller than the screen, ending "That's every step, run N.", slowly (about 15 s)
 Anything else gets a short Markdown reply.
 """
 import json, os, re, sys, time
@@ -68,7 +68,7 @@ class H(BaseHTTPRequestHandler):
         LOG.write(f"{time.strftime('%H:%M:%S')} last={last_role} text={text[:60]!r} tools={len(tools)} {tools}\n"); LOG.flush()
         page_tool = next((t for t in tools if t.endswith("fleet_page_show")), None)
 
-        call, reply = None, None
+        call, reply, pace = None, None, 0.06
         slow = "slow-task" in text and "bash" in tools
         if last_role == "tool" and page_tool and "fleet_page_show" in str(msgs[-1].get("name", "")) + tool_call_name(msgs):
             PAGES[0] += 1
@@ -90,6 +90,7 @@ class H(BaseHTTPRequestHandler):
         elif "long-reply" in text:
             LONGS[0] += 1
             reply = "Every step:\n\n" + "\n".join(f"{i}. Step {i}" for i in range(1, 41)) + f"\n\nThat's every step, run {LONGS[0]}."
+            pace = 0.18  # the walk scrolls up while it streams
         elif "ask-me" in text and "question" in tools:
             call = ("question", {"questions": [{"header": "Database", "question": "Which database should the cache use?",
                                                 "options": [{"label": "SQLite", "description": "Local file"},
@@ -112,7 +113,7 @@ class H(BaseHTTPRequestHandler):
             chunk({"role": "assistant", "content": ""})
             for word in reply.split(" "):
                 chunk({"content": word + " "})
-                time.sleep(0.06)
+                time.sleep(pace)
             chunk({}, "stop")
         self.wfile.write(b"data: [DONE]\n\n"); self.wfile.flush()
 
