@@ -122,6 +122,14 @@ export class FleetManager {
     return this.conns.get(machineId)?.api;
   }
 
+  /**
+   * The session's activity as the list has it, kept live by the sessions topic. A session's own stream folds
+   * `waiting_input` into idle when it starts from a snapshot, so a wait (a question, a pick on a page) is read here.
+   */
+  activityOf(machineId: string, sessionId: string): string | undefined {
+    return this.conns.get(machineId)?.items.find((item) => item.session.id === sessionId)?.activityStatus ?? undefined;
+  }
+
   private publish() {
     const conns = [...this.conns.values()];
     this.cached = {

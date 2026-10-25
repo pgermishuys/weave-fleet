@@ -1,5 +1,6 @@
 // One session: the conversation (the web client's reducer + the phone's folded tool rows), and a dock that is the
-// composer, or the agent's pending ask (permission or question) when there is one.
+// composer, or the agent's pending ask (permission, question, or a pick on a page) when there is one. The strip above
+// the dock pulls up the session's Changes and Pages.
 import { router, useLocalSearchParams } from "expo-router";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { KeyboardAvoidingView, Platform, Pressable, ScrollView, View } from "react-native";
@@ -10,9 +11,13 @@ import { foldMessages, groupTools, stepDetail, stepRow, type FoldedStep, type Ph
 import { headerStatus, type HeaderTone } from "@fleet/lib/phone/session-status";
 import { duration, short } from "@fleet/lib/phone/time";
 import { dontAskAgainWording, permissionHeading } from "@fleet/lib/tools/permission-wording";
-import { manager, useFleet, useSessionStream } from "~/fleet/hooks";
+import { manager, useFleet, useSessionActivity, useSessionPages, useSessionStream } from "~/fleet/hooks";
+import { conversationPages, waitingPage, type SessionPage } from "~/fleet/pages";
 import type { PermissionAsk } from "~/fleet/api";
-import { Composer, Icon, Panel, Markdown, PermissionCard, QuestionCard, Sheet, StatusGlyph, Text, ToolBox, ToolRow, UserBubble, type GlyphStatus } from "~/kit";
+import {
+  Composer, Icon, Panel, Markdown, PageCard, PagePickCard, PageRow, PermissionCard, QuestionCard, SectionHeader, Segments, Sheet,
+  StatusGlyph, Text, ToolBox, ToolRow, UserBubble, type GlyphStatus,
+} from "~/kit";
 import { useTheme } from "~/theme";
 
 const GLYPH: Record<HeaderTone, GlyphStatus> = { working: "working", "needs-you": "needs-you", finished: "done", error: "error", unreachable: "idle", idle: "idle" };
@@ -31,12 +36,17 @@ export default function Session() {
   const [sending, setSending] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [panel, setPanel] = useState(false);
+  const [segment, setSegment] = useState<"changes" | "pages">("changes");
+  // Pages shown after this, or after the Pages list was last open, are new to you.
+  const [seenAt, setSeenAt] = useState(() => new Date().toISOString());
   const [now, setNow] = useState(Date.now());
 
   const refreshAsks = useCallback(() => void api?.permissions(id).then(setPermissions).catch(() => {}), [api, id]);
+  const sessionPages = useSessionPages(machine, id);
   const { state, title } = useSessionStream(machine, id, (event) => {
     if (event.type.startsWith("permission.")) refreshAsks();
-  });
+    sessionPages.onEvent(event);
+  }, sessionPages.reload);
   const streamStatus = state?.sessionStatus ?? null;
   // A snapshot (first load, or after a reconnect) and every status change may bring or settle an ask.
   useEffect(refreshAsks, [refreshAsks, streamStatus]);
@@ -49,10 +59,17 @@ export default function Session() {
   const items = useMemo(() => groupTools(foldMessages(messages)), [messages]);
   const working = state ? isStreamWorking(state.sessionStatus) : false;
   const dock = chooseDock({ permissions, question: pendingQuestion(messages), later: new Set() });
+  const inConversation = useMemo(() => conversationPages(messages), [messages]);
+  const pages = sessionPages.pages;
+  const allPages = useMemo(() => [...pages, ...inConversation], [pages, inConversation]);
+  const activity = useSessionActivity(machine, id, streamStatus ?? undefined);
+  const pick = waitingPage(pages, activity);
+  const newPages = allPages.filter((page) => page.shownAt > seenAt).length;
+  const openPage = (page: SessionPage) => router.push({ pathname: "/page/[machine]/[session]", params: { machine, session: id, key: page.key } });
   const lastUser = [...messages].reverse().find((m) => m.role === "user");
   const lastMessage = messages[messages.length - 1];
   const status = headerStatus({
-    sessionStatus: dock.kind !== "composer" ? "waiting_input" : null,
+    sessionStatus: dock.kind !== "composer" || pick ? "waiting_input" : null,
     streamStatus,
     turnStartedAt: lastUser?.createdAt ?? null,
     updatedAt: lastMessage?.createdAt ?? null,
@@ -111,8 +128,8 @@ export default function Session() {
         onContentSizeChange={() => scroll.current?.scrollToEnd({ animated: true })}
       >
         {!state && <Text tone="muted">Loading…</Text>}
-        {items.map((item) => <Item key={item.key} item={item} />)}
-        {working && dock.kind === "composer" && (
+        {items.map((item) => <Item key={item.key} item={item} pages={allPages} waiting={pick} onOpen={openPage} />)}
+        {working && dock.kind === "composer" && !pick && (
           <View style={{ flexDirection: "row", alignItems: "center", gap: 8 }}>
             <StatusGlyph status="working" size={10} />
             <Text tone="muted" size={13}>Working · {duration(lastUser?.createdAt ?? null, now)}</Text>
@@ -121,11 +138,19 @@ export default function Session() {
       </ScrollView>
 
       <Pressable
-        testID="panel-open" accessibilityRole="button" accessibilityLabel="Changes" onPress={() => setPanel(true)}
+        testID="panel-open" accessibilityRole="button" accessibilityLabel="Changes and pages" onPress={() => { setSegment(newPages ? "pages" : "changes"); setPanel(true); }}
         style={{ flexDirection: "row", alignItems: "center", gap: 8, marginHorizontal: 12, paddingHorizontal: 12, height: 40, borderRadius: 10, backgroundColor: color.tint5 }}
       >
         <Icon name="file" size={16} color={color.muted} />
-        <Text weight="medium" size={14} style={{ flex: 1 }}>Changes</Text>
+        <Text weight="medium" size={14}>Changes</Text>
+        <View style={{ flex: 1 }} />
+        {allPages.length ? (
+          <View testID="pages-count" style={{ flexDirection: "row", alignItems: "center", gap: 6 }}>
+            <Icon name="page" size={15} color={newPages ? color.accent : color.muted} />
+            <Text weight="medium" size={14} tone={newPages ? "accent" : "default"}>Pages</Text>
+            <Text size={14} tone={newPages ? "accent" : "muted"}>{allPages.length}</Text>
+          </View>
+        ) : null}
         <Icon name="chevron-up" size={16} color={color.muted} />
       </Pressable>
 
@@ -152,12 +177,44 @@ export default function Session() {
             onAnswer={(label) => void act(() => api?.answerQuestion(id, dock.pending.requestId, [[label]]))}
           />
         ) : (
-          <Composer value={draft} onChangeText={setDraft} onSend={() => void send()} sending={sending} working={working} machine={machines.length > 1 ? machineName : undefined} placeholder="Message the agent" />
+          <View style={{ gap: 10 }}>
+            {pick ? <PagePickCard title={pick.title} onOpen={() => openPage(pick)} /> : null}
+            <Composer value={draft} onChangeText={setDraft} onSend={() => void send()} sending={sending} working={working} machine={machines.length > 1 ? machineName : undefined} placeholder="Message the agent" />
+          </View>
         )}
       </View>
 
-      <Sheet open={panel} onClose={() => setPanel(false)} title="Changes" testID="panel">
-        <Text tone="muted">Changes, Files and Pages come here</Text>
+      <Sheet open={panel} onClose={() => { setPanel(false); if (segment === "pages") setSeenAt(new Date().toISOString()); }} title={title} testID="panel">
+        <View style={{ gap: 12 }}>
+          <Segments
+            value={segment}
+            onChange={(next) => { if (segment === "pages") setSeenAt(new Date().toISOString()); setSegment(next); }}
+            options={[{ value: "changes", label: "Changes" }, { value: "pages", label: "Pages", count: allPages.length }]}
+          />
+          {segment === "changes" ? (
+            <Text tone="muted">Changes and Files come here</Text>
+          ) : allPages.length === 0 ? (
+            <Text tone="muted">Pages the agent shows come here.</Text>
+          ) : (
+            <View>
+              {[...pages].reverse().map((page) => (
+                <PageRow
+                  key={page.key} testID="page-row" title={page.title} age={clock(page.shownAt)} isNew={page.shownAt > seenAt}
+                  waiting={page.key === pick?.key} detail={pageDetail(page, page.key === pick?.key)}
+                  onPress={() => { setPanel(false); openPage(page); }}
+                />
+              ))}
+              {inConversation.length ? (
+                <>
+                  <View style={{ marginHorizontal: -16 }}><SectionHeader label="In the conversation" /></View>
+                  {[...inConversation].reverse().map((page) => (
+                    <PageRow key={page.key} testID="page-row" title={page.title} age={clock(page.shownAt)} detail="Shown in the conversation" isNew={page.shownAt > seenAt} onPress={() => { setPanel(false); openPage(page); }} />
+                  ))}
+                </>
+              ) : null}
+            </View>
+          )}
+        </View>
       </Sheet>
       </Panel>
     </KeyboardAvoidingView>
@@ -181,20 +238,58 @@ function toolRow(step: FoldedStep) {
   );
 }
 
-function Item({ item }: { item: PhoneItem }) {
+/** "10:31", or "Mon 10:31" for an earlier day. */
+function clock(iso: string): string {
+  const at = new Date(iso);
+  if (Number.isNaN(at.getTime())) return "";
+  const time = at.toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" });
+  return at.toDateString() === new Date().toDateString() ? time : `${at.toLocaleDateString([], { weekday: "short" })} ${time}`;
+}
+
+function pageDetail(page: SessionPage, waiting: boolean): string {
+  if (waiting) return "Waiting for your pick";
+  if (page.choice?.status === "answered") return `Picked ${page.choice.summary ?? page.choice.value ?? ""}`.trim();
+  if (page.choice?.status === "not-answered") return "Not picked";
+  return "Page";
+}
+
+/** The page a fleet_page_show call showed: in the conversation (its call), or in a canvas (the metadata's canvas id, or the title). */
+function stepPage(step: FoldedStep, pages: readonly SessionPage[]): SessionPage | undefined {
+  if (step.tool !== "fleet_page_show" && !step.tool.endsWith("_fleet_page_show")) return undefined;
+  const state = (step.part.state ?? {}) as { input?: { title?: unknown }; metadata?: { canvasId?: unknown } };
+  return pages.find((page) => page.key === `call:${step.part.callId}`)
+    ?? pages.find((page) => page.key === state.metadata?.canvasId)
+    ?? pages.find((page) => page.place === "tab" && page.title === state.input?.title);
+}
+
+function Item({ item, pages, waiting, onOpen }: { item: PhoneItem; pages: readonly SessionPage[]; waiting: SessionPage | null; onOpen: (page: SessionPage) => void }) {
   switch (item.kind) {
     case "user":
       return <UserBubble text={item.text} />;
     case "text":
       return <Markdown text={item.text} />;
-    case "tools":
+    case "tools": {
+      // Each page the calls showed gets a card under them, as the desktop draws it under its tool row.
+      const shown = [...new Map(item.parts.flatMap((part) => (part.kind === "steps" ? part.steps : []))
+        .map((step) => stepPage(step, pages)).filter((page): page is SessionPage => !!page)
+        .map((page) => [page.key, page])).values()];
       return (
-        <ToolBox summary={item.parts.find((p) => p.kind === "steps")?.summary}>
-          {item.parts.map((part) => part.kind === "steps"
-            ? part.steps.map(toolRow)
-            : <ToolRow key={part.key} tool="task" label={part.agent} detail={part.title} status={part.running ? "running" : "done"} />)}
-        </ToolBox>
+        <View style={{ gap: 10 }}>
+          <ToolBox summary={item.parts.find((p) => p.kind === "steps")?.summary}>
+            {item.parts.map((part) => part.kind === "steps"
+              ? part.steps.map(toolRow)
+              : <ToolRow key={part.key} tool="task" label={part.agent} detail={part.title} status={part.running ? "running" : "done"} />)}
+          </ToolBox>
+          {shown.map((page) => (
+            <PageCard
+              key={page.key} testID="page-card" title={page.title} waiting={page.key === waiting?.key}
+              detail={page.key === waiting?.key ? "Waiting for your pick" : `${page.place === "conversation" ? "Shown in the conversation" : pageDetail(page, false)} · ${clock(page.shownAt)}`}
+              onPress={() => onOpen(page)}
+            />
+          ))}
+        </View>
       );
+    }
     case "question":
       return (
         <View style={{ gap: 2 }}>
