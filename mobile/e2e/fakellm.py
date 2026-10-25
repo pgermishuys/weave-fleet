@@ -5,7 +5,7 @@ Replies word by word (so streaming shows), and on keywords in the last user text
   ask-me    -> calls the question tool with two choices
   show-page -> calls fleet_page_show on pages/paging.html (waitForChoice), then says "Going with **<pick>**, run N"
   slow-task -> calls the bash tool with a 45 s command, so the session stays working
-  long-reply -> a reply taller than the screen, ending "That's every step, run N.", slowly (about 15 s)
+  long-reply -> a reply taller than the screen, ending "That's every step, run N.", slowly (about 35 s)
 Anything else gets a short Markdown reply.
 """
 import json, os, re, sys, time
@@ -90,7 +90,7 @@ class H(BaseHTTPRequestHandler):
         elif "long-reply" in text:
             LONGS[0] += 1
             reply = "Every step:\n\n" + "\n".join(f"{i}. Step {i}" for i in range(1, 41)) + f"\n\nThat's every step, run {LONGS[0]}."
-            pace = 0.18  # the walk scrolls up while it streams
+            pace = 0.4  # about 35 s: the walk scrolls up while it streams, and checks after
         elif "ask-me" in text and "question" in tools:
             call = ("question", {"questions": [{"header": "Database", "question": "Which database should the cache use?",
                                                 "options": [{"label": "SQLite", "description": "Local file"},
