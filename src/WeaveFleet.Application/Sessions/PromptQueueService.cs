@@ -51,8 +51,11 @@ public sealed partial class PromptQueueService(
     IHarnessRegistry harnesses,
     IUserContext userContext,
     TurnRetryScheduler retries,
-    ILogger<PromptQueueService> logger)
+    ILogger<PromptQueueService> logger,
+    PromptQueueGate? sharedGate = null)
 {
+    private readonly PromptQueueGate gate = sharedGate ?? new();
+
     /// <summary>The event carrying a session's queue after it changed (<see cref="SessionQueueChanged"/>).</summary>
     public const string ChangedEvent = "session.queue";
 
@@ -184,6 +187,22 @@ public sealed partial class PromptQueueService(
         if (retries.IsHolding(sessionId))
             return;
 
+        // Two turn ends close together (a repeated idle event, or a queue into an idle session as one arrives) must
+        // send one message, not two: the second call would send the next item into the turn the first just started.
+        if (!gate.TryEnter(sessionId))
+            return;
+        try
+        {
+            await SendFirstAsync(sessionId, ct).ConfigureAwait(false);
+        }
+        finally
+        {
+            gate.Leave(sessionId);
+        }
+    }
+
+    private async Task SendFirstAsync(string sessionId, CancellationToken ct)
+    {
         while (await queue.TakeFirstAsync(sessionId).ConfigureAwait(false) is { } item)
         {
             await BroadcastAsync(sessionId, ct).ConfigureAwait(false);
@@ -249,4 +268,14 @@ public sealed partial class PromptQueueService(
 
     [LoggerMessage(Level = LogLevel.Warning, Message = "Could not send queued item {ItemId} to session {SessionId}: {Reason}. It stays first in the queue.")]
     private partial void LogSendFailed(string sessionId, string itemId, string reason);
+}
+
+/// <summary>Which sessions have a queue send under way. Shared by every scope, so two sends for one session can't overlap.</summary>
+public sealed class PromptQueueGate
+{
+    private readonly System.Collections.Concurrent.ConcurrentDictionary<string, byte> _sending = new();
+
+    public bool TryEnter(string sessionId) => _sending.TryAdd(sessionId, 0);
+
+    public void Leave(string sessionId) => _sending.TryRemove(sessionId, out _);
 }
