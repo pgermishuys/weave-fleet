@@ -53,6 +53,21 @@ public sealed class UsageReaderTests : IDisposable
         """;
 
     [Fact]
+    public async Task claude_a_seat_with_a_spend_cap_and_no_windows_has_no_limits_to_show_not_an_error()
+    {
+        ClaudeSignIn();
+        _api.Reply = (HttpStatusCode.OK, """
+            {"five_hour":null,"seven_day":null,"seven_day_opus":null,"seven_day_sonnet":null,
+             "extra_usage":{"is_enabled":true,"monthly_limit":5000,"used_credits":1200.5,"utilization":24.01}}
+            """);
+
+        var reading = await Claude().ReadAsync(default);
+
+        reading.State.ShouldBe(UsageStates.NoWindow);
+        reading.Account.ShouldBe("max");
+    }
+
+    [Fact]
     public async Task claude_reads_percentages_as_fractions_and_sends_the_token_and_beta_header()
     {
         ClaudeSignIn();
