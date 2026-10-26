@@ -34,17 +34,27 @@ export const usePreferencesStore = defineStore("preferences", () => {
   }
 
   async function set(key: string, value: string): Promise<void> {
+    const before = preferences.value[key];
     preferences.value = { ...preferences.value, [key]: value };
 
     try {
-      await api.PUT("/api/preferences/{key}", {
+      const { error: apiError } = await api.PUT("/api/preferences/{key}", {
         params: { path: { key } },
         body: { value } as never,
       });
+      if (!apiError) return;
     } catch {
-      // Revert on failure
-      await fetchPreferences();
+      // Offline: handled below, like an error answer.
     }
+
+    // The save failed: show what the server still has, even when it can't be asked.
+    if (preferences.value[key] === value) {
+      const restored = { ...preferences.value };
+      if (before === undefined) delete restored[key];
+      else restored[key] = before;
+      preferences.value = restored;
+    }
+    await fetchPreferences();
   }
 
   function ensureLoaded(): void {
