@@ -534,7 +534,7 @@ public static class DependencyInjection
         services.AddSingleton<GitHubApiProxy>();
         services.AddBuiltInPlugin<GitHubBackendPlugin>();
 
-        // Smart links: the relay feeds the detector; the watcher stores, enriches and pushes them.
+        // Smart links: the relay and the outbox dispatcher feed the detector; the watcher stores, enriches and pushes them.
         services.AddSingleton<SmartLinkDetector>();
         services.AddSingleton<WeaveFleet.Infrastructure.Plugins.BuiltIn.GitHub.SmartLinkWatcherService>();
         services.AddSingleton<ISmartLinkWatcher>(sp => sp.GetRequiredService<WeaveFleet.Infrastructure.Plugins.BuiltIn.GitHub.SmartLinkWatcherService>());

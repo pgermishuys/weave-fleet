@@ -16,9 +16,9 @@ public sealed record DetectedSmartLink(
     string Relationship);
 
 /// <summary>
-/// Finds GitHub pull requests and issues in message parts as they stream through the relay and queues
-/// them for <see cref="SmartLinkWatcherService"/>. Text parts count as mentions. A pull request URL in the
-/// output of a tool call that ran <c>gh pr create</c> is the session's own pull request. Also notes when
+/// Finds GitHub pull requests and issues in message parts as they go out to clients, through the relay or the
+/// outbox, and queues them for <see cref="SmartLinkWatcherService"/>. Text parts count as mentions. A pull request
+/// URL in the output of a tool call that ran <c>gh pr create</c> is the session's own pull request. Also notes when
 /// each session last sent an event, so the watcher checks busy sessions more often than quiet ones.
 /// </summary>
 public sealed class SmartLinkDetector(TimeProvider? timeProvider = null)

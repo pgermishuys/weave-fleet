@@ -6,6 +6,7 @@ using WeaveFleet.Application.Automations;
 using WeaveFleet.Application.Configuration;
 using WeaveFleet.Application.Events;
 using WeaveFleet.Domain.Repositories;
+using WeaveFleet.Infrastructure.GitHub;
 
 namespace WeaveFleet.Infrastructure.EventBus;
 
@@ -14,7 +15,8 @@ public sealed partial class InProcessOutboxDispatcher(
     IEventBroadcaster broadcaster,
     IAutomationEventNotifier automationNotifier,
     FleetOptions options,
-    ILogger<InProcessOutboxDispatcher> logger) : IOutboxDispatcher, IDisposable
+    ILogger<InProcessOutboxDispatcher> logger,
+    SmartLinkDetector? smartLinkDetector = null) : IOutboxDispatcher, IDisposable
 {
     private readonly AsyncAutoResetEvent _signal = new();
 
@@ -49,6 +51,11 @@ public sealed partial class InProcessOutboxDispatcher(
                     message.Id,
                     message.UserId,
                     cancellationToken).ConfigureAwait(false);
+
+                // Parts saved and sent this way (Claude Code's tool calls, its subagents' replies) never pass the
+                // relay, so their links are looked for here.
+                if (smartLinkDetector is not null && SessionTopicId(message.Topic) is { } sessionId)
+                    smartLinkDetector.Observe(sessionId, message.UserId, message.Type, payload);
 
                 // Notify automation dispatcher
                 await NotifyAutomationDispatcherAsync(
@@ -114,6 +121,10 @@ public sealed partial class InProcessOutboxDispatcher(
 
     /// <summary>How many parents to climb looking for an automation, so a broken parent chain can't loop.</summary>
     private const int MaxParentDepth = 10;
+
+    /// <summary>The session a <c>session:{id}</c> topic is for; null for any other topic.</summary>
+    private static string? SessionTopicId(string topic)
+        => topic.StartsWith("session:", StringComparison.Ordinal) && topic.Length > "session:".Length ? topic["session:".Length..] : null;
 
     /// <summary>
     /// The session an outbox message is about. Session lifecycle messages carry it as <c>sessionId</c>;
