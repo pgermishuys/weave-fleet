@@ -11,22 +11,24 @@ namespace WeaveFleet.Api.Tests.Endpoints;
 /// wrong. These are the bodies an agent is likely to send by mistake, some of them as Windows PowerShell builds them.
 /// </summary>
 [Collection("NonParallelApiFactoryTests")]
-public sealed class UnreadableBodyTests : IDisposable
+public sealed class UnreadableBodyTests : IClassFixture<UnreadableBodyTests.Server>, IDisposable
 {
     private static readonly byte[] Utf8Bom = [0xEF, 0xBB, 0xBF];
 
-    private readonly ApiWebApplicationFactory _factory = new(authEnabled: false);
     private readonly HttpClient _client;
 
-    public UnreadableBodyTests()
+    public UnreadableBodyTests(Server server)
     {
-        _client = _factory.CreateClient();
+        _client = server.Factory.CreateClient();
     }
 
-    public void Dispose()
+    public void Dispose() => _client.Dispose();
+
+    public sealed class Server : IDisposable
     {
-        _client.Dispose();
-        _factory.Dispose();
+        public ApiWebApplicationFactory Factory { get; } = new(authEnabled: false);
+
+        public void Dispose() => Factory.Dispose();
     }
 
     [Fact]
