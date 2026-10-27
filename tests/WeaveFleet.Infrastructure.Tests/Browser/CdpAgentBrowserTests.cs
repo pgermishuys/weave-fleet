@@ -325,15 +325,14 @@ public sealed class CdpAgentBrowserTests
     /// <summary>Pages on a loopback port: <c>/</c> is the page, a favicon so the console stays quiet, anything else a 404.</summary>
     private sealed class LocalSite : IDisposable
     {
-        private readonly HttpListener _listener = new();
+        private readonly HttpListener _listener;
         private int _hits;
 
         public LocalSite(string html)
         {
-            Port = FreePort();
+            _listener = LoopbackListener.Start(out var port);
+            Port = port;
             Url = $"http://127.0.0.1:{Port}/";
-            _listener.Prefixes.Add(Url);
-            _listener.Start();
             _ = Task.Run(async () =>
             {
                 while (_listener.IsListening)
@@ -374,13 +373,6 @@ public sealed class CdpAgentBrowserTests
         {
             _listener.Stop();
             _listener.Close();
-        }
-
-        private static int FreePort()
-        {
-            using var socket = new System.Net.Sockets.Socket(System.Net.Sockets.AddressFamily.InterNetwork, System.Net.Sockets.SocketType.Stream, System.Net.Sockets.ProtocolType.Tcp);
-            socket.Bind(new IPEndPoint(IPAddress.Loopback, 0));
-            return ((IPEndPoint)socket.LocalEndPoint!).Port;
         }
     }
 }

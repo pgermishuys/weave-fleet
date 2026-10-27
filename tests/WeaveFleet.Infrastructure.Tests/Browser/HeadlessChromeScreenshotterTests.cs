@@ -265,15 +265,13 @@ public sealed class HeadlessChromeScreenshotterTests
     /// <summary>A page served on a loopback port, so the test doesn't depend on anything outside this machine.</summary>
     private sealed class LocalSite : IDisposable
     {
-        private readonly HttpListener _listener = new();
+        private readonly HttpListener _listener;
 
         public LocalSite(string html)
         {
             Html = html;
-            var port = FreePort();
+            _listener = LoopbackListener.Start(out var port);
             Url = $"http://127.0.0.1:{port}/";
-            _listener.Prefixes.Add(Url);
-            _listener.Start();
             _ = Task.Run(async () =>
             {
                 while (_listener.IsListening)
@@ -305,13 +303,6 @@ public sealed class HeadlessChromeScreenshotterTests
         {
             _listener.Stop();
             _listener.Close();
-        }
-
-        private static int FreePort()
-        {
-            using var socket = new System.Net.Sockets.Socket(System.Net.Sockets.AddressFamily.InterNetwork, System.Net.Sockets.SocketType.Stream, System.Net.Sockets.ProtocolType.Tcp);
-            socket.Bind(new IPEndPoint(IPAddress.Loopback, 0));
-            return ((IPEndPoint)socket.LocalEndPoint!).Port;
         }
     }
 }

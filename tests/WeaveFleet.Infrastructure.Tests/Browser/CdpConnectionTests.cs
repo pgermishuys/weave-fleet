@@ -24,17 +24,11 @@ public sealed class CdpConnectionTests
     /// <summary>A DevTools endpoint that accepts the websocket and then reads without ever replying.</summary>
     private sealed class SilentBrowser : IDisposable
     {
-        private readonly HttpListener _listener = new();
+        private readonly HttpListener _listener;
 
         public SilentBrowser()
         {
-            var probe = new TcpListener(IPAddress.Loopback, 0);
-            probe.Start();
-            var port = ((IPEndPoint)probe.LocalEndpoint).Port;
-            probe.Stop();
-
-            _listener.Prefixes.Add($"http://127.0.0.1:{port}/");
-            _listener.Start();
+            _listener = LoopbackListener.Start(out var port);
             Url = new Uri($"ws://127.0.0.1:{port}/devtools/browser/silent");
             _ = Task.Run(async () =>
             {

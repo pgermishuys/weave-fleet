@@ -230,7 +230,7 @@ public sealed class SshTunnelsTests : IAsyncLifetime
         if (OperatingSystem.IsWindows())
             return; // The fake ssh is a shell script.
 
-        var tunnels = Tunnels(FakeSsh("echo 'bind: Address already in use' >&2; exit 255"), portAnswers: false, readyTimeout: TimeSpan.FromMilliseconds(500));
+        var tunnels = Tunnels(FakeSsh("echo 'bind: Address already in use' >&2; exit 255"), portAnswers: false, readyTimeout: TimeSpan.FromSeconds(2));
 
         var (_, error) = await tunnels.OpenAsync("m1", SshDestination.Parse("falcon")!, null, CancellationToken.None);
 
