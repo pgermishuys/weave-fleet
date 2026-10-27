@@ -3,6 +3,7 @@ extern alias FakeLlm;
 using FakeLlm::FakeLlmServer;
 using Microsoft.Extensions.DependencyInjection;
 using WeaveFleet.Application.Automations;
+using WeaveFleet.Application.Sessions;
 using WeaveFleet.Application.Workflows;
 using WeaveFleet.Domain.Entities;
 using WeaveFleet.Infrastructure.Harnesses.OpenCode2;
@@ -91,6 +92,12 @@ public sealed partial class OpenCode2WorkflowLiveTests
             await SetWorkflowsAsync(false);
             var off = await FireAsync(automation.Value, AutomationRunTrigger.Manual);
             off.Error.ShouldBe("Skipped: Workflows are turned off in Settings.");
+
+            // Leave the server with no turn on it, so turning Workflows off replaces it before the next test's first
+            // session, not between that test's sessions.
+            var tracker = fleet.Services.GetRequiredService<SessionActivityTracker>();
+            await WaitForAsync(events, () => new[] { fired.SessionId!, now.SessionId! }
+                .All(id => !SessionActivityTracker.IsInTurn(tracker.Get(id)?.ActivityStatus)), cts.Token);
         }
         finally
         {
