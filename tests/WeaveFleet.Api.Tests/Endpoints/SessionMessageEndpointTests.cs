@@ -107,6 +107,20 @@ public sealed class SessionMessageEndpointTests : IAsyncLifetime
     }
 
     [Fact]
+    public async Task An_agent_cannot_post_cancel_or_seat_jobs()
+    {
+        var post = await _client!.PostAsJsonAsync($"/agent/{Token}/api/jobs", new { title = "Update the docs", ask = "Update the README", repository = "ledger-api" });
+        var cancel = await _client!.DeleteAsync($"/agent/{Token}/api/jobs/job-1");
+        var seats = await _client!.PutAsJsonAsync($"/agent/{Token}/api/jobs/machines/machine-1", new { seats = 4 });
+
+        foreach (var byAgent in new[] { post, cancel, seats })
+        {
+            byAgent.StatusCode.ShouldBe(HttpStatusCode.Forbidden);
+            (await ErrorAsync(byAgent)).ShouldBe("Jobs are posted by you for now.");
+        }
+    }
+
+    [Fact]
     public async Task An_agent_cannot_name_the_program_Fleet_runs_for_Copilot_but_the_user_can()
     {
         var byAgent = await _client!.PutAsJsonAsync($"/agent/{Token}/api/preferences/copilot.path", new { value = "/tmp/evil" });

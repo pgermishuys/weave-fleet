@@ -1,9 +1,11 @@
+using System.Net;
 using System.Text.Json;
 using System.Text.Json.Serialization;
 using WeaveFleet.Application.Sessions;
 using WeaveFleet.Application.SessionSources;
 using WeaveFleet.Domain.Entities;
 using WeaveFleet.Domain.Events;
+using WeaveFleet.Domain.Harnesses;
 
 namespace WeaveFleet.Application.Machines;
 
@@ -79,6 +81,75 @@ public sealed class RemoteSessions(RemoteMachineService machines, IHttpClientFac
         }
     }
 
+    /// <summary>The repositories the machine found in its folders (<c>GET /api/repositories</c>): where each is there and its folder name. Null when it didn't answer.</summary>
+    public async Task<IReadOnlyList<(string Path, string Name)>?> RepositoriesAsync(RemoteMachine machine, string token, CancellationToken ct)
+    {
+        var (answer, _, _) = await GetAsync(machine, token, "/api/repositories", ct);
+        if (answer is null)
+            return null;
+
+        using (answer)
+        {
+            return answer.RootElement.TryGetProperty("repositories", out var list) && list.ValueKind == JsonValueKind.Array
+                ? [.. list.EnumerateArray().Select(repo => (Text(repo, "path"), Text(repo, "name"))).Where(repo => repo.Item1 is not null).Select(repo => (repo.Item1!, repo.Item2 ?? ""))]
+                : [];
+        }
+    }
+
+    /// <summary>The origin remote of a repository on the machine (<c>GET /api/repositories/info</c>); empty when it has none. Null when it didn't answer.</summary>
+    public async Task<string?> RemoteUrlAsync(RemoteMachine machine, string token, string path, CancellationToken ct)
+    {
+        var (answer, _, _) = await GetAsync(machine, token, $"/api/repositories/info?path={Uri.EscapeDataString(path)}", ct);
+        if (answer is null)
+            return null;
+
+        using (answer)
+        {
+            if (!answer.RootElement.TryGetProperty("repository", out var repository) || !repository.TryGetProperty("remotes", out var remotes) || remotes.ValueKind != JsonValueKind.Array)
+                return "";
+
+            var origin = remotes.EnumerateArray().FirstOrDefault(remote => Text(remote, "name") == "origin");
+            return Text(origin, "url") ?? "";
+        }
+    }
+
+    /// <summary>
+    /// How a session on the machine stands, for a job that watches it: in a turn, waiting on the user, or between turns
+    /// with a reply behind it. Null when the machine didn't answer, which says nothing.
+    /// </summary>
+    public async Task<RemoteSessionState?> StateAsync(RemoteMachine machine, string token, string sessionId, CancellationToken ct)
+    {
+        var path = $"/api/sessions/{Uri.EscapeDataString(sessionId)}";
+        var missing = false;
+        var (session, _, _) = await RemoteMachineRequests.SendAsync<object>(
+            httpClients, RemoteMachineService.HttpClientName, machine, token, HttpMethod.Get, path, null, null, ct, code => missing = code == HttpStatusCode.NotFound);
+        if (session is null)
+            return missing ? RemoteSessionState.Gone : null;
+
+        string? status;
+        using (session)
+        {
+            if (Text(session.RootElement, "retentionStatus") == "archived")
+                return RemoteSessionState.Gone;
+            status = Text(session.RootElement, "activityStatus");
+        }
+        if (status == ActivityStatuses.WaitingInput)
+            return RemoteSessionState.WaitingInput;
+        if (SessionActivityTracker.IsInTurn(status))
+            return RemoteSessionState.InTurn;
+
+        var (answer, _, _) = await GetAsync(machine, token, $"{path}/messages?limit=30", ct);
+        if (answer is null)
+            return null;
+
+        using (answer)
+        {
+            var replied = answer.RootElement.TryGetProperty("messages", out var list) && list.ValueKind == JsonValueKind.Array
+                && list.EnumerateArray().Any(message => Text(message, "role") == "assistant" && (HasText(message) || Text(message, "finish") is not null));
+            return replied ? RemoteSessionState.Replied : RemoteSessionState.Quiet;
+        }
+    }
+
     /// <summary>
     /// Starts an empty session in <paramref name="folder"/> on the machine: in a new worktree of
     /// <paramref name="branch"/>, fetched from origin there, or in the folder as it is when there's no branch.
@@ -120,6 +191,43 @@ public sealed class RemoteSessions(RemoteMachineService machines, IHttpClientFac
             return id is null
                 ? (null, $"{machine.Name} didn't say which session it started.")
                 : (new RemoteStarted(id, Text(session, "title") ?? title, Text(answer.RootElement, "branch")), null);
+        }
+    }
+
+    /// <summary>
+    /// Starts a session with <paramref name="prompt"/> in a new worktree of the repository at <paramref name="folder"/> on
+    /// the machine. The worktree is named there, as for any session started without a branch, and starts from the
+    /// repository's default branch.
+    /// </summary>
+    public async Task<(string? SessionId, string? Error)> StartWorktreeAsync(
+        RemoteMachine machine,
+        string token,
+        string folder,
+        string title,
+        string prompt,
+        CancellationToken ct)
+    {
+        var body = new RemoteSessionStart
+        {
+            Directory = folder,
+            Title = title,
+            IsolationStrategy = "worktree",
+            InitialPrompt = prompt,
+            Source = new RemoteSource(
+                new RemoteSourceKey(SessionSourceProviderIds.Repository, SessionSourceTypeNames.Repository),
+                new RemoteSourceInput { RepositoryPath = folder, IsolationStrategy = "worktree" }),
+        };
+
+        var (answer, away, refused) = await RemoteMachineRequests.SendAsync(
+            httpClients, HttpClientName, machine, token, HttpMethod.Post, "/api/sessions", body, RemoteRunsJsonContext.Default.RemoteSessionStart, ct);
+        if (answer is null)
+            return (null, away ?? refused);
+
+        using (answer)
+        {
+            var session = answer.RootElement.TryGetProperty("session", out var found) ? found : default;
+            var id = session.ValueKind == JsonValueKind.Object ? Text(session, "id") : null;
+            return id is null ? (null, $"{machine.Name} didn't say which session it started.") : (id, null);
         }
     }
 
@@ -288,6 +396,21 @@ public sealed record RemoteMachineView(string? Away, bool PeerMessages, IReadOnl
 
 /// <summary>A session here, on this machine, that messages one on another machine.</summary>
 public sealed record RemotePeerSender(string MachineId, string MachineName, string SessionId, string Title);
+
+/// <summary>How a session on another machine stands, as a job watching it reads it.</summary>
+public enum RemoteSessionState
+{
+    /// <summary>The machine no longer has it, or it's archived.</summary>
+    Gone,
+    InTurn,
+    WaitingInput,
+
+    /// <summary>Between turns, and it has answered.</summary>
+    Replied,
+
+    /// <summary>Between turns and it hasn't answered yet: just created.</summary>
+    Quiet,
+}
 
 public sealed record RemoteStarted(string SessionId, string Title, string? Branch);
 

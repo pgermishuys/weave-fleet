@@ -185,6 +185,12 @@ internal sealed record ErrorResponse(string Error);
 [JsonSerializable(typeof(WorkflowStepBridgeRequest))]
 [JsonSerializable(typeof(MemoryBridgeRequest))]
 [JsonSerializable(typeof(ModBridgeRequest))]
+// Jobs
+[JsonSerializable(typeof(WeaveFleet.Application.Jobs.JobsDto))]
+[JsonSerializable(typeof(WeaveFleet.Application.Jobs.JobDto))]
+[JsonSerializable(typeof(WeaveFleet.Application.Jobs.JobMachineDto))]
+[JsonSerializable(typeof(WeaveFleet.Application.Jobs.PostJobRequest))]
+[JsonSerializable(typeof(WeaveFleet.Application.Jobs.SaveJobMachineRequest))]
 // Workflows
 [JsonSerializable(typeof(WeaveFleet.Application.Workflows.WorkflowLibraryDto))]
 [JsonSerializable(typeof(WeaveFleet.Application.Workflows.WorkflowRunDto))]

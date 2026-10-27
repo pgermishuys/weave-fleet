@@ -16,7 +16,8 @@ internal static class RemoteMachineRequests
 {
     /// <summary>
     /// Sends a request to the machine. The answer's JSON; or <c>Away</c>, why it can't be asked (it didn't answer, or
-    /// turned the token away); or <c>Refused</c>, what it said was wrong with the request.
+    /// turned the token away); or <c>Refused</c>, what it said was wrong with the request. <paramref name="onRefused"/>
+    /// is told the status code of a refusal, for a caller that reads a 404 as an answer.
     /// </summary>
     public static async Task<(JsonDocument? Answer, string? Away, string? Refused)> SendAsync<T>(
         IHttpClientFactory httpClients,
@@ -27,7 +28,8 @@ internal static class RemoteMachineRequests
         string path,
         T? body,
         JsonTypeInfo<T>? bodyType,
-        CancellationToken ct)
+        CancellationToken ct,
+        Action<HttpStatusCode>? onRefused = null)
     {
         using var request = new HttpRequestMessage(method, $"{machine.BaseUrl}{path}");
         request.Headers.Authorization = new AuthenticationHeaderValue("Bearer", token);
@@ -54,7 +56,10 @@ internal static class RemoteMachineRequests
             if (response.StatusCode is HttpStatusCode.Unauthorized or HttpStatusCode.Forbidden)
                 return (null, $"{machine.Name} turned this Fleet's token away. Update it in Settings › Machines.", null);
             if (!response.IsSuccessStatusCode)
+            {
+                onRefused?.Invoke(response.StatusCode);
                 return (null, null, await ErrorOfAsync(response, machine, ct));
+            }
 
             try
             {

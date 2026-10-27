@@ -66,6 +66,7 @@ public static class EndpointExtensions
         apiScope.MapMemoryEndpoints();
         apiScope.MapReportEndpoints();
         apiScope.MapWorkflowEndpoints();
+        apiScope.MapJobEndpoints();
         apiScope.MapToolEndpoints();
         apiScope.MapInstanceEndpoints();
         apiScope.MapHarnessEndpoints();
