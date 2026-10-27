@@ -111,6 +111,7 @@ public sealed class HarnessEventRelay : BackgroundService
     private readonly IModPermissionHook? _modPermissions;
     private readonly FleetSessionEvents? _fleetEvents;
     private readonly PageChoices? _pageChoices;
+    private readonly SessionNowTracker? _now;
     private CancellationToken _stoppingToken;
 
     /// <summary>
@@ -145,8 +146,10 @@ public sealed class HarnessEventRelay : BackgroundService
         IModPermissionHook? modPermissions = null,
         FleetSessionEvents? fleetEvents = null,
         PageChoices? pageChoices = null,
-        TurnFlagger? turns = null)
+        TurnFlagger? turns = null,
+        SessionNowTracker? now = null)
     {
+        _now = now;
         _turns = turns;
         _fleetEvents = fleetEvents;
         _pageChoices = pageChoices;
@@ -459,6 +462,8 @@ public sealed class HarnessEventRelay : BackgroundService
                 if (_streaming is not null)
                     domainEvent = _streaming.Observe(targetFleetSessionId, domainEvent);
                 _progressObserver?.Observe(targetFleetSessionId, sessionUserId, domainEvent);
+                if (_now is { IsActive: true })
+                    _now.Observe(targetFleetSessionId, sessionUserId, domainEvent);
                 _updates?.Observe(targetFleetSessionId, domainEvent);
                 _workflows?.Observe(targetFleetSessionId, domainEvent);
                 ObserveBrowserCall(targetFleetSessionId, domainEvent);
@@ -582,6 +587,7 @@ public sealed class HarnessEventRelay : BackgroundService
             // on "busy" after a crash/disconnect. This isn't tied to an event, so it stays in
             // the relay (the only code that knows when a pump ends).
             _activityTracker.Remove(fleetSessionId);
+            _now?.Forget(fleetSessionId);
             _activityTracker.ClearPromptTraceContext(fleetSessionId);
 
             // A pump that ends is a harness going away, not a turn finishing: forget what the session was
