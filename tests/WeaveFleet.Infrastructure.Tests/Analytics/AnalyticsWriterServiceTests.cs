@@ -99,14 +99,36 @@ public sealed class AnalyticsWriterServiceTests : IAsyncLifetime
         EndedAt: null,
         DurationSeconds: null);
 
+    private async Task WaitForScalarAsync(string sql, double expected, CancellationToken ct)
+    {
+        await WaitUntilAsync(() =>
+        {
+            using var conn = _analyticsFactory!.CreateConnection();
+            return conn.ExecuteScalar<double?>(sql) == expected;
+        }, $"'{sql}' to return {expected}", ct);
+    }
+
+    private static async Task WaitUntilAsync(Func<bool> condition, string description, CancellationToken ct)
+    {
+        try
+        {
+            while (!condition())
+                await Task.Delay(20, ct);
+        }
+        catch (OperationCanceledException)
+        {
+            throw new TimeoutException($"Timed out after 10 s waiting for the running writer to flush: {description}");
+        }
+    }
+
     [Fact]
     public async Task ProcessesTokenEvent_InsertsIntoTokenEventsTable()
     {
         _collector!.AcceptTokenEvent(MakeTokenEvent("evt-write-1"));
 
-        using var cts = new CancellationTokenSource(TimeSpan.FromSeconds(5));
+        using var cts = new CancellationTokenSource(TimeSpan.FromSeconds(10));
         await _writer!.StartAsync(cts.Token);
-        await Task.Delay(2500, cts.Token); // allow flush interval to fire
+        await WaitForScalarAsync("SELECT COUNT(*) FROM token_events WHERE event_id = 'evt-write-1'", 1, cts.Token);
         await _writer.StopAsync(CancellationToken.None);
 
         using var conn = _analyticsFactory!.CreateConnection();
@@ -121,9 +143,9 @@ public sealed class AnalyticsWriterServiceTests : IAsyncLifetime
     {
         _collector!.AcceptSessionSnapshot(MakeSnapshot("sess-upsert-1"));
 
-        using var cts = new CancellationTokenSource(TimeSpan.FromSeconds(5));
+        using var cts = new CancellationTokenSource(TimeSpan.FromSeconds(10));
         await _writer!.StartAsync(cts.Token);
-        await Task.Delay(2500, cts.Token);
+        await WaitForScalarAsync("SELECT COUNT(*) FROM session_snapshots WHERE session_id = 'sess-upsert-1'", 1, cts.Token);
         await _writer.StopAsync(CancellationToken.None);
 
         using var conn = _analyticsFactory!.CreateConnection();
@@ -140,9 +162,9 @@ public sealed class AnalyticsWriterServiceTests : IAsyncLifetime
         _collector!.AcceptTokenEvent(MakeTokenEvent("evt-idem-1", tokensTotal: 100, tokensInput: 50, tokensOutput: 50));
         _collector.AcceptTokenEvent(MakeTokenEvent("evt-idem-1", tokensTotal: 360, tokensInput: 100, tokensOutput: 260)); // higher totals
 
-        using var cts = new CancellationTokenSource(TimeSpan.FromSeconds(5));
+        using var cts = new CancellationTokenSource(TimeSpan.FromSeconds(10));
         await _writer!.StartAsync(cts.Token);
-        await Task.Delay(2500, cts.Token);
+        await WaitForScalarAsync("SELECT tokens_total FROM token_events WHERE event_id = 'evt-idem-1'", 360, cts.Token);
         await _writer.StopAsync(CancellationToken.None);
 
         using var conn = _analyticsFactory!.CreateConnection();
@@ -162,9 +184,9 @@ public sealed class AnalyticsWriterServiceTests : IAsyncLifetime
         _collector!.AcceptTokenEvent(MakeTokenEvent("evt-upsert-higher", tokensTotal: 100, tokensInput: 50, tokensOutput: 50));
         _collector.AcceptTokenEvent(MakeTokenEvent("evt-upsert-higher", tokensTotal: 360, tokensInput: 100, tokensOutput: 260));
 
-        using var cts = new CancellationTokenSource(TimeSpan.FromSeconds(5));
+        using var cts = new CancellationTokenSource(TimeSpan.FromSeconds(10));
         await _writer!.StartAsync(cts.Token);
-        await Task.Delay(2500, cts.Token);
+        await WaitForScalarAsync("SELECT tokens_total FROM token_events WHERE event_id = 'evt-upsert-higher'", 360, cts.Token);
         await _writer.StopAsync(CancellationToken.None);
 
         using var conn = _analyticsFactory!.CreateConnection();
@@ -184,9 +206,9 @@ public sealed class AnalyticsWriterServiceTests : IAsyncLifetime
         _collector!.AcceptTokenEvent(MakeTokenEvent("evt-upsert-lower", tokensTotal: 360, tokensInput: 100, tokensOutput: 260));
         _collector.AcceptTokenEvent(MakeTokenEvent("evt-upsert-lower", tokensTotal: 100, tokensInput: 50, tokensOutput: 50)); // lower, should not overwrite
 
-        using var cts = new CancellationTokenSource(TimeSpan.FromSeconds(5));
+        using var cts = new CancellationTokenSource(TimeSpan.FromSeconds(10));
         await _writer!.StartAsync(cts.Token);
-        await Task.Delay(2500, cts.Token);
+        await WaitForScalarAsync("SELECT tokens_total FROM token_events WHERE event_id = 'evt-upsert-lower'", 360, cts.Token);
         await _writer.StopAsync(CancellationToken.None);
 
         using var conn = _analyticsFactory!.CreateConnection();
@@ -206,9 +228,10 @@ public sealed class AnalyticsWriterServiceTests : IAsyncLifetime
         _collector!.AcceptTokenEvent(MakeTokenEvent("evt-dedup-increment", sessionId: "sess-dedup"));
         _collector.AcceptTokenEvent(MakeTokenEvent("evt-dedup-increment", sessionId: "sess-dedup")); // duplicate
 
-        using var cts = new CancellationTokenSource(TimeSpan.FromSeconds(5));
+        using var cts = new CancellationTokenSource(TimeSpan.FromSeconds(10));
         await _writer!.StartAsync(cts.Token);
-        await Task.Delay(2500, cts.Token);
+        await WaitForScalarAsync("SELECT COUNT(*) FROM token_events WHERE event_id = 'evt-dedup-increment'", 1, cts.Token);
+        await WaitUntilAsync(() => _sessionRepo.IncrementTokensAsyncCalls.ToArray().Any(c => c.Id == "sess-dedup"), "IncrementTokensAsync call for sess-dedup", cts.Token);
         await _writer.StopAsync(CancellationToken.None);
 
         _sessionRepo.IncrementTokensAsyncCalls.Count(c => c.Id == "sess-dedup").ShouldBe(1);
@@ -220,9 +243,9 @@ public sealed class AnalyticsWriterServiceTests : IAsyncLifetime
         _sessionRepo.Seed(new Session { Id = "sess-push", InstanceId = "inst-1", Title = "Push", Status = "active", TotalTokens = 1000, TotalCost = 0.5 });
         _collector!.AcceptTokenEvent(MakeTokenEvent("evt-push-1", sessionId: "sess-push", tokensTotal: 300, cost: 0.01));
 
-        using var cts = new CancellationTokenSource(TimeSpan.FromSeconds(5));
+        using var cts = new CancellationTokenSource(TimeSpan.FromSeconds(10));
         await _writer!.StartAsync(cts.Token);
-        await Task.Delay(2500, cts.Token);
+        await WaitUntilAsync(() => _broadcaster.Broadcasts.Count > 0, "session totals push", cts.Token);
         await _writer.StopAsync(CancellationToken.None);
 
         var push = _broadcaster.Broadcasts.ShouldHaveSingleItem();
@@ -239,9 +262,9 @@ public sealed class AnalyticsWriterServiceTests : IAsyncLifetime
         for (int i = 0; i < 5; i++)
             _collector!.AcceptTokenEvent(MakeTokenEvent($"evt-batch-{i}", $"sess-{i}"));
 
-        using var cts = new CancellationTokenSource(TimeSpan.FromSeconds(5));
+        using var cts = new CancellationTokenSource(TimeSpan.FromSeconds(10));
         await _writer!.StartAsync(cts.Token);
-        await Task.Delay(2500, cts.Token);
+        await WaitForScalarAsync("SELECT COUNT(*) FROM token_events WHERE event_id LIKE 'evt-batch-%'", 5, cts.Token);
         await _writer.StopAsync(CancellationToken.None);
 
         using var conn = _analyticsFactory!.CreateConnection();
