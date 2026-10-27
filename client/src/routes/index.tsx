@@ -26,7 +26,9 @@ export const HomePage = defineComponent({
     const preferences = usePreferencesStore();
     const { isMissionControlEnabled } = useMissionControlFeature();
     // Only the first showing of "/" at app start may land; later ones (Sessions) never do.
-    let mayLand = landing;
+    // The phone app opens on the phone inbox, which wins.
+    const phone = typeof window.matchMedia === "function" && opensAsPhoneApp(window.location.search, (query) => window.matchMedia(query).matches);
+    let mayLand = landing && !phone;
     landing = false;
     watch(
       () => [preferences.hasFetched, isMissionControlEnabled.value] as const,
@@ -38,10 +40,7 @@ export const HomePage = defineComponent({
       { immediate: true },
     );
     onMounted(() => {
-      if (typeof window.matchMedia !== "function") return;
-      if (opensAsPhoneApp(window.location.search, (query) => window.matchMedia(query).matches)) {
-        void router.navigate({ to: "/phone", replace: true });
-      }
+      if (phone) void router.navigate({ to: "/phone", replace: true });
     });
     return () => <FleetDashboard />;
   },

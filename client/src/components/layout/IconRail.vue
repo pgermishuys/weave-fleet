@@ -106,6 +106,10 @@ const currentRouteRail = computed<string | null>(() => {
     return "jobs";
   }
 
+  if (pathname.value === "/fleet") {
+    return "fleet";
+  }
+
   if (pathname.value === "/settings") {
     return "settings";
   }

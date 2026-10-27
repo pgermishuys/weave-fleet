@@ -144,6 +144,17 @@ describe("the icon rail", () => {
     expect(store.activeRail).toBe("analytics");
   });
 
+  it("highlights Fleet, not Sessions, on mission control", () => {
+    missionOn.value = true;
+    pathname.value = "/fleet";
+
+    const wrapper = mount(IconRail);
+
+    expect(useSidebarStore().activeRail).toBe("fleet");
+    expect(wrapper.find("[aria-label=Fleet]").classes()).toContain("active");
+    expect(wrapper.find("[aria-label=Sessions]").classes()).not.toContain("active");
+  });
+
   it("follows a plugin's path to the plugin's rail", () => {
     pathname.value = "/github/pulls";
     mount(IconRail);

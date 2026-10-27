@@ -51,6 +51,18 @@ describe("landing on mission control", () => {
     expect(navigate).not.toHaveBeenCalled();
   });
 
+  it("leaves the phone app on the phone inbox, not mission control", async () => {
+    vi.stubGlobal("matchMedia", (query: string) => ({ matches: true, media: query }));
+    try {
+      await openAt("/?source=pwa", true);
+
+      expect(navigate).toHaveBeenCalledTimes(1);
+      expect(navigate).toHaveBeenCalledWith({ to: "/phone", replace: true });
+    } finally {
+      vi.unstubAllGlobals();
+    }
+  });
+
   it("lets Sessions reach / after landing, without landing again", async () => {
     const visitHome = await openAt("/", true);
     expect(navigate).toHaveBeenCalledTimes(1);
