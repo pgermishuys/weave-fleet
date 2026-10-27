@@ -5,7 +5,6 @@ using System.Text.Json;
 using Dapper;
 using Microsoft.Extensions.DependencyInjection;
 using WeaveFleet.Api.Auth;
-using WeaveFleet.Api.Tests.Auth;
 using WeaveFleet.Api.Tests.Infrastructure;
 using WeaveFleet.Application.Browser;
 using WeaveFleet.Application.Canvases;
@@ -24,9 +23,8 @@ namespace WeaveFleet.Api.Tests.Endpoints;
 /// access token. The harness's side (which session a token and a call are) is faked; its own rules are covered in the
 /// Infrastructure tests.
 /// </summary>
-[Collection(LocalTokenAuthServiceTestsGroup.Name)]
 #pragma warning disable CA1001 // Type owns disposable fields — disposal handled by IAsyncLifetime.DisposeAsync
-public sealed class McpEndpointTests : IAsyncLifetime
+public sealed class McpEndpointTests : IClassFixture<McpEndpointTests.Server>, IAsyncLifetime
 #pragma warning restore CA1001
 {
     private const string Token = "bridge-1";
@@ -35,21 +33,42 @@ public sealed class McpEndpointTests : IAsyncLifetime
     private const string Owner = "owner-user";
     private const string Url = $"/agent/{Token}/mcp";
 
-    private ApiWebApplicationFactory? _factory;
-    private HttpClient? _client;
+    private readonly ApiWebApplicationFactory _factory;
+    private readonly HttpClient _client;
 
-    public async Task InitializeAsync()
+    public McpEndpointTests(Server server)
     {
-        _factory = CreateFactory(simulateLocalhost: true);
+        _factory = server.Factory;
         _client = _factory.CreateClient();
-        await SeedSessionAsync(_factory);
     }
 
-    public async Task DisposeAsync()
+    /// <summary>Every test starts with the switches at their defaults, no canvases, and the session not in a workflow.</summary>
+    public async Task InitializeAsync()
     {
-        _client?.Dispose();
-        if (_factory is not null)
-            await _factory.DisposeAsync();
+        using var scope = _factory.Services.CreateScope();
+        using var connection = scope.ServiceProvider.GetRequiredService<IDbConnectionFactory>().CreateConnection();
+        await connection.ExecuteAsync("""
+            DELETE FROM user_preferences;
+            DELETE FROM canvases;
+            UPDATE sessions SET workflow_run_id = NULL;
+            """);
+    }
+
+    public Task DisposeAsync()
+    {
+        _client.Dispose();
+        return Task.CompletedTask;
+    }
+
+#pragma warning disable CA1001 // Type owns disposable fields — disposal handled by IAsyncLifetime.DisposeAsync
+    public sealed class Server : IAsyncLifetime
+#pragma warning restore CA1001
+    {
+        public ApiWebApplicationFactory Factory { get; } = CreateFactory(simulateLocalhost: true);
+
+        public Task InitializeAsync() => SeedSessionAsync(Factory);
+
+        public async Task DisposeAsync() => await Factory.DisposeAsync();
     }
 
     // ── The handshake ──────────────────────────────────────────────────────────

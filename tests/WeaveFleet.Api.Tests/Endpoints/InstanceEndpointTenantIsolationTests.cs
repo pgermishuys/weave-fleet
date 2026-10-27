@@ -22,42 +22,58 @@ namespace WeaveFleet.Api.Tests.Endpoints;
 /// Seeds instances for two users directly into the DB, then verifies that
 /// the authenticated test user (sub=test-user) cannot access other-user's instances.
 /// </summary>
-#pragma warning disable CA1001 // Type owns disposable fields — disposal handled by IAsyncLifetime.DisposeAsync
-public sealed class InstanceEndpointTenantIsolationTests : IAsyncLifetime
-#pragma warning restore CA1001
+public sealed class InstanceEndpointTenantIsolationTests : IClassFixture<InstanceEndpointTenantIsolationTests.Server>
 {
-    private InstanceIsolationFactory? _factory;
-    private HttpClient? _client;
+    private readonly WebApplicationFactory<Program> _factory;
+    private readonly HttpClient _client;
 
-    public async Task InitializeAsync()
+    public InstanceEndpointTenantIsolationTests(Server server)
     {
-        _factory = new InstanceIsolationFactory();
-        _client = _factory.CreateClient(new WebApplicationFactoryClientOptions
-        {
-            AllowAutoRedirect = false,
-            HandleCookies = true,
-        });
-
-        // Trigger app startup
-        await _client.GetAsync("/api/sessions");
-
-        // Seed instances for two users directly into the main DB
-        using var scope = _factory.Services.CreateScope();
-        var dbFactory = scope.ServiceProvider.GetRequiredService<IDbConnectionFactory>();
-        using var conn = dbFactory.CreateConnection();
-
-        ExecuteNonQuery(conn, """
-            INSERT OR IGNORE INTO instances (id, port, pid, directory, url, status, created_at, user_id)
-            VALUES ('inst-test', 0, NULL, '/ws-test', '', 'running', '2026-03-01T00:00:00+00:00', 'test-user'),
-                   ('inst-other', 0, NULL, '/ws-other', '', 'running', '2026-03-01T00:00:00+00:00', 'other-user')
-            """);
+        _factory = server.Factory;
+        _client = server.Client;
     }
 
-    public async Task DisposeAsync()
+#pragma warning disable CA1001 // Type owns disposable fields — disposal handled by IAsyncLifetime.DisposeAsync
+    public sealed class Server : IAsyncLifetime
+#pragma warning restore CA1001
     {
-        _client?.Dispose();
-        if (_factory is not null)
-            await _factory.DisposeAsync();
+        private InstanceIsolationFactory? _factory;
+        private HttpClient? _client;
+
+        public async Task InitializeAsync()
+        {
+            _factory = new InstanceIsolationFactory();
+            _client = _factory.CreateClient(new WebApplicationFactoryClientOptions
+            {
+                AllowAutoRedirect = false,
+                HandleCookies = true,
+            });
+
+            // Trigger app startup
+            await _client.GetAsync("/api/sessions");
+
+            // Seed instances for two users directly into the main DB
+            using var scope = _factory.Services.CreateScope();
+            var dbFactory = scope.ServiceProvider.GetRequiredService<IDbConnectionFactory>();
+            using var conn = dbFactory.CreateConnection();
+
+            ExecuteNonQuery(conn, """
+                INSERT OR IGNORE INTO instances (id, port, pid, directory, url, status, created_at, user_id)
+                VALUES ('inst-test', 0, NULL, '/ws-test', '', 'running', '2026-03-01T00:00:00+00:00', 'test-user'),
+                       ('inst-other', 0, NULL, '/ws-other', '', 'running', '2026-03-01T00:00:00+00:00', 'other-user')
+                """);
+        }
+
+        public async Task DisposeAsync()
+        {
+            _client?.Dispose();
+            if (_factory is not null)
+                await _factory.DisposeAsync();
+        }
+
+        public WebApplicationFactory<Program> Factory => _factory!;
+
+        public HttpClient Client => _client!;
     }
 
     [Fact]

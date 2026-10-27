@@ -7,7 +7,6 @@ using Microsoft.AspNetCore.Mvc.Testing;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.DependencyInjection.Extensions;
 using WeaveFleet.Api.Endpoints;
-using WeaveFleet.Api.Tests.Auth;
 using WeaveFleet.Api.Tests.Infrastructure;
 using WeaveFleet.Application.Configuration;
 using WeaveFleet.Application.Data;
@@ -24,28 +23,31 @@ namespace WeaveFleet.Api.Tests.Endpoints;
 /// machine's token, never from a phone, a browser or an agent on this machine. Delivery itself is
 /// <see cref="SessionMessageDelivery"/>'s, covered in the Application tests; it needs a running harness.
 /// </summary>
-[Collection(LocalTokenAuthServiceTestsGroup.Name)]
-#pragma warning disable CA1001 // Type owns disposable fields — disposal handled by IAsyncLifetime.DisposeAsync
-public sealed class MachinePeerEndpointTests : IAsyncLifetime
-#pragma warning restore CA1001
+public sealed class MachinePeerEndpointTests : IClassFixture<MachinePeerEndpointTests.Server>
 {
     private const string BridgeToken = "bridge-1";
     private const string Session = "sess-installer";
     private const string Owner = "local-user";
 
-    private readonly FakeSessionMessageProxy _messages = new();
-    private ApiWebApplicationFactory? _factory;
+    private readonly ApiWebApplicationFactory _factory;
 
-    public async Task InitializeAsync()
+    public MachinePeerEndpointTests(Server server) => _factory = server.Factory;
+
+#pragma warning disable CA1001 // Type owns disposable fields — disposal handled by IAsyncLifetime.DisposeAsync
+    public sealed class Server : IAsyncLifetime
+#pragma warning restore CA1001
     {
-        _messages.GetMessagesBehavior = (_, _, _, _) => Task.FromResult(new MessagePage(
-            [
-                new HarnessMessage { Id = "m1", Role = "user", Parts = [new TextPart("Check the Windows installer.")], Timestamp = DateTimeOffset.UnixEpoch },
-                new HarnessMessage { Id = "m2", Role = "assistant", Parts = [new TextPart("It installs and starts.")], Timestamp = DateTimeOffset.UnixEpoch },
-            ],
-            HasMore: false));
+        private readonly FakeSessionMessageProxy _messages = new()
+        {
+            GetMessagesBehavior = (_, _, _, _) => Task.FromResult(new MessagePage(
+                [
+                    new HarnessMessage { Id = "m1", Role = "user", Parts = [new TextPart("Check the Windows installer.")], Timestamp = DateTimeOffset.UnixEpoch },
+                    new HarnessMessage { Id = "m2", Role = "assistant", Parts = [new TextPart("It installs and starts.")], Timestamp = DateTimeOffset.UnixEpoch },
+                ],
+                HasMore: false)),
+        };
 
-        _factory = new ApiWebApplicationFactory(
+        public Server() => Factory = new ApiWebApplicationFactory(
             authEnabled: false,
             tokenAuthEnabled: true,
             simulateLocalhostRequest: true,
@@ -55,13 +57,12 @@ public sealed class MachinePeerEndpointTests : IAsyncLifetime
                 services.RemoveAll<ISessionMessageProxy>();
                 services.AddScoped<ISessionMessageProxy>(_ => _messages);
             });
-        await SeedSessionAsync();
-    }
 
-    public async Task DisposeAsync()
-    {
-        if (_factory is not null)
-            await _factory.DisposeAsync();
+        public ApiWebApplicationFactory Factory { get; }
+
+        public Task InitializeAsync() => SeedSessionAsync(Factory);
+
+        public async Task DisposeAsync() => await Factory.DisposeAsync();
     }
 
     [Fact]
@@ -171,9 +172,9 @@ public sealed class MachinePeerEndpointTests : IAsyncLifetime
     private static async Task<string?> ErrorAsync(HttpResponseMessage response)
         => (await response.Content.ReadFromJsonAsync<JsonElement>()).GetProperty("error").GetString();
 
-    private async Task SeedSessionAsync()
+    private static async Task SeedSessionAsync(ApiWebApplicationFactory factory)
     {
-        using var scope = _factory!.Services.CreateScope();
+        using var scope = factory.Services.CreateScope();
         using var connection = scope.ServiceProvider.GetRequiredService<IDbConnectionFactory>().CreateConnection();
         await connection.ExecuteAsync($"""
             INSERT INTO workspaces (id, directory, display_name, created_at, user_id)

@@ -5,7 +5,6 @@ using System.Security.Cryptography;
 using System.Text.Json;
 using Microsoft.AspNetCore.Mvc.Testing;
 using Microsoft.Extensions.DependencyInjection;
-using WeaveFleet.Api.Tests.Auth;
 using WeaveFleet.Api.Tests.Infrastructure;
 using WeaveFleet.Application.Configuration;
 using WeaveFleet.Application.Devices;
@@ -20,15 +19,35 @@ namespace WeaveFleet.Api.Tests.Endpoints;
 /// A browser registering where to push: saving, reading back and removing its subscription, a test push, and each
 /// paired device keeping to its own.
 /// </summary>
-[Collection(LocalTokenAuthServiceTestsGroup.Name)]
-public sealed class PushEndpointTests
+public sealed class PushEndpointTests : IClassFixture<PushEndpointTests.Server>, IAsyncLifetime
 {
     private const string Endpoint = "https://fcm.googleapis.com/fcm/send/phone-1";
+
+    private readonly ApiWebApplicationFactory _factory;
+    private readonly RecordingSender _sender;
+
+    public PushEndpointTests(Server server)
+    {
+        _factory = server.Factory;
+        _sender = server.Sender;
+    }
+
+    /// <summary>Every test starts with no subscriptions and nothing sent.</summary>
+    public async Task InitializeAsync()
+    {
+        _sender.Sent.Clear();
+        _sender.Outcome = PushSendOutcome.Delivered;
+        var subscriptions = Subscriptions(_factory);
+        foreach (var subscription in await subscriptions.ListAsync())
+            await subscriptions.DeleteByEndpointAsync(subscription.Endpoint);
+    }
+
+    public Task DisposeAsync() => Task.CompletedTask;
 
     [Fact]
     public async Task The_vapid_key_is_this_machines()
     {
-        await using var factory = CreateFactory();
+        var factory = _factory;
         using var owner = Client(factory, MachineToken(factory));
 
         var key = await owner.GetFromJsonAsync<JsonElement>("/api/push/vapid");
@@ -39,7 +58,7 @@ public sealed class PushEndpointTests
     [Fact]
     public async Task A_device_subscribes_with_every_kind_by_default_then_changes_its_choice()
     {
-        await using var factory = CreateFactory();
+        var factory = _factory;
         var (device, token) = await IssueAsync(factory);
         using var phone = Client(factory, token);
 
@@ -63,7 +82,7 @@ public sealed class PushEndpointTests
     [Fact]
     public async Task Bad_subscriptions_are_refused()
     {
-        await using var factory = CreateFactory();
+        var factory = _factory;
         using var owner = Client(factory, MachineToken(factory));
 
         (await owner.PutAsJsonAsync("/api/push/subscriptions", Body("http://insecure.example/x"))).StatusCode.ShouldBe(HttpStatusCode.BadRequest);
@@ -77,7 +96,7 @@ public sealed class PushEndpointTests
     [Fact]
     public async Task A_device_cannot_touch_another_devices_subscription_but_the_owner_can()
     {
-        await using var factory = CreateFactory();
+        var factory = _factory;
         var (_, first) = await IssueAsync(factory);
         var (_, second) = await IssueAsync(factory, "iPhone");
         using var phone = Client(factory, first);
@@ -98,7 +117,7 @@ public sealed class PushEndpointTests
     [Fact]
     public async Task A_rotated_subscription_keeps_the_old_ones_choices()
     {
-        await using var factory = CreateFactory();
+        var factory = _factory;
         var (_, token) = await IssueAsync(factory);
         using var phone = Client(factory, token);
         await phone.PutAsJsonAsync("/api/push/subscriptions", Body(Endpoint, kinds: ["finished"], quiet: false));
@@ -115,7 +134,7 @@ public sealed class PushEndpointTests
     [Fact]
     public async Task Removing_a_device_removes_its_subscriptions()
     {
-        await using var factory = CreateFactory();
+        var factory = _factory;
         var (device, token) = await IssueAsync(factory);
         using var phone = Client(factory, token);
         using var owner = Client(factory, MachineToken(factory));
@@ -130,8 +149,9 @@ public sealed class PushEndpointTests
     [Fact]
     public async Task A_test_push_goes_to_that_subscription_only()
     {
-        var sender = new RecordingSender(PushSendOutcome.Delivered);
-        await using var factory = CreateFactory(services => services.AddSingleton<IPushSender>(sender));
+        var sender = _sender;
+        sender.Outcome = PushSendOutcome.Delivered;
+        var factory = _factory;
         var (_, token) = await IssueAsync(factory);
         using var phone = Client(factory, token);
         await phone.PutAsJsonAsync("/api/push/subscriptions", Body(Endpoint));
@@ -152,8 +172,9 @@ public sealed class PushEndpointTests
     [Fact]
     public async Task A_test_push_to_a_gone_subscription_removes_it()
     {
-        var sender = new RecordingSender(PushSendOutcome.Gone);
-        await using var factory = CreateFactory(services => services.AddSingleton<IPushSender>(sender));
+        var sender = _sender;
+        sender.Outcome = PushSendOutcome.Gone;
+        var factory = _factory;
         using var owner = Client(factory, MachineToken(factory));
         await owner.PutAsJsonAsync("/api/push/subscriptions", Body(Endpoint));
 
@@ -163,8 +184,21 @@ public sealed class PushEndpointTests
         (await Subscriptions(factory).ListAsync()).ShouldBeEmpty();
     }
 
-    private sealed class RecordingSender(PushSendOutcome outcome) : IPushSender
+    public sealed class Server : IDisposable
     {
+        public Server() => Factory = CreateFactory(services => services.AddSingleton<IPushSender>(Sender));
+
+        public RecordingSender Sender { get; } = new();
+
+        public ApiWebApplicationFactory Factory { get; }
+
+        public void Dispose() => Factory.Dispose();
+    }
+
+    public sealed class RecordingSender : IPushSender
+    {
+        public PushSendOutcome Outcome { get; set; } = PushSendOutcome.Delivered;
+
         public List<(PushSubscriptionRecord Subscription, PushMessage Message)> Sent { get; } = [];
 
         public string Channel => "webpush";
@@ -172,7 +206,7 @@ public sealed class PushEndpointTests
         public Task<PushSendResult> SendAsync(PushSubscriptionRecord subscription, PushMessage message, CancellationToken cancellationToken)
         {
             Sent.Add((subscription, message));
-            return Task.FromResult(new PushSendResult(outcome, 201));
+            return Task.FromResult(new PushSendResult(Outcome, 201));
         }
     }
 

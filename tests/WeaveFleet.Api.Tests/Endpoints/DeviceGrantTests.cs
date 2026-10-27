@@ -4,7 +4,6 @@ using System.Net.Http.Json;
 using System.Text.Json;
 using Microsoft.AspNetCore.Mvc.Testing;
 using Microsoft.Extensions.DependencyInjection;
-using WeaveFleet.Api.Tests.Auth;
 using WeaveFleet.Api.Tests.Infrastructure;
 using WeaveFleet.Application.Configuration;
 using WeaveFleet.Application.Devices;
@@ -18,7 +17,6 @@ namespace WeaveFleet.Api.Tests.Endpoints;
 /// A phone paired with hangar (its home) getting its own token on falcon, another machine in hangar's list, through
 /// hangar; and losing it there when it's removed on hangar. Hangar reaches falcon through falcon's test server.
 /// </summary>
-[Collection(LocalTokenAuthServiceTestsGroup.Name)]
 public sealed class DeviceGrantTests
 {
     [Fact]

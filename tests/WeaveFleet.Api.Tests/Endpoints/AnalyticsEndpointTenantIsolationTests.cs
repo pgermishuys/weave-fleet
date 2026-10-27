@@ -21,75 +21,91 @@ namespace WeaveFleet.Api.Tests.Endpoints;
 /// then verifies that authenticated requests only return the authenticated user's data.
 /// The TestAuthHandler provides <c>sub=test-user</c> for all requests.
 /// </summary>
-#pragma warning disable CA1001 // Type owns disposable fields — disposal handled by IAsyncLifetime.DisposeAsync
-public sealed class AnalyticsEndpointTenantIsolationTests : IAsyncLifetime
-#pragma warning restore CA1001
+public sealed class AnalyticsEndpointTenantIsolationTests : IClassFixture<AnalyticsEndpointTenantIsolationTests.Server>
 {
-    private AnalyticsWebApplicationFactory? _factory;
-    private HttpClient? _client;
+    private readonly WebApplicationFactory<Program> _factory;
+    private readonly HttpClient _client;
 
-    public async Task InitializeAsync()
+    public AnalyticsEndpointTenantIsolationTests(Server server)
     {
-        _factory = new AnalyticsWebApplicationFactory();
-        _client = _factory.CreateClient(new WebApplicationFactoryClientOptions
-        {
-            AllowAutoRedirect = false
-        });
-
-        // Wait for application to start (trigger initialization)
-        _ = await _client.GetAsync("/api/analytics/summary");
-
-        // Seed analytics data for two users via the IAnalyticsDbConnectionFactory
-        using var scope = _factory.Services.CreateScope();
-        var analyticsDb = scope.ServiceProvider.GetRequiredService<IAnalyticsDbConnectionFactory>();
-        using var conn = analyticsDb.CreateConnection();
-
-        // Seed token_events: test-user has 2 events; other-user has 1 event
-        ExecuteNonQuery(conn, """
-            INSERT INTO token_events (
-                event_id, session_id, project_id, project_name, workspace_directory,
-                model_id, provider_id,
-                tokens_input, tokens_output, tokens_reasoning,
-                tokens_cache_read, tokens_cache_write, tokens_total,
-                cost, estimated_cost, created_at, user_id)
-            VALUES
-              ('tu-evt-1','tu-sess-1','proj-a','Alpha','/ws','claude-sonnet','anthropic',
-               100,200,0,0,0,300, 0.01, 0.009, '2026-03-01T10:00:00+00:00','test-user'),
-              ('tu-evt-2','tu-sess-1','proj-a','Alpha','/ws','claude-sonnet','anthropic',
-               50,100,0,0,0,150, 0.005, 0.004, '2026-03-01T11:00:00+00:00','test-user'),
-              ('ou-evt-1','ou-sess-1','proj-b','Beta','/ws2','gpt-4o','openai',
-               200,300,0,0,0,500, 0.02, 0.018, '2026-03-01T12:00:00+00:00','other-user')
-            """);
-
-        // Seed session_snapshots for two users
-        ExecuteNonQuery(conn, """
-            INSERT INTO session_snapshots (
-                session_id, project_id, project_name, workspace_directory, title, status,
-                total_tokens, total_cost, total_estimated_cost,
-                message_count, model_ids, created_at, user_id)
-            VALUES
-              ('tu-sess-1','proj-a','Alpha','/ws','Session A','active',
-               450, 0.015, 0.013, 2, '["claude-sonnet"]', '2026-03-01T10:00:00+00:00','test-user'),
-              ('ou-sess-1','proj-b','Beta','/ws2','Session B','active',
-               500, 0.02, 0.018, 1, '["gpt-4o"]', '2026-03-01T12:00:00+00:00','other-user')
-            """);
-
-        // Seed daily_rollups for two users
-        ExecuteNonQuery(conn, """
-            INSERT INTO daily_rollups (
-                date, user_id, project_id, model_id, provider_id,
-                total_tokens, total_cost, total_estimated_cost, session_count, message_count)
-            VALUES
-              ('2026-03-01','test-user','proj-a','claude-sonnet','anthropic', 450, 0.015, 0.013, 1, 2),
-              ('2026-03-01','other-user','proj-b','gpt-4o','openai', 500, 0.02, 0.018, 1, 1)
-            """);
+        _factory = server.Factory;
+        _client = server.Client;
     }
 
-    public async Task DisposeAsync()
+#pragma warning disable CA1001 // Type owns disposable fields — disposal handled by IAsyncLifetime.DisposeAsync
+    public sealed class Server : IAsyncLifetime
+#pragma warning restore CA1001
     {
-        _client?.Dispose();
-        if (_factory is not null)
-            await _factory.DisposeAsync();
+        private AnalyticsWebApplicationFactory? _factory;
+        private HttpClient? _client;
+
+        public async Task InitializeAsync()
+        {
+            _factory = new AnalyticsWebApplicationFactory();
+            _client = _factory.CreateClient(new WebApplicationFactoryClientOptions
+            {
+                AllowAutoRedirect = false
+            });
+
+            // Wait for application to start (trigger initialization)
+            _ = await _client.GetAsync("/api/analytics/summary");
+
+            // Seed analytics data for two users via the IAnalyticsDbConnectionFactory
+            using var scope = _factory.Services.CreateScope();
+            var analyticsDb = scope.ServiceProvider.GetRequiredService<IAnalyticsDbConnectionFactory>();
+            using var conn = analyticsDb.CreateConnection();
+
+            // Seed token_events: test-user has 2 events; other-user has 1 event
+            ExecuteNonQuery(conn, """
+                INSERT INTO token_events (
+                    event_id, session_id, project_id, project_name, workspace_directory,
+                    model_id, provider_id,
+                    tokens_input, tokens_output, tokens_reasoning,
+                    tokens_cache_read, tokens_cache_write, tokens_total,
+                    cost, estimated_cost, created_at, user_id)
+                VALUES
+                  ('tu-evt-1','tu-sess-1','proj-a','Alpha','/ws','claude-sonnet','anthropic',
+                   100,200,0,0,0,300, 0.01, 0.009, '2026-03-01T10:00:00+00:00','test-user'),
+                  ('tu-evt-2','tu-sess-1','proj-a','Alpha','/ws','claude-sonnet','anthropic',
+                   50,100,0,0,0,150, 0.005, 0.004, '2026-03-01T11:00:00+00:00','test-user'),
+                  ('ou-evt-1','ou-sess-1','proj-b','Beta','/ws2','gpt-4o','openai',
+                   200,300,0,0,0,500, 0.02, 0.018, '2026-03-01T12:00:00+00:00','other-user')
+                """);
+
+            // Seed session_snapshots for two users
+            ExecuteNonQuery(conn, """
+                INSERT INTO session_snapshots (
+                    session_id, project_id, project_name, workspace_directory, title, status,
+                    total_tokens, total_cost, total_estimated_cost,
+                    message_count, model_ids, created_at, user_id)
+                VALUES
+                  ('tu-sess-1','proj-a','Alpha','/ws','Session A','active',
+                   450, 0.015, 0.013, 2, '["claude-sonnet"]', '2026-03-01T10:00:00+00:00','test-user'),
+                  ('ou-sess-1','proj-b','Beta','/ws2','Session B','active',
+                   500, 0.02, 0.018, 1, '["gpt-4o"]', '2026-03-01T12:00:00+00:00','other-user')
+                """);
+
+            // Seed daily_rollups for two users
+            ExecuteNonQuery(conn, """
+                INSERT INTO daily_rollups (
+                    date, user_id, project_id, model_id, provider_id,
+                    total_tokens, total_cost, total_estimated_cost, session_count, message_count)
+                VALUES
+                  ('2026-03-01','test-user','proj-a','claude-sonnet','anthropic', 450, 0.015, 0.013, 1, 2),
+                  ('2026-03-01','other-user','proj-b','gpt-4o','openai', 500, 0.02, 0.018, 1, 1)
+                """);
+        }
+
+        public async Task DisposeAsync()
+        {
+            _client?.Dispose();
+            if (_factory is not null)
+                await _factory.DisposeAsync();
+        }
+
+        public WebApplicationFactory<Program> Factory => _factory!;
+
+        public HttpClient Client => _client!;
     }
 
     [Fact]

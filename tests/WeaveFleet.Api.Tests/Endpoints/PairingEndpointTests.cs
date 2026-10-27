@@ -6,7 +6,6 @@ using System.Text.Json;
 using Microsoft.AspNetCore.Mvc.Testing;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Time.Testing;
-using WeaveFleet.Api.Tests.Auth;
 using WeaveFleet.Api.Tests.Infrastructure;
 using WeaveFleet.Application.Devices;
 using WeaveFleet.Application.Users;
@@ -17,15 +16,20 @@ namespace WeaveFleet.Api.Tests.Endpoints;
 /// Pairing a phone: the owner makes a one-time code, the phone previews and redeems it for its own token, and the
 /// owner can list and remove devices. Requests arrive over loopback on a reachable bind, as through tailscale serve.
 /// </summary>
-[Collection(LocalTokenAuthServiceTestsGroup.Name)]
-public sealed class PairingEndpointTests
+public sealed class PairingEndpointTests : IClassFixture<PairingEndpointTests.Server>
 {
     private const string PhoneUrl = "https://hangar.tail9c2e.ts.net";
+
+    private readonly ApiWebApplicationFactory _server;
+
+    // The pairing endpoints share one limit of 10 requests a minute, so the tests that make many of them
+    // (and the ones that run into it) each get a server of their own.
+    public PairingEndpointTests(Server server) => _server = server.Factory;
 
     [Fact]
     public async Task Create_preview_and_redeem_works_once()
     {
-        await using var factory = CreateFactory();
+        var factory = _server;
         using var owner = Client(factory, MachineToken(factory));
         using var phone = Client(factory);
 
@@ -53,7 +57,7 @@ public sealed class PairingEndpointTests
         again.StatusCode.ShouldBe(HttpStatusCode.NotFound);
 
         var devices = await owner.GetFromJsonAsync<JsonElement>("/api/machine/devices");
-        var listed = devices.GetProperty("devices").EnumerateArray().Single();
+        var listed = devices.GetProperty("devices").EnumerateArray().Single(device => device.GetProperty("name").GetString() == "Pixel 9");
         listed.GetProperty("name").GetString().ShouldBe("Pixel 9");
         listed.GetProperty("platform").GetString().ShouldBe("android");
         listed.TryGetProperty("tokenHash", out _).ShouldBeFalse();
@@ -62,7 +66,7 @@ public sealed class PairingEndpointTests
     [Fact]
     public async Task The_qr_url_carries_the_v1_payload_in_its_fragment()
     {
-        await using var factory = CreateFactory();
+        var factory = _server;
         using var owner = Client(factory, MachineToken(factory));
 
         var created = await CreateCodeAsync(owner, PhoneUrl + "/");
@@ -83,7 +87,7 @@ public sealed class PairingEndpointTests
     [Fact]
     public async Task The_manual_code_redeems_too()
     {
-        await using var factory = CreateFactory();
+        var factory = _server;
         using var owner = Client(factory, MachineToken(factory));
         using var phone = Client(factory);
         var created = await CreateCodeAsync(owner);
@@ -128,7 +132,7 @@ public sealed class PairingEndpointTests
     [Fact]
     public async Task Pairing_needs_a_full_http_address()
     {
-        await using var factory = CreateFactory();
+        var factory = _server;
         using var owner = Client(factory, MachineToken(factory));
 
         (await owner.PostAsJsonAsync("/api/machine/pairing", new { baseUrl = "hangar" })).StatusCode.ShouldBe(HttpStatusCode.BadRequest);
@@ -139,7 +143,7 @@ public sealed class PairingEndpointTests
     [Fact]
     public async Task Devices_cannot_pair_list_remove_or_mint()
     {
-        await using var factory = CreateFactory();
+        var factory = _server;
         var (device, token) = await factory.Services.GetRequiredService<DeviceTokenService>().IssueAsync("Pixel", "android");
         using var phone = Client(factory, token);
 
@@ -152,7 +156,7 @@ public sealed class PairingEndpointTests
     [Fact]
     public async Task Anyone_may_try_a_code_without_signing_in()
     {
-        await using var factory = CreateFactory();
+        var factory = _server;
         using var stranger = Client(factory);
 
         (await stranger.PostAsJsonAsync("/api/pairing/preview", new { secret = "nope" })).StatusCode.ShouldBe(HttpStatusCode.NotFound);
@@ -162,7 +166,7 @@ public sealed class PairingEndpointTests
     [Fact]
     public async Task Removing_a_device_locks_its_token_out_at_once()
     {
-        await using var factory = CreateFactory();
+        var factory = _server;
         using var owner = Client(factory, MachineToken(factory));
         var (device, token) = await factory.Services.GetRequiredService<DeviceTokenService>().IssueAsync("Pixel", "android");
         using var phone = Client(factory, token);
@@ -234,7 +238,7 @@ public sealed class PairingEndpointTests
     [Fact]
     public async Task The_phone_address_is_saved_on_the_machine()
     {
-        await using var factory = CreateFactory();
+        var factory = _server;
         using var owner = Client(factory, MachineToken(factory));
 
         var saved = await owner.PutAsJsonAsync("/api/machine", new { publicUrl = PhoneUrl + "/" });
@@ -247,6 +251,13 @@ public sealed class PairingEndpointTests
         (await owner.PutAsJsonAsync("/api/machine", new { publicUrl = "ftp://x" })).StatusCode.ShouldBe(HttpStatusCode.BadRequest);
         await owner.PutAsJsonAsync("/api/machine", new { publicUrl = "" });
         (await owner.GetFromJsonAsync<JsonElement>("/api/machine")).GetProperty("publicUrl").ValueKind.ShouldBe(JsonValueKind.Null);
+    }
+
+    public sealed class Server : IDisposable
+    {
+        public ApiWebApplicationFactory Factory { get; } = CreateFactory();
+
+        public void Dispose() => Factory.Dispose();
     }
 
     private static async Task<JsonElement> CreateCodeAsync(HttpClient owner, string baseUrl = PhoneUrl)

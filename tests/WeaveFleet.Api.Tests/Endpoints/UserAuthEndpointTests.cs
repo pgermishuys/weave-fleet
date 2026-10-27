@@ -11,12 +11,29 @@ using WeaveFleet.Application.Users;
 
 namespace WeaveFleet.Api.Tests.Endpoints;
 
-public sealed class UserAuthEndpointTests
+public sealed class UserAuthEndpointTests :
+    IClassFixture<UserAuthEndpointTests.SignedInServer>,
+    IClassFixture<UserAuthEndpointTests.SignInRequiredServer>,
+    IClassFixture<UserAuthEndpointTests.AuthDisabledServer>,
+    IClassFixture<UserAuthEndpointTests.TokenAuthServer>
 {
+    private readonly ApiWebApplicationFactory _signedIn;
+    private readonly ApiWebApplicationFactory _signInRequired;
+    private readonly ApiWebApplicationFactory _authDisabled;
+    private readonly ApiWebApplicationFactory _tokenAuth;
+
+    public UserAuthEndpointTests(SignedInServer signedIn, SignInRequiredServer signInRequired, AuthDisabledServer authDisabled, TokenAuthServer tokenAuth)
+    {
+        _signedIn = signedIn.Factory;
+        _signInRequired = signInRequired.Factory;
+        _authDisabled = authDisabled.Factory;
+        _tokenAuth = tokenAuth.Factory;
+    }
+
     [Fact]
     public async Task GetUserMe_WhenAuthenticated_ReturnsOk()
     {
-        await using var factory = new ApiWebApplicationFactory(authEnabled: true, useTestAuthentication: true);
+        var factory = _signedIn;
         using var client = factory.CreateClient(new WebApplicationFactoryClientOptions
         {
             AllowAutoRedirect = false,
@@ -40,7 +57,7 @@ public sealed class UserAuthEndpointTests
     [Fact]
     public async Task GetUserMe_WhenUnauthenticated_ReturnsUnauthorized()
     {
-        await using var factory = new ApiWebApplicationFactory(authEnabled: true);
+        var factory = _signInRequired;
         using var client = factory.CreateClient(new WebApplicationFactoryClientOptions
         {
             AllowAutoRedirect = false,
@@ -55,7 +72,7 @@ public sealed class UserAuthEndpointTests
     [Fact]
     public async Task SignalRHubHandshake_WhenUnauthenticated_ReturnsUnauthorized()
     {
-        await using var factory = new ApiWebApplicationFactory(authEnabled: true);
+        var factory = _signInRequired;
         using var client = factory.CreateClient(new WebApplicationFactoryClientOptions
         {
             AllowAutoRedirect = false,
@@ -73,7 +90,7 @@ public sealed class UserAuthEndpointTests
     [Fact]
     public async Task SignalRHubHandshake_WhenAuthenticatedWithDisallowedOrigin_ReturnsForbidden()
     {
-        await using var factory = new ApiWebApplicationFactory(authEnabled: true, useTestAuthentication: true);
+        var factory = _signedIn;
         using var client = factory.CreateClient(new WebApplicationFactoryClientOptions
         {
             AllowAutoRedirect = false,
@@ -91,7 +108,7 @@ public sealed class UserAuthEndpointTests
     [Fact]
     public async Task UpdateConfig_WithoutCsrfToken_IsRejected()
     {
-        await using var factory = new ApiWebApplicationFactory(authEnabled: true, useTestAuthentication: true);
+        var factory = _signedIn;
         using var client = factory.CreateClient(new WebApplicationFactoryClientOptions
         {
             AllowAutoRedirect = false,
@@ -108,7 +125,7 @@ public sealed class UserAuthEndpointTests
     [Fact]
     public async Task UpdateConfig_WithCsrfToken_Succeeds()
     {
-        await using var factory = new ApiWebApplicationFactory(authEnabled: true, useTestAuthentication: true);
+        var factory = _signedIn;
         using var client = factory.CreateClient(new WebApplicationFactoryClientOptions
         {
             AllowAutoRedirect = false,
@@ -138,7 +155,7 @@ public sealed class UserAuthEndpointTests
     [Fact]
     public async Task Logout_WithoutCsrfToken_IsRejected()
     {
-        await using var factory = new ApiWebApplicationFactory(authEnabled: true, useTestAuthentication: true);
+        var factory = _signedIn;
         using var client = factory.CreateClient(new WebApplicationFactoryClientOptions
         {
             AllowAutoRedirect = false,
@@ -153,7 +170,7 @@ public sealed class UserAuthEndpointTests
     [Fact]
     public async Task GetClientConfig_WhenAuthDisabled_ReturnsClientFlags()
     {
-        await using var factory = new ApiWebApplicationFactory(authEnabled: false);
+        var factory = _authDisabled;
         using var client = factory.CreateClient(new WebApplicationFactoryClientOptions
         {
             AllowAutoRedirect = false,
@@ -173,7 +190,7 @@ public sealed class UserAuthEndpointTests
     [Fact]
     public async Task GetUserMe_WhenAuthDisabled_ReturnsLocalUser()
     {
-        await using var factory = new ApiWebApplicationFactory(authEnabled: false);
+        var factory = _authDisabled;
         using var client = factory.CreateClient(new WebApplicationFactoryClientOptions
         {
             AllowAutoRedirect = false,
@@ -194,7 +211,7 @@ public sealed class UserAuthEndpointTests
     [Fact]
     public async Task GetUserMe_WhenLocalTokenAuthEnabledAndUnauthenticated_ReturnsUnauthorized()
     {
-        await using var factory = new ApiWebApplicationFactory(authEnabled: false, tokenAuthEnabled: true);
+        var factory = _tokenAuth;
         using var client = factory.CreateClient(new WebApplicationFactoryClientOptions
         {
             AllowAutoRedirect = false,
@@ -209,7 +226,7 @@ public sealed class UserAuthEndpointTests
     [Fact]
     public async Task GetUserMe_WhenLocalTokenAuthEnabledAndBearerTokenProvided_ReturnsOk()
     {
-        await using var factory = new ApiWebApplicationFactory(authEnabled: false, tokenAuthEnabled: true);
+        var factory = _tokenAuth;
         using var client = factory.CreateClient(new WebApplicationFactoryClientOptions
         {
             AllowAutoRedirect = false,
@@ -230,7 +247,7 @@ public sealed class UserAuthEndpointTests
     [Fact]
     public async Task Should_return_unauthorized_when_getting_config_without_auth_cookie_in_local_token_mode()
     {
-        await using var factory = new ApiWebApplicationFactory(authEnabled: false, tokenAuthEnabled: true);
+        var factory = _tokenAuth;
         using var client = factory.CreateClient(new WebApplicationFactoryClientOptions
         {
             AllowAutoRedirect = false,
@@ -245,7 +262,7 @@ public sealed class UserAuthEndpointTests
     [Fact]
     public async Task Should_return_auth_status_without_auth_cookie_in_local_token_mode()
     {
-        await using var factory = new ApiWebApplicationFactory(authEnabled: false, tokenAuthEnabled: true);
+        var factory = _tokenAuth;
         using var client = factory.CreateClient(new WebApplicationFactoryClientOptions
         {
             AllowAutoRedirect = false,
@@ -265,7 +282,7 @@ public sealed class UserAuthEndpointTests
     [Fact]
     public async Task Should_return_authenticated_true_when_getting_auth_status_with_bearer_token_in_local_token_mode()
     {
-        await using var factory = new ApiWebApplicationFactory(authEnabled: false, tokenAuthEnabled: true);
+        var factory = _tokenAuth;
         using var client = factory.CreateClient(new WebApplicationFactoryClientOptions
         {
             AllowAutoRedirect = false,
@@ -288,7 +305,7 @@ public sealed class UserAuthEndpointTests
     [Fact]
     public async Task Should_return_unauthorized_without_redirect_when_token_login_token_is_invalid()
     {
-        await using var factory = new ApiWebApplicationFactory(authEnabled: false, tokenAuthEnabled: true);
+        var factory = _tokenAuth;
         using var client = factory.CreateClient(new WebApplicationFactoryClientOptions
         {
             AllowAutoRedirect = false,
@@ -304,7 +321,7 @@ public sealed class UserAuthEndpointTests
     [Fact]
     public async Task Should_return_ok_when_getting_client_config_without_auth_cookie_in_local_token_mode()
     {
-        await using var factory = new ApiWebApplicationFactory(authEnabled: false, tokenAuthEnabled: true);
+        var factory = _tokenAuth;
         using var client = factory.CreateClient(new WebApplicationFactoryClientOptions
         {
             AllowAutoRedirect = false,
@@ -319,7 +336,7 @@ public sealed class UserAuthEndpointTests
     [Fact]
     public async Task Should_return_ok_when_getting_login_page_without_auth_cookie_in_local_token_mode()
     {
-        await using var factory = new ApiWebApplicationFactory(authEnabled: false, tokenAuthEnabled: true);
+        var factory = _tokenAuth;
         using var client = factory.CreateClient(new WebApplicationFactoryClientOptions
         {
             AllowAutoRedirect = false,
@@ -334,7 +351,7 @@ public sealed class UserAuthEndpointTests
     [Fact]
     public async Task Should_return_ok_when_getting_static_asset_without_auth_cookie_in_local_token_mode()
     {
-        await using var factory = new ApiWebApplicationFactory(authEnabled: false, tokenAuthEnabled: true);
+        var factory = _tokenAuth;
         using var client = factory.CreateClient(new WebApplicationFactoryClientOptions
         {
             AllowAutoRedirect = false,
@@ -372,7 +389,7 @@ public sealed class UserAuthEndpointTests
     [Fact]
     public async Task Login_WithExternalReturnUrl_FallsBackToRoot()
     {
-        await using var factory = new ApiWebApplicationFactory(authEnabled: false);
+        var factory = _authDisabled;
         using var client = factory.CreateClient(new WebApplicationFactoryClientOptions
         {
             AllowAutoRedirect = false,
@@ -384,6 +401,34 @@ public sealed class UserAuthEndpointTests
         response.StatusCode.ShouldBe(HttpStatusCode.Redirect);
         response.Headers.Location.ShouldNotBeNull();
         response.Headers.Location.OriginalString.ShouldBe("/");
+    }
+
+    public sealed class SignedInServer : IDisposable
+    {
+        public ApiWebApplicationFactory Factory { get; } = new(authEnabled: true, useTestAuthentication: true);
+
+        public void Dispose() => Factory.Dispose();
+    }
+
+    public sealed class SignInRequiredServer : IDisposable
+    {
+        public ApiWebApplicationFactory Factory { get; } = new(authEnabled: true);
+
+        public void Dispose() => Factory.Dispose();
+    }
+
+    public sealed class AuthDisabledServer : IDisposable
+    {
+        public ApiWebApplicationFactory Factory { get; } = new(authEnabled: false);
+
+        public void Dispose() => Factory.Dispose();
+    }
+
+    public sealed class TokenAuthServer : IDisposable
+    {
+        public ApiWebApplicationFactory Factory { get; } = new(authEnabled: false, tokenAuthEnabled: true);
+
+        public void Dispose() => Factory.Dispose();
     }
 
     private static string? ExtractCookieValue(IEnumerable<string> setCookies, string cookieName)
