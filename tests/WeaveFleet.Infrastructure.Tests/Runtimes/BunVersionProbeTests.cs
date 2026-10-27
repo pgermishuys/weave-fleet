@@ -92,7 +92,8 @@ public sealed class BunVersionProbeTests : IDisposable
     public async Task A_bun_that_hangs_is_killed_with_its_children_when_the_time_is_up()
     {
         if (OperatingSystem.IsWindows()) return;
-        var path = Script("sleep 31 &\nsleep 32");
+        var (first, second) = (UniqueSleep(31), UniqueSleep(32));
+        var path = Script($"{first} &\n{second}");
 
         var clock = Stopwatch.StartNew();
         var result = await Run(path, TimeSpan.FromMilliseconds(300));
@@ -103,8 +104,8 @@ public sealed class BunVersionProbeTests : IDisposable
         result.Error.ShouldNotBeNull();
         result.Error.ShouldContain("didn't answer within");
         await Task.Delay(300);
-        StillRunning("sleep 31").ShouldBeFalse();
-        StillRunning("sleep 32").ShouldBeFalse();
+        StillRunning(first).ShouldBeFalse();
+        StillRunning(second).ShouldBeFalse();
     }
 
     [Fact]
@@ -188,7 +189,8 @@ public sealed class BunVersionProbeTests : IDisposable
     public async Task Cancelling_throws_and_kills_the_process()
     {
         if (OperatingSystem.IsWindows()) return;
-        var path = Script("sleep 33 &\nsleep 34");
+        var (first, second) = (UniqueSleep(33), UniqueSleep(34));
+        var path = Script($"{first} &\n{second}");
         using var cts = new CancellationTokenSource();
         var task = Run(path, Generous, cts.Token);
         await Task.Delay(500);
@@ -196,8 +198,8 @@ public sealed class BunVersionProbeTests : IDisposable
 
         await Should.ThrowAsync<OperationCanceledException>(task);
         await Task.Delay(300);
-        StillRunning("sleep 33").ShouldBeFalse();
-        StillRunning("sleep 34").ShouldBeFalse();
+        StillRunning(first).ShouldBeFalse();
+        StillRunning(second).ShouldBeFalse();
     }
 
     [Fact]
@@ -208,6 +210,13 @@ public sealed class BunVersionProbeTests : IDisposable
         result.Version.ShouldBeNull();
         result.Error.ShouldNotBeNull();
     }
+
+    /// <summary>
+    /// A <c>sleep</c> no other process has the command line of, for <see cref="StillRunning"/> to look for. The suite
+    /// runs in parallel and other tests start sleeps too (AppRunnerTests runs <c>exec sleep 31</c>), so a plain
+    /// <c>sleep 31</c> found running may well be theirs.
+    /// </summary>
+    private static string UniqueSleep(int seconds) => $"sleep {seconds}.{Random.Shared.Next(100_000, 1_000_000)}";
 
     private static bool StillRunning(string commandLine)
     {
