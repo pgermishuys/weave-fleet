@@ -18,6 +18,7 @@ namespace WeaveFleet.Api.Tests.Endpoints;
 /// An automation on hangar that runs on falcon, another machine in hangar's list: Run now starts its session on falcon
 /// through falcon's own API, and the run on hangar says so. With falcon away, the run is skipped and says why.
 /// </summary>
+[Collection(TwoFleetTestGroup.Name)]
 public sealed class AutomationMachineTests : IDisposable
 {
     private readonly string _folder = Directory.CreateTempSubdirectory("fleet-automation-machine-").FullName;

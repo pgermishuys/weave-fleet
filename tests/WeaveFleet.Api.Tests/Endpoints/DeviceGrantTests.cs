@@ -17,6 +17,7 @@ namespace WeaveFleet.Api.Tests.Endpoints;
 /// A phone paired with hangar (its home) getting its own token on falcon, another machine in hangar's list, through
 /// hangar; and losing it there when it's removed on hangar. Hangar reaches falcon through falcon's test server.
 /// </summary>
+[Collection(TwoFleetTestGroup.Name)]
 public sealed class DeviceGrantTests
 {
     [Fact]

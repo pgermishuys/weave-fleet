@@ -16,6 +16,7 @@ namespace WeaveFleet.Api.Tests.Endpoints;
 /// The machine list on the server: adding another Fleet (checked against it), importing a browser's list, removing,
 /// and what a paired device may see. Two Fleets in one process: A's outbound requests are routed to B's test server.
 /// </summary>
+[Collection(TwoFleetTestGroup.Name)]
 public sealed class MachinesEndpointTests : IClassFixture<MachinesEndpointTests.Server>, IAsyncLifetime
 {
     private const string FalconUrl = "https://falcon.tail9c2e.ts.net";

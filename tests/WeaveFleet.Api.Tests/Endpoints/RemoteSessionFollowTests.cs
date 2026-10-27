@@ -25,6 +25,7 @@ namespace WeaveFleet.Api.Tests.Endpoints;
 /// connection it keeps to falcon: its reply and going idle come as falcon's own events, and a turn that ended before
 /// hangar was listening is asked about when it starts. Two Fleets in one process, hangar's calls routed to falcon.
 /// </summary>
+[Collection(TwoFleetTestGroup.Name)]
 public sealed class RemoteSessionFollowTests
 {
     private const string FalconUrl = "https://falcon.tail9c2e.ts.net";
