@@ -10,7 +10,7 @@ using WeaveFleet.Api.Tests.Infrastructure;
 
 namespace WeaveFleet.Api.Tests.Endpoints;
 
-public sealed class SessionDiffEndpointTests
+public sealed class SessionDiffEndpointTests(SessionDiffEndpointTests.Server server) : IClassFixture<SessionDiffEndpointTests.Server>
 {
     [Fact]
     public async Task get_session_diffs_for_workspace_subdirectory_excludes_files_outside_workspace_prefix()
@@ -37,7 +37,7 @@ public sealed class SessionDiffEndpointTests
             await File.WriteAllTextAsync(Path.Combine(tempRoot, "outside-new.txt"), "outside new\n");
 
             var persistedWorkspaceDirectory = Path.Combine(baseline.RepoRoot, "workspace");
-            await using var factory = new ApiWebApplicationFactory(authEnabled: false);
+            var factory = server.Factory;
             await InsertSessionAsync(factory, "session-prefix", "workspace-prefix", "instance-prefix", persistedWorkspaceDirectory, baseline.RefName, baseline.RepoRoot);
             using var client = factory.CreateClient();
 
@@ -104,7 +104,7 @@ public sealed class SessionDiffEndpointTests
             var repoRoot = (await new GitDiffService().FindRepoRootAsync(tempRoot, CancellationToken.None)).ShouldNotBeNull();
 
             // A delegated child session: Fleet took no baseline and kept no repository root for it.
-            await using var factory = new ApiWebApplicationFactory(authEnabled: false);
+            var factory = server.Factory;
             await InsertSessionAsync(factory, "session-branch", "workspace-branch", "instance-branch", repoRoot, gitBaselineRef: null, gitRepoRoot: null);
             using var client = factory.CreateClient();
 
@@ -133,7 +133,7 @@ public sealed class SessionDiffEndpointTests
     [Fact]
     public async Task get_session_diffs_when_baseline_metadata_is_null_returns_unavailable_empty_response()
     {
-        await using var factory = new ApiWebApplicationFactory(authEnabled: false);
+        var factory = server.Factory;
         using var client = factory.CreateClient();
         using var scope = factory.Services.CreateScope();
         var connectionFactory = scope.ServiceProvider.GetRequiredService<IDbConnectionFactory>();
@@ -210,7 +210,7 @@ public sealed class SessionDiffEndpointTests
     [Fact]
     public async Task get_session_diffs_when_session_directory_is_outside_repo_root_returns_unavailable_empty_response()
     {
-        await using var factory = new ApiWebApplicationFactory(authEnabled: false);
+        var factory = server.Factory;
         using var client = factory.CreateClient();
         var repoRoot = Path.Combine(Path.GetTempPath(), $"weave-api-diff-repo-{Guid.NewGuid():N}");
         var outsideDirectory = Path.Combine(Path.GetTempPath(), $"weave-api-diff-outside-{Guid.NewGuid():N}");
@@ -326,5 +326,11 @@ public sealed class SessionDiffEndpointTests
         await process.WaitForExitAsync();
 
         process.ExitCode.ShouldBe(0, $"git {string.Join(' ', arguments)} failed. stdout: {standardOutput} stderr: {standardError}");
+    }
+
+    public sealed class Server : IDisposable
+    {
+        public ApiWebApplicationFactory Factory { get; } = new(authEnabled: false);
+        public void Dispose() => Factory.Dispose();
     }
 }

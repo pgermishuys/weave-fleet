@@ -16,7 +16,7 @@ namespace WeaveFleet.Api.Tests.Endpoints;
 /// straight into the DB for the authenticated test user (sub=test-user) and for other-user.
 /// </summary>
 #pragma warning disable CA1001 // Type owns disposable fields — disposal handled by IAsyncLifetime.DisposeAsync
-public sealed class CanvasEndpointTests : IAsyncLifetime
+public sealed class CanvasEndpointTests : IClassFixture<CanvasEndpointTests.Server>, IAsyncLifetime
 #pragma warning restore CA1001
 {
     private const string ShopState = """{"url":"http://localhost:5173/","appId":"app_1"}""";
@@ -24,13 +24,17 @@ public sealed class CanvasEndpointTests : IAsyncLifetime
     // A retired kind: a diagram saved before diagrams went away.
     private const string DiagramState = """{"direction":"LR","nodes":[{"id":"n1","label":"NuCode session"}],"edges":[]}""";
 
-    private ApiWebApplicationFactory? _factory;
+    private readonly ApiWebApplicationFactory _factory;
     private HttpClient? _client;
     private string? _csrfToken;
 
+    public CanvasEndpointTests(Server server)
+    {
+        _factory = server.Factory;
+    }
+
     public async Task InitializeAsync()
     {
-        _factory = new ApiWebApplicationFactory(authEnabled: true, useTestAuthentication: true);
         _client = _factory.CreateClient(new WebApplicationFactoryClientOptions
         {
             AllowAutoRedirect = false,
@@ -38,28 +42,11 @@ public sealed class CanvasEndpointTests : IAsyncLifetime
         });
         _csrfToken = await GetCsrfTokenAsync(_client);
 
+        // The server is shared: put the canvases back as they were, as on a fresh one.
         using var scope = _factory.Services.CreateScope();
         using var connection = scope.ServiceProvider.GetRequiredService<IDbConnectionFactory>().CreateConnection();
 
-        await connection.ExecuteAsync("""
-            INSERT INTO workspaces (id, directory, display_name, created_at, user_id)
-            VALUES ('ws-mine', '/ws-mine', 'Mine', '2026-09-01T00:00:00+00:00', 'test-user'),
-                   ('ws-other', '/ws-other', 'Other', '2026-09-01T00:00:00+00:00', 'other-user');
-            INSERT INTO instances (id, port, pid, directory, url, status, created_at, user_id)
-            VALUES ('inst-mine', 0, NULL, '/ws-mine', '', 'stopped', '2026-09-01T00:00:00+00:00', 'test-user'),
-                   ('inst-other', 0, NULL, '/ws-other', '', 'stopped', '2026-09-01T00:00:00+00:00', 'other-user');
-            INSERT INTO sessions (
-                id, workspace_id, instance_id, opencode_session_id, title, status, directory,
-                lifecycle_status, retention_status, created_at, user_id)
-            VALUES ('sess-mine', 'ws-mine', 'inst-mine', 'oc-mine', 'Mine', 'stopped', '/ws-mine',
-                    'stopped', 'active', '2026-09-01T10:00:00+00:00', 'test-user'),
-                   ('sess-mine-2', 'ws-mine', 'inst-mine', 'oc-mine-2', 'Mine too', 'stopped', '/ws-mine',
-                    'stopped', 'active', '2026-09-01T11:00:00+00:00', 'test-user'),
-                   ('sess-diagram', 'ws-mine', 'inst-mine', 'oc-diagram', 'Has a diagram', 'stopped', '/ws-mine',
-                    'stopped', 'active', '2026-09-01T11:30:00+00:00', 'test-user'),
-                   ('sess-other', 'ws-other', 'inst-other', 'oc-other', 'Other', 'stopped', '/ws-other',
-                    'stopped', 'active', '2026-09-01T12:00:00+00:00', 'other-user');
-            """);
+        await connection.ExecuteAsync("DELETE FROM canvas_revisions; DELETE FROM canvases;");
 
         await InsertCanvasAsync(connection, "cv_diagram", "sess-diagram", "test-user", "diagram", "Session event flow", DiagramState, version: 2, createdAt: "2026-09-12T10:00:00.0000000Z");
         await InsertCanvasAsync(connection, "cv_shop", "sess-mine", "test-user", "browser", "Shop", ShopState, version: 2, createdAt: "2026-09-12T10:00:00.0000000Z");
@@ -69,11 +56,10 @@ public sealed class CanvasEndpointTests : IAsyncLifetime
         await InsertCanvasAsync(connection, "cv_other", "sess-other", "other-user", "browser", "Theirs", AdminState, version: 1, createdAt: "2026-09-12T10:00:00.0000000Z");
     }
 
-    public async Task DisposeAsync()
+    public Task DisposeAsync()
     {
         _client?.Dispose();
-        if (_factory is not null)
-            await _factory.DisposeAsync();
+        return Task.CompletedTask;
     }
 
     [Fact]
@@ -94,7 +80,7 @@ public sealed class CanvasEndpointTests : IAsyncLifetime
         response.StatusCode.ShouldBe(HttpStatusCode.OK);
         (await response.Content.ReadAsStringAsync()).ShouldBe("[]");
 
-        using var scope = _factory!.Services.CreateScope();
+        using var scope = _factory.Services.CreateScope();
         using var connection = scope.ServiceProvider.GetRequiredService<IDbConnectionFactory>().CreateConnection();
         (await connection.ExecuteScalarAsync<int>("SELECT COUNT(*) FROM canvases WHERE id = 'cv_diagram'")).ShouldBe(1);
     }
@@ -132,7 +118,7 @@ public sealed class CanvasEndpointTests : IAsyncLifetime
     [Fact]
     public async Task Close_removes_the_canvas_from_the_list_and_sends_canvas_closed()
     {
-        var broadcaster = _factory!.Services.GetRequiredService<IEventBroadcaster>();
+        var broadcaster = _factory.Services.GetRequiredService<IEventBroadcaster>();
         using var cts = new CancellationTokenSource(TimeSpan.FromSeconds(10));
         await using var events = broadcaster.SubscribeAsync(["session:sess-mine"], "test-user", cts.Token).GetAsyncEnumerator(cts.Token);
         // The subscription registers when the enumerator first runs, so start it before the request.
@@ -172,10 +158,43 @@ public sealed class CanvasEndpointTests : IAsyncLifetime
         (await _client!.GetAsync("/api/sessions/sess-missing/canvases")).StatusCode.ShouldBe(HttpStatusCode.NotFound);
         (await CloseAsync("sess-other", "cv_other")).StatusCode.ShouldBe(HttpStatusCode.NotFound);
 
-        using var scope = _factory!.Services.CreateScope();
+        using var scope = _factory.Services.CreateScope();
         using var connection = scope.ServiceProvider.GetRequiredService<IDbConnectionFactory>().CreateConnection();
         var closedAt = await connection.ExecuteScalarAsync<string?>("SELECT closed_at FROM canvases WHERE id = 'cv_other'");
         closedAt.ShouldBeNull();
+    }
+
+    public sealed class Server : IAsyncLifetime
+    {
+        public ApiWebApplicationFactory Factory { get; } = new(authEnabled: true, useTestAuthentication: true);
+
+        public async Task InitializeAsync()
+        {
+            using var scope = Factory.Services.CreateScope();
+            using var connection = scope.ServiceProvider.GetRequiredService<IDbConnectionFactory>().CreateConnection();
+
+            await connection.ExecuteAsync("""
+                INSERT INTO workspaces (id, directory, display_name, created_at, user_id)
+                VALUES ('ws-mine', '/ws-mine', 'Mine', '2026-09-01T00:00:00+00:00', 'test-user'),
+                       ('ws-other', '/ws-other', 'Other', '2026-09-01T00:00:00+00:00', 'other-user');
+                INSERT INTO instances (id, port, pid, directory, url, status, created_at, user_id)
+                VALUES ('inst-mine', 0, NULL, '/ws-mine', '', 'stopped', '2026-09-01T00:00:00+00:00', 'test-user'),
+                       ('inst-other', 0, NULL, '/ws-other', '', 'stopped', '2026-09-01T00:00:00+00:00', 'other-user');
+                INSERT INTO sessions (
+                    id, workspace_id, instance_id, opencode_session_id, title, status, directory,
+                    lifecycle_status, retention_status, created_at, user_id)
+                VALUES ('sess-mine', 'ws-mine', 'inst-mine', 'oc-mine', 'Mine', 'stopped', '/ws-mine',
+                        'stopped', 'active', '2026-09-01T10:00:00+00:00', 'test-user'),
+                       ('sess-mine-2', 'ws-mine', 'inst-mine', 'oc-mine-2', 'Mine too', 'stopped', '/ws-mine',
+                        'stopped', 'active', '2026-09-01T11:00:00+00:00', 'test-user'),
+                       ('sess-diagram', 'ws-mine', 'inst-mine', 'oc-diagram', 'Has a diagram', 'stopped', '/ws-mine',
+                        'stopped', 'active', '2026-09-01T11:30:00+00:00', 'test-user'),
+                       ('sess-other', 'ws-other', 'inst-other', 'oc-other', 'Other', 'stopped', '/ws-other',
+                        'stopped', 'active', '2026-09-01T12:00:00+00:00', 'other-user');
+                """);
+        }
+
+        public async Task DisposeAsync() => await Factory.DisposeAsync();
     }
 
     private async Task<HttpResponseMessage> CloseAsync(string sessionId, string canvasId)

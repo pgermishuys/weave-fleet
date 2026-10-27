@@ -10,7 +10,6 @@ namespace WeaveFleet.Api.Tests.Endpoints;
 /// A body Fleet can't read used to get a 400 with nothing in it, so an agent calling the API had to guess what was
 /// wrong. These are the bodies an agent is likely to send by mistake, some of them as Windows PowerShell builds them.
 /// </summary>
-[Collection("NonParallelApiFactoryTests")]
 public sealed class UnreadableBodyTests : IClassFixture<UnreadableBodyTests.Server>, IDisposable
 {
     private static readonly byte[] Utf8Bom = [0xEF, 0xBB, 0xBF];

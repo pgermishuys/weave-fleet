@@ -13,26 +13,32 @@ namespace WeaveFleet.Api.Tests.Endpoints;
 /// were started in that order (D newest); Sub is a subagent's hidden session in A.
 /// </summary>
 #pragma warning disable CA1001 // Type owns disposable fields — disposal handled by IAsyncLifetime.DisposeAsync
-public sealed class SessionPinEndpointTests : IAsyncLifetime
+public sealed class SessionPinEndpointTests : IClassFixture<SessionPinEndpointTests.Server>, IAsyncLifetime
 #pragma warning restore CA1001
 {
     private const string Owner = "local-user";
 
-    private ApiWebApplicationFactory? _factory;
+    private readonly ApiWebApplicationFactory _factory;
     private HttpClient? _client;
+
+    public SessionPinEndpointTests(Server server)
+    {
+        _factory = server.Factory;
+    }
 
     public async Task InitializeAsync()
     {
-        _factory = new ApiWebApplicationFactory(authEnabled: false, simulateLocalhostRequest: true);
         _client = _factory.CreateClient();
-        await SeedAsync();
+        // The server is shared: unpin and restore every session, as on a fresh one.
+        using var scope = _factory.Services.CreateScope();
+        using var connection = scope.ServiceProvider.GetRequiredService<IDbConnectionFactory>().CreateConnection();
+        await connection.ExecuteAsync("UPDATE sessions SET pin_order = NULL, retention_status = 'active', archived_at = NULL");
     }
 
-    public async Task DisposeAsync()
+    public Task DisposeAsync()
     {
         _client?.Dispose();
-        if (_factory is not null)
-            await _factory.DisposeAsync();
+        return Task.CompletedTask;
     }
 
     [Fact]
@@ -167,28 +173,37 @@ public sealed class SessionPinEndpointTests : IAsyncLifetime
         return await response.Content.ReadFromJsonAsync<JsonElement>();
     }
 
-    private async Task SeedAsync()
+    public sealed class Server : IAsyncLifetime
     {
-        using var scope = _factory!.Services.CreateScope();
-        using var connection = scope.ServiceProvider.GetRequiredService<IDbConnectionFactory>().CreateConnection();
-        await connection.ExecuteAsync($"""
-            INSERT INTO workspaces (id, directory, display_name, created_at, user_id)
-            VALUES ('ws-1', '/ws', 'Work', '2026-10-01T00:00:00+00:00', '{Owner}');
-            INSERT INTO instances (id, port, pid, directory, url, status, created_at, user_id)
-            VALUES ('inst-1', 0, NULL, '/ws', '', 'stopped', '2026-10-01T00:00:00+00:00', '{Owner}');
-            INSERT INTO sessions (
-                id, workspace_id, instance_id, opencode_session_id, title, status, directory, harness_type,
-                lifecycle_status, retention_status, created_at, user_id, parent_session_id)
-            VALUES ('a', 'ws-1', 'inst-1', 'ses_a', 'A', 'stopped', '/ws', 'opencode', 'stopped', 'active',
-                    '2026-10-01T10:00:00+00:00', '{Owner}', NULL),
-                   ('b', 'ws-1', 'inst-1', 'ses_b', 'B', 'stopped', '/ws', 'opencode', 'stopped', 'active',
-                    '2026-10-01T10:01:00+00:00', '{Owner}', NULL),
-                   ('c', 'ws-1', 'inst-1', 'ses_c', 'C', 'stopped', '/ws', 'opencode', 'stopped', 'active',
-                    '2026-10-01T10:02:00+00:00', '{Owner}', NULL),
-                   ('d', 'ws-1', 'inst-1', 'ses_d', 'D', 'stopped', '/ws', 'opencode', 'stopped', 'active',
-                    '2026-10-01T10:03:00+00:00', '{Owner}', NULL),
-                   ('sub', 'ws-1', 'inst-1', 'ses_sub', 'Sub', 'stopped', '/ws', 'opencode', 'stopped', 'active',
-                    '2026-10-01T10:04:00+00:00', '{Owner}', 'a');
-            """);
+        public ApiWebApplicationFactory Factory { get; } = new(authEnabled: false, simulateLocalhostRequest: true);
+
+        public Task InitializeAsync() => SeedAsync(Factory);
+
+        public async Task DisposeAsync() => await Factory.DisposeAsync();
+
+        private static async Task SeedAsync(ApiWebApplicationFactory factory)
+        {
+            using var scope = factory.Services.CreateScope();
+            using var connection = scope.ServiceProvider.GetRequiredService<IDbConnectionFactory>().CreateConnection();
+            await connection.ExecuteAsync($"""
+                INSERT INTO workspaces (id, directory, display_name, created_at, user_id)
+                VALUES ('ws-1', '/ws', 'Work', '2026-10-01T00:00:00+00:00', '{Owner}');
+                INSERT INTO instances (id, port, pid, directory, url, status, created_at, user_id)
+                VALUES ('inst-1', 0, NULL, '/ws', '', 'stopped', '2026-10-01T00:00:00+00:00', '{Owner}');
+                INSERT INTO sessions (
+                    id, workspace_id, instance_id, opencode_session_id, title, status, directory, harness_type,
+                    lifecycle_status, retention_status, created_at, user_id, parent_session_id)
+                VALUES ('a', 'ws-1', 'inst-1', 'ses_a', 'A', 'stopped', '/ws', 'opencode', 'stopped', 'active',
+                        '2026-10-01T10:00:00+00:00', '{Owner}', NULL),
+                       ('b', 'ws-1', 'inst-1', 'ses_b', 'B', 'stopped', '/ws', 'opencode', 'stopped', 'active',
+                        '2026-10-01T10:01:00+00:00', '{Owner}', NULL),
+                       ('c', 'ws-1', 'inst-1', 'ses_c', 'C', 'stopped', '/ws', 'opencode', 'stopped', 'active',
+                        '2026-10-01T10:02:00+00:00', '{Owner}', NULL),
+                       ('d', 'ws-1', 'inst-1', 'ses_d', 'D', 'stopped', '/ws', 'opencode', 'stopped', 'active',
+                        '2026-10-01T10:03:00+00:00', '{Owner}', NULL),
+                       ('sub', 'ws-1', 'inst-1', 'ses_sub', 'Sub', 'stopped', '/ws', 'opencode', 'stopped', 'active',
+                        '2026-10-01T10:04:00+00:00', '{Owner}', 'a');
+                """);
+        }
     }
 }

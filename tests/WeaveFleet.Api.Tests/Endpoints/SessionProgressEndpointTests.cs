@@ -12,50 +12,25 @@ using WeaveFleet.Domain.Repositories;
 
 namespace WeaveFleet.Api.Tests.Endpoints;
 
-[Collection("NonParallelApiFactoryTests")]
-public sealed class SessionProgressEndpointTests : IAsyncLifetime, IDisposable
+public sealed class SessionProgressEndpointTests : IClassFixture<SessionProgressEndpointTests.Server>, IDisposable
 {
     private const string LocalUser = "local-user";
     private const string OtherUser = "other-user";
     private const string CreatedAt = "2026-09-13T10:00:00.0000000Z";
 
-    private ApiWebApplicationFactory? _factory;
-    private HttpClient? _client;
+    private readonly HttpClient _client;
 
-    public async Task InitializeAsync()
+    public SessionProgressEndpointTests(Server server)
     {
-        _factory = new ApiWebApplicationFactory(authEnabled: false);
-        _client = _factory.CreateClient();
-
-        using var scope = _factory.Services.CreateScope();
-        using (var connection = scope.ServiceProvider.GetRequiredService<IDbConnectionFactory>().CreateConnection())
-        {
-            await InsertSessionGraphAsync(connection, "session-with-progress", LocalUser);
-            await InsertSessionGraphAsync(connection, "session-without-progress", LocalUser);
-            await InsertSessionGraphAsync(connection, "their-session", OtherUser);
-        }
-
-        var repository = scope.ServiceProvider.GetRequiredService<ISessionProgressRepository>();
-        (await repository.UpsertAsync(Progress("session-with-progress", LocalUser), CancellationToken.None)).ShouldBeTrue();
-        (await repository.UpsertAsync(Progress("their-session", OtherUser), CancellationToken.None)).ShouldBeTrue();
+        _client = server.Factory.CreateClient();
     }
 
-    public Task DisposeAsync()
-    {
-        Dispose();
-        return Task.CompletedTask;
-    }
-
-    public void Dispose()
-    {
-        _client?.Dispose();
-        _factory?.Dispose();
-    }
+    public void Dispose() => _client.Dispose();
 
     [Fact]
     public async Task ListSessions_IncludesProgress_ForSessionsThatHaveIt()
     {
-        var response = await _client!.GetAsync("/api/sessions");
+        var response = await _client.GetAsync("/api/sessions");
 
         response.StatusCode.ShouldBe(HttpStatusCode.OK);
         var sessions = (await response.Content.ReadFromJsonAsync<JsonElement[]>(JsonSerializerOptions.Web)).ShouldNotBeNull();
@@ -70,7 +45,7 @@ public sealed class SessionProgressEndpointTests : IAsyncLifetime, IDisposable
     [Fact]
     public async Task GetProgress_ReturnsTheSessionsTodos()
     {
-        var response = await _client!.GetAsync("/api/sessions/session-with-progress/progress");
+        var response = await _client.GetAsync("/api/sessions/session-with-progress/progress");
 
         response.StatusCode.ShouldBe(HttpStatusCode.OK);
         var progress = await response.Content.ReadFromJsonAsync<JsonElement>(JsonSerializerOptions.Web);
@@ -81,7 +56,7 @@ public sealed class SessionProgressEndpointTests : IAsyncLifetime, IDisposable
     [Fact]
     public async Task GetProgress_ReturnsNoContent_WhenThereIsNone()
     {
-        var response = await _client!.GetAsync("/api/sessions/session-without-progress/progress");
+        var response = await _client.GetAsync("/api/sessions/session-without-progress/progress");
 
         response.StatusCode.ShouldBe(HttpStatusCode.NoContent);
     }
@@ -89,7 +64,7 @@ public sealed class SessionProgressEndpointTests : IAsyncLifetime, IDisposable
     [Fact]
     public async Task GetProgress_ReturnsNotFound_ForSomeoneElsesSession()
     {
-        var response = await _client!.GetAsync("/api/sessions/their-session/progress");
+        var response = await _client.GetAsync("/api/sessions/their-session/progress");
 
         response.StatusCode.ShouldBe(HttpStatusCode.NotFound);
     }
@@ -97,9 +72,31 @@ public sealed class SessionProgressEndpointTests : IAsyncLifetime, IDisposable
     [Fact]
     public async Task GetProgress_ReturnsNotFound_ForAnUnknownSession()
     {
-        var response = await _client!.GetAsync("/api/sessions/no-such-session/progress");
+        var response = await _client.GetAsync("/api/sessions/no-such-session/progress");
 
         response.StatusCode.ShouldBe(HttpStatusCode.NotFound);
+    }
+
+    public sealed class Server : IAsyncLifetime
+    {
+        public ApiWebApplicationFactory Factory { get; } = new(authEnabled: false);
+
+        public async Task InitializeAsync()
+        {
+            using var scope = Factory.Services.CreateScope();
+            using (var connection = scope.ServiceProvider.GetRequiredService<IDbConnectionFactory>().CreateConnection())
+            {
+                await InsertSessionGraphAsync(connection, "session-with-progress", LocalUser);
+                await InsertSessionGraphAsync(connection, "session-without-progress", LocalUser);
+                await InsertSessionGraphAsync(connection, "their-session", OtherUser);
+            }
+
+            var repository = scope.ServiceProvider.GetRequiredService<ISessionProgressRepository>();
+            (await repository.UpsertAsync(Progress("session-with-progress", LocalUser), CancellationToken.None)).ShouldBeTrue();
+            (await repository.UpsertAsync(Progress("their-session", OtherUser), CancellationToken.None)).ShouldBeTrue();
+        }
+
+        public async Task DisposeAsync() => await Factory.DisposeAsync();
     }
 
     private static SessionProgress Progress(string sessionId, string userId) => new()

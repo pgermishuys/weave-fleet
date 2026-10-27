@@ -8,12 +8,13 @@ using WeaveFleet.Application.Workspaces;
 
 namespace WeaveFleet.Api.Tests.Endpoints;
 
-public sealed class NewFolderEndpointTests
+public sealed class NewFolderEndpointTests(NewFolderEndpointTests.Server server) : IClassFixture<NewFolderEndpointTests.Server>
 {
+    private ApiWebApplicationFactory factory => server.Factory;
+
     [Fact]
     public async Task create_makes_a_plain_folder_inside_a_root_and_says_what_it_made()
     {
-        await using var factory = new ApiWebApplicationFactory(authEnabled: false);
         using var client = factory.CreateClient();
         using var root = new TempRoot();
         await RegisterRootAsync(factory, root.Path);
@@ -32,7 +33,6 @@ public sealed class NewFolderEndpointTests
     [Fact]
     public async Task create_returns_409_for_a_folder_that_already_exists()
     {
-        await using var factory = new ApiWebApplicationFactory(authEnabled: false);
         using var client = factory.CreateClient();
         using var root = new TempRoot();
         await RegisterRootAsync(factory, root.Path);
@@ -47,7 +47,6 @@ public sealed class NewFolderEndpointTests
     [Fact]
     public async Task create_starts_a_repository_on_the_branch_asked_for()
     {
-        await using var factory = new ApiWebApplicationFactory(authEnabled: false);
         using var client = factory.CreateClient();
         using var root = new TempRoot();
         await RegisterRootAsync(factory, root.Path);
@@ -62,7 +61,6 @@ public sealed class NewFolderEndpointTests
     [Fact]
     public async Task defaults_name_the_first_branch_of_a_new_repository_and_the_home_folder()
     {
-        await using var factory = new ApiWebApplicationFactory(authEnabled: false);
         using var client = factory.CreateClient();
 
         var json = await client.GetFromJsonAsync<JsonElement>("/api/directories/defaults", JsonSerializerOptions.Web);
@@ -74,7 +72,6 @@ public sealed class NewFolderEndpointTests
     [Fact]
     public async Task listing_a_folder_that_isnt_there_names_the_nearest_one_that_is()
     {
-        await using var factory = new ApiWebApplicationFactory(authEnabled: false);
         using var client = factory.CreateClient();
         using var root = new TempRoot();
         var path = Path.Combine(root.Path, "clients", "acme-portal");
@@ -91,7 +88,6 @@ public sealed class NewFolderEndpointTests
     [Fact]
     public async Task listing_a_folder_says_it_is_there_and_lists_what_is_in_it()
     {
-        await using var factory = new ApiWebApplicationFactory(authEnabled: false);
         using var client = factory.CreateClient();
         using var root = new TempRoot();
         Directory.CreateDirectory(Path.Combine(root.Path, "clients"));
@@ -107,7 +103,6 @@ public sealed class NewFolderEndpointTests
     [Fact]
     public async Task clone_returns_400_before_running_git_for_an_address_it_refuses()
     {
-        await using var factory = new ApiWebApplicationFactory(authEnabled: false);
         using var client = factory.CreateClient();
         using var root = new TempRoot();
         await RegisterRootAsync(factory, root.Path);
@@ -137,7 +132,6 @@ public sealed class NewFolderEndpointTests
     [Fact]
     public async Task find_lists_a_folder_for_at_references_before_a_session_exists()
     {
-        await using var factory = new ApiWebApplicationFactory(authEnabled: false);
         using var client = factory.CreateClient();
         using var root = new TempRoot();
         await RegisterRootAsync(factory, root.Path);
@@ -153,7 +147,6 @@ public sealed class NewFolderEndpointTests
     [Fact]
     public async Task find_refuses_a_missing_path_a_folder_that_isnt_there_and_one_outside_the_roots()
     {
-        await using var factory = new ApiWebApplicationFactory(authEnabled: false);
         using var client = factory.CreateClient();
         using var root = new TempRoot();
         using var outside = new TempRoot();
@@ -187,5 +180,11 @@ public sealed class NewFolderEndpointTests
             try { Directory.Delete(Path, recursive: true); }
             catch (IOException) { }
         }
+    }
+
+    public sealed class Server : IDisposable
+    {
+        public ApiWebApplicationFactory Factory { get; } = new(authEnabled: false);
+        public void Dispose() => Factory.Dispose();
     }
 }

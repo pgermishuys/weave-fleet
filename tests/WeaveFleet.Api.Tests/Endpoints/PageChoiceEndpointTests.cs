@@ -13,54 +13,32 @@ namespace WeaveFleet.Api.Tests.Endpoints;
 /// The bar under a waiting page sends or skips the user's pick. Only the user: an agent reaching Fleet through its
 /// own address can't answer the page it showed.
 /// </summary>
-#pragma warning disable CA1001 // Type owns disposable fields — disposal handled by IAsyncLifetime.DisposeAsync
-public sealed class PageChoiceEndpointTests : IAsyncLifetime
-#pragma warning restore CA1001
+public sealed class PageChoiceEndpointTests : IClassFixture<PageChoiceEndpointTests.Server>, IDisposable
 {
     private const string Owner = "local-user";
     private const string Token = "token-1";
     private const string Session = "sess-layouts";
 
-    private ApiWebApplicationFactory? _factory;
-    private HttpClient? _client;
+    private readonly ApiWebApplicationFactory _factory;
+    private readonly HttpClient _client;
 
-    private PageChoices Choices => _factory!.Services.GetRequiredService<PageChoices>();
-
-    public async Task InitializeAsync()
+    public PageChoiceEndpointTests(Server server)
     {
-        _factory = new ApiWebApplicationFactory(
-            authEnabled: false,
-            simulateLocalhostRequest: true,
-            configureTestServices: services => services.AddSingleton<IHarnessBridgeTokens>(new FakeTokens()));
+        _factory = server.Factory;
         _client = _factory.CreateClient();
-        using var scope = _factory.Services.CreateScope();
-        using var connection = scope.ServiceProvider.GetRequiredService<IDbConnectionFactory>().CreateConnection();
-        await connection.ExecuteAsync($"""
-            INSERT INTO workspaces (id, directory, display_name, created_at, user_id)
-            VALUES ('ws-1', '/ws', 'Work', '2026-10-01T00:00:00+00:00', '{Owner}');
-            INSERT INTO instances (id, port, pid, directory, url, status, created_at, user_id)
-            VALUES ('inst-1', 0, NULL, '/ws', '', 'running', '2026-10-01T00:00:00+00:00', '{Owner}');
-            INSERT INTO sessions (id, workspace_id, instance_id, opencode_session_id, title, status, directory, harness_type,
-                lifecycle_status, retention_status, created_at, user_id)
-            VALUES ('{Session}', 'ws-1', 'inst-1', 'ses_layouts', 'Settings screen', 'active', '/ws', 'opencode2',
-                    'running', 'active', '2026-10-01T10:00:00+00:00', '{Owner}');
-            """);
     }
 
-    public async Task DisposeAsync()
-    {
-        _client?.Dispose();
-        if (_factory is not null)
-            await _factory.DisposeAsync();
-    }
+    public void Dispose() => _client.Dispose();
+
+    private PageChoices Choices => _factory.Services.GetRequiredService<PageChoices>();
 
     [Fact]
     public async Task The_user_sends_the_pick_once()
     {
         Choices.Start(Session, "call-1", "Layouts");
 
-        var sent = await _client!.PostAsJsonAsync($"/api/sessions/{Session}/page-choices/call-1/send", new { value = "b", summary = "Layout B" });
-        var again = await _client!.PostAsJsonAsync($"/api/sessions/{Session}/page-choices/call-1/send", new { value = "a", summary = "Layout A" });
+        var sent = await _client.PostAsJsonAsync($"/api/sessions/{Session}/page-choices/call-1/send", new { value = "b", summary = "Layout B" });
+        var again = await _client.PostAsJsonAsync($"/api/sessions/{Session}/page-choices/call-1/send", new { value = "a", summary = "Layout A" });
 
         sent.StatusCode.ShouldBe(HttpStatusCode.NoContent);
         again.StatusCode.ShouldBe(HttpStatusCode.NotFound);
@@ -72,12 +50,38 @@ public sealed class PageChoiceEndpointTests : IAsyncLifetime
     {
         Choices.Start(Session, "call-2", "Layouts");
 
-        var sent = await _client!.PostAsJsonAsync($"/agent/{Token}/api/sessions/{Session}/page-choices/call-2/send", new { value = "b" });
-        var skipped = await _client!.PostAsync($"/agent/{Token}/api/sessions/{Session}/page-choices/call-2/skip", null);
+        var sent = await _client.PostAsJsonAsync($"/agent/{Token}/api/sessions/{Session}/page-choices/call-2/send", new { value = "b" });
+        var skipped = await _client.PostAsync($"/agent/{Token}/api/sessions/{Session}/page-choices/call-2/skip", null);
 
         sent.StatusCode.ShouldBe(HttpStatusCode.Forbidden);
         skipped.StatusCode.ShouldBe(HttpStatusCode.Forbidden);
         (await Choices.NextAsync(Session, "call-2", TimeSpan.Zero, CancellationToken.None)).ShouldBeNull();
+    }
+
+    public sealed class Server : IAsyncLifetime
+    {
+        public ApiWebApplicationFactory Factory { get; } = new(
+            authEnabled: false,
+            simulateLocalhostRequest: true,
+            configureTestServices: services => services.AddSingleton<IHarnessBridgeTokens>(new FakeTokens()));
+
+        public async Task InitializeAsync()
+        {
+            using var scope = Factory.Services.CreateScope();
+            using var connection = scope.ServiceProvider.GetRequiredService<IDbConnectionFactory>().CreateConnection();
+            await connection.ExecuteAsync($"""
+                INSERT INTO workspaces (id, directory, display_name, created_at, user_id)
+                VALUES ('ws-1', '/ws', 'Work', '2026-10-01T00:00:00+00:00', '{Owner}');
+                INSERT INTO instances (id, port, pid, directory, url, status, created_at, user_id)
+                VALUES ('inst-1', 0, NULL, '/ws', '', 'running', '2026-10-01T00:00:00+00:00', '{Owner}');
+                INSERT INTO sessions (id, workspace_id, instance_id, opencode_session_id, title, status, directory, harness_type,
+                    lifecycle_status, retention_status, created_at, user_id)
+                VALUES ('{Session}', 'ws-1', 'inst-1', 'ses_layouts', 'Settings screen', 'active', '/ws', 'opencode2',
+                        'running', 'active', '2026-10-01T10:00:00+00:00', '{Owner}');
+                """);
+        }
+
+        public async Task DisposeAsync() => await Factory.DisposeAsync();
     }
 
     private sealed class FakeTokens : IHarnessBridgeTokens

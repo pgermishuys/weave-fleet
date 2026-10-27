@@ -20,7 +20,7 @@ namespace WeaveFleet.Api.Tests.Endpoints;
 /// covered by the live tests.
 /// </summary>
 #pragma warning disable CA1001 // Type owns disposable fields — disposal handled by IAsyncLifetime.DisposeAsync
-public sealed class SessionMessageEndpointTests : IAsyncLifetime
+public sealed class SessionMessageEndpointTests : IClassFixture<SessionMessageEndpointTests.Server>, IAsyncLifetime
 #pragma warning restore CA1001
 {
     private const string Token = "token-1";
@@ -29,30 +29,27 @@ public sealed class SessionMessageEndpointTests : IAsyncLifetime
     private const string Receiver = "sess-receiver";
     private const string Owner = "local-user";
 
-    private ApiWebApplicationFactory? _factory;
+    private readonly ApiWebApplicationFactory _factory;
     private HttpClient? _client;
+
+    public SessionMessageEndpointTests(Server server)
+    {
+        _factory = server.Factory;
+    }
 
     public async Task InitializeAsync()
     {
-        _factory = new ApiWebApplicationFactory(
-            authEnabled: false,
-            tokenAuthEnabled: true,
-            simulateLocalhostRequest: true,
-            configureTestServices: services =>
-            {
-                services.AddSingleton<IHarnessCanvasCallerResolver>(new FakeCallers());
-                services.AddSingleton<IHarnessBridgeTokens>(new FakeTokens());
-                services.AddScoped<ISessionUpdateSender, DeliveredUpdates>();
-            });
         _client = _factory.CreateClient();
-        await SeedSessionsAsync();
+        // The server is shared: start each test with no preference set, as on a fresh one.
+        using var scope = _factory.Services.CreateScope();
+        using var connection = scope.ServiceProvider.GetRequiredService<IDbConnectionFactory>().CreateConnection();
+        await connection.ExecuteAsync("DELETE FROM user_preferences");
     }
 
-    public async Task DisposeAsync()
+    public Task DisposeAsync()
     {
         _client?.Dispose();
-        if (_factory is not null)
-            await _factory.DisposeAsync();
+        return Task.CompletedTask;
     }
 
     [Fact]
@@ -249,7 +246,7 @@ public sealed class SessionMessageEndpointTests : IAsyncLifetime
         await TurnOnAsync();
 
         // The sender asked the receiver earlier; the receiver's turn ended, and the update started the sender's turn.
-        var updates = _factory!.Services.GetRequiredService<SessionUpdates>();
+        var updates = _factory.Services.GetRequiredService<SessionUpdates>();
         updates.Watch(new SessionUpdateWatch(Sender, Receiver, Owner, "msg-1"));
         updates.Observe(Receiver, new MessageUpdated
         {
@@ -271,7 +268,7 @@ public sealed class SessionMessageEndpointTests : IAsyncLifetime
 
     private async Task TurnOnAsync()
     {
-        using var scope = _factory!.Services.CreateScope();
+        using var scope = _factory.Services.CreateScope();
         using (scope.ServiceProvider.GetRequiredService<IBackgroundUserScope>().Begin(Owner))
             await scope.ServiceProvider.GetRequiredService<IUserPreferenceRepository>().SetAsync(SessionMessages.PreferenceKey, "true");
     }
@@ -289,23 +286,41 @@ public sealed class SessionMessageEndpointTests : IAsyncLifetime
     private static async Task<string?> ErrorAsync(HttpResponseMessage response)
         => (await response.Content.ReadFromJsonAsync<JsonElement>()).GetProperty("error").GetString();
 
-    private async Task SeedSessionsAsync()
+    public sealed class Server : IAsyncLifetime
     {
-        using var scope = _factory!.Services.CreateScope();
-        using var connection = scope.ServiceProvider.GetRequiredService<IDbConnectionFactory>().CreateConnection();
-        await connection.ExecuteAsync($"""
-            INSERT INTO workspaces (id, directory, display_name, created_at, user_id)
-            VALUES ('ws-1', '/ws', 'Work', '2026-09-18T00:00:00+00:00', '{Owner}');
-            INSERT INTO instances (id, port, pid, directory, url, status, created_at, user_id)
-            VALUES ('inst-1', 0, NULL, '/ws', '', 'running', '2026-09-18T00:00:00+00:00', '{Owner}');
-            INSERT INTO sessions (
-                id, workspace_id, instance_id, opencode_session_id, title, status, directory,
-                lifecycle_status, retention_status, created_at, user_id)
-            VALUES ('{Sender}', 'ws-1', 'inst-1', 'oc-1', 'Fix authentication flow', 'active', '/ws',
-                    'running', 'active', '2026-09-18T10:00:00+00:00', '{Owner}'),
-                   ('{Receiver}', 'ws-1', 'inst-1', 'oc-2', 'Update documentation', 'active', '/ws',
-                    'running', 'active', '2026-09-18T10:00:00+00:00', '{Owner}');
-            """);
+        public ApiWebApplicationFactory Factory { get; } = new(
+            authEnabled: false,
+            tokenAuthEnabled: true,
+            simulateLocalhostRequest: true,
+            configureTestServices: services =>
+            {
+                services.AddSingleton<IHarnessCanvasCallerResolver>(new FakeCallers());
+                services.AddSingleton<IHarnessBridgeTokens>(new FakeTokens());
+                services.AddScoped<ISessionUpdateSender, DeliveredUpdates>();
+            });
+
+        public Task InitializeAsync() => SeedSessionsAsync(Factory);
+
+        public async Task DisposeAsync() => await Factory.DisposeAsync();
+
+        private static async Task SeedSessionsAsync(ApiWebApplicationFactory factory)
+        {
+            using var scope = factory.Services.CreateScope();
+            using var connection = scope.ServiceProvider.GetRequiredService<IDbConnectionFactory>().CreateConnection();
+            await connection.ExecuteAsync($"""
+                INSERT INTO workspaces (id, directory, display_name, created_at, user_id)
+                VALUES ('ws-1', '/ws', 'Work', '2026-09-18T00:00:00+00:00', '{Owner}');
+                INSERT INTO instances (id, port, pid, directory, url, status, created_at, user_id)
+                VALUES ('inst-1', 0, NULL, '/ws', '', 'running', '2026-09-18T00:00:00+00:00', '{Owner}');
+                INSERT INTO sessions (
+                    id, workspace_id, instance_id, opencode_session_id, title, status, directory,
+                    lifecycle_status, retention_status, created_at, user_id)
+                VALUES ('{Sender}', 'ws-1', 'inst-1', 'oc-1', 'Fix authentication flow', 'active', '/ws',
+                        'running', 'active', '2026-09-18T10:00:00+00:00', '{Owner}'),
+                       ('{Receiver}', 'ws-1', 'inst-1', 'oc-2', 'Update documentation', 'active', '/ws',
+                        'running', 'active', '2026-09-18T10:00:00+00:00', '{Owner}');
+                """);
+        }
     }
 
     /// <summary>Delivers every update without prompting anything: the point is what Fleet remembers afterwards.</summary>

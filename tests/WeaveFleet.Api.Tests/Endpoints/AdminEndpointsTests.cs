@@ -11,27 +11,22 @@ using WeaveFleet.Infrastructure.Harnesses.OpenCode.Pooling;
 
 namespace WeaveFleet.Api.Tests.Endpoints;
 
-public sealed class AdminEndpointsTests
+public sealed class AdminEndpointsTests(
+    AdminEndpointsTests.AdminServer adminServer,
+    AdminEndpointsTests.NonAdminServer nonAdminServer,
+    AdminEndpointsTests.LocalServer localServer)
+    : IClassFixture<AdminEndpointsTests.AdminServer>, IClassFixture<AdminEndpointsTests.NonAdminServer>, IClassFixture<AdminEndpointsTests.LocalServer>
 {
     [Fact]
     public async Task opencode_pool_health_returns_pool_state_for_admin_request()
     {
-        await using var factory = new ApiWebApplicationFactory(
-            authEnabled: true,
-            useTestAuthentication: true,
-            testUserIsAdmin: true,
-            configureTestServices: services =>
-            {
-                services.RemoveAll<IOpenCodePoolHealthCheck>();
-                services.AddSingleton<IOpenCodePoolHealthCheck>(new StubPoolHealthCheck(
-                    new OpenCodePoolHealthStatus(
-                        1,
-                        2,
-                        WarmCount: 0,
-                        ActiveCount: 1,
-                        [new OpenCodePoolInstanceHealth("instance-1", 2, 1234, true, false, false, "abc123def456", IsWarm: false)])));
-            });
-        using var client = factory.CreateClient();
+        adminServer.PoolHealth.Status = new OpenCodePoolHealthStatus(
+            1,
+            2,
+            WarmCount: 0,
+            ActiveCount: 1,
+            [new OpenCodePoolInstanceHealth("instance-1", 2, 1234, true, false, false, "abc123def456", IsWarm: false)]);
+        using var client = adminServer.Factory.CreateClient();
 
         var response = await client.GetAsync("/api/admin/opencode/pool");
 
@@ -53,15 +48,7 @@ public sealed class AdminEndpointsTests
     [Fact]
     public async Task opencode_pool_health_returns_forbidden_for_non_admin_request()
     {
-        await using var factory = new ApiWebApplicationFactory(
-            authEnabled: true,
-            useTestAuthentication: true,
-            configureTestServices: services =>
-            {
-                services.RemoveAll<IOpenCodePoolHealthCheck>();
-                services.AddSingleton<IOpenCodePoolHealthCheck>(new ThrowingPoolHealthCheck());
-            });
-        using var client = factory.CreateClient();
+        using var client = nonAdminServer.Factory.CreateClient();
 
         var response = await client.GetAsync("/api/admin/opencode/pool");
 
@@ -71,15 +58,8 @@ public sealed class AdminEndpointsTests
     [Fact]
     public async Task opencode_pool_health_allows_local_operator_when_auth_is_disabled()
     {
-        await using var factory = new ApiWebApplicationFactory(
-            authEnabled: false,
-            configureTestServices: services =>
-            {
-                services.RemoveAll<IOpenCodePoolHealthCheck>();
-                services.AddSingleton<IOpenCodePoolHealthCheck>(new StubPoolHealthCheck(
-                    new OpenCodePoolHealthStatus(0, 0, WarmCount: 0, ActiveCount: 0, [])));
-            });
-        using var client = factory.CreateClient();
+        localServer.PoolHealth.Status = new OpenCodePoolHealthStatus(0, 0, WarmCount: 0, ActiveCount: 0, []);
+        using var client = localServer.Factory.CreateClient();
 
         var response = await client.GetAsync("/api/admin/opencode/pool");
 
@@ -92,30 +72,21 @@ public sealed class AdminEndpointsTests
         const string rawCredentialHash = "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa";
         const string rawOwnerId = "user-alice-sub-claim-value";
 
-        await using var factory = new ApiWebApplicationFactory(
-            authEnabled: true,
-            useTestAuthentication: true,
-            testUserIsAdmin: true,
-            configureTestServices: services =>
-            {
-                services.RemoveAll<IOpenCodePoolHealthCheck>();
-                services.AddSingleton<IOpenCodePoolHealthCheck>(new StubPoolHealthCheck(
-                    new OpenCodePoolHealthStatus(
-                        1,
-                        1,
-                        WarmCount: 1,
-                        ActiveCount: 0,
-                        [new OpenCodePoolInstanceHealth(
-                            "instance-safe-id",
-                            0,
-                            999,
-                            true,
-                            false,
-                            false,
-                            "safe0fingerprint",
-                            IsWarm: true)])));
-            });
-        using var client = factory.CreateClient();
+        adminServer.PoolHealth.Status = new OpenCodePoolHealthStatus(
+            1,
+            1,
+            WarmCount: 1,
+            ActiveCount: 0,
+            [new OpenCodePoolInstanceHealth(
+                "instance-safe-id",
+                0,
+                999,
+                true,
+                false,
+                false,
+                "safe0fingerprint",
+                IsWarm: true)]);
+        using var client = adminServer.Factory.CreateClient();
 
         var response = await client.GetAsync("/api/admin/opencode/pool");
 
@@ -142,15 +113,9 @@ public sealed class AdminEndpointsTests
             new LegacySessionImportResult(true, false, "/tmp/legacy/fleet.db", 2, "completed")
         ]);
 
-        await using var factory = new ApiWebApplicationFactory(
-            authEnabled: false,
-            configureTestServices: services =>
-            {
-                services.RemoveAll<ILegacySessionImporter>();
-                services.AddSingleton<ILegacySessionImporter>(importer);
-        });
-        using var client = factory.CreateClient();
-        await PopulateDestinationDatabaseAsync(factory);
+        localServer.Importer.Inner = importer;
+        using var client = localServer.Factory.CreateClient();
+        await PopulateDestinationDatabaseAsync(localServer.Factory);
 
         var response = await client.PostAsync("/api/admin/import-legacy-sessions", content: null);
 
@@ -174,14 +139,8 @@ public sealed class AdminEndpointsTests
             new LegacySessionImportResult(false, true, "/tmp/legacy/fleet.db", 2, "skipped")
         ]);
 
-        await using var factory = new ApiWebApplicationFactory(
-            authEnabled: false,
-            configureTestServices: services =>
-            {
-                services.RemoveAll<ILegacySessionImporter>();
-                services.AddSingleton<ILegacySessionImporter>(importer);
-            });
-        using var client = factory.CreateClient();
+        localServer.Importer.Inner = importer;
+        using var client = localServer.Factory.CreateClient();
 
         var firstResponse = await client.PostAsync("/api/admin/import-legacy-sessions", content: null);
         var secondResponse = await client.PostAsync("/api/admin/import-legacy-sessions", content: null);
@@ -204,14 +163,8 @@ public sealed class AdminEndpointsTests
         const string error = "Cannot import legacy session 'session-1' because a session with that id already exists.";
         var importer = new ThrowingLegacySessionImporter(new InvalidOperationException(error));
 
-        await using var factory = new ApiWebApplicationFactory(
-            authEnabled: false,
-            configureTestServices: services =>
-            {
-                services.RemoveAll<ILegacySessionImporter>();
-                services.AddSingleton<ILegacySessionImporter>(importer);
-            });
-        using var client = factory.CreateClient();
+        localServer.Importer.Inner = importer;
+        using var client = localServer.Factory.CreateClient();
 
         var response = await client.PostAsync("/api/admin/import-legacy-sessions", content: null);
 
@@ -224,6 +177,84 @@ public sealed class AdminEndpointsTests
         body.GetProperty("count").GetInt32().ShouldBe(0);
         body.GetProperty("status").GetString().ShouldBe("failed");
         body.GetProperty("errors")[0].GetString().ShouldBe(error);
+    }
+
+    public sealed class AdminServer : IDisposable
+    {
+        public SwitchablePoolHealthCheck PoolHealth { get; } = new();
+        public ApiWebApplicationFactory Factory { get; }
+
+        public AdminServer()
+        {
+            Factory = new ApiWebApplicationFactory(
+                authEnabled: true,
+                useTestAuthentication: true,
+                testUserIsAdmin: true,
+                configureTestServices: services =>
+                {
+                    services.RemoveAll<IOpenCodePoolHealthCheck>();
+                    services.AddSingleton<IOpenCodePoolHealthCheck>(PoolHealth);
+                });
+        }
+
+        public void Dispose() => Factory.Dispose();
+    }
+
+    public sealed class NonAdminServer : IDisposable
+    {
+        public ApiWebApplicationFactory Factory { get; } = new(
+            authEnabled: true,
+            useTestAuthentication: true,
+            configureTestServices: services =>
+            {
+                services.RemoveAll<IOpenCodePoolHealthCheck>();
+                services.AddSingleton<IOpenCodePoolHealthCheck>(new ThrowingPoolHealthCheck());
+            });
+
+        public void Dispose() => Factory.Dispose();
+    }
+
+    // Auth off: the local operator is the admin. Each test sets the pool status or the importer it needs.
+    public sealed class LocalServer : IDisposable
+    {
+        public SwitchablePoolHealthCheck PoolHealth { get; } = new();
+        public SwitchableLegacySessionImporter Importer { get; } = new();
+        public ApiWebApplicationFactory Factory { get; }
+
+        public LocalServer()
+        {
+            Factory = new ApiWebApplicationFactory(
+                authEnabled: false,
+                configureTestServices: services =>
+                {
+                    services.RemoveAll<IOpenCodePoolHealthCheck>();
+                    services.AddSingleton<IOpenCodePoolHealthCheck>(PoolHealth);
+                    services.RemoveAll<ILegacySessionImporter>();
+                    services.AddSingleton<ILegacySessionImporter>(Importer);
+                });
+        }
+
+        public void Dispose() => Factory.Dispose();
+    }
+
+    public sealed class SwitchablePoolHealthCheck : IOpenCodePoolHealthCheck
+    {
+        public OpenCodePoolHealthStatus Status { get; set; } = new(0, 0, WarmCount: 0, ActiveCount: 0, []);
+
+        public OpenCodePoolHealthStatus GetStatus() => Status;
+    }
+
+    public sealed class SwitchableLegacySessionImporter : ILegacySessionImporter
+    {
+        public ILegacySessionImporter Inner { get; set; } = null!;
+
+        public Task<LegacySessionImportResult> ImportAsync() => Inner.ImportAsync();
+
+        public Task<LegacySessionImportResult> ImportAsync(CancellationToken cancellationToken) => Inner.ImportAsync(cancellationToken);
+
+        public Task<LegacySessionImportResult> ImportAsync(string sourcePath) => Inner.ImportAsync(sourcePath);
+
+        public Task<LegacySessionImportResult> ImportAsync(string sourcePath, CancellationToken cancellationToken) => Inner.ImportAsync(sourcePath, cancellationToken);
     }
 
     private sealed class SequencedLegacySessionImporter(IReadOnlyList<LegacySessionImportResult> results) : ILegacySessionImporter

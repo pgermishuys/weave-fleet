@@ -12,17 +12,21 @@ namespace WeaveFleet.Api.Tests.Endpoints;
 /// what it takes to open it, while the API still turns the same client away.
 /// </summary>
 #pragma warning disable CA1001 // Type owns disposable fields — disposal handled by IAsyncLifetime.DisposeAsync
-public sealed class PageEndpointTests : IAsyncLifetime
+public sealed class PageEndpointTests : IClassFixture<PageEndpointTests.Server>, IAsyncLifetime
 #pragma warning restore CA1001
 {
     private readonly DirectoryInfo _source = Directory.CreateTempSubdirectory("fleet-page-endpoint-");
-    private ApiWebApplicationFactory? _factory;
+    private readonly ApiWebApplicationFactory _factory;
     private HttpClient? _client;
     private string _pageId = "";
 
+    public PageEndpointTests(Server server)
+    {
+        _factory = server.Factory;
+    }
+
     public async Task InitializeAsync()
     {
-        _factory = new ApiWebApplicationFactory(authEnabled: true);
         _client = _factory.CreateClient(new WebApplicationFactoryClientOptions { AllowAutoRedirect = false });
 
         Directory.CreateDirectory(Path.Combine(_source.FullName, "css"));
@@ -35,12 +39,11 @@ public sealed class PageEndpointTests : IAsyncLifetime
         copied.Problem.ShouldBeNull();
     }
 
-    public async Task DisposeAsync()
+    public Task DisposeAsync()
     {
         _client?.Dispose();
-        if (_factory is not null)
-            await _factory.DisposeAsync();
         _source.Delete(recursive: true);
+        return Task.CompletedTask;
     }
 
     [Fact]
@@ -102,5 +105,11 @@ public sealed class PageEndpointTests : IAsyncLifetime
         var response = await _client!.GetAsync(path.Replace("{page}", _pageId, StringComparison.Ordinal));
 
         response.StatusCode.ShouldBe(HttpStatusCode.NotFound);
+    }
+
+    public sealed class Server : IDisposable
+    {
+        public ApiWebApplicationFactory Factory { get; } = new(authEnabled: true);
+        public void Dispose() => Factory.Dispose();
     }
 }

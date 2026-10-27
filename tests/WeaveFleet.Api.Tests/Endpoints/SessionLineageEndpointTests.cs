@@ -8,6 +8,7 @@ using WeaveFleet.Application.Canvases;
 using WeaveFleet.Application.Data;
 using WeaveFleet.Application.Harnesses;
 using WeaveFleet.Application.Sessions;
+using WeaveFleet.Domain.Harnesses;
 using WeaveFleet.Testing.Fakes;
 
 namespace WeaveFleet.Api.Tests.Endpoints;
@@ -18,44 +19,35 @@ namespace WeaveFleet.Api.Tests.Endpoints;
 /// agent started Two, whose agent started Three. Fork is a fork of Root, Sub a subagent's hidden session in Three.
 /// </summary>
 #pragma warning disable CA1001 // Type owns disposable fields — disposal handled by IAsyncLifetime.DisposeAsync
-public sealed class SessionLineageEndpointTests : IAsyncLifetime
+public sealed class SessionLineageEndpointTests : IClassFixture<SessionLineageEndpointTests.Server>, IAsyncLifetime
 #pragma warning restore CA1001
 {
     private const string Owner = "local-user";
     private const string Token = "token-1";
 
-    private readonly FakeHarnessSession _spawned = new("inst-spawned");
-    private readonly string _folder = Directory.CreateTempSubdirectory("fleet-lineage-tests-").FullName;
-    private ApiWebApplicationFactory? _factory;
+    private readonly ApiWebApplicationFactory _factory;
+    private readonly string _folder;
     private HttpClient? _client;
+
+    public SessionLineageEndpointTests(Server server)
+    {
+        _factory = server.Factory;
+        _folder = server.Folder;
+    }
 
     public async Task InitializeAsync()
     {
-        var registry = new FakeHarnessRegistry();
-        registry.Register(new FakeHarness("opencode2", "OpenCode 2"));
-        registry.Register(new FakeHarnessRuntime("opencode2") { DefaultSession = _spawned });
-        _factory = new ApiWebApplicationFactory(
-            authEnabled: false,
-            simulateLocalhostRequest: true,
-            configureTestServices: services =>
-            {
-                var existing = services.FirstOrDefault(d => d.ServiceType == typeof(IHarnessRegistry));
-                if (existing is not null) services.Remove(existing);
-                services.AddSingleton<IHarnessRegistry>(registry);
-                services.AddSingleton<IHarnessCanvasCallerResolver>(new FakeCallers());
-                services.AddSingleton<IHarnessBridgeTokens>(new FakeTokens());
-            });
         _client = _factory.CreateClient();
-        await SeedAsync();
+        // The server is shared: undo any move from an earlier test, as on a fresh one.
+        using var scope = _factory.Services.CreateScope();
+        using var connection = scope.ServiceProvider.GetRequiredService<IDbConnectionFactory>().CreateConnection();
+        await connection.ExecuteAsync("UPDATE sessions SET lineage_detached_at = NULL");
     }
 
-    public async Task DisposeAsync()
+    public Task DisposeAsync()
     {
         _client?.Dispose();
-        if (_factory is not null)
-            await _factory.DisposeAsync();
-        await _spawned.DisposeAsync();
-        Directory.Delete(_folder, recursive: true);
+        return Task.CompletedTask;
     }
 
     [Fact]
@@ -73,13 +65,15 @@ public sealed class SessionLineageEndpointTests : IAsyncLifetime
     [InlineData("ses_sub")]   // a subagent is part of its parent's turn: as deep as Three
     public async Task An_agent_three_levels_down_is_told_it_cant_go_deeper(string harnessSession)
     {
+        var before = (await ListAsync()).Count(IsGoDeeper);
+
         var response = await StartFromAgentAsync(harnessSession);
 
         response.StatusCode.ShouldBe(HttpStatusCode.Conflict);
         var error = (await response.Content.ReadFromJsonAsync<JsonElement>()).GetProperty("error").GetString();
         error.ShouldBe("This session is 3 levels down from a session the user started; Fleet doesn't let agents start "
             + "sessions deeper than that. Ask the user, or do the work here.");
-        (await ListAsync()).ShouldNotContain(s => s.GetProperty("session").GetProperty("title").GetString() == "Go deeper");
+        (await ListAsync()).Count(IsGoDeeper).ShouldBe(before);
     }
 
     [Fact]
@@ -139,6 +133,8 @@ public sealed class SessionLineageEndpointTests : IAsyncLifetime
         (await PatchLineageAsync("missing", detached: true)).StatusCode.ShouldBe(HttpStatusCode.NotFound);
     }
 
+    private static bool IsGoDeeper(JsonElement s) => s.GetProperty("session").GetProperty("title").GetString() == "Go deeper";
+
     private Task<HttpResponseMessage> PatchLineageAsync(string id, bool detached) =>
         _client!.PatchAsJsonAsync($"/api/sessions/{id}/lineage", new { detached });
 
@@ -161,35 +157,79 @@ public sealed class SessionLineageEndpointTests : IAsyncLifetime
         return await response.Content.ReadFromJsonAsync<JsonElement>();
     }
 
-    private async Task SeedAsync()
+    public sealed class Server : IAsyncLifetime
     {
-        using var scope = _factory!.Services.CreateScope();
-        using var connection = scope.ServiceProvider.GetRequiredService<IDbConnectionFactory>().CreateConnection();
-        await connection.ExecuteAsync(
-            "INSERT INTO workspace_roots (id, path, user_id) VALUES ('root-1', @Path, @Owner)",
-            new { Path = _folder, Owner });
-        await connection.ExecuteAsync($"""
-            INSERT INTO workspaces (id, directory, display_name, created_at, user_id)
-            VALUES ('ws-1', '/ws', 'Work', '2026-10-01T00:00:00+00:00', '{Owner}');
-            INSERT INTO instances (id, port, pid, directory, url, status, created_at, user_id)
-            VALUES ('inst-1', 0, NULL, '/ws', '', 'running', '2026-10-01T00:00:00+00:00', '{Owner}');
-            INSERT INTO sessions (
-                id, workspace_id, instance_id, opencode_session_id, title, status, directory, harness_type,
-                lifecycle_status, retention_status, created_at, user_id, parent_session_id, forked_from_session_id,
-                spawned_by_session_id, spawn_kind)
-            VALUES ('root', 'ws-1', 'inst-1', 'ses_root', 'Root', 'active', '/ws', 'opencode2', 'running', 'active',
-                    '2026-10-01T10:00:00+00:00', '{Owner}', NULL, NULL, NULL, NULL),
-                   ('one', 'ws-1', 'inst-1', 'ses_one', 'One', 'active', '/ws', 'opencode2', 'running', 'active',
-                    '2026-10-01T10:01:00+00:00', '{Owner}', NULL, NULL, 'root', 'api'),
-                   ('two', 'ws-1', 'inst-1', 'ses_two', 'Two', 'active', '/ws', 'opencode2', 'running', 'active',
-                    '2026-10-01T10:02:00+00:00', '{Owner}', NULL, NULL, 'one', 'api'),
-                   ('three', 'ws-1', 'inst-1', 'ses_three', 'Three', 'active', '/ws', 'opencode2', 'running', 'active',
-                    '2026-10-01T10:03:00+00:00', '{Owner}', NULL, NULL, 'two', 'api'),
-                   ('fork', 'ws-1', 'inst-1', 'ses_fork', 'Fork', 'active', '/ws', 'opencode2', 'running', 'active',
-                    '2026-10-01T10:04:00+00:00', '{Owner}', NULL, 'root', NULL, 'fork'),
-                   ('sub', 'ws-1', 'inst-1', 'ses_sub', 'Sub', 'active', '/ws', 'opencode2', 'running', 'active',
-                    '2026-10-01T10:05:00+00:00', '{Owner}', 'three', NULL, NULL, NULL);
-            """);
+        private readonly List<IHarnessSession> _spawned = [];
+
+        public string Folder { get; } = Directory.CreateTempSubdirectory("fleet-lineage-tests-").FullName;
+        public ApiWebApplicationFactory Factory { get; }
+
+        public Server()
+        {
+            var registry = new FakeHarnessRegistry();
+            registry.Register(new FakeHarness("opencode2", "OpenCode 2"));
+            registry.Register(new FakeHarnessRuntime("opencode2")
+            {
+                SpawnBehavior = (_, _) =>
+                {
+                    var session = new FakeHarnessSession($"inst-spawned-{Guid.NewGuid():N}");
+                    lock (_spawned) _spawned.Add(session);
+                    return Task.FromResult<IHarnessSession>(session);
+                },
+            });
+            Factory = new ApiWebApplicationFactory(
+                authEnabled: false,
+                simulateLocalhostRequest: true,
+                configureTestServices: services =>
+                {
+                    var existing = services.FirstOrDefault(d => d.ServiceType == typeof(IHarnessRegistry));
+                    if (existing is not null) services.Remove(existing);
+                    services.AddSingleton<IHarnessRegistry>(registry);
+                    services.AddSingleton<IHarnessCanvasCallerResolver>(new FakeCallers());
+                    services.AddSingleton<IHarnessBridgeTokens>(new FakeTokens());
+                });
+        }
+
+        public Task InitializeAsync() => SeedAsync(Factory, Folder);
+
+        public async Task DisposeAsync()
+        {
+            await Factory.DisposeAsync();
+            foreach (var session in _spawned)
+                await session.DisposeAsync();
+            Directory.Delete(Folder, recursive: true);
+        }
+
+        private static async Task SeedAsync(ApiWebApplicationFactory factory, string folder)
+        {
+            using var scope = factory.Services.CreateScope();
+            using var connection = scope.ServiceProvider.GetRequiredService<IDbConnectionFactory>().CreateConnection();
+            await connection.ExecuteAsync(
+                "INSERT INTO workspace_roots (id, path, user_id) VALUES ('root-1', @Path, @Owner)",
+                new { Path = folder, Owner });
+            await connection.ExecuteAsync($"""
+                INSERT INTO workspaces (id, directory, display_name, created_at, user_id)
+                VALUES ('ws-1', '/ws', 'Work', '2026-10-01T00:00:00+00:00', '{Owner}');
+                INSERT INTO instances (id, port, pid, directory, url, status, created_at, user_id)
+                VALUES ('inst-1', 0, NULL, '/ws', '', 'running', '2026-10-01T00:00:00+00:00', '{Owner}');
+                INSERT INTO sessions (
+                    id, workspace_id, instance_id, opencode_session_id, title, status, directory, harness_type,
+                    lifecycle_status, retention_status, created_at, user_id, parent_session_id, forked_from_session_id,
+                    spawned_by_session_id, spawn_kind)
+                VALUES ('root', 'ws-1', 'inst-1', 'ses_root', 'Root', 'active', '/ws', 'opencode2', 'running', 'active',
+                        '2026-10-01T10:00:00+00:00', '{Owner}', NULL, NULL, NULL, NULL),
+                       ('one', 'ws-1', 'inst-1', 'ses_one', 'One', 'active', '/ws', 'opencode2', 'running', 'active',
+                        '2026-10-01T10:01:00+00:00', '{Owner}', NULL, NULL, 'root', 'api'),
+                       ('two', 'ws-1', 'inst-1', 'ses_two', 'Two', 'active', '/ws', 'opencode2', 'running', 'active',
+                        '2026-10-01T10:02:00+00:00', '{Owner}', NULL, NULL, 'one', 'api'),
+                       ('three', 'ws-1', 'inst-1', 'ses_three', 'Three', 'active', '/ws', 'opencode2', 'running', 'active',
+                        '2026-10-01T10:03:00+00:00', '{Owner}', NULL, NULL, 'two', 'api'),
+                       ('fork', 'ws-1', 'inst-1', 'ses_fork', 'Fork', 'active', '/ws', 'opencode2', 'running', 'active',
+                        '2026-10-01T10:04:00+00:00', '{Owner}', NULL, 'root', NULL, 'fork'),
+                       ('sub', 'ws-1', 'inst-1', 'ses_sub', 'Sub', 'active', '/ws', 'opencode2', 'running', 'active',
+                        '2026-10-01T10:05:00+00:00', '{Owner}', 'three', NULL, NULL, NULL);
+                """);
+        }
     }
 
     private sealed class FakeTokens : IHarnessBridgeTokens

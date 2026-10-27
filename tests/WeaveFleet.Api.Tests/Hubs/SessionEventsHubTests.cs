@@ -20,38 +20,30 @@ namespace WeaveFleet.Api.Tests.Hubs;
 /// Tests hub connectivity, subscription, snapshot delivery, and event broadcasting.
 /// </summary>
 #pragma warning disable CA1001 // IAsyncLifetime handles disposal via DisposeAsync
-public sealed class SessionEventsHubTests : IAsyncLifetime
+public sealed class SessionEventsHubTests : IClassFixture<SessionEventsHubTests.Server>, IClassFixture<SessionEventsHubTests.BroadcastServer>, IAsyncLifetime
 #pragma warning restore CA1001
 {
-    private ApiWebApplicationFactory? _factory;
+    private readonly Server _server;
+    private readonly BroadcastServer _broadcastServer;
     private HubConnection? _connection;
-    private readonly FakeSessionMessageProxy _proxy = new();
-    private readonly InMemorySessionContextRepository _contexts = new();
+    private FakeSessionMessageProxy _proxy => _server.Proxy;
+    private InMemorySessionContextRepository _contexts => _server.Contexts;
+    private ApiWebApplicationFactory _factory => _server.Factory;
 
-    public async Task InitializeAsync()
+    public SessionEventsHubTests(Server server, BroadcastServer broadcastServer)
     {
-        // Configure factory with required test services
-        _factory = new ApiWebApplicationFactory(
-            authEnabled: false,
-            configureTestServices: services =>
-            {
-                // Register a fake message proxy that returns empty snapshots
-                services.AddSingleton<ISessionMessageProxy>(_proxy);
-                services.AddSingleton<ISessionContextRepository>(_contexts);
-            });
-        await Task.CompletedTask;
+        _server = server;
+        _broadcastServer = broadcastServer;
+        _proxy.GetSnapshotBehavior = null;
     }
+
+    public Task InitializeAsync() => Task.CompletedTask;
 
     public async Task DisposeAsync()
     {
         if (_connection is not null)
         {
             await _connection.DisposeAsync();
-        }
-
-        if (_factory is not null)
-        {
-            await _factory.DisposeAsync();
         }
     }
 
@@ -119,9 +111,10 @@ public sealed class SessionEventsHubTests : IAsyncLifetime
     [Fact]
     public async Task SubscribeToSession_IncludesHowFullTheContextIs()
     {
+        var sessionId = $"session-{Guid.NewGuid():N}";
         await _contexts.UpsertAsync(new SessionContext
         {
-            SessionId = "session-1",
+            SessionId = sessionId,
             UserId = "local-user",
             Used = 76_000,
             Limit = 200_000,
@@ -131,7 +124,7 @@ public sealed class SessionEventsHubTests : IAsyncLifetime
         }, CancellationToken.None);
         _connection = await CreateConnectedHubAsync();
 
-        var snapshot = await _connection.InvokeAsync<JsonElement>("SubscribeToSessionAsync", "session-1");
+        var snapshot = await _connection.InvokeAsync<JsonElement>("SubscribeToSessionAsync", sessionId);
 
         var context = snapshot.GetProperty("context");
         context.GetProperty("used").GetInt32().ShouldBe(76_000);
@@ -168,70 +161,62 @@ public sealed class SessionEventsHubTests : IAsyncLifetime
     public async Task BroadcastEvent_DeliveredToSubscribedClient()
     {
         // Arrange: use the real InMemoryEventBroadcaster so the pump delivers events
-        var broadcaster = new InMemoryEventBroadcaster();
-        using var factory = new ApiWebApplicationFactory(
-            authEnabled: false,
-            configureTestServices: services =>
-            {
-                services.AddSingleton<ISessionMessageProxy>(new FakeSessionMessageProxy());
-                services.AddSingleton<IEventBroadcaster>(broadcaster);
-            });
+        var broadcaster = _broadcastServer.Broadcaster;
+        var sessionId = $"session-{Guid.NewGuid():N}";
+        var topic = $"session:{sessionId}";
+        var baseline = SubscriberCount(broadcaster);
 
-        var connection = await CreateConnectedHubAsync(factory);
+        var connection = await CreateConnectedHubAsync(_broadcastServer.Factory);
         await using var _ = connection;
 
-        await connection.InvokeAsync<SessionSnapshot>("SubscribeToSessionAsync", "session-1");
+        await connection.InvokeAsync<SessionSnapshot>("SubscribeToSessionAsync", sessionId);
 
         var received = new TaskCompletionSource<(string Topic, long EventId)>();
-        connection.On("Event", (string topic, long eventId, object? data) =>
+        connection.On("Event", (string evtTopic, long eventId, object? data) =>
         {
-            received.TrySetResult((topic, eventId));
+            received.TrySetResult((evtTopic, eventId));
         });
 
-        await WaitForSubscriberAsync(broadcaster);
+        await WaitForSubscriberAsync(broadcaster, baseline);
 
         // Act
         var payload = JsonDocument.Parse("""{"text":"hello"}""").RootElement;
         await broadcaster.BroadcastAsync(
-            "session:session-1", "message.created", payload, eventId: 42,
+            topic, "message.created", payload, eventId: 42,
             domainEvent: null, userId: null, ct: CancellationToken.None);
 
         // Assert
         var result = await received.Task.WaitAsync(TimeSpan.FromSeconds(5));
-        result.Topic.ShouldBe("session:session-1");
+        result.Topic.ShouldBe(topic);
         result.EventId.ShouldBe(42);
     }
 
     [Fact]
     public async Task BroadcastEvent_NotDeliveredToUnsubscribedClient()
     {
-        var broadcaster = new InMemoryEventBroadcaster();
-        using var factory = new ApiWebApplicationFactory(
-            authEnabled: false,
-            configureTestServices: services =>
-            {
-                services.AddSingleton<ISessionMessageProxy>(new FakeSessionMessageProxy());
-                services.AddSingleton<IEventBroadcaster>(broadcaster);
-            });
+        var broadcaster = _broadcastServer.Broadcaster;
+        var sessionId = $"session-{Guid.NewGuid():N}";
+        var topic = $"session:{sessionId}";
+        var baseline = SubscriberCount(broadcaster);
 
-        var connection = await CreateConnectedHubAsync(factory);
+        var connection = await CreateConnectedHubAsync(_broadcastServer.Factory);
         await using var _ = connection;
 
-        await connection.InvokeAsync<SessionSnapshot>("SubscribeToSessionAsync", "session-1");
-        await connection.InvokeAsync("UnsubscribeFromSessionAsync", "session-1");
+        await connection.InvokeAsync<SessionSnapshot>("SubscribeToSessionAsync", sessionId);
+        await connection.InvokeAsync("UnsubscribeFromSessionAsync", sessionId);
 
         var received = new TaskCompletionSource<bool>();
-        connection.On("Event", (string topic, long eventId, object? data) =>
+        connection.On("Event", (string evtTopic, long eventId, object? data) =>
         {
             received.TrySetResult(true);
         });
 
-        await WaitForSubscriberAsync(broadcaster);
+        await WaitForSubscriberAsync(broadcaster, baseline);
 
         // Act
         var payload = JsonDocument.Parse("{}").RootElement;
         await broadcaster.BroadcastAsync(
-            "session:session-1", "message.created", payload, eventId: 1,
+            topic, "message.created", payload, eventId: 1,
             domainEvent: null, userId: null, ct: CancellationToken.None);
 
         // Assert: no event within 500ms
@@ -242,37 +227,33 @@ public sealed class SessionEventsHubTests : IAsyncLifetime
     [Fact]
     public async Task BroadcastEvent_MultipleEvents_DeliveredInOrder()
     {
-        var broadcaster = new InMemoryEventBroadcaster();
-        using var factory = new ApiWebApplicationFactory(
-            authEnabled: false,
-            configureTestServices: services =>
-            {
-                services.AddSingleton<ISessionMessageProxy>(new FakeSessionMessageProxy());
-                services.AddSingleton<IEventBroadcaster>(broadcaster);
-            });
+        var broadcaster = _broadcastServer.Broadcaster;
+        var sessionId = $"session-{Guid.NewGuid():N}";
+        var topic = $"session:{sessionId}";
+        var baseline = SubscriberCount(broadcaster);
 
-        var connection = await CreateConnectedHubAsync(factory);
+        var connection = await CreateConnectedHubAsync(_broadcastServer.Factory);
         await using var _ = connection;
 
-        await connection.InvokeAsync<SessionSnapshot>("SubscribeToSessionAsync", "session-1");
+        await connection.InvokeAsync<SessionSnapshot>("SubscribeToSessionAsync", sessionId);
 
         var receivedIds = new List<long>();
         var allReceived = new TaskCompletionSource<bool>();
-        connection.On("Event", (string topic, long eventId, object? data) =>
+        connection.On("Event", (string evtTopic, long eventId, object? data) =>
         {
             receivedIds.Add(eventId);
             if (receivedIds.Count == 3)
                 allReceived.TrySetResult(true);
         });
 
-        await WaitForSubscriberAsync(broadcaster);
+        await WaitForSubscriberAsync(broadcaster, baseline);
 
         // Act
         var payload = JsonDocument.Parse("{}").RootElement;
         for (int i = 1; i <= 3; i++)
         {
             await broadcaster.BroadcastAsync(
-                "session:session-1", "message.created", payload, eventId: i,
+                topic, "message.created", payload, eventId: i,
                 domainEvent: null, userId: null, ct: CancellationToken.None);
         }
 
@@ -298,19 +279,64 @@ public sealed class SessionEventsHubTests : IAsyncLifetime
     }
 
     private async Task<HubConnection> CreateConnectedHubAsync()
-        => await CreateConnectedHubAsync(_factory!);
+        => await CreateConnectedHubAsync(_factory);
 
-    private static async Task WaitForSubscriberAsync(InMemoryEventBroadcaster broadcaster)
+    private static int SubscriberCount(InMemoryEventBroadcaster broadcaster)
     {
         var prop = broadcaster.GetType().GetProperty("SubscriberCount",
             System.Reflection.BindingFlags.Instance | System.Reflection.BindingFlags.NonPublic);
+        return (int)(prop?.GetValue(broadcaster) ?? 0);
+    }
+
+    // The server is shared, so wait for this connection's pump: the count rising above what it was before connecting.
+    private static async Task WaitForSubscriberAsync(InMemoryEventBroadcaster broadcaster, int baseline)
+    {
         var sw = System.Diagnostics.Stopwatch.StartNew();
         while (sw.Elapsed < TimeSpan.FromSeconds(3))
         {
-            if ((int)(prop?.GetValue(broadcaster) ?? 0) > 0) return;
+            if (SubscriberCount(broadcaster) > baseline) return;
             await Task.Delay(25);
         }
     }
 
-    // ── Fake Implementations ────────────────────────────────────────────────────────
+    // A fake message proxy that returns empty snapshots, and a context repository the tests can fill.
+    public sealed class Server : IDisposable
+    {
+        public FakeSessionMessageProxy Proxy { get; } = new();
+        public InMemorySessionContextRepository Contexts { get; } = new();
+        public ApiWebApplicationFactory Factory { get; }
+
+        public Server()
+        {
+            Factory = new ApiWebApplicationFactory(
+                authEnabled: false,
+                configureTestServices: services =>
+                {
+                    services.AddSingleton<ISessionMessageProxy>(Proxy);
+                    services.AddSingleton<ISessionContextRepository>(Contexts);
+                });
+        }
+
+        public void Dispose() => Factory.Dispose();
+    }
+
+    // The real in-memory broadcaster, so the pump delivers events the tests broadcast.
+    public sealed class BroadcastServer : IDisposable
+    {
+        public InMemoryEventBroadcaster Broadcaster { get; } = new();
+        public ApiWebApplicationFactory Factory { get; }
+
+        public BroadcastServer()
+        {
+            Factory = new ApiWebApplicationFactory(
+                authEnabled: false,
+                configureTestServices: services =>
+                {
+                    services.AddSingleton<ISessionMessageProxy>(new FakeSessionMessageProxy());
+                    services.AddSingleton<IEventBroadcaster>(Broadcaster);
+                });
+        }
+
+        public void Dispose() => Factory.Dispose();
+    }
 }

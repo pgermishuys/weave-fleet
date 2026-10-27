@@ -19,7 +19,7 @@ namespace WeaveFleet.Api.Tests.Endpoints;
 /// covered in the Infrastructure tests.
 /// </summary>
 #pragma warning disable CA1001 // Type owns disposable fields — disposal handled by IAsyncLifetime.DisposeAsync
-public sealed class CanvasBridgeEndpointTests : IAsyncLifetime
+public sealed class CanvasBridgeEndpointTests : IClassFixture<CanvasBridgeEndpointTests.Server>, IAsyncLifetime
 #pragma warning restore CA1001
 {
     private const string Token = "token-1";
@@ -28,21 +28,27 @@ public sealed class CanvasBridgeEndpointTests : IAsyncLifetime
     private const string Owner = "owner-user";
     private const string BridgeUrl = "/api/bridge/canvas";
 
-    private ApiWebApplicationFactory? _factory;
+    private readonly ApiWebApplicationFactory _factory;
     private HttpClient? _client;
+
+    public CanvasBridgeEndpointTests(Server server)
+    {
+        _factory = server.Factory;
+    }
 
     public async Task InitializeAsync()
     {
-        _factory = CreateFactory(simulateLocalhostRequest: true);
         _client = _factory.CreateClient();
-        await SeedSessionAsync(_factory);
+        // The server is shared: start each test with no canvases open, as on a fresh one.
+        using var scope = _factory.Services.CreateScope();
+        using var connection = scope.ServiceProvider.GetRequiredService<IDbConnectionFactory>().CreateConnection();
+        await connection.ExecuteAsync("DELETE FROM canvas_revisions; DELETE FROM canvases;");
     }
 
-    public async Task DisposeAsync()
+    public Task DisposeAsync()
     {
         _client?.Dispose();
-        if (_factory is not null)
-            await _factory.DisposeAsync();
+        return Task.CompletedTask;
     }
 
     [Fact]
@@ -57,7 +63,7 @@ public sealed class CanvasBridgeEndpointTests : IAsyncLifetime
         body.GetProperty("title").GetString().ShouldStartWith("Shop");
         body.GetProperty("metadata").GetProperty("version").GetInt32().ShouldBe(1);
 
-        using var scope = _factory!.Services.CreateScope();
+        using var scope = _factory.Services.CreateScope();
         using var connection = scope.ServiceProvider.GetRequiredService<IDbConnectionFactory>().CreateConnection();
         (await connection.ExecuteScalarAsync<string>("SELECT user_id FROM canvases WHERE id = @canvasId", new { canvasId })).ShouldBe(Owner);
     }
@@ -94,7 +100,7 @@ public sealed class CanvasBridgeEndpointTests : IAsyncLifetime
         screenshot.GetProperty("sessionId").GetString().ShouldBe(SessionId);
         screenshot.GetProperty("width").GetInt32().ShouldBe(1280);
         screenshot.GetProperty("height").GetInt32().ShouldBe(800);
-        using var scope = _factory!.Services.CreateScope();
+        using var scope = _factory.Services.CreateScope();
         (await scope.ServiceProvider.GetRequiredService<ISessionScreenshotStore>().ReadAsync(SessionId, screenshot.GetProperty("id").GetString()!))
             .ShouldBe(FakeScreenshotter.Png);
     }
@@ -192,6 +198,15 @@ public sealed class CanvasBridgeEndpointTests : IAsyncLifetime
         (await ErrorAsync(missing)).ShouldBe("No canvas cv_missing in this session. Call fleet_canvas_list to see the open canvases.");
         noId.StatusCode.ShouldBe(HttpStatusCode.UnprocessableEntity);
         (await ErrorAsync(noId)).ShouldStartWith("\"canvasId\" is required.");
+    }
+
+    public sealed class Server : IAsyncLifetime
+    {
+        public ApiWebApplicationFactory Factory { get; } = CreateFactory(simulateLocalhostRequest: true);
+
+        public Task InitializeAsync() => SeedSessionAsync(Factory);
+
+        public async Task DisposeAsync() => await Factory.DisposeAsync();
     }
 
     private static ApiWebApplicationFactory CreateFactory(bool simulateLocalhostRequest)
