@@ -260,4 +260,105 @@ public sealed class DreamApplierTests
         (await _applier.UndoAsync(User, _dream, change.Id)).ShouldNotBeNull();
         (await _applier.UndoAsync(User, _dream, "nope")).ShouldNotBeNull();
     }
+
+    private static DreamProposal Keep(string note, params string[] sessions)
+        => new() { Action = "keep", Note = note, Why = "why", Sessions = [.. sessions] };
+
+    [Fact]
+    public async Task A_keep_on_a_learned_note_cited_by_three_sessions_removes_its_lifetime()
+    {
+        var original = Note("aa11", "learned", "Use bun.");
+
+        var change = await ApplyAsync(Keep("aa11", "S1", "S2", "S3"));
+
+        change.Kind.ShouldBe("kept");
+        change.NoteId.ShouldBe("aa11");
+        change.Text.ShouldBe("Use bun.");
+        change.Replaced.ShouldBe([original]);
+        var note = _store.Notes.Single();
+        note.Lifetime.ShouldBeNull();
+        note.Text.ShouldBe("Use bun.");
+        note.Updated.ShouldBe(original.Updated);
+        change.WroteHash.ShouldBe(DreamRules.HashOf(note));
+    }
+
+    [Theory]
+    [InlineData("added")]
+    [InlineData("from-you")]
+    public async Task A_keep_on_a_user_note_is_left_alone(string kind)
+    {
+        var original = Note("aa11", kind, "Use bun.");
+
+        var change = await ApplyAsync(Keep("aa11", "S1", "S2", "S3"));
+
+        change.Kind.ShouldBe("left");
+        change.Reason.ShouldBe(DreamApplier.UserNoteReason);
+        _store.Notes.Single().ShouldBe(original);
+    }
+
+    [Fact]
+    public async Task A_keep_with_two_sessions_is_skipped_even_with_a_correction()
+    {
+        var original = Note("aa11", "learned", "Use bun.");
+
+        var change = await ApplyAsync(Keep("aa11", "S1", "S2") with { Corrected = true, Quote = "use bun here" });
+
+        change.Kind.ShouldBe("skipped");
+        change.Reason.ShouldBe(DreamApplier.KeepSessionsReason);
+        _store.Notes.Single().ShouldBe(original);
+    }
+
+    [Fact]
+    public async Task A_keep_on_a_note_already_kept_is_skipped_and_an_unknown_note_too()
+    {
+        Note("aa11", "learned", "Use bun.");
+        _store.Notes[0] = _store.Notes[0] with { Lifetime = null };
+
+        var already = await ApplyAsync(Keep("aa11", "S1", "S2", "S3"));
+        var unknown = await ApplyAsync(Keep("zz99", "S1", "S2", "S3"));
+
+        already.Kind.ShouldBe("skipped");
+        already.Reason.ShouldBe(DreamApplier.AlreadyKeptReason);
+        unknown.Kind.ShouldBe("skipped");
+        unknown.Reason.ShouldBe("There's no note \"zz99\".");
+    }
+
+    [Fact]
+    public async Task A_keep_on_a_note_edited_mid_dream_is_left_alone()
+    {
+        Note("aa11", "learned", "Use bun.");
+        _store.Notes[0] = _store.Notes[0] with { Text = "Use bun, always." };
+
+        var change = await ApplyAsync(Keep("aa11", "S1", "S2", "S3"));
+
+        change.Kind.ShouldBe("left");
+        change.Reason.ShouldBe(DreamApplier.ChangedReason);
+        _store.Notes.Single().Lifetime.ShouldBe(7);
+    }
+
+    [Fact]
+    public async Task Undo_of_a_keep_puts_the_lifetime_back_and_is_refused_after_an_edit()
+    {
+        var original = Note("aa11", "learned", "Use bun.");
+        var change = await ApplyAsync(Keep("aa11", "S1", "S2", "S3"));
+
+        (await _applier.UndoAsync(User, _dream, change.Id)).ShouldBeNull();
+        _store.Notes.Single().ShouldBe(original);
+
+        var again = await ApplyAsync(Keep("aa11", "S1", "S2", "S3"));
+        _store.Notes[0] = _store.Notes[0] with { Text = "Edited." };
+        var refused = await _applier.UndoAsync(User, _dream, again.Id);
+        refused.ShouldNotBeNull().Description.ShouldBe(DreamApplier.UndoRefused);
+        _store.Notes.Single().Lifetime.ShouldBeNull();
+    }
+
+    [Fact]
+    public async Task Undo_of_a_keep_is_refused_when_the_note_has_a_lifetime_again()
+    {
+        Note("aa11", "learned", "Use bun.");
+        var change = await ApplyAsync(Keep("aa11", "S1", "S2", "S3"));
+        _store.Notes[0] = _store.Notes[0] with { Lifetime = 3 };
+
+        (await _applier.UndoAsync(User, _dream, change.Id)).ShouldNotBeNull().Description.ShouldBe(DreamApplier.UndoRefused);
+    }
 }

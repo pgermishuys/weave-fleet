@@ -61,6 +61,11 @@ public sealed class Automation
     /// doesn't count anything earlier as missed. Null means since it was made. Set by migration 034 only.
     /// </summary>
     public string? HistoryStartsAt { get; set; }
+    /// <summary>
+    /// The automation Fleet owns, by name (<c>dreaming</c>): Fleet creates and removes it, and people can change its time,
+    /// run it now or pause it, but not edit or delete it. Null for every automation a person made.
+    /// </summary>
+    public string? Builtin { get; set; }
     public string CreatedAt { get; set; } = string.Empty;
     public string? UpdatedAt { get; set; }
     public string UserId { get; set; } = string.Empty;

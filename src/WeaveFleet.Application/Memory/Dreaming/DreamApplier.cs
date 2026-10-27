@@ -14,6 +14,8 @@ public sealed class DreamApplier(IMemoryStore store, TimeProvider time)
     public const string ChangedReason = "This note changed while Fleet was dreaming, so Fleet left it as is.";
     public const string OneSessionReason = "Seen in one session only.";
     public const string AlreadyANoteReason = "It's already a note.";
+    public const string AlreadyKeptReason = "It's already kept for good.";
+    public static readonly string KeepSessionsReason = $"Relied on in fewer than {DreamRules.KeepForGoodSessions} sessions.";
     public const string UndoRefused = "This note changed since dreaming changed it; edit it instead.";
 
     public async Task<List<DreamChange>> ApplyAsync(string userId, Dream dream, IReadOnlyList<DreamProposal> proposals, CancellationToken ct = default)
@@ -46,6 +48,7 @@ public sealed class DreamApplier(IMemoryStore store, TimeProvider time)
             "add" => await AddAsync(userId, dream, p, change, cited, notes, ct).ConfigureAwait(false),
             "rewrite" => await RewriteAsync(userId, dream, p, change, cited, notes, ct).ConfigureAwait(false),
             "retire" => await RetireAsync(userId, dream, p, change, cited, notes, ct).ConfigureAwait(false),
+            "keep" => await KeepAsync(userId, dream, p, change, cited, notes, ct).ConfigureAwait(false),
             "merge" => await MergeAsync(userId, dream, p, change, notes, ct).ConfigureAwait(false),
             _ => Skip(change, $"Unknown action \"{p.Action}\"."),
         };
@@ -139,6 +142,37 @@ public sealed class DreamApplier(IMemoryStore store, TimeProvider time)
         return change;
     }
 
+    /// <summary>
+    /// Makes a learned note permanent (no lifetime) when 3+ sessions relied on it. Only the lifetime changes (<c>Updated</c> stays),
+    /// so Undo can put the note back exactly and nothing else about it moves.
+    /// </summary>
+    private async Task<DreamChange> KeepAsync(string userId, Dream dream, DreamProposal p, DreamChange change, List<DreamSession> cited, IReadOnlyList<MemoryNote> notes, CancellationToken ct)
+    {
+        if (dream.Notes.FirstOrDefault(n => n.Id == p.Note?.Trim()) is not { } snapshot)
+            return Skip(change, $"There's no note \"{p.Note}\".");
+
+        change.NoteId = snapshot.Id;
+        change.List = snapshot.List;
+        var current = notes.FirstOrDefault(n => n.Id == snapshot.Id);
+        var replaced = current is null ? [] : new List<MemoryNote> { current };
+        change.Text = current?.Text ?? snapshot.Text;
+        if (snapshot.Kind != MemoryKinds.Learned)
+            return Left(change, UserNoteReason, replaced);
+        if (current is not null && current.Lifetime is null)
+            return Skip(change, AlreadyKeptReason);
+        if (cited.Count < DreamRules.KeepForGoodSessions)
+            return Skip(change, KeepSessionsReason);
+        if (current is null || DreamRules.HashOf(current) != snapshot.Hash)
+            return Left(change, ChangedReason, replaced);
+
+        var written = current with { Lifetime = null };
+        await store.SaveAsync(userId, written, ct).ConfigureAwait(false);
+        change.Kind = DreamRules.ChangeKinds.Kept;
+        change.Replaced = replaced;
+        change.WroteHash = DreamRules.HashOf(written);
+        return change;
+    }
+
     private async Task<DreamChange> MergeAsync(string userId, Dream dream, DreamProposal p, DreamChange change, IReadOnlyList<MemoryNote> notes, CancellationToken ct)
     {
         var removeIds = p.Remove.Select(id => id.Trim()).Where(id => id != p.Keep?.Trim()).Distinct().ToList();
@@ -225,7 +259,7 @@ public sealed class DreamApplier(IMemoryStore store, TimeProvider time)
             return FleetError.NotFoundFor("Change", changeId);
         if (change.Undone)
             return FleetError.ValidationError("Dream.Undo", "This change was already undone.");
-        if (change.Kind is not (DreamRules.ChangeKinds.Added or DreamRules.ChangeKinds.Rewritten or DreamRules.ChangeKinds.Merged or DreamRules.ChangeKinds.Retired))
+        if (change.Kind is not (DreamRules.ChangeKinds.Added or DreamRules.ChangeKinds.Rewritten or DreamRules.ChangeKinds.Merged or DreamRules.ChangeKinds.Retired or DreamRules.ChangeKinds.Kept))
             return FleetError.ValidationError("Dream.Undo", "Only a change Fleet made can be undone.");
 
         var refused = FleetError.ValidationError("Dream.Undo", UndoRefused);
@@ -239,6 +273,13 @@ public sealed class DreamApplier(IMemoryStore store, TimeProvider time)
                 break;
             case DreamRules.ChangeKinds.Rewritten:
                 if (!await UnchangedAsync(userId, id, change.WroteHash, ct).ConfigureAwait(false) || change.Replaced.Count == 0)
+                    return refused;
+                await store.SaveAsync(userId, change.Replaced[0], ct).ConfigureAwait(false);
+                break;
+            case DreamRules.ChangeKinds.Kept:
+                // Someone giving the note a lifetime again leaves nothing to undo.
+                if (!await UnchangedAsync(userId, id, change.WroteHash, ct).ConfigureAwait(false) || change.Replaced.Count == 0
+                    || await store.FindAsync(userId, id, ct).ConfigureAwait(false) is not { Lifetime: null })
                     return refused;
                 await store.SaveAsync(userId, change.Replaced[0], ct).ConfigureAwait(false);
                 break;

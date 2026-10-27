@@ -42,11 +42,12 @@ function machineOf(automation: Automation): string | null {
   return machines.entries.find((entry) => entry.key === id)?.name ?? automation.lastRun?.machineName ?? "another machine";
 }
 
+/** Built-in automations first (the sort is stable, so the rest keep their order). */
 const rows = computed(() => automations.value.map((automation) => ({
   automation,
   status: automationRowStatus(automation, new Date(now.value)),
   machine: machineOf(automation),
-})));
+})).sort((a, b) => Number(!!b.automation.builtin) - Number(!!a.automation.builtin)));
 
 function selectAutomation(id: string): void {
   emit("update:modelValue", id);
@@ -131,6 +132,11 @@ function handleCreate(): void {
           aria-hidden="true"
         />
         <span class="automation-row__title">{{ automation.name }}</span>
+        <span
+          v-if="automation.builtin"
+          class="automation-row__pill"
+          data-testid="automation-row-builtin"
+        >Built in</span>
         <span
           v-if="machine"
           class="automation-row__machine"
@@ -313,6 +319,16 @@ function handleCreate(): void {
   font-weight: 400;
   line-height: 1.3;
   white-space: nowrap;
+}
+
+.automation-row__pill {
+  flex-shrink: 0;
+  border: 1px solid var(--border);
+  border-radius: 999px;
+  padding: 0 7px;
+  color: var(--muted);
+  font-size: 11px;
+  font-weight: 500;
 }
 
 .automation-row__meta--working {

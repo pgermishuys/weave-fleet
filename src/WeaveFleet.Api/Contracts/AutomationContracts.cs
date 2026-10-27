@@ -92,7 +92,9 @@ public sealed record AutomationResponse(
     string? NextRunAt,
     AutomationRunResponse? LastRun,
     /// <summary>The machine in this Fleet's list its runs go to; null for this machine.</summary>
-    string? TargetMachineId = null);
+    string? TargetMachineId = null,
+    /// <summary>The built-in automation it is (<c>dreaming</c>); null for one a person made.</summary>
+    string? Builtin = null);
 
 /// <summary>
 /// One run. State is "starting", "running", "done", "failed" or "skipped"; a run that started a workflow run follows it,
@@ -113,7 +115,9 @@ public sealed record AutomationRunResponse(
     /// <summary>The other machine it went to; null for this machine. Its session and workflow run are there.</summary>
     string? MachineId = null,
     /// <summary>That machine's name when the run went to it.</summary>
-    string? MachineName = null);
+    string? MachineName = null,
+    /// <summary>What a run that starts several sessions did, in words (a night of dreaming).</summary>
+    string? Summary = null);
 
 public sealed record AutomationRunListResponse(IReadOnlyList<AutomationRunResponse> Runs);
 

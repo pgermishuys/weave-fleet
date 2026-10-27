@@ -22,7 +22,7 @@ public static class DreamEndpoints
             {
                 if (http.RefuseAgent("when Fleet dreams") is { } refused)
                     return refused;
-                return !await dreams.IsEnabledAsync() ? Off() : (await dreams.StartAsync(req, ct)).ToApiResult();
+                return !await dreams.IsEnabledAsync() ? Off() : (await dreams.StartAsync(req with { Since = null, RunId = null }, ct)).ToApiResult();
             })
             .WithName("StartDream")
             .Produces<DreamView>();
@@ -35,6 +35,24 @@ public static class DreamEndpoints
             })
             .WithName("UndoDreamChange")
             .Produces<DreamView>();
+
+        var nightly = app.MapGroup("/api/memory/dreaming/nightly").WithTags("Memory");
+
+        // GET /api/memory/dreaming/nightly: "Dream each night" and what the last night did.
+        nightly.MapGet("/", async (DreamService dreams, NightlyDreaming nights, CancellationToken ct)
+                => !await dreams.IsEnabledAsync() ? Off() : Results.Ok(await nights.GetAsync(ct)))
+            .WithName("GetNightlyDreaming")
+            .Produces<NightlyDreamingView>();
+
+        // PUT /api/memory/dreaming/nightly  { "enabled"?, "time"?: "03:00", "timeZone"?, "harnessType"?, "model"?, "budgetTokens"? }
+        nightly.MapPut("/", async (HttpContext http, NightlyDreamingRequest req, DreamService dreams, NightlyDreaming nights, CancellationToken ct) =>
+            {
+                if (http.RefuseAgent("when Fleet dreams") is { } refused)
+                    return refused;
+                return !await dreams.IsEnabledAsync() ? Off() : (await nights.SetAsync(req, ct)).ToApiResult();
+            })
+            .WithName("SetNightlyDreaming")
+            .Produces<NightlyDreamingView>();
 
         return app;
     }

@@ -14,6 +14,16 @@ public interface IAutomationRunRepository
         string? machineId = null, string? machineName = null);
     /// <summary>Records how a run on another machine ended (<see cref="AutomationRun.SettledState"/>).</summary>
     Task SettleAsync(string id, string state);
+    /// <summary>
+    /// Writes what a run that starts several sessions has done so far (<see cref="AutomationRun.Summary"/>), and how it
+    /// ended once <paramref name="settledState"/> is given ("done" or "failed").
+    /// </summary>
+    Task SetSummaryAsync(string id, string summary, string? settledState = null, string? reason = null);
+    /// <summary>
+    /// Ends the nights (runs with a <see cref="AutomationRun.Summary"/> and no session) still unsettled from before
+    /// <paramref name="beforeUtc"/>: Fleet stopped while they ran, so nothing will finish them.
+    /// </summary>
+    Task<int> EndUnsettledNightsAsync(string beforeUtc, string reason);
     /// <summary>An automation's runs, newest first. Not scoped to a user: load the automation as its owner first.</summary>
     Task<IReadOnlyList<AutomationRun>> ListByAutomationAsync(string automationId, int limit);
     /// <summary>Each automation's newest run, keyed by automation id.</summary>

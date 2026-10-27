@@ -150,4 +150,20 @@ public sealed class DreamTranscriptTests
         DreamAnswer.Parse("```json\n{\"other\":1}\n```").ShouldBeNull();
         DreamAnswer.Parse(null).ShouldBeNull();
     }
+
+    [Fact]
+    public void The_answer_reads_a_keep_action_and_the_prompt_offers_it_and_marks_notes_that_fade()
+    {
+        var proposals = DreamAnswer.Parse("```json\n{\"changes\":[{\"action\":\"keep\",\"note\":\"aa11\",\"why\":\"w\",\"sessions\":[\"S1\",\"S2\",\"S3\"],\"quote\":\"q\"}]}\n```");
+
+        var keep = proposals.ShouldNotBeNull().Single();
+        keep.Action.ShouldBe("keep");
+        keep.Note.ShouldBe("aa11");
+        keep.Sessions.ShouldBe(["S1", "S2", "S3"]);
+
+        var prompt = DreamPrompt.Build("/work/fleet", "", 3,
+            [new DreamNote { Id = "aa11", List = "repository", Kind = "learned", Text = "Use bun.", Fades = true }]);
+        prompt.ShouldContain("\"action\":\"keep\"");
+        prompt.ShouldContain("[aa11] (learned, fades) Use bun.");
+    }
 }

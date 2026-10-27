@@ -217,6 +217,8 @@ internal sealed class FakeAutomationRepository : IAutomationRepository
         return Task.CompletedTask;
     }
 
+    public Task<Automation?> GetBuiltinAsync(string builtin) => Task.FromResult<Automation?>(null);
+
     public Task<Automation?> GetByIdAsync(string id)
         => Task.FromResult(_store.GetValueOrDefault(id));
 

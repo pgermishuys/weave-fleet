@@ -30,6 +30,17 @@ public static class DreamRules
 
     public const int ListLimit = 10;
 
+    /// <summary>The user preference holding a night's token budget (<see cref="DefaultBudgetTokens"/> when unset).</summary>
+    public const string BudgetPreferenceKey = "DreamingBudget";
+
+    public const int DefaultBudgetTokens = 300_000;
+
+    /// <summary>The most sessions a night looks at to find the repositories worked in.</summary>
+    public const int NightSessionsScanned = 500;
+
+    /// <summary>How many distinct sessions must have relied on a learned note before a dream may keep it for good.</summary>
+    public const int KeepForGoodSessions = 3;
+
     public static class Statuses
     {
         public const string Reading = "reading";
@@ -44,6 +55,7 @@ public static class DreamRules
         public const string Rewritten = "rewritten";
         public const string Merged = "merged";
         public const string Retired = "retired";
+        public const string Kept = "kept";
         public const string Left = "left";
         public const string Skipped = "skipped";
     }
@@ -86,6 +98,9 @@ public sealed class DreamNote
     public string Kind { get; set; } = "";
     public string Text { get; set; } = "";
     public string Hash { get; set; } = "";
+
+    /// <summary>A learned note that will expire if unused: the only kind a dream may keep for good.</summary>
+    public bool Fades { get; set; }
 }
 
 /// <summary>What a dream did with one proposal, with what Undo needs to put it back.</summary>
@@ -125,6 +140,15 @@ public sealed class Dream
     public List<DreamNote> Notes { get; set; } = [];
     public List<DreamChange> Changes { get; set; } = [];
 
+    /// <summary>The automation run (a night) that started it; null for Dream now.</summary>
+    public string? RunId { get; set; }
+
+    /// <summary>For a night's dream: it read the sessions started since then (the last night). Null reads the newest.</summary>
+    public DateTimeOffset? Since { get; set; }
+
+    /// <summary>What the dreaming session cost, once it ended.</summary>
+    public int? Tokens { get; set; }
+
     public bool IsActive => Status is DreamRules.Statuses.Reading or DreamRules.Statuses.Running;
 }
 
@@ -157,7 +181,10 @@ public sealed record DreamView(
     DateTimeOffset Started,
     DateTimeOffset? Finished,
     IReadOnlyList<DreamSessionView> ReadSessions,
-    IReadOnlyList<DreamChangeView> Changes)
+    IReadOnlyList<DreamChangeView> Changes,
+    string? RunId = null,
+    int? Tokens = null,
+    DateTimeOffset? Since = null)
 {
     public static DreamView Of(Dream dream)
     {
@@ -185,13 +212,24 @@ public sealed record DreamView(
                 read.Count,
                 change.Quote,
                 change.Reason,
-                change.Undone))]);
+                change.Undone))],
+            dream.RunId,
+            dream.Tokens,
+            dream.Since);
     }
 }
 
 public sealed record DreamListView(IReadOnlyList<DreamView> Dreams);
 
-public sealed record StartDreamRequest(string? Repository, string? HarnessType, string? ProviderId, string? ModelId);
+/// <param name="Since">A night's dream reads the sessions started since then; null reads the newest.</param>
+/// <param name="RunId">The night (automation run) starting it; set by Fleet only.</param>
+public sealed record StartDreamRequest(
+    string? Repository,
+    string? HarnessType,
+    string? ProviderId,
+    string? ModelId,
+    DateTimeOffset? Since = null,
+    string? RunId = null);
 
 /// <summary>Where a user's dreams are kept.</summary>
 public interface IDreamStore
@@ -202,4 +240,7 @@ public interface IDreamStore
     Task<Dream?> FindAsync(string userId, string id, CancellationToken ct = default);
 
     Task SaveAsync(string userId, Dream dream, CancellationToken ct = default);
+
+    /// <summary>The dreams in every repository started at or after <paramref name="since"/>, newest first.</summary>
+    Task<IReadOnlyList<Dream>> ListSinceAsync(string userId, DateTimeOffset since, int limit, CancellationToken ct = default);
 }

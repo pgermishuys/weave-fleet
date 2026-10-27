@@ -314,6 +314,8 @@ internal sealed class FakeAutomationRepository : IAutomationRepository
         return Task.CompletedTask;
     }
 
+    public Task<Automation?> GetBuiltinAsync(string builtin) => Task.FromResult<Automation?>(null);
+
     public Task<Automation?> GetByIdAsync(string id)
         => Task.FromResult(_store.GetValueOrDefault(id));
 
@@ -417,6 +419,7 @@ internal sealed class FakeSessionRepository : ISessionRepository
     public Task<IReadOnlyList<Domain.Entities.Session>> ListAsync(int limit = 100, int offset = 0, IReadOnlyList<string>? statuses = null, string? projectId = null) => throw new NotImplementedException();
     public Task<IReadOnlyList<Domain.Entities.Session>> ListAsync(int limit, int offset, IReadOnlyList<string>? statuses, string? projectId, IReadOnlyList<string>? retentionStatuses) => throw new NotImplementedException();
     public Task<IReadOnlyList<Domain.Entities.Session>> ListAsync(int limit, int offset, IReadOnlyList<string>? statuses, string? projectId, IReadOnlyList<string>? retentionStatuses, IReadOnlyList<string>? tags) => throw new NotImplementedException();
+    public Task<IReadOnlyList<Domain.Entities.Session>> ListCreatedSinceAsync(string sinceUtc, int limit) => throw new NotImplementedException();
     public Task DeleteByProjectIdAsync(string projectId) => throw new NotImplementedException();
     public Task<int> CountAsync(IReadOnlyList<string>? statuses = null) => throw new NotImplementedException();
     public Task<int> CountAsync(IReadOnlyList<string>? statuses, IReadOnlyList<string>? retentionStatuses) => throw new NotImplementedException();

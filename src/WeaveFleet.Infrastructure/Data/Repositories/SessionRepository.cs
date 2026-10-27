@@ -328,6 +328,25 @@ public sealed class SessionRepository(
         return list;
     }
 
+    public async Task<IReadOnlyList<Session>> ListCreatedSinceAsync(string sinceUtc, int limit)
+    {
+        using var conn = connectionFactory.CreateConnection();
+        return await conn.QueryAsync(
+            """
+            SELECT * FROM sessions
+            WHERE user_id = @UserId AND parent_session_id IS NULL AND side_of_session_id IS NULL AND created_at >= @Since
+            ORDER BY created_at DESC
+            LIMIT @Limit
+            """,
+            cmd =>
+            {
+                cmd.AddParameter("UserId", userContext.UserId);
+                cmd.AddParameter("Since", sinceUtc);
+                cmd.AddParameter("Limit", limit);
+            },
+            ReadSession);
+    }
+
     public async Task DeleteByProjectIdAsync(string projectId)
     {
         using var conn = connectionFactory.CreateConnection();

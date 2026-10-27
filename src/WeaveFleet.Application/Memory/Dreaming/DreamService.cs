@@ -82,7 +82,7 @@ public sealed partial class DreamService(
     IEventBroadcaster broadcaster,
     IServiceScopeFactory scopeFactory,
     TimeProvider time,
-    ILogger<DreamService> logger)
+    ILogger<DreamService> logger) : IDreamStarter
 {
     private static readonly TimeSpan StaleAfter = TimeSpan.FromHours(1);
 
@@ -113,7 +113,7 @@ public sealed partial class DreamService(
         if (existing.Any(d => d.IsActive && now - d.Started < StaleAfter))
             return FleetError.ValidationError("Dream.Running", "Fleet is already dreaming about this repository.");
 
-        var dream = new Dream { Repository = repository, Started = now, HarnessType = request.HarnessType };
+        var dream = new Dream { Repository = repository, Started = now, HarnessType = request.HarnessType, RunId = request.RunId, Since = request.Since };
         await dreams.SaveAsync(user.UserId, dream, ct).ConfigureAwait(false);
 
         var userId = user.UserId;
@@ -155,7 +155,11 @@ public sealed partial class DreamService(
         if (dream is null)
             return;
 
-        var candidates = (await sessions.ListAsync(300, 0, null, null, null, null).ConfigureAwait(false))
+        // A night reads what was started since the last one; Dream now, the newest.
+        var listed = request.Since is { } since
+            ? await sessions.ListCreatedSinceAsync(since.UtcDateTime.ToString("O"), DreamRules.NightSessionsScanned).ConfigureAwait(false)
+            : await sessions.ListAsync(300, 0, null, null, null, null).ConfigureAwait(false);
+        var candidates = listed
             .Where(s => !s.IsHidden && s.ParentSessionId is null && s.SideOfSessionId is null
                 && !s.Tags.Contains(DreamRules.SessionTag) && !string.IsNullOrWhiteSpace(s.Directory)
                 && string.Equals(AgentMemory.RepositoryOf(s.Directory), dream.Repository, PathComparison))
@@ -164,7 +168,7 @@ public sealed partial class DreamService(
             .ToList();
         if (candidates.Count == 0)
         {
-            await FailAsync(userId, dreamId, "No sessions in this repository to read yet.").ConfigureAwait(false);
+            await FailAsync(userId, dreamId, request.Since is null ? "No sessions in this repository to read yet." : "No new sessions in this repository to read.").ConfigureAwait(false);
             return;
         }
 
@@ -206,6 +210,7 @@ public sealed partial class DreamService(
             Kind = note.Kind,
             Text = note.Text,
             Hash = DreamRules.HashOf(note),
+            Fades = note.Kind == MemoryKinds.Learned && note.Lifetime is not null,
         })];
 
         // In the repository's own folder, not a worktree: it reads, and Fleet applies.
@@ -353,8 +358,10 @@ public static class DreamPrompt
             .Append(" {\"action\":\"add\",\"list\":\"repository|machine\",\"text\":\"…\",\"why\":\"one sentence\",\"sessions\":[\"S1\",\"S4\"],\"quote\":\"short failing command/error or the user's words\",\"corrected\":false},\n")
             .Append(" {\"action\":\"rewrite\",\"note\":\"<id>\",\"text\":\"…\",\"why\":\"…\",\"sessions\":[],\"quote\":\"…\"},\n")
             .Append(" {\"action\":\"merge\",\"keep\":\"<id>\",\"remove\":[\"<id>\"],\"text\":\"optional new wording for keep (learned keep only)\",\"why\":\"…\"},\n")
-            .Append(" {\"action\":\"retire\",\"note\":\"<id>\",\"why\":\"…\",\"sessions\":[],\"quote\":\"…\"}\n")
-            .Append("]}\n```\nAn empty list is a fine answer.\n\n");
+            .Append(" {\"action\":\"retire\",\"note\":\"<id>\",\"why\":\"…\",\"sessions\":[],\"quote\":\"…\"},\n")
+            .Append(" {\"action\":\"keep\",\"note\":\"<id>\",\"why\":\"…\",\"sessions\":[\"S1\",\"S3\",\"S5\"],\"quote\":\"…\"}\n")
+            .Append("]}\n```\nAn empty list is a fine answer. Keep (for good) is for a learned note marked `fades` that ").Append(DreamRules.KeepForGoodSessions)
+            .Append("+ sessions relied on and that would otherwise fade; cite those sessions.\n\n");
 
         Section(text, $"Repository notes ({name})", notes.Where(n => n.List == "repository"));
         Section(text, "Machine notes", notes.Where(n => n.List == "machine"));
@@ -368,7 +375,7 @@ public static class DreamPrompt
         foreach (var note in notes)
         {
             any = true;
-            text.Append('[').Append(note.Id).Append("] (").Append(note.Kind).Append(") ").Append(note.Text).Append('\n');
+            text.Append('[').Append(note.Id).Append("] (").Append(note.Kind).Append(note.Fades ? ", fades) " : ") ").Append(note.Text).Append('\n');
         }
 
         text.Append(any ? "\n" : "(none)\n\n");

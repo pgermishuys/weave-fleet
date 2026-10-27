@@ -36,6 +36,8 @@ export interface Automation {
   lastRun?: AutomationRun | null;
   /** The machine in this Fleet's list its runs go to (`workspaceId` is a folder there); null for this machine. */
   targetMachineId?: string | null;
+  /** Which built-in automation Fleet keeps (`"dreaming"`); null for one you made. Built-ins can't be edited or deleted. */
+  builtin?: string | null;
 }
 
 /**
@@ -62,6 +64,8 @@ export interface AutomationRun {
   machineId?: string | null;
   /** That machine's name when the run went to it. */
   machineName?: string | null;
+  /** What the run did, in words (a dreaming night's notes changed); null for runs that don't say. */
+  summary?: string | null;
 }
 
 /** A new automation's starting point from a session ("Repeat on a schedule…"). */

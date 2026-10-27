@@ -42,6 +42,11 @@ public interface ISessionRepository
     Task<IReadOnlyList<Session>> ListAsync(int limit = 100, int offset = 0, IReadOnlyList<string>? statuses = null, string? projectId = null);
     Task<IReadOnlyList<Session>> ListAsync(int limit, int offset, IReadOnlyList<string>? statuses, string? projectId, IReadOnlyList<string>? retentionStatuses);
     Task<IReadOnlyList<Session>> ListAsync(int limit, int offset, IReadOnlyList<string>? statuses, string? projectId, IReadOnlyList<string>? retentionStatuses, IReadOnlyList<string>? tags);
+    /// <summary>
+    /// The current user's top-level sessions started at or after <paramref name="sinceUtc"/> (ISO 8601), newest first, at
+    /// most <paramref name="limit"/>; archived and hidden ones included. What a night of dreaming has to read.
+    /// </summary>
+    Task<IReadOnlyList<Session>> ListCreatedSinceAsync(string sinceUtc, int limit);
     Task DeleteByProjectIdAsync(string projectId);
     Task<int> CountAsync(IReadOnlyList<string>? statuses = null);
     Task<int> CountAsync(IReadOnlyList<string>? statuses, IReadOnlyList<string>? retentionStatuses);

@@ -21,6 +21,7 @@ public sealed class AutomationSchedulerServiceTests : IDisposable
     private readonly InMemoryAutomationRunRepository _runs = new();
     private readonly RecordingExecutor _executor = new();
     private readonly SessionActivityTracker _activity = new();
+    private readonly WeaveFleet.Testing.Fakes.FakeBuiltinAutomations _builtins = new();
     private readonly Clock _clock = new(NineOnMonday);
     private readonly AutomationSchedulerService _scheduler;
 
@@ -31,6 +32,7 @@ public sealed class AutomationSchedulerServiceTests : IDisposable
         services.AddSingleton<IAutomationRunRepository>(_runs);
         services.AddSingleton<IAutomationExecutor>(_executor);
         services.AddSingleton(_activity);
+        services.AddSingleton<IBuiltinAutomations>(_builtins);
         services.AddSingleton<TimeProvider>(_clock);
         services.AddSingleton(typeof(Microsoft.Extensions.Logging.ILogger<>), typeof(NullLogger<>));
         // No other machines here; runs only need the way to them.
@@ -92,6 +94,49 @@ public sealed class AutomationSchedulerServiceTests : IDisposable
         var run = _runs.All.ShouldHaveSingleItem();
         (run.Trigger, run.Status, run.SessionId).ShouldBe(("schedule", "started", "session-1"));
         run.ScheduledFor.ShouldBe(NineOnMonday.UtcDateTime.ToString("O"));
+    }
+
+    [Fact]
+    public async Task A_due_built_in_automation_runs_through_its_host_when_its_feature_is_on()
+    {
+        var automation = Seed("schedule", "0 9 * * 1");
+        automation.Builtin = BuiltinAutomations.Dreaming;
+
+        await PollAtAsync(NineOnMonday.AddSeconds(15));
+
+        _executor.Calls.ShouldBeEmpty();
+        var run = _runs.All.ShouldHaveSingleItem();
+        _builtins.RunIds.ShouldBe([run.Id]);
+        run.Status.ShouldBe(AutomationRunStatus.Started);
+    }
+
+    [Fact]
+    public async Task A_due_built_in_automation_whose_feature_is_off_leaves_no_run_at_all()
+    {
+        var automation = Seed("schedule", "0 9 * * 1");
+        automation.Builtin = BuiltinAutomations.Dreaming;
+        _builtins.On = false;
+
+        await PollAtAsync(NineOnMonday.AddSeconds(15));
+
+        _runs.All.ShouldBeEmpty();
+        _builtins.RunIds.ShouldBeEmpty();
+        _executor.Calls.ShouldBeEmpty();
+    }
+
+    [Fact]
+    public async Task A_night_left_unsettled_by_a_stop_is_ended_on_the_first_poll()
+    {
+        await _runs.InsertAsync(new AutomationRun
+        {
+            Id = "night", AutomationId = "auto-x", UserId = "user-1", Trigger = "schedule", Status = AutomationRunStatus.Started,
+            StartedAt = NineOnMonday.AddHours(-6).UtcDateTime.ToString("O"), Summary = "Dreaming about alpha (1 of 1)…",
+        });
+
+        await PollAtAsync(NineOnMonday);
+
+        var night = _runs.All.Single();
+        (night.SettledState, night.Error).ShouldBe(("failed", "Fleet stopped during the night."));
     }
 
     [Fact]

@@ -158,6 +158,15 @@ public sealed class InMemorySessionRepository : ISessionRepository
         return Task.FromResult(result);
     }
 
+    public Task<IReadOnlyList<Session>> ListCreatedSinceAsync(string sinceUtc, int limit)
+    {
+        IReadOnlyList<Session> result = [.. _store.Values
+            .Where(s => s.ParentSessionId is null && s.SideOfSessionId is null && string.CompareOrdinal(s.CreatedAt, sinceUtc) >= 0)
+            .OrderByDescending(s => s.CreatedAt, StringComparer.Ordinal)
+            .Take(limit)];
+        return Task.FromResult(result);
+    }
+
     public Task DeleteByProjectIdAsync(string projectId)
     {
         var ids = _store.Values.Where(s => s.ProjectId == projectId).Select(s => s.Id).ToList();

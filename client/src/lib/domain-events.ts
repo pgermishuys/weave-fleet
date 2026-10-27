@@ -1,4 +1,5 @@
 import type { MemorySavedPayload } from "@/lib/agent-memory";
+import type { DreamView } from "@/lib/dreaming";
 import type { SessionProgressDetail, SessionProgressSummary } from "@/lib/session-progress";
 import type { Rollout } from "@/lib/fleet-updates";
 import type { SmartLinkWire } from "@/lib/smart-links";
@@ -822,6 +823,12 @@ export interface MemorySaved extends EventCursorMetadata {
   payload: MemorySavedPayload;
 }
 
+/** A dream ended. Sent on the `sessions` topic. */
+export interface MemoryDreamed extends EventCursorMetadata {
+  type: "memory.dreamed";
+  payload: DreamView;
+}
+
 /** A workflow run changed. Sent on the `sessions` topic. */
 export interface WorkflowRunChanged extends EventCursorMetadata {
   type: "workflow_run";
@@ -977,6 +984,7 @@ export type DomainEvent =
   | SmartLinkUpdated
   | UpdateRolloutChanged
   | MemorySaved
+  | MemoryDreamed
   | WorkflowRunChanged
   | HarnessUsageChanged
   | UsageLimitsChanged

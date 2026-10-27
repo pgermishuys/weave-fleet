@@ -197,7 +197,7 @@ public static class AutomationEndpoints
     private static AutomationRunResponse MapRun(AutomationRun run, string state) => new(
         run.Id, run.AutomationId, run.Trigger, run.ScheduledFor, run.StartedAt,
         state, run.SessionId, run.InstanceId, run.Error, run.WorkflowRunId,
-        run.MachineId, run.MachineName);
+        run.MachineId, run.MachineName, run.Summary);
 
     private static AutomationResponse MapToResponse(Automation a, AutomationRunResponse? lastRun, TimeProvider time) => new(
         a.Id, a.Name, a.Prompt, a.TriggerType, a.TriggerConfig,
@@ -206,7 +206,8 @@ public static class AutomationEndpoints
         a.Isolation, a.BaseBranch, a.HarnessType, a.WorkflowId, a.WorkflowId is null ? null : a.WorkflowSteps,
         a.IsEnabled ? AutomationSchedule.NextOccurrenceUtc(a, time.GetUtcNow().UtcDateTime)?.ToString("O") : null,
         lastRun,
-        a.TargetMachineId);
+        a.TargetMachineId,
+        a.Builtin);
 }
 
 #pragma warning restore IL2026

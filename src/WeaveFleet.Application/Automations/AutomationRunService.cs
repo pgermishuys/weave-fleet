@@ -48,7 +48,8 @@ public sealed partial class AutomationRunService(
     TimeProvider timeProvider,
     ILogger<AutomationRunService> logger,
     RemoteAutomationRuns remoteRuns,
-    IAutomationWorkflows? workflows = null)
+    IAutomationWorkflows? workflows = null,
+    IBuiltinAutomations? builtins = null)
 {
     /// <summary>A run still "starting" after this is assumed stuck, so it no longer holds up the next one.</summary>
     private static readonly TimeSpan StartingTimeout = TimeSpan.FromMinutes(15);
@@ -114,16 +115,21 @@ public sealed partial class AutomationRunService(
             : null;
 
         // Run now sends the prompt as a scheduled run would; "manual" only marks where the session came from.
-        var outcome = await executionService.ExecuteAsync(
-            automation,
-            eventType: trigger.EventType ?? (trigger.IsManual ? "manual" : null),
-            eventSummary: trigger.EventSummary,
-            previousSessionId,
-            ct);
+        var outcome = automation.Builtin is not null
+            ? builtins is null
+                ? AutomationExecutionOutcome.SkippedBecause("Skipped: this Fleet can't run built-in automations.")
+                : await builtins.RunAsync(automation, run, ct)
+            : await executionService.ExecuteAsync(
+                automation,
+                eventType: trigger.EventType ?? (trigger.IsManual ? "manual" : null),
+                eventSummary: trigger.EventSummary,
+                previousSessionId,
+                ct);
 
         run.Status = outcome.Skipped ? AutomationRunStatus.Skipped
-            : outcome.SessionId is not null || outcome.WorkflowRunId is not null ? AutomationRunStatus.Started
+            : outcome.SessionId is not null || outcome.WorkflowRunId is not null || outcome.Summary is not null ? AutomationRunStatus.Started
             : AutomationRunStatus.Failed;
+        run.Summary = outcome.Summary ?? run.Summary;
         run.SessionId = outcome.SessionId;
         run.InstanceId = outcome.InstanceId;
         run.Error = outcome.Error;
@@ -216,12 +222,16 @@ public sealed partial class AutomationRunService(
         _ => AutomationRunState.Done,
     };
 
-    /// <summary>What the runs list says about a run that started a session: running while its session is busy.</summary>
+    /// <summary>
+    /// What the runs list says about a run that started a session: running while its session is busy. A run that starts
+    /// several sessions (<see cref="AutomationRun.Summary"/>, no session of its own) runs until it settles itself.
+    /// </summary>
     public string StateOf(AutomationRun run) => run.Status switch
     {
         AutomationRunStatus.Starting => AutomationRunState.Starting,
         AutomationRunStatus.Failed => AutomationRunState.Failed,
         AutomationRunStatus.Skipped => AutomationRunState.Skipped,
+        _ when run is { Summary: not null, SessionId: null, WorkflowRunId: null, MachineId: null } => run.SettledState ?? AutomationRunState.Running,
         _ => run.SessionId is not null && activityTracker.GetEffectiveActivityStatus(run.SessionId) == "busy"
             ? AutomationRunState.Running
             : AutomationRunState.Done,

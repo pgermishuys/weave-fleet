@@ -67,6 +67,7 @@ public sealed partial class AutomationSchedulerService : BackgroundService
         {
             // Runs Fleet was starting when it stopped will never finish starting.
             await runs.FailStaleStartingAsync((now - StaleStartingAfter).ToString("O"), "Fleet stopped before the run started.");
+            await runs.EndUnsettledNightsAsync(now.ToString("O"), "Fleet stopped during the night.");
             _hasCleanedUp = true;
         }
 
@@ -74,11 +75,16 @@ public sealed partial class AutomationSchedulerService : BackgroundService
         due.AddRange(await automations.ListEnabledByTriggerTypeAsync(AutomationSchedule.ScheduleTrigger));
         due.AddRange(await automations.ListEnabledByTriggerTypeAsync(AutomationSchedule.OnceTrigger));
         var lastScheduled = await runs.GetLastScheduledForAsync();
+        var builtins = scope.ServiceProvider.GetService<IBuiltinAutomations>();
 
         foreach (var automation in due)
         {
             try
             {
+                // A built-in automation whose feature is off isn't scheduled at all: no run, no record, no cost.
+                if (automation.Builtin is not null && (builtins is null || !await builtins.IsOnAsync(automation)))
+                    continue;
+
                 var decision = AutomationSchedule.Decide(automation, HandledUntilUtc(automation, lastScheduled), now);
                 if (decision is null)
                     continue;

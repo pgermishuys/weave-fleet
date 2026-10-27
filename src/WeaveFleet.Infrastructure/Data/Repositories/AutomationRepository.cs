@@ -28,13 +28,13 @@ public sealed class AutomationRepository : IAutomationRepository
                 max_concurrent_runs, max_runs_per_hour, timeout_minutes,
                 is_enabled, is_deleted, workspace_id, model, agent,
                 created_at, updated_at, user_id, target_tags, target_type, time_zone, isolation, base_branch, harness_type,
-                workflow_id, workflow_steps, target_machine_id
+                workflow_id, workflow_steps, target_machine_id, builtin
             ) VALUES (
                 @Id, @Name, @Prompt, @TriggerType, @TriggerConfig,
                 @MaxConcurrentRuns, @MaxRunsPerHour, @TimeoutMinutes,
                 @IsEnabled, @IsDeleted, @WorkspaceId, @Model, @Agent,
                 @CreatedAt, @UpdatedAt, @UserId, @TargetTags, @TargetType, @TimeZone, @Isolation, @BaseBranch, @HarnessType,
-                @WorkflowId, @WorkflowSteps, @TargetMachineId
+                @WorkflowId, @WorkflowSteps, @TargetMachineId, @Builtin
             )
             """,
             cmd =>
@@ -64,6 +64,7 @@ public sealed class AutomationRepository : IAutomationRepository
                 cmd.AddParameter("WorkflowId", automation.WorkflowId);
                 cmd.AddParameter("WorkflowSteps", SerializeWorkflowSteps(automation.WorkflowSteps));
                 cmd.AddParameter("TargetMachineId", automation.TargetMachineId);
+                cmd.AddParameter("Builtin", automation.Builtin);
             });
     }
 
@@ -134,6 +135,25 @@ public sealed class AutomationRepository : IAutomationRepository
             cmd =>
             {
                 cmd.AddParameter("Id", id);
+                cmd.AddParameter("UserId", _userContext.UserId);
+            },
+            MapAutomation);
+    }
+
+    public async Task<Automation?> GetBuiltinAsync(string builtin)
+    {
+        using var conn = _connectionFactory.CreateConnection();
+        return await conn.QueryFirstOrDefaultAsync(
+            """
+            SELECT *
+            FROM automations
+            WHERE builtin = @Builtin AND user_id = @UserId AND is_deleted = 0
+            ORDER BY created_at DESC
+            LIMIT 1
+            """,
+            cmd =>
+            {
+                cmd.AddParameter("Builtin", builtin);
                 cmd.AddParameter("UserId", _userContext.UserId);
             },
             MapAutomation);
@@ -258,6 +278,7 @@ public sealed class AutomationRepository : IAutomationRepository
             WorkflowId = r.GetNullableString(r.GetOrdinal("workflow_id")),
             WorkflowSteps = DeserializeTargetTags(r.GetNullableString(r.GetOrdinal("workflow_steps"))),
             TargetMachineId = r.GetNullableString(r.GetOrdinal("target_machine_id")),
+            Builtin = r.GetNullableString(r.GetOrdinal("builtin")),
         };
     }
 
