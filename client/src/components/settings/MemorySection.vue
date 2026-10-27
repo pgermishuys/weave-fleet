@@ -17,12 +17,16 @@ import {
   type MemoryNotes,
   type MemoryOverview,
 } from "@/lib/agent-memory";
+import { useSettingsNav } from "@/composables/use-settings-nav";
 import { useDreamingFeature } from "@/composables/use-dreaming-feature";
+import DreamNightly from "@/components/settings/memory/DreamNightly.vue";
 import DreamingPanel from "@/components/settings/memory/DreamingPanel.vue";
 
 const { isDreamingEnabled } = useDreamingFeature();
 const overview = shallowRef<MemoryOverview | null>(null);
 const notes = shallowRef<MemoryNotes | null>(null);
+const { memoryRepository } = useSettingsNav();
+const nightlyHarness = ref<string | null>(null);
 const repository = ref<string | null>(null);
 const search = ref("");
 const error = ref<string | null>(null);
@@ -79,6 +83,9 @@ async function load(): Promise<void> {
   error.value = null;
   try {
     overview.value = await getMemory();
+    const wanted = memoryRepository.value;
+    memoryRepository.value = null;
+    if (wanted && overview.value.repositories.some((item) => item.path === wanted)) repository.value = wanted;
     repository.value ??= overview.value.repositories[0]?.path ?? null;
     await loadNotes();
   } catch (caught) {
@@ -326,9 +333,14 @@ onMounted(load);
           >{{ noteCount }} {{ noteCount === 1 ? "note" : "notes" }} · about {{ notes.tokens.toLocaleString() }} tokens per request</span>
         </div>
 
+        <DreamNightly
+          v-if="isDreamingEnabled"
+          @harness="nightlyHarness = $event"
+        />
         <DreamingPanel
           v-if="isDreamingEnabled"
           :repository="repository"
+          :nightly-harness="nightlyHarness"
           @changed="run(refresh)"
         />
 

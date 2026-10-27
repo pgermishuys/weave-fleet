@@ -8,6 +8,7 @@ import {
   DREAM_POLL_MS,
   dreamKindLabel,
   dreamListLabel,
+  formatTokens,
   groupDreamChanges,
   isDreamBusy,
   listDreams,
@@ -18,7 +19,8 @@ import {
   type DreamView,
 } from "@/lib/dreaming";
 
-const props = defineProps<{ repository: string | null }>();
+/** `harness` is the one Dream each night uses; Dream now follows it until a harness is picked here. */
+const props = defineProps<{ repository: string | null; nightlyHarness?: string | null }>();
 /** A change was undone or a dream finished: the notes list should be read again. */
 const emit = defineEmits<{ changed: [] }>();
 
@@ -36,7 +38,9 @@ const showSkipped = ref(false);
 const chosen = ref<string>(localStorage.getItem(HARNESS_KEY) ?? "");
 
 const harnessType = computed(() => {
-  if (enabledHarnesses.value.some((harness) => harness.type === chosen.value)) return chosen.value;
+  for (const type of [chosen.value, props.nightlyHarness]) {
+    if (type && enabledHarnesses.value.some((harness) => harness.type === type)) return type;
+  }
   return enabledHarnesses.value.find((harness) => harness.type === "opencode2")?.type ?? enabledHarnesses.value[0]?.type ?? "";
 });
 const busy = computed(() => isDreamBusy(dream.value));
@@ -213,10 +217,13 @@ function sessionLabel(session: DreamSessionRef): string {
           class="mt-3"
         >
           <p class="text-sm font-medium text-text">
-            Last dream · {{ dream.repositoryName }} · {{ changedCount }} {{ changedCount === 1 ? "note" : "notes" }} changed
+            {{ dream.runId ? "Last night" : "Last dream" }} · {{ dream.repositoryName }} · {{ changedCount }} {{ changedCount === 1 ? "note" : "notes" }} changed
           </p>
           <p class="mt-0.5 text-xs text-muted">
             Read {{ dream.readSessions.length }} {{ dream.readSessions.length === 1 ? "session" : "sessions" }}
+            <template v-if="dream.tokens">
+              · {{ formatTokens(dream.tokens) }} tokens
+            </template>
             <template v-if="dream.finished">
               · {{ when.format(new Date(dream.finished)) }}
             </template>

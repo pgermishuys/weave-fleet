@@ -38,6 +38,7 @@ import { useSessionCheckoutUpdates } from "@/composables/use-session-checkout-up
 import { useSessionTokenUpdates } from "@/composables/use-session-token-updates";
 import { useSmartLinkUpdates } from "@/composables/use-smart-link-updates";
 import { useMemoryNotices } from "@/composables/use-memory-notices";
+import { useDreamNotices } from "@/composables/use-dream-notices";
 import { useModsRuntimeStore } from "@/stores/mods-runtime";
 import { useUpdateNotices } from "@/composables/use-update-notices";
 import { useFleetUpdateNotices } from "@/composables/use-fleet-update-notices";
@@ -60,6 +61,7 @@ useSessionCheckoutUpdates();
 useSessionTokenUpdates();
 useSmartLinkUpdates();
 useMemoryNotices();
+useDreamNotices();
 // Keeps the Mods row current: an install runs on after Settings closes.
 useModsRuntimeStore().listen();
 useUpdateNotices();

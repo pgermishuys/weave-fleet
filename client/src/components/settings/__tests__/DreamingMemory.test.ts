@@ -1,7 +1,7 @@
 import { enableAutoUnmount, flushPromises, mount } from "@vue/test-utils";
 import { computed, ref } from "vue";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import type { DreamChangeView, DreamView } from "@/lib/dreaming";
+import type { DreamChangeView, DreamView, NightlyDreamingView } from "@/lib/dreaming";
 
 const mocks = vi.hoisted(() => ({
   on: { value: false } as { value: boolean },
@@ -10,6 +10,8 @@ const mocks = vi.hoisted(() => ({
   listDreams: vi.fn(),
   startDream: vi.fn(),
   undoDreamChange: vi.fn(),
+  setNightlyDreaming: vi.fn(),
+  getNightlyDreaming: vi.fn(),
 }));
 
 vi.mock("@/lib/agent-memory", async (importOriginal) => ({
@@ -22,6 +24,8 @@ vi.mock("@/lib/dreaming", async (importOriginal) => ({
   listDreams: mocks.listDreams,
   startDream: mocks.startDream,
   undoDreamChange: mocks.undoDreamChange,
+  getNightlyDreaming: mocks.getNightlyDreaming,
+  setNightlyDreaming: mocks.setNightlyDreaming,
 }));
 vi.mock("@/composables/use-dreaming-feature", () => ({
   useDreamingFeature: () => ({ isDreamingEnabled: computed(() => mocks.on.value) }),
@@ -34,6 +38,7 @@ vi.mock("@/composables/use-enabled-harnesses", () => ({
     ]),
   }),
 }));
+vi.mock("@/composables/use-harness-catalog", () => ({ useHarnessCatalog: () => ({ catalog: ref(null), models: ref([]) }) }));
 vi.mock("@tanstack/vue-router", () => ({ useNavigate: () => vi.fn() }));
 
 const { default: MemorySection } = await import("@/components/settings/MemorySection.vue");
@@ -72,6 +77,9 @@ function dreamView(overrides: Partial<DreamView> = {}): DreamView {
     started: "2026-10-27T01:00:00Z",
     finished: "2026-10-27T01:05:00Z",
     readSessions: [session("s1", "Fix the sprocket"), session("s2", "Tune the gizmo")],
+    runId: null,
+    tokens: null,
+    since: null,
     changes: [
       change("added"),
       change("rewritten", { replaced: [{ id: "o1", text: "old sprocket advice", kind: "learned", list: "repository" }] }),
@@ -81,6 +89,10 @@ function dreamView(overrides: Partial<DreamView> = {}): DreamView {
     ],
     ...overrides,
   };
+}
+
+function nightlyView(overrides: Partial<NightlyDreamingView> = {}): NightlyDreamingView {
+  return { enabled: false, automationId: null, paused: false, time: "03:00", timeZone: null, harnessType: null, model: null, budgetTokens: 300000, nextRunAt: null, recent: [], ...overrides };
 }
 
 async function mountSection() {
@@ -103,6 +115,7 @@ describe("Dreaming in Settings → Memory", () => {
     });
     mocks.listMemoryNotes.mockResolvedValue({ repository: "/src/acme-widgets", repositoryNotes: [], machineNotes: [], tokens: 0 });
     mocks.listDreams.mockResolvedValue([dreamView()]);
+    mocks.getNightlyDreaming.mockResolvedValue(nightlyView());
   });
 
   it("renders nothing and asks for no dreams while the switch is off", async () => {
@@ -145,6 +158,52 @@ describe("Dreaming in Settings → Memory", () => {
     expect(undo.text()).toBe("Undone");
     expect(undo.attributes("disabled")).toBeDefined();
     expect(mocks.listMemoryNotes.mock.calls.length).toBeGreaterThan(notesReads);
+  });
+
+  it("shows no nightly row and asks nothing while the switch is off", async () => {
+    mocks.on.value = false;
+    const wrapper = await mountSection();
+
+    expect(wrapper.find("[data-testid='dream-nightly']").exists()).toBe(false);
+    expect(mocks.getNightlyDreaming).not.toHaveBeenCalled();
+  });
+
+  it("turns nightly dreaming on with the time zone, then saves the time and the budget", async () => {
+    mocks.setNightlyDreaming.mockImplementation(async (change) => nightlyView({ enabled: true, ...change }));
+    const wrapper = await mountSection();
+
+    expect(wrapper.find("[data-testid='dream-time']").exists()).toBe(false);
+    await wrapper.get("[data-testid='dream-nightly-switch']").trigger("click");
+    await flushPromises();
+    expect(mocks.setNightlyDreaming).toHaveBeenLastCalledWith({ enabled: true, timeZone: Intl.DateTimeFormat().resolvedOptions().timeZone });
+    expect(wrapper.get("[data-testid='dream-nightly']").text()).toContain("Up to 300k tokens a night");
+
+    await wrapper.get("[data-testid='dream-time']").setValue("04:30");
+    await flushPromises();
+    expect(mocks.setNightlyDreaming).toHaveBeenLastCalledWith({ time: "04:30", timeZone: Intl.DateTimeFormat().resolvedOptions().timeZone });
+
+    await wrapper.get("[data-testid='dream-budget']").setValue("1000000");
+    await flushPromises();
+    expect(mocks.setNightlyDreaming).toHaveBeenLastCalledWith({ budgetTokens: 1000000 });
+  });
+
+  it("says when the automation is paused, and links to it", async () => {
+    mocks.getNightlyDreaming.mockResolvedValue(nightlyView({ enabled: true, paused: true, automationId: "a1" }));
+    const wrapper = await mountSection();
+
+    expect(wrapper.get("[data-testid='dream-paused']").text()).toBe("Paused in Automations");
+    expect(wrapper.get("[data-testid='dream-automation']").text()).toBe("Runs as the built-in automation Dreaming");
+  });
+
+  it("names a night's dream and its tokens, and shows a kept note with Undo", async () => {
+    mocks.listDreams.mockResolvedValue([dreamView({ runId: "r1", tokens: 186000, changes: [change("kept")] })]);
+    const wrapper = await mountSection();
+    const text = wrapper.get("[data-testid='dreaming-panel']").text();
+
+    expect(text).toContain("Last night · acme-widgets · 1 note changed");
+    expect(text).toContain("186k tokens");
+    expect(text).toContain("Kept for good");
+    expect(wrapper.get("[data-testid='dream-undo']").text()).toBe("Undo");
   });
 
   it("starts a dream on the chosen harness and shows it running", async () => {
