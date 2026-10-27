@@ -276,7 +276,7 @@ jobs:
         working-directory: client
 
       - name: Unit tests
-        run: npx vitest run --shard=${{ matrix.shard }}/2 --reporter=default --reporter=junit --outputFile=test-results/client-results-${{ matrix.shard }}.xml
+        run: npx vitest run --shard=${{ matrix.shard }}/2 --reporter=default --reporter=github-actions --reporter=junit --outputFile=test-results/client-results-${{ matrix.shard }}.xml
         working-directory: client
 
       - name: Upload test results
@@ -298,6 +298,9 @@ jobs:
           # The default (true) only writes the job summary and never creates this check run, so a failing test
           # would get no annotated check on the PR.
           use-actions-summary: false
+          # Its java-junit parser can't read vitest's stack lines, so it would pin the failure to the XML file. The
+          # github-actions reporter above annotates the failing test's own line instead.
+          max-annotations: 0
 
   # ── Mod host (mods/host: Bun + TypeScript) ───────────────────────────────
   mods-host:
