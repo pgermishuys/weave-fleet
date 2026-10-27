@@ -105,6 +105,7 @@ public sealed class JobSessions(
 
         return await remote.StateAsync(machine, token, job.SessionId, ct) switch
         {
+            RemoteSessionState.Gone => JobSessionState.Gone,
             RemoteSessionState.InTurn => JobSessionState.InTurn,
             RemoteSessionState.WaitingInput => JobSessionState.WaitingInput,
             RemoteSessionState.Replied => JobSessionState.Replied,

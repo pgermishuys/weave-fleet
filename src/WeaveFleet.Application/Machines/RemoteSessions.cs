@@ -1,3 +1,4 @@
+using System.Net;
 using System.Text.Json;
 using System.Text.Json.Serialization;
 using WeaveFleet.Application.Sessions;
@@ -119,13 +120,19 @@ public sealed class RemoteSessions(RemoteMachineService machines, IHttpClientFac
     public async Task<RemoteSessionState?> StateAsync(RemoteMachine machine, string token, string sessionId, CancellationToken ct)
     {
         var path = $"/api/sessions/{Uri.EscapeDataString(sessionId)}";
-        var (session, _, _) = await GetAsync(machine, token, path, ct);
+        var missing = false;
+        var (session, _, _) = await RemoteMachineRequests.SendAsync<object>(
+            httpClients, RemoteMachineService.HttpClientName, machine, token, HttpMethod.Get, path, null, null, ct, code => missing = code == HttpStatusCode.NotFound);
         if (session is null)
-            return null;
+            return missing ? RemoteSessionState.Gone : null;
 
         string? status;
         using (session)
+        {
+            if (Text(session.RootElement, "retentionStatus") == "archived")
+                return RemoteSessionState.Gone;
             status = Text(session.RootElement, "activityStatus");
+        }
         if (status == ActivityStatuses.WaitingInput)
             return RemoteSessionState.WaitingInput;
         if (SessionActivityTracker.IsInTurn(status))
@@ -393,6 +400,8 @@ public sealed record RemotePeerSender(string MachineId, string MachineName, stri
 /// <summary>How a session on another machine stands, as a job watching it reads it.</summary>
 public enum RemoteSessionState
 {
+    /// <summary>The machine no longer has it, or it's archived.</summary>
+    Gone,
     InTurn,
     WaitingInput,
 

@@ -15,6 +15,11 @@ public static class JobEndpoints
     {
         var group = app.MapGroup("/api/jobs")
             .WithTags("Jobs")
+            // A job starts a prompted session, perhaps on another machine, so only the user posts one for now.
+            .AddEndpointFilter(async (context, next) =>
+                !HttpMethods.IsGet(context.HttpContext.Request.Method) && context.HttpContext.IsAgentRequest()
+                    ? Results.Json(new ErrorResponse("Jobs are posted by you for now."), ApiJsonContext.Default.ErrorResponse, statusCode: StatusCodes.Status403Forbidden)
+                    : await next(context))
             .AddEndpointFilter(async (context, next) =>
                 await context.HttpContext.RequestServices.GetRequiredService<JobsFeature>().IsEnabledAsync()
                     ? await next(context)
