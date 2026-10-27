@@ -643,7 +643,9 @@ public sealed class BunMachineFinderTests : IDisposable
     private string WriteScript(string folder, string body)
     {
         var path = Path.Combine(Folder(folder), "bun");
-        TestExecutable.Write(path, "#!/bin/sh\n" + body + "\n");
+        File.WriteAllText(path, "#!/bin/sh\n" + body + "\n");
+        if (!OperatingSystem.IsWindows())
+            File.SetUnixFileMode(path, UnixFileMode.UserRead | UnixFileMode.UserWrite | UnixFileMode.UserExecute);
         return path;
     }
 }

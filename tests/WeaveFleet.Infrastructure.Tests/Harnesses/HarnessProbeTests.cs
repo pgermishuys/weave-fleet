@@ -88,7 +88,9 @@ public sealed class HarnessProbeTests : IDisposable
     private string Script(string name, string body)
     {
         var path = Path.Combine(_root, name);
-        TestExecutable.Write(path, $"#!/bin/sh\n{body}\n");
+        File.WriteAllText(path, $"#!/bin/sh\n{body}\n");
+        if (!OperatingSystem.IsWindows())
+            File.SetUnixFileMode(path, UnixFileMode.UserRead | UnixFileMode.UserWrite | UnixFileMode.UserExecute);
         return path;
     }
 }
