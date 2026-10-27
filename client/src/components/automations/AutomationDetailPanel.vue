@@ -5,7 +5,8 @@ import { AlertCircle, Ellipsis, Play, Plus, Trash2 } from "lucide-vue-next";
 import { DropdownMenuItem } from "reka-ui";
 import AutomationComposer from "@/components/automations/AutomationComposer.vue";
 import AutomationMachineScope from "@/components/automations/AutomationMachineScope.vue";
-import StatusGlyph from "@/components/sessions/StatusGlyph.vue";
+import AutomationRunsList from "@/components/automations/AutomationRunsList.vue";
+import BuiltinAutomationDetail from "@/components/automations/BuiltinAutomationDetail.vue";
 import { Button } from "@/components/ui/button";
 import { DropdownMenu, DropdownMenuContent, DropdownMenuTrigger } from "@/components/ui/dropdown-menu";
 import { Switch } from "@/components/ui/switch";
@@ -26,7 +27,7 @@ import { useSettingsNav } from "@/composables/use-settings-nav";
 import { useWorkflowsFeature } from "@/composables/use-workflows-feature";
 import { keyForModel, modelFromPath } from "@/lib/agent-model-choice";
 import { describeDate, fromTrigger, nextRun } from "@/lib/automation-schedule";
-import { describeEventType, describeRunState, describeRunTrigger, eventTypeOf } from "@/lib/automations";
+import { describeEventType, eventTypeOf } from "@/lib/automations";
 import type { NewSessionFolder } from "@/lib/new-session-request";
 import { useAutomationsStore, type Automation, type AutomationRun, type CreateAutomationRequest } from "@/stores/automations";
 import { useMachinesStore } from "@/stores/machines";
@@ -169,7 +170,7 @@ watch(seedSessionId, async (sessionId) => {
 async function loadRuns(): Promise<void> {
   clearTimeout(pollTimer);
   const id = activeAutomationId.value;
-  if (viewMode.value !== "edit" || !id) return;
+  if (viewMode.value !== "edit" || !id || currentAutomation.value?.builtin) return;
   try {
     const next = await fetchRuns(id);
     if (activeAutomationId.value === id) {
@@ -286,13 +287,6 @@ const headerMeta = computed(() => {
   return automation.nextRunAt ? `Next run ${describeDate(new Date(automation.nextRunAt))}` : "";
 });
 
-const doneCount = computed(() => runs.value.filter((run) => run.state === "done").length);
-
-/** When a run was for: its schedule time, or when it started. */
-function runTime(run: AutomationRun): string {
-  return describeDate(new Date(run.scheduledFor ?? run.startedAt));
-}
-
 /** Its workflow run, once the workflows store has it: the run's session that needs you, else its newest step. */
 function sessionOf(run: AutomationRun): string | null {
   const workflowRun = run.workflowRunId ? workflowRuns.runs[run.workflowRunId] : undefined;
@@ -378,6 +372,12 @@ const firstRunHint = computed(() => {
         />
       </AutomationMachineScope>
     </template>
+
+    <!-- A built-in automation: a compact view with no composer, delete or edit -->
+    <BuiltinAutomationDetail
+      v-else-if="viewMode === 'edit' && currentAutomation?.builtin"
+      :automation="currentAutomation"
+    />
 
     <!-- An existing automation: its runs, with its composer underneath -->
     <template v-else-if="viewMode === 'edit' && currentAutomation">
@@ -494,67 +494,11 @@ const firstRunHint = computed(() => {
           <strong>No runs yet</strong>
           {{ firstRunHint }}
         </div>
-        <section
+        <AutomationRunsList
           v-else-if="runs.length > 0"
-          class="automation-runs"
-          aria-label="Runs"
-        >
-          <div class="automation-runs__label">
-            <span>Runs</span>
-            <span>{{ doneCount }} of {{ runs.length }} finished</span>
-          </div>
-          <component
-            :is="run.sessionId ? 'button' : 'div'"
-            v-for="run in runs"
-            :key="run.id"
-            :type="run.sessionId ? 'button' : undefined"
-            class="automation-run"
-            :class="{ 'automation-run--openable': run.sessionId }"
-            data-testid="automation-run"
-            @click="openRun(run)"
-          >
-            <span class="automation-run__glyph">
-              <StatusGlyph
-                v-if="run.state === 'running' || run.state === 'starting'"
-                status="active"
-                :label="describeRunState(run).label"
-              />
-              <StatusGlyph
-                v-else-if="run.state === 'waiting'"
-                status="waiting_input"
-                label="Needs you"
-              />
-              <StatusGlyph
-                v-else-if="run.state === 'failed'"
-                status="error"
-                label="Failed"
-              />
-            </span>
-            <span class="automation-run__title">
-              {{ runTime(run) }}
-              <small v-if="describeRunTrigger(run.trigger)">{{ describeRunTrigger(run.trigger) }}</small>
-              <small
-                v-if="run.machineName"
-                class="automation-run__machine"
-                data-testid="automation-run-machine"
-              >on {{ run.machineName }}</small>
-            </span>
-            <span class="automation-run__end">
-              <span
-                v-if="run.sessionId"
-                class="automation-run__open"
-              >{{ run.workflowRunId ? "Open run →" : "Open session →" }}</span>
-              <span
-                class="automation-run__state"
-                :class="`automation-run__state--${describeRunState(run).tone}`"
-              >{{ describeRunState(run).label }}</span>
-            </span>
-            <span
-              v-if="run.error"
-              class="automation-run__why"
-            >{{ run.error }}</span>
-          </component>
-        </section>
+          :runs="runs"
+          @open="openRun"
+        />
       </div>
 
       <div
@@ -758,126 +702,6 @@ const firstRunHint = computed(() => {
 .automation-page__error {
   width: calc(100% - 48px);
   margin-bottom: 8px;
-}
-
-.automation-runs {
-  width: 100%;
-  max-width: 760px;
-  margin: 0 auto;
-}
-
-.automation-runs__label {
-  display: flex;
-  align-items: baseline;
-  justify-content: space-between;
-  padding: 0 10px 6px;
-  color: var(--muted);
-  font-size: 11px;
-  font-weight: 600;
-  letter-spacing: 0.05em;
-  text-transform: uppercase;
-}
-
-.automation-runs__label span:last-child {
-  font-size: 12px;
-  font-weight: 400;
-  letter-spacing: 0;
-  text-transform: none;
-}
-
-.automation-run {
-  display: grid;
-  width: 100%;
-  min-height: 34px;
-  grid-template-columns: 10px minmax(0, 1fr) auto;
-  align-items: center;
-  column-gap: 9px;
-  border: 0;
-  border-radius: var(--radius-btn);
-  padding: 5px 10px;
-  background: transparent;
-  color: var(--text);
-  font: inherit;
-  text-align: left;
-}
-
-.automation-run--openable {
-  cursor: pointer;
-}
-
-.automation-run--openable:hover {
-  background: color-mix(in srgb, var(--text) 5%, transparent);
-}
-
-.automation-run--openable:focus-visible {
-  outline: 2px solid var(--accent);
-  outline-offset: -2px;
-}
-
-.automation-run__glyph {
-  display: grid;
-  width: 10px;
-  place-items: center;
-}
-
-.automation-run__title {
-  font-size: 13px;
-  font-variant-numeric: tabular-nums;
-}
-
-.automation-run__title small {
-  margin-left: 6px;
-  color: var(--muted);
-  font-size: 12px;
-}
-
-/* The machine a run went to, in the sidebar's machine coral. */
-.automation-run__title .automation-run__machine {
-  color: var(--coral);
-  font-family: var(--font-mono-stack);
-  font-size: 11.5px;
-}
-
-.automation-run__end {
-  display: flex;
-  align-items: center;
-  gap: 10px;
-}
-
-.automation-run__open {
-  color: var(--muted);
-  font-size: 12px;
-  opacity: 0;
-  transition: opacity var(--transition);
-}
-
-.automation-run:hover .automation-run__open,
-.automation-run:focus-visible .automation-run__open {
-  opacity: 1;
-}
-
-.automation-run__state {
-  color: color-mix(in srgb, var(--muted) 85%, transparent);
-  font-size: 12px;
-  white-space: nowrap;
-}
-
-.automation-run__state--working {
-  color: var(--running);
-}
-
-.automation-run__state--error {
-  color: var(--error);
-}
-
-.automation-run__state--warn {
-  color: var(--status-waiting);
-}
-
-.automation-run__why {
-  grid-column: 2 / 4;
-  color: var(--muted);
-  font-size: 12px;
 }
 
 /* Clear the fixed menu button that replaces the sidebar on narrow screens. */
