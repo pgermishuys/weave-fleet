@@ -266,6 +266,11 @@ public static class DependencyInjection
         services.AddSingleton<WeaveFleet.Application.Memory.AgentMemorySessions>();
         services.AddScoped<WeaveFleet.Application.Memory.AgentMemoryService>();
         services.AddScoped<WeaveFleet.Application.Memory.AgentMemoryBridge>();
+        services.AddSingleton<WeaveFleet.Application.Memory.Dreaming.IDreamStore, WeaveFleet.Infrastructure.Memory.FileDreamStore>();
+        services.AddSingleton<WeaveFleet.Application.Memory.Dreaming.DreamSessions>();
+        services.AddSingleton<WeaveFleet.Application.Memory.Dreaming.DreamFinisher>();
+        services.AddScoped<WeaveFleet.Application.Memory.Dreaming.DreamingFeature>();
+        services.AddScoped<WeaveFleet.Application.Memory.Dreaming.DreamService>();
         // Help → Report a problem. The log location comes from AddFleetDiagnosticLogging; without it, no log is attached.
         services.TryAddSingleton(FleetLogLocation.Disabled);
         services.AddScoped<WeaveFleet.Application.Reports.ProblemReportService>();

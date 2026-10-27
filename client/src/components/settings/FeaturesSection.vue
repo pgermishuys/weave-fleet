@@ -12,6 +12,7 @@ import { LARGE_PASTES_PREFERENCE_KEY } from "@/lib/attached-files";
 import { STARTERS_PREFERENCE_KEY } from "@/lib/starters";
 import { PAGE_CHOICE_PREFERENCE_KEY } from "@/lib/page-choice";
 import { FLEET_UPDATES_PREFERENCE_KEY } from "@/lib/fleet-updates";
+import { DREAMING_PREFERENCE_KEY } from "@/lib/dreaming";
 import { JOBS_PREFERENCE_KEY } from "@/lib/jobs";
 import { MISSION_CONTROL_PREFERENCE_KEY } from "@/lib/mission-control";
 import { AGENT_HANDOFF_PREFERENCE_KEY, LIVE_MACHINES_PREFERENCE_KEY } from "@/lib/machines";
@@ -190,6 +191,18 @@ const isSavingPageChoice = shallowRef(false);
 
 const isJobsEnabled = computed(() => preferencesStore.get(JOBS_PREFERENCE_KEY, "false") === "true");
 const isSavingJobs = shallowRef(false);
+
+const isDreamingEnabled = computed(() => preferencesStore.get(DREAMING_PREFERENCE_KEY, "false") === "true");
+const isSavingDreaming = shallowRef(false);
+
+async function toggleDreaming(): Promise<void> {
+  isSavingDreaming.value = true;
+  try {
+    await preferencesStore.set(DREAMING_PREFERENCE_KEY, isDreamingEnabled.value ? "false" : "true");
+  } finally {
+    isSavingDreaming.value = false;
+  }
+}
 
 const isMissionControlEnabled = computed(() => preferencesStore.get(MISSION_CONTROL_PREFERENCE_KEY, "false") === "true");
 const isSavingMissionControl = shallowRef(false);
@@ -819,6 +832,44 @@ async function toggleBoardFeature(): Promise<void> {
           <span
             class="pointer-events-none inline-block h-5 w-5 rounded-full bg-white shadow ring-0 transition duration-200 ease-in-out"
             :class="isJobsEnabled ? 'translate-x-5' : 'translate-x-0'"
+          />
+        </button>
+      </div>
+    </div>
+    <div class="mt-3 flex items-start justify-between gap-4 rounded-card border border-border bg-main-bg p-4">
+      <div>
+        <p class="flex items-center gap-2 text-sm font-medium text-text">
+          Dreaming
+          <span class="rounded-full border border-border px-2 py-px text-[0.7rem] font-medium uppercase tracking-wide text-muted">
+            Experimental
+          </span>
+        </p>
+        <p class="mt-1 text-xs text-muted">
+          Fleet reads a repository's recent sessions and updates its memory notes. Every change says why, and you can undo it. Notes you wrote are never changed.
+        </p>
+      </div>
+
+      <div class="flex items-center gap-2">
+        <LoaderCircle
+          v-if="isSavingDreaming"
+          :size="16"
+          class="animate-spin text-muted"
+          aria-hidden="true"
+        />
+        <button
+          type="button"
+          role="switch"
+          :aria-checked="isDreamingEnabled"
+          :disabled="preferencesStore.isLoading || isSavingDreaming"
+          aria-label="Enable Dreaming"
+          data-testid="dreaming-switch"
+          class="relative inline-flex h-6 w-11 shrink-0 cursor-pointer rounded-full border-2 border-transparent transition-colors duration-200 ease-in-out focus:outline-none focus:ring-2 focus:ring-accent focus:ring-offset-2 focus:ring-offset-main-bg disabled:cursor-not-allowed disabled:opacity-60"
+          :class="isDreamingEnabled ? 'bg-accent' : 'bg-border'"
+          @click="toggleDreaming"
+        >
+          <span
+            class="pointer-events-none inline-block h-5 w-5 rounded-full bg-white shadow ring-0 transition duration-200 ease-in-out"
+            :class="isDreamingEnabled ? 'translate-x-5' : 'translate-x-0'"
           />
         </button>
       </div>
