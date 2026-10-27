@@ -70,7 +70,7 @@ export interface MemorySavedPayload {
 
 const MEMORY_PATH = "/api/memory";
 
-async function send<T>(path: string, fallback: string, init?: RequestInit): Promise<T> {
+export async function send<T>(path: string, fallback: string, init?: RequestInit): Promise<T> {
   const response = await apiFetch(path, init && {
     ...init,
     headers: { "Content-Type": "application/json", ...init.headers },

@@ -17,7 +17,10 @@ import {
   type MemoryNotes,
   type MemoryOverview,
 } from "@/lib/agent-memory";
+import { useDreamingFeature } from "@/composables/use-dreaming-feature";
+import DreamingPanel from "@/components/settings/memory/DreamingPanel.vue";
 
+const { isDreamingEnabled } = useDreamingFeature();
 const overview = shallowRef<MemoryOverview | null>(null);
 const notes = shallowRef<MemoryNotes | null>(null);
 const repository = ref<string | null>(null);
@@ -322,6 +325,12 @@ onMounted(load);
             data-testid="memory-count"
           >{{ noteCount }} {{ noteCount === 1 ? "note" : "notes" }} · about {{ notes.tokens.toLocaleString() }} tokens per request</span>
         </div>
+
+        <DreamingPanel
+          v-if="isDreamingEnabled"
+          :repository="repository"
+          @changed="run(refresh)"
+        />
 
         <template
           v-for="group in ([
