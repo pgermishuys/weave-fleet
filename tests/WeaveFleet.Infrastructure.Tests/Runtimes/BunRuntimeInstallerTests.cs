@@ -808,9 +808,7 @@ public sealed class BunRuntimeInstallerTests : IDisposable
 
     private static void WriteScript(string path, string version)
     {
-        File.WriteAllText(path, $"#!/bin/sh\necho {version}\n");
-        if (!OperatingSystem.IsWindows())
-            File.SetUnixFileMode(path, UnixFileMode.UserRead | UnixFileMode.UserWrite | UnixFileMode.UserExecute);
+        TestExecutable.Write(path, $"#!/bin/sh\necho {version}\n");
     }
 
     [Fact]

@@ -46,10 +46,7 @@ public sealed class SshTunnelsTests : IAsyncLifetime
     private string FakeSsh(string body)
     {
         var path = Path.Combine(_dir, "ssh");
-        File.WriteAllText(path, $"#!/bin/sh\necho \"$$ $*\" >> \"{_dir}/calls\"\n{body}\n");
-#pragma warning disable CA1416 // Only reached off Windows.
-        File.SetUnixFileMode(path, UnixFileMode.UserRead | UnixFileMode.UserWrite | UnixFileMode.UserExecute);
-#pragma warning restore CA1416
+        TestExecutable.Write(path, $"#!/bin/sh\necho \"$$ $*\" >> \"{_dir}/calls\"\n{body}\n");
         return path;
     }
 

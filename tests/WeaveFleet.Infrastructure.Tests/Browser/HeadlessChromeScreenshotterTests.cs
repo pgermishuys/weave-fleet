@@ -214,14 +214,13 @@ public sealed class HeadlessChromeScreenshotterTests
             _starts = System.IO.Path.Combine(_folder, "starts");
             Path = System.IO.Path.Combine(_folder, "chrome");
             var then = realBrowser is null ? "exec sleep 60" : $"exec '{realBrowser}' \"$@\"";
-            File.WriteAllText(Path, $"""
+            TestExecutable.Write(Path, $"""
                 #!/bin/sh
                 echo x >> '{_starts}'
                 if [ "$(wc -l < '{_starts}')" -le {Math.Min(stalls, 1000)} ]; then exec sleep 60; fi
                 {then}
 
                 """);
-            File.SetUnixFileMode(Path, UnixFileMode.UserRead | UnixFileMode.UserWrite | UnixFileMode.UserExecute);
         }
 
         public string Path { get; }
