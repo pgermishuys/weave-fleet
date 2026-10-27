@@ -3,6 +3,7 @@ using System.Runtime.InteropServices;
 using Microsoft.Extensions.Logging;
 using WeaveFleet.Application.Mods.Host;
 using WeaveFleet.Infrastructure.Harnesses;
+using WeaveFleet.Infrastructure.IO;
 
 namespace WeaveFleet.Infrastructure.Mods.Host;
 
@@ -73,7 +74,7 @@ internal sealed class ModHostProcess : IDisposable
         var host = new ModHostProcess(launch, logger);
         try
         {
-            host._process.Start();
+            FreshExecutable.Start(host._process);
         }
         catch
         {

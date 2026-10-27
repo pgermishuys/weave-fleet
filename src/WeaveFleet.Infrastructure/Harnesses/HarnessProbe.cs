@@ -3,6 +3,7 @@ using System.Diagnostics;
 using System.Text.RegularExpressions;
 using Microsoft.Extensions.Logging;
 using WeaveFleet.Domain.Harnesses;
+using WeaveFleet.Infrastructure.IO;
 
 namespace WeaveFleet.Infrastructure.Harnesses;
 
@@ -97,8 +98,7 @@ internal static partial class HarnessProbe
         };
         foreach (var argument in arguments) psi.ArgumentList.Add(argument);
 
-        using var process = Process.Start(psi)
-            ?? throw new InvalidOperationException($"Process.Start returned no process for {executablePath}.");
+        using var process = FreshExecutable.Start(psi);
 
         using var timeout = CancellationTokenSource.CreateLinkedTokenSource(ct);
         timeout.CancelAfter(Timeout);

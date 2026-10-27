@@ -3,6 +3,7 @@ using System.Diagnostics;
 using System.Globalization;
 using System.Text;
 using WeaveFleet.Application.Runtimes;
+using WeaveFleet.Infrastructure.IO;
 
 namespace WeaveFleet.Infrastructure.Runtimes;
 
@@ -105,7 +106,7 @@ internal static class BunVersionProbe
         Process process;
         try
         {
-            process = Process.Start(psi) ?? throw new InvalidOperationException("No process started.");
+            process = FreshExecutable.Start(psi);
         }
         catch (Exception ex) when (ex is Win32Exception or InvalidOperationException or IOException or UnauthorizedAccessException)
         {
