@@ -69,7 +69,14 @@ internal sealed class ClaudeUsageProvider(IHttpClientFactory http, UsageSources 
                 windows.Add(new UsageLimitWindow { Window = name, Utilization = used, ResetsAt = resets, WindowSeconds = name == "five_hour" ? 18000 : 604800, Status = UsageRead.StatusFor(used) });
             }
 
-            return windows.Count == 0 ? new UsageReading(UsageStates.Unreadable) : new UsageReading(UsageStates.Ok, plan, windows);
+            if (windows.Count > 0)
+                return new UsageReading(UsageStates.Ok, plan, windows);
+
+            // A seat with a spend cap instead of 5-hour and weekly windows answers with every window null: that's an
+            // answer Fleet understands (nothing to meter), not one it can't read.
+            var answeredNull = Windows.Any(name => body.RootElement.TryGetProperty(name, out var window) && window.ValueKind == JsonValueKind.Null)
+                && !Windows.Any(name => body.RootElement.TryGetProperty(name, out var window) && window.ValueKind != JsonValueKind.Null);
+            return answeredNull ? new UsageReading(UsageStates.NoWindow, plan) : new UsageReading(UsageStates.Unreadable);
         }
     }
 
