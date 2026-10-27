@@ -502,6 +502,57 @@ public sealed class ClaudeCodeLongLivedProcessTests : IAsyncDisposable
     }
 
     [Fact]
+    public async Task An_answered_question_reads_as_working_before_Claude_takes_the_answer()
+    {
+        if (OperatingSystem.IsWindows())
+            return;
+
+        // Claude Code can act on the answer and end the turn before Fleet's write returns; the busy goes out first, so
+        // it can't be lost to the turn's end or come after its idle.
+        var session = Start();
+        await session.SendPromptAsync("ask me slowly", null, CancellationToken.None);
+        await WaitForAsync(() => Statuses().Contains(ActivityStatuses.WaitingInput));
+
+        // The answer repeats the question, longer than a pipe holds, so its write waits until the stand-in reads on.
+        var answering = session.AnswerQuestionAsync("toolu_ask", [["Blue"]], CancellationToken.None);
+        await WaitForAsync(() => Statuses().Count >= 3);
+        answering.IsCompleted.ShouldBeFalse();
+        Statuses().ShouldBe(["busy", ActivityStatuses.WaitingInput, ActivityStatuses.Busy]);
+
+        await File.WriteAllTextAsync(Path.Combine(_directory, "go"), "");
+        await answering;
+        await WaitForAsync(() => Count(EventTypes.SessionIdle) == 1);
+        Statuses().ShouldBe(["busy", ActivityStatuses.WaitingInput, ActivityStatuses.Busy, "idle"]);
+    }
+
+    [Fact]
+    public async Task A_permission_reply_is_settled_before_Claude_takes_it()
+    {
+        if (OperatingSystem.IsWindows())
+            return;
+
+        var session = Start();
+        await session.ApplyPermissionsAsync(new PermissionPolicy(PermissionLevels.Ask), CancellationToken.None);
+        await session.SendPromptAsync("push slowly", null, CancellationToken.None);
+        await WaitForAsync(() => Count(EventTypes.PermissionAsked) == 1);
+
+        // Settled later, the turn's end could get there first and report the ask gone, the user's reply lost.
+        var replying = session.ReplyToPermissionAsync("req_push", PermissionReplies.Once, null, CancellationToken.None);
+        await WaitForAsync(() => Statuses().Count >= 3);
+        replying.IsCompleted.ShouldBeFalse();
+        Statuses().ShouldBe(["busy", ActivityStatuses.WaitingInput, ActivityStatuses.Busy]);
+
+        await File.WriteAllTextAsync(Path.Combine(_directory, "go"), "");
+        await replying;
+        await WaitForAsync(() => Count(EventTypes.SessionIdle) == 1);
+        Statuses().ShouldBe(["busy", ActivityStatuses.WaitingInput, ActivityStatuses.Busy, "idle"]);
+        _events.Where(e => e.Type == EventTypes.PermissionReplied)
+            .Select(e => e.Payload!.Value.GetProperty("reply").GetString())
+            .ShouldBe([PermissionReplies.Once]);
+        AssistantText().ShouldBe(["Pushed."]);
+    }
+
+    [Fact]
     public async Task A_dismissed_question_is_refused()
     {
         if (OperatingSystem.IsWindows())
@@ -859,7 +910,8 @@ public sealed class ClaudeCodeLongLivedProcessTests : IAsyncDisposable
     /// writes its arguments to <c>args-N.txt</c>; every stdin line goes to <c>stdin.txt</c>. Prompts: "start background"
     /// starts a task that finishes a second after the turn, and Claude then goes on by itself; "start slow background"
     /// does the same, with a turn of its own that takes a while; "start lasting background" starts one that doesn't finish; "hang" starts a tool call that
-    /// only an interrupt ends; anything else gets "Reply N".
+    /// only an interrupt ends; "ask me" asks a question and "ask me slowly" and "push slowly" ask long ones, then stop reading
+    /// until the test writes <c>go</c>; anything else gets "Reply N".
     /// </summary>
     private string FakeClaude(bool honoursInterrupt, bool switchesModel)
     {
@@ -884,6 +936,12 @@ public sealed class ClaudeCodeLongLivedProcessTests : IAsyncDisposable
             echo $$ >> "$dir/starts.txt"
             n=0
             steering=0
+            # Longer than a pipe holds: Fleet's answer repeats it, so its write waits until this reads on.
+            long=$(head -c 262144 /dev/zero | tr '\0' x)
+            # Stops reading stdin until the test says go.
+            hold() {
+              while [ ! -f "$dir/go" ]; do sleep 0.02; done
+            }
             wake() {
               sleep "$1"
               echo '{"type":"system","subtype":"background_tasks_changed","tasks":[],"session_id":"cc-1"}'
@@ -923,6 +981,11 @@ public sealed class ClaudeCodeLongLivedProcessTests : IAsyncDisposable
                 *'"subtype":"set_permission_mode"'*|*'"subtype":"apply_flag_settings"'*)
                   echo '{"type":"control_response","response":{"subtype":"success","request_id":"'"$rid"'"}}'
                   ;;
+                *'"type":"control_response"'*'"req_push"'*)
+                  echo '{"type":"user","message":{"role":"user","content":[{"tool_use_id":"toolu_push","type":"tool_result","content":"pushed"}]},"parent_tool_use_id":null}'
+                  echo '{"type":"assistant","message":{"id":"msg_pushed","role":"assistant","content":[{"type":"text","text":"Pushed."}]},"parent_tool_use_id":null}'
+                  echo '{"type":"result","subtype":"success","is_error":false,"result":"Pushed.","session_id":"cc-1"}'
+                  ;;
                 *'"type":"control_response"'*'"updatedInput"'*)
                   echo '{"type":"user","message":{"role":"user","content":[{"tool_use_id":"toolu_ask","type":"tool_result","content":"Your questions have been answered"}]},"parent_tool_use_id":null}'
                   echo '{"type":"assistant","message":{"id":"msg_answered","role":"assistant","content":[{"type":"text","text":"You answered."}]},"parent_tool_use_id":null}'
@@ -946,6 +1009,16 @@ public sealed class ClaudeCodeLongLivedProcessTests : IAsyncDisposable
                     *'steer me'*)
                       steering=1
                       echo '{"type":"assistant","message":{"id":"msg_'$n'","role":"assistant","content":[{"type":"tool_use","id":"toolu_steer","name":"Bash","input":{"command":"sleep 5; echo one"}}]},"parent_tool_use_id":null}'
+                      ;;
+                    *'ask me slowly'*)
+                      echo '{"type":"assistant","message":{"id":"msg_'$n'","role":"assistant","content":[{"type":"tool_use","id":"toolu_ask","name":"AskUserQuestion","input":{"questions":[{"question":"Which colour?","header":"Colour","options":[{"label":"Red","description":"r"},{"label":"Blue","description":"b"}],"multiSelect":false}]}}]},"parent_tool_use_id":null}'
+                      echo '{"type":"control_request","request_id":"req_ask","request":{"subtype":"can_use_tool","tool_name":"AskUserQuestion","input":{"questions":[{"question":"Which colour?","header":"Colour","options":[{"label":"Red","description":"'"$long"'"},{"label":"Blue","description":"b"}],"multiSelect":false}]},"tool_use_id":"toolu_ask"}}'
+                      hold
+                      ;;
+                    *'push slowly'*)
+                      echo '{"type":"assistant","message":{"id":"msg_'$n'","role":"assistant","content":[{"type":"tool_use","id":"toolu_push","name":"Bash","input":{"command":"git push"}}]},"parent_tool_use_id":null}'
+                      echo '{"type":"control_request","request_id":"req_push","request":{"subtype":"can_use_tool","tool_name":"Bash","input":{"command":"git push","description":"'"$long"'"},"tool_use_id":"toolu_push"}}'
+                      hold
                       ;;
                     *'ask me'*)
                       echo '{"type":"assistant","message":{"id":"msg_'$n'","role":"assistant","content":[{"type":"tool_use","id":"toolu_ask","name":"AskUserQuestion","input":{"questions":[{"question":"Which colour?","header":"Colour","options":[{"label":"Red","description":"r"},{"label":"Blue","description":"b"}],"multiSelect":false}]}}]},"parent_tool_use_id":null}'
