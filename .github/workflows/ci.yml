@@ -72,11 +72,14 @@ jobs:
 
       - name: Report unit test results
         if: success() || failure()
-        uses: dorny/test-reporter@v1
+        uses: dorny/test-reporter@v3
         with:
           name: Unit Test Results
           path: test-results/**/*.trx
           reporter: dotnet-trx
+          # The default (true) only writes the job summary and never creates this check run, so a failing test
+          # would get no annotated check on the PR.
+          use-actions-summary: false
 
   # ── .NET live tests (real OpenCode / OpenCode 2) ─────────────────────────
   live:
@@ -203,11 +206,14 @@ jobs:
 
       - name: Report live test results
         if: success() || failure()
-        uses: dorny/test-reporter@v1
+        uses: dorny/test-reporter@v3
         with:
           name: Live Test Results
           path: test-results/**/*.trx
           reporter: dotnet-trx
+          # The default (true) only writes the job summary and never creates this check run, so a failing test
+          # would get no annotated check on the PR.
+          use-actions-summary: false
 
   # ── Frontend checks (lint, typecheck) ───────────────────────────────────
   client-checks:
@@ -270,7 +276,7 @@ jobs:
         working-directory: client
 
       - name: Unit tests
-        run: npx vitest run --shard=${{ matrix.shard }}/2 --reporter=default --reporter=junit --outputFile=test-results/client-results-${{ matrix.shard }}.xml
+        run: npx vitest run --shard=${{ matrix.shard }}/2 --reporter=default --reporter=github-actions --reporter=junit --outputFile=test-results/client-results-${{ matrix.shard }}.xml
         working-directory: client
 
       - name: Upload test results
@@ -284,11 +290,17 @@ jobs:
 
       - name: Report client test results
         if: success() || failure()
-        uses: dorny/test-reporter@v1
+        uses: dorny/test-reporter@v3
         with:
           name: Client Test Results (${{ matrix.shard }}/2)
           path: client/test-results/**/*.xml
           reporter: java-junit
+          # The default (true) only writes the job summary and never creates this check run, so a failing test
+          # would get no annotated check on the PR.
+          use-actions-summary: false
+          # Its java-junit parser can't read vitest's stack lines, so it would pin the failure to the XML file. The
+          # github-actions reporter above annotates the failing test's own line instead.
+          max-annotations: 0
 
   # ── Mod host (mods/host: Bun + TypeScript) ───────────────────────────────
   mods-host:
@@ -622,11 +634,14 @@ jobs:
 
       - name: Report E2E test results
         if: success() || failure()
-        uses: dorny/test-reporter@v1
+        uses: dorny/test-reporter@v3
         with:
           name: E2E Results
           path: test-results/**/*.trx
           reporter: dotnet-trx
+          # The default (true) only writes the job summary and never creates this check run, so a failing test
+          # would get no annotated check on the PR.
+          use-actions-summary: false
 
   # ── AOT publish validation ────────────────────────────────────────────────
   aot:
