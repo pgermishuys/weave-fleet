@@ -1,5 +1,5 @@
 import { defineComponent, h } from "vue";
-import { BarChart3, LayoutGrid, ListTodo, MessageSquare, Settings, Workflow, Zap } from "lucide-vue-next";
+import { BarChart3, LayoutGrid, ListTodo, Radar, MessageSquare, Settings, Workflow, Zap } from "lucide-vue-next";
 import BoardControlsPanel from "@/components/board/BoardControlsPanel.vue";
 import SessionsPanel from "@/components/sessions/SessionsPanel.vue";
 import SettingsNavPanel from "@/components/settings/SettingsNavPanel.vue";
@@ -7,6 +7,7 @@ import AutomationsNavPanel from "@/components/automations/AutomationsNavPanel.vu
 import WorkflowsNavPanel from "@/components/workflows/WorkflowsNavPanel.vue";
 import { useBoardFeature } from "@/composables/use-board-feature";
 import { useJobsFeature } from "@/composables/use-jobs-feature";
+import { useMissionControlFeature } from "@/composables/use-mission-control-feature";
 import { useWorkflowsFeature } from "@/composables/use-workflows-feature";
 import { useSettingsNav } from "@/composables/use-settings-nav";
 import { useAutomationsNav } from "@/composables/use-automations-nav";
@@ -64,9 +65,12 @@ const WorkflowsContextPanel = defineComponent({
 const boardOff = () => !useBoardFeature().isBoardFeatureEnabled.value;
 const workflowsOff = () => !useWorkflowsFeature().isWorkflowsEnabled.value;
 const jobsOff = () => !useJobsFeature().isJobsEnabled.value;
+const missionControlOff = () => !useMissionControlFeature().isMissionControlEnabled.value;
 
 /** The rails Fleet ships. Plugin rails (GitHub, Plugins) come from the plugins' own sidebar contributions. */
 railPoint.contribute("core", [
+  // Fleet (mission control) comes first and leaves the rail while it's switched off, like Board.
+  { id: "fleet", label: "Fleet", icon: Radar, to: "/fleet", placement: "top", order: -10, panel: SessionsPanel, hidden: missionControlOff },
   { id: "sessions", label: "Sessions", icon: MessageSquare, to: "/", placement: "top", order: 0, panel: SessionsPanel },
   // Board leaves the rail while it's switched off. Workflows stays, dimmed; its page says how to turn it on.
   { id: "board", label: "Board", icon: LayoutGrid, to: "/board", placement: "top", order: 10, panel: BoardContextPanel, hidden: boardOff },

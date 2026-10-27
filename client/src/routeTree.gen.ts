@@ -18,6 +18,7 @@ import { Route as PairRouteImport } from './routes/pair'
 import { Route as LoginRouteImport } from './routes/login'
 import { Route as JobsRouteImport } from './routes/jobs'
 import { Route as GithubRouteImport } from './routes/github'
+import { Route as FleetRouteImport } from './routes/fleet'
 import { Route as BoardRouteImport } from './routes/board'
 import { Route as AutomationsRouteImport } from './routes/automations'
 import { Route as AnalyticsRouteImport } from './routes/analytics'
@@ -79,6 +80,11 @@ const JobsRoute = JobsRouteImport.update({
 const GithubRoute = GithubRouteImport.update({
   id: '/github',
   path: '/github',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const FleetRoute = FleetRouteImport.update({
+  id: '/fleet',
+  path: '/fleet',
   getParentRoute: () => rootRouteImport,
 } as any)
 const BoardRoute = BoardRouteImport.update({
@@ -175,6 +181,7 @@ export interface FileRoutesByFullPath {
   '/analytics': typeof AnalyticsRoute
   '/automations': typeof AutomationsRoute
   '/board': typeof BoardRoute
+  '/fleet': typeof FleetRoute
   '/github': typeof GithubRouteWithChildren
   '/jobs': typeof JobsRoute
   '/login': typeof LoginRoute
@@ -203,6 +210,7 @@ export interface FileRoutesByTo {
   '/analytics': typeof AnalyticsRoute
   '/automations': typeof AutomationsRoute
   '/board': typeof BoardRoute
+  '/fleet': typeof FleetRoute
   '/jobs': typeof JobsRoute
   '/login': typeof LoginRoute
   '/pair': typeof PairRoute
@@ -229,6 +237,7 @@ export interface FileRoutesById {
   '/analytics': typeof AnalyticsRoute
   '/automations': typeof AutomationsRoute
   '/board': typeof BoardRoute
+  '/fleet': typeof FleetRoute
   '/github': typeof GithubRouteWithChildren
   '/jobs': typeof JobsRoute
   '/login': typeof LoginRoute
@@ -259,6 +268,7 @@ export interface FileRouteTypes {
     | '/analytics'
     | '/automations'
     | '/board'
+    | '/fleet'
     | '/github'
     | '/jobs'
     | '/login'
@@ -287,6 +297,7 @@ export interface FileRouteTypes {
     | '/analytics'
     | '/automations'
     | '/board'
+    | '/fleet'
     | '/jobs'
     | '/login'
     | '/pair'
@@ -312,6 +323,7 @@ export interface FileRouteTypes {
     | '/analytics'
     | '/automations'
     | '/board'
+    | '/fleet'
     | '/github'
     | '/jobs'
     | '/login'
@@ -341,6 +353,7 @@ export interface RootRouteChildren {
   AnalyticsRoute: typeof AnalyticsRoute
   AutomationsRoute: typeof AutomationsRoute
   BoardRoute: typeof BoardRoute
+  FleetRoute: typeof FleetRoute
   GithubRoute: typeof GithubRouteWithChildren
   JobsRoute: typeof JobsRoute
   LoginRoute: typeof LoginRoute
@@ -418,6 +431,13 @@ declare module '@tanstack/vue-router' {
       path: '/github'
       fullPath: '/github'
       preLoaderRoute: typeof GithubRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/fleet': {
+      id: '/fleet'
+      path: '/fleet'
+      fullPath: '/fleet'
+      preLoaderRoute: typeof FleetRouteImport
       parentRoute: typeof rootRouteImport
     }
     '/board': {
@@ -594,6 +614,7 @@ const rootRouteChildren: RootRouteChildren = {
   AnalyticsRoute: AnalyticsRoute,
   AutomationsRoute: AutomationsRoute,
   BoardRoute: BoardRoute,
+  FleetRoute: FleetRoute,
   GithubRoute: GithubRouteWithChildren,
   JobsRoute: JobsRoute,
   LoginRoute: LoginRoute,

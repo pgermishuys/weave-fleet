@@ -13,6 +13,7 @@ import { STARTERS_PREFERENCE_KEY } from "@/lib/starters";
 import { PAGE_CHOICE_PREFERENCE_KEY } from "@/lib/page-choice";
 import { FLEET_UPDATES_PREFERENCE_KEY } from "@/lib/fleet-updates";
 import { JOBS_PREFERENCE_KEY } from "@/lib/jobs";
+import { MISSION_CONTROL_PREFERENCE_KEY } from "@/lib/mission-control";
 import { AGENT_HANDOFF_PREFERENCE_KEY, LIVE_MACHINES_PREFERENCE_KEY } from "@/lib/machines";
 import {
   DESKTOP_NOTIFICATIONS_PREFERENCE_KEY,
@@ -189,6 +190,18 @@ const isSavingPageChoice = shallowRef(false);
 
 const isJobsEnabled = computed(() => preferencesStore.get(JOBS_PREFERENCE_KEY, "false") === "true");
 const isSavingJobs = shallowRef(false);
+
+const isMissionControlEnabled = computed(() => preferencesStore.get(MISSION_CONTROL_PREFERENCE_KEY, "false") === "true");
+const isSavingMissionControl = shallowRef(false);
+
+async function toggleMissionControl(): Promise<void> {
+  isSavingMissionControl.value = true;
+  try {
+    await preferencesStore.set(MISSION_CONTROL_PREFERENCE_KEY, isMissionControlEnabled.value ? "false" : "true");
+  } finally {
+    isSavingMissionControl.value = false;
+  }
+}
 
 async function toggleJobs(): Promise<void> {
   isSavingJobs.value = true;
@@ -806,6 +819,44 @@ async function toggleBoardFeature(): Promise<void> {
           <span
             class="pointer-events-none inline-block h-5 w-5 rounded-full bg-white shadow ring-0 transition duration-200 ease-in-out"
             :class="isJobsEnabled ? 'translate-x-5' : 'translate-x-0'"
+          />
+        </button>
+      </div>
+    </div>
+    <div class="mt-3 flex items-start justify-between gap-4 rounded-card border border-border bg-main-bg p-4">
+      <div>
+        <p class="flex items-center gap-2 text-sm font-medium text-text">
+          Mission control
+          <span class="rounded-full border border-border px-2 py-px text-[0.7rem] font-medium uppercase tracking-wide text-muted">
+            Experimental
+          </span>
+        </p>
+        <p class="mt-1 text-xs text-muted">
+          One screen for every running agent on every machine: what needs you, what each is doing right now, and a nudge box. It becomes the first screen when Fleet opens.
+        </p>
+      </div>
+
+      <div class="flex items-center gap-2">
+        <LoaderCircle
+          v-if="isSavingMissionControl"
+          :size="16"
+          class="animate-spin text-muted"
+          aria-hidden="true"
+        />
+        <button
+          type="button"
+          role="switch"
+          :aria-checked="isMissionControlEnabled"
+          :disabled="preferencesStore.isLoading || isSavingMissionControl"
+          aria-label="Enable Mission control"
+          data-testid="mission-control-switch"
+          class="relative inline-flex h-6 w-11 shrink-0 cursor-pointer rounded-full border-2 border-transparent transition-colors duration-200 ease-in-out focus:outline-none focus:ring-2 focus:ring-accent focus:ring-offset-2 focus:ring-offset-main-bg disabled:cursor-not-allowed disabled:opacity-60"
+          :class="isMissionControlEnabled ? 'bg-accent' : 'bg-border'"
+          @click="toggleMissionControl"
+        >
+          <span
+            class="pointer-events-none inline-block h-5 w-5 rounded-full bg-white shadow ring-0 transition duration-200 ease-in-out"
+            :class="isMissionControlEnabled ? 'translate-x-5' : 'translate-x-0'"
           />
         </button>
       </div>

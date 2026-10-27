@@ -30,7 +30,7 @@ export class InboxFeed extends MachineFeed<InboxRead> {
 }
 
 /** Reads the session list and the asks of waiting sessions. */
-async function readInbox(request: FeedRequest): Promise<InboxRead> {
+export async function readInbox(request: FeedRequest): Promise<InboxRead> {
   const response = await request(`/api/sessions?limit=${SESSION_PAGE}&offset=0`);
   if (!response.ok) {
     throw new FeedError(response.status === 401 ? "This phone's key for this machine stopped working." : `It answered ${response.status}.`);

@@ -8,11 +8,12 @@ import { useSidebarStore } from "@/stores/sidebar";
 import githubPluginManifest from "@/plugins/builtin/github";
 import marketplacePluginManifest from "@/plugins/builtin/marketplace";
 
-const { navigate, pathname, boardOn, workflowsOn } = vi.hoisted(() => ({
+const { navigate, pathname, boardOn, workflowsOn, missionOn } = vi.hoisted(() => ({
   navigate: vi.fn(),
   pathname: { value: "/" },
   boardOn: { value: false },
   workflowsOn: { value: false },
+  missionOn: { value: false },
 }));
 
 vi.mock("@tanstack/vue-router", () => ({
@@ -23,6 +24,7 @@ vi.mock("@/api/client", () => ({
   api: { GET: vi.fn().mockResolvedValue({ data: { statuses: [] }, error: undefined, response: { status: 200 } }) },
 }));
 vi.mock("@/composables/use-board-feature", () => ({ useBoardFeature: () => ({ isBoardFeatureEnabled: ref(boardOn.value) }) }));
+vi.mock("@/composables/use-mission-control-feature", () => ({ useMissionControlFeature: () => ({ isMissionControlEnabled: ref(missionOn.value) }) }));
 vi.mock("@/composables/use-workflows-feature", () => ({ useWorkflowsFeature: () => ({ isWorkflowsEnabled: ref(workflowsOn.value) }) }));
 vi.mock("@/stores/workflows", () => ({ useWorkflowsStore: () => ({ ensureLoaded: vi.fn() }) }));
 vi.mock("@/composables/use-whats-new", () => ({ useWhatsNew: () => ({ openWhatsNew: vi.fn() }) }));
@@ -55,6 +57,7 @@ describe("the icon rail", () => {
     pathname.value = "/";
     boardOn.value = false;
     workflowsOn.value = false;
+    missionOn.value = false;
     navigate.mockClear();
   });
 
@@ -66,6 +69,16 @@ describe("the icon rail", () => {
     ]);
     expect(wrapper.findAll("nav.rail-nav .rail-label").map((label) => label.text())).toEqual(railLabels(wrapper));
     expect(wrapper.find("[data-tooltip]").exists()).toBe(false);
+  });
+
+  it("puts Fleet first once Mission control is on, and opens it", async () => {
+    missionOn.value = true;
+
+    const wrapper = mount(IconRail);
+
+    expect(railLabels(wrapper).slice(0, 3)).toEqual(["Fleet", "Sessions", "Workflows"]);
+    await wrapper.find("[aria-label=Fleet]").trigger("click");
+    expect(navigate).toHaveBeenLastCalledWith({ to: "/fleet" });
   });
 
   it("marks only the switched-off rails", () => {
