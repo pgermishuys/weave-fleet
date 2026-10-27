@@ -3,7 +3,7 @@ import { defineContributionPoint } from "@/lib/contributions";
 import { getSidebarPanels, getSidebarViews } from "@/plugins/slots";
 
 /** The rails Fleet itself ships; the plugins' rails are open-ended, so a rail id is any string. */
-export type BuiltInRailId = "board" | "sessions" | "analytics" | "automations" | "workflows" | "settings";
+export type BuiltInRailId = "board" | "sessions" | "analytics" | "automations" | "workflows" | "jobs" | "settings";
 
 // `string & {}` keeps the built-in ids in editor completions while accepting a plugin's id.
 export type SidebarRail = BuiltInRailId | (string & {});

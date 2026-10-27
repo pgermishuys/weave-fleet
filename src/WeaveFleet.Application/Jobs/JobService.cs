@@ -33,6 +33,10 @@ public sealed record JobMachineDto(string Id, string Name, bool IsLocal, int Sea
 
 public sealed record JobsDto(IReadOnlyList<JobDto> Jobs, IReadOnlyList<JobMachineDto> Machines);
 
+/// <param name="Repository">What a job names: the origin remote, or the folder name when there is none.</param>
+/// <param name="Machines">The machines that have it.</param>
+public sealed record JobRepositoryDto(string Name, string Repository, IReadOnlyList<string> Machines);
+
 /// <summary>Posting, listing and cancelling jobs, and each machine's seats and labels for them.</summary>
 public sealed class JobService(
     IJobRepository jobs,
@@ -40,6 +44,7 @@ public sealed class JobService(
     MachineIdentityStore identity,
     RemoteMachineService machines,
     JobMachineCache cache,
+    IJobMachines jobMachines,
     JobDispatcher dispatcher,
     TimeProvider time)
 {
@@ -63,8 +68,25 @@ public sealed class JobService(
             list.Add(new(machine.Id, machine.Name, false, setting?.Seats ?? 0, used.GetValueOrDefault(machine.Id), setting?.Labels ?? [], machine.Status));
         }
 
+        // Jobs switched off and on again leave open jobs nothing wakes the dispatcher for: opening the screen does.
+        if (all.Any(job => job.State is JobStates.Waiting || JobStates.HoldsSeat(job.State)))
+            dispatcher.Nudge();
+
         var seen = cache.Last;
         return new JobsDto([.. all.Select(job => ToDto(job, seen, used))], list);
+    }
+
+    /// <summary>The repositories on the machines that take jobs, each once, for the picker in New job.</summary>
+    public async Task<IReadOnlyList<JobRepositoryDto>> RepositoriesAsync(CancellationToken ct)
+    {
+        var machines = await jobMachines.ListAsync(ct);
+        cache.Last = machines;
+        return [.. machines
+            .Where(machine => machine.Seats > 0)
+            .SelectMany(machine => machine.Repositories.Select(repository => (Machine: machine.Name, Repository: repository)))
+            .GroupBy(found => found.Repository.RemoteUrl.Length > 0 ? found.Repository.RemoteUrl : found.Repository.Name, StringComparer.OrdinalIgnoreCase)
+            .Select(group => new JobRepositoryDto(JobMatching.RepositoryName(group.Key), group.Key, [.. group.Select(found => found.Machine).Distinct()]))
+            .OrderBy(repository => repository.Name, StringComparer.OrdinalIgnoreCase)];
     }
 
     public async Task<Result<JobDto>> PostAsync(PostJobRequest request)

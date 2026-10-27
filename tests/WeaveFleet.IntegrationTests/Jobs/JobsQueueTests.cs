@@ -141,6 +141,46 @@ public sealed class JobsQueueTests
         host.Services.GetRequiredService<ScriptedJobSessions>().Started.ShouldBeEmpty();
     }
 
+    [Fact]
+    public async Task Opening_the_screen_wakes_the_dispatcher_only_when_a_job_is_open()
+    {
+        await using var host = new JobsHost(on: true, dispatcherRuns: false);
+        var dispatcher = host.Services.GetRequiredService<JobDispatcher>();
+
+        await host.ListAsync();
+        (await dispatcher.WaitForNudgeAsync(TimeSpan.Zero, CancellationToken.None)).ShouldBeFalse();
+
+        // Left open from before Jobs was switched off: nothing posted it just now, so nothing nudged for it.
+        using (var scope = host.Services.CreateScope())
+            await scope.ServiceProvider.GetRequiredService<Domain.Repositories.IJobRepository>().InsertAsync(new Job
+            {
+                Id = "old", UserId = "local-user", Title = "t", Ask = "a", Repository = "ledger-api", CreatedAt = DateTimeOffset.UtcNow, UpdatedAt = DateTimeOffset.UtcNow,
+            });
+        await host.ListAsync();
+
+        (await dispatcher.WaitForNudgeAsync(TimeSpan.Zero, CancellationToken.None)).ShouldBeTrue();
+    }
+
+    [Fact]
+    public async Task The_picker_lists_each_repository_once_with_the_machines_that_have_it()
+    {
+        await using var host = new JobsHost(on: true, dispatcherRuns: false);
+        var docs = new JobRepository("/work/docs-site", "docs-site", "");
+        host.Services.GetRequiredService<ScriptedJobMachines>().Machines =
+        [
+            new JobMachine(host.MachineId, "atlas", true, true, true, 2, [], [_ledgerApi, docs]),
+            new JobMachine("mini-id", "mini", false, true, true, 1, ["mac"], [_ledgerApi]),
+            new JobMachine("laptop-id", "laptop", false, true, true, 0, [], [new JobRepository("/work/ledger-ios", "ledger-ios", "")]),
+        ];
+
+        var repositories = await host.Client.GetFromJsonAsync<JsonElement>("/api/jobs/repositories");
+
+        repositories.EnumerateArray().Select(repository => repository.GetProperty("name").GetString()).ShouldBe(["docs-site", "ledger-api"]);
+        var ledger = repositories.EnumerateArray().Single(repository => repository.GetProperty("name").GetString() == "ledger-api");
+        ledger.GetProperty("repository").GetString().ShouldBe("https://example.com/acme/ledger-api");
+        ledger.GetProperty("machines").EnumerateArray().Select(machine => machine.GetString()).ShouldBe(["atlas", "mini"]);
+    }
+
     private sealed class ScriptedJobMachines : IJobMachines
     {
         public IReadOnlyList<JobMachine> Machines { get; set; } = [];
@@ -172,7 +212,7 @@ public sealed class JobsQueueTests
         public Task<JobSessionState?> ReadAsync(Job job, CancellationToken ct) => Task.FromResult<JobSessionState?>(_states[job.SessionId!]);
     }
 
-    private sealed class JobsHost(bool on) : WebApplicationFactory<Program>
+    private sealed class JobsHost(bool on, bool dispatcherRuns = true) : WebApplicationFactory<Program>
     {
         private readonly string _dir = Directory.CreateTempSubdirectory("fleet-jobs-").FullName;
         private HttpClient? _client;
@@ -195,6 +235,12 @@ public sealed class JobsQueueTests
             builder.ConfigureTestServices(services =>
             {
                 services.AddSingleton<WeaveFleet.Application.Mods.Host.IModHostBun, WeaveFleet.Testing.Fakes.NoModHostBun>();
+                if (!dispatcherRuns)
+                {
+                    foreach (var service in services.Where(service => service.ImplementationType == typeof(JobDispatcherService)).ToList())
+                        services.Remove(service);
+                }
+
                 services.AddSingleton<ScriptedJobMachines>();
                 services.AddSingleton<IJobMachines>(sp => sp.GetRequiredService<ScriptedJobMachines>());
                 services.AddSingleton<ScriptedJobSessions>();
