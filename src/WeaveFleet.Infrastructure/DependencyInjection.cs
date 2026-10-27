@@ -276,6 +276,7 @@ public static class DependencyInjection
         });
         services.AddScoped<SessionMessageDelivery>();
         services.AddScoped<WeaveFleet.Application.Machines.AgentHandoffFeature>();
+        services.AddSingleton<WeaveFleet.Application.Machines.RecentSessionStarts>();
         services.AddScoped<WeaveFleet.Application.Machines.MachineHandoffBridge>();
         services.AddScoped<SessionMessageBridge>();
         // @ sessions in the composer: the block a message's references become, and fleet_session_read.
