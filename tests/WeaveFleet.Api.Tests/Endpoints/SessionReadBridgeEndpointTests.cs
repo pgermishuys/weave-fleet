@@ -19,7 +19,7 @@ namespace WeaveFleet.Api.Tests.Endpoints;
 /// owner's sessions can be read or referenced, and the conversation comes a page at a time.
 /// </summary>
 #pragma warning disable CA1001 // Type owns disposable fields — disposal handled by IAsyncLifetime.DisposeAsync
-public sealed class SessionReadBridgeEndpointTests : IAsyncLifetime
+public sealed class SessionReadBridgeEndpointTests : IClassFixture<SessionReadBridgeEndpointTests.Server>, IAsyncLifetime
 #pragma warning restore CA1001
 {
     private const string Token = "token-1";
@@ -29,42 +29,28 @@ public sealed class SessionReadBridgeEndpointTests : IAsyncLifetime
     private const string SomeoneElses = "sess-someone-elses";
     private const string Owner = "local-user";
 
-    private readonly FakeSessionMessageProxy _messages = new();
-    private readonly List<(string SessionId, int? Limit, string? Before)> _reads = [];
-    private ApiWebApplicationFactory? _factory;
+    private readonly Server _server;
     private HttpClient? _client;
 
-    public async Task InitializeAsync()
+    public SessionReadBridgeEndpointTests(Server server)
     {
-        // 45 messages, m01 oldest; a page is the newest `limit` before the cursor, oldest first.
-        var all = Enumerable.Range(1, 45).Select(i => Message($"m{i:00}", i % 2 == 1 ? "user" : "assistant", $"Message {i}")).ToList();
-        _messages.GetMessagesBehavior = (sessionId, limit, before, _) =>
-        {
-            _reads.Add((sessionId, limit, before));
-            var end = before is null ? all.Count : all.FindIndex(m => m.Id == before);
-            var start = Math.Max(0, end - (limit ?? 20));
-            return Task.FromResult(new MessagePage(all.GetRange(start, end - start), HasMore: start > 0));
-        };
-
-        _factory = new ApiWebApplicationFactory(
-            authEnabled: false,
-            tokenAuthEnabled: true,
-            simulateLocalhostRequest: true,
-            configureTestServices: services =>
-            {
-                services.AddSingleton<IHarnessCanvasCallerResolver>(new FakeCallers());
-                services.RemoveAll<ISessionMessageProxy>();
-                services.AddScoped<ISessionMessageProxy>(_ => _messages);
-            });
-        _client = _factory.CreateClient();
-        await SeedSessionsAsync();
+        _server = server;
     }
 
-    public async Task DisposeAsync()
+    private List<(string SessionId, int? Limit, string? Before)> _reads => _server.Reads;
+
+    public Task InitializeAsync()
+    {
+        // The server is shared: forget what earlier tests read.
+        _reads.Clear();
+        _client = _server.Factory.CreateClient();
+        return Task.CompletedTask;
+    }
+
+    public Task DisposeAsync()
     {
         _client?.Dispose();
-        if (_factory is not null)
-            await _factory.DisposeAsync();
+        return Task.CompletedTask;
     }
 
     [Fact]
@@ -171,25 +157,61 @@ public sealed class SessionReadBridgeEndpointTests : IAsyncLifetime
         Timestamp = DateTimeOffset.UnixEpoch,
     };
 
-    private async Task SeedSessionsAsync()
+    public sealed class Server : IAsyncLifetime
     {
-        using var scope = _factory!.Services.CreateScope();
-        using var connection = scope.ServiceProvider.GetRequiredService<IDbConnectionFactory>().CreateConnection();
-        await connection.ExecuteAsync($"""
-            INSERT INTO workspaces (id, directory, display_name, created_at, user_id)
-            VALUES ('ws-1', '/ws', 'Work', '2026-10-04T00:00:00+00:00', '{Owner}');
-            INSERT INTO instances (id, port, pid, directory, url, status, created_at, user_id)
-            VALUES ('inst-1', 0, NULL, '/ws', '', 'running', '2026-10-04T00:00:00+00:00', '{Owner}');
-            INSERT INTO sessions (
-                id, workspace_id, instance_id, opencode_session_id, title, status, directory,
-                lifecycle_status, retention_status, created_at, user_id)
-            VALUES ('{Reader}', 'ws-1', 'inst-1', 'oc-1', 'Capture subagents', 'active', '/ws',
-                    'running', 'active', '2026-10-04T10:00:00+00:00', '{Owner}'),
-                   ('{Referenced}', 'ws-1', 'inst-1', 'oc-2', 't3code: what can we learn?', 'active', '/ws',
-                    'running', 'active', '2026-10-04T10:00:00+00:00', '{Owner}'),
-                   ('{SomeoneElses}', 'ws-1', 'inst-1', 'oc-3', 'Their notes', 'active', '/ws',
-                    'running', 'active', '2026-10-04T10:00:00+00:00', 'someone-else');
-            """);
+        public List<(string SessionId, int? Limit, string? Before)> Reads { get; } = [];
+        public ApiWebApplicationFactory Factory { get; }
+
+        public Server()
+        {
+            var messages = new FakeSessionMessageProxy();
+            var reads = Reads;
+            // 45 messages, m01 oldest; a page is the newest `limit` before the cursor, oldest first.
+            var all = Enumerable.Range(1, 45).Select(i => Message($"m{i:00}", i % 2 == 1 ? "user" : "assistant", $"Message {i}")).ToList();
+            messages.GetMessagesBehavior = (sessionId, limit, before, _) =>
+            {
+                reads.Add((sessionId, limit, before));
+                var end = before is null ? all.Count : all.FindIndex(m => m.Id == before);
+                var start = Math.Max(0, end - (limit ?? 20));
+                return Task.FromResult(new MessagePage(all.GetRange(start, end - start), HasMore: start > 0));
+            };
+
+            Factory = new ApiWebApplicationFactory(
+                authEnabled: false,
+                tokenAuthEnabled: true,
+                simulateLocalhostRequest: true,
+                configureTestServices: services =>
+                {
+                    services.AddSingleton<IHarnessCanvasCallerResolver>(new FakeCallers());
+                    services.RemoveAll<ISessionMessageProxy>();
+                    services.AddScoped<ISessionMessageProxy>(_ => messages);
+                });
+        }
+
+        public Task InitializeAsync() => SeedSessionsAsync(Factory);
+
+        public async Task DisposeAsync() => await Factory.DisposeAsync();
+
+        private static async Task SeedSessionsAsync(ApiWebApplicationFactory factory)
+        {
+            using var scope = factory.Services.CreateScope();
+            using var connection = scope.ServiceProvider.GetRequiredService<IDbConnectionFactory>().CreateConnection();
+            await connection.ExecuteAsync($"""
+                INSERT INTO workspaces (id, directory, display_name, created_at, user_id)
+                VALUES ('ws-1', '/ws', 'Work', '2026-10-04T00:00:00+00:00', '{Owner}');
+                INSERT INTO instances (id, port, pid, directory, url, status, created_at, user_id)
+                VALUES ('inst-1', 0, NULL, '/ws', '', 'running', '2026-10-04T00:00:00+00:00', '{Owner}');
+                INSERT INTO sessions (
+                    id, workspace_id, instance_id, opencode_session_id, title, status, directory,
+                    lifecycle_status, retention_status, created_at, user_id)
+                VALUES ('{Reader}', 'ws-1', 'inst-1', 'oc-1', 'Capture subagents', 'active', '/ws',
+                        'running', 'active', '2026-10-04T10:00:00+00:00', '{Owner}'),
+                       ('{Referenced}', 'ws-1', 'inst-1', 'oc-2', 't3code: what can we learn?', 'active', '/ws',
+                        'running', 'active', '2026-10-04T10:00:00+00:00', '{Owner}'),
+                       ('{SomeoneElses}', 'ws-1', 'inst-1', 'oc-3', 'Their notes', 'active', '/ws',
+                        'running', 'active', '2026-10-04T10:00:00+00:00', 'someone-else');
+                """);
+        }
     }
 
     private sealed class FakeCallers : IHarnessCanvasCallerResolver

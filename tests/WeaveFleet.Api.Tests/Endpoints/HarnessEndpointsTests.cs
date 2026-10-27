@@ -10,8 +10,107 @@ using WeaveFleet.Domain.Repositories;
 
 namespace WeaveFleet.Api.Tests.Endpoints;
 
-public sealed class HarnessEndpointsTests
+public sealed class HarnessEndpointsTests :
+    IClassFixture<HarnessEndpointsTests.Server>,
+    IClassFixture<HarnessEndpointsTests.UpdateServer>,
+    IClassFixture<HarnessEndpointsTests.LocalWarmupServer>,
+    IClassFixture<HarnessEndpointsTests.AuthWarmupServer>,
+    IClassFixture<HarnessEndpointsTests.AnonymousWarmupServer>
 {
+    private static readonly WebApplicationFactoryClientOptions NoRedirect = new() { AllowAutoRedirect = false };
+
+    private readonly Server _server;
+    private readonly UpdateServer _updateServer;
+    private readonly LocalWarmupServer _localWarmup;
+    private readonly AuthWarmupServer _authWarmup;
+    private readonly AnonymousWarmupServer _anonymousWarmup;
+
+    public HarnessEndpointsTests(
+        Server server, UpdateServer updateServer, LocalWarmupServer localWarmup, AuthWarmupServer authWarmup, AnonymousWarmupServer anonymousWarmup)
+    {
+        (_server, _updateServer, _localWarmup, _authWarmup, _anonymousWarmup) = (server, updateServer, localWarmup, authWarmup, anonymousWarmup);
+        _localWarmup.Runtime.WarmupCalls.Clear();
+        _authWarmup.Runtime.WarmupCalls.Clear();
+        _anonymousWarmup.Runtime.WarmupCalls.Clear();
+    }
+
+    // Servers are booted on first use. The tests that swap the harness registry (or set the opencode/pi switches) keep their own.
+
+    public sealed class Server : IDisposable
+    {
+        private readonly Lazy<ApiWebApplicationFactory> _factory = new(() => new ApiWebApplicationFactory(authEnabled: false));
+        public ApiWebApplicationFactory Factory => _factory.Value;
+        public void Dispose() { if (_factory.IsValueCreated) _factory.Value.Dispose(); }
+    }
+
+    /// <summary>One fake update service for the class; a test resets it, and the check switch, first.</summary>
+    public sealed class UpdateServer : IDisposable
+    {
+        private readonly Lazy<ApiWebApplicationFactory> _factory;
+        public UpdateServer() => _factory = new(() => new ApiWebApplicationFactory(
+            authEnabled: false,
+            configureTestServices: services => services.AddSingleton<IHarnessUpdateService>(Updates)));
+        public FakeHarnessUpdateService Updates { get; } = new();
+        public ApiWebApplicationFactory Factory => _factory.Value;
+
+        public async Task ResetAsync()
+        {
+            Updates.Updates.Clear();
+            Updates.Started.Clear();
+            Updates.Dismissed.Clear();
+            Updates.Described.Clear();
+            Updates.StartResult = new HarnessUpdateJob(HarnessUpdatePhases.Waiting, null, null, 0, null, null);
+            await using var scope = Factory.Services.CreateAsyncScope();
+            await scope.ServiceProvider.GetRequiredService<IUserPreferenceRepository>().SetAsync("harnessUpdates.check", "true");
+        }
+
+        public void Dispose() { if (_factory.IsValueCreated) _factory.Value.Dispose(); }
+    }
+
+    public sealed class LocalWarmupServer : WarmupServer
+    {
+        public LocalWarmupServer() : base(authEnabled: false, useTestAuthentication: false) { }
+    }
+
+    public sealed class AuthWarmupServer : WarmupServer
+    {
+        public AuthWarmupServer() : base(authEnabled: true, useTestAuthentication: true) { }
+    }
+
+    public sealed class AnonymousWarmupServer : WarmupServer
+    {
+        public AnonymousWarmupServer() : base(authEnabled: true, useTestAuthentication: false) { }
+    }
+
+    /// <summary>A server whose "opencode" harness is one fake runtime, so a test can see what was warmed up.</summary>
+    public abstract class WarmupServer : IDisposable
+    {
+        private readonly Lazy<ApiWebApplicationFactory> _factory;
+
+        protected WarmupServer(bool authEnabled, bool useTestAuthentication)
+        {
+            var registry = new FakeHarnessRegistry();
+            registry.Register(Runtime);
+            _factory = new(() => new ApiWebApplicationFactory(
+                authEnabled: authEnabled,
+                useTestAuthentication: useTestAuthentication,
+                configureTestServices: services =>
+                {
+                    var existing = services.FirstOrDefault(d => d.ServiceType == typeof(IHarnessRegistry));
+                    if (existing is not null) services.Remove(existing);
+                    services.AddSingleton<IHarnessRegistry>(registry);
+                }));
+        }
+
+        public FakeHarnessRuntime Runtime { get; } = new("opencode");
+        public ApiWebApplicationFactory Factory => _factory.Value;
+        public void Dispose()
+        {
+            if (_factory.IsValueCreated) _factory.Value.Dispose();
+            GC.SuppressFinalize(this);
+        }
+    }
+
     [Fact]
     public async Task get_harnesses_returns_user_enabled_from_preferences()
     {
@@ -43,11 +142,8 @@ public sealed class HarnessEndpointsTests
     [Fact]
     public async Task get_harnesses_are_on_until_the_user_turns_them_off()
     {
-        await using var factory = new ApiWebApplicationFactory(authEnabled: false);
-        using var client = factory.CreateClient(new WebApplicationFactoryClientOptions
-        {
-            AllowAutoRedirect = false,
-        });
+        var factory = _server.Factory;
+        using var client = factory.CreateClient(NoRedirect);
 
         var response = await client.GetAsync("/api/harnesses");
         var body = await response.Content.ReadAsStringAsync();
@@ -66,8 +162,8 @@ public sealed class HarnessEndpointsTests
     [Fact]
     public async Task get_harnesses_describes_each_harness_so_the_client_keeps_no_table_of_its_own()
     {
-        await using var factory = new ApiWebApplicationFactory(authEnabled: false);
-        using var client = factory.CreateClient(new WebApplicationFactoryClientOptions { AllowAutoRedirect = false });
+        var factory = _server.Factory;
+        using var client = factory.CreateClient(NoRedirect);
 
         var response = await client.GetAsync("/api/harnesses");
         var body = await response.Content.ReadAsStringAsync();
@@ -103,8 +199,8 @@ public sealed class HarnessEndpointsTests
     [Fact]
     public async Task get_harnesses_lists_them_in_their_own_order()
     {
-        await using var factory = new ApiWebApplicationFactory(authEnabled: false);
-        using var client = factory.CreateClient(new WebApplicationFactoryClientOptions { AllowAutoRedirect = false });
+        var factory = _server.Factory;
+        using var client = factory.CreateClient(NoRedirect);
 
         var response = await client.GetAsync("/api/harnesses");
         using var document = JsonDocument.Parse(await response.Content.ReadAsStringAsync());
@@ -153,8 +249,9 @@ public sealed class HarnessEndpointsTests
     [InlineData(false)]
     public async Task get_harnesses_describes_the_pooled_opencode_switch_with_the_default_fleet_runs_with(bool pooledByDefault)
     {
+        // The switch's default is read once per server, so each case boots its own.
         await using var factory = new ApiWebApplicationFactory(authEnabled: false);
-        using var client = factory.CreateClient(new WebApplicationFactoryClientOptions { AllowAutoRedirect = false });
+        using var client = factory.CreateClient(NoRedirect);
         factory.Services.GetRequiredService<FleetOptions>().Harness.PooledOpenCodeHarness = pooledByDefault;
 
         using var document = JsonDocument.Parse(await client.GetStringAsync("/api/harnesses"));
@@ -263,7 +360,8 @@ public sealed class HarnessEndpointsTests
     [Fact]
     public async Task get_harnesses_includes_updates_and_skips_the_latest_version_lookup_when_checks_are_off()
     {
-        var updates = new FakeHarnessUpdateService();
+        await _updateServer.ResetAsync();
+        var updates = _updateServer.Updates;
         updates.Updates["opencode"] = new HarnessUpdateInfo
         {
             LatestVersion = "1.18.31",
@@ -272,10 +370,8 @@ public sealed class HarnessEndpointsTests
             Command = "/home/you/.opencode/bin/opencode upgrade 1.18.31",
             Job = new HarnessUpdateJob(HarnessUpdatePhases.Waiting, null, null, 2, "1.18.20", null),
         };
-        await using var factory = new ApiWebApplicationFactory(
-            authEnabled: false,
-            configureTestServices: services => services.AddSingleton<IHarnessUpdateService>(updates));
-        using var client = factory.CreateClient(new WebApplicationFactoryClientOptions { AllowAutoRedirect = false });
+        var factory = _updateServer.Factory;
+        using var client = factory.CreateClient(NoRedirect);
 
         using (var document = JsonDocument.Parse(await client.GetStringAsync("/api/harnesses")))
         {
@@ -300,11 +396,9 @@ public sealed class HarnessEndpointsTests
     [Fact]
     public async Task update_endpoints_start_and_dismiss_an_update()
     {
-        var updates = new FakeHarnessUpdateService();
-        await using var factory = new ApiWebApplicationFactory(
-            authEnabled: false,
-            configureTestServices: services => services.AddSingleton<IHarnessUpdateService>(updates));
-        using var client = factory.CreateClient(new WebApplicationFactoryClientOptions { AllowAutoRedirect = false });
+        await _updateServer.ResetAsync();
+        var updates = _updateServer.Updates;
+        using var client = _updateServer.Factory.CreateClient(NoRedirect);
 
         var started = await client.PostAsync("/api/harnesses/opencode/update", content: null);
         started.StatusCode.ShouldBe(HttpStatusCode.Accepted);
@@ -327,11 +421,8 @@ public sealed class HarnessEndpointsTests
         // The endpoint signature must accept no owner ID, credential hash, resume token,
         // or workspace directory from the caller. Verify the route only accepts POST with
         // no query or body parameters — any caller-supplied payload must be ignored.
-        await using var factory = CreateLocalModeFactoryWithFakeRuntime(out var fakeRuntime);
-        using var client = factory.CreateClient(new WebApplicationFactoryClientOptions
-        {
-            AllowAutoRedirect = false,
-        });
+        var fakeRuntime = _localWarmup.Runtime;
+        using var client = _localWarmup.Factory.CreateClient(NoRedirect);
 
         // Attempt to supply caller-controlled parameters via query string — they must be ignored.
         var response = await client.PostAsync(
@@ -348,11 +439,8 @@ public sealed class HarnessEndpointsTests
     [Fact]
     public async Task warmup_opencode_local_mode_returns_no_content_and_warms_up_local_user()
     {
-        await using var factory = CreateLocalModeFactoryWithFakeRuntime(out var fakeRuntime);
-        using var client = factory.CreateClient(new WebApplicationFactoryClientOptions
-        {
-            AllowAutoRedirect = false,
-        });
+        var fakeRuntime = _localWarmup.Runtime;
+        using var client = _localWarmup.Factory.CreateClient(NoRedirect);
 
         var response = await client.PostAsync("/api/harnesses/opencode/warmup", content: null);
 
@@ -364,10 +452,8 @@ public sealed class HarnessEndpointsTests
     [Fact]
     public async Task warmup_opencode_auth_enabled_authenticated_user_returns_no_content()
     {
-        await using var factory = CreateAuthModeFactoryWithFakeRuntime(
-            authenticated: true,
-            out var fakeRuntime);
-        using var client = factory.CreateClient(new WebApplicationFactoryClientOptions
+        var fakeRuntime = _authWarmup.Runtime;
+        using var client = _authWarmup.Factory.CreateClient(new WebApplicationFactoryClientOptions
         {
             AllowAutoRedirect = false,
             HandleCookies = true,
@@ -392,10 +478,8 @@ public sealed class HarnessEndpointsTests
     {
         // In auth-enabled mode with no authenticated user the authorization middleware blocks
         // the request before the endpoint handler runs. No warmup must be attempted.
-        await using var factory = CreateAuthModeFactoryWithFakeRuntime(
-            authenticated: false,
-            out var fakeRuntime);
-        using var client = factory.CreateClient(new WebApplicationFactoryClientOptions
+        var fakeRuntime = _anonymousWarmup.Runtime;
+        using var client = _anonymousWarmup.Factory.CreateClient(new WebApplicationFactoryClientOptions
         {
             AllowAutoRedirect = false,
             HandleCookies = true,
@@ -418,25 +502,12 @@ public sealed class HarnessEndpointsTests
     {
         // Simulate the edge-case where auth middleware succeeds but IUserContext.IsAuthenticated
         // is false (e.g. background/startup context). The endpoint must skip warmup and return 204.
-        var fakeRuntime = new FakeHarnessRuntime("opencode");
-        var registry = new FakeHarnessRegistry();
-        registry.Register(fakeRuntime);
-
-        await using var factory = new ApiWebApplicationFactory(
-            authEnabled: true,
-            useTestAuthentication: false,
-            configureTestServices: services =>
-            {
-                // Replace the registry so GetRuntimeByType returns our fake.
-                var existing = services.FirstOrDefault(d => d.ServiceType == typeof(IHarnessRegistry));
-                if (existing is not null) services.Remove(existing);
-                services.AddSingleton<IHarnessRegistry>(registry);
-            });
+        var fakeRuntime = _anonymousWarmup.Runtime;
 
         // With no authentication scheme that succeeds, the middleware returns 401 before
         // the handler — which IS the correct no-op behavior for auth-enabled anonymous requests.
         // This test verifies warmup was not called regardless.
-        using var client = factory.CreateClient(new WebApplicationFactoryClientOptions
+        using var client = _anonymousWarmup.Factory.CreateClient(new WebApplicationFactoryClientOptions
         {
             AllowAutoRedirect = false,
             HandleCookies = true,
@@ -456,44 +527,6 @@ public sealed class HarnessEndpointsTests
     }
 
     // ── Helpers ───────────────────────────────────────────────────────────────
-
-    private static ApiWebApplicationFactory CreateLocalModeFactoryWithFakeRuntime(
-        out FakeHarnessRuntime fakeRuntime)
-    {
-        var runtime = new FakeHarnessRuntime("opencode");
-        var registry = new FakeHarnessRegistry();
-        registry.Register(runtime);
-        fakeRuntime = runtime;
-
-        return new ApiWebApplicationFactory(
-            authEnabled: false,
-            configureTestServices: services =>
-            {
-                var existing = services.FirstOrDefault(d => d.ServiceType == typeof(IHarnessRegistry));
-                if (existing is not null) services.Remove(existing);
-                services.AddSingleton<IHarnessRegistry>(registry);
-            });
-    }
-
-    private static ApiWebApplicationFactory CreateAuthModeFactoryWithFakeRuntime(
-        bool authenticated,
-        out FakeHarnessRuntime fakeRuntime)
-    {
-        var runtime = new FakeHarnessRuntime("opencode");
-        var registry = new FakeHarnessRegistry();
-        registry.Register(runtime);
-        fakeRuntime = runtime;
-
-        return new ApiWebApplicationFactory(
-            authEnabled: true,
-            useTestAuthentication: authenticated,
-            configureTestServices: services =>
-            {
-                var existing = services.FirstOrDefault(d => d.ServiceType == typeof(IHarnessRegistry));
-                if (existing is not null) services.Remove(existing);
-                services.AddSingleton<IHarnessRegistry>(registry);
-            });
-    }
 
     /// <summary>
     /// Performs a GET to /api/user/me (requires auth) to obtain a CSRF token for authenticated tests.

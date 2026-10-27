@@ -9,8 +9,7 @@ using WeaveFleet.Application.Data;
 
 namespace WeaveFleet.Api.Tests.Endpoints;
 
-[Collection("NonParallelApiFactoryTests")]
-public sealed class EndpointGuardTests
+public sealed class EndpointGuardTests(EndpointGuardTests.Server server) : IClassFixture<EndpointGuardTests.Server>
 {
     private const string _userId = "local-user";
 
@@ -19,7 +18,7 @@ public sealed class EndpointGuardTests
     [InlineData("disconnected")]
     public async Task get_session_returns_manual_pi_terminal_capabilities(string lifecycleStatus)
     {
-        await using var factory = new ApiWebApplicationFactory(authEnabled: false);
+        var factory = server.Factory;
         using var client = factory.CreateClient();
         var sessionId = $"session-pi-{lifecycleStatus}";
         await InsertSessionAsync(
@@ -45,7 +44,7 @@ public sealed class EndpointGuardTests
     [Fact]
     public async Task get_session_says_a_claude_code_subagent_session_takes_no_prompt()
     {
-        await using var factory = new ApiWebApplicationFactory(authEnabled: false);
+        var factory = server.Factory;
         using var client = factory.CreateClient();
         await InsertSessionAsync(factory, "cc-parent", "instance-cc-parent", "stopped", "stopped", "manual", "claude-code");
         await InsertSessionAsync(factory, "cc-child", "instance-cc-child", "stopped", "stopped", "manual", "claude-code",
@@ -71,7 +70,7 @@ public sealed class EndpointGuardTests
     [Fact]
     public async Task get_session_returns_its_project_name()
     {
-        await using var factory = new ApiWebApplicationFactory(authEnabled: false);
+        var factory = server.Factory;
         using var client = factory.CreateClient();
         const string sessionId = "session-in-project";
         using (var scope = factory.Services.CreateScope())
@@ -180,4 +179,10 @@ public sealed class EndpointGuardTests
                 StoppedAt = createdAt,
                 UserId = _userId
             });
+
+    public sealed class Server : IDisposable
+    {
+        public ApiWebApplicationFactory Factory { get; } = new(authEnabled: false);
+        public void Dispose() => Factory.Dispose();
+    }
 }

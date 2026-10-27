@@ -10,27 +10,16 @@ using WeaveFleet.Infrastructure.Usage;
 
 namespace WeaveFleet.Api.Tests.Endpoints;
 
-public sealed class UsageEndpointsTests : IDisposable
+public sealed class UsageEndpointsTests(UsageEndpointsTests.Server server) : IClassFixture<UsageEndpointsTests.Server>, IDisposable
 {
     private readonly string _home = Directory.CreateTempSubdirectory("fleet-usage-api-").FullName;
 
     public void Dispose() => Directory.Delete(_home, recursive: true);
 
-    // The readers look in a temp home, never the real one.
-    private ApiWebApplicationFactory Factory() => new(authEnabled: false, configureTestServices: services =>
-    {
-        services.RemoveAll<UsageSources>();
-        services.AddSingleton(new UsageSources(_home, _ => null));
-    });
-
     [Fact]
     public async Task It_is_always_enabled_and_a_provider_without_consent_is_not_read()
     {
-        Directory.CreateDirectory(Path.Combine(_home, ".local", "share", "opencode"));
-        await File.WriteAllTextAsync(Path.Combine(_home, ".local", "share", "opencode", "auth.json"),
-            """{"openai":{"type":"oauth","access":"invented-secret","accountId":"acct-77"}}""");
-        await using var factory = Factory();
-        using var client = factory.CreateClient();
+        using var client = server.Factory.CreateClient();
 
         var text = await client.GetStringAsync("/api/usage/limits?watch=true");
         using var body = JsonDocument.Parse(text);
@@ -46,10 +35,7 @@ public sealed class UsageEndpointsTests : IDisposable
     [Fact]
     public async Task A_provider_with_no_account_id_has_a_null_key_that_is_still_sent()
     {
-        Directory.CreateDirectory(Path.Combine(_home, ".claude"));
-        await File.WriteAllTextAsync(Path.Combine(_home, ".claude", ".credentials.json"), """{"claudeAiOauth":{"accessToken":"invented-secret","expiresAt":1000}}""");
-        await using var factory = Factory();
-        using var client = factory.CreateClient();
+        using var client = server.Factory.CreateClient();
 
         var body = await client.GetFromJsonAsync<JsonElement>("/api/usage/limits");
 
@@ -60,10 +46,7 @@ public sealed class UsageEndpointsTests : IDisposable
     [Fact]
     public async Task On_it_lists_the_sign_in_it_found_and_never_the_token()
     {
-        Directory.CreateDirectory(Path.Combine(_home, ".claude"));
-        await File.WriteAllTextAsync(Path.Combine(_home, ".claude", ".credentials.json"), """{"claudeAiOauth":{"accessToken":"invented-secret","expiresAt":1000}}""");
-        await using var factory = Factory();
-        using var client = factory.CreateClient();
+        using var client = server.Factory.CreateClient();
 
         // The first read happens by itself; this token expired long ago, so it answers signed out without any request.
         var text = await client.GetStringAsync("/api/usage/limits");
@@ -77,6 +60,7 @@ public sealed class UsageEndpointsTests : IDisposable
         text.ShouldNotContain("invented-secret");
     }
 
+    // Its own server: the poll needs a sign-in without an expiry, and a canned answer from the provider.
     [Fact]
     public async Task A_polled_window_carries_its_length()
     {
@@ -107,7 +91,7 @@ public sealed class UsageEndpointsTests : IDisposable
     [Fact]
     public async Task Allow_and_revoke_answer_204_and_an_unknown_provider_404()
     {
-        await using var factory = Factory();
+        var factory = server.Factory;
         using var client = factory.CreateClient(new WebApplicationFactoryClientOptions { AllowAutoRedirect = false });
 
         (await client.PostAsync("/api/usage/limits/codex/allow", null)).StatusCode.ShouldBe(HttpStatusCode.NoContent);
@@ -119,5 +103,33 @@ public sealed class UsageEndpointsTests : IDisposable
             (await scope.ServiceProvider.GetRequiredService<IUserPreferenceRepository>().GetAsync("UsageAllow.codex")).ShouldBe("false");
 
         (await client.PostAsync("/api/usage/limits/nope/allow", null)).StatusCode.ShouldBe(HttpStatusCode.NotFound);
+    }
+
+    // The readers look in a temp home, never the real one.
+    public sealed class Server : IDisposable
+    {
+        private readonly string _home = Directory.CreateTempSubdirectory("fleet-usage-api-server-").FullName;
+
+        public ApiWebApplicationFactory Factory { get; }
+
+        public Server()
+        {
+            Directory.CreateDirectory(Path.Combine(_home, ".local", "share", "opencode"));
+            File.WriteAllText(Path.Combine(_home, ".local", "share", "opencode", "auth.json"),
+                """{"openai":{"type":"oauth","access":"invented-secret","accountId":"acct-77"}}""");
+            Directory.CreateDirectory(Path.Combine(_home, ".claude"));
+            File.WriteAllText(Path.Combine(_home, ".claude", ".credentials.json"), """{"claudeAiOauth":{"accessToken":"invented-secret","expiresAt":1000}}""");
+            Factory = new ApiWebApplicationFactory(authEnabled: false, configureTestServices: services =>
+            {
+                services.RemoveAll<UsageSources>();
+                services.AddSingleton(new UsageSources(_home, _ => null));
+            });
+        }
+
+        public void Dispose()
+        {
+            Factory.Dispose();
+            Directory.Delete(_home, recursive: true);
+        }
     }
 }

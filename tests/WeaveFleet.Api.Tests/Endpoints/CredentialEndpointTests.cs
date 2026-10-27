@@ -7,25 +7,35 @@ using WeaveFleet.Api.Tests.Infrastructure;
 
 namespace WeaveFleet.Api.Tests.Endpoints;
 
-public sealed class CredentialEndpointTests
+public sealed class CredentialEndpointTests(CredentialEndpointTests.Server server) : IClassFixture<CredentialEndpointTests.Server>
 {
+    // One server for the class: each test stores its credential under a label of its own and reads back only that.
+    private readonly ApiWebApplicationFactory _factory = server.Factory;
+    private readonly string _id = Guid.NewGuid().ToString("N")[..8];
+
+    public sealed class Server : IDisposable
+    {
+        public ApiWebApplicationFactory Factory { get; } = new(authEnabled: true, useTestAuthentication: true);
+        public void Dispose() => Factory.Dispose();
+    }
+
     [Fact]
     public async Task PutAndGetCredentials_WithCsrfToken_StoresAndReturnsMetadataOnly()
     {
-        await using var factory = new ApiWebApplicationFactory(authEnabled: true, useTestAuthentication: true);
-        using var client = factory.CreateClient(new WebApplicationFactoryClientOptions
+        using var client = _factory.CreateClient(new WebApplicationFactoryClientOptions
         {
             AllowAutoRedirect = false,
             HandleCookies = true,
         });
 
         var csrfToken = await GetCsrfTokenAsync(client);
+        var label = $"Work Key {_id}";
         var secretValue = "sk-anthropic-secret-1234";
 
         using var storeRequest = CreateJsonRequest(
             HttpMethod.Put,
             "/api/credentials",
-            new StoreCredentialPayload("Work Key", "anthropic", "api-key", secretValue, "{\"scope\":\"work\"}"),
+            new StoreCredentialPayload(label, "anthropic", "api-key", secretValue, "{\"scope\":\"work\"}"),
             csrfToken);
 
         var storeResponse = await client.SendAsync(storeRequest);
@@ -38,17 +48,17 @@ public sealed class CredentialEndpointTests
         listResponse.StatusCode.ShouldBe(HttpStatusCode.OK);
         listBody.ShouldNotContain(secretValue);
 
-        var credentials = JsonSerializer.Deserialize<List<CredentialResponsePayload>>(listBody, JsonSerializerOptions.Web);
+        var credentials = JsonSerializer.Deserialize<List<CredentialResponsePayload>>(listBody, JsonSerializerOptions.Web)?.Where(c => c.Label == label).ToList();
         credentials.ShouldNotBeNull();
         credentials.Count.ShouldBe(1);
-        credentials[0].Label.ShouldBe("Work Key");
+        credentials[0].Label.ShouldBe(label);
         credentials[0].Namespace.ShouldBe("anthropic");
         credentials[0].Kind.ShouldBe("api-key");
         credentials[0].DisplayHint.ShouldBe("...1234");
         credentials[0].Metadata.ShouldBe("{\"scope\":\"work\"}");
 
         using var json = JsonDocument.Parse(listBody);
-        var credential = json.RootElement[0];
+        var credential = json.RootElement.EnumerateArray().Single(c => c.GetProperty("label").GetString() == label);
         credential.TryGetProperty("value", out _).ShouldBeFalse();
         credential.TryGetProperty("encryptedValue", out _).ShouldBeFalse();
     }
@@ -56,24 +66,24 @@ public sealed class CredentialEndpointTests
     [Fact]
     public async Task PutById_WithCsrfToken_UpdatesCredentialValueAndMetadata()
     {
-        await using var factory = new ApiWebApplicationFactory(authEnabled: true, useTestAuthentication: true);
-        using var client = factory.CreateClient(new WebApplicationFactoryClientOptions
+        using var client = _factory.CreateClient(new WebApplicationFactoryClientOptions
         {
             AllowAutoRedirect = false,
             HandleCookies = true,
         });
 
         var csrfToken = await GetCsrfTokenAsync(client);
+        var label = $"Shared Key {_id}";
 
         using var createRequest = CreateJsonRequest(
             HttpMethod.Put,
             "/api/credentials",
-            new StoreCredentialPayload("Shared Key", "openai", "api-key", "sk-openai-old-1111", "{\"scope\":\"old\"}"),
+            new StoreCredentialPayload(label, "openai", "api-key", "sk-openai-old-1111", "{\"scope\":\"old\"}"),
             csrfToken);
         var createResponse = await client.SendAsync(createRequest);
         createResponse.StatusCode.ShouldBe(HttpStatusCode.NoContent);
 
-        var initialCredentials = await client.GetFromJsonAsync<List<CredentialResponsePayload>>("/api/credentials");
+        var initialCredentials = await ListOursAsync(client, label);
         initialCredentials.ShouldNotBeNull();
         initialCredentials.Count.ShouldBe(1);
 
@@ -94,11 +104,11 @@ public sealed class CredentialEndpointTests
         listBody.ShouldNotContain("sk-openai-old-1111");
         listBody.ShouldNotContain("sk-openai-new-5678");
 
-        var updatedCredentials = JsonSerializer.Deserialize<List<CredentialResponsePayload>>(listBody, JsonSerializerOptions.Web);
+        var updatedCredentials = JsonSerializer.Deserialize<List<CredentialResponsePayload>>(listBody, JsonSerializerOptions.Web)?.Where(c => c.Label == label).ToList();
         updatedCredentials.ShouldNotBeNull();
         updatedCredentials.Count.ShouldBe(1);
         updatedCredentials[0].Id.ShouldBe(credentialId);
-        updatedCredentials[0].Label.ShouldBe("Shared Key");
+        updatedCredentials[0].Label.ShouldBe(label);
         updatedCredentials[0].Namespace.ShouldBe("openai");
         updatedCredentials[0].Kind.ShouldBe("api-key");
         updatedCredentials[0].DisplayHint.ShouldBe("...5678");
@@ -108,24 +118,24 @@ public sealed class CredentialEndpointTests
     [Fact]
     public async Task Delete_WithCsrfToken_RemovesCredential()
     {
-        await using var factory = new ApiWebApplicationFactory(authEnabled: true, useTestAuthentication: true);
-        using var client = factory.CreateClient(new WebApplicationFactoryClientOptions
+        using var client = _factory.CreateClient(new WebApplicationFactoryClientOptions
         {
             AllowAutoRedirect = false,
             HandleCookies = true,
         });
 
         var csrfToken = await GetCsrfTokenAsync(client);
+        var label = $"Delete Me {_id}";
 
         using var createRequest = CreateJsonRequest(
             HttpMethod.Put,
             "/api/credentials",
-            new StoreCredentialPayload("Delete Me", "custom", "api-key", "delete-secret-9999", null),
+            new StoreCredentialPayload(label, "custom", "api-key", "delete-secret-9999", null),
             csrfToken);
         var createResponse = await client.SendAsync(createRequest);
         createResponse.StatusCode.ShouldBe(HttpStatusCode.NoContent);
 
-        var credentials = await client.GetFromJsonAsync<List<CredentialResponsePayload>>("/api/credentials");
+        var credentials = await ListOursAsync(client, label);
         credentials.ShouldNotBeNull();
         credentials.Count.ShouldBe(1);
 
@@ -136,10 +146,14 @@ public sealed class CredentialEndpointTests
 
         deleteResponse.StatusCode.ShouldBe(HttpStatusCode.NoContent);
 
-        var afterDelete = await client.GetFromJsonAsync<List<CredentialResponsePayload>>("/api/credentials");
+        var afterDelete = await ListOursAsync(client, label);
         afterDelete.ShouldNotBeNull();
         afterDelete.ShouldBeEmpty();
     }
+
+    private static async Task<List<CredentialResponsePayload>> ListOursAsync(HttpClient client, string label)
+        => (await client.GetFromJsonAsync<List<CredentialResponsePayload>>("/api/credentials", JsonSerializerOptions.Web) ?? [])
+            .Where(c => c.Label == label).ToList();
 
     private static HttpRequestMessage CreateJsonRequest<T>(HttpMethod method, string uri, T payload, string csrfToken)
     {

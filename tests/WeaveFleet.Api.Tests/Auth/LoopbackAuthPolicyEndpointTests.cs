@@ -15,10 +15,13 @@ namespace WeaveFleet.Api.Tests.Auth;
 /// bound to 0.0.0.0 must refuse an un-tokened loopback request. A Fleet bound to 127.0.0.1 cannot be
 /// reached that way and keeps the bypass — that is the desktop app's path.
 /// </summary>
-[Collection(LocalTokenAuthServiceTestsGroup.Name)]
-public sealed class LoopbackAuthPolicyEndpointTests
+public sealed class LoopbackAuthPolicyEndpointTests : IClassFixture<LoopbackAuthPolicyEndpointTests.Servers>
 {
     private const string ValidToken = "1234567890abcdef";
+
+    private readonly Servers _servers;
+
+    public LoopbackAuthPolicyEndpointTests(Servers servers) => _servers = servers;
 
     // ── Bound to loopback: the bypass stays (desktop app) ─────────────────────
 
@@ -28,7 +31,7 @@ public sealed class LoopbackAuthPolicyEndpointTests
     [InlineData("::1")]
     public async Task Should_auto_authenticate_loopback_request_when_bound_to_loopback(string host)
     {
-        await using var factory = CreateFactory(host);
+        var factory = _servers.For(host);
         using var client = CreateClient(factory);
 
         var response = await client.GetAsync("/api/user/me");
@@ -39,7 +42,7 @@ public sealed class LoopbackAuthPolicyEndpointTests
     [Fact]
     public async Task Should_report_localhost_in_auth_status_when_bound_to_loopback()
     {
-        await using var factory = CreateFactory("127.0.0.1");
+        var factory = _servers.For("127.0.0.1");
         using var client = CreateClient(factory);
 
         var status = await GetAuthStatus(client);
@@ -50,7 +53,7 @@ public sealed class LoopbackAuthPolicyEndpointTests
     [Fact]
     public async Task Should_sign_in_on_auth_login_when_bound_to_loopback()
     {
-        await using var factory = CreateFactory("127.0.0.1");
+        var factory = _servers.For("127.0.0.1");
         using var client = CreateClient(factory);
 
         var response = await client.GetAsync("/auth/login");
@@ -70,7 +73,7 @@ public sealed class LoopbackAuthPolicyEndpointTests
     [InlineData("/api/credentials")]
     public async Task Should_reject_untokened_loopback_request_when_bound_to_all_interfaces(string path)
     {
-        await using var factory = CreateFactory("0.0.0.0");
+        var factory = _servers.For("0.0.0.0");
         using var client = CreateClient(factory);
 
         var response = await client.GetAsync(path);
@@ -81,7 +84,7 @@ public sealed class LoopbackAuthPolicyEndpointTests
     [Fact]
     public async Task Should_reject_untokened_loopback_hub_negotiate_when_bound_to_all_interfaces()
     {
-        await using var factory = CreateFactory("0.0.0.0");
+        var factory = _servers.For("0.0.0.0");
         using var client = CreateClient(factory);
 
         var response = await client.PostAsync("/hubs/session-events/negotiate?negotiateVersion=1", new StringContent(string.Empty));
@@ -95,7 +98,7 @@ public sealed class LoopbackAuthPolicyEndpointTests
     [InlineData("192.168.1.13")]
     public async Task Should_reject_untokened_loopback_request_for_every_remote_reachable_bind(string host)
     {
-        await using var factory = CreateFactory(host);
+        var factory = _servers.For(host);
         using var client = CreateClient(factory);
 
         var response = await client.GetAsync("/api/user/me");
@@ -106,7 +109,7 @@ public sealed class LoopbackAuthPolicyEndpointTests
     [Fact]
     public async Task Should_not_sign_in_on_auth_login_when_bound_to_all_interfaces()
     {
-        await using var factory = CreateFactory("0.0.0.0");
+        var factory = _servers.For("0.0.0.0");
         using var client = CreateClient(factory);
 
         var response = await client.GetAsync("/auth/login");
@@ -122,7 +125,7 @@ public sealed class LoopbackAuthPolicyEndpointTests
     {
         // The login page skips the token form and bounces through /auth/login when this is true;
         // reporting the raw remote IP would loop it forever against a Fleet bound to 0.0.0.0.
-        await using var factory = CreateFactory("0.0.0.0");
+        var factory = _servers.For("0.0.0.0");
         using var client = CreateClient(factory);
 
         var status = await GetAuthStatus(client);
@@ -135,7 +138,7 @@ public sealed class LoopbackAuthPolicyEndpointTests
     [Fact]
     public async Task Should_accept_bearer_token_from_loopback_when_bound_to_all_interfaces()
     {
-        await using var factory = CreateFactory("0.0.0.0");
+        var factory = _servers.For("0.0.0.0");
         using var client = CreateClient(factory);
         client.DefaultRequestHeaders.Authorization = new AuthenticationHeaderValue("Bearer", ValidToken);
 
@@ -148,7 +151,7 @@ public sealed class LoopbackAuthPolicyEndpointTests
     public async Task Should_accept_token_login_cookie_when_bound_to_all_interfaces()
     {
         // This is the printed /login?token=… flow — the one login a remotely-bound Fleet now asks for.
-        await using var factory = CreateFactory("0.0.0.0");
+        var factory = _servers.For("0.0.0.0");
         using var client = CreateClient(factory);
 
         var loginResponse = await client.PostAsJsonAsync("/auth/token-login", new TokenLoginRequest(ValidToken));
@@ -175,6 +178,28 @@ public sealed class LoopbackAuthPolicyEndpointTests
             host: host,
             configureTestServices: services =>
                 services.AddSingleton<ILocalTokenAuthService>(new StubLocalTokenAuthService(ValidToken)));
+
+    /// <summary>One server per bind address, started the first time a test asks for it.</summary>
+    public sealed class Servers : IDisposable
+    {
+        private readonly Dictionary<string, ApiWebApplicationFactory> _byHost = [];
+
+        public ApiWebApplicationFactory For(string host)
+        {
+            lock (_byHost)
+            {
+                if (!_byHost.TryGetValue(host, out var factory))
+                    _byHost[host] = factory = CreateFactory(host);
+                return factory;
+            }
+        }
+
+        public void Dispose()
+        {
+            foreach (var factory in _byHost.Values)
+                factory.Dispose();
+        }
+    }
 
     private static HttpClient CreateClient(WebApplicationFactory<Program> factory)
         => factory.CreateClient(new WebApplicationFactoryClientOptions

@@ -10,28 +10,37 @@ namespace WeaveFleet.Api.Tests.Endpoints;
 /// The designer's endpoints: checking as the user edits, and New, open and save in a repository's .weave/workflows.
 /// Over HTTP, so the source-generated JSON is what the client gets.
 /// </summary>
-public sealed class WorkflowEditEndpointTests : IAsyncDisposable
+public sealed class WorkflowEditEndpointTests : IClassFixture<WorkflowEditEndpointTests.Server>, IAsyncLifetime
 {
     private static readonly string[] Done = ["done"];
 
-    private readonly ApiWebApplicationFactory _factory = new(authEnabled: false);
     private readonly HttpClient _client;
     private readonly string _root = Path.Combine(Path.GetTempPath(), $"weave-api-workflows-{Guid.NewGuid():N}");
     private readonly string _repo;
 
-    public WorkflowEditEndpointTests()
+    public WorkflowEditEndpointTests(Server server)
     {
-        _client = _factory.CreateClient();
+        _client = server.Factory.CreateClient();
         _repo = Path.Combine(_root, "repo");
         Directory.CreateDirectory(_repo);
     }
 
-    public async ValueTask DisposeAsync()
+    // The switch is off until a test turns it on; one server for the class, so start each test from off.
+    public async Task InitializeAsync()
+        => (await _client.PutAsJsonAsync("/api/preferences/Workflows", new { value = "false" })).EnsureSuccessStatusCode();
+
+    public Task DisposeAsync()
     {
         _client.Dispose();
-        await _factory.DisposeAsync();
         if (Directory.Exists(_root))
             Directory.Delete(_root, recursive: true);
+        return Task.CompletedTask;
+    }
+
+    public sealed class Server : IDisposable
+    {
+        public ApiWebApplicationFactory Factory { get; } = new(authEnabled: false);
+        public void Dispose() => Factory.Dispose();
     }
 
     private async Task TurnOnAsync()

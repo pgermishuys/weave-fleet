@@ -9,85 +9,23 @@ using WeaveFleet.Application.Data;
 
 namespace WeaveFleet.Api.Tests.Endpoints;
 
-[Collection("NonParallelApiFactoryTests")]
-public sealed class SessionEndpointOriginTests : IAsyncLifetime, IDisposable
+public sealed class SessionEndpointOriginTests : IClassFixture<SessionEndpointOriginTests.Server>, IDisposable
 {
     private const string _userId = "local-user";
 
-    private ApiWebApplicationFactory? _factory;
-    private HttpClient? _client;
+    private readonly HttpClient _client;
 
-    public async Task InitializeAsync()
+    public SessionEndpointOriginTests(Server server)
     {
-        _factory = new ApiWebApplicationFactory(authEnabled: false);
-        _client = _factory.CreateClient();
-
-        using var scope = _factory.Services.CreateScope();
-        var connectionFactory = scope.ServiceProvider.GetRequiredService<IDbConnectionFactory>();
-        using var connection = connectionFactory.CreateConnection();
-
-        var createdAt = "2026-01-01T00:00:00.0000000Z";
-
-        await InsertWorkspaceAsync(connection, "workspace-with-origin", "/tmp/workspace-with-origin", createdAt);
-        await InsertWorkspaceAsync(connection, "workspace-without-origin", "/tmp/workspace-without-origin", createdAt);
-
-        await InsertInstanceAsync(connection, "instance-with-origin", "/tmp/workspace-with-origin", createdAt);
-        await InsertInstanceAsync(connection, "instance-without-origin", "/tmp/workspace-without-origin", createdAt);
-
-        await InsertSessionAsync(connection, "session-with-origin", "workspace-with-origin", "instance-with-origin", "/tmp/workspace-with-origin", createdAt);
-        await InsertSessionAsync(connection, "session-without-origin", "workspace-without-origin", "instance-without-origin", "/tmp/workspace-without-origin", createdAt);
-
-        await connection.ExecuteAsync(
-            "INSERT INTO session_source_usages (id, session_id, workspace_id, provider_id, source_type, action_id, resource_id, resource_url, title, summary, created_at) VALUES (@Id, @SessionId, @WorkspaceId, @ProviderId, @SourceType, @ActionId, @ResourceId, @ResourceUrl, @Title, @Summary, @CreatedAt)",
-            new
-            {
-                Id = "usage-start-session",
-                SessionId = "session-with-origin",
-                WorkspaceId = "workspace-with-origin",
-                ProviderId = "github",
-                SourceType = "repository",
-                ActionId = "start-session",
-                ResourceId = "repo-1",
-                ResourceUrl = "https://github.com/acme/repo",
-                Title = "acme/repo",
-                Summary = "Primary origin",
-                CreatedAt = createdAt
-            });
-
-        await connection.ExecuteAsync(
-            "INSERT INTO session_source_usages (id, session_id, workspace_id, provider_id, source_type, action_id, resource_id, resource_url, title, summary, created_at) VALUES (@Id, @SessionId, @WorkspaceId, @ProviderId, @SourceType, @ActionId, @ResourceId, @ResourceUrl, @Title, @Summary, @CreatedAt)",
-            new
-            {
-                Id = "usage-non-start-session",
-                SessionId = "session-without-origin",
-                WorkspaceId = "workspace-without-origin",
-                ProviderId = "local",
-                SourceType = "directory",
-                ActionId = "add-to-session",
-                ResourceId = "/tmp/workspace-without-origin",
-                ResourceUrl = "file:///tmp/workspace-without-origin",
-                Title = "workspace-without-origin",
-                Summary = "Not a primary origin",
-                CreatedAt = createdAt
-            });
+        _client = server.Factory.CreateClient();
     }
 
-    public Task DisposeAsync()
-    {
-        Dispose();
-        return Task.CompletedTask;
-    }
-
-    public void Dispose()
-    {
-        _client?.Dispose();
-        _factory?.Dispose();
-    }
+    public void Dispose() => _client.Dispose();
 
     [Fact]
     public async Task ListSessions_WhenBatchContainsMixedOrigins_MapsOriginOnlyForSessionsWithStartSessionUsage()
     {
-        var response = await _client!.GetAsync("/api/sessions");
+        var response = await _client.GetAsync("/api/sessions");
 
         response.StatusCode.ShouldBe(HttpStatusCode.OK);
         var sessions = await response.Content.ReadFromJsonAsync<JsonElement[]>(JsonSerializerOptions.Web);
@@ -115,7 +53,7 @@ public sealed class SessionEndpointOriginTests : IAsyncLifetime, IDisposable
     [Fact]
     public async Task GetSession_WhenNoStartSessionUsageExists_ReturnsNullOrigin()
     {
-        var response = await _client!.GetAsync("/api/sessions/session-without-origin");
+        var response = await _client.GetAsync("/api/sessions/session-without-origin");
 
         response.StatusCode.ShouldBe(HttpStatusCode.OK);
         var session = await response.Content.ReadFromJsonAsync<JsonElement>(JsonSerializerOptions.Web);
@@ -123,6 +61,65 @@ public sealed class SessionEndpointOriginTests : IAsyncLifetime, IDisposable
         session.GetProperty("id").GetString().ShouldBe("session-without-origin");
         session.GetProperty("origin").ValueKind.ShouldBe(JsonValueKind.Null);
         AssertCapabilitiesDto(session.GetProperty("capabilities"));
+    }
+
+    public sealed class Server : IAsyncLifetime
+    {
+        public ApiWebApplicationFactory Factory { get; } = new(authEnabled: false);
+
+        public async Task InitializeAsync()
+        {
+            using var scope = Factory.Services.CreateScope();
+            var connectionFactory = scope.ServiceProvider.GetRequiredService<IDbConnectionFactory>();
+            using var connection = connectionFactory.CreateConnection();
+
+            var createdAt = "2026-01-01T00:00:00.0000000Z";
+
+            await InsertWorkspaceAsync(connection, "workspace-with-origin", "/tmp/workspace-with-origin", createdAt);
+            await InsertWorkspaceAsync(connection, "workspace-without-origin", "/tmp/workspace-without-origin", createdAt);
+
+            await InsertInstanceAsync(connection, "instance-with-origin", "/tmp/workspace-with-origin", createdAt);
+            await InsertInstanceAsync(connection, "instance-without-origin", "/tmp/workspace-without-origin", createdAt);
+
+            await InsertSessionAsync(connection, "session-with-origin", "workspace-with-origin", "instance-with-origin", "/tmp/workspace-with-origin", createdAt);
+            await InsertSessionAsync(connection, "session-without-origin", "workspace-without-origin", "instance-without-origin", "/tmp/workspace-without-origin", createdAt);
+
+            await connection.ExecuteAsync(
+                "INSERT INTO session_source_usages (id, session_id, workspace_id, provider_id, source_type, action_id, resource_id, resource_url, title, summary, created_at) VALUES (@Id, @SessionId, @WorkspaceId, @ProviderId, @SourceType, @ActionId, @ResourceId, @ResourceUrl, @Title, @Summary, @CreatedAt)",
+                new
+                {
+                    Id = "usage-start-session",
+                    SessionId = "session-with-origin",
+                    WorkspaceId = "workspace-with-origin",
+                    ProviderId = "github",
+                    SourceType = "repository",
+                    ActionId = "start-session",
+                    ResourceId = "repo-1",
+                    ResourceUrl = "https://github.com/acme/repo",
+                    Title = "acme/repo",
+                    Summary = "Primary origin",
+                    CreatedAt = createdAt
+                });
+
+            await connection.ExecuteAsync(
+                "INSERT INTO session_source_usages (id, session_id, workspace_id, provider_id, source_type, action_id, resource_id, resource_url, title, summary, created_at) VALUES (@Id, @SessionId, @WorkspaceId, @ProviderId, @SourceType, @ActionId, @ResourceId, @ResourceUrl, @Title, @Summary, @CreatedAt)",
+                new
+                {
+                    Id = "usage-non-start-session",
+                    SessionId = "session-without-origin",
+                    WorkspaceId = "workspace-without-origin",
+                    ProviderId = "local",
+                    SourceType = "directory",
+                    ActionId = "add-to-session",
+                    ResourceId = "/tmp/workspace-without-origin",
+                    ResourceUrl = "file:///tmp/workspace-without-origin",
+                    Title = "workspace-without-origin",
+                    Summary = "Not a primary origin",
+                    CreatedAt = createdAt
+                });
+        }
+
+        public async Task DisposeAsync() => await Factory.DisposeAsync();
     }
 
     private static void AssertCapabilitiesDto(JsonElement capabilities)

@@ -13,61 +13,20 @@ using WeaveFleet.Testing.Fakes;
 
 namespace WeaveFleet.Api.Tests.Endpoints;
 
-public sealed class SessionFileBrowserEndpointTests : IAsyncDisposable
+public sealed class SessionFileBrowserEndpointTests : IClassFixture<SessionFileBrowserEndpointTests.Server>, IDisposable
 {
-    private readonly ApiWebApplicationFactory _factory;
     private readonly HttpClient _client;
     private readonly TempDirectory _tempDirectory;
 
-    public SessionFileBrowserEndpointTests()
+    public SessionFileBrowserEndpointTests(Server server)
     {
         _tempDirectory = new TempDirectory();
-        
-        _factory = new ApiWebApplicationFactory(
-            authEnabled: false,
-            configureTestServices: services =>
-            {
-                // The endpoints these tests call use the session services; replace them with ones over in-memory fakes.
-                var builder = new SessionOrchestratorBuilder()
-                    .WithUserContext(new TestUserContext("test-user"));
-
-                builder.WorkspaceRootRepository.Seed(
-                    new WorkspaceRoot
-                    {
-                        Id = "root-1",
-                        Path = Path.GetTempPath(),
-                        CreatedAt = DateTime.UtcNow.ToString("O")
-                    }
-                );
-
-                builder.ProjectRepository.Seed(new Project
-                {
-                    Id = "scratch-1",
-                    Name = "Scratch",
-                    Type = "scratch",
-                    Position = 0,
-                    CreatedAt = "2026-01-01",
-                    UpdatedAt = "2026-01-01"
-                });
-
-                var runtime = builder.RegisterHarness("opencode", "OpenCode");
-                runtime.DefaultSession = new FakeHarnessSession("inst-1");
-
-                var orchestrator = builder.Build();
-                services.AddSingleton(orchestrator);
-                services.AddSingleton(builder.Creation);
-                services.AddSingleton(builder.Files);
-                services.AddSingleton(new WeaveFleet.Application.Sessions.Files.SessionAttachments(
-                    builder.SessionRepository, Microsoft.Extensions.Logging.Abstractions.NullLogger<WeaveFleet.Application.Sessions.Files.SessionAttachments>.Instance));
-            });
-
-        _client = _factory.CreateClient();
+        _client = server.Factory.CreateClient();
     }
 
-    public async ValueTask DisposeAsync()
+    public void Dispose()
     {
         _client.Dispose();
-        await _factory.DisposeAsync();
         _tempDirectory.Dispose();
     }
 
@@ -393,6 +352,49 @@ public sealed class SessionFileBrowserEndpointTests : IAsyncDisposable
         (await _client.GetAsync($"/api/sessions/{sessionId}/files/image?path=notes.txt")).StatusCode.ShouldBe(HttpStatusCode.BadRequest);
         (await _client.GetAsync($"/api/sessions/{sessionId}/files/image?path=../outside.png")).StatusCode.ShouldBe(HttpStatusCode.BadRequest);
         (await _client.GetAsync($"/api/sessions/{sessionId}/files/image?path=gone.png")).StatusCode.ShouldBe(HttpStatusCode.NotFound);
+    }
+
+    public sealed class Server : IDisposable
+    {
+        public ApiWebApplicationFactory Factory { get; } = new(
+            authEnabled: false,
+            configureTestServices: services =>
+            {
+                // The endpoints these tests call use the session services; replace them with ones over in-memory fakes.
+                var builder = new SessionOrchestratorBuilder()
+                    .WithUserContext(new TestUserContext("test-user"));
+
+                builder.WorkspaceRootRepository.Seed(
+                    new WorkspaceRoot
+                    {
+                        Id = "root-1",
+                        Path = Path.GetTempPath(),
+                        CreatedAt = DateTime.UtcNow.ToString("O")
+                    }
+                );
+
+                builder.ProjectRepository.Seed(new Project
+                {
+                    Id = "scratch-1",
+                    Name = "Scratch",
+                    Type = "scratch",
+                    Position = 0,
+                    CreatedAt = "2026-01-01",
+                    UpdatedAt = "2026-01-01"
+                });
+
+                var runtime = builder.RegisterHarness("opencode", "OpenCode");
+                runtime.DefaultSession = new FakeHarnessSession("inst-1");
+
+                var orchestrator = builder.Build();
+                services.AddSingleton(orchestrator);
+                services.AddSingleton(builder.Creation);
+                services.AddSingleton(builder.Files);
+                services.AddSingleton(new WeaveFleet.Application.Sessions.Files.SessionAttachments(
+                    builder.SessionRepository, Microsoft.Extensions.Logging.Abstractions.NullLogger<WeaveFleet.Application.Sessions.Files.SessionAttachments>.Instance));
+            });
+
+        public void Dispose() => Factory.Dispose();
     }
 
     private sealed class TempDirectory : IDisposable

@@ -4,7 +4,6 @@ using System.Net.Http.Json;
 using System.Text.Json;
 using Microsoft.AspNetCore.Mvc.Testing;
 using Microsoft.Extensions.DependencyInjection;
-using WeaveFleet.Api.Tests.Auth;
 using WeaveFleet.Api.Tests.Infrastructure;
 using WeaveFleet.Application.Users;
 
@@ -14,13 +13,17 @@ namespace WeaveFleet.Api.Tests.Endpoints;
 /// Adding a machine with a code: a node (no web app) makes a one-time code for another Fleet, which redeems it for a
 /// token of its own. The node lists that token as a machine and can remove it; the master token never moves.
 /// </summary>
-[Collection(LocalTokenAuthServiceTestsGroup.Name)]
-public sealed class MachinePairingEndpointTests
+public sealed class MachinePairingEndpointTests : IClassFixture<MachinePairingEndpointTests.Server>
 {
+    private readonly ApiWebApplicationFactory _node;
+
+    // Typed codes are limited to five tries a minute across the server, so the test that tries one twice has its own.
+    public MachinePairingEndpointTests(Server server) => _node = server.Factory;
+
     [Fact]
     public async Task A_node_makes_a_code_for_another_machine_but_still_refuses_to_pair_a_phone()
     {
-        await using var factory = CreateNode();
+        var factory = _node;
         using var owner = Client(factory, MasterToken(factory));
 
         var made = await owner.PostAsJsonAsync("/api/machine/pairing/code", new { });
@@ -36,7 +39,7 @@ public sealed class MachinePairingEndpointTests
     [Fact]
     public async Task The_code_redeems_on_a_node_for_a_machine_token_that_is_listed_and_can_be_removed()
     {
-        await using var factory = CreateNode();
+        var factory = _node;
         using var owner = Client(factory, MasterToken(factory));
         using var other = Client(factory);
         var manualCode = await NewCodeAsync(owner);
@@ -54,7 +57,9 @@ public sealed class MachinePairingEndpointTests
         using var paired = Client(factory, token);
         (await paired.GetAsync("/api/sessions")).StatusCode.ShouldBe(HttpStatusCode.OK);
 
-        var listed = (await owner.GetFromJsonAsync<JsonElement>("/api/machine/devices")).GetProperty("devices").EnumerateArray().Single();
+        var deviceId = token["fdt_".Length..token.IndexOf('.', StringComparison.Ordinal)];
+        var listed = (await owner.GetFromJsonAsync<JsonElement>("/api/machine/devices")).GetProperty("devices").EnumerateArray()
+            .Single(device => device.GetProperty("id").GetString() == deviceId);
         listed.GetProperty("name").GetString().ShouldBe("studio-mac");
         listed.GetProperty("kind").GetString().ShouldBe("machine");
 
@@ -78,7 +83,7 @@ public sealed class MachinePairingEndpointTests
     [Fact]
     public async Task A_machine_token_cannot_make_codes_or_manage_devices()
     {
-        await using var factory = CreateNode();
+        var factory = _node;
         using var owner = Client(factory, MasterToken(factory));
         using var other = Client(factory);
         var manualCode = await NewCodeAsync(owner);
@@ -93,7 +98,7 @@ public sealed class MachinePairingEndpointTests
     [Fact]
     public async Task An_unknown_kind_is_refused_and_keeps_the_code()
     {
-        await using var factory = CreateNode();
+        var factory = _node;
         using var owner = Client(factory, MasterToken(factory));
         using var other = Client(factory);
         var manualCode = await NewCodeAsync(owner);
@@ -105,10 +110,17 @@ public sealed class MachinePairingEndpointTests
     [Fact]
     public async Task Making_a_code_needs_the_master_token()
     {
-        await using var factory = CreateNode();
+        var factory = _node;
         using var nobody = Client(factory);
 
         (await nobody.PostAsJsonAsync("/api/machine/pairing/code", new { })).StatusCode.ShouldBe(HttpStatusCode.Unauthorized);
+    }
+
+    public sealed class Server : IDisposable
+    {
+        public ApiWebApplicationFactory Factory { get; } = CreateNode();
+
+        public void Dispose() => Factory.Dispose();
     }
 
     private static async Task<string> NewCodeAsync(HttpClient owner)

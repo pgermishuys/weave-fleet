@@ -22,67 +22,87 @@ namespace WeaveFleet.Api.Tests.Endpoints;
 /// Seeds sessions for two users directly into the DB, then verifies that
 /// the authenticated test user (sub=test-user) cannot access other-user's sessions.
 /// </summary>
-#pragma warning disable CA1001 // Type owns disposable fields — disposal handled by IAsyncLifetime.DisposeAsync
-public sealed class SessionEndpointTenantIsolationTests : IAsyncLifetime
-#pragma warning restore CA1001
+public sealed class SessionEndpointTenantIsolationTests : IClassFixture<SessionEndpointTenantIsolationTests.Server>
 {
-    private SessionIsolationFactory? _factory;
-    private HttpClient? _client;
-    private string? _csrfToken;
+    private readonly WebApplicationFactory<Program> _factory;
+    private readonly HttpClient _client;
+    private readonly string? _csrfToken;
 
-    public async Task InitializeAsync()
+    public SessionEndpointTenantIsolationTests(Server server)
     {
-        _factory = new SessionIsolationFactory();
-        // HandleCookies=true so the antiforgery state cookie (.WeaveFleet.Antiforgery) is
-        // stored by the client and sent on subsequent requests — required for CSRF validation.
-        _client = _factory.CreateClient(new WebApplicationFactoryClientOptions
-        {
-            AllowAutoRedirect = false,
-            HandleCookies = true
-        });
-
-        // Trigger app startup and capture the CSRF token from the Set-Cookie header.
-        // The antiforgery middleware emits .WeaveFleet.CSRF (readable, HttpOnly=false) on GET requests.
-        var startupResponse = await _client.GetAsync("/api/sessions");
-        _csrfToken = ExtractCookieValue(startupResponse, ".WeaveFleet.CSRF");
-
-        // Seed sessions for two users directly into the main DB
-        using var scope = _factory.Services.CreateScope();
-        var dbFactory = scope.ServiceProvider.GetRequiredService<IDbConnectionFactory>();
-        using var conn = dbFactory.CreateConnection();
-
-        // Insert workspaces (required FK for sessions; use display_name not name)
-        ExecuteNonQuery(conn, """
-            INSERT OR IGNORE INTO workspaces (id, directory, display_name, created_at, user_id)
-            VALUES ('ws-test', '/ws-test', 'Test Workspace', '2026-03-01T00:00:00+00:00', 'test-user'),
-                   ('ws-other', '/ws-other', 'Other Workspace', '2026-03-01T00:00:00+00:00', 'other-user')
-            """);
-
-        // Insert instances (required FK for sessions)
-        ExecuteNonQuery(conn, """
-            INSERT OR IGNORE INTO instances (id, port, pid, directory, url, status, created_at, user_id)
-            VALUES ('inst-test', 0, NULL, '/ws-test', '', 'stopped', '2026-03-01T00:00:00+00:00', 'test-user'),
-                   ('inst-other', 0, NULL, '/ws-other', '', 'stopped', '2026-03-01T00:00:00+00:00', 'other-user')
-            """);
-
-        // Insert sessions for both users (opencode_session_id is required NOT NULL)
-        ExecuteNonQuery(conn, """
-            INSERT OR IGNORE INTO sessions (
-                id, workspace_id, instance_id, opencode_session_id, title, status, directory,
-                lifecycle_status, retention_status, created_at, user_id)
-            VALUES
-              ('sess-test-1', 'ws-test', 'inst-test', 'oc-test-1', 'Test Session', 'stopped', '/ws-test',
-               'stopped', 'active', '2026-03-01T10:00:00+00:00', 'test-user'),
-              ('sess-other-1', 'ws-other', 'inst-other', 'oc-other-1', 'Other Session', 'stopped', '/ws-other',
-               'stopped', 'active', '2026-03-01T12:00:00+00:00', 'other-user')
-            """);
+        _factory = server.Factory;
+        _client = server.Client;
+        _csrfToken = server.CsrfToken;
     }
 
-    public async Task DisposeAsync()
+#pragma warning disable CA1001 // Type owns disposable fields — disposal handled by IAsyncLifetime.DisposeAsync
+    public sealed class Server : IAsyncLifetime
+#pragma warning restore CA1001
     {
-        _client?.Dispose();
-        if (_factory is not null)
-            await _factory.DisposeAsync();
+        private SessionIsolationFactory? _factory;
+        private HttpClient? _client;
+        private string? _csrfToken;
+
+        public async Task InitializeAsync()
+        {
+            _factory = new SessionIsolationFactory();
+            // HandleCookies=true so the antiforgery state cookie (.WeaveFleet.Antiforgery) is
+            // stored by the client and sent on subsequent requests — required for CSRF validation.
+            _client = _factory.CreateClient(new WebApplicationFactoryClientOptions
+            {
+                AllowAutoRedirect = false,
+                HandleCookies = true
+            });
+
+            // Trigger app startup and capture the CSRF token from the Set-Cookie header.
+            // The antiforgery middleware emits .WeaveFleet.CSRF (readable, HttpOnly=false) on GET requests.
+            var startupResponse = await _client.GetAsync("/api/sessions");
+            _csrfToken = ExtractCookieValue(startupResponse, ".WeaveFleet.CSRF");
+
+            // Seed sessions for two users directly into the main DB
+            using var scope = _factory.Services.CreateScope();
+            var dbFactory = scope.ServiceProvider.GetRequiredService<IDbConnectionFactory>();
+            using var conn = dbFactory.CreateConnection();
+
+            // Insert workspaces (required FK for sessions; use display_name not name)
+            ExecuteNonQuery(conn, """
+                INSERT OR IGNORE INTO workspaces (id, directory, display_name, created_at, user_id)
+                VALUES ('ws-test', '/ws-test', 'Test Workspace', '2026-03-01T00:00:00+00:00', 'test-user'),
+                       ('ws-other', '/ws-other', 'Other Workspace', '2026-03-01T00:00:00+00:00', 'other-user')
+                """);
+
+            // Insert instances (required FK for sessions)
+            ExecuteNonQuery(conn, """
+                INSERT OR IGNORE INTO instances (id, port, pid, directory, url, status, created_at, user_id)
+                VALUES ('inst-test', 0, NULL, '/ws-test', '', 'stopped', '2026-03-01T00:00:00+00:00', 'test-user'),
+                       ('inst-other', 0, NULL, '/ws-other', '', 'stopped', '2026-03-01T00:00:00+00:00', 'other-user')
+                """);
+
+            // Insert sessions for both users (opencode_session_id is required NOT NULL)
+            ExecuteNonQuery(conn, """
+                INSERT OR IGNORE INTO sessions (
+                    id, workspace_id, instance_id, opencode_session_id, title, status, directory,
+                    lifecycle_status, retention_status, created_at, user_id)
+                VALUES
+                  ('sess-test-1', 'ws-test', 'inst-test', 'oc-test-1', 'Test Session', 'stopped', '/ws-test',
+                   'stopped', 'active', '2026-03-01T10:00:00+00:00', 'test-user'),
+                  ('sess-other-1', 'ws-other', 'inst-other', 'oc-other-1', 'Other Session', 'stopped', '/ws-other',
+                   'stopped', 'active', '2026-03-01T12:00:00+00:00', 'other-user')
+                """);
+        }
+
+        public async Task DisposeAsync()
+        {
+            _client?.Dispose();
+            if (_factory is not null)
+                await _factory.DisposeAsync();
+        }
+
+        public WebApplicationFactory<Program> Factory => _factory!;
+
+        public HttpClient Client => _client!;
+
+        public string? CsrfToken => _csrfToken;
     }
 
     [Fact]

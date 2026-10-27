@@ -6,16 +6,36 @@ using WeaveFleet.Api.Tests.Infrastructure;
 
 namespace WeaveFleet.Api.Tests.Endpoints;
 
-public sealed class WeaveConfigEndpointTests
+public sealed class WeaveConfigEndpointTests : IClassFixture<WeaveConfigEndpointTests.Server>, IClassFixture<WeaveConfigEndpointTests.SignInServer>
 {
+    private readonly ApiWebApplicationFactory _open;
+    private readonly ApiWebApplicationFactory _signIn;
+
+    public WeaveConfigEndpointTests(Server server, SignInServer signInServer)
+    {
+        _open = server.Factory;
+        _signIn = signInServer.Factory;
+    }
+
+    public sealed class Server : IDisposable
+    {
+        public ApiWebApplicationFactory Factory { get; } = new(authEnabled: false);
+        public void Dispose() => Factory.Dispose();
+    }
+
+    public sealed class SignInServer : IDisposable
+    {
+        public ApiWebApplicationFactory Factory { get; } = new(authEnabled: true);
+        public void Dispose() => Factory.Dispose();
+    }
+
     private static HttpClient CreateClient(ApiWebApplicationFactory factory) =>
         factory.CreateClient(new WebApplicationFactoryClientOptions { AllowAutoRedirect = false, HandleCookies = true });
 
     [Fact]
     public async Task saving_with_an_unknown_source_is_refused()
     {
-        await using var factory = new ApiWebApplicationFactory(authEnabled: false);
-        using var client = CreateClient(factory);
+        using var client = CreateClient(_open);
 
         var response = await client.PutAsJsonAsync("/api/weave", new JsonObject { ["source"] = "theirs", ["files"] = new JsonObject() });
 
@@ -25,8 +45,7 @@ public sealed class WeaveConfigEndpointTests
     [Fact]
     public async Task a_file_weave_doesnt_read_is_refused()
     {
-        await using var factory = new ApiWebApplicationFactory(authEnabled: false);
-        using var client = CreateClient(factory);
+        using var client = CreateClient(_open);
 
         var response = await client.PutAsJsonAsync("/api/weave", new JsonObject
         {
@@ -43,8 +62,7 @@ public sealed class WeaveConfigEndpointTests
     [InlineData("?flavor=pi")]
     public async Task reading_the_users_own_files_needs_weave_or_legacy(string query)
     {
-        await using var factory = new ApiWebApplicationFactory(authEnabled: false);
-        using var client = CreateClient(factory);
+        using var client = CreateClient(_open);
 
         var response = await client.GetAsync($"/api/weave/own{query}");
 
@@ -54,8 +72,7 @@ public sealed class WeaveConfigEndpointTests
     [Fact]
     public async Task the_users_own_files_are_never_read_with_sign_in_on()
     {
-        await using var factory = new ApiWebApplicationFactory(authEnabled: true);
-        using var client = CreateClient(factory);
+        using var client = CreateClient(_signIn);
 
         var response = await client.GetAsync("/api/weave/own?flavor=weave");
 
@@ -65,8 +82,7 @@ public sealed class WeaveConfigEndpointTests
     [Fact]
     public async Task adding_weave_to_a_harness_fleet_doesnt_have_is_not_found()
     {
-        await using var factory = new ApiWebApplicationFactory(authEnabled: false);
-        using var client = CreateClient(factory);
+        using var client = CreateClient(_open);
 
         var added = await client.PostAsync("/api/weave/harnesses/nope/plugin", content: null);
         var removed = await client.DeleteAsync("/api/weave/harnesses/nope/plugin");
@@ -78,8 +94,7 @@ public sealed class WeaveConfigEndpointTests
     [Fact]
     public async Task a_harnesss_plugins_are_never_changed_with_sign_in_on()
     {
-        await using var factory = new ApiWebApplicationFactory(authEnabled: true);
-        using var client = CreateClient(factory);
+        using var client = CreateClient(_signIn);
 
         var response = await client.PostAsync("/api/weave/harnesses/opencode2/plugin", content: null);
 

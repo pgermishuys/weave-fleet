@@ -19,13 +19,16 @@ using WeaveFleet.Testing.Fakes;
 
 namespace WeaveFleet.Api.Tests.Endpoints;
 
-public sealed class BoardEndpointTests
+public sealed class BoardEndpointTests(
+    BoardEndpointTests.Server server,
+    BoardEndpointTests.SourceServer sourceServer,
+    BoardEndpointTests.AuthServer authServer)
+    : IClassFixture<BoardEndpointTests.Server>, IClassFixture<BoardEndpointTests.SourceServer>, IClassFixture<BoardEndpointTests.AuthServer>
 {
     [Fact]
     public async Task BoardEndpoints_FullLifecycle_ReturnsExpectedStatusCodesAndPersistsOrdering()
     {
-        await using var factory = new ApiWebApplicationFactory(authEnabled: false);
-        using var client = factory.CreateClient();
+        using var client = server.Factory.CreateClient();
 
         var board = await CreateBoardAsync(client, "My Board");
         var boardId = board.Id;
@@ -138,8 +141,7 @@ public sealed class BoardEndpointTests
     [Fact]
     public async Task DeleteLane_WhenLaneContainsCards_ReturnsConflict()
     {
-        await using var factory = new ApiWebApplicationFactory(authEnabled: false);
-        using var client = factory.CreateClient();
+        using var client = server.Factory.CreateClient();
 
         var board = await CreateBoardAsync(client, "Board");
         var lane = await CreateLaneAsync(client, board.Id, "Inbox");
@@ -156,8 +158,7 @@ public sealed class BoardEndpointTests
     [Fact]
     public async Task UpdateLane_WhenInboxToggled_ClearsPreviousInboxLane()
     {
-        await using var factory = new ApiWebApplicationFactory(authEnabled: false);
-        using var client = factory.CreateClient();
+        using var client = server.Factory.CreateClient();
 
         var board = await CreateBoardAsync(client, "Board");
         var laneOne = await CreateLaneAsync(client, board.Id, "Todo");
@@ -184,8 +185,7 @@ public sealed class BoardEndpointTests
     [Fact]
     public async Task BoardEndpoints_InvalidOperations_ReturnExpectedErrors()
     {
-        await using var factory = new ApiWebApplicationFactory(authEnabled: false);
-        using var client = factory.CreateClient();
+        using var client = server.Factory.CreateClient();
 
         var board = await CreateBoardAsync(client, "Board");
 
@@ -244,20 +244,8 @@ public sealed class BoardEndpointTests
     [Fact]
     public async Task SourceEndpoints_FullLifecycle_AndSyncReturnsExpectedCounts()
     {
-        await using var factory = new ApiWebApplicationFactory(
-            authEnabled: false,
-            configureTestServices: services =>
-            {
-                services.RemoveAll<GitHubApiProxy>();
-                services.RemoveAll<IIntegrationStore>();
-                services.RemoveAll<IPluginStateStore>();
-                services.RemoveAll<ICredentialProtector>();
-                services.AddSingleton<IIntegrationStore, InMemoryIntegrationStore>();
-                services.AddSingleton<IPluginStateStore, PluginStateStore>();
-                services.AddSingleton<ICredentialProtector, FakeCredentialProtector>();
-                services.AddSingleton<GitHubApiProxy>(_ => new GitHubApiProxy(new TestHttpClientFactory(new FakeGitHubIssuesHandler())));
-            });
-        using var client = factory.CreateClient();
+        sourceServer.Handler.Inner = new FakeGitHubIssuesHandler();
+        using var client = sourceServer.Factory.CreateClient();
 
         var board = await CreateBoardAsync(client, "Sync Board");
         var inboxLane = await CreateLaneAsync(client, board.Id, "Inbox");
@@ -294,7 +282,7 @@ public sealed class BoardEndpointTests
         updatedSource.ShouldNotBeNull();
         updatedSource.Config.ShouldBe("{\"repository\":\"acme/rocket\",\"labels\":[\"bug\"]}");
 
-        using (var scope = factory.Services.CreateScope())
+        using (var scope = sourceServer.Factory.Services.CreateScope())
         {
             var connectionFactory = scope.ServiceProvider.GetRequiredService<IDbConnectionFactory>();
             using var connection = connectionFactory.CreateConnection();
@@ -366,26 +354,10 @@ public sealed class BoardEndpointTests
     [Fact]
     public async Task SourceEndpoints_ResyncAfterManualMove_PreservesLaneAndRefreshesMetadata()
     {
-        await using var factory = new ApiWebApplicationFactory(
-            authEnabled: false,
-            configureTestServices: services =>
-            {
-                services.RemoveAll<GitHubApiProxy>();
-                services.RemoveAll<IIntegrationStore>();
-                services.RemoveAll<IPluginStateStore>();
-                services.RemoveAll<ICredentialProtector>();
-                services.AddSingleton<IIntegrationStore, InMemoryIntegrationStore>();
-                services.AddSingleton<IPluginStateStore, PluginStateStore>();
-                services.AddSingleton<ICredentialProtector, FakeCredentialProtector>();
-                services.AddSingleton<GitHubApiProxy>(_ =>
-                {
-                    var handler = new FakeGitHubIssuesHandler(
-                        CreateIssuesPayload(CreateIssue(1, "Issue one", "open", CreateLabels("bug"), "octocat", "2026-04-24T12:00:00Z")),
-                        CreateIssuesPayload(CreateIssue(1, "Issue one updated", "closed", CreateLabels("bug", "urgent"), "hubot", "2026-04-24T13:00:00Z")));
-                    return new GitHubApiProxy(new TestHttpClientFactory(handler));
-                });
-            });
-        using var client = factory.CreateClient();
+        sourceServer.Handler.Inner = new FakeGitHubIssuesHandler(
+                CreateIssuesPayload(CreateIssue(1, "Issue one", "open", CreateLabels("bug"), "octocat", "2026-04-24T12:00:00Z")),
+                CreateIssuesPayload(CreateIssue(1, "Issue one updated", "closed", CreateLabels("bug", "urgent"), "hubot", "2026-04-24T13:00:00Z")));
+        using var client = sourceServer.Factory.CreateClient();
 
         var board = await CreateBoardAsync(client, "Smoke Test Board");
         var inboxLane = await CreateLaneAsync(client, board.Id, "Inbox");
@@ -402,7 +374,7 @@ public sealed class BoardEndpointTests
             new { providerType = "github", config = "{\"repository\":\"acme/rocket\"}" });
         createSourceResponse.StatusCode.ShouldBe(HttpStatusCode.Created);
 
-        using (var scope = factory.Services.CreateScope())
+        using (var scope = sourceServer.Factory.Services.CreateScope())
         {
             var connectionFactory = scope.ServiceProvider.GetRequiredService<IDbConnectionFactory>();
             using var connection = connectionFactory.CreateConnection();
@@ -462,8 +434,7 @@ public sealed class BoardEndpointTests
     [Fact]
     public async Task SourceEndpoints_InvalidOperations_ReturnExpectedErrors()
     {
-        await using var factory = new ApiWebApplicationFactory(authEnabled: false);
-        using var client = factory.CreateClient();
+        using var client = server.Factory.CreateClient();
 
         var board = await CreateBoardAsync(client, "Board");
 
@@ -500,8 +471,7 @@ public sealed class BoardEndpointTests
     [Fact]
     public async Task BoardEndpoints_EnforceOwnership()
     {
-        await using var factory = new ApiWebApplicationFactory(authEnabled: true, useTestAuthentication: true);
-        using var client = factory.CreateClient(new WebApplicationFactoryClientOptions
+        using var client = authServer.Factory.CreateClient(new WebApplicationFactoryClientOptions
         {
             AllowAutoRedirect = false,
             HandleCookies = true,
@@ -509,7 +479,7 @@ public sealed class BoardEndpointTests
 
         var csrfToken = await GetCsrfTokenAsync(client);
 
-        using var scope = factory.Services.CreateScope();
+        using var scope = authServer.Factory.Services.CreateScope();
         var connectionFactory = scope.ServiceProvider.GetRequiredService<IDbConnectionFactory>();
         using var connection = connectionFactory.CreateConnection();
 
@@ -536,6 +506,52 @@ public sealed class BoardEndpointTests
         deleteOtherCardRequest.Headers.Add("X-CSRF-Token", csrfToken);
         var deleteOtherCardResponse = await client.SendAsync(deleteOtherCardRequest);
         deleteOtherCardResponse.StatusCode.ShouldBe(HttpStatusCode.NotFound);
+    }
+
+    public sealed class Server : IDisposable
+    {
+        public ApiWebApplicationFactory Factory { get; } = new(authEnabled: false);
+        public void Dispose() => Factory.Dispose();
+    }
+
+    // GitHub is faked; each test sets the issues the fake serves.
+    public sealed class SourceServer : IDisposable
+    {
+        public SwitchableHandler Handler { get; } = new();
+        public ApiWebApplicationFactory Factory { get; }
+
+        public SourceServer()
+        {
+            Factory = new ApiWebApplicationFactory(
+                authEnabled: false,
+                configureTestServices: services =>
+                {
+                    services.RemoveAll<GitHubApiProxy>();
+                    services.RemoveAll<IIntegrationStore>();
+                    services.RemoveAll<IPluginStateStore>();
+                    services.RemoveAll<ICredentialProtector>();
+                    services.AddSingleton<IIntegrationStore, InMemoryIntegrationStore>();
+                    services.AddSingleton<IPluginStateStore, PluginStateStore>();
+                    services.AddSingleton<ICredentialProtector, FakeCredentialProtector>();
+                    services.AddSingleton<GitHubApiProxy>(_ => new GitHubApiProxy(new TestHttpClientFactory(Handler)));
+                });
+        }
+
+        public void Dispose() => Factory.Dispose();
+    }
+
+    public sealed class AuthServer : IDisposable
+    {
+        public ApiWebApplicationFactory Factory { get; } = new(authEnabled: true, useTestAuthentication: true);
+        public void Dispose() => Factory.Dispose();
+    }
+
+    public sealed class SwitchableHandler : HttpMessageHandler
+    {
+        public HttpMessageHandler Inner { get; set; } = new FakeGitHubIssuesHandler();
+
+        protected override Task<HttpResponseMessage> SendAsync(HttpRequestMessage request, CancellationToken cancellationToken)
+            => new HttpMessageInvoker(Inner, disposeHandler: false).SendAsync(request, cancellationToken);
     }
 
     private static async Task<BoardDto> CreateBoardAsync(HttpClient client, string name)
@@ -693,7 +709,7 @@ public sealed class BoardEndpointTests
 
     private static Task<int> InsertCredentialAsync(IDbConnection connection, string userId, string encryptedValue)
         => connection.ExecuteAsync(
-            "INSERT INTO user_credentials (id, user_id, namespace, kind, label, encrypted_value, display_hint, metadata, created_at, updated_at) VALUES (@Id, @UserId, @Namespace, @Kind, @Label, @EncryptedValue, @DisplayHint, @Metadata, @CreatedAt, @UpdatedAt)",
+            "INSERT OR IGNORE INTO user_credentials (id, user_id, namespace, kind, label, encrypted_value, display_hint, metadata, created_at, updated_at) VALUES (@Id, @UserId, @Namespace, @Kind, @Label, @EncryptedValue, @DisplayHint, @Metadata, @CreatedAt, @UpdatedAt)",
             new
             {
                 Id = Guid.NewGuid().ToString(),

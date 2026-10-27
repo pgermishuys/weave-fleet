@@ -6,7 +6,6 @@ using Microsoft.AspNetCore.Mvc.Testing;
 using Microsoft.Extensions.DependencyInjection;
 using WeaveFleet.Api.Auth;
 using WeaveFleet.Api.Endpoints;
-using WeaveFleet.Api.Tests.Auth;
 using WeaveFleet.Api.Tests.Infrastructure;
 using WeaveFleet.Application.Configuration;
 using WeaveFleet.Application.Users;
@@ -18,13 +17,23 @@ namespace WeaveFleet.Api.Tests.Endpoints;
 /// sets it (<c>Fleet:ServeUi=false</c>, <c>Fleet:Auth:RequireToken=true</c>), bound to loopback, with every request
 /// arriving over loopback: a node never signs anyone in by where they come from.
 /// </summary>
-[Collection(LocalTokenAuthServiceTestsGroup.Name)]
-public sealed class NodeModeEndpointTests
+public sealed class NodeModeEndpointTests :
+    IClassFixture<NodeModeEndpointTests.Server>,
+    IClassFixture<NodeModeEndpointTests.WebAppServer>
 {
+    private readonly ApiWebApplicationFactory _node;
+    private readonly ApiWebApplicationFactory _webApp;
+
+    public NodeModeEndpointTests(Server node, WebAppServer webApp)
+    {
+        _node = node.Factory;
+        _webApp = webApp.Factory;
+    }
+
     [Fact]
     public async Task A_browser_at_the_root_gets_a_page_saying_what_this_is()
     {
-        await using var factory = CreateNode();
+        var factory = _node;
         using var client = CreateClient(factory);
         client.DefaultRequestHeaders.Accept.ParseAdd("text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8");
 
@@ -45,7 +54,7 @@ public sealed class NodeModeEndpointTests
     [Fact]
     public async Task Anything_else_at_the_root_gets_a_json_note()
     {
-        await using var factory = CreateNode();
+        var factory = _node;
         using var client = CreateClient(factory);
 
         var response = await client.GetAsync("/");
@@ -67,7 +76,7 @@ public sealed class NodeModeEndpointTests
     [InlineData("/pair")]
     public async Task Web_app_paths_are_not_found(string path)
     {
-        await using var factory = CreateNode();
+        var factory = _node;
         using var client = CreateClient(factory, Token(factory));
 
         var response = await client.GetAsync(path);
@@ -78,7 +87,7 @@ public sealed class NodeModeEndpointTests
     [Fact]
     public async Task The_web_app_is_still_served_without_the_switch()
     {
-        await using var factory = new ApiWebApplicationFactory(authEnabled: false, tokenAuthEnabled: true, simulateLocalhostRequest: true, host: "127.0.0.1");
+        var factory = _webApp;
         using var client = CreateClient(factory);
 
         var root = await client.GetStringAsync("/");
@@ -94,7 +103,7 @@ public sealed class NodeModeEndpointTests
     [InlineData("/api/user/me")]
     public async Task Api_requests_without_the_token_are_refused_even_over_loopback(string path)
     {
-        await using var factory = CreateNode();
+        var factory = _node;
         using var client = CreateClient(factory);
 
         var response = await client.GetAsync(path);
@@ -105,7 +114,7 @@ public sealed class NodeModeEndpointTests
     [Fact]
     public async Task A_protected_page_outside_the_api_answers_401_rather_than_sending_to_a_sign_in_page()
     {
-        await using var factory = CreateNode();
+        var factory = _node;
         using var client = CreateClient(factory);
 
         var response = await client.PostAsync("/auth/logout", new StringContent(string.Empty));
@@ -117,7 +126,7 @@ public sealed class NodeModeEndpointTests
     [Fact]
     public async Task The_machine_answers_with_the_token()
     {
-        await using var factory = CreateNode();
+        var factory = _node;
         using var client = CreateClient(factory, Token(factory));
 
         var machine = await client.GetFromJsonAsync<JsonElement>("/api/machine");
@@ -132,7 +141,7 @@ public sealed class NodeModeEndpointTests
     [Fact]
     public async Task The_hub_takes_the_token_as_access_token()
     {
-        await using var factory = CreateNode();
+        var factory = _node;
         using var client = CreateClient(factory);
 
         var withToken = await client.PostAsync(
@@ -147,7 +156,7 @@ public sealed class NodeModeEndpointTests
     [Fact]
     public async Task Pairing_a_phone_points_at_a_fleet_with_the_web_app()
     {
-        await using var factory = CreateNode();
+        var factory = _node;
         using var client = CreateClient(factory, Token(factory));
 
         var response = await client.PostAsJsonAsync("/api/machine/pairing", new { baseUrl = "https://atlas.tail9c2e.ts.net" });
@@ -193,6 +202,20 @@ public sealed class NodeModeEndpointTests
             host: "127.0.0.1",
             requireToken: true,
             serveUi: false);
+
+    public sealed class Server : IDisposable
+    {
+        public ApiWebApplicationFactory Factory { get; } = CreateNode();
+
+        public void Dispose() => Factory.Dispose();
+    }
+
+    public sealed class WebAppServer : IDisposable
+    {
+        public ApiWebApplicationFactory Factory { get; } = new(authEnabled: false, tokenAuthEnabled: true, simulateLocalhostRequest: true, host: "127.0.0.1");
+
+        public void Dispose() => Factory.Dispose();
+    }
 
     private static string Token(WebApplicationFactory<Program> factory)
         => factory.Services.GetRequiredService<ILocalTokenAuthService>().Token;

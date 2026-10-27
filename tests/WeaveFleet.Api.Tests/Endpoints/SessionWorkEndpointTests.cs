@@ -19,7 +19,7 @@ namespace WeaveFleet.Api.Tests.Endpoints;
 /// which session started it, when the agent names itself.
 /// </summary>
 #pragma warning disable CA1001 // Type owns disposable fields — disposal handled by IAsyncLifetime.DisposeAsync
-public sealed class SessionWorkEndpointTests : IAsyncLifetime
+public sealed class SessionWorkEndpointTests : IClassFixture<SessionWorkEndpointTests.Server>, IAsyncLifetime
 #pragma warning restore CA1001
 {
     private const string Owner = "local-user";
@@ -27,41 +27,38 @@ public sealed class SessionWorkEndpointTests : IAsyncLifetime
     private const string Parent = "sess-parent";
     private const string Quiet = "sess-quiet";
 
-    private readonly FakeHarnessSession _harness = new("inst-1");
-    private readonly FakeHarnessSession _spawned = new("inst-spawned");
-    private readonly string _folder = Directory.CreateTempSubdirectory("fleet-work-tests-").FullName;
-    private ApiWebApplicationFactory? _factory;
+    private readonly ApiWebApplicationFactory _factory;
+    private readonly FakeHarnessSession _harness;
+    private readonly string _folder;
+    private readonly string _started;
     private HttpClient? _client;
+
+    public SessionWorkEndpointTests(Server server)
+    {
+        _factory = server.Factory;
+        _harness = server.Harness;
+        _folder = server.Folder;
+        _started = server.Started;
+    }
 
     public async Task InitializeAsync()
     {
-        var registry = new FakeHarnessRegistry();
-        registry.Register(new FakeHarness("opencode2", "OpenCode 2"));
-        registry.Register(new FakeHarnessRuntime("opencode2") { DefaultSession = _spawned });
-        _factory = new ApiWebApplicationFactory(
-            authEnabled: false,
-            simulateLocalhostRequest: true,
-            configureTestServices: services =>
-            {
-                var existing = services.FirstOrDefault(d => d.ServiceType == typeof(IHarnessRegistry));
-                if (existing is not null) services.Remove(existing);
-                services.AddSingleton<IHarnessRegistry>(registry);
-                services.AddSingleton<IHarnessCanvasCallerResolver>(new FakeCallers());
-                services.AddSingleton<IHarnessBridgeTokens>(new FakeTokens());
-            });
         _client = _factory.CreateClient();
-        await SeedAsync();
-        _factory.Services.GetRequiredService<InstanceTracker>().Register("inst-1", _harness);
+        // The server is shared: put the dev server's work and the harness fake back as they were, as on a fresh one.
+        _harness.StopWorkBehavior = null;
+        _harness.WorkOutputBehavior = null;
+        _harness.StopWorkCalls.Clear();
+        using var scope = _factory.Services.CreateScope();
+        using var connection = scope.ServiceProvider.GetRequiredService<IDbConnectionFactory>().CreateConnection();
+        await connection.ExecuteAsync(
+            "UPDATE delegations SET status = 'running', updated_at = @Started, completed_at = NULL, ended_reason = NULL, detail = NULL WHERE id = 'w-dev'",
+            new { Started = _started });
     }
 
-    public async Task DisposeAsync()
+    public Task DisposeAsync()
     {
         _client?.Dispose();
-        if (_factory is not null)
-            await _factory.DisposeAsync();
-        await _harness.DisposeAsync();
-        await _spawned.DisposeAsync();
-        Directory.Delete(_folder, recursive: true);
+        return Task.CompletedTask;
     }
 
     [Fact]
@@ -203,39 +200,91 @@ public sealed class SessionWorkEndpointTests : IAsyncLifetime
         return await response.Content.ReadFromJsonAsync<JsonElement>();
     }
 
-    private async Task SeedAsync()
+    public sealed class Server : IAsyncLifetime
     {
-        using var scope = _factory!.Services.CreateScope();
-        using var connection = scope.ServiceProvider.GetRequiredService<IDbConnectionFactory>().CreateConnection();
-        var now = DateTime.UtcNow;
-        var old = now.AddHours(-2).ToString("O");
-        var started = now.AddMinutes(-3).ToString("O");
-        var ended = now.AddMinutes(-1).ToString("O");
-        await connection.ExecuteAsync(
-            "INSERT INTO workspace_roots (id, path, user_id) VALUES ('root-1', @Path, @Owner)",
-            new { Path = _folder, Owner });
-        await connection.ExecuteAsync($"""
-            INSERT INTO workspaces (id, directory, display_name, created_at, user_id)
-            VALUES ('ws-1', '/ws', 'Work', '2026-10-01T00:00:00+00:00', '{Owner}');
-            INSERT INTO instances (id, port, pid, directory, url, status, created_at, user_id)
-            VALUES ('inst-1', 0, NULL, '/ws', '', 'running', '2026-10-01T00:00:00+00:00', '{Owner}');
-            INSERT INTO sessions (
-                id, workspace_id, instance_id, opencode_session_id, title, status, directory, harness_type,
-                lifecycle_status, retention_status, created_at, user_id, forked_from_session_id, spawn_kind)
-            VALUES ('{Parent}', 'ws-1', 'inst-1', 'ses_parent', 'Capture subagents', 'active', '/ws', 'opencode2',
-                    'running', 'active', '2026-10-01T10:00:00+00:00', '{Owner}', NULL, NULL),
-                   ('{Quiet}', 'ws-1', 'inst-1', 'ses_quiet', 'Fork: emit jobs', 'active', '/ws', 'opencode2',
-                    'running', 'active', '2026-10-01T11:00:00+00:00', '{Owner}', '{Parent}', 'fork');
-            INSERT INTO delegations (
-                id, parent_session_id, parent_tool_call_id, title, status, created_at, updated_at, completed_at,
-                kind, work_id, label, background, can_stop, can_read_output, ended_reason, detail)
-            VALUES ('w-old', '{Parent}', 'call_old', 'explore', 'completed', '{old}', '{old}', '{old}',
-                    'subagent', 'call_old', 'Find the mapper', 0, 0, 0, 'completed', NULL),
-                   ('w-dev', '{Parent}', 'call_dev', 'shell', 'running', '{started}', '{started}', NULL,
-                    'shell', 'sh_dev', 'bun run dev', 1, 1, 1, NULL, NULL),
-                   ('w-lint', '{Parent}', 'call_lint', 'shell', 'completed', '{started}', '{ended}', '{ended}',
-                    'shell', 'sh_lint', 'bun run lint', 1, 1, 1, 'completed', 'exit 0');
-            """);
+        private readonly List<IHarnessSession> _spawned = [];
+
+        public FakeHarnessSession Harness { get; } = new("inst-1");
+        public string Folder { get; } = Directory.CreateTempSubdirectory("fleet-work-tests-").FullName;
+        public string Started { get; private set; } = "";
+        public ApiWebApplicationFactory Factory { get; }
+
+        public Server()
+        {
+            var registry = new FakeHarnessRegistry();
+            registry.Register(new FakeHarness("opencode2", "OpenCode 2"));
+            registry.Register(new FakeHarnessRuntime("opencode2")
+            {
+                SpawnBehavior = (_, _) =>
+                {
+                    var session = new FakeHarnessSession($"inst-spawned-{Guid.NewGuid():N}");
+                    lock (_spawned) _spawned.Add(session);
+                    return Task.FromResult<IHarnessSession>(session);
+                },
+            });
+            Factory = new ApiWebApplicationFactory(
+                authEnabled: false,
+                simulateLocalhostRequest: true,
+                configureTestServices: services =>
+                {
+                    var existing = services.FirstOrDefault(d => d.ServiceType == typeof(IHarnessRegistry));
+                    if (existing is not null) services.Remove(existing);
+                    services.AddSingleton<IHarnessRegistry>(registry);
+                    services.AddSingleton<IHarnessCanvasCallerResolver>(new FakeCallers());
+                    services.AddSingleton<IHarnessBridgeTokens>(new FakeTokens());
+                });
+        }
+
+        public async Task InitializeAsync()
+        {
+            Started = await SeedAsync(Factory, Folder);
+            Factory.Services.GetRequiredService<InstanceTracker>().Register("inst-1", Harness);
+        }
+
+        public async Task DisposeAsync()
+        {
+            await Factory.DisposeAsync();
+            await Harness.DisposeAsync();
+            foreach (var session in _spawned)
+                await session.DisposeAsync();
+            Directory.Delete(Folder, recursive: true);
+        }
+
+        private static async Task<string> SeedAsync(ApiWebApplicationFactory factory, string folder)
+        {
+            using var scope = factory.Services.CreateScope();
+            using var connection = scope.ServiceProvider.GetRequiredService<IDbConnectionFactory>().CreateConnection();
+            var now = DateTime.UtcNow;
+            var old = now.AddHours(-2).ToString("O");
+            var started = now.AddMinutes(-3).ToString("O");
+            var ended = now.AddMinutes(-1).ToString("O");
+            await connection.ExecuteAsync(
+                "INSERT INTO workspace_roots (id, path, user_id) VALUES ('root-1', @Path, @Owner)",
+                new { Path = folder, Owner });
+            await connection.ExecuteAsync($"""
+                INSERT INTO workspaces (id, directory, display_name, created_at, user_id)
+                VALUES ('ws-1', '/ws', 'Work', '2026-10-01T00:00:00+00:00', '{Owner}');
+                INSERT INTO instances (id, port, pid, directory, url, status, created_at, user_id)
+                VALUES ('inst-1', 0, NULL, '/ws', '', 'running', '2026-10-01T00:00:00+00:00', '{Owner}');
+                INSERT INTO sessions (
+                    id, workspace_id, instance_id, opencode_session_id, title, status, directory, harness_type,
+                    lifecycle_status, retention_status, created_at, user_id, forked_from_session_id, spawn_kind)
+                VALUES ('{Parent}', 'ws-1', 'inst-1', 'ses_parent', 'Capture subagents', 'active', '/ws', 'opencode2',
+                        'running', 'active', '2026-10-01T10:00:00+00:00', '{Owner}', NULL, NULL),
+                       ('{Quiet}', 'ws-1', 'inst-1', 'ses_quiet', 'Fork: emit jobs', 'active', '/ws', 'opencode2',
+                        'running', 'active', '2026-10-01T11:00:00+00:00', '{Owner}', '{Parent}', 'fork');
+                INSERT INTO delegations (
+                    id, parent_session_id, parent_tool_call_id, title, status, created_at, updated_at, completed_at,
+                    kind, work_id, label, background, can_stop, can_read_output, ended_reason, detail)
+                VALUES ('w-old', '{Parent}', 'call_old', 'explore', 'completed', '{old}', '{old}', '{old}',
+                        'subagent', 'call_old', 'Find the mapper', 0, 0, 0, 'completed', NULL),
+                       ('w-dev', '{Parent}', 'call_dev', 'shell', 'running', '{started}', '{started}', NULL,
+                        'shell', 'sh_dev', 'bun run dev', 1, 1, 1, NULL, NULL),
+                       ('w-lint', '{Parent}', 'call_lint', 'shell', 'completed', '{started}', '{ended}', '{ended}',
+                        'shell', 'sh_lint', 'bun run lint', 1, 1, 1, 'completed', 'exit 0');
+                """);
+            return started;
+        }
     }
 
     private sealed class FakeTokens : IHarnessBridgeTokens

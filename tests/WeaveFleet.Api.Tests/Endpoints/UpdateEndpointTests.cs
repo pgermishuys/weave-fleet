@@ -8,13 +8,39 @@ using WeaveFleet.Infrastructure.Updates;
 
 namespace WeaveFleet.Api.Tests.Endpoints;
 
-public sealed class UpdateEndpointTests
+public sealed class UpdateEndpointTests : IClassFixture<UpdateEndpointTests.Server>, IClassFixture<UpdateEndpointTests.SeededServer>
 {
+    private readonly ApiWebApplicationFactory _factory;
+    private readonly UpdateStateHolder _holder;
+    private readonly ApiWebApplicationFactory _seededFactory;
+
+    public UpdateEndpointTests(Server server, SeededServer seeded)
+    {
+        _factory = server.Factory;
+        _seededFactory = seeded.Factory;
+        _holder = seeded.Holder;
+    }
+
+    public sealed class Server : IDisposable
+    {
+        public ApiWebApplicationFactory Factory { get; } = new(authEnabled: false);
+        public void Dispose() => Factory.Dispose();
+    }
+
+    /// <summary>A server whose update state a test sets before it asks.</summary>
+    public sealed class SeededServer : IDisposable
+    {
+        public UpdateStateHolder Holder { get; } = new();
+        public ApiWebApplicationFactory Factory { get; }
+
+        public SeededServer() => Factory = new(authEnabled: false, configureTestServices: services => services.AddSingleton(Holder));
+        public void Dispose() => Factory.Dispose();
+    }
+
     [Fact]
     public async Task get_update_status_returns_ok_with_current_version()
     {
-        await using var factory = new ApiWebApplicationFactory(authEnabled: false);
-        using var client = factory.CreateClient();
+        using var client = _factory.CreateClient();
 
         var response = await client.GetAsync("/api/update/status");
 
@@ -29,23 +55,15 @@ public sealed class UpdateEndpointTests
     [Fact]
     public async Task get_update_status_reflects_seeded_state()
     {
-        await using var factory = new ApiWebApplicationFactory(
-            authEnabled: false,
-            configureTestServices: services =>
-            {
-                // Pre-seed a known state so we can assert what the endpoint returns.
-                var holder = new UpdateStateHolder();
-                holder.SetState(new UpdateState(
-                    UpdateStatus.Available,
-                    LatestVersion: "99.0.0",
-                    DownloadUrl: "https://example.com/fleet.zip",
-                    AssetName: "fleet-v99.0.0-linux-x64.tar.gz",
-                    CheckedAt: DateTimeOffset.UtcNow,
-                    Error: null));
-
-                services.AddSingleton(holder);
-            });
-        using var client = factory.CreateClient();
+        // Pre-seed a known state so we can assert what the endpoint returns.
+        _holder.SetState(new UpdateState(
+            UpdateStatus.Available,
+            LatestVersion: "99.0.0",
+            DownloadUrl: "https://example.com/fleet.zip",
+            AssetName: "fleet-v99.0.0-linux-x64.tar.gz",
+            CheckedAt: DateTimeOffset.UtcNow,
+            Error: null));
+        using var client = _seededFactory.CreateClient();
 
         var response = await client.GetAsync("/api/update/status");
 
@@ -60,22 +78,14 @@ public sealed class UpdateEndpointTests
     [Fact]
     public async Task get_machine_says_where_the_fleet_is_with_updates()
     {
-        await using var factory = new ApiWebApplicationFactory(
-            authEnabled: false,
-            configureTestServices: services =>
-            {
-                var holder = new UpdateStateHolder();
-                holder.SetState(new UpdateState(
-                    UpdateStatus.Staged,
-                    LatestVersion: "99.0.0",
-                    DownloadUrl: null,
-                    AssetName: null,
-                    CheckedAt: new DateTimeOffset(2026, 10, 20, 8, 0, 0, TimeSpan.Zero),
-                    Error: null));
-
-                services.AddSingleton(holder);
-            });
-        using var client = factory.CreateClient();
+        _holder.SetState(new UpdateState(
+            UpdateStatus.Staged,
+            LatestVersion: "99.0.0",
+            DownloadUrl: null,
+            AssetName: null,
+            CheckedAt: new DateTimeOffset(2026, 10, 20, 8, 0, 0, TimeSpan.Zero),
+            Error: null));
+        using var client = _seededFactory.CreateClient();
 
         var machine = await client.GetFromJsonAsync<JsonElement>("/api/machine");
 
@@ -106,8 +116,7 @@ public sealed class UpdateEndpointTests
     [Fact]
     public async Task post_update_download_returns_bad_request_when_no_update_available()
     {
-        await using var factory = new ApiWebApplicationFactory(authEnabled: false);
-        using var client = factory.CreateClient();
+        using var client = _factory.CreateClient();
 
         // Default state is Unknown — not Available — so download should be rejected.
         var response = await client.PostAsync("/api/update/download", content: null);

@@ -7,13 +7,20 @@ using WeaveFleet.Application.Workspaces;
 
 namespace WeaveFleet.Api.Tests.Endpoints;
 
-public sealed class KeyFileEndpointTests
+public sealed class KeyFileEndpointTests(KeyFileEndpointTests.Server server) : IClassFixture<KeyFileEndpointTests.Server>
 {
+    private readonly ApiWebApplicationFactory _factory = server.Factory;
+
+    public sealed class Server : IDisposable
+    {
+        public ApiWebApplicationFactory Factory { get; } = new(authEnabled: false);
+        public void Dispose() => Factory.Dispose();
+    }
+
     [Fact]
     public async Task get_key_files_returns_400_for_a_directory_that_does_not_exist()
     {
-        await using var factory = new ApiWebApplicationFactory(authEnabled: false);
-        using var client = factory.CreateClient();
+        using var client = _factory.CreateClient();
 
         var response = await client.GetAsync("/api/key-files?directory=/does/not/exist/xyz123");
 
@@ -23,10 +30,9 @@ public sealed class KeyFileEndpointTests
     [Fact]
     public async Task get_key_files_returns_400_for_a_directory_outside_the_allowed_roots()
     {
-        await using var factory = new ApiWebApplicationFactory(authEnabled: false);
-        using var client = factory.CreateClient();
+        using var client = _factory.CreateClient();
         using var root = new TempRoot();
-        await RegisterRootAsync(factory, root.Path);
+        await RegisterRootAsync(_factory, root.Path);
         var outside = OperatingSystem.IsWindows() ? @"C:\Windows" : "/usr";
 
         var response = await client.GetAsync($"/api/key-files?directory={Uri.EscapeDataString(outside)}");
@@ -37,10 +43,9 @@ public sealed class KeyFileEndpointTests
     [Fact]
     public async Task get_key_files_returns_no_files_for_an_empty_directory_inside_an_allowed_root()
     {
-        await using var factory = new ApiWebApplicationFactory(authEnabled: false);
-        using var client = factory.CreateClient();
+        using var client = _factory.CreateClient();
         using var root = new TempRoot();
-        await RegisterRootAsync(factory, root.Path);
+        await RegisterRootAsync(_factory, root.Path);
 
         var response = await client.GetAsync($"/api/key-files?directory={Uri.EscapeDataString(root.Path)}");
 
@@ -52,8 +57,7 @@ public sealed class KeyFileEndpointTests
     [Fact]
     public async Task open_file_returns_400_for_a_file_that_does_not_exist()
     {
-        await using var factory = new ApiWebApplicationFactory(authEnabled: false);
-        using var client = factory.CreateClient();
+        using var client = _factory.CreateClient();
 
         var response = await client.PostAsJsonAsync(
             "/api/open-file",
@@ -65,10 +69,9 @@ public sealed class KeyFileEndpointTests
     [Fact]
     public async Task open_file_returns_400_for_an_existing_file_outside_the_allowed_roots()
     {
-        await using var factory = new ApiWebApplicationFactory(authEnabled: false);
-        using var client = factory.CreateClient();
+        using var client = _factory.CreateClient();
         using var root = new TempRoot();
-        await RegisterRootAsync(factory, root.Path);
+        await RegisterRootAsync(_factory, root.Path);
         using var outsideRoot = new TempRoot();
         var outsideFile = Path.Combine(outsideRoot.Path, "Outside.slnx");
         await File.WriteAllTextAsync(outsideFile, "");

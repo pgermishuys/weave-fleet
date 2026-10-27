@@ -8,33 +8,68 @@ using WeaveFleet.Infrastructure.Skills;
 
 namespace WeaveFleet.Api.Tests.Endpoints;
 
-/// <summary>Settings turns Fleet's built-in skills on one at a time; each is off until then.</summary>
-public sealed class BuiltInSkillEndpointTests : IAsyncDisposable
+/// <summary>
+/// Settings turns Fleet's built-in skills on one at a time; each is off until then. One server for the class, with every
+/// skill switched off and the saved versions cleared before each test; the first test checks the untouched default on its own server.
+/// </summary>
+public sealed class BuiltInSkillEndpointTests : IClassFixture<BuiltInSkillEndpointTests.Server>, IAsyncLifetime
 {
-    private readonly string _versions = Path.Combine(Path.GetTempPath(), $"fleet-api-skill-versions-{Guid.NewGuid():N}");
-    private readonly ApiWebApplicationFactory _factory;
+    private readonly Server _server;
     private readonly HttpClient _client;
 
-    public BuiltInSkillEndpointTests()
+    public BuiltInSkillEndpointTests(Server server)
     {
-        _factory = new ApiWebApplicationFactory(
-            authEnabled: false,
-            configureTestServices: services => services.AddSingleton<ISkillVersionStore>(new FileSkillVersionStore(_versions)));
-        _client = _factory.CreateClient();
+        _server = server;
+        _client = server.Factory.CreateClient();
     }
 
-    public async ValueTask DisposeAsync()
+    public async Task InitializeAsync()
+    {
+        _server.ClearVersions();
+        foreach (var skill in await ListAsync(_client))
+        {
+            if (skill.GetProperty("withMods").GetBoolean() || !skill.GetProperty("enabled").GetBoolean())
+                continue;
+            (await _client.PutAsJsonAsync($"/api/skills/built-in/{skill.GetProperty("name").GetString()}", new { enabled = false })).EnsureSuccessStatusCode();
+        }
+    }
+
+    public Task DisposeAsync()
     {
         _client.Dispose();
-        await _factory.DisposeAsync();
-        if (Directory.Exists(_versions))
-            Directory.Delete(_versions, recursive: true);
+        return Task.CompletedTask;
+    }
+
+    public sealed class Server : IDisposable
+    {
+        private readonly string _versions = Path.Combine(Path.GetTempPath(), $"fleet-api-skill-versions-{Guid.NewGuid():N}");
+
+        public Server() => Factory = new ApiWebApplicationFactory(
+            authEnabled: false,
+            configureTestServices: services => services.AddSingleton<ISkillVersionStore>(new FileSkillVersionStore(_versions)));
+
+        public ApiWebApplicationFactory Factory { get; }
+
+        public void ClearVersions()
+        {
+            if (Directory.Exists(_versions))
+                Directory.Delete(_versions, recursive: true);
+        }
+
+        public void Dispose()
+        {
+            Factory.Dispose();
+            ClearVersions();
+        }
     }
 
     [Fact]
     public async Task List_shows_every_built_in_skill_off_with_its_description()
     {
-        var skills = await ListAsync();
+        using var fresh = new Server();
+        using var client = fresh.Factory.CreateClient();
+
+        var skills = await ListAsync(client);
 
         skills.Select(skill => skill.GetProperty("name").GetString())
             .ShouldBe(["fleet-code-review", "fleet-debug", "fleet-design", "fleet-diagrams", "fleet-explain", "fleet-mockups", "fleet-mod", "fleet-plan", "fleet-run", "fleet-simplify", "fleet-walkthrough"]);
@@ -52,7 +87,7 @@ public sealed class BuiltInSkillEndpointTests : IAsyncDisposable
         updated.GetProperty("name").GetString().ShouldBe("fleet-run");
         updated.GetProperty("enabled").GetBoolean().ShouldBeTrue();
 
-        (await ListAsync())
+        (await ListAsync(_client))
             .Where(skill => skill.GetProperty("enabled").GetBoolean())
             .Select(skill => skill.GetProperty("name").GetString())
             .ShouldBe(["fleet-run"]);
@@ -61,7 +96,7 @@ public sealed class BuiltInSkillEndpointTests : IAsyncDisposable
     [Fact]
     public async Task Fleet_mod_has_no_switch_because_it_comes_with_Mods()
     {
-        (await ListAsync()).Single(skill => skill.GetProperty("name").GetString() == "fleet-mod")
+        (await ListAsync(_client)).Single(skill => skill.GetProperty("name").GetString() == "fleet-mod")
             .GetProperty("withMods").GetBoolean().ShouldBeTrue();
 
         var response = await _client.PutAsJsonAsync("/api/skills/built-in/fleet-mod", new { enabled = true });
@@ -96,7 +131,7 @@ public sealed class BuiltInSkillEndpointTests : IAsyncDisposable
         saved.GetProperty("version").GetInt32().ShouldBe(1);
         saved.GetProperty("yourContent").GetString().ShouldBe(mine);
         saved.GetProperty("versions")[0].GetProperty("note").GetString().ShouldBe("No style nits.");
-        (await ListAsync()).First().GetProperty("version").GetInt32().ShouldBe(1);
+        (await ListAsync(_client)).First().GetProperty("version").GetInt32().ShouldBe(1);
 
         var version = await _client.GetFromJsonAsync<JsonElement>("/api/skills/built-in/fleet-code-review/versions/1");
         version.GetProperty("content").GetString().ShouldBe(mine);
@@ -135,9 +170,9 @@ public sealed class BuiltInSkillEndpointTests : IAsyncDisposable
         return await response.Content.ReadFromJsonAsync<JsonElement>();
     }
 
-    private async Task<List<JsonElement>> ListAsync()
+    private static async Task<List<JsonElement>> ListAsync(HttpClient client)
     {
-        var response = await _client.GetAsync("/api/skills/built-in");
+        var response = await client.GetAsync("/api/skills/built-in");
         response.StatusCode.ShouldBe(HttpStatusCode.OK);
         return (await response.Content.ReadFromJsonAsync<JsonElement>()).EnumerateArray().ToList();
     }

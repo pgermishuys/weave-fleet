@@ -10,7 +10,7 @@ using WeaveFleet.Application.DTOs;
 
 namespace WeaveFleet.Api.Tests.Endpoints;
 
-public sealed class SmartLinkEndpointTests
+public sealed class SmartLinkEndpointTests(SmartLinkEndpointTests.Server server) : IClassFixture<SmartLinkEndpointTests.Server>
 {
     private static readonly JsonSerializerOptions JsonOptions = JsonSerializerOptions.Web;
 
@@ -60,7 +60,7 @@ public sealed class SmartLinkEndpointTests
     [Fact]
     public async Task SmartLinks_AddListDismissAndRestore()
     {
-        await using var factory = new ApiWebApplicationFactory(authEnabled: false);
+        var factory = server.Factory;
         using var client = factory.CreateClient();
         var sessionId = await SeedSessionAsync(factory);
 
@@ -105,7 +105,7 @@ public sealed class SmartLinkEndpointTests
     [Fact]
     public async Task SmartLinks_AddRejectsNonGitHubUrls()
     {
-        await using var factory = new ApiWebApplicationFactory(authEnabled: false);
+        var factory = server.Factory;
         using var client = factory.CreateClient();
         var sessionId = await SeedSessionAsync(factory);
 
@@ -119,7 +119,7 @@ public sealed class SmartLinkEndpointTests
     [Fact]
     public async Task SmartLinks_PinAndUnpinMovesBetweenMentionedAndPinned()
     {
-        await using var factory = new ApiWebApplicationFactory(authEnabled: false);
+        var factory = server.Factory;
         using var client = factory.CreateClient();
         var sessionId = await SeedSessionAsync(factory);
         var linkId = SeedMentionedLink(factory, sessionId);
@@ -140,7 +140,7 @@ public sealed class SmartLinkEndpointTests
     [Fact]
     public async Task SmartLinks_Refresh_AcceptsForOwnSessionOnly()
     {
-        await using var factory = new ApiWebApplicationFactory(authEnabled: false);
+        var factory = server.Factory;
         using var client = factory.CreateClient();
         var sessionId = await SeedSessionAsync(factory);
 
@@ -151,7 +151,7 @@ public sealed class SmartLinkEndpointTests
     [Fact]
     public async Task SmartLinks_AddForUnknownSession_ReturnsNotFound()
     {
-        await using var factory = new ApiWebApplicationFactory(authEnabled: false);
+        var factory = server.Factory;
         using var client = factory.CreateClient();
 
         var response = await client.PostAsJsonAsync(
@@ -159,5 +159,11 @@ public sealed class SmartLinkEndpointTests
             new AddSmartLinkRequest("https://github.com/owner/repo/pull/1"));
 
         response.StatusCode.ShouldBe(HttpStatusCode.NotFound);
+    }
+
+    public sealed class Server : IDisposable
+    {
+        public ApiWebApplicationFactory Factory { get; } = new(authEnabled: false);
+        public void Dispose() => Factory.Dispose();
     }
 }

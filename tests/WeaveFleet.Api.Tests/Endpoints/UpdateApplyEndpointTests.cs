@@ -23,8 +23,7 @@ namespace WeaveFleet.Api.Tests.Endpoints;
 /// Restarting Fleet into an update and rolling an update out: only the owner, never an agent or a paired phone, and only
 /// when something is staged and nothing is in a turn.
 /// </summary>
-[Collection(LocalTokenAuthServiceTestsGroup.Name)]
-public sealed class UpdateApplyEndpointTests : IDisposable
+public sealed class UpdateApplyEndpointTests : IClassFixture<UpdateApplyEndpointTests.RefusalServer>, IDisposable
 {
     private const string BridgeToken = "bridge-1";
 
@@ -37,9 +36,41 @@ public sealed class UpdateApplyEndpointTests : IDisposable
     private int _needsYou;
     private bool _launcher = true;
 
+    private readonly RefusalServer _refusals;
+
+    public UpdateApplyEndpointTests(RefusalServer refusals) => _refusals = refusals;
+
     public void Dispose() => Directory.Delete(_root, recursive: true);
 
-    private ApiWebApplicationFactory Fleet() => new(
+    private ApiWebApplicationFactory Fleet() => Build(_root, _time, _exited, _gate, () => _staged, () => _working, () => _needsYou, () => _launcher);
+
+    /// <summary>One server for the tests that only get refused: nothing is staged for them to apply, and nothing they do changes it.</summary>
+    public sealed class RefusalServer : IDisposable
+    {
+        private readonly string _root = Directory.CreateTempSubdirectory("fleet-apply-").FullName;
+
+        public RefusalServer() => Factory = Build(_root, new FakeTimeProvider(), Exited, Gate, () => "99.0.0", () => 0, () => 0, () => true);
+
+        public ApiWebApplicationFactory Factory { get; }
+        public UpdateRestartGate Gate { get; } = new();
+        public TaskCompletionSource<int> Exited { get; } = new(TaskCreationOptions.RunContinuationsAsynchronously);
+
+        public void Dispose()
+        {
+            Factory.Dispose();
+            Directory.Delete(_root, recursive: true);
+        }
+    }
+
+    private static ApiWebApplicationFactory Build(
+        string root,
+        FakeTimeProvider time,
+        TaskCompletionSource<int> exited,
+        UpdateRestartGate gate,
+        Func<string?> staged,
+        Func<int> working,
+        Func<int> needsYou,
+        Func<bool> launcher) => new(
         authEnabled: false,
         tokenAuthEnabled: true,
         simulateLocalhostRequest: true,
@@ -47,20 +78,20 @@ public sealed class UpdateApplyEndpointTests : IDisposable
         configureTestServices: services =>
         {
             services.AddSingleton<IHarnessBridgeTokens>(new FakeBridgeTokens());
-            services.AddSingleton(_gate);
+            services.AddSingleton(gate);
             services.AddSingleton(sp => new UpdateRestartService(
                 sp.GetRequiredService<FleetOptions>(),
-                new UpdateFiles(_root),
+                new UpdateFiles(root),
                 sp.GetRequiredService<UpdateDownloadService>(),
-                _gate,
+                gate,
                 sp.GetRequiredService<IServiceScopeFactory>(),
                 new StubLifetime(),
-                _time,
+                time,
                 NullLogger<UpdateRestartService>.Instance,
-                code => _exited.TrySetResult(code),
-                name => _launcher && name == UpdateRestartService.LauncherVariable ? "85" : null,
-                () => _staged,
-                () => Task.FromResult(new MachineSessionCounts(_working, _needsYou)),
+                code => exited.TrySetResult(code),
+                name => launcher() && name == UpdateRestartService.LauncherVariable ? "85" : null,
+                staged,
+                () => Task.FromResult(new MachineSessionCounts(working(), needsYou())),
                 rules: sp.GetRequiredService<UpdateRuleStore>()));
         });
 
@@ -122,14 +153,13 @@ public sealed class UpdateApplyEndpointTests : IDisposable
     [InlineData("/api/update/rollout")]
     public async Task An_agent_cannot_restart_fleet_or_start_a_rollout(string path)
     {
-        await using var factory = Fleet();
-        using var client = factory.CreateClient();
+        using var client = _refusals.Factory.CreateClient();
 
         var response = await client.PostAsync($"/agent/{BridgeToken}{path}", content: null);
 
         response.StatusCode.ShouldBe(HttpStatusCode.Forbidden);
-        _exited.Task.IsCompleted.ShouldBeFalse();
-        _gate.IsRestarting.ShouldBeFalse();
+        _refusals.Exited.Task.IsCompleted.ShouldBeFalse();
+        _refusals.Gate.IsRestarting.ShouldBeFalse();
     }
 
     [Theory]
@@ -137,14 +167,14 @@ public sealed class UpdateApplyEndpointTests : IDisposable
     [InlineData("/api/update/rollout")]
     public async Task A_paired_phone_cannot_restart_fleet_or_start_a_rollout(string path)
     {
-        await using var factory = Fleet();
+        var factory = _refusals.Factory;
         var (_, deviceToken) = await factory.Services.GetRequiredService<DeviceTokenService>().IssueAsync("Pixel", "android");
         using var phone = Client(factory, deviceToken);
 
         var response = await phone.PostAsync(path, content: null);
 
         response.StatusCode.ShouldBe(HttpStatusCode.Forbidden);
-        _gate.IsRestarting.ShouldBeFalse();
+        _refusals.Gate.IsRestarting.ShouldBeFalse();
     }
 
     [Fact]
@@ -170,7 +200,7 @@ public sealed class UpdateApplyEndpointTests : IDisposable
     [Fact]
     public async Task An_agent_and_a_paired_phone_cannot_change_the_rule()
     {
-        await using var factory = Fleet();
+        var factory = _refusals.Factory;
         using var agent = factory.CreateClient();
         var (_, deviceToken) = await factory.Services.GetRequiredService<DeviceTokenService>().IssueAsync("Pixel", "android");
         using var phone = Client(factory, deviceToken);

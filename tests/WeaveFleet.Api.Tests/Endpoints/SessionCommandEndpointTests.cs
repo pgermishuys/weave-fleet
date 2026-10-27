@@ -12,22 +12,25 @@ using WeaveFleet.Domain.Harnesses;
 
 namespace WeaveFleet.Api.Tests.Endpoints;
 
-[Collection("NonParallelApiFactoryTests")]
-public sealed class SessionCommandEndpointTests : IAsyncLifetime, IDisposable
+public sealed class SessionCommandEndpointTests : IClassFixture<SessionCommandEndpointTests.Server>, IAsyncLifetime, IDisposable
 {
     private const string _userId = "local-user";
-    private const string _sessionId = "session-cmd-1";
-    private const string _instanceId = "instance-cmd-1";
+    private readonly string _sessionId = $"session-cmd-{Guid.NewGuid():N}";
+    private readonly string _instanceId = $"instance-cmd-{Guid.NewGuid():N}";
 
-    private ApiWebApplicationFactory? _factory;
+    private readonly ApiWebApplicationFactory _factory;
     private HttpClient? _client;
     private SlowFakeHarnessSession? _slowSession;
+
+    public SessionCommandEndpointTests(Server server)
+    {
+        _factory = server.Factory;
+    }
 
     public async Task InitializeAsync()
     {
         _slowSession = new SlowFakeHarnessSession(_instanceId);
 
-        _factory = new ApiWebApplicationFactory(authEnabled: false);
         _client = _factory.CreateClient();
 
         // Register the slow session in the InstanceTracker
@@ -54,7 +57,6 @@ public sealed class SessionCommandEndpointTests : IAsyncLifetime, IDisposable
     public void Dispose()
     {
         _client?.Dispose();
-        _factory?.Dispose();
     }
 
     [Fact]
@@ -75,7 +77,7 @@ public sealed class SessionCommandEndpointTests : IAsyncLifetime, IDisposable
 
         // The command should still have been dispatched (eventually)
         // Give a small window for the fire-and-forget task to start
-        await Task.Delay(200);
+        await WaitForDispatchAsync();
         _slowSession!.SendCommandCalls.Count.ShouldBe(1);
     }
 
@@ -88,7 +90,7 @@ public sealed class SessionCommandEndpointTests : IAsyncLifetime, IDisposable
 
         response.StatusCode.ShouldBe(HttpStatusCode.Accepted);
 
-        await Task.Delay(200);
+        await WaitForDispatchAsync();
 
         _slowSession!.SendCommandCalls.Count.ShouldBe(1);
         _slowSession.SendCommandCalls[0].Command.ShouldBe("weave:start");
@@ -104,11 +106,32 @@ public sealed class SessionCommandEndpointTests : IAsyncLifetime, IDisposable
         response.StatusCode.ShouldBe(HttpStatusCode.Accepted);
 
         // Wait for the fire-and-forget task to execute
-        await Task.Delay(200);
+        await WaitForDispatchAsync();
 
         _slowSession!.SendCommandCalls.Count.ShouldBe(1);
         // The cancellation token passed should not be cancelled even after the HTTP response completes
         _slowSession.LastCancellationToken.IsCancellationRequested.ShouldBeFalse();
+    }
+
+    private async Task WaitForDispatchAsync()
+    {
+        var deadline = DateTime.UtcNow.AddSeconds(10);
+        while (_slowSession!.SendCommandCalls.Count == 0 && DateTime.UtcNow < deadline)
+            await Task.Delay(20);
+    }
+
+    public sealed class Server : IAsyncLifetime
+    {
+        public ApiWebApplicationFactory Factory { get; } = new(authEnabled: false);
+
+        // Warm the command route so the timing check measures the endpoint, not the first request's start-up.
+        public async Task InitializeAsync()
+        {
+            using var client = Factory.CreateClient();
+            await client.PostAsJsonAsync("/api/sessions/warm-up/command", new { command = "warm-up" });
+        }
+
+        public async Task DisposeAsync() => await Factory.DisposeAsync();
     }
 
     private static Task<int> InsertWorkspaceAsync(IDbConnection connection, string id, string directory, string createdAt) =>

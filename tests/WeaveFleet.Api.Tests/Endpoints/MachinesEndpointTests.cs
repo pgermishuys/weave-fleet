@@ -4,7 +4,6 @@ using System.Net.Http.Json;
 using System.Text.Json;
 using Microsoft.AspNetCore.Mvc.Testing;
 using Microsoft.Extensions.DependencyInjection;
-using WeaveFleet.Api.Tests.Auth;
 using WeaveFleet.Api.Tests.Infrastructure;
 using WeaveFleet.Application.Configuration;
 using WeaveFleet.Application.Devices;
@@ -17,16 +16,35 @@ namespace WeaveFleet.Api.Tests.Endpoints;
 /// The machine list on the server: adding another Fleet (checked against it), importing a browser's list, removing,
 /// and what a paired device may see. Two Fleets in one process: A's outbound requests are routed to B's test server.
 /// </summary>
-[Collection(LocalTokenAuthServiceTestsGroup.Name)]
-public sealed class MachinesEndpointTests
+[Collection(TwoFleetTestGroup.Name)]
+public sealed class MachinesEndpointTests : IClassFixture<MachinesEndpointTests.Server>, IAsyncLifetime
 {
     private const string FalconUrl = "https://falcon.tail9c2e.ts.net";
+
+    private readonly ApiWebApplicationFactory _falcon;
+    private readonly ApiWebApplicationFactory _hangar;
+
+    public MachinesEndpointTests(Server server)
+    {
+        _falcon = server.Falcon;
+        _hangar = server.Hangar;
+    }
+
+    /// <summary>Every test starts with an empty machine list on hangar.</summary>
+    public async Task InitializeAsync()
+    {
+        var machines = _hangar.Services.GetRequiredService<WeaveFleet.Domain.Repositories.IRemoteMachineRepository>();
+        foreach (var machine in await machines.ListAsync())
+            await machines.DeleteAsync(machine.Id);
+    }
+
+    public Task DisposeAsync() => Task.CompletedTask;
 
     [Fact]
     public async Task The_owner_adds_a_machine_after_checking_it_and_sees_its_token()
     {
-        await using var falcon = Fleet();
-        await using var hangar = Fleet(routeTo: falcon);
+        var falcon = _falcon;
+        var hangar = _hangar;
         using var owner = Client(hangar, Token(hangar));
 
         var added = await owner.PostAsJsonAsync("/api/machines", new { baseUrl = FalconUrl + "/", token = Token(falcon) });
@@ -45,7 +63,7 @@ public sealed class MachinesEndpointTests
     [Fact]
     public async Task Over_ssh_lists_config_hosts_for_the_owner_and_refuses_a_destination_that_could_be_an_ssh_option()
     {
-        await using var hangar = Fleet();
+        var hangar = _hangar;
         using var owner = Client(hangar, Token(hangar));
 
         var hosts = await owner.GetAsync("/api/machines/ssh-hosts");
@@ -60,7 +78,7 @@ public sealed class MachinesEndpointTests
     [Fact]
     public async Task Installing_over_ssh_refuses_a_destination_that_could_be_an_ssh_option()
     {
-        await using var hangar = Fleet();
+        var hangar = _hangar;
         using var owner = Client(hangar, Token(hangar));
 
         var refused = await owner.PostAsJsonAsync("/api/machines/ssh/install", new { destination = "-oProxyCommand=touch-pwned" });
@@ -72,8 +90,8 @@ public sealed class MachinesEndpointTests
     [Fact]
     public async Task A_machine_reached_by_address_has_no_ssh_fields()
     {
-        await using var falcon = Fleet();
-        await using var hangar = Fleet(routeTo: falcon);
+        var falcon = _falcon;
+        var hangar = _hangar;
         using var owner = Client(hangar, Token(hangar));
 
         var body = await (await owner.PostAsJsonAsync("/api/machines", new { baseUrl = FalconUrl, token = Token(falcon) })).Content.ReadFromJsonAsync<JsonElement>();
@@ -86,8 +104,8 @@ public sealed class MachinesEndpointTests
     [Fact]
     public async Task A_wrong_token_or_address_is_refused_with_a_reason()
     {
-        await using var falcon = Fleet();
-        await using var hangar = Fleet(routeTo: falcon);
+        var falcon = _falcon;
+        var hangar = _hangar;
         using var owner = Client(hangar, Token(hangar));
 
         var wrongToken = await owner.PostAsJsonAsync("/api/machines", new { baseUrl = FalconUrl, token = "not-the-token-0123456789" });
@@ -113,8 +131,8 @@ public sealed class MachinesEndpointTests
     [Fact]
     public async Task A_device_reads_the_list_without_tokens_and_cannot_change_it()
     {
-        await using var falcon = Fleet();
-        await using var hangar = Fleet(routeTo: falcon);
+        var falcon = _falcon;
+        var hangar = _hangar;
         using var owner = Client(hangar, Token(hangar));
         await owner.PostAsJsonAsync("/api/machines", new { baseUrl = FalconUrl, token = Token(falcon) });
         var (_, deviceToken) = await hangar.Services.GetRequiredService<DeviceTokenService>().IssueAsync("Pixel", "android");
@@ -135,7 +153,7 @@ public sealed class MachinesEndpointTests
     [Fact]
     public async Task Importing_a_browsers_list_is_idempotent_and_skips_this_machine()
     {
-        await using var hangar = Fleet();
+        var hangar = _hangar;
         using var owner = Client(hangar, Token(hangar));
         var machines = new object[]
         {
@@ -158,7 +176,7 @@ public sealed class MachinesEndpointTests
     [Fact]
     public async Task Removing_a_machine()
     {
-        await using var hangar = Fleet();
+        var hangar = _hangar;
         using var owner = Client(hangar, Token(hangar));
         await owner.PostAsJsonAsync("/api/machines/import", new { machines = new[] { new { id = "falcon-id", name = "falcon", baseUrl = "http://falcon:2113", token = "falcon-token-0123456789" } } });
 
@@ -170,7 +188,7 @@ public sealed class MachinesEndpointTests
     [Fact]
     public async Task The_token_is_kept_encrypted()
     {
-        await using var hangar = Fleet();
+        var hangar = _hangar;
         using var owner = Client(hangar, Token(hangar));
         await owner.PostAsJsonAsync("/api/machines/import", new { machines = new[] { new { id = "falcon-id", name = "falcon", baseUrl = "http://falcon:2113", token = "falcon-token-0123456789" } } });
 
@@ -182,8 +200,8 @@ public sealed class MachinesEndpointTests
     [Fact]
     public async Task Only_the_owner_lets_agents_hand_work_to_a_machine_and_adding_it_again_keeps_that()
     {
-        await using var falcon = Fleet();
-        await using var hangar = Fleet(routeTo: falcon);
+        var falcon = _falcon;
+        var hangar = _hangar;
         using var owner = Client(hangar, Token(hangar));
         var id = Identity(falcon).Id;
         var added = await (await owner.PostAsJsonAsync("/api/machines", new { baseUrl = FalconUrl, token = Token(falcon) })).Content.ReadFromJsonAsync<JsonElement>();
@@ -200,6 +218,21 @@ public sealed class MachinesEndpointTests
         fromPhone.StatusCode.ShouldBe(HttpStatusCode.Forbidden);
         var list = await owner.GetFromJsonAsync<JsonElement>("/api/machines");
         list.GetProperty("machines")[0].GetProperty("agentsAllowed").GetBoolean().ShouldBeTrue();
+    }
+
+    public sealed class Server : IDisposable
+    {
+        public Server() => Hangar = Fleet(routeTo: Falcon);
+
+        public ApiWebApplicationFactory Falcon { get; } = Fleet();
+
+        public ApiWebApplicationFactory Hangar { get; }
+
+        public void Dispose()
+        {
+            Hangar.Dispose();
+            Falcon.Dispose();
+        }
     }
 
     private static ApiWebApplicationFactory Fleet(ApiWebApplicationFactory? routeTo = null, bool routeToSelf = false)

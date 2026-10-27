@@ -8,15 +8,25 @@ using WeaveFleet.Application.Users;
 
 namespace WeaveFleet.Api.Tests.Auth;
 
-[Collection(LocalTokenAuthServiceTestsGroup.Name)]
-public sealed class TokenLoginEndpointTests
+public sealed class TokenLoginEndpointTests :
+    IClassFixture<TokenLoginEndpointTests.Server>,
+    IClassFixture<TokenLoginEndpointTests.LocalhostServer>
 {
     private const string ValidToken = "1234567890abcdef";
+
+    private readonly ApiWebApplicationFactory _server;
+    private readonly ApiWebApplicationFactory _localhost;
+
+    public TokenLoginEndpointTests(Server server, LocalhostServer localhost)
+    {
+        _server = server.Factory;
+        _localhost = localhost.Factory;
+    }
 
     [Fact]
     public async Task Should_return_ok_and_set_cookie_when_token_login_token_is_valid()
     {
-        await using var factory = CreateFactory();
+        var factory = _server;
         using var client = CreateClient(factory);
 
         var response = await client.PostAsJsonAsync("/auth/token-login", new TokenLoginRequest(ValidToken));
@@ -34,7 +44,7 @@ public sealed class TokenLoginEndpointTests
     [Fact]
     public async Task Should_keep_the_token_sign_in_past_the_browser_session_for_30_days()
     {
-        await using var factory = CreateFactory();
+        var factory = _server;
         using var client = CreateClient(factory);
 
         var response = await client.PostAsJsonAsync("/auth/token-login", new TokenLoginRequest(ValidToken));
@@ -54,7 +64,7 @@ public sealed class TokenLoginEndpointTests
     [Fact]
     public async Task Should_return_unauthorized_when_token_login_token_is_invalid()
     {
-        await using var factory = CreateFactory();
+        var factory = _server;
         using var client = CreateClient(factory);
 
         var response = await client.PostAsJsonAsync("/auth/token-login", new TokenLoginRequest("invalid-token"));
@@ -65,7 +75,7 @@ public sealed class TokenLoginEndpointTests
     [Fact]
     public async Task Should_return_ok_when_bearer_token_is_valid()
     {
-        await using var factory = CreateFactory();
+        var factory = _server;
         using var client = CreateClient(factory);
         client.DefaultRequestHeaders.Authorization = new AuthenticationHeaderValue("Bearer", ValidToken);
 
@@ -77,7 +87,7 @@ public sealed class TokenLoginEndpointTests
     [Fact]
     public async Task Should_return_unauthorized_when_bearer_token_is_invalid()
     {
-        await using var factory = CreateFactory();
+        var factory = _server;
         using var client = CreateClient(factory);
         client.DefaultRequestHeaders.Authorization = new AuthenticationHeaderValue("Bearer", "invalid-token");
 
@@ -89,7 +99,7 @@ public sealed class TokenLoginEndpointTests
     [Fact]
     public async Task Should_return_ok_when_request_is_from_localhost_without_bearer_token()
     {
-        await using var factory = CreateFactory(simulateLocalhostRequest: true);
+        var factory = _localhost;
         using var client = CreateClient(factory);
 
         var response = await client.GetAsync("/api/user/me");
@@ -100,7 +110,7 @@ public sealed class TokenLoginEndpointTests
     [Fact]
     public async Task Should_clear_auth_cookie_and_reject_protected_requests_after_logout()
     {
-        await using var factory = CreateFactory();
+        var factory = _server;
         using var client = CreateClient(factory);
 
         var loginResponse = await client.PostAsJsonAsync("/auth/token-login", new TokenLoginRequest(ValidToken));
@@ -131,6 +141,20 @@ public sealed class TokenLoginEndpointTests
             simulateLocalhostRequest: simulateLocalhostRequest,
             configureTestServices: services =>
                 services.AddSingleton<ILocalTokenAuthService>(new TestLocalTokenAuthService(ValidToken)));
+
+    public sealed class Server : IDisposable
+    {
+        public ApiWebApplicationFactory Factory { get; } = CreateFactory();
+
+        public void Dispose() => Factory.Dispose();
+    }
+
+    public sealed class LocalhostServer : IDisposable
+    {
+        public ApiWebApplicationFactory Factory { get; } = CreateFactory(simulateLocalhostRequest: true);
+
+        public void Dispose() => Factory.Dispose();
+    }
 
     private static HttpClient CreateClient(WebApplicationFactory<Program> factory)
         => factory.CreateClient(new WebApplicationFactoryClientOptions

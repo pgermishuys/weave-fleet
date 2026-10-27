@@ -13,50 +13,25 @@ using WeaveFleet.Domain.Repositories;
 namespace WeaveFleet.Api.Tests.Endpoints;
 
 /// <summary>How full a session's context is (<c>GET /context</c>), and Compact now (<c>POST /compact</c>).</summary>
-[Collection("NonParallelApiFactoryTests")]
-public sealed class SessionContextEndpointTests : IAsyncLifetime, IDisposable
+public sealed class SessionContextEndpointTests : IClassFixture<SessionContextEndpointTests.Server>, IDisposable
 {
     private const string LocalUser = "local-user";
     private const string OtherUser = "other-user";
     private const string CreatedAt = "2026-10-06T10:00:00.0000000Z";
 
-    private ApiWebApplicationFactory? _factory;
-    private HttpClient? _client;
+    private readonly HttpClient _client;
 
-    public async Task InitializeAsync()
+    public SessionContextEndpointTests(Server server)
     {
-        _factory = new ApiWebApplicationFactory(authEnabled: false);
-        _client = _factory.CreateClient();
-
-        using var scope = _factory.Services.CreateScope();
-        using (var connection = scope.ServiceProvider.GetRequiredService<IDbConnectionFactory>().CreateConnection())
-        {
-            await InsertSessionGraphAsync(connection, "session-with-context", LocalUser);
-            await InsertSessionGraphAsync(connection, "session-without-context", LocalUser);
-            await InsertSessionGraphAsync(connection, "their-session", OtherUser);
-        }
-
-        var repository = scope.ServiceProvider.GetRequiredService<ISessionContextRepository>();
-        (await repository.UpsertAsync(Context("session-with-context", LocalUser), CancellationToken.None)).ShouldBeTrue();
-        (await repository.UpsertAsync(Context("their-session", OtherUser), CancellationToken.None)).ShouldBeTrue();
+        _client = server.Factory.CreateClient();
     }
 
-    public Task DisposeAsync()
-    {
-        Dispose();
-        return Task.CompletedTask;
-    }
-
-    public void Dispose()
-    {
-        _client?.Dispose();
-        _factory?.Dispose();
-    }
+    public void Dispose() => _client.Dispose();
 
     [Fact]
     public async Task GetContext_ReturnsHowFullTheContextIs()
     {
-        var response = await _client!.GetAsync("/api/sessions/session-with-context/context");
+        var response = await _client.GetAsync("/api/sessions/session-with-context/context");
 
         response.StatusCode.ShouldBe(HttpStatusCode.OK);
         var context = await response.Content.ReadFromJsonAsync<JsonElement>(JsonSerializerOptions.Web);
@@ -67,7 +42,7 @@ public sealed class SessionContextEndpointTests : IAsyncLifetime, IDisposable
     [Fact]
     public async Task GetContext_ReturnsNoContent_WhenTheHarnessHasntSaid()
     {
-        var response = await _client!.GetAsync("/api/sessions/session-without-context/context");
+        var response = await _client.GetAsync("/api/sessions/session-without-context/context");
 
         response.StatusCode.ShouldBe(HttpStatusCode.NoContent);
     }
@@ -77,7 +52,7 @@ public sealed class SessionContextEndpointTests : IAsyncLifetime, IDisposable
     [InlineData("no-such-session")]
     public async Task GetContext_ReturnsNotFound_ForSomeoneElsesOrAnUnknownSession(string sessionId)
     {
-        var response = await _client!.GetAsync($"/api/sessions/{sessionId}/context");
+        var response = await _client.GetAsync($"/api/sessions/{sessionId}/context");
 
         response.StatusCode.ShouldBe(HttpStatusCode.NotFound);
     }
@@ -85,9 +60,31 @@ public sealed class SessionContextEndpointTests : IAsyncLifetime, IDisposable
     [Fact]
     public async Task Compact_ReturnsNotFound_ForSomeoneElsesSession()
     {
-        var response = await _client!.PostAsync("/api/sessions/their-session/compact", content: null);
+        var response = await _client.PostAsync("/api/sessions/their-session/compact", content: null);
 
         response.StatusCode.ShouldBe(HttpStatusCode.NotFound);
+    }
+
+    public sealed class Server : IAsyncLifetime
+    {
+        public ApiWebApplicationFactory Factory { get; } = new(authEnabled: false);
+
+        public async Task InitializeAsync()
+        {
+            using var scope = Factory.Services.CreateScope();
+            using (var connection = scope.ServiceProvider.GetRequiredService<IDbConnectionFactory>().CreateConnection())
+            {
+                await InsertSessionGraphAsync(connection, "session-with-context", LocalUser);
+                await InsertSessionGraphAsync(connection, "session-without-context", LocalUser);
+                await InsertSessionGraphAsync(connection, "their-session", OtherUser);
+            }
+
+            var repository = scope.ServiceProvider.GetRequiredService<ISessionContextRepository>();
+            (await repository.UpsertAsync(Context("session-with-context", LocalUser), CancellationToken.None)).ShouldBeTrue();
+            (await repository.UpsertAsync(Context("their-session", OtherUser), CancellationToken.None)).ShouldBeTrue();
+        }
+
+        public async Task DisposeAsync() => await Factory.DisposeAsync();
     }
 
     private static SessionContext Context(string sessionId, string userId)
