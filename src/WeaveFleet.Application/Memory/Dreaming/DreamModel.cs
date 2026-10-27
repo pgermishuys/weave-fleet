@@ -38,6 +38,9 @@ public static class DreamRules
     /// <summary>The most sessions a night looks at to find the repositories worked in.</summary>
     public const int NightSessionsScanned = 500;
 
+    /// <summary>How many distinct sessions must have relied on a learned note before a dream may keep it for good.</summary>
+    public const int KeepForGoodSessions = 3;
+
     public static class Statuses
     {
         public const string Reading = "reading";
@@ -52,6 +55,7 @@ public static class DreamRules
         public const string Rewritten = "rewritten";
         public const string Merged = "merged";
         public const string Retired = "retired";
+        public const string Kept = "kept";
         public const string Left = "left";
         public const string Skipped = "skipped";
     }
@@ -94,6 +98,9 @@ public sealed class DreamNote
     public string Kind { get; set; } = "";
     public string Text { get; set; } = "";
     public string Hash { get; set; } = "";
+
+    /// <summary>A learned note that will expire if unused: the only kind a dream may keep for good.</summary>
+    public bool Fades { get; set; }
 }
 
 /// <summary>What a dream did with one proposal, with what Undo needs to put it back.</summary>
