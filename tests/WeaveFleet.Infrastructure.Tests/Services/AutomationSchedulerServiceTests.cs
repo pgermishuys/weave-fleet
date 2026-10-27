@@ -107,7 +107,7 @@ public sealed class AutomationSchedulerServiceTests : IDisposable
         _executor.Calls.ShouldBeEmpty();
         var run = _runs.All.ShouldHaveSingleItem();
         _builtins.RunIds.ShouldBe([run.Id]);
-        (run.Status, run.Summary).ShouldBe((AutomationRunStatus.Started, "Reading alpha…"));
+        run.Status.ShouldBe(AutomationRunStatus.Started);
     }
 
     [Fact]

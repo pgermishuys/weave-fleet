@@ -40,7 +40,6 @@ public sealed class BuiltinAutomationRepositoryTests
 
         since.Where(id => id is "later" or "hidden-top-level" or "at" or "older" or "child" or "side")
             .ShouldBe(["later", "hidden-top-level", "at"]);
-        since.ShouldNotContain(graph.Session.Id.Replace(graph.Session.Id, "never"));
         since.Count.ShouldBe(since.Distinct().Count());
         limited.Count.ShouldBe(2);
         (await repo.ListCreatedSinceAsync("2026-10-26T12:00:00.0000000Z", 100)).ShouldAllBe(s => s.UserId == OwnerId);
