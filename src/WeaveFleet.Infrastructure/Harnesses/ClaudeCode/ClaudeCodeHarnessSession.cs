@@ -787,13 +787,18 @@ internal sealed class ClaudeCodeHarnessSession : IHarnessSession
                 : $"The user refused this tool call and said: {message}")
             : ClaudeCodeInput.Allow(requestId, _askInputs.GetValueOrDefault(requestId));
 
-        if (_process is not { } process || !await process.WriteLineAsync(line, ct).ConfigureAwait(false))
+        if (_process is not { } process)
         {
             SettlePermission(requestId, PermissionReplies.Gone);
             throw new KeyNotFoundException($"Permission request '{requestId}' isn't waiting for an answer: Claude Code has stopped.");
         }
 
-        SettlePermission(requestId, reply);
+        // Settled before Claude Code reads the reply: it can run the call and end the turn before the write returns, and
+        // the turn's end would then report the ask gone and the session working after its idle.
+        if (!SettlePermission(requestId, reply))
+            throw new KeyNotFoundException($"Permission request '{requestId}' isn't waiting for an answer.");
+        if (!await process.WriteLineAsync(line, ct).ConfigureAwait(false))
+            throw new KeyNotFoundException($"Permission request '{requestId}' isn't waiting for an answer: Claude Code has stopped.");
     }
 
     /// <summary>Whether anything still waits on the user: a permission ask or a question.</summary>
@@ -849,15 +854,16 @@ internal sealed class ClaudeCodeHarnessSession : IHarnessSession
             .ConfigureAwait(false);
     }
 
-    /// <summary>The ask no longer waits; once none does, the turn is working again.</summary>
-    private void SettlePermission(string requestId, string reply)
+    /// <summary>The ask no longer waits; once none does, the turn is working again. False when it wasn't waiting.</summary>
+    private bool SettlePermission(string requestId, string reply)
     {
         _askInputs.TryRemove(requestId, out _);
         if (_permissions.Pending.Remove(requestId) is not { } settled)
-            return;
+            return false;
         _eventChannel.Writer.TryWrite(PermissionEvents.Replied(settled.Ask, reply, _fleetSessionId));
         if (!WaitsOnUser && reply != PermissionReplies.Gone)
             _eventChannel.Writer.TryWrite(PermissionEvents.Status(ActivityStatuses.Busy, _fleetSessionId));
+        return true;
     }
 
     /// <summary>The asks still waiting when the turn or its process ended: nothing will answer them now.</summary>
@@ -923,14 +929,20 @@ internal sealed class ClaudeCodeHarnessSession : IHarnessSession
 
     private async Task AnswerAsync(string callId, PendingQuestion question, string line, CancellationToken ct)
     {
-        if (_process is not { } process || !await process.WriteLineAsync(line, ct).ConfigureAwait(false))
+        if (_process is not { } process)
         {
             _questions.TryRemove(callId, out _);
             throw new KeyNotFoundException($"Question '{callId}' isn't waiting for an answer: Claude Code has stopped.");
         }
 
-        if (_questions.TryRemove(new KeyValuePair<string, PendingQuestion>(callId, question)) && !WaitsOnUser)
+        // Settled before Claude Code reads the answer: it can go on and end the turn before the write returns, and the
+        // turn's end forgets the question, so the session would never read as working again, or would after its idle.
+        if (!_questions.TryRemove(new KeyValuePair<string, PendingQuestion>(callId, question)))
+            throw new KeyNotFoundException($"Question '{callId}' isn't waiting for an answer.");
+        if (!WaitsOnUser)
             _eventChannel.Writer.TryWrite(PermissionEvents.Status(ActivityStatuses.Busy, _fleetSessionId));
+        if (!await process.WriteLineAsync(line, ct).ConfigureAwait(false))
+            throw new KeyNotFoundException($"Question '{callId}' isn't waiting for an answer: Claude Code has stopped.");
     }
 
     /// <inheritdoc />
