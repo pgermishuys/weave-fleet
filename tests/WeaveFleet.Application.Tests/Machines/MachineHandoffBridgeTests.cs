@@ -70,7 +70,8 @@ public sealed class MachineHandoffBridgeTests : IDisposable
             new RemoteSessions(_atlas.Service, _atlas),
             _identity,
             _watches,
-            _followed);
+            _followed,
+            new RecentSessionStarts());
 
         _atlas.Answer = request => request switch
         {
@@ -115,6 +116,28 @@ public sealed class MachineHandoffBridgeTests : IDisposable
         message.GetProperty("fromTitle").GetString().ShouldBe("Fix login flake");
         message.GetProperty("text").GetString().ShouldBe("Run them on fix/login-flake.");
         _atlas.Requests.ShouldAllBe(request => request.Token == FakeMachine.Token);
+    }
+
+    [Fact]
+    public async Task A_start_repeated_after_a_timeout_gives_back_the_first_session_not_a_second()
+    {
+        var first = await _bridge.StartAsync("token", "oc-1", "atlas", "/srv/harbor-api", "Run the tests", "Run them.", null, null);
+        var retry = await _bridge.StartAsync("token", "oc-1", "atlas", "/srv/harbor-api", "Run the tests", "Run them.", null, null);
+
+        first.IsSuccess.ShouldBeTrue(first.Error?.Message);
+        retry.IsSuccess.ShouldBeTrue(retry.Error?.Message);
+        _atlas.Requests.Count(request => request.Request == "POST /api/sessions").ShouldBe(1);
+        _atlas.Requests.Count(request => request.Request == "POST /api/machine/peer/sessions/s-remote/message").ShouldBe(1);
+        retry.Value!.Output.ShouldBe(first.Value!.Output);
+    }
+
+    [Fact]
+    public async Task A_second_start_with_another_task_is_a_new_session()
+    {
+        await _bridge.StartAsync("token", "oc-1", "atlas", "/srv/harbor-api", "Run the tests", "Run them.", null, null);
+        await _bridge.StartAsync("token", "oc-1", "atlas", "/srv/harbor-api", "Run the tests", "Run the slow ones.", null, null);
+
+        _atlas.Requests.Count(request => request.Request == "POST /api/sessions").ShouldBe(2);
     }
 
     [Fact]

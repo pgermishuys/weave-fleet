@@ -21,7 +21,8 @@ public sealed class MachineHandoffBridge(
     RemoteSessions remote,
     MachineIdentityStore identity,
     SessionUpdates updates,
-    IRemoteSessionEvents events)
+    IRemoteSessionEvents events,
+    RecentSessionStarts recentStarts)
 {
     public const string TurnedOffMessage = "Handing work to other machines is turned off in Fleet's Settings.";
 
@@ -117,11 +118,31 @@ public sealed class MachineHandoffBridge(
 
             var cleanBranch = string.IsNullOrWhiteSpace(branch) ? null : branch.Trim();
             var cleanHarness = string.IsNullOrWhiteSpace(harness) ? null : harness.Trim();
-            var (started, startError) = await remote.StartAsync(machine, token!, folder.Trim(), title.Trim(), cleanBranch, cleanHarness, ct).ConfigureAwait(false);
+
+            // The tool call that timed out may still be running, and the agent calls again: the same start from the same
+            // session within a few minutes is the one already made, not a second session.
+            var key = string.Join('\u001f', caller.FleetSessionId, machine.Id, folder.Trim(), title.Trim(), task.Trim(), cleanBranch, cleanHarness, notifyWhenDone);
+            return await recentStarts.OnceAsync(key, () => StartOnceAsync(caller, machine, token!, folder.Trim(), title.Trim(), task.Trim(), cleanBranch, cleanHarness, notifyWhenDone, sender, ct)).ConfigureAwait(false);
+        });
+
+    private async Task<CanvasResult<CanvasToolOutput>> StartOnceAsync(
+        HarnessCanvasCaller caller,
+        RemoteMachine machine,
+        string token,
+        string folder,
+        string title,
+        string task,
+        string? cleanBranch,
+        string? cleanHarness,
+        bool notifyWhenDone,
+        RemotePeerSender sender,
+        CancellationToken ct)
+    {
+            var (started, startError) = await remote.StartAsync(machine, token, folder, title, cleanBranch, cleanHarness, ct).ConfigureAwait(false);
             if (started is null)
                 return Refused($"Fleet couldn't start it: {startError}");
 
-            var (delivered, messageError) = await remote.MessageAsync(machine, token!, started.SessionId, sender, task.Trim(), ct).ConfigureAwait(false);
+            var (delivered, messageError) = await remote.MessageAsync(machine, token, started.SessionId, sender, task, ct).ConfigureAwait(false);
             if (delivered is null)
             {
                 return Refused(
@@ -130,12 +151,12 @@ public sealed class MachineHandoffBridge(
             }
 
             var watching = notifyWhenDone && Watch(caller, machine, started.SessionId, started.Title, delivered.MessageId);
-            var where = started.Branch is { } onBranch ? $" in a worktree on {onBranch}" : $" in {folder.Trim()}";
+            var where = started.Branch is { } onBranch ? $" in a worktree on {onBranch}" : $" in {folder}";
             return CanvasResult.Ok(new CanvasToolOutput(
                 $"Started {started.Title} on {machine.Name}",
                 $"Started {started.Title} on {machine.Name} ({started.SessionId}){where}, and gave it the task. It's working on it now. "
                 + ReplyNote(watching, machine.Name)));
-        });
+    }
 
     /// <summary><c>fleet_message</c> naming a machine, once <see cref="Sessions.SessionMessageBridge"/> has placed the caller.</summary>
     public Task<CanvasResult<CanvasToolOutput>> MessageAsync(
