@@ -3,6 +3,7 @@ using System.Runtime.InteropServices;
 using System.Text;
 using Microsoft.Extensions.Logging;
 using WeaveFleet.Application.Terminals;
+using WeaveFleet.Infrastructure.IO;
 
 namespace WeaveFleet.Infrastructure.Harnesses.Acp;
 
@@ -77,7 +78,7 @@ internal sealed class AcpAgentProcess : IAcpAgent
             start.Environment[key] = value;
 
         var process = new Process { StartInfo = start, EnableRaisingEvents = true };
-        process.Start();
+        FreshExecutable.Start(process);
         var group = ProcessGroupHelper.AssignToProcessGroup(process, logger);
         var agent = new AcpAgentProcess(process, group, new AcpClient(process.StandardOutput, process.StandardInput, logger), logger);
         process.ErrorDataReceived += (_, e) =>
