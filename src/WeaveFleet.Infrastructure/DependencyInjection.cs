@@ -586,6 +586,9 @@ public static class DependencyInjection
         services.AddSingleton<SessionActivityTracker>();
         services.AddSingleton<SessionCapabilitiesResolver>();
 
+        // What each session is doing this second, for mission control. Keeps nothing until the first request for it.
+        services.AddSingleton<SessionNowTracker>();
+
         // Which tabs are looking at which session: the recap waits on it, notifications keep quiet about it.
         services.AddSingleton<SessionFocusTracker>();
 

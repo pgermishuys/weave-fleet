@@ -131,6 +131,16 @@ public static class SessionEndpoints
         .Produces<List<SessionListResponse>>(200)
         .WithName("GetSessions");
 
+        // GET /api/sessions/now — what each of the user's sessions is doing this second, by session id: mission control's
+        // "now" lines. The first call starts the bookkeeping, so it answers empty until agents do something next.
+        group.MapGet("/now", (SessionNowTracker nowTracker, IUserContext user) =>
+        {
+            nowTracker.Activate();
+            return Results.Ok(nowTracker.GetFor(user.UserId));
+        })
+        .Produces<IReadOnlyDictionary<string, SessionNow>>(200)
+        .WithName("GetSessionsNow");
+
         // GET /api/sessions/{id}
         group.MapGet("/{id}", async (
             string id,
