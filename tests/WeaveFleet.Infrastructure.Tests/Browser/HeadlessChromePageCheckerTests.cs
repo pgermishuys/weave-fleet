@@ -177,7 +177,7 @@ public sealed class HeadlessChromePageCheckerTests
 
         public void Dispose()
         {
-            _listener.Stop();
+            // Close alone: after Stop, Close listens on the port again for a moment, and fails if another test has it by then.
             _listener.Close();
         }
     }
