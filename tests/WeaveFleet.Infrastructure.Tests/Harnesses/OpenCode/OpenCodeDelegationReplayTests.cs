@@ -135,21 +135,35 @@ public sealed class OpenCodeDelegationReplayTests
     }
 
     /// <summary>
-    /// Starts consuming events in background, waits for the stream to end naturally
-    /// (the <see cref="FakeSseHandler"/> terminates on the second call), then returns
-    /// all collected events.  Falls back to cancellation after a generous timeout to
-    /// prevent hangs.
+    /// Consumes the session's events until the <see cref="FakeSseHandler"/>'s last event, a sentinel it appends
+    /// after the scripted ones, has come through, then stops and returns the scripted events (the sentinel left out).
+    /// The subscription never ends by itself (it reconnects until cancelled), and the sentinel is read after every
+    /// scripted event, so reaching it means they have all been handled. The timeout is only a guard against a hang.
     /// </summary>
     private static async Task<List<HarnessEvent>> ConsumeWithCancelAsync(
         OpenCodeHarnessSession instance,
         int timeoutMs = 10_000)
     {
         using var cts = new CancellationTokenSource(TimeSpan.FromMilliseconds(timeoutMs));
-        return await Task.Run(() => ConsumeAsync(instance, cts.Token), cts.Token);
+        var events = new List<HarnessEvent>();
+        try
+        {
+            await foreach (var evt in instance.SubscribeAsync(cts.Token).ConfigureAwait(false))
+            {
+                if (evt.Type == FakeSseHandler.SentinelType)
+                    break;
+                events.Add(evt);
+            }
+        }
+        catch (OperationCanceledException) { }
+        return events;
     }
 
-    private sealed class FakeSseHandler(string body) : HttpMessageHandler
+    private sealed class FakeSseHandler(string scriptedBody) : HttpMessageHandler
     {
+        internal const string SentinelType = "test.stream-drained";
+
+        private readonly string _body = scriptedBody + "data: {\"type\":\"" + SentinelType + "\",\"properties\":{}}\n\n";
         private int _callCount;
 
         protected override Task<HttpResponseMessage> SendAsync(
@@ -162,7 +176,7 @@ public sealed class OpenCodeDelegationReplayTests
             if (Interlocked.Increment(ref _callCount) > 1)
                 throw new OperationCanceledException(cancellationToken);
 
-            var content = new StringContent(body, Encoding.UTF8, "text/event-stream");
+            var content = new StringContent(_body, Encoding.UTF8, "text/event-stream");
             return Task.FromResult(new HttpResponseMessage(HttpStatusCode.OK) { Content = content });
         }
     }

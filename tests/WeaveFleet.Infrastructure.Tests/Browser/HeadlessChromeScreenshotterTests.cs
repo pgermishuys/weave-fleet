@@ -214,14 +214,13 @@ public sealed class HeadlessChromeScreenshotterTests
             _starts = System.IO.Path.Combine(_folder, "starts");
             Path = System.IO.Path.Combine(_folder, "chrome");
             var then = realBrowser is null ? "exec sleep 60" : $"exec '{realBrowser}' \"$@\"";
-            File.WriteAllText(Path, $"""
+            TestExecutable.Write(Path, $"""
                 #!/bin/sh
                 echo x >> '{_starts}'
                 if [ "$(wc -l < '{_starts}')" -le {Math.Min(stalls, 1000)} ]; then exec sleep 60; fi
                 {then}
 
                 """);
-            File.SetUnixFileMode(Path, UnixFileMode.UserRead | UnixFileMode.UserWrite | UnixFileMode.UserExecute);
         }
 
         public string Path { get; }
@@ -266,15 +265,13 @@ public sealed class HeadlessChromeScreenshotterTests
     /// <summary>A page served on a loopback port, so the test doesn't depend on anything outside this machine.</summary>
     private sealed class LocalSite : IDisposable
     {
-        private readonly HttpListener _listener = new();
+        private readonly HttpListener _listener;
 
         public LocalSite(string html)
         {
             Html = html;
-            var port = FreePort();
+            _listener = LoopbackListener.Start(out var port);
             Url = $"http://127.0.0.1:{port}/";
-            _listener.Prefixes.Add(Url);
-            _listener.Start();
             _ = Task.Run(async () =>
             {
                 while (_listener.IsListening)
@@ -304,15 +301,8 @@ public sealed class HeadlessChromeScreenshotterTests
 
         public void Dispose()
         {
-            _listener.Stop();
+            // Close alone: after Stop, Close listens on the port again for a moment, and fails if another test has it by then.
             _listener.Close();
-        }
-
-        private static int FreePort()
-        {
-            using var socket = new System.Net.Sockets.Socket(System.Net.Sockets.AddressFamily.InterNetwork, System.Net.Sockets.SocketType.Stream, System.Net.Sockets.ProtocolType.Tcp);
-            socket.Bind(new IPEndPoint(IPAddress.Loopback, 0));
-            return ((IPEndPoint)socket.LocalEndPoint!).Port;
         }
     }
 }

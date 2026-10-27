@@ -91,7 +91,7 @@ public sealed class PortaPtyProcessTests : IDisposable
         (await shell.WaitForAsync(@"BG=\d+")).ShouldBeTrue(shell.Output);
         var background = int.Parse(Regex.Match(shell.Output, @"BG=(\d+)").Groups[1].Value, CultureInfo.InvariantCulture);
         await shell.SendAsync("sleep 1002\r");
-        var foreground = await WaitForPidAsync("sleep 1002");
+        var foreground = await WaitForChildAsync(shell.Process.Pid, "sleep 1002");
 
         shell.Process.Kill();
 
@@ -100,34 +100,6 @@ public sealed class PortaPtyProcessTests : IDisposable
         (await WaitUntilGoneAsync(shell.Process.Pid)).ShouldBeTrue("shell still running");
         (await WaitUntilGoneAsync(foreground)).ShouldBeTrue("foreground child still running");
         (await WaitUntilGoneAsync(background)).ShouldBeTrue("background child still running");
-    }
-
-    [Fact]
-    public async Task Environment_IsExactlyTheOneGiven()
-    {
-        if (!OperatingSystem.IsLinux()) return;
-
-        const string fleetOnly = "FLEET_PTY_TEST_SECRET";
-        Environment.SetEnvironmentVariable(fleetOnly, "leaked");
-        try
-        {
-            var env = new Dictionary<string, string>
-            {
-                ["PATH"] = Environment.GetEnvironmentVariable("PATH") ?? "/usr/bin:/bin",
-                ["HOME"] = _workDir,
-                ["TERM"] = "xterm-256color",
-                ["PS1"] = "$ ",
-                ["FLEET_PTY_TEST_ADDED"] = "added",
-            };
-            await using var shell = await Shell.StartAsync(_workDir, env: env);
-            await shell.SendAsync($"echo \"[${fleetOnly}][$FLEET_PTY_TEST_ADDED]\"\r");
-
-            (await shell.WaitForAsync(@"\[\]\[added\]")).ShouldBeTrue(shell.Output);
-        }
-        finally
-        {
-            Environment.SetEnvironmentVariable(fleetOnly, null);
-        }
     }
 
     [Fact]
@@ -162,24 +134,8 @@ public sealed class PortaPtyProcessTests : IDisposable
         await shell.DisposeAsync();
     }
 
-    [Fact]
-    public void EnvironmentChanges_RemovesWhatTheTargetLeavesOut()
-    {
-        Environment.SetEnvironmentVariable("FLEET_PTY_TEST_REMOVED", "x");
-        try
-        {
-            var changes = PortaPtyFactory.EnvironmentChanges(new Dictionary<string, string> { ["ONLY"] = "1" });
-
-            changes["FLEET_PTY_TEST_REMOVED"].ShouldBe(string.Empty);
-            changes["ONLY"].ShouldBe("1");
-        }
-        finally
-        {
-            Environment.SetEnvironmentVariable("FLEET_PTY_TEST_REMOVED", null);
-        }
-    }
-
-    private static async Task<int> WaitForPidAsync(string commandLine)
+    /// <summary>The child of <paramref name="parent"/> running <paramref name="commandLine"/>: another test run on the machine may run the same command.</summary>
+    private static async Task<int> WaitForChildAsync(int parent, string commandLine)
     {
         var sw = Stopwatch.StartNew();
         while (sw.Elapsed < Timeout)
@@ -190,7 +146,7 @@ public sealed class PortaPtyProcessTests : IDisposable
                 try
                 {
                     var cmd = File.ReadAllText(Path.Combine(dir, "cmdline")).Replace('\0', ' ').Trim();
-                    if (cmd == commandLine) return pid;
+                    if (cmd == commandLine && ParentOf(pid) == parent) return pid;
                 }
                 catch (IOException) { }
                 catch (UnauthorizedAccessException) { }
@@ -198,6 +154,13 @@ public sealed class PortaPtyProcessTests : IDisposable
             await Task.Delay(50);
         }
         throw new TimeoutException($"No process running '{commandLine}'");
+    }
+
+    // The fourth field of /proc/<pid>/stat, after the command name in parentheses.
+    private static int ParentOf(int pid)
+    {
+        var stat = File.ReadAllText($"/proc/{pid}/stat");
+        return int.Parse(stat[(stat.LastIndexOf(')') + 2)..].Split(' ')[1], CultureInfo.InvariantCulture);
     }
 
     private static async Task<bool> WaitUntilGoneAsync(int pid)
@@ -290,6 +253,60 @@ public sealed class PortaPtyProcessTests : IDisposable
             while ((n = await Process.ReadAsync(buffer, _cts.Token)) > 0)
             {
                 lock (_output) _output.Append(Encoding.UTF8.GetString(buffer, 0, n));
+            }
+        }
+    }
+
+    /// <summary>Set environment variables, which every process the other tests start would inherit.</summary>
+    [Collection(ProcessWide.Collection)]
+    public sealed class WithEnvironmentVariables : IDisposable
+    {
+        private readonly PortaPtyProcessTests _t = new();
+
+        public void Dispose() => _t.Dispose();
+
+        [Fact]
+        public async Task Environment_IsExactlyTheOneGiven()
+        {
+            if (!OperatingSystem.IsLinux()) return;
+
+            const string fleetOnly = "FLEET_PTY_TEST_SECRET";
+            Environment.SetEnvironmentVariable(fleetOnly, "leaked");
+            try
+            {
+                var env = new Dictionary<string, string>
+                {
+                    ["PATH"] = Environment.GetEnvironmentVariable("PATH") ?? "/usr/bin:/bin",
+                    ["HOME"] = _t._workDir,
+                    ["TERM"] = "xterm-256color",
+                    ["PS1"] = "$ ",
+                    ["FLEET_PTY_TEST_ADDED"] = "added",
+                };
+                await using var shell = await Shell.StartAsync(_t._workDir, env: env);
+                await shell.SendAsync($"echo \"[${fleetOnly}][$FLEET_PTY_TEST_ADDED]\"\r");
+
+                (await shell.WaitForAsync(@"\[\]\[added\]")).ShouldBeTrue(shell.Output);
+            }
+            finally
+            {
+                Environment.SetEnvironmentVariable(fleetOnly, null);
+            }
+        }
+
+        [Fact]
+        public void EnvironmentChanges_RemovesWhatTheTargetLeavesOut()
+        {
+            Environment.SetEnvironmentVariable("FLEET_PTY_TEST_REMOVED", "x");
+            try
+            {
+                var changes = PortaPtyFactory.EnvironmentChanges(new Dictionary<string, string> { ["ONLY"] = "1" });
+
+                changes["FLEET_PTY_TEST_REMOVED"].ShouldBe(string.Empty);
+                changes["ONLY"].ShouldBe("1");
+            }
+            finally
+            {
+                Environment.SetEnvironmentVariable("FLEET_PTY_TEST_REMOVED", null);
             }
         }
     }

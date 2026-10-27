@@ -179,9 +179,7 @@ public sealed class ClaudeCodePermissionTests : IDisposable
                 echo '{"type":"result","subtype":"success","is_error":false,"result":"ok","session_id":"cc-1"}'
                 cat > /dev/null
                 """;
-        File.WriteAllText(claude, script.ReplaceLineEndings("\n"));
-        if (!OperatingSystem.IsWindows())
-            File.SetUnixFileMode(claude, UnixFileMode.UserRead | UnixFileMode.UserWrite | UnixFileMode.UserExecute);
+        TestExecutable.Write(claude, script.ReplaceLineEndings("\n"));
         return claude;
     }
 

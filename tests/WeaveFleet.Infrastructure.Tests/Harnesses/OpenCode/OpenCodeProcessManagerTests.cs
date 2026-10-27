@@ -2,6 +2,7 @@ using WeaveFleet.Infrastructure.Harnesses.OpenCode;
 
 namespace WeaveFleet.Infrastructure.Tests.Harnesses.OpenCode;
 
+[Collection(ProcessWide.Collection)]
 public sealed class OpenCodeProcessManagerTests
 {
     [Fact]

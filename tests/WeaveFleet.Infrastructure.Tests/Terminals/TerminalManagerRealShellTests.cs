@@ -7,6 +7,7 @@ using WeaveFleet.Infrastructure.Terminals;
 namespace WeaveFleet.Infrastructure.Tests.Terminals;
 
 /// <summary>The terminal manager with a real shell, real files and a real pseudoterminal. Linux only.</summary>
+[Collection(ProcessWide.Collection)]
 public sealed class TerminalManagerRealShellTests : IAsyncDisposable
 {
     private static readonly TimeSpan Timeout = TimeSpan.FromSeconds(10);

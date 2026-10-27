@@ -25,7 +25,7 @@ internal enum BunServeMode
 /// <summary>A loopback HTTP server that plays GitHub's release downloads for the Bun installer tests.</summary>
 internal sealed class BunReleaseServer : IDisposable
 {
-    private readonly HttpListener _listener = new();
+    private readonly HttpListener _listener;
     private readonly CancellationTokenSource _stop = new();
     private readonly Dictionary<string, (byte[] Body, int Status, BunServeMode Mode)> _routes = [];
     private readonly List<string> _requests = [];
@@ -36,14 +36,8 @@ internal sealed class BunReleaseServer : IDisposable
 
     public BunReleaseServer()
     {
-        var probe = new TcpListener(IPAddress.Loopback, 0);
-        probe.Start();
-        var port = ((IPEndPoint)probe.LocalEndpoint).Port;
-        probe.Stop();
-
+        _listener = LoopbackListener.Start(out var port);
         BaseUri = new Uri($"http://127.0.0.1:{port}/");
-        _listener.Prefixes.Add(BaseUri.ToString());
-        _listener.Start();
         _ = Task.Run(AcceptAsync);
     }
 

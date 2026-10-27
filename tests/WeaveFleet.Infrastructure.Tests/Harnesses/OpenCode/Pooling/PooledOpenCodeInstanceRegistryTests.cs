@@ -658,31 +658,6 @@ public sealed class PooledOpenCodeInstanceRegistryTests
     }
 
     [Fact]
-    public async Task pool_metrics_report_active_instances_sessions_and_restarts()
-    {
-        var factory = new TestInstanceFactory();
-        using var listener = new TestMeterListener();
-        listener.Start();
-        await using var registry = CreateRegistry(factory, TimeSpan.FromMinutes(1));
-
-        var firstLease = await registry.AcquireAsync("credential-hash", CancellationToken.None);
-        var secondLease = await registry.AcquireAsync("credential-hash", CancellationToken.None);
-
-        listener.RecordObservableInstruments();
-
-        listener.GetLatestObservableValue("opencode_pool_instances_active").ShouldBe(1);
-        listener.GetObservableValues("opencode_pool_sessions_per_instance").ShouldContain(2);
-        listener.GetObservableValues("opencode_pool_utilization").ShouldContain(2);
-
-        await firstLease.Instance.ReportCrashAsync(new InvalidOperationException("process crashed"));
-
-        listener.GetCounterValue("opencode_pool_process_restarts").ShouldBe(1);
-
-        await firstLease.DisposeAsync();
-        await secondLease.DisposeAsync();
-    }
-
-    [Fact]
     public async Task pool_operation_logs_cover_lifecycle_and_do_not_include_plaintext_credentials()
     {
         var factory = new TestInstanceFactory();
@@ -1429,4 +1404,34 @@ public sealed class PooledOpenCodeInstanceRegistryTests
         EventId EventId,
         string Message,
         IReadOnlyDictionary<string, object?> StateValues);
+
+    /// <summary>Listens to Fleet's static meter, which records every test's measurements, not just this one's.</summary>
+    [Collection(ProcessWide.Collection)]
+    public sealed class WithMeterListener
+    {
+        [Fact]
+        public async Task pool_metrics_report_active_instances_sessions_and_restarts()
+        {
+            var factory = new TestInstanceFactory();
+            using var listener = new TestMeterListener();
+            listener.Start();
+            await using var registry = CreateRegistry(factory, TimeSpan.FromMinutes(1));
+
+            var firstLease = await registry.AcquireAsync("credential-hash", CancellationToken.None);
+            var secondLease = await registry.AcquireAsync("credential-hash", CancellationToken.None);
+
+            listener.RecordObservableInstruments();
+
+            listener.GetLatestObservableValue("opencode_pool_instances_active").ShouldBe(1);
+            listener.GetObservableValues("opencode_pool_sessions_per_instance").ShouldContain(2);
+            listener.GetObservableValues("opencode_pool_utilization").ShouldContain(2);
+
+            await firstLease.Instance.ReportCrashAsync(new InvalidOperationException("process crashed"));
+
+            listener.GetCounterValue("opencode_pool_process_restarts").ShouldBe(1);
+
+            await firstLease.DisposeAsync();
+            await secondLease.DisposeAsync();
+        }
+    }
 }

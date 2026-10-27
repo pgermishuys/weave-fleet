@@ -940,9 +940,7 @@ public sealed class ClaudeCodeLongLivedProcessTests : IAsyncDisposable
               esac
             done
             """;
-        File.WriteAllText(claude, script.ReplaceLineEndings("\n"));
-        if (!OperatingSystem.IsWindows())
-            File.SetUnixFileMode(claude, UnixFileMode.UserRead | UnixFileMode.UserWrite | UnixFileMode.UserExecute);
+        TestExecutable.Write(claude, script.ReplaceLineEndings("\n"));
         return claude;
     }
 

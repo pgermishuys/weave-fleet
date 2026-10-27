@@ -84,9 +84,8 @@ public sealed class ClaudeCodeProcessManagerTests : IDisposable
         else
         {
             claude = Path.Combine(_folder, "claude");
-            await File.WriteAllTextAsync(claude,
+            TestExecutable.Write(claude,
                 $"#!/bin/sh\n(sleep 300 < /dev/null > /dev/null 2>&1 & echo $! > '{pidFile}.tmp' && mv '{pidFile}.tmp' '{pidFile}')\ncat > /dev/null\n");
-            File.SetUnixFileMode(claude, UnixFileMode.UserRead | UnixFileMode.UserWrite | UnixFileMode.UserExecute);
         }
 
         var group = ProcessGroupHelper.CreateProcessGroup();
@@ -136,9 +135,7 @@ public sealed class ClaudeCodeProcessManagerTests : IDisposable
         var output = Path.Combine(_folder, "args.txt");
         File.Delete(output);
         var claude = Path.Combine(_folder, "claude");
-        await File.WriteAllTextAsync(claude, $"#!/bin/sh\nprintf '%s\\n' \"$@\" > '{output}.tmp' && mv '{output}.tmp' '{output}'\ncat > /dev/null\n");
-        if (!OperatingSystem.IsWindows())
-            File.SetUnixFileMode(claude, UnixFileMode.UserRead | UnixFileMode.UserWrite | UnixFileMode.UserExecute);
+        TestExecutable.Write(claude, $"#!/bin/sh\nprintf '%s\\n' \"$@\" > '{output}.tmp' && mv '{output}.tmp' '{output}'\ncat > /dev/null\n");
 
         await using var manager = new ClaudeCodeProcessManager(NullLogger<ClaudeCodeProcessManager>.Instance);
         await manager.StartAsync(new ClaudeCodeProcessOptions

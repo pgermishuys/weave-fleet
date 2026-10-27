@@ -23,8 +23,7 @@ public sealed class ClaudeCodeMissingFolderTests : IDisposable
             return;
 
         var claude = Path.Combine(_directory, "claude");
-        File.WriteAllText(claude, "#!/bin/sh\ncat > /dev/null\n");
-        File.SetUnixFileMode(claude, UnixFileMode.UserRead | UnixFileMode.UserWrite | UnixFileMode.UserExecute);
+        TestExecutable.Write(claude, "#!/bin/sh\ncat > /dev/null\n");
         var work = Path.Combine(_directory, "work");
         Directory.CreateDirectory(work);
         var session = Session(claude, work);

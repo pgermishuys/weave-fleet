@@ -234,33 +234,6 @@ public sealed class AppRunnerTests
     }
 
     [Fact]
-    public async Task A_run_gets_its_port_but_none_of_Fleets_own_settings_and_is_first_to_go_when_memory_runs_out()
-    {
-        if (!OperatingSystem.IsLinux())
-            return;
-
-        Environment.SetEnvironmentVariable("Fleet__BrowserTestSecret", "s3cret");
-        Environment.SetEnvironmentVariable("ASPNETCORE_URLS_BROWSER_TEST", "http://localhost:2113");
-        try
-        {
-            using var runner = NewRunner();
-            var app = await StartAsync(runner, "app_1", "ses-1", Path.GetTempPath(),
-                "echo \"secret=${Fleet__BrowserTestSecret:-none} aspnet=${ASPNETCORE_URLS_BROWSER_TEST:-none} port=$PORT oom=$(cat /proc/self/oom_score_adj)\"");
-
-            await runner.WaitUntilReadyAsync(app.Id, TimeSpan.FromSeconds(10));
-
-            // Process.Exited can fire before the last output line is read, so wait for a line first.
-            await WaitForAsync(() => runner.Logs(app.Id, 10).Count > 0);
-            runner.Logs(app.Id, 10).ShouldContain($"secret=none aspnet=none port={app.Port} oom=1000");
-        }
-        finally
-        {
-            Environment.SetEnvironmentVariable("Fleet__BrowserTestSecret", null);
-            Environment.SetEnvironmentVariable("ASPNETCORE_URLS_BROWSER_TEST", null);
-        }
-    }
-
-    [Fact]
     public async Task Output_is_numbered_so_a_client_can_ask_for_what_it_has_not_seen()
     {
         if (OperatingSystem.IsWindows())
@@ -436,4 +409,36 @@ public sealed class AppRunnerTests
         => (Environment.GetEnvironmentVariable("PATH") ?? string.Empty)
             .Split(Path.PathSeparator)
             .Any(dir => File.Exists(Path.Combine(dir, command)));
+
+    /// <summary>Sets environment variables, which every process the other tests start would inherit.</summary>
+    [Collection(ProcessWide.Collection)]
+    public sealed class WithFleetSettings
+    {
+        [Fact]
+        public async Task A_run_gets_its_port_but_none_of_Fleets_own_settings_and_is_first_to_go_when_memory_runs_out()
+        {
+            if (!OperatingSystem.IsLinux())
+                return;
+
+            Environment.SetEnvironmentVariable("Fleet__BrowserTestSecret", "s3cret");
+            Environment.SetEnvironmentVariable("ASPNETCORE_URLS_BROWSER_TEST", "http://localhost:2113");
+            try
+            {
+                using var runner = NewRunner();
+                var app = await StartAsync(runner, "app_1", "ses-1", Path.GetTempPath(),
+                    "echo \"secret=${Fleet__BrowserTestSecret:-none} aspnet=${ASPNETCORE_URLS_BROWSER_TEST:-none} port=$PORT oom=$(cat /proc/self/oom_score_adj)\"");
+
+                await runner.WaitUntilReadyAsync(app.Id, TimeSpan.FromSeconds(10));
+
+                // Process.Exited can fire before the last output line is read, so wait for a line first.
+                await WaitForAsync(() => runner.Logs(app.Id, 10).Count > 0);
+                runner.Logs(app.Id, 10).ShouldContain($"secret=none aspnet=none port={app.Port} oom=1000");
+            }
+            finally
+            {
+                Environment.SetEnvironmentVariable("Fleet__BrowserTestSecret", null);
+                Environment.SetEnvironmentVariable("ASPNETCORE_URLS_BROWSER_TEST", null);
+            }
+        }
+    }
 }

@@ -46,10 +46,7 @@ public sealed class SshTunnelsTests : IAsyncLifetime
     private string FakeSsh(string body)
     {
         var path = Path.Combine(_dir, "ssh");
-        File.WriteAllText(path, $"#!/bin/sh\necho \"$$ $*\" >> \"{_dir}/calls\"\n{body}\n");
-#pragma warning disable CA1416 // Only reached off Windows.
-        File.SetUnixFileMode(path, UnixFileMode.UserRead | UnixFileMode.UserWrite | UnixFileMode.UserExecute);
-#pragma warning restore CA1416
+        TestExecutable.Write(path, $"#!/bin/sh\necho \"$$ $*\" >> \"{_dir}/calls\"\n{body}\n");
         return path;
     }
 
@@ -233,7 +230,7 @@ public sealed class SshTunnelsTests : IAsyncLifetime
         if (OperatingSystem.IsWindows())
             return; // The fake ssh is a shell script.
 
-        var tunnels = Tunnels(FakeSsh("echo 'bind: Address already in use' >&2; exit 255"), portAnswers: false, readyTimeout: TimeSpan.FromMilliseconds(500));
+        var tunnels = Tunnels(FakeSsh("echo 'bind: Address already in use' >&2; exit 255"), portAnswers: false, readyTimeout: TimeSpan.FromSeconds(2));
 
         var (_, error) = await tunnels.OpenAsync("m1", SshDestination.Parse("falcon")!, null, CancellationToken.None);
 

@@ -136,14 +136,13 @@ public sealed class HeadlessChromePageCheckerTests
     /// <summary>Files served on a loopback port by path, like Fleet serves a page's folder; anything else is a 404.</summary>
     private sealed class LocalSite : IDisposable
     {
-        private readonly HttpListener _listener = new();
+        private readonly HttpListener _listener;
         private readonly string _root;
 
         public LocalSite(Dictionary<string, string> files)
         {
-            _root = $"http://127.0.0.1:{FreePort()}/";
-            _listener.Prefixes.Add(_root);
-            _listener.Start();
+            _listener = LoopbackListener.Start(out var port);
+            _root = $"http://127.0.0.1:{port}/";
             _ = Task.Run(async () =>
             {
                 while (_listener.IsListening)
@@ -178,15 +177,8 @@ public sealed class HeadlessChromePageCheckerTests
 
         public void Dispose()
         {
-            _listener.Stop();
+            // Close alone: after Stop, Close listens on the port again for a moment, and fails if another test has it by then.
             _listener.Close();
-        }
-
-        private static int FreePort()
-        {
-            using var socket = new System.Net.Sockets.Socket(System.Net.Sockets.AddressFamily.InterNetwork, System.Net.Sockets.SocketType.Stream, System.Net.Sockets.ProtocolType.Tcp);
-            socket.Bind(new IPEndPoint(IPAddress.Loopback, 0));
-            return ((IPEndPoint)socket.LocalEndPoint!).Port;
         }
     }
 }
