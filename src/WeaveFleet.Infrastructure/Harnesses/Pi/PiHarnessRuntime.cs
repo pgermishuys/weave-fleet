@@ -1,3 +1,4 @@
+using WeaveFleet.Application.Analytics;
 using System.Text.Json;
 using Microsoft.Extensions.Logging;
 using WeaveFleet.Application.Configuration;
@@ -21,13 +22,16 @@ public sealed class PiHarnessRuntime : IHarnessRuntime
     private readonly FleetOptions _options;
     private readonly ILogger<PiHarnessRuntime> _logger;
     private readonly ILoggerFactory _loggerFactory;
+    private readonly IAnalyticsCollector? _analyticsCollector;
 
     /// <summary>Initialises the runtime with required dependencies.</summary>
     public PiHarnessRuntime(
         FleetOptions options,
         ILogger<PiHarnessRuntime> logger,
-        ILoggerFactory loggerFactory)
+        ILoggerFactory loggerFactory,
+        IAnalyticsCollector? analyticsCollector = null)
     {
+        _analyticsCollector = analyticsCollector;
         _options = options;
         _logger = logger;
         _loggerFactory = loggerFactory;
@@ -82,7 +86,12 @@ public sealed class PiHarnessRuntime : IHarnessRuntime
                 processManager,
                 client,
                 TimeSpan.FromSeconds(_options.HarnessShutdownTimeoutSeconds),
-                _loggerFactory.CreateLogger<PiHarnessSession>());
+                _loggerFactory.CreateLogger<PiHarnessSession>(),
+                _analyticsCollector,
+                options.ProjectId,
+                options.ProjectName,
+                options.WorkingDirectory,
+                options.OwnerUserId);
 
             var state = await GetStateAsync(client, ct).ConfigureAwait(false);
             if (state is not null)
@@ -142,7 +151,12 @@ public sealed class PiHarnessRuntime : IHarnessRuntime
                 processManager,
                 client,
                 TimeSpan.FromSeconds(_options.HarnessShutdownTimeoutSeconds),
-                _loggerFactory.CreateLogger<PiHarnessSession>());
+                _loggerFactory.CreateLogger<PiHarnessSession>(),
+                _analyticsCollector,
+                options.ProjectId,
+                options.ProjectName,
+                options.WorkingDirectory,
+                options.OwnerUserId);
 
             var initialState = await GetStateAsync(client, ct).ConfigureAwait(false);
             if (initialState is not null)

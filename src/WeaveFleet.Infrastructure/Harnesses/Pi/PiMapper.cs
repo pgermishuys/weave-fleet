@@ -1,3 +1,4 @@
+using WeaveFleet.Application.Analytics;
 using System.Globalization;
 using System.Text.Json;
 using System.Text.Json.Serialization;
@@ -495,6 +496,50 @@ internal sealed class PiMapper
             Output = Math.Max(0, usage.Output),
         };
         return call.Used > 0 ? (call, message.Provider, message.Model) : null;
+    }
+
+    /// <summary>
+    /// What an assistant message used, once it ends, for the analytics collector. Pi counts each kind once, with the
+    /// reasoning in the output. Keyed on Fleet's session (the totals are kept on it), and on Pi's response id (or the
+    /// message's time) so the same call is never counted twice.
+    /// </summary>
+    internal static TokenEventData? TryExtractTokenEvent(
+        PiEvent evt,
+        string fleetSessionId,
+        string? projectId,
+        string? projectName,
+        string? workspaceDirectory,
+        string userId = "local-user")
+    {
+        if (evt is not PiMessageEndEvent { Message: { Role: "assistant", Usage: { } usage } message })
+            return null;
+
+        double input = Math.Max(0, usage.Input), output = Math.Max(0, usage.Output);
+        double cacheRead = Math.Max(0, usage.CacheRead), cacheWrite = Math.Max(0, usage.CacheWrite);
+        var total = input + output + cacheRead + cacheWrite;
+        var cost = Math.Max(0, usage.Cost?.Total ?? 0);
+        if (total <= 0 && cost <= 0)
+            return null;
+
+        var call = message.ResponseId ?? message.Timestamp?.ToString(System.Globalization.CultureInfo.InvariantCulture) ?? Guid.NewGuid().ToString("N");
+        return new TokenEventData(
+            EventId: $"{fleetSessionId}:{call}",
+            SessionId: fleetSessionId,
+            ProjectId: projectId,
+            ProjectName: projectName,
+            WorkspaceDirectory: workspaceDirectory,
+            ModelId: message.Model,
+            ProviderId: message.Provider,
+            TokensInput: input,
+            TokensOutput: output,
+            TokensReasoning: 0,
+            TokensCacheRead: cacheRead,
+            TokensCacheWrite: cacheWrite,
+            TokensTotal: total,
+            Cost: cost,
+            EstimatedCost: null,
+            CreatedAt: DateTimeOffset.UtcNow,
+            UserId: userId);
     }
 
     private HarnessEvent CreateCompactedEvent(PiCompactionEndEvent evt)

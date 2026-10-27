@@ -1,3 +1,4 @@
+using WeaveFleet.Application.Analytics;
 using System.Runtime.CompilerServices;
 using System.Text.Json;
 using System.Threading.Channels;
@@ -62,6 +63,11 @@ internal sealed class PiHarnessSession : IHarnessSession
     private string? _sessionId;
     private PiModelRef? _model;
     private readonly string _fleetSessionId;
+    private readonly IAnalyticsCollector? _analytics;
+    private readonly string? _projectId;
+    private readonly string? _projectName;
+    private readonly string? _workingDirectory;
+    private readonly string _ownerUserId;
 
     // The model's context window, and whether Pi compacts on its own, from Pi's state.
     private int? _contextWindow;
@@ -75,8 +81,14 @@ internal sealed class PiHarnessSession : IHarnessSession
         PiProcessManager processManager,
         PiJsonlClient client,
         TimeSpan shutdownTimeout,
-        ILogger<PiHarnessSession> logger)
-        : this(instanceId, fleetSessionId, (IPiProcessManager)processManager, client, shutdownTimeout, logger)
+        ILogger<PiHarnessSession> logger,
+        IAnalyticsCollector? analytics = null,
+        string? projectId = null,
+        string? projectName = null,
+        string? workingDirectory = null,
+        string ownerUserId = "local-user")
+        : this(instanceId, fleetSessionId, (IPiProcessManager)processManager, client, shutdownTimeout, logger,
+            analytics, projectId, projectName, workingDirectory, ownerUserId)
     {
     }
 
@@ -86,8 +98,18 @@ internal sealed class PiHarnessSession : IHarnessSession
         IPiProcessManager processManager,
         PiJsonlClient client,
         TimeSpan shutdownTimeout,
-        ILogger<PiHarnessSession> logger)
+        ILogger<PiHarnessSession> logger,
+        IAnalyticsCollector? analytics = null,
+        string? projectId = null,
+        string? projectName = null,
+        string? workingDirectory = null,
+        string ownerUserId = "local-user")
     {
+        _analytics = analytics;
+        _projectId = projectId;
+        _projectName = projectName;
+        _workingDirectory = workingDirectory;
+        _ownerUserId = ownerUserId;
         InstanceId = instanceId;
         _fleetSessionId = fleetSessionId;
         _processManager = processManager;
@@ -423,6 +445,10 @@ internal sealed class PiHarnessSession : IHarnessSession
                 {
                     await _eventChannel.Writer.WriteAsync(harnessEvent, _pumpCts.Token).ConfigureAwait(false);
                 }
+
+                if (_analytics is not null
+                    && PiMapper.TryExtractTokenEvent(evt, _fleetSessionId, _projectId, _projectName, _workingDirectory, _ownerUserId) is { } tokenEvent)
+                    _analytics.AcceptTokenEvent(tokenEvent);
 
                 if (PiMapper.TryReadContextCall(evt) is { } contextCall)
                     await _eventChannel.Writer.WriteAsync(ContextUsageEvent(contextCall.Call, contextCall.Provider, contextCall.Model), _pumpCts.Token).ConfigureAwait(false);

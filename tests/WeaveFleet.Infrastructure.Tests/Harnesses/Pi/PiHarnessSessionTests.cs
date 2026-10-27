@@ -1,3 +1,4 @@
+using WeaveFleet.Application.Analytics;
 using System.Text;
 using System.Text.Json;
 using Microsoft.Extensions.Logging;
@@ -303,6 +304,41 @@ public sealed class PiHarnessSessionTests
     }
 
     [Fact]
+    public async Task an_assistant_messages_usage_goes_to_analytics_on_fleets_session_once_per_call()
+    {
+        await using var harness = CreateHarness();
+        var analytics = new RecordingAnalytics();
+        await using var session = harness.CreateSession(analytics);
+        using var cts = new CancellationTokenSource(TimeSpan.FromSeconds(5));
+        var message = new PiMessage
+        {
+            Role = "assistant",
+            Provider = "anthropic",
+            Model = "claude-sonnet-4-5",
+            ResponseId = "resp-1",
+            Usage = new PiUsage { Input = 10, Output = 90, CacheRead = 50, CacheWrite = 5, Cost = new PiCost { Total = 0.02 } },
+        };
+
+        await harness.WriteEventAsync(new PiMessageEndEvent { Message = message }, cts.Token);
+        await ReadUntilAsync(session, EventTypes.ContextUsage, cts.Token);
+
+        var tokens = analytics.Events.ShouldHaveSingleItem();
+        tokens.SessionId.ShouldBe("fleet-session");
+        tokens.EventId.ShouldBe("fleet-session:resp-1");
+        tokens.TokensTotal.ShouldBe(155);
+        tokens.Cost.ShouldBe(0.02);
+        tokens.ProjectId.ShouldBe("proj-1");
+        tokens.ModelId.ShouldBe("claude-sonnet-4-5");
+    }
+
+    private sealed class RecordingAnalytics : IAnalyticsCollector
+    {
+        public List<TokenEventData> Events { get; } = [];
+        public void AcceptTokenEvent(TokenEventData data) => Events.Add(data);
+        public void AcceptSessionSnapshot(SessionSnapshotData data) { }
+    }
+
+    [Fact]
     public async Task compact_sends_pis_compact_command_and_a_refusal_is_a_failed_compaction()
     {
         await using var harness = CreateHarness();
@@ -545,14 +581,18 @@ public sealed class PiHarnessSessionTests
 
         public TestPiProcessManager Process { get; } = new();
 
-        public PiHarnessSession CreateSession()
+        public PiHarnessSession CreateSession(IAnalyticsCollector? analytics = null)
             => new(
                 "pi-instance",
                 "fleet-session",
                 Process,
                 _client,
                 TimeSpan.FromMilliseconds(50),
-                NullLogger<PiHarnessSession>.Instance);
+                NullLogger<PiHarnessSession>.Instance,
+                analytics,
+                projectId: "proj-1",
+                projectName: "demo",
+                workingDirectory: "/work/demo");
 
         public Task<PiResponseEvent> SendRequestAsync(PiCommand command, CancellationToken ct)
             => _client.SendRequestAsync(command, ct);
