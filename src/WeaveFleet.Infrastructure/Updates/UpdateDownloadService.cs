@@ -10,12 +10,17 @@ namespace WeaveFleet.Infrastructure.Updates;
 /// Downloads and validates a Fleet release archive to a staging directory.
 /// The update is not applied here — the launcher scripts apply it on next start.
 /// </summary>
+/// <param name="stagingDirectory">Where the update is staged; null stages it next to <c>app/</c>, where the launcher looks.</param>
 public sealed partial class UpdateDownloadService(
     IHttpClientFactory httpClientFactory,
     UpdateStateHolder stateHolder,
-    ILogger<UpdateDownloadService> logger)
+    ILogger<UpdateDownloadService> logger,
+    string? stagingDirectory = null)
 {
     private static readonly SemaphoreSlim s_downloadLock = new(1, 1);
+
+    /// <summary>The folder an update is downloaded to and its manifest read from.</summary>
+    public string StagingDirectory { get; } = stagingDirectory ?? DefaultStagingDirectory();
 
     /// <summary>Downloads the update described by <paramref name="state"/> and stages it for the next launch.</summary>
     public async Task DownloadUpdateAsync(UpdateState state, CancellationToken ct)
@@ -46,7 +51,7 @@ public sealed partial class UpdateDownloadService(
         var assetName = state.AssetName!;
         var downloadUrl = state.DownloadUrl!;
 
-        var stagingDir = GetStagingDirectory();
+        var stagingDir = StagingDirectory;
 
         try
         {
@@ -119,7 +124,7 @@ public sealed partial class UpdateDownloadService(
     {
         try
         {
-            var manifestPath = Path.Combine(GetStagingDirectory(), "update-manifest.json");
+            var manifestPath = Path.Combine(StagingDirectory, "update-manifest.json");
             var info = new FileInfo(manifestPath);
             if (!info.Exists)
             {
@@ -140,7 +145,7 @@ public sealed partial class UpdateDownloadService(
         }
     }
 
-    private static string GetStagingDirectory()
+    private static string DefaultStagingDirectory()
     {
         // The app binary lives at <install>/app/. Stage one level up, alongside the app dir.
         var appDir = AppContext.BaseDirectory.TrimEnd(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar);

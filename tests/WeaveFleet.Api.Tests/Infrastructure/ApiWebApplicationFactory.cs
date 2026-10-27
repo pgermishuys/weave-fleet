@@ -11,7 +11,9 @@ using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Options;
 using WeaveFleet.Application.Harnesses;
+using WeaveFleet.Application.Updates;
 using WeaveFleet.Infrastructure.Machines;
+using WeaveFleet.Infrastructure.Updates;
 using WeaveFleet.Testing.Fakes;
 
 namespace WeaveFleet.Api.Tests.Infrastructure;
@@ -30,6 +32,10 @@ public sealed class ApiWebApplicationFactory(
     private readonly string _dbPath = Path.Combine(Path.GetTempPath(), $"fleet-api-tests-{Guid.NewGuid():N}.db");
     private readonly string _analyticsDbPath = Path.Combine(Path.GetTempPath(), $"fleet-api-tests-analytics-{Guid.NewGuid():N}.db");
     private readonly string _webRootPath = Path.Combine(Path.GetTempPath(), $"fleet-api-tests-wwwroot-{Guid.NewGuid():N}");
+    private readonly string _updateStagingPath = Path.Combine(Path.GetTempPath(), $"fleet-api-tests-update-{Guid.NewGuid():N}");
+
+    /// <summary>What a test server's GitHub calls fail with: tests never reach GitHub.</summary>
+    public const string NoGitHub = "Test servers don't reach GitHub";
 
     /// <summary>The temporary web root the app serves static files from.</summary>
     public string WebRootPath => _webRootPath;
@@ -92,6 +98,20 @@ public sealed class ApiWebApplicationFactory(
             builder.UseSetting("Authentication:DefaultChallengeScheme", "Unauthorized");
         }
 
+        // Nor do Fleet's own updates: no checks on a timer, GitHub refuses, and an update stages in this server's own
+        // folder, not next to the test assembly where every later test server would see it. A test can register its own.
+        builder.UseSetting("Fleet:Update:CheckOnStartup", "false");
+        builder.UseSetting("Fleet:Update:CheckIntervalHours", "0");
+        builder.ConfigureTestServices(services =>
+        {
+            services.AddHttpClient("GitHubApi").ConfigurePrimaryHttpMessageHandler(() => new NoGitHubHandler());
+            services.AddSingleton(sp => new UpdateDownloadService(
+                sp.GetRequiredService<IHttpClientFactory>(),
+                sp.GetRequiredService<UpdateStateHolder>(),
+                sp.GetRequiredService<ILogger<UpdateDownloadService>>(),
+                _updateStagingPath));
+        });
+
         // Harness updates look versions up on npm; tests don't reach the network. A test can register its own.
         builder.ConfigureTestServices(services => services.AddSingleton<IHarnessUpdateService>(new FakeHarnessUpdateService()));
 
@@ -128,6 +148,7 @@ public sealed class ApiWebApplicationFactory(
         TryDelete($"{_dbPath}-shm");
         TryDelete(Path.ChangeExtension(_dbPath, ".machine.json"));
         TryDeleteDirectory(_webRootPath);
+        TryDeleteDirectory(_updateStagingPath);
     }
 
     private void EnsureWebRootExists()
@@ -135,6 +156,12 @@ public sealed class ApiWebApplicationFactory(
         Directory.CreateDirectory(_webRootPath);
         File.WriteAllText(Path.Combine(_webRootPath, "index.html"), "<html><body><div id=\"app\">Weave Fleet</div><script src=\"/app.js\"></script></body></html>");
         File.WriteAllText(Path.Combine(_webRootPath, "app.js"), "window.__fleetTest = true;");
+    }
+
+    private sealed class NoGitHubHandler : HttpMessageHandler
+    {
+        protected override Task<HttpResponseMessage> SendAsync(HttpRequestMessage request, CancellationToken cancellationToken) =>
+            throw new HttpRequestException($"{NoGitHub}: {request.RequestUri}");
     }
 
     private sealed class SilentHandler : HttpMessageHandler
