@@ -178,8 +178,8 @@ public sealed class BunRuntimeInstallerTests : IDisposable
     public async Task Says_the_connection_was_refused_when_nothing_listens()
     {
         var release = Publish();
-        var port = FreePort();
-        var installer = NewInstaller(release, "linux-x64", downloadBase: new Uri($"http://127.0.0.1:{port}/"));
+        using var port = new RefusingLoopbackPort();
+        var installer = NewInstaller(release, "linux-x64", downloadBase: new Uri($"http://127.0.0.1:{port.Port}/"));
 
         var result = await installer.EnsureAsync(release, null, CancellationToken.None);
 
@@ -1154,15 +1154,6 @@ public sealed class BunRuntimeInstallerTests : IDisposable
     }
 
     // -- helpers ------------------------------------------------------------------------------------------------
-
-    private static int FreePort()
-    {
-        var probe = new System.Net.Sockets.TcpListener(System.Net.IPAddress.Loopback, 0);
-        probe.Start();
-        var port = ((System.Net.IPEndPoint)probe.LocalEndpoint).Port;
-        probe.Stop();
-        return port;
-    }
 
     private static Func<string, CancellationToken, Task<BunProbeResult>> Prints(string version) =>
         (_, _) => Task.FromResult(new BunProbeResult(BunVersion.Parse(version), null));
