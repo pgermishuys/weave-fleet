@@ -1,11 +1,12 @@
 import { defineComponent, h } from "vue";
-import { BarChart3, LayoutGrid, MessageSquare, Settings, Workflow, Zap } from "lucide-vue-next";
+import { BarChart3, LayoutGrid, ListTodo, MessageSquare, Settings, Workflow, Zap } from "lucide-vue-next";
 import BoardControlsPanel from "@/components/board/BoardControlsPanel.vue";
 import SessionsPanel from "@/components/sessions/SessionsPanel.vue";
 import SettingsNavPanel from "@/components/settings/SettingsNavPanel.vue";
 import AutomationsNavPanel from "@/components/automations/AutomationsNavPanel.vue";
 import WorkflowsNavPanel from "@/components/workflows/WorkflowsNavPanel.vue";
 import { useBoardFeature } from "@/composables/use-board-feature";
+import { useJobsFeature } from "@/composables/use-jobs-feature";
 import { useWorkflowsFeature } from "@/composables/use-workflows-feature";
 import { useSettingsNav } from "@/composables/use-settings-nav";
 import { useAutomationsNav } from "@/composables/use-automations-nav";
@@ -62,6 +63,7 @@ const WorkflowsContextPanel = defineComponent({
 // (which starts loading the preferences), so asking again here only reads.
 const boardOff = () => !useBoardFeature().isBoardFeatureEnabled.value;
 const workflowsOff = () => !useWorkflowsFeature().isWorkflowsEnabled.value;
+const jobsOff = () => !useJobsFeature().isJobsEnabled.value;
 
 /** The rails Fleet ships. Plugin rails (GitHub, Plugins) come from the plugins' own sidebar contributions. */
 railPoint.contribute("core", [
@@ -69,6 +71,8 @@ railPoint.contribute("core", [
   // Board leaves the rail while it's switched off. Workflows stays, dimmed; its page says how to turn it on.
   { id: "board", label: "Board", icon: LayoutGrid, to: "/board", placement: "top", order: 10, panel: BoardContextPanel, hidden: boardOff },
   { id: "workflows", label: "Workflows", icon: Workflow, to: "/workflows", placement: "top", order: 20, panel: WorkflowsContextPanel, off: workflowsOff },
+  // Jobs leaves the rail while it's switched off, like Board. Its page is the whole context; the sessions list stays beside it.
+  { id: "jobs", label: "Jobs", icon: ListTodo, to: "/jobs", placement: "top", order: 25, panel: SessionsPanel, hidden: jobsOff },
   { id: "automations", label: "Automations", icon: Zap, to: "/automations", placement: "top", order: 30, panel: AutomationsContextPanel },
   // Analytics is a full page; its context column keeps the sessions list.
   { id: "analytics", label: "Analytics", icon: BarChart3, to: "/analytics", placement: "secondary", order: 0, panel: SessionsPanel },

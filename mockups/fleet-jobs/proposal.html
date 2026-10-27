@@ -1,0 +1,1015 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Fleet Work</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
+<style>
+/* Fleet's own tokens (client/src/assets/main.css): light theme first, dark below. */
+:root {
+  --main-bg: #F3F2EF;
+  --rail-bg: #FFFFFF;
+  --panel-bg: #FFFFFF;
+  --card-bg: #FFFFFF;
+  --sunk: #F7F6F3;
+  --border: rgba(26, 25, 24, 0.10);
+  --text: #1A1918;
+  --muted: #6E6A65;
+  --accent: #5B6EC7;
+  --accent-dim: rgba(91, 110, 199, 0.12);
+  --running: #16a34a;
+  --waiting: #d97706;
+  --complete: #2563eb;
+  --error: #dc2626;
+  --queued: #7c3aed;
+  --frame-shadow: 0 1px 2px rgba(26,25,24,.05), 0 24px 48px -28px rgba(26,25,24,.28);
+  --sans: "Inter", system-ui, -apple-system, sans-serif;
+  --mono: "JetBrains Mono", ui-monospace, monospace;
+}
+@media (prefers-color-scheme: dark) {
+  :root {
+    color-scheme: dark;
+    --main-bg: #0d0d10;
+    --rail-bg: #0d0d10;
+    --panel-bg: #141418;
+    --card-bg: #1b1b20;
+    --sunk: #111114;
+    --border: rgba(255, 255, 255, 0.075);
+    --text: #e8e8ec;
+    --muted: #8e8e9a;
+    --accent: #6366f1;
+    --accent-dim: rgba(99, 102, 241, 0.16);
+    --running: #22c55e;
+    --waiting: #f59e0b;
+    --complete: #3b82f6;
+    --error: #ef4444;
+    --queued: #8b5cf6;
+    --frame-shadow: 0 30px 60px -30px rgba(0,0,0,.7);
+  }
+}
+
+* { box-sizing: border-box; }
+html, body { margin: 0; }
+body {
+  background: var(--main-bg);
+  color: var(--text);
+  font: 15px/1.55 var(--sans);
+  padding: 0 16px 96px;
+  -webkit-font-smoothing: antialiased;
+}
+.page { max-width: 1240px; margin: 0 auto; display: grid; gap: 64px; }
+h1, h2, h3 { text-wrap: balance; margin: 0; line-height: 1.2; }
+h1 { font-size: 34px; font-weight: 700; letter-spacing: -0.02em; }
+h2 { font-size: 22px; font-weight: 650; letter-spacing: -0.01em; }
+h3 { font-size: 15px; font-weight: 600; }
+p { margin: 0; max-width: 68ch; }
+.muted { color: var(--muted); }
+.mono { font-family: var(--mono); font-size: 12px; }
+.eyebrow { font: 500 11px/1 var(--mono); letter-spacing: .08em; text-transform: uppercase; color: var(--muted); }
+section { display: grid; gap: 18px; min-width: 0; }
+.prose { display: grid; gap: 12px; }
+header.top { padding-top: 48px; display: grid; gap: 14px; }
+header.top p { font-size: 17px; }
+
+/* Toc */
+nav.toc { display: flex; flex-wrap: wrap; gap: 8px; }
+nav.toc a { color: var(--text); text-decoration: none; font-size: 13px; padding: 6px 10px; border: 1px solid var(--border); border-radius: 999px; background: var(--panel-bg); }
+nav.toc a:hover { border-color: var(--accent); }
+a:focus-visible, button:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+
+/* ── Comparison: today vs work ─────────────────────── */
+.compare { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; }
+.cmp { background: var(--panel-bg); border: 1px solid var(--border); border-radius: 12px; padding: 16px; display: grid; gap: 12px; align-content: start; min-width: 0; }
+.cmp .big { font: 600 28px/1 var(--sans); font-variant-numeric: tabular-nums; }
+.cmp .big small { font-size: 14px; font-weight: 500; color: var(--muted); margin-left: 6px; }
+.mini-list { font-size: 13px; display: grid; gap: 2px; border-top: 1px solid var(--border); padding-top: 10px; }
+.mini-list .m { display: flex; gap: 8px; align-items: center; font: 600 12px var(--mono); padding: 6px 0 2px; }
+.mini-list .r { display: flex; justify-content: space-between; gap: 8px; padding: 3px 0 3px 14px; color: var(--text); }
+.mini-list .r span:first-child { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; min-width: 0; }
+.mini-list .r .t { color: var(--muted); font-size: 12px; flex: none; }
+.mini-list .more { color: var(--muted); padding: 6px 0 0 14px; }
+.att { display: grid; gap: 6px; border-top: 1px solid var(--border); padding-top: 10px; font-size: 13px; }
+.att .r { display: flex; gap: 8px; align-items: baseline; }
+
+/* ── App frame ─────────────────────────────────────── */
+.frame-wrap { overflow-x: auto; border-radius: 14px; box-shadow: var(--frame-shadow); border: 1px solid var(--border); }
+.app { min-width: 1080px; height: 640px; display: grid; grid-template-columns: 64px 1fr; background: var(--rail-bg); font-size: 13px; }
+.rail { display: flex; flex-direction: column; align-items: center; gap: 4px; padding: 12px 0; border-right: 1px solid var(--border); }
+.rail .ri { width: 54px; display: grid; justify-items: center; gap: 3px; padding: 7px 0; border-radius: 8px; color: var(--muted); font-size: 10px; }
+.rail .ri svg { width: 18px; height: 18px; }
+.rail .ri.on { background: var(--accent-dim); color: var(--text); }
+.rail .ri.on svg { color: var(--accent); }
+.rail .sp { flex: 1; }
+.ctx { display: grid; grid-template-rows: auto 1fr; min-width: 0; background: var(--main-bg); }
+.bar { display: flex; align-items: center; gap: 14px; padding: 10px 16px; border-bottom: 1px solid var(--border); background: var(--rail-bg); }
+.bar h3 { font-size: 15px; }
+.seg { display: inline-flex; border: 1px solid var(--border); border-radius: 8px; padding: 2px; gap: 2px; }
+.seg span { padding: 4px 10px; border-radius: 6px; color: var(--muted); }
+.seg span.on { background: var(--card-bg); color: var(--text); box-shadow: 0 0 0 1px var(--border); }
+.cap { display: flex; gap: 6px; margin-left: auto; align-items: center; }
+.capchip { display: inline-flex; align-items: center; gap: 6px; padding: 4px 8px; border-radius: 7px; border: 1px solid var(--border); background: var(--panel-bg); font: 500 12px var(--mono); white-space: nowrap; }
+.seats { display: inline-flex; gap: 2px; }
+.seats i { width: 6px; height: 10px; border-radius: 2px; background: var(--border); display: block; }
+.seats i.b { background: var(--running); }
+.seats i.w { background: var(--waiting); }
+.capchip.paused { color: var(--muted); }
+.btn { display: inline-flex; align-items: center; gap: 6px; padding: 6px 11px; border-radius: 8px; border: 1px solid var(--border); background: var(--card-bg); color: var(--text); font: 500 12px var(--sans); cursor: pointer; white-space: nowrap; }
+.btn.pri { background: var(--accent); border-color: var(--accent); color: #fff; }
+
+/* Board */
+.work { display: grid; grid-template-columns: 1fr 330px; min-height: 0; }
+.board { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 10px; padding: 12px; overflow: hidden; min-height: 0; }
+.col { display: grid; grid-template-rows: auto 1fr; gap: 8px; min-height: 0; min-width: 0; }
+.colh { display: flex; align-items: center; gap: 7px; font-weight: 600; padding: 2px 4px; }
+.colh .n { color: var(--muted); font-weight: 500; font-variant-numeric: tabular-nums; }
+.colh .d { width: 8px; height: 8px; border-radius: 50%; }
+.cards { display: flex; flex-direction: column; gap: 8px; overflow: hidden; min-height: 0; }
+.card { background: var(--panel-bg); border: 1px solid var(--border); border-radius: 10px; padding: 10px 11px; display: grid; gap: 6px; text-align: left; color: var(--text); font: inherit; cursor: pointer; width: 100%; }
+.card:hover { border-color: color-mix(in srgb, var(--accent) 45%, var(--border)); }
+.card.sel { border-color: var(--accent); box-shadow: 0 0 0 1px var(--accent); }
+.card .tt { font-weight: 550; line-height: 1.35; }
+.card .meta { display: flex; flex-wrap: wrap; gap: 5px; align-items: center; color: var(--muted); font-size: 12px; }
+.chip { display: inline-flex; align-items: center; gap: 4px; font: 500 11px var(--mono); padding: 1px 6px; border-radius: 5px; background: var(--sunk); border: 1px solid var(--border); color: var(--muted); white-space: nowrap; }
+.chip.role { color: var(--accent); background: var(--accent-dim); border-color: transparent; }
+.why { font-size: 12px; color: var(--muted); border-top: 1px dashed var(--border); padding-top: 6px; }
+.why b { color: var(--text); font-weight: 550; }
+.on-m { font: 500 12px var(--mono); color: var(--text); display: inline-flex; gap: 6px; align-items: center; }
+.dot { width: 7px; height: 7px; border-radius: 50%; display: inline-block; flex: none; }
+.dot.run { background: var(--running); }
+.dot.wait { background: var(--waiting); }
+.dot.q { background: var(--queued); }
+.dot.done { background: var(--complete); }
+.dot.off { background: var(--muted); opacity: .5; }
+.ask { font-size: 12px; color: var(--text); background: color-mix(in srgb, var(--waiting) 12%, transparent); border-radius: 6px; padding: 5px 7px; }
+.prog { height: 3px; border-radius: 2px; background: var(--border); overflow: hidden; }
+.prog i { display: block; height: 100%; background: var(--running); }
+.card.dn .tt { color: var(--muted); font-weight: 500; }
+
+/* Detail */
+.detail { border-left: 1px solid var(--border); background: var(--panel-bg); padding: 16px; display: flex; flex-direction: column; gap: 14px; overflow: hidden; }
+.detail .st { display: flex; align-items: center; gap: 8px; font-size: 12px; color: var(--muted); }
+.kv { display: grid; grid-template-columns: 88px 1fr; gap: 7px 10px; font-size: 12.5px; }
+.kv dt { color: var(--muted); }
+.kv dd { margin: 0; min-width: 0; display: flex; flex-wrap: wrap; gap: 4px; }
+.lbl { font: 500 10.5px var(--mono); letter-spacing: .07em; text-transform: uppercase; color: var(--muted); }
+.timeline { display: grid; gap: 8px; font-size: 12.5px; }
+.timeline .e { display: grid; grid-template-columns: 44px 12px 1fr; gap: 6px; align-items: baseline; }
+.timeline .e .tm { color: var(--muted); font: 12px var(--mono); font-variant-numeric: tabular-nums; }
+.quote { font-size: 12.5px; background: var(--sunk); border: 1px solid var(--border); border-radius: 8px; padding: 9px 10px; }
+.select { display: flex; justify-content: space-between; align-items: center; border: 1px solid var(--border); border-radius: 8px; padding: 6px 9px; background: var(--card-bg); font-size: 12.5px; }
+
+/* Agents screen */
+.agents { display: grid; grid-template-columns: repeat(2, minmax(0,1fr)); gap: 12px; padding: 14px; overflow: hidden; align-content: start; }
+.mach { background: var(--panel-bg); border: 1px solid var(--border); border-radius: 12px; padding: 12px 14px; display: grid; gap: 10px; align-content: start; }
+.mach.paused { opacity: .72; }
+.mh { display: flex; align-items: center; gap: 8px; }
+.mh .nm { font: 600 13px var(--mono); }
+.mh .tag { font-size: 11px; color: var(--muted); }
+.sw { margin-left: auto; display: inline-flex; align-items: center; gap: 7px; font-size: 12px; color: var(--muted); }
+.sw i { width: 28px; height: 16px; border-radius: 999px; background: var(--running); position: relative; display: block; }
+.sw i::after { content: ""; position: absolute; width: 12px; height: 12px; border-radius: 50%; background: #fff; top: 2px; left: 14px; }
+.sw.off i { background: var(--border); }
+.sw.off i::after { left: 2px; }
+.offers { display: flex; flex-wrap: wrap; gap: 4px; align-items: center; font-size: 12px; color: var(--muted); }
+.seat { display: grid; grid-template-columns: 14px 1fr auto; gap: 8px; align-items: center; padding: 6px 8px; border-radius: 7px; background: var(--sunk); font-size: 12.5px; }
+.seat .s1 { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.seat .s2 { color: var(--muted); font: 11.5px var(--mono); white-space: nowrap; }
+.seat.free { background: transparent; border: 1px dashed var(--border); color: var(--muted); }
+.seat-list { display: grid; gap: 5px; }
+
+/* Orchestrator screen */
+.orch { display: grid; grid-template-columns: 236px minmax(0, 1fr) 320px; min-height: 0; }
+.slist { border-right: 1px solid var(--border); background: var(--panel-bg); padding: 10px 8px; display: grid; gap: 2px; align-content: start; font-size: 13px; }
+.slist .h { font: 500 10.5px var(--mono); letter-spacing: .07em; text-transform: uppercase; color: var(--muted); padding: 8px 8px 4px; }
+.slist .s { display: flex; gap: 8px; align-items: center; padding: 6px 8px; border-radius: 7px; }
+.slist .s.on { background: var(--accent-dim); }
+.slist .s span:nth-child(2) { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.slist .s .t { color: var(--muted); font-size: 11.5px; }
+.conv { padding: 18px 26px; display: flex; flex-direction: column; gap: 14px; overflow: hidden; background: var(--main-bg); }
+.u { align-self: flex-end; max-width: 78%; background: var(--card-bg); border: 1px solid var(--border); border-radius: 12px; padding: 9px 12px; }
+.a { display: grid; gap: 10px; max-width: 92%; }
+.plan { background: var(--panel-bg); border: 1px solid var(--border); border-radius: 10px; overflow: hidden; }
+.plan .ph { display: flex; align-items: center; gap: 8px; padding: 8px 12px; border-bottom: 1px solid var(--border); font-weight: 600; }
+.plan .ph .btn { margin-left: auto; }
+.pi { display: grid; grid-template-columns: 22px 1fr auto; gap: 8px; align-items: center; padding: 7px 12px; border-bottom: 1px solid var(--border); }
+.pi:last-child { border-bottom: 0; }
+.pi .no { font: 500 11px var(--mono); color: var(--muted); }
+.pi .x { display: flex; gap: 5px; flex-wrap: wrap; align-items: center; }
+.pi .x .after { font-size: 11.5px; color: var(--muted); }
+.pi .stt { font: 500 11.5px var(--mono); display: inline-flex; gap: 6px; align-items: center; white-space: nowrap; }
+.upd { font-size: 12.5px; border-left: 2px solid var(--waiting); padding: 4px 0 4px 10px; color: var(--muted); }
+.upd b { color: var(--text); font-weight: 550; }
+.composer { margin-top: auto; border: 1px solid var(--border); border-radius: 12px; background: var(--panel-bg); padding: 10px 12px; color: var(--muted); display: flex; justify-content: space-between; align-items: center; }
+.rpanel { border-left: 1px solid var(--border); background: var(--panel-bg); padding: 14px; display: flex; flex-direction: column; gap: 12px; overflow: hidden; }
+.tabs { display: flex; gap: 14px; border-bottom: 1px solid var(--border); font-size: 12.5px; }
+.tabs span { padding-bottom: 7px; color: var(--muted); }
+.tabs span.on { color: var(--text); box-shadow: inset 0 -2px 0 var(--accent); }
+.gauge { display: grid; gap: 6px; }
+.gauge .row { display: flex; justify-content: space-between; font-size: 12.5px; }
+.stack { display: flex; height: 8px; border-radius: 4px; overflow: hidden; background: var(--border); }
+.stack i { display: block; height: 100%; }
+
+/* ── How it works ────────────────────────────────────── */
+.steps { display: grid; grid-template-columns: repeat(5, minmax(0, 1fr)); gap: 10px; counter-reset: s; }
+.step { background: var(--panel-bg); border: 1px solid var(--border); border-radius: 12px; padding: 14px; display: grid; gap: 8px; align-content: start; min-width: 0; }
+.step .k { font: 500 11px var(--mono); color: var(--accent); }
+.step p { font-size: 13.5px; }
+.callout { background: var(--panel-bg); border: 1px solid var(--border); border-radius: 12px; padding: 16px 18px; display: grid; gap: 8px; }
+.callout p { font-size: 14px; }
+
+/* ── Tables ──────────────────────────────────────────── */
+.tbl-wrap { overflow-x: auto; border: 1px solid var(--border); border-radius: 12px; background: var(--panel-bg); }
+table { border-collapse: collapse; width: 100%; font-size: 13.5px; min-width: 620px; }
+th, td { text-align: left; padding: 10px 14px; border-bottom: 1px solid var(--border); vertical-align: top; }
+th { font: 500 11px var(--mono); letter-spacing: .07em; text-transform: uppercase; color: var(--muted); }
+tr:last-child td { border-bottom: 0; }
+td.k { font-weight: 600; white-space: nowrap; }
+.pill { font: 500 11px var(--mono); padding: 2px 7px; border-radius: 999px; white-space: nowrap; }
+.pill.reuse { background: color-mix(in srgb, var(--running) 14%, transparent); color: var(--running); }
+.pill.new { background: var(--accent-dim); color: var(--accent); }
+
+/* ── Decisions ───────────────────────────────────────── */
+.decisions { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 12px; }
+.dec { background: var(--panel-bg); border: 1px solid var(--border); border-radius: 12px; padding: 16px; display: grid; gap: 10px; align-content: start; }
+.dec ol { margin: 0; padding-left: 18px; display: grid; gap: 6px; font-size: 13.5px; }
+.dec li.rec::marker { color: var(--accent); }
+.dec .r { font: 500 11px var(--mono); color: var(--accent); margin-left: 4px; }
+
+.stages { display: grid; gap: 8px; }
+.stg { display: grid; grid-template-columns: 90px 1fr; gap: 14px; background: var(--panel-bg); border: 1px solid var(--border); border-radius: 10px; padding: 12px 14px; }
+.stg .n { font: 600 12px var(--mono); color: var(--accent); }
+.stg p { font-size: 13.5px; }
+.stg .demo { color: var(--muted); font-size: 13px; margin-top: 4px; }
+
+/* ── Thesis ─────────────────────────────────────────── */
+.thesis { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 10px; margin: 6px 0 2px; }
+.thesis > div { display: grid; gap: 4px; background: var(--panel-bg); border: 1px solid var(--border); border-radius: 12px; padding: 14px; }
+.thesis b { font-size: 16px; }
+.thesis .muted { font-size: 13px; }
+
+/* ── Lanes ──────────────────────────────────────────── */
+.lsum { margin-left: auto; display: flex; gap: 16px; font-size: 12.5px; color: var(--muted); }
+.lsum b { color: var(--text); font-variant-numeric: tabular-nums; }
+.lsum .w b { color: var(--waiting); }
+.lanes-body { display: grid; grid-template-rows: 1fr auto; min-height: 0; }
+.lanes { display: grid; grid-template-columns: 132px 1fr; padding: 4px 16px 0; overflow: hidden; align-content: start; font-size: 12px; }
+.lanes .axis { grid-column: 2; position: relative; height: 26px; border-bottom: 1px solid var(--border); }
+.lanes .axis span:last-child { transform: translateX(-100%); }
+.lanes .axis span { position: absolute; top: 6px; transform: translateX(-50%); color: var(--muted); font: 11px var(--mono); font-variant-numeric: tabular-nums; }
+.lanes .mlabel { grid-column: 1 / -1; display: flex; align-items: center; gap: 7px; padding: 8px 0 3px; font: 600 12px var(--mono); }
+.lanes .mlabel .muted { font: 400 11.5px var(--sans); }
+.lanes .slabel { color: var(--muted); font: 11px var(--mono); padding-left: 14px; display: flex; align-items: center; height: 22px; }
+.lanes .track { position: relative; height: 22px; border-bottom: 1px dashed color-mix(in srgb, var(--border) 60%, transparent); }
+.blk { position: absolute; top: 3px; height: 16px; border-radius: 4px; font-size: 10.5px; line-height: 16px; padding: 0 5px; overflow: hidden; white-space: nowrap; text-overflow: ellipsis; color: var(--text); cursor: pointer; border: 0; font-family: var(--sans); text-align: left; }
+.blk.done { background: color-mix(in srgb, var(--complete) 22%, var(--card-bg)); color: var(--muted); }
+.blk.run { background: color-mix(in srgb, var(--running) 30%, var(--card-bg)); }
+.blk.wait { background: repeating-linear-gradient(135deg, color-mix(in srgb, var(--waiting) 38%, var(--card-bg)) 0 6px, color-mix(in srgb, var(--waiting) 20%, var(--card-bg)) 6px 12px); }
+.blk.lost { background: color-mix(in srgb, var(--error) 30%, var(--card-bg)); }
+.blk.chore { background: color-mix(in srgb, var(--queued) 22%, var(--card-bg)); color: var(--muted); }
+.blk.you { background: repeating-linear-gradient(90deg, var(--sunk) 0 3px, var(--border) 3px 4px); color: var(--muted); }
+.blk.idle { background: transparent; border: 1px dashed var(--border); color: var(--muted); cursor: default; }
+.blk.next { background: transparent; border: 1px dashed color-mix(in srgb, var(--accent) 60%, transparent); color: var(--accent); }
+.blk:focus-visible { outline: 2px solid var(--accent); }
+.nowline { position: absolute; top: 0; bottom: 0; width: 0; border-left: 1.5px solid var(--accent); pointer-events: none; z-index: 2; }
+.nowline span { position: absolute; top: 4px; left: 4px; font: 600 10.5px var(--mono); color: var(--accent); }
+.lane-tip { margin: 6px 16px 12px; padding: 8px 12px; border: 1px solid var(--border); border-radius: 8px; background: var(--panel-bg); font-size: 12.5px; min-height: 36px; }
+.legend { display: flex; flex-wrap: wrap; gap: 12px; font-size: 11.5px; color: var(--muted); }
+.legend i { display: inline-block; width: 18px; height: 10px; border-radius: 3px; vertical-align: -1px; margin-right: 5px; position: static; }
+
+/* ── Brief ──────────────────────────────────────────── */
+.brief { display: grid; grid-template-columns: 430px minmax(0, 1fr); min-height: 0; background: var(--main-bg); }
+.bcol { border-right: 1px solid var(--border); background: var(--panel-bg); padding: 22px 20px; display: flex; flex-direction: column; gap: 12px; overflow: hidden; }
+.bhead { display: grid; gap: 8px; }
+.bstats { display: grid; gap: 4px; font-size: 12.5px; color: var(--muted); }
+.bstats span { display: flex; gap: 8px; align-items: center; }
+.dot.err { background: var(--error); }
+.dcard { border: 1px solid var(--border); border-radius: 10px; padding: 11px 12px; display: grid; gap: 7px; background: var(--card-bg); }
+.dcard.soft { background: transparent; border-style: dashed; }
+.dcard p { font-size: 12.5px; }
+.dtop { display: flex; gap: 8px; align-items: center; }
+.dtop .muted { margin-left: auto; font-size: 11.5px; }
+.dbtns { display: flex; gap: 6px; flex-wrap: wrap; }
+.gcol { display: grid; grid-template-rows: auto 1fr auto; min-height: 0; }
+.ghead { display: flex; align-items: center; gap: 10px; padding: 12px 18px; border-bottom: 1px solid var(--border); }
+.gmap { position: relative; overflow: hidden; }
+.gedges { position: absolute; inset: 0; width: 100%; height: 100%; }
+.gnode { position: absolute; width: 196px; background: var(--panel-bg); border: 1px solid var(--border); border-radius: 10px; padding: 9px 11px; display: grid; gap: 5px; font-size: 12px; }
+.gnode .tt { font-weight: 550; font-size: 12.5px; line-height: 1.3; }
+.gnode .meta { display: flex; gap: 6px; align-items: center; color: var(--muted); font-size: 11.5px; flex-wrap: wrap; }
+.gnode.wait { border-color: var(--waiting); box-shadow: 0 0 0 1px color-mix(in srgb, var(--waiting) 50%, transparent); }
+.gnode.done .tt { color: var(--muted); }
+.gnode.new { border-style: dashed; }
+.mbadge { font: 600 10.5px var(--mono); padding: 1px 6px; border-radius: 5px; background: var(--sunk); border: 1px solid var(--border); color: var(--text); }
+.ask-orch { margin: 0 18px 16px; border: 1px solid var(--border); border-radius: 12px; background: var(--panel-bg); padding: 10px 12px; display: flex; justify-content: space-between; gap: 10px; font-size: 12.5px; }
+
+/* ── Ideas / wild ───────────────────────────────────── */
+.ideas { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 12px; }
+.idea { background: var(--panel-bg); border: 1px solid var(--border); border-radius: 12px; padding: 16px; display: grid; gap: 8px; align-content: start; }
+.idea .k { font: 500 11px var(--mono); color: var(--accent); letter-spacing: .04em; }
+.idea p { font-size: 13.5px; color: var(--muted); }
+.pill.unv { background: color-mix(in srgb, var(--waiting) 16%, transparent); color: var(--waiting); margin-left: 4px; }
+.gap { display: grid; gap: 10px; background: var(--panel-bg); border: 1px solid var(--border); border-radius: 12px; padding: 16px 18px; }
+.gap ul { margin: 8px 0 0; padding-left: 18px; display: grid; gap: 4px; font-size: 14px; }
+
+.caption { font-size: 13.5px; color: var(--muted); max-width: 90ch; }
+.caption b { color: var(--text); font-weight: 600; }
+
+@media (max-width: 860px) {
+  .compare, .decisions, .ideas, .thesis { grid-template-columns: 1fr; }
+  .steps { grid-template-columns: 1fr 1fr; }
+}
+@media (max-width: 480px) {
+  h1 { font-size: 28px; }
+  .steps { grid-template-columns: 1fr; }
+  .stg { grid-template-columns: 1fr; gap: 4px; }
+}
+@media (prefers-reduced-motion: no-preference) {
+  .card { transition: border-color 120ms ease-out, box-shadow 120ms ease-out; }
+}
+</style>
+</head>
+<body>
+<svg width="0" height="0" style="position:absolute" aria-hidden="true">
+  <symbol id="i-chat" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/></symbol>
+  <symbol id="i-work" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="4" width="5" height="16" rx="1.5"/><rect x="10" y="4" width="5" height="10" rx="1.5"/><rect x="17" y="4" width="4" height="13" rx="1.5"/></symbol>
+  <symbol id="i-flow" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="7" height="7" rx="1.5"/><rect x="14" y="14" width="7" height="7" rx="1.5"/><path d="M7 10v4a3 3 0 0 0 3 3h4"/></symbol>
+  <symbol id="i-zap" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M13 2 3 14h9l-1 8 10-12h-9z"/></symbol>
+  <symbol id="i-gear" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.7 1.7 0 0 0 .3 1.8l.1.1a2 2 0 1 1-2.8 2.8l-.1-.1a1.7 1.7 0 0 0-1.8-.3 1.7 1.7 0 0 0-1 1.5V21a2 2 0 1 1-4 0v-.1a1.7 1.7 0 0 0-1.1-1.5 1.7 1.7 0 0 0-1.8.3l-.1.1a2 2 0 1 1-2.8-2.8l.1-.1a1.7 1.7 0 0 0 .3-1.8 1.7 1.7 0 0 0-1.5-1H3a2 2 0 1 1 0-4h.1a1.7 1.7 0 0 0 1.5-1.1 1.7 1.7 0 0 0-.3-1.8l-.1-.1a2 2 0 1 1 2.8-2.8l.1.1a1.7 1.7 0 0 0 1.8.3H9a1.7 1.7 0 0 0 1-1.5V3a2 2 0 1 1 4 0v.1a1.7 1.7 0 0 0 1 1.5 1.7 1.7 0 0 0 1.8-.3l.1-.1a2 2 0 1 1 2.8 2.8l-.1.1a1.7 1.7 0 0 0-.3 1.8V9a1.7 1.7 0 0 0 1.5 1H21a2 2 0 1 1 0 4h-.1a1.7 1.7 0 0 0-1.5 1z"/></symbol>
+</svg>
+
+<template id="rail">
+  <div class="rail">
+    <div class="ri" data-r="sessions"><svg><use href="#i-chat"/></svg>Sessions</div>
+    <div class="ri" data-r="work"><svg><use href="#i-work"/></svg>Work</div>
+    <div class="ri" data-r="workflows"><svg><use href="#i-flow"/></svg>Workflows</div>
+    <div class="ri" data-r="automations"><svg><use href="#i-zap"/></svg>Automations</div>
+    <div class="sp"></div>
+    <div class="ri" data-r="settings"><svg><use href="#i-gear"/></svg>Settings</div>
+  </div>
+</template>
+
+<template id="capbar">
+  <div class="cap">
+    <span class="capchip"><span class="seats"><i class="b"></i><i class="b"></i><i class="b"></i><i></i></span>atlas 3/4</span>
+    <span class="capchip"><span class="seats"><i class="b"></i><i class="w"></i></span>mini 2/2</span>
+    <span class="capchip"><span class="seats"><i class="b"></i><i class="b"></i><i class="b"></i><i></i><i></i><i></i></span>build-box 3/6</span>
+    <span class="capchip paused"><span class="seats"><i></i><i></i></span>laptop paused</span>
+  </div>
+</template>
+
+<div class="page">
+
+<header class="top">
+  <span class="eyebrow">Exploration · draft · 26 October 2026</span>
+  <h1>Fleet vNext</h1>
+  <p>Today you look at Fleet through sessions: machine, then folder, then session. That works with one or two machines. With four machines and a dozen agents running, the list grows faster than you can read it, and nothing tells you which session is the one you should look at. And one machine can't do all the work anyway.</p>
+  <p>The idea here: <b>work</b> becomes the unit, <b>machines</b> become capacity, and <b>you</b> become the scarce part. You, or an orchestrator agent, post pieces of work. Every machine you own offers seats, and a free seat picks up work that fits. You see work and decisions, not sessions. Sessions are still there, one click in.</p>
+  <div class="thesis">
+    <div><span class="eyebrow">Unit</span><b>A piece of work</b><span class="muted">an ask, a folder, what it needs, what done means</span></div>
+    <div><span class="eyebrow">Capacity</span><b>Seats on machines</b><span class="muted">idle seats pull work; nothing sits unused</span></div>
+    <div><span class="eyebrow">Bottleneck</span><b>Your attention</b><span class="muted">a seat waiting on you is the most expensive seat</span></div>
+  </div>
+  <p class="caption">Three concepts below show the same afternoon three ways: <b>A Queue</b> (closest to today), <b>B Lanes</b> (machines over time), <b>C Brief</b> (the orchestrator as your home screen). They aren't exclusive; vNext could be C as home, with A and B one click away.</p>
+  <nav class="toc" aria-label="Sections">
+    <a href="#why">Why</a><a href="#queue">A · Queue</a><a href="#agents">A · Agents</a><a href="#lanes">B · Lanes</a><a href="#brief">C · Brief</a><a href="#orch">Orchestrator</a><a href="#ideas">New ideas</a><a href="#wild">In the wild</a><a href="#how">How pick-up works</a><a href="#decide">Decisions</a><a href="#stages">Stages</a>
+  </nav>
+</header>
+
+<!-- ───────────────────────── Why ───────────────────────── -->
+<section id="why">
+  <span class="eyebrow">Why</span>
+  <h2>The same afternoon, two ways</h2>
+  <div class="compare">
+    <div class="cmp">
+      <h3>Today: the Sessions list</h3>
+      <div class="big">142<small>rows across 4 machines</small></div>
+      <div class="mini-list">
+        <div class="m"><span class="dot run"></span>atlas <span class="muted">· 38</span></div>
+        <div class="r"><span>Retry budget for webhooks</span><span class="t">now</span></div>
+        <div class="r"><span>general · Review the diff</span><span class="t">2m</span></div>
+        <div class="r"><span>Fork: emit jobs over SignalR</span><span class="t">4m</span></div>
+        <div class="r"><span>Offline sync conflicts</span><span class="t">11m</span></div>
+        <div class="m"><span class="dot run"></span>mini <span class="muted">· 24</span></div>
+        <div class="r"><span>Sync status badge on iOS</span><span class="t">now</span></div>
+        <div class="r"><span>Hero image sizes</span><span class="t">1h</span></div>
+        <div class="m"><span class="dot run"></span>build-box <span class="muted">· 61</span></div>
+        <div class="r"><span>Bump ledger-api dependencies</span><span class="t">now</span></div>
+        <div class="r"><span>Flaky: import_resumes_after_restart</span><span class="t">3m</span></div>
+        <div class="more">+ 133 more rows, 3 of them waiting on you somewhere</div>
+      </div>
+    </div>
+    <div class="cmp">
+      <h3>Work: what's being done</h3>
+      <div class="big">14<small>pieces of work, 2 need you</small></div>
+      <div class="att">
+        <div class="r"><span class="dot wait"></span><span><b>Needs you</b> · Conflict rules for offline edits asks: keep server-wins for deletes?</span></div>
+        <div class="r"><span class="dot wait"></span><span><b>Needs you</b> · Retry budget for webhooks: PR #212 is ready to review</span></div>
+        <div class="r"><span class="dot run"></span><span><b>6 running</b> on atlas, mini and build-box</span></div>
+        <div class="r"><span class="dot q"></span><span><b>3 waiting</b> · one is stuck: it needs a Mac and mini is full</span></div>
+        <div class="r"><span class="dot done"></span><span><b>3 done today</b> · 2 merged, 1 closed with a note</span></div>
+      </div>
+    </div>
+  </div>
+  <p class="caption">One piece of work can be several sessions: the agent's own, its sub-agents, a fork, a retry on another machine after the first one stopped answering. The Sessions list shows all of them. Work shows one row with the state that matters.</p>
+</section>
+
+<!-- ───────────────────────── Queue ───────────────────────── -->
+<section id="queue">
+  <span class="eyebrow">Concept A · Queue</span>
+  <h2>The work queue</h2>
+  <p class="caption">A new <b>Work</b> rail item. Four columns by state. The bar shows each machine's seats: how many agents it runs at once and how many are busy. <b>Click a card</b> to see its detail on the right.</p>
+  <div class="frame-wrap">
+    <div class="app" data-rail="work">
+      <div class="rail-slot"></div>
+      <div class="ctx">
+        <div class="bar">
+          <h3>Work</h3>
+          <div class="seg"><span class="on">Queue</span><span>Agents</span></div>
+          <div class="cap-slot" style="margin-left:auto"></div>
+          <button class="btn pri" type="button">+ New work</button>
+        </div>
+        <div class="work">
+          <div class="board">
+            <div class="col">
+              <div class="colh"><span class="d" style="background:var(--queued)"></span>Waiting <span class="n">3</span></div>
+              <div class="cards">
+                <button class="card" data-item="mac" type="button">
+                  <div class="tt">Sync status badge in the iOS share sheet</div>
+                  <div class="meta"><span class="chip">ledger-ios</span><span class="chip role">Standard</span><span class="chip">needs mac</span></div>
+                  <div class="why"><b>Stuck:</b> only mini has <span class="mono">mac</span>, and it's full. Next free seat in ~6 min.</div>
+                </button>
+                <button class="card" data-item="after" type="button">
+                  <div class="tt">Migrate offline queue to the new schema</div>
+                  <div class="meta"><span class="chip">ledger-api</span><span class="chip role">Strong</span></div>
+                  <div class="why">Starts after <b>Conflict rules for offline edits</b></div>
+                </button>
+                <button class="card" data-item="next" type="button">
+                  <div class="tt">Docs: how offline sync resolves conflicts</div>
+                  <div class="meta"><span class="chip">docs-site</span><span class="chip role">Fast</span></div>
+                  <div class="why">Next on <b>build-box</b>, seat 4</div>
+                </button>
+              </div>
+            </div>
+            <div class="col">
+              <div class="colh"><span class="d" style="background:var(--running)"></span>Running <span class="n">6</span></div>
+              <div class="cards">
+                <button class="card sel" data-item="retry" type="button">
+                  <div class="tt">Dedupe webhook deliveries on retry</div>
+                  <div class="meta"><span class="on-m"><span class="dot run"></span>atlas</span><span>OpenCode 2 · 12m</span></div>
+                  <div class="prog"><i style="width:57%"></i></div>
+                  <div class="meta"><span>4 of 7 todos</span><span>· attempt 2</span></div>
+                </button>
+                <button class="card" data-item="deps" type="button">
+                  <div class="tt">Bump ledger-api dependencies</div>
+                  <div class="meta"><span class="on-m"><span class="dot run"></span>build-box</span><span>Claude Code · 3m</span></div>
+                  <div class="prog"><i style="width:20%"></i></div>
+                </button>
+                <button class="card" data-item="flaky" type="button">
+                  <div class="tt">Flaky: import_resumes_after_restart</div>
+                  <div class="meta"><span class="on-m"><span class="dot run"></span>build-box</span><span>OpenCode 2 · 8m</span></div>
+                  <div class="prog"><i style="width:70%"></i></div>
+                </button>
+                <button class="card" data-item="ios" type="button">
+                  <div class="tt">Offline banner on the iOS home screen</div>
+                  <div class="meta"><span class="on-m"><span class="dot run"></span>mini</span><span>Claude Code · 21m</span></div>
+                  <div class="prog"><i style="width:85%"></i></div>
+                </button>
+                <div class="muted" style="font-size:12px;padding:0 4px">+ 2 more</div>
+              </div>
+            </div>
+            <div class="col">
+              <div class="colh"><span class="d" style="background:var(--waiting)"></span>Needs you <span class="n">2</span></div>
+              <div class="cards">
+                <button class="card" data-item="q" type="button">
+                  <div class="tt">Conflict rules for offline edits</div>
+                  <div class="meta"><span class="on-m"><span class="dot wait"></span>mini</span><span>asked 4m ago</span></div>
+                  <div class="ask">Keep server-wins for deletes, or ask the user on the device?</div>
+                </button>
+                <button class="card" data-item="pr" type="button">
+                  <div class="tt">Retry budget for webhooks</div>
+                  <div class="meta"><span class="on-m"><span class="dot wait"></span>atlas</span><span>PR #212 · checks green</span></div>
+                  <div class="ask">Ready for your review</div>
+                </button>
+              </div>
+            </div>
+            <div class="col">
+              <div class="colh"><span class="d" style="background:var(--complete)"></span>Done today <span class="n">3</span></div>
+              <div class="cards">
+                <button class="card dn" type="button"><div class="tt">Rate limit headers</div><div class="meta"><span class="chip">PR #209 merged</span><span>$0.84</span></div></button>
+                <button class="card dn" type="button"><div class="tt">Index for slow ledger search</div><div class="meta"><span class="chip">PR #210 merged</span><span>$1.92</span></div></button>
+                <button class="card dn" type="button"><div class="tt">Dark mode contrast pass</div><div class="meta"><span class="chip">closed</span><span>"Not needed, already AA"</span></div></button>
+              </div>
+            </div>
+          </div>
+          <aside class="detail" id="detail" aria-live="polite"></aside>
+        </div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- ───────────────────────── Agents ───────────────────────── -->
+<section id="agents">
+  <span class="eyebrow">Concept A · Agents tab</span>
+  <h2>Agents, by machine</h2>
+  <p class="caption">The same rail item, <b>Agents</b> tab. Each machine has seats and says what it offers: harnesses, folders it has, and labels you give it (<span class="mono">mac</span>, <span class="mono">gpu</span>, <span class="mono">docker</span>). A free seat shows what it will take next. <b>Takes work</b> off means the machine finishes what it has and takes nothing new, for the laptop you're typing on.</p>
+  <div class="frame-wrap">
+    <div class="app" data-rail="work">
+      <div class="rail-slot"></div>
+      <div class="ctx">
+        <div class="bar">
+          <h3>Work</h3>
+          <div class="seg"><span>Queue</span><span class="on">Agents</span></div>
+          <div class="cap" style="margin-left:auto"><span class="muted" style="font-size:12px">Roles: Strong = Opus 5.5 · Standard = Sonnet 5.5 · Fast = Haiku 5.5</span></div>
+          <button class="btn" type="button">Add a machine</button>
+        </div>
+        <div class="agents">
+          <div class="mach">
+            <div class="mh"><span class="dot run"></span><span class="nm">atlas</span><span class="tag">this machine · 3 of 4 seats</span><span class="sw"><i></i>Takes work</span></div>
+            <div class="offers"><span class="chip">linux</span><span class="chip">docker</span><span>· OpenCode 2, Claude Code · 4 folders</span></div>
+            <div class="seat-list">
+              <div class="seat"><span class="dot run"></span><span class="s1">Dedupe webhook deliveries on retry</span><span class="s2">Standard · 12m</span></div>
+              <div class="seat"><span class="dot wait"></span><span class="s1">Retry budget for webhooks</span><span class="s2">needs you</span></div>
+              <div class="seat"><span class="dot run"></span><span class="s1">Fork: emit jobs over SignalR</span><span class="s2">Strong · 4m</span></div>
+              <div class="seat free"><span class="dot off"></span><span class="s1">Free · takes the next thing that fits</span><span class="s2"></span></div>
+            </div>
+          </div>
+          <div class="mach">
+            <div class="mh"><span class="dot run"></span><span class="nm">mini</span><span class="tag">2 of 2 seats</span><span class="sw"><i></i>Takes work</span></div>
+            <div class="offers"><span class="chip">mac</span><span class="chip">ios</span><span>· Claude Code, OpenCode 2 · Xcode 27</span></div>
+            <div class="seat-list">
+              <div class="seat"><span class="dot run"></span><span class="s1">Offline banner on the iOS home screen</span><span class="s2">Standard · 21m</span></div>
+              <div class="seat"><span class="dot wait"></span><span class="s1">Conflict rules for offline edits</span><span class="s2">needs you</span></div>
+            </div>
+            <div class="why">1 waiting for a seat here: <b>Sync status badge in the iOS share sheet</b>. <a href="#agents" style="color:var(--accent)">Add a seat</a></div>
+          </div>
+          <div class="mach">
+            <div class="mh"><span class="dot run"></span><span class="nm">build-box</span><span class="tag">node · 3 of 6 seats</span><span class="sw"><i></i>Takes work</span></div>
+            <div class="offers"><span class="chip">linux</span><span class="chip">gpu</span><span class="chip">docker</span><span>· OpenCode 2, Claude Code, Pi · clones folders it doesn't have</span></div>
+            <div class="seat-list">
+              <div class="seat"><span class="dot run"></span><span class="s1">Bump ledger-api dependencies</span><span class="s2">Fast · 3m</span></div>
+              <div class="seat"><span class="dot run"></span><span class="s1">Flaky: import_resumes_after_restart</span><span class="s2">Standard · 8m</span></div>
+              <div class="seat"><span class="dot run"></span><span class="s1">Load test the sync endpoint</span><span class="s2">Standard · 31m</span></div>
+              <div class="seat free"><span class="dot off"></span><span class="s1">Free · next: Docs: how offline sync resolves conflicts</span><span class="s2"></span></div>
+            </div>
+          </div>
+          <div class="mach paused">
+            <div class="mh"><span class="dot off"></span><span class="nm">laptop</span><span class="tag">0 of 2 seats</span><span class="sw off"><i></i>Takes work</span></div>
+            <div class="offers"><span class="chip">mac</span><span>· Claude Code · you start sessions here yourself</span></div>
+            <div class="why">Takes nothing from the queue. Your own sessions on it still show in Sessions.</div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- ───────────────────────── Lanes ───────────────────────── -->
+<section id="lanes">
+  <span class="eyebrow">Concept B · Lanes</span>
+  <h2>Every seat you own, over time</h2>
+  <p class="caption">Each machine is a band, each seat a lane, time runs left to right with <b>now</b> as a line. Right of now, faded blocks are what each seat will pick up next. You see at a glance what no list shows: <b>seats waiting on you</b> (amber, striped, growing), <b>idle seats</b> (and the chores they took when nothing was queued), and the moment a machine dropped out and its work moved. <b>Hover or click a block</b>.</p>
+  <div class="frame-wrap">
+    <div class="app" data-rail="work">
+      <div class="rail-slot"></div>
+      <div class="ctx">
+        <div class="bar">
+          <h3>Work</h3>
+          <div class="seg"><span>Queue</span><span class="on">Lanes</span><span>Agents</span></div>
+          <div class="lsum">
+            <span><b>9</b> of 14 seats busy</span>
+            <span class="w"><b>1h 6m</b> of seat time waited on you today</span>
+            <span><b>3</b> chores ran on idle seats</span>
+          </div>
+        </div>
+        <div class="lanes-body">
+          <div class="lanes" id="lanes-grid"></div>
+          <div class="lane-tip" id="lane-tip">Hover a block to see what it is.</div>
+        </div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- ───────────────────────── Brief ───────────────────────── -->
+<section id="brief">
+  <span class="eyebrow">Concept C · Brief</span>
+  <h2>The orchestrator as your home screen</h2>
+  <p class="caption">You open Fleet and the orchestrator has a brief ready: what happened since you left, and the decisions only you can make, each answerable in place. The right side is the <b>goal map</b>: the pieces of a goal, what waits on what, and which machine has each one. You talk to the orchestrator from the bar at the bottom. Sessions never appear unless you open one.</p>
+  <div class="frame-wrap">
+    <div class="app" data-rail="work">
+      <div class="rail-slot"></div>
+      <div class="brief">
+        <div class="bcol">
+          <div class="bhead">
+            <span class="eyebrow">Since you left at 11:20</span>
+            <h3 style="font-size:20px">Two things need you. Everything else is moving.</h3>
+            <div class="bstats">
+              <span><span class="dot done"></span>3 merged</span>
+              <span><span class="dot run"></span>6 running on 3 machines</span>
+              <span><span class="dot off"></span>build-box was idle 40 min; it ran 3 chores</span>
+              <span><span class="dot err"></span>mini dropped out at 14:02; its piece moved to atlas</span>
+            </div>
+          </div>
+          <div class="lbl">Decide</div>
+          <div class="dcard">
+            <div class="dtop"><span class="dot wait"></span><b>Conflict rules for offline edits</b><span class="muted">mini · 11m waiting</span></div>
+            <p>Keep server-wins for deletes, or ask the user on the device? You asked to decide this one yourself. Two pieces wait on it.</p>
+            <div class="dbtns"><button class="btn pri" type="button">Server wins</button><button class="btn" type="button">Ask on device</button><button class="btn" type="button">Open session</button></div>
+          </div>
+          <div class="dcard">
+            <div class="dtop"><span class="dot wait"></span><b>Retry budget for webhooks</b><span class="muted">PR #212 · checks green</span></div>
+            <p>+212 −38 in 9 files. The orchestrator read it: one risk, the budget resets on restart.</p>
+            <div class="dbtns"><button class="btn pri" type="button">Review diff</button><button class="btn" type="button">Merge</button><button class="btn" type="button">Send back…</button></div>
+          </div>
+          <div class="dcard soft">
+            <div class="dtop"><span class="dot q"></span><b>Suggestion</b><span class="muted">orchestrator</span></div>
+            <p>The share-sheet badge has waited 50 min for a Mac. Your laptop is a Mac and idle. Lend it one seat until 16:00?</p>
+            <div class="dbtns"><button class="btn" type="button">Lend 1 seat</button><button class="btn" type="button">Keep waiting</button></div>
+          </div>
+        </div>
+        <div class="gcol">
+          <div class="ghead"><b>Offline sync this week</b><span class="muted">1 of 7 done · $4.10 so far</span><div class="seg" style="margin-left:auto"><span class="on">Offline sync</span><span>Webhooks</span><span>Chores</span></div></div>
+          <div class="gmap" id="gmap">
+            <svg class="gedges" id="gedges" aria-hidden="true"></svg>
+          </div>
+          <div class="ask-orch"><span>Tell the orchestrator… <span class="muted">e.g. "make the iOS work wait until the API lands"</span></span><span class="mono muted">Opus 5.5</span></div>
+        </div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- ───────────────────────── Orchestrator ───────────────────────── -->
+<section id="orch">
+  <span class="eyebrow">Shared by every concept · Orchestrator</span>
+  <h2>An orchestrator that plans, Fleet that hands out</h2>
+  <p class="caption">The orchestrator is an ordinary session with one more tool: <span class="mono">fleet_work_post</span>. You talk to it about a goal; it breaks the goal into pieces with what each one needs, and posts them. From there <b>Fleet</b> matches work to machines, so handing out costs no tokens. The orchestrator hears back when a piece finishes or asks something, and answers what it can.</p>
+  <div class="frame-wrap">
+    <div class="app" data-rail="sessions">
+      <div class="rail-slot"></div>
+      <div class="orch">
+        <div class="slist">
+          <div class="h">Orchestrators</div>
+          <div class="s on"><span class="dot run"></span><span>Offline sync this week</span><span class="t">now</span></div>
+          <div class="s"><span class="dot off"></span><span>Webhook reliability</span><span class="t">2h</span></div>
+          <div class="h">ledger-api</div>
+          <div class="s"><span class="dot off"></span><span>Look at the slow search query</span><span class="t">1d</span></div>
+          <div class="s"><span class="dot off"></span><span>Scratch</span><span class="t">3d</span></div>
+          <div class="h">Work sessions</div>
+          <div class="s"><span class="muted" style="font-size:12px">14 sessions in Work. Shown there, not here.</span></div>
+        </div>
+        <div class="conv">
+          <div class="u">Offline sync for ledger is the priority this week. Break it up and get it going. The iOS bits need the Mac. Ask me before changing how deletes resolve.</div>
+          <div class="a">
+            <div>I split it into five pieces. Two can start now; the schema migration waits for the conflict rules, because the rules decide the columns.</div>
+            <div class="plan">
+              <div class="ph">Posted 5 pieces to Work <span class="muted" style="font-weight:400">· goal: Offline sync this week</span><button class="btn" type="button">Open in Work</button></div>
+              <div class="pi"><span class="no">1</span><div class="x"><span>Conflict rules for offline edits</span><span class="chip">ledger-api</span><span class="chip role">Strong</span></div><span class="stt"><span class="dot wait"></span>needs you</span></div>
+              <div class="pi"><span class="no">2</span><div class="x"><span>Migrate offline queue to the new schema</span><span class="after">after 1</span></div><span class="stt"><span class="dot q"></span>waiting</span></div>
+              <div class="pi"><span class="no">3</span><div class="x"><span>Offline banner on the iOS home screen</span><span class="chip">needs mac</span></div><span class="stt"><span class="dot run"></span>mini · 21m</span></div>
+              <div class="pi"><span class="no">4</span><div class="x"><span>Sync status badge in the iOS share sheet</span><span class="chip">needs mac</span></div><span class="stt"><span class="dot q"></span>waiting for mini</span></div>
+              <div class="pi"><span class="no">5</span><div class="x"><span>Docs: how offline sync resolves conflicts</span><span class="after">after 1</span></div><span class="stt"><span class="dot q"></span>waiting</span></div>
+            </div>
+          </div>
+          <div class="upd"><b>Piece 1 asks</b>: keep server-wins for deletes, or ask the user on the device? You said to ask you first, so I've left it with you. It's in Needs you.</div>
+          <div class="composer"><span>Answer, or tell the orchestrator what to change…</span><span class="mono">Opus 5.5 · OpenCode 2</span></div>
+        </div>
+        <div class="rpanel">
+          <div class="tabs"><span class="on">Goal</span><span>Files</span><span>Changes</span></div>
+          <div class="gauge">
+            <div class="row"><b>Offline sync this week</b><span class="muted">1 of 5 done</span></div>
+            <div class="stack"><i style="width:20%;background:var(--complete)"></i><i style="width:20%;background:var(--running)"></i><i style="width:20%;background:var(--waiting)"></i><i style="width:40%;background:var(--queued)"></i></div>
+          </div>
+          <dl class="kv">
+            <dt>Spent</dt><dd>$4.10 · orchestrator $0.38</dd>
+            <dt>Machines</dt><dd>atlas, mini</dd>
+            <dt>Its rules</dt><dd>Ask before changing how deletes resolve</dd>
+          </dl>
+          <div class="lbl">What it can do</div>
+          <div class="quote">Post work, change or cancel work it posted, answer questions from its own pieces. It can't merge, and it can't take a seat for itself.</div>
+        </div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- ───────────────────────── Ideas ───────────────────────── -->
+<section id="ideas">
+  <span class="eyebrow">New ideas</span>
+  <h2>Things a fleet of your own machines can do</h2>
+  <div class="ideas">
+    <div class="idea"><span class="k">Context affinity</span><h3>Work goes where its context is warm</h3><p>A machine that just worked on ledger-api has it checked out, its build cache full, its prompt cache warm and its notes fresh. The matcher prefers it for follow-ups, and the card says why: "atlas: has ledger-api, built 20 min ago".</p></div>
+    <div class="idea"><span class="k">Idle chores</span><h3>Spare seats do the dull work</h3><p>A backlog you approve in advance: flaky tests, dependency bumps, TODOs marked for agents. A seat idle for 10 minutes takes one. Results wait as draft PRs. Chores never merge and never interrupt you.</p></div>
+    <div class="idea"><span class="k">Lend a seat</span><h3>Your laptop works while you're away</h3><p>When you lock the screen, your own machine offers a seat or two; when you come back it finishes the step it's on and takes nothing new. The machine you type on is never slowed down by agents.</p></div>
+    <div class="idea"><span class="k">You are the bottleneck</span><h3>Waiting on you, measured</h3><p>Seat time blocked on a question or a review is counted and shown. Decisions are sorted by how much work they unblock, not by when they were asked. The phone app shows only this list.</p></div>
+    <div class="idea"><span class="k">Checkpoints</span><h3>A machine can drop out mid-piece</h3><p>Each piece pushes its work branch at every finished todo. If its machine stops answering, the piece resumes on another machine from the last push with the session's notes, as attempt 2.</p></div>
+    <div class="idea"><span class="k">Seats have a price</span><h3>Roles map per machine</h3><p>Fast on build-box can be a local model at $0; Strong only runs where an Opus sign-in exists. The matcher reads price as well as fit, and every goal shows what it has cost so far.</p></div>
+  </div>
+</section>
+
+<!-- ───────────────────────── Wild ───────────────────────── -->
+<section id="wild">
+  <span class="eyebrow">In the wild</span>
+  <h2>What exists, and where the gap is</h2>
+  <p>Coding-agent tools all treat machines as either one laptop or a vendor's cloud. Systems that do spread work over many machines (CI runners, task queues) know nothing about agents, folders or people. Fleet already sits on your own machines and talks to every harness, so it can join the two.</p>
+  <div class="tbl-wrap">
+    <table>
+      <thead><tr><th>Tool</th><th>Who hands out work</th><th>Machines</th><th>Worth taking</th></tr></thead>
+      <tbody>
+        <tr><td class="k">Gas Town (Steve Yegge)</td><td>A "Mayor" agent assigns git-tracked work items to short-lived workers</td><td>One machine, tmux</td><td>Workers are disposable; the work item is durable. A crashed worker is replaced and the next one reads the item.</td></tr>
+        <tr><td class="k">Claude Code agent view</td><td>You</td><td>One machine</td><td>Sessions grouped by state, needs-input first</td></tr>
+        <tr><td class="k">Claude Code agent teams</td><td>A lead assigns, or an idle teammate claims an unblocked task</td><td>One session group</td><td>Idle workers claim tasks whose dependencies are done</td></tr>
+        <tr><td class="k">Claude Code self-hosted runner <span class="pill unv">unverified</span></td><td>Pull: a runner with free capacity claims from Anthropic's queue</td><td>Yours, Team/Enterprise only</td><td>Capacity as one number per machine. Claude only, cloud queue.</td></tr>
+        <tr><td class="k">GitHub Agent HQ</td><td>You assign an issue to one or several agents</td><td>GitHub's cloud</td><td>One issue to several agents, compare the PRs</td></tr>
+        <tr><td class="k">Cursor 3 agents window</td><td>You</td><td>Local, cloud, SSH</td><td>Best-of-n: one task across models side by side</td></tr>
+        <tr><td class="k">Linear, Amp</td><td>You delegate an issue</td><td>Vendor cloud</td><td>Delegating isn't assigning: the person stays the owner and hears when input is needed</td></tr>
+        <tr><td class="k">Paperclip</td><td>A manager agent breaks goals into issues; workers wake and take theirs</td><td>Not machine-aware</td><td>Goals, budgets per agent</td></tr>
+        <tr><td class="k">Vibe Kanban</td><td>You drag a card to an agent</td><td>Local (company closed April 2026)</td><td>Cards that move as agents pick them up</td></tr>
+        <tr><td class="k">GitHub Actions runners, Buildkite</td><td>Pull: a job waits for a runner with all its labels</td><td>Many</td><td>Labels as the match rule; "waiting: no runner with mac"; pause a queue</td></tr>
+        <tr><td class="k">Temporal, BOINC</td><td>Pull: workers poll, or ask when their buffer runs low</td><td>Many</td><td>Heartbeats carry free slots; the worker decides when it wants more</td></tr>
+      </tbody>
+    </table>
+  </div>
+  <div class="gap">
+    <div><span class="eyebrow">Unclaimed, as far as we could find</span>
+      <ul>
+        <li>Pull across <b>your own mixed machines</b> (Mac, Linux box, GPU box) running local agents, with no cloud queue.</li>
+        <li>Matching by <b>harness, folder and labels</b>, for any harness, not one vendor's.</li>
+        <li>An <b>attention view across machines</b>: tools show sessions, none shows "this seat is waiting on you".</li>
+      </ul>
+    </div>
+    <p class="muted" style="font-size:13px">Two small projects (kandev, Fusion) advertise boards over several machines; we couldn't check how far they go. Sources: Yegge's "Welcome to Gas Town", code.claude.com docs for agent view and agent teams, cursor.com changelog 3.0, github.blog on mission control, Linear and Amp docs, paperclip.ing, GitHub Actions and Buildkite docs, Temporal docs, BOINC wiki. The runner row comes from a third-party post.</p>
+  </div>
+</section>
+
+<!-- ───────────────────────── How ───────────────────────── -->
+<section id="how">
+  <span class="eyebrow">How a machine picks up work</span>
+  <h2>Pull, without the machines calling home</h2>
+  <div class="steps">
+    <div class="step"><span class="k">01 Posted</span><p>A piece of work: the ask, the folder, a role, labels it needs, what "done" means, and what it waits for.</p></div>
+    <div class="step"><span class="k">02 Matched</span><p>When a seat frees up, Fleet finds the oldest piece that fits: labels, folder, harness. Pinned work goes only to its machine.</p></div>
+    <div class="step"><span class="k">03 Claimed</span><p>Fleet starts a session on that machine, in a worktree, with the hand-off it already has. The claim holds while the machine answers.</p></div>
+    <div class="step"><span class="k">04 Runs</span><p>A normal session. Questions go to Needs you, or to the orchestrator that posted it.</p></div>
+    <div class="step"><span class="k">05 Back</span><p>Done when its check passes, e.g. a PR with green checks. If the machine stops answering, the piece goes back to the queue as attempt 2.</p></div>
+  </div>
+  <div class="callout">
+    <h3>Who does the matching</h3>
+    <p>Today the interface Fleet reaches out to nodes; nodes never know where the interface is. Keeping it that way is simpler and safer: the Fleet with the queue (your main one) already watches every machine live, so it sees a free seat and hands the next piece over through the same hand-off agents use now. It behaves like pull, a free seat takes work, but nothing new has to reach in from outside. True pull, where a node asks a queue for work, only matters once there are nodes the main Fleet can't reach, and that can come later.</p>
+  </div>
+</section>
+
+<!-- ───────────────────────── Builds on ───────────────────────── -->
+<section id="builds">
+  <span class="eyebrow">What it builds on</span>
+  <h2>Most of the plumbing is already in Fleet</h2>
+  <div class="tbl-wrap">
+    <table>
+      <thead><tr><th>Piece</th><th></th><th>Where it comes from</th></tr></thead>
+      <tbody>
+        <tr><td class="k">Start a session on another machine</td><td><span class="pill reuse">have</span></td><td>Agent hand-off (<span class="mono">fleet_session_start</span> with a machine) and automations that name a machine</td></tr>
+        <tr><td class="k">Every machine live in one window</td><td><span class="pill reuse">have</span></td><td>Live machine feeds, "not answering" detection, one hub per machine</td></tr>
+        <tr><td class="k">Hear back when work ends</td><td><span class="pill reuse">have</span></td><td><span class="mono">notifyWhenDone</span> and replies across machines</td></tr>
+        <tr><td class="k">Roles instead of model names</td><td><span class="pill reuse">have</span></td><td>Strong, Standard and Fast from Settings → Workflows</td></tr>
+        <tr><td class="k">"Done when" checks</td><td><span class="pill reuse">have</span></td><td>Workflow Wait steps and GitHub smart links (PR state, checks)</td></tr>
+        <tr><td class="k">Machine capabilities</td><td><span class="pill reuse">have</span></td><td><span class="mono">GET /api/machine</span> capabilities: harnesses, OS</td></tr>
+        <tr><td class="k">Work items and the queue</td><td><span class="pill new">new</span></td><td>A table on the main Fleet, plus the Work screen. Board already draws sessions as a kanban and could become this.</td></tr>
+        <tr><td class="k">Seats and labels per machine</td><td><span class="pill new">new</span></td><td>A seat count and labels in Settings → Machines, shown on Agents</td></tr>
+        <tr><td class="k">Matcher and claim</td><td><span class="pill new">new</span></td><td>Runs on the main Fleet when a seat frees or work is posted; no model involved</td></tr>
+        <tr><td class="k"><span class="mono">fleet_work_post</span></td><td><span class="pill new">new</span></td><td>One tool for the orchestrator, behind a switch, like session messages</td></tr>
+      </tbody>
+    </table>
+  </div>
+</section>
+
+<!-- ───────────────────────── Decide ───────────────────────── -->
+<section id="decide">
+  <span class="eyebrow">Decisions for you</span>
+  <h2>Four questions before anything is built</h2>
+  <div class="decisions">
+    <div class="dec">
+      <h3>1. Who decides where work runs?</h3>
+      <ol>
+        <li class="rec">Free seats take the next piece that fits; you or the orchestrator can pin a piece to a machine <span class="r">recommended</span></li>
+        <li>The orchestrator always picks the machine</li>
+        <li>You always pick, Fleet only queues</li>
+      </ol>
+    </div>
+    <div class="dec">
+      <h3>2. What is the orchestrator?</h3>
+      <ol>
+        <li class="rec">A normal session that plans and posts; Fleet does the handing out <span class="r">recommended</span></li>
+        <li>A standing agent that runs all the time and dispatches every piece itself (tokens on every hand-out)</li>
+        <li>No orchestrator agent; you post work yourself</li>
+      </ol>
+    </div>
+    <div class="dec">
+      <h3>3. Which concept leads?</h3>
+      <ol>
+        <li class="rec">A Queue first, replacing Board; B Lanes as its second tab; C Brief once the orchestrator exists <span class="r">recommended</span></li>
+        <li>C Brief as Fleet's home screen from the start</li>
+        <li>Something else from these three, or none of them</li>
+      </ol>
+      <p class="muted" style="font-size:13px">A is the cheapest to build and teaches the model. C is the most different, but it needs an orchestrator that is good at planning before it's worth opening.</p>
+    </div>
+    <div class="dec">
+      <h3>4. What is "an agent" on the Agents tab?</h3>
+      <ol>
+        <li class="rec">A seat on a machine: it runs one piece at a time with the role the piece asks for <span class="r">recommended</span></li>
+        <li>Named, standing agents ("Reviewer on build-box") that only take their kind of work</li>
+      </ol>
+      <p class="muted" style="font-size:13px">Named agents feel closer to what you described, but they split seats into pools that sit idle. Roles on the piece get the same effect.</p>
+    </div>
+  </div>
+</section>
+
+<!-- ───────────────────────── Stages ───────────────────────── -->
+<section id="stages">
+  <span class="eyebrow">Stages</span>
+  <h2>A thin slice first</h2>
+  <div class="stages">
+    <div class="stg"><span class="n">Stage 1</span><div><p>Work items and the queue on one machine, behind an Experimental switch. Post a piece by hand; it starts when a seat frees, shows in Work, ends when its PR is green.</p><p class="demo">Demo: post three pieces with 2 seats; the third starts by itself when the first finishes.</p></div></div>
+    <div class="stg"><span class="n">Stage 2</span><div><p>Seats and labels per machine, and the matcher across machines. Lost machine puts the piece back as attempt 2.</p><p class="demo">Demo: a piece that needs <span class="mono">mac</span> waits, says why, and starts on mini when a seat frees. Stop mini mid-turn; the piece moves to attempt 2.</p></div></div>
+    <div class="stg"><span class="n">Stage 3</span><div><p><span class="mono">fleet_work_post</span> for orchestrator sessions, with "after" links between pieces and questions routed back to it.</p><p class="demo">Demo: the offline sync conversation above, live on OpenCode 2.</p></div></div>
+    <div class="stg"><span class="n">Later</span><div><p>Work from GitHub issues with a label, automations that post work, nodes that ask a queue for work themselves, budgets per goal.</p></div></div>
+  </div>
+</section>
+
+</div>
+
+<script>
+// Stamp the shared rail and capacity bar into each frame.
+const railTpl = document.getElementById('rail');
+document.querySelectorAll('.app').forEach(app => {
+  const slot = app.querySelector('.rail-slot');
+  const rail = railTpl.content.firstElementChild.cloneNode(true);
+  rail.querySelector(`[data-r="${app.dataset.rail}"]`)?.classList.add('on');
+  slot.replaceWith(rail);
+});
+const capTpl = document.getElementById('capbar');
+document.querySelectorAll('.cap-slot').forEach(s => s.replaceWith(capTpl.content.firstElementChild.cloneNode(true)));
+
+const items = {
+  retry: {
+    title: 'Dedupe webhook deliveries on retry', st: '<span class="dot run"></span>Running on atlas · attempt 2',
+    ask: 'Deliveries retried after a timeout can arrive twice. Store the delivery id and skip repeats for 24 hours. Add a test that sends the same delivery twice.',
+    kv: [['Posted by', 'Webhook reliability (orchestrator)'], ['Folder', '<span class="chip">ledger-api</span>'], ['Role', '<span class="chip role">Standard</span> Sonnet 5.5'], ['Needs', '<span class="chip">docker</span>'], ['Done when', 'PR open, checks green'], ['Why atlas', 'Has ledger-api checked out, built 20 min ago; resumed from mini\'s last push']],
+    tl: [['13:48', 'q', 'Posted'], ['13:48', 'run', 'Taken by mini, seat 1'], ['14:02', 'off', 'mini stopped answering · back in the queue'], ['14:02', 'run', 'Taken by atlas, seat 1 · attempt 2']],
+    run: 'Run on', where: 'Any machine that fits', open: true
+  },
+  mac: {
+    title: 'Sync status badge in the iOS share sheet', st: '<span class="dot q"></span>Waiting · 3rd in line',
+    ask: 'Show the last sync time and a pending count in the share extension. Reuse the badge from the home screen banner work.',
+    kv: [['Posted by', 'Offline sync this week (orchestrator)'], ['Folder', '<span class="chip">ledger-ios</span>'], ['Role', '<span class="chip role">Standard</span> Sonnet 5.5'], ['Needs', '<span class="chip">mac</span>'], ['Done when', 'PR open, checks green']],
+    tl: [['13:31', 'q', 'Posted'], ['now', 'q', 'Fits only mini (mac). mini has 2 of 2 seats busy.']],
+    why: 'Waiting for a seat on <b>mini</b>. Its longest piece has 4 of 5 todos done. Turn on <b>Takes work</b> for laptop to start it there.',
+    run: 'Run on', where: 'Any machine with mac'
+  },
+  after: {
+    title: 'Migrate offline queue to the new schema', st: '<span class="dot q"></span>Waiting · after another piece',
+    ask: 'Once the conflict rules are settled, add the columns they need and migrate existing queued edits.',
+    kv: [['Posted by', 'Offline sync this week (orchestrator)'], ['Folder', '<span class="chip">ledger-api</span>'], ['Role', '<span class="chip role">Strong</span> Opus 5.5'], ['After', 'Conflict rules for offline edits'], ['Done when', 'PR open, checks green']],
+    tl: [['13:31', 'q', 'Posted'], ['now', 'wait', 'Conflict rules for offline edits needs you']],
+    why: 'Starts by itself once <b>Conflict rules for offline edits</b> is done.',
+    run: 'Run on', where: 'Any machine that fits'
+  },
+  next: {
+    title: 'Docs: how offline sync resolves conflicts', st: '<span class="dot q"></span>Waiting · next on build-box',
+    ask: 'A page for the docs site explaining what happens when two devices edit the same entry offline.',
+    kv: [['Posted by', 'You'], ['Folder', '<span class="chip">docs-site</span>'], ['Role', '<span class="chip role">Fast</span> Haiku 5.5'], ['Done when', 'PR open']],
+    tl: [['13:52', 'q', 'Posted'], ['now', 'q', 'build-box will take it: seat 4 frees as its current piece ends']],
+    run: 'Run on', where: 'Any machine that fits'
+  },
+  q: {
+    title: 'Conflict rules for offline edits', st: '<span class="dot wait"></span>Needs you · on mini',
+    ask: 'Decide and implement how edits made offline on two devices resolve. Ask before changing how deletes resolve.',
+    kv: [['Posted by', 'Offline sync this week (orchestrator)'], ['Folder', '<span class="chip">ledger-api</span>'], ['Role', '<span class="chip role">Strong</span> Opus 5.5'], ['Done when', 'PR open, checks green']],
+    tl: [['13:31', 'q', 'Posted'], ['13:31', 'run', 'Taken by mini, seat 2'], ['14:19', 'wait', 'Asked a question']],
+    why: '<b>It asks:</b> keep server-wins for deletes, or ask the user on the device? <br><span style="display:inline-flex;gap:6px;margin-top:6px"><span class="btn">Server wins</span><span class="btn">Ask on device</span><span class="btn">Open session</span></span>',
+    run: 'Running on', where: 'mini', open: true
+  },
+  pr: {
+    title: 'Retry budget for webhooks', st: '<span class="dot wait"></span>Needs you · PR #212',
+    ask: 'Cap retries per endpoint per hour and surface the budget in the dashboard.',
+    kv: [['Posted by', 'Webhook reliability (orchestrator)'], ['Folder', '<span class="chip">ledger-api</span>'], ['Done when', 'PR open, checks green · <b>met</b>'], ['Changes', '+212 −38 in 9 files']],
+    tl: [['12:10', 'q', 'Posted'], ['12:11', 'run', 'Taken by atlas, seat 2'], ['13:44', 'wait', 'PR #212 opened, checks green']],
+    why: 'Done as far as the agent can go. Review the PR, then merge it or send it back with a note.',
+    run: 'Ran on', where: 'atlas', open: true
+  },
+};
+items.deps = { ...items.next, title: 'Bump ledger-api dependencies', st: '<span class="dot run"></span>Running on build-box', kv: [['Posted by', 'Automation · Mondays 09:00'], ['Folder', '<span class="chip">ledger-api</span>'], ['Role', '<span class="chip role">Fast</span> Haiku 5.5'], ['Done when', 'PR open, checks green']], ask: 'Update minor and patch versions, run the tests, open one PR.', tl: [['14:21', 'q', 'Posted by an automation'], ['14:21', 'run', 'Taken by build-box, seat 1']], why: null, run: 'Running on', where: 'build-box', open: true };
+items.flaky = { ...items.deps, title: 'Flaky: import_resumes_after_restart', kv: [['Posted by', 'You'], ['Folder', '<span class="chip">ledger-api</span>'], ['Role', '<span class="chip role">Standard</span> Sonnet 5.5'], ['Done when', 'Passes 50 runs in a row']], ask: 'Find why the test fails one run in twenty and fix the cause, not the test.', tl: [['14:16', 'q', 'Posted'], ['14:16', 'run', 'Taken by build-box, seat 2']] };
+items.ios = { ...items.deps, title: 'Offline banner on the iOS home screen', st: '<span class="dot run"></span>Running on mini', kv: [['Posted by', 'Offline sync this week (orchestrator)'], ['Folder', '<span class="chip">ledger-ios</span>'], ['Role', '<span class="chip role">Standard</span> Sonnet 5.5'], ['Needs', '<span class="chip">mac</span>']], ask: 'Show a banner when the app is offline with edits waiting.', tl: [['13:31', 'q', 'Posted'], ['13:32', 'run', 'Taken by mini, seat 1']], where: 'mini' };
+
+const detail = document.getElementById('detail');
+function show(id) {
+  const it = items[id];
+  if (!it) return;
+  detail.innerHTML = `
+    <div class="st">${it.st}</div>
+    <h3 style="font-size:16px">${it.title}</h3>
+    <div class="quote">${it.ask}</div>
+    ${it.why ? `<div class="why" style="border:0;padding:0">${it.why}</div>` : ''}
+    <dl class="kv">${it.kv.map(([k, v]) => `<dt>${k}</dt><dd>${v}</dd>`).join('')}</dl>
+    <div class="lbl">${it.run}</div>
+    <div class="select"><span>${it.where}</span><span class="muted">▾</span></div>
+    <div class="lbl">History</div>
+    <div class="timeline">${it.tl.map(([t, d, x]) => `<div class="e"><span class="tm">${t}</span><span class="dot ${d}"></span><span>${x}</span></div>`).join('')}</div>
+    ${it.open ? '<div style="display:flex;gap:6px;margin-top:auto"><button class="btn" type="button">Open session</button><button class="btn" type="button">Cancel</button></div>' : '<div style="display:flex;gap:6px;margin-top:auto"><button class="btn" type="button">Edit</button><button class="btn" type="button">Cancel</button></div>'}`;
+}
+document.querySelectorAll('.card[data-item]').forEach(c => c.addEventListener('click', () => {
+  document.querySelectorAll('.card.sel').forEach(s => s.classList.remove('sel'));
+  c.classList.add('sel');
+  show(c.dataset.item);
+}));
+show('retry');
+
+// ── Concept B: lanes. Times are minutes since midnight; the window is 11:00–16:00, now is 14:30.
+const T0 = 660, T1 = 960, NOW = 870;
+const pct = t => ((t - T0) / (T1 - T0)) * 100;
+const hm = s => { const [h, m] = s.split(':').map(Number); return h * 60 + m; };
+const lanes = [
+  { m: 'atlas', note: 'this machine · linux, docker', seats: [
+    [['11:05', '12:40', 'done', 'Rate limit headers', 'Merged as PR #209 · $0.84'], ['12:50', '13:58', 'done', 'Index for slow ledger search', 'Merged as PR #210 · $1.92'], ['14:02', 'now', 'run', 'Dedupe webhook deliveries · attempt 2', 'Moved here from mini at 14:02. Picked atlas because it has ledger-api checked out and built 20 min ago.']],
+    [['12:11', '13:44', 'done', 'Retry budget for webhooks', 'Built and opened PR #212'], ['13:44', 'now', 'wait', 'PR #212 waits for your review', 'This seat has waited 46 min on you. Review it, or let the seat go and keep the PR.']],
+    [['11:30', '12:10', 'done', 'Docs typo sweep', 'Chore · draft PR'], ['12:10', '14:26', 'idle', 'idle 2h 16m', ''], ['14:26', 'now', 'run', 'Fork: emit jobs over SignalR', 'Started by you as a fork']],
+    [['11:00', 'now', 'idle', 'idle', ''], ['14:34', '15:30', 'next', 'next: whatever fits', 'Free seat: takes the next piece that fits']],
+  ]},
+  { m: 'mini', note: 'mac, ios', seats: [
+    [['11:40', '13:20', 'done', 'Hero image sizes', 'Merged'], ['13:32', 'now', 'run', 'Offline banner on the iOS home screen', '4 of 5 todos done'], ['14:38', '15:40', 'next', 'next: Share-sheet badge', 'Waiting for this seat: only mini has mac']],
+    [['13:48', '14:02', 'lost', 'Dedupe… attempt 1', 'mini stopped answering at 14:02. Last push at todo 2; atlas resumed from there.'], ['14:05', '14:19', 'run', 'Conflict rules', 'Working'], ['14:19', 'now', 'wait', 'asks: deletes?', 'Waiting on you for 11 min. Two other pieces wait on this one.']],
+  ]},
+  { m: 'build-box', note: 'node · linux, gpu, docker · Fast = local model', seats: [
+    [['11:00', '12:00', 'idle', 'idle', ''], ['12:00', '13:10', 'chore', 'chore: flaky retry test', 'Chore on an idle seat · draft PR #207'], ['13:10', '14:21', 'idle', 'idle', ''], ['14:21', 'now', 'run', 'Bump ledger-api dependencies', 'Posted by the Monday automation']],
+    [['11:00', '14:16', 'idle', 'idle 3h 16m', ''], ['14:16', 'now', 'run', 'Flaky: import_resumes_after_restart', 'Posted by you']],
+    [['11:00', '13:59', 'idle', 'idle', ''], ['13:59', 'now', 'run', 'Load test the sync endpoint', 'Added by the orchestrator after the banner landed']],
+    [['11:00', '13:20', 'idle', 'idle', ''], ['13:20', '14:00', 'chore', 'chore: TODO sweep', 'Chore · local model · $0'], ['14:00', 'now', 'idle', 'idle', ''], ['14:36', '15:10', 'next', 'next: Docs: offline sync', 'Fast role runs on the local model here, $0']],
+    [['11:00', '13:00', 'idle', 'idle', ''], ['13:00', '13:50', 'chore', 'chore: bump docs-site', 'Chore · draft PR'], ['13:50', 'now', 'idle', 'idle', '']],
+    [['11:00', 'now', 'idle', 'idle 3h 30m · no work fits', 'Nothing in the queue fits and the chore backlog is empty']],
+  ]},
+  { m: 'laptop', note: 'mac · lends seats when the screen is locked', seats: [
+    [['11:00', '12:30', 'you', 'your session: Scratch', 'Your own session. Seats aren\'t lent while you\'re using the machine.'], ['12:30', '13:30', 'chore', 'lent: chore', 'Screen locked 12:30–13:30, so it took a chore'], ['13:30', 'now', 'you', 'you', 'You\'re back; nothing new is taken']],
+  ]},
+];
+const grid = document.getElementById('lanes-grid');
+const tip = document.getElementById('lane-tip');
+const legend = '<span class="legend"><span><i class="blk run"></i>running</span><span><i class="blk wait"></i>waiting on you</span><span><i class="blk lost"></i>machine dropped</span><span><i class="blk chore"></i>chore on a spare seat</span><span><i class="blk done"></i>done</span><span><i class="blk next"></i>picks up next</span><span><i class="blk you"></i>you</span></span>';
+tip.innerHTML = legend;
+let html = '<div></div><div class="axis">' + [11, 12, 13, 14, 15, 16].map(h => `<span style="left:${pct(h * 60)}%">${h}:00</span>`).join('') + `</div>`;
+lanes.forEach(l => {
+  html += `<div class="mlabel"><span class="dot ${l.m === 'laptop' ? 'off' : 'run'}"></span>${l.m} <span class="muted">${l.note}</span></div>`;
+  l.seats.forEach((s, i) => {
+    html += `<div class="slabel">seat ${i + 1}</div><div class="track">`;
+    s.forEach(([a, b, k, label, more]) => {
+      const st = hm(a), en = b === 'now' ? NOW : hm(b);
+      const tag = k === 'idle' ? 'div' : 'button type="button"';
+      html += `<${tag} class="blk ${k}" style="left:${pct(st)}%;width:calc(${pct(en) - pct(st)}% - 2px)" data-t="${label}" data-m="${more}" data-w="${l.m} · seat ${i + 1} · ${a}–${b}">${label}</${k === 'idle' ? 'div' : 'button'}>`;
+    });
+    html += `<div class="nowline" style="left:${pct(NOW)}%"></div></div>`;
+  });
+});
+grid.innerHTML = html;
+grid.querySelector('.nowline').innerHTML = '<span>now</span>';
+grid.querySelectorAll('button.blk').forEach(b => {
+  const showTip = () => { tip.innerHTML = `<b>${b.dataset.t}</b> <span class="muted">· ${b.dataset.w}</span>${b.dataset.m ? ' — ' + b.dataset.m : ''}`; };
+  b.addEventListener('mouseenter', showTip); b.addEventListener('focus', showTip); b.addEventListener('click', showTip);
+});
+grid.addEventListener('mouseleave', () => { tip.innerHTML = legend; });
+
+// ── Concept C: goal map. Positions in px inside the map.
+const gnodes = [
+  { id: 1, x: 24, y: 28, cls: 'wait', t: 'Conflict rules for offline edits', m: 'mini', s: '<span class="dot wait"></span>needs you · 11m' },
+  { id: 2, x: 262, y: 8, cls: '', t: 'Migrate offline queue to the new schema', m: 'not started', s: '<span class="dot q"></span>after 1' },
+  { id: 5, x: 262, y: 118, cls: '', t: 'Docs: how offline sync resolves conflicts', m: 'build-box', s: '<span class="dot q"></span>after 1 · will run on local model' },
+  { id: 3, x: 24, y: 210, cls: 'done', t: 'Offline banner, API side', m: 'atlas', s: '<span class="dot done"></span>merged · PR #211' },
+  { id: 4, x: 262, y: 232, cls: '', t: 'Offline banner on the iOS home screen', m: 'mini', s: '<span class="dot run"></span>running · 4 of 5' },
+  { id: 6, x: 500, y: 232, cls: '', t: 'Sync status badge in the iOS share sheet', m: 'mini, when free', s: '<span class="dot q"></span>after 4 · needs mac' },
+  { id: 7, x: 262, y: 342, cls: 'new', t: 'Load test the sync endpoint', m: 'build-box', s: '<span class="dot run"></span>added by the orchestrator at 13:59' },
+];
+const edges = [[1, 2], [1, 5], [3, 4], [4, 6], [3, 7]];
+const gmap = document.getElementById('gmap');
+gnodes.forEach(n => {
+  const d = document.createElement('div');
+  d.className = 'gnode ' + n.cls; d.style.left = n.x + 'px'; d.style.top = n.y + 'px'; d.id = 'g' + n.id;
+  d.innerHTML = `<div class="tt">${n.t}</div><div class="meta"><span class="mbadge">${n.m}</span><span>${n.s}</span></div>`;
+  gmap.appendChild(d);
+});
+function drawEdges() {
+  const svg = document.getElementById('gedges');
+  const r0 = gmap.getBoundingClientRect();
+  svg.innerHTML = edges.map(([a, b]) => {
+    const A = document.getElementById('g' + a).getBoundingClientRect(), B = document.getElementById('g' + b).getBoundingClientRect();
+    const x1 = A.right - r0.left, y1 = A.top + A.height / 2 - r0.top, x2 = B.left - r0.left, y2 = B.top + B.height / 2 - r0.top;
+    const mx = (x1 + x2) / 2;
+    return `<path d="M${x1} ${y1} C${mx} ${y1} ${mx} ${y2} ${x2} ${y2}" fill="none" stroke="var(--muted)" stroke-opacity=".5" stroke-width="1.5"/>`;
+  }).join('');
+}
+drawEdges();
+window.addEventListener('resize', drawEdges);
+</script>
+</body>
+</html>

@@ -12,6 +12,7 @@ import { LARGE_PASTES_PREFERENCE_KEY } from "@/lib/attached-files";
 import { STARTERS_PREFERENCE_KEY } from "@/lib/starters";
 import { PAGE_CHOICE_PREFERENCE_KEY } from "@/lib/page-choice";
 import { FLEET_UPDATES_PREFERENCE_KEY } from "@/lib/fleet-updates";
+import { JOBS_PREFERENCE_KEY } from "@/lib/jobs";
 import { AGENT_HANDOFF_PREFERENCE_KEY, LIVE_MACHINES_PREFERENCE_KEY } from "@/lib/machines";
 import {
   DESKTOP_NOTIFICATIONS_PREFERENCE_KEY,
@@ -185,6 +186,18 @@ const isSavingAgentHandoff = shallowRef(false);
 
 const isPageChoiceEnabled = computed(() => preferencesStore.get(PAGE_CHOICE_PREFERENCE_KEY, "false") === "true");
 const isSavingPageChoice = shallowRef(false);
+
+const isJobsEnabled = computed(() => preferencesStore.get(JOBS_PREFERENCE_KEY, "false") === "true");
+const isSavingJobs = shallowRef(false);
+
+async function toggleJobs(): Promise<void> {
+  isSavingJobs.value = true;
+  try {
+    await preferencesStore.set(JOBS_PREFERENCE_KEY, isJobsEnabled.value ? "false" : "true");
+  } finally {
+    isSavingJobs.value = false;
+  }
+}
 
 async function togglePageChoice(): Promise<void> {
   isSavingPageChoice.value = true;
@@ -755,6 +768,44 @@ async function toggleBoardFeature(): Promise<void> {
           <span
             class="pointer-events-none inline-block h-5 w-5 rounded-full bg-white shadow ring-0 transition duration-200 ease-in-out"
             :class="isAgentHandoffEnabled && isSessionMessagesEnabled ? 'translate-x-5' : 'translate-x-0'"
+          />
+        </button>
+      </div>
+    </div>
+    <div class="mt-3 flex items-start justify-between gap-4 rounded-card border border-border bg-main-bg p-4">
+      <div>
+        <p class="flex items-center gap-2 text-sm font-medium text-text">
+          Jobs
+          <span class="rounded-full border border-border px-2 py-px text-[0.7rem] font-medium uppercase tracking-wide text-muted">
+            Experimental
+          </span>
+        </p>
+        <p class="mt-1 text-xs text-muted">
+          One queue of jobs. Fleet starts each on whichever of your machines has a free seat. Give machines seats in Settings → Machines.
+        </p>
+      </div>
+
+      <div class="flex items-center gap-2">
+        <LoaderCircle
+          v-if="isSavingJobs"
+          :size="16"
+          class="animate-spin text-muted"
+          aria-hidden="true"
+        />
+        <button
+          type="button"
+          role="switch"
+          :aria-checked="isJobsEnabled"
+          :disabled="preferencesStore.isLoading || isSavingJobs"
+          aria-label="Enable Jobs"
+          data-testid="jobs-switch"
+          class="relative inline-flex h-6 w-11 shrink-0 cursor-pointer rounded-full border-2 border-transparent transition-colors duration-200 ease-in-out focus:outline-none focus:ring-2 focus:ring-accent focus:ring-offset-2 focus:ring-offset-main-bg disabled:cursor-not-allowed disabled:opacity-60"
+          :class="isJobsEnabled ? 'bg-accent' : 'bg-border'"
+          @click="toggleJobs"
+        >
+          <span
+            class="pointer-events-none inline-block h-5 w-5 rounded-full bg-white shadow ring-0 transition duration-200 ease-in-out"
+            :class="isJobsEnabled ? 'translate-x-5' : 'translate-x-0'"
           />
         </button>
       </div>

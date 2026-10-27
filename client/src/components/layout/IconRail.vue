@@ -13,6 +13,7 @@ import "@/components/layout/core-rails";
 import RailButton from "@/components/layout/RailButton.vue";
 import { isSidebarRail, rails, type RailDefinition } from "@/lib/rails";
 import { useBoardFeature } from "@/composables/use-board-feature";
+import { useJobsFeature } from "@/composables/use-jobs-feature";
 import { useWorkflowsFeature } from "@/composables/use-workflows-feature";
 import { useWorkflowsStore } from "@/stores/workflows";
 import { useSidebarStore } from "@/stores/sidebar";
@@ -38,6 +39,7 @@ const { activeRail } = storeToRefs(sidebarStore);
 const router = useRouter();
 const pluginRuntime = usePluginRuntime();
 useBoardFeature(); // starts loading the preferences the Board rail's switch reads
+useJobsFeature(); // and the Jobs rail's
 const { isWorkflowsEnabled } = useWorkflowsFeature();
 const workflowsStore = useWorkflowsStore();
 const problemReport = useProblemReportStore();
@@ -96,6 +98,10 @@ const currentRouteRail = computed<string | null>(() => {
 
   if (pathname.value === "/workflows") {
     return "workflows";
+  }
+
+  if (pathname.value === "/jobs") {
+    return "jobs";
   }
 
   if (pathname.value === "/settings") {

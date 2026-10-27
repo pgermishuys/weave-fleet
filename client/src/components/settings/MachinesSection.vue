@@ -5,8 +5,10 @@ import { AlertCircle, Check, Copy, Eye, EyeOff, LoaderCircle, Plus, RefreshCw } 
 import { SshNotInstalledError, useMachinesStore, type MachineAccess, type MachineEntry, type MachineHarness, type SshInstallPlan } from "@/stores/machines";
 import AddPhonePanel from "@/components/settings/AddPhonePanel.vue";
 import MachineUpdatesStrip from "@/components/settings/MachineUpdatesStrip.vue";
+import MachineJobSeats from "@/components/settings/MachineJobSeats.vue";
 import MachineVersionLine from "@/components/settings/MachineVersionLine.vue";
 import { useFleetUpdates } from "@/composables/use-fleet-updates";
+import { useJobsFeature } from "@/composables/use-jobs-feature";
 import { useWhatsNew } from "@/composables/use-whats-new";
 import type { FleetUpdateRow } from "@/lib/fleet-updates";
 import DevicesList from "@/components/settings/DevicesList.vue";
@@ -30,6 +32,9 @@ const machines = useMachinesStore();
 const { entries, others, home, liveReachable, source, sshHosts } = storeToRefs(machines);
 const preferencesStore = usePreferencesStore();
 preferencesStore.ensureLoaded();
+// Each card draws MachineJobSeats from a list that is empty with Jobs off, not under a v-if: a false v-if still leaves a
+// comment node, and with Jobs off the card must render exactly as it did.
+const { isJobsEnabled: jobsOn } = useJobsFeature();
 
 // ── Updates (Settings → Features → Updates in Machines) ──────────────────────
 // Everything here does nothing with the switch off: no request, no timer, nothing drawn.
@@ -757,6 +762,11 @@ onUnmounted(() => stopPolling?.());
             >
             Agents can hand work here
           </label>
+          <MachineJobSeats
+            v-for="key in jobsOn ? [entry.key] : []"
+            :key="key"
+            :entry-key="key"
+          />
 
           <form
             v-if="tokenFor === entry.key"

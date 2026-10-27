@@ -189,6 +189,8 @@ internal sealed record ErrorResponse(string Error);
 [JsonSerializable(typeof(WeaveFleet.Application.Jobs.JobsDto))]
 [JsonSerializable(typeof(WeaveFleet.Application.Jobs.JobDto))]
 [JsonSerializable(typeof(WeaveFleet.Application.Jobs.JobMachineDto))]
+[JsonSerializable(typeof(IReadOnlyList<WeaveFleet.Application.Jobs.JobRepositoryDto>))]
+[JsonSerializable(typeof(List<WeaveFleet.Application.Jobs.JobRepositoryDto>))]
 [JsonSerializable(typeof(WeaveFleet.Application.Jobs.PostJobRequest))]
 [JsonSerializable(typeof(WeaveFleet.Application.Jobs.SaveJobMachineRequest))]
 // Workflows

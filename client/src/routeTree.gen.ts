@@ -16,6 +16,7 @@ import { Route as RepositoriesRouteImport } from './routes/repositories'
 import { Route as PhoneRouteImport } from './routes/phone'
 import { Route as PairRouteImport } from './routes/pair'
 import { Route as LoginRouteImport } from './routes/login'
+import { Route as JobsRouteImport } from './routes/jobs'
 import { Route as GithubRouteImport } from './routes/github'
 import { Route as BoardRouteImport } from './routes/board'
 import { Route as AutomationsRouteImport } from './routes/automations'
@@ -68,6 +69,11 @@ const PairRoute = PairRouteImport.update({
 const LoginRoute = LoginRouteImport.update({
   id: '/login',
   path: '/login',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const JobsRoute = JobsRouteImport.update({
+  id: '/jobs',
+  path: '/jobs',
   getParentRoute: () => rootRouteImport,
 } as any)
 const GithubRoute = GithubRouteImport.update({
@@ -170,6 +176,7 @@ export interface FileRoutesByFullPath {
   '/automations': typeof AutomationsRoute
   '/board': typeof BoardRoute
   '/github': typeof GithubRouteWithChildren
+  '/jobs': typeof JobsRoute
   '/login': typeof LoginRoute
   '/pair': typeof PairRoute
   '/phone': typeof PhoneRouteWithChildren
@@ -196,6 +203,7 @@ export interface FileRoutesByTo {
   '/analytics': typeof AnalyticsRoute
   '/automations': typeof AutomationsRoute
   '/board': typeof BoardRoute
+  '/jobs': typeof JobsRoute
   '/login': typeof LoginRoute
   '/pair': typeof PairRoute
   '/repositories': typeof RepositoriesRoute
@@ -222,6 +230,7 @@ export interface FileRoutesById {
   '/automations': typeof AutomationsRoute
   '/board': typeof BoardRoute
   '/github': typeof GithubRouteWithChildren
+  '/jobs': typeof JobsRoute
   '/login': typeof LoginRoute
   '/pair': typeof PairRoute
   '/phone': typeof PhoneRouteWithChildren
@@ -251,6 +260,7 @@ export interface FileRouteTypes {
     | '/automations'
     | '/board'
     | '/github'
+    | '/jobs'
     | '/login'
     | '/pair'
     | '/phone'
@@ -277,6 +287,7 @@ export interface FileRouteTypes {
     | '/analytics'
     | '/automations'
     | '/board'
+    | '/jobs'
     | '/login'
     | '/pair'
     | '/repositories'
@@ -302,6 +313,7 @@ export interface FileRouteTypes {
     | '/automations'
     | '/board'
     | '/github'
+    | '/jobs'
     | '/login'
     | '/pair'
     | '/phone'
@@ -330,6 +342,7 @@ export interface RootRouteChildren {
   AutomationsRoute: typeof AutomationsRoute
   BoardRoute: typeof BoardRoute
   GithubRoute: typeof GithubRouteWithChildren
+  JobsRoute: typeof JobsRoute
   LoginRoute: typeof LoginRoute
   PairRoute: typeof PairRoute
   PhoneRoute: typeof PhoneRouteWithChildren
@@ -391,6 +404,13 @@ declare module '@tanstack/vue-router' {
       path: '/login'
       fullPath: '/login'
       preLoaderRoute: typeof LoginRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/jobs': {
+      id: '/jobs'
+      path: '/jobs'
+      fullPath: '/jobs'
+      preLoaderRoute: typeof JobsRouteImport
       parentRoute: typeof rootRouteImport
     }
     '/github': {
@@ -575,6 +595,7 @@ const rootRouteChildren: RootRouteChildren = {
   AutomationsRoute: AutomationsRoute,
   BoardRoute: BoardRoute,
   GithubRoute: GithubRouteWithChildren,
+  JobsRoute: JobsRoute,
   LoginRoute: LoginRoute,
   PairRoute: PairRoute,
   PhoneRoute: PhoneRouteWithChildren,

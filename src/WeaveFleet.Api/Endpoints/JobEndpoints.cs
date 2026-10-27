@@ -30,6 +30,11 @@ public static class JobEndpoints
             .WithName("ListJobs")
             .Produces<JobsDto>();
 
+        // GET /api/jobs/repositories — what New job can pick from: each repository once, with the machines that have it.
+        group.MapGet("/repositories", async (JobService jobs, CancellationToken ct) => Results.Ok(await jobs.RepositoriesAsync(ct)))
+            .WithName("ListJobRepositories")
+            .Produces<IReadOnlyList<JobRepositoryDto>>();
+
         group.MapPost("/", async (PostJobRequest request, JobService jobs) =>
                 (await jobs.PostAsync(request)).ToApiResult())
             .WithName("PostJob")
