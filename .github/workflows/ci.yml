@@ -209,9 +209,9 @@ jobs:
           path: test-results/**/*.trx
           reporter: dotnet-trx
 
-  # ── Frontend checks (lint, typecheck, unit tests) ────────────────────────
-  client:
-    name: Client
+  # ── Frontend checks (lint, typecheck) ───────────────────────────────────
+  client-checks:
+    name: Client checks
     runs-on: ubuntu-latest
     timeout-minutes: 10
 
@@ -241,15 +241,43 @@ jobs:
         run: npm run typecheck
         working-directory: client
 
+  # ── Frontend unit tests, split across two shards ─────────────────────────
+  client:
+    name: Client tests (${{ matrix.shard }}/2)
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    strategy:
+      fail-fast: false
+      matrix:
+        shard: [1, 2]
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: 'npm'
+          cache-dependency-path: client/package-lock.json
+
+      - name: Enable Corepack npm
+        run: corepack enable
+
+      - name: Install dependencies
+        run: corepack npm ci
+        working-directory: client
+
       - name: Unit tests
-        run: npx vitest run --reporter=default --reporter=junit --outputFile=test-results/client-results.xml
+        run: npx vitest run --shard=${{ matrix.shard }}/2 --reporter=default --reporter=junit --outputFile=test-results/client-results-${{ matrix.shard }}.xml
         working-directory: client
 
       - name: Upload test results
         if: always()
         uses: actions/upload-artifact@v4
         with:
-          name: client-test-results-${{ github.run_id }}
+          name: client-test-results-${{ matrix.shard }}-${{ github.run_id }}
           path: client/test-results/
           retention-days: 7
           if-no-files-found: ignore
@@ -258,7 +286,7 @@ jobs:
         if: success() || failure()
         uses: dorny/test-reporter@v1
         with:
-          name: Client Test Results
+          name: Client Test Results (${{ matrix.shard }}/2)
           path: client/test-results/**/*.xml
           reporter: java-junit
 
