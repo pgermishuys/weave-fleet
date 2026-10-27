@@ -1,10 +1,13 @@
+using Microsoft.Extensions.Logging.Abstractions;
 using Shouldly;
 using WeaveFleet.Application.Sessions;
 using WeaveFleet.Application.Sessions.Creation;
 using WeaveFleet.Domain.Entities;
 using WeaveFleet.Domain.Events;
+using WeaveFleet.Domain.Harnesses;
 using WeaveFleet.Testing.Builders;
 using WeaveFleet.Testing.Fakes;
+using WeaveFleet.Testing.Fakes.Repositories;
 
 namespace WeaveFleet.Application.Tests.Sessions;
 
@@ -19,6 +22,7 @@ public sealed class SessionMessageDeliveryTests : IAsyncDisposable, IDisposable
     private readonly SessionOrchestratorBuilder _builder;
     private readonly FakeHarnessSession _harnessSession = new("inst-1");
     private readonly SessionOrchestrator _orchestrator;
+    private readonly InMemoryQueuedPromptRepository _queued = new();
     private readonly SessionMessageDelivery _sut;
     private readonly string _directory = Path.Combine(Path.GetTempPath(), $"fleet-message-delivery-{Guid.NewGuid():N}");
 
@@ -38,7 +42,18 @@ public sealed class SessionMessageDeliveryTests : IAsyncDisposable, IDisposable
         });
         _builder.RegisterHarness("opencode", "OpenCode").DefaultSession = _harnessSession;
         _orchestrator = _builder.Build();
-        _sut = new SessionMessageDelivery(_builder.Prompting, _builder.EventBroadcaster);
+        var queue = new PromptQueueService(
+            _builder.Prompting,
+            _builder.ShellCommands,
+            _builder.SessionRepository,
+            _queued,
+            _builder.EventBroadcaster,
+            _builder.ActivityTracker,
+            _builder.HarnessRegistry,
+            new TestUserContext(UserId),
+            new TurnRetryScheduler(TestServiceScopeFactory.CreateEmpty(), TimeProvider.System, NullLogger<TurnRetryScheduler>.Instance),
+            NullLogger<PromptQueueService>.Instance);
+        _sut = new SessionMessageDelivery(_builder.Prompting, _builder.EventBroadcaster, queue);
     }
 
     public ValueTask DisposeAsync() => _harnessSession.DisposeAsync();
@@ -89,6 +104,25 @@ public sealed class SessionMessageDeliveryTests : IAsyncDisposable, IDisposable
 
         sent.IsFailure.ShouldBeTrue();
         _builder.EventBroadcaster.Broadcasts.ShouldNotContain(b => b.Type == "session.messaged");
+    }
+
+    /// <summary>
+    /// A harness that can't take a prompt in the middle of a turn (GitHub Copilot over ACP, also while it waits on a
+    /// permission ask or compacts) says so with <see cref="HarnessBusyException"/>. The message waits in the receiver's
+    /// queue and goes when the turn ends, rather than failing as "Fleet couldn't deliver it".
+    /// </summary>
+    [Fact]
+    public async Task a_message_to_a_busy_receiver_waits_in_its_queue()
+    {
+        var to = await CreateSessionAsync();
+        _builder.ActivityTracker.Update(to, ActivityStatuses.Busy, UserId);
+        _harnessSession.SendPromptBehavior = (_, _, _) => throw new HarnessBusyException("The agent is still working on the last prompt.");
+
+        var sent = await _sut.DeliverAsync("s-sender", "Fix login flake", fromMachine: null, to, "Check the installer.", UserId, CancellationToken.None);
+
+        sent.IsSuccess.ShouldBeTrue(sent.IsFailure ? sent.Error.Description : null);
+        (await _queued.ListAsync(to)).ShouldHaveSingleItem().Text.ShouldContain("Check the installer.");
+        Messaged(to).FromSessionId.ShouldBe("s-sender");
     }
 
     private async Task<string> CreateSessionAsync()

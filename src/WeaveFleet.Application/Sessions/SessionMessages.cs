@@ -89,7 +89,7 @@ public sealed record SessionMessageMachine(string Id, string Name);
 /// and <c>session.messaged</c> on the receiver's topic. The sender is whoever the caller says; each caller has
 /// checked it first: the bridge from the calling process, a peer request from the machine token it came with.
 /// </summary>
-public sealed class SessionMessageDelivery(SessionPrompting prompting, IEventBroadcaster broadcaster)
+public sealed class SessionMessageDelivery(SessionPrompting prompting, IEventBroadcaster broadcaster, PromptQueueService queue)
 {
     public async Task<Result<PromptSessionResult>> DeliverAsync(
         string fromSessionId,
@@ -100,14 +100,20 @@ public sealed class SessionMessageDelivery(SessionPrompting prompting, IEventBro
         string userId,
         CancellationToken ct)
     {
-        var sent = await prompting.PromptSessionWithReceiptAsync(
-                toSessionId,
-                SessionMessages.Wrap(fromSessionId, fromTitle, text.Trim(), fromMachine),
-                options: null,
-                userMessageId: null,
-                correlationId: null,
-                ct)
+        var wrapped = SessionMessages.Wrap(fromSessionId, fromTitle, text.Trim(), fromMachine);
+        var sent = await prompting.PromptSessionWithReceiptAsync(toSessionId, wrapped, options: null, userMessageId: null, correlationId: null, ct)
             .ConfigureAwait(false);
+        // A harness that can't take a prompt mid-turn (GitHub Copilot, also while it waits on a permission ask)
+        // refuses it: the message waits in the receiver's queue and goes when its turn ends. It then has no
+        // message id, so the sender can't be told when the receiver is done.
+        if (sent.IsFailure && sent.Error.Code == SessionPrompting.BusyErrorCode)
+        {
+            var queued = await queue.EnqueueAsync(toSessionId, new QueuePromptRequest(wrapped, Kind: null), ct).ConfigureAwait(false);
+            if (queued.IsFailure)
+                return queued.Error;
+            sent = new PromptSessionResult(EventId: null, CorrelationId: Guid.NewGuid().ToString(), MessageId: null);
+        }
+
         if (sent.IsFailure)
             return sent;
 
@@ -204,7 +210,9 @@ public sealed class SessionMessageBridge(
             var title = to.Value.Title;
             return CanvasResult.Ok(new CanvasToolOutput(
                 $"Messaged {title}",
-                notifyWhenDone
+                notifyWhenDone && sent.Value.MessageId is null
+                    ? $"Queued for {title} ({toSessionId}): it's busy, and the message goes when its turn ends. Fleet can't tell you when it's done with it for this session, so check on it later."
+                    : notifyWhenDone
                     ? $"Delivered to {title} ({toSessionId}). It starts on it now, or when the turn it's on ends. Fleet will send you its reply when it's done, as a new message; you don't need to check on it."
                     : $"Delivered to {title} ({toSessionId}). It starts on it now, or when the turn it's on ends. Its reply stays in that session."));
         }
