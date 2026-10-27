@@ -1,6 +1,8 @@
 using System.ComponentModel;
 using System.Diagnostics;
 using System.Globalization;
+using System.IO.Pipes;
+using System.Runtime.InteropServices;
 using System.Text;
 using WeaveFleet.Application.Runtimes;
 using WeaveFleet.Infrastructure.IO;
@@ -21,8 +23,11 @@ internal static class BunVersionProbe
     /// <summary>How long <c>--version</c> may take before Fleet gives up on it.</summary>
     public static readonly TimeSpan DefaultTimeout = TimeSpan.FromSeconds(5);
 
-    /// <summary>How long stdout gets to finish once the Bun has exited, before what was read so far is used.</summary>
+    /// <summary>How long the readers get to stop once the probe is over.</summary>
     private static readonly TimeSpan OutputGrace = TimeSpan.FromMilliseconds(250);
+
+    /// <summary>How often the stdout reader looks again at a pipe that has nothing in it, to notice the Bun has exited.</summary>
+    private static readonly TimeSpan PollInterval = TimeSpan.FromMilliseconds(50);
 
     /// <summary>The most stdout read; a Bun that prints more is not printing a version.</summary>
     private const int MaxOutputBytes = 4096;
@@ -124,15 +129,16 @@ internal static class BunVersionProbe
             try
             {
                 process.StandardInput.Close();
-                stdout = output.ReadAsync(limit.Token);
+                stdout = Task.Factory.StartNew(() => output.Read(limit.Token), CancellationToken.None, TaskCreationOptions.LongRunning, TaskScheduler.Default);
                 stderr = DiscardAsync(process.StandardError.BaseStream, limit.Token);
 
                 await process.WaitForExitAsync(limit.Token).ConfigureAwait(false);
 
                 // A Bun can print its version and exit while a child it started still holds stdout open, so the pipe
-                // never closes. Give the output a moment to finish, then use what was read and kill what's left.
+                // never closes. The reader stops once the pipe is empty after the exit; then what's left is killed.
                 // Known limit: a child that double-forked out of the process tree escapes the kill and can outlive the probe.
-                await Task.WhenAny(stdout, Task.Delay(OutputGrace, limit.Token)).ConfigureAwait(false);
+                output.BunExited();
+                await stdout.WaitAsync(limit.Token).ConfigureAwait(false);
                 var (bytes, tooMuch) = output.Snapshot();
                 Kill(process);
 
@@ -176,22 +182,61 @@ internal static class BunVersionProbe
 
     private static BunProbeResult Failed(string error) => new(null, error);
 
-    /// <summary>Reads stdout up to <see cref="MaxOutputBytes"/>, keeping what it has so far where another thread can take it.</summary>
+    /// <summary>
+    /// Reads stdout up to <see cref="MaxOutputBytes"/> on a thread of its own, keeping what it has so far where another
+    /// thread can take it.
+    /// <para>
+    /// It decides itself when the output is complete, from the pipe, never from a clock: a reader on the thread pool
+    /// could be left waiting behind other work while a timer ran ahead of it, so a Bun that had printed its version
+    /// was reported as printing nothing.
+    /// </para>
+    /// </summary>
     private sealed class OutputReader(Process process)
     {
         private readonly object _lock = new();
         private readonly byte[] _buffer = new byte[MaxOutputBytes + 1];
         private int _length;
         private bool _tooMuch;
+        private volatile bool _exited;
 
-        /// <summary>Reads until the pipe closes; one byte over the limit kills the process so it can't flood.</summary>
-        public async Task ReadAsync(CancellationToken ct)
+        /// <summary>The Bun has exited, so everything it printed is in the pipe already.</summary>
+        public void BunExited() => _exited = true;
+
+        /// <summary>
+        /// Reads until the pipe closes, or until it's empty after the Bun exited (only a child it left behind could
+        /// still write); one byte over the limit kills the process so it can't flood.
+        /// </summary>
+        public void Read(CancellationToken ct)
         {
             var stream = process.StandardOutput.BaseStream;
-            var chunk = new byte[1024];
-            while (true)
+            SafeHandle? pipe = stream switch
             {
-                var read = await stream.ReadAsync(chunk, ct).ConfigureAwait(false);
+                PipeStream p => p.SafePipeHandle,
+                FileStream f => f.SafeFileHandle,
+                _ => null,
+            };
+            var chunk = new byte[1024];
+            while (!ct.IsCancellationRequested)
+            {
+                // Whether it had exited before the look, so an empty pipe means all it printed has been read.
+                var exited = _exited;
+                if (pipe is not null && !PipeInput.HasInput(pipe, exited ? TimeSpan.Zero : PollInterval))
+                {
+                    if (exited)
+                        return;
+                    continue;
+                }
+
+                int read;
+                try
+                {
+                    read = stream.Read(chunk);
+                }
+                catch (Exception ex) when (ex is IOException or ObjectDisposedException)
+                {
+                    return;
+                }
+
                 if (read == 0)
                     return;
 
