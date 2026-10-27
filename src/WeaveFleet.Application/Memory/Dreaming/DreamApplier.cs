@@ -13,6 +13,7 @@ public sealed class DreamApplier(IMemoryStore store, TimeProvider time)
     public const string UserNoteReason = "You wrote this note; dreaming never changes your notes.";
     public const string ChangedReason = "This note changed while Fleet was dreaming, so Fleet left it as is.";
     public const string OneSessionReason = "Seen in one session only.";
+    public const string AlreadyANoteReason = "It's already a note.";
     public const string UndoRefused = "This note changed since dreaming changed it; edit it instead.";
 
     public async Task<List<DreamChange>> ApplyAsync(string userId, Dream dream, IReadOnlyList<DreamProposal> proposals, CancellationToken ct = default)
@@ -67,8 +68,10 @@ public sealed class DreamApplier(IMemoryStore store, TimeProvider time)
             return Skip(change, OneSessionReason);
 
         var days = await store.ListDaysUsedAsync(userId, dream.Repository, ct).ConfigureAwait(false);
-        var active = notes.Count(n => n.List == list && (list == MemoryList.Machine || n.Repository == dream.Repository)
-            && !AgentMemory.IsExpired(n, days.For(n), time.LocalTimeZone));
+        var inList = notes.Where(n => n.List == list && (list == MemoryList.Machine || n.Repository == dream.Repository)).ToList();
+        if (inList.Any(n => string.Equals(n.Text, change.Text, StringComparison.OrdinalIgnoreCase)))
+            return Skip(change, AlreadyANoteReason);
+        var active = inList.Count(n => !AgentMemory.IsExpired(n, days.For(n), time.LocalTimeZone));
         if (active >= AgentMemory.MaxNotes(list))
             return Left(change, $"The {change.List} list is full ({active} notes), so Fleet left it as is.", []);
 

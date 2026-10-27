@@ -298,7 +298,9 @@ function sessionLabel(session: DreamSessionRef): string {
               </p>
 
               <div class="mt-2 flex items-center justify-between gap-2">
+                <!-- A merge needs no sessions: two notes said the same thing. Without evidence there's no Why. -->
                 <button
+                  v-if="change.sessions.length > 0 || change.quote"
                   type="button"
                   class="flex items-center gap-1 text-xs text-muted hover:text-text"
                   :aria-expanded="open.has(change.id)"
@@ -312,6 +314,7 @@ function sessionLabel(session: DreamSessionRef): string {
                   />
                   Why
                 </button>
+                <span v-else />
                 <button
                   type="button"
                   class="rounded-btn border border-border px-2 py-0.5 text-xs text-text disabled:opacity-60"
@@ -323,7 +326,7 @@ function sessionLabel(session: DreamSessionRef): string {
                 </button>
               </div>
               <div
-                v-if="open.has(change.id)"
+                v-if="open.has(change.id) && (change.sessions.length > 0 || change.quote)"
                 class="mt-2 border-t border-border pt-2 text-xs text-muted"
                 data-testid="dream-evidence"
               >

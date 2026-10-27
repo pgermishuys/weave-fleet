@@ -70,6 +70,18 @@ public sealed class DreamApplierTests
     }
 
     [Fact]
+    public async Task An_add_that_repeats_a_note_word_for_word_is_skipped()
+    {
+        Note("n1", MemoryKinds.Learned, "Run tests with bun run test.");
+
+        var change = await ApplyAsync(Add("run tests with bun run test.", "S1", "S2"));
+
+        change.Kind.ShouldBe("skipped");
+        change.Reason.ShouldBe(DreamApplier.AlreadyANoteReason);
+        _store.Notes.Count.ShouldBe(1);
+    }
+
+    [Fact]
     public async Task An_add_seen_in_one_session_is_skipped_even_when_the_label_is_repeated()
     {
         var change = await ApplyAsync(Add("Run tests with bun run test.", "S1", "s1"));

@@ -86,6 +86,8 @@ public sealed partial class DreamService(
 {
     private static readonly TimeSpan StaleAfter = TimeSpan.FromHours(1);
 
+    private const string StoppedBeforeAnswer = "The dreaming session stopped before it answered. Open it to see why.";
+
     private static readonly StringComparison PathComparison =
         OperatingSystem.IsWindows() || OperatingSystem.IsMacOS() ? StringComparison.OrdinalIgnoreCase : StringComparison.Ordinal;
 
@@ -236,7 +238,8 @@ public sealed partial class DreamService(
     {
         var userId = user.UserId;
         var dream = await dreams.FindAsync(userId, dreamId).ConfigureAwait(false);
-        if (dream is null || !dream.IsActive)
+        var retried = dream is { Status: DreamRules.Statuses.Failed, Error: StoppedBeforeAnswer } && dream.SessionId == sessionId;
+        if (dream is null || !(dream.IsActive || retried))
         {
             running.Unregister(sessionId);
             return;
@@ -248,6 +251,15 @@ public sealed partial class DreamService(
             return; // A new session reads idle before its first turn starts.
 
         var text = string.Join("\n", last.Parts.OfType<TextMessageEventPart>().Select(p => p.Text));
+        if (string.IsNullOrWhiteSpace(text))
+        {
+            // The turn failed before the model said anything (a usage limit, say). The dream stops blocking another, but
+            // stays registered: if Fleet's retry of the turn answers, that turn's end still applies it.
+            if (dream.Status != DreamRules.Statuses.Failed)
+                await FailAsync(userId, dreamId, StoppedBeforeAnswer, dream).ConfigureAwait(false);
+            return;
+        }
+
         var applied = await CompleteAsync(userId, dream, text).ConfigureAwait(false);
         running.Unregister(sessionId);
         if (applied)
