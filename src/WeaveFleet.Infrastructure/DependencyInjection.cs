@@ -390,6 +390,15 @@ public static class DependencyInjection
         services.AddHostedService<WeaveFleet.Infrastructure.Usage.UsagePollingService>();
         services.AddSingleton<IPendingPermissions>(sp => sp.GetRequiredService<PendingPermissionStore>());
         services.AddScoped<WeaveFleet.Application.Workflows.WorkflowsFeature>();
+        // Jobs: one queue that free seats on any machine pick up. The dispatcher idles unless a user has jobs and has them on.
+        services.AddSingleton<IJobRepository, JobRepository>();
+        services.AddScoped<WeaveFleet.Application.Jobs.JobsFeature>();
+        services.AddSingleton<WeaveFleet.Application.Jobs.JobMachineCache>();
+        services.AddScoped<WeaveFleet.Application.Jobs.IJobMachines, WeaveFleet.Application.Jobs.JobMachines>();
+        services.AddScoped<WeaveFleet.Application.Jobs.IJobSessions, WeaveFleet.Application.Jobs.JobSessions>();
+        services.AddScoped<WeaveFleet.Application.Jobs.JobService>();
+        services.AddSingleton<WeaveFleet.Application.Jobs.JobDispatcher>();
+        services.AddHostedService<WeaveFleet.Application.Jobs.JobDispatcherService>();
         // Safe mode ("Start without mods") lives in memory, shared by every request and by the mod host.
         services.AddSingleton<WeaveFleet.Application.Mods.ModsSafeMode>();
         services.AddScoped<WeaveFleet.Application.Mods.ModsFeature>();

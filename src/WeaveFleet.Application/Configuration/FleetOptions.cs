@@ -219,6 +219,12 @@ public sealed class HarnessOptions
     public bool Workflows { get; set; }
 
     /// <summary>
+    /// Lets Fleet keep a queue of jobs and start each on a machine with a free seat. Experimental: a user's <c>Jobs</c>
+    /// preference wins over this. Default: false.
+    /// </summary>
+    public bool Jobs { get; set; }
+
+    /// <summary>
     /// Remembers which sessions were working when Fleet stopped, and shows each a restart cut off with an Interrupted card
     /// and Continue. Off unless turned on (<c>Fleet__Harness__RestartContinue=true</c>) while it is built. Default: false.
     /// </summary>
