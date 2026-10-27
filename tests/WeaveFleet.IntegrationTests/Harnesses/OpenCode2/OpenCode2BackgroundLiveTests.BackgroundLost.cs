@@ -15,7 +15,7 @@ namespace WeaveFleet.IntegrationTests.Harnesses.OpenCode2;
 /// the work dies too, and V2 never posts the notice that would end its call: the history keeps the call running for
 /// good. Fleet ends it instead, live when the server stops and on every read after.
 /// </summary>
-public sealed partial class OpenCode2LiveTests
+public sealed partial class OpenCode2BackgroundLiveTests
 {
     [OpenCode2Fact]
     public async Task Background_work_the_server_died_under_ends_live_and_when_read_back()

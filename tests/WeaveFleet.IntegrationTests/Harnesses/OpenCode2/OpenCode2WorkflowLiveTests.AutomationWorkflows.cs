@@ -3,6 +3,7 @@ extern alias FakeLlm;
 using FakeLlm::FakeLlmServer;
 using Microsoft.Extensions.DependencyInjection;
 using WeaveFleet.Application.Automations;
+using WeaveFleet.Application.Sessions;
 using WeaveFleet.Application.Workflows;
 using WeaveFleet.Domain.Entities;
 using WeaveFleet.Infrastructure.Harnesses.OpenCode2;
@@ -16,7 +17,7 @@ namespace WeaveFleet.IntegrationTests.Harnesses.OpenCode2;
 /// <c>fleet_step_done</c>, and the run stops at its You decide step. A second firing while it waits there is skipped
 /// with the step's name, Run now isn't and gets a worktree of its own, and with Workflows off a firing says so.
 /// </summary>
-public sealed partial class OpenCode2LiveTests
+public sealed partial class OpenCode2WorkflowLiveTests
 {
     private const string AutomationWorkflow = """
         name: Live automation
@@ -91,6 +92,12 @@ public sealed partial class OpenCode2LiveTests
             await SetWorkflowsAsync(false);
             var off = await FireAsync(automation.Value, AutomationRunTrigger.Manual);
             off.Error.ShouldBe("Skipped: Workflows are turned off in Settings.");
+
+            // Leave the server with no turn on it, so turning Workflows off replaces it before the next test's first
+            // session, not between that test's sessions.
+            var tracker = fleet.Services.GetRequiredService<SessionActivityTracker>();
+            await WaitForAsync(events, () => new[] { fired.SessionId!, now.SessionId! }
+                .All(id => !SessionActivityTracker.IsInTurn(tracker.Get(id)?.ActivityStatus)), cts.Token);
         }
         finally
         {

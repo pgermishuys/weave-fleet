@@ -17,7 +17,7 @@ namespace WeaveFleet.IntegrationTests.Harnesses.OpenCode2;
 /// active. Fleet stops or replaces a server only when nothing runs on it, so the command isn't killed and its notice
 /// still arrives.
 /// </summary>
-public sealed partial class OpenCode2LiveTests
+public sealed partial class OpenCode2BackgroundLiveTests
 {
     [OpenCode2Fact]
     public async Task A_profile_server_stays_up_while_a_background_shell_runs_and_stops_once_it_has_finished()

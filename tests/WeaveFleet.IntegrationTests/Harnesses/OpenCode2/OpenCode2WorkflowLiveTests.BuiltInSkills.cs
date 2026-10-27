@@ -13,7 +13,7 @@ namespace WeaveFleet.IntegrationTests.Harnesses.OpenCode2;
 /// off reaches new sessions through V2's file watcher, with no new server. V2 fixes a session's skill list (the
 /// <c>&lt;available_skills&gt;</c> block of its system prompt) when the session is created.
 /// </summary>
-public sealed partial class OpenCode2LiveTests
+public sealed partial class OpenCode2WorkflowLiveTests
 {
     private const string BuiltInSkill = "fleet-simplify";
 

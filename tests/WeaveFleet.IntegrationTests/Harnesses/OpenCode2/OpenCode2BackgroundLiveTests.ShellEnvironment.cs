@@ -12,7 +12,7 @@ namespace WeaveFleet.IntegrationTests.Harnesses.OpenCode2;
 /// keeps <c>FLEET_URL</c>, which Fleet's skills call Fleet through. Fleet's plugin takes them out of every shell V2
 /// starts, so a subagent's first command is covered as surely as the session's own.
 /// </summary>
-public sealed partial class OpenCode2LiveTests
+public sealed partial class OpenCode2BackgroundLiveTests
 {
     /// <summary>Names only: the values are secrets.</summary>
     private const string ListEnvironment = "env | cut -d= -f1 | sort | tr '\\n' ' '; echo; curl -s -o /dev/null -w 'fleet=%{http_code}' \"$FLEET_URL/api/sessions\"";

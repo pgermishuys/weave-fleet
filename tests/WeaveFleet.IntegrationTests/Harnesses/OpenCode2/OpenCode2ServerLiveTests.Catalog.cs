@@ -8,7 +8,7 @@ namespace WeaveFleet.IntegrationTests.Harnesses.OpenCode2;
 /// The live catalog: V2 rebuilds a folder's agents, models and commands whenever a file it watches changes, and Fleet
 /// tells the owner's browsers so an open composer or slash-command list asks again.
 /// </summary>
-public sealed partial class OpenCode2LiveTests
+public sealed partial class OpenCode2ServerLiveTests
 {
     /// <summary>Longer than the server's settle time after a folder loads, so what follows is a change, not loading.</summary>
     private static readonly TimeSpan PastLoading = TimeSpan.FromSeconds(4);

@@ -14,7 +14,7 @@ namespace WeaveFleet.IntegrationTests.Harnesses.OpenCode2;
 /// Signing in to OpenCode 2's providers from Fleet, live, with dummy keys only. No sign-in is completed with a real
 /// provider: the browser sign-in is failed through its own callback, which is what shows Fleet can reach it.
 /// </summary>
-public sealed partial class OpenCode2LiveTests
+public sealed partial class OpenCode2ServerLiveTests
 {
     private const string DummyKey = "sk-ant-dummy-FLEETLIVE-0000";
 
