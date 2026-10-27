@@ -27,6 +27,48 @@ public sealed class UpdateCheckServiceTests
         UpdateCheckService.IsNewerVersion(latest, current).ShouldBe(expected);
     }
 
+    // A build from source is stamped by MinVer with a prerelease, e.g. 0.62.1-alpha.0.4 four commits past v0.62.0.
+    [Theory]
+    [InlineData("0.62.0", "0.62.1-alpha.0.4", false)]
+    [InlineData("0.62.1", "0.62.1-alpha.0.4", true)]
+    [InlineData("0.62.0", "0.62.0-alpha", true)]
+    [InlineData("0.62.0-alpha", "0.62.0", false)]
+    [InlineData("0.62.1-alpha.0.4", "0.62.0", true)]
+    [InlineData("0.62.1-alpha.0.5", "0.62.1-alpha.0.4", true)]
+    [InlineData("0.62.1-alpha.0.10", "0.62.1-alpha.0.9", true)]
+    [InlineData("0.62.1-alpha.0.4", "0.62.1-alpha.0.4", false)]
+    [InlineData("0.62.1-beta", "0.62.1-alpha.0.4", true)]
+    [InlineData("0.62.1-alpha.1", "0.62.1-alpha", true)]
+    [InlineData("0.62.1-alpha.beta", "0.62.1-alpha.1", true)]
+    [InlineData("0.62.0", "0.0.0-alpha.0", true)]
+    public void is_newer_version_understands_prerelease_versions(string latest, string current, bool expected)
+    {
+        UpdateCheckService.IsNewerVersion(latest, current).ShouldBe(expected);
+    }
+
+    [Theory]
+    [InlineData("v0.62.0", "0.62.1-alpha.0.4+d311447a", false)]
+    [InlineData("0.62.1+abc", "v0.62.1-alpha.0.4+d311447a", true)]
+    [InlineData("0.62.0+abc", "0.62.0+def", false)]
+    [InlineData("0.62", "0.62.0", false)]
+    [InlineData("0.62.0", "0.62", false)]
+    public void is_newer_version_ignores_build_metadata_a_v_prefix_and_missing_zeros(string latest, string current, bool expected)
+    {
+        UpdateCheckService.IsNewerVersion(latest, current).ShouldBe(expected);
+    }
+
+    // What can't be read is never an update: a guess either way could fetch an older Fleet.
+    [Theory]
+    [InlineData("not-a-version", "0.1.9")]
+    [InlineData("0.2.0", "not-a-version")]
+    [InlineData("0.2.0-", "0.1.9")]
+    [InlineData("0.2.0-alpha..1", "0.1.9")]
+    [InlineData("0.2.0-alpha", "0.2.0-")]
+    public void is_newer_version_is_false_when_either_version_cannot_be_read(string latest, string current)
+    {
+        UpdateCheckService.IsNewerVersion(latest, current).ShouldBeFalse();
+    }
+
     [Theory]
     [InlineData("", "0.1.9")]
     [InlineData("not-a-version", "0.1.9")]

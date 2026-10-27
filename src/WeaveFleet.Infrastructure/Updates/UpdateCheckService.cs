@@ -1,3 +1,4 @@
+using System.Globalization;
 using System.Net.Http.Headers;
 using System.Runtime.InteropServices;
 using System.Text.Json;
@@ -174,16 +175,63 @@ public sealed partial class UpdateCheckService(
         }
     }
 
+    /// <summary>
+    /// Whether <paramref name="latest"/> comes after <paramref name="current"/> in SemVer order, so a build from source
+    /// (MinVer stamps <c>0.62.1-alpha.0.4</c> four commits past v0.62.0) sits after 0.62.0 and before 0.62.1.
+    /// A version that can't be read is never newer: a guess could fetch, or restart into, an older Fleet.
+    /// </summary>
     internal static bool IsNewerVersion(string latest, string current)
+        => TryParseSemVer(latest, out var l) && TryParseSemVer(current, out var c) && CompareSemVer(l, c) > 0;
+
+    private static bool TryParseSemVer(string? text, out (Version Core, string[] Prerelease) version)
     {
-        if (string.IsNullOrWhiteSpace(latest))
+        version = default;
+        if (string.IsNullOrWhiteSpace(text))
             return false;
 
-        if (Version.TryParse(latest, out var l) && Version.TryParse(current, out var c))
-            return l > c;
+        // Build metadata (+…) takes no part in the order.
+        var value = text.Trim().TrimStart('v', 'V').Split('+')[0];
+        var dash = value.IndexOf('-');
+        var prerelease = dash < 0 ? [] : value[(dash + 1)..].Split('.');
+        if (dash >= 0 && prerelease.Any(id => id.Length == 0))
+            return false;
 
-        // Fall back to string comparison if parsing fails.
-        return !string.Equals(latest, current, StringComparison.OrdinalIgnoreCase);
+        if (!Version.TryParse(dash < 0 ? value : value[..dash], out var core))
+            return false;
+
+        // 0.62 and 0.62.0 are the same version.
+        version = (new Version(core.Major, core.Minor, Math.Max(core.Build, 0)), prerelease);
+        return true;
+    }
+
+    private static int CompareSemVer((Version Core, string[] Prerelease) a, (Version Core, string[] Prerelease) b)
+    {
+        var core = a.Core.CompareTo(b.Core);
+        if (core != 0)
+            return core;
+
+        // A release comes after its prereleases.
+        if (a.Prerelease.Length == 0 || b.Prerelease.Length == 0)
+            return b.Prerelease.Length.CompareTo(a.Prerelease.Length);
+
+        for (var i = 0; i < Math.Min(a.Prerelease.Length, b.Prerelease.Length); i++)
+        {
+            var x = a.Prerelease[i];
+            var y = b.Prerelease[i];
+            var xNumber = ulong.TryParse(x, NumberStyles.None, CultureInfo.InvariantCulture, out var xn);
+            var yNumber = ulong.TryParse(y, NumberStyles.None, CultureInfo.InvariantCulture, out var yn);
+            var order = (xNumber, yNumber) switch
+            {
+                (true, true) => xn.CompareTo(yn),
+                (true, false) => -1, // numbers come before words
+                (false, true) => 1,
+                _ => string.CompareOrdinal(x, y),
+            };
+            if (order != 0)
+                return order;
+        }
+
+        return a.Prerelease.Length.CompareTo(b.Prerelease.Length);
     }
 
     internal static string DownloadUrl(UpdateOptions update, string version, string assetName) =>
