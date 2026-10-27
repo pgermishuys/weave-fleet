@@ -125,6 +125,16 @@ public sealed class SessionMessageDeliveryTests : IAsyncDisposable, IDisposable
         Messaged(to).FromSessionId.ShouldBe("s-sender");
     }
 
+    [Fact]
+    public async Task a_message_says_it_cannot_wait_for_a_running_turn()
+    {
+        var to = await CreateSessionAsync();
+
+        await _sut.DeliverAsync("s-sender", "Fix login flake", fromMachine: null, to, "Check the installer.", UserId, CancellationToken.None);
+
+        _harnessSession.SendPromptCalls.ShouldHaveSingleItem().Options!.FailIfBusy.ShouldBeTrue();
+    }
+
     private async Task<string> CreateSessionAsync()
     {
         var created = await _orchestrator.CreateSessionAsync(new CreateSessionRequest { Directory = _directory, Title = "Check the Windows installer" });

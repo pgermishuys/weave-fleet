@@ -436,6 +436,29 @@ public sealed class ClaudeCodeLongLivedProcessTests : IAsyncDisposable
     }
 
     [Fact]
+    public async Task A_prompt_that_cannot_wait_is_refused_at_once_while_a_turn_runs_and_goes_when_it_ends()
+    {
+        if (OperatingSystem.IsWindows())
+            return;
+
+        var session = Start();
+        await session.SendPromptAsync("steer me", null, CancellationToken.None);
+        await WaitForAsync(() => Tools().Any(t => t.ToolCallId == "toolu_steer"));
+
+        // Without the option the prompt would wait for the turn; with it, the caller is told at once to queue.
+        await Should.ThrowAsync<HarnessBusyException>(
+            () => session.SendPromptAsync("a message", new PromptOptions { FailIfBusy = true }, CancellationToken.None).WaitAsync(TimeSpan.FromSeconds(5)));
+        Prompts().ShouldBe(["steer me"]);
+
+        // The turn ends; the same prompt now starts one.
+        await session.SendPromptAsync("change course", new PromptOptions { Delivery = PromptDelivery.Steer }, CancellationToken.None);
+        await WaitForAsync(() => Count(EventTypes.SessionIdle) == 1);
+        await PromptAsync("a message", new PromptOptions { FailIfBusy = true });
+
+        Prompts().ShouldBe(["steer me", "change course", "a message"]);
+    }
+
+    [Fact]
     public async Task A_steered_prompt_with_no_turn_running_starts_one()
     {
         if (OperatingSystem.IsWindows())

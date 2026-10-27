@@ -290,14 +290,25 @@ internal sealed class ClaudeCodeHarnessSession : IHarnessSession
         if (options?.Delivery == PromptDelivery.Steer && await TrySteerAsync(text, options, ct).ConfigureAwait(false))
             return;
 
-        await _promptLock.WaitAsync(ct).ConfigureAwait(false);
+        // A caller that can't wait: the lock is taken by a prompt that is starting or waiting on a turn, which is busy too.
+        var failIfBusy = options?.FailIfBusy == true;
+        if (failIfBusy)
+        {
+            if (!await _promptLock.WaitAsync(0, ct).ConfigureAwait(false))
+                throw new HarnessBusyException(BusyMessage);
+        }
+        else
+        {
+            await _promptLock.WaitAsync(ct).ConfigureAwait(false);
+        }
+
         try
         {
             LogSendPrompt(_logger, InstanceId, null);
 
             // 1. One turn at a time: a prompt sent mid-turn (Fleet's, or one Claude Code started by itself) waits for
-            //    that turn to end.
-            var turn = await BeginPromptedTurnAsync(ct).ConfigureAwait(false);
+            //    that turn to end, unless the caller can't wait.
+            var turn = await BeginPromptedTurnAsync(failIfBusy, ct).ConfigureAwait(false);
             try
             {
                 // The conversation is read back from Fleet's database, so the prompt is saved there, under
@@ -392,8 +403,10 @@ internal sealed class ClaudeCodeHarnessSession : IHarnessSession
         return ($"/{skills[0]} {text}", notes);
     }
 
-    /// <summary>Waits for a running turn to end, then starts Fleet's.</summary>
-    private async Task<Turn> BeginPromptedTurnAsync(CancellationToken ct)
+    private const string BusyMessage = "Claude Code is working on a turn.";
+
+    /// <summary>Waits for a running turn to end, then starts Fleet's; with <paramref name="failIfBusy"/> it throws instead.</summary>
+    private async Task<Turn> BeginPromptedTurnAsync(bool failIfBusy, CancellationToken ct)
     {
         while (true)
         {
@@ -404,6 +417,8 @@ internal sealed class ClaudeCodeHarnessSession : IHarnessSession
                     throw new ObjectDisposedException(nameof(ClaudeCodeHarnessSession), "The session has stopped.");
                 if (_turn is null)
                     return BeginTurn(process: null);
+                if (failIfBusy)
+                    throw new HarnessBusyException(BusyMessage);
                 running = _turn.Done.Task;
             }
 
