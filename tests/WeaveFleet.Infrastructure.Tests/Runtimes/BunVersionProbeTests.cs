@@ -175,25 +175,6 @@ public sealed class BunVersionProbeTests : IDisposable
     }
 
     [Fact]
-    public async Task Fleets_environment_is_not_passed_on()
-    {
-        if (OperatingSystem.IsWindows()) return;
-        var name = $"FLEET_BUN_PROBE_TEST_{Guid.NewGuid():N}";
-        Environment.SetEnvironmentVariable(name, "x");
-        try
-        {
-            var result = await Run(Script($"if [ -z \"${{{name}+set}}\" ]; then echo 1.4.5; else echo leaked; fi"));
-
-            result.Error.ShouldBeNull();
-            result.Version.ShouldBe(new BunVersion(1, 4, 5, null));
-        }
-        finally
-        {
-            Environment.SetEnvironmentVariable(name, null);
-        }
-    }
-
-    [Fact]
     public async Task HOME_and_USER_are_not_passed_on()
     {
         if (OperatingSystem.IsWindows()) return;
@@ -237,5 +218,33 @@ public sealed class BunVersionProbeTests : IDisposable
         })!;
         ps.WaitForExit();
         return ps.ExitCode == 0;
+    }
+
+    /// <summary>Sets an environment variable, which every process the other tests start would inherit.</summary>
+    [Collection(ProcessWide.Collection)]
+    public sealed class WithFleetSettings : IDisposable
+    {
+        private readonly BunVersionProbeTests _probe = new();
+
+        public void Dispose() => _probe.Dispose();
+
+        [Fact]
+        public async Task Fleets_environment_is_not_passed_on()
+        {
+            if (OperatingSystem.IsWindows()) return;
+            var name = $"FLEET_BUN_PROBE_TEST_{Guid.NewGuid():N}";
+            Environment.SetEnvironmentVariable(name, "x");
+            try
+            {
+                var result = await Run(_probe.Script($"if [ -z \"${{{name}+set}}\" ]; then echo 1.4.5; else echo leaked; fi"));
+
+                result.Error.ShouldBeNull();
+                result.Version.ShouldBe(new BunVersion(1, 4, 5, null));
+            }
+            finally
+            {
+                Environment.SetEnvironmentVariable(name, null);
+            }
+        }
     }
 }

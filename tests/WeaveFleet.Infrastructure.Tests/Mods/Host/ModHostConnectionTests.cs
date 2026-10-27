@@ -6,6 +6,7 @@ using WeaveFleet.Infrastructure.Mods.Host;
 namespace WeaveFleet.Infrastructure.Tests.Mods.Host;
 
 /// <summary>Starting a host process, with /bin/sh as Bun and a shell script as host.js. Unix only.</summary>
+[Collection(ProcessWide.Collection)]
 public sealed class ModHostConnectionTests : IDisposable
 {
     private const string Initialized = """{"jsonrpc":"2.0","id":1,"result":{"protocol":1,"hostVersion":"h1","bunVersion":"b1"}}""";

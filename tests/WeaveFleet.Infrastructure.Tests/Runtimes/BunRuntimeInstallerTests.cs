@@ -9,6 +9,7 @@ using WeaveFleet.Infrastructure.Runtimes;
 
 namespace WeaveFleet.Infrastructure.Tests.Runtimes;
 
+[Collection(ProcessWide.Collection)]
 public sealed class BunRuntimeInstallerTests : IDisposable
 {
     private static string Script(string version) => $"#!/bin/sh\necho {version}\n";

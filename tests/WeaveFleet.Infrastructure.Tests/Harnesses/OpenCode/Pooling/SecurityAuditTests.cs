@@ -23,6 +23,7 @@ using WeaveFleet.Testing.Fakes.Repositories;
 
 namespace WeaveFleet.Infrastructure.Tests.Harnesses.OpenCode.Pooling;
 
+[Collection(ProcessWide.Collection)]
 public sealed class SecurityAuditTests
 {
     [Fact]

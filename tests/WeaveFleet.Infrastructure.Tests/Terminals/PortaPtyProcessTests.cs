@@ -11,6 +11,7 @@ namespace WeaveFleet.Infrastructure.Tests.Terminals;
 /// Runs a real shell on a real pseudoterminal. Linux only for now: macOS and Windows are covered by the
 /// checklist in the terminal plan until CI runs there.
 /// </summary>
+[Collection(ProcessWide.Collection)]
 public sealed class PortaPtyProcessTests : IDisposable
 {
     private static readonly TimeSpan Timeout = TimeSpan.FromSeconds(10);

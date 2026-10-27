@@ -10,6 +10,7 @@ using WeaveFleet.Infrastructure.Harnesses.OpenCode.Pooling;
 
 namespace WeaveFleet.Infrastructure.Tests.Harnesses.OpenCode.Pooling;
 
+[Collection(ProcessWide.Collection)]
 public sealed class PooledOpenCodeInstanceRegistryTests
 {
     [Fact]
