@@ -233,8 +233,11 @@ public sealed class OpenCode2RuntimeTests
     [Fact]
     public async Task A_session_streams_its_mapped_events_and_follows_the_turn()
     {
-        await using var server = Server(OpenCode2Fixtures.ClientServing(OpenCode2Fixtures.Read("text-and-tool-turn.sse")));
+        // The server reads its stream as soon as it's made: a session attached after the turn started would never see it start.
+        var attached = new TaskCompletionSource();
+        await using var server = Server(OpenCode2Fixtures.ClientServing(OpenCode2Fixtures.Read("text-and-tool-turn.sse"), streamWhen: attached.Task));
         await using var session = NewSession(server, _ => Task.FromResult(server));
+        attached.SetResult();
 
         // The recording holds two turns. Stopping at the first idle races the pump into the second turn's start.
         using var timeout = new CancellationTokenSource(TimeSpan.FromSeconds(5));
