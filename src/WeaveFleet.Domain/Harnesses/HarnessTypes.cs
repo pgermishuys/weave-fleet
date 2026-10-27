@@ -599,6 +599,12 @@ public sealed record PromptOptions
     /// steers); prompts the user sends always say.
     /// </summary>
     public PromptDelivery? Delivery { get; init; }
+
+    /// <summary>
+    /// For a caller that can't wait for the turn to end (a message from another session): a harness that would wait
+    /// for the running turn throws <see cref="HarnessBusyException"/> at once instead, for the caller to queue the prompt.
+    /// </summary>
+    public bool FailIfBusy { get; init; }
 }
 
 /// <summary>When a prompt sent while a turn runs reaches the agent.</summary>

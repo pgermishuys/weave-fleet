@@ -9,6 +9,7 @@ using WeaveFleet.Application.Sessions.Prompting;
 using WeaveFleet.Application.Users;
 using WeaveFleet.Domain.Common;
 using WeaveFleet.Domain.Events;
+using WeaveFleet.Domain.Harnesses;
 using WeaveFleet.Domain.Repositories;
 
 namespace WeaveFleet.Application.Sessions;
@@ -101,11 +102,12 @@ public sealed class SessionMessageDelivery(SessionPrompting prompting, IEventBro
         CancellationToken ct)
     {
         var wrapped = SessionMessages.Wrap(fromSessionId, fromTitle, text.Trim(), fromMachine);
-        var sent = await prompting.PromptSessionWithReceiptAsync(toSessionId, wrapped, options: null, userMessageId: null, correlationId: null, ct)
+        var sent = await prompting.PromptSessionWithReceiptAsync(toSessionId, wrapped, new PromptOptions { FailIfBusy = true }, userMessageId: null, correlationId: null, ct)
             .ConfigureAwait(false);
-        // A harness that can't take a prompt mid-turn (GitHub Copilot, also while it waits on a permission ask)
-        // refuses it: the message waits in the receiver's queue and goes when its turn ends. It then has no
-        // message id, so the sender can't be told when the receiver is done.
+        // A harness that can't take a prompt mid-turn (GitHub Copilot, also while it waits on a permission ask) or
+        // would make the sender wait for it (Claude Code) refuses it: the message waits in the receiver's queue and
+        // goes when its turn ends. It then has no message
+        // id, so the sender can't be told when the receiver is done.
         if (sent.IsFailure && sent.Error.Code == SessionPrompting.BusyErrorCode)
         {
             var queued = await queue.EnqueueAsync(toSessionId, new QueuePromptRequest(wrapped, Kind: null), ct).ConfigureAwait(false);
@@ -208,11 +210,19 @@ public sealed class SessionMessageBridge(
                 updates.Watch(new SessionUpdateWatch(caller.FleetSessionId, toSessionId, caller.UserId, messageId));
 
             var title = to.Value.Title;
+            if (sent.Value.MessageId is null)
+            {
+                var queued = $"Queued for {title} ({toSessionId}): it's busy, and the message goes when its turn ends.";
+                return CanvasResult.Ok(new CanvasToolOutput(
+                    $"Messaged {title}",
+                    notifyWhenDone
+                        ? $"{queued} You won't get an update for this one; message again later if you need the answer."
+                        : $"{queued} Its reply stays in that session."));
+            }
+
             return CanvasResult.Ok(new CanvasToolOutput(
                 $"Messaged {title}",
-                notifyWhenDone && sent.Value.MessageId is null
-                    ? $"Queued for {title} ({toSessionId}): it's busy, and the message goes when its turn ends. Fleet can't tell you when it's done with it for this session, so check on it later."
-                    : notifyWhenDone
+                notifyWhenDone
                     ? $"Delivered to {title} ({toSessionId}). It starts on it now, or when the turn it's on ends. Fleet will send you its reply when it's done, as a new message; you don't need to check on it."
                     : $"Delivered to {title} ({toSessionId}). It starts on it now, or when the turn it's on ends. Its reply stays in that session."));
         }
