@@ -1,5 +1,6 @@
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging;
+using WeaveFleet.Application.Memory.Dreaming;
 using WeaveFleet.Application.Mods;
 using WeaveFleet.Application.Users;
 using WeaveFleet.Domain.Repositories;
@@ -17,7 +18,7 @@ namespace WeaveFleet.Application.Sessions;
 /// caught up with the event yet. What's queued is in the database, so a Fleet restart keeps it; it's sent the next
 /// time the session's turn ends, or with Send now.
 /// </remarks>
-public sealed partial class PromptQueueDispatcher(IServiceScopeFactory scopeFactory, ILogger<PromptQueueDispatcher> logger, ModTurnHook? modTurns = null)
+public sealed partial class PromptQueueDispatcher(IServiceScopeFactory scopeFactory, ILogger<PromptQueueDispatcher> logger, ModTurnHook? modTurns = null, DreamFinisher? dreams = null)
 {
     private readonly Lock _gate = new();
     private readonly List<Task> _inFlight = [];
@@ -37,6 +38,9 @@ public sealed partial class PromptQueueDispatcher(IServiceScopeFactory scopeFact
     {
         if (!string.IsNullOrEmpty(userId))
             modTurns?.Observe(sessionId, domainEvent);
+
+        // Ends a dream whose session just finished its turn; with none running this is a dictionary lookup.
+        dreams?.Observe(sessionId, userId, domainEvent);
 
         if (domainEvent is not SessionIdled || string.IsNullOrEmpty(userId))
             return;

@@ -501,6 +501,13 @@ public sealed partial class AgentMemoryService(
         }
     }
 
+    /// <summary>
+    /// After a dream (or its Undo) changed notes: writes again what sessions read for the repository and the machine, so
+    /// sessions started next, and running ones with their next prompt (<see cref="ChangesForAsync"/>), hear the change.
+    /// </summary>
+    public Task RefreshAfterDreamAsync(string userId, string repository, CancellationToken ct = default)
+        => RefreshContextAsync(userId, Touched.MachineList.And(new Touched(Machine: false, repository)), ct);
+
     /// <summary>What a change touched: the machine's list, one repository's, or everything.</summary>
     private sealed record Touched(bool Machine, string? Repository, bool AllRepositories = false)
     {

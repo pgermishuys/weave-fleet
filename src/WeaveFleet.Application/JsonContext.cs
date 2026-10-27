@@ -159,6 +159,7 @@ internal sealed record QuickChatSourceInput;
 [JsonSerializable(typeof(FilesChangedPayload))]
 [JsonSerializable(typeof(WeaveFleet.Application.Harnesses.HarnessCatalogChangedPayload))]
 [JsonSerializable(typeof(WeaveFleet.Application.Memory.MemorySavedPayload))]
+[JsonSerializable(typeof(WeaveFleet.Application.Memory.Dreaming.DreamView))]
 [JsonSerializable(typeof(TurnError))]
 [JsonSerializable(typeof(WeaveFleet.Application.Reports.InboxReport))]
 [JsonSerializable(typeof(WeaveFleet.Application.Reports.InboxAccepted))]
