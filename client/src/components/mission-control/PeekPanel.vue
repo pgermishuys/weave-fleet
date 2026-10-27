@@ -134,8 +134,8 @@ function nudge(): void {
           <span class="font-semibold">{{ helper.title }}</span>
           <span
             v-if="helper.label"
-            class="text-muted"
-          > {{ helper.label }}</span>
+            class="ml-1 text-muted"
+          >{{ helper.label }}</span>
         </li>
       </ul>
     </section>

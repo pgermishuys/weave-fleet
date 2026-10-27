@@ -46,6 +46,7 @@ describe("Mission control page", () => {
   let requests: string[];
   let permissionAnswered: boolean;
   let questionAnswered: boolean;
+  let atlasNow: string;
 
   beforeEach(() => {
     localStorage.clear();
@@ -55,6 +56,7 @@ describe("Mission control page", () => {
     enabled = true;
     permissionAnswered = false;
     questionAnswered = false;
+    atlasNow = "bash · pnpm test webhooks";
     requests = [];
     saveMachines([{ id: "m2", name: "mini", baseUrl: "http://mini.test:5732", token: "mini-token", addedAt: "2026-10-27T08:00:00Z" }]);
     vi.stubGlobal("fetch", vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
@@ -68,7 +70,7 @@ describe("Mission control page", () => {
           ? [item("mini-q", "Rate limiter", questionAnswered ? {} : { sessionStatus: "waiting_input", activityStatus: "idle" })]
           : [item("atlas-w", "Index rebuild"), item("atlas-p", "Dependency bump", { sessionStatus: "waiting_input", activityStatus: "idle" })]);
       }
-      if (path === "/api/sessions/now") return onMini ? json({}, 404) : json({ "atlas-w": { text: "bash · pnpm test webhooks", kind: "tool", at: "" } });
+      if (path === "/api/sessions/now") return onMini ? json({}, 404) : json({ "atlas-w": { text: atlasNow, kind: "tool", at: "" } });
       if (path === "/api/sessions/mini-q/permissions") return json([]);
       if (path === "/api/sessions/mini-q/messages") return json({ messages: questionAnswered ? [] : [questionMessage] });
       if (path === "/api/sessions/atlas-p/permissions") {
@@ -109,6 +111,23 @@ describe("Mission control page", () => {
 
     await wrapper.find("[data-testid='group-machine']").trigger("click");
     expect(wrapper.findAll("[data-testid='mission-group'] h3").map((heading) => heading.text().replace(/\s+\d+$/, "")).sort()).toEqual(["This machine", "mini"]);
+  });
+
+  it("follows each machine's now line every few seconds", async () => {
+    vi.useFakeTimers({ toFake: ["setInterval", "clearInterval"] });
+    try {
+      const wrapper = mount(MissionControlPage);
+      await flushPromises();
+      expect(wrapper.find("[data-state='working'] [data-testid='tile-now']").text()).toBe("bash · pnpm test webhooks");
+
+      atlasNow = "edit · src/sync/rules.ts";
+      await vi.advanceTimersByTimeAsync(4000);
+      await flushPromises();
+
+      expect(wrapper.find("[data-state='working'] [data-testid='tile-now']").text()).toBe("edit · src/sync/rules.ts");
+    } finally {
+      vi.useRealTimers();
+    }
   });
 
   it("answers a question and a permission in place, each on its own machine", async () => {

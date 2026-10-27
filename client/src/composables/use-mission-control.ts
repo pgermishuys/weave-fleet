@@ -1,17 +1,20 @@
 import { computed, onUnmounted, shallowRef, watch } from "vue";
 import { feedHubFor } from "@/composables/use-signalr-socket";
 import { targetFor } from "@/lib/machine-target";
-import { buildTiles, groupTiles, needsYou, summarize, type Grouping, type MissionMachine, type Tile } from "@/lib/mission-control";
-import { MissionFeed, type MissionSnapshot } from "@/lib/mission-control-feed";
-import { nudgeRequest, readRequest } from "@/lib/mission-control-requests";
+import { buildTiles, groupTiles, needsYou, summarize, type Grouping, type MissionMachine, type SessionNow, type Tile } from "@/lib/mission-control";
+import { InboxFeed, type InboxSnapshot } from "@/lib/phone/inbox-feed";
+import { fetchNow, nudgeRequest, readRequest } from "@/lib/mission-control-requests";
 import { permissionAnswerRequest, questionAnswerRequest, sendAnswer, type AnswerOutcome, type AnswerTarget, type PermissionReply } from "@/lib/push/answer";
 import { useMachinesStore, type MachineEntry } from "@/stores/machines";
 import { useRelativeTime } from "@/composables/use-relative-time";
 
+/** How often each machine is asked what its sessions are doing; the sessions themselves come with the feed's events. */
+const NOW_POLL_MS = 4000;
+
 interface OpenFeed {
   entry: MachineEntry;
-  feed: MissionFeed;
-  snapshot: MissionSnapshot | null;
+  feed: InboxFeed;
+  snapshot: InboxSnapshot | null;
 }
 
 /**
@@ -22,6 +25,7 @@ export function useMissionControl() {
   const machines = useMachinesStore();
   const clock = useRelativeTime();
   const open = shallowRef<OpenFeed[]>([]);
+  const nowLines = shallowRef<Readonly<Record<string, Record<string, SessionNow>>>>({});
   const grouping = shallowRef<Grouping>("folder");
 
   const states = computed<MissionMachine[]>(() => open.value.map(({ entry, snapshot }) => ({
@@ -30,7 +34,7 @@ export function useMissionControl() {
     status: snapshot?.status ?? "connecting",
     sessions: snapshot?.sessions ?? [],
     asks: snapshot?.asks ?? {},
-    now: snapshot?.now ?? {},
+    now: nowLines.value[entry.key] ?? {},
   })));
   const tiles = computed(() => buildTiles(states.value, clock.value));
   const groups = computed(() => groupTiles(tiles.value, grouping.value));
@@ -41,19 +45,25 @@ export function useMissionControl() {
     return a.key === b.key && a.baseUrl === b.baseUrl && (a.connection?.token ?? null) === (b.connection?.token ?? null);
   }
 
-  function replace(feed: MissionFeed, snapshot: MissionSnapshot): void {
+  function replace(feed: InboxFeed, snapshot: InboxSnapshot): void {
     open.value = open.value.map((candidate) => candidate.feed === feed ? { ...candidate, snapshot } : candidate);
   }
 
   function openFeed(entry: MachineEntry): OpenFeed {
-    const feed: MissionFeed = new MissionFeed({
+    const feed: InboxFeed = new InboxFeed({
       target: { machineId: entry.key, baseUrl: entry.baseUrl, token: entry.connection?.token ?? null },
       onChange: (snapshot) => replace(feed, snapshot),
       // The machine's event hub, shared with its sessions open in this page.
       createHub: () => feedHubFor(targetFor(entry.connection)),
     });
     void feed.start();
+    void pollNow(entry);
     return { entry, feed, snapshot: null };
+  }
+
+  async function pollNow(entry: MachineEntry): Promise<void> {
+    const lines = await fetchNow({ baseUrl: entry.baseUrl, token: entry.connection?.token ?? null });
+    nowLines.value = { ...nowLines.value, [entry.key]: lines };
   }
 
   /** Opens a feed for each machine that has none, and closes those of machines that are gone or changed. */
@@ -64,7 +74,11 @@ export function useMissionControl() {
   }
 
   watch(() => machines.entries, sync, { immediate: true });
+  const nowTimer = setInterval(() => {
+    if (document.visibilityState !== "hidden") for (const { entry } of open.value) void pollNow(entry);
+  }, NOW_POLL_MS);
   onUnmounted(() => {
+    clearInterval(nowTimer);
     for (const candidate of open.value) void candidate.feed.stop();
     open.value = [];
   });
