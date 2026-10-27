@@ -14,8 +14,10 @@ export default defineConfig({
     environment: "jsdom",
     globals: true,
     setupFiles: ["./src/test-setup.ts"],
+    // Off by default: nothing in CI reads it and it adds ~10% to a run.
+    // `vitest run --coverage` turns it on locally.
     coverage: {
-      enabled: true,
+      enabled: false,
       provider: "v8",
       reporter: ["text", "html"],
       include: [
