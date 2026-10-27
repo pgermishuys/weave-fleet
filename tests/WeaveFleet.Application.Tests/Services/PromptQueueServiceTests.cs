@@ -257,4 +257,25 @@ public sealed class PromptQueueServiceTests : IAsyncDisposable
         _harness.SendPromptCalls.ShouldBeEmpty();
         (await _queue.ListAsync("s1")).Select(i => i.Text).ShouldBe(["first", "second"]);
     }
+
+    [Fact]
+    public async Task Two_turn_ends_close_together_send_one_message_not_two()
+    {
+        Seed();
+        Busy();
+        var service = Build();
+        await QueueAsync(service, "first");
+        await QueueAsync(service, "second");
+        var release = new TaskCompletionSource();
+        _harness.SendPromptBehavior = (_, _, _) => release.Task;
+
+        var one = service.SendNextAsync("s1");
+        var two = service.SendNextAsync("s1");
+        await Task.Delay(100);
+        release.SetResult();
+        await Task.WhenAll(one, two);
+
+        _harness.SendPromptCalls.Select(c => c.Text).ShouldBe(["first"]);
+        (await _queue.ListAsync("s1")).Select(i => i.Text).ShouldBe(["second"]);
+    }
 }

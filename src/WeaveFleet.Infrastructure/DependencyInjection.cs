@@ -342,6 +342,7 @@ public static class DependencyInjection
         services.AddSingleton<WeaveFleet.Application.Machines.RemoteSessions>();
         services.AddHttpClient(WeaveFleet.Application.Machines.RemoteSessions.HttpClientName, client => client.Timeout = TimeSpan.FromMinutes(2))
             .ConfigurePrimaryHttpMessageHandler(() => new System.Net.Http.SocketsHttpHandler { AllowAutoRedirect = false, ConnectTimeout = TimeSpan.FromSeconds(5) });
+        services.AddSingleton<PromptQueueGate>();
         services.AddScoped<PromptQueueService>();
         // Singleton: the relay hands it every event; it sends a session's next queued message when its turn ends.
         services.AddSingleton<PromptQueueDispatcher>();
