@@ -428,8 +428,10 @@ public sealed class ClaudeCodeMapperTests
     }
 
     [Fact]
-    public void TryExtractTokenEvent_UsesResultSessionIdOverParameter()
+    public void TryExtractTokenEvent_CountsAgainstTheFleetSession_NotClaudeCodesOwn()
     {
+        // The result line's session_id is Claude Code's own (Fleet's resume token). Counted under it, the tokens
+        // matched no Fleet session: sessions.total_tokens stayed 0 for every Claude Code session.
         var result = new ClaudeCodeResultMessage
         {
             Subtype = "success",
@@ -439,10 +441,10 @@ public sealed class ClaudeCodeMapperTests
         };
 
         var data = ClaudeCodeMapper.TryExtractTokenEvent(
-            result, "fleet-sess-fallback", null, null, null, null);
+            result, "fleet-sess", null, null, null, null);
 
         data.ShouldNotBeNull();
-        // result.SessionId takes precedence
-        data.SessionId.ShouldBe("claude-native-sess");
+        data.SessionId.ShouldBe("fleet-sess");
+        data.EventId.ShouldStartWith("fleet-sess:");
     }
 }

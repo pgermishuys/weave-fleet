@@ -569,7 +569,8 @@ internal static class ClaudeCodeMapper
                 reasoningTokens: 0,
                 cacheReadTokens: cacheReadTokens);
 
-            var resolvedSessionId = result.SessionId ?? sessionId ?? string.Empty;
+            // Fleet's session, which the totals are kept on; the result's session_id is Claude Code's own (the resume token).
+            var resolvedSessionId = sessionId ?? result.SessionId ?? string.Empty;
 
             return new TokenEventData(
                 EventId: $"{resolvedSessionId}:{result.GetHashCode()}",
