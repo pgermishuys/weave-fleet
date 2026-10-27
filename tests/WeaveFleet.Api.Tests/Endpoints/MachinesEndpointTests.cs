@@ -49,8 +49,7 @@ public sealed class MachinesEndpointTests : IClassFixture<MachinesEndpointTests.
 
         var added = await owner.PostAsJsonAsync("/api/machines", new { baseUrl = FalconUrl + "/", token = Token(falcon) });
 
-        added.StatusCode.ShouldBe(HttpStatusCode.OK);
-        var body = await added.Content.ReadFromJsonAsync<JsonElement>();
+        var body = await added.ReadSuccessAsync();
         body.GetProperty("id").GetString().ShouldBe(Identity(falcon).Id);
         body.GetProperty("baseUrl").GetString().ShouldBe(FalconUrl);
         body.GetProperty("status").GetString().ShouldBe("online");
@@ -94,7 +93,7 @@ public sealed class MachinesEndpointTests : IClassFixture<MachinesEndpointTests.
         var hangar = _hangar;
         using var owner = Client(hangar, Token(hangar));
 
-        var body = await (await owner.PostAsJsonAsync("/api/machines", new { baseUrl = FalconUrl, token = Token(falcon) })).Content.ReadFromJsonAsync<JsonElement>();
+        var body = await (await owner.PostAsJsonAsync("/api/machines", new { baseUrl = FalconUrl, token = Token(falcon) })).ReadSuccessAsync();
 
         body.TryGetProperty("sshDestination", out var ssh).ShouldBeTrue();
         ssh.ValueKind.ShouldBe(JsonValueKind.Null);
@@ -134,7 +133,7 @@ public sealed class MachinesEndpointTests : IClassFixture<MachinesEndpointTests.
         var falcon = _falcon;
         var hangar = _hangar;
         using var owner = Client(hangar, Token(hangar));
-        await owner.PostAsJsonAsync("/api/machines", new { baseUrl = FalconUrl, token = Token(falcon) });
+        await (await owner.PostAsJsonAsync("/api/machines", new { baseUrl = FalconUrl, token = Token(falcon) })).ReadSuccessAsync();
         var (_, deviceToken) = await hangar.Services.GetRequiredService<DeviceTokenService>().IssueAsync("Pixel", "android");
         using var phone = Client(hangar, deviceToken);
 
@@ -204,11 +203,11 @@ public sealed class MachinesEndpointTests : IClassFixture<MachinesEndpointTests.
         var hangar = _hangar;
         using var owner = Client(hangar, Token(hangar));
         var id = Identity(falcon).Id;
-        var added = await (await owner.PostAsJsonAsync("/api/machines", new { baseUrl = FalconUrl, token = Token(falcon) })).Content.ReadFromJsonAsync<JsonElement>();
+        var added = await (await owner.PostAsJsonAsync("/api/machines", new { baseUrl = FalconUrl, token = Token(falcon) })).ReadSuccessAsync();
         added.GetProperty("agentsAllowed").GetBoolean().ShouldBeFalse();
 
         var allowed = await owner.PutAsJsonAsync($"/api/machines/{id}", new { agentsAllowed = true });
-        await owner.PostAsJsonAsync("/api/machines", new { baseUrl = FalconUrl, token = Token(falcon) });
+        await (await owner.PostAsJsonAsync("/api/machines", new { baseUrl = FalconUrl, token = Token(falcon) })).ReadSuccessAsync();
         var (_, deviceToken) = await hangar.Services.GetRequiredService<DeviceTokenService>().IssueAsync("Pixel", "android");
         using var phone = Client(hangar, deviceToken);
         var fromPhone = await phone.PutAsJsonAsync($"/api/machines/{id}", new { agentsAllowed = false });

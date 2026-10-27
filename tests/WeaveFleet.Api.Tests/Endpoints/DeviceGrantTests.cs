@@ -31,8 +31,7 @@ public sealed class DeviceGrantTests
 
         var granted = await phone.PostAsync($"/api/machines/{MachineId(falcon)}/device-grant", null);
 
-        granted.StatusCode.ShouldBe(HttpStatusCode.OK);
-        var grant = await granted.Content.ReadFromJsonAsync<JsonElement>();
+        var grant = await granted.ReadSuccessAsync();
         grant.GetProperty("machineId").GetString().ShouldBe(MachineId(falcon));
         grant.GetProperty("baseUrl").GetString().ShouldBe("https://falcon.test");
         var falconToken = grant.GetProperty("token").GetString()!;
@@ -58,7 +57,7 @@ public sealed class DeviceGrantTests
         await ListAsync(hangar, falcon);
         var (phoneDevice, phoneToken) = await hangar.Services.GetRequiredService<DeviceTokenService>().IssueAsync("Pixel 9", "android");
         using var phone = Client(hangar, phoneToken);
-        var falconToken = (await (await phone.PostAsync($"/api/machines/{MachineId(falcon)}/device-grant", null)).Content.ReadFromJsonAsync<JsonElement>()).GetProperty("token").GetString()!;
+        var falconToken = (await (await phone.PostAsync($"/api/machines/{MachineId(falcon)}/device-grant", null)).ReadSuccessAsync()).GetProperty("token").GetString()!;
         using var owner = Client(hangar, MachineToken(hangar));
 
         (await owner.DeleteAsync($"/api/machine/devices/{phoneDevice.Id}")).StatusCode.ShouldBe(HttpStatusCode.NoContent);
@@ -77,8 +76,8 @@ public sealed class DeviceGrantTests
         var (_, phoneToken) = await hangar.Services.GetRequiredService<DeviceTokenService>().IssueAsync("Pixel 9", "android");
         using var phone = Client(hangar, phoneToken);
 
-        var first = (await (await phone.PostAsync($"/api/machines/{MachineId(falcon)}/device-grant", null)).Content.ReadFromJsonAsync<JsonElement>()).GetProperty("token").GetString()!;
-        var second = (await (await phone.PostAsync($"/api/machines/{MachineId(falcon)}/device-grant", null)).Content.ReadFromJsonAsync<JsonElement>()).GetProperty("token").GetString()!;
+        var first = (await (await phone.PostAsync($"/api/machines/{MachineId(falcon)}/device-grant", null)).ReadSuccessAsync()).GetProperty("token").GetString()!;
+        var second = (await (await phone.PostAsync($"/api/machines/{MachineId(falcon)}/device-grant", null)).ReadSuccessAsync()).GetProperty("token").GetString()!;
 
         (await Client(falcon, first).GetAsync("/api/sessions")).StatusCode.ShouldBe(HttpStatusCode.Unauthorized);
         (await Client(falcon, second).GetAsync("/api/sessions")).StatusCode.ShouldBe(HttpStatusCode.OK);
@@ -109,7 +108,7 @@ public sealed class DeviceGrantTests
         await ListAsync(hangar, falcon);
         var (phoneDevice, phoneToken) = await hangar.Services.GetRequiredService<DeviceTokenService>().IssueAsync("Pixel 9", "android");
         using var phone = Client(hangar, phoneToken);
-        var falconToken = (await (await phone.PostAsync($"/api/machines/{MachineId(falcon)}/device-grant", null)).Content.ReadFromJsonAsync<JsonElement>()).GetProperty("token").GetString()!;
+        var falconToken = (await (await phone.PostAsync($"/api/machines/{MachineId(falcon)}/device-grant", null)).ReadSuccessAsync()).GetProperty("token").GetString()!;
 
         route.Down = true;
         using var owner = Client(hangar, MachineToken(hangar));
@@ -134,7 +133,7 @@ public sealed class DeviceGrantTests
         await ListAsync(hangar, falcon);
         var (phoneDevice, phoneToken) = await hangar.Services.GetRequiredService<DeviceTokenService>().IssueAsync("Pixel 9", "android");
         using var phone = Client(hangar, phoneToken);
-        (await phone.PostAsync($"/api/machines/{MachineId(falcon)}/device-grant", null)).StatusCode.ShouldBe(HttpStatusCode.OK);
+        await (await phone.PostAsync($"/api/machines/{MachineId(falcon)}/device-grant", null)).ReadSuccessAsync();
         var first = (await hangar.Services.GetRequiredService<IRemoteMachineRepository>().GetGrantAsync(phoneDevice.Id, MachineId(falcon)))!;
 
         route.Down = true;
@@ -143,7 +142,7 @@ public sealed class DeviceGrantTests
             .RemoteDeviceId.ShouldBe(first.RemoteDeviceId, "hangar still knows the token it couldn't remove");
 
         route.Down = false;
-        (await phone.PostAsync($"/api/machines/{MachineId(falcon)}/device-grant", null)).StatusCode.ShouldBe(HttpStatusCode.OK);
+        await (await phone.PostAsync($"/api/machines/{MachineId(falcon)}/device-grant", null)).ReadSuccessAsync();
         var onFalcon = await falcon.Services.GetRequiredService<DeviceTokenService>().ListAsync();
         onFalcon.Count.ShouldBe(1);
         onFalcon.Single().Id.ShouldNotBe(first.RemoteDeviceId);
@@ -179,7 +178,7 @@ public sealed class DeviceGrantTests
         await ListAsync(hangar, falcon);
         var (_, phoneToken) = await hangar.Services.GetRequiredService<DeviceTokenService>().IssueAsync("Pixel 9", "android");
         using var phone = Client(hangar, phoneToken);
-        var falconToken = (await (await phone.PostAsync($"/api/machines/{MachineId(falcon)}/device-grant", null)).Content.ReadFromJsonAsync<JsonElement>()).GetProperty("token").GetString()!;
+        var falconToken = (await (await phone.PostAsync($"/api/machines/{MachineId(falcon)}/device-grant", null)).ReadSuccessAsync()).GetProperty("token").GetString()!;
 
         using var owner = Client(hangar, MachineToken(hangar));
         (await owner.DeleteAsync($"/api/machines/{MachineId(falcon)}")).StatusCode.ShouldBe(HttpStatusCode.NoContent);

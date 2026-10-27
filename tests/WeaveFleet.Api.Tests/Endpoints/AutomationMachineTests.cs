@@ -79,14 +79,18 @@ public sealed class AutomationMachineTests : IDisposable
             .GetProperty("state").GetString().ShouldBe("done");
     }
 
-    /// <summary>Run now, then the run once it has finished starting.</summary>
+    /// <summary>
+    /// Run now, then the run once it has finished starting: as long as hangar waits for falcon, whose first answer is
+    /// slow on a busy CPU.
+    /// </summary>
     private static async Task<JsonElement> RunNowAsync(HttpClient owner, string automationId)
     {
         var started = await owner.PostAsync($"/api/automations/{automationId}/run", null);
         started.StatusCode.ShouldBe(HttpStatusCode.Accepted);
         var runId = (await started.Content.ReadFromJsonAsync<JsonElement>()).GetProperty("id").GetString();
 
-        for (var attempt = 0; attempt < 100; attempt++)
+        var deadline = DateTime.UtcNow + ApiWebApplicationFactory.RemoteMachinesTimeout;
+        while (DateTime.UtcNow < deadline)
         {
             var runs = await owner.GetFromJsonAsync<JsonElement>($"/api/automations/{automationId}/runs");
             var run = runs.GetProperty("runs").EnumerateArray().First(r => r.GetProperty("id").GetString() == runId);

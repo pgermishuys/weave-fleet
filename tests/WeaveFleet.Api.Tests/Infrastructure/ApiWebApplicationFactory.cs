@@ -11,6 +11,7 @@ using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Options;
 using WeaveFleet.Application.Harnesses;
+using WeaveFleet.Application.Machines;
 using WeaveFleet.Application.Updates;
 using WeaveFleet.Infrastructure.Machines;
 using WeaveFleet.Infrastructure.Updates;
@@ -36,6 +37,9 @@ public sealed class ApiWebApplicationFactory(
 
     /// <summary>What a test server's GitHub calls fail with: tests never reach GitHub.</summary>
     public const string NoGitHub = "Test servers don't reach GitHub";
+
+    /// <summary>How long a test Fleet waits for another machine (another test Fleet) to answer.</summary>
+    public static readonly TimeSpan RemoteMachinesTimeout = TimeSpan.FromMinutes(1);
 
     /// <summary>The temporary web root the app serves static files from.</summary>
     public string WebRootPath => _webRootPath;
@@ -123,6 +127,13 @@ public sealed class ApiWebApplicationFactory(
             watcher.Handler = new SilentHandler();
             return watcher;
         }));
+
+        // A fresh test server builds its endpoints and services on its first request, which on a busy CPU took 7–9 s:
+        // past the 5 s one Fleet waits for another, so a two-Fleet test read "Couldn't reach". A real machine is
+        // running already; a test Fleet gets a minute. RemoteMachinesTimeout says how long.
+        builder.ConfigureTestServices(services => services.AddHttpClient(
+            RemoteMachineService.HttpClientName,
+            client => client.Timeout = RemoteMachinesTimeout));
 
         if (configureTestServices is not null)
         {
