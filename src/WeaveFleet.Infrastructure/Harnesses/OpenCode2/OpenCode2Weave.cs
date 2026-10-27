@@ -46,9 +46,11 @@ internal sealed partial class OpenCode2Weave(
 
     /// <summary>
     /// How long a try waits for a Weave the config lists to load or fail: V2 installs a package from npm the first
-    /// time, which takes seconds, and loads the folder without waiting for it.
+    /// time and loads the folder without waiting for it. Until then it logs nothing, so a listed Weave that's neither
+    /// loaded nor failed is still installing. The adapter is about 380 packages (440 MB), which took 35 to 95 seconds
+    /// on a developer machine (27 October 2026), so this only stops a try that V2 never finishes.
     /// </summary>
-    internal TimeSpan PluginWait { get; init; } = TimeSpan.FromSeconds(60);
+    internal TimeSpan PluginWait { get; init; } = TimeSpan.FromMinutes(5);
 
     /// <summary>A config whose agent shows up only when Weave reads the folder Fleet points it at.</summary>
     private static readonly IReadOnlyDictionary<string, string> ProbeFiles = new Dictionary<string, string>(StringComparer.Ordinal)

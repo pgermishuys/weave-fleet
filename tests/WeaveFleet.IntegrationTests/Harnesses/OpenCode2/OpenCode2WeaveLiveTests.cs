@@ -18,7 +18,8 @@ namespace WeaveFleet.IntegrationTests.Harnesses.OpenCode2;
 public sealed class OpenCode2WeaveLiveTests(OpenCode2LiveFleet fleet) : IClassFixture<OpenCode2LiveFleet>
 {
     private const string Harness = OpenCode2HarnessSession.Type;
-    private static readonly TimeSpan Timeout = TimeSpan.FromMinutes(4);
+    /// <summary>Longer than <see cref="OpenCode2Weave.PluginWait"/>: Add Weave waits for V2 to install the adapter from npm.</summary>
+    private static readonly TimeSpan Timeout = TimeSpan.FromMinutes(8);
 
     [WeaveOpenCode2Fact]
     public async Task Weave_added_from_fleet_loads_in_the_running_server_and_takes_the_config_kept_in_fleet()
