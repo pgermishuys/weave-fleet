@@ -17,15 +17,25 @@ namespace WeaveFleet.Api.Tests.Auth;
 /// moment the device is removed. Requests arrive over loopback on a reachable bind, the way <c>tailscale serve</c>
 /// delivers them, so none of them pass by ambient trust.
 /// </summary>
-[Collection(LocalTokenAuthServiceTestsGroup.Name)]
-public sealed class DeviceTokenAuthTests
+public sealed class DeviceTokenAuthTests :
+    IClassFixture<DeviceTokenAuthTests.Server>,
+    IClassFixture<DeviceTokenAuthTests.LoopbackServer>
 {
     private const string ForeignOrigin = "http://falcon.tail9c2e.ts.net:2113";
+
+    private readonly ApiWebApplicationFactory _server;
+    private readonly ApiWebApplicationFactory _loopback;
+
+    public DeviceTokenAuthTests(Server server, LoopbackServer loopback)
+    {
+        _server = server.Factory;
+        _loopback = loopback.Factory;
+    }
 
     [Fact]
     public async Task A_device_token_works_in_the_header()
     {
-        await using var factory = CreateFactory();
+        var factory = _server;
         var (_, token) = await IssueAsync(factory);
         using var client = CreateClient(factory, token);
 
@@ -36,7 +46,7 @@ public sealed class DeviceTokenAuthTests
     [Fact]
     public async Task A_device_token_works_on_the_hub_but_not_in_an_ordinary_query()
     {
-        await using var factory = CreateFactory();
+        var factory = _server;
         var (_, token) = await IssueAsync(factory);
         using var client = CreateClient(factory);
 
@@ -52,7 +62,7 @@ public sealed class DeviceTokenAuthTests
     [Fact]
     public async Task A_device_cannot_read_or_replace_the_machine_token()
     {
-        await using var factory = CreateFactory();
+        var factory = _server;
         var (_, token) = await IssueAsync(factory);
         using var device = CreateClient(factory, token);
         using var owner = CreateClient(factory, MachineToken(factory));
@@ -65,7 +75,7 @@ public sealed class DeviceTokenAuthTests
     [Fact]
     public async Task A_device_cannot_change_where_pairing_codes_point()
     {
-        await using var factory = CreateFactory();
+        var factory = _server;
         var (_, token) = await IssueAsync(factory);
         using var device = CreateClient(factory, token);
         using var owner = CreateClient(factory, MachineToken(factory));
@@ -78,7 +88,7 @@ public sealed class DeviceTokenAuthTests
     public async Task A_wrong_device_token_is_refused_and_never_falls_back_to_loopback()
     {
         // Loopback bind: an untokened request would be let in. A presented device token must be right.
-        await using var factory = CreateFactory(host: "127.0.0.1");
+        var factory = _loopback;
         var (device, _) = await IssueAsync(factory);
         var forged = $"fdt_{device.Id}.{new string('A', 43)}";
         using var client = CreateClient(factory, forged);
@@ -90,7 +100,7 @@ public sealed class DeviceTokenAuthTests
     [Fact]
     public async Task A_removed_device_is_refused_in_the_header()
     {
-        await using var factory = CreateFactory();
+        var factory = _server;
         var (device, token) = await IssueAsync(factory);
         using var client = CreateClient(factory, token);
         (await client.GetAsync("/api/sessions")).StatusCode.ShouldBe(HttpStatusCode.OK);
@@ -103,7 +113,7 @@ public sealed class DeviceTokenAuthTests
     [Fact]
     public async Task A_device_cookie_carries_device_rights_and_dies_with_the_device()
     {
-        await using var factory = CreateFactory();
+        var factory = _server;
         var (device, token) = await IssueAsync(factory);
         using var browser = factory.CreateClient(new WebApplicationFactoryClientOptions { AllowAutoRedirect = false, HandleCookies = true });
 
@@ -120,7 +130,7 @@ public sealed class DeviceTokenAuthTests
     public async Task A_signed_in_phone_that_lost_its_token_gets_a_new_one_and_the_old_one_stops()
     {
         // An iPhone's Home Screen app starts with a copy of Safari's cookies but none of its storage.
-        await using var factory = CreateFactory();
+        var factory = _server;
         var (device, oldToken) = await IssueAsync(factory);
         using var homeScreenApp = factory.CreateClient(new WebApplicationFactoryClientOptions { AllowAutoRedirect = false, HandleCookies = true });
         (await homeScreenApp.PostAsJsonAsync("/auth/token-login", new { token = oldToken })).StatusCode.ShouldBe(HttpStatusCode.OK);
@@ -143,7 +153,7 @@ public sealed class DeviceTokenAuthTests
     [Fact]
     public async Task Only_a_live_paired_device_gets_a_new_token()
     {
-        await using var factory = CreateFactory();
+        var factory = _server;
         using var owner = CreateClient(factory, MachineToken(factory));
         using var stranger = CreateClient(factory);
         var (device, token) = await IssueAsync(factory);
@@ -159,7 +169,7 @@ public sealed class DeviceTokenAuthTests
     [Fact]
     public async Task The_owner_cookie_still_manages_access()
     {
-        await using var factory = CreateFactory();
+        var factory = _server;
         using var browser = factory.CreateClient(new WebApplicationFactoryClientOptions { AllowAutoRedirect = false, HandleCookies = true });
 
         (await browser.PostAsJsonAsync("/auth/token-login", new { token = MachineToken(factory) })).StatusCode.ShouldBe(HttpStatusCode.OK);
@@ -170,7 +180,7 @@ public sealed class DeviceTokenAuthTests
     [Fact]
     public async Task Loopback_auto_auth_is_the_owner()
     {
-        await using var factory = CreateFactory(host: "127.0.0.1");
+        var factory = _loopback;
         using var client = CreateClient(factory);
 
         (await client.GetAsync("/api/machine/access")).StatusCode.ShouldBe(HttpStatusCode.OK);
@@ -179,7 +189,7 @@ public sealed class DeviceTokenAuthTests
     [Fact]
     public async Task Removing_a_device_closes_its_hub_connection_at_once()
     {
-        await using var factory = CreateFactory();
+        var factory = _server;
         var (device, token) = await IssueAsync(factory);
         await using var hub = new HubConnectionBuilder()
             .WithUrl($"{factory.Server.BaseAddress}hubs/session-events", options =>
@@ -228,7 +238,7 @@ public sealed class DeviceTokenAuthTests
     [Fact]
     public async Task A_tokened_device_request_from_another_origin_gets_cors_without_credentials()
     {
-        await using var factory = CreateFactory();
+        var factory = _server;
         var (_, token) = await IssueAsync(factory);
         using var client = CreateClient(factory, token);
 
@@ -252,6 +262,20 @@ public sealed class DeviceTokenAuthTests
         FleetClaims.IsOwner(User(new Claim(FleetClaims.DeviceId, "d"))).ShouldBeFalse();
         FleetClaims.IsOwner(User(new Claim(BearerTokenHandler.MethodClaim, BearerTokenHandler.AgentMethod))).ShouldBeFalse();
         FleetClaims.IsOwner(new ClaimsPrincipal(new ClaimsIdentity())).ShouldBeFalse();
+    }
+
+    public sealed class Server : IDisposable
+    {
+        public ApiWebApplicationFactory Factory { get; } = CreateFactory();
+
+        public void Dispose() => Factory.Dispose();
+    }
+
+    public sealed class LoopbackServer : IDisposable
+    {
+        public ApiWebApplicationFactory Factory { get; } = CreateFactory(host: "127.0.0.1");
+
+        public void Dispose() => Factory.Dispose();
     }
 
     private static Task<(DeviceSummary Device, string Token)> IssueAsync(WebApplicationFactory<Program> factory)

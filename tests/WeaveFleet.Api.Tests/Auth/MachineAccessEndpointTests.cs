@@ -21,17 +21,36 @@ namespace WeaveFleet.Api.Tests.Auth;
 /// CORS answer the browser needs, and the socket forms of the token. Every request here arrives over loopback,
 /// the way <c>tailscale serve</c> delivers it, so none of these pass by ambient trust.
 /// </summary>
-[Collection(LocalTokenAuthServiceTestsGroup.Name)]
-public sealed class MachineAccessEndpointTests
+public sealed class MachineAccessEndpointTests :
+    IClassFixture<MachineAccessEndpointTests.LoopbackServer>,
+    IClassFixture<MachineAccessEndpointTests.OpenServer>,
+    IClassFixture<MachineAccessEndpointTests.RequireTokenServer>,
+    IClassFixture<MachineAccessEndpointTests.SignInServer>,
+    IClassFixture<MachineAccessEndpointTests.ThrowingServer>
 {
     private const string ForeignOrigin = "http://falcon.tail9c2e.ts.net:2113";
+
+    private readonly ApiWebApplicationFactory _loopback;
+    private readonly ApiWebApplicationFactory _open;
+    private readonly ApiWebApplicationFactory _requireToken;
+    private readonly ApiWebApplicationFactory _signIn;
+    private readonly ApiWebApplicationFactory _throwing;
+
+    public MachineAccessEndpointTests(LoopbackServer loopback, OpenServer open, RequireTokenServer requireToken, SignInServer signIn, ThrowingServer throwing)
+    {
+        _loopback = loopback.Factory;
+        _open = open.Factory;
+        _requireToken = requireToken.Factory;
+        _signIn = signIn.Factory;
+        _throwing = throwing.Factory;
+    }
 
     // ── Identity ──────────────────────────────────────────────────────────────
 
     [Fact]
     public async Task Machine_identity_is_stable_and_names_its_contract()
     {
-        await using var factory = CreateFactory("127.0.0.1");
+        var factory = _loopback;
         using var client = CreateClient(factory);
 
         var first = await client.GetFromJsonAsync<JsonElement>("/api/machine");
@@ -49,7 +68,7 @@ public sealed class MachineAccessEndpointTests
     [Fact]
     public async Task Machine_identity_says_what_it_can_run_and_how_busy_it_is()
     {
-        await using var factory = CreateFactory("127.0.0.1");
+        var factory = _loopback;
         using var client = CreateClient(factory);
 
         var capabilities = (await client.GetFromJsonAsync<JsonElement>("/api/machine")).GetProperty("capabilities");
@@ -72,12 +91,14 @@ public sealed class MachineAccessEndpointTests
         var renamed = await client.PutAsJsonAsync("/api/machine", new { name = "hangar" });
         (await renamed.Content.ReadFromJsonAsync<JsonElement>()).GetProperty("capabilities").GetProperty("sessions")
             .GetProperty("working").GetInt32().ShouldBe(0);
+
+        await client.PutAsJsonAsync("/api/machine", new { name = "" });
     }
 
     [Fact]
     public async Task A_machine_can_be_renamed_and_an_empty_name_goes_back_to_the_host_name()
     {
-        await using var factory = CreateFactory("127.0.0.1");
+        var factory = _loopback;
         using var client = CreateClient(factory);
 
         var renamed = await client.PutAsJsonAsync("/api/machine", new { name = "  hangar  " });
@@ -90,7 +111,7 @@ public sealed class MachineAccessEndpointTests
     [Fact]
     public async Task A_fleet_with_sign_in_shows_its_identity_but_its_users_cannot_rename_it()
     {
-        await using var factory = new ApiWebApplicationFactory(authEnabled: true, useTestAuthentication: true);
+        var factory = _signIn;
         using var client = factory.CreateClient();
 
         var identity = await client.GetFromJsonAsync<JsonElement>("/api/machine");
@@ -106,7 +127,7 @@ public sealed class MachineAccessEndpointTests
     [Fact]
     public async Task Machine_identity_needs_the_token_on_a_reachable_bind()
     {
-        await using var factory = CreateFactory("0.0.0.0");
+        var factory = _open;
         using var client = CreateClient(factory);
 
         (await client.GetAsync("/api/machine")).StatusCode.ShouldBe(HttpStatusCode.Unauthorized);
@@ -120,7 +141,7 @@ public sealed class MachineAccessEndpointTests
     [Fact]
     public async Task Access_reports_the_saved_token()
     {
-        await using var factory = CreateFactory("127.0.0.1");
+        var factory = _loopback;
         using var client = CreateClient(factory);
 
         var access = await client.GetFromJsonAsync<JsonElement>("/api/machine/access");
@@ -133,7 +154,7 @@ public sealed class MachineAccessEndpointTests
     [Fact]
     public async Task Access_lists_addresses_when_other_devices_can_connect()
     {
-        await using var factory = CreateFactory("0.0.0.0");
+        var factory = _open;
         using var client = CreateClient(factory, Token(factory));
 
         var access = await client.GetFromJsonAsync<JsonElement>("/api/machine/access");
@@ -146,7 +167,7 @@ public sealed class MachineAccessEndpointTests
     [Fact]
     public async Task Replacing_the_token_locks_out_the_old_one()
     {
-        await using var factory = CreateFactory("0.0.0.0");
+        var factory = _open;
         var old = Token(factory);
         using var client = CreateClient(factory, old);
 
@@ -165,7 +186,7 @@ public sealed class MachineAccessEndpointTests
     [Fact]
     public async Task A_preflight_for_a_tokened_request_is_answered_for_any_origin()
     {
-        await using var factory = CreateFactory("0.0.0.0");
+        var factory = _open;
         using var client = CreateClient(factory);
 
         using var request = new HttpRequestMessage(HttpMethod.Options, "/api/sessions");
@@ -182,7 +203,7 @@ public sealed class MachineAccessEndpointTests
     [Fact]
     public async Task A_tokened_request_from_another_origin_can_be_read()
     {
-        await using var factory = CreateFactory("0.0.0.0");
+        var factory = _open;
         using var client = CreateClient(factory, Token(factory));
 
         using var request = new HttpRequestMessage(HttpMethod.Get, "/api/machine");
@@ -199,7 +220,7 @@ public sealed class MachineAccessEndpointTests
     {
         // The desktop app's shape: loopback auto-auth signs this request in. Without CORS headers the browser
         // still won't hand the answer to a page on another origin.
-        await using var factory = CreateFactory("127.0.0.1");
+        var factory = _loopback;
         using var client = CreateClient(factory);
 
         using var request = new HttpRequestMessage(HttpMethod.Get, "/api/machine/access");
@@ -213,12 +234,7 @@ public sealed class MachineAccessEndpointTests
     public async Task A_server_error_still_answers_another_origin()
     {
         // Without CORS headers on the 500, the browser reports a CORS failure and the page never sees the error.
-        await using var factory = new ApiWebApplicationFactory(
-            authEnabled: false,
-            tokenAuthEnabled: true,
-            simulateLocalhostRequest: true,
-            host: "0.0.0.0",
-            configureTestServices: services => services.AddSingleton<IBackendPlugin, ThrowingPlugin>());
+        var factory = _throwing;
         using var client = CreateClient(factory, Token(factory));
 
         using var request = new HttpRequestMessage(HttpMethod.Get, "/api/test/throw");
@@ -244,7 +260,7 @@ public sealed class MachineAccessEndpointTests
     [Fact]
     public async Task The_hub_accepts_the_token_as_access_token()
     {
-        await using var factory = CreateFactory("0.0.0.0");
+        var factory = _open;
         using var client = CreateClient(factory);
 
         var accepted = await client.PostAsync(
@@ -261,7 +277,7 @@ public sealed class MachineAccessEndpointTests
     [Fact]
     public async Task Ordinary_api_requests_ignore_a_token_in_the_query()
     {
-        await using var factory = CreateFactory("0.0.0.0");
+        var factory = _open;
         using var client = CreateClient(factory);
 
         var response = await client.GetAsync($"/api/machine?access_token={Uri.EscapeDataString(Token(factory))}");
@@ -272,7 +288,7 @@ public sealed class MachineAccessEndpointTests
     [Fact]
     public async Task A_wrong_query_token_never_falls_back_to_loopback()
     {
-        await using var factory = CreateFactory("127.0.0.1");
+        var factory = _loopback;
         using var client = CreateClient(factory);
 
         var response = await client.PostAsync(
@@ -317,7 +333,7 @@ public sealed class MachineAccessEndpointTests
     [Fact]
     public async Task Require_token_turns_off_loopback_auto_auth()
     {
-        await using var factory = CreateFactory("127.0.0.1", requireToken: true);
+        var factory = _requireToken;
         using var client = CreateClient(factory);
 
         (await client.GetAsync("/api/user/me")).StatusCode.ShouldBe(HttpStatusCode.Unauthorized);
@@ -332,7 +348,7 @@ public sealed class MachineAccessEndpointTests
     [InlineData("Tailscale-User-Login", "someone@example.com")]
     public async Task A_loopback_request_that_came_through_a_proxy_needs_the_token(string header, string value)
     {
-        await using var factory = CreateFactory("127.0.0.1");
+        var factory = _loopback;
         using var client = CreateClient(factory);
         client.DefaultRequestHeaders.Add(header, value);
 
@@ -359,6 +375,46 @@ public sealed class MachineAccessEndpointTests
             simulateLocalhostRequest: true,
             host: host,
             requireToken: requireToken);
+
+    public sealed class LoopbackServer : IDisposable
+    {
+        public ApiWebApplicationFactory Factory { get; } = CreateFactory("127.0.0.1");
+
+        public void Dispose() => Factory.Dispose();
+    }
+
+    public sealed class OpenServer : IDisposable
+    {
+        public ApiWebApplicationFactory Factory { get; } = CreateFactory("0.0.0.0");
+
+        public void Dispose() => Factory.Dispose();
+    }
+
+    public sealed class RequireTokenServer : IDisposable
+    {
+        public ApiWebApplicationFactory Factory { get; } = CreateFactory("127.0.0.1", requireToken: true);
+
+        public void Dispose() => Factory.Dispose();
+    }
+
+    public sealed class SignInServer : IDisposable
+    {
+        public ApiWebApplicationFactory Factory { get; } = new(authEnabled: true, useTestAuthentication: true);
+
+        public void Dispose() => Factory.Dispose();
+    }
+
+    public sealed class ThrowingServer : IDisposable
+    {
+        public ApiWebApplicationFactory Factory { get; } = new(
+            authEnabled: false,
+            tokenAuthEnabled: true,
+            simulateLocalhostRequest: true,
+            host: "0.0.0.0",
+            configureTestServices: services => services.AddSingleton<IBackendPlugin, ThrowingPlugin>());
+
+        public void Dispose() => Factory.Dispose();
+    }
 
     private static HttpClient CreateClient(WebApplicationFactory<Program> factory, string? token = null)
     {

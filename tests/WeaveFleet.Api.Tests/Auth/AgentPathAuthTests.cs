@@ -19,11 +19,14 @@ namespace WeaveFleet.Api.Tests.Auth;
 /// An agent process calls Fleet under <c>/agent/{bridge token}</c>. The verified prefix is its credential, so it gets
 /// in on a remote-reachable bind or with <c>RequireToken</c>, where loopback auto-auth is off, and nothing else does.
 /// </summary>
-[Collection(LocalTokenAuthServiceTestsGroup.Name)]
-public sealed class AgentPathAuthTests
+public sealed class AgentPathAuthTests : IClassFixture<AgentPathAuthTests.Servers>
 {
     private const string AccessToken = "1234567890abcdef";
     private const string BridgeToken = "bridge-1";
+
+    private readonly Servers _servers;
+
+    public AgentPathAuthTests(Servers servers) => _servers = servers;
 
     [Theory]
     [InlineData("0.0.0.0", false)]
@@ -32,7 +35,7 @@ public sealed class AgentPathAuthTests
     [InlineData("0.0.0.0", true)]
     public async Task An_agent_lists_sessions_under_its_prefix_whatever_the_bind(string host, bool requireToken)
     {
-        await using var factory = CreateFactory(host, requireToken);
+        var factory = _servers.For(host, requireToken);
         using var client = factory.CreateClient();
 
         var response = await client.GetAsync($"/agent/{BridgeToken}/api/sessions");
@@ -45,7 +48,7 @@ public sealed class AgentPathAuthTests
     [InlineData(true)]
     public async Task An_agent_post_to_create_a_session_is_not_refused_as_unauthenticated(bool requireToken)
     {
-        await using var factory = CreateFactory("0.0.0.0", requireToken);
+        var factory = _servers.For("0.0.0.0", requireToken);
         using var client = factory.CreateClient();
 
         var response = await client.PostAsJsonAsync(
@@ -59,7 +62,7 @@ public sealed class AgentPathAuthTests
     [Fact]
     public async Task Without_the_prefix_an_untokened_request_is_still_refused_on_a_remote_reachable_bind()
     {
-        await using var factory = CreateFactory("0.0.0.0");
+        var factory = _servers.For("0.0.0.0");
         using var client = factory.CreateClient();
 
         var response = await client.GetAsync("/api/sessions");
@@ -70,7 +73,7 @@ public sealed class AgentPathAuthTests
     [Fact]
     public async Task An_unknown_bridge_token_is_not_found()
     {
-        await using var factory = CreateFactory("0.0.0.0");
+        var factory = _servers.For("0.0.0.0");
         using var client = factory.CreateClient();
 
         var response = await client.GetAsync("/agent/not-a-token/api/sessions");
@@ -82,7 +85,7 @@ public sealed class AgentPathAuthTests
     public async Task A_valid_bridge_token_from_another_machine_is_not_found()
     {
         // Without the loopback filter the test server's remote address isn't loopback.
-        await using var factory = CreateFactory("0.0.0.0", simulateLocalhost: false);
+        var factory = _servers.For("0.0.0.0", simulateLocalhost: false);
         using var client = factory.CreateClient();
 
         var response = await client.GetAsync($"/agent/{BridgeToken}/api/sessions");
@@ -93,7 +96,7 @@ public sealed class AgentPathAuthTests
     [Fact]
     public async Task A_wrong_bearer_token_on_the_agent_path_does_not_fall_back_to_agent_auth()
     {
-        await using var factory = CreateFactory("0.0.0.0");
+        var factory = _servers.For("0.0.0.0");
         using var client = factory.CreateClient();
         client.DefaultRequestHeaders.Authorization = new AuthenticationHeaderValue("Bearer", "wrong-token");
 
@@ -105,7 +108,7 @@ public sealed class AgentPathAuthTests
     [Fact]
     public async Task An_agent_request_through_a_proxy_is_refused()
     {
-        await using var factory = CreateFactory("0.0.0.0");
+        var factory = _servers.For("0.0.0.0");
         using var client = factory.CreateClient();
         client.DefaultRequestHeaders.Add("X-Forwarded-For", "203.0.113.7");
 
@@ -168,6 +171,29 @@ public sealed class AgentPathAuthTests
                 services.AddSingleton<ILocalTokenAuthService>(new StubLocalTokenAuthService(AccessToken));
                 services.AddSingleton<IHarnessBridgeTokens>(new FakeBridgeTokens());
             });
+
+    /// <summary>One server per bind and setting, started the first time a test asks for it.</summary>
+    public sealed class Servers : IDisposable
+    {
+        private readonly Dictionary<(string Host, bool RequireToken, bool SimulateLocalhost), ApiWebApplicationFactory> _byConfig = [];
+
+        public ApiWebApplicationFactory For(string host, bool requireToken = false, bool simulateLocalhost = true)
+        {
+            lock (_byConfig)
+            {
+                var key = (host, requireToken, simulateLocalhost);
+                if (!_byConfig.TryGetValue(key, out var factory))
+                    _byConfig[key] = factory = CreateFactory(host, requireToken, simulateLocalhost);
+                return factory;
+            }
+        }
+
+        public void Dispose()
+        {
+            foreach (var factory in _byConfig.Values)
+                factory.Dispose();
+        }
+    }
 
     private sealed class FakeBridgeTokens : IHarnessBridgeTokens
     {
