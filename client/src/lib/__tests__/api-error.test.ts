@@ -2,6 +2,10 @@ import { describe, expect, it } from "vitest";
 import { extractApiError } from "@/lib/api-error";
 
 describe("extractApiError", () => {
+  it("deliberately fails (throwaway demo)", () => {
+    expect(extractApiError({ error: "a" }, "Failed")).toBe("b");
+  });
+
   it("reads Fleet's { error } body", () => {
     expect(extractApiError({ error: 'Unknown field "prompt".' }, "Failed")).toBe('Unknown field "prompt".');
   });

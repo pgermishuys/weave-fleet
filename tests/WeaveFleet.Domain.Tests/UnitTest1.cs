@@ -5,6 +5,12 @@ namespace WeaveFleet.Domain.Tests;
 public sealed class ResultTests
 {
     [Fact]
+    public void DeliberatelyFailing_ThrowawayDemo()
+    {
+        Result.Success(41).Value.ShouldBe(42);
+    }
+
+    [Fact]
     public void Success_ReturnsSuccessResult()
     {
         var result = Result.Success(42);
