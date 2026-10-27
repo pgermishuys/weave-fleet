@@ -112,7 +112,7 @@ public sealed class RemoteSessionFollowTests
         hangar.Services.GetRequiredService<RemoteMachineWatcher>().Handler = falcon.Server.CreateHandler();
         using var owner = hangar.CreateClient(new WebApplicationFactoryClientOptions { HandleCookies = false });
         owner.DefaultRequestHeaders.Authorization = new AuthenticationHeaderValue("Bearer", Token(hangar));
-        var added = await (await owner.PostAsJsonAsync("/api/machines", new { baseUrl = FalconUrl, token = Token(falcon) })).Content.ReadFromJsonAsync<JsonElement>();
+        var added = await (await owner.PostAsJsonAsync("/api/machines", new { baseUrl = FalconUrl, token = Token(falcon) })).ReadSuccessAsync();
         var id = added.GetProperty("id").GetString()!;
         (await owner.PutAsJsonAsync($"/api/machines/{id}", new { agentsAllowed = true })).EnsureSuccessStatusCode();
         return id;
