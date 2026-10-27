@@ -15,14 +15,15 @@ namespace WeaveFleet.Api.Tests.Endpoints;
 /// Drawing a session's tool rows through mods, and adding Fleet's sample. With no mod host running nothing is drawn,
 /// so these cover the routes' shapes and checks; the draw itself is covered against a real host in the Infrastructure tests.
 /// </summary>
-public sealed class ModRenderEndpointTests : IAsyncDisposable
+public sealed class ModRenderEndpointTests : IClassFixture<ModRenderEndpointTests.Server>, IDisposable
 {
-    private readonly ApiWebApplicationFactory _factory = new(authEnabled: false);
+    private readonly ApiWebApplicationFactory _factory;
     private readonly HttpClient _client;
     private readonly string _sampleFolder;
 
-    public ModRenderEndpointTests()
+    public ModRenderEndpointTests(Server server)
     {
+        _factory = server.Factory;
         _client = _factory.CreateClient();
         var options = _factory.Services.GetRequiredService<FleetOptions>();
         var data = Path.GetDirectoryName(Path.GetFullPath(options.DatabasePath))!;
@@ -30,12 +31,17 @@ public sealed class ModRenderEndpointTests : IAsyncDisposable
         _sampleFolder = Path.Combine(data, "mods", user16, "test-chips");
     }
 
-    public async ValueTask DisposeAsync()
+    public void Dispose()
     {
         _client.Dispose();
-        await _factory.DisposeAsync();
         if (Directory.Exists(_sampleFolder))
             Directory.Delete(_sampleFolder, recursive: true);
+    }
+
+    public sealed class Server : IDisposable
+    {
+        public ApiWebApplicationFactory Factory { get; } = new(authEnabled: false);
+        public void Dispose() => Factory.Dispose();
     }
 
     private async Task TurnOnAsync()

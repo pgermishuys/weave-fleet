@@ -18,42 +18,61 @@ namespace WeaveFleet.Api.Tests.Endpoints;
 /// Skills and tools install globally (~/.config/opencode) or into a repository (&lt;repo&gt;/.opencode),
 /// and removing them deletes what was installed. Everything runs against a temporary home folder.
 /// </summary>
-public sealed class InstallScopeEndpointTests : IAsyncDisposable
+public sealed class InstallScopeEndpointTests : IClassFixture<InstallScopeEndpointTests.Server>, IDisposable
 {
     private const int LocalSource = 2;
 
-    private readonly string _home = Directory.CreateDirectory(
-        Path.Combine(Path.GetTempPath(), $"fleet-install-scope-{Guid.NewGuid():N}")).FullName;
-
+    // One server and home folder for the class; each test installs under names of its own.
+    private readonly string _home;
     private readonly ApiWebApplicationFactory _factory;
     private readonly HttpClient _client;
+    private readonly string _id = Guid.NewGuid().ToString("N")[..8];
+    private readonly string _tool;
+    private readonly string _skill;
+    private readonly string _repoName;
 
-    public InstallScopeEndpointTests()
+    public InstallScopeEndpointTests(Server server)
     {
-        _factory = new ApiWebApplicationFactory(authEnabled: false, configureTestServices: services =>
-        {
-            var paths = new HarnessInstallPaths(_home);
-            var skillStore = new JsonSkillManifestStore(_home);
-            services.RemoveAll<HarnessInstallPaths>();
-            services.RemoveAll<ISkillManifestStore>();
-            services.RemoveAll<ISkillSyncEngine>();
-            services.RemoveAll<IToolManifestStore>();
-            services.RemoveAll<IToolInstaller>();
-            services.AddSingleton(paths);
-            services.AddSingleton<ISkillManifestStore>(skillStore);
-            services.AddSingleton<ISkillSyncEngine>(new SkillSyncEngine(skillStore, paths, NullLogger<SkillSyncEngine>.Instance));
-            services.AddSingleton<IToolManifestStore>(new JsonToolManifestStore(_home));
-            services.AddSingleton<IToolInstaller>(new ToolInstaller(paths, NullLogger<ToolInstaller>.Instance));
-        });
+        _home = server.Home;
+        _factory = server.Factory;
         _client = _factory.CreateClient();
+        (_tool, _skill, _repoName) = ($"sample-tool-{_id}", $"my-skill-{_id}", $"my-repo-{_id}");
     }
 
-    public async ValueTask DisposeAsync()
+    public void Dispose() => _client.Dispose();
+
+    public sealed class Server : IDisposable
     {
-        _client.Dispose();
-        await _factory.DisposeAsync();
-        try { Directory.Delete(_home, recursive: true); }
-        catch (IOException) { }
+        public string Home { get; } = Directory.CreateDirectory(
+            Path.Combine(Path.GetTempPath(), $"fleet-install-scope-{Guid.NewGuid():N}")).FullName;
+
+        public ApiWebApplicationFactory Factory { get; }
+
+        public Server()
+        {
+            Factory = new ApiWebApplicationFactory(authEnabled: false, configureTestServices: services =>
+            {
+                var paths = new HarnessInstallPaths(Home);
+                var skillStore = new JsonSkillManifestStore(Home);
+                services.RemoveAll<HarnessInstallPaths>();
+                services.RemoveAll<ISkillManifestStore>();
+                services.RemoveAll<ISkillSyncEngine>();
+                services.RemoveAll<IToolManifestStore>();
+                services.RemoveAll<IToolInstaller>();
+                services.AddSingleton(paths);
+                services.AddSingleton<ISkillManifestStore>(skillStore);
+                services.AddSingleton<ISkillSyncEngine>(new SkillSyncEngine(skillStore, paths, NullLogger<SkillSyncEngine>.Instance));
+                services.AddSingleton<IToolManifestStore>(new JsonToolManifestStore(Home));
+                services.AddSingleton<IToolInstaller>(new ToolInstaller(paths, NullLogger<ToolInstaller>.Instance));
+            });
+        }
+
+        public void Dispose()
+        {
+            Factory.Dispose();
+            try { Directory.Delete(Home, recursive: true); }
+            catch (IOException) { }
+        }
     }
 
     // ── Tools ─────────────────────────────────────────────────────────────────
@@ -61,15 +80,15 @@ public sealed class InstallScopeEndpointTests : IAsyncDisposable
     [Fact]
     public async Task InstallTool_Global_LandsInOpenCodesGlobalToolsFolder()
     {
-        var source = WriteFile(Path.Combine(_home, "downloads", "sample-tool.ts"), "export default {}");
+        var source = WriteFile(Path.Combine(_home, "downloads", $"{_tool}.ts"), "export default {}");
 
-        var response = await _client.PostAsJsonAsync("/api/tools/install", NativeTool("sample-tool", source));
+        var response = await _client.PostAsJsonAsync("/api/tools/install", NativeTool(_tool, source));
 
         response.StatusCode.ShouldBe(HttpStatusCode.Created);
-        var installed = Path.Combine(_home, ".config", "opencode", "tools", "sample-tool.ts");
+        var installed = Path.Combine(_home, ".config", "opencode", "tools", $"{_tool}.ts");
         File.Exists(installed).ShouldBeTrue();
 
-        var tool = (await GetJsonAsync("/api/tools")).GetProperty("tools").EnumerateArray().ShouldHaveSingleItem();
+        var tool = (await OursAsync("/api/tools", "tools", _tool)).ShouldHaveSingleItem();
         tool.GetProperty("scope").GetString().ShouldBe("global");
         tool.GetProperty("installedPath").GetString().ShouldBe(installed);
     }
@@ -77,49 +96,49 @@ public sealed class InstallScopeEndpointTests : IAsyncDisposable
     [Fact]
     public async Task InstallTool_Project_LandsInTheRepository_AndRemoveDeletesIt()
     {
-        var repo = await CreateRepositoryAsync("my-repo");
-        var source = WriteFile(Path.Combine(_home, "downloads", "sample-tool.ts"), "export default {}");
+        var repo = await CreateRepositoryAsync(_repoName);
+        var source = WriteFile(Path.Combine(_home, "downloads", $"{_tool}.ts"), "export default {}");
 
-        var install = await _client.PostAsJsonAsync("/api/tools/install", NativeTool("sample-tool", source, "project", repo));
+        var install = await _client.PostAsJsonAsync("/api/tools/install", NativeTool(_tool, source, "project", repo));
 
         install.StatusCode.ShouldBe(HttpStatusCode.Created);
-        var installed = Path.Combine(repo, ".opencode", "tools", "sample-tool.ts");
+        var installed = Path.Combine(repo, ".opencode", "tools", $"{_tool}.ts");
         File.Exists(installed).ShouldBeTrue();
-        File.Exists(Path.Combine(_home, ".config", "opencode", "tools", "sample-tool.ts")).ShouldBeFalse();
+        File.Exists(Path.Combine(_home, ".config", "opencode", "tools", $"{_tool}.ts")).ShouldBeFalse();
 
-        var remove = await _client.DeleteAsync($"/api/tools/sample-tool?scope=project&projectPath={Uri.EscapeDataString(repo)}");
+        var remove = await _client.DeleteAsync($"/api/tools/{_tool}?scope=project&projectPath={Uri.EscapeDataString(repo)}");
 
         remove.StatusCode.ShouldBe(HttpStatusCode.NoContent);
         File.Exists(installed).ShouldBeFalse();
-        (await GetJsonAsync("/api/tools")).GetProperty("tools").GetArrayLength().ShouldBe(0);
+        (await OursAsync("/api/tools", "tools", _tool)).ShouldBeEmpty();
     }
 
     [Fact]
     public async Task InstallTool_GlobalAndProject_AreSeparateInstalls()
     {
-        var repo = await CreateRepositoryAsync("my-repo");
-        var source = WriteFile(Path.Combine(_home, "downloads", "sample-tool.ts"), "export default {}");
+        var repo = await CreateRepositoryAsync(_repoName);
+        var source = WriteFile(Path.Combine(_home, "downloads", $"{_tool}.ts"), "export default {}");
 
-        (await _client.PostAsJsonAsync("/api/tools/install", NativeTool("sample-tool", source))).StatusCode.ShouldBe(HttpStatusCode.Created);
-        (await _client.PostAsJsonAsync("/api/tools/install", NativeTool("sample-tool", source, "project", repo))).StatusCode.ShouldBe(HttpStatusCode.Created);
-        (await _client.PostAsJsonAsync("/api/tools/install", NativeTool("sample-tool", source))).StatusCode.ShouldBe(HttpStatusCode.Conflict);
+        (await _client.PostAsJsonAsync("/api/tools/install", NativeTool(_tool, source))).StatusCode.ShouldBe(HttpStatusCode.Created);
+        (await _client.PostAsJsonAsync("/api/tools/install", NativeTool(_tool, source, "project", repo))).StatusCode.ShouldBe(HttpStatusCode.Created);
+        (await _client.PostAsJsonAsync("/api/tools/install", NativeTool(_tool, source))).StatusCode.ShouldBe(HttpStatusCode.Conflict);
 
-        (await _client.DeleteAsync("/api/tools/sample-tool")).StatusCode.ShouldBe(HttpStatusCode.NoContent);
+        (await _client.DeleteAsync($"/api/tools/{_tool}")).StatusCode.ShouldBe(HttpStatusCode.NoContent);
 
-        File.Exists(Path.Combine(_home, ".config", "opencode", "tools", "sample-tool.ts")).ShouldBeFalse();
-        File.Exists(Path.Combine(repo, ".opencode", "tools", "sample-tool.ts")).ShouldBeTrue();
+        File.Exists(Path.Combine(_home, ".config", "opencode", "tools", $"{_tool}.ts")).ShouldBeFalse();
+        File.Exists(Path.Combine(repo, ".opencode", "tools", $"{_tool}.ts")).ShouldBeTrue();
     }
 
     [Fact]
     public async Task InstallTool_WhenAFileFleetDidNotWriteIsThere_Returns409AndRecordsNothing()
     {
-        WriteFile(Path.Combine(_home, ".config", "opencode", "tools", "sample-tool.ts"), "// mine");
-        var source = WriteFile(Path.Combine(_home, "downloads", "sample-tool.ts"), "export default {}");
+        WriteFile(Path.Combine(_home, ".config", "opencode", "tools", $"{_tool}.ts"), "// mine");
+        var source = WriteFile(Path.Combine(_home, "downloads", $"{_tool}.ts"), "export default {}");
 
-        var response = await _client.PostAsJsonAsync("/api/tools/install", NativeTool("sample-tool", source));
+        var response = await _client.PostAsJsonAsync("/api/tools/install", NativeTool(_tool, source));
 
         response.StatusCode.ShouldBe(HttpStatusCode.Conflict);
-        (await GetJsonAsync("/api/tools")).GetProperty("tools").GetArrayLength().ShouldBe(0);
+        (await OursAsync("/api/tools", "tools", _tool)).ShouldBeEmpty();
     }
 
     [Fact]
@@ -127,9 +146,9 @@ public sealed class InstallScopeEndpointTests : IAsyncDisposable
     {
         var outside = Directory.CreateDirectory(Path.Combine(_home, "outside", "repo")).FullName;
         Directory.CreateDirectory(Path.Combine(outside, ".git"));
-        var source = WriteFile(Path.Combine(_home, "downloads", "sample-tool.ts"), "export default {}");
+        var source = WriteFile(Path.Combine(_home, "downloads", $"{_tool}.ts"), "export default {}");
 
-        var response = await _client.PostAsJsonAsync("/api/tools/install", NativeTool("sample-tool", source, "project", outside));
+        var response = await _client.PostAsJsonAsync("/api/tools/install", NativeTool(_tool, source, "project", outside));
 
         response.StatusCode.ShouldBe(HttpStatusCode.BadRequest);
         Directory.Exists(Path.Combine(outside, ".opencode")).ShouldBeFalse();
@@ -138,9 +157,9 @@ public sealed class InstallScopeEndpointTests : IAsyncDisposable
     [Fact]
     public async Task InstallTool_WithAnUnknownScope_Returns400()
     {
-        var source = WriteFile(Path.Combine(_home, "downloads", "sample-tool.ts"), "export default {}");
+        var source = WriteFile(Path.Combine(_home, "downloads", $"{_tool}.ts"), "export default {}");
 
-        var response = await _client.PostAsJsonAsync("/api/tools/install", NativeTool("sample-tool", source, "everywhere"));
+        var response = await _client.PostAsJsonAsync("/api/tools/install", NativeTool(_tool, source, "everywhere"));
 
         response.StatusCode.ShouldBe(HttpStatusCode.BadRequest);
     }
@@ -150,15 +169,15 @@ public sealed class InstallScopeEndpointTests : IAsyncDisposable
     [Fact]
     public async Task InstallSkill_WithNoHarnesses_InstallsForOpenCode()
     {
-        var source = CreateSkillSource("my-skill");
+        var source = CreateSkillSource(_skill);
 
-        var response = await _client.PostAsJsonAsync("/api/skills/install", LocalSkill("my-skill", source));
+        var response = await _client.PostAsJsonAsync("/api/skills/install", LocalSkill(_skill, source));
 
         response.StatusCode.ShouldBe(HttpStatusCode.Created);
-        var installed = Path.Combine(_home, ".config", "opencode", "skills", "my-skill");
+        var installed = Path.Combine(_home, ".config", "opencode", "skills", _skill);
         File.Exists(Path.Combine(installed, "SKILL.md")).ShouldBeTrue();
 
-        var skill = (await GetJsonAsync("/api/skills")).GetProperty("skills").EnumerateArray().ShouldHaveSingleItem();
+        var skill = (await OursAsync("/api/skills", "skills", _skill)).ShouldHaveSingleItem();
         skill.GetProperty("scope").GetString().ShouldBe("global");
         skill.GetProperty("installedPaths").EnumerateArray().Select(p => p.GetString()).ShouldBe([installed]);
     }
@@ -166,20 +185,20 @@ public sealed class InstallScopeEndpointTests : IAsyncDisposable
     [Fact]
     public async Task InstallSkill_Project_LandsInTheRepository_AndRemoveDeletesIt()
     {
-        var repo = await CreateRepositoryAsync("my-repo");
-        var source = CreateSkillSource("my-skill");
+        var repo = await CreateRepositoryAsync(_repoName);
+        var source = CreateSkillSource(_skill);
 
-        var install = await _client.PostAsJsonAsync("/api/skills/install", LocalSkill("my-skill", source, "project", repo));
+        var install = await _client.PostAsJsonAsync("/api/skills/install", LocalSkill(_skill, source, "project", repo));
 
         install.StatusCode.ShouldBe(HttpStatusCode.Created);
-        var installed = Path.Combine(repo, ".opencode", "skills", "my-skill");
+        var installed = Path.Combine(repo, ".opencode", "skills", _skill);
         File.Exists(Path.Combine(installed, "SKILL.md")).ShouldBeTrue();
 
-        var skill = (await GetJsonAsync("/api/skills")).GetProperty("skills").EnumerateArray().ShouldHaveSingleItem();
+        var skill = (await OursAsync("/api/skills", "skills", _skill)).ShouldHaveSingleItem();
         skill.GetProperty("scope").GetString().ShouldBe("project");
         skill.GetProperty("projectPath").GetString().ShouldBe(repo);
 
-        var remove = await _client.DeleteAsync($"/api/skills/my-skill?scope=project&projectPath={Uri.EscapeDataString(repo)}");
+        var remove = await _client.DeleteAsync($"/api/skills/{_skill}?scope=project&projectPath={Uri.EscapeDataString(repo)}");
 
         remove.StatusCode.ShouldBe(HttpStatusCode.NoContent);
         Directory.Exists(installed).ShouldBeFalse();
@@ -189,14 +208,14 @@ public sealed class InstallScopeEndpointTests : IAsyncDisposable
     [Fact]
     public async Task InstallSkill_WhenAFolderFleetDidNotWriteIsThere_Returns409AndRecordsNothing()
     {
-        WriteFile(Path.Combine(_home, ".config", "opencode", "skills", "my-skill", "SKILL.md"), "# mine");
-        var source = CreateSkillSource("my-skill");
+        WriteFile(Path.Combine(_home, ".config", "opencode", "skills", _skill, "SKILL.md"), "# mine");
+        var source = CreateSkillSource(_skill);
 
-        var response = await _client.PostAsJsonAsync("/api/skills/install", LocalSkill("my-skill", source));
+        var response = await _client.PostAsJsonAsync("/api/skills/install", LocalSkill(_skill, source));
 
         response.StatusCode.ShouldBe(HttpStatusCode.Conflict);
-        (await GetJsonAsync("/api/skills")).GetProperty("skills").GetArrayLength().ShouldBe(0);
-        File.ReadAllText(Path.Combine(_home, ".config", "opencode", "skills", "my-skill", "SKILL.md")).ShouldBe("# mine");
+        (await OursAsync("/api/skills", "skills", _skill)).ShouldBeEmpty();
+        File.ReadAllText(Path.Combine(_home, ".config", "opencode", "skills", _skill, "SKILL.md")).ShouldBe("# mine");
     }
 
     // ── Helpers ───────────────────────────────────────────────────────────────
@@ -208,7 +227,8 @@ public sealed class InstallScopeEndpointTests : IAsyncDisposable
         {
             var workspaceRoots = scope.ServiceProvider.GetRequiredService<WorkspaceRootService>();
             var added = await workspaceRoots.AddRootAsync(root);
-            if (added.IsFailure && !added.Error.Code.Contains("Conflict", StringComparison.Ordinal))
+            if (added.IsFailure && !added.Error.Code.Contains("Conflict", StringComparison.Ordinal)
+                && !added.Error.Description.Contains("already registered", StringComparison.Ordinal))
                 throw new InvalidOperationException(added.Error.Description);
         }
 
@@ -230,6 +250,10 @@ public sealed class InstallScopeEndpointTests : IAsyncDisposable
         File.WriteAllText(path, content);
         return path;
     }
+
+    /// <summary>The listed entries with this test's name; the other tests' installs share the manifest.</summary>
+    private async Task<List<JsonElement>> OursAsync(string url, string property, string name)
+        => (await GetJsonAsync(url)).GetProperty(property).EnumerateArray().Where(e => e.GetProperty("name").GetString() == name).ToList();
 
     private async Task<JsonElement> GetJsonAsync(string url)
     {

@@ -10,8 +10,14 @@ namespace WeaveFleet.Api.Tests.Endpoints;
 /// before reaching the handler, so the primary attack vector is the POST body's Name field
 /// and encoded route parameters that survive routing.
 /// </summary>
-public sealed class SkillEndpointPathTraversalTests
+public sealed class SkillEndpointPathTraversalTests(SkillEndpointPathTraversalTests.Server server) : IClassFixture<SkillEndpointPathTraversalTests.Server>
 {
+    public sealed class Server : IDisposable
+    {
+        public ApiWebApplicationFactory Factory { get; } = new(authEnabled: false);
+        public void Dispose() => Factory.Dispose();
+    }
+
     // ── POST /api/skills/install — path traversal rejection via name field ────────────
 
     [Theory]
@@ -22,8 +28,7 @@ public sealed class SkillEndpointPathTraversalTests
     [InlineData("name\\with\\backslashes")]
     public async Task PostSkill_Returns400_ForTraversalName(string name)
     {
-        await using var factory = new ApiWebApplicationFactory(authEnabled: false);
-        using var client = factory.CreateClient();
+        using var client = server.Factory.CreateClient();
 
         var payload = System.Text.Json.JsonSerializer.Serialize(new
         {
@@ -49,8 +54,7 @@ public sealed class SkillEndpointPathTraversalTests
     [InlineData("/api/skills/foo%5cbar")]             // URL-encoded "foo\bar"
     public async Task DeleteSkill_ReturnsBadRequestOrNotRouted_ForEncodedTraversal(string url)
     {
-        await using var factory = new ApiWebApplicationFactory(authEnabled: false);
-        using var client = factory.CreateClient();
+        using var client = server.Factory.CreateClient();
 
         var request = new HttpRequestMessage(HttpMethod.Delete, url);
         var response = await client.SendAsync(request);
@@ -65,8 +69,7 @@ public sealed class SkillEndpointPathTraversalTests
     [Fact]
     public async Task DeleteSkill_Returns404_ForNonExistentValidName()
     {
-        await using var factory = new ApiWebApplicationFactory(authEnabled: false);
-        using var client = factory.CreateClient();
+        using var client = server.Factory.CreateClient();
 
         var request = new HttpRequestMessage(HttpMethod.Delete, "/api/skills/nonexistent-skill-xyz");
         var response = await client.SendAsync(request);
@@ -77,8 +80,7 @@ public sealed class SkillEndpointPathTraversalTests
     [Fact]
     public async Task PostSkill_AcceptsValidNames()
     {
-        await using var factory = new ApiWebApplicationFactory(authEnabled: false);
-        using var client = factory.CreateClient();
+        using var client = server.Factory.CreateClient();
 
         // Valid name should not be rejected as 400 — it may get 409 (Conflict) or other non-400 status
         var payload = System.Text.Json.JsonSerializer.Serialize(new

@@ -11,21 +11,22 @@ using WeaveFleet.Application.Mods;
 namespace WeaveFleet.Api.Tests.Endpoints;
 
 /// <summary>
-/// The Mods switch's API. Runs against the real file store: each test works in its own mod name and session id, and
-/// removes what it wrote from Fleet's data folder.
+/// The Mods switch's API. One server for the class, with the switch turned back off before each test. Runs against the
+/// real file store: each test works in its own mod name and session id, and removes what it wrote from Fleet's data folder.
 /// </summary>
-public sealed class ModEndpointTests : IAsyncDisposable
+public sealed class ModEndpointTests : IClassFixture<ModEndpointTests.Server>, IAsyncLifetime
 {
     private const string TurnedOff = "Mods are turned off in Fleet's Settings.";
 
-    private readonly ApiWebApplicationFactory _factory = new(authEnabled: false);
+    private readonly ApiWebApplicationFactory _factory;
     private readonly HttpClient _client;
     private readonly string _name = $"test-chips-{Guid.NewGuid():N}"[..20];
     private readonly string _session = $"session-{Guid.NewGuid():N}";
     private readonly string _userFolder;
 
-    public ModEndpointTests()
+    public ModEndpointTests(Server server)
     {
+        _factory = server.Factory;
         _client = _factory.CreateClient();
         var options = _factory.Services.GetRequiredService<FleetOptions>();
         var data = Path.GetDirectoryName(Path.GetFullPath(options.DatabasePath))!;
@@ -33,12 +34,22 @@ public sealed class ModEndpointTests : IAsyncDisposable
         _userFolder = Path.Combine(data, "mods", user16);
     }
 
-    public async ValueTask DisposeAsync()
+    // Off is the default; turning it on again ends safe mode, so every test starts from a fresh switch.
+    public async Task InitializeAsync()
+        => (await _client.PutAsJsonAsync("/api/preferences/Mods", new { value = "false" })).EnsureSuccessStatusCode();
+
+    public Task DisposeAsync()
     {
         _client.Dispose();
-        await _factory.DisposeAsync();
         TryDelete(Path.Combine(_userFolder, _name));
         TryDelete(Path.Combine(_userFolder, "drafts", _session));
+        return Task.CompletedTask;
+    }
+
+    public sealed class Server : IDisposable
+    {
+        public ApiWebApplicationFactory Factory { get; } = new(authEnabled: false);
+        public void Dispose() => Factory.Dispose();
     }
 
     private static void TryDelete(string folder)

@@ -8,13 +8,20 @@ using WeaveFleet.Application.Configuration;
 
 namespace WeaveFleet.Api.Tests.Endpoints;
 
-public sealed class ConfigEndpointTests
+public sealed class ConfigEndpointTests(ConfigEndpointTests.Server server) : IClassFixture<ConfigEndpointTests.Server>
 {
+    private readonly ApiWebApplicationFactory _factory = server.Factory;
+
+    public sealed class Server : IDisposable
+    {
+        public ApiWebApplicationFactory Factory { get; } = new(authEnabled: false);
+        public void Dispose() => Factory.Dispose();
+    }
+
     [Fact]
     public async Task get_config_returns_pooled_opencode_harness_enabled_by_default()
     {
-        await using var factory = new ApiWebApplicationFactory(authEnabled: false);
-        using var client = factory.CreateClient(new WebApplicationFactoryClientOptions
+        using var client = _factory.CreateClient(new WebApplicationFactoryClientOptions
         {
             AllowAutoRedirect = false,
             HandleCookies = true,
@@ -32,42 +39,48 @@ public sealed class ConfigEndpointTests
     [Fact]
     public async Task put_config_toggles_pooled_opencode_harness_at_runtime()
     {
-        await using var factory = new ApiWebApplicationFactory(authEnabled: false);
-        using var client = factory.CreateClient(new WebApplicationFactoryClientOptions
+        using var client = _factory.CreateClient(new WebApplicationFactoryClientOptions
         {
             AllowAutoRedirect = false,
             HandleCookies = true,
         });
 
-        var disableResponse = await client.PutAsJsonAsync("/api/config", new JsonObject
+        var options = _factory.Services.GetRequiredService<FleetOptions>();
+        try
         {
-            ["pooledOpenCodeHarness"] = false,
-        });
+            var disableResponse = await client.PutAsJsonAsync("/api/config", new JsonObject
+            {
+                ["pooledOpenCodeHarness"] = false,
+            });
 
-        disableResponse.StatusCode.ShouldBe(HttpStatusCode.NoContent);
-        var options = factory.Services.GetRequiredService<FleetOptions>();
-        options.Harness.PooledOpenCodeHarness.ShouldBeFalse();
+            disableResponse.StatusCode.ShouldBe(HttpStatusCode.NoContent);
+            options.Harness.PooledOpenCodeHarness.ShouldBeFalse();
 
-        var getDisabledResponse = await client.GetAsync("/api/config");
-        getDisabledResponse.StatusCode.ShouldBe(HttpStatusCode.OK);
-        var disabledPayload = await getDisabledResponse.Content.ReadFromJsonAsync<JsonObject>();
-        disabledPayload.ShouldNotBeNull();
-        disabledPayload["pooledOpenCodeHarness"]!.GetValue<bool>().ShouldBeFalse();
+            var getDisabledResponse = await client.GetAsync("/api/config");
+            getDisabledResponse.StatusCode.ShouldBe(HttpStatusCode.OK);
+            var disabledPayload = await getDisabledResponse.Content.ReadFromJsonAsync<JsonObject>();
+            disabledPayload.ShouldNotBeNull();
+            disabledPayload["pooledOpenCodeHarness"]!.GetValue<bool>().ShouldBeFalse();
 
-        var enableResponse = await client.PutAsJsonAsync("/api/config", new JsonObject
+            var enableResponse = await client.PutAsJsonAsync("/api/config", new JsonObject
+            {
+                ["pooledOpenCodeHarness"] = true,
+            });
+
+            enableResponse.StatusCode.ShouldBe(HttpStatusCode.NoContent);
+            options.Harness.PooledOpenCodeHarness.ShouldBeTrue();
+        }
+        finally
         {
-            ["pooledOpenCodeHarness"] = true,
-        });
-
-        enableResponse.StatusCode.ShouldBe(HttpStatusCode.NoContent);
-        options.Harness.PooledOpenCodeHarness.ShouldBeTrue();
+            // The other tests expect the default.
+            options.Harness.PooledOpenCodeHarness = true;
+        }
     }
 
     [Fact]
     public async Task put_config_rejects_non_boolean_pooled_opencode_harness_value()
     {
-        await using var factory = new ApiWebApplicationFactory(authEnabled: false);
-        using var client = factory.CreateClient(new WebApplicationFactoryClientOptions
+        using var client = _factory.CreateClient(new WebApplicationFactoryClientOptions
         {
             AllowAutoRedirect = false,
             HandleCookies = true,
@@ -79,7 +92,7 @@ public sealed class ConfigEndpointTests
         });
 
         response.StatusCode.ShouldBe(HttpStatusCode.BadRequest);
-        var options = factory.Services.GetRequiredService<FleetOptions>();
+        var options = _factory.Services.GetRequiredService<FleetOptions>();
         options.Harness.PooledOpenCodeHarness.ShouldBeTrue();
     }
 }
