@@ -139,11 +139,11 @@ public sealed partial class DreamingAutomation(
                 continue;
             }
 
-            if (dream.SessionId is not null && await sessions.GetByIdAsync(dream.SessionId).ConfigureAwait(false) is { } session)
+            if (await TokensOfAsync(dream.SessionId).ConfigureAwait(false) is { } tokens)
             {
-                dream.Tokens = session.TotalTokens;
+                dream.Tokens = tokens;
                 await dreams.SaveAsync(automation.UserId, dream).ConfigureAwait(false);
-                spent += session.TotalTokens;
+                spent += tokens;
             }
 
             if (dream.Status == DreamRules.Statuses.Done)
@@ -171,6 +171,17 @@ public sealed partial class DreamingAutomation(
                 return null;
             await Task.Delay(PollEvery, time).ConfigureAwait(false);
         }
+    }
+
+    /// <summary>What the dreaming session cost. Usage is counted as it arrives, so a total still at 0 is read once more.</summary>
+    private async Task<int?> TokensOfAsync(string? sessionId)
+    {
+        if (sessionId is null || await sessions.GetByIdAsync(sessionId).ConfigureAwait(false) is not { } session)
+            return null;
+        if (session.TotalTokens > 0)
+            return session.TotalTokens;
+        await Task.Delay(PollEvery, time).ConfigureAwait(false);
+        return (await sessions.GetByIdAsync(sessionId).ConfigureAwait(false))?.TotalTokens ?? 0;
     }
 
     private async Task<int> BudgetAsync()

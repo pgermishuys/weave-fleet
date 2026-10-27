@@ -147,6 +147,8 @@ const NIGHTLY_PATH = "/api/memory/dreaming/nightly";
 
 export const getNightlyDreaming = (): Promise<NightlyDreamingView> => send(NIGHTLY_PATH, "Couldn't load nightly dreaming.");
 
+/** A `model` of null goes back to the harness's default: the server reads an empty model that way, and a missing one as unchanged. */
 export function setNightlyDreaming(change: NightlyDreamingChange): Promise<NightlyDreamingView> {
-  return send(NIGHTLY_PATH, "Couldn't save nightly dreaming.", { method: "PUT", body: JSON.stringify(change) });
+  const body = change.model === null ? { ...change, model: "" } : change;
+  return send(NIGHTLY_PATH, "Couldn't save nightly dreaming.", { method: "PUT", body: JSON.stringify(body) });
 }
