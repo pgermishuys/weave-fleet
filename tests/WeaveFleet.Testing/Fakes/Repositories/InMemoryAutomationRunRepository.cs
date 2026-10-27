@@ -50,6 +50,35 @@ public sealed class InMemoryAutomationRunRepository : IAutomationRunRepository
         return Task.CompletedTask;
     }
 
+    public Task SetSummaryAsync(string id, string summary, string? settledState = null, string? reason = null)
+    {
+        lock (_gate)
+        {
+            var run = _runs.Single(r => r.Id == id);
+            run.Summary = summary;
+            run.SettledState = settledState ?? run.SettledState;
+            run.Error = reason ?? run.Error;
+        }
+
+        return Task.CompletedTask;
+    }
+
+    public Task<int> EndUnsettledNightsAsync(string beforeUtc, string reason)
+    {
+        lock (_gate)
+        {
+            var nights = _runs.Where(r => r.Summary is not null && r.SettledState is null && r.SessionId is null && r.MachineId is null
+                && string.CompareOrdinal(r.StartedAt, beforeUtc) < 0).ToList();
+            foreach (var run in nights)
+            {
+                run.SettledState = "failed";
+                run.Error = reason;
+            }
+
+            return Task.FromResult(nights.Count);
+        }
+    }
+
     public Task<IReadOnlyList<AutomationRun>> ListByAutomationAsync(string automationId, int limit)
     {
         lock (_gate)
@@ -117,5 +146,6 @@ public sealed class InMemoryAutomationRunRepository : IAutomationRunRepository
         MachineId = run.MachineId,
         MachineName = run.MachineName,
         SettledState = run.SettledState,
+        Summary = run.Summary,
     };
 }

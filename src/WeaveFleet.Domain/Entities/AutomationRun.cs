@@ -26,11 +26,17 @@ public sealed class AutomationRun
     public string? MachineName { get; set; }
     /// <summary>
     /// How a run on another machine ended ("done", "ended" or "failed"), once that machine said so, so it isn't asked
-    /// again. Null while it may still be going, and for runs on this machine.
+    /// again; and how a night of dreaming (<see cref="Summary"/>) ended. Null while it may still be going, and for other
+    /// runs on this machine.
     /// </summary>
     public string? SettledState { get; set; }
     /// <summary>Why it failed or was skipped, in words.</summary>
     public string? Error { get; set; }
+    /// <summary>
+    /// What a run that starts several sessions did, in words: a night of dreaming, one session per repository. Set while
+    /// it runs; such a run has no <see cref="SessionId"/> and is running until <see cref="SettledState"/> is set.
+    /// </summary>
+    public string? Summary { get; set; }
 }
 
 public static class AutomationRunStatus

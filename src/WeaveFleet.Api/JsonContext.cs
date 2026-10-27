@@ -548,6 +548,8 @@ internal sealed record ErrorResponse(string Error);
 [JsonSerializable(typeof(WeaveFleet.Application.Memory.Dreaming.DreamView))]
 [JsonSerializable(typeof(WeaveFleet.Application.Memory.Dreaming.DreamListView))]
 [JsonSerializable(typeof(WeaveFleet.Application.Memory.Dreaming.StartDreamRequest))]
+[JsonSerializable(typeof(WeaveFleet.Application.Memory.Dreaming.NightlyDreamingView))]
+[JsonSerializable(typeof(WeaveFleet.Application.Memory.Dreaming.NightlyDreamingRequest))]
 [JsonSerializable(typeof(WeaveFleet.Api.Endpoints.SetMemoryEnabledRequest))]
 [JsonSerializable(typeof(WeaveFleet.Api.Endpoints.AddMemoryNoteRequest))]
 [JsonSerializable(typeof(WeaveFleet.Api.Endpoints.UpdateMemoryNoteRequest))]

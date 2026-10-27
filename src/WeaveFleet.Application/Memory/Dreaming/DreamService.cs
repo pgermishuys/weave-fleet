@@ -82,7 +82,7 @@ public sealed partial class DreamService(
     IEventBroadcaster broadcaster,
     IServiceScopeFactory scopeFactory,
     TimeProvider time,
-    ILogger<DreamService> logger)
+    ILogger<DreamService> logger) : IDreamStarter
 {
     private static readonly TimeSpan StaleAfter = TimeSpan.FromHours(1);
 
@@ -113,7 +113,7 @@ public sealed partial class DreamService(
         if (existing.Any(d => d.IsActive && now - d.Started < StaleAfter))
             return FleetError.ValidationError("Dream.Running", "Fleet is already dreaming about this repository.");
 
-        var dream = new Dream { Repository = repository, Started = now, HarnessType = request.HarnessType };
+        var dream = new Dream { Repository = repository, Started = now, HarnessType = request.HarnessType, RunId = request.RunId, Since = request.Since };
         await dreams.SaveAsync(user.UserId, dream, ct).ConfigureAwait(false);
 
         var userId = user.UserId;
@@ -155,7 +155,11 @@ public sealed partial class DreamService(
         if (dream is null)
             return;
 
-        var candidates = (await sessions.ListAsync(300, 0, null, null, null, null).ConfigureAwait(false))
+        // A night reads what was started since the last one; Dream now, the newest.
+        var listed = request.Since is { } since
+            ? await sessions.ListCreatedSinceAsync(since.UtcDateTime.ToString("O"), DreamRules.NightSessionsScanned).ConfigureAwait(false)
+            : await sessions.ListAsync(300, 0, null, null, null, null).ConfigureAwait(false);
+        var candidates = listed
             .Where(s => !s.IsHidden && s.ParentSessionId is null && s.SideOfSessionId is null
                 && !s.Tags.Contains(DreamRules.SessionTag) && !string.IsNullOrWhiteSpace(s.Directory)
                 && string.Equals(AgentMemory.RepositoryOf(s.Directory), dream.Repository, PathComparison))
@@ -164,7 +168,7 @@ public sealed partial class DreamService(
             .ToList();
         if (candidates.Count == 0)
         {
-            await FailAsync(userId, dreamId, "No sessions in this repository to read yet.").ConfigureAwait(false);
+            await FailAsync(userId, dreamId, request.Since is null ? "No sessions in this repository to read yet." : "No new sessions in this repository to read.").ConfigureAwait(false);
             return;
         }
 

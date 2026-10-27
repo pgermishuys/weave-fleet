@@ -79,6 +79,41 @@ public sealed class AutomationRunRepository(IDbConnectionFactory connectionFacto
             });
     }
 
+    public async Task SetSummaryAsync(string id, string summary, string? settledState = null, string? reason = null)
+    {
+        using var conn = connectionFactory.CreateConnection();
+        await conn.ExecuteNonQueryAsync(
+            """
+            UPDATE automation_runs
+            SET summary = @Summary, settled_state = COALESCE(@State, settled_state), error = COALESCE(@Error, error)
+            WHERE id = @Id
+            """,
+            cmd =>
+            {
+                cmd.AddParameter("Id", id);
+                cmd.AddParameter("Summary", summary);
+                cmd.AddParameter("State", settledState);
+                cmd.AddParameter("Error", reason);
+            });
+    }
+
+    public async Task<int> EndUnsettledNightsAsync(string beforeUtc, string reason)
+    {
+        using var conn = connectionFactory.CreateConnection();
+        return await conn.ExecuteNonQueryAsync(
+            """
+            UPDATE automation_runs
+            SET settled_state = 'failed', error = @Error
+            WHERE summary IS NOT NULL AND settled_state IS NULL AND session_id IS NULL AND machine_id IS NULL
+              AND started_at < @Before
+            """,
+            cmd =>
+            {
+                cmd.AddParameter("Before", beforeUtc);
+                cmd.AddParameter("Error", reason);
+            });
+    }
+
     public async Task<IReadOnlyList<AutomationRun>> ListByAutomationAsync(string automationId, int limit)
     {
         using var conn = connectionFactory.CreateConnection();
@@ -163,5 +198,6 @@ public sealed class AutomationRunRepository(IDbConnectionFactory connectionFacto
         MachineId = r.GetNullableString(r.GetOrdinal("machine_id")),
         MachineName = r.GetNullableString(r.GetOrdinal("machine_name")),
         SettledState = r.GetNullableString(r.GetOrdinal("settled_state")),
+        Summary = r.GetNullableString(r.GetOrdinal("summary")),
     };
 }

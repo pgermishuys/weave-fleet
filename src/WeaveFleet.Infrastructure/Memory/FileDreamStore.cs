@@ -40,6 +40,29 @@ internal sealed partial class FileDreamStore(FleetOptions options, ILogger<FileD
         }
     }
 
+    public async Task<IReadOnlyList<Dream>> ListSinceAsync(string userId, DateTimeOffset since, int limit, CancellationToken ct = default)
+    {
+        var folder = Folder(userId);
+        if (!Directory.Exists(folder))
+            return [];
+
+        await _lock.WaitAsync(ct).ConfigureAwait(false);
+        try
+        {
+            return [.. Directory.EnumerateFiles(folder, "*.json")
+                .Where(path => File.GetLastWriteTimeUtc(path) >= since.UtcDateTime)
+                .Select(Read)
+                .OfType<Dream>()
+                .Where(dream => dream.Started >= since)
+                .OrderByDescending(dream => dream.Started)
+                .Take(limit)];
+        }
+        finally
+        {
+            _lock.Release();
+        }
+    }
+
     public async Task<Dream?> FindAsync(string userId, string id, CancellationToken ct = default)
     {
         if (!IsValidId(id))

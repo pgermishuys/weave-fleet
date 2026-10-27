@@ -17,6 +17,9 @@ namespace WeaveFleet.Application.Automations;
 /// <param name="Skipped">Nothing started, on purpose or because the start was refused; <paramref name="Error"/> says why.</param>
 /// <param name="MachineId">The other machine it went to (<see cref="Automation.TargetMachineId"/>); null for this one.</param>
 /// <param name="MachineName">That machine's name at the time.</param>
+/// <param name="Summary">
+/// What a run that starts several sessions (a built-in automation's) is doing, in words; it goes on in the background.
+/// </param>
 public sealed record AutomationExecutionOutcome(
     string? SessionId,
     string? InstanceId,
@@ -24,7 +27,8 @@ public sealed record AutomationExecutionOutcome(
     string? WorkflowRunId = null,
     bool Skipped = false,
     string? MachineId = null,
-    string? MachineName = null)
+    string? MachineName = null,
+    string? Summary = null)
 {
     public static AutomationExecutionOutcome Failed(string error) => new(null, null, error);
     public static AutomationExecutionOutcome SkippedBecause(string reason) => new(null, null, reason, Skipped: true);

@@ -26,8 +26,12 @@ public sealed class AutomationService(
     IAutomationRepository automationRepository,
     IUserContext userContext,
     IRemoteMachineRepository? machines = null,
-    IEventAutomationIndex? eventIndex = null)
+    IEventAutomationIndex? eventIndex = null,
+    IBuiltinAutomations? builtins = null)
 {
+    /// <summary>Why a built-in automation can't be edited or deleted here.</summary>
+    public const string BuiltinRefusal = "Dreaming is built in. Change its time, run it or pause it here; turn it off in Settings → Memory.";
+
     /// <summary>
     /// Creates a new automation with the specified configuration, switched on: the person just asked for it.
     /// Validates the schedule (a cron or a one-off time), its time zone, and where runs happen.
@@ -128,6 +132,8 @@ public sealed class AutomationService(
         var existing = await automationRepository.GetByIdAsync(id);
         if (existing is null)
             return FleetError.NotFoundFor(nameof(Automation), id);
+        if (existing.Builtin is not null)
+            return FleetError.ValidationError("Builtin", BuiltinRefusal);
 
         // A one-off time that has passed is fine on an automation that's off (it already ran); not on one that's on.
         var isWorkflow = targetType == AutomationTargets.Workflow;
@@ -211,6 +217,8 @@ public sealed class AutomationService(
         var automation = await automationRepository.GetByIdAsync(id);
         if (automation is null)
             return FleetError.NotFoundFor(nameof(Automation), id);
+        if (automation.Builtin is not null)
+            return FleetError.ValidationError("Builtin", BuiltinRefusal);
 
         await automationRepository.DeleteAsync(id);
         eventIndex?.Invalidate();
@@ -230,12 +238,19 @@ public sealed class AutomationService(
     }
 
     /// <summary>
-    /// Lists all automations, optionally filtered by workspace.
+    /// Lists all automations, optionally filtered by workspace. A built-in one is left out while its feature is off.
     /// </summary>
     public async Task<Result<IReadOnlyList<Automation>>> ListAsync(string? workspaceId = null)
     {
         var automations = await automationRepository.ListAsync(workspaceId);
-        return Result.Success(automations);
+        var listed = new List<Automation>(automations.Count);
+        foreach (var automation in automations)
+        {
+            if (automation.Builtin is null || (builtins is not null && await builtins.IsOnAsync(automation)))
+                listed.Add(automation);
+        }
+
+        return Result.Success<IReadOnlyList<Automation>>(listed);
     }
 
     /// <summary>
