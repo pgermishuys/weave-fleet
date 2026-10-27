@@ -44,6 +44,9 @@ public sealed partial class SessionPrompting(
     ModTurnHook? modTurns = null,
     SessionUpdates? updates = null)
 {
+    /// <summary>The error code of a prompt the harness refused because its turn is still running.</summary>
+    public const string BusyErrorCode = "Session.Busy";
+
     public async Task<Result<Unit>> PromptSessionAsync(
         string id,
         string text,
@@ -268,6 +271,11 @@ public sealed partial class SessionPrompting(
             }
 
             return new PromptSessionResult(EventId: null, effectiveCorrelationId, generatedMessageId);
+        }
+        catch (HarnessBusyException ex)
+        {
+            // The harness can't take a prompt in the middle of its turn: a caller that can wait queues it.
+            return new FleetError(BusyErrorCode, ex.Message);
         }
         catch (InvalidOperationException ex)
         {
