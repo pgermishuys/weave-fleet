@@ -14,7 +14,7 @@ namespace WeaveFleet.IntegrationTests.Harnesses.OpenCode2;
 /// Work a real V2 runs in the background is Fleet's running work: a shell Fleet can read and stop on its own, and a
 /// subagent whose child session Fleet stops by interrupting it. Each leaves the rest of the session as it was.
 /// </summary>
-public sealed partial class OpenCode2LiveTests
+public sealed partial class OpenCode2BackgroundLiveTests
 {
     [OpenCode2Fact]
     public async Task A_background_shell_is_running_work_whose_output_fleet_reads_and_which_fleet_stops()

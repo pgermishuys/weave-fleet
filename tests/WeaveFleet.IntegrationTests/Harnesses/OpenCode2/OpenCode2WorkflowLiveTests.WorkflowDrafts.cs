@@ -12,7 +12,7 @@ namespace WeaveFleet.IntegrationTests.Harnesses.OpenCode2;
 /// with errors is asked about again with the earlier question and answer carried in the prompt; Describe it asks
 /// <c>generate</c> on a throwaway session, then deletes it. Neither leaves anything in a session's history or on disk.
 /// </summary>
-public sealed partial class OpenCode2LiveTests
+public sealed partial class OpenCode2WorkflowLiveTests
 {
     private const string DraftWithErrors = """
         ```yaml

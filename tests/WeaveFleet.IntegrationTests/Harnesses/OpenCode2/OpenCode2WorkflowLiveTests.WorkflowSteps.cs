@@ -19,7 +19,7 @@ namespace WeaveFleet.IntegrationTests.Harnesses.OpenCode2;
 /// offered. A step session sees it and finishes its step with it. A session made before the switch gets the rule when
 /// it's resumed. These fail if a future V2 changes how a session's rules hide a tool.
 /// </summary>
-public sealed partial class OpenCode2LiveTests
+public sealed partial class OpenCode2WorkflowLiveTests
 {
     private const string StepWorkflow = """
         name: Live check
@@ -238,14 +238,6 @@ public sealed partial class OpenCode2LiveTests
         {
             await SetWorkflowsAsync(false);
         }
-    }
-
-    /// <summary>Turns workflows on or off as Settings does; the owner's next session gets a server to match.</summary>
-    private async Task SetWorkflowsAsync(bool enabled)
-    {
-        using var user = BackgroundUserContext.BeginScope(OpenCode2LiveFleet.Owner);
-        using var scope = fleet.Services.CreateScope();
-        await scope.ServiceProvider.GetRequiredService<IUserPreferenceRepository>().SetAsync(FleetWorkflows.PreferenceKey, enabled ? "true" : "false");
     }
 
     /// <summary>A run, as the runner saves one, whose first step the next session will be.</summary>

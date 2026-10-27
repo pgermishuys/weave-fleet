@@ -16,7 +16,7 @@ namespace WeaveFleet.IntegrationTests.Harnesses.OpenCode2;
 /// <c>fleet_step_done</c>, and the run stops at its You decide step. A second firing while it waits there is skipped
 /// with the step's name, Run now isn't and gets a worktree of its own, and with Workflows off a firing says so.
 /// </summary>
-public sealed partial class OpenCode2LiveTests
+public sealed partial class OpenCode2WorkflowLiveTests
 {
     private const string AutomationWorkflow = """
         name: Live automation

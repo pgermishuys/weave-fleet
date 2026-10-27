@@ -3,20 +3,16 @@ extern alias FakeLlm;
 using System.Diagnostics;
 using System.Text.Json;
 using System.Text.Json.Nodes;
-using System.Text.RegularExpressions;
 using FakeLlm::FakeLlmServer;
 using Microsoft.Extensions.DependencyInjection;
 using WeaveFleet.Application.Canvases;
 using WeaveFleet.Application.Configuration;
-using WeaveFleet.Application.Events;
-using WeaveFleet.Application.Harnesses;
 using WeaveFleet.Application.Sessions;
 using WeaveFleet.Application.Users;
 using WeaveFleet.Domain.Entities;
 using WeaveFleet.Domain.Events;
 using WeaveFleet.Domain.Harnesses;
 using WeaveFleet.Domain.Repositories;
-using WeaveFleet.Infrastructure;
 using WeaveFleet.Infrastructure.Harnesses;
 using WeaveFleet.Infrastructure.Harnesses.OpenCode2;
 using WeaveFleet.Infrastructure.Sessions;
@@ -32,9 +28,9 @@ namespace WeaveFleet.IntegrationTests.Harnesses.OpenCode2;
 /// </summary>
 [Trait("Category", "Integration")]
 [Trait("Harness", "opencode2")]
-public sealed partial class OpenCode2LiveTests(OpenCode2LiveFleet fleet) : IClassFixture<OpenCode2LiveFleet>
+public sealed partial class OpenCode2LiveTests(OpenCode2LiveFleet fleet) : OpenCode2LiveTestBase, IClassFixture<OpenCode2LiveFleet>
 {
-    private static readonly TimeSpan Timeout = TimeSpan.FromMinutes(2);
+    protected override OpenCode2LiveFleet Fleet => fleet;
 
     [OpenCode2Fact]
     public async Task A_prompt_streams_the_reply_and_the_turn_ends()
@@ -603,131 +599,4 @@ public sealed partial class OpenCode2LiveTests(OpenCode2LiveFleet fleet) : IClas
             (await HasExitedAsync(server, TimeSpan.FromSeconds(10))).ShouldBeTrue($"OpenCode 2 server {server} outlived Fleet.");
         (await IsForgottenAsync(servers.Contains, TimeSpan.FromSeconds(10))).ShouldBeTrue("Fleet still lists a stopped server as running.");
     }
-
-    // Fleet forgets a harness process from Process.Exited, which .NET raises on a thread-pool thread after the
-    // process is gone, so the registry can still list it for a moment after the OS says it has exited.
-    private static async Task<bool> IsForgottenAsync(Func<int, bool> pids, TimeSpan timeout)
-    {
-        var deadline = DateTime.UtcNow + timeout;
-        while (DateTime.UtcNow < deadline)
-        {
-            if (!ProcessGroupHelper.RunningProcesses.Any(p => pids(p.Pid)))
-                return true;
-            await Task.Delay(50);
-        }
-
-        return !ProcessGroupHelper.RunningProcesses.Any(p => pids(p.Pid));
-    }
-
-    private static async Task<bool> HasExitedAsync(int processId, TimeSpan timeout)
-    {
-        var deadline = DateTime.UtcNow + timeout;
-        while (DateTime.UtcNow < deadline)
-        {
-            try
-            {
-                using var process = Process.GetProcessById(processId);
-                if (process.HasExited)
-                    return true;
-            }
-            catch (ArgumentException)
-            {
-                return true;
-            }
-
-            await Task.Delay(200);
-        }
-
-        return false;
-    }
-
-    private async Task PromptAsync(string sessionId, string text, PromptOptions? options, CancellationToken ct)
-    {
-        var prompted = await fleet.WithOrchestratorAsync(o => o.PromptSessionAsync(sessionId, text, options, ct));
-        prompted.IsSuccess.ShouldBeTrue(prompted.IsFailure ? prompted.Error.Description : null);
-    }
-
-    private async Task<IReadOnlyList<WeaveFleet.Application.DTOs.DelegationDto>> Delegations(string sessionId)
-    {
-        using var user = BackgroundUserContext.BeginScope(OpenCode2LiveFleet.Owner);
-        using var scope = fleet.Services.CreateScope();
-        return await scope.ServiceProvider.GetRequiredService<DelegationService>().GetDelegationsAsync(sessionId);
-    }
-
-    private static ScriptedLlmResponse ToolCall(string callId, string tool, object input) => new()
-    {
-        StopReason = "tool_calls",
-        ToolCalls = [new ScriptedToolCall(callId, tool, JsonSerializer.Serialize(input))],
-    };
-
-    private static object Question(string question) => new
-    {
-        questions = new[]
-        {
-            new
-            {
-                question,
-                header = "Pick",
-                options = new[] { new { label = "A", description = "The first" }, new { label = "B", description = "The second" } },
-            },
-        },
-    };
-
-    /// <summary>Fleet says a session is working with <c>session.status</c> <c>busy</c>.</summary>
-    private static bool IsBusy(BroadcastEvent e)
-        => e.Type == "session.status"
-            && e.Payload.TryGetProperty("status", out var status)
-            && status.ValueKind == JsonValueKind.Object
-            && status.TryGetProperty("type", out var type)
-            && type.GetString() == ActivityStatuses.Busy;
-
-    private static IEnumerable<T> Parts<T>(LiveEvents events, string sessionId) where T : MessageEventPart
-        => events.For(sessionId).Select(e => e.DomainEvent).OfType<MessagePartUpdated>().Select(e => e.Payload.Part).OfType<T>();
-
-    /// <summary>Each part as the live stream last showed it, in the order they first appeared.</summary>
-    private static List<T> LatestParts<T>(LiveEvents events, string sessionId) where T : MessageEventPart
-        => Parts<T>(events, sessionId).GroupBy(p => p.Id).Select(g => g.Last()).ToList();
-
-    private static IEnumerable<MessageLifecyclePayload> Messages(LiveEvents events, string sessionId)
-        => events.For(sessionId).Select(e => e.DomainEvent).OfType<MessageUpdated>().Select(e => e.Payload);
-
-    private static JsonNode ToJson(string sessionId, MessageEventPart part)
-        => JsonNode.Parse(JsonSerializer.Serialize(
-            new MessagePartUpdatedPayload { SessionId = sessionId, Part = part },
-            InfrastructureJsonContext.Default.MessagePartUpdatedPayload))!["part"]!;
-
-    private Task<object> WaitForAsync(LiveEvents events, Func<bool> done, CancellationToken ct)
-        => WaitForAsync(events, () => Task.FromResult<object?>(done() ? true : null), ct);
-
-    private Task<object> WaitForAsync(LiveEvents events, Func<Task<bool>> done, CancellationToken ct)
-        => WaitForAsync(events, async () => await done() ? true : (object?)null, ct);
-
-    /// <summary>Polls until <paramref name="read"/> has a value; on a timeout, says what Fleet sent and what the model was asked.</summary>
-    private async Task<T> WaitForAsync<T>(LiveEvents events, Func<Task<T?>> read, CancellationToken ct)
-    {
-        using var wait = CancellationTokenSource.CreateLinkedTokenSource(ct);
-        wait.CancelAfter(TimeSpan.FromSeconds(60));
-        while (true)
-        {
-            if (await read() is { } value)
-                return value;
-
-            try
-            {
-                await Task.Delay(200, wait.Token);
-            }
-            catch (OperationCanceledException)
-            {
-                throw new TimeoutException(
-                    $"Timed out. Fleet sent: {events.Describe()}\n" +
-                    "The model was asked:\n" + string.Join("\n", fleet.Llm.Queue.Requests.Select(r =>
-                        $"  first={Trim(LlmRequest.FirstUserText(r))} last={LlmRequest.LastRole(r)} tool={Trim(LlmRequest.LastToolText(r))}")));
-            }
-        }
-    }
-
-    private static string Trim(string? value) => value is null ? "-" : value[..Math.Min(value.Length, 120)];
-
-    [GeneratedRegex(@"cv_[A-Za-z0-9]+")]
-    private static partial Regex CanvasId();
 }

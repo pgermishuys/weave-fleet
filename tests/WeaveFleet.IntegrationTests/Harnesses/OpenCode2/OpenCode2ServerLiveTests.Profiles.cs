@@ -4,10 +4,8 @@ using FakeLlm::FakeLlmServer;
 using Microsoft.Extensions.DependencyInjection;
 using WeaveFleet.Application.Configuration;
 using WeaveFleet.Application.Harnesses;
-using WeaveFleet.Application.Sessions.Creation;
 using WeaveFleet.Domain.Events;
 using WeaveFleet.Infrastructure.Harnesses.OpenCode2;
-using WeaveFleet.Infrastructure.Users;
 
 namespace WeaveFleet.IntegrationTests.Harnesses.OpenCode2;
 
@@ -15,7 +13,7 @@ namespace WeaveFleet.IntegrationTests.Harnesses.OpenCode2;
 /// Profiles on OpenCode 2, live. A profile here brings a provider of its own on the same scripted model, whose model id
 /// names the profile, so the model a request asks for says which config the turn ran on.
 /// </summary>
-public sealed partial class OpenCode2LiveTests
+public sealed partial class OpenCode2ServerLiveTests
 {
     [OpenCode2Fact]
     public async Task Two_sessions_in_one_folder_are_answered_by_their_own_profile_and_by_none()
@@ -163,81 +161,5 @@ public sealed partial class OpenCode2LiveTests
         await WaitForAsync(events, () => events.For(id).Count(e => e.Type == "session.idle") >= 2, cts.Token);
         LatestParts<TextMessageEventPart>(events, id).Last().Text.ShouldBe("Answered by idle-model.");
         harness.ProcessId.ShouldNotBeNull().ShouldNotBe(server);
-    }
-
-    /// <summary>A profile whose provider (<c>prof</c>) is the scripted model under the model id <paramref name="model"/>, with an agent of its own.</summary>
-    private string ProfileContent(string model, string extra = "") => $$"""
-        {
-          // The scripted model again, as a provider of the profile's own.
-          "model": "prof/{{model}}",
-          "provider": {
-            "prof": {
-              "npm": "@ai-sdk/openai-compatible",
-              "options": { "baseURL": "{{fleet.Llm.BaseUrl.ToString().TrimEnd('/')}}/v1", "apiKey": "profile-key" },
-              "models": { "{{model}}": { "name": "{{model}}", "tool_call": true } }
-            }
-          },
-          "agent": { "profiled": { "description": "Only on the profile", "mode": "primary", "prompt": "You are the profile's agent." } }{{extra}}
-        }
-        """;
-
-    private async Task<HarnessProfileView> CreateProfileAsync(string name, string content, CancellationToken ct)
-    {
-        var created = await WithProfilesAsync(p => p.CreateAsync(OpenCode2HarnessSession.Type, name, content, ct));
-        created.IsSuccess.ShouldBeTrue(created.IsFailure ? created.Error.Description : null);
-        return created.Value;
-    }
-
-    private async Task<string> CreateSessionAsync(string folder, string title, string profileId, CancellationToken ct)
-    {
-        var created = await fleet.WithOrchestratorAsync(o => o.CreateSessionAsync(new CreateSessionRequest
-        {
-            Directory = folder,
-            Title = title,
-            HarnessType = OpenCode2HarnessSession.Type,
-            HarnessProfileId = profileId,
-        }, ct));
-        created.IsSuccess.ShouldBeTrue(created.IsFailure ? created.Error.Description : null);
-        return created.Value.Session.Id;
-    }
-
-    private async Task<WeaveFleet.Domain.Harnesses.HarnessCatalog> CatalogAsync(string folder, string profileId, CancellationToken ct)
-    {
-        using var user = BackgroundUserContext.BeginScope(OpenCode2LiveFleet.Owner);
-        using var scope = fleet.Services.CreateScope();
-        var catalog = await scope.ServiceProvider.GetRequiredService<HarnessCatalogService>()
-            .GetCatalogAsync(OpenCode2HarnessSession.Type, folder, ct, profileId);
-        catalog.IsSuccess.ShouldBeTrue(catalog.IsFailure ? catalog.Error.Description : null);
-        return catalog.Value.ShouldNotBeNull();
-    }
-
-    private async Task<T> WithProfilesAsync<T>(Func<HarnessProfileService, Task<T>> call)
-    {
-        using var user = BackgroundUserContext.BeginScope(OpenCode2LiveFleet.Owner);
-        using var scope = fleet.Services.CreateScope();
-        return await call(scope.ServiceProvider.GetRequiredService<HarnessProfileService>());
-    }
-
-    /// <summary>The processes of this user whose environment has <paramref name="name"/>=<paramref name="value"/> (Linux).</summary>
-    private static List<int> ProcessesWith(string name, string value)
-    {
-        var wanted = $"{name}={value}";
-        var found = new List<int>();
-        foreach (var folder in Directory.EnumerateDirectories("/proc"))
-        {
-            if (!int.TryParse(Path.GetFileName(folder), out var pid))
-                continue;
-            try
-            {
-                if (File.ReadAllText(Path.Combine(folder, "environ")).Split('\0').Contains(wanted))
-                    found.Add(pid);
-            }
-            catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
-            {
-                // Another user's process, or gone.
-            }
-        }
-
-        return found;
     }
 }
