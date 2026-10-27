@@ -114,6 +114,47 @@ public sealed class UpdateEndpointTests : IClassFixture<UpdateEndpointTests.Serv
     }
 
     [Fact]
+    public async Task a_test_server_never_asks_github_for_an_update()
+    {
+        // Asking the real GitHub found a release newer than the build and downloaded it, 60 MB, into the test run.
+        await using var factory = new ApiWebApplicationFactory(authEnabled: false);
+        using var client = factory.CreateClient();
+
+        (await client.PostAsync("/api/update/check", content: null)).StatusCode.ShouldBe(HttpStatusCode.Accepted);
+
+        var status = await client.GetFromJsonAsync<UpdateStatusDto>("/api/update/status", JsonSerializerOptions.Web);
+        status!.Status.ShouldBe("error");
+        status.Error.ShouldNotBeNull().ShouldContain(ApiWebApplicationFactory.NoGitHub);
+    }
+
+    [Fact]
+    public async Task each_test_server_stages_updates_in_its_own_folder()
+    {
+        // They used to share one next to the test assembly, so an update one of them staged showed on every other.
+        await using var staging = new ApiWebApplicationFactory(authEnabled: false);
+        await using var other = new ApiWebApplicationFactory(authEnabled: false);
+        var dir = staging.Services.GetRequiredService<UpdateDownloadService>().StagingDirectory;
+        Directory.CreateDirectory(dir);
+        var manifest = Path.Combine(dir, "update-manifest.json");
+        await File.WriteAllTextAsync(manifest, """{ "version": "99.0.0", "assetFileName": "fleet.tar.gz", "sha256": "00", "downloadedAt": "2026-10-27T08:00:00Z" }""");
+        try
+        {
+            using var stagingClient = staging.CreateClient();
+            using var otherClient = other.CreateClient();
+
+            var staged = await stagingClient.GetFromJsonAsync<JsonElement>("/api/machine");
+            var unstaged = await otherClient.GetFromJsonAsync<JsonElement>("/api/machine");
+
+            staged.GetProperty("update").GetProperty("stagedVersion").GetString().ShouldBe("99.0.0");
+            unstaged.GetProperty("update").GetProperty("stagedVersion").ValueKind.ShouldBe(JsonValueKind.Null);
+        }
+        finally
+        {
+            File.Delete(manifest);
+        }
+    }
+
+    [Fact]
     public async Task post_update_download_returns_bad_request_when_no_update_available()
     {
         using var client = _factory.CreateClient();
@@ -128,7 +169,7 @@ public sealed class UpdateEndpointTests : IClassFixture<UpdateEndpointTests.Serv
     public async Task get_releases_returns_the_recent_releases_newest_first()
     {
         // Its own data folder: test servers keep their databases side by side in the temp folder, and a saved
-        // release-notes.json there (from post_update_check, which asks the real GitHub) would be read instead.
+        // release-notes.json there would be read instead.
         var dataDir = Directory.CreateTempSubdirectory("fleet-release-notes-").FullName;
         await using var factory = new ApiWebApplicationFactory(
             authEnabled: false,
