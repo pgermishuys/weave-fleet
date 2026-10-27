@@ -247,4 +247,57 @@ public sealed class BunVersionProbeTests : IDisposable
             }
         }
     }
+
+    /// <summary>Keeps the thread pool busy, which slows every test running beside it.</summary>
+    [Collection(ProcessWide.Collection)]
+    public sealed class OnABusyThreadPool : IDisposable
+    {
+        private readonly BunVersionProbeTests _probe = new();
+
+        public void Dispose() => _probe.Dispose();
+
+        /// <summary>
+        /// A Bun that has exited has already written its version into the pipe, but reading it takes a thread-pool
+        /// thread. When none is free, the probe's wait for stdout timed out first (timers run ahead of queued work)
+        /// and it reported "Bun printed nothing", as it did on a loaded CI runner.
+        /// </summary>
+        [Fact]
+        public async Task A_version_already_printed_is_read_however_long_the_pool_takes_to_read_it()
+        {
+            if (OperatingSystem.IsWindows()) return;
+            var path = _probe.Script("echo 1.4.5");
+
+            // Far more work items than threads, each holding its thread, so everything queued waits its turn.
+            using var stop = new CancellationTokenSource();
+            void Block() => ThreadPool.UnsafeQueueUserWorkItem(_ =>
+            {
+                Thread.Sleep(100);
+                if (!stop.IsCancellationRequested)
+                    Block();
+            }, null);
+
+            var errors = new List<string>();
+            try
+            {
+                for (var i = 0; i < Environment.ProcessorCount * 8; i++)
+                    Block();
+
+                // Before the fix, 10 probes failed at least once about 2 runs in 3, and 20 failed in 5 runs out of 5.
+                for (var i = 0; i < 20; i++)
+                {
+                    var result = await Task.Factory.StartNew(
+                        () => BunVersionProbe.RunAsync(path, Generous, CancellationToken.None).GetAwaiter().GetResult(),
+                        TaskCreationOptions.LongRunning);
+                    if (result.Error is { } error)
+                        errors.Add(error);
+                }
+            }
+            finally
+            {
+                await stop.CancelAsync();
+            }
+
+            errors.ShouldBeEmpty();
+        }
+    }
 }
