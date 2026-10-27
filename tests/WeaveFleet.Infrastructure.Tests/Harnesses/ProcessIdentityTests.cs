@@ -58,7 +58,7 @@ public sealed class ProcessIdentityTests
         using var sleep = Process.Start(new ProcessStartInfo("sleep", "30") { UseShellExecute = false })!;
         try
         {
-            var first = ProcessIdentity.Read(sleep.Id).ShouldNotBeNull();
+            var first = ReadOnceExecd(sleep.Id, "sleep");
             ProcessIdentity.Read(sleep.Id).ShouldBe(first);
             first.Name.ShouldBe("sleep");
             first.IsSameProcess(ProcessIdentity.Read(Environment.ProcessId)).ShouldBeFalse();
@@ -70,6 +70,20 @@ public sealed class ProcessIdentityTests
         }
 
         ProcessIdentity.Read(sleep.Id).ShouldBeNull();
+    }
+
+    // Between the fork and the exec the child still has its parent thread's name (".NET TP Worker"), and the parent can
+    // already be running again, so the name settles a moment after Process.Start returns. Wait for it, on the clock.
+    private static ProcessIdentity ReadOnceExecd(int pid, string name)
+    {
+        var deadline = Stopwatch.StartNew();
+        while (true)
+        {
+            var identity = ProcessIdentity.Read(pid).ShouldNotBeNull();
+            if (identity.Name == name || deadline.Elapsed > TimeSpan.FromSeconds(10))
+                return identity;
+            Thread.Yield();
+        }
     }
 
     private static string Stat(int pid, string name, string state, long startTime)
