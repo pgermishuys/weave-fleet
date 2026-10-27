@@ -38,7 +38,7 @@ public sealed class JobsQueueTests
         var second = await host.PostAsync("Fix the rounding");
         var mac = await host.PostAsync("Build the iOS app", "mac");
         var fourth = await host.PostAsync("Update the docs");
-        await dispatcher.RunOnceAsync(CancellationToken.None);
+        (await dispatcher.RunOnceAsync(CancellationToken.None)).ShouldBeTrue();
 
         var queue = await host.ListAsync();
         queue.Job(first).MachineName.ShouldBe("atlas");
@@ -97,6 +97,7 @@ public sealed class JobsQueueTests
 
         (await host.Client.DeleteAsync($"/api/jobs/{running}")).StatusCode.ShouldBe(HttpStatusCode.NotFound);
         (await host.Client.DeleteAsync($"/api/jobs/{waiting}")).StatusCode.ShouldBe(HttpStatusCode.NoContent);
+        (await host.Services.GetRequiredService<JobDispatcher>().RunOnceAsync(CancellationToken.None)).ShouldBeTrue();
         (await host.ListAsync()).Jobs.Select(job => job.Id).ShouldBe([running]);
     }
 
@@ -135,7 +136,7 @@ public sealed class JobsQueueTests
                 Id = "old", UserId = "local-user", Title = "t", Ask = "a", Repository = "ledger-api", CreatedAt = DateTimeOffset.UtcNow, UpdatedAt = DateTimeOffset.UtcNow,
             });
 
-        await host.Services.GetRequiredService<JobDispatcher>().RunOnceAsync(CancellationToken.None);
+        (await host.Services.GetRequiredService<JobDispatcher>().RunOnceAsync(CancellationToken.None)).ShouldBeFalse();
 
         host.Services.GetRequiredService<ScriptedJobSessions>().Started.ShouldBeEmpty();
     }

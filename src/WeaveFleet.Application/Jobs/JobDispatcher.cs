@@ -40,9 +40,13 @@ public sealed partial class JobDispatcher(IServiceScopeFactory scopeFactory, ILo
     /// <summary>Waits until a pass is asked for, or <paramref name="interval"/> passes.</summary>
     internal Task<bool> WaitForNudgeAsync(TimeSpan interval, CancellationToken ct) => _nudged.WaitAsync(interval, ct);
 
-    /// <summary>One pass, for every user who has a job that waits or runs and has jobs turned on.</summary>
-    public async Task RunOnceAsync(CancellationToken ct)
+    /// <summary>
+    /// One pass, for every user who has a job that waits or runs and has jobs turned on. True when a pass ran, so there
+    /// is a job to keep watching; false when there is nothing to watch and the next pass can wait for a nudge.
+    /// </summary>
+    public async Task<bool> RunOnceAsync(CancellationToken ct)
     {
+        var watching = false;
         await _pass.WaitAsync(ct).ConfigureAwait(false);
         try
         {
@@ -56,8 +60,11 @@ public sealed partial class JobDispatcher(IServiceScopeFactory scopeFactory, ILo
                 {
                     using var scope = scopeFactory.CreateScope();
                     using var user = scope.ServiceProvider.GetRequiredService<IBackgroundUserScope>().Begin(userId);
-                    if (await scope.ServiceProvider.GetRequiredService<JobsFeature>().IsEnabledAsync().ConfigureAwait(false))
-                        await PassAsync(scope.ServiceProvider, userId, ct).ConfigureAwait(false);
+                    if (!await scope.ServiceProvider.GetRequiredService<JobsFeature>().IsEnabledAsync().ConfigureAwait(false))
+                        continue;
+
+                    watching = true;
+                    await PassAsync(scope.ServiceProvider, userId, ct).ConfigureAwait(false);
                 }
                 catch (Exception ex) when (ex is not OperationCanceledException)
                 {
@@ -69,6 +76,8 @@ public sealed partial class JobDispatcher(IServiceScopeFactory scopeFactory, ILo
         {
             _pass.Release();
         }
+
+        return watching;
     }
 
     private async Task PassAsync(IServiceProvider services, string userId, CancellationToken ct)
@@ -152,10 +161,17 @@ public sealed partial class JobDispatcher(IServiceScopeFactory scopeFactory, ILo
     private partial void LogStartFailed(string jobId, string machine, string reason);
 }
 
-/// <summary>Runs <see cref="JobDispatcher"/> when it's nudged and every <see cref="Interval"/> after, to catch what no one tells it: a session that ended, a machine that came back.</summary>
+/// <summary>
+/// Runs <see cref="JobDispatcher"/> once at startup, which finds jobs a restart left open, and again when it's nudged. While a
+/// job is open it also runs every <see cref="Interval"/>, to catch what no one tells it: a session that ended, a machine
+/// that came back. With nothing to watch it waits for a nudge and reads nothing, so a Fleet that doesn't use jobs pays nothing.
+/// </summary>
 public sealed partial class JobDispatcherService(JobDispatcher dispatcher, ILogger<JobDispatcherService> logger) : BackgroundService
 {
     public static readonly TimeSpan Interval = TimeSpan.FromSeconds(3);
+
+    /// <summary>How long to wait for the next pass: the interval while a job is open, otherwise until nudged.</summary>
+    public static TimeSpan NextWait(bool watching) => watching ? Interval : Timeout.InfiniteTimeSpan;
 
     protected override async Task ExecuteAsync(CancellationToken stoppingToken)
     {
@@ -163,8 +179,8 @@ public sealed partial class JobDispatcherService(JobDispatcher dispatcher, ILogg
         {
             try
             {
-                await dispatcher.RunOnceAsync(stoppingToken).ConfigureAwait(false);
-                await dispatcher.WaitForNudgeAsync(Interval, stoppingToken).ConfigureAwait(false);
+                var watching = await dispatcher.RunOnceAsync(stoppingToken).ConfigureAwait(false);
+                await dispatcher.WaitForNudgeAsync(NextWait(watching), stoppingToken).ConfigureAwait(false);
             }
             catch (OperationCanceledException) when (stoppingToken.IsCancellationRequested)
             {
