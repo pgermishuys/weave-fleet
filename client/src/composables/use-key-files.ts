@@ -1,5 +1,5 @@
 import { readonly, ref, shallowRef, type Ref, type ShallowRef } from "vue";
-import { api } from "@/api/client";
+import { useMachineTarget } from "@/lib/machine-target";
 import { extractApiError } from "@/lib/api-error";
 
 export interface KeyFilesResponse {
@@ -14,6 +14,7 @@ export interface UseKeyFilesResult {
 }
 
 export function useKeyFiles(): UseKeyFilesResult {
+  const { api } = useMachineTarget();
   const filesByTool = ref<Record<string, readonly string[]>>({});
   const isLoading = shallowRef(false);
   const error = shallowRef<string | undefined>(undefined);

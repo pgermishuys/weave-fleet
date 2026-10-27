@@ -1,5 +1,5 @@
 import { onMounted, readonly, ref, shallowRef, type Ref, type ShallowRef } from "vue";
-import { api } from "@/api/client";
+import { liveTarget, useMachineTarget, type MachineTarget } from "@/lib/machine-target";
 import { extractApiError } from "@/lib/api-error";
 
 export interface AvailableTool {
@@ -16,14 +16,28 @@ export interface UseAvailableToolsResult {
   refetch: () => Promise<void>;
 }
 
-let moduleCache: AvailableTool[] | null = null;
-let moduleFetchPromise: Promise<AvailableTool[]> | null = null;
-const sharedTools = ref<AvailableTool[]>([]);
-const sharedIsLoading = shallowRef(true);
-const sharedError = shallowRef<string | undefined>(undefined);
+/** What one machine offers: tools are found on the machine that opens them, so each machine has its own answer. */
+interface MachineTools {
+  cache: AvailableTool[] | null;
+  fetchPromise: Promise<AvailableTool[]> | null;
+  tools: Ref<AvailableTool[]>;
+  isLoading: ShallowRef<boolean>;
+  error: ShallowRef<string | undefined>;
+}
 
-async function fetchAvailableTools(): Promise<AvailableTool[]> {
-  const { data, error: apiError } = await api.GET("/api/available-tools");
+const perMachine = new Map<string, MachineTools>();
+
+function stateFor(key: string): MachineTools {
+  let state = perMachine.get(key);
+  if (!state) {
+    state = { cache: null, fetchPromise: null, tools: ref<AvailableTool[]>([]), isLoading: shallowRef(true), error: shallowRef<string | undefined>(undefined) };
+    perMachine.set(key, state);
+  }
+  return state;
+}
+
+async function fetchAvailableTools(target: MachineTarget): Promise<AvailableTool[]> {
+  const { data, error: apiError } = await target.api.GET("/api/available-tools");
   if (apiError) {
     throw new Error(extractApiError(apiError, "Failed to fetch available tools"));
   }
@@ -40,44 +54,48 @@ async function fetchAvailableTools(): Promise<AvailableTool[]> {
   return Array.isArray(result.tools) ? result.tools : [];
 }
 
-async function loadTools(): Promise<void> {
-  if (moduleCache) {
-    sharedTools.value = moduleCache;
+async function loadTools(target: MachineTarget): Promise<void> {
+  const state = stateFor(target.key);
+  if (state.cache) {
+    state.tools.value = state.cache;
   }
 
-  sharedIsLoading.value = !moduleCache;
-  sharedError.value = undefined;
+  state.isLoading.value = !state.cache;
+  state.error.value = undefined;
 
-  if (!moduleFetchPromise) {
-    moduleFetchPromise = fetchAvailableTools();
+  if (!state.fetchPromise) {
+    state.fetchPromise = fetchAvailableTools(target);
   }
 
   try {
-    const tools = await moduleFetchPromise;
-    moduleCache = tools;
-    sharedTools.value = tools;
-    sharedError.value = undefined;
+    const tools = await state.fetchPromise;
+    state.cache = tools;
+    state.tools.value = tools;
+    state.error.value = undefined;
   } catch (fetchError) {
-    sharedError.value = fetchError instanceof Error ? fetchError.message : "Failed to load tools";
+    state.error.value = fetchError instanceof Error ? fetchError.message : "Failed to load tools";
   } finally {
-    sharedIsLoading.value = false;
-    moduleFetchPromise = null;
+    state.isLoading.value = false;
+    state.fetchPromise = null;
   }
 }
 
-// Eagerly start fetching tools on module load so they're ready when UI renders
-void loadTools();
+// Eagerly start fetching the live machine's tools on module load so they're ready when UI renders
+void loadTools(liveTarget());
 
+/** The tools the open session's machine offers (the live machine's outside a session). */
 export function useAvailableTools(): UseAvailableToolsResult {
+  const target = useMachineTarget();
+  const state = stateFor(target.key);
   onMounted(() => {
-    void loadTools();
+    void loadTools(target);
   });
 
   return {
-    tools: readonly(sharedTools),
-    isLoading: readonly(sharedIsLoading),
-    error: readonly(sharedError),
-    refetch: loadTools,
+    tools: readonly(state.tools),
+    isLoading: readonly(state.isLoading),
+    error: readonly(state.error),
+    refetch: () => loadTools(target),
   };
 }
 
@@ -107,8 +125,10 @@ export function getToolLabel(toolId: string, available: readonly AvailableTool[]
 }
 
 export function invalidateToolsCache(): void {
-  moduleCache = null;
-  moduleFetchPromise = null;
-  sharedTools.value = [];
-  sharedError.value = undefined;
+  for (const state of perMachine.values()) {
+    state.cache = null;
+    state.fetchPromise = null;
+    state.tools.value = [];
+    state.error.value = undefined;
+  }
 }
