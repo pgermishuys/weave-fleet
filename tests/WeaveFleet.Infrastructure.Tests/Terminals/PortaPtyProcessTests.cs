@@ -92,7 +92,7 @@ public sealed class PortaPtyProcessTests : IDisposable
         (await shell.WaitForAsync(@"BG=\d+")).ShouldBeTrue(shell.Output);
         var background = int.Parse(Regex.Match(shell.Output, @"BG=(\d+)").Groups[1].Value, CultureInfo.InvariantCulture);
         await shell.SendAsync("sleep 1002\r");
-        var foreground = await WaitForPidAsync("sleep 1002");
+        var foreground = await WaitForChildAsync(shell.Process.Pid, "sleep 1002");
 
         shell.Process.Kill();
 
@@ -180,7 +180,8 @@ public sealed class PortaPtyProcessTests : IDisposable
         }
     }
 
-    private static async Task<int> WaitForPidAsync(string commandLine)
+    /// <summary>The child of <paramref name="parent"/> running <paramref name="commandLine"/>: another test run on the machine may run the same command.</summary>
+    private static async Task<int> WaitForChildAsync(int parent, string commandLine)
     {
         var sw = Stopwatch.StartNew();
         while (sw.Elapsed < Timeout)
@@ -191,7 +192,7 @@ public sealed class PortaPtyProcessTests : IDisposable
                 try
                 {
                     var cmd = File.ReadAllText(Path.Combine(dir, "cmdline")).Replace('\0', ' ').Trim();
-                    if (cmd == commandLine) return pid;
+                    if (cmd == commandLine && ParentOf(pid) == parent) return pid;
                 }
                 catch (IOException) { }
                 catch (UnauthorizedAccessException) { }
@@ -199,6 +200,13 @@ public sealed class PortaPtyProcessTests : IDisposable
             await Task.Delay(50);
         }
         throw new TimeoutException($"No process running '{commandLine}'");
+    }
+
+    // The fourth field of /proc/<pid>/stat, after the command name in parentheses.
+    private static int ParentOf(int pid)
+    {
+        var stat = File.ReadAllText($"/proc/{pid}/stat");
+        return int.Parse(stat[(stat.LastIndexOf(')') + 2)..].Split(' ')[1], CultureInfo.InvariantCulture);
     }
 
     private static async Task<bool> WaitUntilGoneAsync(int pid)

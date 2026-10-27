@@ -427,7 +427,7 @@ public sealed class BunMachineFinderTests : IDisposable
             (good, BunCandidateStatuses.Usable),
             (old, BunCandidateStatuses.TooOld),
             (broken, BunCandidateStatuses.NotWorking),
-        ]);
+        ], string.Join("; ", found.Select(c => c.Message)));
         found[0].Version.ShouldBe("1.4.9");
     }
 
@@ -439,7 +439,7 @@ public sealed class BunMachineFinderTests : IDisposable
 
         var candidate = await new BunMachineFinder { Home = _root }.CheckAsync(good, CancellationToken.None);
 
-        candidate.Status.ShouldBe(BunCandidateStatuses.Usable);
+        candidate.Status.ShouldBe(BunCandidateStatuses.Usable, candidate.Message);
         candidate.Version.ShouldBe("1.4.9");
     }
 
