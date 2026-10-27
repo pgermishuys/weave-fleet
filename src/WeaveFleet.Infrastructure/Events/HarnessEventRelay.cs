@@ -272,6 +272,16 @@ public sealed class HarnessEventRelay : BackgroundService
             return;
         }
 
+        // Removed or replaced before we took its slot: OnInstanceRemoved found nothing to cancel, so a pump started now
+        // would follow a harness Fleet has let go of, and hold the slot its next instance needs. Checked after the slot
+        // is taken, so a removal that lands later still finds this pump and cancels it.
+        if (!ReferenceEquals(_tracker.Get(instanceId), instance))
+        {
+            if (_subscriptions.TryRemove(new KeyValuePair<string, CancellationTokenSource>(instanceId, cts)))
+                cts.Dispose();
+            return;
+        }
+
         var startedAt = Stopwatch.GetTimestamp();
         var task = Task.Run(() => PumpAsync(instanceId, instance, cts.Token), cts.Token);
         _pumpTasks.TryAdd(instanceId, task);
@@ -315,10 +325,7 @@ public sealed class HarnessEventRelay : BackgroundService
             return;
         }
 
-        // Removed or replaced while we waited: nothing of ours to restart.
-        if (!ReferenceEquals(_tracker.Get(instanceId), instance))
-            return;
-
+        // StartSubscription won't restart it if it was removed or replaced while we waited.
         StartSubscription(instanceId, instance, attempt);
     }
 

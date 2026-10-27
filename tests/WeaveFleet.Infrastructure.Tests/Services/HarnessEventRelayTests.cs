@@ -508,20 +508,76 @@ public sealed class HarnessEventRelayTests
         var tracker = new InstanceTracker();
         var publisher = new FakeEventPublisher();
         var relay = BuildRelay(tracker, broadcaster, publisher, activityTracker, scopeFactory);
-        relay.PumpRestartDelay = TimeSpan.FromMilliseconds(200);
+        relay.PumpRestartDelay = TimeSpan.FromMilliseconds(20);
         sessionRepo.Seed(new Session { Id = "fleet-gone", InstanceId = "instance-gone", UserId = "u" });
 
         using var cts = new CancellationTokenSource(TimeSpan.FromSeconds(10));
         await relay.StartAsync(cts.Token);
 
+        // Removed as its subscription fails, so the removal comes before the restart however slow the machine is.
+        // Removing it after seeing the failure raced the restart delay and lost on a loaded CI runner.
         var instance = new FakeHarnessSession("instance-gone") { FailingSubscriptions = 1 };
+        instance.SubscribeBehavior = () => tracker.Remove("instance-gone");
         tracker.Register("instance-gone", instance);
         await WaitUntilAsync(() => Task.FromResult(instance.SubscriptionCount == 1), cts.Token);
-        tracker.Remove("instance-gone");
 
         await Task.Delay(600, cts.Token);
 
         instance.SubscriptionCount.ShouldBe(1);
+
+        await cts.CancelAsync();
+        await relay.StopAsync(CancellationToken.None);
+    }
+
+    // A removal that lands between the harness being registered and the relay taking its pump slot found no pump to
+    // cancel, so the relay then pumped a harness Fleet had let go of and kept the slot, leaving the next instance with
+    // that id deaf.
+    [Fact]
+    public async Task Instance_removed_before_its_pump_starts_gets_no_pump()
+    {
+        var (broadcaster, sessionRepo, scopeFactory, activityTracker) = BuildDependencies();
+        var tracker = new InstanceTracker();
+        var publisher = new FakeEventPublisher();
+        var relay = BuildRelay(tracker, broadcaster, publisher, activityTracker, scopeFactory);
+        sessionRepo.Seed(new Session { Id = "fleet-raced", InstanceId = "instance-raced", UserId = "u" });
+        sessionRepo.Seed(new Session { Id = "fleet-probe", InstanceId = "instance-probe", UserId = "u" });
+
+        // Subscribed before the relay's handler, so it runs first: the removal lands in between.
+        void RemoveOnRegister(string id, IHarnessSession _)
+        {
+            if (id == "instance-raced")
+                tracker.Remove(id);
+        }
+
+        tracker.InstanceRegistered += RemoveOnRegister;
+
+        using var cts = new CancellationTokenSource(TimeSpan.FromSeconds(10));
+        await relay.StartAsync(cts.Token);
+
+        // The relay attaches its handlers in the background: wait until it pumps a harness.
+        var probe = new FakeHarnessSession("instance-probe");
+        tracker.Register("instance-probe", probe);
+        await WaitUntilAsync(() => Task.FromResult(probe.SubscriptionCount == 1), cts.Token);
+
+        var removed = new FakeHarnessSession("instance-raced");
+        tracker.Register("instance-raced", removed);
+        tracker.InstanceRegistered -= RemoveOnRegister;
+
+        var next = new FakeHarnessSession("instance-raced");
+        tracker.Register("instance-raced", next);
+        using var wait = CancellationTokenSource.CreateLinkedTokenSource(cts.Token);
+        wait.CancelAfter(TimeSpan.FromSeconds(5));
+        try
+        {
+            await WaitUntilAsync(() => Task.FromResult(next.SubscriptionCount == 1), wait.Token);
+        }
+        catch (OperationCanceledException)
+        {
+            // Asserted below.
+        }
+
+        next.SubscriptionCount.ShouldBe(1);
+        removed.SubscriptionCount.ShouldBe(0);
 
         await cts.CancelAsync();
         await relay.StopAsync(CancellationToken.None);

@@ -202,10 +202,15 @@ public sealed class FakeHarnessSession : IHarnessSession
 
     private int _subscriptionCount;
 
+    /// <summary>Runs as each subscription starts, before a scripted failure throws.</summary>
+    public Action? SubscribeBehavior { get; set; }
+
     public async IAsyncEnumerable<HarnessEvent> SubscribeAsync(
         [EnumeratorCancellation] CancellationToken ct = default)
     {
-        if (Interlocked.Increment(ref _subscriptionCount) <= FailingSubscriptions)
+        var count = Interlocked.Increment(ref _subscriptionCount);
+        SubscribeBehavior?.Invoke();
+        if (count <= FailingSubscriptions)
             throw new InvalidOperationException("Scripted subscription failure.");
 
         await foreach (var evt in _channel.Reader.ReadAllAsync(ct))
