@@ -22,9 +22,65 @@ concurrency:
   cancel-in-progress: true
 
 jobs:
-  # ── .NET unit / integration tests ────────────────────────────────────────
-  test:
-    name: .NET Tests
+  # ── .NET unit tests ──────────────────────────────────────────────────────
+  # The one build that runs every analyzer (code style, trimming), so those problems still fail CI. The other
+  # .NET jobs build with -p:RunAnalyzers=false.
+  unit:
+    name: .NET Unit Tests
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          lfs: true
+
+      - name: Setup .NET
+        uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: '10.0.x'
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+
+      - name: Build solution
+        run: dotnet build WeaveFleet.slnx --configuration Release -p:SkipFrontendBuild=true
+
+      # The live IntegrationTests run in the Live job; this keeps the E2E project's non-E2E test (WebPushTests,
+      # Category=PushE2E) here. `--logger trx` gives each test project its own results file.
+      - name: Run .NET unit tests
+        run: >
+          dotnet test WeaveFleet.slnx
+          --configuration Release
+          --filter "Category!=E2E&Category!=HarnessSmoke&Category!=ModHostLive&FullyQualifiedName!~WeaveFleet.IntegrationTests."
+          --logger trx
+          --results-directory test-results/
+          --no-build
+          -p:SkipFrontendBuild=true
+
+      - name: Upload test results
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: dotnet-unit-test-results-${{ github.run_id }}
+          path: test-results/
+          retention-days: 7
+          if-no-files-found: ignore
+
+      - name: Report unit test results
+        if: success() || failure()
+        uses: dorny/test-reporter@v1
+        with:
+          name: Unit Test Results
+          path: test-results/**/*.trx
+          reporter: dotnet-trx
+
+  # ── .NET live tests (real OpenCode / OpenCode 2) ─────────────────────────
+  live:
+    name: .NET Live Tests
     runs-on: ubuntu-latest
     timeout-minutes: 20
     env:
@@ -106,15 +162,18 @@ jobs:
           opencode --version | grep -qF "$OPENCODE_VERSION" || { echo "::error::opencode on PATH isn't OpenCode $OPENCODE_VERSION."; exit 1; }
           "$opencode2" --version | grep -qF "$OPENCODE2_VERSION" || { echo "::error::The separate OpenCode 2 isn't $OPENCODE2_VERSION."; exit 1; }
 
-      - name: Build solution
-        run: dotnet build WeaveFleet.slnx --configuration Release -p:SkipFrontendBuild=true
+      # Builds only what this job runs, without analyzers (the Unit job already runs them).
+      - name: Build live tests
+        run: |
+          dotnet build tests/WeaveFleet.IntegrationTests --configuration Release -p:SkipFrontendBuild=true -p:RunAnalyzers=false
+          dotnet build tests/WeaveFleet.ConformanceTests --configuration Release -p:SkipFrontendBuild=true -p:RunAnalyzers=false
 
-      - name: Run .NET tests
+      - name: Run live tests
         run: >
-          dotnet test WeaveFleet.slnx
+          dotnet test tests/WeaveFleet.IntegrationTests
           --configuration Release
           --filter "Category!=E2E&Category!=HarnessSmoke&Category!=ModHostLive"
-          --logger "trx;LogFileName=test-results.trx"
+          --logger trx
           --results-directory test-results/
           --no-build
           -p:SkipFrontendBuild=true
@@ -137,16 +196,16 @@ jobs:
         if: always()
         uses: actions/upload-artifact@v4
         with:
-          name: dotnet-test-results-${{ github.run_id }}
+          name: dotnet-live-test-results-${{ github.run_id }}
           path: test-results/
           retention-days: 7
           if-no-files-found: ignore
 
-      - name: Report .NET test results
+      - name: Report live test results
         if: success() || failure()
         uses: dorny/test-reporter@v1
         with:
-          name: .NET Test Results
+          name: Live Test Results
           path: test-results/**/*.trx
           reporter: dotnet-trx
 
@@ -343,7 +402,8 @@ jobs:
 
   # The mod store opens and stats every file of a mod natively (SafeFile: open with O_NONBLOCK | O_NOFOLLOW, then
   # fstat), and the open flags differ by OS and CPU. The other .NET tests run on Linux x64 only, so these few run on
-  # each other Unix Fleet's code has a path for. macos-13 is retired; macos-15-intel is GitHub's x64 macOS image.
+  # each other Unix Fleet's code has a path for. Fleet ships macOS for Apple silicon only (osx-arm64 in release.yml),
+  # so Intel Mac isn't tested.
   mods-file-safety:
     name: Mod file safety (${{ matrix.runs_on }})
     runs-on: ${{ matrix.runs_on }}
@@ -351,7 +411,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        runs_on: [macos-latest, macos-15-intel, ubuntu-24.04-arm]
+        runs_on: [macos-latest, ubuntu-24.04-arm]
 
     steps:
       - name: Checkout
@@ -466,8 +526,9 @@ jobs:
           key: nuget-${{ runner.os }}-${{ hashFiles('**/*.csproj', 'Directory.Packages.props') }}
           restore-keys: nuget-${{ runner.os }}-
 
+      # The Unit job runs the analyzers.
       - name: Build E2E tests
-        run: dotnet build tests/WeaveFleet.E2E --configuration Release
+        run: dotnet build tests/WeaveFleet.E2E --configuration Release -p:RunAnalyzers=false
 
       - name: Get installed Playwright version
         shell: pwsh
@@ -574,12 +635,15 @@ jobs:
           test -s dist/host.js
         working-directory: mods/host
 
+      # The Unit job runs the analyzers; ILC still fails the publish on trim and AOT warnings
+      # (IlcTreatWarningsAsErrors follows TreatWarningsAsErrors).
       - name: AOT publish (linux-x64)
         run: |
           dotnet publish src/WeaveFleet.Api/WeaveFleet.Api.csproj \
             --configuration Release \
             --runtime linux-x64 \
             --output artifacts/publish/linux-x64 \
+            -p:RunAnalyzers=false \
             -p:SkipFrontendBuild=true
 
       - name: Check the publish output and package have the mod host
