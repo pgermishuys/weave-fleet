@@ -6,7 +6,6 @@ using WeaveFleet.Infrastructure.Mods.Host;
 namespace WeaveFleet.Infrastructure.Tests.Mods.Host;
 
 /// <summary>Starting a host process, with /bin/sh as Bun and a shell script as host.js. Unix only.</summary>
-[Collection(ProcessWide.Collection)]
 public sealed class ModHostConnectionTests : IDisposable
 {
     private const string Initialized = """{"jsonrpc":"2.0","id":1,"result":{"protocol":1,"hostVersion":"h1","bunVersion":"b1"}}""";
@@ -27,21 +26,6 @@ public sealed class ModHostConnectionTests : IDisposable
 
     private Task<IModHostConnection> StartAsync(string script)
         => _factory.StartAsync(Launch(script), new Calls(), CancellationToken.None);
-
-    [Fact]
-    public async Task Starts_with_an_empty_environment_in_the_working_folder_and_reads_initialize()
-    {
-        if (OperatingSystem.IsWindows())
-            return;
-        Environment.SetEnvironmentVariable("FLEET_SECRET_FOR_TEST", "secret");
-        var env = Path.Combine(_root, "env.txt");
-
-        await using var connection = await StartAsync($"env > '{env}'; pwd > '{env}.pwd'\nread line\necho '{Initialized}'\nread rest");
-
-        connection.Host.ShouldBe(new ModHostInitializeResult(1, "h1", "b1"));
-        File.ReadAllText(env).ShouldNotContain("FLEET_SECRET_FOR_TEST");
-        Path.GetFileName(File.ReadAllText(env + ".pwd").Trim()).ShouldBe("work");
-    }
 
     [Fact]
     public async Task Another_protocol_is_refused_and_the_process_is_gone()
@@ -109,6 +93,37 @@ public sealed class ModHostConnectionTests : IDisposable
 
         public void HandleNotification(string method, JsonElement parameters)
         {
+        }
+    }
+
+    /// <summary>Sets an environment variable, which every process the other tests start would inherit.</summary>
+    [Collection(ProcessWide.Collection)]
+    public sealed class WithFleetSettings : IDisposable
+    {
+        private readonly ModHostConnectionTests _t = new();
+
+        public void Dispose() => _t.Dispose();
+
+        [Fact]
+        public async Task Starts_with_an_empty_environment_in_the_working_folder_and_reads_initialize()
+        {
+            if (OperatingSystem.IsWindows())
+                return;
+            Environment.SetEnvironmentVariable("FLEET_SECRET_FOR_TEST", "secret");
+            try
+            {
+                var env = Path.Combine(_t._root, "env.txt");
+
+                await using var connection = await _t.StartAsync($"env > '{env}'; pwd > '{env}.pwd'\nread line\necho '{Initialized}'\nread rest");
+
+                connection.Host.ShouldBe(new ModHostInitializeResult(1, "h1", "b1"));
+                File.ReadAllText(env).ShouldNotContain("FLEET_SECRET_FOR_TEST");
+                Path.GetFileName(File.ReadAllText(env + ".pwd").Trim()).ShouldBe("work");
+            }
+            finally
+            {
+                Environment.SetEnvironmentVariable("FLEET_SECRET_FOR_TEST", null);
+            }
         }
     }
 }

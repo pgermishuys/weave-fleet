@@ -9,7 +9,6 @@ using WeaveFleet.Infrastructure.Runtimes;
 
 namespace WeaveFleet.Infrastructure.Tests.Runtimes;
 
-[Collection(ProcessWide.Collection)]
 public sealed class BunRuntimeInstallerTests : IDisposable
 {
     private static string Script(string version) => $"#!/bin/sh\necho {version}\n";
@@ -328,31 +327,6 @@ public sealed class BunRuntimeInstallerTests : IDisposable
         result.Error.Description.ShouldBe($"Fleet:Harness:BunPath is {missing}, which doesn't exist.");
         _server.Requests.ShouldBeEmpty();
         installer.Job.ShouldBeNull();
-    }
-
-    [Fact]
-    public async Task Never_looks_on_path_in_any_build_so_it_installs()
-    {
-        var release = Publish();
-        var onPath = Path.Combine(_home, "path-bin");
-        Directory.CreateDirectory(onPath);
-        await File.WriteAllTextAsync(Path.Combine(onPath, "bun"), Script("1.4.9"));
-        var probed = 0;
-        var installer = NewInstaller(release, "linux-x64", probe: (_, _) => { probed++; return Task.FromResult(new BunProbeResult(BunVersion.Parse("1.4.9"), null)); });
-        var path = Environment.GetEnvironmentVariable("PATH");
-        Environment.SetEnvironmentVariable("PATH", onPath + Path.PathSeparator + path);
-        try
-        {
-            (await installer.FindAsync(release, CancellationToken.None)).ShouldBeNull();
-            var result = await installer.EnsureAsync(release, null, CancellationToken.None);
-
-            result.Value.Source.ShouldBe(BunSources.Installed);
-            probed.ShouldBe(0);
-        }
-        finally
-        {
-            Environment.SetEnvironmentVariable("PATH", path);
-        }
     }
 
     [Fact]
@@ -1333,5 +1307,39 @@ public sealed class BunRuntimeInstallerTests : IDisposable
     private sealed class SyncProgress(Action<BunInstallJob> report) : IProgress<BunInstallJob>
     {
         public void Report(BunInstallJob value) => report(value);
+    }
+
+    /// <summary>Changes PATH, which every process the other tests start would inherit.</summary>
+    [Collection(ProcessWide.Collection)]
+    public sealed class WithChangedPath : IDisposable
+    {
+        private readonly BunRuntimeInstallerTests _t = new();
+
+        public void Dispose() => _t.Dispose();
+
+        [Fact]
+        public async Task Never_looks_on_path_in_any_build_so_it_installs()
+        {
+            var release = _t.Publish();
+            var onPath = Path.Combine(_t._home, "path-bin");
+            Directory.CreateDirectory(onPath);
+            await File.WriteAllTextAsync(Path.Combine(onPath, "bun"), Script("1.4.9"));
+            var probed = 0;
+            var installer = _t.NewInstaller(release, "linux-x64", probe: (_, _) => { probed++; return Task.FromResult(new BunProbeResult(BunVersion.Parse("1.4.9"), null)); });
+            var path = Environment.GetEnvironmentVariable("PATH");
+            Environment.SetEnvironmentVariable("PATH", onPath + Path.PathSeparator + path);
+            try
+            {
+                (await installer.FindAsync(release, CancellationToken.None)).ShouldBeNull();
+                var result = await installer.EnsureAsync(release, null, CancellationToken.None);
+
+                result.Value.Source.ShouldBe(BunSources.Installed);
+                probed.ShouldBe(0);
+            }
+            finally
+            {
+                Environment.SetEnvironmentVariable("PATH", path);
+            }
+        }
     }
 }

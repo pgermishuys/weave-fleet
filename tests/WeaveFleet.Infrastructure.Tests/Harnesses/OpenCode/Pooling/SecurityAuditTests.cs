@@ -23,73 +23,8 @@ using WeaveFleet.Testing.Fakes.Repositories;
 
 namespace WeaveFleet.Infrastructure.Tests.Harnesses.OpenCode.Pooling;
 
-[Collection(ProcessWide.Collection)]
 public sealed class SecurityAuditTests
 {
-    [Fact]
-    public async Task sse_event_without_parseable_session_id_is_dropped_never_forwarded_and_increments_metric()
-    {
-        var instance = CreateInstance();
-        var resolver = new StaticBindingResolver();
-        var streamFactory = new FakeStreamFactory();
-        using var listener = new SseDropMetricListener();
-        listener.Start();
-        await using var demultiplexer = new SseEventDemultiplexer(
-            resolver,
-            streamFactory,
-            NullLogger<SseEventDemultiplexer>.Instance,
-            TimeSpan.Zero,
-            TimeSpan.Zero);
-        var consumerId = Guid.NewGuid();
-        var consumer = Channel.CreateUnbounded<OpenCodeSseEvent>();
-        await using var registration = await demultiplexer.RegisterConsumerAsync(
-            instance,
-            "/repo/one",
-            consumerId,
-            consumer,
-            CancellationToken.None);
-        var stream = await streamFactory.WaitForSubscriptionAsync(instance, "/repo/one", 1);
-
-        await stream.WriteAsync(CreateEventWithNumericSessionId());
-
-        await WaitForDroppedCountAsync(demultiplexer, 1);
-        await listener.WaitForCounterAtLeastAsync(1);
-        demultiplexer.DroppedUnattributableEventCount.ShouldBe(1);
-        await AssertNoEventAsync(consumer);
-    }
-
-    [Fact]
-    public async Task sse_event_without_bound_session_id_is_dropped_never_forwarded_and_increments_metric()
-    {
-        var instance = CreateInstance();
-        var resolver = new StaticBindingResolver();
-        var streamFactory = new FakeStreamFactory();
-        using var listener = new SseDropMetricListener();
-        listener.Start();
-        await using var demultiplexer = new SseEventDemultiplexer(
-            resolver,
-            streamFactory,
-            NullLogger<SseEventDemultiplexer>.Instance,
-            TimeSpan.Zero,
-            TimeSpan.Zero);
-        var consumerId = Guid.NewGuid();
-        var consumer = Channel.CreateUnbounded<OpenCodeSseEvent>();
-        await using var registration = await demultiplexer.RegisterConsumerAsync(
-            instance,
-            "/repo/one",
-            consumerId,
-            consumer,
-            CancellationToken.None);
-        var stream = await streamFactory.WaitForSubscriptionAsync(instance, "/repo/one", 1);
-
-        await stream.WriteAsync(CreateEvent("message.updated", "oc-session-unbound"));
-
-        await WaitForDroppedCountAsync(demultiplexer, 1);
-        await listener.WaitForCounterAtLeastAsync(1);
-        demultiplexer.DroppedUnattributableEventCount.ShouldBe(1);
-        await AssertNoEventAsync(consumer);
-    }
-
     [Fact]
     public async Task double_lease_release_is_idempotent_and_does_not_underflow_ref_count()
     {
@@ -722,6 +657,75 @@ public sealed class SecurityAuditTests
         public void Dispose()
         {
             _listener.Dispose();
+        }
+    }
+
+    /// <summary>Listens to Fleet's static meter, which records every test's measurements, not just this one's.</summary>
+    [Collection(ProcessWide.Collection)]
+    public sealed class WithMeterListener
+    {
+        [Fact]
+        public async Task sse_event_without_parseable_session_id_is_dropped_never_forwarded_and_increments_metric()
+        {
+            var instance = CreateInstance();
+            var resolver = new StaticBindingResolver();
+            var streamFactory = new FakeStreamFactory();
+            using var listener = new SseDropMetricListener();
+            listener.Start();
+            await using var demultiplexer = new SseEventDemultiplexer(
+                resolver,
+                streamFactory,
+                NullLogger<SseEventDemultiplexer>.Instance,
+                TimeSpan.Zero,
+                TimeSpan.Zero);
+            var consumerId = Guid.NewGuid();
+            var consumer = Channel.CreateUnbounded<OpenCodeSseEvent>();
+            await using var registration = await demultiplexer.RegisterConsumerAsync(
+                instance,
+                "/repo/one",
+                consumerId,
+                consumer,
+                CancellationToken.None);
+            var stream = await streamFactory.WaitForSubscriptionAsync(instance, "/repo/one", 1);
+
+            await stream.WriteAsync(CreateEventWithNumericSessionId());
+
+            await WaitForDroppedCountAsync(demultiplexer, 1);
+            await listener.WaitForCounterAtLeastAsync(1);
+            demultiplexer.DroppedUnattributableEventCount.ShouldBe(1);
+            await AssertNoEventAsync(consumer);
+        }
+
+        [Fact]
+        public async Task sse_event_without_bound_session_id_is_dropped_never_forwarded_and_increments_metric()
+        {
+            var instance = CreateInstance();
+            var resolver = new StaticBindingResolver();
+            var streamFactory = new FakeStreamFactory();
+            using var listener = new SseDropMetricListener();
+            listener.Start();
+            await using var demultiplexer = new SseEventDemultiplexer(
+                resolver,
+                streamFactory,
+                NullLogger<SseEventDemultiplexer>.Instance,
+                TimeSpan.Zero,
+                TimeSpan.Zero);
+            var consumerId = Guid.NewGuid();
+            var consumer = Channel.CreateUnbounded<OpenCodeSseEvent>();
+            await using var registration = await demultiplexer.RegisterConsumerAsync(
+                instance,
+                "/repo/one",
+                consumerId,
+                consumer,
+                CancellationToken.None);
+            var stream = await streamFactory.WaitForSubscriptionAsync(instance, "/repo/one", 1);
+
+            await stream.WriteAsync(CreateEvent("message.updated", "oc-session-unbound"));
+
+            await WaitForDroppedCountAsync(demultiplexer, 1);
+            await listener.WaitForCounterAtLeastAsync(1);
+            demultiplexer.DroppedUnattributableEventCount.ShouldBe(1);
+            await AssertNoEventAsync(consumer);
         }
     }
 }

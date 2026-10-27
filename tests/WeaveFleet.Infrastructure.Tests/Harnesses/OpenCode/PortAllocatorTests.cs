@@ -5,7 +5,6 @@ using WeaveFleet.Infrastructure.Harnesses.OpenCode;
 
 namespace WeaveFleet.Infrastructure.Tests.Harnesses.OpenCode;
 
-[Collection(ProcessWide.Collection)]
 public sealed class PortAllocatorTests
 {
     [Fact]
@@ -136,21 +135,6 @@ public sealed class PortAllocatorTests
         allocator.UtilizationRatio.ShouldBe(0.25);
     }
 
-    [Fact]
-    public void utilization_metric_reports_allocated_port_fraction()
-    {
-        using var listener = new TestMeterListener();
-        listener.Start();
-        var allocator = new PortAllocator(72000, 72003);
-
-        allocator.AllocatePort();
-        allocator.AllocatePort();
-
-        listener.RecordObservableInstruments();
-
-        listener.GetObservableValues().ShouldContain(0.5);
-    }
-
     private sealed class TestMeterListener : IDisposable
     {
         private readonly MeterListener _listener = new();
@@ -191,6 +175,26 @@ public sealed class PortAllocatorTests
         public void Dispose()
         {
             _listener.Dispose();
+        }
+    }
+
+    /// <summary>Listens to Fleet's static meter, which records every test's measurements, not just this one's.</summary>
+    [Collection(ProcessWide.Collection)]
+    public sealed class WithMeterListener
+    {
+        [Fact]
+        public void utilization_metric_reports_allocated_port_fraction()
+        {
+            using var listener = new TestMeterListener();
+            listener.Start();
+            var allocator = new PortAllocator(72000, 72003);
+
+            allocator.AllocatePort();
+            allocator.AllocatePort();
+
+            listener.RecordObservableInstruments();
+
+            listener.GetObservableValues().ShouldContain(0.5);
         }
     }
 }
