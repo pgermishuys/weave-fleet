@@ -94,8 +94,13 @@ internal static class GitCommand
         foreach (var arg in args)
             start.ArgumentList.Add(arg);
 
-        // Never wait on a credential prompt nobody can see.
+        // Never wait on a credential prompt nobody can see. Git tries a graphical askpass program before it reads
+        // GIT_TERMINAL_PROMPT, so those are switched off too (an empty GIT_ASKPASS also skips core.askPass and
+        // SSH_ASKPASS); stored credentials and credential helpers still work.
         start.Environment["GIT_TERMINAL_PROMPT"] = "0";
+        start.Environment["GIT_ASKPASS"] = "";
+        start.Environment["SSH_ASKPASS_REQUIRE"] = "never";
+        start.Environment["GCM_INTERACTIVE"] = "never";
         foreach (var (key, value) in environment ?? new Dictionary<string, string>())
             start.Environment[key] = value;
 

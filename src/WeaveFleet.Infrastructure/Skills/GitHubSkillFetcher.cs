@@ -407,14 +407,12 @@ public sealed partial class GitHubSkillFetcher(ILogger<GitHubSkillFetcher> logge
         string? workingDirectory,
         CancellationToken cancellationToken)
     {
-        // Credential Manager's sign-in window would wait for someone who isn't there; the fetch fails with an auth
-        // error instead (GIT_TERMINAL_PROMPT is off for every git Fleet runs).
-        var environment = new Dictionary<string, string> { ["GCM_INTERACTIVE"] = "never" };
-
+        // The fetch fails with an auth error instead of waiting for a sign-in nobody can see
+        // (GitCommand turns every git prompt off).
         try
         {
             var result = await GitCommand.ExecAsync(workingDirectory ?? Environment.CurrentDirectory, args, GitTimeout,
-                cancellationToken, environment).ConfigureAwait(false);
+                cancellationToken).ConfigureAwait(false);
             var output = result.StandardOutput;
             var error = result.StandardError;
             var exitCode = result.ExitCode;
