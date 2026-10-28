@@ -405,12 +405,15 @@ export function applyPartUpdate(
 
     if (part.type === "tool") {
       const existingPart = msg.parts.find(
-        (p): p is AccumulatedToolPart => p.type === "tool" && p.partId === part.id,
+        (p): p is AccumulatedToolPart =>
+          p.type === "tool" && (p.partId === part.id || (!!part.callID && p.callId === part.callID)),
       );
       const existingState = (existingPart?.state ?? {}) as Record<string, unknown>;
       const incomingState = (part.state ?? {}) as Record<string, unknown>;
+      // A harness can name one call's part twice (Pi: streamed as content-N, run as tool-<callId>); the call id
+      // says it's the same row, so it keeps the part id it already has.
       const newPart: AccumulatedToolPart = {
-        partId: part.id,
+        partId: existingPart?.partId ?? part.id,
         type: "tool",
         tool: part.tool ?? "",
         callId: part.callID ?? "",
@@ -421,7 +424,7 @@ export function applyPartUpdate(
       if (existingPart) {
         return {
           ...msg,
-          parts: msg.parts.map((p) => (p.partId === part.id ? newPart : p)),
+          parts: msg.parts.map((p) => (p === existingPart ? newPart : p)),
         };
       }
       return { ...msg, parts: [...msg.parts, newPart] };
