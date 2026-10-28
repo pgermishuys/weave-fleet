@@ -53,6 +53,7 @@ for i in 1 2; do
   scheme=$([ "$i" = 1 ] && echo light || echo dark)
   appearance "$scheme"
   sleep 3
+  ready
   # No clearState: the second walk relaunches the paired app in the other scheme. A walk that fails before its first
   # screenshot sent nothing yet, so it can run again as it is.
   dir="$OUT/$PLATFORM-$scheme"
@@ -60,6 +61,7 @@ for i in 1 2; do
     if [ -z "$(find "$dir" -name '*.png' 2>/dev/null)" ]; then
       echo "walk $scheme failed before it started; once more"
       sleep 5
+      ready
       maestro_run -e RUN=$i --test-output-dir "$dir" flows/walk.yaml || FAILED=1
     else
       FAILED=1
