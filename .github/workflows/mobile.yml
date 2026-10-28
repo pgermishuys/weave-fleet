@@ -1,0 +1,288 @@
+# Fleet's phone app (mobile/): checks, an Android and an iOS build walked through with Maestro against a scratch
+# Fleet (screenshots in light and dark as artifacts), and over-the-air updates to EAS from main.
+name: Mobile
+
+on:
+  pull_request:
+    paths:
+      - 'mobile/**'
+      - 'client/src/lib/**'
+      - 'client/src/components/session/activity-stream-tool-card*'
+      - 'client/src/assets/main.css'
+      - '.github/workflows/mobile.yml'
+  push:
+    branches: [main, 'mobile/**']
+    paths:
+      - 'mobile/**'
+      - 'client/src/lib/**'
+      - 'client/src/components/session/activity-stream-tool-card*'
+      - 'client/src/assets/main.css'
+      - '.github/workflows/mobile.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: mobile-${{ github.ref }}
+  cancel-in-progress: true
+
+env:
+  # Same pin as ci.yml; bump both together.
+  OPENCODE_VERSION: '1.18.31'
+  DOTNET_CLI_TELEMETRY_OPTOUT: 1
+  MAESTRO_CLI_NO_ANALYTICS: 1
+
+jobs:
+  check:
+    name: Check
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: 'npm'
+          cache-dependency-path: client/package-lock.json
+      - uses: oven-sh/setup-bun@v2
+      - run: corepack enable
+      # The app type-checks and runs the web client's lib files, so it needs the client's modules.
+      - name: Client dependencies
+        run: corepack npm ci
+        working-directory: client
+      - name: App dependencies
+        run: bun install --frozen-lockfile
+        working-directory: mobile
+      - name: Tokens match the web client
+        run: bun run tokens:check
+        working-directory: mobile
+      - name: Typecheck
+        run: bunx tsc --noEmit
+        working-directory: mobile
+      - name: Tests
+        run: bun test src
+        working-directory: mobile
+
+  android:
+    name: Android walk-through
+    needs: check
+    # Pull requests and main walk the app; a push to a mobile/** branch only checks and publishes the update (its pull
+    # request walks it), so the macOS minutes aren't spent twice.
+    if: github.event_name != 'push' || github.ref == 'refs/heads/main'
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+    env:
+      FLEET_E2E: '1'
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - uses: oven-sh/setup-bun@v2
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '17'
+      - uses: gradle/actions/setup-gradle@v4
+      - uses: actions/setup-dotnet@v4
+        with:
+          global-json-file: global.json
+
+      - name: App dependencies
+        run: bun install --frozen-lockfile
+        working-directory: mobile
+      # FLEET_E2E=1 adds the cleartext-to-localhost network config; no other build can talk plain http.
+      - name: Generate the Android project
+        run: CI=1 bunx expo prebuild -p android
+        working-directory: mobile
+      # Release bundles the JS and Expo's template signs it with the debug key. x86_64 only: it's what the emulator runs.
+      # The Gradle and Kotlin daemons hold gigabytes the emulator and Maestro need for the walk: stop them after.
+      - name: Build the APK
+        run: |
+          ./gradlew assembleRelease -PreactNativeArchitectures=x86_64 --console=plain
+          ./gradlew --stop
+        working-directory: mobile/android
+
+      - name: Install OpenCode
+        run: |
+          for attempt in 1 2 3 4; do
+            curl -fsSL https://opencode.ai/install | bash -s -- --version "$OPENCODE_VERSION" --no-modify-path && break
+            if [ "$attempt" -eq 4 ]; then echo "OpenCode install failed"; exit 1; fi
+            sleep $((attempt * 10))
+          done
+          echo "$HOME/.opencode/bin" >> "$GITHUB_PATH"
+      - name: Build Fleet
+        run: |
+          dotnet build src/WeaveFleet.Api -c Debug -p:SkipFrontendBuild=true
+          dotnet build-server shutdown
+      - name: Start a scratch Fleet
+        run: FLEET_E2E_DIR="$RUNNER_TEMP/fleet-e2e" bash mobile/e2e/start-fleet.sh
+      - name: Install Maestro
+        run: |
+          curl -fsSL "https://get.maestro.mobile.dev" | bash
+          echo "$HOME/.maestro/bin" >> "$GITHUB_PATH"
+
+      - name: Enable KVM
+        run: |
+          echo 'KERNEL=="kvm", GROUP="kvm", MODE="0666", OPTIONS+="static_node=kvm"' | sudo tee /etc/udev/rules.d/99-kvm4all.rules
+          sudo udevadm control --reload-rules
+          sudo udevadm trigger --name-match=kvm
+
+      - name: Walk through the app
+        uses: reactivecircus/android-emulator-runner@v2
+        with:
+          api-level: 35
+          target: google_apis
+          arch: x86_64
+          profile: pixel_6
+          disable-animations: true
+          script: |
+            adb reverse tcp:5431 tcp:5431
+            adb install -r mobile/android/app/build/outputs/apk/release/app-release.apk
+            bash mobile/e2e/walk-all.sh android "$RUNNER_TEMP/shots"
+
+      - name: Shots in the summary
+        if: always()
+        run: |
+          { echo "### Android screenshots"; find "$RUNNER_TEMP/shots" -name "*.png" 2>/dev/null | sed "s|$RUNNER_TEMP/shots/||" | sort | sed 's/^/- /'; } >> "$GITHUB_STEP_SUMMARY"
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: mobile-android-shots
+          path: |
+            ${{ runner.temp }}/shots
+            ${{ runner.temp }}/fleet-e2e/*.log
+          if-no-files-found: warn
+
+  ios:
+    name: iOS walk-through
+    needs: check
+    # Pull requests and main walk the app; a push to a mobile/** branch only checks and publishes the update (its pull
+    # request walks it), so the macOS minutes aren't spent twice.
+    if: github.event_name != 'push' || github.ref == 'refs/heads/main'
+    runs-on: macos-26
+    timeout-minutes: 90
+    env:
+      FLEET_E2E: '1'
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - uses: oven-sh/setup-bun@v2
+      - uses: actions/setup-dotnet@v4
+        with:
+          global-json-file: global.json
+
+      - name: App dependencies
+        run: bun install --frozen-lockfile
+        working-directory: mobile
+      - uses: actions/cache@v4
+        with:
+          path: |
+            ~/Library/Caches/CocoaPods
+            ~/.cocoapods
+          key: pods-${{ runner.os }}-${{ hashFiles('mobile/bun.lock') }}
+          restore-keys: pods-${{ runner.os }}-
+      # SDK 58 links precompiled React Native and Expo modules by default (no expo-build-properties needed), which
+      # is what the spike's 36 minute build lacked.
+      - name: Generate the iOS project
+        run: CI=1 bunx expo prebuild -p ios
+        working-directory: mobile
+
+      - name: Boot a simulator
+        run: |
+          UDID=$(xcrun simctl list devices available -j | python3 -c "import json,sys; d=json.load(sys.stdin)['devices']; c=[x for k,v in d.items() if 'iOS' in k for x in v if x['name'].startswith('iPhone') and x['name'].endswith('Pro')]; print(c[-1]['udid'])")
+          xcrun simctl boot "$UDID"
+          xcrun simctl bootstatus "$UDID" -b
+          echo "UDID=$UDID" >> "$GITHUB_ENV"
+
+      # Release, so the JS is bundled; no signing.
+      - name: Build for the simulator
+        working-directory: mobile/ios
+        run: |
+          WS=$(ls -d *.xcworkspace | head -1); SCHEME=${WS%.xcworkspace}
+          set -o pipefail
+          xcodebuild -workspace "$WS" -scheme "$SCHEME" -configuration Release -sdk iphonesimulator \
+            -destination "id=$UDID" -derivedDataPath build CODE_SIGN_IDENTITY=- CODE_SIGNING_REQUIRED=NO build \
+            | tee "$RUNNER_TEMP/xcodebuild.log" | grep -E "error:|\*\* BUILD" || true
+          grep -q "BUILD SUCCEEDED" "$RUNNER_TEMP/xcodebuild.log"
+          echo "APP=$PWD/$(ls -d build/Build/Products/Release-iphonesimulator/*.app | head -1)" >> "$GITHUB_ENV"
+      - name: Install the app
+        run: xcrun simctl install "$UDID" "$APP"
+
+      - name: Install OpenCode
+        run: |
+          for attempt in 1 2 3 4; do
+            curl -fsSL https://opencode.ai/install | bash -s -- --version "$OPENCODE_VERSION" --no-modify-path && break
+            if [ "$attempt" -eq 4 ]; then echo "OpenCode install failed"; exit 1; fi
+            sleep $((attempt * 10))
+          done
+          echo "$HOME/.opencode/bin" >> "$GITHUB_PATH"
+      - name: Build Fleet
+        run: dotnet build src/WeaveFleet.Api -c Debug -p:SkipFrontendBuild=true
+      - name: Start a scratch Fleet
+        run: FLEET_E2E_DIR="$RUNNER_TEMP/fleet-e2e" bash mobile/e2e/start-fleet.sh
+      - name: Install Maestro
+        run: |
+          curl -fsSL "https://get.maestro.mobile.dev" | bash
+          echo "$HOME/.maestro/bin" >> "$GITHUB_PATH"
+
+      - name: Walk through the app
+        run: bash mobile/e2e/walk-all.sh ios "$RUNNER_TEMP/shots" "$UDID"
+
+      - name: Shots in the summary
+        if: always()
+        run: |
+          { echo "### iOS screenshots"; find "$RUNNER_TEMP/shots" -name "*.png" 2>/dev/null | sed "s|$RUNNER_TEMP/shots/||" | sort | sed 's/^/- /'; } >> "$GITHUB_STEP_SUMMARY"
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: mobile-ios-shots
+          path: |
+            ${{ runner.temp }}/shots
+            ${{ runner.temp }}/xcodebuild.log
+            ${{ runner.temp }}/fleet-e2e/*.log
+          if-no-files-found: warn
+
+  eas-update:
+    name: EAS update
+    needs: check
+    if: github.event_name == 'push'
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    env:
+      EXPO_TOKEN: ${{ secrets.EXPO_TOKEN }}
+    steps:
+      - name: Skip without an Expo token
+        id: gate
+        run: |
+          if [ -n "$EXPO_TOKEN" ]; then echo "go=true" >> "$GITHUB_OUTPUT"; else echo "No EXPO_TOKEN secret; skipping."; fi
+      - uses: actions/checkout@v4
+        if: steps.gate.outputs.go == 'true'
+      - uses: actions/setup-node@v4
+        if: steps.gate.outputs.go == 'true'
+        with:
+          node-version: '22'
+      - uses: oven-sh/setup-bun@v2
+        if: steps.gate.outputs.go == 'true'
+      - uses: expo/expo-github-action@v8
+        if: steps.gate.outputs.go == 'true'
+        with:
+          eas-version: latest
+          token: ${{ secrets.EXPO_TOKEN }}
+      - name: App dependencies
+        if: steps.gate.outputs.go == 'true'
+        run: bun install --frozen-lockfile
+        working-directory: mobile
+      - name: Publish
+        if: steps.gate.outputs.go == 'true'
+        working-directory: mobile
+        env:
+          SHA: ${{ github.sha }}
+        run: |
+          msg="${SHA::7} $(git log -1 --format=%s)"
+          for channel in preview development; do
+            bunx eas-cli update --channel "$channel" --message "$msg" --non-interactive
+          done

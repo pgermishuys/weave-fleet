@@ -1,0 +1,169 @@
+# Every screen of the app against the scratch Fleet, after pair.yaml. Run once per colour scheme; RUN is 1 for the
+# first and 2 for the second, so the wait for the suite's reply is for a new one, not the earlier run's.
+# maestro test -e RUN=1 --test-output-dir shots flows/walk.yaml
+appId: io.tryweave.fleet
+---
+- launchApp
+- extendedWaitUntil:
+    visible: ".*Fix pagination off-by-one.*"
+    timeout: 90000
+- takeScreenshot: 01-sessions
+
+- tapOn: ".*Fix pagination off-by-one.*"
+# It opens on the newest message: the first reply, or in the second walk the end of the first walk's long reply.
+- extendedWaitUntil:
+    visible: "(Here's the plan|That's every step, run 1).*"
+    timeout: 90000
+- takeScreenshot: 02-conversation
+
+# A command waits for approval.
+- tapOn:
+    id: "composer"
+- inputText: "run-tests please"
+- tapOn:
+    id: "send"
+- extendedWaitUntil:
+    visible: "Allow once"
+    timeout: 90000
+- takeScreenshot: 03-permission
+- tapOn: "Allow once"
+- extendedWaitUntil:
+    visible: ".*run ${RUN} of the suite.*"
+    timeout: 90000
+- takeScreenshot: 04-tool-box
+
+# An agent shows a page and waits for the pick: the docked card opens it full screen, a tap in the page picks, the bar sends.
+- tapOn:
+    id: "composer"
+- inputText: "show-page please"
+- tapOn:
+    id: "send"
+- extendedWaitUntil:
+    visible: "Pick on the page"
+    timeout: 90000
+- takeScreenshot: 05-page-pick
+- tapOn:
+    id: "page-pick-open"
+# Android's WebView reads each option as one node ("B. Paged table Twenty rows…"), so match inside it.
+- extendedWaitUntil:
+    visible: ".*Infinite scroll.*"
+    timeout: 30000
+- takeScreenshot: 06-page
+- tapOn: ".*Paged table.*"
+# Send pick is there from the start, waiting; the sentence says the page proposed a pick.
+- extendedWaitUntil:
+    visible: "You picked Paged table."
+    timeout: 30000
+- takeScreenshot: 07-page-picked
+- tapOn:
+    id: "page-choice-send"
+- extendedWaitUntil:
+    visible: ".*Going with.*run ${RUN}.*"
+    timeout: 90000
+- takeScreenshot: 08-page-sent
+
+# A reply taller than the screen. Scrolled up to an older message while it streams, the conversation stays there,
+# as the web client's does; at the newest message it follows (every wait for a reply above relies on that).
+- tapOn:
+    id: "composer"
+- inputText: "long-reply please"
+- tapOn:
+    id: "send"
+# The reply takes about 100 s: scroll up as soon as the turn starts. The swipes stay in the top of the screen, on the
+# conversation above the keyboard (Maestro's hideKeyboard fails on iOS).
+- extendedWaitUntil:
+    notVisible: "Finished.*"
+    timeout: 30000
+- repeat:
+    times: 8
+    while:
+      notVisible: "show-page please"
+    commands:
+      - swipe:
+          start: 50%, 15%
+          end: 50%, 38%
+- assertVisible: "show-page please"
+# Still streaming, or the check below proves nothing.
+- assertNotVisible: "Finished.*"
+- extendedWaitUntil:
+    visible: "Finished.*"
+    timeout: 150000
+- assertVisible: "show-page please"
+- assertNotVisible: "That's every step, run ${RUN}."
+- takeScreenshot: 08a-kept-place
+
+# A page shown since the phone last opened this session's Pages: back on the list, its row says so.
+# By id: with the keyboard up, Android's own "Back" (the keyboard's collapse key) matches the text too.
+- tapOn:
+    id: "session-back"
+- extendedWaitUntil:
+    visible: ".*Fix pagination off-by-one.*1 new page.*"
+    timeout: 30000
+- takeScreenshot: 08b-new-pages
+# Opening a session shows its newest message, with no scrolling: the end of that reply, and not its start.
+- tapOn: ".*Fix pagination off-by-one.*"
+- extendedWaitUntil:
+    visible: "That's every step, run ${RUN}."
+    timeout: 30000
+- assertNotVisible: "Every step:"
+- takeScreenshot: 08c-reopened
+
+# The Changes sheet pulls up, then shows the page under Pages, then closes; Back returns to the list.
+# The dock swaps from the permission card back to the composer as the turn ends, moving the strip; a tap that
+# lands mid-move misses, so tap until the sheet is up.
+- retry:
+    maxRetries: 3
+    commands:
+      - tapOn:
+          id: "panel-open"
+      - extendedWaitUntil:
+          visible:
+            id: "segment-pages"
+          timeout: 10000
+- takeScreenshot: 09-changes
+- tapOn:
+    id: "segment-pages"
+- extendedWaitUntil:
+    visible: "Three ways to page the results"
+    timeout: 30000
+- takeScreenshot: 10-pages
+- tapOn:
+    id: "sheet-close"
+- tapOn:
+    id: "session-back"
+- extendedWaitUntil:
+    visible: "Sessions"
+    timeout: 30000
+# Pages was opened: nothing on the row is new any more.
+- assertNotVisible: ".*Fix pagination off-by-one.*new page.*"
+
+- tapOn: "Workflows"
+- takeScreenshot: 11-workflows
+- tapOn: "Automations"
+- takeScreenshot: 12-automations
+- tapOn: "Machines"
+- extendedWaitUntil:
+    visible: "Pair another machine"
+    timeout: 30000
+- takeScreenshot: 13-machines
+- tapOn: "Sessions"
+
+# The Kit, by its deep link; iOS asks before opening the app.
+- openLink: fleet://kit
+- tapOn:
+    text: "Open"
+    optional: true
+- extendedWaitUntil:
+    visible: "Kit"
+    timeout: 30000
+- takeScreenshot: 14-kit
+- scroll
+- scroll
+- takeScreenshot: 15-kit-middle
+- scroll
+- scroll
+- takeScreenshot: 16-kit-lower
+- scroll
+- scroll
+- scroll
+- takeScreenshot: 17-kit-end
