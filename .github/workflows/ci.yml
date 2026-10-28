@@ -89,7 +89,7 @@ jobs:
     env:
       # The live tests' pinned harness versions (see the install steps). Bump here and check the live tests pass.
       OPENCODE_VERSION: '1.18.31'
-      OPENCODE2_VERSION: '2.1.4'
+      OPENCODE2_VERSION: '2.2.0'
 
     steps:
       - name: Checkout

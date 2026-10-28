@@ -190,6 +190,34 @@ public sealed class ProviderLimitReaderTests
         error.RetryAt.ShouldBe(DateTimeOffset.FromUnixTimeSeconds(1791344624));
     }
 
+    // OpenCode 2.2's session errors (packages/core/src/session/to-session-error.ts), with the messages it writes.
+    [Fact]
+    public void OpenCode_2_2_workspace_budget_limit_is_not_a_limit_a_wait_gets_past()
+        => Classify("provider.budget-limit", "Workspace usage limit reached. Model use is paused until the limit resets.", 402)
+            .Kind.ShouldBeNull();
+
+    [Fact]
+    public void OpenCode_2_2_model_budget_limit_is_not_a_limit_a_wait_gets_past()
+        => Classify("provider.model-budget-limit", "You've reached the spend limit for this model. Switch models to keep going.", 402)
+            .Kind.ShouldBeNull();
+
+    [Fact]
+    public void OpenCode_2_2_free_limit_is_a_usage_limit()
+        => Classify("provider.free-limit", "Free usage limit reached. Connect a provider or subscribe to OpenCode Go to keep going, or switch models.", 429)
+            .Kind.ShouldBe(TurnErrorKinds.UsageLimit);
+
+    [Theory]
+    [InlineData("Rate limit exceeded. Please retry after 20 seconds.")]
+    [InlineData("429 Too Many Requests: input tokens per minute limit exceeded (context window 200000 tokens)")]
+    [InlineData("Request too large for tokens per min (TPM): Limit 30000, Requested 35000")]
+    public void OpenCode_2_2_rate_limit_that_talks_about_tokens_is_a_rate_limit_not_a_context_overflow(string message)
+    {
+        var error = Classify("provider.rate-limit", message, 429);
+
+        error.Kind.ShouldBe(TurnErrorKinds.RateLimit);
+        error.Name.ShouldBe("provider.rate-limit");
+    }
+
     [Theory]
     [InlineData("6m0s", 360_000)]
     [InlineData("1.5s", 1_500)]
