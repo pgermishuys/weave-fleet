@@ -106,6 +106,63 @@ public sealed class GitCommandTests
         }
     }
 
+    [Fact]
+    public async Task Git_never_calls_a_login_program_from_the_environment()
+    {
+        if (OperatingSystem.IsWindows())
+            return;
+
+        // A server that wants a login makes git ask: git tries GIT_ASKPASS / SSH_ASKPASS before it reads GIT_TERMINAL_PROMPT.
+        var folder = Directory.CreateTempSubdirectory("fleet-askpass-").FullName;
+        var called = Path.Combine(folder, "called");
+        var askpass = Path.Combine(folder, "askpass.sh");
+        await File.WriteAllTextAsync(askpass, $"#!/bin/sh\necho asked >> '{called}'\necho secret\n");
+        File.SetUnixFileMode(askpass, UnixFileMode.UserRead | UnixFileMode.UserWrite | UnixFileMode.UserExecute);
+
+        using var listener = new System.Net.HttpListener();
+        var port = FreePort();
+        listener.Prefixes.Add($"http://127.0.0.1:{port}/");
+        listener.Start();
+        var serving = Task.Run(async () =>
+        {
+            while (listener.IsListening)
+            {
+                var context = await listener.GetContextAsync();
+                context.Response.StatusCode = 401;
+                context.Response.AddHeader("WWW-Authenticate", "Basic realm=\"fleet\"");
+                context.Response.Close();
+            }
+        });
+
+        var saved = (Environment.GetEnvironmentVariable("GIT_ASKPASS"), Environment.GetEnvironmentVariable("SSH_ASKPASS"));
+        Environment.SetEnvironmentVariable("GIT_ASKPASS", askpass);
+        Environment.SetEnvironmentVariable("SSH_ASKPASS", askpass);
+        try
+        {
+            var error = await Should.ThrowAsync<GitCommandException>(
+                GitCommand.RunAsync(folder, TimeSpan.FromSeconds(20), "ls-remote", $"http://127.0.0.1:{port}/repo.git"));
+
+            File.Exists(called).ShouldBeFalse($"git called the askpass program: {error.GitMessage}");
+        }
+        finally
+        {
+            Environment.SetEnvironmentVariable("GIT_ASKPASS", saved.Item1);
+            Environment.SetEnvironmentVariable("SSH_ASKPASS", saved.Item2);
+            listener.Stop();
+            try { await serving; } catch (Exception) { }
+            Directory.Delete(folder, recursive: true);
+        }
+    }
+
+    private static int FreePort()
+    {
+        var probe = new System.Net.Sockets.TcpListener(System.Net.IPAddress.Loopback, 0);
+        probe.Start();
+        var port = ((System.Net.IPEndPoint)probe.LocalEndpoint).Port;
+        probe.Stop();
+        return port;
+    }
+
     private static string[] Alias(string shell) => ["-c", $"alias.fleet-test=!{shell}", "fleet-test"];
 
     /// <summary>A sleep length no other process on the machine is using, so the test can find its own.</summary>
