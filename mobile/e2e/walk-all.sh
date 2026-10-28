@@ -16,9 +16,17 @@ appearance() {
     adb shell am force-stop io.tryweave.fleet
   fi
 }
+# Maestro sometimes exits mid-command with no error of its own; say how it ended, and whether the kernel killed it.
 maestro_run() {
   local args=(); [ "$PLATFORM" = ios ] && args=(--device "$UDID")
-  maestro "${args[@]}" test -e FLEET_URL="$FLEET_URL" -e PAIR_CODE="$PAIR_CODE" "${@}"
+  local code=0
+  maestro "${args[@]}" test -e FLEET_URL="$FLEET_URL" -e PAIR_CODE="$PAIR_CODE" "${@}" || code=$?
+  if [ "$code" -ne 0 ] && [ "$(uname)" = Linux ]; then
+    echo "maestro exited with $code"
+    free -m
+    sudo -n dmesg 2>/dev/null | grep -iE "out of memory|killed process" | tail -5
+  fi
+  return "$code"
 }
 
 # The emulator can drop to "device offline" for a moment just after boot, which kills Maestro's device server

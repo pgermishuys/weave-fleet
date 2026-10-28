@@ -97,8 +97,11 @@ jobs:
         run: CI=1 bunx expo prebuild -p android
         working-directory: mobile
       # Release bundles the JS and Expo's template signs it with the debug key. x86_64 only: it's what the emulator runs.
+      # The Gradle and Kotlin daemons hold gigabytes the emulator and Maestro need for the walk: stop them after.
       - name: Build the APK
-        run: ./gradlew assembleRelease -PreactNativeArchitectures=x86_64 --console=plain
+        run: |
+          ./gradlew assembleRelease -PreactNativeArchitectures=x86_64 --console=plain
+          ./gradlew --stop
         working-directory: mobile/android
 
       - name: Install OpenCode
@@ -110,7 +113,9 @@ jobs:
           done
           echo "$HOME/.opencode/bin" >> "$GITHUB_PATH"
       - name: Build Fleet
-        run: dotnet build src/WeaveFleet.Api -c Debug -p:SkipFrontendBuild=true
+        run: |
+          dotnet build src/WeaveFleet.Api -c Debug -p:SkipFrontendBuild=true
+          dotnet build-server shutdown
       - name: Start a scratch Fleet
         run: FLEET_E2E_DIR="$RUNNER_TEMP/fleet-e2e" bash mobile/e2e/start-fleet.sh
       - name: Install Maestro
