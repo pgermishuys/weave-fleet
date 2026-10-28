@@ -62,7 +62,9 @@ appId: io.tryweave.fleet
 - takeScreenshot: 08-page-sent
 
 # A page shown since the phone last opened this session's Pages: back on the list, its row says so.
-- tapOn: "Back"
+# By id: with the keyboard up, Android's own "Back" (the keyboard's collapse key) matches the text too.
+- tapOn:
+    id: "session-back"
 - extendedWaitUntil:
     visible: ".*Fix pagination off-by-one.*1 new page.*"
     timeout: 30000
@@ -93,7 +95,8 @@ appId: io.tryweave.fleet
 - takeScreenshot: 10-pages
 - tapOn:
     id: "sheet-close"
-- tapOn: "Back"
+- tapOn:
+    id: "session-back"
 - extendedWaitUntil:
     visible: "Sessions"
     timeout: 30000

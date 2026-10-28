@@ -113,7 +113,7 @@ export default function Session() {
     <KeyboardAvoidingView behavior={Platform.OS === "ios" ? "padding" : "height"} style={{ flex: 1, paddingTop: insets.top + 4, paddingBottom: insets.bottom + 6, paddingHorizontal: 6 }}>
       <Panel style={{ flex: 1 }}>
       <View style={{ flexDirection: "row", alignItems: "center", gap: 4, paddingHorizontal: 8, paddingVertical: 8 }}>
-        <Pressable accessibilityLabel="Back" hitSlop={8} onPress={() => (router.canGoBack() ? router.back() : router.replace("/"))} style={{ width: 44, height: 44, alignItems: "center", justifyContent: "center" }}>
+        <Pressable testID="session-back" accessibilityLabel="Back" hitSlop={8} onPress={() => (router.canGoBack() ? router.back() : router.replace("/"))} style={{ width: 44, height: 44, alignItems: "center", justifyContent: "center" }}>
           <Icon name="back" size={22} color={color.text} />
         </Pressable>
         <View style={{ flex: 1, gap: 2 }}>

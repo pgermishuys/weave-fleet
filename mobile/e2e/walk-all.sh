@@ -36,6 +36,8 @@ ready() {
     echo "closing \"$anr isn't responding\""
     adb shell am force-stop "$anr"
   done
+  # A device that dropped offline comes back without its adb reverse, and the app can't reach Fleet: set it up again.
+  adb reverse "tcp:${FLEET_URL##*:}" "tcp:${FLEET_URL##*:}" > /dev/null
   return 0
 }
 
