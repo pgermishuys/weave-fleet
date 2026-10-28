@@ -58,6 +58,8 @@ public sealed class SessionLineageEndpointTests : IClassFixture<SessionLineageEn
         response.StatusCode.ShouldBe(HttpStatusCode.OK, await response.Content.ReadAsStringAsync());
         var session = (await response.Content.ReadFromJsonAsync<JsonElement>()).GetProperty("session");
         session.GetProperty("spawnedBySessionId").GetString().ShouldBe("two");
+        // It goes where the session that started it is, not to Scratch.
+        session.GetProperty("projectId").GetString().ShouldBe("proj-1");
     }
 
     [Theory]
@@ -208,6 +210,8 @@ public sealed class SessionLineageEndpointTests : IClassFixture<SessionLineageEn
                 "INSERT INTO workspace_roots (id, path, user_id) VALUES ('root-1', @Path, @Owner)",
                 new { Path = folder, Owner });
             await connection.ExecuteAsync($"""
+                INSERT INTO projects (id, name, type, position, created_at, updated_at, user_id)
+                VALUES ('proj-1', 'Weave', 'user', 1, '2026-10-01', '2026-10-01', '{Owner}');
                 INSERT INTO workspaces (id, directory, display_name, created_at, user_id)
                 VALUES ('ws-1', '/ws', 'Work', '2026-10-01T00:00:00+00:00', '{Owner}');
                 INSERT INTO instances (id, port, pid, directory, url, status, created_at, user_id)
@@ -228,6 +232,7 @@ public sealed class SessionLineageEndpointTests : IClassFixture<SessionLineageEn
                         '2026-10-01T10:04:00+00:00', '{Owner}', NULL, 'root', NULL, 'fork'),
                        ('sub', 'ws-1', 'inst-1', 'ses_sub', 'Sub', 'active', '/ws', 'opencode2', 'running', 'active',
                         '2026-10-01T10:05:00+00:00', '{Owner}', 'three', NULL, NULL, NULL);
+                UPDATE sessions SET project_id = 'proj-1' WHERE id = 'two';
                 """);
         }
     }

@@ -41,8 +41,9 @@ curl -s -X POST "$FLEET_URL/api/sessions" -H 'content-type: application/json' -H
 
 `isolationStrategy` is `existing` (work in the folder as it is), `worktree` (a new git worktree) or `clone`.
 The `X-Fleet-Harness-Session` header tells Fleet this session started the new one; keep it.
-`branch`, `projectId` and `tags` are optional. If you have the `fleet_message` tool, leave out `initialPrompt`
-(Fleet refuses it from agents then) and give the new session its task with the tool.
+`branch`, `projectId` and `tags` are optional; without `projectId` the new session goes in your session's project.
+If you have the `fleet_message` tool, leave out `initialPrompt` (Fleet refuses it from agents then) and give the new
+session its task with the tool.
 Sessions started this way can start their own, three deep at most: past that Fleet answers 409 and says why.
 
 ## Start a session from a GitHub issue or pull request
