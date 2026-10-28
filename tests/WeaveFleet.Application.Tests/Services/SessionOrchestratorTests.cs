@@ -146,6 +146,32 @@ public sealed class SessionOrchestratorTests : IAsyncDisposable
         created.Payload.GetProperty("spawnedBySessionId").GetString().ShouldBe("caller-1");
     }
 
+    [Fact]
+    public async Task A_session_an_agent_started_goes_to_the_project_of_the_session_that_started_it()
+    {
+        ConfigureHarnessAndScratchProject();
+        using var tempDirectory = new TempDirectory();
+        _builder.SessionRepository.Seed(new Session
+        {
+            Id = "caller-1", WorkspaceId = "w1", InstanceId = "i1", OpencodeSessionId = "oc-caller", Title = "Orchestrator",
+            Status = "idle", Directory = tempDirectory.Path, CreatedAt = "2026-01-01T00:00:00.0000000Z",
+            ProjectId = "proj-1", UserId = "user-1",
+        });
+
+        var started = await _sut.CreateSessionAsync(new CreateSessionRequest
+        {
+            Directory = tempDirectory.Path, Title = "Worker", SpawnedBySessionId = "caller-1",
+        });
+        var named = await _sut.CreateSessionAsync(new CreateSessionRequest
+        {
+            Directory = tempDirectory.Path, Title = "Elsewhere", SpawnedBySessionId = "caller-1", ProjectId = "proj-2",
+        });
+
+        started.Value.Session.ProjectId.ShouldBe("proj-1");
+        // A project the agent names still wins.
+        named.Value.Session.ProjectId.ShouldBe("proj-2");
+    }
+
     [Theory]
     [InlineData("run-1", null, SpawnKinds.Workflow)]
     [InlineData(null, SpawnKinds.Automation, SpawnKinds.Automation)]

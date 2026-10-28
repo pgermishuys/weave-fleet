@@ -170,9 +170,11 @@ public sealed partial class SessionCreation(
 
         var launchArtifacts = ((RuntimePreparation.Ready)preparation).Artifacts;
 
-        // Resolve or default project. A workflow run's next step goes where the run's steps are.
+        // Resolve or default project. A workflow run's next step goes where the run's steps are, and a session an agent
+        // started goes where the session that started it is.
         var projectId = request.ProjectId
             ?? await ResolveWorkflowRunProjectIdAsync(request.WorkflowRunId)
+            ?? await ResolveSpawningSessionProjectIdAsync(request.SpawnedBySessionId)
             ?? await ResolveScratchProjectIdAsync();
 
         // Look up project name for analytics context (best-effort)
@@ -782,6 +784,9 @@ public sealed partial class SessionCreation(
         => workflowRunId is null
             ? null
             : (await sessionRepository.GetForWorkflowRunAsync(workflowRunId)).FirstOrDefault(s => s.ProjectId is not null)?.ProjectId;
+
+    private async Task<string?> ResolveSpawningSessionProjectIdAsync(string? spawnedBySessionId)
+        => spawnedBySessionId is null ? null : (await sessionRepository.GetByIdAsync(spawnedBySessionId))?.ProjectId;
 
     private async Task<string?> ResolveScratchProjectIdAsync()
     {

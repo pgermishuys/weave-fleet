@@ -149,7 +149,8 @@ Fleet ends what isn't in it as `lost`, matching by `workId` or by child session)
 
 **Lineage**: `forked_from_session_id` + `spawn_kind = fork` on Fork and on a kept side conversation;
 `spawned_by_session_id` + `spawn_kind = api` on `POST /api/sessions` from an agent (its `/agent/{token}` prefix)
-that names its own harness session in `X-Fleet-Harness-Session`. Both plugins put that id in the agent's shell as
+that names its own harness session in `X-Fleet-Harness-Session`; without a `projectId` it goes in the starting
+session's project, not Scratch. Both plugins put that id in the agent's shell as
 `FLEET_HARNESS_SESSION_ID` (OpenCode's `shell.env` hook; OpenCode 2's `tool execute.before` + `shell create.before`),
 and the Fleet API skill sends it. Workflow steps get `spawn_kind = workflow`, automation runs `automation`; neither
 has a starting session. `parent_session_id` still means a hidden delegated child.
