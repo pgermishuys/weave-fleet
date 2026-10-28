@@ -17,6 +17,13 @@ using WeaveFleet.Testing.Fixtures;
 
 namespace WeaveFleet.Infrastructure.Tests.Plugins.BuiltIn.GitHub;
 
+public enum GraphQlLimit
+{
+    None,
+    ErrorsInOk,
+    Forbidden,
+}
+
 /// <summary>How many requests a watcher cycle sends to GitHub.</summary>
 public sealed class SmartLinkWatcherCycleTests : IDisposable
 {
@@ -139,6 +146,31 @@ public sealed class SmartLinkWatcherCycleTests : IDisposable
         _links.All.Single().EnrichmentStatus.ShouldBe(SmartLinkEnrichmentStatuses.NotConnected);
     }
 
+    [Theory]
+    [InlineData(GraphQlLimit.ErrorsInOk)]
+    [InlineData(GraphQlLimit.Forbidden)]
+    public async Task A_spent_graphql_quota_backs_off_until_it_resets(GraphQlLimit limit)
+    {
+        _gitHub.GraphQl = limit;
+        _gitHub.GraphQlResetAt = _clock.Now.AddMinutes(30);
+        OnBranch("s1", "feature/x");
+
+        await _watcher.RunCycleAsync(CancellationToken.None);
+        _clock.Now = _clock.Now.AddMinutes(3);
+        _detector.Observe("s1", UserId, "session.status", null);
+        await _watcher.RunCycleAsync(CancellationToken.None);
+
+        _gitHub.Count("/graphql").ShouldBe(1);
+        _gitHub.Count(PullRequest7).ShouldBeGreaterThan(1); // The REST lookups carry on.
+
+        _clock.Now = _clock.Now.AddMinutes(40);
+        _gitHub.GraphQl = GraphQlLimit.None;
+        _detector.Observe("s1", UserId, "session.status", null);
+        await _watcher.RunCycleAsync(CancellationToken.None);
+
+        _gitHub.Count("/graphql").ShouldBe(2);
+    }
+
     [Fact]
     public async Task A_manual_refresh_that_finds_nothing_new_still_reports_the_check()
     {
@@ -211,6 +243,10 @@ public sealed class SmartLinkWatcherCycleTests : IDisposable
 
         public bool Unauthorized { get; set; }
 
+        public GraphQlLimit GraphQl { get; set; }
+
+        public DateTimeOffset GraphQlResetAt { get; set; }
+
         public int Count(string pathAndQuery) => _counts.GetValueOrDefault(pathAndQuery);
 
         protected override Task<HttpResponseMessage> SendAsync(HttpRequestMessage request, CancellationToken cancellationToken)
@@ -220,6 +256,22 @@ public sealed class SmartLinkWatcherCycleTests : IDisposable
 
             if (Unauthorized)
                 return Task.FromResult(new HttpResponseMessage(HttpStatusCode.Unauthorized));
+
+            if (pathAndQuery == "/graphql" && GraphQl != GraphQlLimit.None)
+            {
+                var limited = new HttpResponseMessage(GraphQl == GraphQlLimit.Forbidden ? HttpStatusCode.Forbidden : HttpStatusCode.OK)
+                {
+                    Content = new StringContent(
+                        GraphQl == GraphQlLimit.Forbidden
+                            ? "{\"message\":\"API rate limit exceeded\"}"
+                            : "{\"errors\":[{\"type\":\"RATE_LIMITED\",\"message\":\"API rate limit exceeded\"}]}",
+                        Encoding.UTF8,
+                        "application/json"),
+                };
+                limited.Headers.Add("x-ratelimit-remaining", "0");
+                limited.Headers.Add("x-ratelimit-reset", GraphQlResetAt.ToUnixTimeSeconds().ToString(CultureInfo.InvariantCulture));
+                return Task.FromResult(limited);
+            }
 
             JsonNode body = pathAndQuery switch
             {
