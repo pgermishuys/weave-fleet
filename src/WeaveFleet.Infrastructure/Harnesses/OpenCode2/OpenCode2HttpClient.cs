@@ -385,16 +385,41 @@ internal sealed partial class OpenCode2HttpClient(HttpClient http, HttpClient ev
         await EnsureSuccessAsync(response, "load the folder", ct).ConfigureAwait(false);
     }
 
+    /// <summary>How long to wait before asking again after a 503; a test shortens it.</summary>
+    internal TimeSpan RetryDelay { get; set; } = TimeSpan.FromMilliseconds(500);
+
+    private const int SettleAttempts = 12;
+
+    /// <summary>
+    /// A catalog read (agents, plugins, models, providers). 2.2 answers 503 <c>ServiceUnavailableError</c> while a
+    /// folder's plugins haven't settled, which lasts a moment on a cold server, so it's asked again a few times before
+    /// the 503 is let through.
+    /// </summary>
+    private async Task<T?> GetWhenSettledAsync<T>(string url, System.Text.Json.Serialization.Metadata.JsonTypeInfo<T> typeInfo, CancellationToken ct)
+    {
+        for (var attempt = 1; ; attempt++)
+        {
+            try
+            {
+                return await http.GetFromJsonAsync(url, typeInfo, ct).ConfigureAwait(false);
+            }
+            catch (HttpRequestException ex) when (ex.StatusCode == HttpStatusCode.ServiceUnavailable && attempt < SettleAttempts)
+            {
+                await Task.Delay(RetryDelay, ct).ConfigureAwait(false);
+            }
+        }
+    }
+
     /// <summary>The agents in <paramref name="directory"/>; load the location first.</summary>
     public async Task<IReadOnlyList<OpenCode2AgentInfo>> GetAgentsAsync(string directory, CancellationToken ct)
-        => (await http.GetFromJsonAsync(
+        => (await GetWhenSettledAsync(
             $"api/agent?{LocationQuery(directory)}",
             OpenCode2JsonContext.Default.OpenCode2EnvelopeListOpenCode2AgentInfo,
             ct).ConfigureAwait(false))?.Data ?? [];
 
     /// <summary>The plugins V2 loaded in <paramref name="directory"/>, its own built-in ones too; load the location first.</summary>
     public async Task<IReadOnlyList<OpenCode2PluginInfo>> GetPluginsAsync(string directory, CancellationToken ct)
-        => (await http.GetFromJsonAsync(
+        => (await GetWhenSettledAsync(
             $"api/plugin?{LocationQuery(directory)}",
             OpenCode2JsonContext.Default.OpenCode2EnvelopeListOpenCode2PluginInfo,
             ct).ConfigureAwait(false))?.Data ?? [];
@@ -413,20 +438,20 @@ internal sealed partial class OpenCode2HttpClient(HttpClient http, HttpClient ev
 
     /// <summary>The models in <paramref name="directory"/>, of every provider; load the location first.</summary>
     public async Task<IReadOnlyList<OpenCode2ModelInfo>> GetModelsAsync(string directory, CancellationToken ct)
-        => (await http.GetFromJsonAsync(
+        => (await GetWhenSettledAsync(
             $"api/model?{LocationQuery(directory)}",
             OpenCode2JsonContext.Default.OpenCode2EnvelopeListOpenCode2ModelInfo,
             ct).ConfigureAwait(false))?.Data ?? [];
 
     /// <summary>The model a session gets when nothing picks one (the config's <c>model</c>, else V2's choice), if any.</summary>
     public async Task<OpenCode2ModelInfo?> GetDefaultModelAsync(string directory, CancellationToken ct)
-        => (await http.GetFromJsonAsync(
+        => (await GetWhenSettledAsync(
             $"api/model/default?{LocationQuery(directory)}",
             OpenCode2JsonContext.Default.OpenCode2EnvelopeOpenCode2ModelInfo,
             ct).ConfigureAwait(false))?.Data;
 
     public async Task<IReadOnlyList<OpenCode2ProviderInfo>> GetProvidersAsync(string directory, CancellationToken ct)
-        => (await http.GetFromJsonAsync(
+        => (await GetWhenSettledAsync(
             $"api/provider?{LocationQuery(directory)}",
             OpenCode2JsonContext.Default.OpenCode2EnvelopeListOpenCode2ProviderInfo,
             ct).ConfigureAwait(false))?.Data ?? [];

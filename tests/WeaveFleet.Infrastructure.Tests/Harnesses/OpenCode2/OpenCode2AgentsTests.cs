@@ -32,6 +32,25 @@ public sealed class OpenCode2AgentsTests
     }
 
     [Fact]
+    public async Task The_catalog_waits_out_a_503_while_V2_is_still_settling_its_plugins()
+    {
+        // 2.2 answers 503 ServiceUnavailableError on /api/agent (and /api/model) until the folder's plugins have settled.
+        var agent503s = 2;
+        var api = CatalogApi(intercept: request => request.RequestUri!.AbsolutePath == "/api/agent" && Interlocked.Decrement(ref agent503s) >= 0
+            ? new HttpResponseMessage(HttpStatusCode.ServiceUnavailable)
+            {
+                Content = new StringContent("""{"_tag":"ServiceUnavailableError","message":"Plugins are still loading"}""", Encoding.UTF8, "application/json"),
+            }
+            : null);
+        await using var server = LoadingServer(api);
+        server.Client.RetryDelay = TimeSpan.FromMilliseconds(1);
+
+        var catalog = await OpenCode2Catalog.ReadAsync(server, Folder, CancellationToken.None);
+
+        catalog.Agents.ShouldNotBeEmpty();
+    }
+
+    [Fact]
     public async Task Every_catalog_request_names_the_folder()
     {
         var queries = new List<string>();
@@ -669,10 +688,13 @@ public sealed class OpenCode2AgentsTests
         _ => new HttpResponseMessage(HttpStatusCode.NoContent),
     });
 
-    private static StubHandler CatalogApi(Action<HttpRequestMessage>? seen = null, string? skills = SkillsJson) => new(request =>
+    private static StubHandler CatalogApi(
+        Action<HttpRequestMessage>? seen = null,
+        string? skills = SkillsJson,
+        Func<HttpRequestMessage, HttpResponseMessage?>? intercept = null) => new(request =>
     {
         seen?.Invoke(request);
-        return request.RequestUri!.AbsolutePath switch
+        return intercept?.Invoke(request) ?? request.RequestUri!.AbsolutePath switch
         {
             "/api/location" => Json("""{"directory":"/work/rocket","project":{"id":"p","directory":"/work/rocket","canonical":"/work/rocket"}}"""),
             "/api/agent" => Json(AgentsJson),
