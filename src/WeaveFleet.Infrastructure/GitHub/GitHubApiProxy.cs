@@ -74,9 +74,9 @@ public sealed class GitHubApiProxy(IHttpClientFactory httpClientFactory)
     private static string ConditionalCacheKey(string token, string path)
         => $"{Convert.ToHexString(SHA256.HashData(Encoding.UTF8.GetBytes(token)))[..16]}:{path}";
 
-    private static DateTimeOffset? ReadRateLimitReset(HttpResponseMessage response)
+    private static DateTimeOffset? ReadRateLimitReset(HttpResponseMessage response, bool always = false)
     {
-        if (response.StatusCode is not (HttpStatusCode.Forbidden or HttpStatusCode.TooManyRequests))
+        if (!always && response.StatusCode is not (HttpStatusCode.Forbidden or HttpStatusCode.TooManyRequests))
             return null;
 
         if (response.Headers.TryGetValues("x-ratelimit-remaining", out var remaining)
@@ -209,6 +209,18 @@ public sealed class GitHubApiProxy(IHttpClientFactory httpClientFactory)
         string query,
         JsonObject variables,
         CancellationToken ct)
+        => (await SendGraphQLAsync(token, query, variables, ct).ConfigureAwait(false)).Body;
+
+    /// <summary>
+    /// Like <see cref="PostGraphQLAsync"/>, but says when the GraphQL quota is spent: GitHub answers that with a 403 or
+    /// 429, or with a 200 whose <c>errors</c> hold a <c>RATE_LIMITED</c> entry. <see cref="GitHubApiResponse.Body"/> is
+    /// <c>null</c> on failure and on a spent quota.
+    /// </summary>
+    public async Task<GitHubApiResponse> SendGraphQLAsync(
+        string token,
+        string query,
+        JsonObject variables,
+        CancellationToken ct)
     {
         using var client = httpClientFactory.CreateClient();
         client.DefaultRequestHeaders.Authorization = new AuthenticationHeaderValue("Bearer", token);
@@ -224,9 +236,20 @@ public sealed class GitHubApiProxy(IHttpClientFactory httpClientFactory)
         using var response = await client.PostAsync($"{BaseUrl}/graphql", content, ct).ConfigureAwait(false);
 
         if (!response.IsSuccessStatusCode)
-            return null;
+            return new GitHubApiResponse(response.StatusCode, null, NotModified: false, ReadRateLimitReset(response));
 
         var json = await response.Content.ReadAsStringAsync(ct).ConfigureAwait(false);
-        return JsonNode.Parse(json);
+        var body = JsonNode.Parse(json);
+        if (IsRateLimited(body))
+        {
+            var resetAt = ReadRateLimitReset(response, always: true) ?? DateTimeOffset.UtcNow.AddMinutes(1);
+            return new GitHubApiResponse(response.StatusCode, null, NotModified: false, resetAt);
+        }
+
+        return new GitHubApiResponse(response.StatusCode, body, NotModified: false);
     }
+
+    private static bool IsRateLimited(JsonNode? body)
+        => body?["errors"] is JsonArray errors
+           && errors.Any(e => string.Equals(e?["type"]?.GetValue<string>(), "RATE_LIMITED", StringComparison.Ordinal));
 }

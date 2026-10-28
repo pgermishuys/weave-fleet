@@ -51,6 +51,8 @@ internal sealed partial class SmartLinkWatcherService(
     private readonly SemaphoreSlim _wake = new(0, 1);
     private readonly ConcurrentDictionary<string, DateTimeOffset> _retryAfter = new(StringComparer.Ordinal);
     private readonly ConcurrentDictionary<string, DateTimeOffset> _userPausedUntil = new(StringComparer.Ordinal);
+    // GraphQL has a quota of its own: spent, review threads wait while the REST lookups carry on.
+    private readonly ConcurrentDictionary<string, DateTimeOffset> _userGraphQlPausedUntil = new(StringComparer.Ordinal);
     private readonly ConcurrentDictionary<string, (string Owner, string Repo)?> _remotes = new(StringComparer.Ordinal);
 
     private DateTimeOffset _lastSourceSync = DateTimeOffset.MinValue;
@@ -414,7 +416,7 @@ internal sealed partial class SmartLinkWatcherService(
 
             // Review activity bumps the pull request's updated_at, so a 304 means threads are unchanged.
             if (!prResponse.NotModified || metadata["reviewThreads"] is null)
-                await RefreshReviewThreadsAsync(reference, cycle, token, metadata, ct).ConfigureAwait(false);
+                await RefreshReviewThreadsAsync(link.UserId, reference, cycle, token, metadata, ct).ConfigureAwait(false);
         }
 
         link.MetadataJson = metadata.ToJsonString();
@@ -613,7 +615,8 @@ internal sealed partial class SmartLinkWatcherService(
         SetCiFailures(metadata, ciFailures);
     }
 
-    private static async Task RefreshReviewThreadsAsync(
+    private async Task RefreshReviewThreadsAsync(
+        string userId,
         GitHubLinkReference reference,
         Cycle cycle,
         string token,
@@ -627,7 +630,18 @@ internal sealed partial class SmartLinkWatcherService(
             ["number"] = JsonValue.Create(reference.Number),
         };
 
-        var response = await cycle.PostGraphQLAsync(token, GitHubEndpointMappings.ReviewThreadsQuery, variables, ct).ConfigureAwait(false);
+        if (_userGraphQlPausedUntil.TryGetValue(userId, out var pausedUntil) && pausedUntil > _time.GetUtcNow())
+            return;
+
+        var graphQl = await cycle.PostGraphQLAsync(token, GitHubEndpointMappings.ReviewThreadsQuery, variables, ct).ConfigureAwait(false);
+        if (graphQl.RateLimitResetAt is { } resetAt)
+        {
+            _userGraphQlPausedUntil[userId] = resetAt;
+            LogGraphQlRateLimited(resetAt);
+            return;
+        }
+
+        var response = graphQl.Body;
         if (response?["data"]?["repository"]?["pullRequest"] is not JsonObject pullRequest)
             return;
 
@@ -754,7 +768,7 @@ internal sealed partial class SmartLinkWatcherService(
     {
         private readonly Dictionary<string, string?> _tokens = new(StringComparer.Ordinal);
         private readonly Dictionary<string, GitHubApiResponse> _responses = new(StringComparer.Ordinal);
-        private readonly Dictionary<string, JsonNode?> _graphQL = new(StringComparer.Ordinal);
+        private readonly Dictionary<string, GitHubApiResponse> _graphQL = new(StringComparer.Ordinal);
         private readonly Dictionary<string, string?> _texts = new(StringComparer.Ordinal);
 
         public async Task<string?> GetTokenAsync(string userId, CancellationToken ct)
@@ -781,16 +795,16 @@ internal sealed partial class SmartLinkWatcherService(
             return response with { Body = response.Body?.DeepClone() };
         }
 
-        public async Task<JsonNode?> PostGraphQLAsync(string token, string query, JsonObject variables, CancellationToken ct)
+        public async Task<GitHubApiResponse> PostGraphQLAsync(string token, string query, JsonObject variables, CancellationToken ct)
         {
             var key = Key(token, query + variables.ToJsonString());
             if (!_graphQL.TryGetValue(key, out var response))
             {
-                response = await proxy.PostGraphQLAsync(token, query, variables, ct).ConfigureAwait(false);
+                response = await proxy.SendGraphQLAsync(token, query, variables, ct).ConfigureAwait(false);
                 _graphQL[key] = response;
             }
 
-            return response?.DeepClone();
+            return response with { Body = response.Body?.DeepClone() };
         }
 
         public async Task<string?> FetchTextAsync(string token, string path, CancellationToken ct)
@@ -868,6 +882,9 @@ internal sealed partial class SmartLinkWatcherService(
 
     [LoggerMessage(Level = LogLevel.Warning, Message = "GitHub rate limit reached; smart links pause until {ResetAt}.")]
     private partial void LogRateLimited(DateTimeOffset resetAt);
+
+    [LoggerMessage(Level = LogLevel.Warning, Message = "GitHub GraphQL rate limit reached; review threads pause until {ResetAt}.")]
+    private partial void LogGraphQlRateLimited(DateTimeOffset resetAt);
 
     internal sealed record CiFailure(
         string Sha,
