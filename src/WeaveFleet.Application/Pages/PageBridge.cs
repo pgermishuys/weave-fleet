@@ -91,7 +91,10 @@ public sealed class PageBridge(
             var waits = waitForChoice && cantWait is null && callId is { Length: > 0 } && choices is not null
                         && choiceFeature is not null && await choiceFeature.IsEnabledAsync()
                         && choices.Start(sessionId, callId, pageTitle);
-            var published = await PublishAsync(sessionId, file, file, pageTitle, warnings, ct);
+            // The tab says it waits as soon as it opens, before Fleet checks the page: the check can take a while (a cold browser on
+            // a busy Mac took over a minute), and the user mustn't wait on it to be asked.
+            var waiting = waits ? new PageChoiceState(callId!, PageChoiceState.Waiting, Now()) : null;
+            var published = await PublishAsync(sessionId, file, file, pageTitle, warnings, ct, choice: waiting);
             if (!published.IsSuccess)
             {
                 if (waits)
@@ -100,13 +103,6 @@ public sealed class PageBridge(
             }
 
             var (canvas, copy, updated, check) = published.Value;
-            if (waits)
-            {
-                var waiting = new PageChoiceState(callId!, PageChoiceState.Waiting, Now());
-                var marked = await canvases.UpdatePageAsync(sessionId, canvas.Id, page => { page.Choice = waiting; return page; }, ct);
-                if (marked.IsSuccess)
-                    canvas = marked.Value;
-            }
 
             var output = new StringBuilder()
                 .Append(updated ? "Updated " : "Showing ").Append(CanvasText.CanvasName(canvas))
@@ -229,10 +225,12 @@ public sealed class PageBridge(
     /// <summary>
     /// Copies <paramref name="file"/> (and the web files in its folder) into a page and shows it in the session's page tab
     /// for <paramref name="source"/>: the same source updates its tab, which reloads. Otherwise <paramref name="title"/>
-    /// picks the tab, as for any canvas. Says what Fleet's check of the page found.
+    /// picks the tab, as for any canvas. A page that waits for a pick is marked with <paramref name="choice"/> as soon as
+    /// its tab is up. Says what Fleet's check of the page found, which runs last.
     /// </summary>
     internal async Task<CanvasResult<PublishedPage>> PublishAsync(
-        string sessionId, string source, string file, string title, IReadOnlyList<string> warnings, CancellationToken ct, string? label = null)
+        string sessionId, string source, string file, string title, IReadOnlyList<string> warnings, CancellationToken ct,
+        string? label = null, PageChoiceState? choice = null)
     {
         var tabs = await PageTabsAsync(sessionId, ct);
         var sameSource = tabs.FirstOrDefault(tab => string.Equals(tab.State.Source, source, PathComparison));
@@ -268,7 +266,15 @@ public sealed class PageBridge(
         if (replaced is not null && replaced != pageId)
             await pages.DeleteAsync(sessionId, replaced, ct);
 
-        return CanvasResult.Ok(new PublishedPage(opened.Value.Canvas, copy, Updated: sameSource is not null, CheckText(await CheckAsync(copy, ct), inConversation: false)));
+        var canvas = opened.Value.Canvas;
+        if (choice is not null)
+        {
+            var marked = await canvases.UpdatePageAsync(sessionId, canvas.Id, page => { page.Choice = choice; return page; }, ct);
+            if (marked.IsSuccess)
+                canvas = marked.Value;
+        }
+
+        return CanvasResult.Ok(new PublishedPage(canvas, copy, Updated: sameSource is not null, CheckText(await CheckAsync(copy, ct), inConversation: false)));
     }
 
 

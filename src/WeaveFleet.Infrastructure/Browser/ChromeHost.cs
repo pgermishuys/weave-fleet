@@ -297,6 +297,11 @@ public sealed class ChromeHost(FleetOptions options, ILogger<ChromeHost> logger)
         yield return "--disable-extensions";
         yield return "--disable-component-update";
         yield return "--metrics-recording-only";
+        // On a Mac, Chrome asks the login keychain for the key its cookies are kept under before it sends any request.
+        // Without a keychain to ask (Fleet run with another HOME, as on CI) nothing loads: every page waited out the
+        // 30 s reply timeout. The profile is a temp folder thrown away afterwards, so a stand-in keychain loses nothing.
+        if (RuntimeInformation.IsOSPlatform(OSPlatform.OSX))
+            yield return "--use-mock-keychain";
         yield return "about:blank";
     }
 
