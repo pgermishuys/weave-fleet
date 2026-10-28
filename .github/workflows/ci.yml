@@ -443,7 +443,7 @@ jobs:
   # The mod store opens and stats every file of a mod natively (SafeFile: open with O_NONBLOCK | O_NOFOLLOW, then
   # fstat), and the open flags differ by OS and CPU. The other .NET tests run on Linux x64 only, so these few run on
   # each other Unix Fleet's code has a path for. Fleet ships macOS for Apple silicon only (osx-arm64 in release.yml),
-  # so Intel Mac isn't tested.
+  # so Intel Mac isn't tested. On the Mac, the page check in headless Chrome runs here too.
   mods-file-safety:
     name: Mod file safety (${{ matrix.runs_on }})
     runs-on: ${{ matrix.runs_on }}
@@ -491,6 +491,22 @@ jobs:
             echo "::error::The mod file-safety tests didn't run."
             exit 1
           fi
+
+      # On a Mac, headless Chrome under a HOME with no login keychain loaded nothing until it was told to use a stand-in
+      # keychain (--use-mock-keychain): every page check waited out its 30 s timeout. Fleet runs that way on CI (the phone
+      # app's walk-throughs) and for anyone who runs it with another HOME, so the check runs here under an empty HOME.
+      - name: Check pages in headless Chrome under an empty HOME
+        if: runner.os == 'macOS'
+        shell: bash
+        env:
+          FLEET_TEST_CHROME: /Applications/Google Chrome.app/Contents/MacOS/Google Chrome
+        run: |
+          # The tests pass without running when there's no browser, so make sure there is one.
+          test -x "$FLEET_TEST_CHROME" || { echo "::error::No Chrome at $FLEET_TEST_CHROME"; exit 1; }
+          mkdir -p "$RUNNER_TEMP/empty-home"
+          HOME="$RUNNER_TEMP/empty-home" DOTNET_CLI_HOME="$RUNNER_TEMP/dotnet-home" NUGET_PACKAGES="$HOME/.nuget/packages" \
+            dotnet test tests/WeaveFleet.Infrastructure.Tests --configuration Release --no-build \
+            --filter "FullyQualifiedName~HeadlessChromePageCheckerTests" -p:SkipFrontendBuild=true
 
   # ── Desktop app ──────────────────────────────────────────────────────────
   desktop:

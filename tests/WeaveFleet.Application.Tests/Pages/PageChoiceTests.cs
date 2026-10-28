@@ -79,11 +79,16 @@ public sealed class PageChoiceTests : IDisposable
         (choice.CallId, choice.Status).ShouldBe((CallId, PageChoiceState.Waiting));
         Statuses().ShouldBe([ActivityStatuses.WaitingInput]);
 
+        // The user picks before the check is done; the agent hears the pick once the call returns.
+        _choices.End(SessionId, CallId, PageChoiceAnswer.Picked("b", "Layout B")).ShouldBeTrue();
         checker.Done.SetResult(PageCheckOutcome.Found(["Script error: boom."]));
         var output = (await shown).Value!;
         output.Choice.ShouldBe(PageChoiceOutput.StillWaiting);
         output.Output.ShouldContain("Script error: boom.");
-        (await PageAsync()).Choice!.Status.ShouldBe(PageChoiceState.Waiting);
+
+        var round = (await bridge.WaitForChoiceAsync(Token, OpenCodeSessionId, CallId, output.CanvasId)).Value!;
+        round.Title.ShouldBe("Picked Layout B");
+        (await PageAsync()).Choice!.Status.ShouldBe(PageChoiceState.Answered);
     }
 
     [Fact]
