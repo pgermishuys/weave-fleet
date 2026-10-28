@@ -2,6 +2,7 @@ using System.Threading.Channels;
 using Microsoft.Extensions.Hosting;
 using Microsoft.Extensions.Time.Testing;
 using WeaveFleet.Application.Canvases;
+using WeaveFleet.Application.Configuration;
 using WeaveFleet.Application.Pages;
 using WeaveFleet.Application.Sessions;
 using WeaveFleet.Application.Tests.Canvases;
@@ -60,6 +61,29 @@ public sealed class PageChoiceTests : IDisposable
         var choice = (await PageAsync()).Choice!;
         (choice.CallId, choice.Status).ShouldBe((CallId, PageChoiceState.Waiting));
         Statuses().ShouldBe([ActivityStatuses.WaitingInput]);
+    }
+
+    [Fact]
+    public async Task The_page_waits_for_the_pick_while_Fleet_is_still_checking_it()
+    {
+        // On a Mac runner the check took up to 96 s; the user mustn't be kept from picking for that long.
+        var checker = new HeldPageChecker();
+        var bridge = new PageBridge(
+            [NewCallers()], new ScopedUser(), new CanvasService(_canvasRepository, new FakeEventBroadcaster(), new ScopedUser()),
+            new FakePageStore(), new InMemorySessionRepository(), checker, new FixedFleetUrl(), _choices, new PageChoiceFeature(_preferences));
+
+        var shown = bridge.ShowAsync(Token, OpenCodeSessionId, Mockup(), "Layouts", waitForChoice: true, callId: CallId);
+        await checker.Started.Task.WaitAsync(TimeSpan.FromSeconds(10));
+
+        var choice = (await PageAsync()).Choice.ShouldNotBeNull();
+        (choice.CallId, choice.Status).ShouldBe((CallId, PageChoiceState.Waiting));
+        Statuses().ShouldBe([ActivityStatuses.WaitingInput]);
+
+        checker.Done.SetResult(PageCheckOutcome.Found(["Script error: boom."]));
+        var output = (await shown).Value!;
+        output.Choice.ShouldBe(PageChoiceOutput.StillWaiting);
+        output.Output.ShouldContain("Script error: boom.");
+        (await PageAsync()).Choice!.Status.ShouldBe(PageChoiceState.Waiting);
     }
 
     [Fact]
@@ -193,6 +217,25 @@ public sealed class PageChoiceTests : IDisposable
         var callers = new FakeCallers();
         callers.Add(Token, OpenCodeSessionId, new HarnessCanvasCaller(SessionId, "owner-user"));
         return callers;
+    }
+
+    /// <summary>A check that takes as long as the test says, as a slow browser's does.</summary>
+    private sealed class HeldPageChecker : IPageChecker
+    {
+        public TaskCompletionSource Started { get; } = new(TaskCreationOptions.RunContinuationsAsynchronously);
+
+        public TaskCompletionSource<PageCheckOutcome> Done { get; } = new(TaskCreationOptions.RunContinuationsAsynchronously);
+
+        public Task<PageCheckOutcome> CheckAsync(string url, CancellationToken ct = default)
+        {
+            Started.TrySetResult();
+            return Done.Task;
+        }
+    }
+
+    private sealed class FixedFleetUrl : ILocalFleetUrl
+    {
+        public string? TryGet() => "http://127.0.0.1:5123";
     }
 
     private sealed class Lifetime : IHostApplicationLifetime
