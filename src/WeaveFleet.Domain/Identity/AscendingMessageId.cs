@@ -56,6 +56,29 @@ public static class AscendingMessageId
     /// Used for testing and deterministic ID generation.
     /// </summary>
     public static string NewFromTimestamp(long timestampMs, int counter)
+        => Build(timestampMs, counter, GenerateBase62(RandomLength));
+
+    /// <summary>
+    /// Generates the same id every time for the same arguments: the layout of <see cref="NewFromTimestamp"/>, with the
+    /// 14 characters after the time taken from a hash of <paramref name="seed"/> instead of at random. For a harness that
+    /// replays a conversation it already has, so a message gets the id it had the last time, and sorts with live ids by time.
+    /// </summary>
+    public static string Stable(long timestampMs, int counter, string seed)
+    {
+        var hash = SHA256.HashData(Encoding.UTF8.GetBytes(seed));
+        var result = new StringBuilder(RandomLength);
+        for (var i = 0; i < RandomLength; i++)
+            result.Append(Base62Alphabet[hash[i] % Base62Alphabet.Length]);
+        return Build(timestampMs, counter, result.ToString());
+    }
+
+    /// <summary>
+    /// An id that sorts after every id made for <paramref name="timestampMs"/> (any counter, any suffix) and before any made
+    /// later. For a boundary between messages whose ids Fleet can't name one by one, such as where a fork's copy ends.
+    /// </summary>
+    public static string Ceiling(long timestampMs) => Build(timestampMs, 0xFFF, new string('z', RandomLength));
+
+    private static string Build(long timestampMs, int counter, string randomPart)
     {
         // Algorithm: (timestampMs * 0x1000 + counter) → lower 6 bytes → big-endian hex
         var combined = (timestampMs * 0x1000L) + counter;
@@ -71,9 +94,6 @@ public static class AscendingMessageId
 
         // Convert to hex (12 characters)
         var hexPart = Convert.ToHexStringLower(bytes);
-
-        // Generate 14 random base62 characters
-        var randomPart = GenerateBase62(RandomLength);
 
         return $"{Prefix}{hexPart}{randomPart}";
     }

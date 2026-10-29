@@ -38,7 +38,11 @@ public sealed class CopilotHarness : IHarness
         SupportsPermissionLevels = true,
         ReportsFileWrites = true,
         HistoryLivesInHarness = true,
-        SupportsForking = false,
+        SupportsForking = true,
+        SupportsOffTheRecordPrompt = true,
+        SupportsShellCommands = true,
+        // /btw: a fork (_fleet/fork) Fleet runs beside the session, whose prompts carry model notes (TakesModelNotes).
+        SupportsSideConversations = true,
         SupportsImageAttachments = true,
         ReportsTodos = true,
         SupportsProviderSignIn = true,

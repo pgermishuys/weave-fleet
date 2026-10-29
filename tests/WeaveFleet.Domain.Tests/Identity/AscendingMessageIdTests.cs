@@ -122,4 +122,40 @@ public class AscendingMessageIdTests
         // Assert
         Assert.Equal(1000, ids.Count); // All IDs should be unique
     }
+
+    [Fact]
+    public void Stable_GivesTheSameIdForTheSameArguments_AndADifferentOneForAnotherSeed()
+    {
+        var id = AscendingMessageId.Stable(1_700_000_000_000, 1, "event-a");
+
+        Assert.Equal(id, AscendingMessageId.Stable(1_700_000_000_000, 1, "event-a"));
+        Assert.NotEqual(id, AscendingMessageId.Stable(1_700_000_000_000, 1, "event-b"));
+        Assert.Matches(new Regex(@"^msg_[0-9a-f]{12}[0-9A-Za-z]{14}$"), id);
+    }
+
+    [Fact]
+    public void Stable_SortsByTimeThenCounter_LikeNewFromTimestamp()
+    {
+        var ids = new[]
+        {
+            AscendingMessageId.Stable(1_700_000_000_000, 0, "zzz"),
+            AscendingMessageId.Stable(1_700_000_000_000, 1, "aaa"),
+            AscendingMessageId.Stable(1_700_000_000_001, 0, "mmm"),
+        };
+
+        Assert.Equal(ids, ids.OrderBy(i => i, StringComparer.Ordinal));
+        Assert.Equal(AscendingMessageId.NewFromTimestamp(1_700_000_000_000, 1)[..16], ids[1][..16]);
+    }
+
+    [Fact]
+    public void Ceiling_SortsAfterEveryIdOfItsMillisecond_AndBeforeTheNext()
+    {
+        var ceiling = AscendingMessageId.Ceiling(1_700_000_000_000);
+
+        Assert.True(string.CompareOrdinal(AscendingMessageId.Stable(1_700_000_000_000, 0, "a"), ceiling) < 0);
+        Assert.True(string.CompareOrdinal(AscendingMessageId.Stable(1_700_000_000_000, 40, "zzz"), ceiling) < 0);
+        Assert.True(string.CompareOrdinal(AscendingMessageId.NewFromTimestamp(1_700_000_000_000, 4094), ceiling) < 0);
+        Assert.True(string.CompareOrdinal(AscendingMessageId.Stable(1_700_000_000_001, 0, "a"), ceiling) > 0);
+        Assert.Matches(new Regex(@"^msg_[0-9a-f]{12}z{14}$"), ceiling);
+    }
 }

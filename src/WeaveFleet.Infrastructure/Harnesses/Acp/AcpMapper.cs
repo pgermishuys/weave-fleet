@@ -62,6 +62,39 @@ internal sealed class AcpMapper(string sessionId, Func<string, JsonElement, Flee
     private bool _turnRow;
     // Dividers that came while a turn's message is open: they go into the history after it, where their ids put them.
     private readonly List<HarnessMessage> _dividers = [];
+    private bool _replaying;
+    // While a conversation replays: the key of the user message or shell command the replay has reached, and how many
+    // messages have taken an id from it so far.
+    private (long At, string Id, int Count)? _key;
+    // The id Fleet gave the shell command it just sent, for the "started" notification that comes back for it.
+    private string? _nextShellId;
+    private readonly Dictionary<string, ShellRun> _shells = [];
+
+    /// <summary>A user's shell command: the message it shows as, and where that message sits in the history.</summary>
+    private sealed record ShellRun(string MessageId, string Command, long At, int HistoryIndex, StringBuilder Output);
+
+    /// <summary>
+    /// Whether the agent is replaying a conversation it already has (<c>session/load</c>). A replayed message takes a stable id
+    /// from the key the agent gave its user message (<c>_meta.fleetKey</c>), so it has the same id on every load, and the same
+    /// as the one the agent named when it forked; a live message takes a fresh one.
+    /// </summary>
+    internal bool Replaying
+    {
+        set
+        {
+            lock (_lock)
+            {
+                _replaying = value;
+                _key = null;
+            }
+        }
+    }
+
+    /// <summary>The id Fleet gave the next shell command, which its <c>started</c> notification will show it under.</summary>
+    internal void ExpectShell(string? messageId) { lock (_lock) _nextShellId = messageId; }
+
+    /// <summary>Maps a <c>_fleet/shell_command</c> notification: a user's shell command started, printed, or ended.</summary>
+    internal IReadOnlyList<HarnessEvent> ShellCommand(JsonElement p) { lock (_lock) return ShellCommandCore(p); }
 
     /// <summary>The agent's todo list as last reported (<c>plan</c> updates), including while a loaded conversation replays.</summary>
     internal IReadOnlyList<TodoEntry> Todos() { lock (_lock) return _todos; }
@@ -147,6 +180,7 @@ internal sealed class AcpMapper(string sessionId, Func<string, JsonElement, Flee
                 {
                     CommitAssistant();
                     _turnRow = false;
+                    SetKey(update);
                     AddUser("");
                     _userOpen = true;
                 }
@@ -303,7 +337,8 @@ internal sealed class AcpMapper(string sessionId, Func<string, JsonElement, Flee
                 return [];
         }
 
-        var id = AscendingMessageId.New();
+        // Replayed, it takes the next id from the key the replay has reached, so it stays in place among the stable ids.
+        var id = NextId();
         var summary = Str(p, "summary")?.Trim();
         var divider = new CompactionPart(
             trigger, Number(p, "tokensBefore") is { } before ? (int)before : null, Number(p, "tokensAfter") is { } after ? (int)after : null,
@@ -650,7 +685,7 @@ internal sealed class AcpMapper(string sessionId, Func<string, JsonElement, Flee
     {
         if (_assistantId is not null)
             return;
-        _assistantId = AscendingMessageId.New();
+        _assistantId = NextId();
         _assistantAt = DateTimeOffset.UtcNow;
         _assistantModel = model?.Invoke();
         events.Add(Event(EventTypes.MessageCreated, Lifecycle(_assistantId, completed: false)));
@@ -676,7 +711,7 @@ internal sealed class AcpMapper(string sessionId, Func<string, JsonElement, Flee
     /// <summary>The user's message: the text, then each attached image as a file part, as the other harnesses show them.</summary>
     private void AddUser(string text, IReadOnlyList<HarnessAttachment>? images = null, string? messageId = null)
     {
-        var id = messageId ?? AscendingMessageId.New();
+        var id = messageId ?? NextId();
         List<MessagePart> parts = [new TextPart(text)];
         parts.AddRange((images ?? []).Select((image, index) => new FilePart($"{id}-file-{index}", image.Mime, $"data:{image.Mime};base64,{image.Data}", image.Filename)));
         _history.Add(new HarnessMessage { Id = id, Role = "user", Parts = parts, Timestamp = DateTimeOffset.UtcNow });
@@ -688,30 +723,33 @@ internal sealed class AcpMapper(string sessionId, Func<string, JsonElement, Flee
         _history[^1] = last with { Parts = [new TextPart(last.TextContent + text)] };
     }
 
-    private JsonElement Lifecycle(string messageId, bool completed) => JsonSerializer.SerializeToElement(
+    private JsonElement Lifecycle(string messageId, bool completed)
+        => Lifecycle(messageId, "assistant", _assistantAt.ToUnixTimeMilliseconds(), completed, EventParts(messageId, _parts));
+
+    private JsonElement Lifecycle(string messageId, string role, long created, bool completed, List<MessageEventPart> parts) => JsonSerializer.SerializeToElement(
         new MessageLifecyclePayload
         {
             Info = new MessageEventInfo
             {
                 Id = messageId,
-                Role = "assistant",
+                Role = role,
                 SessionId = sessionId,
                 ModelId = _assistantModel,
                 Time = new MessageEventTime
                 {
-                    Created = _assistantAt.ToUnixTimeMilliseconds(),
+                    Created = created,
                     Completed = completed ? DateTimeOffset.UtcNow.ToUnixTimeMilliseconds() : null,
                 },
             },
             // The event replaces the message's parts: without them the finished message would empty itself.
-            Parts = EventParts(messageId),
+            Parts = parts,
         },
         InfrastructureJsonContext.Default.MessageLifecyclePayload);
 
-    private List<MessageEventPart> EventParts(string messageId)
+    private List<MessageEventPart> EventParts(string messageId, List<MessagePart> source)
     {
-        var parts = new List<MessageEventPart>(_parts.Count);
-        foreach (var part in _parts)
+        var parts = new List<MessageEventPart>(source.Count);
+        foreach (var part in source)
         {
             switch (part)
             {
@@ -751,6 +789,113 @@ internal sealed class AcpMapper(string sessionId, Func<string, JsonElement, Flee
     {
         Type = type, SessionId = sessionId, Timestamp = DateTimeOffset.UtcNow, Payload = payload,
     };
+
+    /// <summary>
+    /// A new message's id: a fresh one, or while a conversation replays the next stable one from the key the replay has
+    /// reached (the user message is 0, its reply 1, a divider after it 2, …). Without a key (an agent that sends none) it's fresh.
+    /// </summary>
+    private string NextId()
+    {
+        if (!_replaying || _key is not { } key)
+            return AscendingMessageId.New();
+        _key = key with { Count = key.Count + 1 };
+        return AscendingMessageId.Stable(key.At, key.Count, key.Id);
+    }
+
+    /// <summary>Reads the key a replayed user message carries (<c>_meta.fleetKey</c>: <c>id</c> and <c>at</c>); none clears the last one.</summary>
+    private void SetKey(JsonElement update)
+    {
+        _key = null;
+        if (!_replaying || !update.TryGetProperty("_meta", out var meta) || meta.ValueKind != JsonValueKind.Object
+            || !meta.TryGetProperty("fleetKey", out var key) || Str(key, "id") is not { Length: > 0 } id)
+            return;
+        _key = (AtMillis(key), id, 0);
+    }
+
+    /// <summary>The <c>at</c> an agent gave (ISO-8601), in Unix milliseconds; now when it gave none Fleet can read.</summary>
+    internal static long AtMillis(JsonElement owner)
+        => DateTimeOffset.TryParse(Str(owner, "at"), CultureInfo.InvariantCulture, DateTimeStyles.AssumeUniversal, out var at)
+            ? at.ToUnixTimeMilliseconds()
+            : DateTimeOffset.UtcNow.ToUnixTimeMilliseconds();
+
+    /// <summary>
+    /// A user's shell command as Fleet shows it (<see cref="ShellCommands"/>): a message of its own, role shell, holding one
+    /// tool part named <c>shell</c> whose input is the command, whose output is what it printed, and whose metadata says
+    /// how it ended: the same as OpenCode 2's. It runs while the agent says <c>started</c> and <c>output</c>, and is
+    /// complete on <c>ended</c>. Live it has the id Fleet gave the command; replayed, a stable one from the call's id.
+    /// </summary>
+    private List<HarnessEvent> ShellCommandCore(JsonElement p)
+    {
+        var events = new List<HarnessEvent>();
+        var callId = Str(p, "toolCallId");
+        if (callId is null)
+            return events;
+
+        var phase = Str(p, "phase");
+        // An "ended" with no "started" before it (the agent sends the pair on replay, but a live one can be missed) starts it too.
+        if (phase is "started" or "ended" && !_shells.ContainsKey(callId))
+        {
+            CommitAssistant();
+            _userOpen = false;
+            _turnRow = false;
+            var at = AtMillis(p);
+            if (_replaying)
+                _key = (at, callId, 0);
+            var id = _replaying ? NextId() : _nextShellId ?? NextId();
+            _nextShellId = null;
+            var run = new ShellRun(id, Str(p, "command") ?? "", at, _history.Count, new StringBuilder());
+            _shells[callId] = run;
+            _history.Add(new HarnessMessage { Id = id, Role = ShellCommands.Role, Parts = [ShellPart(callId, run, null)], Timestamp = DateTimeOffset.FromUnixTimeMilliseconds(at) });
+            events.Add(Event(EventTypes.MessageCreated, Lifecycle(id, ShellCommands.Role, at, completed: false, [ShellEventPart(callId, run, null)])));
+            events.Add(ShellPartEvent(callId, run, null));
+        }
+
+        if (!_shells.TryGetValue(callId, out var shell))
+            return events;
+        if (phase == "output" && Str(p, "text") is { } chunk)
+        {
+            shell.Output.Append(chunk);
+            return events;
+        }
+
+        if (phase != "ended")
+            return events;
+
+        _shells.Remove(callId);
+        var output = Str(p, "output") ?? shell.Output.ToString();
+        var exit = Number(p, "exitCode") is { } code ? (int)code : (int?)null;
+        var done = ShellPart(callId, shell, (output, exit));
+        _history[shell.HistoryIndex] = _history[shell.HistoryIndex] with { Parts = [done] };
+        events.Add(Event(EventTypes.MessageUpdated, Lifecycle(shell.MessageId, ShellCommands.Role, shell.At, completed: true, [ShellEventPart(callId, shell, (output, exit))])));
+        events.Add(ShellPartEvent(callId, shell, (output, exit)));
+        return events;
+    }
+
+    private static string ShellPartId(ShellRun run) => $"{run.MessageId}-p1";
+
+    private static ToolUsePart ShellPart(string callId, ShellRun run, (string Output, int? Exit)? ended)
+    {
+        var input = Json(new JsonObject { ["command"] = run.Command });
+        if (ended is not { } end)
+            return new ToolUsePart(callId, "shell", input, ToolUseState.Running) { PartId = ShellPartId(run) };
+        return new ToolUsePart(callId, "shell", input, ToolUseState.Completed)
+        {
+            PartId = ShellPartId(run),
+            Output = Json(end.Output),
+            Metadata = Json(new JsonObject { [ShellCommands.ExitMetadata] = end.Exit }),
+        };
+    }
+
+    private ToolMessageEventPart ShellEventPart(string callId, ShellRun run, (string Output, int? Exit)? ended)
+    {
+        var part = ShellPart(callId, run, ended);
+        ToolInvocationState state = ended is null
+            ? new ToolRunningState { Input = part.Arguments }
+            : new ToolCompletedState { Input = part.Arguments, Output = part.Output, Metadata = part.Metadata };
+        return new ToolMessageEventPart { Id = ShellPartId(run), SessionId = sessionId, MessageId = run.MessageId, ToolName = "shell", CallId = callId, State = state };
+    }
+
+    private HarnessEvent ShellPartEvent(string callId, ShellRun run, (string Output, int? Exit)? ended) => PartEvent(ShellEventPart(callId, run, ended));
 
     private string NextPartId() => $"{_assistantId}-p{++_partCount}";
 
