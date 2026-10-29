@@ -10,6 +10,7 @@ using WeaveFleet.Domain.Events;
 using WeaveFleet.Domain.Harnesses;
 using WeaveFleet.Infrastructure.Harnesses;
 using WeaveFleet.Infrastructure.Harnesses.ClaudeCode;
+using WeaveFleet.Infrastructure.Harnesses.Copilot;
 using WeaveFleet.Infrastructure.Harnesses.OpenCode;
 using WeaveFleet.Infrastructure.Harnesses.OpenCode2;
 using WeaveFleet.Testing.Fakes;
@@ -1213,6 +1214,66 @@ public sealed class OpenCodeSessionMessageProxyTests
         sessionActivator.ActivateAsyncCalls.Count.ShouldBe(1);
 
         // Verify fallback was NOT called
+        fallbackSnapshotBuilder.BuildAsyncCalls.ShouldBeEmpty();
+    }
+
+    // After a Fleet restart a resumed session comes back under a new instance id (Copilot, OpenCode 2). The read
+    // looked for the harness under the old one, missed, and the first read showed only the saved prompt.
+    [Theory]
+    [InlineData("opencode2")]
+    [InlineData("copilot")]
+    public async Task GetMessagesAsync_reads_the_harness_a_resume_starts_under_a_new_instance_id(string harnessType)
+    {
+        var sessionId = "test-session-new-instance";
+        Session StoredSession(string instanceId) => new()
+        {
+            Id = sessionId,
+            InstanceId = instanceId,
+            HarnessType = harnessType,
+            HarnessResumeToken = "resume-token-new-instance",
+            Title = "Test Session",
+            Status = "active",
+            UserId = "user-1",
+        };
+        var sessionRepository = new InMemorySessionRepository();
+        sessionRepository.Seed(StoredSession("instance-before-restart"));
+
+        var harnessSession = new FakeHarnessSession("instance-after-restart")
+        {
+            GetMessagesBehavior = (query, ct) => Task.FromResult(new MessagePage(
+                [
+                    new HarnessMessage { Id = "msg-prompt", Role = "user", Parts = [new TextPart("Hello")], Timestamp = DateTimeOffset.UtcNow },
+                    new HarnessMessage { Id = "msg-reply", Role = "assistant", Parts = [new TextPart("Hi")], Timestamp = DateTimeOffset.UtcNow },
+                ],
+                false))
+        };
+
+        var instanceTracker = new InstanceTracker();
+        var fallbackSnapshotBuilder = new FakeSessionSnapshotBuilder();
+        var sessionActivator = new FakeSessionActivator
+        {
+            ActivateBehavior = (sid, ct) =>
+            {
+                // The database hands out a new row, as the real repository does: the one the read holds keeps the old id.
+                instanceTracker.Register("instance-after-restart", harnessSession);
+                sessionRepository.Seed(StoredSession("instance-after-restart"));
+                return Task.FromResult(Result.Success<IHarnessSession>(harnessSession));
+            }
+        };
+
+        var proxy = new OpenCodeSessionMessageProxy(
+            sessionRepository,
+            instanceTracker,
+            new SessionActivityTracker(),
+            new InMemoryDelegationRepository(),
+            fallbackSnapshotBuilder,
+            CreateServiceProvider(sessionActivator),
+            new HarnessRegistry([new OpenCode2Harness(), new CopilotHarness()], []),
+            NullLogger<OpenCodeSessionMessageProxy>.Instance);
+
+        var result = await proxy.GetMessagesAsync(sessionId);
+
+        result.Messages.Select(m => m.Id).ShouldBe(["msg-prompt", "msg-reply"]);
         fallbackSnapshotBuilder.BuildAsyncCalls.ShouldBeEmpty();
     }
 
