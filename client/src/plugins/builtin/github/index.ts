@@ -31,6 +31,7 @@ export const githubPluginManifest = {
     ],
     configPage: {
       title: "GitHub integration",
+      navLabel: "GitHub",
       component: GitHubSettings,
       icon: Github,
     },

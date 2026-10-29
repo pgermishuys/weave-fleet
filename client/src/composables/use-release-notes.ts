@@ -33,7 +33,7 @@ async function load(): Promise<void> {
   }
 }
 
-/** The notes of Fleet's recent releases, newest first, for What's new in Settings → System. */
+/** The notes of Fleet's recent releases, newest first, for What's new in Settings → Updates & about. */
 export function useReleaseNotes() {
   return {
     releases: readonly(releases),

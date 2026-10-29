@@ -2,7 +2,7 @@ import { computed } from "vue";
 import { WORKFLOWS_PREFERENCE_KEY } from "@/lib/workflows";
 import { usePreferencesStore } from "@/stores/preferences";
 
-/** Whether workflows are on: the switch in Settings → Workflows. Off, there's no rail item and no runner. */
+/** Whether workflows are on: the switch in Settings → Labs. Off, there's no rail item and no runner. */
 export function useWorkflowsFeature() {
   const preferencesStore = usePreferencesStore();
   preferencesStore.ensureLoaded();

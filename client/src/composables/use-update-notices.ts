@@ -113,7 +113,7 @@ export function useUpdateNotices(): void {
   const releaseNotes = useReleaseNotes();
   /** "3 new, 4 fixed" for each version whose notes Fleet has, for the link on its update card. */
   const counts = new Map<string, string>();
-  // Opens What's new in Settings → System; the href is only for a middle-click or a copied link.
+  // Opens What's new in Settings → Updates & about; the href is only for a middle-click or a copied link.
   const whatsNew = (version: string) => {
     const count = counts.get(version);
     return { label: count ? `What's new: ${count}` : "What's new", href: releaseNotesUrl(version), run: () => openWhatsNew(version) };

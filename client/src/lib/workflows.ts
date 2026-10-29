@@ -4,7 +4,7 @@
  * stop the run on the user. These are the server's shapes (`/api/workflows`) and the helpers the pages share.
  */
 
-/** The user preference behind the switch in Settings → Workflows. */
+/** The user preference behind the switch in Settings → Labs. */
 export const WORKFLOWS_PREFERENCE_KEY = "Workflows";
 
 /** The user preference that maps each role to a model, per harness. Kept in Fleet, not in the repo. */

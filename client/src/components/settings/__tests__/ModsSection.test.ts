@@ -138,19 +138,19 @@ describe("ModsSection", () => {
     expect(store.state.setSafeMode).toHaveBeenCalledWith(false);
   });
 
-  it("links to the Features section, where the switch and the runtime are", async () => {
+  it("links to Labs, where the switch and the runtime are", async () => {
     const { activeSection } = useSettingsNav();
-    activeSection.value = "mods";
+    activeSection.value = "skills";
     const wrapper = await mountSection();
-    expect(wrapper.text()).toContain("The switch and the mod runtime (Bun) are in Features.");
+    expect(wrapper.text()).toContain("The switch and the mod runtime (Bun) are in Labs.");
     await wrapper.get("[data-testid=mods-features-link]").trigger("click");
-    expect(activeSection.value).toBe("features");
+    expect(activeSection.value).toBe("labs");
   });
 
-  it("points at Features instead when the Mods switch is off", async () => {
+  it("points at Labs instead when the Mods switch is off", async () => {
     store.state.isSwitchedOn = false;
     const wrapper = await mountSection();
-    expect(wrapper.get("[data-testid=mods-switched-off]").text()).toContain("Turn Mods on in Settings → Features");
+    expect(wrapper.get("[data-testid=mods-switched-off]").text()).toContain("Turn Mods on in Settings → Labs");
     expect(wrapper.find("[data-testid^=mod-row-]").exists()).toBe(false);
   });
 

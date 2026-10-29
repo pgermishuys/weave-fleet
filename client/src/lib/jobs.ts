@@ -1,4 +1,4 @@
-/** The server's preference for Jobs (Settings → Features): off, there's no rail item, no screen and no request. */
+/** The server's preference for Jobs (Settings → Labs): off, there's no rail item, no screen and no request. */
 export const JOBS_PREFERENCE_KEY = "Jobs";
 
 export const MAX_JOB_SEATS = 16;

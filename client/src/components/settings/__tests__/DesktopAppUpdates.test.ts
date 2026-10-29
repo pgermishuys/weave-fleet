@@ -41,7 +41,7 @@ const idle: DesktopUpdateState = { status: "idle", mode: "install", currentVersi
 // The update-status composable shares its state between mounts and only refetches for its first subscriber.
 enableAutoUnmount(afterEach);
 
-describe("Settings → System in the desktop app", () => {
+describe("Settings → Updates & about in the desktop app", () => {
   beforeEach(() => {
     getMock.mockReset();
   });

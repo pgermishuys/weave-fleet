@@ -1,59 +1,89 @@
 <script setup lang="ts">
-import type { RegisteredSettingsSection } from "@/plugins/slots";
-import { computed } from "vue";
-import { Settings2 } from "lucide-vue-next";
+import { computed, nextTick, watch } from "vue";
 import AppearanceSection from "@/components/settings/AppearanceSection.vue";
-import FeaturesSection from "@/components/settings/FeaturesSection.vue";
-import SystemSection from "@/components/settings/SystemSection.vue";
-import WhatsNewSection from "@/components/settings/WhatsNewSection.vue";
-import CredentialsSection from "@/components/settings/CredentialsSection.vue";
-import SkillsSection from "@/components/settings/SkillsSection.vue";
-import MemorySection from "@/components/settings/MemorySection.vue";
-import ModsSection from "@/components/settings/ModsSection.vue";
 import BrowserSection from "@/components/settings/BrowserSection.vue";
-import PermissionsSection from "@/components/settings/PermissionsSection.vue";
-import ToolsSection from "@/components/settings/ToolsSection.vue";
+import CredentialsSection from "@/components/settings/CredentialsSection.vue";
+import GeneralSection from "@/components/settings/GeneralSection.vue";
 import HarnessesSection from "@/components/settings/HarnessesSection.vue";
+import LabsSection from "@/components/settings/LabsSection.vue";
 import MachinesSection from "@/components/settings/MachinesSection.vue";
-import WeaveSection from "@/components/settings/WeaveSection.vue";
-import WorkflowsSection from "@/components/settings/WorkflowsSection.vue";
+import MemorySection from "@/components/settings/MemorySection.vue";
+import PermissionsSection from "@/components/settings/PermissionsSection.vue";
+import SkillsToolsPage from "@/components/settings/SkillsToolsPage.vue";
 import StorageSection from "@/components/settings/StorageSection.vue";
+import SystemSection from "@/components/settings/SystemSection.vue";
+import WeaveSection from "@/components/settings/WeaveSection.vue";
+import WhatsNewSection from "@/components/settings/WhatsNewSection.vue";
+import WorkflowsSection from "@/components/settings/WorkflowsSection.vue";
 import WorkspaceSection from "@/components/settings/WorkspaceSection.vue";
 import WorktreeNamingSection from "@/components/settings/WorktreeNamingSection.vue";
 import { useSettingsNav } from "@/composables/use-settings-nav";
 import { useMachinesStore } from "@/stores/machines";
-import { usePluginRuntime } from "@/plugins/composable";
-import { getSettingsSections } from "@/plugins/slots";
+import { getConfigPage } from "@/plugins/slots";
 
-interface DecoratedSettingsSection extends RegisteredSettingsSection {
-  displayName: string;
-}
+const INTEGRATION_PREFIX = "integration:";
 
-const pluginRuntime = usePluginRuntime();
-const { activeSection } = useSettingsNav();
+/** Each page's own title and one line under it. */
+const PAGES: Readonly<Record<string, { title: string; line: string }>> = {
+  general: { title: "General", line: "Everyday behaviour." },
+  appearance: { title: "Appearance", line: "How Fleet looks." },
+  harnesses: { title: "Harnesses", line: "The coding agents Fleet can run, and how each is set up." },
+  permissions: { title: "Permissions", line: "What agents may do without asking, and whether they can use a browser." },
+  skills: { title: "Skills & tools", line: "What agents can use: skills, tools and, with Mods on, mods." },
+  memory: { title: "Memory", line: "What Fleet remembers about each repository." },
+  weave: { title: "Weave", line: "The Weave plugin and its config for each harness." },
+  workflows: { title: "Workflows", line: "Model roles for workflow steps." },
+  folders: { title: "Folders", line: "Where your repositories are, how worktrees are named, and the disk they take." },
+  machines: { title: "Machines", line: "The machines you work on, phones and devices, and the access token." },
+  labs: { title: "Labs", line: "Experiments. They can change or go away, and each is off until you turn it on." },
+  updates: { title: "Updates & about", line: "Fleet's version and updates, and what's new." },
+  credentials: { title: "API keys", line: "Credentials for model providers." },
+};
+
+const { activeSection, activeAnchor } = useSettingsNav();
 // Settings belong to a machine: when another one is live, these are its settings.
 const machines = useMachinesStore();
 
-const pluginSections = computed<readonly DecoratedSettingsSection[]>(() => {
-  const descriptorsById = new Map(
-    pluginRuntime.descriptors.value.map((descriptor) => [descriptor.id, descriptor.displayName]),
-  );
+// An add-on's page comes through the plugin contribution point; core never imports the add-on.
+const integrationPage = computed(() =>
+  activeSection.value.startsWith(INTEGRATION_PREFIX)
+    ? getConfigPage(activeSection.value.slice(INTEGRATION_PREFIX.length))
+    : undefined,
+);
 
-  return getSettingsSections().map((section) => ({
-    ...section,
-    displayName: descriptorsById.get(section.pluginId) ?? section.title,
-  }));
+const header = computed(() => {
+  if (activeSection.value.startsWith(INTEGRATION_PREFIX)) {
+    const page = integrationPage.value;
+    return { title: page?.navLabel ?? page?.title ?? "Integration", line: page?.title ?? "" };
+  }
+  return PAGES[activeSection.value] ?? PAGES.general;
 });
+
+// Landing on a group (Folders › Storage, Permissions › Browser) scrolls it into view.
+watch(
+  [activeSection, activeAnchor],
+  async () => {
+    if (!activeAnchor.value) return;
+    await nextTick();
+    document
+      .querySelector(`[data-settings-anchor="${CSS.escape(activeAnchor.value)}"]`)
+      ?.scrollIntoView({ block: "start", behavior: "smooth" });
+  },
+  { flush: "post", immediate: true },
+);
 </script>
 
 <template>
   <section class="grid grid-cols-1 gap-6">
     <div>
-      <h1 class="text-2xl font-semibold tracking-tight text-text">
-        Settings
+      <h1
+        class="text-2xl font-semibold tracking-tight text-text"
+        data-testid="settings-page-title"
+      >
+        {{ header.title }}
       </h1>
       <p class="mt-1 text-sm text-muted">
-        Manage credentials, folders, appearance, skills, memory, permissions, harnesses, Weave, system details, and plugin-provided settings.
+        {{ header.line }}
       </p>
       <p
         v-if="!machines.live.isHome && activeSection !== 'machines'"
@@ -64,108 +94,49 @@ const pluginSections = computed<readonly DecoratedSettingsSection[]>(() => {
       </p>
     </div>
 
-    <template v-if="activeSection === 'workspace'">
-      <WorkspaceSection />
-      <WorktreeNamingSection />
-    </template>
+    <GeneralSection v-if="activeSection === 'general'" />
 
-    <StorageSection v-else-if="activeSection === 'storage'" />
-
-    <CredentialsSection v-else-if="activeSection === 'credentials'" />
-
-    <template
-      v-else-if="activeSection === 'appearance'"
-    >
-      <AppearanceSection />
-    </template>
-
-    <SkillsSection v-else-if="activeSection === 'skills'" />
-
-    <MemorySection v-else-if="activeSection === 'memory'" />
-    <ModsSection v-else-if="activeSection === 'mods'" />
-    <BrowserSection v-else-if="activeSection === 'browser'" />
-
-    <PermissionsSection v-else-if="activeSection === 'permissions'" />
-
-    <ToolsSection v-else-if="activeSection === 'tools'" />
-
-    <FeaturesSection v-else-if="activeSection === 'features'" />
+    <AppearanceSection v-else-if="activeSection === 'appearance'" />
 
     <HarnessesSection v-else-if="activeSection === 'harnesses'" />
 
-    <MachinesSection v-else-if="activeSection === 'machines'" />
+    <template v-else-if="activeSection === 'permissions'">
+      <PermissionsSection />
+      <div data-settings-anchor="browser">
+        <BrowserSection />
+      </div>
+    </template>
+
+    <SkillsToolsPage v-else-if="activeSection === 'skills'" />
+
+    <MemorySection v-else-if="activeSection === 'memory'" />
 
     <WeaveSection v-else-if="activeSection === 'weave'" />
 
     <WorkflowsSection v-else-if="activeSection === 'workflows'" />
 
-    <section
-      v-else-if="activeSection === 'plugins'"
-      class="rounded-card border border-border bg-card-bg p-6 shadow-sm"
-    >
-      <div class="flex flex-col gap-1">
-        <h2 class="text-lg font-semibold text-text">
-          Plugin settings
-        </h2>
-        <p class="text-sm text-muted">
-          Extra sections registered by installed plugins appear here automatically.
-        </p>
+    <template v-else-if="activeSection === 'folders'">
+      <WorkspaceSection />
+      <WorktreeNamingSection />
+      <div data-settings-anchor="storage">
+        <StorageSection />
       </div>
+    </template>
 
-      <div
-        v-if="pluginSections.length === 0"
-        class="mt-5 rounded-card border border-dashed border-border p-6 text-center"
-      >
-        <p class="text-sm font-medium text-text">
-          No plugin settings available
-        </p>
-        <p class="mt-1 text-xs text-muted">
-          Registered plugins can contribute settings sections through <code>getSettingsSections()</code>.
-        </p>
-      </div>
+    <MachinesSection v-else-if="activeSection === 'machines'" />
 
-      <div
-        v-else
-        class="mt-5 grid gap-4"
-      >
-        <article
-          v-for="section in pluginSections"
-          :key="section.id"
-          class="rounded-card border border-border bg-main-bg p-4"
-        >
-          <div class="mb-4 flex items-start gap-3">
-            <div class="rounded-btn border border-border bg-card-bg p-2 text-text">
-              <component
-                :is="section.icon"
-                v-if="section.icon"
-                :size="16"
-                aria-hidden="true"
-              />
-              <Settings2
-                v-else
-                :size="16"
-                aria-hidden="true"
-              />
-            </div>
+    <LabsSection v-else-if="activeSection === 'labs'" />
 
-            <div>
-              <h3 class="text-sm font-semibold text-text">
-                {{ section.displayName }}
-              </h3>
-              <p class="mt-1 text-xs text-muted">
-                {{ section.title }}
-              </p>
-            </div>
-          </div>
-
-          <component :is="section.component" />
-        </article>
-      </div>
-    </section>
-
-    <template v-else-if="activeSection === 'system'">
+    <template v-else-if="activeSection === 'updates'">
       <SystemSection />
       <WhatsNewSection />
     </template>
+
+    <CredentialsSection v-else-if="activeSection === 'credentials'" />
+
+    <component
+      :is="integrationPage.component"
+      v-else-if="integrationPage"
+    />
   </section>
 </template>

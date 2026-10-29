@@ -1,34 +1,24 @@
 <script setup lang="ts">
 import { computed, onMounted, shallowRef } from "vue";
-import { Check, LoaderCircle } from "lucide-vue-next";
+import { Check } from "lucide-vue-next";
 import ModelSelector from "@/components/session/ModelSelector.vue";
 import SelectorDropdown from "@/components/session/SelectorDropdown.vue";
 import { useEnabledHarnesses } from "@/composables/use-enabled-harnesses";
 import { useHarnessCatalog } from "@/composables/use-harness-catalog";
 import { keyFromPath, pathFromKey, useModelRoles } from "@/composables/use-model-roles";
+import { useSettingsNav } from "@/composables/use-settings-nav";
 import { useWorkflowsFeature } from "@/composables/use-workflows-feature";
 import { useWorkflowsNav } from "@/composables/use-workflows-nav";
 import { describeDefaults } from "@/lib/agent-model-choice";
 import { ROLE_DESCRIPTIONS, ROLE_NAMES, WORKFLOW_ROLES, type WorkflowRole } from "@/lib/workflows";
-import { usePreferencesStore } from "@/stores/preferences";
 
-const preferencesStore = usePreferencesStore();
-const { isWorkflowsEnabled, setWorkflowsEnabled } = useWorkflowsFeature();
+const { isWorkflowsEnabled } = useWorkflowsFeature();
+const { setActiveSection } = useSettingsNav();
 const { harnesses: allHarnesses, enabledHarnesses, defaultHarnessType } = useEnabledHarnesses();
 const { choiceFor, setChoice } = useModelRoles();
 const nav = useWorkflowsNav();
 
-const isSaving = shallowRef(false);
 const savingRole = shallowRef<WorkflowRole | null>(null);
-
-async function toggle(): Promise<void> {
-  isSaving.value = true;
-  try {
-    await setWorkflowsEnabled(!isWorkflowsEnabled.value);
-  } finally {
-    isSaving.value = false;
-  }
-}
 
 /** Roles are mapped per harness: the same model has a different id on each. */
 const harnesses = computed(() => enabledHarnesses.value.filter((harness) => harness.capabilities.supportsWorkflowSteps));
@@ -99,48 +89,23 @@ onMounted(() => {
 <template>
   <div class="flex flex-col gap-4">
     <section
+      v-if="!isWorkflowsEnabled"
       class="rounded-card border border-border bg-card-bg p-6 shadow-sm"
-      data-testid="workflows-switch-card"
+      data-testid="workflows-off-card"
     >
-      <div class="flex items-start justify-between gap-4">
-        <div>
-          <h2 class="flex items-center gap-2 text-lg font-semibold text-text">
-            Workflows
-            <span class="rounded-full border border-border px-2 py-px text-[0.7rem] font-medium uppercase tracking-wide text-muted">
-              Experimental
-            </span>
-          </h2>
-          <p class="mt-1 text-sm text-muted">
-            Show Workflows in the rail, and let Fleet run workflows: it moves between steps and stops where a step
-            asks you. Off: no runner, no step tool, nothing changes.
-          </p>
-        </div>
-
-        <div class="flex items-center gap-2">
-          <LoaderCircle
-            v-if="isSaving"
-            :size="16"
-            class="animate-spin text-muted"
-            aria-hidden="true"
-          />
-          <button
-            type="button"
-            role="switch"
-            :aria-checked="isWorkflowsEnabled"
-            :disabled="preferencesStore.isLoading || isSaving"
-            aria-label="Enable workflows"
-            data-testid="workflows-switch"
-            class="relative inline-flex h-6 w-11 shrink-0 cursor-pointer rounded-full border-2 border-transparent transition-colors duration-200 ease-in-out focus:outline-none focus:ring-2 focus:ring-accent focus:ring-offset-2 focus:ring-offset-main-bg disabled:cursor-not-allowed disabled:opacity-60"
-            :class="isWorkflowsEnabled ? 'bg-accent' : 'bg-border'"
-            @click="toggle"
-          >
-            <span
-              class="pointer-events-none inline-block h-5 w-5 rounded-full bg-white shadow ring-0 transition duration-200 ease-in-out"
-              :class="isWorkflowsEnabled ? 'translate-x-5' : 'translate-x-0'"
-            />
-          </button>
-        </div>
-      </div>
+      <h2 class="text-lg font-semibold text-text">
+        Workflows is off
+      </h2>
+      <p class="mt-1 text-sm text-muted">
+        Turn it on in
+        <button
+          type="button"
+          class="text-accent hover:underline focus-visible:outline focus-visible:outline-2 focus-visible:outline-accent"
+          data-testid="workflows-labs-link"
+          @click="setActiveSection('labs')"
+        >Settings → Labs</button>
+        to show Workflows in the rail and set the model roles here.
+      </p>
     </section>
 
     <section

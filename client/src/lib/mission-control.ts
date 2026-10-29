@@ -8,7 +8,7 @@ import { isTopLevel, sessionBucket, sessionUpdatedAt } from "@/lib/needs-you";
 import type { FeedStatus } from "@/lib/machine-feed";
 import { askPreviewWording } from "@/lib/tools";
 
-/** The switch in Settings → Features. Off, there's no rail item, no screen and no request. */
+/** The switch in Settings → Labs. Off, there's no rail item, no screen and no request. */
 export const MISSION_CONTROL_PREFERENCE_KEY = "features.mission-control.enabled";
 
 /** What a machine says a session is doing this second (`GET /api/sessions/now`). */

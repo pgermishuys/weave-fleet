@@ -5,7 +5,7 @@
 import type { DesktopUpdateState } from "@/lib/desktop";
 import { formatRelativeTime } from "@/lib/format-utils";
 
-/** Settings → Features: shows each machine's version, update rule and Restart in Settings → Machines. Off until turned on. */
+/** Settings → Labs: shows each machine's version, update rule and Restart in Settings → Machines. Off until turned on. */
 export const FLEET_UPDATES_PREFERENCE_KEY = "FleetUpdates";
 
 /** Settings → Machines: the rule the user chose for every machine, unless one has its own. */

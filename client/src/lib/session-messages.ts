@@ -22,7 +22,7 @@
  * The tags are in the text itself, so they survive a reload from the harness's store.
  */
 
-/** The user preference behind the switch in Settings → Features. */
+/** The user preference behind the switch in Settings → Labs. */
 export const SESSION_MESSAGES_PREFERENCE_KEY = "SessionMessages";
 
 export interface PeerSender {

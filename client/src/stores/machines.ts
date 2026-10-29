@@ -763,7 +763,7 @@ export const useMachinesStore = defineStore("machines", () => {
 
   const preferences = usePreferencesStore();
   const sessionsStore = useSessionsStore();
-  /** Settings → Features: every machine that isn't live keeps a live feed, instead of being polled. */
+  /** Settings → Labs: every machine that isn't live keeps a live feed, instead of being polled. */
   const liveFeeds = computed(() => preferences.get(LIVE_MACHINES_PREFERENCE_KEY, "false") === "true");
   /**
    * The same switch opens another machine's session in place, without a reload. Until the preferences load it's as

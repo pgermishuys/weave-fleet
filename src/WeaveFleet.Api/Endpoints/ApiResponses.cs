@@ -38,7 +38,7 @@ public sealed record RestartingResponse(string? To);
 /// <summary>Which machines to roll an update out to; empty or absent is all of them.</summary>
 public sealed record RolloutRequest(IReadOnlyList<string>? MachineIds);
 
-/// <summary>Fleet's recent releases, newest first, for What's new in Settings → System.</summary>
+/// <summary>Fleet's recent releases, newest first, for What's new in Settings → Updates & about.</summary>
 public sealed record ReleaseNotesResponse(
     IReadOnlyList<ReleaseNoteResponse> Releases,
     string? FetchedAt,
@@ -531,8 +531,8 @@ public sealed record AgentBrowserResponse(
     string? FocusedTabId,
     IReadOnlyList<WeaveFleet.Domain.Events.BrowserStep> Steps);
 
-/// <summary>Settings → Browser: whether agents can use a browser, which pages (<c>session</c>, <c>machine</c>, <c>any</c>), and page scripts.</summary>
+/// <summary>Settings → Permissions: whether agents can use a browser, which pages (<c>session</c>, <c>machine</c>, <c>any</c>), and page scripts.</summary>
 public sealed record AgentBrowserSettingsResponse(bool Enabled, string Pages, bool Scripts);
 
-/// <summary>A change to Settings → Browser; a null field stays as it is.</summary>
+/// <summary>A change to Settings → Permissions; a null field stays as it is.</summary>
 public sealed record AgentBrowserSettingsRequest(bool? Enabled, string? Pages, bool? Scripts);

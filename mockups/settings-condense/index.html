@@ -1,0 +1,747 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Condensing Settings</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
+<script src="https://unpkg.com/lucide@0.469.0/dist/umd/lucide.min.js"></script>
+<style>
+/* Fleet's own tokens (client/src/assets/main.css): light theme, then Default Dark. */
+:root {
+  --main-bg: #F3F2EF; --rail-bg: #F3F2EF; --panel-bg: #FFFFFF; --card-bg: #FFFFFF; --inset: #F3F2EF;
+  --border: rgba(26, 25, 24, 0.09); --text: #1A1918; --muted: #6E6A65; --accent: #5B6EC7;
+  --accent-dim: rgba(91, 110, 199, 0.12); --running: #16a34a; --idle: #d97706; --error: #dc2626; --coral: #D95A3A;
+  --radius-card: 10px; --radius-btn: 8px; --radius-panel: 12px;
+  --page-bg: #E9E8E4;
+  --font: "Inter Variable", "Inter", system-ui, -apple-system, sans-serif;
+  --mono: "JetBrains Mono", ui-monospace, monospace;
+}
+@media (prefers-color-scheme: dark) {
+  :root {
+    color-scheme: dark;
+    --main-bg: #0d0d10; --rail-bg: #0d0d10; --panel-bg: #141418; --card-bg: #1b1b20; --inset: #1b1b20;
+    --border: rgba(255, 255, 255, 0.075); --text: #e8e8ec; --muted: #8e8e9a; --accent: #6366f1;
+    --accent-dim: rgba(99, 102, 241, 0.15); --running: #22c55e; --idle: #f59e0b; --error: #ef4444;
+    --page-bg: #08080a;
+  }
+}
+* { box-sizing: border-box; }
+html, body { margin: 0; }
+body { background: var(--page-bg); color: var(--text); font: 14px/1.5 var(--font); padding: 0 16px 64px; }
+button { font: inherit; color: inherit; cursor: pointer; }
+:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+code, .mono { font-family: var(--mono); font-size: 0.92em; }
+
+.doc { max-width: 1180px; margin: 0 auto; display: grid; gap: 28px; padding-top: 32px; }
+.doc h1 { font-size: 26px; letter-spacing: -0.01em; margin: 0; text-wrap: balance; }
+.doc h2 { font-size: 17px; margin: 0 0 10px; text-wrap: balance; }
+.lede { color: var(--muted); max-width: 70ch; margin: 6px 0 0; }
+
+.facts { display: grid; grid-template-columns: repeat(auto-fit, minmax(140px, 1fr)); gap: 10px; }
+.fact { background: var(--panel-bg); border: 1px solid var(--border); border-radius: var(--radius-card); padding: 12px 14px; }
+.fact b { display: block; font-size: 22px; font-variant-numeric: tabular-nums; letter-spacing: -0.01em; }
+.fact span { color: var(--muted); font-size: 12.5px; }
+
+.picker { display: flex; flex-wrap: wrap; gap: 6px; background: var(--panel-bg); border: 1px solid var(--border); border-radius: 12px; padding: 5px; width: fit-content; max-width: 100%; }
+.picker button { border: 1px solid transparent; background: transparent; border-radius: 8px; padding: 7px 12px; font-size: 13px; font-weight: 500; color: var(--muted); display: flex; gap: 8px; align-items: baseline; }
+.picker button small { font-weight: 400; font-size: 11.5px; }
+.picker button[aria-pressed="true"] { background: var(--accent-dim); border-color: color-mix(in srgb, var(--accent) 40%, transparent); color: var(--text); }
+.rec { font-size: 10px; font-weight: 600; text-transform: uppercase; letter-spacing: 0.05em; color: var(--accent); }
+
+.optnote { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; }
+.optnote > div { background: var(--panel-bg); border: 1px solid var(--border); border-radius: var(--radius-card); padding: 14px 16px; min-width: 0; }
+.optnote h3 { margin: 0 0 6px; font-size: 13px; }
+.optnote ul { margin: 0; padding-left: 18px; color: var(--muted); font-size: 13px; display: grid; gap: 4px; }
+.optnote li b { color: var(--text); font-weight: 500; }
+
+/* ---------- The fake Fleet window ---------- */
+.win { display: grid; grid-template-columns: 72px 216px minmax(0, 1fr); height: 660px; border: 1px solid var(--border); border-radius: 14px; overflow: hidden; background: var(--main-bg); box-shadow: 0 24px 60px -30px rgba(0,0,0,0.35); }
+.rail { background: var(--rail-bg); display: flex; flex-direction: column; align-items: center; gap: 4px; padding: 14px 0; }
+.rail .logo { font-weight: 800; color: var(--accent); font-size: 16px; margin-bottom: 10px; letter-spacing: -0.04em; }
+.rail .ri { width: 60px; display: flex; flex-direction: column; align-items: center; gap: 2px; padding: 6px 0; border-radius: 8px; font-size: 10px; color: var(--muted); }
+.rail .ri svg { width: 17px; height: 17px; }
+.rail .ri.on { background: color-mix(in srgb, var(--text) 8%, transparent); color: var(--text); }
+.rail .sp { flex: 1; }
+
+.snav { display: flex; flex-direction: column; min-height: 0; overflow: auto; padding: 0 10px 12px; }
+.snav .hd { margin: 0; padding: 18px 8px 8px; font-size: 10px; font-weight: 600; text-transform: uppercase; letter-spacing: 0.05em; color: var(--muted); }
+.snav .grp { padding: 12px 10px 4px; font-size: 10px; font-weight: 600; text-transform: uppercase; letter-spacing: 0.05em; color: var(--muted); opacity: 0.8; }
+.ni { display: flex; align-items: center; gap: 10px; width: 100%; min-height: 40px; padding: 0 12px; margin-bottom: 4px; border: 1px solid transparent; border-radius: var(--radius-btn); background: transparent; color: var(--muted); font-size: 12px; font-weight: 500; text-align: left; }
+.snav.tight .ni { min-height: 32px; margin-bottom: 1px; }
+.ni svg { width: 16px; height: 16px; flex-shrink: 0; }
+.ni:hover { background: var(--panel-bg); color: var(--text); }
+.ni.on { border-color: color-mix(in srgb, var(--accent) 40%, transparent); background: color-mix(in srgb, var(--panel-bg) 88%, var(--accent) 12%); color: var(--text); }
+.ni .badge { margin-left: auto; font-size: 10px; font-weight: 600; background: var(--accent); color: #fff; border-radius: 999px; padding: 0 6px; line-height: 16px; }
+.ni .dot { margin-left: auto; width: 7px; height: 7px; border-radius: 50%; background: var(--accent); }
+.search { display: flex; align-items: center; gap: 8px; margin: 14px 2px 4px; padding: 0 10px; height: 34px; border: 1px solid var(--border); border-radius: 8px; background: var(--panel-bg); }
+.search svg { width: 14px; height: 14px; color: var(--muted); }
+.search input { border: 0; background: transparent; color: var(--text); font: 12.5px var(--font); width: 100%; outline: none; }
+.search kbd { font: 10px var(--mono); color: var(--muted); border: 1px solid var(--border); border-radius: 4px; padding: 0 4px; }
+.res { display: block; width: 100%; text-align: left; border: 1px solid transparent; background: transparent; border-radius: 8px; padding: 7px 10px; }
+.res:hover, .res.first { background: var(--panel-bg); border-color: var(--border); }
+.res b { display: block; font-size: 12.5px; font-weight: 500; }
+.res b mark { background: var(--accent-dim); color: inherit; border-radius: 3px; }
+.res span { display: block; font-size: 11px; color: var(--muted); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.res em { font-style: normal; color: var(--accent); }
+.empty-res { font-size: 12px; color: var(--muted); padding: 10px; }
+
+.detail { background: var(--panel-bg); margin: 8px 8px 8px 0; border-radius: var(--radius-panel); overflow: auto; padding: 22px 24px 40px; min-width: 0; }
+.detail h1 { font-size: 22px; font-weight: 600; letter-spacing: -0.01em; margin: 0; }
+.detail .sub { color: var(--muted); font-size: 13px; margin: 4px 0 18px; max-width: 72ch; }
+
+/* Today: one card per setting, inside a section card */
+.tsec { border: 1px solid var(--border); border-radius: var(--radius-card); padding: 18px 20px; display: grid; gap: 12px; }
+.tsec + .tsec { margin-top: 18px; }
+.tsec h2 { font-size: 17px; margin: 0; }
+.tsec .tdesc { color: var(--muted); font-size: 13px; margin: -6px 0 2px; }
+.tsec h3 { font-size: 13px; margin: 8px 0 -2px; }
+.tcard { display: flex; gap: 16px; align-items: center; justify-content: space-between; background: var(--inset); border: 1px solid var(--border); border-radius: var(--radius-card); padding: 13px 14px; }
+.tcard .tt { font-size: 13px; font-weight: 500; display: flex; gap: 8px; align-items: center; flex-wrap: wrap; }
+.tcard .td { font-size: 11.5px; color: var(--muted); margin-top: 3px; max-width: 78ch; }
+
+/* Condensed: groups of rows */
+.g { display: grid; gap: 6px; }
+.g + .g { margin-top: 20px; }
+.gh { display: flex; align-items: baseline; justify-content: space-between; gap: 12px; padding: 0 2px; }
+.gh h2 { font-size: 13px; font-weight: 600; margin: 0; }
+.gh .gn { font-size: 12px; color: var(--muted); }
+.box { border: 1px solid var(--border); border-radius: var(--radius-card); background: var(--card-bg); }
+.row { display: flex; gap: 14px; align-items: center; justify-content: space-between; padding: 9px 14px; min-height: 48px; transition: background 600ms ease-out; }
+.row + .row { border-top: 1px solid var(--border); }
+.row .rt { font-size: 13px; font-weight: 500; display: flex; gap: 7px; align-items: center; flex-wrap: wrap; }
+.row .rd { font-size: 12px; color: var(--muted); margin-top: 1px; }
+.row .rd .more { border: 0; background: none; color: var(--accent); padding: 0; font-size: 12px; }
+.row .rl { font-size: 11.5px; color: var(--accent); margin-top: 3px; display: inline-flex; gap: 4px; align-items: center; }
+.row .rl svg { width: 12px; height: 12px; }
+.row .ctl { display: flex; gap: 8px; align-items: center; flex-shrink: 0; }
+.row.flash { background: var(--accent-dim); box-shadow: inset 2px 0 0 var(--accent); }
+.row.dis { opacity: 0.55; }
+.gfoot { font-size: 11.5px; color: var(--muted); padding: 0 2px; }
+.gfoot a, .gfoot button { color: var(--accent); background: none; border: 0; padding: 0; font-size: inherit; }
+
+/* Controls */
+.sw { width: 36px; height: 20px; border-radius: 999px; border: 0; background: color-mix(in srgb, var(--muted) 35%, transparent); position: relative; flex-shrink: 0; padding: 0; }
+.sw::after { content: ""; position: absolute; top: 2px; left: 2px; width: 16px; height: 16px; border-radius: 50%; background: #fff; transition: left 150ms ease-out; box-shadow: 0 1px 2px rgba(0,0,0,0.25); }
+.sw[aria-checked="true"] { background: var(--accent); }
+.sw[aria-checked="true"]::after { left: 18px; }
+.sw:disabled { cursor: not-allowed; opacity: 0.5; }
+.sel { appearance: none; font: 12.5px var(--font); color: var(--text); background: var(--panel-bg) url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='10' height='6'%3E%3Cpath d='M1 1l4 4 4-4' stroke='%23888' fill='none' stroke-width='1.5'/%3E%3C/svg%3E") no-repeat right 9px center; border: 1px solid var(--border); border-radius: 7px; padding: 5px 28px 5px 10px; max-width: 220px; }
+.seg { display: inline-flex; border: 1px solid var(--border); border-radius: 7px; padding: 2px; gap: 2px; background: var(--inset); }
+.seg button { border: 0; background: transparent; font-size: 12px; padding: 3px 10px; border-radius: 5px; color: var(--muted); }
+.seg button[aria-pressed="true"] { background: var(--panel-bg); color: var(--text); box-shadow: 0 1px 2px rgba(0,0,0,0.12); }
+.btn { border: 1px solid var(--border); background: var(--panel-bg); border-radius: 7px; padding: 5px 10px; font-size: 12px; font-weight: 500; white-space: nowrap; display: inline-flex; align-items: center; gap: 5px; }
+.btn.pri { background: var(--accent); border-color: var(--accent); color: #fff; }
+.btn svg { width: 13px; height: 13px; }
+.val { font-size: 12.5px; color: var(--muted); white-space: nowrap; }
+.inp { font: 12px var(--mono); color: var(--text); background: var(--inset); border: 1px solid var(--border); border-radius: 7px; padding: 5px 9px; width: 190px; }
+.pill { font-size: 10px; font-weight: 600; text-transform: uppercase; letter-spacing: 0.04em; border: 1px solid var(--border); border-radius: 999px; padding: 1px 7px; color: var(--muted); }
+.pill.ok { color: var(--running); border-color: color-mix(in srgb, var(--running) 40%, transparent); }
+.pill.warn { color: var(--idle); border-color: color-mix(in srgb, var(--idle) 40%, transparent); }
+.pill.acc { color: var(--accent); border-color: color-mix(in srgb, var(--accent) 45%, transparent); }
+.chip { font-size: 11px; color: var(--muted); background: var(--inset); border: 1px solid var(--border); border-radius: 6px; padding: 1px 7px; }
+
+.tabs { display: flex; gap: 4px; border-bottom: 1px solid var(--border); margin-bottom: 18px; overflow-x: auto; }
+.tabs button { border: 0; background: none; padding: 8px 12px; font-size: 13px; font-weight: 500; color: var(--muted); border-bottom: 2px solid transparent; margin-bottom: -1px; display: inline-flex; gap: 6px; align-items: center; white-space: nowrap; }
+.tabs button[aria-selected="true"] { color: var(--text); border-color: var(--accent); }
+.tabs .st { width: 7px; height: 7px; border-radius: 50%; background: var(--running); }
+.tabs .st.warn { background: var(--idle); }
+.tabs .st.off { background: var(--muted); }
+
+.hhead { display: flex; gap: 14px; align-items: center; justify-content: space-between; margin-bottom: 18px; flex-wrap: wrap; }
+.hhead .hn { font-size: 16px; font-weight: 600; display: flex; gap: 8px; align-items: center; }
+.hhead .hm { font: 11.5px var(--mono); color: var(--muted); margin-top: 2px; }
+
+.swatches { display: flex; gap: 6px; flex-wrap: wrap; }
+.swatch { width: 30px; height: 22px; border-radius: 6px; border: 1px solid var(--border); padding: 0; }
+.swatch.on { outline: 2px solid var(--accent); outline-offset: 1px; }
+
+.disk { display: flex; height: 8px; border-radius: 4px; overflow: hidden; width: 220px; background: var(--inset); }
+.disk i { display: block; }
+
+.matrix { width: 100%; border-collapse: collapse; font-size: 12.5px; }
+.matrix th { text-align: left; font-weight: 500; color: var(--muted); font-size: 11.5px; padding: 8px 14px; }
+.matrix td { padding: 9px 14px; border-top: 1px solid var(--border); }
+.matrix td:first-child { font-weight: 500; }
+.matrix a { color: var(--accent); }
+
+.levels { display: grid; grid-template-columns: repeat(3, 1fr); gap: 8px; padding: 12px; }
+.level { border: 1px solid var(--border); border-radius: 8px; padding: 10px 12px; text-align: left; background: var(--panel-bg); }
+.level.on { border-color: var(--accent); background: var(--accent-dim); }
+.level b { font-size: 12.5px; font-weight: 600; display: block; }
+.level span { font-size: 11.5px; color: var(--muted); }
+
+/* Map table */
+.map { width: 100%; border-collapse: collapse; background: var(--panel-bg); border: 1px solid var(--border); border-radius: var(--radius-card); overflow: hidden; font-size: 13px; }
+.map th { text-align: left; font-size: 11px; text-transform: uppercase; letter-spacing: 0.05em; color: var(--muted); font-weight: 600; padding: 10px 14px; }
+.map td { padding: 9px 14px; border-top: 1px solid var(--border); vertical-align: top; }
+.map td:first-child { white-space: nowrap; font-weight: 500; }
+.map .gone { color: var(--muted); }
+.mapwrap { overflow-x: auto; border-radius: var(--radius-card); }
+
+.qs { display: grid; gap: 10px; counter-reset: q; }
+.q { background: var(--panel-bg); border: 1px solid var(--border); border-radius: var(--radius-card); padding: 14px 16px; }
+.q h3 { margin: 0 0 4px; font-size: 14px; }
+.q p { margin: 0; color: var(--muted); font-size: 13px; max-width: 80ch; }
+.q p b { color: var(--text); font-weight: 500; }
+
+@media (max-width: 760px) {
+  .win { grid-template-columns: minmax(0, 1fr); grid-template-rows: auto minmax(0, 1fr); height: 700px; }
+  .rail { display: none; }
+  .snav { flex-direction: row; flex-wrap: nowrap; overflow-x: auto; padding: 8px 8px 0; gap: 4px; align-items: center; }
+  .snav .hd, .snav .grp { display: none; }
+  .snav .search { flex: 0 0 160px; margin: 0; }
+  .ni { min-height: 32px; width: auto; white-space: nowrap; flex-shrink: 0; margin: 0; }
+  .ni .badge, .ni .dot { margin-left: 4px; }
+  .res { flex: 0 0 200px; }
+  .detail { margin: 8px; padding: 18px 16px 32px; }
+  .row { flex-wrap: wrap; }
+  .tcard { flex-wrap: wrap; }
+  .levels { grid-template-columns: 1fr; }
+  .optnote { grid-template-columns: 1fr; }
+  .fact b { font-size: 18px; }
+  .inp { width: 150px; }
+}
+@media (prefers-reduced-motion: reduce) { .row, .sw::after { transition: none; } }
+</style>
+</head>
+<body>
+<main class="doc">
+  <header>
+    <h1>Condensing Settings</h1>
+    <p class="lede">Settings has grown to 15 pages, one switch per card. Below is today's screen and three ways to condense it. Each one builds on the one before. All four show the same settings, with invented data. Click around inside each window.</p>
+  </header>
+
+  <section aria-labelledby="today-h">
+    <h2 id="today-h">What's there today</h2>
+    <div class="facts">
+      <div class="fact"><b>15</b><span>pages in one flat list, in no particular order</span></div>
+      <div class="fact"><b>17 + 1</b><span>switches and a select under Features, 10 of them Experimental</span></div>
+      <div class="fact"><b>4</b><span>places that handle updates: Harnesses, Machines, System, Weave</span></div>
+      <div class="fact"><b>5</b><span>pages with a choice per harness: Harnesses, Weave, Permissions, Browser, Workflows</span></div>
+      <div class="fact"><b>3</b><span>screens the menu can't reach: API keys, Plugin settings, GitHub</span></div>
+    </div>
+  </section>
+
+  <section aria-labelledby="proto-h" style="display:grid; gap:14px">
+    <h2 id="proto-h" style="margin:0">Prototypes</h2>
+    <div class="picker" role="group" aria-label="Which version">
+      <button data-opt="today">Today</button>
+      <button data-opt="o1">1 · Lighter rows <small>15 pages</small></button>
+      <button data-opt="o2">2 · Grouped <small>10 pages</small> <span class="rec">Recommended</span></button>
+      <button data-opt="o3">3 · Essentials + search</button>
+    </div>
+    <div class="win" id="win">
+      <aside class="rail" id="rail"></aside>
+      <nav class="snav" id="snav" aria-label="Settings sections"></nav>
+      <section class="detail" id="detail" aria-live="polite"></section>
+    </div>
+    <div class="optnote" id="optnote"></div>
+  </section>
+
+  <section aria-labelledby="map-h">
+    <h2 id="map-h">Where everything goes in option 2</h2>
+    <div class="mapwrap">
+    <table class="map">
+      <thead><tr><th>Today</th><th>Option 2</th></tr></thead>
+      <tbody>
+        <tr><td>Features</td><td><b>General</b> gets the 7 everyday settings. <b>Labs</b> gets the 10 experiments, plus Workflows. Each experiment names what it adds and where.</td></tr>
+        <tr><td>Harnesses + Weave</td><td><b>Harnesses</b>, one tab per harness: version, providers, what it may do, Weave, profiles and its own settings.</td></tr>
+        <tr><td>Permissions + Browser</td><td><b>Permissions</b>: the default level, unattended runs and the browser. The per-harness level moves to each harness's tab. A table here shows them all.</td></tr>
+        <tr><td>Skills, Tools, Mods</td><td><b>Skills &amp; tools</b>, with tabs. Mods is a tab while its Labs switch is on.</td></tr>
+        <tr><td>Folders + Storage</td><td><b>Folders</b>: locations, worktree names and the disk they take.</td></tr>
+        <tr><td>System + update strips</td><td><b>Updates &amp; about</b>: Fleet, the desktop app, every harness and every machine, plus What's new.</td></tr>
+        <tr><td>Machines</td><td><b>Machines</b>: machines, phones and devices, and the access token. Versions and update rules move to Updates.</td></tr>
+        <tr><td>Workflows</td><td>The switch goes to <b>Labs</b>. Model roles move to the Workflows page in the rail, next to the workflows that use them.</td></tr>
+        <tr><td>Memory</td><td><b>Memory</b>, as today. Dreaming's switch is in Labs; its nightly run shows here when it's on.</td></tr>
+        <tr><td>Appearance</td><td><b>Appearance</b>, unchanged apart from the lighter rows.</td></tr>
+        <tr><td class="gone">API keys (no way in)</td><td>Each harness's <b>Providers</b> group, which already signs in with keys.</td></tr>
+        <tr><td class="gone">GitHub (no way in)</td><td><b>Integrations › GitHub</b>. The GitHub add-on fills a slot that core offers, so core still never imports it.</td></tr>
+        <tr><td class="gone">Plugin settings (empty)</td><td>Removed. Add-ons put their own entry under Integrations.</td></tr>
+      </tbody>
+    </table>
+    </div>
+  </section>
+
+  <section aria-labelledby="q-h">
+    <h2 id="q-h">What I need from you</h2>
+    <div class="qs">
+      <div class="q"><h3>1. How far should it go?</h3><p><b>Option 1</b> is a styling change only: every page gets lighter and Features splits in two. <b>Option 2</b> also merges pages, going from 15 to 10 in 4 groups. <b>Option 3</b> adds a first page of everyday settings and a search box. I recommend 2 now and 3's search box next: it's the settings-search proposal from 14 October, and the shared row component in 1 is what makes search possible.</p></div>
+      <div class="q"><h3>2. Where do experimental switches live?</h3><p><b>All in Labs</b> (shown): one list to try things, and graduating an experiment means moving one row to its page. <b>Or in the page they change</b>, with an Experimental pill: Jobs in Machines, Dreaming in Memory, Copilot in Harnesses. That's less action at a distance, but the experiments end up scattered again.</p></div>
+      <div class="q"><h3>3. Does Weave go inside each harness?</h3><p>Shown that way: Weave's plugin and config sit in each harness's tab, because Weave is per harness. The cost is that Weave's config editor, which is big, becomes a dialog opened from there.</p></div>
+      <div class="q"><h3>4. Can the descriptions get shorter?</h3><p>Rows show one line, and <b>More</b> opens today's full text. Most of today's text stays word for word behind More; only the first line is rewritten.</p></div>
+    </div>
+  </section>
+</main>
+
+<script>
+/* ---------------- Data ---------------- */
+const ICON = {
+  folders: "folder-git-2", storage: "hard-drive", appearance: "palette", features: "sliders-horizontal", general: "sliders-horizontal",
+  skills: "wrench", memory: "lightbulb", permissions: "shield-check", browser: "globe", tools: "puzzle", harnesses: "cable",
+  machines: "server", weave: "waves", workflows: "workflow", system: "info", labs: "flask-conical", updates: "refresh-cw",
+  github: "github", essentials: "sparkles", skillstools: "wrench"
+};
+const LABEL = {
+  folders: "Folders", storage: "Storage", appearance: "Appearance", features: "Features", general: "General", skills: "Skills",
+  memory: "Memory", permissions: "Permissions", browser: "Browser", tools: "Tools", harnesses: "Harnesses", machines: "Machines",
+  weave: "Weave", workflows: "Workflows", system: "System", labs: "Labs", updates: "Updates & about", github: "GitHub",
+  essentials: "Essentials", skillstools: "Skills & tools"
+};
+
+// Row: t title, d one-liner, long today's text, c control, x extras
+const sw = (on, dis) => ({ k: "sw", on, dis });
+const sel = (opts, v) => ({ k: "sel", opts, v });
+const seg = (opts, v) => ({ k: "seg", opts, v });
+const btn = (...labels) => ({ k: "btn", labels });
+const val = (text) => ({ k: "val", text });
+const inp = (text) => ({ k: "inp", text });
+const R = (id, t, d, c, x = {}) => ({ id, t, d, c, ...x });
+
+const GENERAL = [
+  { h: "New sessions", rows: [
+    R("starters", "Show starters", "A few sentences to start from on the new-session page.", sw(true), { long: "On the new-session page, offer a few sentences to start from, such as \"Explore the code\". A starter fills the box; nothing is sent until you press Enter." }),
+    R("pastes", "Large pastes", "When you paste 2,000 characters or 25 lines or more.", sel(["Ask", "Always attach", "Paste as text"], "Ask"), { long: "When you paste 2,000 characters or 25 lines or more." }),
+  ]},
+  { h: "While you're away", rows: [
+    R("notify", "Desktop notifications", "When a session needs you or finishes, unless it's the one in front of you.", sw(false), { long: "Tell me when a session needs an answer, or finishes, while I'm looking at something else. Nothing is sent about the session in front of you." }),
+    R("recap", "Session recap", "A one-line recap when a turn finishes out of view. One extra request each.", sw(false), { long: "When a turn finishes while you're looking at something else, write a one-line recap above the composer for when you come back. Each recap is one extra request to the session's model." }),
+    R("retry", "Try again when a limit resets", "Sends \"Continue where you left off.\" once a rate limit resets.", sw(true), { long: "When a model provider's rate limit or usage limit stops a turn, send \"Continue where you left off.\" when the limit resets, or after a wait when the provider doesn't say. What you queued waits for it." }),
+  ]},
+  { h: "Rail and status bar", rows: [
+    R("usage", "Show usage in the status bar", "The tightest provider limit, grey until 80%.", sw(true), { long: "Fleet asks the providers you've signed in to how much you've used, read-only: Claude automatically, the others after you press Allow. The chip shows the tightest limit, grey until 80%. Turn it off to hide it; nothing else changes." }),
+    R("board", "Board", "The Board entry in the rail, with its panels.", sw(false), { long: "Show the Board entry in the left rail and enable the board workspace panels." }),
+  ]},
+];
+
+const LABS_ROWS = (where) => [
+  R("messages", "Messages between sessions", "An agent can message another session with fleet_message.", sw(true), { adds: "fleet_message tool", long: "Let an agent send a message to another session with the fleet_message tool. The message says which session sent it, and the agent treats it as a teammate's request, not yours. Agents can't send prompts through Fleet's API while this is on. Applies to sessions started afterwards." }),
+  R("handoff", "Hand work to other machines", "An agent can start and talk to a session on a machine you allow.", sw(false), { adds: where ? "A switch on each machine" : null, link: where ? "machines" : null, needs: "Needs Messages between sessions.", long: "Let an agent start a session on another machine, give it a task, and message and read it there. Only on the machines you allow in Settings → Machines. This Fleet makes every call there, so agents never see a machine's token. OpenCode and Claude Code sessions get it; Pi sessions don't. Applies to sessions started afterwards." }),
+  R("live", "Keep every machine live", "Other machines update as they change, not every 15 seconds.", sw(false), { long: "Other machines' sessions update as they change, instead of every 15 seconds, and open here without a reload." }),
+  R("updates", "Updates in Machines", "Each machine's version, update rule and Restart.", sw(true), { adds: where ? "Machines in Updates" : null, link: where ? "updates" : null, long: "Shows each machine's version, update rule and Restart in Settings → Machines, plus Update machines now, which restarts every machine that has an update downloaded, one at a time." }),
+  R("jobs", "Jobs", "One queue; Fleet starts each job wherever a seat is free.", sw(false), { adds: where ? "Jobs page, seats on each machine" : null, link: where ? "machines" : null, long: "One queue of jobs. Fleet starts each on whichever of your machines has a free seat. Give machines seats in Settings → Machines." }),
+  R("mission", "Mission control", "One screen for every running agent. It becomes the first screen.", sw(false), { adds: where ? "Mission control page" : null, long: "One screen for every running agent on every machine: what needs you, what each is doing right now, and a nudge box. It becomes the first screen when Fleet opens." }),
+  R("dreaming", "Dreaming", "Fleet reads recent sessions and updates memory notes overnight.", sw(true), { adds: where ? "Nightly run in Memory" : null, link: where ? "memory" : null, long: "Fleet reads a repository's recent sessions and updates its memory notes. Every change says why, and you can undo it. Notes you wrote are never changed." }),
+  R("choose", "Choose on a page", "The agent shows you a page and waits while you pick.", sw(true), { long: "The agent can show you a page and wait while you pick on it. Works with OpenCode and Claude Code; GitHub Copilot needs a weave-copilot update first." }),
+  R("copilot", "GitHub Copilot", "Start sessions on Copilot. Needs weave-copilot on PATH.", sw(false), { adds: where ? "A Copilot tab in Harnesses" : null, link: where ? "harnesses" : null, long: "Start sessions on GitHub Copilot, with HydraFusion's passes when you turn them on under Settings → Harnesses. Needs weave-copilot, which Fleet finds on PATH." }),
+  R("mods", "Mods", "Agents write small add-ons for Fleet; you review each one.", sw(true), { adds: where ? "A Mods tab, Bun 1.3.2" : null, link: where ? "skillstools" : null, long: "Agents can write small add-ons for Fleet: what a tool row shows, buttons, panes you open from the + menu, and hooks on prompts, turns and permission asks. You review each one before it's kept." }),
+];
+const WORKFLOWS_SWITCH = R("workflows-on", "Workflows", "Workflows in the rail; Fleet runs their steps and stops where one asks you.", sw(true), { adds: "Workflows in the rail", long: "Show Workflows in the rail, and let Fleet run workflows: it moves between steps and stops where a step asks you. Off: no runner, no step tool, nothing changes." });
+
+const THEMES = ["#6366f1|#0d0d10", "#5B6EC7|#F3F2EF", "#A855F7|#0F172A", "#A855F7|#000000", "#88C0D0|#2E3440", "#BD93F9|#282A36", "#268BD2|#002B36", "#2f81f7|#0d1117"];
+const APPEARANCE = [
+  { h: "Look", rows: [
+    R("theme", "Theme", "System follows your computer.", { k: "theme" }, { long: "System, Default Dark, Light, Weave Classic, Black (OLED), Nord, Dracula, Solarized Dark, Solarized Light, Monokai, GitHub Dark." }),
+    R("font", "Font", "The interface font.", sel(["Inter", "System UI", "IBM Plex Sans", "JetBrains Mono"], "Inter"), { long: "Choose the interface font used across the workspace shell." }),
+    R("size", "Font size", "13, 14, 15 or 16 px.", seg(["S", "M", "L", "XL"], "M"), { long: "Adjust the base font size for the interface." }),
+  ]},
+  { h: "Conversation", rows: [
+    R("thinking", "Thinking", "One line per block, with its gist. Click a line to open it.", seg(["Folded", "Open", "Hidden"], "Folded"), { long: "How the model's thinking shows in conversations." }),
+  ]},
+];
+
+const FOLDERS = [
+  { h: "Locations", note: "Fleet lists repositories up to three folders deep.", rows: [
+    R("loc1", "~/source", "From the environment · 23 repositories", btn("Refresh")),
+    R("loc2", "~/work/client-apps", "Added · 6 repositories", btn("Remove")),
+    R("loc-add", "Add a location", "A folder you clone into, such as ~/projects.", btn("Add location…")),
+  ]},
+  { h: "Worktrees", note: "How new worktrees are named.", rows: [
+    R("prefix", "Branch prefix", "What every branch starts with.", inp("fleet")),
+    R("branch", "Branch name", "Tokens fill in when a session starts.", inp("{prefix}/{slug}")),
+    R("wtroot", "Worktree root and folder", "~/source/{repo}-worktrees/{slug}", btn("Edit templates…")),
+  ]},
+];
+const STORAGE = [
+  { h: "Disk", note: "Only checkouts Fleet made.", rows: [
+    R("disk", "Worktree checkouts", "4.2 GB in use · 610 MB need a look · 2.8 GB could be freed", { k: "disk" }),
+    R("clean", "Clean now", "Removes checkouts of sessions archived for 7 days or more. Branches and conversations stay.", btn("Preview…")),
+  ]},
+];
+
+const SKILLS_BUILTIN = [
+  ["fleet-code-review", "Review a change for bugs, checked before it's reported.", true],
+  ["fleet-debug", "Find the root cause before changing code.", true],
+  ["fleet-mockups", "Mockups and prototypes in a page canvas.", true],
+  ["fleet-design", "Design HTML pages so they look chosen.", true],
+  ["fleet-explain", "A short animation of how something works.", false],
+  ["fleet-walkthrough", "A guided tour of a diff.", false],
+  ["fleet-run", "Run the project's app to see a change.", true],
+];
+const skillRows = () => SKILLS_BUILTIN.map(([n, d, on]) => R("sk-" + n, n, d, sw(on), { mono: true }));
+
+const MEMORY = (dreamOn) => [
+  { h: "Memory", rows: [
+    R("mem-on", "Remember what agents learn", "New sessions start with their repository's notes and this machine's notes.", sw(true), { long: "Let agents keep notes about each repository (test commands, conventions, your corrections) and about this machine (disk space, memory, crashes, tools that don't work here). New sessions start with both, so agents get better the longer you work with them." }),
+  ]},
+  { h: "Notes", note: "about 1,240 tokens per request", rows: [
+    R("mem-repo", "orbit-web", "27 notes · 3 expired", btn("Manage notes")),
+    R("mem-api", "harbor-api", "12 notes", btn("Manage notes")),
+    R("mem-machine", "This machine", "9 notes, read by every repository", btn("Manage notes")),
+  ]},
+  ...(dreamOn ? [{ h: "Dreaming", rows: [
+    R("dream-night", "Nightly run", "03:00 on this machine · last run changed 4 notes", btn("See changes")),
+  ]}] : []),
+];
+
+const PERM_LEVELS = [
+  ["Ask before changes", "Reading and searching run. Everything else asks."],
+  ["Allow edits", "File edits run as well. Commands and web ask."],
+  ["Allow everything", "Nothing asks. For a sandbox or throwaway worktree."],
+];
+const UNATTENDED = R("unattended", "Unattended runs", "Automations and workflow steps nobody is watching.", sel(["Allow everything", "Same as sessions (a run waits for you)", "Deny anything that would ask"], "Allow everything"), { long: "Nobody is there to answer, so these runs ask about nothing." });
+const BROWSER = [
+  R("browser-on", "Agents can use a browser", "Their own tab in Fleet's headless browser, not yours.", sw(true), { long: "Adds browser tools to sessions that can have them. Off: OpenCode 2 doesn't see its browser tools, Claude Code doesn't see Fleet's from its next message, and OpenCode's answer that the browser is off." }),
+  R("browser-pages", "Pages agents can open", "Fleet checks every address first, links it clicks included.", sel(["This session's pages", "Any page on this machine", "Any address"], "This session's pages"), { long: "This session's pages: apps it started and pages in its canvases, on this machine. Recommended." }),
+  R("browser-js", "Run scripts in pages", "Useful for checks; a script can read the page's storage.", sw(false), { long: "Lets the agent run its own JavaScript in a page. Useful for checks, but a script can read the page's storage and call other local services." }),
+  R("browser-up", "Upload files to pages", "Not in this version.", sw(false, true), { dis: true }),
+];
+
+const HARN = {
+  oc2: { name: "OpenCode 2", st: "ok", ver: "2.2.1", path: "~/.opencode2/bin/opencode", def: true, upd: "Up to date",
+    prov: [["Anthropic", "Signed in · in use"], ["OpenAI", "Signed in"]], perm: "Default (Allow edits)", browser: "On · its own browser tools",
+    weave: ["Loaded · 7 agents", "Remove"], cfg: "Kept in Fleet", profiles: "No profiles. Sessions use your opencode.json as it is.", own: [] },
+  oc: { name: "OpenCode", st: "ok", ver: "1.18.30", path: "~/.opencode/bin/opencode", upd: "Up to date",
+    prov: [["Anthropic", "Signed in · in use"]], perm: "Default (Allow edits)", browser: "On · Fleet's plugin",
+    weave: ["Loaded · Weave Legacy", "Remove"], cfg: "My own file", profiles: "1 profile: cheap-models", own: [R("pooled", "Pooled OpenCode mode", "New sessions share one OpenCode process, so they survive a Fleet restart.", sw(true))] },
+  cc: { name: "Claude Code", st: "warn", ver: "2.4.1", path: "~/.local/bin/claude", upd: "2.4.3 is available",
+    prov: [["Claude subscription", "Signed in · in use"]], perm: "Allow everything", browser: "On · Fleet's tools",
+    weave: null, cfg: null, profiles: null, own: [R("cc-mem", "Claude Code's own memory", "Lives in ~/.claude. It can repeat or disagree with Fleet's notes.", val("On"))] },
+  pi: { name: "Pi", st: "ok", ver: "0.9.2", path: "~/.local/bin/pi", upd: "Up to date",
+    prov: [["OpenRouter", "Signed in · in use"]], perm: null, browser: null, weave: null, cfg: null, profiles: null, own: [] },
+};
+
+/* ---------------- Page builders ---------------- */
+function harnessTab(h) {
+  const groups = [
+    { h: "Version", rows: [
+      R("h-ver", h.ver + " · " + h.upd, h.path, h.st === "warn" ? btn("Update to 2.4.3") : btn("Check again"), { monoD: true }),
+    ]},
+    { h: "Providers", note: "Sign in with a key or in the browser.", rows: [
+      ...h.prov.map(([n, s], i) => R("h-prov" + i, n, s, btn("Sign out"))),
+      R("h-prov-add", "Add a sign-in", "Anthropic, OpenAI, Google, OpenRouter and 70 more.", btn("Sign in…")),
+    ]},
+    { h: "What it may do", rows: [
+      h.perm ? R("h-perm", "Permissions", "Applies from each session's next message.", sel(["Default (Allow edits)", "Ask before changes", "Allow edits", "Allow everything"], h.perm)) : R("h-perm", "Permissions", "Fleet can't hand Pi a permission level yet.", val("Not available")),
+      h.browser ? R("h-browser", "Browser", h.browser, val("On")) : R("h-browser", "Browser", "Fleet can't add tools to Pi yet.", val("Off")),
+    ]},
+  ];
+  if (h.weave) groups.push({ h: "Weave", note: "Agents, prompts and workflows Weave adds.", rows: [
+    R("h-weave", "Weave plugin", h.weave[0], btn(h.weave[1])),
+    R("h-weave-cfg", "Config", "Whose config Weave reads in Fleet sessions.", seg(["My own file", "Kept in Fleet"], h.cfg), { extra: btn("Edit…") }),
+  ]});
+  else groups.push({ h: "Weave", rows: [R("h-weave", "Weave plugin", "Fleet can't add Weave to " + h.name + " yet.", val("Not available"))] });
+  if (h.profiles) groups.push({ h: "Profiles", note: "Extra config on top of opencode.json.", rows: [R("h-prof", "Profiles", h.profiles, btn("New profile"))] });
+  if (h.own.length) groups.push({ h: h.name + " settings", rows: h.own });
+  return groups;
+}
+
+function pagesFor(opt) {
+  const labsOn = (id) => state.labs[id];
+  const P = {};
+  // ---- Option 1 granularity (also used by Today) ----
+  P.folders = { title: "Folders", sub: "Where Fleet finds your repositories, and how it names worktrees.", groups: FOLDERS };
+  P.storage = { title: "Storage", sub: "What Fleet's worktree checkouts take on this machine.", groups: STORAGE };
+  P.appearance = { title: "Appearance", sub: "How Fleet looks.", groups: APPEARANCE };
+  P.general = { title: "General", sub: "Everyday behaviour.", groups: GENERAL };
+  P.labs = { title: "Labs", sub: "Experiments. They can change or go away, and each is off until you turn it on.", groups: [{ h: "Experiments", rows: [...LABS_ROWS(opt !== "o1"), WORKFLOWS_SWITCH] }] };
+  P.features = { title: "Features", sub: "Enable or hide optional workspace features.", today: true, groups: [{ h: "", rows: [...GENERAL.flatMap(g => g.rows), ...LABS_ROWS(false).map(r => ({ ...r, exp: true }))] }] };
+  P.skills = { title: "Skills", sub: "Manage installed skills, turn on the ones that come with Fleet, browse the catalog, or install from a custom source.", tabs: ["Installed", "Built in", "Catalog", "Custom"], tab: 1, groups: [{ h: "Built in", note: "Sessions you start afterwards get them.", rows: skillRows() }] };
+  P.tools = { title: "Tools", sub: "Manage installed tools, browse the catalog, or install from a custom source.", tabs: ["Installed", "Catalog", "Custom"], tab: 0, groups: [{ h: "Installed", rows: [
+    R("t1", "context7", "Docs lookup for libraries · Global", btn("Update")), R("t2", "playwright-mcp", "Drive a browser · orbit-web", btn("Remove"))] }] };
+  P.memory = { title: "Memory", sub: "Notes agents keep about each repository and this machine.", groups: MEMORY(labsOn("dreaming")) };
+  P.permissions = { title: "Permissions", sub: "What an agent can do without asking. Changes apply from each session's next message.", groups: [
+    { h: "Default", rows: [{ id: "levels", c: { k: "levels" } }] },
+    { h: "Each harness", rows: Object.values(HARN).map(h => h.perm ? R("p-" + h.name, h.name, "Ends up with " + (h.perm.startsWith("Default") ? "Allow edits" : h.perm), sel(["Default (Allow edits)", "Ask before changes", "Allow edits", "Allow everything"], h.perm)) : R("p-" + h.name, h.name, "Fleet can't hand Pi a permission level yet.", val("—"))) },
+    { h: "Runs nobody is watching", rows: [UNATTENDED] },
+  ]};
+  P.browser = { title: "Browser", sub: "Agents open their own tab on a page, read it, click and type, to try what they built.", groups: [
+    { h: "", rows: BROWSER },
+    { h: "Each harness", rows: Object.values(HARN).map(h => R("b-" + h.name, h.name, h.browser || "Off: Fleet can't add tools to Pi yet.", val(h.browser ? "On" : "Off"))) },
+  ]};
+  P.harnesses = { title: "Harnesses", sub: "The runtimes Fleet uses to drive sessions.", groups: [
+    { h: "", rows: [R("h-check", "Check for updates", "Last checked 2 minutes ago.", sw(true), { extra: btn("Check again") }), R("h-setup", "Set up a harness", "Install, sign in and pick a default.", btn("Set up…"))] },
+    { h: "Installed", rows: Object.entries(HARN).map(([k, h]) => R("h-" + k, h.name + (h.def ? "" : ""), h.ver + " · " + h.upd, sw(true), { pills: [h.st === "warn" ? ["Update", "warn"] : ["Ready", "ok"], ...(h.def ? [["Default", "acc"]] : [])], extra: btn(h.def ? "Default" : "Set default") })) },
+    { h: "OpenCode", rows: [HARN.oc.own[0], R("oc-prof", "Profiles", "1 profile: cheap-models", btn("New profile"))] },
+    { h: "OpenCode 2", rows: [R("oc2-prof", "Profiles", "No profiles yet.", btn("New profile"))] },
+  ]};
+  P.weave = { title: "Weave", sub: "Agents, prompts and workflows Weave adds to your harnesses.", groups: [
+    { h: "Each harness", rows: Object.values(HARN).map(h => h.weave ? R("w-" + h.name, h.name, h.weave[0], btn(h.weave[1])) : R("w-" + h.name, h.name, "Fleet can't edit its plugin list.", val("—"))) },
+    { h: "Config", rows: [R("w-cfg", "Whose config Weave reads", "Kept in Fleet: edited here and tried before it's used.", seg(["My own file", "Kept in Fleet"], "Kept in Fleet"), { extra: btn("Edit…") })] },
+  ]};
+  P.machines = { title: "Machines", sub: "Every machine runs its own Fleet. A session stays on the machine it started on.", groups: [
+    { h: "Machines", rows: [
+      R("m-home", "hangar", "This computer · Linux · v0.62.0", val("Live"), { pills: [["Live", "ok"]] }),
+      R("m-falcon", "falcon", "Over SSH · macOS · v0.61.0", btn("Work here"), { pills: opt === "o1" && labsOn("updates") ? [["Update", "warn"]] : [] , extra: labsOn("handoff") ? { k: "chk", text: "Agents can hand work here" } : null }),
+      R("m-kestrel", "kestrel", "By address · Windows · offline 3 h", btn("Work here")),
+      R("m-add", "Add a machine", "Over SSH, with a pairing code or by address.", btn("Add a machine…")),
+    ]},
+    ...(opt === "o1" && labsOn("updates") ? [{ h: "Updates", rows: [R("m-rule", "Machines update", "Update machines now doesn't wait for the rule.", sel(["Ask me first", "When nothing is working", "Only overnight, 02:00–05:00"], "Ask me first"), { extra: btn("Update machines now (1)") })] }] : []),
+    { h: "Phones and devices", rows: [
+      R("m-phone", "Use Fleet from your phone", "Answer agents, start sessions, get notifications.", btn("Show the code")),
+      R("m-dev", "Devices with access", "This computer and 2 phones", btn("Manage")),
+      R("m-token", "Access token", "Whoever has it can do anything Fleet can here.", btn("Show", "Replace")),
+    ]},
+  ]};
+  P.workflows = { title: "Workflows", sub: "Steps ask for a role, not a model, so a shared workflow works on your providers.", groups: [
+    { h: "", rows: [WORKFLOWS_SWITCH] },
+    { h: "Model roles", rows: [
+      R("wf-strong", "Strong", "Judgement: deciding what to build and whether it's right", sel(["claude-opus-5-5", "gpt-5.2"], "claude-opus-5-5")),
+      R("wf-std", "Standard", "Doing the work: writing and running code", sel(["claude-sonnet-5-5"], "claude-sonnet-5-5")),
+      R("wf-fast", "Fast", "Reading and sorting: short tasks with a clear answer", sel(["claude-haiku-5-5"], "claude-haiku-5-5")),
+    ]},
+  ]};
+  P.system = { title: "System", sub: "Version information and software updates.", groups: [
+    { h: "", rows: [R("sys-ver", "Installed version", "v0.62.0" + (labsOn("updates") ? ", update waiting · see Machines" : ""), btn("What's new", "Check for updates"))] },
+    { h: "What's new", rows: [R("wn1", "Fleet 0.62.0", "28 October 2026 · Phone app, pages on the phone", btn("Open")), R("wn2", "Fleet 0.61.0", "24 October 2026", btn("Open"))] },
+  ]};
+
+  // ---- Option 2 / 3 merged pages ----
+  if (opt === "o2" || opt === "o3") {
+    P.labs.groups[0].rows = [...LABS_ROWS(true), WORKFLOWS_SWITCH];
+    P.harnesses = { title: "Harnesses", sub: "The runtimes Fleet drives sessions with. Everything about one harness is on its tab.", harnessTabs: true, groups: [] };
+    P.permissions = { title: "Permissions", sub: "What agents can do without asking. Changes apply from each session's next message.", groups: [
+      { h: "Default for every harness", rows: [{ id: "levels", c: { k: "levels" } }] },
+      { h: "Runs nobody is watching", rows: [UNATTENDED] },
+      { h: "Browser", rows: BROWSER.slice(0, 3) },
+      { h: "Each harness", note: "Set on each harness's tab", rows: [{ id: "matrix", c: { k: "matrix" } }] },
+    ]};
+    P.skillstools = { title: "Skills & tools", sub: "What agents can use, from Fleet, a catalog or anywhere else.", tabs: ["Skills", "Tools", ...(labsOn("mods") ? ["Mods"] : [])], tab: 0, groups: [
+      { h: "Built in", note: "Off until you turn them on", rows: skillRows() },
+      { h: "Installed", rows: [R("sk-i1", "release-notes", "From github.com/orbit-labs/skills · Global", btn("Update")), R("sk-add", "Add a skill", "From the catalog, a GitHub URL or a folder.", btn("Browse…"))] },
+    ]};
+    P.folders = { title: "Folders", sub: "Where Fleet finds repositories, how it names worktrees, and the disk they take.", groups: [...FOLDERS, ...STORAGE] };
+    P.machines.groups = P.machines.groups.filter(g => g.h !== "Updates");
+    P.machines.groups[0].rows = P.machines.groups[0].rows.map(r => ({ ...r, pills: r.id === "m-home" ? r.pills : [] }));
+    P.machines.groups.splice(1, 0, ...(labsOn("jobs") ? [{ h: "Jobs", rows: [R("m-seats", "Seats for jobs", "hangar 2 · falcon 1 · kestrel 0", btn("Edit"))] }] : []));
+    P.updates = { title: "Updates & about", sub: "Every version Fleet looks after, in one place.", groups: [
+      { h: "Fleet", rows: [R("u-fleet", "Fleet 0.62.0", "Up to date · checked 2 minutes ago", btn("Check now"), { pills: [["Up to date", "ok"]] })] },
+      { h: "Harnesses", rows: [
+        R("u-check", "Check for updates", "Daily, and when Fleet starts.", sw(true)),
+        R("u-oc2", "OpenCode 2", "2.2.1 · up to date", btn("Check again")),
+        R("u-cc", "Claude Code", "2.4.1 → 2.4.3 · waits for 1 working session", btn("Update"), { pills: [["Update", "warn"]] }),
+        R("u-pi", "Pi", "0.9.2 · up to date", btn("Check again")),
+      ]},
+      ...(labsOn("updates") ? [{ h: "Machines", rows: [
+        R("u-rule", "Machines update", "Update machines now doesn't wait for the rule.", sel(["Ask me first", "When nothing is working", "Only overnight, 02:00–05:00"], "Ask me first")),
+        R("u-falcon", "falcon", "0.61.0 → 0.62.0 · downloaded", btn("Update machines now (1)"), { pills: [["Update", "warn"]] }),
+        R("u-kestrel", "kestrel", "0.60.2 · offline", val("Waiting")),
+      ]}] : []),
+      { h: "What's new", rows: [R("wn1", "Fleet 0.62.0", "28 October 2026 · Phone app, pages on the phone", btn("Open")), R("wn2", "Fleet 0.61.0", "24 October 2026", btn("Open"))] },
+    ]};
+    P.github = { title: "GitHub", sub: "Added by the GitHub add-on.", groups: [
+      { h: "Connection", rows: [
+        R("gh-conn", "GitHub is connected", "Fleet lists your repositories and shows linked pull requests and issues.", btn("Disconnect"), { pills: [["Connected", "ok"]] }),
+        R("gh-cache", "Repository cache", "48 repositories · refreshed 10 minutes ago", btn("Refresh")),
+      ]},
+    ]};
+  }
+  if (opt === "o3") {
+    P.essentials = { title: "Essentials", sub: "What most people change. Everything else is in the menu, or type in the search box.", groups: [
+      { h: "Look", rows: [ { ...APPEARANCE[0].rows[0], from: "appearance" }, { ...APPEARANCE[0].rows[2], from: "appearance" } ] },
+      { h: "Agents", rows: [
+        R("e-harness", "Default harness", "Used when you don't pick one.", sel(["OpenCode 2", "OpenCode", "Claude Code", "Pi"], "OpenCode 2"), { from: "harnesses" }),
+        R("e-perm", "Permissions", "Reading runs; edits, commands and web ask first.", sel(["Ask before changes", "Allow edits", "Allow everything"], "Allow edits"), { from: "permissions" }),
+        { ...MEMORY(false)[0].rows[0], d: "Agents keep notes per repository and machine.", from: "memory" },
+      ]},
+      { h: "You", rows: [ { ...GENERAL[1].rows[0], from: "general" }, { ...GENERAL[1].rows[1], from: "general" } ] },
+      { h: "Fleet", rows: [ R("e-upd", "Fleet 0.62.0", "Up to date. 1 harness update waiting.", btn("Updates"), { from: "updates" }) ] },
+    ]};
+  }
+  return P;
+}
+
+const NAV = {
+  today: { tight: false, items: ["folders", "storage", "appearance", "features", "skills", "memory", "permissions", "browser", "tools", "harnesses", "machines", "weave", "workflows", "system"] },
+  o1: { tight: false, items: ["folders", "storage", "appearance", "general", "labs", "skills", "memory", "permissions", "browser", "tools", "harnesses", "machines", "weave", "workflows", "system"] },
+  o2: { tight: true, groups: [["You", ["general", "appearance"]], ["Agents", ["harnesses", "permissions", "skillstools", "memory"]], ["Work", ["folders", "machines"]], ["Fleet", ["labs", "updates"]], ["Integrations", ["github"]]] },
+  o3: { tight: true, search: true, groups: [["", ["essentials"]], ["You", ["general", "appearance"]], ["Agents", ["harnesses", "permissions", "skillstools", "memory"]], ["Work", ["folders", "machines"]], ["Fleet", ["labs", "updates"]], ["Integrations", ["github"]]] },
+};
+
+const NOTES = {
+  today: [["What you're looking at", ["Today's screen, rebuilt from the code with invented data.", "<b>Features</b> holds 17 cards, about 70 px each, so it takes three screens.", "Experimental switches in Features add controls to Machines, Memory, Harnesses and Mods."]],
+          ["What hurts", ["The menu is 14 entries long, plus Mods, and isn't grouped.", "One harness's settings are spread over Harnesses, Weave, Permissions, Browser and Workflows.", "Updates are in System, Machines and Harnesses, and System points you to Machines."]]],
+  o1: [["What changes", ["<b>Lighter rows</b>: one card per group and one line per setting. <b>More</b> opens the full text.", "Features splits into <b>General</b> (7 everyday settings) and <b>Labs</b> (11 experiments, Workflows included).", "Every row comes from one shared row component, which is what search needs later."]],
+       ["What stays the same", ["The same pages and the same order. Nothing moves between pages.", "Features fits on one screen: General is about 400 px, down from about 1,200.", "Cost: a styling pass over 15 sections, with no changes to behaviour."]]],
+  o2: [["What changes", ["<b>15 → 10 pages</b> in 4 groups: You, Agents, Work, Fleet. Add-ons get an Integrations group.", "<b>Harnesses</b>: one tab per harness holds everything about it, including Weave, permissions and the browser.", "<b>Updates &amp; about</b>: every version in one place. Machines keeps machines and devices only.", "Labs names what each experiment adds, with a link to it."]],
+       ["What it costs", ["Pages move, so links like \"Settings → Machines\" in text and in the docs need updating.", "Weave's config editor becomes a dialog opened from a harness tab.", "Workflows' model roles move to the Workflows page.", "About 3 PRs: rows (option 1), merge pages, move updates."]]],
+  o3: [["What changes", ["Settings opens on <b>Essentials</b>: 8 settings most people change, each with a link to its page.", "A <b>search box</b> finds any setting. Try \"recap\", \"token\" or \"browser\". Enter opens the first result and highlights it.", "Everything else is option 2."]],
+       ["What it costs", ["Essentials is a second home for 8 settings, so it's a list to keep up to date.", "Search needs every row to come from the shared row component, so it lands after option 1.", "Search is the settings-search proposal from 14 October, already worked out."]]],
+};
+
+/* ---------------- State + render ---------------- */
+const state = { opt: "o2", page: { today: "features", o1: "general", o2: "harnesses", o3: "essentials" }, htab: "oc2", q: "", flash: null, open: {},
+  labs: { messages: true, handoff: false, live: false, updates: true, jobs: false, mission: false, dreaming: true, choose: true, copilot: false, mods: true } };
+
+const esc = (s) => String(s).replace(/[&<>"]/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" }[c]));
+const icon = (n) => `<i data-lucide="${n}"></i>`;
+
+function ctl(c, row) {
+  if (!c) return "";
+  switch (c.k) {
+    case "sw": {
+      const on = row && state.labs[row.id] !== undefined ? state.labs[row.id] : c.on;
+      const dis = c.dis || (row && row.id === "handoff" && !state.labs.messages);
+      return `<button class="sw" role="switch" aria-checked="${on}" aria-label="${esc(row ? row.t : "")}" data-sw="${row ? row.id : ""}" ${dis ? "disabled" : ""}></button>`;
+    }
+    case "sel": return `<select class="sel" aria-label="${esc(row.t)}">${c.opts.map(o => `<option ${o === c.v ? "selected" : ""}>${esc(o)}</option>`).join("")}</select>`;
+    case "seg": return `<div class="seg" role="group" aria-label="${esc(row.t)}">${c.opts.map(o => `<button aria-pressed="${o === c.v}" data-seg>${esc(o)}</button>`).join("")}</div>`;
+    case "btn": return c.labels.map(l => `<button class="btn">${esc(l)}</button>`).join("");
+    case "val": return `<span class="val">${esc(c.text)}</span>`;
+    case "inp": return `<input class="inp" value="${esc(c.text)}" aria-label="${esc(row.t)}">`;
+    case "chk": return `<label class="val" style="display:flex;gap:6px;align-items:center"><input type="checkbox"> ${esc(c.text)}</label>`;
+    case "theme": return `<div class="swatches">${THEMES.map((t, i) => { const [fg, bg] = t.split("|"); return `<button class="swatch ${i === 0 ? "on" : ""}" aria-label="Theme ${i + 1}" style="background:${bg}; box-shadow: inset 0 -5px 0 ${fg}"></button>`; }).join("")}<button class="btn">All 11</button></div>`;
+    case "disk": return `<div class="disk" aria-hidden="true"><i style="width:55%;background:var(--accent)"></i><i style="width:8%;background:var(--idle)"></i><i style="width:37%;background:color-mix(in srgb, var(--running) 60%, transparent)"></i></div>`;
+  }
+  return "";
+}
+
+function rowHtml(r, opt) {
+  if (r.c && r.c.k === "levels") return `<div class="levels">${PERM_LEVELS.map(([t, d], i) => `<button class="level ${i === 1 ? "on" : ""}" data-level><b>${t}</b><span>${d}</span></button>`).join("")}</div>`;
+  if (r.c && r.c.k === "matrix") return `<table class="matrix"><thead><tr><th>Harness</th><th>Permissions</th><th>Browser</th></tr></thead><tbody>${Object.entries(HARN).map(([k, h]) => `<tr><td>${h.name}</td><td>${h.perm ? esc(h.perm.replace("Default (Allow edits)", "Allow edits (default)")) : "Not available"}</td><td>${h.browser ? "On" : "Off"} · <a href="#" data-htab="${k}">Change</a></td></tr>`).join("")}</tbody></table>`;
+  const lab = state.labs[r.id] !== undefined;
+  const isOpen = state.open[opt + r.id];
+  const pills = (r.pills || []).map(([t, k]) => `<span class="pill ${k}">${t}</span>`).join("") + (r.exp ? `<span class="pill">Experimental</span>` : "");
+  const more = r.long && r.long !== r.d && !isOpen ? ` <button class="more" data-more="${r.id}">More</button>` : "";
+  const d = isOpen ? r.long : r.d;
+  const sub = [];
+  if (r.needs && lab && !state.labs.messages) sub.push(`<div class="rd" style="color:var(--idle)">${esc(r.needs)}</div>`);
+  if (r.adds && lab && state.labs[r.id]) sub.push(`<div class="rl">${icon("corner-down-right")}Adds: ${esc(r.adds)}${r.link ? ` · <a href="#" data-go="${r.link}" style="color:inherit">Open</a>` : ""}</div>`);
+  if (r.from && opt === "o3") sub.push(`<div class="rl"><a href="#" data-go="${r.from}" style="color:inherit">In ${esc(LABEL[r.from])}</a></div>`);
+  const name = r.mono ? `<span class="mono">${esc(r.t)}</span>` : esc(r.t);
+  return `<div class="row ${r.dis ? "dis" : ""} ${state.flash === r.id ? "flash" : ""}" id="row-${r.id}"><div style="min-width:0"><div class="rt">${name}${pills}</div><div class="rd ${r.monoD ? "mono" : ""}">${esc(d)}${more}</div>${sub.join("")}</div><div class="ctl">${r.extra ? ctl(r.extra, r) : ""}${ctl(r.c, r)}</div></div>`;
+}
+
+function todayHtml(p) {
+  // One card per setting, long text, the way Fleet draws it now.
+  const cards = (rows) => rows.map(r => {
+    if (r.c && (r.c.k === "levels" || r.c.k === "matrix")) return rowHtml(r, "today");
+    const on = state.labs[r.id] !== undefined ? state.labs[r.id] : r.c && r.c.on;
+    return `<div class="tcard"><div><div class="tt">${esc(r.t)}${r.exp ? `<span class="pill">Experimental</span>` : ""}${(r.pills || []).map(([t, k]) => `<span class="pill ${k}">${t}</span>`).join("")}</div><div class="td">${esc(r.long || r.d)}</div></div><div class="ctl">${r.extra ? ctl(r.extra, r) : ""}${ctl(r.c, r)}</div></div>`;
+  }).join("");
+  return `<section class="tsec"><h2>${esc(p.title)}</h2><p class="tdesc">${esc(p.sub)}</p>${p.groups.map(g => (g.h ? `<h3>${esc(g.h)}</h3>` : "") + cards(g.rows)).join("")}</section>`;
+}
+
+function harnessTabsHtml(opt) {
+  const h = HARN[state.htab];
+  const keys = Object.keys(HARN);
+  return `<div class="hhead"><div><div class="hn">Default harness</div><div class="rd" style="font-size:12px;color:var(--muted)">Used when a new session doesn't pick one.</div></div><div class="ctl" style="display:flex;gap:8px"><select class="sel" aria-label="Default harness">${keys.map(k => `<option ${HARN[k].def ? "selected" : ""}>${HARN[k].name}</option>`).join("")}</select><button class="btn">${icon("download")}Set up a harness</button></div></div>
+  <div class="tabs" role="tablist">${keys.map(k => `<button role="tab" aria-selected="${k === state.htab}" data-htab="${k}"><span class="st ${HARN[k].st === "warn" ? "warn" : ""}"></span>${HARN[k].name}</button>`).join("")}${state.labs.copilot ? `<button role="tab" aria-selected="false"><span class="st off"></span>GitHub Copilot</button>` : ""}</div>
+  <div class="hhead"><div><div class="hn">${h.name}${h.def ? `<span class="pill acc">Default</span>` : ""}<span class="pill ${h.st === "warn" ? "warn" : "ok"}">${h.st === "warn" ? "Update" : "Ready"}</span></div><div class="hm">${h.ver} · ${h.path}</div></div><label class="val" style="display:flex;gap:8px;align-items:center">Enabled ${ctl(sw(true), { id: "h-en", t: "Enabled" })}</label></div>
+  ${groupsHtml(harnessTab(h), opt)}`;
+}
+
+function groupsHtml(groups, opt) {
+  return groups.map(g => `<div class="g">${g.h ? `<div class="gh"><h2>${esc(g.h)}</h2>${g.note ? `<span class="gn">${esc(g.note)}</span>` : ""}</div>` : ""}<div class="box">${g.rows.map(r => rowHtml(r, opt)).join("")}</div></div>`).join("");
+}
+
+function navItem(id, opt) {
+  const on = state.page[opt] === id;
+  let badge = "";
+  if (id === "machines" && state.labs.updates && (opt === "today" || opt === "o1")) badge = `<span class="badge">1</span>`;
+  if (id === "updates" && state.labs.updates) badge = `<span class="badge">2</span>`;
+  if (id === "system" && opt !== "o2" && opt !== "o3") badge = "";
+  return `<button class="ni ${on ? "on" : ""}" data-page="${id}" ${on ? 'aria-current="page"' : ""}>${icon(ICON[id])}<span>${LABEL[id]}</span>${badge}</button>`;
+}
+
+function searchIndex(P) {
+  const out = [];
+  for (const [pid, p] of Object.entries(P)) {
+    if (pid === "essentials" || pid === "features" || pid === "storage" || pid === "browser" || pid === "weave" || pid === "tools" || pid === "skills" || pid === "system" || pid === "workflows") continue;
+    const groups = p.harnessTabs ? harnessTab(HARN.oc2).map(g => ({ ...g, h: "OpenCode 2 · " + g.h })) : p.groups;
+    for (const g of groups) for (const r of g.rows) if (r.t) out.push({ pid, r, where: LABEL[pid] + (g.h ? " › " + g.h : "") });
+  }
+  return out;
+}
+
+function render() {
+  const opt = state.opt;
+  const P = pagesFor(opt);
+  document.querySelectorAll(".picker button").forEach(b => b.setAttribute("aria-pressed", b.dataset.opt === opt));
+
+  // rail
+  document.getElementById("rail").innerHTML = `<div class="logo">W</div>` +
+    [["message-square", "Sessions"], ["layout-grid", "Board"], ["workflow", "Workflows"], ["zap", "Automations"], ["bar-chart-3", "Analytics"]].map(([i, l]) => `<div class="ri">${icon(i)}${l}</div>`).join("") +
+    `<div class="sp"></div>` + [["github", "GitHub"], ["puzzle", "Plugins"]].map(([i, l]) => `<div class="ri">${icon(i)}${l}</div>`).join("") +
+    `<div class="ri on">${icon("settings")}Settings</div><div class="ri">${icon("circle-help")}Help</div>`;
+
+  // nav
+  const nav = NAV[opt];
+  const snav = document.getElementById("snav");
+  snav.className = "snav" + (nav.tight ? " tight" : "");
+  let nh = `<p class="hd">Settings</p>`;
+  if (nav.search) nh += `<label class="search">${icon("search")}<input id="q" placeholder="Search settings" value="${esc(state.q)}" aria-label="Search settings"><kbd>/</kbd></label>`;
+  if (nav.search && state.q.trim()) {
+    const q = state.q.trim().toLowerCase();
+    const hits = searchIndex(P).filter(({ r }) => (r.t + " " + (r.d || "") + " " + (r.long || "")).toLowerCase().includes(q))
+      .sort((a, b) => (b.r.t.toLowerCase().includes(q)) - (a.r.t.toLowerCase().includes(q))).slice(0, 8);
+    const mark = (s) => { const i = s.toLowerCase().indexOf(q); return i < 0 ? esc(s) : esc(s.slice(0, i)) + "<mark>" + esc(s.slice(i, i + q.length)) + "</mark>" + esc(s.slice(i + q.length)); };
+    nh += hits.length ? hits.map((h, i) => `<button class="res ${i === 0 ? "first" : ""}" data-hit="${h.pid}|${h.r.id}"><b>${mark(h.r.t)}</b><span><em>${esc(h.where)}</em> · ${esc(h.r.d || "")}</span></button>`).join("")
+      : `<div class="empty-res">Nothing in Settings matches "${esc(state.q)}".</div>`;
+  } else if (nav.groups) {
+    nh += nav.groups.map(([g, ids]) => (g ? `<div class="grp">${g}</div>` : "") + ids.map(id => navItem(id, opt)).join("")).join("");
+  } else {
+    nh += nav.items.map(id => navItem(id, opt)).join("");
+  }
+  snav.innerHTML = nh;
+
+  // detail
+  const pid = state.page[opt];
+  const p = P[pid];
+  const det = document.getElementById("detail");
+  let body;
+  if (opt === "today") {
+    body = `<h1>Settings</h1><p class="sub">Manage credentials, folders, appearance, skills, memory, permissions, harnesses, Weave, system details, and plugin-provided settings.</p>` + todayHtml(p);
+  } else {
+    body = `<h1>${esc(p.title)}</h1><p class="sub">${esc(p.sub)}</p>`;
+    if (p.tabs) body += `<div class="tabs" role="tablist">${p.tabs.map((t, i) => `<button role="tab" aria-selected="${i === p.tab}">${t}${t === "Mods" ? ` <span class="pill">Labs</span>` : ""}</button>`).join("")}</div>`;
+    body += p.harnessTabs ? harnessTabsHtml(opt) : groupsHtml(p.groups, opt);
+    if (pid === "machines" && (opt === "o2" || opt === "o3") && !state.labs.jobs) body += `<p class="gfoot" style="margin-top:14px">Seats for jobs show here when Jobs is on in <button data-go="labs">Labs</button>.</p>`;
+  }
+  det.innerHTML = body;
+
+  // notes
+  document.getElementById("optnote").innerHTML = NOTES[opt].map(([h, items]) => `<div><h3>${h}</h3><ul>${items.map(i => `<li>${i}</li>`).join("")}</ul></div>`).join("");
+
+  if (window.lucide) lucide.createIcons();
+  const qi = document.getElementById("q");
+  if (qi && state.focusQ) { qi.focus(); qi.setSelectionRange(qi.value.length, qi.value.length); }
+  if (state.flash) {
+    const el = document.getElementById("row-" + state.flash);
+    if (el) el.scrollIntoView({ block: "center", behavior: "smooth" });
+    const f = state.flash; setTimeout(() => { if (state.flash === f) { state.flash = null; const e = document.getElementById("row-" + f); if (e) e.classList.remove("flash"); } }, 1600);
+  }
+}
+
+/* ---------------- Events ---------------- */
+document.addEventListener("click", (e) => {
+  const t = e.target.closest("button, a");
+  if (!t) return;
+  if (t.dataset.opt) { state.opt = t.dataset.opt; state.q = ""; state.focusQ = false; render(); return; }
+  if (t.dataset.page) { state.page[state.opt] = t.dataset.page; document.getElementById("detail").scrollTop = 0; render(); return; }
+  if (t.dataset.go) { e.preventDefault(); const opt = state.opt; const map = { skillstools: opt === "o1" ? "skills" : "skillstools", updates: opt === "o1" ? "machines" : "updates" }; state.page[opt] = map[t.dataset.go] || t.dataset.go; render(); return; }
+  if (t.dataset.htab) { e.preventDefault(); state.htab = t.dataset.htab; if (state.opt === "o2" || state.opt === "o3") state.page[state.opt] = "harnesses"; render(); return; }
+  if (t.dataset.more) { state.open[state.opt + t.dataset.more] = true; render(); return; }
+  if (t.dataset.hit) { const [pid, rid] = t.dataset.hit.split("|"); state.page[state.opt] = pid; if (pid === "harnesses") state.htab = "oc2"; state.flash = rid; state.focusQ = false; render(); return; }
+  if (t.dataset.sw !== undefined) {
+    const id = t.dataset.sw;
+    if (state.labs[id] !== undefined) { state.labs[id] = !state.labs[id]; if (id === "messages" && !state.labs.messages) state.labs.handoff = false; render(); }
+    else t.setAttribute("aria-checked", t.getAttribute("aria-checked") !== "true");
+    return;
+  }
+  if (t.hasAttribute("data-seg")) { t.parentElement.querySelectorAll("button").forEach(b => b.setAttribute("aria-pressed", b === t)); return; }
+  if (t.hasAttribute("data-level")) { t.parentElement.querySelectorAll(".level").forEach(b => b.classList.toggle("on", b === t)); return; }
+});
+document.addEventListener("input", (e) => {
+  if (e.target.id === "q") { state.q = e.target.value; state.focusQ = true; render(); }
+});
+document.addEventListener("keydown", (e) => {
+  if (e.target.id === "q" && e.key === "Enter") { const first = document.querySelector(".res"); if (first) first.click(); }
+  if (e.target.id === "q" && e.key === "Escape") { state.q = ""; render(); }
+});
+
+render();
+</script>
+</body>
+</html>

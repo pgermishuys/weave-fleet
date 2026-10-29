@@ -12,7 +12,7 @@ public static class DreamRules
 {
     public const string PreferenceKey = "Dreaming";
 
-    public const string TurnedOffMessage = "Dreaming is off. Turn it on in Settings → Features.";
+    public const string TurnedOffMessage = "Dreaming is off. Turn it on in Settings → Labs.";
 
     /// <summary>The event on the <c>sessions</c> topic when a dream ends, with the <see cref="DreamView"/>.</summary>
     public const string DreamedEventType = "memory.dreamed";

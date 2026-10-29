@@ -390,7 +390,7 @@ function handleKeydown(event: KeyboardEvent): void {
         class="wf-run__link"
         @click="openSkillsSettings"
       >
-        Turn it on in Settings → Skills
+        Turn it on in Settings → Skills & tools
       </button>
     </p>
     <p

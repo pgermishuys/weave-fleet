@@ -271,7 +271,7 @@ public sealed partial class WorkflowRunner(
             switch (choiceId)
             {
                 case RetryChoice when await scope.Skills.IsOffAsync(skilled.Skill).ConfigureAwait(false):
-                    return FleetError.ValidationError("Choice", $"{skilled.Skill} is still off. Turn it on in Settings → Skills, then retry.");
+                    return FleetError.ValidationError("Choice", $"{skilled.Skill} is still off. Turn it on in Settings → Skills & tools, then retry.");
                 case RetryChoice:
                     break;
                 case WithoutSkillChoice:

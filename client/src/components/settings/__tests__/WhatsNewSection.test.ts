@@ -45,7 +45,7 @@ const versions = (wrapper: Awaited<ReturnType<typeof mountCard>>) =>
     badge: row.find(".whats-new__badge").exists() ? row.find(".whats-new__badge").text() : null,
   }));
 
-describe("What's new in Settings → System", () => {
+describe("What's new in Settings → Updates & about", () => {
   beforeEach(() => {
     getMock.mockReset();
     navigate.mockReset();
@@ -78,7 +78,7 @@ describe("What's new in Settings → System", () => {
     open.mockRestore();
   });
 
-  it("goes to Settings → System and scrolls to the version a What's new link named", async () => {
+  it("goes to Settings → Updates & about and scrolls to the version a What's new link named", async () => {
     respond({ currentVersion: "0.46.0", status: "uptodate", latestVersion: "0.46.0" });
     const Opener = defineComponent({
       setup() {
@@ -92,7 +92,7 @@ describe("What's new in Settings → System", () => {
     (opener.vm as unknown as ReturnType<typeof useWhatsNew>).openWhatsNew("0.45.0");
     await flushPromises();
 
-    expect(useSettingsNav().activeSection.value).toBe("system");
+    expect(useSettingsNav().activeSection.value).toBe("updates");
     expect(navigate).toHaveBeenCalledWith({ to: "/settings" });
     const row = wrapper.find("[data-version='0.45.0']");
     expect((row.element as HTMLDetailsElement).open).toBe(true);

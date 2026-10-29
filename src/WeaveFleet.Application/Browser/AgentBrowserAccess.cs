@@ -5,7 +5,7 @@ using WeaveFleet.Domain.Repositories;
 namespace WeaveFleet.Application.Browser;
 
 /// <summary>
-/// What a session's agent may do in its browser right now: the user's Settings → Browser, and with
+/// What a session's agent may do in its browser right now: the user's Settings → Permissions, and with
 /// <see cref="AgentBrowserPages.Session"/> the pages that are the session's own (its apps' ports, the pages its browser
 /// canvases show, and the pages Fleet serves for its page canvases).
 /// </summary>
@@ -39,15 +39,15 @@ public sealed record AgentBrowserLimits(
     public string Refusal(Uri url) => Settings.Pages switch
     {
         AgentBrowserPages.Machine =>
-            $"Fleet's browser settings only let agents open pages on this machine, and {url} isn't one. Ask the user to allow any address in Settings → Browser if you need it.",
+            $"Fleet's browser settings only let agents open pages on this machine, and {url} isn't one. Ask the user to allow any address in Settings → Permissions if you need it.",
         _ =>
             $"Fleet's browser settings only let agents open this session's own pages: apps it started (fleet_app_start) and pages in its canvases. {url} isn't one of them. "
-            + "Start the app with fleet_app_start or show the page with fleet_browser_open first, or ask the user to allow more pages in Settings → Browser.",
+            + "Start the app with fleet_app_start or show the page with fleet_browser_open first, or ask the user to allow more pages in Settings → Permissions.",
     };
 }
 
 /// <summary>
-/// Tells whoever needs it that a user changed Settings → Browser, e.g. a harness adapter that attaches or detaches
+/// Tells whoever needs it that a user changed Settings → Permissions, e.g. a harness adapter that attaches or detaches
 /// its sessions' browser when it's switched on or off.
 /// </summary>
 public sealed class AgentBrowserSettingsChanges
@@ -57,7 +57,7 @@ public sealed class AgentBrowserSettingsChanges
     public void Notify(string userId, AgentBrowserSettings settings) => Changed?.Invoke(userId, settings);
 }
 
-/// <summary>Reads <see cref="AgentBrowserLimits"/> for a session, and the user's Settings → Browser. Runs as the user.</summary>
+/// <summary>Reads <see cref="AgentBrowserLimits"/> for a session, and the user's Settings → Permissions. Runs as the user.</summary>
 public sealed class AgentBrowserAccess(
     IUserPreferenceRepository preferences,
     AppRunService apps,

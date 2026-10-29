@@ -101,9 +101,9 @@ public sealed record HarnessCapabilities
 
     /// <summary>
     /// The agent can use its own browser tab (Fleet's agent browser, in Fleet's headless
-    /// Chrome) while Settings → Browser is on: natively through the harness's own browser tools with Fleet as the browser
+    /// Chrome) while Settings → Permissions is on: natively through the harness's own browser tools with Fleet as the browser
     /// (OpenCode 2), or through Fleet's <c>fleet_browser_read</c> and <c>fleet_browser_act</c> (OpenCode). Without it the
-    /// harness has no way to reach Fleet's tools, and Settings → Browser says so.
+    /// harness has no way to reach Fleet's tools, and Settings → Permissions says so.
     /// </summary>
     public bool SupportsAgentBrowser { get; init; }
 
@@ -178,7 +178,7 @@ public sealed record HarnessPresentation
     public HarnessPermissionModes? PermissionModes { get; init; }
 
     /// <summary>
-    /// How the agent gets its browser tab, shown in Settings → Browser. Null without
+    /// How the agent gets its browser tab, shown in Settings → Permissions. Null without
     /// <see cref="HarnessCapabilities.SupportsAgentBrowser"/>.
     /// </summary>
     public string? AgentBrowser { get; init; }

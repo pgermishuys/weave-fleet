@@ -17,7 +17,7 @@ namespace WeaveFleet.Infrastructure.Browser;
 /// ref. A tab reads the page as an accessibility tree with element refs, takes input as real mouse and key events,
 /// and keeps the console, the requests and an open dialog for the agent to read.
 /// <para>
-/// Settings → Browser is checked on every action and enforced here: the address an action asks for, and every page
+/// Settings → Permissions is checked on every action and enforced here: the address an action asks for, and every page
 /// the tab's main frame loads (a click on a link included), go through <c>Fetch</c>, and anything outside the allowed
 /// pages is blocked. Page scripts are off unless the user allows them; uploads are refused.
 /// </para>
@@ -97,7 +97,7 @@ public sealed partial class CdpAgentBrowser : IAgentBrowser, IAsyncDisposable
         if (!limits.Settings.Enabled)
         {
             return AgentBrowserResult.Fail(AgentBrowserFailures.Off,
-                "The browser is turned off in Fleet (Settings → Browser), so agents can't use it. Don't retry; tell the user if you need it.");
+                "The browser is turned off in Fleet (Settings → Permissions), so agents can't use it. Don't retry; tell the user if you need it.");
         }
 
         var session = _sessions.GetOrAdd(call.SessionId, id => new SessionTabs(id, call.UserId));
@@ -715,7 +715,7 @@ public sealed partial class CdpAgentBrowser : IAgentBrowser, IAsyncDisposable
         if (!limits.Settings.Scripts)
         {
             return AgentBrowserResult.Fail(AgentBrowserFailures.Denied,
-                "Running scripts in pages is off in Fleet (Settings → Browser → Run scripts in pages). Use snapshot, find, console and network.list instead; don't retry.");
+                "Running scripts in pages is off in Fleet (Settings → Permissions → Run scripts in pages). Use snapshot, find, console and network.list instead; don't retry.");
         }
 
         if (string.IsNullOrWhiteSpace(action.Script))

@@ -6,7 +6,7 @@ import { usePreferencesStore } from "@/stores/preferences";
 import { isSessionNotificationEvent, type DomainEvent } from "@/lib/domain-events";
 import { useServiceWorker } from "@/composables/use-service-worker";
 
-/** The Settings → Features switch for desktop notifications. Off unless turned on. */
+/** The Settings → General switch for desktop notifications. Off unless turned on. */
 export const DESKTOP_NOTIFICATIONS_PREFERENCE_KEY = "DesktopNotifications";
 
 /** Whether this browser can show desktop notifications at all. */

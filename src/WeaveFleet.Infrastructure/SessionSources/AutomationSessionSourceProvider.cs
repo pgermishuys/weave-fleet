@@ -129,7 +129,7 @@ public sealed class AutomationSessionSourceProvider(
             {
                 return FleetError.ValidationError(
                     "SessionSource.Automation.WorkspaceId",
-                    $"{folder} isn't inside a workspace root. Add it in Settings → Workspace.");
+                    $"{folder} isn't inside a workspace root. Add it in Settings → Folders.");
             }
 
             return new WorkspaceIntent(canonicalDirectoryResult.Value, "existing", null);

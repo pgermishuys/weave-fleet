@@ -176,11 +176,11 @@ export function rememberSessionMachines(machineId: string | null, sessionIds: re
 /** How `rememberSessionMachines` records the home machine, whose id the client may not know. */
 export const HOME_MACHINE_KEY = "home";
 
-/** The user preference behind "Keep every machine live" in Settings → Features: a live feed per machine, not a poll. */
+/** The user preference behind "Keep every machine live" in Settings → Labs: a live feed per machine, not a poll. */
 export const LIVE_MACHINES_PREFERENCE_KEY = "LiveMachines";
 
 /**
- * The user preference behind "Hand work to other machines" in Settings → Features: agents may start, message and read
+ * The user preference behind "Hand work to other machines" in Settings → Labs: agents may start, message and read
  * sessions on the machines allowed in Settings → Machines. Needs messages between sessions.
  */
 export const AGENT_HANDOFF_PREFERENCE_KEY = "AgentHandoff";

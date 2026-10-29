@@ -12,7 +12,7 @@ export interface WhatsNewRequest {
 const request = shallowRef<WhatsNewRequest | null>(null);
 
 /**
- * Opens What's new: Settings → System, at the version's notes. Every "What's new" in Fleet comes here instead of
+ * Opens What's new: Settings → Updates & about, at the version's notes. Every "What's new" in Fleet comes here instead of
  * sending the user to GitHub.
  */
 export function useWhatsNew() {
@@ -21,7 +21,7 @@ export function useWhatsNew() {
 
   function openWhatsNew(version?: string | null, options: { since?: string } = {}): void {
     request.value = options.since ? { version: version ?? null, since: options.since } : { version: version ?? null };
-    setActiveSection("system");
+    setActiveSection("updates");
     void router.navigate({ to: "/settings" });
   }
 

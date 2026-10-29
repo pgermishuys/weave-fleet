@@ -299,7 +299,7 @@ public sealed partial class WorkflowRunnerTests
         // A skill that's off.
         var skillOff = await rig.Runs.RunAsync(WorkflowAutomation(rig), Schedule());
         skillOff.Status.ShouldBe(AutomationRunStatus.Skipped);
-        skillOff.Error.ShouldBe("Skipped: Review uses fleet-code-review, which is off. Turn it on in Settings → Skills.");
+        skillOff.Error.ShouldBe("Skipped: Review uses fleet-code-review, which is off. Turn it on in Settings → Skills & tools.");
 
         // A model the harness doesn't offer.
         _preferences.Seed(BuiltInSkillService.PreferenceKey, "fleet-code-review");

@@ -11,7 +11,7 @@ import { CODE } from "./classes";
 
 /**
  * What sits under the Mods description: the question before installing, the install's progress, why it failed, and
- * the quiet line once Mods are on. The switch stays in FeaturesSection; this shows what it needs and does what the
+ * the quiet line once Mods are on. The switch stays in Labs; this shows what it needs and does what the
  * buttons say. The install itself runs on the server.
  */
 const props = defineProps<{ enabled: boolean }>();
@@ -136,7 +136,7 @@ async function useMine(path: string): Promise<void> {
             type="button"
             class="text-accent hover:underline focus-visible:outline focus-visible:outline-2 focus-visible:outline-accent"
             data-testid="mods-showcase-link"
-            @click="setActiveSection('mods')"
+            @click="setActiveSection('skills', 'mods')"
           >Showcase in Mods</button>.
         </p>
       </div>

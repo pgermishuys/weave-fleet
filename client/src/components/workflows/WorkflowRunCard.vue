@@ -316,7 +316,7 @@ function openSession(sessionId: string): void {
         class="wf-card__link"
         @click="openSkillsSettings"
       >
-        Settings → Skills
+        Settings → Skills & tools
       </button>, then retry. Or start the step without it for the rest of this run.
     </p>
     <p

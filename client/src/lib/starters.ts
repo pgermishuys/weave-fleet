@@ -1,4 +1,4 @@
-/** Settings → Features → Show starters, and the row's own "Hide starters". On unless turned off. */
+/** Settings → General → Show starters, and the row's own "Hide starters". On unless turned off. */
 export const STARTERS_PREFERENCE_KEY = "NewSessionStarters";
 
 /** The built-in Fix a bug workflow, which the workflow starter opens. */

@@ -15,7 +15,7 @@ using WeaveFleet.Infrastructure.Runtimes;
 namespace WeaveFleet.E2E.Tests;
 
 /// <summary>
-/// Turning Mods on in Settings → Features, against a local stand-in for Bun's downloads: the row says what Fleet will
+/// Turning Mods on in Settings → Labs, against a local stand-in for Bun's downloads: the row says what Fleet will
 /// install, a blocked download says why and turns the switch back off, and Retry shows the install's progress until
 /// Bun is ready. Fleet's Bun goes into a temporary home, never the real one.
 /// </summary>
@@ -37,8 +37,8 @@ public sealed class TurningModsOnTests : E2ETestBase,
             // Settings checks the session before it shows a section, and a click on the nav before that is lost. On a
             // busy machine that check alone has taken over 15 s, so wait for it generously.
             await Page.GotoAsync("/settings");
-            await Assertions.Expect(Page.GetByRole(AriaRole.Heading, new() { Name = "Settings", Exact = true })).ToBeVisibleAsync(new() { Timeout = 60_000 });
-            await Page.GetByRole(AriaRole.Button, new() { Name = "Features", Exact = true }).ClickAsync();
+            await Assertions.Expect(Page.GetByRole(AriaRole.Heading, new() { Name = "General", Exact = true })).ToBeVisibleAsync(new() { Timeout = 60_000 });
+            await Page.GetByRole(AriaRole.Button, new() { Name = "Labs", Exact = true }).ClickAsync();
             var toggle = Page.Locator("[data-testid='mods-switch']");
             var panel = Page.Locator("[data-testid='mods-panel']");
             await Assertions.Expect(toggle).ToBeVisibleAsync(new() { Timeout = 15_000 });

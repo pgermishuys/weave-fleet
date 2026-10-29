@@ -288,7 +288,7 @@ public sealed class WorkflowService(
         foreach (var step in steps)
         {
             if (await skills.IsOffAsync(step.Skill).ConfigureAwait(false))
-                return $"{step.Title} uses {step.Skill}, which is off. Turn it on in Settings → Skills.";
+                return $"{step.Title} uses {step.Skill}, which is off. Turn it on in Settings → Skills & tools.";
         }
 
         return null;

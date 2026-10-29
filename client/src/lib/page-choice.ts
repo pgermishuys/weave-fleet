@@ -4,7 +4,7 @@
  */
 import { asRecord } from "@/lib/tools/input";
 
-/** The user preference behind the switch in Settings → Features. */
+/** The user preference behind the switch in Settings → Labs. */
 export const PAGE_CHOICE_PREFERENCE_KEY = "PageChoice";
 
 export interface PageChoice {

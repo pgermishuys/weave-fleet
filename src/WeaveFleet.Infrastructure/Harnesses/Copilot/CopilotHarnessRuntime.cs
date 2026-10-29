@@ -33,7 +33,7 @@ public sealed class CopilotHarnessRuntime(
 
     internal const string CliMissingMessage = "Install the Copilot CLI from Settings, or put copilot on PATH.";
 
-    internal const string FeatureOffMessage = "GitHub Copilot is experimental: turn it on in Settings → Features.";
+    internal const string FeatureOffMessage = "GitHub Copilot is experimental: turn it on in Settings → Labs.";
 
     private const string Executable = "weave-copilot";
     private const string LocalUser = "local-user";

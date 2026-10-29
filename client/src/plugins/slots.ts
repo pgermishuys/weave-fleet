@@ -34,6 +34,10 @@ export function getSettingsSections(): readonly RegisteredSettingsSection[] {
   return settingsSections.items.value;
 }
 
+export function getConfigPages(): readonly RegisteredConfigPage[] {
+  return configPages.items.value;
+}
+
 export function getConfigPage(pluginId: string): RegisteredConfigPage | undefined {
   return configPages.get(pluginId);
 }
