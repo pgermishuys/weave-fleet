@@ -4301,6 +4301,7 @@ export interface components {
             cacheWrite: number | string;
             output: number | string;
             reasoning: number | string;
+            totalOnly: boolean;
             used: number | string;
         };
         SessionContextTurn: {

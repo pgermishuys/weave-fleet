@@ -12,6 +12,8 @@ export interface ContextCall {
   output: number;
   reasoning: number;
   used: number;
+  /** The harness gave only the total (GitHub Copilot): it's all in `input`, and the split isn't known. */
+  totalOnly: boolean;
 }
 
 /** The context's size at the end of a turn. */
@@ -153,7 +155,11 @@ function toCall(raw: unknown): ContextCall | null {
     output: toCount(raw.output) ?? 0,
     reasoning: toCount(raw.reasoning) ?? 0,
   };
-  return { ...call, used: toCount(raw.used) ?? call.input + call.cacheRead + call.cacheWrite + call.output + call.reasoning };
+  return {
+    ...call,
+    used: toCount(raw.used) ?? call.input + call.cacheRead + call.cacheWrite + call.output + call.reasoning,
+    totalOnly: raw.totalOnly === true,
+  };
 }
 
 function toTurn(raw: unknown): ContextTurn | null {

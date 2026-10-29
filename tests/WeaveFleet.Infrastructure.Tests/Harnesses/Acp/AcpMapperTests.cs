@@ -1,6 +1,7 @@
 using System.Text.Json;
 using WeaveFleet.Application.FleetTools;
 using WeaveFleet.Domain.Harnesses;
+using WeaveFleet.Infrastructure.Harnesses;
 using WeaveFleet.Infrastructure.Harnesses.Acp;
 
 namespace WeaveFleet.Infrastructure.Tests.Harnesses.Acp;
@@ -477,5 +478,27 @@ public sealed class AcpMapperTests
         file.Mime.ShouldBe("image/png");
         file.Url.ShouldBe("data:image/png;base64,AAAA");
         file.Filename.ShouldBe("chart.png");
+    }
+
+    [Fact]
+    public void a_usage_update_is_the_contexts_size_with_the_window_and_where_copilot_compacts()
+    {
+        var mapper = new AcpMapper("s1", model: () => "claude-haiku-4.5");
+
+        var report = ContextEvents.ReadUsage(mapper.Update(J("""{"sessionUpdate":"usage_update","used":16452,"size":136000}""")).Single())!;
+
+        report.Call!.Used.ShouldBe(16452);
+        report.Call.TotalOnly.ShouldBeTrue();
+        (report.Limit, report.CompactsAt, report.ModelId, report.ProviderId).ShouldBe((136000, 108800, "claude-haiku-4.5", "copilot"));
+        mapper.Messages().ShouldBeEmpty();
+    }
+
+    [Fact]
+    public void a_usage_update_without_its_numbers_says_nothing()
+    {
+        var mapper = new AcpMapper("s1");
+
+        mapper.Update(J("""{"sessionUpdate":"usage_update"}""")).ShouldBeEmpty();
+        ContextEvents.ReadUsage(mapper.Update(J("""{"sessionUpdate":"usage_update","size":200000}""")).Single())!.Call.ShouldBeNull();
     }
 }

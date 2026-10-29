@@ -21,7 +21,7 @@ internal sealed partial class AcpHarnessSession : IHarnessSession
     /// <summary>weave-copilot's answer to a <c>_fleet/steer</c> that arrived after the turn ended.</summary>
     internal const int NoTurnRunning = -32001;
 
-    private readonly IAcpAgent _agent;
+    private IAcpAgent _agent;
     private readonly AcpMapper _mapper;
     private readonly string _fleetSessionId;
     private readonly string _workingDirectory;
@@ -41,6 +41,8 @@ internal sealed partial class AcpHarnessSession : IHarnessSession
     private readonly string? _projectName;
     private readonly string _ownerUserId;
     private bool _replaying;
+    // A new process is loading the conversation the mapper already has: what it replays is dropped.
+    private bool _relaunching;
     private bool _disposed;
     private int _ended;
 
@@ -60,11 +62,35 @@ internal sealed partial class AcpHarnessSession : IHarnessSession
         _agent = agent;
         _logger = logger;
         // A replayed call is an old one: what Fleet keeps now is for the calls of the turn running.
-        _mapper = new AcpMapper(fleetSessionId, (tool, arguments) => _replaying ? null : fleetToolCalls?.Take(fleetSessionId, tool, arguments));
+        _mapper = new AcpMapper(fleetSessionId, (tool, arguments) => _replaying ? null : fleetToolCalls?.Take(fleetSessionId, tool, arguments), () => _model);
+        Attach(agent);
+    }
+
+    private void Attach(IAcpAgent agent)
+    {
         agent.Client.Notification += OnNotification;
         agent.Client.RequestHandler = OnRequestAsync;
         agent.Client.Closed += OnClosed;
     }
+
+    private void Detach(IAcpAgent agent)
+    {
+        agent.Client.Notification -= OnNotification;
+        agent.Client.RequestHandler = null;
+        agent.Client.Closed -= OnClosed;
+    }
+
+    /// <summary>The <c>mcpServers</c> the session's process was started with, which a new one is given again.</summary>
+    internal JsonArray? McpServers { get; set; }
+
+    /// <summary>Which of Fleet's tools the process listed when it started; null where Fleet can't tell.</summary>
+    internal FleetToolSwitches? FleetTools { get; set; }
+
+    /// <summary>Which of Fleet's tools the session should have now; null where Fleet can't tell (tests).</summary>
+    internal Func<Task<FleetToolSwitches?>>? ReadFleetTools { get; init; }
+
+    /// <summary>Starts a new agent process for the session, as the first one was; null where the session can't restart (tests).</summary>
+    internal Func<CancellationToken, Task<IAcpAgent>>? Relaunch { get; init; }
 
     /// <summary>Runs once when the session ends, for whoever issued it something that must not outlive it.</summary>
     internal Action? OnEnded { get; init; }
@@ -138,18 +164,68 @@ internal sealed partial class AcpHarnessSession : IHarnessSession
     /// <summary>Loads the conversation again from the agent, which replays it as updates; none of them reach Fleet as events.</summary>
     internal async Task LoadAsync(JsonArray? mcpServers, CancellationToken ct)
     {
+        McpServers = mcpServers;
         _replaying = true;
         try
         {
-            var result = await _agent.Client.RequestAsync("session/load",
-                new JsonObject { ["sessionId"] = ResumeToken, ["cwd"] = _workingDirectory, ["mcpServers"] = mcpServers ?? [] }, ct).ConfigureAwait(false);
-            ReadModels(result);
+            ReadModels(await LoadOnAsync(_agent, ct).ConfigureAwait(false));
         }
         finally
         {
             _replaying = false;
         }
     }
+
+    private Task<JsonElement> LoadOnAsync(IAcpAgent agent, CancellationToken ct) => agent.Client.RequestAsync("session/load",
+        new JsonObject { ["sessionId"] = ResumeToken, ["cwd"] = _workingDirectory, ["mcpServers"] = McpServers?.DeepClone() ?? new JsonArray() }, ct);
+
+    /// <summary>
+    /// Copilot lists the tools of Fleet's MCP server once, when its process starts, so a switch that changed since
+    /// (Settings → Browser, memory, messages between sessions) takes a new process, which loads the conversation again.
+    /// When that fails, the session carries on with the process it has.
+    /// </summary>
+    private async Task RefreshFleetToolsAsync(CancellationToken ct)
+    {
+        if (Relaunch is null || ReadFleetTools is null || await ReadFleetTools().ConfigureAwait(false) is not { } wanted || wanted == FleetTools)
+            return;
+
+        IAcpAgent? next = null;
+        var old = _agent;
+        try
+        {
+            next = await Relaunch(ct).ConfigureAwait(false);
+            Detach(old);
+            Attach(next);
+            _agent = next;
+            _relaunching = true;
+            ReadModels(await LoadOnAsync(next, ct).ConfigureAwait(false));
+        }
+        catch (Exception ex) when (ex is not OutOfMemoryException)
+        {
+            if (next is not null)
+            {
+                Detach(next);
+                Attach(old);
+                _agent = old;
+                await next.DisposeAsync().ConfigureAwait(false);
+            }
+
+            if (ex is OperationCanceledException)
+                throw;
+            LogRelaunchFailed(_logger, _fleetSessionId, ex);
+            return;
+        }
+        finally
+        {
+            _relaunching = false;
+        }
+
+        FleetTools = wanted;
+        await old.DisposeAsync().ConfigureAwait(false);
+    }
+
+    [LoggerMessage(Level = LogLevel.Warning, Message = "GitHub Copilot session {SessionId} couldn't start a process with Fleet's changed tools, so it keeps the one it has")]
+    private static partial void LogRelaunchFailed(ILogger logger, string sessionId, Exception ex);
 
     public async Task SendPromptAsync(string text, PromptOptions? options, CancellationToken ct)
     {
@@ -178,6 +254,7 @@ internal sealed partial class AcpHarnessSession : IHarnessSession
             return;
         }
 
+        await RefreshFleetToolsAsync(ct).ConfigureAwait(false);
         if (options?.ModelId is { Length: > 0 } wanted && ModelId(wanted) is { } model && model != _model)
         {
             await _agent.Client.RequestAsync("session/set_model", new JsonObject { ["sessionId"] = ResumeToken, ["modelId"] = model }, ct).ConfigureAwait(false);
@@ -342,6 +419,8 @@ internal sealed partial class AcpHarnessSession : IHarnessSession
 
     private void OnNotification(string method, JsonElement parameters)
     {
+        if (_relaunching)
+            return;
         IReadOnlyList<HarnessEvent> events = method switch
         {
             "session/update" when parameters.TryGetProperty("update", out var update) => _mapper.Update(update),

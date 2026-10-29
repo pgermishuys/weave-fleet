@@ -19,7 +19,7 @@ namespace WeaveFleet.Infrastructure.Harnesses.Copilot;
 internal sealed record CopilotLaunchArtifacts(string? ModelId) : RuntimeLaunchArtifacts;
 
 /// <summary><see cref="IHarnessRuntime"/> for GitHub Copilot: one weave-copilot process per session, spoken to over ACP.</summary>
-public sealed class CopilotHarnessRuntime(
+public sealed partial class CopilotHarnessRuntime(
     IServiceScopeFactory scopes,
     ILoggerFactory loggers,
     IAnalyticsCollector? analytics = null,
@@ -179,10 +179,18 @@ public sealed class CopilotHarnessRuntime(
         var token = FleetTools.Issue(options.SessionId, options.OwnerUserId);
         try
         {
-            var created = await NewSessionAsync(agent, options.WorkingDirectory, CopilotFleetTools.McpServers(LocalFleetUrl(), token), ct).ConfigureAwait(false);
+            var tools = await ReadFleetToolsAsync(options.OwnerUserId, options.SessionId).ConfigureAwait(false);
+            var mcpServers = CopilotFleetTools.McpServers(LocalFleetUrl(), token);
+            var created = await NewSessionAsync(agent, options.WorkingDirectory, mcpServers, ct).ConfigureAwait(false);
             var session = new AcpHarnessSession(HarnessType, $"copilot-{Guid.NewGuid():N}", options.SessionId, AcpMapper.Str(created, "sessionId")!,
                 options.WorkingDirectory, agent, _logger, analytics, options.ProjectId, options.ProjectName, options.OwnerUserId, FleetToolCalls())
-            { OnEnded = () => FleetTools.Revoke(token) };
+            {
+                OnEnded = () => FleetTools.Revoke(token),
+                ReadFleetTools = () => ReadFleetToolsAsync(options.OwnerUserId, options.SessionId),
+                Relaunch = async relaunchCt => await StartAsync(options.OwnerUserId, options.WorkingDirectory, relaunchCt).ConfigureAwait(false),
+                McpServers = mcpServers,
+                FleetTools = tools,
+            };
             session.ReadModels(created);
             if (options.InitialPrompt is not null)
             {
@@ -211,9 +219,15 @@ public sealed class CopilotHarnessRuntime(
         var token = FleetTools.Issue(options.SessionId, options.OwnerUserId);
         try
         {
+            var tools = await ReadFleetToolsAsync(options.OwnerUserId, options.SessionId).ConfigureAwait(false);
             var session = new AcpHarnessSession(HarnessType, $"copilot-{Guid.NewGuid():N}", options.SessionId, options.ResumeToken, options.WorkingDirectory, agent, _logger,
                 analytics, options.ProjectId, options.ProjectName, options.OwnerUserId, FleetToolCalls())
-            { OnEnded = () => FleetTools.Revoke(token) };
+            {
+                OnEnded = () => FleetTools.Revoke(token),
+                ReadFleetTools = () => ReadFleetToolsAsync(options.OwnerUserId, options.SessionId),
+                Relaunch = async relaunchCt => await StartAsync(options.OwnerUserId, options.WorkingDirectory, relaunchCt).ConfigureAwait(false),
+                FleetTools = tools,
+            };
             await session.LoadAsync(CopilotFleetTools.McpServers(LocalFleetUrl(), token), ct).ConfigureAwait(false);
             return session;
         }
@@ -289,6 +303,31 @@ public sealed class CopilotHarnessRuntime(
 
     private static Task<JsonElement> NewSessionAsync(AcpAgentProcess agent, string directory, JsonArray mcpServers, CancellationToken ct)
         => agent.Client.RequestAsync("session/new", new JsonObject { ["cwd"] = directory, ["mcpServers"] = mcpServers }, ct);
+
+    /// <summary>
+    /// Which of Fleet's tools the session has now (<see cref="FleetToolSettings"/>), which its process lists when it
+    /// starts; null when Fleet can't tell, or runs no MCP server for it yet.
+    /// </summary>
+    private async Task<FleetToolSwitches?> ReadFleetToolsAsync(string ownerUserId, string sessionId)
+    {
+        if (string.IsNullOrEmpty(LocalFleetUrl()))
+            return null;
+        try
+        {
+            using var scope = scopes.CreateScope();
+            return scope.ServiceProvider.GetService<FleetToolSettings>() is { } settings
+                ? await settings.ForSessionAsync(ownerUserId, sessionId).ConfigureAwait(false)
+                : null;
+        }
+        catch (Exception ex) when (ex is not OperationCanceledException and not OutOfMemoryException)
+        {
+            LogFleetToolsUnread(_logger, sessionId, ex);
+            return null;
+        }
+    }
+
+    [LoggerMessage(Level = LogLevel.Warning, Message = "Couldn't read which of Fleet's tools GitHub Copilot session {SessionId} has")]
+    private static partial void LogFleetToolsUnread(ILogger logger, string sessionId, Exception ex);
 
     /// <summary>Where Fleet listens, for the MCP server; null until it knows.</summary>
     private string? LocalFleetUrl()

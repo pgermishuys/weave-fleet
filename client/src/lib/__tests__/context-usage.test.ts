@@ -48,6 +48,28 @@ describe("toContextUsage", () => {
     expect(usage?.turns).toHaveLength(1);
   });
 
+  it("marks a call whose harness gave only the total, with the total as its size", () => {
+    const usage = toContextUsage({
+      sessionId: "s1",
+      used: 12000,
+      lastCall: { input: 12000, cacheRead: 0, cacheWrite: 0, output: 0, reasoning: 0, used: 12000, totalOnly: true },
+      turns: [],
+    });
+
+    expect(usage?.lastCall?.totalOnly).toBe(true);
+    expect(usage?.lastCall?.used).toBe(12_000);
+  });
+
+  it("reads a call without the field as one with a known split", () => {
+    const usage = toContextUsage({
+      sessionId: "s1",
+      lastCall: { input: 1000, cacheRead: 74500, cacheWrite: 0, output: 500, reasoning: 0, used: 76000 },
+      turns: [],
+    });
+
+    expect(usage?.lastCall?.totalOnly).toBe(false);
+  });
+
   it("isn't a context without a session", () => {
     expect(toContextUsage(null)).toBeNull();
     expect(toContextUsage({ used: 1 })).toBeNull();

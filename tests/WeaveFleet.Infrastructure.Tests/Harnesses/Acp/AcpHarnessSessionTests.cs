@@ -2,6 +2,7 @@ using System.Text.Json;
 using System.Text.Json.Nodes;
 using Microsoft.Extensions.Logging.Abstractions;
 using WeaveFleet.Application.Analytics;
+using WeaveFleet.Application.FleetTools;
 using WeaveFleet.Domain.Harnesses;
 using WeaveFleet.Domain.Identity;
 using WeaveFleet.Infrastructure.Harnesses;
@@ -390,6 +391,107 @@ public sealed class AcpHarnessSessionTests
 
         JsonNode.Parse(sent!)!.AsArray().Single()!["name"]!.GetValue<string>().ShouldBe("fleet");
         ended.ShouldBe(1);
+    }
+
+    private static readonly FleetToolSwitches BrowserOff = new(SessionMessages: false, Memory: false, WorkflowStep: false, Browser: false);
+
+    /// <summary>A Fleet session on <paramref name="first"/> whose process listed <see cref="BrowserOff"/>; a restart starts <paramref name="next"/>.</summary>
+    private static AcpHarnessSession Relaunchable(FakeAcpAgent first, Func<FleetToolSwitches?> now, Func<IAcpAgent> next) =>
+        new("copilot", "copilot-1", "fleet-1", "acp-1", "/work", first, NullLogger.Instance)
+        {
+            McpServers = new JsonArray(new JsonObject { ["name"] = "fleet" }),
+            FleetTools = BrowserOff,
+            ReadFleetTools = () => Task.FromResult(now()),
+            Relaunch = _ => Task.FromResult(next()),
+        };
+
+    private static Func<string, JsonElement, Task<JsonNode?>> Answers(FakeAcpAgent agent, string reply, string? replayed = null) => (method, _) =>
+    {
+        if (method == "session/load" && replayed is not null)
+            agent.Update("acp-1", new JsonObject { ["sessionUpdate"] = "agent_message_chunk", ["content"] = new JsonObject { ["type"] = "text", ["text"] = replayed } });
+        if (method == "session/prompt")
+            agent.Update("acp-1", new JsonObject { ["sessionUpdate"] = "agent_message_chunk", ["content"] = new JsonObject { ["type"] = "text", ["text"] = reply } });
+        return Task.FromResult<JsonNode?>(new JsonObject { ["stopReason"] = "end_turn" });
+    };
+
+    [Fact]
+    public async Task a_tool_switch_changed_since_the_process_started_takes_a_new_one_that_loads_the_conversation()
+    {
+        await using var first = new FakeAcpAgent();
+        first.Handle = Answers(first, "First.");
+        await using var second = new FakeAcpAgent();
+        second.Handle = Answers(second, "Second.", replayed: "First.");
+        var switches = BrowserOff;
+        await using var session = Relaunchable(first, () => switches, () => second);
+        await session.SendPromptAsync("one", null, CancellationToken.None);
+        await ReadAsync(session, Idle);
+
+        switches = BrowserOff with { Browser = true };
+        await session.SendPromptAsync("two", null, CancellationToken.None);
+        await ReadAsync(session, Idle);
+
+        first.IsRunning.ShouldBeFalse();
+        var load = second.Received.Single(r => r.Method == "session/load").Params;
+        load.GetProperty("sessionId").GetString().ShouldBe("acp-1");
+        load.GetProperty("mcpServers")[0].GetProperty("name").GetString().ShouldBe("fleet");
+        second.Received.Select(r => r.Method).ShouldBe(["session/load", "session/prompt"]);
+        session.FleetTools.ShouldBe(switches);
+        // What the new process replayed is the conversation the session already has: it isn't added twice.
+        (await session.GetMessagesAsync(null, CancellationToken.None)).Messages.Select(m => m.TextContent).ShouldBe(["one", "First.", "two", "Second."]);
+    }
+
+    [Fact]
+    public async Task the_same_switches_keep_the_process()
+    {
+        await using var agent = new FakeAcpAgent();
+        agent.Handle = Answers(agent, "Hi.");
+        var relaunched = 0;
+        await using var session = Relaunchable(agent, () => BrowserOff, () => { relaunched++; return new FakeAcpAgent(); });
+
+        await session.SendPromptAsync("one", null, CancellationToken.None);
+        await ReadAsync(session, Idle);
+
+        relaunched.ShouldBe(0);
+        agent.IsRunning.ShouldBeTrue();
+    }
+
+    [Fact]
+    public async Task a_new_process_that_cant_load_the_conversation_leaves_the_session_on_the_one_it_has()
+    {
+        await using var first = new FakeAcpAgent();
+        first.Handle = Answers(first, "Still here.");
+        await using var broken = new FakeAcpAgent();
+        broken.Handle = (_, _) => throw new AcpException("Session not found", -32000);
+        await using var session = Relaunchable(first, () => BrowserOff with { Browser = true }, () => broken);
+
+        await session.SendPromptAsync("one", null, CancellationToken.None);
+        await ReadAsync(session, Idle);
+
+        broken.IsRunning.ShouldBeFalse();
+        first.IsRunning.ShouldBeTrue();
+        first.Received.ShouldContain(r => r.Method == "session/prompt");
+        session.FleetTools.ShouldBe(BrowserOff);
+        (await session.GetMessagesAsync(null, CancellationToken.None)).Messages.Select(m => m.TextContent).ShouldBe(["one", "Still here."]);
+    }
+
+    [Fact]
+    public async Task a_usage_update_during_a_turn_reports_the_contexts_size_for_the_sessions_model()
+    {
+        await using var agent = new FakeAcpAgent();
+        agent.Handle = (method, _) =>
+        {
+            if (method == "session/prompt")
+                agent.Update("acp-1", new JsonObject { ["sessionUpdate"] = "usage_update", ["used"] = 4200, ["size"] = 128000 });
+            return Task.FromResult<JsonNode?>(new JsonObject { ["stopReason"] = "end_turn" });
+        };
+        await using var session = NewSession(agent);
+        session.ReadModels(JsonDocument.Parse("""{"models":{"currentModelId":"m1","availableModels":[{"modelId":"m1","name":"Model One"}]}}""").RootElement);
+
+        await session.SendPromptAsync("hello", null, CancellationToken.None);
+        var events = await ReadAsync(session, Idle);
+
+        var report = ContextEvents.ReadUsage(events.Single(e => e.Type == EventTypes.ContextUsage))!;
+        (report.Call!.Used, report.Limit, report.ModelId).ShouldBe((4200, 128000, "m1"));
     }
 
     private static JsonObject Ask() => new()
