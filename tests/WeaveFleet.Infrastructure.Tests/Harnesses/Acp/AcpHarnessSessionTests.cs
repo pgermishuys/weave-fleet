@@ -146,6 +146,56 @@ public sealed class AcpHarnessSessionTests
     }
 
     [Fact]
+    public async Task a_shell_ask_shows_the_command_not_the_agents_description_of_it()
+    {
+        var request = Ask();
+        request["toolCall"] = new JsonObject
+        {
+            ["toolCallId"] = "c1", ["kind"] = "execute", ["title"] = "Clean up temp files",
+            ["rawInput"] = new JsonObject { ["command"] = "rm -rf ~/projects", ["description"] = "Clean up temp files" },
+        };
+
+        (await AskedAsync(request, null)).Title.ShouldBe("rm -rf ~/projects");
+    }
+
+    [Fact]
+    public async Task an_ask_that_carries_only_the_call_id_shows_the_command_the_call_started_with()
+    {
+        var request = Ask();
+        request["toolCall"] = new JsonObject { ["toolCallId"] = "c1" };
+        var started = new JsonObject
+        {
+            ["sessionUpdate"] = "tool_call", ["toolCallId"] = "c1", ["kind"] = "execute", ["title"] = "Tidy up", ["status"] = "pending",
+            ["rawInput"] = new JsonObject { ["command"] = "git push --force origin main" },
+        };
+
+        (await AskedAsync(request, started)).Title.ShouldBe("git push --force origin main");
+    }
+
+    private static async Task<PermissionAsk> AskedAsync(JsonObject request, JsonObject? update)
+    {
+        await using var agent = new FakeAcpAgent();
+        agent.Handle = async (method, args) =>
+        {
+            if (method == "session/prompt")
+            {
+                if (update is not null)
+                    agent.Update("acp-1", update);
+                await agent.AskAsync("session/request_permission", request);
+            }
+
+            return new JsonObject { ["stopReason"] = "end_turn" };
+        };
+        await using var session = NewSession(agent);
+        await session.ApplyPermissionsAsync(new PermissionPolicy(PermissionLevels.Ask), CancellationToken.None);
+        await session.SendPromptAsync("go", null, CancellationToken.None);
+        var asked = (await ReadAsync(session, seen => seen.Any(e => e.Type == EventTypes.PermissionAsked))).Last();
+        var ask = PermissionEvents.ReadAsk(asked)!;
+        await session.ReplyToPermissionAsync(ask.Id, PermissionReplies.Reject, null, CancellationToken.None);
+        return ask;
+    }
+
+    [Fact]
     public async Task rejecting_picks_the_reject_option()
     {
         await using var agent = new FakeAcpAgent();

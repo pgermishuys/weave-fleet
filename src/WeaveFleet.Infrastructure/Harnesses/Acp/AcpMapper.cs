@@ -372,6 +372,21 @@ internal sealed class AcpMapper(string sessionId, Func<string, JsonElement, Flee
             new TodosReportedPayload { SessionId = sessionId, Items = items }, InfrastructureJsonContext.Default.TodosReportedPayload)));
     }
 
+    /// <summary>
+    /// What an ask for tool call <paramref name="callId"/> should show first: the command it runs, from the request's own
+    /// <c>rawInput</c> or else the call's earlier update (an ask can carry only the call's id), never the agent's title,
+    /// which describes the command and can understate it. Null when the call isn't a command.
+    /// </summary>
+    internal string? CommandOf(JsonElement call, string? callId)
+    {
+        if (call.TryGetProperty("rawInput", out var raw) && Str(raw, "command") is { } own)
+            return own;
+        if (callId is null)
+            return null;
+        lock (_lock)
+            return _tools.TryGetValue(callId, out var at) && _parts[at] is ToolUsePart { Arguments: { ValueKind: JsonValueKind.Object } known } ? Str(known, "command") : null;
+    }
+
     private void Tool(List<HarnessEvent> events, JsonElement update)
     {
         _userOpen = false;
