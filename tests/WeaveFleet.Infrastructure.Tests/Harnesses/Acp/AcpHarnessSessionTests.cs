@@ -491,6 +491,28 @@ public sealed class AcpHarnessSessionTests
     }
 
     [Fact]
+    public async Task a_new_process_gets_fleets_skills_again_and_the_agent_is_selected_again()
+    {
+        await using var first = new FakeAcpAgent();
+        first.Handle = Answers(first, "First.");
+        await using var second = new FakeAcpAgent();
+        second.Handle = Answers(second, "Second.");
+        var switches = BrowserOff;
+        await using var session = Relaunchable(first, () => switches, () => second);
+        session.SkillDirectory = "/data/copilot/skills/me";
+        await session.SendPromptAsync("one", new PromptOptions { Agent = "reviewer" }, CancellationToken.None);
+        await ReadAsync(session, Idle);
+
+        switches = BrowserOff with { Browser = true };
+        await session.SendPromptAsync("two", new PromptOptions { Agent = "reviewer" }, CancellationToken.None);
+        await ReadAsync(session, Idle);
+
+        var load = second.Received.Single(r => r.Method == "session/load").Params;
+        load.GetProperty("_meta").GetProperty("skillDirectories")[0].GetString().ShouldBe("/data/copilot/skills/me");
+        second.Received.Select(r => r.Method).ShouldBe(["session/load", "session/set_config_option", "session/prompt"]);
+    }
+
+    [Fact]
     public async Task the_same_switches_keep_the_process()
     {
         await using var agent = new FakeAcpAgent();
@@ -571,6 +593,146 @@ public sealed class AcpHarnessSessionTests
 
         var report = ContextEvents.ReadUsage(events.Single(e => e.Type == EventTypes.ContextUsage))!;
         (report.Call!.Used, report.Limit, report.ModelId).ShouldBe((4200, 128000, "m1"));
+    }
+
+    private static JsonNode? CommandsAnswer() => JsonNode.Parse("""
+        {"commands":[
+          {"name":"demo-skill","description":"A demo skill","hint":null,"kind":"skill"},
+          {"name":"review","description":"Review","hint":"what","kind":"builtin"},
+          {"name":"model","description":"Pick a model","hint":null,"kind":"builtin"},
+          {"name":"ui-thing","description":"Client","hint":null,"kind":"client"}]}
+        """);
+
+    private static List<JsonElement> Sent(FakeAcpAgent agent, string method)
+    {
+        lock (agent.Received)
+            return [.. agent.Received.Where(r => r.Method == method).Select(r => r.Params)];
+    }
+
+    private static async Task WaitForPromptsAsync(FakeAcpAgent agent, int count)
+    {
+        using var timeout = new CancellationTokenSource(TimeSpan.FromSeconds(5));
+        while (Sent(agent, "session/prompt").Count < count)
+            await Task.Delay(10, timeout.Token);
+    }
+
+    [Fact]
+    public async Task commands_are_the_skills_and_the_allow_listed_built_ins_and_nothing_else()
+    {
+        await using var agent = new FakeAcpAgent();
+        agent.Handle = (_, _) => Task.FromResult(CommandsAnswer());
+        await using var session = NewSession(agent);
+
+        var commands = await session.GetCommandsAsync(CancellationToken.None);
+
+        commands.Select(c => (c.Name, c.Kind)).ShouldBe([("demo-skill", "skill"), ("review", "command")]);
+        Sent(agent, "_fleet/commands").Single().GetProperty("sessionId").GetString().ShouldBe("acp-1");
+    }
+
+    [Fact]
+    public async Task an_older_weave_copilot_offers_no_commands_and_only_Copilots_own_agent()
+    {
+        await using var agent = new FakeAcpAgent();
+        agent.Handle = (_, _) => throw new AcpException("Method not found", -32601);
+        await using var session = NewSession(agent);
+
+        (await session.GetCommandsAsync(CancellationToken.None)).ShouldBeEmpty();
+        (await session.GetAgentsAsync(CancellationToken.None)).Select(a => a.Name).ShouldBe(["copilot"]);
+    }
+
+    [Fact]
+    public async Task a_command_is_sent_as_a_prompt_with_its_arguments_under_Fleets_message_id()
+    {
+        await using var agent = new FakeAcpAgent();
+        agent.Handle = (_, _) => Task.FromResult<JsonNode?>(new JsonObject { ["stopReason"] = "end_turn" });
+        await using var session = NewSession(agent);
+
+        var id = await session.SendCommandAsync(new CommandOptions { Command = "demo-skill", Arguments = "about\nrain", MessageId = "msg-1" }, CancellationToken.None);
+        await WaitForPromptsAsync(agent, 1);
+
+        id.ShouldBe("msg-1");
+        Sent(agent, "session/prompt").Single().GetProperty("prompt")[0].GetProperty("text").GetString().ShouldBe("/demo-skill about rain");
+    }
+
+    [Fact]
+    public async Task skills_ride_on_the_prompt_only_when_there_are_some()
+    {
+        await using var agent = new FakeAcpAgent();
+        agent.Handle = (_, _) => Task.FromResult<JsonNode?>(new JsonObject { ["stopReason"] = "end_turn" });
+        await using var session = NewSession(agent);
+
+        await session.SendPromptAsync("one", new PromptOptions { Skills = [] }, CancellationToken.None);
+        await ReadAsync(session, Idle);
+        await session.SendPromptAsync("two", new PromptOptions { Skills = ["demo-skill", "other"] }, CancellationToken.None);
+        await WaitForPromptsAsync(agent, 2);
+
+        var prompts = Sent(agent, "session/prompt");
+        prompts[0].TryGetProperty("_meta", out _).ShouldBeFalse();
+        prompts[1].GetProperty("_meta").GetProperty("skills").EnumerateArray().Select(e => e.GetString()).ShouldBe(["demo-skill", "other"]);
+    }
+
+    [Fact]
+    public async Task a_loaded_session_gets_the_skills_folder()
+    {
+        await using var agent = new FakeAcpAgent();
+        await using var session = NewSession(agent);
+
+        await session.LoadAsync(null, CancellationToken.None, "/data/copilot/skills/me");
+        await session.LoadAsync(null, CancellationToken.None);
+
+        var loads = Sent(agent, "session/load");
+        loads[0].GetProperty("_meta").GetProperty("skillDirectories").EnumerateArray().Select(e => e.GetString()).ShouldBe(["/data/copilot/skills/me"]);
+        loads[1].TryGetProperty("_meta", out _).ShouldBeFalse();
+        AcpHarnessSession.SkillDirectoriesMeta(null).ShouldBeNull();
+    }
+
+    [Fact]
+    public async Task agents_are_Copilots_own_first_then_the_custom_ones()
+    {
+        await using var agent = new FakeAcpAgent();
+        agent.Handle = (_, _) => Task.FromResult(JsonNode.Parse("""{"agents":[{"name":"pirate","displayName":"Pirate","description":"Talks like one","source":"project"}]}"""));
+        await using var session = NewSession(agent);
+
+        var agents = await session.GetAgentsAsync(CancellationToken.None);
+
+        agents.Select(a => (a.Name, a.Mode)).ShouldBe([("copilot", "primary"), ("pirate", "primary")]);
+        agents[1].Description.ShouldBe("Talks like one");
+        Sent(agent, "_fleet/agents").Single().GetProperty("cwd").GetString().ShouldBe("/work");
+    }
+
+    [Fact]
+    public async Task an_agent_is_selected_once_again_after_it_changes_and_copilot_deselects_with_an_empty_value()
+    {
+        await using var agent = new FakeAcpAgent();
+        agent.Handle = (_, _) => Task.FromResult<JsonNode?>(new JsonObject { ["stopReason"] = "end_turn" });
+        await using var session = NewSession(agent);
+
+        foreach (var name in new[] { "pirate", "pirate", "poet", "copilot", "copilot" })
+        {
+            await session.SendPromptAsync("hi", new PromptOptions { Agent = name }, CancellationToken.None);
+            using var timeout = new CancellationTokenSource(TimeSpan.FromSeconds(5));
+            while (session.Status == HarnessSessionStatus.Running)
+                await Task.Delay(10, timeout.Token);
+        }
+
+        Sent(agent, "session/set_config_option").Select(p => (p.GetProperty("configId").GetString(), p.GetProperty("value").GetString()))
+            .ShouldBe([("agent", "pirate"), ("agent", "poet"), ("agent", "")]);
+    }
+
+    [Fact]
+    public async Task an_agent_that_cant_be_selected_fails_the_prompt_with_a_readable_error()
+    {
+        await using var agent = new FakeAcpAgent();
+        agent.Handle = (method, _) => method == "session/set_config_option"
+            ? throw new AcpException("Unknown agent: nope", -32000)
+            : Task.FromResult<JsonNode?>(new JsonObject());
+        await using var session = NewSession(agent);
+
+        var error = await Should.ThrowAsync<InvalidOperationException>(() => session.SendPromptAsync("hi", new PromptOptions { Agent = "nope" }, CancellationToken.None));
+
+        error.Message.ShouldContain("nope");
+        error.Message.ShouldContain("Unknown agent");
+        Sent(agent, "session/prompt").ShouldBeEmpty();
     }
 
     private static JsonObject Ask() => new()

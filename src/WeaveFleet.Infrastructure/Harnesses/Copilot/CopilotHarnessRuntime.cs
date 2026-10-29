@@ -24,7 +24,8 @@ public sealed partial class CopilotHarnessRuntime(
     ILoggerFactory loggers,
     IAnalyticsCollector? analytics = null,
     IHttpClientFactory? httpClients = null,
-    string? home = null) : IHarnessRuntime
+    string? home = null,
+    FleetOptions? options = null) : IHarnessRuntime
 {
     private static readonly TimeSpan AuthLife = TimeSpan.FromSeconds(30);
 
@@ -57,7 +58,18 @@ public sealed partial class CopilotHarnessRuntime(
     }
 
     private readonly ILogger _logger = loggers.CreateLogger<CopilotHarnessRuntime>();
-    private readonly ConcurrentDictionary<bool, (DateTimeOffset At, HarnessCatalog Catalog)> _catalogs = new();
+    private readonly ConcurrentDictionary<(bool Hydra, string Directory), (DateTimeOffset At, HarnessCatalog Catalog)> _catalogs = new();
+
+    /// <summary>Fleet's skills for the sessions; none without Fleet's options (tests), and sessions then start without them.</summary>
+    private CopilotFleetSkills? _skills;
+
+    private async Task<string?> SkillsFolderAsync(string ownerUserId)
+    {
+        if (options is null)
+            return null;
+        _skills ??= new CopilotFleetSkills(Path.GetDirectoryName(Path.GetFullPath(options.DatabasePath)) ?? Environment.CurrentDirectory, scopes, loggers.CreateLogger<CopilotFleetSkills>());
+        return await _skills.ForOwnerAsync(ownerUserId).ConfigureAwait(false);
+    }
     private (DateTimeOffset At, bool SignedIn)? _auth;
 
     /// <inheritdoc />
@@ -181,7 +193,8 @@ public sealed partial class CopilotHarnessRuntime(
         {
             var tools = await ReadFleetToolsAsync(options.OwnerUserId, options.SessionId, options.WorkflowStep).ConfigureAwait(false);
             var mcpServers = CopilotFleetTools.McpServers(LocalFleetUrl(), token);
-            var created = await NewSessionAsync(agent, options.WorkingDirectory, mcpServers, ct).ConfigureAwait(false);
+            var skills = await SkillsFolderAsync(options.OwnerUserId).ConfigureAwait(false);
+            var created = await NewSessionAsync(agent, options.WorkingDirectory, mcpServers, skills, ct).ConfigureAwait(false);
             var session = new AcpHarnessSession(HarnessType, $"copilot-{Guid.NewGuid():N}", options.SessionId, AcpMapper.Str(created, "sessionId")!,
                 options.WorkingDirectory, agent, _logger, analytics, options.ProjectId, options.ProjectName, options.OwnerUserId, FleetToolCalls())
             {
@@ -189,6 +202,7 @@ public sealed partial class CopilotHarnessRuntime(
                 ReadFleetTools = () => ReadFleetToolsAsync(options.OwnerUserId, options.SessionId),
                 Relaunch = async relaunchCt => await StartAsync(options.OwnerUserId, options.WorkingDirectory, relaunchCt).ConfigureAwait(false),
                 McpServers = mcpServers,
+                SkillDirectory = skills,
                 FleetTools = tools,
             };
             session.ReadModels(created);
@@ -228,7 +242,7 @@ public sealed partial class CopilotHarnessRuntime(
                 Relaunch = async relaunchCt => await StartAsync(options.OwnerUserId, options.WorkingDirectory, relaunchCt).ConfigureAwait(false),
                 FleetTools = tools,
             };
-            await session.LoadAsync(CopilotFleetTools.McpServers(LocalFleetUrl(), token), ct).ConfigureAwait(false);
+            await session.LoadAsync(CopilotFleetTools.McpServers(LocalFleetUrl(), token), ct, await SkillsFolderAsync(options.OwnerUserId).ConfigureAwait(false)).ConfigureAwait(false);
             return session;
         }
         catch (Exception ex)
@@ -250,21 +264,23 @@ public sealed partial class CopilotHarnessRuntime(
         if (!await IsOnAsync(ownerUserId, CopilotHarness.FeaturePreferenceKey).ConfigureAwait(false))
             return null;
         var hydra = await IsOnAsync(ownerUserId, CopilotHarness.HydraFusionPreferenceKey).ConfigureAwait(false);
-        if (_catalogs.TryGetValue(hydra, out var cached) && DateTimeOffset.UtcNow - cached.At < CatalogLife)
+        var folder = Directory.Exists(directory) ? directory : Environment.CurrentDirectory;
+        if (_catalogs.TryGetValue((hydra, folder), out var cached) && DateTimeOffset.UtcNow - cached.At < CatalogLife)
             return cached.Catalog;
 
-        await using var agent = await StartAsync(ownerUserId, Directory.Exists(directory) ? directory : Environment.CurrentDirectory, ct).ConfigureAwait(false);
+        await using var agent = await StartAsync(ownerUserId, folder, ct).ConfigureAwait(false);
         // The model list without a session: a session/new would leave one in the user's own Copilot history each time.
         var listed = await agent.Client.RequestAsync("_fleet/models", new JsonObject(), ct).ConfigureAwait(false);
         var (models, current) = AcpHarnessSession.ParseModelList(listed);
         var catalog = new HarnessCatalog
         {
-            Agents = [],
+            Agents = await AcpHarnessSession.ListAgentsAsync(agent.Client, folder, ct).ConfigureAwait(false),
+            DefaultAgent = AcpHarnessSession.CopilotAgent,
             Providers = [new ProviderInfo { Id = "copilot", Name = "GitHub Copilot", Models = models }],
             DefaultModelProviderId = "copilot",
             DefaultModelId = current,
         };
-        _catalogs[hydra] = (DateTimeOffset.UtcNow, catalog);
+        _catalogs[(hydra, folder)] = (DateTimeOffset.UtcNow, catalog);
         return catalog;
     }
 
@@ -301,8 +317,13 @@ public sealed partial class CopilotHarnessRuntime(
         }
     }
 
-    private static Task<JsonElement> NewSessionAsync(AcpAgentProcess agent, string directory, JsonArray mcpServers, CancellationToken ct)
-        => agent.Client.RequestAsync("session/new", new JsonObject { ["cwd"] = directory, ["mcpServers"] = mcpServers }, ct);
+    private static Task<JsonElement> NewSessionAsync(AcpAgentProcess agent, string directory, JsonArray mcpServers, string? skillDirectory, CancellationToken ct)
+    {
+        var request = new JsonObject { ["cwd"] = directory, ["mcpServers"] = mcpServers };
+        if (AcpHarnessSession.SkillDirectoriesMeta(skillDirectory) is { } meta)
+            request["_meta"] = meta;
+        return agent.Client.RequestAsync("session/new", request, ct);
+    }
 
     /// <summary>
     /// Which of Fleet's tools the session has now (<see cref="FleetToolSettings"/>), which its process lists when it
