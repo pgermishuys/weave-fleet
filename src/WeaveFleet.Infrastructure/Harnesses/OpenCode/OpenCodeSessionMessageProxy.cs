@@ -219,14 +219,12 @@ public sealed class OpenCodeSessionMessageProxy(
                 try
                 {
                     var sessionActivator = serviceProvider.GetRequiredService<ISessionActivator>();
-                    await sessionActivator.ActivateToReadAsync(fleetSessionId, ct).ConfigureAwait(false);
-                    
-                    // Check if resume succeeded by looking for the harness again
-                    harnessSession = instanceTracker.Get(session.InstanceId);
-                    if (harnessSession is not null)
+                    // Read the harness the wake returns: a resume can start it under a new instance id
+                    var activated = await sessionActivator.ActivateToReadAsync(fleetSessionId, ct).ConfigureAwait(false);
+                    if (activated.IsSuccess)
                     {
                         LogFetchingFromHarness(logger, fleetSessionId, null);
-                        return await GetLiveMessagesAsync(fleetSessionId, harnessSession, limit, before, ct).ConfigureAwait(false);
+                        return await GetLiveMessagesAsync(fleetSessionId, activated.Value, limit, before, ct).ConfigureAwait(false);
                     }
                 }
                 catch (Exception ex)
