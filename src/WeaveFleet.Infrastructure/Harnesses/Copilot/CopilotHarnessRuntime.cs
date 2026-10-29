@@ -35,8 +35,6 @@ public sealed partial class CopilotHarnessRuntime(
 
     internal const string CliMissingMessage = "Install the Copilot CLI from Settings, or put copilot on PATH.";
 
-    internal const string FeatureOffMessage = "GitHub Copilot is experimental: turn it on in Settings → Labs.";
-
     private const string Executable = "weave-copilot";
     private const string LocalUser = "local-user";
     private static readonly TimeSpan CatalogLife = TimeSpan.FromMinutes(10);
@@ -102,8 +100,6 @@ public sealed partial class CopilotHarnessRuntime(
     /// <inheritdoc />
     public async Task<HarnessAvailability> CheckAvailabilityAsync(CancellationToken ct)
     {
-        if (!await IsOnAsync(LocalUser, CopilotHarness.FeaturePreferenceKey).ConfigureAwait(false))
-            return HarnessAvailability.NotWorking(FeatureOffMessage);
         var installed = await HarnessProbe.CheckInstalledAsync("weave-copilot", await ExecutableAsync(LocalUser).ConfigureAwait(false), [], _logger, ct).ConfigureAwait(false);
         if (!installed.Available)
             return installed;
@@ -189,7 +185,6 @@ public sealed partial class CopilotHarnessRuntime(
     /// <inheritdoc />
     public async Task<IHarnessSession> SpawnAsync(HarnessSpawnOptions options, CancellationToken ct)
     {
-        await RequireFeatureAsync(options.OwnerUserId).ConfigureAwait(false);
         HarnessHelpers.ValidateWorkingDirectory(options.WorkingDirectory);
         var agent = await StartAsync(options.OwnerUserId, options.WorkingDirectory, ct).ConfigureAwait(false);
         var token = FleetTools.Issue(options.SessionId, options.OwnerUserId);
@@ -233,7 +228,6 @@ public sealed partial class CopilotHarnessRuntime(
     /// <inheritdoc />
     public async Task<IHarnessSession> ResumeAsync(HarnessResumeOptions options, CancellationToken ct)
     {
-        await RequireFeatureAsync(options.OwnerUserId).ConfigureAwait(false);
         if (options.DelegatedChild)
             return new AcpChildSession($"copilot-{Guid.NewGuid():N}", options.ResumeToken, () => FindParentAsync(options));
         HarnessHelpers.ValidateWorkingDirectory(options.WorkingDirectory);
@@ -296,8 +290,6 @@ public sealed partial class CopilotHarnessRuntime(
     /// <inheritdoc />
     public async Task<HarnessCatalog?> GetCatalogAsync(string ownerUserId, string directory, HarnessProfile? profile, CancellationToken ct)
     {
-        if (!await IsOnAsync(ownerUserId, CopilotHarness.FeaturePreferenceKey).ConfigureAwait(false))
-            return null;
         var hydra = await IsOnAsync(ownerUserId, CopilotHarness.HydraFusionPreferenceKey).ConfigureAwait(false);
         var folder = Directory.Exists(directory) ? directory : Environment.CurrentDirectory;
         if (_catalogs.TryGetValue((hydra, folder), out var cached) && DateTimeOffset.UtcNow - cached.At < CatalogLife)
@@ -395,12 +387,6 @@ public sealed partial class CopilotHarnessRuntime(
     {
         using var scope = scopes.CreateScope();
         return scope.ServiceProvider.GetService<ILocalFleetUrl>()?.TryGet();
-    }
-
-    private async Task RequireFeatureAsync(string ownerUserId)
-    {
-        if (!await IsOnAsync(ownerUserId, CopilotHarness.FeaturePreferenceKey).ConfigureAwait(false))
-            throw new InvalidOperationException(FeatureOffMessage);
     }
 
     private async Task<bool> IsOnAsync(string userId, string key)

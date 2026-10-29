@@ -465,12 +465,17 @@ describe("HarnessesSection", () => {
       expect(wrapper.get("[data-testid='harness-tab-opencode2']").attributes("aria-selected")).toBe("true");
     });
 
-    it("lists GitHub Copilot only when Fleet does, which is while its Labs switch is on", async () => {
-      mockApiResponses({}, () => [createHarness("opencode", "OpenCode")]);
-      expect((await mountHarnessesSection()).find("[data-testid='harness-tab-copilot']").exists()).toBe(false);
+    it("gives GitHub Copilot its own tab, third in Fleet's order, with no switch to turn it on", async () => {
+      mockApiResponses({}, () => [
+        createHarness("opencode2", "OpenCode 2", { isDefault: true }),
+        createHarness("claude-code", "Claude Code"),
+        createHarness("copilot", "GitHub Copilot"),
+        createHarness("pi", "Pi"),
+      ]);
 
-      mockApiResponses({}, () => [createHarness("opencode", "OpenCode"), createHarness("copilot", "GitHub Copilot")]);
-      expect((await mountHarnessesSection()).find("[data-testid='harness-tab-copilot']").exists()).toBe(true);
+      const wrapper = await mountHarnessesSection();
+
+      expect(wrapper.findAll("[role='tab']").map((tab) => tab.text())).toEqual(["OpenCode 2", "Claude Code", "GitHub Copilot", "Pi"]);
     });
 
     it("remembers the tab while Settings is open", async () => {

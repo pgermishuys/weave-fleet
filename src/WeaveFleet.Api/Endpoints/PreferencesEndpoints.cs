@@ -25,7 +25,7 @@ public static class PreferencesEndpoints
 
         group.MapPut("/{key}", async (string key, SetPreferenceRequest req, IUserPreferenceRepository repo, HttpContext http, HarnessAvailabilityCache harnessChecks) =>
         {
-            // Preferences hold Fleet's safety settings (permission level) and switches (Copilot, HydraFusion's credits,
+            // Preferences hold Fleet's safety settings (permission level) and switches (HydraFusion's credits,
             // Mods, Built-in skills, Session messages) and the program Fleet runs for GitHub Copilot, so only the user
             // sets them, never an agent through its /agent/{token} address. No key is open to agents: none of Fleet's
             // skills, plugins or tools write one.
@@ -38,8 +38,8 @@ public static class PreferencesEndpoints
 
             await repo.SetAsync(key, req.Value);
 
-            // The GitHub Copilot switches change what the harness offers: the next read checks again.
-            if (key is "Copilot" || key.StartsWith("copilot.", StringComparison.Ordinal))
+            // GitHub Copilot's settings (its path, HydraFusion) change what the harness offers: the next read checks again.
+            if (key.StartsWith("copilot.", StringComparison.Ordinal))
                 harnessChecks.Forget();
 
             if (mods is not null && !modsWasOn && await mods.IsSwitchedOnAsync())

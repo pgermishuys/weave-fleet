@@ -174,6 +174,30 @@ describe("HarnessSetupRows", () => {
     expect(view.find("[data-testid='harness-setup-install-copilot']").exists()).toBe(false);
   });
 
+  it("follows GitHub Copilot's install while it runs, and stops once it's done", async () => {
+    vi.useFakeTimers();
+    const copilot = (phase: "running" | "succeeded") => ({
+      type: "copilot",
+      displayName: "GitHub Copilot",
+      available: phase === "succeeded",
+      userEnabled: true,
+      state: phase === "succeeded" ? "ready" : "not-installed",
+      capabilities,
+      update: {
+        updateAvailable: false, canInstall: phase === "running", installPlan: "Fleet downloads weave-copilot 0.2.1 and the Copilot CLI 1.0.105 from GitHub.",
+        job: { phase, message: phase === "running" ? "Downloading the Copilot CLI 1.0.105… 30%" : "Installed GitHub Copilot 0.2.1.", output: "", workingSessions: 0 },
+      },
+    }) as HarnessInfo;
+    const view = await mountRows([openCode(), copilot("running")]);
+
+    vi.advanceTimersByTime(4000);
+    expect(mocks.refreshAllHarnesses).toHaveBeenCalledTimes(2);
+
+    await view.setProps({ harnesses: [openCode(), copilot("succeeded")] });
+    vi.advanceTimersByTime(4000);
+    expect(mocks.refreshAllHarnesses).toHaveBeenCalledTimes(2);
+  });
+
   it("says where OpenCode 2 goes and what to know before installing it", async () => {
     const view = await mountRows([openCode2()]);
 

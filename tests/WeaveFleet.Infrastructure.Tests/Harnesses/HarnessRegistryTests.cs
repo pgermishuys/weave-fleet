@@ -4,6 +4,9 @@ using WeaveFleet.Application.Harnesses;
 using WeaveFleet.Domain.Harnesses;
 using WeaveFleet.Infrastructure;
 using WeaveFleet.Infrastructure.Harnesses;
+using WeaveFleet.Infrastructure.Harnesses.ClaudeCode;
+using WeaveFleet.Infrastructure.Harnesses.Copilot;
+using WeaveFleet.Infrastructure.Harnesses.OpenCode2;
 using WeaveFleet.Infrastructure.Harnesses.Pi;
 using WeaveFleet.Testing.Fakes;
 
@@ -103,6 +106,15 @@ public sealed class HarnessRegistryTests
 
         registry.GetAll().Select(h => h.Type).ShouldBe(["opencode2", "opencode", "pi"]);
         (await registry.GetAvailabilityAsync(CancellationToken.None)).Select(h => h.Type).ShouldBe(["opencode2", "opencode", "pi"]);
+    }
+
+    [Fact]
+    public void fleets_own_harnesses_come_opencode_2_then_claude_code_then_github_copilot_then_pi()
+    {
+        var registry = new HarnessRegistry(
+            [new PiHarness(), new CopilotHarness(), new ClaudeCodeHarness(), new OpenCode2Harness()], []);
+
+        registry.GetAll().Select(h => h.Type).ShouldBe(["opencode2", "claude-code", "copilot", "pi"]);
     }
 
     [Fact]

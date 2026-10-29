@@ -206,7 +206,11 @@ public sealed class HarnessEndpointsTests :
         using var document = JsonDocument.Parse(await response.Content.ReadAsStringAsync());
 
         document.RootElement.EnumerateArray().Select(h => h.GetProperty("type").GetString())
-            .ShouldBe(["opencode2", "opencode", "claude-code", "pi", "copilot"]);
+            .ShouldBe(["opencode2", "opencode", "claude-code", "copilot", "pi"]);
+        // With no preference set GitHub Copilot is offered like the others: what it lacks is an install, not a switch.
+        var copilot = document.RootElement.EnumerateArray().Single(h => h.GetProperty("type").GetString() == "copilot");
+        copilot.GetProperty("presentation").GetProperty("eyebrow").GetString().ShouldBe("CLI harness");
+        copilot.GetProperty("state").GetString().ShouldNotBe("not-working");
     }
 
     [Fact]

@@ -45,7 +45,7 @@ public sealed class PiHarness : IHarness
     /// <inheritdoc />
     public HarnessPresentation Presentation { get; } = new()
     {
-        Order = 3,
+        Order = 4,
         Eyebrow = "CLI harness",
         Description = "Harness for sessions backed by the Pi command-line runtime from pi.dev.",
         Icon = HarnessIcons.Infinity,

@@ -73,7 +73,7 @@ public sealed class CopilotHarnessRuntimeTests
         ((SessionRecords)(object)records).Child = new Session { ParentSessionId = "parent" };
         wake = new Wakes(() => runtime!.Live["parent"] = parent);
         var services = new ServiceCollection();
-        services.AddScoped<IUserPreferenceRepository>(_ => new Preferences(new() { [CopilotHarness.FeaturePreferenceKey] = "true" }));
+        services.AddScoped<IUserPreferenceRepository>(_ => new Preferences([]));
         services.AddScoped(_ => records);
         services.AddScoped<ISessionActivator>(_ => wake);
         runtime = new CopilotHarnessRuntime(services.BuildServiceProvider().GetRequiredService<IServiceScopeFactory>(), NullLoggerFactory.Instance);
@@ -95,17 +95,63 @@ public sealed class CopilotHarnessRuntimeTests
     }
 
     [Fact]
-    public async Task with_the_experimental_switch_off_nothing_starts_and_it_says_why()
+    public async Task with_no_switch_on_it_checks_the_install_and_ignores_the_old_experimental_preference()
     {
-        var runtime = Runtime();
+        var home = Directory.CreateTempSubdirectory().FullName;
+        try
+        {
+            var missing = Path.Combine(home, "weave-copilot");
+            var services = new ServiceCollection();
+            // "Copilot" was the Settings → Labs switch: a user who turned it off still gets the harness.
+            services.AddScoped<IUserPreferenceRepository>(_ => new Preferences(new() { ["Copilot"] = "false", [CopilotHarnessRuntime.PathPreferenceKey] = missing }));
+            var runtime = new CopilotHarnessRuntime(services.BuildServiceProvider().GetRequiredService<IServiceScopeFactory>(), NullLoggerFactory.Instance, home: home);
 
-        (await runtime.CheckAvailabilityAsync(CancellationToken.None)).Reason.ShouldBe(CopilotHarnessRuntime.FeatureOffMessage);
-        (await Should.ThrowAsync<InvalidOperationException>(() => runtime.SpawnAsync(
-            new HarnessSpawnOptions { SessionId = "s", WorkingDirectory = Path.GetTempPath(), OwnerUserId = "u" }, CancellationToken.None)))
-            .Message.ShouldBe(CopilotHarnessRuntime.FeatureOffMessage);
-        await Should.ThrowAsync<InvalidOperationException>(() => runtime.ResumeAsync(
-            new HarnessResumeOptions { SessionId = "s", WorkingDirectory = Path.GetTempPath(), ResumeToken = "t", OwnerUserId = "u" }, CancellationToken.None));
-        (await runtime.GetCatalogAsync("u", Path.GetTempPath(), null, CancellationToken.None)).ShouldBeNull();
+            var availability = await runtime.CheckAvailabilityAsync(CancellationToken.None);
+
+            availability.State.ShouldBe(HarnessStates.NotInstalled);
+            availability.Reason!.ShouldContain(missing);
+        }
+        finally
+        {
+            Directory.Delete(home, recursive: true);
+        }
+    }
+
+    [Fact]
+    public async Task a_session_starts_with_no_preference_set()
+    {
+        if (OperatingSystem.IsWindows()) return; // The stand-in weave-copilot is a shell script.
+        var home = Directory.CreateTempSubdirectory().FullName;
+        try
+        {
+            // A weave-copilot that answers every request, and session/new with its session's id.
+            var agent = Path.Combine(home, "weave-copilot");
+            File.WriteAllText(agent, """
+                #!/bin/sh
+                while IFS= read -r line; do
+                  id=$(printf '%s' "$line" | sed -n 's/^{"jsonrpc":"2.0","id":\([0-9]*\).*/\1/p')
+                  [ -z "$id" ] && continue
+                  case "$line" in
+                    *'"method":"session/new"'*) printf '{"jsonrpc":"2.0","id":%s,"result":{"sessionId":"acp-1"}}\n' "$id" ;;
+                    *) printf '{"jsonrpc":"2.0","id":%s,"result":{}}\n' "$id" ;;
+                  esac
+                done
+                """);
+            File.SetUnixFileMode(agent, UnixFileMode.UserRead | UnixFileMode.UserWrite | UnixFileMode.UserExecute);
+            var services = new ServiceCollection();
+            services.AddScoped<IUserPreferenceRepository>(_ => new Preferences(new() { [CopilotHarnessRuntime.PathPreferenceKey] = agent }));
+            var runtime = new CopilotHarnessRuntime(services.BuildServiceProvider().GetRequiredService<IServiceScopeFactory>(), NullLoggerFactory.Instance, home: home);
+
+            await using var session = await runtime.SpawnAsync(
+                new HarnessSpawnOptions { SessionId = "s", WorkingDirectory = home, OwnerUserId = "u" }, CancellationToken.None);
+
+            session.ResumeToken.ShouldBe("acp-1");
+            runtime.Live.ShouldContainKey("s");
+        }
+        finally
+        {
+            Directory.Delete(home, recursive: true);
+        }
     }
 
     [Fact]
