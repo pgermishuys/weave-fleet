@@ -1,6 +1,7 @@
 #!/usr/bin/env bash
 # Pairs once, then walks every screen in light and in dark. Usage: walk-all.sh <android|ios> <out-dir> [ios-udid]
-# Needs FLEET_URL and PAIR_CODE (start-fleet.sh) and a running emulator or simulator with the app installed.
+# Needs FLEET_URL, PAIR_CODE, FLEET_TOKEN, SESSION_ID and SCRATCH_HOME (start-fleet.sh) and a running emulator or
+# simulator with the app installed.
 # Screenshots land in <out-dir>/<platform>-light and <platform>-dark. Both walks run even if the first fails.
 set -uo pipefail
 PLATFORM=$1; OUT=$2; UDID=${3:-}
@@ -25,6 +26,7 @@ maestro_run() {
     echo "maestro exited with $code"
     free -m
     sudo -n dmesg 2>/dev/null | grep -iE "out of memory|killed process" | tail -5
+    [ "$PLATFORM" = android ] && adb devices
   fi
   return "$code"
 }
@@ -49,6 +51,22 @@ ready() {
   return 0
 }
 
+# The emulator sometimes drops its adb link, at any point and now and then twice in a run: the adb server reads "connection
+# terminated" from the emulator at the moment adbd fails to write to it, and reconnects within a second. Maestro
+# doesn't, so it dies mid-command, with "device offline" or with no error at all. The link is the adb server's
+# connection to the emulator's adb port; a new one means it dropped. The adb server's log goes with the shots.
+adb_link() { ss -tnH '( dport = :5555 )' 2>/dev/null | awk '{print $4}'; }
+[ "$PLATFORM" = android ] && trap 'cp "${TMPDIR:-/tmp}/adb.$(id -u).log" "$OUT/adb-server.log" 2>/dev/null' EXIT
+
+# A walk cut off mid-turn leaves its session with a command or a page waiting: the next try gets a new session, and the
+# old one goes, so the list still has one "Fix pagination off-by-one".
+fresh_session() {
+  local auth=(-H "Authorization: Bearer $FLEET_TOKEN")
+  curl -fsS -X POST "${auth[@]}" "$FLEET_URL/api/sessions/$SESSION_ID/abort" > /dev/null || true
+  curl -fsS -X DELETE "${auth[@]}" "$FLEET_URL/api/sessions/$SESSION_ID" > /dev/null || true
+  SESSION_ID=$(bash new-session.sh)
+}
+
 ready
 appearance light
 if ! maestro_run --test-output-dir "$OUT/pair" flows/pair.yaml; then
@@ -63,18 +81,26 @@ for i in 1 2; do
   sleep 3
   ready
   # No clearState: the second walk relaunches the paired app in the other scheme. A walk that fails before its first
-  # screenshot sent nothing yet, so it can run again as it is.
-  dir="$OUT/$PLATFORM-$scheme"
-  if ! maestro_run -e RUN=$i --test-output-dir "$dir" flows/walk.yaml; then
-    if [ -z "$(find "$dir" -name '*.png' 2>/dev/null)" ]; then
-      echo "walk $scheme failed before it started; once more"
-      sleep 5
-      ready
-      maestro_run -e RUN=$i --test-output-dir "$dir" flows/walk.yaml || FAILED=1
-    else
+  # screenshot sent nothing yet, so it can run again as it is; one the emulator cut off later runs again on a fresh
+  # session, where it's run 1. Two more tries at most.
+  dir="$OUT/$PLATFORM-$scheme"; run=$i
+  for try in 1 2 3; do
+    link=$([ "$PLATFORM" = android ] && adb_link)
+    maestro_run -e RUN=$run --test-output-dir "$dir" flows/walk.yaml && break
+    if [ "$try" = 3 ]; then
       FAILED=1
+    elif [ -z "$(find "$dir" -name '*.png' 2>/dev/null)" ]; then
+      echo "walk $scheme failed before it started; once more"
+    elif [ "$PLATFORM" = android ] && [ "$(adb_link)" != "$link" ]; then
+      echo "the emulator dropped its adb link mid-walk; walk $scheme once more, on a fresh session"
+      fresh_session
+      dir="$OUT/$PLATFORM-$scheme-try$((try + 1))"; run=1
+    else
+      FAILED=1; break
     fi
-  fi
+    sleep 5
+    ready
+  done
 done
 find "$OUT" -name "*.png" | sort
 exit $FAILED

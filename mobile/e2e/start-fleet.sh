@@ -85,15 +85,10 @@ BASE=http://127.0.0.1:$PORT
 api -X POST $BASE/api/workspace-roots -d "{\"path\":\"$HOME/src\"}" > /dev/null
 # On before the first session: OpenCode's process reads it when it starts, to offer waitForChoice.
 api -X PUT $BASE/api/preferences/PageChoice -d '{"value":"true"}' > /dev/null
-SESSION=$(api -X POST $BASE/api/sessions -d "{\"directory\":\"$HOME/src/demo-app\",\"title\":\"Fix pagination off-by-one\",\"isolationStrategy\":\"existing\",\"harnessType\":\"opencode\",\"initialPrompt\":\"The pagination test fails on the last page. Can you look?\"}" \
-  | python3 -c "import json,sys;print(json.load(sys.stdin)['session']['id'])")
-for _ in $(seq 90); do
-  status=$(api $BASE/api/sessions/$SESSION | python3 -c "import json,sys;print(json.load(sys.stdin).get('activityStatus'))")
-  [ "$status" = "idle" ] && break; sleep 1
-done
+SESSION=$(FLEET_URL=$BASE FLEET_TOKEN=$TOKEN SCRATCH_HOME=$HOME bash "$ROOT/mobile/e2e/new-session.sh")
 api -X PUT $BASE/api/preferences/PermissionLevel -d '{"value":"ask"}' > /dev/null
 CODE=$(api -X POST $BASE/api/machine/pairing -d "{\"baseUrl\":\"$BASE\"}" | python3 -c "import json,sys;print(json.load(sys.stdin)['manualCode'])")
 
 out=${GITHUB_ENV:-/dev/stdout}
 { echo "FLEET_URL=$BASE"; echo "PAIR_CODE=$CODE"; echo "SCRATCH_HOME=$HOME"; echo "SESSION_ID=$SESSION"; echo "FLEET_TOKEN=$TOKEN"; echo "FLEET_E2E_DIR=$WORK"; } >> "$out"
-echo "Fleet ready: session $SESSION ($status), code $CODE"
+echo "Fleet ready: session $SESSION, code $CODE"
