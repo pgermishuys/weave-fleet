@@ -126,12 +126,12 @@ async function resetToDefaults(): Promise<void> {
 </script>
 
 <template>
-  <section class="rounded-card border border-border bg-card-bg p-6 shadow-sm">
+  <section class="rounded-card border border-border bg-card-bg px-4 py-4">
     <div class="flex flex-col gap-1">
-      <h2 class="text-lg font-semibold text-text">
+      <h2 class="text-sm font-semibold text-text">
         Worktrees
       </h2>
-      <p class="text-sm text-muted">
+      <p class="text-xs text-muted">
         How new worktrees are named. Tokens are filled in when a session starts. A repository that
         commits its own <code>weave.jsonc</code> names branches its way instead, for everyone who
         clones it.

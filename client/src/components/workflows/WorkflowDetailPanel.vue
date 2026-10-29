@@ -370,7 +370,7 @@ function openRun(run: WorkflowRun): void {
           <dd>A new worktree from the base branch</dd>
         </div>
         <div>
-          <dt>Models{{ skills.length ? " · skills" : "" }} (roles are set in Settings)</dt>
+          <dt>Models{{ skills.length ? " · skills" : "" }} (roles are under Model roles)</dt>
           <dd>
             {{ models }}
             <span

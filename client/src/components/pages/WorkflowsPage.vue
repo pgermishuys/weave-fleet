@@ -2,6 +2,7 @@
 import { watch } from "vue";
 import { useRouter, useSearch } from "@tanstack/vue-router";
 import FeatureOffNotice from "@/components/pages/FeatureOffNotice.vue";
+import WorkflowModelRoles from "@/components/workflows/WorkflowModelRoles.vue";
 import WorkflowDetailPanel from "@/components/workflows/WorkflowDetailPanel.vue";
 import { useWorkflowsFeature } from "@/composables/use-workflows-feature";
 import { useWorkflowsNav } from "@/composables/use-workflows-nav";
@@ -31,7 +32,10 @@ watch(() => [search.value.workflow, search.value.folder] as const, ([workflow, f
 
 <template>
   <section class="flex h-full flex-col overflow-hidden">
-    <WorkflowDetailPanel v-if="isWorkflowsEnabled" />
+    <template v-if="isWorkflowsEnabled">
+      <WorkflowDetailPanel />
+      <WorkflowModelRoles />
+    </template>
     <FeatureOffNotice
       v-else
       title="Workflows"

@@ -1,6 +1,8 @@
 <script setup lang="ts">
 import { computed, onMounted } from "vue";
-import { Clock, Info } from "lucide-vue-next";
+import { Info } from "lucide-vue-next";
+import SettingGroup from "@/components/settings/SettingGroup.vue";
+import SettingRow from "@/components/settings/SettingRow.vue";
 import StatusGlyph from "@/components/sessions/StatusGlyph.vue";
 import { useAgentBrowserSettings } from "@/composables/use-agent-browser-settings";
 import { useEnabledHarnesses } from "@/composables/use-enabled-harnesses";
@@ -93,76 +95,71 @@ function onLevelKeydown(event: KeyboardEvent, index: number): void {
 </script>
 
 <template>
-  <section
-    class="rounded-card border border-border bg-card-bg p-6 shadow-sm"
+  <div
+    class="grid gap-6"
     data-testid="permissions-section"
   >
     <div class="flex flex-col gap-1">
-      <h2 class="text-lg font-semibold text-text">
-        Permissions
-      </h2>
-      <p class="text-sm text-muted">
+      <p class="px-1 text-sm text-muted">
         Choose what an agent can do without asking. When it needs your OK, the session shows
         <span class="permissions-needs"><StatusGlyph status="waiting_input" /> Needs you</span>
         and the ask waits in the conversation. Changes apply from each session's next message.
       </p>
     </div>
 
-    <div class="mt-5 grid gap-2">
-      <div class="flex flex-wrap items-baseline gap-2">
-        <h3 class="text-sm font-semibold text-text">
-          Default
-        </h3>
-        <span class="text-xs text-muted">Used by every harness unless you pick something else on its tab.</span>
-      </div>
-      <div
-        class="permissions-levels"
-        role="radiogroup"
-        aria-label="Default permission level"
-      >
-        <button
-          v-for="(level, index) in LEVELS"
-          :key="level.id"
-          type="button"
-          role="radio"
-          class="permissions-level"
-          :aria-checked="defaultLevel === level.id"
-          :tabindex="defaultLevel === level.id ? 0 : -1"
-          :data-testid="`permission-level-${level.id}`"
-          @click="setDefault(level.id)"
-          @keydown="onLevelKeydown($event, index)"
+    <SettingGroup
+      id="default-level"
+      title="Default"
+      hint="Used by every harness unless you pick something else on its tab."
+    >
+      <div class="px-4 py-3">
+        <div
+          class="permissions-levels"
+          role="radiogroup"
+          aria-label="Default permission level"
         >
-          <span class="permissions-level__name">
-            <span
-              class="permissions-level__radio"
-              aria-hidden="true"
-            />
-            {{ PERMISSION_LEVEL_NAMES[level.id] }}
-          </span>
-          <span class="permissions-level__desc">{{ level.description }}</span>
-          <span
-            class="permissions-level__runs"
-            aria-hidden="true"
+          <button
+            v-for="(level, index) in LEVELS"
+            :key="level.id"
+            type="button"
+            role="radio"
+            class="permissions-level"
+            :aria-checked="defaultLevel === level.id"
+            :tabindex="defaultLevel === level.id ? 0 : -1"
+            :data-testid="`permission-level-${level.id}`"
+            @click="setDefault(level.id)"
+            @keydown="onLevelKeydown($event, index)"
           >
+            <span class="permissions-level__name">
+              <span
+                class="permissions-level__radio"
+                aria-hidden="true"
+              />
+              {{ PERMISSION_LEVEL_NAMES[level.id] }}
+            </span>
+            <span class="permissions-level__desc">{{ level.description }}</span>
             <span
-              v-for="[name, runs] in level.runs"
-              :key="name"
-              :class="runs ? 'permissions-chip--runs' : 'permissions-chip--asks'"
-            >{{ name }}</span>
-          </span>
-        </button>
+              class="permissions-level__runs"
+              aria-hidden="true"
+            >
+              <span
+                v-for="[name, runs] in level.runs"
+                :key="name"
+                :class="runs ? 'permissions-chip--runs' : 'permissions-chip--asks'"
+              >{{ name }}</span>
+            </span>
+          </button>
+        </div>
       </div>
-    </div>
+    </SettingGroup>
 
-    <div class="mt-5 grid gap-2">
-      <div class="flex flex-wrap items-baseline gap-2">
-        <h3 class="text-sm font-semibold text-text">
-          Each harness
-        </h3>
-        <span class="text-xs text-muted">Set on each harness's tab, under What it may do.</span>
-      </div>
+    <SettingGroup
+      id="each-harness"
+      title="Each harness"
+      hint="Set on each harness's tab, under What it may do."
+    >
       <div
-        class="permissions-rows"
+        class="permissions-rows px-4 py-3"
         data-testid="permissions-each-harness"
       >
         <div class="permissions-row permissions-row--head">
@@ -192,26 +189,19 @@ function onLevelKeydown(event: KeyboardEvent, index: number): void {
           </span>
         </div>
       </div>
-    </div>
+    </SettingGroup>
 
-    <div class="mt-5 grid gap-2">
-      <div class="flex flex-wrap items-baseline gap-2">
-        <h3 class="text-sm font-semibold text-text">
-          Runs nobody is watching
-        </h3>
-        <span class="text-xs text-muted">Automations and workflow steps Fleet finishes.</span>
-      </div>
-      <div class="permissions-rows">
-        <div class="permissions-row">
-          <span class="permissions-row__name">
-            <Clock
-              :size="14"
-              class="text-muted"
-              aria-hidden="true"
-            />
-            Unattended runs
-          </span>
-          <span class="permissions-row__handed permissions-row__handed--plain">{{ UNATTENDED_NOTES[unattended] }}</span>
+    <SettingGroup
+      id="unattended"
+      title="Runs nobody is watching"
+      hint="Automations and workflow steps Fleet finishes."
+    >
+      <SettingRow
+        id="unattended-runs"
+        title="Unattended runs"
+        :summary="UNATTENDED_NOTES[unattended]"
+      >
+        <template #control>
           <select
             id="permission-unattended"
             class="permissions-select"
@@ -229,11 +219,11 @@ function onLevelKeydown(event: KeyboardEvent, index: number): void {
               Deny anything that would ask
             </option>
           </select>
-        </div>
-      </div>
-    </div>
+        </template>
+      </SettingRow>
+    </SettingGroup>
 
-    <p class="permissions-fine mt-5">
+    <p class="permissions-fine">
       <Info
         :size="13"
         aria-hidden="true"
@@ -243,7 +233,7 @@ function onLevelKeydown(event: KeyboardEvent, index: number): void {
         session it works for.
       </span>
     </p>
-  </section>
+  </div>
 </template>
 
 <style scoped>

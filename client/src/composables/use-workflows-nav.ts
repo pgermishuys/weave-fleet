@@ -20,6 +20,8 @@ const showingRuns = shallowRef(false);
 /** New workflow, or Duplicate when a built-in is given. */
 const creating = shallowRef<{ source: { id: string; name: string } | null } | null>(null);
 /** The workflow open in the designer with unsaved edits, so its row says Edited. */
+/** The Model roles dialog on the Workflows page, opened from its list or from a link that says where roles are set. */
+const modelRolesOpen = shallowRef(false);
 const unsavedWorkflowId = shallowRef<string | null>(null);
 /** Asking the model for a draft: from a session (its title) or from a description. Error when it failed. */
 const drafting = shallowRef<{ sessionTitle: string | null; error: string | null; retry: () => void } | null>(null);
@@ -168,6 +170,7 @@ export function useWorkflowsNav() {
     repositoryPath,
     showingRuns,
     creating,
+    modelRolesOpen,
     unsavedWorkflowId,
     drafting,
     drafted,

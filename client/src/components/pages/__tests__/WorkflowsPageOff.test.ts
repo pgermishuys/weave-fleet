@@ -25,6 +25,10 @@ vi.mock("@/components/workflows/WorkflowDetailPanel.vue", () => ({
   default: { template: "<div data-testid=\"workflow-detail\" />" },
 }));
 
+vi.mock("@/components/workflows/WorkflowModelRoles.vue", () => ({
+  default: { template: "<div data-testid=\"workflow-model-roles-dialog\" />" },
+}));
+
 describe("the Workflows page", () => {
   it("says Workflows is off and turns it on from the button", async () => {
     enabled.value = false;
@@ -54,6 +58,8 @@ describe("the Workflows page", () => {
     const wrapper = mount(WorkflowsPage);
 
     expect(wrapper.find("[data-testid=workflow-detail]").exists()).toBe(true);
+    // Model roles are on this page, in a dialog opened from the list.
+    expect(wrapper.find("[data-testid=workflow-model-roles-dialog]").exists()).toBe(true);
     expect(wrapper.find("[data-testid=feature-off]").exists()).toBe(false);
   });
 });

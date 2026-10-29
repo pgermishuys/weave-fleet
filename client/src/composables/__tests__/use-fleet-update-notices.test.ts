@@ -100,7 +100,7 @@ describe("useFleetUpdateNotices", () => {
     expect(notices.chips).toHaveLength(0);
   });
 
-  it("turns the one chip into the rollout's progress while machines update, and a click opens Settings → Machines", async () => {
+  it("turns the one chip into the rollout's progress while machines update, and a click opens Settings → Updates & about › Machines", async () => {
     const { useSettingsNav } = await import("@/composables/use-settings-nav");
     mountIt();
     const notices = useNoticesStore();
@@ -110,6 +110,7 @@ describe("useFleetUpdateNotices", () => {
     expect(notices.chips.map((chip) => chip.chip)).toEqual(["Updating machines · 2 of 3"]);
 
     notices.chips[0]!.onChipClick?.();
-    expect(useSettingsNav().activeSection.value).toBe("machines");
+    expect(useSettingsNav().activeSection.value).toBe("updates");
+    expect(useSettingsNav().activeAnchor.value).toBe("machines");
   });
 });

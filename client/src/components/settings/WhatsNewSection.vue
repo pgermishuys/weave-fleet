@@ -104,18 +104,14 @@ onMounted(async () => {
 <template>
   <section
     ref="card"
-    class="whats-new rounded-card border border-border bg-card-bg p-6 shadow-sm"
+    class="whats-new"
+    data-setting-group="whats-new"
     data-testid="whats-new"
   >
-    <div class="flex items-start justify-between gap-4">
-      <div class="flex flex-col gap-1">
-        <h2 class="text-lg font-semibold text-text">
-          What's new
-        </h2>
-        <p class="text-sm text-muted">
-          What changed in each version of Fleet.
-        </p>
-      </div>
+    <div class="mb-2 flex items-baseline justify-between gap-4 px-1">
+      <h2 class="text-sm font-semibold text-text">
+        What's new
+      </h2>
       <a
         :href="ALL_RELEASES_URL"
         target="_blank"
@@ -130,80 +126,79 @@ onMounted(async () => {
       </a>
     </div>
 
-    <p
-      v-if="isLoading && releases.length === 0"
-      class="mt-4 text-sm text-muted"
-    >
-      Loading release notes…
-    </p>
-    <p
-      v-else-if="releases.length === 0"
-      class="mt-4 text-sm text-muted"
-      data-testid="whats-new-empty"
-    >
-      {{ error ? `Fleet couldn't get the release notes (${error}).` : "There are no release notes yet." }}
-      They're on <a
-        :href="ALL_RELEASES_URL"
-        target="_blank"
-        rel="noopener noreferrer"
-        class="underline underline-offset-2 hover:text-text"
-      >GitHub</a>.
-    </p>
-
-    <div
-      v-else
-      class="mt-3"
-    >
+    <div class="rounded-card border border-border bg-card-bg px-4 py-3">
       <p
-        v-if="error"
-        class="mb-2 text-xs text-muted"
-        data-testid="whats-new-stale"
+        v-if="isLoading && releases.length === 0"
+        class="text-sm text-muted"
       >
-        Couldn't check GitHub for newer notes ({{ error }}). These are from {{ savedOn }}.
+        Loading release notes…
       </p>
-      <details
-        v-for="release in [...range.open, ...range.folded]"
-        :key="release.version"
-        class="whats-new__version"
-        :class="{ 'whats-new__version--flash': flashed === release.version }"
-        :data-version="release.version"
-        :open="range.open.includes(release)"
-        data-testid="whats-new-version"
+      <p
+        v-else-if="releases.length === 0"
+        class="text-sm text-muted"
+        data-testid="whats-new-empty"
       >
-        <summary class="whats-new__summary">
-          <ChevronRight
-            :size="14"
-            class="whats-new__chevron text-muted"
-            aria-hidden="true"
-          />
-          <span class="text-sm font-semibold text-text">Fleet {{ release.version }}</span>
-          <span
-            v-if="badge(release)"
-            class="whats-new__badge"
-            :class="{ 'whats-new__badge--accent': badge(release)?.tone === 'accent' }"
-          >{{ badge(release)?.label }}</span>
-          <span class="ml-auto font-mono text-xs text-muted">{{ formatDate(release.publishedAt) }}</span>
-        </summary>
-        <!-- eslint-disable vue/no-v-html -- release notes rendered by Fleet's Markdown renderer and sanitized -->
-        <div
-          class="whats-new__notes md-content"
-          @click="openLink"
-          v-html="rendered.get(release.version)?.html"
-        />
-        <!-- eslint-enable vue/no-v-html -->
+        {{ error ? `Fleet couldn't get the release notes (${error}).` : "There are no release notes yet." }}
+        They're on <a
+          :href="ALL_RELEASES_URL"
+          target="_blank"
+          rel="noopener noreferrer"
+          class="underline underline-offset-2 hover:text-text"
+        >GitHub</a>.
+      </p>
+
+      <div v-else>
         <p
-          v-if="rendered.get(release.version)?.internal"
-          class="whats-new__internal"
-          data-testid="whats-new-internal"
+          v-if="error"
+          class="mb-2 text-xs text-muted"
+          data-testid="whats-new-stale"
         >
-          {{ internalLine(rendered.get(release.version)?.internal ?? 0) }}
-          <a
-            :href="release.url"
-            target="_blank"
-            rel="noopener noreferrer"
-          >All the notes on GitHub</a>
+          Couldn't check GitHub for newer notes ({{ error }}). These are from {{ savedOn }}.
         </p>
-      </details>
+        <details
+          v-for="release in [...range.open, ...range.folded]"
+          :key="release.version"
+          class="whats-new__version"
+          :class="{ 'whats-new__version--flash': flashed === release.version }"
+          :data-version="release.version"
+          :open="range.open.includes(release)"
+          data-testid="whats-new-version"
+        >
+          <summary class="whats-new__summary">
+            <ChevronRight
+              :size="14"
+              class="whats-new__chevron text-muted"
+              aria-hidden="true"
+            />
+            <span class="text-sm font-semibold text-text">Fleet {{ release.version }}</span>
+            <span
+              v-if="badge(release)"
+              class="whats-new__badge"
+              :class="{ 'whats-new__badge--accent': badge(release)?.tone === 'accent' }"
+            >{{ badge(release)?.label }}</span>
+            <span class="ml-auto font-mono text-xs text-muted">{{ formatDate(release.publishedAt) }}</span>
+          </summary>
+          <!-- eslint-disable vue/no-v-html -- release notes rendered by Fleet's Markdown renderer and sanitized -->
+          <div
+            class="whats-new__notes md-content"
+            @click="openLink"
+            v-html="rendered.get(release.version)?.html"
+          />
+          <!-- eslint-enable vue/no-v-html -->
+          <p
+            v-if="rendered.get(release.version)?.internal"
+            class="whats-new__internal"
+            data-testid="whats-new-internal"
+          >
+            {{ internalLine(rendered.get(release.version)?.internal ?? 0) }}
+            <a
+              :href="release.url"
+              target="_blank"
+              rel="noopener noreferrer"
+            >All the notes on GitHub</a>
+          </p>
+        </details>
+      </div>
     </div>
   </section>
 </template>

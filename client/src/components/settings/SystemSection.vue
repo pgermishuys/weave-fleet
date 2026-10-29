@@ -3,6 +3,8 @@ import { computed } from "vue";
 import { AlertCircle, CheckCircle2, Download, LoaderCircle, RefreshCw } from "lucide-vue-next";
 import { useUpdateStatus } from "@/composables/use-update-status";
 import DesktopAppUpdates from "@/components/settings/DesktopAppUpdates.vue";
+import SettingGroup from "@/components/settings/SettingGroup.vue";
+import SettingRow from "@/components/settings/SettingRow.vue";
 import { getDesktopBridge } from "@/lib/desktop";
 import { useWhatsNew } from "@/composables/use-whats-new";
 import { useFleetUpdatesEnabled } from "@/composables/use-fleet-updates";
@@ -99,175 +101,167 @@ const downloadProgressLabel = computed(() => {
 </script>
 
 <template>
-  <section class="rounded-card border border-border bg-card-bg p-6 shadow-sm">
-    <div class="flex flex-col gap-1">
-      <h2 class="text-lg font-semibold text-text">
-        System
-      </h2>
-      <p class="text-sm text-muted">
-        Version information and software updates.
+  <SettingGroup
+    id="fleet"
+    title="Fleet"
+    hint="This Fleet's version and its updates."
+  >
+    <SettingRow
+      id="fleet-version"
+      title="Installed version"
+    >
+      <template #below>
+        <p
+          v-if="updateStatus"
+          class="mt-0.5 font-mono text-xs text-muted"
+        >
+          v{{ updateStatus.currentVersion }}{{ updateWaiting ? ", update waiting ·" : "" }}
+          <button
+            v-if="updateWaiting"
+            type="button"
+            class="underline underline-offset-2 transition-colors hover:text-text"
+            data-testid="system-see-machines"
+            @click="setActiveSection('updates', 'machines')"
+          >
+            see Machines
+          </button>
+        </p>
+        <p
+          v-else
+          class="mt-0.5 text-xs text-muted"
+        >
+          Loading…
+        </p>
+      </template>
+    </SettingRow>
+
+    <DesktopAppUpdates v-if="inApp" />
+
+    <!-- Update status row -->
+    <div
+      v-if="showServerUpdates"
+      class="flex flex-col gap-2 px-4 py-3"
+    >
+      <div class="flex items-center justify-between">
+        <div class="flex items-center gap-2">
+          <LoaderCircle
+            v-if="isCheckingOrDownloading"
+            :size="15"
+            class="animate-spin text-muted"
+            aria-hidden="true"
+          />
+          <CheckCircle2
+            v-else-if="statusVariant === 'ok'"
+            :size="15"
+            class="text-success"
+            aria-hidden="true"
+          />
+          <Download
+            v-else-if="statusVariant === 'warn'"
+            :size="15"
+            class="text-warn"
+            aria-hidden="true"
+          />
+          <AlertCircle
+            v-else-if="statusVariant === 'error'"
+            :size="15"
+            class="text-danger"
+            aria-hidden="true"
+          />
+          <Download
+            v-else-if="statusVariant === 'info'"
+            :size="15"
+            class="text-accent"
+            aria-hidden="true"
+          />
+
+          <p
+            class="text-sm"
+            :class="{
+              'text-text': statusVariant === 'ok' || statusVariant === 'muted',
+              'text-accent': statusVariant === 'info',
+              'text-warn': statusVariant === 'warn',
+              'text-danger': statusVariant === 'error',
+            }"
+          >
+            {{ statusLabel }}
+          </p>
+        </div>
+
+        <div class="flex items-center gap-2">
+          <button
+            v-if="notesVersion"
+            type="button"
+            class="text-xs text-muted underline underline-offset-2 transition-colors hover:text-text"
+            @click="openWhatsNew(notesVersion)"
+          >
+            What's new
+          </button>
+          <button
+            v-if="canDownload"
+            type="button"
+            class="rounded-btn border border-border bg-card-bg px-3 py-1.5 text-xs font-medium text-text transition-colors hover:bg-main-bg disabled:cursor-not-allowed disabled:opacity-50"
+            @click="downloadUpdate"
+          >
+            Download
+          </button>
+
+          <button
+            v-if="canCheck"
+            type="button"
+            :disabled="isCheckingOrDownloading"
+            class="flex items-center gap-1.5 rounded-btn border border-border bg-card-bg px-3 py-1.5 text-xs font-medium text-text transition-colors hover:bg-main-bg disabled:cursor-not-allowed disabled:opacity-50"
+            @click="checkForUpdate"
+          >
+            <RefreshCw
+              :size="12"
+              :class="{ 'animate-spin': isCheckingOrDownloading }"
+              aria-hidden="true"
+            />
+            Check for updates
+          </button>
+        </div>
+      </div>
+
+      <!-- Download progress bar -->
+      <div
+        v-if="updateStatus?.status === 'downloading'"
+        class="flex flex-col gap-1"
+      >
+        <div class="h-1.5 w-full overflow-hidden rounded-full bg-border">
+          <div
+            class="h-full rounded-full bg-accent transition-all duration-300"
+            :style="{ width: downloadProgressPercent != null ? `${downloadProgressPercent}%` : '100%' }"
+            :class="{ 'animate-pulse': downloadProgressPercent == null }"
+          />
+        </div>
+        <p
+          v-if="downloadProgressLabel"
+          class="text-xs text-muted"
+        >
+          {{ downloadProgressLabel }}
+        </p>
+      </div>
+    </div>
+
+    <!-- Error detail -->
+    <div
+      v-if="updateStatus?.status === 'error' && updateStatus.error"
+      class="bg-danger/5 px-4 py-3"
+    >
+      <p class="text-xs text-danger">
+        {{ updateStatus.error }}
       </p>
     </div>
 
-    <div class="mt-5 grid gap-4">
-      <!-- Version row -->
-      <div class="flex items-center justify-between rounded-card border border-border bg-main-bg px-4 py-3">
-        <div>
-          <p class="text-sm font-medium text-text">
-            Installed version
-          </p>
-          <p
-            v-if="updateStatus"
-            class="mt-0.5 font-mono text-xs text-muted"
-          >
-            v{{ updateStatus.currentVersion }}{{ updateWaiting ? ", update waiting ·" : "" }}
-            <button
-              v-if="updateWaiting"
-              type="button"
-              class="underline underline-offset-2 transition-colors hover:text-text"
-              data-testid="system-see-machines"
-              @click="setActiveSection('machines')"
-            >
-              see Machines
-            </button>
-          </p>
-          <p
-            v-else
-            class="mt-0.5 text-xs text-muted"
-          >
-            Loading…
-          </p>
-        </div>
-      </div>
-
-      <DesktopAppUpdates v-if="inApp" />
-
-      <!-- Update status row -->
-      <div
-        v-if="showServerUpdates"
-        class="flex flex-col gap-2 rounded-card border border-border bg-main-bg px-4 py-3"
-      >
-        <div class="flex items-center justify-between">
-          <div class="flex items-center gap-2">
-            <LoaderCircle
-              v-if="isCheckingOrDownloading"
-              :size="15"
-              class="animate-spin text-muted"
-              aria-hidden="true"
-            />
-            <CheckCircle2
-              v-else-if="statusVariant === 'ok'"
-              :size="15"
-              class="text-success"
-              aria-hidden="true"
-            />
-            <Download
-              v-else-if="statusVariant === 'warn'"
-              :size="15"
-              class="text-warn"
-              aria-hidden="true"
-            />
-            <AlertCircle
-              v-else-if="statusVariant === 'error'"
-              :size="15"
-              class="text-danger"
-              aria-hidden="true"
-            />
-            <Download
-              v-else-if="statusVariant === 'info'"
-              :size="15"
-              class="text-accent"
-              aria-hidden="true"
-            />
-
-            <p
-              class="text-sm"
-              :class="{
-                'text-text': statusVariant === 'ok' || statusVariant === 'muted',
-                'text-accent': statusVariant === 'info',
-                'text-warn': statusVariant === 'warn',
-                'text-danger': statusVariant === 'error',
-              }"
-            >
-              {{ statusLabel }}
-            </p>
-          </div>
-
-          <div class="flex items-center gap-2">
-            <button
-              v-if="notesVersion"
-              type="button"
-              class="text-xs text-muted underline underline-offset-2 transition-colors hover:text-text"
-              @click="openWhatsNew(notesVersion)"
-            >
-              What's new
-            </button>
-            <button
-              v-if="canDownload"
-              type="button"
-              class="rounded-btn border border-border bg-card-bg px-3 py-1.5 text-xs font-medium text-text transition-colors hover:bg-main-bg disabled:cursor-not-allowed disabled:opacity-50"
-              @click="downloadUpdate"
-            >
-              Download
-            </button>
-
-            <button
-              v-if="canCheck"
-              type="button"
-              :disabled="isCheckingOrDownloading"
-              class="flex items-center gap-1.5 rounded-btn border border-border bg-card-bg px-3 py-1.5 text-xs font-medium text-text transition-colors hover:bg-main-bg disabled:cursor-not-allowed disabled:opacity-50"
-              @click="checkForUpdate"
-            >
-              <RefreshCw
-                :size="12"
-                :class="{ 'animate-spin': isCheckingOrDownloading }"
-                aria-hidden="true"
-              />
-              Check for updates
-            </button>
-          </div>
-        </div>
-
-        <!-- Download progress bar -->
-        <div
-          v-if="updateStatus?.status === 'downloading'"
-          class="flex flex-col gap-1"
-        >
-          <div class="h-1.5 w-full overflow-hidden rounded-full bg-border">
-            <div
-              class="h-full rounded-full bg-accent transition-all duration-300"
-              :style="{ width: downloadProgressPercent != null ? `${downloadProgressPercent}%` : '100%' }"
-              :class="{ 'animate-pulse': downloadProgressPercent == null }"
-            />
-          </div>
-          <p
-            v-if="downloadProgressLabel"
-            class="text-xs text-muted"
-          >
-            {{ downloadProgressLabel }}
-          </p>
-        </div>
-      </div>
-
-      <!-- Error detail -->
-      <div
-        v-if="updateStatus?.status === 'error' && updateStatus.error"
-        class="rounded-card border border-border border-danger/30 bg-danger/5 px-4 py-3"
-      >
-        <p class="text-xs text-danger">
-          {{ updateStatus.error }}
-        </p>
-      </div>
-
-      <!-- Staged restart note -->
-      <div
-        v-if="updateStatus?.status === 'staged'"
-        class="rounded-card border border-border bg-main-bg px-4 py-3"
-      >
-        <p class="text-xs text-muted">
-          It's downloaded and installs the next time you start Fleet (<code class="font-mono">fleet</code>).
-        </p>
-      </div>
+    <!-- Staged restart note -->
+    <div
+      v-if="updateStatus?.status === 'staged'"
+      class="px-4 py-3"
+    >
+      <p class="text-xs text-muted">
+        It's downloaded and installs the next time you start Fleet (<code class="font-mono">fleet</code>).
+      </p>
     </div>
-  </section>
+  </SettingGroup>
 </template>

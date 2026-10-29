@@ -93,7 +93,7 @@ function modelLabel(path: string | null): string {
   return models.value.find((model) => model.selectionKey === key)?.name ?? path.slice(path.indexOf("/") + 1);
 }
 
-/** What each role runs on for this run: its override, else Settings → Workflows. */
+/** What each role runs on for this run: its override, else the Model roles on the Workflows page. */
 function roleModel(role: WorkflowRole): string | null {
   const over = overrides[role];
   return over !== undefined ? pathFromKey(over) : choiceFor(harnessType.value, role).model;
@@ -365,7 +365,7 @@ function handleKeydown(event: KeyboardEvent): void {
             >{{ modelLabel(roleModel(role)) }}</span>
           </div>
           <p class="wf-models__note">
-            Only for this run. The roles themselves are set in Settings → Workflows.
+            Only for this run. The roles themselves are set under Model roles, in the Workflows list.
           </p>
         </PopoverContent>
       </Popover>

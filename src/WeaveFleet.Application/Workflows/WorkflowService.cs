@@ -324,7 +324,7 @@ public sealed class WorkflowService(
             if (model is null)
             {
                 var fix = WorkflowRoles.IsRole(step.Model)
-                    ? $"Pick another model for {WorkflowRoles.DisplayName(step.Model)} in Settings → Workflows, or in the Run box's Models menu."
+                    ? $"Pick another model for {WorkflowRoles.DisplayName(step.Model)} under Model roles on the Workflows page, or in the Run box's Models menu."
                     : $"Change {step.Title}'s model in {entry.File ?? "the workflow"}.";
                 return $"{step.Title}'s model, {choice.Model}, isn't available on {harness.DisplayName}. {fix}";
             }

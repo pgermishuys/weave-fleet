@@ -207,7 +207,7 @@ public sealed partial class WorkflowRunnerTests
         MapRoles("fake/strong");
         var first = await rig.Runs.RunAsync(automation, new AutomationRunTrigger(AutomationRunTrigger.Manual));
 
-        // Settings → Workflows changes after the automation was saved and after its first run.
+        // Model roles change after the automation was saved and after its first run.
         MapRoles("fake/stronger");
         var second = await rig.Runs.RunAsync(automation, new AutomationRunTrigger(AutomationRunTrigger.Manual));
 
@@ -306,7 +306,7 @@ public sealed partial class WorkflowRunnerTests
         MapRoles("fake/strong");
         rig.Harness.CatalogBehavior = (_, _, _) => Task.FromResult<HarnessCatalog?>(new HarnessCatalog { Agents = [], Providers = [] });
         var noModel = await rig.Runs.RunAsync(WorkflowAutomation(rig), Schedule());
-        noModel.Error.ShouldBe("Skipped: Plan's model, fake/strong, isn't available on OpenCode. Pick another model for Strong in Settings → Workflows, or in the Run box's Models menu.");
+        noModel.Error.ShouldBe("Skipped: Plan's model, fake/strong, isn't available on OpenCode. Pick another model for Strong under Model roles on the Workflows page, or in the Run box's Models menu.");
 
         // A workflow that isn't there any more.
         rig.Harness.CatalogBehavior = null;

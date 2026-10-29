@@ -3,14 +3,11 @@ import { computed, onMounted, onUnmounted, reactive, shallowRef, watch } from "v
 import { storeToRefs } from "pinia";
 import { AlertCircle, Check, Copy, Eye, EyeOff, LoaderCircle, Plus, RefreshCw } from "lucide-vue-next";
 import { SshNotInstalledError, useMachinesStore, type MachineAccess, type MachineEntry, type MachineHarness, type SshInstallPlan } from "@/stores/machines";
+import SettingGroup from "@/components/settings/SettingGroup.vue";
+import SettingRow from "@/components/settings/SettingRow.vue";
 import AddPhonePanel from "@/components/settings/AddPhonePanel.vue";
-import MachineUpdatesStrip from "@/components/settings/MachineUpdatesStrip.vue";
 import MachineJobSeats from "@/components/settings/MachineJobSeats.vue";
-import MachineVersionLine from "@/components/settings/MachineVersionLine.vue";
-import { useFleetUpdates } from "@/composables/use-fleet-updates";
 import { useJobsFeature } from "@/composables/use-jobs-feature";
-import { useWhatsNew } from "@/composables/use-whats-new";
-import type { FleetUpdateRow } from "@/lib/fleet-updates";
 import DevicesList from "@/components/settings/DevicesList.vue";
 import { listDevices, type PairedDevice } from "@/lib/devices-api";
 import { AGENT_HANDOFF_PREFERENCE_KEY } from "@/lib/machines";
@@ -35,26 +32,6 @@ preferencesStore.ensureLoaded();
 // Each card draws MachineJobSeats from a list that is empty with Jobs off, not under a v-if: a false v-if still leaves a
 // comment node, and with Jobs off the card must render exactly as it did.
 const { isJobsEnabled: jobsOn } = useJobsFeature();
-
-// ── Updates (Settings → Labs → Updates in Machines) ──────────────────────
-// Everything here does nothing with the switch off: no request, no timer, nothing drawn.
-const fleetUpdates = useFleetUpdates();
-const { enabled: updatesOn } = fleetUpdates;
-const { openWhatsNew } = useWhatsNew();
-const updateRows = computed(() => new Map(fleetUpdates.machineRows.value.map((row) => [row.key, row])));
-
-const unreachableKeys = computed(() => new Set(fleetUpdates.machineRows.value.filter((row) => row.state.kind === "unreachable").map((row) => row.key)));
-
-function updateRow(entry: MachineEntry): FleetUpdateRow | null {
-  return updatesOn.value ? updateRows.value.get(entry.key) ?? null : null;
-}
-
-/** "Restart into X" on a card whose machine has an update downloaded; the reason it can't is in the version line. */
-function restartButton(entry: MachineEntry): { label: string; disabled: boolean } | null {
-  const offer = updateRow(entry)?.restart;
-  if (offer?.kind !== "button") return null;
-  return { label: offer.label, disabled: offer.disabled || fleetUpdates.rolloutRunning.value || !!fleetUpdates.restartingSelf.value };
-}
 
 // ── Add ──────────────────────────────────────────────────────────────────────
 const showAddForm = shallowRef(false);
@@ -335,547 +312,509 @@ onUnmounted(() => stopPolling?.());
 </script>
 
 <template>
-  <section
-    class="rounded-card border border-border bg-card-bg p-6 shadow-sm"
+  <div
+    class="grid gap-6"
     data-testid="machines-section"
   >
-    <div class="flex flex-col gap-3 md:flex-row md:items-start md:justify-between">
-      <div class="space-y-1">
-        <h2 class="text-lg font-semibold text-text">
-          Machines
-        </h2>
-        <p class="max-w-prose text-sm text-muted">
-          Every machine runs its own Fleet and keeps its own sessions, repositories and sign-ins. A session stays
-          on the machine it started on. The sessions list shows them all; the one you're working in is live.
-        </p>
-      </div>
-
-      <button
-        v-if="!showAddForm"
-        type="button"
-        :class="buttonPrimaryClass"
-        data-testid="machines-add"
-        @click="openAddForm()"
-      >
-        <Plus
-          :size="16"
-          aria-hidden="true"
-        />
-        Add a machine
-      </button>
-    </div>
-
-    <form
-      v-if="showAddForm"
-      class="mt-5 grid gap-3 rounded-card border border-border bg-main-bg p-4"
-      data-testid="machines-add-form"
-      @submit.prevent="addMachine"
+    <SettingGroup
+      id="machines"
+      title="Machines"
     >
-      <div>
-        <h3 class="text-sm font-semibold text-text">
-          Add a machine
-        </h3>
-      </div>
-      <div
-        class="flex gap-1 rounded-btn border border-border bg-main-bg p-1 text-sm"
-        role="tablist"
-        aria-label="How to add the machine"
+      <SettingRow
+        id="add-machine"
+        title="Add a machine"
+        summary="Every machine runs its own Fleet and keeps its own sessions, repositories and sign-ins. A session stays on the machine it started on. The sessions list shows them all; the one you're working in is live."
       >
-        <button
-          v-for="mode in addModes"
-          :key="mode"
-          type="button"
-          role="tab"
-          :aria-selected="addMode === mode"
-          class="flex-1 rounded-btn px-3 py-1.5 font-medium transition-colors"
-          :class="addMode === mode ? 'bg-accent/15 text-text' : 'text-muted hover:text-text'"
-          :data-testid="`machines-add-mode-${mode}`"
-          @click="pickMode(mode)"
+        <template #control>
+          <button
+            v-if="!showAddForm"
+            type="button"
+            :class="buttonPrimaryClass"
+            data-testid="machines-add"
+            @click="openAddForm()"
+          >
+            <Plus
+              :size="16"
+              aria-hidden="true"
+            />
+            Add a machine
+          </button>
+        </template>
+      </SettingRow>
+
+      <form
+        v-if="showAddForm"
+        class="grid gap-3 bg-main-bg px-4 py-4"
+        data-testid="machines-add-form"
+        @submit.prevent="addMachine"
+      >
+        <div>
+          <h3 class="text-sm font-semibold text-text">
+            Add a machine
+          </h3>
+        </div>
+        <div
+          class="flex gap-1 rounded-btn border border-border bg-main-bg p-1 text-sm"
+          role="tablist"
+          aria-label="How to add the machine"
         >
-          {{ modeLabels[mode] }}
-        </button>
-      </div>
-      <p
-        v-if="addMode === 'ssh'"
-        class="text-xs text-muted"
-        data-testid="machines-add-ssh-help"
-      >
-        Fleet logs in with your own SSH keys and asks the other machine for a pairing code. No password is asked, no
-        token is pasted.
-      </p>
-      <p
-        v-else-if="addMode === 'code'"
-        class="text-xs text-muted"
-        data-testid="machines-add-code-help"
-      >
-        On the other machine, run <code class="machine-code">fleet node pair</code>. It prints an address and a code
-        that works once for 10 minutes. The other machine keeps a token of its own for this one, which you can remove
-        there.
-      </p>
-      <p
-        v-else
-        class="text-xs text-muted"
-      >
-        The other machine has to listen beyond 127.0.0.1: start it with <code class="machine-code">--host 0.0.0.0</code>,
-        or behind <code class="machine-code">tailscale serve</code> with <code class="machine-code">--require-token</code>.
-      </p>
-      <label
-        v-if="addMode === 'ssh'"
-        class="grid gap-1 text-sm text-text"
-      >
-        <span class="text-xs font-medium uppercase tracking-wide text-muted">Host</span>
-        <input
-          v-model="addForm.ssh"
-          type="text"
-          list="machines-ssh-hosts"
-          autocomplete="off"
-          autocapitalize="none"
-          spellcheck="false"
-          :class="inputClass"
-          placeholder="falcon or alice@falcon"
-          :disabled="isAdding"
-          data-testid="machines-add-ssh-host"
+          <button
+            v-for="mode in addModes"
+            :key="mode"
+            type="button"
+            role="tab"
+            :aria-selected="addMode === mode"
+            class="flex-1 rounded-btn px-3 py-1.5 font-medium transition-colors"
+            :class="addMode === mode ? 'bg-accent/15 text-text' : 'text-muted hover:text-text'"
+            :data-testid="`machines-add-mode-${mode}`"
+            @click="pickMode(mode)"
+          >
+            {{ modeLabels[mode] }}
+          </button>
+        </div>
+        <p
+          v-if="addMode === 'ssh'"
+          class="text-xs text-muted"
+          data-testid="machines-add-ssh-help"
         >
-        <datalist id="machines-ssh-hosts">
-          <option
-            v-for="host in sshHosts ?? []"
-            :key="host.alias"
-            :value="host.destination"
-            :label="hostLabel(host)"
-          />
-        </datalist>
-      </label>
-      <label
-        v-else
-        class="grid gap-1 text-sm text-text"
-      >
-        <span class="text-xs font-medium uppercase tracking-wide text-muted">Address</span>
-        <input
-          v-model="addForm.url"
-          type="text"
-          inputmode="url"
-          autocomplete="off"
-          spellcheck="false"
-          :class="inputClass"
-          placeholder="http://100.64.90.72:2113"
-          :disabled="isAdding"
-          data-testid="machines-add-url"
+          Fleet logs in with your own SSH keys and asks the other machine for a pairing code. No password is asked, no
+          token is pasted.
+        </p>
+        <p
+          v-else-if="addMode === 'code'"
+          class="text-xs text-muted"
+          data-testid="machines-add-code-help"
         >
-      </label>
-      <label
-        v-if="addMode === 'code'"
-        class="grid gap-1 text-sm text-text"
-      >
-        <span class="text-xs font-medium uppercase tracking-wide text-muted">Pairing code</span>
-        <input
-          v-model="addForm.code"
-          type="text"
-          autocomplete="off"
-          autocapitalize="characters"
-          spellcheck="false"
-          :class="[inputClass, 'font-mono tracking-widest']"
-          placeholder="ABCD-EFGH"
-          :disabled="isAdding"
-          data-testid="machines-add-code"
+          On the other machine, run <code class="machine-code">fleet node pair</code>. It prints an address and a code
+          that works once for 10 minutes. The other machine keeps a token of its own for this one, which you can remove
+          there.
+        </p>
+        <p
+          v-else
+          class="text-xs text-muted"
         >
-      </label>
-      <template v-else-if="addMode === 'address'">
-        <button
-          v-if="!showAdvanced"
-          type="button"
-          class="justify-self-start text-xs text-muted underline-offset-2 hover:text-text hover:underline"
-          data-testid="machines-add-advanced"
-          @click="showAdvanced = true"
+          The other machine has to listen beyond 127.0.0.1: start it with <code class="machine-code">--host 0.0.0.0</code>,
+          or behind <code class="machine-code">tailscale serve</code> with <code class="machine-code">--require-token</code>.
+        </p>
+        <label
+          v-if="addMode === 'ssh'"
+          class="grid gap-1 text-sm text-text"
         >
-          Advanced: use the machine's access token
-        </button>
+          <span class="text-xs font-medium uppercase tracking-wide text-muted">Host</span>
+          <input
+            v-model="addForm.ssh"
+            type="text"
+            list="machines-ssh-hosts"
+            autocomplete="off"
+            autocapitalize="none"
+            spellcheck="false"
+            :class="inputClass"
+            placeholder="falcon or alice@falcon"
+            :disabled="isAdding"
+            data-testid="machines-add-ssh-host"
+          >
+          <datalist id="machines-ssh-hosts">
+            <option
+              v-for="host in sshHosts ?? []"
+              :key="host.alias"
+              :value="host.destination"
+              :label="hostLabel(host)"
+            />
+          </datalist>
+        </label>
         <label
           v-else
           class="grid gap-1 text-sm text-text"
         >
-          <span class="text-xs font-medium uppercase tracking-wide text-muted">Access token</span>
+          <span class="text-xs font-medium uppercase tracking-wide text-muted">Address</span>
           <input
-            v-model="addForm.token"
-            type="password"
+            v-model="addForm.url"
+            type="text"
+            inputmode="url"
             autocomplete="off"
             spellcheck="false"
             :class="inputClass"
-            placeholder="Paste the machine's token"
+            placeholder="http://100.64.90.72:2113"
             :disabled="isAdding"
-            data-testid="machines-add-token"
+            data-testid="machines-add-url"
           >
-          <span class="text-xs text-muted">This is the machine's full-access token. A pairing code is safer.</span>
         </label>
-      </template>
-      <div
-        v-if="addError"
-        class="flex items-start gap-2 rounded-card border border-red-500/30 bg-red-500/10 px-3 py-2 text-sm text-red-300"
-        role="alert"
-        data-testid="machines-add-error"
-      >
-        <AlertCircle
-          :size="16"
-          class="mt-0.5 shrink-0"
-          aria-hidden="true"
-        />
-        <span>{{ addError }}</span>
-      </div>
-      <div
-        v-if="installPlan"
-        class="grid gap-3 rounded-card border border-border bg-main-bg p-3"
-        data-testid="machines-install-plan"
-      >
-        <h4 class="text-sm font-semibold text-text">
-          Set up {{ installPlan.host }}
-        </h4>
-        <template v-if="installPlan.canInstall">
-          <p class="text-xs text-muted">
-            SSH works, but Fleet isn't on {{ installPlan.host }}. Fleet can run these two commands there as you.
-            Nothing runs until you click.
-          </p>
-          <pre
-            class="m-0 overflow-x-auto rounded-btn border border-border bg-card-bg px-3 py-2 font-mono text-xs text-text"
-            data-testid="machines-install-commands"
-          ><template
+        <label
+          v-if="addMode === 'code'"
+          class="grid gap-1 text-sm text-text"
+        >
+          <span class="text-xs font-medium uppercase tracking-wide text-muted">Pairing code</span>
+          <input
+            v-model="addForm.code"
+            type="text"
+            autocomplete="off"
+            autocapitalize="characters"
+            spellcheck="false"
+            :class="[inputClass, 'font-mono tracking-widest']"
+            placeholder="ABCD-EFGH"
+            :disabled="isAdding"
+            data-testid="machines-add-code"
+          >
+        </label>
+        <template v-else-if="addMode === 'address'">
+          <button
+            v-if="!showAdvanced"
+            type="button"
+            class="justify-self-start text-xs text-muted underline-offset-2 hover:text-text hover:underline"
+            data-testid="machines-add-advanced"
+            @click="showAdvanced = true"
+          >
+            Advanced: use the machine's access token
+          </button>
+          <label
+            v-else
+            class="grid gap-1 text-sm text-text"
+          >
+            <span class="text-xs font-medium uppercase tracking-wide text-muted">Access token</span>
+            <input
+              v-model="addForm.token"
+              type="password"
+              autocomplete="off"
+              spellcheck="false"
+              :class="inputClass"
+              placeholder="Paste the machine's token"
+              :disabled="isAdding"
+              data-testid="machines-add-token"
+            >
+            <span class="text-xs text-muted">This is the machine's full-access token. A pairing code is safer.</span>
+          </label>
+        </template>
+        <div
+          v-if="addError"
+          class="flex items-start gap-2 rounded-card border border-red-500/30 bg-red-500/10 px-3 py-2 text-sm text-red-300"
+          role="alert"
+          data-testid="machines-add-error"
+        >
+          <AlertCircle
+            :size="16"
+            class="mt-0.5 shrink-0"
+            aria-hidden="true"
+          />
+          <span>{{ addError }}</span>
+        </div>
+        <div
+          v-if="installPlan"
+          class="grid gap-3 rounded-card border border-border bg-main-bg p-3"
+          data-testid="machines-install-plan"
+        >
+          <h4 class="text-sm font-semibold text-text">
+            Set up {{ installPlan.host }}
+          </h4>
+          <template v-if="installPlan.canInstall">
+            <p class="text-xs text-muted">
+              SSH works, but Fleet isn't on {{ installPlan.host }}. Fleet can run these two commands there as you.
+              Nothing runs until you click.
+            </p>
+            <pre
+              class="m-0 overflow-x-auto rounded-btn border border-border bg-card-bg px-3 py-2 font-mono text-xs text-text"
+              data-testid="machines-install-commands"
+            ><template
             v-for="command in installPlan.commands"
             :key="command"
           >$ {{ command }}
 </template></pre>
-          <p class="text-xs text-muted">
-            The second one starts a background service named <code class="machine-code">fleet-node</code> that listens on
-            127.0.0.1 only. It opens no port and leaves other services alone. To remove it, run
-            <code class="machine-code">fleet node uninstall-service</code> there. No sudo and no password prompts: if
-            something needs them, it stops and says so.
-          </p>
-          <p class="text-xs text-muted">
-            Harnesses (OpenCode, Claude Code…) aren't installed. Set those up on {{ installPlan.host }} the way you
-            would anywhere.
-          </p>
-          <div class="flex flex-wrap gap-2">
-            <button
-              type="button"
-              :class="buttonPrimaryClass"
-              :disabled="isInstalling"
-              data-testid="machines-install-run"
-              @click="installNode"
+            <p class="text-xs text-muted">
+              The second one starts a background service named <code class="machine-code">fleet-node</code> that listens on
+              127.0.0.1 only. It opens no port and leaves other services alone. To remove it, run
+              <code class="machine-code">fleet node uninstall-service</code> there. No sudo and no password prompts: if
+              something needs them, it stops and says so.
+            </p>
+            <p class="text-xs text-muted">
+              Harnesses (OpenCode, Claude Code…) aren't installed. Set those up on {{ installPlan.host }} the way you
+              would anywhere.
+            </p>
+            <div class="flex flex-wrap gap-2">
+              <button
+                type="button"
+                :class="buttonPrimaryClass"
+                :disabled="isInstalling"
+                data-testid="machines-install-run"
+                @click="installNode"
+              >
+                <LoaderCircle
+                  v-if="isInstalling"
+                  :size="16"
+                  class="animate-spin"
+                  aria-hidden="true"
+                />
+                {{ isInstalling ? `Installing on ${installPlan.host}…` : "Install and pair" }}
+              </button>
+              <button
+                type="button"
+                :class="buttonSecondaryClass"
+                :disabled="isInstalling"
+                data-testid="machines-install-cancel"
+                @click="installPlan = null"
+              >
+                I'll do it myself
+              </button>
+            </div>
+            <p
+              v-if="isInstalling"
+              class="text-xs text-muted"
             >
-              <LoaderCircle
-                v-if="isInstalling"
-                :size="16"
-                class="animate-spin"
-                aria-hidden="true"
-              />
-              {{ isInstalling ? `Installing on ${installPlan.host}…` : "Install and pair" }}
-            </button>
-            <button
-              type="button"
-              :class="buttonSecondaryClass"
-              :disabled="isInstalling"
-              data-testid="machines-install-cancel"
-              @click="installPlan = null"
-            >
-              I'll do it myself
-            </button>
-          </div>
-          <p
-            v-if="isInstalling"
-            class="text-xs text-muted"
+              Downloading Fleet and starting it. This can take a minute or two.
+            </p>
+          </template>
+          <template v-else>
+            <p class="text-xs text-muted">
+              SSH works, but Fleet isn't on {{ installPlan.host }}, and Fleet only installs itself over SSH on Linux and
+              macOS. Install it there yourself, then add it again.
+              <a
+                :href="installPlan.docs"
+                target="_blank"
+                rel="noopener"
+                class="text-accent underline-offset-2 hover:underline"
+                data-testid="machines-install-docs"
+              >How to install Fleet</a>
+            </p>
+            <div>
+              <button
+                type="button"
+                :class="buttonSecondaryClass"
+                @click="installPlan = null"
+              >
+                OK
+              </button>
+            </div>
+          </template>
+        </div>
+        <div
+          v-if="!installPlan"
+          class="flex flex-wrap gap-2"
+        >
+          <button
+            type="submit"
+            :class="buttonPrimaryClass"
+            :disabled="isAdding || (addMode === 'ssh' ? !addForm.ssh.trim() : !addForm.url.trim() || !(addMode === 'code' ? addForm.code.trim() : addForm.token.trim()))"
+            data-testid="machines-add-submit"
           >
-            Downloading Fleet and starting it. This can take a minute or two.
-          </p>
-        </template>
-        <template v-else>
-          <p class="text-xs text-muted">
-            SSH works, but Fleet isn't on {{ installPlan.host }}, and Fleet only installs itself over SSH on Linux and
-            macOS. Install it there yourself, then add it again.
-            <a
-              :href="installPlan.docs"
-              target="_blank"
-              rel="noopener"
-              class="text-accent underline-offset-2 hover:underline"
-              data-testid="machines-install-docs"
-            >How to install Fleet</a>
-          </p>
-          <div>
-            <button
-              type="button"
-              :class="buttonSecondaryClass"
-              @click="installPlan = null"
-            >
-              OK
-            </button>
-          </div>
-        </template>
-      </div>
-      <div
-        v-if="!installPlan"
-        class="flex flex-wrap gap-2"
+            <LoaderCircle
+              v-if="isAdding"
+              :size="16"
+              class="animate-spin"
+              aria-hidden="true"
+            />
+            {{ isAdding ? "Checking…" : "Add machine" }}
+          </button>
+          <button
+            type="button"
+            :class="buttonSecondaryClass"
+            :disabled="isAdding"
+            @click="showAddForm = false"
+          >
+            Cancel
+          </button>
+        </div>
+      </form>
+
+      <p
+        v-if="justAdded"
+        class="flex items-center gap-2 px-4 py-3 text-sm text-text"
+        role="status"
       >
-        <button
-          type="submit"
-          :class="buttonPrimaryClass"
-          :disabled="isAdding || (addMode === 'ssh' ? !addForm.ssh.trim() : !addForm.url.trim() || !(addMode === 'code' ? addForm.code.trim() : addForm.token.trim()))"
-          data-testid="machines-add-submit"
-        >
-          <LoaderCircle
-            v-if="isAdding"
-            :size="16"
-            class="animate-spin"
-            aria-hidden="true"
-          />
-          {{ isAdding ? "Checking…" : "Add machine" }}
-        </button>
-        <button
-          type="button"
-          :class="buttonSecondaryClass"
-          :disabled="isAdding"
-          @click="showAddForm = false"
-        >
-          Cancel
-        </button>
-      </div>
-    </form>
-
-    <p
-      v-if="justAdded"
-      class="mt-4 flex items-center gap-2 text-sm text-text"
-      role="status"
-    >
-      <Check
-        :size="16"
-        class="text-[var(--running)]"
-        aria-hidden="true"
-      />
-      Added {{ justAdded }}. Its sessions are in the sessions list.
-    </p>
-
-    <MachineUpdatesStrip
-      v-if="updatesOn"
-      :summary="fleetUpdates.summary.value"
-      :checked-at="fleetUpdates.checkedAt.value"
-      :rollout="fleetUpdates.rollout.value"
-      :rollout-running="fleetUpdates.rolloutRunning.value"
-      :is-checking="fleetUpdates.isChecking.value"
-      :ready-machines="fleetUpdates.readyMachines.value"
-      :unreachable="unreachableKeys"
-      :chosen-rule="fleetUpdates.chosenRule.value"
-      :outcome="fleetUpdates.outcome.value"
-      :action-error="fleetUpdates.actionError.value"
-      @check="fleetUpdates.checkNow()"
-      @update="fleetUpdates.startRollout()"
-      @stop="fleetUpdates.stopRollout()"
-      @choose="fleetUpdates.chooseRule($event)"
-      @whats-new="openWhatsNew"
-    />
-
-    <ul
-      class="mt-5 grid gap-2"
-      aria-label="Machines"
-    >
-      <li
-        v-for="entry in entries"
-        :key="entry.key"
-        class="machine-card"
-        data-testid="machine-card"
-        :data-machine="entry.key"
-      >
-        <span
-          class="machine-card__dot"
-          :class="`machine-card__dot--${stateLine(entry).tone}`"
+        <Check
+          :size="16"
+          class="text-[var(--running)]"
           aria-hidden="true"
         />
-        <div class="machine-card__names">
-          <template v-if="renaming === entry.key">
-            <form
-              class="flex flex-wrap items-center gap-2"
-              @submit.prevent="saveRename(entry)"
+        Added {{ justAdded }}. Its sessions are in the sessions list.
+      </p>
+
+      <ul
+        class="divide-y divide-border"
+        aria-label="Machines"
+      >
+        <li
+          v-for="entry in entries"
+          :key="entry.key"
+          class="machine-card"
+          data-testid="machine-card"
+          :data-machine="entry.key"
+        >
+          <span
+            class="machine-card__dot"
+            :class="`machine-card__dot--${stateLine(entry).tone}`"
+            aria-hidden="true"
+          />
+          <div class="machine-card__names">
+            <template v-if="renaming === entry.key">
+              <form
+                class="flex flex-wrap items-center gap-2"
+                @submit.prevent="saveRename(entry)"
+              >
+                <input
+                  v-model="renameValue"
+                  type="text"
+                  maxlength="64"
+                  :class="inputClass"
+                  class="max-w-[240px] py-1"
+                  :aria-label="`New name for ${entry.name}`"
+                  data-testid="machine-rename-input"
+                >
+                <button
+                  type="submit"
+                  :class="buttonSecondaryClass"
+                  :disabled="busyKey === entry.key"
+                >
+                  Save
+                </button>
+                <button
+                  type="button"
+                  :class="buttonSecondaryClass"
+                  @click="renaming = null"
+                >
+                  Cancel
+                </button>
+              </form>
+            </template>
+            <span
+              v-else
+              class="machine-card__name"
+            >
+              {{ entry.name }}
+              <span
+                v-if="entry.os"
+                class="machine-card__os"
+              >{{ entry.os }}</span>
+              <span
+                v-if="entry.isLive"
+                class="machine-card__live"
+              >Live</span>
+            </span>
+            <span
+              v-if="entry.sshDestination"
+              class="machine-card__url"
+              data-testid="machine-ssh-line"
+            >Over SSH as {{ entry.sshDestination }}</span>
+            <span
+              v-else
+              class="machine-card__url"
+            >{{ location(entry) }}</span>
+            <span
+              class="machine-card__state"
+              :class="`machine-card__state--${stateLine(entry).tone}`"
+              :data-testid="entry.tunnelUp === false ? 'machine-tunnel-down' : undefined"
+            >{{ stateLine(entry).text }}</span>
+            <span
+              v-if="capabilityLine(entry)"
+              class="machine-card__capabilities"
+              :title="harnessVersions(entry)"
+              data-testid="machine-capabilities"
+            >{{ capabilityLine(entry) }}</span>
+            <label
+              v-if="showsAgentsAllowed(entry)"
+              class="machine-card__agents"
+              data-testid="machine-agents-allowed"
             >
               <input
-                v-model="renameValue"
-                type="text"
-                maxlength="64"
+                type="checkbox"
+                :checked="machines.agentsAllowed[entry.key] === true"
+                :disabled="busyKey === entry.key"
+                @change="toggleAgentsAllowed(entry)"
+              >
+              Agents can hand work here
+            </label>
+            <MachineJobSeats
+              v-for="key in jobsOn ? [entry.key] : []"
+              :key="key"
+              :entry-key="key"
+            />
+
+            <form
+              v-if="tokenFor === entry.key"
+              class="mt-2 flex flex-wrap items-center gap-2"
+              @submit.prevent="saveToken(entry)"
+            >
+              <input
+                v-model="tokenValue"
+                type="password"
+                autocomplete="off"
                 :class="inputClass"
-                class="max-w-[240px] py-1"
-                :aria-label="`New name for ${entry.name}`"
-                data-testid="machine-rename-input"
+                class="max-w-[320px] py-1"
+                placeholder="Paste the new token"
+                :aria-label="`New token for ${entry.name}`"
               >
               <button
                 type="submit"
                 :class="buttonSecondaryClass"
-                :disabled="busyKey === entry.key"
+                :disabled="busyKey === entry.key || !tokenValue.trim()"
               >
                 Save
               </button>
               <button
                 type="button"
                 :class="buttonSecondaryClass"
-                @click="renaming = null"
+                @click="tokenFor = null"
               >
                 Cancel
               </button>
             </form>
-          </template>
-          <span
-            v-else
-            class="machine-card__name"
-          >
-            {{ entry.name }}
-            <span
-              v-if="entry.os"
-              class="machine-card__os"
-            >{{ entry.os }}</span>
-            <span
-              v-if="entry.isLive"
-              class="machine-card__live"
-            >Live</span>
-          </span>
-          <span
-            v-if="entry.sshDestination"
-            class="machine-card__url"
-            data-testid="machine-ssh-line"
-          >Over SSH as {{ entry.sshDestination }}</span>
-          <span
-            v-else
-            class="machine-card__url"
-          >{{ location(entry) }}</span>
-          <span
-            class="machine-card__state"
-            :class="`machine-card__state--${stateLine(entry).tone}`"
-            :data-testid="entry.tunnelUp === false ? 'machine-tunnel-down' : undefined"
-          >{{ stateLine(entry).text }}</span>
-          <span
-            v-if="capabilityLine(entry)"
-            class="machine-card__capabilities"
-            :title="harnessVersions(entry)"
-            data-testid="machine-capabilities"
-          >{{ capabilityLine(entry) }}</span>
-          <label
-            v-if="showsAgentsAllowed(entry)"
-            class="machine-card__agents"
-            data-testid="machine-agents-allowed"
-          >
-            <input
-              type="checkbox"
-              :checked="machines.agentsAllowed[entry.key] === true"
-              :disabled="busyKey === entry.key"
-              @change="toggleAgentsAllowed(entry)"
+            <p
+              v-if="rowError[entry.key]"
+              class="mt-1 text-xs text-red-400"
+              role="alert"
             >
-            Agents can hand work here
-          </label>
-          <MachineJobSeats
-            v-for="key in jobsOn ? [entry.key] : []"
-            :key="key"
-            :entry-key="key"
-          />
+              {{ rowError[entry.key] }}
+            </p>
+          </div>
 
-          <form
-            v-if="tokenFor === entry.key"
-            class="mt-2 flex flex-wrap items-center gap-2"
-            @submit.prevent="saveToken(entry)"
+          <div
+            v-if="renaming !== entry.key"
+            class="machine-card__actions"
           >
-            <input
-              v-model="tokenValue"
-              type="password"
-              autocomplete="off"
-              :class="inputClass"
-              class="max-w-[320px] py-1"
-              placeholder="Paste the new token"
-              :aria-label="`New token for ${entry.name}`"
-            >
             <button
-              type="submit"
+              v-if="!entry.isLive"
+              type="button"
               :class="buttonSecondaryClass"
-              :disabled="busyKey === entry.key || !tokenValue.trim()"
+              data-testid="machine-open"
+              @click="machines.openOn(entry.key, '/')"
             >
-              Save
+              Work here
             </button>
             <button
               type="button"
               :class="buttonSecondaryClass"
-              @click="tokenFor = null"
+              @click="startRename(entry)"
             >
-              Cancel
+              Rename
             </button>
-          </form>
-          <p
-            v-if="rowError[entry.key]"
-            class="mt-1 text-xs text-red-400"
-            role="alert"
-          >
-            {{ rowError[entry.key] }}
-          </p>
-        </div>
+            <button
+              v-if="!entry.isHome"
+              type="button"
+              :class="buttonSecondaryClass"
+              @click="startToken(entry)"
+            >
+              New token
+            </button>
+            <button
+              v-if="!entry.isHome"
+              type="button"
+              :class="buttonDangerClass"
+              data-testid="machine-forget"
+              @click="forget(entry)"
+            >
+              Forget
+            </button>
+          </div>
+        </li>
+      </ul>
+    </SettingGroup>
 
-        <div
-          v-if="renaming !== entry.key"
-          class="machine-card__actions"
-        >
-          <button
-            v-if="restartButton(entry)"
-            type="button"
-            :class="buttonSecondaryClass"
-            :disabled="restartButton(entry)!.disabled"
-            data-testid="update-restart"
-            @click="fleetUpdates.restart(updateRow(entry)!)"
-          >
-            {{ restartButton(entry)!.label }}
-          </button>
-          <button
-            v-if="!entry.isLive"
-            type="button"
-            :class="buttonSecondaryClass"
-            data-testid="machine-open"
-            @click="machines.openOn(entry.key, '/')"
-          >
-            Work here
-          </button>
-          <button
-            type="button"
-            :class="buttonSecondaryClass"
-            @click="startRename(entry)"
-          >
-            Rename
-          </button>
-          <button
-            v-if="!entry.isHome"
-            type="button"
-            :class="buttonSecondaryClass"
-            @click="startToken(entry)"
-          >
-            New token
-          </button>
-          <button
-            v-if="!entry.isHome"
-            type="button"
-            :class="buttonDangerClass"
-            data-testid="machine-forget"
-            @click="forget(entry)"
-          >
-            Forget
-          </button>
-        </div>
-
-        <MachineVersionLine
-          v-if="updateRow(entry)"
-          :row="updateRow(entry)!"
-          :rollout="fleetUpdates.rollout.value"
-          :chosen-rule="fleetUpdates.chosenRule.value"
-          @override="fleetUpdates.overrideRule(entry.key, $event)"
-        />
-      </li>
-    </ul>
-
-    <div
-      class="mt-8 border-t border-border pt-6"
+    <SettingGroup
+      id="phones"
+      :title="`Let other devices reach ${homeName}`"
+      hint="Phones and devices, and the access token."
       data-testid="machine-access"
     >
-      <h3 class="text-sm font-semibold text-text">
-        Let other devices reach {{ homeName }}
-      </h3>
-
       <p
         v-if="accessError"
-        class="mt-2 text-sm text-red-400"
+        class="px-4 py-3 text-sm text-red-400"
         role="alert"
       >
         {{ accessError }}
@@ -883,7 +822,7 @@ onUnmounted(() => stopPolling?.());
 
       <p
         v-else-if="!access"
-        class="mt-2 text-sm text-muted"
+        class="px-4 py-3 text-sm text-muted"
       >
         <template v-if="isDevice">
           This browser is signed in as a paired device. Adding phones and seeing the token happen on the computer.
@@ -895,7 +834,7 @@ onUnmounted(() => stopPolling?.());
 
       <template v-else>
         <div
-          class="mb-6 mt-3"
+          class="px-4 py-3"
           data-testid="machine-phones"
         >
           <AddPhonePanel
@@ -917,7 +856,7 @@ onUnmounted(() => stopPolling?.());
 
         <p
           v-if="!access.remoteReachable && !access.requiresToken"
-          class="mt-2 max-w-prose text-sm text-muted"
+          class="max-w-prose px-4 py-3 text-sm text-muted"
           data-testid="machine-access-loopback"
         >
           Only this computer can reach it: Fleet listens on {{ access.host }}:{{ access.port }}. To add it from
@@ -927,7 +866,7 @@ onUnmounted(() => stopPolling?.());
         </p>
         <p
           v-else-if="!access.remoteReachable"
-          class="mt-2 max-w-prose text-sm text-muted"
+          class="max-w-prose px-4 py-3 text-sm text-muted"
         >
           Fleet listens on {{ access.host }}:{{ access.port }} and asks every request for the token, so a proxy
           such as <code class="machine-code">tailscale serve</code> can forward other devices to it. Use the
@@ -936,7 +875,7 @@ onUnmounted(() => stopPolling?.());
 
         <div
           v-if="access.addresses.length"
-          class="mt-3 grid gap-1"
+          class="grid gap-1 px-4 py-3"
         >
           <span class="text-xs font-medium uppercase tracking-wide text-muted">Addresses</span>
           <div
@@ -966,7 +905,7 @@ onUnmounted(() => stopPolling?.());
           </div>
         </div>
 
-        <div class="mt-4 grid gap-1">
+        <div class="grid gap-1 px-4 py-3">
           <span class="text-xs font-medium uppercase tracking-wide text-muted">Access token</span>
           <div class="flex flex-wrap items-center gap-2">
             <code
@@ -1032,8 +971,8 @@ onUnmounted(() => stopPolling?.());
           </p>
         </div>
       </template>
-    </div>
-  </section>
+    </SettingGroup>
+  </div>
 </template>
 
 <style scoped>
@@ -1042,10 +981,7 @@ onUnmounted(() => stopPolling?.());
   flex-wrap: wrap;
   align-items: flex-start;
   gap: 12px;
-  padding: 12px 14px;
-  border: 1px solid var(--border);
-  border-radius: var(--radius-card);
-  background: var(--main-bg);
+  padding: 12px 16px;
 }
 
 .machine-card__dot {

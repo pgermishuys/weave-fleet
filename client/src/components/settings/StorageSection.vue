@@ -135,14 +135,14 @@ onMounted(load);
 
 <template>
   <section
-    class="rounded-card border border-border bg-card-bg p-6 shadow-sm"
+    class="rounded-card border border-border bg-card-bg px-4 py-4"
     data-testid="storage-section"
   >
     <div class="flex flex-col gap-1">
-      <h2 class="text-lg font-semibold text-text">
+      <h2 class="text-sm font-semibold text-text">
         Storage
       </h2>
-      <p class="text-sm text-muted">
+      <p class="text-xs text-muted">
         What Fleet's worktree checkouts take on this machine.
       </p>
     </div>

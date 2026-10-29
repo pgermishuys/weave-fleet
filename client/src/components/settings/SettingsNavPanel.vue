@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import type { Component } from "vue";
 import { computed, onMounted } from "vue";
-import { Cable, FlaskConical, FolderGit2, Lightbulb, Palette, RefreshCw, Server, ShieldCheck, SlidersHorizontal, Workflow, Wrench, Settings2 } from "lucide-vue-next";
+import { Cable, FlaskConical, FolderGit2, Lightbulb, Palette, RefreshCw, Server, ShieldCheck, SlidersHorizontal, Wrench, Settings2 } from "lucide-vue-next";
 import { useFleetUpdatesWatch } from "@/composables/use-fleet-updates";
 import type { SettingsSectionId } from "@/composables/use-settings-nav";
 import { useUpdateStatus } from "@/composables/use-update-status";
@@ -35,14 +35,13 @@ const { isUpdateAvailable, isUpdateStaged } = useUpdateStatus();
 
 const showUpdateDot = computed(() => isUpdateAvailable.value || isUpdateStaged.value);
 
-// With the Updates switch (Labs) on, the Machines entry carries a badge: how many machines can update.
+// With the Updates switch (Labs) on, the Updates & about entry carries a badge: how many machines can update.
 const { waiting: updatesWaiting } = useFleetUpdatesWatch();
 
 // The switch decides whether Skills & tools has a Mods tab; read it once here so that is right on first paint.
 const mods = useModsStore();
 onMounted(() => { void mods.loadSwitch(); });
 
-// Workflows stays here until its page is folded into the Workflows rail page.
 const coreGroups: readonly SettingsNavGroup[] = [
   {
     id: "you",
@@ -60,7 +59,6 @@ const coreGroups: readonly SettingsNavGroup[] = [
       { id: "permissions", label: "Permissions", icon: ShieldCheck },
       { id: "skills", label: "Skills & tools", icon: Wrench },
       { id: "memory", label: "Memory", icon: Lightbulb },
-      { id: "workflows", label: "Workflows", icon: Workflow },
     ],
   },
   {
@@ -142,13 +140,13 @@ function selectSection(sectionId: SettingsSectionId): void {
           <span>{{ item.label }}</span>
           <!-- Update notification dot for Updates & about -->
           <span
-            v-if="item.id === 'updates' && showUpdateDot"
+            v-if="item.id === 'updates' && showUpdateDot && !updatesWaiting"
             class="ml-auto h-2 w-2 rounded-full"
             :class="isUpdateStaged ? 'bg-warn' : 'bg-accent'"
             aria-label="Update available"
           />
           <span
-            v-if="item.id === 'machines' && updatesWaiting"
+            v-if="item.id === 'updates' && updatesWaiting"
             class="ml-auto rounded-full bg-accent px-1.5 text-[10px] font-semibold leading-4 text-white"
             :aria-label="`${updatesWaiting} ${updatesWaiting === 1 ? 'machine' : 'machines'} can update`"
             data-testid="updates-badge"

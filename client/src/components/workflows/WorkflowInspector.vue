@@ -446,7 +446,7 @@ function setChoiceTarget(at: number, target: string): void {
             </datalist>
           </div>
           <p class="wf-help">
-            Roles map to your models in Settings → Workflows. A pinned model has to be one everyone who runs this has.
+            Roles map to your models under Model roles, in the Workflows list. A pinned model has to be one everyone who runs this has.
           </p>
         </div>
 

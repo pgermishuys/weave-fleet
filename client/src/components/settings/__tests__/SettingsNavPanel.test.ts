@@ -36,7 +36,7 @@ describe("SettingsNavPanel", () => {
     ]);
     expect(groups).toEqual([
       ["you", ["General", "Appearance"]],
-      ["agents", ["Harnesses", "Permissions", "Skills & tools", "Memory", "Workflows"]],
+      ["agents", ["Harnesses", "Permissions", "Skills & tools", "Memory"]],
       ["work", ["Folders", "Machines"]],
       ["fleet", ["Labs", "Updates & about"]],
     ]);
@@ -73,16 +73,20 @@ describe("SettingsNavPanel", () => {
     update.available.value = false;
   });
 
-  it("puts the number of machines that can update on Machines", async () => {
+  it("puts the number of machines that can update on Updates & about, in place of the dot", async () => {
     updates.waiting.value = 0;
     expect((await mountNav(false)).find("[data-testid='updates-badge']").exists()).toBe(false);
 
     updates.waiting.value = 3;
+    update.available.value = true;
     const wrapper = await mountNav(false);
-    const entry = wrapper.findAll("button").find((b) => b.text().startsWith("Machines"))!;
+    const entry = wrapper.findAll("button").find((b) => b.text().startsWith("Updates"))!;
     expect(entry.get("[data-testid='updates-badge']").text()).toBe("3");
+    expect(entry.find("[aria-label='Update available']").exists()).toBe(false);
+    expect(wrapper.findAll("[data-testid='updates-badge']")).toHaveLength(1);
     await entry.trigger("click");
-    expect(wrapper.emitted("update:modelValue")![0]).toEqual(["machines"]);
+    expect(wrapper.emitted("update:modelValue")![0]).toEqual(["updates"]);
     updates.waiting.value = 0;
+    update.available.value = false;
   });
 });

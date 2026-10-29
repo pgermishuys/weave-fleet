@@ -5,7 +5,7 @@ release notes). A workflow is a short list of steps; each agent step is an ordin
 the run from step to step and stops wherever a step asks the user.
 
 **Check that Workflows is on first**: `GET /api/workflows` answers 404 "turned off in Fleet's Settings" when it's not.
-Then say so and point at Settings → Workflows. Don't turn it on.
+Then say so and point at Settings → Labs. Don't turn it on.
 
 Look at what exists before you offer a new one:
 
