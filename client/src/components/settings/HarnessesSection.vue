@@ -133,11 +133,14 @@ watch([activeAnchor, activeHarness, () => weave.view.value, harnesses], () => {
 }, { immediate: true });
 
 // Scroll to the group a link named (Weave, What it may do) once it is on the page; Weave's arrives after Fleet asks.
+// Once there, the anchor is spent, so a later save or refresh doesn't pull the page back to it.
 watch([activeAnchor, selected, () => weave.view.value], async () => {
   if (!activeAnchor.value) return;
   await nextTick();
-  document.querySelector(`[data-setting-group="${activeAnchor.value.replace(/"/g, "")}"]`)
-    ?.scrollIntoView({ block: "start", behavior: "smooth" });
+  const group = document.querySelector(`[data-setting-group="${activeAnchor.value.replace(/"/g, "")}"]`);
+  if (!group) return;
+  group.scrollIntoView?.({ block: "start", behavior: "smooth" });
+  activeAnchor.value = null;
 }, { flush: "post" });
 
 function dotClass(status: HarnessStatus): string {

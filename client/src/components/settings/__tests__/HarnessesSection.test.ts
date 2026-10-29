@@ -482,6 +482,17 @@ describe("HarnessesSection", () => {
       expect(wrapper.find("[data-setting-group='may-do']").exists()).toBe(true);
     });
 
+    it("spends the anchor once it has scrolled there, so a later save doesn't pull the page back", async () => {
+      mockApiResponses({}, () => [createHarness("opencode", "OpenCode"), createHarness("pi", "Pi")]);
+      useSettingsNav().openHarness("pi", "may-do");
+
+      // On the page, so the group can be found and scrolled to.
+      mounted.push(mount(HarnessesSection, { global: { plugins: [getActivePinia()!] }, attachTo: document.body }));
+      await flushPromises();
+
+      expect(useSettingsNav().activeAnchor.value).toBeNull();
+    });
+
     it("the old Weave id opens the default harness's tab when Weave is asked about there", async () => {
       weaveHarnesses = [
         { harnessType: "opencode", harnessName: "OpenCode", checked: true, installs: [] },
