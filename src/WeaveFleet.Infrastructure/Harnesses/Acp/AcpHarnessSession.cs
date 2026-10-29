@@ -10,6 +10,8 @@ using WeaveFleet.Application.FleetTools;
 using WeaveFleet.Application.Harnesses;
 using WeaveFleet.Domain.Events;
 using WeaveFleet.Domain.Harnesses;
+using WeaveFleet.Domain.Identity;
+using WeaveFleet.Infrastructure.Harnesses.OpenCode2;
 
 namespace WeaveFleet.Infrastructure.Harnesses.Acp;
 
@@ -20,7 +22,7 @@ namespace WeaveFleet.Infrastructure.Harnesses.Acp;
 /// </summary>
 internal sealed partial class AcpHarnessSession : IHarnessSession
 {
-    /// <summary>weave-copilot's answer to a <c>_fleet/steer</c> that arrived after the turn ended.</summary>
+    /// <summary>weave-copilot's answer to a <c>_fleet/steer</c> that arrived after the turn ended, or a <c>_fleet/shell</c> that arrived during one.</summary>
     internal const int NoTurnRunning = -32001;
 
     private IAcpAgent _agent;
@@ -181,6 +183,7 @@ internal sealed partial class AcpHarnessSession : IHarnessSession
         McpServers = mcpServers;
         SkillDirectory = skillDirectory;
         _replaying = true;
+        _mapper.Replaying = true;
         try
         {
             ReadModels(await LoadOnAsync(_agent, ct).ConfigureAwait(false));
@@ -188,6 +191,7 @@ internal sealed partial class AcpHarnessSession : IHarnessSession
         finally
         {
             _replaying = false;
+            _mapper.Replaying = false;
         }
     }
 
@@ -534,6 +538,7 @@ internal sealed partial class AcpHarnessSession : IHarnessSession
             "session/update" when parameters.TryGetProperty("update", out var update) => _mapper.Update(update),
             "_fleet/fusion" => _mapper.Fusion(parameters),
             "_fleet/compaction" => _mapper.Compaction(parameters),
+            "_fleet/shell_command" => _mapper.ShellCommand(parameters),
             _ => [],
         };
         if (!_replaying)
@@ -667,7 +672,78 @@ internal sealed partial class AcpHarnessSession : IHarnessSession
         return commands;
     }
 
-    public Task<string?> AskOffTheRecordAsync(string prompt, CancellationToken ct) => Task.FromResult<string?>(null);
+    /// <summary>A question to the model about the conversation that leaves no trace in it (<c>_fleet/ask</c>); null when it had no answer.</summary>
+    public async Task<string?> AskOffTheRecordAsync(string prompt, CancellationToken ct)
+    {
+        ObjectDisposedException.ThrowIf(_disposed, this);
+        var result = await _agent.Client.RequestAsync("_fleet/ask", new JsonObject { ["sessionId"] = ResumeToken, ["question"] = prompt }, ct).ConfigureAwait(false);
+        return AcpMapper.Str(result, "answer") is { Length: > 0 } answer ? answer : null;
+    }
+
+    /// <summary>
+    /// Copilot keeps nothing between <c>_fleet/ask</c> calls, so each follow-up carries the questions and answers before it
+    /// (as OpenCode 2's does).
+    /// </summary>
+    public Task<IOffTheRecordConversation?> StartOffTheRecordAsync(CancellationToken ct)
+    {
+        ObjectDisposedException.ThrowIf(_disposed, this);
+        return Task.FromResult<IOffTheRecordConversation?>(
+            new OpenCode2OffTheRecordConversation(AskOffTheRecordAsync, OpenCode2HarnessRuntime.ConversationQuestionTimeout));
+    }
+
+    /// <summary>
+    /// A new Copilot session holding this one's conversation (<c>_fleet/fork</c>), up to before the turn running now. The
+    /// boundary is the newest message it copied, under the id the fork's own replay will give that message.
+    /// </summary>
+    public async Task<ConversationFork?> ForkConversationAsync(CancellationToken ct)
+    {
+        ObjectDisposedException.ThrowIf(_disposed, this);
+        var result = await _agent.Client.RequestAsync("_fleet/fork", new JsonObject { ["sessionId"] = ResumeToken }, ct).ConfigureAwait(false);
+        var forkId = AcpMapper.Str(result, "sessionId") ?? throw new AcpException("The agent forked the session but didn't say which one it made.");
+        if (!result.TryGetProperty("boundary", out var boundary) || boundary.ValueKind != JsonValueKind.Object || AcpMapper.Str(boundary, "id") is not { } key)
+            return new ConversationFork(forkId, null);
+        var offset = boundary.TryGetProperty("offset", out var n) && n.TryGetInt32(out var count) ? count : 0;
+        return new ConversationFork(forkId, AscendingMessageId.Stable(AcpMapper.AtMillis(boundary), offset, key));
+    }
+
+    /// <summary>
+    /// Runs a command the user typed in the session's folder (<c>_fleet/shell</c>), which returns when it ends. Its message
+    /// shows from the agent's <c>_fleet/shell_command</c> notifications, under the id Fleet gave it. This waits only long
+    /// enough to hear a refusal: a turn running (Fleet's composer holds a command back until it's over).
+    /// </summary>
+    public async Task RunShellCommandAsync(ShellCommandOptions options, CancellationToken ct)
+    {
+        ObjectDisposedException.ThrowIf(_disposed, this);
+        if (Status == HarnessSessionStatus.Running)
+            throw new HarnessBusyException("The agent is still working on the last prompt.");
+
+        _mapper.ExpectShell(options.MessageId);
+        try
+        {
+            await ShellCommandCall.RunUntilTakenAsync(
+                async token =>
+                {
+                    try
+                    {
+                        await _agent.Client.RequestAsync("_fleet/shell", new JsonObject { ["sessionId"] = ResumeToken, ["command"] = options.Command }, token).ConfigureAwait(false);
+                    }
+                    catch (AcpException ex) when (ex.Code == NoTurnRunning)
+                    {
+                        throw new HarnessBusyException("A turn is running; run the command when it's over.");
+                    }
+                },
+                ex => LogShellCommandFailed(_logger, ex),
+                CancellationToken.None).ConfigureAwait(false);
+        }
+        catch
+        {
+            _mapper.ExpectShell(null);
+            throw;
+        }
+    }
+
+    [LoggerMessage(Level = LogLevel.Warning, Message = "A shell command the user ran failed after it was taken.")]
+    private static partial void LogShellCommandFailed(ILogger logger, Exception exception);
 
     /// <summary>Sends <c>/name arguments</c> as a prompt: weave-copilot expands it, and the conversation keeps what was typed.</summary>
     public async Task<string?> SendCommandAsync(CommandOptions options, CancellationToken ct)

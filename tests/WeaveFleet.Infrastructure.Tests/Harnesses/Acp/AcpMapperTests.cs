@@ -1,6 +1,7 @@
 using System.Text.Json;
 using WeaveFleet.Application.FleetTools;
 using WeaveFleet.Domain.Harnesses;
+using WeaveFleet.Domain.Identity;
 using WeaveFleet.Infrastructure.Harnesses;
 using WeaveFleet.Infrastructure.Harnesses.Acp;
 
@@ -614,5 +615,131 @@ public sealed class AcpMapperTests
         mapper.Update(Chunk("agent_message_chunk", "more"));
 
         mapper.Messages().Select(m => m.Parts[0] is CompactionPart ? "divider" : m.TextContent).ShouldBe(["first", "answer", "divider", "second", "more"]);
+    }
+
+    private static JsonElement Keyed(string text, string id, string at)
+        => J($$$"""{"sessionUpdate":"user_message_chunk","content":{"type":"text","text":"{{{text}}}"},"_meta":{"fleetKey":{"id":"{{{id}}}","at":"{{{at}}}"} }}""");
+
+    private const string At = "2026-10-29T10:00:00.0000000+00:00";
+    private static readonly long AtMs = DateTimeOffset.Parse(At, System.Globalization.CultureInfo.InvariantCulture).ToUnixTimeMilliseconds();
+
+    [Fact]
+    public void a_replayed_conversation_takes_stable_ids_from_each_user_messages_key()
+    {
+        string[] Ids()
+        {
+            var mapper = new AcpMapper("s1") { Replaying = true };
+            mapper.Update(Keyed("first", "u1", At));
+            mapper.Update(Chunk("agent_message_chunk", "reply"));
+            mapper.Update(Keyed("second", "u2", At));
+            mapper.Update(Chunk("agent_thought_chunk", "hmm"));
+            mapper.Update(J("""{"sessionUpdate":"tool_call","toolCallId":"c1","kind":"read","status":"completed"}"""));
+            mapper.Update(Chunk("agent_message_chunk", "after the call"));
+            return [.. mapper.Messages().Select(m => m.Id)];
+        }
+
+        var ids = Ids();
+
+        ids.ShouldBe(Ids());
+        ids.Length.ShouldBe(5);
+        ids[0].ShouldBe(AscendingMessageId.Stable(AtMs, 0, "u1"));
+        ids[1].ShouldBe(AscendingMessageId.Stable(AtMs, 1, "u1"));
+        ids[2].ShouldBe(AscendingMessageId.Stable(AtMs, 0, "u2"));
+        ids[3].ShouldBe(AscendingMessageId.Stable(AtMs, 1, "u2"));
+        ids[4].ShouldBe(AscendingMessageId.Stable(AtMs, 2, "u2"));
+    }
+
+    [Fact]
+    public void a_replayed_compaction_divider_stays_between_its_turn_and_the_next_with_the_same_id_every_time()
+    {
+        string[] Ids()
+        {
+            var mapper = new AcpMapper("s1") { Replaying = true };
+            mapper.Update(Keyed("first", "u1", At));
+            mapper.Update(Chunk("agent_message_chunk", "reply"));
+            mapper.Compaction(Compaction("ended", "auto", 9000, 1200, "What we did."));
+            mapper.Update(Keyed("second", "u2", "2026-10-29T10:05:00.0000000+00:00"));
+            return [.. mapper.Messages().Select(m => m.Id)];
+        }
+
+        var ids = Ids();
+
+        ids.ShouldBe(Ids());
+        ids.Length.ShouldBe(4);
+        ids[2].ShouldBe(AscendingMessageId.Stable(AtMs, 2, "u1"));
+        ids.ShouldBe(ids.OrderBy(id => id, StringComparer.Ordinal));
+    }
+
+    [Fact]
+    public void live_messages_and_replayed_ones_without_a_key_keep_fresh_ids()
+    {
+        var replayed = new AcpMapper("s1") { Replaying = true };
+        replayed.Update(J("""{"sessionUpdate":"user_message_chunk","content":{"type":"text","text":"old"}}"""));
+        var mapper = new AcpMapper("s1");
+        mapper.Update(Keyed("ignored", "u1", At));
+        mapper.Update(Chunk("agent_message_chunk", "live"));
+
+        replayed.Messages().Single().Id.ShouldNotBe(AscendingMessageId.Stable(AtMs, 0, "u1"));
+        mapper.Messages().Select(m => m.Id).ShouldNotContain(AscendingMessageId.Stable(AtMs, 1, "u1"));
+    }
+
+    [Fact]
+    public void the_boundary_a_fork_names_is_the_id_its_replay_gives_that_message()
+    {
+        // weave-copilot says: the user message "u1" at AtMs with a reply after it, offset 1.
+        var boundary = AscendingMessageId.Stable(AtMs, 1, "u1");
+        var mapper = new AcpMapper("s1") { Replaying = true };
+
+        mapper.Update(Keyed("question", "u1", At));
+        mapper.Update(Chunk("agent_message_chunk", "answer"));
+
+        mapper.Messages()[^1].Id.ShouldBe(boundary);
+    }
+
+    private static JsonElement Shell(string phase, string extra = "")
+        => J($$"""{"sessionId":"acp-1","toolCallId":"sh1","phase":"{{phase}}","command":"git status","at":"{{At}}"{{extra}} }""");
+
+    [Fact]
+    public void a_live_shell_command_is_a_shell_message_under_the_id_fleet_gave_it_running_then_complete()
+    {
+        var mapper = new AcpMapper("s1");
+        mapper.ExpectShell("msg_fleet");
+
+        var started = mapper.ShellCommand(Shell("started"));
+        mapper.ShellCommand(Shell("output", ",\"text\":\"On branch \""));
+        var ended = mapper.ShellCommand(Shell("ended", ",\"output\":\"On branch main\\n\",\"exitCode\":0,\"success\":true"));
+
+        started.Select(e => e.Type).ShouldBe([EventTypes.MessageCreated, EventTypes.MessagePartUpdated]);
+        var info = started[0].Payload!.Value.GetProperty("info");
+        (info.GetProperty("id").GetString(), info.GetProperty("role").GetString()).ShouldBe(("msg_fleet", ShellCommands.Role));
+        started[0].Payload!.Value.GetProperty("parts")[0].GetProperty("state").GetProperty("status").GetString().ShouldBe("running");
+        ended.Select(e => e.Type).ShouldBe([EventTypes.MessageUpdated, EventTypes.MessagePartUpdated]);
+        ended[0].Payload!.Value.GetProperty("info").GetProperty("time").TryGetProperty("completed", out _).ShouldBeTrue();
+        var state = ended[1].Payload!.Value.GetProperty("part").GetProperty("state");
+        state.GetProperty("status").GetString().ShouldBe("completed");
+        state.GetProperty("input").GetProperty("command").GetString().ShouldBe("git status");
+        state.GetProperty("output").GetString().ShouldBe("On branch main\n");
+        state.GetProperty("metadata").GetProperty(ShellCommands.ExitMetadata).GetInt32().ShouldBe(0);
+
+        var message = mapper.Messages().Single();
+        (message.Id, message.Role).ShouldBe(("msg_fleet", ShellCommands.Role));
+        var tool = message.Parts.OfType<ToolUsePart>().Single();
+        (tool.ToolName, tool.State).ShouldBe(("shell", ToolUseState.Completed));
+    }
+
+    [Fact]
+    public void a_replayed_shell_command_has_a_stable_id_and_the_reply_after_it_counts_on_from_it()
+    {
+        var mapper = new AcpMapper("s1") { Replaying = true };
+
+        mapper.ShellCommand(Shell("started"));
+        mapper.ShellCommand(Shell("ended", ",\"output\":\"clean\",\"exitCode\":1,\"success\":false"));
+        mapper.Update(Chunk("agent_message_chunk", "noted"));
+
+        var messages = mapper.Messages();
+        messages.Select(m => m.Role).ShouldBe([ShellCommands.Role, "assistant"]);
+        messages[0].Id.ShouldBe(AscendingMessageId.Stable(AtMs, 0, "sh1"));
+        messages[1].Id.ShouldBe(AscendingMessageId.Stable(AtMs, 1, "sh1"));
+        messages[0].Parts.OfType<ToolUsePart>().Single().Metadata!.Value.GetProperty("exit").GetInt32().ShouldBe(1);
     }
 }

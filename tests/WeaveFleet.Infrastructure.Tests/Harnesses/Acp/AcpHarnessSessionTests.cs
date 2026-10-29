@@ -735,6 +735,175 @@ public sealed class AcpHarnessSessionTests
         Sent(agent, "session/prompt").ShouldBeEmpty();
     }
 
+    private static JsonObject ShellNote(string phase, string? output = null, int? exit = null) => new()
+    {
+        ["jsonrpc"] = "2.0",
+        ["method"] = "_fleet/shell_command",
+        ["params"] = new JsonObject
+        {
+            ["sessionId"] = "acp-1", ["toolCallId"] = "sh1", ["phase"] = phase, ["command"] = "git status", ["at"] = "2026-10-29T10:00:00.0000000+00:00",
+            ["output"] = output, ["exitCode"] = exit,
+        },
+    };
+
+    [Fact]
+    public async Task a_shell_command_shows_under_the_id_fleet_gave_it_and_stays_in_the_history()
+    {
+        await using var agent = new FakeAcpAgent();
+        agent.Handle = (method, _) =>
+        {
+            if (method == "_fleet/shell")
+            {
+                agent.Send(ShellNote("started"));
+                agent.Send(ShellNote("ended", "clean", 0));
+            }
+
+            return Task.FromResult<JsonNode?>(new JsonObject { ["success"] = true, ["exitCode"] = 0 });
+        };
+        await using var session = NewSession(agent);
+
+        await session.RunShellCommandAsync(new ShellCommandOptions { Command = "git status", MessageId = "msg_fleet" }, CancellationToken.None);
+        var events = await ReadAsync(session, seen => seen.Count(e => e.Type is EventTypes.MessageCreated or EventTypes.MessageUpdated) == 2);
+
+        agent.Received.Single(r => r.Method == "_fleet/shell").Params.GetProperty("command").GetString().ShouldBe("git status");
+        events.First().Payload!.Value.GetProperty("info").GetProperty("id").GetString().ShouldBe("msg_fleet");
+        var message = (await session.GetMessagesAsync(null, CancellationToken.None)).Messages.Single();
+        (message.Id, message.Role).ShouldBe(("msg_fleet", ShellCommands.Role));
+        message.Parts.OfType<ToolUsePart>().Single().State.ShouldBe(ToolUseState.Completed);
+    }
+
+    [Fact]
+    public async Task a_shell_command_during_a_turn_is_refused_as_busy_by_either_side()
+    {
+        await using var agent = new FakeAcpAgent();
+        var release = new TaskCompletionSource();
+        agent.Handle = async (method, _) =>
+        {
+            if (method == "session/prompt")
+                await release.Task;
+            if (method == "_fleet/shell")
+                throw new AcpException("A turn is running; run the command when it's over", AcpHarnessSession.NoTurnRunning);
+            return new JsonObject();
+        };
+        await using var session = NewSession(agent);
+
+        // Fleet knows a turn is running.
+        await session.SendPromptAsync("work", null, CancellationToken.None);
+        await Should.ThrowAsync<HarnessBusyException>(() => session.RunShellCommandAsync(new ShellCommandOptions { Command = "ls" }, CancellationToken.None));
+        agent.Received.ShouldNotContain(r => r.Method == "_fleet/shell");
+        release.SetResult();
+        await ReadAsync(session, Idle);
+
+        // Copilot knows one is, and says so.
+        await using var other = new FakeAcpAgent();
+        other.Handle = (_, _) => throw new AcpException("A turn is running", AcpHarnessSession.NoTurnRunning);
+        await using var second = NewSession(other);
+        await Should.ThrowAsync<HarnessBusyException>(() => second.RunShellCommandAsync(new ShellCommandOptions { Command = "ls" }, CancellationToken.None));
+    }
+
+    [Fact]
+    public async Task a_loaded_session_gives_its_messages_stable_ids_and_its_shell_commands_come_back()
+    {
+        async Task<string[]> LoadedIds()
+        {
+            await using var agent = new FakeAcpAgent();
+            agent.Handle = (method, _) =>
+            {
+                if (method == "session/load")
+                {
+                    agent.Update("acp-1", new JsonObject
+                    {
+                        ["sessionUpdate"] = "user_message_chunk", ["content"] = new JsonObject { ["type"] = "text", ["text"] = "hi" },
+                        ["_meta"] = new JsonObject { ["fleetKey"] = new JsonObject { ["id"] = "u1", ["at"] = "2026-10-29T10:00:00.0000000+00:00" } },
+                    });
+                    agent.Update("acp-1", new JsonObject { ["sessionUpdate"] = "agent_message_chunk", ["content"] = new JsonObject { ["type"] = "text", ["text"] = "hello" } });
+                    agent.Send(ShellNote("started"));
+                    agent.Send(ShellNote("ended", "clean", 0));
+                }
+
+                return Task.FromResult<JsonNode?>(new JsonObject());
+            };
+            await using var session = NewSession(agent);
+            await session.LoadAsync(null, CancellationToken.None);
+            await Task.Delay(100);
+            return [.. (await session.GetMessagesAsync(null, CancellationToken.None)).Messages.Select(m => m.Role + ":" + m.Id)];
+        }
+
+        var first = await LoadedIds();
+
+        first.Length.ShouldBe(3);
+        first.ShouldBe(await LoadedIds());
+        first[2].ShouldStartWith("shell:msg_");
+    }
+
+    [Fact]
+    public async Task asking_off_the_record_sends_the_question_and_returns_the_answer_or_null()
+    {
+        await using var agent = new FakeAcpAgent();
+        var answer = (string?)"It retries three times.";
+        agent.Handle = (_, _) => Task.FromResult<JsonNode?>(new JsonObject { ["answer"] = answer });
+        await using var session = NewSession(agent);
+
+        (await session.AskOffTheRecordAsync("what does it do?", CancellationToken.None)).ShouldBe("It retries three times.");
+        answer = null;
+        (await session.AskOffTheRecordAsync("and now?", CancellationToken.None)).ShouldBeNull();
+
+        agent.Received[0].Method.ShouldBe("_fleet/ask");
+        agent.Received[0].Params.GetProperty("question").GetString().ShouldBe("what does it do?");
+        agent.Received[0].Params.GetProperty("sessionId").GetString().ShouldBe("acp-1");
+    }
+
+    [Fact]
+    public async Task an_off_the_record_conversation_carries_the_earlier_questions_and_answers_into_each_follow_up()
+    {
+        await using var agent = new FakeAcpAgent();
+        var n = 0;
+        agent.Handle = (_, _) => Task.FromResult<JsonNode?>(new JsonObject { ["answer"] = $"answer {++n}" });
+        await using var session = NewSession(agent);
+
+        await using var conversation = (await session.StartOffTheRecordAsync(CancellationToken.None))!;
+        await conversation.AskAsync("first?", CancellationToken.None);
+        var second = await conversation.AskAsync("second?", CancellationToken.None);
+
+        second!.Text.ShouldBe("answer 2");
+        var sent = agent.Received[1].Params.GetProperty("question").GetString()!;
+        sent.ShouldContain("first?");
+        sent.ShouldContain("answer 1");
+        sent.ShouldEndWith("second?");
+        agent.Received[0].Params.GetProperty("question").GetString().ShouldBe("first?");
+    }
+
+    [Fact]
+    public async Task forking_names_the_boundary_with_the_id_the_forks_own_replay_gives_that_message()
+    {
+        const string at = "2026-10-29T10:00:00.0000000+00:00";
+        await using var agent = new FakeAcpAgent();
+        agent.Handle = (_, _) => Task.FromResult<JsonNode?>(new JsonObject
+        {
+            ["sessionId"] = "acp-fork",
+            ["boundary"] = new JsonObject { ["id"] = "u1", ["at"] = at, ["offset"] = 1 },
+        });
+        await using var session = NewSession(agent);
+
+        var fork = await session.ForkConversationAsync(CancellationToken.None);
+
+        agent.Received.Single().Method.ShouldBe("_fleet/fork");
+        fork!.ResumeToken.ShouldBe("acp-fork");
+        fork.BoundaryMessageId.ShouldBe(AscendingMessageId.Stable(DateTimeOffset.Parse(at, System.Globalization.CultureInfo.InvariantCulture).ToUnixTimeMilliseconds(), 1, "u1"));
+    }
+
+    [Fact]
+    public async Task forking_a_session_with_nothing_to_copy_has_no_boundary()
+    {
+        await using var agent = new FakeAcpAgent();
+        agent.Handle = (_, _) => Task.FromResult<JsonNode?>(new JsonObject { ["sessionId"] = "acp-fork", ["boundary"] = null });
+        await using var session = NewSession(agent);
+
+        var fork = await session.ForkConversationAsync(CancellationToken.None);
+
+        (fork!.ResumeToken, fork.BoundaryMessageId).ShouldBe(("acp-fork", null));
+    }
+
     private static JsonObject Ask() => new()
     {
         ["sessionId"] = "acp-1",
