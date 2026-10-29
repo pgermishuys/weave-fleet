@@ -131,7 +131,7 @@ internal sealed class SseEventDemultiplexer : IAsyncDisposable
             throw new InvalidOperationException("No OpenCode SSE directory stream has been registered for the pooled session.");
         }
 
-        await entry.WaitForActiveStreamAsync().WaitAsync(ct).ConfigureAwait(false);
+        await WaitForActiveStreamAsync(entry, ct).ConfigureAwait(false);
     }
 
     public ValueTask<IAsyncDisposable> RegisterConsumerAsync(
@@ -187,7 +187,7 @@ internal sealed class SseEventDemultiplexer : IAsyncDisposable
 
         try
         {
-            await entry.WaitForActiveStreamAsync().WaitAsync(ct).ConfigureAwait(false);
+            await WaitForActiveStreamAsync(entry, ct).ConfigureAwait(false);
             return new ConsumerRegistration(this, key, consumerId);
         }
         catch
@@ -218,6 +218,23 @@ internal sealed class SseEventDemultiplexer : IAsyncDisposable
         }
     }
 
+    /// <summary>
+    /// Waits until the directory's stream is live, or its instance has stopped: that one never streams again, and its
+    /// consumers move to the replacement, so waiting for it would hang whoever got there first.
+    /// </summary>
+    private static async Task WaitForActiveStreamAsync(DirectoryStreamEntry entry, CancellationToken ct)
+    {
+        var stopped = entry.Key.Instance.Stopped;
+        using var waiting = CancellationTokenSource.CreateLinkedTokenSource(ct, stopped);
+        try
+        {
+            await entry.WaitForActiveStreamAsync().WaitAsync(waiting.Token).ConfigureAwait(false);
+        }
+        catch (OperationCanceledException) when (stopped.IsCancellationRequested && !ct.IsCancellationRequested)
+        {
+        }
+    }
+
     private DirectoryStreamEntry CreateEntry(DirectoryStreamKey key)
     {
         var entry = new DirectoryStreamEntry(key);
@@ -234,6 +251,16 @@ internal sealed class SseEventDemultiplexer : IAsyncDisposable
             while (!entry.Cancellation.IsCancellationRequested)
             {
                 entry.MarkStreamInactive();
+
+                // A crashed or stopped server never comes back as this instance (see PooledOpenCodeInstance.Stopped):
+                // wait for the consumers to move to the replacement instead of reconnecting with the old password.
+                var stopped = entry.Key.Instance.Stopped;
+                if (stopped.IsCancellationRequested)
+                {
+                    await Task.Delay(Timeout.InfiniteTimeSpan, entry.Cancellation.Token).ConfigureAwait(false);
+                }
+
+                using var streamCancellation = CancellationTokenSource.CreateLinkedTokenSource(entry.Cancellation.Token, stopped);
                 try
                 {
                     await foreach (var evt in _streamFactory
@@ -241,14 +268,14 @@ internal sealed class SseEventDemultiplexer : IAsyncDisposable
                                            entry.Key.Instance,
                                            entry.Key.Directory,
                                            entry.NotifyActiveStreamAsync,
-                                           entry.Cancellation.Token)
-                                       .WithCancellation(entry.Cancellation.Token)
+                                           streamCancellation.Token)
+                                       .WithCancellation(streamCancellation.Token)
                                        .ConfigureAwait(false))
                     {
                         RouteEvent(entry, evt);
                     }
 
-                    if (!entry.Cancellation.IsCancellationRequested)
+                    if (!streamCancellation.IsCancellationRequested)
                     {
                         LogStreamRestart(_logger, entry.Key.Instance.InstanceId, entry.Key.Directory, null);
                     }
@@ -256,6 +283,10 @@ internal sealed class SseEventDemultiplexer : IAsyncDisposable
                 catch (OperationCanceledException) when (entry.Cancellation.IsCancellationRequested)
                 {
                     break;
+                }
+                catch (OperationCanceledException) when (stopped.IsCancellationRequested)
+                {
+                    continue;
                 }
                 catch (Exception ex) when (entry.Cancellation.IsCancellationRequested)
                 {

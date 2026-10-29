@@ -89,6 +89,35 @@ public sealed class SseEventDemultiplexerTests
     }
 
     [Fact]
+    public async Task a_crashed_instance_stream_stops_and_is_not_reopened_while_consumers_remain()
+    {
+        // The pool starts a replacement server, often on the dead one's port with a new password: a stream that kept
+        // reconnecting with the old client would get 401s from it until every consumer had moved over.
+        var instance = CreateInstance();
+        var consumerId = Guid.NewGuid();
+        var resolver = new FakeBindingResolver();
+        var streamFactory = new FakeStreamFactory();
+        await using var demultiplexer = new SseEventDemultiplexer(
+            resolver,
+            streamFactory,
+            NullLogger<SseEventDemultiplexer>.Instance,
+            TimeSpan.Zero,
+            TimeSpan.Zero);
+        resolver.Bind(instance, "/repo/one", "oc-session-1", consumerId);
+        var registration = await demultiplexer.RegisterConsumerAsync(
+            instance, "/repo/one", consumerId, Channel.CreateUnbounded<OpenCodeSseEvent>(), CancellationToken.None);
+        await streamFactory.WaitForSubscriptionAsync(instance, "/repo/one", 1);
+
+        await instance.ReportCrashAsync(new InvalidOperationException("process crashed"));
+
+        await streamFactory.WaitForCancellationAsync(instance, "/repo/one", 1);
+        await Task.Delay(200);
+        streamFactory.SubscriptionCount(instance, "/repo/one").ShouldBe(1);
+
+        await registration.DisposeAsync();
+    }
+
+    [Fact]
     public async Task unbound_session_drops_warn_once_per_session_with_session_instance_and_directory()
     {
         var instance = CreateInstance();

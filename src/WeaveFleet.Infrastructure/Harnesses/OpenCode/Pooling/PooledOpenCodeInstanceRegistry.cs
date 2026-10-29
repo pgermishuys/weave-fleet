@@ -143,6 +143,10 @@ internal sealed class PooledOpenCodeInstanceRegistry : IAsyncDisposable
         LoggerMessage.Define<string>(LogLevel.Error, new EventId(4, "RestartLimitExceeded"),
             "Pooled OpenCode instance restart limit exceeded for key fingerprint {PoolKeyFingerprint}; active leases remain permanently faulted.");
 
+    private static readonly Action<ILogger, string, Exception?> LogRestartFailed =
+        LoggerMessage.Define<string>(LogLevel.Error, new EventId(15, "RestartFailed"),
+            "Pooled OpenCode instance for key fingerprint {PoolKeyFingerprint} crashed and its replacement failed to start; active leases remain permanently faulted.");
+
     private static readonly Action<ILogger, string, Exception?> LogAcquireRequested =
         LoggerMessage.Define<string>(LogLevel.Information, new EventId(11, "AcquireRequested"),
             "Acquiring pooled OpenCode instance for key fingerprint {PoolKeyFingerprint}.");
@@ -665,13 +669,33 @@ internal sealed class PooledOpenCodeInstanceRegistry : IAsyncDisposable
             var startupDirectory = entry.StartupDirectory ?? Environment.CurrentDirectory;
             var restartEnvironment = entry.RestartEnvironment ?? new Dictionary<string, string>();
             ProcessRestarts.Add(1);
-            var replacementInstance = await SpawnAsync(
-                    entry.Key,
-                    startupDirectory,
-                    restartEnvironment,
-                    SpawnReasonCrashRestart,
-                    CancellationToken.None)
-                .ConfigureAwait(false);
+            PooledOpenCodeInstance replacementInstance;
+            try
+            {
+                replacementInstance = await SpawnAsync(
+                        entry.Key,
+                        startupDirectory,
+                        restartEnvironment,
+                        SpawnReasonCrashRestart,
+                        CancellationToken.None)
+                    .ConfigureAwait(false);
+            }
+            catch (Exception spawnFailure)
+            {
+                // Tell the leases, or their holders wait for a replacement forever; the next acquire starts afresh.
+                LogRestartFailed(_logger, keyFingerprint, spawnFailure);
+                foreach (var lease in crashedInstance.Leases)
+                {
+                    if (!lease.IsReleased)
+                    {
+                        lease.NotifyPermanentFault(spawnFailure);
+                    }
+                }
+
+                _entries.TryRemove(entry.Key, out _);
+                return;
+            }
+
             entry.Instance = replacementInstance;
 
             foreach (var lease in crashedInstance.Leases)

@@ -16,6 +16,7 @@ internal sealed class PooledOpenCodeInstance : IAsyncDisposable
     private readonly ILogger<PooledOpenCodeInstance>? _logger;
     private readonly ConcurrentDictionary<string, TaskCompletionSource> _eventSubscriptionReady = new(StringComparer.Ordinal);
     private readonly ConcurrentDictionary<string, byte> _directories = new(StringComparer.Ordinal);
+    private readonly CancellationTokenSource _stopped = new();
     private int _disposed;
     private int _faulted;
 
@@ -103,6 +104,12 @@ internal sealed class PooledOpenCodeInstance : IAsyncDisposable
 
     public bool IsAvailable => !IsFaulted && !IsDisposed;
 
+    /// <summary>
+    /// Cancelled once the process crashed or was stopped. It never comes back: the pool starts a replacement as a new
+    /// instance, often on the same port with a new password, so this one's client would only get 401s from it.
+    /// </summary>
+    internal CancellationToken Stopped => _stopped.Token;
+
     /// <summary>Waits for <see cref="Preparation"/>; the wait ends early if <paramref name="ct"/> is cancelled, the preparation carries on.</summary>
     internal Task WhenPreparedAsync(CancellationToken ct) => Preparation.WaitAsync(ct);
 
@@ -173,6 +180,8 @@ internal sealed class PooledOpenCodeInstance : IAsyncDisposable
             return;
         }
 
+        await _stopped.CancelAsync().ConfigureAwait(false);
+
         if (_logger is not null)
         {
             LogCrashDetected(_logger, ProcessId ?? 0, ProcessId.HasValue, null);
@@ -208,6 +217,7 @@ internal sealed class PooledOpenCodeInstance : IAsyncDisposable
             _processManager.ProcessExited -= OnProcessExited;
         }
 
+        await _stopped.CancelAsync().ConfigureAwait(false);
         await _shutdownAsync().ConfigureAwait(false);
     }
 
