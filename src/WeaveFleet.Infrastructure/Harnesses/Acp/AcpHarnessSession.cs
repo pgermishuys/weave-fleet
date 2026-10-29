@@ -6,6 +6,7 @@ using System.Threading.Channels;
 using Microsoft.Extensions.Logging;
 using WeaveFleet.Application.Analytics;
 using WeaveFleet.Application.FleetTools;
+using WeaveFleet.Application.Harnesses;
 using WeaveFleet.Domain.Events;
 using WeaveFleet.Domain.Harnesses;
 
@@ -36,6 +37,7 @@ internal sealed partial class AcpHarnessSession : IHarnessSession
     private readonly ConcurrentDictionary<string, JsonElement> _askOptions = new(StringComparer.Ordinal);
     private IReadOnlyList<ModelInfo> _models = [];
     private string? _model;
+    private string? _selectedAgent;
     private readonly IAnalyticsCollector? _analytics;
     private readonly string? _projectId;
     private readonly string? _projectName;
@@ -86,6 +88,9 @@ internal sealed partial class AcpHarnessSession : IHarnessSession
 
     /// <summary>The <c>mcpServers</c> the session's process was started with, which a new one is given again.</summary>
     internal JsonArray? McpServers { get; set; }
+
+    /// <summary>Fleet's folder of skills the session's process was given, which a new one is given again.</summary>
+    internal string? SkillDirectory { get; set; }
 
     /// <summary>Which of Fleet's tools the process listed when it started; null where Fleet can't tell.</summary>
     internal FleetToolSwitches? FleetTools { get; set; }
@@ -165,10 +170,14 @@ internal sealed partial class AcpHarnessSession : IHarnessSession
         return (list, AcpMapper.Str(result, "currentModelId"));
     }
 
-    /// <summary>Loads the conversation again from the agent, which replays it as updates; none of them reach Fleet as events.</summary>
-    internal async Task LoadAsync(JsonArray? mcpServers, CancellationToken ct)
+    /// <summary>
+    /// Loads the conversation again from the agent, which replays it as updates; none of them reach Fleet as events.
+    /// <paramref name="skillDirectory"/> is Fleet's folder of skills, which a loaded session needs again.
+    /// </summary>
+    internal async Task LoadAsync(JsonArray? mcpServers, CancellationToken ct, string? skillDirectory = null)
     {
         McpServers = mcpServers;
+        SkillDirectory = skillDirectory;
         _replaying = true;
         try
         {
@@ -180,8 +189,13 @@ internal sealed partial class AcpHarnessSession : IHarnessSession
         }
     }
 
-    private Task<JsonElement> LoadOnAsync(IAcpAgent agent, CancellationToken ct) => agent.Client.RequestAsync("session/load",
-        new JsonObject { ["sessionId"] = ResumeToken, ["cwd"] = _workingDirectory, ["mcpServers"] = McpServers?.DeepClone() ?? new JsonArray() }, ct);
+    private Task<JsonElement> LoadOnAsync(IAcpAgent agent, CancellationToken ct)
+    {
+        var load = new JsonObject { ["sessionId"] = ResumeToken, ["cwd"] = _workingDirectory, ["mcpServers"] = McpServers?.DeepClone() ?? new JsonArray() };
+        if (SkillDirectoriesMeta(SkillDirectory) is { } meta)
+            load["_meta"] = meta;
+        return agent.Client.RequestAsync("session/load", load, ct);
+    }
 
     /// <summary>
     /// Copilot lists the tools of Fleet's MCP server once, when its process starts, so a switch that changed since
@@ -217,6 +231,8 @@ internal sealed partial class AcpHarnessSession : IHarnessSession
             Attach(next);
             _agent = next;
             ReadModels(await LoadOnAsync(next, ct).ConfigureAwait(false));
+            // Copilot doesn't keep a selected agent across a load: the next prompt naming one selects it again.
+            _selectedAgent = null;
         }
         catch (Exception ex) when (ex is not OutOfMemoryException)
         {
@@ -283,21 +299,54 @@ internal sealed partial class AcpHarnessSession : IHarnessSession
             _model = model;
         }
 
+        if (options?.Agent is { Length: > 0 } agent && agent != (_selectedAgent ?? CopilotAgent))
+        {
+            try
+            {
+                await _agent.Client.RequestAsync("session/set_config_option",
+                    new JsonObject { ["sessionId"] = ResumeToken, ["configId"] = "agent", ["value"] = agent == CopilotAgent ? "" : agent }, ct).ConfigureAwait(false);
+            }
+            catch (AcpException ex)
+            {
+                // Running on another agent than the one asked for would be worse than not running.
+                throw new InvalidOperationException($"GitHub Copilot couldn't switch to the agent \"{agent}\": {ex.Message}", ex);
+            }
+
+            _selectedAgent = agent;
+        }
+
         Status = HarnessSessionStatus.Running;
         Emit(_mapper.UserPrompt(text, images, options?.MessageId));
         Emit(_mapper.Status(ActivityStatuses.Busy));
-        _ = RunPromptAsync(text, images, options?.ModelNotes);
+        _ = RunPromptAsync(text, images, PromptMeta(options?.ModelNotes, options?.Skills));
     }
 
-    private async Task RunPromptAsync(string text, IReadOnlyList<HarnessAttachment> images, IReadOnlyList<string>? notes)
+    /// <summary>
+    /// The <c>_meta</c> of a <c>session/prompt</c>: Fleet's notes, which weave-copilot puts ahead of the prompt out of the
+    /// thread, and the skills it loads ahead of it; null when there is neither.
+    /// </summary>
+    internal static JsonObject? PromptMeta(IReadOnlyList<string>? notes, IReadOnlyList<string>? skills)
+    {
+        var meta = new JsonObject();
+        if (notes is { Count: > 0 })
+            meta["modelNotes"] = new JsonArray([.. notes.Select(n => (JsonNode)JsonValue.Create(n))]);
+        if (skills is { Count: > 0 })
+            meta["skills"] = new JsonArray([.. skills.Select(name => (JsonNode)JsonValue.Create(name))]);
+        return meta.Count > 0 ? meta : null;
+    }
+
+    /// <summary>The <c>_meta</c> of a <c>session/new</c> or <c>session/load</c> that points Copilot at Fleet's skills folder; null without one.</summary>
+    internal static JsonObject? SkillDirectoriesMeta(string? folder)
+        => string.IsNullOrEmpty(folder) ? null : new JsonObject { ["skillDirectories"] = new JsonArray(JsonValue.Create(folder)) };
+
+    private async Task RunPromptAsync(string text, IReadOnlyList<HarnessAttachment> images, JsonObject? meta)
     {
         try
         {
             var blocks = new JsonArray(new JsonObject { ["type"] = "text", ["text"] = text });
             var request = new JsonObject { ["sessionId"] = ResumeToken, ["prompt"] = blocks };
-            // What the model reads besides the prompt (Fleet's notes): weave-copilot puts them ahead of it, out of the thread.
-            if (notes is { Count: > 0 })
-                request["_meta"] = new JsonObject { ["modelNotes"] = new JsonArray([.. notes.Select(n => (JsonNode)JsonValue.Create(n))]) };
+            if (meta is not null)
+                request["_meta"] = meta;
             foreach (var image in images)
                 blocks.Add((JsonNode)new JsonObject { ["type"] = "image", ["data"] = image.Data, ["mimeType"] = image.Mime, ["uri"] = image.Filename });
             var result = await _agent.Client.RequestAsync("session/prompt", request, CancellationToken.None).ConfigureAwait(false);
@@ -533,14 +582,89 @@ internal sealed partial class AcpHarnessSession : IHarnessSession
     public Task<IReadOnlyList<ProviderInfo>> GetProvidersAsync(CancellationToken ct)
         => Task.FromResult<IReadOnlyList<ProviderInfo>>([new ProviderInfo { Id = "copilot", Name = "GitHub Copilot", Models = _models }]);
 
-    public Task<IReadOnlyList<AgentInfo>> GetAgentsAsync(CancellationToken ct) => Task.FromResult<IReadOnlyList<AgentInfo>>([]);
+    /// <summary>Copilot's own agent, and the name Fleet gives it: the session runs on it when no custom agent is selected.</summary>
+    internal const string CopilotAgent = "copilot";
 
-    public Task<IReadOnlyList<CommandInfo>> GetCommandsAsync(CancellationToken ct) => Task.FromResult<IReadOnlyList<CommandInfo>>([]);
+    /// <summary>The agents of the session's folder (<c>_fleet/agents</c>), Copilot's own first.</summary>
+    public Task<IReadOnlyList<AgentInfo>> GetAgentsAsync(CancellationToken ct) => ListAgentsAsync(_agent.Client, _workingDirectory, ct);
+
+    /// <summary>
+    /// <c>_fleet/agents</c> for a folder, with Copilot's own agent first. A weave-copilot too old to know it (-32601) has
+    /// no custom agents to offer, so the list is Copilot's own alone.
+    /// </summary>
+    internal static async Task<IReadOnlyList<AgentInfo>> ListAgentsAsync(AcpClient client, string directory, CancellationToken ct)
+    {
+        List<AgentInfo> agents = [new() { Name = CopilotAgent, Description = "GitHub Copilot's own agent, without a custom agent", Mode = "primary" }];
+        try
+        {
+            var result = await client.RequestAsync("_fleet/agents", new JsonObject { ["cwd"] = directory }, ct).ConfigureAwait(false);
+            if (result.TryGetProperty("agents", out var listed) && listed.ValueKind == JsonValueKind.Array)
+            {
+                foreach (var agent in listed.EnumerateArray())
+                {
+                    if (AcpMapper.Str(agent, "name") is { Length: > 0 } name && agents.All(a => a.Name != name))
+                        agents.Add(new AgentInfo { Name = name, Description = AcpMapper.Str(agent, "description") ?? AcpMapper.Str(agent, "displayName"), Mode = "primary" });
+                }
+            }
+        }
+        catch (AcpException ex) when (ex.Code == MethodNotFound)
+        {
+        }
+
+        return agents;
+    }
+
+    private const int MethodNotFound = -32601;
+
+    /// <summary>The built-in commands of Copilot that Fleet offers: the rest are Fleet's own controls, or need Copilot's terminal.</summary>
+    private static readonly HashSet<string> OfferedBuiltIns = new(["init", "review", "security-review", "research", "blame", "env"], StringComparer.Ordinal);
+
+    /// <summary>The commands a session offers (<c>_fleet/commands</c>): its skills and the allow-listed built-ins; -32601 (an older weave-copilot) gives none.</summary>
+    public async Task<IReadOnlyList<CommandInfo>> GetCommandsAsync(CancellationToken ct)
+    {
+        try
+        {
+            var result = await _agent.Client.RequestAsync("_fleet/commands", new JsonObject { ["sessionId"] = ResumeToken }, ct).ConfigureAwait(false);
+            return ParseCommands(result);
+        }
+        catch (AcpException ex) when (ex.Code == MethodNotFound)
+        {
+            return [];
+        }
+    }
+
+    /// <summary>The commands of a <c>_fleet/commands</c> result Fleet shows: skills as skills, allow-listed built-ins as commands.</summary>
+    internal static IReadOnlyList<CommandInfo> ParseCommands(JsonElement result)
+    {
+        List<CommandInfo> commands = [];
+        if (!result.TryGetProperty("commands", out var listed) || listed.ValueKind != JsonValueKind.Array)
+            return commands;
+        foreach (var command in listed.EnumerateArray())
+        {
+            if (AcpMapper.Str(command, "name") is not { Length: > 0 } name || commands.Any(c => c.Name == name))
+                continue;
+            var kind = AcpMapper.Str(command, "kind") switch
+            {
+                "skill" => "skill",
+                "builtin" when OfferedBuiltIns.Contains(name) => "command",
+                _ => null,
+            };
+            if (kind is not null)
+                commands.Add(new CommandInfo { Name = name, Description = AcpMapper.Str(command, "description"), Kind = kind });
+        }
+
+        return commands;
+    }
 
     public Task<string?> AskOffTheRecordAsync(string prompt, CancellationToken ct) => Task.FromResult<string?>(null);
 
-    public Task<string?> SendCommandAsync(CommandOptions options, CancellationToken ct)
-        => throw new NotSupportedException("GitHub Copilot sessions don't take slash commands yet.");
+    /// <summary>Sends <c>/name arguments</c> as a prompt: weave-copilot expands it, and the conversation keeps what was typed.</summary>
+    public async Task<string?> SendCommandAsync(CommandOptions options, CancellationToken ct)
+    {
+        await SendPromptAsync(CommandFormatting.FormatCommandPrompt(options),
+            new PromptOptions { Agent = options.Agent, ModelId = options.ModelId, MessageId = options.MessageId }, ct).ConfigureAwait(false);
+        return options.MessageId;
+    }
 
     public Task AnswerQuestionAsync(string requestId, IReadOnlyList<IReadOnlyList<string>> answers, CancellationToken ct)
         => throw new NotSupportedException("GitHub Copilot sessions don't ask questions yet.");
