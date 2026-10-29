@@ -317,12 +317,27 @@ public sealed class UsageReaderTests : IDisposable
     [Theory]
     [InlineData("[]")]
     [InlineData("""{"authenticated":true,"quotas":[]}""")]
-    [InlineData("""{"authenticated":true,"quotas":[{"id":"chat","unlimited":true}]}""")]
-    public async Task copilot_an_answer_without_limited_quotas_is_unreadable(string body)
+    public async Task copilot_an_answer_without_quotas_is_unreadable(string body)
     {
         CopilotReplies(body);
 
         (await Copilot().ReadAsync(default)).State.ShouldBe(UsageStates.Unreadable);
+    }
+
+    [Fact]
+    public async Task copilot_with_every_quota_unlimited_has_no_limit_to_show()
+    {
+        // An enterprise seat on token billing (29 October 2026): every quota unlimited, entitlement 0.
+        CopilotReplies("""
+            {"authenticated":true,"login":"octo-invented","plan":"enterprise","resetAt":"2026-11-01T00:00:00Z","quotas":[
+              {"id":"premium_interactions","entitlement":0,"remaining":0,"percentRemaining":100,"unlimited":true},
+              {"id":"chat","entitlement":0,"remaining":0,"percentRemaining":100,"unlimited":true}]}
+            """);
+
+        var reading = await Copilot().ReadAsync(default);
+
+        reading.State.ShouldBe(UsageStates.NoWindow);
+        reading.Account.ShouldBe("enterprise");
     }
 
     [Fact]

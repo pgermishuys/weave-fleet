@@ -16,10 +16,10 @@ namespace WeaveFleet.Infrastructure.Harnesses.Copilot;
 internal sealed class CopilotInstaller(IHttpClientFactory httpClientFactory, string home, Func<string, string?>? environment = null) : IHarnessInstaller
 {
     /// <summary>The weave-copilot release this Fleet was built against.</summary>
-    internal const string WeaveCopilotVersion = "0.1.0";
+    internal const string WeaveCopilotVersion = "0.2.1";
 
     /// <summary>The Copilot CLI release weave-copilot was tested with.</summary>
-    internal const string CliVersion = "1.0.98";
+    internal const string CliVersion = "1.0.105";
 
     internal const string WeaveCopilotBaseUrlVariable = "FLEET_WEAVE_COPILOT_RELEASE_BASE_URL";
     internal const string CliBaseUrlVariable = "FLEET_COPILOT_CLI_RELEASE_BASE_URL";

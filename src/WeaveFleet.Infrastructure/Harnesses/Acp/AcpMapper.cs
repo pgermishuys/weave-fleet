@@ -55,10 +55,13 @@ internal sealed class AcpMapper(string sessionId, Func<string, JsonElement, Flee
     private string? _openPartId;
     private string? _assistantId;
     private DateTimeOffset _assistantAt;
+    private string? _assistantModel;     // the session's model when the answer began (Copilot names none per message)
     private bool _userOpen;
     private int _partCount;
     private int _stepCount;
     private bool _turnRow;
+    // Dividers that came while a turn's message is open: they go into the history after it, where their ids put them.
+    private readonly List<HarnessMessage> _dividers = [];
 
     /// <summary>The agent's todo list as last reported (<c>plan</c> updates), including while a loaded conversation replays.</summary>
     internal IReadOnlyList<TodoEntry> Todos() { lock (_lock) return _todos; }
@@ -82,6 +85,13 @@ internal sealed class AcpMapper(string sessionId, Func<string, JsonElement, Flee
     /// <summary>Maps a <c>_fleet/fusion</c> notification: a pass started, or finished with its time and credits.</summary>
     internal IReadOnlyList<HarnessEvent> Fusion(JsonElement p) { lock (_lock) return FusionCore(p); }
 
+    /// <summary>
+    /// Maps a <c>_fleet/compaction</c> notification. Its start and failure are Fleet's own context events; its end adds a
+    /// divider, a message of its own after the turn's message when one is open (an automatic compaction can end while
+    /// the turn's answer is still streaming, or after it).
+    /// </summary>
+    internal IReadOnlyList<HarnessEvent> Compaction(JsonElement p) { lock (_lock) return CompactionCore(p); }
+
     /// <summary>What the finished turn used (the prompt result's <c>usage</c>): its tokens, and credits when Copilot reported them.</summary>
     internal IReadOnlyList<HarnessEvent> Usage(JsonElement usage) { lock (_lock) return UsageCore(usage); }
 
@@ -92,7 +102,7 @@ internal sealed class AcpMapper(string sessionId, Func<string, JsonElement, Flee
     internal IReadOnlyList<HarnessEvent> Fail(string message) { lock (_lock) return FailCore(message); }
 
     /// <summary>The conversation so far, oldest first, with the turn still running as its last message.</summary>
-    private List<HarnessMessage> MessagesCore() => _assistantId is null ? _history : [.. _history, Assistant()];
+    private List<HarnessMessage> MessagesCore() => _assistantId is null ? _history : [.. _history, Assistant(), .. _dividers];
 
     private List<HarnessEvent> UserPromptCore(string text, IReadOnlyList<HarnessAttachment>? images, string? messageId)
     {
@@ -165,9 +175,10 @@ internal sealed class AcpMapper(string sessionId, Func<string, JsonElement, Flee
     }
 
     /// <summary>
-    /// A <c>usage_update</c>: the tokens in the context now (<c>used</c>) and the model's window (<c>size</c>), which
-    /// Copilot sends after each model call. It gives no split, so the whole count is the call's input, marked
-    /// <see cref="ContextCall.TotalOnly"/>.
+    /// A <c>usage_update</c>: the tokens in the context (<c>used</c>) and the model's window (<c>size</c>). weave-copilot sends
+    /// one before each model call with only the total, so the whole count is the call's input, marked
+    /// <see cref="ContextCall.TotalOnly"/>; and one after each of the main agent's calls with the call's own split in
+    /// <c>_meta.call</c> (input and output counting the cached and the reasoning, as Copilot counts them).
     /// </summary>
     private HarnessEvent? ContextUsage(JsonElement update)
     {
@@ -177,12 +188,29 @@ internal sealed class AcpMapper(string sessionId, Func<string, JsonElement, Flee
             return null;
         return ContextEvents.Usage(new ContextUsageReport
         {
-            Call = used is >= 0 and var tokens ? new ContextCall { Input = (int)tokens, TotalOnly = true } : null,
+            Call = SplitCall(update) ?? (used is >= 0 and var tokens ? new ContextCall { Input = (int)tokens, TotalOnly = true } : null),
             Limit = limit,
             CompactsAt = limit is { } window ? (int)(window * CompactsAtShare) : null,
             ModelId = model?.Invoke(),
             ProviderId = "copilot",
         }, sessionId);
+    }
+
+    /// <summary>The call's tokens in <c>_meta.call</c>, each counted once; null when the update has none.</summary>
+    private static ContextCall? SplitCall(JsonElement update)
+    {
+        if (!update.TryGetProperty("_meta", out var meta) || meta.ValueKind != JsonValueKind.Object
+            || !meta.TryGetProperty("call", out var call) || call.ValueKind != JsonValueKind.Object)
+            return null;
+        int Count(string name) => (int)Math.Max(0, Number(call, name) ?? 0);
+        return new ContextCall
+        {
+            Input = Math.Max(0, Count("input") - Count("cacheRead") - Count("cacheWrite")),
+            CacheRead = Count("cacheRead"),
+            CacheWrite = Count("cacheWrite"),
+            Output = Math.Max(0, Count("output") - Count("reasoning")),
+            Reasoning = Count("reasoning"),
+        };
     }
 
     /// <summary>
@@ -252,6 +280,55 @@ internal sealed class AcpMapper(string sessionId, Func<string, JsonElement, Flee
             : new ToolCompletedState { Input = Json(input), Title = Str(p, "pattern") };
         _turnRow = true;
         UpsertTool(events, "fusion-turn", TurnTool, input, state, !finished ? ToolUseState.Running : failed ? ToolUseState.Error : ToolUseState.Completed);
+    }
+
+    private List<HarnessEvent> CompactionCore(JsonElement p)
+    {
+        // Copilot says "auto" for any compaction it began itself.
+        var trigger = Str(p, "trigger") switch
+        {
+            "manual" => ContextCompactionTriggers.Manual,
+            "auto" => ContextCompactionTriggers.Auto,
+            _ => null,
+        };
+        switch (Str(p, "phase"))
+        {
+            case "started":
+                return [ContextEvents.Compaction(ContextCompactionPhases.Started, sessionId, trigger, fleetSessionId: sessionId)];
+            case "failed":
+                return [ContextEvents.Compaction(ContextCompactionPhases.Failed, sessionId, trigger, Str(p, "error") ?? "Copilot couldn't compact the session.", sessionId)];
+            case "ended":
+                break;
+            default:
+                return [];
+        }
+
+        var id = AscendingMessageId.New();
+        var summary = Str(p, "summary")?.Trim();
+        var divider = new CompactionPart(
+            trigger, Number(p, "tokensBefore") is { } before ? (int)before : null, Number(p, "tokensAfter") is { } after ? (int)after : null,
+            string.IsNullOrEmpty(summary) ? null : summary)
+        {
+            PartId = $"{id}-compaction",
+        };
+        var message = new HarnessMessage { Id = id, Role = "assistant", Parts = [divider], Timestamp = DateTimeOffset.UtcNow };
+        // Behind the turn's message while it is open (the ids already say so); in place when nothing is open.
+        (_assistantId is null ? _history : _dividers).Add(message);
+
+        var at = message.Timestamp.ToUnixTimeMilliseconds();
+        var part = Events.SessionSnapshotBuilder.CompactionEventPart(divider, sessionId, id, 0);
+        return
+        [
+            ContextEvents.Compaction(ContextCompactionPhases.Ended, sessionId, trigger, fleetSessionId: sessionId),
+            Event(EventTypes.MessageUpdated, JsonSerializer.SerializeToElement(
+                new MessageLifecyclePayload
+                {
+                    Info = new MessageEventInfo { Id = id, Role = "assistant", SessionId = sessionId, Time = new MessageEventTime { Created = at, Completed = at } },
+                    Parts = [part],
+                },
+                InfrastructureJsonContext.Default.MessageLifecyclePayload)),
+            PartEvent(part),
+        ];
     }
 
     /// <summary>
@@ -575,6 +652,7 @@ internal sealed class AcpMapper(string sessionId, Func<string, JsonElement, Flee
             return;
         _assistantId = AscendingMessageId.New();
         _assistantAt = DateTimeOffset.UtcNow;
+        _assistantModel = model?.Invoke();
         events.Add(Event(EventTypes.MessageCreated, Lifecycle(_assistantId, completed: false)));
     }
 
@@ -584,6 +662,8 @@ internal sealed class AcpMapper(string sessionId, Func<string, JsonElement, Flee
             return;
         if (_parts.Count > 0)
             _history.Add(Assistant());
+        _history.AddRange(_dividers);
+        _dividers.Clear();
         _assistantId = null;
         _parts.Clear();
         _tools.Clear();
@@ -591,7 +671,7 @@ internal sealed class AcpMapper(string sessionId, Func<string, JsonElement, Flee
         _openKind = _openPartId = null;
     }
 
-    private HarnessMessage Assistant() => new() { Id = _assistantId!, Role = "assistant", Parts = [.. _parts], Timestamp = _assistantAt };
+    private HarnessMessage Assistant() => new() { Id = _assistantId!, Role = "assistant", Parts = [.. _parts], Timestamp = _assistantAt, ModelId = _assistantModel };
 
     /// <summary>The user's message: the text, then each attached image as a file part, as the other harnesses show them.</summary>
     private void AddUser(string text, IReadOnlyList<HarnessAttachment>? images = null, string? messageId = null)
@@ -616,6 +696,7 @@ internal sealed class AcpMapper(string sessionId, Func<string, JsonElement, Flee
                 Id = messageId,
                 Role = "assistant",
                 SessionId = sessionId,
+                ModelId = _assistantModel,
                 Time = new MessageEventTime
                 {
                     Created = _assistantAt.ToUnixTimeMilliseconds(),

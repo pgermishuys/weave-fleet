@@ -121,6 +121,9 @@ internal sealed class CopilotUsageProvider(
             });
         }
 
+        // Every quota unlimited (an enterprise seat billed in AI credits per token): there's no limit to show, which is the answer.
+        if (windows.Count == 0 && quotas.Count > 0 && quotas.All(q => q.Unlimited))
+            return new UsageReading(UsageStates.NoWindow, account);
         return windows.Count == 0 ? new UsageReading(UsageStates.Unreadable) : new UsageReading(UsageStates.Ok, account, windows);
     }
 
