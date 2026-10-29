@@ -31,6 +31,12 @@ describe("messagesAfter", () => {
 
   it("keeps everything without a boundary, or when it isn't loaded", () => {
     expect(messagesAfter(messages, null)).toBe(messages);
-    expect(messagesAfter(messages, "older")).toBe(messages);
+    expect(messagesAfter(messages, "0-older")).toBe(messages);
+  });
+
+  it("keeps what sorts after a boundary that isn't among them", () => {
+    const copied = [{ messageId: "msg_0001a" }, { messageId: "msg_0001b" }, { messageId: "msg_0002a" }];
+    expect(messagesAfter(copied, "msg_0001zz")).toEqual([{ messageId: "msg_0002a" }]);
+    expect(messagesAfter(copied, "msg_0002zz")).toEqual([]);
   });
 });

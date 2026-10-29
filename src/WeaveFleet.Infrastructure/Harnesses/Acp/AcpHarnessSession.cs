@@ -693,17 +693,17 @@ internal sealed partial class AcpHarnessSession : IHarnessSession
 
     /// <summary>
     /// A new Copilot session holding this one's conversation (<c>_fleet/fork</c>), up to before the turn running now. The
-    /// boundary is the newest message it copied, under the id the fork's own replay will give that message.
+    /// fork's replay keys every message it copied by the newest user message or shell command before it, so the boundary is
+    /// an id that sorts after everything keyed by the last one: Fleet splits a reply into steps the agent can't count.
     /// </summary>
     public async Task<ConversationFork?> ForkConversationAsync(CancellationToken ct)
     {
         ObjectDisposedException.ThrowIf(_disposed, this);
         var result = await _agent.Client.RequestAsync("_fleet/fork", new JsonObject { ["sessionId"] = ResumeToken }, ct).ConfigureAwait(false);
         var forkId = AcpMapper.Str(result, "sessionId") ?? throw new AcpException("The agent forked the session but didn't say which one it made.");
-        if (!result.TryGetProperty("boundary", out var boundary) || boundary.ValueKind != JsonValueKind.Object || AcpMapper.Str(boundary, "id") is not { } key)
+        if (!result.TryGetProperty("boundary", out var boundary) || boundary.ValueKind != JsonValueKind.Object || AcpMapper.Str(boundary, "id") is null)
             return new ConversationFork(forkId, null);
-        var offset = boundary.TryGetProperty("offset", out var n) && n.TryGetInt32(out var count) ? count : 0;
-        return new ConversationFork(forkId, AscendingMessageId.Stable(AcpMapper.AtMillis(boundary), offset, key));
+        return new ConversationFork(forkId, AscendingMessageId.Ceiling(AcpMapper.AtMillis(boundary)));
     }
 
     /// <summary>

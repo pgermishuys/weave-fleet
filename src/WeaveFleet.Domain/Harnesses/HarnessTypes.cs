@@ -623,8 +623,9 @@ public enum PromptDelivery
 /// </summary>
 /// <param name="ResumeToken">The new harness session, which Fleet resumes as the fork's session.</param>
 /// <param name="BoundaryMessageId">
-/// The newest message the fork copied, under the fork's own id; a side conversation is what comes after it. Null when
-/// the fork copied nothing.
+/// The newest message the fork copied, under the fork's own id, or an id that sorts after it and before anything newer
+/// (<see cref="Identity.AscendingMessageId.Ceiling"/>); a side conversation is what comes after it. Null when the fork
+/// copied nothing.
 /// </param>
 public sealed record ConversationFork(string ResumeToken, string? BoundaryMessageId);
 

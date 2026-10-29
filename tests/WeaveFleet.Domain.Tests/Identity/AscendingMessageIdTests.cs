@@ -146,4 +146,16 @@ public class AscendingMessageIdTests
         Assert.Equal(ids, ids.OrderBy(i => i, StringComparer.Ordinal));
         Assert.Equal(AscendingMessageId.NewFromTimestamp(1_700_000_000_000, 1)[..16], ids[1][..16]);
     }
+
+    [Fact]
+    public void Ceiling_SortsAfterEveryIdOfItsMillisecond_AndBeforeTheNext()
+    {
+        var ceiling = AscendingMessageId.Ceiling(1_700_000_000_000);
+
+        Assert.True(string.CompareOrdinal(AscendingMessageId.Stable(1_700_000_000_000, 0, "a"), ceiling) < 0);
+        Assert.True(string.CompareOrdinal(AscendingMessageId.Stable(1_700_000_000_000, 40, "zzz"), ceiling) < 0);
+        Assert.True(string.CompareOrdinal(AscendingMessageId.NewFromTimestamp(1_700_000_000_000, 4094), ceiling) < 0);
+        Assert.True(string.CompareOrdinal(AscendingMessageId.Stable(1_700_000_000_001, 0, "a"), ceiling) > 0);
+        Assert.Matches(new Regex(@"^msg_[0-9a-f]{12}z{14}$"), ceiling);
+    }
 }

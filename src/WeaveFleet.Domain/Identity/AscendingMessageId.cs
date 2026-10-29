@@ -72,6 +72,12 @@ public static class AscendingMessageId
         return Build(timestampMs, counter, result.ToString());
     }
 
+    /// <summary>
+    /// An id that sorts after every id made for <paramref name="timestampMs"/> (any counter, any suffix) and before any made
+    /// later. For a boundary between messages whose ids Fleet can't name one by one, such as where a fork's copy ends.
+    /// </summary>
+    public static string Ceiling(long timestampMs) => Build(timestampMs, 0xFFF, new string('z', RandomLength));
+
     private static string Build(long timestampMs, int counter, string randomPart)
     {
         // Algorithm: (timestampMs * 0x1000 + counter) → lower 6 bytes → big-endian hex

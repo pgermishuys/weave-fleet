@@ -874,7 +874,7 @@ public sealed class AcpHarnessSessionTests
     }
 
     [Fact]
-    public async Task forking_names_the_boundary_with_the_id_the_forks_own_replay_gives_that_message()
+    public async Task forking_names_a_boundary_after_everything_keyed_by_the_last_copied_message()
     {
         const string at = "2026-10-29T10:00:00.0000000+00:00";
         await using var agent = new FakeAcpAgent();
@@ -889,7 +889,7 @@ public sealed class AcpHarnessSessionTests
 
         agent.Received.Single().Method.ShouldBe("_fleet/fork");
         fork!.ResumeToken.ShouldBe("acp-fork");
-        fork.BoundaryMessageId.ShouldBe(AscendingMessageId.Stable(DateTimeOffset.Parse(at, System.Globalization.CultureInfo.InvariantCulture).ToUnixTimeMilliseconds(), 1, "u1"));
+        fork.BoundaryMessageId.ShouldBe(AscendingMessageId.Ceiling(DateTimeOffset.Parse(at, System.Globalization.CultureInfo.InvariantCulture).ToUnixTimeMilliseconds()));
     }
 
     [Fact]

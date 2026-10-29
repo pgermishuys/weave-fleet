@@ -684,16 +684,24 @@ public sealed class AcpMapperTests
     }
 
     [Fact]
-    public void the_boundary_a_fork_names_is_the_id_its_replay_gives_that_message()
+    public void the_boundary_a_fork_names_sorts_after_every_message_its_replay_copies_and_before_a_new_one()
     {
-        // weave-copilot says: the user message "u1" at AtMs with a reply after it, offset 1.
-        var boundary = AscendingMessageId.Stable(AtMs, 1, "u1");
+        // weave-copilot names the last user message "u1". Fleet splits its reply into steps around the tool call, which
+        // the agent can't count, so the boundary sorts after all of them.
+        var boundary = AscendingMessageId.Ceiling(AtMs);
         var mapper = new AcpMapper("s1") { Replaying = true };
 
         mapper.Update(Keyed("question", "u1", At));
+        mapper.Update(Chunk("agent_message_chunk", "looking"));
+        mapper.Update(J("""{"sessionUpdate":"tool_call","toolCallId":"c1","kind":"read","status":"completed"}"""));
         mapper.Update(Chunk("agent_message_chunk", "answer"));
+        mapper.Replaying = false;
+        mapper.UserPrompt("a side question");
 
-        mapper.Messages()[^1].Id.ShouldBe(boundary);
+        var ids = mapper.Messages().Select(m => m.Id).ToList();
+        ids.Count.ShouldBe(4);
+        ids.Take(3).ShouldAllBe(id => string.CompareOrdinal(id, boundary) < 0);
+        string.CompareOrdinal(ids[3], boundary).ShouldBeGreaterThan(0);
     }
 
     private static JsonElement Shell(string phase, string extra = "")

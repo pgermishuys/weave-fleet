@@ -1,5 +1,6 @@
 import type { AutocompleteCommand } from "@/api/client";
 import type { AccumulatedMessage } from "@/lib/client-types";
+import { compareMessageIds } from "@/lib/event-state";
 
 /**
  * Side conversations: `/btw <question>` asks in a fork of the session made at its last finished turn, so the session
@@ -24,9 +25,10 @@ export function parseSideQuestion(draft: string): string | null {
 }
 
 /**
- * A side conversation's own messages: those after `boundaryMessageId`, the newest one it copied from its session. All
- * of them when there's no boundary (it copied nothing), or when the boundary isn't among them (only newer messages are
- * loaded).
+ * A side conversation's own messages: those after `boundaryMessageId`, the newest one it copied from its session. A
+ * boundary that isn't among them is an id that sorts after what was copied (GitHub Copilot names one, since Fleet splits
+ * a reply into steps the harness can't count), or one older than what's loaded: the messages that sort after it. All of
+ * them when there's no boundary (it copied nothing).
  */
 export function messagesAfter<T extends Pick<AccumulatedMessage, "messageId">>(
   messages: readonly T[],
@@ -37,5 +39,9 @@ export function messagesAfter<T extends Pick<AccumulatedMessage, "messageId">>(
   }
 
   const boundary = messages.findIndex((message) => message.messageId === boundaryMessageId);
-  return boundary < 0 ? messages : messages.slice(boundary + 1);
+  if (boundary >= 0) {
+    return messages.slice(boundary + 1);
+  }
+  const after = messages.filter((message) => compareMessageIds(message.messageId, boundaryMessageId) > 0);
+  return after.length === messages.length ? messages : after;
 }
