@@ -185,10 +185,27 @@ jobs:
             ~/.cocoapods
           key: pods-${{ runner.os }}-${{ hashFiles('mobile/bun.lock') }}
           restore-keys: pods-${{ runner.os }}-
+      # The pods (RNScreens, Reanimated, SVG, Worklets…) still compile ~570 C++ files from source: ccache keeps them
+      # between runs. Keyed on the Xcode build and the lockfile; it's saved right after the build, so a walk that
+      # fails later still leaves it for the next run.
+      - name: Install ccache
+        id: ccache
+        run: |
+          HOMEBREW_NO_AUTO_UPDATE=1 HOMEBREW_NO_INSTALL_CLEANUP=1 brew install ccache
+          echo "CCACHE_DIR=$HOME/.ccache" >> "$GITHUB_ENV"
+          prefix="ccache-ios-$(xcodebuild -version | awk '/Build version/ {print $3}')-"
+          echo "prefix=$prefix" >> "$GITHUB_OUTPUT"
+          echo "key=$prefix${{ hashFiles('mobile/bun.lock') }}" >> "$GITHUB_OUTPUT"
+      - uses: actions/cache/restore@v4
+        id: ccache-restore
+        with:
+          path: ~/.ccache
+          key: ${{ steps.ccache.outputs.key }}
+          restore-keys: ${{ steps.ccache.outputs.prefix }}
       # SDK 58 links precompiled React Native and Expo modules by default (no expo-build-properties needed), which
-      # is what the spike's 36 minute build lacked.
+      # is what the spike's 36 minute build lacked. USE_CCACHE=1 makes pod install compile through ccache.
       - name: Generate the iOS project
-        run: CI=1 bunx expo prebuild -p ios
+        run: CI=1 USE_CCACHE=1 bunx expo prebuild -p ios
         working-directory: mobile
 
       - name: Boot a simulator
@@ -198,17 +215,26 @@ jobs:
           xcrun simctl bootstatus "$UDID" -b
           echo "UDID=$UDID" >> "$GITHUB_ENV"
 
-      # Release, so the JS is bundled; no signing.
+      # Release, so the JS is bundled; no signing. Only the simulator's own arch: Release builds arm64 and x86_64
+      # otherwise, every file twice.
       - name: Build for the simulator
         working-directory: mobile/ios
         run: |
           WS=$(ls -d *.xcworkspace | head -1); SCHEME=${WS%.xcworkspace}
+          ccache -z > /dev/null
           set -o pipefail
           xcodebuild -workspace "$WS" -scheme "$SCHEME" -configuration Release -sdk iphonesimulator \
-            -destination "id=$UDID" -derivedDataPath build CODE_SIGN_IDENTITY=- CODE_SIGNING_REQUIRED=NO build \
+            -destination "id=$UDID" -derivedDataPath build ONLY_ACTIVE_ARCH=YES \
+            CODE_SIGN_IDENTITY=- CODE_SIGNING_REQUIRED=NO build \
             | tee "$RUNNER_TEMP/xcodebuild.log" | grep -E "error:|\*\* BUILD" || true
+          ccache -s
           grep -q "BUILD SUCCEEDED" "$RUNNER_TEMP/xcodebuild.log"
           echo "APP=$PWD/$(ls -d build/Build/Products/Release-iphonesimulator/*.app | head -1)" >> "$GITHUB_ENV"
+      - uses: actions/cache/save@v4
+        if: steps.ccache-restore.outputs.cache-hit != 'true'
+        with:
+          path: ~/.ccache
+          key: ${{ steps.ccache.outputs.key }}
       - name: Install the app
         run: xcrun simctl install "$UDID" "$APP"
 
