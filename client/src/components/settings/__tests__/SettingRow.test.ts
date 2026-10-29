@@ -1,13 +1,14 @@
 import { mount } from "@vue/test-utils";
-import type { Component } from "vue";
 import { describe, expect, it } from "vitest";
 import SettingGroupComponent from "@/components/settings/SettingGroup.vue";
 import SettingRowComponent from "@/components/settings/SettingRow.vue";
 import SettingSwitch from "@/components/settings/SettingSwitch.vue";
 
-// CI's vue-tsc (npm ci on Node 22) finds no mount() overload for these slotted components; the props are checked by the components themselves.
-const SettingRow = SettingRowComponent as unknown as Component;
-const SettingGroup = SettingGroupComponent as unknown as Component;
+// @vue/test-utils 2.2.7 (CI's package-lock) has no mount() overload for components with typed named slots.
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+const SettingRow = SettingRowComponent as any;
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+const SettingGroup = SettingGroupComponent as any;
 
 describe("SettingRow", () => {
   it("shows the summary, and More opens today's full text word for word", async () => {
