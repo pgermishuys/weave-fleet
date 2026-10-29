@@ -20,6 +20,7 @@ public sealed class OpenCode2WeaveTests : IAsyncLifetime
     // Lines from a real OpenCode 2.0.16 log: a Weave version npm doesn't have, and OpenCode 1's Weave adapter, which a
     // config shared with OpenCode 1 lists under "plugin" and V2 tries too.
     private const string MissingVersionLine = """timestamp=2026-09-26T07:53:51.871Z level=WARN run=feb9c753 message="failed to load plugin" target=@weaveio/weave-adapter-opencode2@9.9.9-nope ref=err_6a09dd44 cause="Cause([Fail(NpmInstallFailedError (cause: @weaveio/weave-adapter-opencode2: No matching version found for @weaveio/weave-adapter-opencode2@9.9.9-nope.))])" http.span=4840 role=server""";
+    private const string DependencyNotPublishedLine = """timestamp=2026-10-29T18:51:16.380Z level=WARN run=178ce191 message="failed to load plugin" target=@weaveio/weave-adapter-opencode2@0.3.0 ref=err_d1925aec cause="Cause([Fail(NpmInstallFailedError (cause: @ai-sdk/gateway: No matching version found for @ai-sdk/gateway@3.0.225.))])" http.span=33740 role=server""";
     private const string V1AdapterLine = """timestamp=2026-09-26T07:53:51.856Z level=WARN run=feb9c753 message="failed to load plugin" target=@weaveio/weave-adapter-opencode@0.2.0-next.1 ref=err_9697c2b2 cause="Cause([Fail(PluginModule.LoadError: Plugin must export a default definition with an id and an effect or setup function. (cause: SchemaError(Expected object\n  at [\"default\"])))])" http.span=4825 role=server""";
 
     private readonly string _data = Path.Combine(Path.GetTempPath(), $"opencode2-weave-{Guid.NewGuid():N}");
@@ -156,6 +157,28 @@ public sealed class OpenCode2WeaveTests : IAsyncLifetime
         install.Entry.ShouldBe("@weaveio/weave-adapter-opencode2@9.9.9-nope");
         install.AcceptsFleetConfig.ShouldBeFalse();
         install.Error.ShouldBe("NpmInstallFailedError (cause: @weaveio/weave-adapter-opencode2: No matching version found for @weaveio/weave-adapter-opencode2@9.9.9-nope.)");
+    }
+
+    [Theory]
+    [InlineData(true, "NpmInstallFailedError (cause: @ai-sdk/gateway: No matching version found for @ai-sdk/gateway@3.0.225.)")]
+    [InlineData(false, "Plugin failed to load")]
+    public async Task an_adapter_v2_lists_as_failed_is_not_loaded_and_says_why(bool logged, string reason)
+    {
+        // OpenCode 2.2 lists a plugin it couldn't load, without an id. Here npm couldn't yet serve a package the adapter
+        // needs, published a minute after the one that asks for it.
+        var failed = new
+        {
+            source = new { type = "package", target = "@weaveio/weave-adapter-opencode2@0.3.0" },
+            state = new { status = "failed", error = "Plugin failed to load", @ref = "err_d1925aec" },
+        };
+        _trialApi = () => TrialApi([Builtin("opencode.agent"), failed], [Agent("build", "The default agent.")], ["@weaveio/weave-adapter-opencode2@0.3.0"]);
+        _trialLog = logged ? [DependencyNotPublishedLine] : [];
+
+        var install = (await _weave.DetectAsync(Owner, CancellationToken.None)).ShouldHaveSingleItem();
+
+        install.Entry.ShouldBe("@weaveio/weave-adapter-opencode2@0.3.0");
+        install.AcceptsFleetConfig.ShouldBeFalse();
+        install.Error.ShouldBe(reason);
     }
 
     [Fact]

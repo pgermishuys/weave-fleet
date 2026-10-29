@@ -313,13 +313,24 @@ internal sealed record OpenCode2AgentInfo
 }
 
 /// <summary>
-/// A plugin V2 loaded in a folder (<c>GET /api/plugin</c>). One it couldn't load isn't listed; the reason is only in
-/// its log.
+/// A plugin in a folder (<c>GET /api/plugin</c>). OpenCode 2.2 lists one it couldn't load too, with no
+/// <see cref="Id"/> and <see cref="State"/> <c>failed</c>; older versions leave it out. Why it failed is only in V2's log.
 /// </summary>
 internal sealed record OpenCode2PluginInfo
 {
     public string? Id { get; init; }
     public OpenCode2PluginSource? Source { get; init; }
+    public OpenCode2PluginState? State { get; init; }
+
+    /// <summary>V2 loaded it: <c>active</c>, or listed by a version that doesn't say.</summary>
+    public bool Loaded => State?.Status != "failed";
+}
+
+/// <summary>Whether V2 loaded a plugin: <c>active</c>, or <c>failed</c> with a generic <see cref="Error"/>.</summary>
+internal sealed record OpenCode2PluginState
+{
+    public string? Status { get; init; }
+    public string? Error { get; init; }
 }
 
 /// <summary>

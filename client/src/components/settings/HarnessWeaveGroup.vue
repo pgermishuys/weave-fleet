@@ -11,7 +11,7 @@ import {
   WEAVE_FLAVORS,
   describeWeaveInstall,
   loadedFlavors,
-  usableFlavorsOf,
+  outdatedFlavorsOf,
   weaveAddedByFleet,
   weavePill,
 } from "@/lib/weave-flavors";
@@ -33,8 +33,7 @@ const detection = computed<WeaveHarnessDetection | undefined>(() =>
   view.value?.harnesses.find((harness) => harness.harnessType === props.harnessType));
 const all = computed(() => view.value?.harnesses ?? []);
 const flavors = computed(() => loadedFlavors(all.value));
-const usableFlavors = computed(() => usableFlavorsOf(all.value));
-const outdated = computed(() => flavors.value.filter((flavor) => !usableFlavors.value.includes(flavor)));
+const outdated = computed(() => outdatedFlavorsOf(all.value));
 const bothLoaded = computed(() => (detection.value?.installs ?? []).some((install) => install.flavor === "weave")
   && (detection.value?.installs ?? []).some((install) => install.flavor === "legacy"));
 

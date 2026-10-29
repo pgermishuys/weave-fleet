@@ -81,6 +81,22 @@ describe("WeaveConfigDialog", () => {
     expect(wrapper.get("[data-testid='weave-source-fleet']").attributes("disabled")).toBeDefined();
   });
 
+  it("asks for Weave to load, not for an update, when the listed Weave didn't load", async () => {
+    const wrapper = await mountSection(config({
+      harnesses: [{
+        harnessType: "opencode2", harnessName: "OpenCode 2", checked: true,
+        installs: [{
+          flavor: "weave", package: "@weaveio/weave-adapter-opencode2", entry: "@weaveio/weave-adapter-opencode2@0.3.0",
+          acceptsFleetConfig: false, error: "No matching version found for @ai-sdk/gateway@3.0.225.",
+        }],
+      }],
+    }));
+
+    const fleet = wrapper.get("[data-testid='weave-source-fleet']");
+    expect(fleet.attributes("disabled")).toBeDefined();
+    expect(fleet.text()).toContain("Needs Weave to load first");
+  });
+
   it("starts Fleet's config from a short template and tries it with the harness", async () => {
     check.mockResolvedValueOnce([{
       harnessType: "opencode", harnessName: "OpenCode", flavor: "weave",

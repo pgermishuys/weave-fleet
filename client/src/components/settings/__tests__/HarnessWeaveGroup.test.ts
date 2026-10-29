@@ -183,5 +183,7 @@ describe("HarnessWeaveGroup", () => {
 
     expect(wrapper.text()).toContain("@weaveio/weave-adapter-opencode2@9.9.9 · didn't load: No matching version found");
     expect(wrapper.text()).toContain("Weave · didn't load");
+    // It didn't load, so its version isn't what's wrong.
+    expect(wrapper.find("[data-testid='weave-outdated']").exists()).toBe(false);
   });
 });

@@ -18,6 +18,7 @@ import {
   WEAVE_LEGACY_CONFIG as LEGACY_CONFIG,
   WEAVE_PROMPTS as PROMPTS,
   loadedFlavors,
+  outdatedFlavorsOf,
   usableFlavorsOf,
 } from "@/lib/weave-flavors";
 
@@ -54,7 +55,7 @@ function sortedEntries(record: Readonly<Record<string, string>>): [string, strin
 const harnesses = computed<readonly WeaveHarnessDetection[]>(() => view.value?.harnesses ?? []);
 const flavors = computed(() => loadedFlavors(harnesses.value));
 const usableFlavors = computed(() => usableFlavorsOf(harnesses.value));
-const outdated = computed(() => flavors.value.filter((flavor) => !usableFlavors.value.includes(flavor)));
+const outdated = computed(() => outdatedFlavorsOf(harnesses.value));
 
 /** The files of the Weaves this machine runs. Files of one it doesn't stay saved, out of the way. */
 const fileTabs = computed(() => {
@@ -252,9 +253,11 @@ function folderName(directory: string): string {
           >
             <span class="text-sm font-semibold text-text">Keep it in Fleet</span>
             <span class="text-xs text-muted">
-              {{ usableFlavors.length === 0
-                ? `Needs ${outdated.map((flavor) => `${FLAVORS[flavor].name} ${FLAVORS[flavor].minimum}`).join(" or ")} or later`
-                : "Edited here and tried before it's used. Your own files stay as they are." }}
+              {{ usableFlavors.length > 0
+                ? "Edited here and tried before it's used. Your own files stay as they are."
+                : outdated.length > 0
+                  ? `Needs ${outdated.map((flavor) => `${FLAVORS[flavor].name} ${FLAVORS[flavor].minimum}`).join(" or ")} or later`
+                  : "Needs Weave to load first" }}
             </span>
           </button>
         </div>

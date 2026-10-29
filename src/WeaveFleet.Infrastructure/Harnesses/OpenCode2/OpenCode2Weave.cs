@@ -16,8 +16,8 @@ namespace WeaveFleet.Infrastructure.Harnesses.OpenCode2;
 /// When the user keeps their Weave config in Fleet, servers start with <see cref="WeaveEnvironment.GlobalConfigDir"/>
 /// pointing at the folder Fleet writes (<see cref="OpenCode2ServerSetup.WeaveConfigFolder"/>).
 /// <para>
-/// What V2 loads is read from a throwaway server with its log on (<see cref="TryAsync"/>): <c>GET /api/plugin</c> lists
-/// only the plugins V2 loaded, and why one didn't load is only in its log. A change reaches running servers with
+/// What V2 loads is read from a throwaway server with its log on (<see cref="TryAsync"/>): <c>GET /api/plugin</c> says
+/// which plugins V2 loaded, and why one didn't load is only in its log. A change reaches running servers with
 /// <c>POST /api/location/reload</c>, which reads the config again, plugins included, and lets running turns go on;
 /// it cancels open questions, so Fleet reloads a server once none of its sessions waits on one.
 /// </para>
@@ -91,14 +91,21 @@ internal sealed partial class OpenCode2Weave(
         var trial = await TryAsync(ownerUserId, ProbeFiles, ct).ConfigureAwait(false);
         var probed = trial.Agents.Any(agent => agent.Id == ProbeAgent);
 
+        var failed = FailedPlugins(trial.Log);
         var installs = new List<WeaveInstall>();
         foreach (var plugin in trial.Plugins)
         {
-            if (Describe(plugin) is { Package: Package } found)
-                installs.Add(new WeaveInstall(WeaveFlavor.Weave, Package, found.Entry, probed));
+            if (Describe(plugin) is not { Package: Package } found)
+                continue;
+
+            // OpenCode 2.2 lists a Weave it couldn't load too, e.g. when npm can't install one of its packages yet.
+            installs.Add(plugin.Loaded
+                ? new WeaveInstall(WeaveFlavor.Weave, Package, found.Entry, probed)
+                : new WeaveInstall(WeaveFlavor.Weave, Package, found.Entry, false,
+                    failed.FirstOrDefault(f => f.Target == found.Entry).Cause ?? plugin.State?.Error ?? "OpenCode 2 couldn't load it."));
         }
 
-        foreach (var (target, cause) in FailedPlugins(trial.Log))
+        foreach (var (target, cause) in failed)
         {
             if (PackageOf(target) == Package && installs.All(install => install.Entry != target))
                 installs.Add(new WeaveInstall(WeaveFlavor.Weave, Package, target, false, cause));
@@ -197,7 +204,7 @@ internal sealed partial class OpenCode2Weave(
                 var agents = await server.Client.GetAgentsAsync(project, ct).ConfigureAwait(false);
 
                 // Weave adds its agents once it has read its config, which can be after V2 says the folder is loaded.
-                if (plugins.Any(plugin => Describe(plugin)?.Package == Package))
+                if (plugins.Any(plugin => plugin.Loaded && Describe(plugin)?.Package == Package))
                 {
                     var until = DateTimeOffset.UtcNow + AgentWait;
                     while (!agents.Any(IsWeaveAgent) && DateTimeOffset.UtcNow < until)

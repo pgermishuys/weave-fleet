@@ -73,6 +73,17 @@ export function loadedFlavors(harnesses: readonly WeaveHarnessDetection[]): Weav
   return (["weave", "legacy"] as const).filter((flavor) => installs.some((install) => install.flavor === flavor));
 }
 
+/**
+ * The Weaves some harness loads only at a version that can't read Fleet's folder. One that didn't load at all isn't
+ * too old: why it didn't load is shown instead.
+ */
+export function outdatedFlavorsOf(harnesses: readonly WeaveHarnessDetection[]): WeaveFlavor[] {
+  const loaded = harnesses.flatMap((harness) => harness.installs).filter((install) => !install.error);
+  return (["weave", "legacy"] as const).filter((flavor) =>
+    loaded.some((install) => install.flavor === flavor)
+    && !loaded.some((install) => install.flavor === flavor && install.acceptsFleetConfig));
+}
+
 /** The Weaves Fleet can hand a config to: at least one harness loads a version that reads Fleet's folder. */
 export function usableFlavorsOf(harnesses: readonly WeaveHarnessDetection[]): WeaveFlavor[] {
   const installs = harnesses.flatMap((harness) => harness.installs);

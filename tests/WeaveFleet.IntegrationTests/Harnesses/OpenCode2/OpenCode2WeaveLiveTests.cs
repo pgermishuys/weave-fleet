@@ -1,5 +1,6 @@
 using Microsoft.Extensions.DependencyInjection;
 using WeaveFleet.Application.Weave;
+using WeaveFleet.Domain.Common;
 using WeaveFleet.Domain.Harnesses;
 using WeaveFleet.Infrastructure.Harnesses;
 using WeaveFleet.Infrastructure.Harnesses.OpenCode;
@@ -18,8 +19,11 @@ namespace WeaveFleet.IntegrationTests.Harnesses.OpenCode2;
 public sealed class OpenCode2WeaveLiveTests(OpenCode2LiveFleet fleet) : IClassFixture<OpenCode2LiveFleet>
 {
     private const string Harness = OpenCode2HarnessSession.Type;
-    /// <summary>Longer than <see cref="OpenCode2Weave.PluginWait"/>: Add Weave waits for V2 to install the adapter from npm.</summary>
-    private static readonly TimeSpan Timeout = TimeSpan.FromMinutes(8);
+    /// <summary>
+    /// Longer than <see cref="OpenCode2Weave.PluginWait"/>: Add Weave waits for V2 to install the adapter from npm, maybe
+    /// more than once (<see cref="AddWeaveAsync"/>).
+    /// </summary>
+    private static readonly TimeSpan Timeout = TimeSpan.FromMinutes(12);
 
     [WeaveOpenCode2Fact]
     public async Task Weave_added_from_fleet_loads_in_the_running_server_and_takes_the_config_kept_in_fleet()
@@ -39,7 +43,7 @@ public sealed class OpenCode2WeaveLiveTests(OpenCode2LiveFleet fleet) : IClassFi
         before.AddTo.ShouldBe(configFile);
 
         // Add Weave: the adapter goes into the user's config at an exact version, and V2 loads it without a restart.
-        var added = await WeaveAsync(w => w.AddPluginAsync(Harness, cts.Token));
+        var added = await AddWeaveAsync(cts.Token);
         added.IsSuccess.ShouldBeTrue(added.IsFailure ? added.Error.Description : null);
         added.Value.Loaded.ShouldBeTrue(added.Value.Message);
         added.Value.Entry.ShouldStartWith(OpenCode2Weave.Package + "@");
@@ -93,6 +97,28 @@ public sealed class OpenCode2WeaveLiveTests(OpenCode2LiveFleet fleet) : IClassFi
         foreach (var directory in environment.Values)
             Directory.CreateDirectory(directory);
         fleet.Services.GetRequiredService<OpenCodeHarnessRuntime>().ProcessEnvironment = environment;
+    }
+
+    /// <summary>
+    /// Add Weave, again if npm couldn't serve a package the adapter needs yet. npm lists a release before every mirror
+    /// serves the release it asks for: on 29 October 2026 <c>ai@6.0.318</c> asked for <c>@ai-sdk/gateway@3.0.224</c>
+    /// 39 seconds before it was there, and V2 couldn't load Weave in that window. Fleet says why; a user tries again.
+    /// </summary>
+    private async Task<Result<WeavePluginChange>> AddWeaveAsync(CancellationToken ct)
+    {
+        for (var attempt = 1; ; attempt++)
+        {
+            var added = await WeaveAsync(w => w.AddPluginAsync(Harness, ct));
+            if (attempt == 3 || added.IsFailure || added.Value.Loaded
+                || !added.Value.Message.Contains("No matching version found", StringComparison.Ordinal))
+            {
+                return added;
+            }
+
+            var removed = await WeaveAsync(w => w.RemovePluginAsync(Harness, ct));
+            removed.IsSuccess.ShouldBeTrue(removed.IsFailure ? removed.Error.Description : null);
+            await Task.Delay(TimeSpan.FromMinutes(1), ct);
+        }
     }
 
     private static WeaveHarnessDetection Detection(WeaveConfigView view) => view.Harnesses.Single(h => h.HarnessType == Harness);
