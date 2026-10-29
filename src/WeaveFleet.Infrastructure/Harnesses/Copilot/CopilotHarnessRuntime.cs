@@ -179,7 +179,7 @@ public sealed partial class CopilotHarnessRuntime(
         var token = FleetTools.Issue(options.SessionId, options.OwnerUserId);
         try
         {
-            var tools = await ReadFleetToolsAsync(options.OwnerUserId, options.SessionId).ConfigureAwait(false);
+            var tools = await ReadFleetToolsAsync(options.OwnerUserId, options.SessionId, options.WorkflowStep).ConfigureAwait(false);
             var mcpServers = CopilotFleetTools.McpServers(LocalFleetUrl(), token);
             var created = await NewSessionAsync(agent, options.WorkingDirectory, mcpServers, ct).ConfigureAwait(false);
             var session = new AcpHarnessSession(HarnessType, $"copilot-{Guid.NewGuid():N}", options.SessionId, AcpMapper.Str(created, "sessionId")!,
@@ -219,7 +219,7 @@ public sealed partial class CopilotHarnessRuntime(
         var token = FleetTools.Issue(options.SessionId, options.OwnerUserId);
         try
         {
-            var tools = await ReadFleetToolsAsync(options.OwnerUserId, options.SessionId).ConfigureAwait(false);
+            var tools = await ReadFleetToolsAsync(options.OwnerUserId, options.SessionId, options.WorkflowStep).ConfigureAwait(false);
             var session = new AcpHarnessSession(HarnessType, $"copilot-{Guid.NewGuid():N}", options.SessionId, options.ResumeToken, options.WorkingDirectory, agent, _logger,
                 analytics, options.ProjectId, options.ProjectName, options.OwnerUserId, FleetToolCalls())
             {
@@ -308,7 +308,11 @@ public sealed partial class CopilotHarnessRuntime(
     /// Which of Fleet's tools the session has now (<see cref="FleetToolSettings"/>), which its process lists when it
     /// starts; null when Fleet can't tell, or runs no MCP server for it yet.
     /// </summary>
-    private async Task<FleetToolSwitches?> ReadFleetToolsAsync(string ownerUserId, string sessionId)
+    /// <param name="workflowStep">
+    /// The session is a step the agent finishes. A new session isn't saved yet when its process starts, so Fleet can't
+    /// read that from it, but its first prompt can, and would otherwise take a new process.
+    /// </param>
+    private async Task<FleetToolSwitches?> ReadFleetToolsAsync(string ownerUserId, string sessionId, bool workflowStep = false)
     {
         if (string.IsNullOrEmpty(LocalFleetUrl()))
             return null;
@@ -316,7 +320,8 @@ public sealed partial class CopilotHarnessRuntime(
         {
             using var scope = scopes.CreateScope();
             return scope.ServiceProvider.GetService<FleetToolSettings>() is { } settings
-                ? await settings.ForSessionAsync(ownerUserId, sessionId).ConfigureAwait(false)
+                && await settings.ForSessionAsync(ownerUserId, sessionId).ConfigureAwait(false) is { } switches
+                ? switches with { WorkflowStep = switches.WorkflowStep || workflowStep }
                 : null;
         }
         catch (Exception ex) when (ex is not OperationCanceledException and not OutOfMemoryException)

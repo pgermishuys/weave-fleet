@@ -475,6 +475,35 @@ public sealed class AcpHarnessSessionTests
     }
 
     [Fact]
+    public async Task a_new_process_that_dies_while_loading_doesnt_end_the_session()
+    {
+        await using var first = new FakeAcpAgent();
+        first.Handle = Answers(first, "Still here.");
+        await using var dying = new FakeAcpAgent();
+        dying.Handle = (_, _) =>
+        {
+            dying.Die();
+            return new TaskCompletionSource<JsonNode?>().Task;
+        };
+        var ended = 0;
+        await using var session = new AcpHarnessSession("copilot", "copilot-1", "fleet-1", "acp-1", "/work", first, NullLogger.Instance)
+        {
+            OnEnded = () => ended++,
+            FleetTools = BrowserOff,
+            ReadFleetTools = () => Task.FromResult<FleetToolSwitches?>(BrowserOff with { Browser = true }),
+            Relaunch = _ => Task.FromResult<IAcpAgent>(dying),
+        };
+
+        await session.SendPromptAsync("one", null, CancellationToken.None);
+        await ReadAsync(session, Idle);
+
+        // Its token still works: Fleet's tools answer the process the session kept.
+        ended.ShouldBe(0);
+        session.Status.ShouldBe(HarnessSessionStatus.Idle);
+        first.Received.ShouldContain(r => r.Method == "session/prompt");
+    }
+
+    [Fact]
     public async Task a_usage_update_during_a_turn_reports_the_contexts_size_for_the_sessions_model()
     {
         await using var agent = new FakeAcpAgent();

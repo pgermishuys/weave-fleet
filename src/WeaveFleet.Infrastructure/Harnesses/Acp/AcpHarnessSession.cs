@@ -41,8 +41,11 @@ internal sealed partial class AcpHarnessSession : IHarnessSession
     private readonly string? _projectName;
     private readonly string _ownerUserId;
     private bool _replaying;
-    // A new process is loading the conversation the mapper already has: what it replays is dropped.
+    // A new process is loading the conversation the mapper already has: what it replays is dropped, and its ending
+    // (it failed to start) doesn't end the session, which carries on with the process it had.
     private bool _relaunching;
+    private readonly SemaphoreSlim _relaunch = new(1, 1);
+    private static readonly TimeSpan RelaunchWait = TimeSpan.FromSeconds(30);
     private bool _disposed;
     private int _ended;
 
@@ -186,18 +189,32 @@ internal sealed partial class AcpHarnessSession : IHarnessSession
     /// </summary>
     private async Task RefreshFleetToolsAsync(CancellationToken ct)
     {
-        if (Relaunch is null || ReadFleetTools is null || await ReadFleetTools().ConfigureAwait(false) is not { } wanted || wanted == FleetTools)
+        if (Relaunch is null || ReadFleetTools is null)
             return;
 
+        await _relaunch.WaitAsync(ct).ConfigureAwait(false);
+        try
+        {
+            if (await ReadFleetTools().ConfigureAwait(false) is { } wanted && wanted != FleetTools)
+                await RelaunchAsync(wanted, ct).ConfigureAwait(false);
+        }
+        finally
+        {
+            _relaunch.Release();
+        }
+    }
+
+    private async Task RelaunchAsync(FleetToolSwitches wanted, CancellationToken ct)
+    {
         IAcpAgent? next = null;
         var old = _agent;
         try
         {
-            next = await Relaunch(ct).ConfigureAwait(false);
+            next = await Relaunch!(ct).ConfigureAwait(false);
+            _relaunching = true;
             Detach(old);
             Attach(next);
             _agent = next;
-            _relaunching = true;
             ReadModels(await LoadOnAsync(next, ct).ConfigureAwait(false));
         }
         catch (Exception ex) when (ex is not OutOfMemoryException)
@@ -433,6 +450,8 @@ internal sealed partial class AcpHarnessSession : IHarnessSession
 
     private void OnClosed()
     {
+        if (_relaunching)
+            return;
         End();
         if (_disposed)
             return;
@@ -506,10 +525,14 @@ internal sealed partial class AcpHarnessSession : IHarnessSession
         if (_disposed)
             return;
         _disposed = true;
+        // A process swap under way finishes first, so the process this ends is the one the session kept.
+        var gated = await _relaunch.WaitAsync(RelaunchWait).ConfigureAwait(false);
         End();
         foreach (var id in _asks.Keys)
             Settle(id, PermissionReplies.Gone, null);
         _events.Writer.TryComplete();
         await _agent.DisposeAsync().ConfigureAwait(false);
+        if (gated)
+            _relaunch.Release();
     }
 }
