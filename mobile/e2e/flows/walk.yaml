@@ -148,11 +148,14 @@ appId: io.tryweave.fleet
 - takeScreenshot: 13-machines
 - tapOn: "Sessions"
 
-# The Kit, by its deep link; iOS asks before opening the app.
-- openLink: fleet://kit
-- tapOn:
-    text: "Open"
-    optional: true
+# The Kit, by long-pressing the Fleet mark. Not by its deep link: the first fleet:// link on iOS asks "Open in Fleet?",
+# and after Open the simulator sometimes holds the link for most of a minute before the app gets it.
+- extendedWaitUntil:
+    visible:
+      id: "fleet-mark"
+    timeout: 30000
+- longPressOn:
+    id: "fleet-mark"
 - extendedWaitUntil:
     visible: "Kit"
     timeout: 30000

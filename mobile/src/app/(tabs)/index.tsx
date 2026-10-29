@@ -29,7 +29,7 @@ export default function Sessions() {
     <PanelPage
       bar={
         <View style={{ paddingHorizontal: 18, paddingVertical: 10 }}>
-          <Pressable onLongPress={() => router.push("/kit")} delayLongPress={600} accessibilityLabel="Fleet" style={{ alignSelf: "flex-start" }}>
+          <Pressable onLongPress={() => router.push("/kit")} delayLongPress={600} accessibilityLabel="Fleet" testID="fleet-mark" style={{ alignSelf: "flex-start" }}>
             <FleetMark height={22} />
           </Pressable>
         </View>
