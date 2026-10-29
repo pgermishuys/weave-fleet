@@ -5,6 +5,9 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 import { clearPendingPrompts, clearSentPrompts } from "@/composables/use-send-prompt";
 import type { FileDiffItem } from "@/api/client";
 import { useSessionsStore } from "@/stores/sessions";
+// Imported statically (vi.mock is hoisted above it) so loading the route's module graph happens while the
+// file is collected, not inside the first test's 5 s timeout: under load that load alone took over 5 s.
+import { Route } from "@/routes/sessions.$id";
 
 const { navigateMock, params, search, diffState, apiFetchMock } = vi.hoisted(() => ({
   navigateMock: vi.fn(),
@@ -148,7 +151,6 @@ describe("session route files view close", () => {
 
   it("renders_chat_components_with_session_props_and_keeps_prompt_flow_wired", async () => {
     search.value = { instanceId: "instance-1" };
-    const { Route } = await import("@/routes/sessions.$id");
     const SessionDetailPage = (Route as unknown as { config: { component: DefineComponent } }).config.component;
 
     const wrapper = mount(SessionDetailPage, {
@@ -191,7 +193,6 @@ describe("session route files view close", () => {
         archiveDisabledReason: null, unarchiveDisabledReason: null, forkDisabledReason: null, deleteDisabledReason: null,
       },
     }));
-    const { Route } = await import("@/routes/sessions.$id");
     const SessionDetailPage = (Route as unknown as { config: { component: DefineComponent } }).config.component;
 
     const wrapper = mount(SessionDetailPage, { attachTo: document.body });
@@ -205,7 +206,6 @@ describe("session route files view close", () => {
   });
 
   it("restores_chat_mode_and_clears_files_view_search_when_files_view_closes", async () => {
-    const { Route } = await import("@/routes/sessions.$id");
     const SessionDetailPage = (Route as unknown as { config: { component: DefineComponent } }).config.component;
 
     const wrapper = mount(SessionDetailPage, {
@@ -238,7 +238,6 @@ describe("session route files view close", () => {
   it("navigates_to_files_search_and_replaces_chat_when_files_changed_badge_is_clicked", async () => {
     search.value = { instanceId: "instance-1" };
 
-    const { Route } = await import("@/routes/sessions.$id");
     const SessionDetailPage = (Route as unknown as { config: { component: DefineComponent } }).config.component;
     const pinia = createPinia();
     setActivePinia(pinia);
@@ -310,7 +309,6 @@ describe("session route files view close", () => {
   it("opens_diffs_tray_over_chat_when_context_open_handler_runs", async () => {
     search.value = { instanceId: "instance-1" };
     const { useSessionDiffsContext } = await import("@/composables/use-session-diffs-context");
-    const { Route } = await import("@/routes/sessions.$id");
     const SessionDetailPage = (Route as unknown as { config: { component: DefineComponent } }).config.component;
 
     const wrapper = mount(SessionDetailPage, {
@@ -330,7 +328,6 @@ describe("session route files view close", () => {
   it("refreshes_stale_diffs_when_tray_opens", async () => {
     search.value = { instanceId: "instance-1" };
     diffState.isStale.value = true;
-    const { Route } = await import("@/routes/sessions.$id");
     const { useSessionDiffsContext } = await import("@/composables/use-session-diffs-context");
     const SessionDetailPage = (Route as unknown as { config: { component: DefineComponent } }).config.component;
 
