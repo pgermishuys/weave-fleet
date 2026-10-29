@@ -64,7 +64,18 @@ describe("WorkflowModelRoles", () => {
     wrapper.unmount();
   });
 
+  it("closes the dialog for good when the page goes away, so coming back doesn't reopen it", async () => {
+    modelRolesOpen.value = true;
+    const wrapper = mountDialog();
+    await flushPromises();
+    expect(modelRolesOpen.value).toBe(true);
+    wrapper.unmount();
+    expect(modelRolesOpen.value).toBe(false);
+    modelRolesOpen.value = true;
+  });
+
   it("names the harnesses that run workflows, from their capabilities, when none of those is on", async () => {
+    modelRolesOpen.value = true;
     const [openCode, claudeCode] = harnessState.all;
     const acme = { ...openCode, type: "acme", displayName: "Acme Code" };
     harnessState.all = [openCode, claudeCode, acme];

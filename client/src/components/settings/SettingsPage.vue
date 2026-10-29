@@ -1,7 +1,6 @@
 <script setup lang="ts">
 import { computed, nextTick, watch } from "vue";
 import AppearanceSection from "@/components/settings/AppearanceSection.vue";
-import BrowserSection from "@/components/settings/BrowserSection.vue";
 import CredentialsSection from "@/components/settings/CredentialsSection.vue";
 import GeneralSection from "@/components/settings/GeneralSection.vue";
 import HarnessesSection from "@/components/settings/HarnessesSection.vue";
@@ -54,15 +53,21 @@ const header = computed(() => {
   return PAGES[activeSection.value] ?? PAGES.general;
 });
 
-// Landing on a group (Folders › Storage, Permissions › Browser) scrolls it into view.
+// These pages read the anchor themselves (Harnesses picks a tab, Skills & tools picks tools or mods), so they keep it.
+const OWN_ANCHOR_PAGES: readonly string[] = ["harnesses", "skills"];
+
+// Landing on a group (Folders › Storage, Permissions › Browser) scrolls it into view, once: the anchor is spent after.
 watch(
   [activeSection, activeAnchor],
   async () => {
     if (!activeAnchor.value) return;
     await nextTick();
-    document
-      .querySelector(`[data-settings-anchor="${CSS.escape(activeAnchor.value)}"], [data-setting-group="${CSS.escape(activeAnchor.value)}"], [data-setting-row="${CSS.escape(activeAnchor.value)}"]`)
-      ?.scrollIntoView({ block: "start", behavior: "smooth" });
+    if (!activeAnchor.value) return;
+    const target = document.querySelector(`[data-settings-anchor="${CSS.escape(activeAnchor.value)}"], [data-setting-group="${CSS.escape(activeAnchor.value)}"], [data-setting-row="${CSS.escape(activeAnchor.value)}"]`);
+    if (!target) return;
+    target.scrollIntoView({ block: "start", behavior: "smooth" });
+    // Left alone when the group isn't there yet, so one that appears later still gets scrolled to.
+    if (!OWN_ANCHOR_PAGES.includes(activeSection.value)) activeAnchor.value = null;
   },
   { flush: "post", immediate: true },
 );
@@ -95,12 +100,7 @@ watch(
 
     <HarnessesSection v-else-if="activeSection === 'harnesses'" />
 
-    <template v-else-if="activeSection === 'permissions'">
-      <PermissionsSection />
-      <div data-settings-anchor="browser">
-        <BrowserSection />
-      </div>
-    </template>
+    <PermissionsSection v-else-if="activeSection === 'permissions'" />
 
     <SkillsToolsPage v-else-if="activeSection === 'skills'" />
 

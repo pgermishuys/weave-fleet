@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import { computed, onMounted } from "vue";
 import { Info } from "lucide-vue-next";
+import BrowserSection from "@/components/settings/BrowserSection.vue";
 import SettingGroup from "@/components/settings/SettingGroup.vue";
 import SettingRow from "@/components/settings/SettingRow.vue";
 import StatusGlyph from "@/components/sessions/StatusGlyph.vue";
@@ -154,6 +155,42 @@ function onLevelKeydown(event: KeyboardEvent, index: number): void {
     </SettingGroup>
 
     <SettingGroup
+      id="unattended"
+      title="Runs nobody is watching"
+      hint="Automations and workflow steps Fleet finishes."
+    >
+      <SettingRow
+        id="unattended-runs"
+        title="Unattended runs"
+        :summary="UNATTENDED_NOTES[unattended]"
+      >
+        <template #control>
+          <select
+            id="permission-unattended"
+            class="permissions-select"
+            aria-label="Unattended runs"
+            :value="unattended"
+            @change="setUnattended(($event.target as HTMLSelectElement).value)"
+          >
+            <option value="all">
+              Allow everything
+            </option>
+            <option value="same">
+              Same as sessions (a run waits for you)
+            </option>
+            <option value="deny">
+              Deny anything that would ask
+            </option>
+          </select>
+        </template>
+      </SettingRow>
+    </SettingGroup>
+
+    <div data-settings-anchor="browser">
+      <BrowserSection />
+    </div>
+
+    <SettingGroup
       id="each-harness"
       title="Each harness"
       hint="Set on each harness's tab, under What it may do."
@@ -189,38 +226,6 @@ function onLevelKeydown(event: KeyboardEvent, index: number): void {
           </span>
         </div>
       </div>
-    </SettingGroup>
-
-    <SettingGroup
-      id="unattended"
-      title="Runs nobody is watching"
-      hint="Automations and workflow steps Fleet finishes."
-    >
-      <SettingRow
-        id="unattended-runs"
-        title="Unattended runs"
-        :summary="UNATTENDED_NOTES[unattended]"
-      >
-        <template #control>
-          <select
-            id="permission-unattended"
-            class="permissions-select"
-            aria-label="Unattended runs"
-            :value="unattended"
-            @change="setUnattended(($event.target as HTMLSelectElement).value)"
-          >
-            <option value="all">
-              Allow everything
-            </option>
-            <option value="same">
-              Same as sessions (a run waits for you)
-            </option>
-            <option value="deny">
-              Deny anything that would ask
-            </option>
-          </select>
-        </template>
-      </SettingRow>
     </SettingGroup>
 
     <p class="permissions-fine">

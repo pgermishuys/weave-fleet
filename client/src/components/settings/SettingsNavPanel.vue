@@ -140,14 +140,15 @@ function selectSection(sectionId: SettingsSectionId): void {
           <span>{{ item.label }}</span>
           <!-- Update notification dot for Updates & about -->
           <span
-            v-if="item.id === 'updates' && showUpdateDot && !updatesWaiting"
-            class="ml-auto h-2 w-2 rounded-full"
+            v-if="item.id === 'updates' && showUpdateDot"
+            class="ml-auto h-2 w-2 shrink-0 rounded-full"
             :class="isUpdateStaged ? 'bg-warn' : 'bg-accent'"
             aria-label="Update available"
           />
           <span
             v-if="item.id === 'updates' && updatesWaiting"
-            class="ml-auto rounded-full bg-accent px-1.5 text-[10px] font-semibold leading-4 text-white"
+            :class="showUpdateDot ? 'ml-1.5' : 'ml-auto'"
+            class="rounded-full bg-accent px-1.5 text-[10px] font-semibold leading-4 text-white"
             :aria-label="`${updatesWaiting} ${updatesWaiting === 1 ? 'machine' : 'machines'} can update`"
             data-testid="updates-badge"
           >{{ updatesWaiting }}</span>

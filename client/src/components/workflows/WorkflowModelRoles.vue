@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { computed, shallowRef, watch } from "vue";
+import { computed, onUnmounted, shallowRef, watch } from "vue";
 import { Check } from "lucide-vue-next";
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import ModelSelector from "@/components/session/ModelSelector.vue";
@@ -80,6 +80,11 @@ function usedBy(role: WorkflowRole): string[] {
   return [...titles];
 }
 
+// The flag outlives the page, and links set it before navigating here, so it's cleared on the way out rather than on mount.
+onUnmounted(() => {
+  nav.modelRolesOpen.value = false;
+});
+
 watch(() => nav.modelRolesOpen.value, (open) => {
   if (open && !nav.library.value && isWorkflowsEnabled.value) void nav.reload();
 });
@@ -146,6 +151,7 @@ watch(() => nav.modelRolesOpen.value, (open) => {
               default-description="The model the session composer uses when you don't pick one"
               :disabled="!isSupported || savingRole === role"
               :test-id="`workflows-role-model-${role}`"
+              placement="auto"
               @update:model-value="pickModel(role, $event)"
             />
             <SelectorDropdown
@@ -153,6 +159,7 @@ watch(() => nav.modelRolesOpen.value, (open) => {
               label="Effort selector"
               :items="effortItems(role)"
               :disabled="effortItems(role).length < 2"
+              placement="auto"
               @update:model-value="pickEffort(role, $event)"
             />
           </div>

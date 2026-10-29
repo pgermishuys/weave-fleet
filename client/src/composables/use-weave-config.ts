@@ -26,15 +26,41 @@ function applyPending(view: WeaveConfigView | null): boolean {
   return view?.apply?.folders.some((folder) => !folder.reloaded) ?? false;
 }
 
+/** What an Add Weave or Remove said, shown on that harness's tab. */
+export interface WeavePluginNotice {
+  text: string;
+  tone: "ok" | "warn" | "error";
+}
+
+/**
+ * What Fleet said last, so coming back to Settings shows it at once without asking again. Asking can start a harness,
+ * so only Check again, a save and a plugin change ask afresh.
+ */
+let lastView: WeaveConfigView | null = null;
+/** The harness whose plugin list Fleet is changing. Every harness's list can be the same opencode.json, so one at a time. */
+const changingPlugin = shallowRef<string | null>(null);
+
+/** For tests: forget what Fleet said last. */
+export function forgetWeaveConfig(): void {
+  lastView = null;
+  changingPlugin.value = null;
+}
+
 /**
  * Settings → Harnesses → Weave: which Weave each harness loads, the config Fleet keeps for it, and how far the last save has got.
  * While a save waits for busy folders, it re-reads until they've all reloaded.
  */
 export function useWeaveConfig() {
-  const view = shallowRef<WeaveConfigView | null>(null);
+  const view = shallowRef<WeaveConfigView | null>(lastView);
   const loading = shallowRef(false);
   const error = shallowRef<string | null>(null);
+  const pluginNotices = shallowRef<Readonly<Record<string, WeavePluginNotice>>>({});
   let poll: ReturnType<typeof setTimeout> | undefined;
+
+  function show(next: WeaveConfigView): void {
+    view.value = next;
+    lastView = next;
+  }
 
   function schedulePoll(): void {
     if (poll !== undefined) clearTimeout(poll);
@@ -54,7 +80,7 @@ export function useWeaveConfig() {
         params: { query: { redetect: redetect || undefined } },
       });
       if (!response.ok) throw new Error(errorMessage(apiError, response));
-      view.value = data as unknown as WeaveConfigView;
+      show(data as unknown as WeaveConfigView);
       error.value = null;
     } catch (caught) {
       error.value = caught instanceof Error ? caught.message : "Couldn't load the Weave config.";
@@ -62,6 +88,11 @@ export function useWeaveConfig() {
       loading.value = false;
       schedulePoll();
     }
+  }
+
+  /** Asks once: does nothing when Fleet has answered already or is answering now. */
+  function ensureLoaded(): void {
+    if (view.value === null && !loading.value) void load();
   }
 
   async function check(flavor: WeaveFlavor, files: Record<string, string>): Promise<WeaveHarnessCheck[]> {
@@ -76,7 +107,7 @@ export function useWeaveConfig() {
     if (!response.ok) throw new Error(errorMessage(apiError, response));
     const result = data as unknown as WeaveSaveResult;
     if (result.saved && result.config) {
-      view.value = result.config;
+      show(result.config);
       schedulePoll();
     }
     return result;
@@ -87,15 +118,29 @@ export function useWeaveConfig() {
    * the change. The view comes back asked afresh.
    */
   async function changePlugin(harnessType: string, add: boolean): Promise<WeavePluginChange> {
-    const options = { params: { path: { harnessType } } };
-    const { data, error: apiError, response } = add
-      ? await api.POST("/api/weave/harnesses/{harnessType}/plugin", options)
-      : await api.DELETE("/api/weave/harnesses/{harnessType}/plugin", options);
-    if (!response.ok) throw new Error(errorMessage(apiError, response));
-    const result = data as unknown as WeavePluginChange;
-    view.value = result.config;
-    schedulePoll();
-    return result;
+    if (changingPlugin.value !== null) throw new Error("Fleet is still changing another harness's plugins.");
+    changingPlugin.value = harnessType;
+    try {
+      const options = { params: { path: { harnessType } } };
+      const { data, error: apiError, response } = add
+        ? await api.POST("/api/weave/harnesses/{harnessType}/plugin", options)
+        : await api.DELETE("/api/weave/harnesses/{harnessType}/plugin", options);
+      if (!response.ok) throw new Error(errorMessage(apiError, response));
+      const result = data as unknown as WeavePluginChange;
+      show(result.config);
+      schedulePoll();
+      return result;
+    } finally {
+      changingPlugin.value = null;
+    }
+  }
+
+  /** Kept on the page's state, not a tab's, so a tab switch doesn't lose what the change said. */
+  function setPluginNotice(harnessType: string, notice: WeavePluginNotice | null): void {
+    const next = { ...pluginNotices.value };
+    if (notice) next[harnessType] = notice;
+    else delete next[harnessType];
+    pluginNotices.value = next;
   }
 
   async function readOwn(flavor: WeaveFlavor): Promise<WeaveOwnConfig> {
@@ -103,6 +148,9 @@ export function useWeaveConfig() {
     if (!response.ok) throw new Error(errorMessage(apiError, response));
     return data as unknown as WeaveOwnConfig;
   }
+
+  // A save left waiting for busy folders is still followed after coming back.
+  schedulePoll();
 
   onBeforeUnmount(() => {
     if (poll !== undefined) clearTimeout(poll);
@@ -113,9 +161,13 @@ export function useWeaveConfig() {
     loading: readonly(loading),
     error: readonly(error),
     load,
+    ensureLoaded,
     check,
     save,
     readOwn,
     changePlugin,
+    changingPlugin: readonly(changingPlugin),
+    pluginNotices: readonly(pluginNotices),
+    setPluginNotice,
   };
 }

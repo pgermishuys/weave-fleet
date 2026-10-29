@@ -111,4 +111,23 @@ describe("PermissionsSection", () => {
     expect(putMock).toHaveBeenLastCalledWith("/api/preferences/{key}", { params: { path: { key: "PermissionUnattended" } }, body: { value: "deny" } });
     expect(wrapper.text()).toContain("Anything that would ask is refused");
   });
+
+  it("orders the groups Default, unattended runs, Browser, then the read-only table", async () => {
+    const wrapper = await mountSection();
+    const root = wrapper.get("[data-testid='permissions-section']").element;
+    const at = (selector: string) => {
+      const found = root.querySelector(selector);
+      expect(found).not.toBeNull();
+      return Array.from(root.querySelectorAll("*")).indexOf(found!);
+    };
+
+    const order = [
+      at("[data-setting-group='default-level']"),
+      at("[data-setting-group='unattended']"),
+      at("[data-settings-anchor='browser'] [data-testid='browser-section']"),
+      at("[data-setting-group='each-harness']"),
+      at(".permissions-fine"),
+    ];
+    expect(order).toEqual([...order].sort((a, b) => a - b));
+  });
 });
