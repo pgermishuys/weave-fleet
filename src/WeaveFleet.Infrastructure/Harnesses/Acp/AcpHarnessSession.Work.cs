@@ -15,9 +15,6 @@ namespace WeaveFleet.Infrastructure.Harnesses.Acp;
 /// </summary>
 internal sealed partial class AcpHarnessSession
 {
-    /// <summary>The code of a JSON-RPC "method not found": an older weave-copilot doesn't know the work requests.</summary>
-    private const int MethodNotFound = -32601;
-
     /// <summary>One subagent's conversation. It has no mapper until its Fleet session is known (live), or at once while a load replays.</summary>
     private sealed class ChildConversation
     {
