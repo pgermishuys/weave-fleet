@@ -361,6 +361,30 @@ public sealed partial class WorkspaceService(
         bool fetchOrigin,
         string? message)
     {
+        // Picking a free branch and folder, then adding the worktree, is one step: two sessions started at
+        // once for one repository would otherwise pick the same name and the second `git worktree add` fail.
+        var gate = _worktreeGates.GetOrAdd(WorkspaceRootService.CanonicalizePath(sourceDir), _ => new SemaphoreSlim(1, 1));
+        await gate.WaitAsync().ConfigureAwait(false);
+        try
+        {
+            return await CreateWorktreeCoreAsync(sourceDir, branch, baseBranch, fetchOrigin, message).ConfigureAwait(false);
+        }
+        finally
+        {
+            gate.Release();
+        }
+    }
+
+    private static readonly System.Collections.Concurrent.ConcurrentDictionary<string, SemaphoreSlim> _worktreeGates =
+        new(OperatingSystem.IsWindows() ? StringComparer.OrdinalIgnoreCase : StringComparer.Ordinal);
+
+    private async Task<(string Directory, string Branch)> CreateWorktreeCoreAsync(
+        string sourceDir,
+        string? branch,
+        string? baseBranch,
+        bool fetchOrigin,
+        string? message)
+    {
         var shortId = Guid.NewGuid().ToString("N")[..8];
         var templates = naming is null
             ? WorktreeNaming.Defaults

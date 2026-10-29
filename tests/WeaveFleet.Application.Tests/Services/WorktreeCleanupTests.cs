@@ -94,6 +94,23 @@ public sealed class WorktreeCleanupTests : IDisposable
     }
 
     [Fact]
+    public async Task a_checkout_whose_status_git_cannot_read_is_kept_not_treated_as_clean()
+    {
+        var workspace = await WorktreeAsync("fleet/unreadable");
+        Archived(workspace, daysAgo: 10);
+        File.WriteAllText(Path.Combine(workspace.Directory, "work.md"), "unsaved thoughts");
+        var gitDir = _repository.Git("rev-parse", "--git-path", "worktrees").Trim();
+        var index = Directory.GetDirectories(Path.Combine(_repository.Path, gitDir)).Single();
+        File.WriteAllText(Path.Combine(index, "index"), "not an index");
+
+        var report = await _cleanup.CleanAsync([workspace.Id]);
+
+        report.Removed.ShouldBeEmpty();
+        report.Kept.ShouldHaveSingleItem().Reason.ShouldStartWith("Fleet couldn't read it");
+        File.Exists(Path.Combine(workspace.Directory, "work.md")).ShouldBeTrue();
+    }
+
+    [Fact]
     public async Task uncommitted_work_and_stray_ignored_files_keep_a_checkout_but_rebuilt_output_does_not()
     {
         var edited = await WorktreeAsync("fleet/edited");
