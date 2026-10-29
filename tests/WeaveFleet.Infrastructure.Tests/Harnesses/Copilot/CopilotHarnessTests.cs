@@ -15,5 +15,5 @@ public sealed class CopilotHarnessTests
 
     [Fact]
     public void the_pinned_runtimes_are_the_ones_compaction_was_probed_on()
-        => (CopilotInstaller.WeaveCopilotVersion, CopilotInstaller.CliVersion).ShouldBe(("0.2.0", "1.0.105"));
+        => (CopilotInstaller.WeaveCopilotVersion, CopilotInstaller.CliVersion).ShouldBe(("0.2.1", "1.0.105"));
 }

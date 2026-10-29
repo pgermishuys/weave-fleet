@@ -506,6 +506,21 @@ public sealed class AcpMapperTests
         => JsonSerializer.SerializeToElement(new { sessionId = "s1", phase, trigger, tokensBefore = before, tokensAfter = after, summary, error });
 
     [Fact]
+    public void an_answer_names_the_model_the_session_was_on_when_it_began()
+    {
+        var current = "auto";
+        var mapper = new AcpMapper("s1", model: () => current);
+        mapper.UserPrompt("hi");
+
+        var created = mapper.Update(Chunk("agent_message_chunk", "Hello.")).First(e => e.Type == EventTypes.MessageCreated);
+        current = "claude-haiku-5.5";
+
+        // The header and the picker's "Default (…)" read it: Copilot names no model per message.
+        created.Payload!.Value.GetProperty("info").GetProperty("modelID").GetString().ShouldBe("auto");
+        mapper.Messages()[^1].ModelId.ShouldBe("auto");
+    }
+
+    [Fact]
     public void a_usage_update_after_a_main_agent_call_carries_its_split()
     {
         var mapper = new AcpMapper("s1");

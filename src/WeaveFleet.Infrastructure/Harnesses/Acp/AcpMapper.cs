@@ -55,6 +55,7 @@ internal sealed class AcpMapper(string sessionId, Func<string, JsonElement, Flee
     private string? _openPartId;
     private string? _assistantId;
     private DateTimeOffset _assistantAt;
+    private string? _assistantModel;     // the session's model when the answer began (Copilot names none per message)
     private bool _userOpen;
     private int _partCount;
     private int _stepCount;
@@ -651,6 +652,7 @@ internal sealed class AcpMapper(string sessionId, Func<string, JsonElement, Flee
             return;
         _assistantId = AscendingMessageId.New();
         _assistantAt = DateTimeOffset.UtcNow;
+        _assistantModel = model?.Invoke();
         events.Add(Event(EventTypes.MessageCreated, Lifecycle(_assistantId, completed: false)));
     }
 
@@ -669,7 +671,7 @@ internal sealed class AcpMapper(string sessionId, Func<string, JsonElement, Flee
         _openKind = _openPartId = null;
     }
 
-    private HarnessMessage Assistant() => new() { Id = _assistantId!, Role = "assistant", Parts = [.. _parts], Timestamp = _assistantAt };
+    private HarnessMessage Assistant() => new() { Id = _assistantId!, Role = "assistant", Parts = [.. _parts], Timestamp = _assistantAt, ModelId = _assistantModel };
 
     /// <summary>The user's message: the text, then each attached image as a file part, as the other harnesses show them.</summary>
     private void AddUser(string text, IReadOnlyList<HarnessAttachment>? images = null, string? messageId = null)
@@ -694,6 +696,7 @@ internal sealed class AcpMapper(string sessionId, Func<string, JsonElement, Flee
                 Id = messageId,
                 Role = "assistant",
                 SessionId = sessionId,
+                ModelId = _assistantModel,
                 Time = new MessageEventTime
                 {
                     Created = _assistantAt.ToUnixTimeMilliseconds(),
