@@ -195,7 +195,7 @@ jobs:
           echo "CCACHE_DIR=$HOME/.ccache" >> "$GITHUB_ENV"
           prefix="ccache-ios-$(xcodebuild -version | awk '/Build version/ {print $3}')-"
           echo "prefix=$prefix" >> "$GITHUB_OUTPUT"
-          echo "key=$prefix${{ hashFiles('mobile/bun.lock') }}" >> "$GITHUB_OUTPUT"
+          echo "key=${prefix}${{ hashFiles('mobile/bun.lock') }}" >> "$GITHUB_OUTPUT"
       - uses: actions/cache/restore@v4
         id: ccache-restore
         with:
