@@ -3,6 +3,7 @@ using System.Runtime.CompilerServices;
 using System.Text.Json;
 using System.Text.Json.Nodes;
 using System.Threading.Channels;
+using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging;
 using WeaveFleet.Application.Analytics;
 using WeaveFleet.Application.FleetTools;
@@ -54,8 +55,9 @@ internal sealed partial class AcpHarnessSession : IHarnessSession
 
     internal AcpHarnessSession(string harnessType, string instanceId, string fleetSessionId, string acpSessionId, string workingDirectory,
         IAcpAgent agent, ILogger logger, IAnalyticsCollector? analytics = null, string? projectId = null, string? projectName = null,
-        string ownerUserId = "local-user", FleetToolCallRecords? fleetToolCalls = null)
+        string ownerUserId = "local-user", FleetToolCallRecords? fleetToolCalls = null, IServiceScopeFactory? scopes = null)
     {
+        _scopes = scopes;
         _analytics = analytics;
         _projectId = projectId;
         _projectName = projectName;
@@ -255,6 +257,7 @@ internal sealed partial class AcpHarnessSession : IHarnessSession
         }
 
         FleetTools = wanted;
+        LoseRunningWork();
         await old.DisposeAsync().ConfigureAwait(false);
     }
 
@@ -358,6 +361,7 @@ internal sealed partial class AcpHarnessSession : IHarnessSession
             }
 
             Emit(_mapper.EndTurn(AcpMapper.Str(result, "stopReason")));
+            EndSyncChildren();
         }
         catch (AcpException ex)
         {
@@ -365,6 +369,7 @@ internal sealed partial class AcpHarnessSession : IHarnessSession
             Status = alive ? HarnessSessionStatus.Idle : HarnessSessionStatus.Error;
             var why = alive || _agent.Stderr.Length == 0 ? ex.Message : $"{ex.Message} {_agent.Stderr}";
             Emit(_mapper.Fail(why));
+            EndSyncChildren();
         }
     }
 
@@ -522,7 +527,7 @@ internal sealed partial class AcpHarnessSession : IHarnessSession
 
     private void OnNotification(string method, JsonElement parameters)
     {
-        if (_relaunching)
+        if (_relaunching || HandleChildTraffic(method, parameters))
             return;
         IReadOnlyList<HarnessEvent> events = method switch
         {
@@ -557,13 +562,19 @@ internal sealed partial class AcpHarnessSession : IHarnessSession
 
     public Task<MessagePage> GetMessagesAsync(MessageQuery? query, CancellationToken ct)
     {
-        var messages = _mapper.Messages().ToList();
+        return Task.FromResult(Page(_mapper.Messages(), query));
+    }
+
+    /// <summary>One page of a conversation: what comes before the message asked for, the last <c>Limit</c> of it.</summary>
+    internal static MessagePage Page(IEnumerable<HarnessMessage> all, MessageQuery? query)
+    {
+        var messages = all.ToList();
         if (!string.IsNullOrWhiteSpace(query?.Before) && messages.FindIndex(m => m.Id == query.Before) is >= 0 and var at)
             messages = messages[..at];
         var more = query?.Limit is { } limit && messages.Count > limit;
         if (more)
             messages = messages[^query!.Limit!.Value..];
-        return Task.FromResult(new MessagePage(messages, more));
+        return new MessagePage(messages, more);
     }
 
     public async IAsyncEnumerable<HarnessEvent> SubscribeAsync([EnumeratorCancellation] CancellationToken ct)

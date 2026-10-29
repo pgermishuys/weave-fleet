@@ -1,6 +1,13 @@
+using System.Reflection;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging.Abstractions;
+using System.Text.Json.Nodes;
 using WeaveFleet.Application.Harnesses;
+using WeaveFleet.Application.Sessions;
+using WeaveFleet.Domain.Common;
+using WeaveFleet.Domain.Entities;
+using WeaveFleet.Domain.Harnesses;
+using WeaveFleet.Infrastructure.Tests.Harnesses.Acp;
 using WeaveFleet.Domain.Repositories;
 using WeaveFleet.Infrastructure.Harnesses.Acp;
 using WeaveFleet.Infrastructure.Harnesses.Copilot;
@@ -21,6 +28,70 @@ public sealed class CopilotHarnessRuntimeTests
         var services = new ServiceCollection();
         services.AddScoped<IUserPreferenceRepository>(_ => new Preferences(on.ToDictionary(p => p.Key, p => p.Value)));
         return new CopilotHarnessRuntime(services.BuildServiceProvider().GetRequiredService<IServiceScopeFactory>(), NullLoggerFactory.Instance);
+    }
+
+
+    private sealed class Wakes(Action wake) : ISessionActivator
+    {
+        public List<string> Woken { get; } = [];
+
+        public Task<Result<IHarnessSession>> ActivateSessionAsync(string sessionId, CancellationToken ct = default)
+        {
+            Woken.Add(sessionId);
+            wake();
+            return Task.FromResult(Result.Failure<IHarnessSession>(new FleetError("test", "not needed")));
+        }
+    }
+
+    public class SessionRecords : DispatchProxy
+    {
+        public Session? Child { get; set; }
+
+        protected override object? Invoke(MethodInfo? targetMethod, object?[]? args)
+            => targetMethod!.Name == "GetByIdAsync" ? Task.FromResult(Child) : throw new NotSupportedException(targetMethod.Name);
+    }
+
+    [Fact]
+    public async Task a_subagents_child_session_reads_its_conversation_from_the_parent_live_or_woken()
+    {
+        var wake = (Wakes?)null;
+        CopilotHarnessRuntime? runtime = null;
+        await using var agent = new FakeAcpAgent();
+        agent.Handle = (method, _) =>
+        {
+            if (method == "session/load")
+                agent.Update("acp-1", new JsonObject
+                {
+                    ["sessionUpdate"] = "agent_message_chunk", ["content"] = new JsonObject { ["type"] = "text", ["text"] = "Found it" },
+                    ["_meta"] = new JsonObject { ["parentToolCallId"] = "call-1" },
+                });
+            return Task.FromResult<JsonNode?>(new JsonObject());
+        };
+        await using var parent = new AcpHarnessSession("copilot", "copilot-1", "parent", "acp-1", "/work", agent, NullLogger.Instance);
+        await parent.LoadAsync(null, CancellationToken.None);
+        var records = DispatchProxy.Create<ISessionRepository, SessionRecords>();
+        ((SessionRecords)(object)records).Child = new Session { ParentSessionId = "parent" };
+        wake = new Wakes(() => runtime!.Live["parent"] = parent);
+        var services = new ServiceCollection();
+        services.AddScoped<IUserPreferenceRepository>(_ => new Preferences(new() { [CopilotHarness.FeaturePreferenceKey] = "true" }));
+        services.AddScoped(_ => records);
+        services.AddScoped<ISessionActivator>(_ => wake);
+        runtime = new CopilotHarnessRuntime(services.BuildServiceProvider().GetRequiredService<IServiceScopeFactory>(), NullLoggerFactory.Instance);
+
+        // After a restart the options leave out the parent: it's found from the child's record, then woken.
+        await using var child = await runtime.ResumeAsync(new HarnessResumeOptions
+        {
+            SessionId = "child", WorkingDirectory = "/nowhere", ResumeToken = "call-1", OwnerUserId = "u", DelegatedChild = true,
+        }, CancellationToken.None);
+
+        var messages = (await child.GetMessagesAsync(null, CancellationToken.None)).Messages;
+        messages.SelectMany(m => m.Parts).OfType<TextPart>().Single().Text.ShouldBe("Found it");
+        wake.Woken.ShouldBe(["parent"]);
+        (await child.GetMessagesAsync(null, CancellationToken.None)).Messages.Count.ShouldBe(1);
+        wake.Woken.Count.ShouldBe(1);
+        (await child.CheckHealthAsync(CancellationToken.None)).Healthy.ShouldBeTrue();
+        await Should.ThrowAsync<NotSupportedException>(() => child.SendPromptAsync("hi", null, CancellationToken.None));
+        (await child.GetRunningWorkAsync(CancellationToken.None)).ShouldBeNull();
     }
 
     [Fact]

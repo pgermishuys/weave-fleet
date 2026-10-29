@@ -50,6 +50,10 @@ public sealed class CopilotHarness : IHarness
         SupportsWorkflowSteps = true,
         SupportsCompaction = true,
         TakesModelNotes = true,
+        // A subagent's conversation is its own hidden child session, read through the parent's session.
+        SupportsChildSessions = true,
+        ChildSessionsResumable = false,
+        ReportsBackgroundWork = true,
     };
 
     /// <inheritdoc />

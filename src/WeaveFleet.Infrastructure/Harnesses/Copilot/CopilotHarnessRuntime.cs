@@ -7,6 +7,7 @@ using WeaveFleet.Application.Analytics;
 using WeaveFleet.Application.Configuration;
 using WeaveFleet.Application.FleetTools;
 using WeaveFleet.Application.Harnesses;
+using WeaveFleet.Application.Sessions;
 using WeaveFleet.Domain.Entities;
 using WeaveFleet.Domain.Harnesses;
 using WeaveFleet.Domain.Repositories;
@@ -56,6 +57,9 @@ public sealed partial class CopilotHarnessRuntime(
 
         return _fleetToolCalls;
     }
+
+    /// <summary>The sessions running now, by Fleet session id: a subagent's child session finds its parent here.</summary>
+    internal ConcurrentDictionary<string, AcpHarnessSession> Live { get; } = new(StringComparer.Ordinal);
 
     private readonly ILogger _logger = loggers.CreateLogger<CopilotHarnessRuntime>();
     private readonly ConcurrentDictionary<(bool Hydra, string Directory), (DateTimeOffset At, HarnessCatalog Catalog)> _catalogs = new();
@@ -195,16 +199,18 @@ public sealed partial class CopilotHarnessRuntime(
             var mcpServers = CopilotFleetTools.McpServers(LocalFleetUrl(), token);
             var skills = await SkillsFolderAsync(options.OwnerUserId).ConfigureAwait(false);
             var created = await NewSessionAsync(agent, options.WorkingDirectory, mcpServers, skills, ct).ConfigureAwait(false);
+            AcpHarnessSession? made = null;
             var session = new AcpHarnessSession(HarnessType, $"copilot-{Guid.NewGuid():N}", options.SessionId, AcpMapper.Str(created, "sessionId")!,
-                options.WorkingDirectory, agent, _logger, analytics, options.ProjectId, options.ProjectName, options.OwnerUserId, FleetToolCalls())
+                options.WorkingDirectory, agent, _logger, analytics, options.ProjectId, options.ProjectName, options.OwnerUserId, FleetToolCalls(), scopes)
             {
-                OnEnded = () => FleetTools.Revoke(token),
+                OnEnded = () => Ended(options.SessionId, token, made),
                 ReadFleetTools = () => ReadFleetToolsAsync(options.OwnerUserId, options.SessionId),
                 Relaunch = async relaunchCt => await StartAsync(options.OwnerUserId, options.WorkingDirectory, relaunchCt).ConfigureAwait(false),
                 McpServers = mcpServers,
                 SkillDirectory = skills,
                 FleetTools = tools,
             };
+            made = Live[options.SessionId] = session;
             session.ReadModels(created);
             if (options.InitialPrompt is not null)
             {
@@ -228,20 +234,24 @@ public sealed partial class CopilotHarnessRuntime(
     public async Task<IHarnessSession> ResumeAsync(HarnessResumeOptions options, CancellationToken ct)
     {
         await RequireFeatureAsync(options.OwnerUserId).ConfigureAwait(false);
+        if (options.DelegatedChild)
+            return new AcpChildSession($"copilot-{Guid.NewGuid():N}", options.ResumeToken, () => FindParentAsync(options));
         HarnessHelpers.ValidateWorkingDirectory(options.WorkingDirectory);
         var agent = await StartAsync(options.OwnerUserId, options.WorkingDirectory, ct).ConfigureAwait(false);
         var token = FleetTools.Issue(options.SessionId, options.OwnerUserId);
         try
         {
             var tools = await ReadFleetToolsAsync(options.OwnerUserId, options.SessionId, options.WorkflowStep).ConfigureAwait(false);
+            AcpHarnessSession? made = null;
             var session = new AcpHarnessSession(HarnessType, $"copilot-{Guid.NewGuid():N}", options.SessionId, options.ResumeToken, options.WorkingDirectory, agent, _logger,
-                analytics, options.ProjectId, options.ProjectName, options.OwnerUserId, FleetToolCalls())
+                analytics, options.ProjectId, options.ProjectName, options.OwnerUserId, FleetToolCalls(), scopes)
             {
-                OnEnded = () => FleetTools.Revoke(token),
+                OnEnded = () => Ended(options.SessionId, token, made),
                 ReadFleetTools = () => ReadFleetToolsAsync(options.OwnerUserId, options.SessionId),
                 Relaunch = async relaunchCt => await StartAsync(options.OwnerUserId, options.WorkingDirectory, relaunchCt).ConfigureAwait(false),
                 FleetTools = tools,
             };
+            made = Live[options.SessionId] = session;
             await session.LoadAsync(CopilotFleetTools.McpServers(LocalFleetUrl(), token), ct, await SkillsFolderAsync(options.OwnerUserId).ConfigureAwait(false)).ConfigureAwait(false);
             return session;
         }
@@ -253,6 +263,31 @@ public sealed partial class CopilotHarnessRuntime(
                 throw StartFailure(ex);
             throw;
         }
+    }
+
+    private void Ended(string fleetSessionId, string token, AcpHarnessSession? session)
+    {
+        FleetTools.Revoke(token);
+        if (session is not null)
+            Live.TryRemove(new KeyValuePair<string, AcpHarnessSession>(fleetSessionId, session));
+    }
+
+    /// <summary>
+    /// The live session of the parent of a subagent's child session: the one the child's options name, else the one Fleet
+    /// has on record (after a restart the options leave it out). A parent that isn't live is woken to read.
+    /// </summary>
+    private async Task<AcpHarnessSession?> FindParentAsync(HarnessResumeOptions options)
+    {
+        using var user = BackgroundUserContext.BeginScope(options.OwnerUserId);
+        using var scope = scopes.CreateScope();
+        var parentId = options.ParentSessionId
+            ?? (await scope.ServiceProvider.GetRequiredService<ISessionRepository>().GetByIdAsync(options.SessionId).ConfigureAwait(false))?.ParentSessionId;
+        if (parentId is null)
+            return null;
+        if (Live.TryGetValue(parentId, out var live))
+            return live;
+        await scope.ServiceProvider.GetRequiredService<ISessionActivator>().ActivateToReadAsync(parentId).ConfigureAwait(false);
+        return Live.GetValueOrDefault(parentId);
     }
 
     /// <inheritdoc />
