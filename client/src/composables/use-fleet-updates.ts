@@ -42,7 +42,7 @@ const COME_BACK_LIMIT_MS = 3 * 60_000;
 
 const DESKTOP_PLATFORMS: Record<string, string> = { darwin: "macos", win32: "windows", linux: "linux" };
 
-/** Settings → Features: whether Settings → Machines shows each machine's version, update rule and Restart. */
+/** Settings → Labs: whether Settings → Machines shows each machine's version, update rule and Restart. */
 export function useFleetUpdatesEnabled() {
   const preferences = usePreferencesStore();
   preferences.ensureLoaded();
@@ -52,7 +52,7 @@ export function useFleetUpdatesEnabled() {
 /**
  * Every Fleet the user runs, with its version and update state: the desktop app when this page runs in it, then home
  * and each machine in Settings → Machines. Machines come from the machine store, so this adds no polling of its own:
- * the store keeps `GET /api/machine` fresh for every machine (a live feed or a poll, as Settings → Features chose).
+ * the store keeps `GET /api/machine` fresh for every machine (a live feed or a poll, as Settings → Labs chose).
  */
 export function useFleetUpdates() {
   const machines = useMachinesStore();

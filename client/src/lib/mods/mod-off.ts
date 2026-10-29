@@ -3,7 +3,7 @@ import { useModsStore } from "@/stores/mods";
 
 /**
  * Whether a mod is turned off, for the pane it draws. The server lists a turned-off mod's declared panes with `off`; a
- * pane the mod opened without declaring is judged by the kept mods (Settings → Mods), once those are loaded.
+ * pane the mod opened without declaring is judged by the kept mods (Settings → Skills & tools → Mods), once those are loaded.
  */
 export function isModOff(sessionId: string, mod: string): boolean {
   const declared = declaredModPanes(sessionId).filter((pane) => pane.mod === mod);
@@ -11,7 +11,7 @@ export function isModOff(sessionId: string, mod: string): boolean {
   return useModsStore().kept?.mods.find((kept) => kept.name === mod)?.off != null;
 }
 
-/** The same per-mod switch as Settings → Mods (a draft's own switch for the session's draft). The server then says `mods.changed`. */
+/** The same per-mod switch as Settings → Skills & tools → Mods (a draft's own switch for the session's draft). The server then says `mods.changed`. */
 export async function turnModOn(sessionId: string, mod: string): Promise<void> {
   const store = useModsStore();
   const draft = declaredModPanes(sessionId).some((pane) => pane.mod === mod && pane.draft);

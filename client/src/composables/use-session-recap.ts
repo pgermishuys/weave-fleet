@@ -5,7 +5,7 @@ import { DESKTOP_NOTIFICATIONS_PREFERENCE_KEY } from "@/composables/use-session-
 import { useMachineTarget } from "@/lib/machine-target";
 import { usePreferencesStore } from "@/stores/preferences";
 
-/** The Settings → Features switch for session recaps. Off unless turned on. */
+/** The Settings → General switch for session recaps. Off unless turned on. */
 export const SESSION_RECAP_PREFERENCE_KEY = "SessionRecap";
 
 /** Window focus flickers when you click into a canvas iframe; wait for it to settle. */

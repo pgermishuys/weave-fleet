@@ -302,7 +302,7 @@ const MOCK_SMART_LINKS: Record<string, unknown[]> = {
   ],
 };
 
-// Settings → Skills / Tools: installs globally and into a repository, plus one tool an older
+// Settings → Skills & tools / Tools: installs globally and into a repository, plus one tool an older
 // Fleet left somewhere OpenCode never looked (no installed path).
 const MOCK_SKILLS = [
   {

@@ -28,23 +28,29 @@ vi.mock("@/composables/use-workflows-nav", () => ({
 }));
 
 import WorkflowsSection from "@/components/settings/WorkflowsSection.vue";
+import { useSettingsNav } from "@/composables/use-settings-nav";
 import { usePreferencesStore } from "@/stores/preferences";
 
 describe("WorkflowsSection", () => {
-  it("is off by default, with no model roles, and the switch turns it on", async () => {
+  it("is off by default, pointing at Labs for the switch, with no model roles", async () => {
     const wrapper = mount(WorkflowsSection);
     await flushPromises();
 
-    const toggle = wrapper.get('[data-testid="workflows-switch"]');
-    expect(toggle.attributes("aria-checked")).toBe("false");
-    expect(wrapper.text()).toContain("Experimental");
+    expect(wrapper.find('[data-testid="workflows-switch"]').exists()).toBe(false);
+    expect(wrapper.find('[data-testid="workflows-off-card"]').exists()).toBe(true);
     expect(wrapper.find('[data-testid="workflows-roles-card"]').exists()).toBe(false);
 
-    await toggle.trigger("click");
+    await wrapper.get('[data-testid="workflows-labs-link"]').trigger("click");
+    expect(useSettingsNav().activeSection.value).toBe("labs");
+  });
+
+  it("shows a role for each kind of work once Workflows is on", async () => {
+    const preferences = usePreferencesStore();
+    preferences.preferences = { Workflows: "true" };
+    preferences.hasFetched = true;
+    const wrapper = mount(WorkflowsSection);
     await flushPromises();
 
-    expect(usePreferencesStore().get("Workflows", "false")).toBe("true");
-    expect(putMock).toHaveBeenCalledWith("/api/preferences/{key}", expect.objectContaining({ params: { path: { key: "Workflows" } } }));
     expect(wrapper.find('[data-testid="workflows-roles-card"]').exists()).toBe(true);
     for (const role of ["strong", "standard", "fast"])
       expect(wrapper.find(`[data-testid="workflows-role-${role}"]`).exists()).toBe(true);

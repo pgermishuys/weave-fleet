@@ -3,7 +3,7 @@ import { onReconnect, useWeaveSocket } from "@/composables/use-weave-socket";
 import { toScheduledRetry, type ScheduledRetry } from "@/lib/turn-retry";
 import { useMachineTarget } from "@/lib/machine-target";
 
-/** The Settings → Features switch. On unless the user turned it off. */
+/** The Settings → General switch. On unless the user turned it off. */
 export const RETRY_AFTER_LIMITS_PREFERENCE_KEY = "RetryAfterLimits";
 
 /** The `session.retry` event: a session's retry, or null when it has none waiting. Sent on its topic and `sessions`. */

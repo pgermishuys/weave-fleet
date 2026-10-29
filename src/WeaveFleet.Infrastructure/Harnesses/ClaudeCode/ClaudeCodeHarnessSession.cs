@@ -468,7 +468,7 @@ internal sealed class ClaudeCodeHarnessSession : IHarnessSession
         if (process is { IsRunning: true } && current is not null)
         {
             // Claude Code lists an MCP server's tools and its skills when it starts, so a switch that changed since
-            // (memory, messages between sessions, Settings → Browser, a built-in skill) takes a new process, which resumes
+            // (memory, messages between sessions, Settings → Permissions, a built-in skill) takes a new process, which resumes
             // the conversation. Not while work it left running would end with it: until that's done, the process keeps
             // the tools and skills it has.
             if (current.FleetTools != wanted.FleetTools || current.Skills != wanted.Skills)

@@ -249,7 +249,7 @@ public sealed partial class WorkflowStepToolLiveTests
 
             var retried = await services.GetRequiredService<WorkflowRunner>().AnswerAsync(Owner, RunId, WorkflowRunner.RetryChoice, null, null, ct);
             retried.IsFailure.ShouldBeTrue();
-            retried.Error.Description.ShouldBe("fleet-code-review is still off. Turn it on in Settings → Skills, then retry.");
+            retried.Error.Description.ShouldBe("fleet-code-review is still off. Turn it on in Settings → Skills & tools, then retry.");
             Turns(llm).ShouldNotContain(t => FirstUserText(t) != null && FirstUserText(t)!.StartsWith("Review it.", StringComparison.Ordinal));
         });
     }

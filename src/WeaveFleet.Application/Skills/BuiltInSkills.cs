@@ -100,7 +100,7 @@ public sealed partial class BuiltInSkillService(
         if (skill is null)
             return FleetError.NotFoundFor("BuiltInSkill", name);
         if (name == ModsSkill)
-            return FleetError.ValidationError("Enabled", $"{name} has no switch of its own: it's on while Mods is on (Settings → Features).");
+            return FleetError.ValidationError("Enabled", $"{name} has no switch of its own: it's on while Mods is on (Settings → Labs).");
 
         var names = new SortedSet<string>(await GetEnabledAsync(preferences).ConfigureAwait(false), StringComparer.Ordinal);
         if (enabled)

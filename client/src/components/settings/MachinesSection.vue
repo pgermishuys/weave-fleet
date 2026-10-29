@@ -36,7 +36,7 @@ preferencesStore.ensureLoaded();
 // comment node, and with Jobs off the card must render exactly as it did.
 const { isJobsEnabled: jobsOn } = useJobsFeature();
 
-// ── Updates (Settings → Features → Updates in Machines) ──────────────────────
+// ── Updates (Settings → Labs → Updates in Machines) ──────────────────────
 // Everything here does nothing with the switch off: no request, no timer, nothing drawn.
 const fleetUpdates = useFleetUpdates();
 const { enabled: updatesOn } = fleetUpdates;

@@ -1,29 +1,12 @@
 <script setup lang="ts">
 import type { Component } from "vue";
 import { computed, onMounted } from "vue";
-import { Blocks, Cable, FolderGit2, Globe, HardDrive, Info, Lightbulb, Palette, Puzzle, Server, ShieldCheck, SlidersHorizontal, Waves, Workflow, Wrench } from "lucide-vue-next";
+import { Cable, FlaskConical, FolderGit2, Lightbulb, Palette, RefreshCw, Server, ShieldCheck, SlidersHorizontal, Waves, Workflow, Wrench, Settings2 } from "lucide-vue-next";
 import { useFleetUpdatesWatch } from "@/composables/use-fleet-updates";
+import type { SettingsSectionId } from "@/composables/use-settings-nav";
 import { useUpdateStatus } from "@/composables/use-update-status";
+import { getConfigPages } from "@/plugins/slots";
 import { useModsStore } from "@/stores/mods";
-
-type SettingsSectionId =
-  | "workspace"
-  | "storage"
-  | "credentials"
-  | "appearance"
-  | "skills"
-  | "memory"
-  | "mods"
-  | "browser"
-  | "permissions"
-  | "tools"
-  | "features"
-  | "harnesses"
-  | "machines"
-  | "weave"
-  | "workflows"
-  | "plugins"
-  | "system";
 
 interface Props {
   modelValue: string;
@@ -39,6 +22,12 @@ interface SettingsNavItem {
   icon: Component;
 }
 
+interface SettingsNavGroup {
+  id: string;
+  label: string;
+  items: readonly SettingsNavItem[];
+}
+
 defineProps<Props>();
 const emit = defineEmits<Emits>();
 
@@ -46,32 +35,64 @@ const { isUpdateAvailable, isUpdateStaged } = useUpdateStatus();
 
 const showUpdateDot = computed(() => isUpdateAvailable.value || isUpdateStaged.value);
 
-// With the Updates switch (Features) on, the Machines entry carries a badge: how many machines can update.
+// With the Updates switch (Labs) on, the Machines entry carries a badge: how many machines can update.
 const { waiting: updatesWaiting } = useFleetUpdatesWatch();
 
+// The switch decides whether Skills & tools has a Mods tab; read it once here so that is right on first paint.
 const mods = useModsStore();
-// The switch decides whether Mods has a place in the nav; read it once here so the entry is right on first paint.
 onMounted(() => { void mods.loadSwitch(); });
 
-const allItems: readonly SettingsNavItem[] = [
-  { id: "workspace", label: "Folders", icon: FolderGit2 },
-  { id: "storage", label: "Storage", icon: HardDrive },
-  { id: "appearance", label: "Appearance", icon: Palette },
-  { id: "features", label: "Features", icon: SlidersHorizontal },
-  { id: "skills", label: "Skills", icon: Wrench },
-  { id: "memory", label: "Memory", icon: Lightbulb },
-  { id: "mods", label: "Mods", icon: Blocks },
-  { id: "permissions", label: "Permissions", icon: ShieldCheck },
-  { id: "browser", label: "Browser", icon: Globe },
-  { id: "tools", label: "Tools", icon: Puzzle },
-  { id: "harnesses", label: "Harnesses", icon: Cable },
-  { id: "machines", label: "Machines", icon: Server },
-  { id: "weave", label: "Weave", icon: Waves },
-  { id: "workflows", label: "Workflows", icon: Workflow },
-  { id: "system", label: "System", icon: Info },
+// Weave and Workflows stay here until their pages are folded into Harnesses and the Workflows rail page.
+const coreGroups: readonly SettingsNavGroup[] = [
+  {
+    id: "you",
+    label: "You",
+    items: [
+      { id: "general", label: "General", icon: SlidersHorizontal },
+      { id: "appearance", label: "Appearance", icon: Palette },
+    ],
+  },
+  {
+    id: "agents",
+    label: "Agents",
+    items: [
+      { id: "harnesses", label: "Harnesses", icon: Cable },
+      { id: "permissions", label: "Permissions", icon: ShieldCheck },
+      { id: "skills", label: "Skills & tools", icon: Wrench },
+      { id: "memory", label: "Memory", icon: Lightbulb },
+      { id: "weave", label: "Weave", icon: Waves },
+      { id: "workflows", label: "Workflows", icon: Workflow },
+    ],
+  },
+  {
+    id: "work",
+    label: "Work",
+    items: [
+      { id: "folders", label: "Folders", icon: FolderGit2 },
+      { id: "machines", label: "Machines", icon: Server },
+    ],
+  },
+  {
+    id: "fleet",
+    label: "Fleet",
+    items: [
+      { id: "labs", label: "Labs", icon: FlaskConical },
+      { id: "updates", label: "Updates & about", icon: RefreshCw },
+    ],
+  },
 ];
 
-const items = computed(() => allItems.filter((item) => (item.id !== "mods" || mods.isSwitchedOn)));
+// One entry per add-on that offers a settings page, through the plugin contribution point.
+const groups = computed<readonly SettingsNavGroup[]>(() => {
+  const integrations = getConfigPages().map((page): SettingsNavItem => ({
+    id: `integration:${page.pluginId}`,
+    label: page.navLabel ?? page.title,
+    icon: page.icon ?? Settings2,
+  }));
+  return integrations.length > 0
+    ? [...coreGroups, { id: "integrations", label: "Integrations", items: integrations }]
+    : coreGroups;
+});
 
 function selectSection(sectionId: SettingsSectionId): void {
   emit("update:modelValue", sectionId);
@@ -93,36 +114,48 @@ function selectSection(sectionId: SettingsSectionId): void {
       class="settings-nav"
       aria-label="Settings sections"
     >
-      <button
-        v-for="item in items"
-        :key="item.id"
-        type="button"
-        class="settings-nav__item"
-        :class="{ 'settings-nav__item--active': modelValue === item.id }"
-        :aria-current="modelValue === item.id ? 'page' : undefined"
-        @click="selectSection(item.id)"
+      <div
+        v-for="group in groups"
+        :key="group.id"
+        class="settings-nav__group"
+        role="group"
+        :aria-label="group.label"
+        :data-settings-nav-group="group.id"
       >
-        <component
-          :is="item.icon"
-          :size="16"
-          class="settings-nav__icon"
-          aria-hidden="true"
-        />
-        <span>{{ item.label }}</span>
-        <!-- Update notification dot for the System nav item -->
-        <span
-          v-if="item.id === 'system' && showUpdateDot"
-          class="ml-auto h-2 w-2 rounded-full"
-          :class="isUpdateStaged ? 'bg-warn' : 'bg-accent'"
-          aria-label="Update available"
-        />
-        <span
-          v-if="item.id === 'machines' && updatesWaiting"
-          class="ml-auto rounded-full bg-accent px-1.5 text-[10px] font-semibold leading-4 text-white"
-          :aria-label="`${updatesWaiting} ${updatesWaiting === 1 ? 'machine' : 'machines'} can update`"
-          data-testid="updates-badge"
-        >{{ updatesWaiting }}</span>
-      </button>
+        <p class="settings-nav__group-label">
+          {{ group.label }}
+        </p>
+        <button
+          v-for="item in group.items"
+          :key="item.id"
+          type="button"
+          class="settings-nav__item"
+          :class="{ 'settings-nav__item--active': modelValue === item.id }"
+          :aria-current="modelValue === item.id ? 'page' : undefined"
+          @click="selectSection(item.id)"
+        >
+          <component
+            :is="item.icon"
+            :size="16"
+            class="settings-nav__icon"
+            aria-hidden="true"
+          />
+          <span>{{ item.label }}</span>
+          <!-- Update notification dot for Updates & about -->
+          <span
+            v-if="item.id === 'updates' && showUpdateDot"
+            class="ml-auto h-2 w-2 rounded-full"
+            :class="isUpdateStaged ? 'bg-warn' : 'bg-accent'"
+            aria-label="Update available"
+          />
+          <span
+            v-if="item.id === 'machines' && updatesWaiting"
+            class="ml-auto rounded-full bg-accent px-1.5 text-[10px] font-semibold leading-4 text-white"
+            :aria-label="`${updatesWaiting} ${updatesWaiting === 1 ? 'machine' : 'machines'} can update`"
+            data-testid="updates-badge"
+          >{{ updatesWaiting }}</span>
+        </button>
+      </div>
     </nav>
   </section>
 </template>
@@ -154,8 +187,26 @@ function selectSection(sectionId: SettingsSectionId): void {
   display: flex;
   flex: 1;
   flex-direction: column;
-  gap: 4px;
+  gap: 0;
   padding: 0 12px 12px;
+}
+
+.settings-nav__group {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  margin-bottom: 8px;
+}
+
+.settings-nav__group-label {
+  margin: 8px 0 2px;
+  padding: 0 12px;
+  font-size: 10px;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  color: var(--muted);
+  opacity: 0.8;
 }
 
 .settings-nav__item {
@@ -163,7 +214,7 @@ function selectSection(sectionId: SettingsSectionId): void {
   align-items: center;
   gap: 10px;
   width: 100%;
-  min-height: 40px;
+  min-height: 36px;
   padding: 0 12px;
   border: 1px solid transparent;
   border-radius: var(--radius-btn);

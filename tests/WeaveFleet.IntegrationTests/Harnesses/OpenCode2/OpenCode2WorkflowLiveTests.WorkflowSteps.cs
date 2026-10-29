@@ -117,7 +117,7 @@ public sealed partial class OpenCode2WorkflowLiveTests
 
             var retried = await fleet.Services.GetRequiredService<WorkflowRunner>().AnswerAsync(OpenCode2LiveFleet.Owner, runId, WorkflowRunner.RetryChoice, null, null, cts.Token);
             retried.IsFailure.ShouldBeTrue();
-            retried.Error.Description.ShouldBe("fleet-code-review is still off. Turn it on in Settings → Skills, then retry.");
+            retried.Error.Description.ShouldBe("fleet-code-review is still off. Turn it on in Settings → Skills & tools, then retry.");
             fleet.Llm.Queue.Requests.ShouldNotContain(r => LlmRequest.FirstUserText(r) != null && LlmRequest.FirstUserText(r)!.StartsWith("Review it.", StringComparison.Ordinal));
         }
         finally

@@ -27,7 +27,7 @@ public sealed partial class UpdateRulePushService(
     TimeProvider time,
     ILogger<UpdateRulePushService> logger) : BackgroundService
 {
-    /// <summary>Settings → Features: the switch for the whole feature.</summary>
+    /// <summary>Settings → Labs: the switch for the whole feature.</summary>
     public const string SwitchKey = "FleetUpdates";
 
     /// <summary>The rule the user chose for every machine, unless one has its own.</summary>

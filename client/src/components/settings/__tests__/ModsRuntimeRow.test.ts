@@ -1,13 +1,14 @@
 import { flushPromises, mount, type VueWrapper } from "@vue/test-utils";
 import { createPinia, setActivePinia } from "pinia";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import FeaturesSection from "@/components/settings/FeaturesSection.vue";
+import LabsSection from "@/components/settings/LabsSection.vue";
 import type { ModsRuntimeJob, ModsRuntimeView } from "@/lib/mods-runtime";
 import { useSettingsNav } from "@/composables/use-settings-nav";
 
 const { getMock, putMock } = vi.hoisted(() => ({ getMock: vi.fn(), putMock: vi.fn() }));
 
 vi.mock("@/api/client", () => ({ api: { GET: getMock, PUT: putMock } }));
+vi.mock("@tanstack/vue-router", () => ({ useRouter: () => ({ navigate: vi.fn() }) }));
 vi.mock("@/composables/use-signalr-socket", () => ({ onGlobalEvent: () => () => {} }));
 
 const NOW = Date.parse("2026-10-10T12:00:00Z");
@@ -35,7 +36,7 @@ const json = (body: unknown) => new Response(JSON.stringify(body), { headers: { 
 async function mountRow(view: ModsRuntimeView, preference?: "true" | "false"): Promise<VueWrapper> {
   server.view = view;
   getMock.mockResolvedValue({ data: preference ? { Mods: preference } : {} });
-  const wrapper = mount(FeaturesSection, { attachTo: document.body });
+  const wrapper = mount(LabsSection, { attachTo: document.body });
   await flushPromises();
   return wrapper;
 }
@@ -256,7 +257,8 @@ describe("Mods row: turning Mods on", () => {
 
     expect(panel(wrapper).find("[data-testid='mods-sample-add']").exists()).toBe(false);
     await panel(wrapper).get("[data-testid='mods-showcase-link']").trigger("click");
-    expect(useSettingsNav().activeSection.value).toBe("mods");
+    expect(useSettingsNav().activeSection.value).toBe("skills");
+    expect(useSettingsNav().activeAnchor.value).toBe("mods");
   });
 
   it("3 downloading: doesn't point to the Showcase until Bun is there", async () => {

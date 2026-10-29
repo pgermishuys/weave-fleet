@@ -49,7 +49,7 @@ public sealed partial class WorkflowRunnerTests
         var retried = await _runner.AnswerAsync(UserId, run, "retry", null);
 
         retried.IsFailure.ShouldBeTrue();
-        retried.Error.Description.ShouldBe("fleet-code-review is still off. Turn it on in Settings → Skills, then retry.");
+        retried.Error.Description.ShouldBe("fleet-code-review is still off. Turn it on in Settings → Skills & tools, then retry.");
         _sessions.Started.Count.ShouldBe(2);
         _runs.Run(run).WaitingKind.ShouldBe(WorkflowWaitingKinds.SkillOff);
     }

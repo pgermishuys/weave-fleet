@@ -6,7 +6,7 @@ using WeaveFleet.Infrastructure.Browser;
 namespace WeaveFleet.Api.Endpoints;
 
 /// <summary>
-/// The agent's own browser: a session's tabs and steps, a picture of a tab for Agent's view, and Settings → Browser.
+/// The agent's own browser: a session's tabs and steps, a picture of a tab for Agent's view, and Settings → Permissions.
 /// Live steps arrive on <c>session:{id}</c> as <c>browser.step</c>.
 /// </summary>
 public static class AgentBrowserEndpoints
@@ -49,7 +49,7 @@ public static class AgentBrowserEndpoints
 
         var settings = app.MapGroup("/api/agent-browser").WithTags("Agent browser");
 
-        // GET /api/agent-browser/settings — Settings → Browser
+        // GET /api/agent-browser/settings — Settings → Permissions
         settings.MapGet("/settings", async (AgentBrowserAccess access) =>
         {
             var current = await access.SettingsAsync();

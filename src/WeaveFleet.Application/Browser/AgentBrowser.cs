@@ -133,7 +133,7 @@ public sealed record AgentBrowserFailure(string Code, string Message);
 
 public static class AgentBrowserFailures
 {
-    /// <summary>The browser is turned off in Settings → Browser.</summary>
+    /// <summary>The browser is turned off in Settings → Permissions.</summary>
     public const string Off = "off";
 
     /// <summary>A setting forbids it: an address outside the allowed pages, a script while scripts are off.</summary>
@@ -186,7 +186,7 @@ public sealed record AgentBrowserResult
 public sealed record AgentBrowserCall(string SessionId, string UserId, AgentBrowserAction Action, string? CallId = null);
 
 /// <summary>
-/// The agent's own browser: tabs per session in Fleet's headless browser, kept to the pages Settings → Browser allows.
+/// The agent's own browser: tabs per session in Fleet's headless browser, kept to the pages Settings → Permissions allows.
 /// The user's view of a page is theirs; the agent's tabs are separate, with their own cookies and sign-ins.
 /// </summary>
 public interface IAgentBrowser
@@ -203,7 +203,7 @@ public interface IAgentBrowser
     Task CloseSessionAsync(string sessionId);
 }
 
-/// <summary>Which pages an agent's tab may open (Settings → Browser).</summary>
+/// <summary>Which pages an agent's tab may open (Settings → Permissions).</summary>
 public static class AgentBrowserPages
 {
     /// <summary>The session's own pages: apps it started and pages its canvases show. The default.</summary>
@@ -218,7 +218,7 @@ public static class AgentBrowserPages
     public static bool IsKnown(string? value) => value is Session or Machine or Any;
 }
 
-/// <summary>The user's choices in Settings → Browser, with the defaults the user agreed: on, own pages, no scripts.</summary>
+/// <summary>The user's choices in Settings → Permissions, with the defaults the user agreed: on, own pages, no scripts.</summary>
 public sealed record AgentBrowserSettings(bool Enabled = true, string Pages = AgentBrowserPages.Session, bool Scripts = false)
 {
     public const string EnabledKey = "AgentBrowser.Enabled";

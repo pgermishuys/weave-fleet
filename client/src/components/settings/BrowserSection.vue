@@ -5,7 +5,7 @@ import { useEnabledHarnesses } from "@/composables/use-enabled-harnesses";
 import { apiFetch } from "@/lib/api-client";
 
 /**
- * Settings → Browser: whether agents can use a browser of their own, which pages it may open, and whether page scripts
+ * Settings → Permissions: whether agents can use a browser of their own, which pages it may open, and whether page scripts
  * run. Fleet runs every browser action, so these limits hold whatever an agent writes. The rows below say how each
  * harness gets the browser, or why it doesn't.
  */

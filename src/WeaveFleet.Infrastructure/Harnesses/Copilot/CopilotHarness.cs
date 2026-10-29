@@ -5,14 +5,14 @@ namespace WeaveFleet.Infrastructure.Harnesses.Copilot;
 
 /// <summary>
 /// GitHub Copilot, through weave-copilot: an ACP agent built on GitHub's Copilot SDK that runs the Copilot CLI. Experimental
-/// (Settings → Features), so it is off until the user turns it on.
+/// (Settings → Labs), so it is off until the user turns it on.
 /// </summary>
 public sealed class CopilotHarness : IHarness
 {
     /// <summary>The harness type, as sessions and preferences name it.</summary>
     public const string TypeName = "copilot";
 
-    /// <summary>The preference behind the Settings → Features switch for GitHub Copilot.</summary>
+    /// <summary>The preference behind the Settings → Labs switch for GitHub Copilot.</summary>
     public const string FeaturePreferenceKey = "Copilot";
 
     /// <summary>The preference behind the HydraFusion switch in the harness's settings (off unless turned on).</summary>

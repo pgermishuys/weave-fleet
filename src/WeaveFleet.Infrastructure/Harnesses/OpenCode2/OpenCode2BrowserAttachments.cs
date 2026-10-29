@@ -14,7 +14,7 @@ namespace WeaveFleet.Infrastructure.Harnesses.OpenCode2;
 /// Fleet as the browser behind OpenCode 2's browser plugin (<c>@opencode/plugin-browser</c>, RPC
 /// <c>experimental.browser</c>, protocol version 4), which gives agents <c>tools.browser.*</c> in Code Mode.
 /// <para>
-/// While Settings → Browser is on, every session that attaches to a server is attached as its browser: a pending
+/// While Settings → Permissions is on, every session that attaches to a server is attached as its browser: a pending
 /// <c>attach</c> call for the attachment's life, and an allow for the <c>browser</c> action after the deny every Fleet
 /// session has (<see cref="OpenCode2HttpClient.DenyBrowser"/>), so the agent sees the tools only while they work. V2
 /// announces each request on the server's event stream (<c>rpc.experimental.browser.control</c>, ids only); Fleet fetches

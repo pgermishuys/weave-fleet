@@ -146,7 +146,7 @@ function announce(saved: BuiltInSkillDetail, previous: number | null): void {
           } catch (caught) {
             notices.update(id, {
               title: "Couldn't undo it",
-              body: caught instanceof Error ? caught.message : "Switch back in Settings → Skills → Built in.",
+              body: caught instanceof Error ? caught.message : "Switch back in Settings → Skills & tools → Built in.",
               actions: [],
             });
           }

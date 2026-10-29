@@ -360,7 +360,7 @@ export interface HarnessCapabilities {
   supportsShellCommands?: boolean;
   /** A session can fork into a side conversation at its last finished turn (`/btw` in the composer). */
   supportsSideConversations?: boolean;
-  /** The agent can use its own browser tab while Settings → Browser is on (natively, or through Fleet's tools). */
+  /** The agent can use its own browser tab while Settings → Permissions is on (natively, or through Fleet's tools). */
   supportsAgentBrowser?: boolean;
   /** The agent has Fleet's tools: an `@`-referenced session goes as a link it reads with `fleet_session_read`, not a recap. */
   supportsFleetTools?: boolean;

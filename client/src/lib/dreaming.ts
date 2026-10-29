@@ -1,6 +1,6 @@
 import { send } from "@/lib/agent-memory";
 
-/** The server's preference for Dreaming (Settings → Features): off, Memory shows nothing new and no request is made. */
+/** The server's preference for Dreaming (Settings → Labs): off, Memory shows nothing new and no request is made. */
 export const DREAMING_PREFERENCE_KEY = "Dreaming";
 
 /** How often a dream that's reading or running is asked about. */

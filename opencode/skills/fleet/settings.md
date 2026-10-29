@@ -5,15 +5,15 @@ Read these before you offer a feature. Never write to them: tell the user where 
 | Feature | Check | Off means | Turn on in |
 |---|---|---|---|
 | Memory | `GET /api/memory` → `enabled` | notes aren't read or saved | Settings → Memory |
-| Workflows | `GET /api/workflows` → 404 "turned off" | no workflow can run | Settings → Workflows |
-| Mods | `GET /api/features/mods` → `on` | no mods | Settings → Features (Settings → Mods appears once it's on) |
-| Agent browser | `GET /api/agent-browser/settings` → `enabled` | no browser tools | Settings → Browser |
-| Messages between sessions | the `fleet_message` tool exists | the tool isn't there | Settings → Features |
+| Workflows | `GET /api/workflows` → 404 "turned off" | no workflow can run | Settings → Labs |
+| Mods | `GET /api/features/mods` → `on` | no mods | Settings → Labs (a Mods tab appears in Settings → Skills & tools once it's on) |
+| Agent browser | `GET /api/agent-browser/settings` → `enabled` | no browser tools | Settings → Permissions → Browser |
+| Messages between sessions | the `fleet_message` tool exists | the tool isn't there | Settings → Labs |
 
 Everything else Fleet stores as a preference: `GET /api/preferences` returns one object of key → value strings (for
 example `Memory`, `Workflows`, `SessionMessages`). A key that isn't there is at its default. `GET /api/config` is
 Fleet's own configuration, `GET /api/harnesses` the agents it can start and which are installed, and
-`GET /api/skills/built-in` the built-in skills and which are on (Settings → Skills).
+`GET /api/skills/built-in` the built-in skills and which are on (Settings → Skills & tools).
 
 ## "What can you do here?"
 

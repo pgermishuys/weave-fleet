@@ -79,7 +79,7 @@ public static class FleetToolCatalog
 /// Which of Fleet's switchable tools a session gets, as the OpenCode plugins decide it from the switches their process
 /// started with: <c>fleet_message</c> with messages between sessions on, the hand-off tools with agent hand-off on,
 /// <c>fleet_memory_*</c> with memory on, the <c>fleet_mod_*</c> tools with Mods on,
-/// <c>fleet_step_done</c> in a workflow step's session, and the agent's browser tools with Settings → Browser on.
+/// <c>fleet_step_done</c> in a workflow step's session, and the agent's browser tools with Settings → Permissions on.
 /// </summary>
 /// <param name="Walkthrough">The fleet-walkthrough skill is on: its page tool comes with it.</param>
 /// <param name="AgentHandoff">Agents may hand work to other machines (<c>AgentHandoffFeature</c>): its tools, and a machine on the message tools.</param>

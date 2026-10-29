@@ -5,7 +5,7 @@ namespace WeaveFleet.Api.Endpoints;
 
 #pragma warning disable IL2026 // RDG intercepts MapX calls in Web SDK projects making them trim-safe
 
-/// <summary>Settings → Storage: the worktree checkouts Fleet made, what Clean now would do with each, and doing it.</summary>
+/// <summary>Settings → Folders: the worktree checkouts Fleet made, what Clean now would do with each, and doing it.</summary>
 public static class StorageEndpoints
 {
     public static IEndpointRouteBuilder MapStorageEndpoints(this IEndpointRouteBuilder app)

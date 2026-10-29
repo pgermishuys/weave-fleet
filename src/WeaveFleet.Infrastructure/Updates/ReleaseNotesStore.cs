@@ -5,7 +5,7 @@ using WeaveFleet.Application.Configuration;
 
 namespace WeaveFleet.Infrastructure.Updates;
 
-/// <summary>One Fleet release's notes, as Settings → System shows them.</summary>
+/// <summary>One Fleet release's notes, as Settings → Updates & about shows them.</summary>
 public sealed record ReleaseNote(string Version, string? PublishedAt, string Body, string Url);
 
 /// <summary>The releases Fleet knows about, newest first, and when they were fetched.</summary>

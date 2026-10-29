@@ -55,6 +55,8 @@ export interface FleetPluginSettingsSection {
 
 export interface FleetPluginConfigPage {
   title: string;
+  /** The entry's name under Integrations in Settings; the title when absent. */
+  navLabel?: string;
   component: Component;
   icon?: Component;
 }

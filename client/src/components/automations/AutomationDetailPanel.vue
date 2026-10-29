@@ -313,7 +313,7 @@ function openRun(run: AutomationRun): void {
 const workflowsOffWarning = computed(() => currentAutomation.value?.targetType === "workflow" && !isWorkflowsEnabled.value);
 
 function openWorkflowsSettings(): void {
-  setActiveSection("workflows");
+  setActiveSection("labs");
   void navigate({ to: "/settings" });
 }
 
@@ -482,7 +482,7 @@ const firstRunHint = computed(() => {
               type="button"
               class="automation-page__link"
               @click="openWorkflowsSettings"
-            >Open Settings → Workflows</button>
+            >Open Settings → Labs</button>
           </span>
         </div>
 

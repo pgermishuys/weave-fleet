@@ -92,7 +92,7 @@ const icons = { explore: Compass, plan: ListChecks, review: Search } as const;
           <span class="ns-option__text">Hide starters</span>
         </DropdownMenuItem>
         <p class="ns-pop__note">
-          Settings → Features → Show starters brings them back.
+          Settings → General → Show starters brings them back.
         </p>
       </DropdownMenuContent>
     </DropdownMenu>

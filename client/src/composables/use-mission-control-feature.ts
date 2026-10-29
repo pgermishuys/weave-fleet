@@ -2,7 +2,7 @@ import { computed } from "vue";
 import { MISSION_CONTROL_PREFERENCE_KEY } from "@/lib/mission-control";
 import { usePreferencesStore } from "@/stores/preferences";
 
-/** Whether Mission control is on: the switch in Settings → Features. Off, there's no rail item, no screen and no request. */
+/** Whether Mission control is on: the switch in Settings → Labs. Off, there's no rail item, no screen and no request. */
 export function useMissionControlFeature() {
   const preferencesStore = usePreferencesStore();
   preferencesStore.ensureLoaded();

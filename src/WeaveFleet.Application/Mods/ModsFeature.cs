@@ -5,7 +5,7 @@ using WeaveFleet.Domain.Repositories;
 
 namespace WeaveFleet.Application.Mods;
 
-/// <summary>Whether Mods are on for the current user (Settings → Experimental), and whether any may run.</summary>
+/// <summary>Whether Mods are on for the current user (Settings → Labs), and whether any may run.</summary>
 public sealed class ModsFeature(FleetOptions options, IUserPreferenceRepository preferences, ModsSafeMode safeMode, IUserContext user)
 {
     public const string PreferenceKey = "Mods";

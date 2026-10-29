@@ -3,7 +3,7 @@ import { ref } from "vue";
 import { Button } from "@/components/ui/button";
 import { turnModOn } from "@/lib/mods/mod-off";
 
-/** What a pane says while its mod is turned off: the same switch as Settings → Mods, then the mod draws it again. */
+/** What a pane says while its mod is turned off: the same switch as Settings → Skills & tools → Mods, then the mod draws it again. */
 const props = defineProps<{ sessionId: string; mod: string }>();
 
 const busy = ref(false);
@@ -46,7 +46,7 @@ async function turnOn(): Promise<void> {
       class="mod-pane-off__text"
       role="alert"
     >
-      Couldn't turn {{ mod }} on. Try again, or use Settings → Mods.
+      Couldn't turn {{ mod }} on. Try again, or use Settings → Skills & tools → Mods.
     </p>
   </div>
 </template>
