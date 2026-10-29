@@ -12,6 +12,7 @@ public sealed partial class WorkflowRunnerTests
 {
     private const string Request = "Press ? to see every keyboard shortcut";
     private const string Worktree = "/repo-worktrees/press-see-every-keyboard-shortcut";
+    private const string BugNotes = ".weave/bugs/press-see-every-keyboard-shortcut.md";
 
     // ── The request in every step ──────────────────────────────────────────────
 
@@ -267,6 +268,34 @@ public sealed partial class WorkflowRunnerTests
 
         _files.Commits.ShouldBeEmpty();
         Visit("plan").FilesCommit.ShouldBeNull();
+    }
+
+    [Fact]
+    public async Task a_step_that_ends_the_run_has_its_declared_files_committed_too()
+    {
+        var run = await StartAsync(workflowId: "builtin:fix-a-bug");
+
+        await DoneAsync(_sessions.Started[^1].SessionId, "failed", "Tried the obvious causes.");
+
+        Said(_files.Commits.ShouldHaveSingleItem()).ShouldBe((Worktree, BugNotes, "Find the cause"));
+        var visit = Visit("investigate");
+        (visit.FilesChecked, visit.FilesCommit, visit.FilesCommitError).ShouldBe((true, "c0ffee1", null));
+        _runs.Run(run).Status.ShouldBe(WorkflowRunStatus.Done);
+        _events.Last.Sessions.Single(s => s.StepId == "investigate").FilesCommit.ShouldBe("c0ffee1");
+    }
+
+    [Fact]
+    public async Task a_step_that_ends_the_run_without_its_declared_files_ends_it_anyway_and_commits_nothing()
+    {
+        var run = await StartAsync(workflowId: "builtin:fix-a-bug");
+        _files.Absent.Add(BugNotes);
+
+        await DoneAsync(_sessions.Started[^1].SessionId, "failed", "Couldn't reproduce it.");
+
+        _files.Commits.ShouldBeEmpty();
+        var visit = Visit("investigate");
+        (visit.FilesChecked, visit.FilesCommit).ShouldBe((false, null));
+        _runs.Run(run).Status.ShouldBe(WorkflowRunStatus.Done);
     }
 
     private string Prompt(string stepId) => _sessions.Started.Last(s => s.StepId == stepId).Prompt;
