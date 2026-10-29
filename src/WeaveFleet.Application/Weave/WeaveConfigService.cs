@@ -9,7 +9,7 @@ using WeaveFleet.Domain.Repositories;
 
 namespace WeaveFleet.Application.Weave;
 
-/// <summary>The Weave section of Settings: what each harness loads, the config Fleet keeps, and the last save.</summary>
+/// <summary>The Weave groups on the harness tabs of Settings → Harnesses: what each harness loads, the config Fleet keeps, and the last save.</summary>
 /// <param name="Source"><c>own</c> or <c>fleet</c>.</param>
 public sealed record WeaveConfigView(
     string Source,

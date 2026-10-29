@@ -27,7 +27,7 @@ function applyPending(view: WeaveConfigView | null): boolean {
 }
 
 /**
- * Settings → Weave: which Weave each harness loads, the config Fleet keeps for it, and how far the last save has got.
+ * Settings → Harnesses → Weave: which Weave each harness loads, the config Fleet keeps for it, and how far the last save has got.
  * While a save waits for busy folders, it re-reads until they've all reloaded.
  */
 export function useWeaveConfig() {

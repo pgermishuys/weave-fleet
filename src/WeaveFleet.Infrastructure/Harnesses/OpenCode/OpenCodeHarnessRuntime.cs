@@ -392,7 +392,7 @@ public sealed class OpenCodeHarnessRuntime : IHarnessRuntime, IDisposable, IAsyn
             errors.Add(new RuntimePreparationError(
                 Code: "WeaveConfigNotWritten",
                 Message: $"Fleet couldn't write your Weave config for OpenCode: {ex.Message}",
-                Guidance: "Check that Fleet can write to its data folder, or switch Settings → Weave to your own file."));
+                Guidance: "Check that Fleet can write to its data folder, or switch Settings → Harnesses → OpenCode → Weave to your own file."));
         }
 
         if (errors.Count > 0)

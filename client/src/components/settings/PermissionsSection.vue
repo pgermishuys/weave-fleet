@@ -1,15 +1,15 @@
 <script setup lang="ts">
-import { computed } from "vue";
+import { computed, onMounted } from "vue";
 import { Clock, Info } from "lucide-vue-next";
 import StatusGlyph from "@/components/sessions/StatusGlyph.vue";
+import { useAgentBrowserSettings } from "@/composables/use-agent-browser-settings";
 import { useEnabledHarnesses } from "@/composables/use-enabled-harnesses";
+import { useHarnessPermissions } from "@/composables/use-harness-permissions";
+import { useSettingsNav } from "@/composables/use-settings-nav";
 import {
-  DEFAULT_PERMISSION_LEVEL,
   PERMISSION_LEVEL_KEY,
   PERMISSION_LEVEL_NAMES,
   PERMISSION_UNATTENDED_KEY,
-  harnessPermissionKey,
-  toPermissionLevel,
   toUnattendedPermission,
   type PermissionLevel,
   type UnattendedPermission,
@@ -46,30 +46,23 @@ const LEVELS: readonly LevelOption[] = [
 
 const { harnesses } = useEnabledHarnesses();
 
-/** Every harness Fleet knows, with what it hands each at the level, or null when it can't hand one a level. */
+const { defaultLevel, ownLevel, effectiveLevel, supportsLevels } = useHarnessPermissions();
+const { settings: browser, load: loadBrowser } = useAgentBrowserSettings();
+const { openHarness } = useSettingsNav();
+
+onMounted(() => void loadBrowser());
+
+/** Every harness Fleet knows, with its permission level and whether its agents get the browser. Read-only: each harness's tab changes them. */
 const harnessRows = computed(() =>
   harnesses.value.map((harness) => ({
     type: harness.type,
     name: harness.displayName,
-    handed: harness.capabilities.supportsPermissionLevels === true
-      ? harness.presentation?.permissionModes ?? null
-      : null,
-    supported: harness.capabilities.supportsPermissionLevels === true,
+    permissions: supportsLevels(harness)
+      ? `${PERMISSION_LEVEL_NAMES[effectiveLevel(harness.type)]}${ownLevel(harness.type) ? "" : " (default)"}`
+      : "Not available",
+    browserOn: harness.capabilities?.supportsAgentBrowser === true && browser.value.enabled,
   })),
 );
-
-const defaultLevel = computed<PermissionLevel>(
-  () => toPermissionLevel(preferencesStore.preferences[PERMISSION_LEVEL_KEY]) ?? DEFAULT_PERMISSION_LEVEL,
-);
-
-/** A harness's own level, or null when it uses the default. */
-function harnessLevel(type: string): PermissionLevel | null {
-  return toPermissionLevel(preferencesStore.preferences[harnessPermissionKey(type)]);
-}
-
-function effectiveLevel(type: string): PermissionLevel {
-  return harnessLevel(type) ?? defaultLevel.value;
-}
 
 const unattended = computed<UnattendedPermission>(
   () => toUnattendedPermission(preferencesStore.preferences[PERMISSION_UNATTENDED_KEY]),
@@ -83,11 +76,6 @@ const UNATTENDED_NOTES: Record<UnattendedPermission, string> = {
 
 function setDefault(level: PermissionLevel): void {
   void preferencesStore.set(PERMISSION_LEVEL_KEY, level);
-}
-
-function setHarness(type: string, value: string): void {
-  // "default" clears the harness's own level; the preferences API keeps strings, so an empty one means unset.
-  void preferencesStore.set(harnessPermissionKey(type), value === "default" ? "" : value);
 }
 
 function setUnattended(value: string): void {
@@ -125,7 +113,7 @@ function onLevelKeydown(event: KeyboardEvent, index: number): void {
         <h3 class="text-sm font-semibold text-text">
           Default
         </h3>
-        <span class="text-xs text-muted">Used by every harness unless you pick something else below.</span>
+        <span class="text-xs text-muted">Used by every harness unless you pick something else on its tab.</span>
       </div>
       <div
         class="permissions-levels"
@@ -171,9 +159,17 @@ function onLevelKeydown(event: KeyboardEvent, index: number): void {
         <h3 class="text-sm font-semibold text-text">
           Each harness
         </h3>
-        <span class="text-xs text-muted">What Fleet hands the harness is shown under its name.</span>
+        <span class="text-xs text-muted">Set on each harness's tab, under What it may do.</span>
       </div>
-      <div class="permissions-rows">
+      <div
+        class="permissions-rows"
+        data-testid="permissions-each-harness"
+      >
+        <div class="permissions-row permissions-row--head">
+          <span>Harness</span>
+          <span>Permissions</span>
+          <span>Browser</span>
+        </div>
         <div
           v-for="harness in harnessRows"
           :key="harness.type"
@@ -181,34 +177,19 @@ function onLevelKeydown(event: KeyboardEvent, index: number): void {
         >
           <span class="permissions-row__name">{{ harness.name }}</span>
           <span
-            v-if="!harness.supported"
             class="permissions-row__handed permissions-row__handed--plain"
             :data-testid="`permission-handed-${harness.type}`"
-          >Fleet can't hand {{ harness.name }} a permission level yet.</span>
-          <span
-            v-else
-            class="permissions-row__handed"
-            :data-testid="`permission-handed-${harness.type}`"
-          >{{ harness.handed?.[effectiveLevel(harness.type)] ?? PERMISSION_LEVEL_NAMES[effectiveLevel(harness.type)] }}</span>
-          <select
-            v-if="harness.supported"
-            :id="`permission-harness-${harness.type}`"
-            class="permissions-select"
-            :aria-label="`${harness.name} permissions`"
-            :value="harnessLevel(harness.type) ?? 'default'"
-            @change="setHarness(harness.type, ($event.target as HTMLSelectElement).value)"
-          >
-            <option value="default">
-              Default ({{ PERMISSION_LEVEL_NAMES[defaultLevel] }})
-            </option>
-            <option
-              v-for="level in LEVELS"
-              :key="level.id"
-              :value="level.id"
-            >
-              {{ PERMISSION_LEVEL_NAMES[level.id] }}
-            </option>
-          </select>
+          >{{ harness.permissions }}</span>
+          <span class="permissions-row__browser">
+            {{ harness.browserOn ? "On" : "Off" }} &middot;
+            <button
+              type="button"
+              class="permissions-link"
+              :aria-label="`Change ${harness.name}'s permissions and browser`"
+              :data-testid="`permission-change-${harness.type}`"
+              @click="openHarness(harness.type, 'may-do')"
+            >Change</button>
+          </span>
         </div>
       </div>
     </div>
@@ -394,6 +375,28 @@ function onLevelKeydown(event: KeyboardEvent, index: number): void {
   color: var(--text);
   font-size: 13px;
   font-weight: 500;
+}
+
+.permissions-row--head {
+  grid-template-columns: 150px minmax(0, 1fr) 90px;
+  padding-block: 8px;
+  color: var(--muted);
+  font-size: 12px;
+}
+
+.permissions-row__browser {
+  display: inline-flex;
+  min-width: 90px;
+  gap: 4px;
+  color: var(--text);
+  font-size: 12.5px;
+}
+
+.permissions-link {
+  color: var(--accent);
+  font: inherit;
+  text-decoration: underline;
+  cursor: pointer;
 }
 
 .permissions-row__handed {

@@ -12,7 +12,6 @@ import PermissionsSection from "@/components/settings/PermissionsSection.vue";
 import SkillsToolsPage from "@/components/settings/SkillsToolsPage.vue";
 import StorageSection from "@/components/settings/StorageSection.vue";
 import SystemSection from "@/components/settings/SystemSection.vue";
-import WeaveSection from "@/components/settings/WeaveSection.vue";
 import WhatsNewSection from "@/components/settings/WhatsNewSection.vue";
 import WorkflowsSection from "@/components/settings/WorkflowsSection.vue";
 import WorkspaceSection from "@/components/settings/WorkspaceSection.vue";
@@ -27,11 +26,10 @@ const INTEGRATION_PREFIX = "integration:";
 const PAGES: Readonly<Record<string, { title: string; line: string }>> = {
   general: { title: "General", line: "Everyday behaviour." },
   appearance: { title: "Appearance", line: "How Fleet looks." },
-  harnesses: { title: "Harnesses", line: "The coding agents Fleet can run, and how each is set up." },
+  harnesses: { title: "Harnesses", line: "The runtimes Fleet drives sessions with. Everything about one harness is on its tab." },
   permissions: { title: "Permissions", line: "What agents may do without asking, and whether they can use a browser." },
   skills: { title: "Skills & tools", line: "What agents can use: skills, tools and, with Mods on, mods." },
   memory: { title: "Memory", line: "What Fleet remembers about each repository." },
-  weave: { title: "Weave", line: "The Weave plugin and its config for each harness." },
   workflows: { title: "Workflows", line: "Model roles for workflow steps." },
   folders: { title: "Folders", line: "Where your repositories are, how worktrees are named, and the disk they take." },
   machines: { title: "Machines", line: "The machines you work on, phones and devices, and the access token." },
@@ -110,8 +108,6 @@ watch(
     <SkillsToolsPage v-else-if="activeSection === 'skills'" />
 
     <MemorySection v-else-if="activeSection === 'memory'" />
-
-    <WeaveSection v-else-if="activeSection === 'weave'" />
 
     <WorkflowsSection v-else-if="activeSection === 'workflows'" />
 
