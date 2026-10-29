@@ -42,10 +42,11 @@ public sealed class CopilotHarness : IHarness
         SupportsImageAttachments = true,
         ReportsTodos = true,
         SupportsProviderSignIn = true,
-        TakesModelNotes = false,
         // Fleet's browser tools and the step tool come over Fleet's MCP server, which lists them per session.
         SupportsAgentBrowser = true,
         SupportsWorkflowSteps = true,
+        SupportsCompaction = true,
+        TakesModelNotes = true,
     };
 
     /// <inheritdoc />

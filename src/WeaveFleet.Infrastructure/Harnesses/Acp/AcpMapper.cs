@@ -59,6 +59,8 @@ internal sealed class AcpMapper(string sessionId, Func<string, JsonElement, Flee
     private int _partCount;
     private int _stepCount;
     private bool _turnRow;
+    // Dividers that came while a turn's message is open: they go into the history after it, where their ids put them.
+    private readonly List<HarnessMessage> _dividers = [];
 
     /// <summary>The agent's todo list as last reported (<c>plan</c> updates), including while a loaded conversation replays.</summary>
     internal IReadOnlyList<TodoEntry> Todos() { lock (_lock) return _todos; }
@@ -82,6 +84,13 @@ internal sealed class AcpMapper(string sessionId, Func<string, JsonElement, Flee
     /// <summary>Maps a <c>_fleet/fusion</c> notification: a pass started, or finished with its time and credits.</summary>
     internal IReadOnlyList<HarnessEvent> Fusion(JsonElement p) { lock (_lock) return FusionCore(p); }
 
+    /// <summary>
+    /// Maps a <c>_fleet/compaction</c> notification. Its start and failure are Fleet's own context events; its end adds a
+    /// divider, a message of its own after the turn's message when one is open (an automatic compaction can end while
+    /// the turn's answer is still streaming, or after it).
+    /// </summary>
+    internal IReadOnlyList<HarnessEvent> Compaction(JsonElement p) { lock (_lock) return CompactionCore(p); }
+
     /// <summary>What the finished turn used (the prompt result's <c>usage</c>): its tokens, and credits when Copilot reported them.</summary>
     internal IReadOnlyList<HarnessEvent> Usage(JsonElement usage) { lock (_lock) return UsageCore(usage); }
 
@@ -92,7 +101,7 @@ internal sealed class AcpMapper(string sessionId, Func<string, JsonElement, Flee
     internal IReadOnlyList<HarnessEvent> Fail(string message) { lock (_lock) return FailCore(message); }
 
     /// <summary>The conversation so far, oldest first, with the turn still running as its last message.</summary>
-    private List<HarnessMessage> MessagesCore() => _assistantId is null ? _history : [.. _history, Assistant()];
+    private List<HarnessMessage> MessagesCore() => _assistantId is null ? _history : [.. _history, Assistant(), .. _dividers];
 
     private List<HarnessEvent> UserPromptCore(string text, IReadOnlyList<HarnessAttachment>? images, string? messageId)
     {
@@ -252,6 +261,55 @@ internal sealed class AcpMapper(string sessionId, Func<string, JsonElement, Flee
             : new ToolCompletedState { Input = Json(input), Title = Str(p, "pattern") };
         _turnRow = true;
         UpsertTool(events, "fusion-turn", TurnTool, input, state, !finished ? ToolUseState.Running : failed ? ToolUseState.Error : ToolUseState.Completed);
+    }
+
+    private List<HarnessEvent> CompactionCore(JsonElement p)
+    {
+        // Copilot says "auto" for any compaction it began itself.
+        var trigger = Str(p, "trigger") switch
+        {
+            "manual" => ContextCompactionTriggers.Manual,
+            "auto" => ContextCompactionTriggers.Auto,
+            _ => null,
+        };
+        switch (Str(p, "phase"))
+        {
+            case "started":
+                return [ContextEvents.Compaction(ContextCompactionPhases.Started, sessionId, trigger, fleetSessionId: sessionId)];
+            case "failed":
+                return [ContextEvents.Compaction(ContextCompactionPhases.Failed, sessionId, trigger, Str(p, "error") ?? "Copilot couldn't compact the session.", sessionId)];
+            case "ended":
+                break;
+            default:
+                return [];
+        }
+
+        var id = AscendingMessageId.New();
+        var summary = Str(p, "summary")?.Trim();
+        var divider = new CompactionPart(
+            trigger, Number(p, "tokensBefore") is { } before ? (int)before : null, Number(p, "tokensAfter") is { } after ? (int)after : null,
+            string.IsNullOrEmpty(summary) ? null : summary)
+        {
+            PartId = $"{id}-compaction",
+        };
+        var message = new HarnessMessage { Id = id, Role = "assistant", Parts = [divider], Timestamp = DateTimeOffset.UtcNow };
+        // Behind the turn's message while it is open (the ids already say so); in place when nothing is open.
+        (_assistantId is null ? _history : _dividers).Add(message);
+
+        var at = message.Timestamp.ToUnixTimeMilliseconds();
+        var part = Events.SessionSnapshotBuilder.CompactionEventPart(divider, sessionId, id, 0);
+        return
+        [
+            ContextEvents.Compaction(ContextCompactionPhases.Ended, sessionId, trigger, fleetSessionId: sessionId),
+            Event(EventTypes.MessageUpdated, JsonSerializer.SerializeToElement(
+                new MessageLifecyclePayload
+                {
+                    Info = new MessageEventInfo { Id = id, Role = "assistant", SessionId = sessionId, Time = new MessageEventTime { Created = at, Completed = at } },
+                    Parts = [part],
+                },
+                InfrastructureJsonContext.Default.MessageLifecyclePayload)),
+            PartEvent(part),
+        ];
     }
 
     /// <summary>
@@ -584,6 +642,8 @@ internal sealed class AcpMapper(string sessionId, Func<string, JsonElement, Flee
             return;
         if (_parts.Count > 0)
             _history.Add(Assistant());
+        _history.AddRange(_dividers);
+        _dividers.Clear();
         _assistantId = null;
         _parts.Clear();
         _tools.Clear();

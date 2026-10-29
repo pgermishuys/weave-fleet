@@ -501,4 +501,86 @@ public sealed class AcpMapperTests
         mapper.Update(J("""{"sessionUpdate":"usage_update"}""")).ShouldBeEmpty();
         ContextEvents.ReadUsage(mapper.Update(J("""{"sessionUpdate":"usage_update","size":200000}""")).Single())!.Call.ShouldBeNull();
     }
+
+    private static JsonElement Compaction(string phase, string trigger = "manual", int? before = null, int? after = null, string? summary = null, string? error = null)
+        => JsonSerializer.SerializeToElement(new { sessionId = "s1", phase, trigger, tokensBefore = before, tokensAfter = after, summary, error });
+
+    [Fact]
+    public void a_compaction_starting_and_failing_are_context_events_with_no_divider()
+    {
+        var mapper = new AcpMapper("s1");
+
+        var started = mapper.Compaction(Compaction("started")).Single();
+        var failed = mapper.Compaction(Compaction("failed", error: "Too big")).Single();
+
+        ContextEvents.ReadCompaction(started)!.ShouldBeEquivalentTo(new ContextCompactionReport { Phase = "started", Trigger = "manual" });
+        ContextEvents.ReadCompaction(failed)!.Error.ShouldBe("Too big");
+        mapper.Messages().ShouldBeEmpty();
+    }
+
+    [Fact]
+    public void a_compaction_ending_adds_a_divider_message_with_its_numbers_and_summary()
+    {
+        var mapper = new AcpMapper("s1");
+        mapper.UserPrompt("hi");
+
+        var events = mapper.Compaction(Compaction("ended", "auto", 9000, 1200, " What we did. "));
+
+        var divider = mapper.Messages()[1];
+        divider.Role.ShouldBe("assistant");
+        var part = divider.Parts.Single().ShouldBeOfType<CompactionPart>();
+        (part.Trigger, part.TokensBefore, part.TokensAfter, part.Summary).ShouldBe(("auto", 9000, 1200, "What we did."));
+        events.Select(e => e.Type).ShouldBe([EventTypes.ContextCompaction, EventTypes.MessageUpdated, EventTypes.MessagePartUpdated]);
+        events[2].Payload!.Value.GetProperty("part").GetProperty("messageID").GetString().ShouldBe(divider.Id);
+    }
+
+    [Fact]
+    public void a_compaction_ending_while_the_turns_message_is_open_goes_behind_it_and_the_turn_still_ends_on_its_message()
+    {
+        var mapper = new AcpMapper("s1");
+        mapper.UserPrompt("go");
+        mapper.Update(Chunk("agent_message_chunk", "Part one. "));
+
+        mapper.Compaction(Compaction("ended", "auto"));
+        mapper.Update(Chunk("agent_message_chunk", "Part two."));
+        mapper.Usage(J("""{"inputTokens":100,"outputTokens":20}"""));
+        var live = mapper.Messages();
+        var end = mapper.EndTurn("end_turn");
+
+        live.Select(m => m.Parts[0].GetType().Name).ShouldBe(["TextPart", "TextPart", "CompactionPart"]);
+        var done = mapper.Messages();
+        done.Select(m => m.Role).ShouldBe(["user", "assistant", "assistant"]);
+        done[1].TextContent.ShouldBe("Part one. Part two.");
+        done[1].Parts.OfType<StepFinishPart>().Single().TokensInput.ShouldBe(100);
+        done[2].Parts.Single().ShouldBeOfType<CompactionPart>();
+        string.CompareOrdinal(done[1].Id, done[2].Id).ShouldBeLessThan(0);
+        end.Single(e => e.Type == EventTypes.MessageUpdated).Payload!.Value.GetProperty("info").GetProperty("id").GetString().ShouldBe(done[1].Id);
+        end[^1].Type.ShouldBe(EventTypes.SessionStatus);
+    }
+
+    [Fact]
+    public void a_compaction_ending_after_the_turn_ended_follows_the_turns_message()
+    {
+        var mapper = new AcpMapper("s1");
+        mapper.UserPrompt("go");
+        mapper.Update(Chunk("agent_message_chunk", "Done."));
+        mapper.EndTurn("end_turn");
+
+        mapper.Compaction(Compaction("ended", "auto"));
+
+        mapper.Messages().Select(m => m.Parts[0].GetType().Name).ShouldBe(["TextPart", "TextPart", "CompactionPart"]);
+    }
+
+    [Fact]
+    public void a_replayed_conversation_keeps_the_divider_in_its_place()
+    {
+        var mapper = new AcpMapper("s1");
+        mapper.Update(Chunk("user_message_chunk", "first"));
+        mapper.Update(Chunk("agent_message_chunk", "answer"));
+        mapper.Compaction(Compaction("ended", "manual"));
+        mapper.Update(Chunk("user_message_chunk", "second"));
+        mapper.Update(Chunk("agent_message_chunk", "more"));
+
+        mapper.Messages().Select(m => m.Parts[0] is CompactionPart ? "divider" : m.TextContent).ShouldBe(["first", "answer", "divider", "second", "more"]);
+    }
 }

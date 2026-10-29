@@ -46,6 +46,7 @@ internal sealed partial class AcpHarnessSession : IHarnessSession
     private bool _relaunching;
     private readonly SemaphoreSlim _relaunch = new(1, 1);
     private static readonly TimeSpan RelaunchWait = TimeSpan.FromSeconds(30);
+    private bool _compacting;
     private bool _disposed;
     private int _ended;
 
@@ -251,6 +252,10 @@ internal sealed partial class AcpHarnessSession : IHarnessSession
         if (images.Any(a => !a.Mime.StartsWith("image/", StringComparison.OrdinalIgnoreCase)))
             throw new NotSupportedException("GitHub Copilot sessions take images, not other kinds of file.");
 
+        // Not while a compaction Fleet asked for is running: Fleet queues the prompt and sends it when the session idles.
+        if (_compacting)
+            throw new HarnessBusyException("The session is compacting its context.");
+
         if (Status == HarnessSessionStatus.Running)
         {
             if (options?.Delivery != PromptDelivery.Steer)
@@ -281,17 +286,21 @@ internal sealed partial class AcpHarnessSession : IHarnessSession
         Status = HarnessSessionStatus.Running;
         Emit(_mapper.UserPrompt(text, images, options?.MessageId));
         Emit(_mapper.Status(ActivityStatuses.Busy));
-        _ = RunPromptAsync(text, images);
+        _ = RunPromptAsync(text, images, options?.ModelNotes);
     }
 
-    private async Task RunPromptAsync(string text, IReadOnlyList<HarnessAttachment> images)
+    private async Task RunPromptAsync(string text, IReadOnlyList<HarnessAttachment> images, IReadOnlyList<string>? notes)
     {
         try
         {
             var blocks = new JsonArray(new JsonObject { ["type"] = "text", ["text"] = text });
+            var request = new JsonObject { ["sessionId"] = ResumeToken, ["prompt"] = blocks };
+            // What the model reads besides the prompt (Fleet's notes): weave-copilot puts them ahead of it, out of the thread.
+            if (notes is { Count: > 0 })
+                request["_meta"] = new JsonObject { ["modelNotes"] = new JsonArray([.. notes.Select(n => (JsonNode)JsonValue.Create(n))]) };
             foreach (var image in images)
                 blocks.Add((JsonNode)new JsonObject { ["type"] = "image", ["data"] = image.Data, ["mimeType"] = image.Mime, ["uri"] = image.Filename });
-            var result = await _agent.Client.RequestAsync("session/prompt", new JsonObject { ["sessionId"] = ResumeToken, ["prompt"] = blocks }, CancellationToken.None).ConfigureAwait(false);
+            var result = await _agent.Client.RequestAsync("session/prompt", request, CancellationToken.None).ConfigureAwait(false);
             Status = HarnessSessionStatus.Idle;
             if (result.ValueKind == JsonValueKind.Object && result.TryGetProperty("usage", out var usage) && usage.ValueKind == JsonValueKind.Object)
             {
@@ -307,6 +316,34 @@ internal sealed partial class AcpHarnessSession : IHarnessSession
             Status = alive ? HarnessSessionStatus.Idle : HarnessSessionStatus.Error;
             var why = alive || _agent.Stderr.Length == 0 ? ex.Message : $"{ex.Message} {_agent.Stderr}";
             Emit(_mapper.Fail(why));
+        }
+    }
+
+    /// <summary>
+    /// Asks weave-copilot to compact the session (<c>_fleet/compact</c>), which answers when Copilot is done. The session shows
+    /// as working meanwhile, so a prompt typed in the meantime waits in Fleet's queue and goes when the session idles after.
+    /// </summary>
+    public async Task CompactAsync(CompactOptions options, CancellationToken ct)
+    {
+        ObjectDisposedException.ThrowIf(_disposed, this);
+        if (Status == HarnessSessionStatus.Running || _compacting)
+            throw new HarnessBusyException("Wait for the agent to finish its turn, then compact.");
+
+        _compacting = true;
+        Emit(_mapper.Status(ActivityStatuses.Busy));
+        try
+        {
+            await _agent.Client.RequestAsync("_fleet/compact", new JsonObject { ["sessionId"] = ResumeToken }, ct).ConfigureAwait(false);
+        }
+        catch (AcpException ex) when (ex.Code == NoTurnRunning)
+        {
+            throw new HarnessBusyException("A turn is running; compact the session when it's over.");
+        }
+        finally
+        {
+            _compacting = false;
+            if (Status != HarnessSessionStatus.Running)
+                Emit(_mapper.Status(ActivityStatuses.Idle));
         }
     }
 
@@ -442,6 +479,7 @@ internal sealed partial class AcpHarnessSession : IHarnessSession
         {
             "session/update" when parameters.TryGetProperty("update", out var update) => _mapper.Update(update),
             "_fleet/fusion" => _mapper.Fusion(parameters),
+            "_fleet/compaction" => _mapper.Compaction(parameters),
             _ => [],
         };
         if (!_replaying)

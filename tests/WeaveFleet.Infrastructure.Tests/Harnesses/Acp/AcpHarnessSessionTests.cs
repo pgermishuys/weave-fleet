@@ -582,4 +582,86 @@ public sealed class AcpHarnessSessionTests
             new JsonObject { ["optionId"] = "always", ["name"] = "Always", ["kind"] = "allow_always" },
             new JsonObject { ["optionId"] = "deny", ["name"] = "Deny", ["kind"] = "reject_once" }),
     };
+
+    [Fact]
+    public async Task model_notes_go_in_the_prompts_meta_and_not_in_fleets_conversation()
+    {
+        await using var agent = new FakeAcpAgent();
+        agent.Handle = (_, _) => Task.FromResult<JsonNode?>(new JsonObject { ["stopReason"] = "end_turn" });
+        await using var session = NewSession(agent);
+
+        await session.SendPromptAsync("hello", new PromptOptions { ModelNotes = ["Note one", "Note two"] }, CancellationToken.None);
+        await ReadAsync(session, Idle);
+
+        var sent = agent.Received.Single(r => r.Method == "session/prompt").Params;
+        sent.GetProperty("_meta").GetProperty("modelNotes").EnumerateArray().Select(n => n.GetString()).ShouldBe(["Note one", "Note two"]);
+        sent.GetProperty("prompt")[0].GetProperty("text").GetString().ShouldBe("hello");
+        (await session.GetMessagesAsync(null, CancellationToken.None)).Messages.Single(m => m.Role == "user").TextContent.ShouldBe("hello");
+    }
+
+    [Fact]
+    public async Task a_prompt_without_notes_has_no_meta()
+    {
+        await using var agent = new FakeAcpAgent();
+        agent.Handle = (_, _) => Task.FromResult<JsonNode?>(new JsonObject { ["stopReason"] = "end_turn" });
+        await using var session = NewSession(agent);
+
+        await session.SendPromptAsync("hello", null, CancellationToken.None);
+        await ReadAsync(session, Idle);
+
+        agent.Received.Single(r => r.Method == "session/prompt").Params.TryGetProperty("_meta", out _).ShouldBeFalse();
+    }
+
+    [Fact]
+    public async Task compacting_shows_the_session_busy_then_idle_and_holds_a_prompt_meanwhile()
+    {
+        await using var agent = new FakeAcpAgent();
+        var release = new TaskCompletionSource();
+        agent.Handle = async (method, _) =>
+        {
+            if (method == "_fleet/compact")
+            {
+                agent.Send(new JsonObject { ["jsonrpc"] = "2.0", ["method"] = "_fleet/compaction", ["params"] = new JsonObject { ["sessionId"] = "acp-1", ["phase"] = "started", ["trigger"] = "manual" } });
+                await release.Task;
+                agent.Send(new JsonObject { ["jsonrpc"] = "2.0", ["method"] = "_fleet/compaction", ["params"] = new JsonObject { ["sessionId"] = "acp-1", ["phase"] = "ended", ["trigger"] = "manual", ["summary"] = "Sum" } });
+                return new JsonObject { ["success"] = true };
+            }
+
+            return new JsonObject { ["stopReason"] = "end_turn" };
+        };
+        await using var session = NewSession(agent);
+
+        var compacting = session.CompactAsync(new CompactOptions(), CancellationToken.None);
+        await Should.ThrowAsync<HarnessBusyException>(() => session.SendPromptAsync("too soon", null, CancellationToken.None));
+        release.SetResult();
+        await compacting;
+        var events = await ReadAsync(session, Idle);
+
+        var statuses = events.Where(e => e.Type == EventTypes.SessionStatus).Select(e => e.Payload!.Value.GetProperty("status").GetProperty("type").GetString());
+        statuses.ShouldBe(["busy", "idle"]);
+        events.ShouldContain(e => e.Type == EventTypes.ContextCompaction);
+        (await session.GetMessagesAsync(null, CancellationToken.None)).Messages.Single().Parts.Single().ShouldBeOfType<CompactionPart>().Summary.ShouldBe("Sum");
+        await session.SendPromptAsync("now", null, CancellationToken.None);
+    }
+
+    [Fact]
+    public async Task compacting_while_a_turn_runs_is_busy_whether_fleet_knows_or_the_agent_says()
+    {
+        await using var agent = new FakeAcpAgent();
+        var release = new TaskCompletionSource();
+        agent.Handle = async (method, _) =>
+        {
+            if (method == "_fleet/compact")
+                throw new AcpException("A turn is running", AcpHarnessSession.NoTurnRunning);
+            await release.Task;
+            return new JsonObject { ["stopReason"] = "end_turn" };
+        };
+        await using var session = NewSession(agent);
+
+        await Should.ThrowAsync<HarnessBusyException>(() => session.CompactAsync(new CompactOptions(), CancellationToken.None));
+        await session.SendPromptAsync("first", null, CancellationToken.None);
+        await Should.ThrowAsync<HarnessBusyException>(() => session.CompactAsync(new CompactOptions(), CancellationToken.None));
+        agent.Received.Count(r => r.Method == "_fleet/compact").ShouldBe(1);
+        release.SetResult();
+    }
 }
