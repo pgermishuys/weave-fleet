@@ -2,6 +2,7 @@
 import { computed, ref, shallowRef } from "vue";
 import { Check, MessageCircleQuestion } from "lucide-vue-next";
 import StatusGlyph from "@/components/sessions/StatusGlyph.vue";
+import { QuestionGoneError } from "@/composables/use-question-answer";
 import type { AccumulatedToolPart } from "@/lib/client-types";
 import {
   getQuestionInput,
@@ -26,7 +27,10 @@ const submittedAnswers = computed(() => getQuestionAnswers(props.part));
 const isActive = computed(() =>
   questionStatus.value === "pending" || questionStatus.value === "running"
 );
-const isDismissed = computed(() => questionStatus.value === "error");
+// Set once Fleet says the agent no longer holds this question: the card is only a leftover, and Dismiss hides it here.
+const gone = shallowRef(false);
+const hiddenHere = shallowRef(false);
+const isDismissed = computed(() => questionStatus.value === "error" || hiddenHere.value);
 
 // ── Selection state (only used when active) ───────────────────────────────────
 
@@ -150,6 +154,7 @@ async function submit() {
   try {
     await props.onSubmit(answers);
   } catch (e) {
+    gone.value = e instanceof QuestionGoneError;
     error.value = e instanceof Error ? e.message : "Failed to submit answer";
   } finally {
     loading.value = false;
@@ -158,11 +163,16 @@ async function submit() {
 
 async function dismiss() {
   if (loading.value) return;
+  if (gone.value) {
+    hiddenHere.value = true;
+    return;
+  }
   loading.value = true;
   error.value = null;
   try {
     await props.onDismiss();
   } catch (e) {
+    gone.value = e instanceof QuestionGoneError;
     error.value = e instanceof Error ? e.message : "Failed to dismiss";
   } finally {
     loading.value = false;
@@ -345,7 +355,7 @@ function answerText(questionIdx: number): string {
         :disabled="loading"
         @click="dismiss"
       >
-        Skip
+        {{ gone ? "Dismiss" : "Skip" }}
       </button>
       <span
         class="qcard__keys"

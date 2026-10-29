@@ -12,12 +12,12 @@ function reply(status: number, statusText: string) {
 describe("useQuestionAnswer", () => {
   beforeEach(() => post.mockReset());
 
-  it.each([404, 409])("says a question is already answered when Fleet answers %i (it was answered from another device)", async (status) => {
+  it.each([404, 409])("says the agent isn't waiting any more when Fleet answers %i (answered elsewhere, or Fleet or the agent restarted)", async (status) => {
     post.mockResolvedValue(reply(status, "Not Found"));
     const { answerQuestion, rejectQuestion } = useQuestionAnswer("s1");
 
-    await expect(answerQuestion("q1", [["Yes"]])).rejects.toThrow("This question was already answered.");
-    await expect(rejectQuestion("q1")).rejects.toThrow("This question was already answered.");
+    await expect(answerQuestion("q1", [["Yes"]])).rejects.toThrow("The agent isn't waiting for this question any more.");
+    await expect(rejectQuestion("q1")).rejects.toThrow("The agent isn't waiting for this question any more.");
   });
 
   it("keeps the status for other failures", async () => {

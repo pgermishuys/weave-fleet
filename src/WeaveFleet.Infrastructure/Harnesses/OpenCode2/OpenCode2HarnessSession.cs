@@ -578,7 +578,7 @@ internal sealed partial class OpenCode2HarnessSession : IHarnessSession, IOpenCo
         var server = await AttachedServerAsync(ct).ConfigureAwait(false);
         var form = await FindQuestionAsync(server, requestId, ct).ConfigureAwait(false);
 
-        await server.Client.ReplyToFormAsync(ResumeToken, form.Id!, FormAnswer(form, answers), ct).ConfigureAwait(false);
+        await ForgettingIfGoneAsync(form, server.Client.ReplyToFormAsync(ResumeToken, form.Id!, FormAnswer(form, answers), ct)).ConfigureAwait(false);
         Forget(form.Id!);
 
         // The turn goes on; V2 doesn't say so itself, since it never stopped.
@@ -592,8 +592,22 @@ internal sealed partial class OpenCode2HarnessSession : IHarnessSession, IOpenCo
         var server = await AttachedServerAsync(ct).ConfigureAwait(false);
         var form = await FindQuestionAsync(server, requestId, ct).ConfigureAwait(false);
 
-        await server.Client.CancelFormAsync(ResumeToken, form.Id!, ct).ConfigureAwait(false);
+        await ForgettingIfGoneAsync(form, server.Client.CancelFormAsync(ResumeToken, form.Id!, ct)).ConfigureAwait(false);
         Forget(form.Id!);
+    }
+
+    /// <summary>A form V2 no longer holds (its server restarted since it asked) isn't waiting here any more either.</summary>
+    private async Task ForgettingIfGoneAsync(OpenCode2Form form, Task call)
+    {
+        try
+        {
+            await call.ConfigureAwait(false);
+        }
+        catch (KeyNotFoundException)
+        {
+            Forget(form.Id!);
+            throw;
+        }
     }
 
     public async Task<IReadOnlyList<AgentInfo>> GetAgentsAsync(CancellationToken ct)
