@@ -86,7 +86,7 @@ steps:
 | `skill`    | A skill the step should use. Fleet adds "Use the \<skill\> skill." to the prompt. A built-in skill has to be on in Settings → Skills, both when the run starts and when the step starts (see [A skill turned off](#a-skill-turned-off)). |
 | `optional` | `true`, or a hint for when to switch it on (`For UI and new features`). Off unless switched on in the Run box. |
 | `finish`   | `you`: you work through the step together and only you end it. `agent`: the agent always ends it with `fleet_step_done`, even with Check with me on. Left out, the agent ends it unless Check with me is on. See [Steps you finish](#steps-you-finish). |
-| `writes`   | The files the step writes, relative to the run's worktree, e.g. `docs/design/{{slug}}.md`. Fleet checks they exist before the next step starts, then commits them. See [Declared files](#declared-files). |
+| `writes`   | The files the step writes, relative to the run's worktree, e.g. `docs/design/{{slug}}.md`. Fleet checks they exist before the next step starts, or before the run ends, then commits them. See [Declared files](#declared-files). |
 | `prompt`   | Required. What the agent should do. See [Variables](#variables).                                          |
 | `outcomes` | Required. The words the agent can finish with, e.g. `[pass, changes]`.                                      |
 | `on`       | Where an outcome leads: a step's id or `end`, plus `max` for loops. Outcomes not listed go to the next step. |
@@ -225,6 +225,11 @@ Design's files in its own folder, committed or not. Before the next step starts,
 exists, for every step that declares any, whoever finishes it. If one is missing, the step waits under Needs you: reply
 to the agent in its session (when that reply's turn ends, Fleet looks again and goes on if the files are there now), or
 press **Move on anyway**.
+
+A step that ends the run, the last one or one whose outcome leads to `end`, has its files checked and committed the same
+way before the run is done. A missing one doesn't hold the run there, though: no step comes after to need it, and a step
+that ends the run early may not have written it (Fix a bug's Investigate, when it can't find the cause). The run ends,
+and that step's files aren't committed.
 
 Once the files pass the check, Fleet commits the ones that are new or changed, and only those: `git add` and
 `git commit` with those paths, as `docs: design (x.md, x.html)`, with the repository's own git identity and hooks.

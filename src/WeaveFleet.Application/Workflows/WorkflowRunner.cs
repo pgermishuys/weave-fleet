@@ -556,21 +556,25 @@ public sealed partial class WorkflowRunner(
             }
         }
 
-        // Before the next step starts, so it never starts from files that aren't there.
-        if (checkFiles && target != WorkflowTargets.End && step.Writes.Count > 0)
+        // Before the next step starts, so it never starts from files that aren't there. The last step's files are
+        // checked and committed too, but a missing one doesn't hold the end: no step needs it, and a step that ends the
+        // run early (Investigate's failed) may never have written it.
+        if (checkFiles && step.Writes.Count > 0)
         {
             var missing = scope.Files.Missing(state.Run.WorktreePath, FilesOf(state, step));
-            if (missing.Count > 0)
+            if (missing.Count == 0)
+            {
+                visit.FilesChecked = true;
+                await CommitFilesAsync(scope, state, step, visit).ConfigureAwait(false);
+                await scope.Runs.UpdateStepAsync(visit).ConfigureAwait(false);
+            }
+            else if (target != WorkflowTargets.End)
             {
                 await WaitAsync(scope, state, step.Id, MissingFilesMessage(step, missing), WorkflowWaitingKinds.MissingFiles).ConfigureAwait(false);
                 if (visit.SessionId is { } session)
                     _watches[session] = StepWatch.ForReply(state.Run.Id, visit, state.Run.UserId);
                 return;
             }
-
-            visit.FilesChecked = true;
-            await CommitFilesAsync(scope, state, step, visit).ConfigureAwait(false);
-            await scope.Runs.UpdateStepAsync(visit).ConfigureAwait(false);
         }
 
         await GoToAsync(scope, state, target, note: null, ct).ConfigureAwait(false);

@@ -336,9 +336,9 @@ public sealed partial class WorkflowRunnerTests
         saved.Branch.ShouldBe("fleet/press-see-every-keyboard-shortcut");
     }
 
-    private async Task<string> StartAsync(IReadOnlyList<string>? optional = null, bool checkWithMe = false)
+    private async Task<string> StartAsync(IReadOnlyList<string>? optional = null, bool checkWithMe = false, string workflowId = "builtin:build-a-feature")
     {
-        var entry = WorkflowCatalog.BuiltIns.Single(e => e.Id == "builtin:build-a-feature");
+        var entry = WorkflowCatalog.BuiltIns.Single(e => e.Id == workflowId);
         var workflow = entry.Definition!;
         var roles = new Dictionary<string, WorkflowModelChoice>
         {
