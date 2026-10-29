@@ -18,7 +18,7 @@ module.exports = {
   npmRebuild: false,
   // Where electron-updater looks for new versions: the public mirror the CLI updater reads too. The release workflow
   // uploads the files itself (`--publish never`); this only writes the update feed (latest*.yml) and app-update.yml.
-  publish: [{ provider: "github", owner: "pgermishuys", repo: "fleet-releases", releaseType: "release" }],
+  publish: [{ provider: "github", owner: "pgermishuys", repo: "weave-fleet", releaseType: "release" }],
 
   mac: {
     target: ["dmg", "zip"],

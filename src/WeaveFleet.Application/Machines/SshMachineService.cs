@@ -87,7 +87,7 @@ public sealed class SshMachineService(RemoteMachineService machines, ISshTunnels
     /// <summary>The lines shown to the user and run as one command, in this order.</summary>
     public static readonly IReadOnlyList<string> InstallCommands =
     [
-        "curl -fsSL https://github.com/pgermishuys/fleet-releases/releases/latest/download/install.sh | sh",
+        "curl -fsSL https://github.com/pgermishuys/weave-fleet/releases/latest/download/install.sh | sh",
         "$HOME/.weave/fleet/bin/fleet node install-service",
     ];
 

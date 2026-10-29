@@ -10,7 +10,7 @@ import { sanitizeHtml } from "@/lib/sanitize-html";
 import { compareVersions, parseReleaseNotes, releaseNotesMarkdown, whatsNewRange, type ReleaseNote } from "@/lib/release-notes";
 
 /** The public list both the app and the CLI update from. */
-const ALL_RELEASES_URL = "https://github.com/pgermishuys/fleet-releases/releases";
+const ALL_RELEASES_URL = "https://github.com/pgermishuys/weave-fleet/releases";
 
 const { releases, fetchedAt, error, isLoading, load } = useReleaseNotes();
 const { updateStatus } = useUpdateStatus();

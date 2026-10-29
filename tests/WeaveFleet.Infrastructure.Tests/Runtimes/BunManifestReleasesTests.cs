@@ -195,9 +195,9 @@ public sealed class BunManifestReleasesTests : IDisposable
     [Fact]
     public void The_default_address_is_the_update_repositorys_bun_json()
     {
-        var options = new FleetOptions { Update = { GitHubRepo = "acme/fleet-releases" } };
+        var options = new FleetOptions { Update = { GitHubRepo = "acme/fleet" } };
 
-        BunManifestReleases.UrlFor(options).ToString().ShouldBe("https://raw.githubusercontent.com/acme/fleet-releases/main/bun.json");
+        BunManifestReleases.UrlFor(options).ToString().ShouldBe("https://raw.githubusercontent.com/acme/fleet/main/bun/bun.json");
         BunManifestReleases.UrlFor(new FleetOptions { Update = { BunManifestUrl = "http://example.test/x.json" } }).ToString()
             .ShouldBe("http://example.test/x.json");
     }

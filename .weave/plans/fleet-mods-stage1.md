@@ -270,7 +270,7 @@ not merge, check a PR isn't merged before pushing), plus for server work:
   1. *Turning Mods on* (Settings → Features) first says that mods need Bun, what Fleet will download and where, then
      installs at once with a progress bar in that row (inline, not a dialog). The first mod never waits on the
      download. A failed install turns the switch back off.
-  2. *Our own manifest.* fleet-releases carries a `bun.json`: the recommended Bun version, a sha256 per platform, the
+  2. *Our own manifest.* weave-fleet carries a `bun/bun.json`: the recommended Bun version, a sha256 per platform, the
      oldest safe version and a note. Fleet reads it on its own update schedule (5 s after start, then every
      `Fleet:Update:CheckIntervalHours`). The pinned `BunRelease` stays as the offline fallback. Fleet never reads
      Bun's GitHub to decide anything: Bun publishes no security advisories, so Fleet decides "unsafe" when it bumps the
@@ -286,7 +286,7 @@ not merge, check a PR isn't merged before pushing), plus for server work:
   Bun runs (the user's own or Fleet's), releases as data with the pin as fallback, several installed versions with the
   newest kept running during a download, pruning, safety status, and the contract line; (2) the `bun.json` manifest:
   shape and validation, fetching on Fleet's update schedule, change events, publishing and the bump job (proposed
-  first; nothing changes in fleet-releases without the user's go-ahead). *M2* (host client and supervisor) runs the
+  first; nothing changes in the release repository without the user's go-ahead). *M2* (host client and supervisor) runs the
   host on `IBunRuntime.FindAsync`'s Bun, restarts it when that Bun's version changes, and prunes once the host has
   moved. *M2b* (turning Mods on): the Settings row, the runtime status API and its events, saving the Bun path the
   user picks, the background install at start, and the notices.

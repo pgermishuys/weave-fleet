@@ -197,7 +197,7 @@ public sealed class SshMachineTests : IDisposable
     public void The_install_commands_are_fixed_and_only_use_the_documented_install_source()
     {
         SshMachineService.InstallCommands.ShouldBe([
-            "curl -fsSL https://github.com/pgermishuys/fleet-releases/releases/latest/download/install.sh | sh",
+            "curl -fsSL https://github.com/pgermishuys/weave-fleet/releases/latest/download/install.sh | sh",
             "$HOME/.weave/fleet/bin/fleet node install-service",
         ]);
     }

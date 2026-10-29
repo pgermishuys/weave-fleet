@@ -34,7 +34,7 @@ describe("update state", () => {
     expect(nextState(idle("notify"), { type: "available", version: "0.25.0" }, now)).toMatchObject({
       status: "available",
       version: "0.25.0",
-      releaseUrl: "https://github.com/pgermishuys/fleet-releases/releases/tag/v0.25.0",
+      releaseUrl: "https://github.com/pgermishuys/weave-fleet/releases/tag/v0.25.0",
     });
   });
 

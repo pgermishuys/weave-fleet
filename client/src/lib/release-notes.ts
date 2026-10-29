@@ -44,8 +44,6 @@ const SCOPE_LABELS: Record<string, string> = {
   mcp: "MCP",
   btw: "/btw",
 };
-// The fleet-releases mirror adds a link back to the source release at the end.
-const MIRROR_FOOTER = /\n-{3,}\s*\nRelease notes from https?:\/\/\S+\s*$/;
 
 /**
  * Splits GitHub's release notes into what was written by hand (above "What's Changed") and the pull requests,
@@ -54,7 +52,7 @@ const MIRROR_FOOTER = /\n-{3,}\s*\nRelease notes from https?:\/\/\S+\s*$/;
  * "New Contributors" section are left out.
  */
 export function parseReleaseNotes(body: string): ParsedReleaseNotes {
-  const lines = body.replace(/\r\n/g, "\n").replace(MIRROR_FOOTER, "").split("\n");
+  const lines = body.replace(/\r\n/g, "\n").split("\n");
   const intro: string[] = [];
   const added: ReleaseChange[] = [];
   const fixed: ReleaseChange[] = [];

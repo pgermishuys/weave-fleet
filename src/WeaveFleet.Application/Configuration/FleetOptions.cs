@@ -417,8 +417,8 @@ public sealed class DataProtectionOptions
 /// <summary>Configuration for automatic update checking and download.</summary>
 public sealed class UpdateOptions
 {
-    /// <summary>GitHub repository to check for releases. Default: pgermishuys/fleet-releases.</summary>
-    public string GitHubRepo { get; set; } = "pgermishuys/fleet-releases";
+    /// <summary>GitHub repository to check for releases. Default: pgermishuys/weave-fleet.</summary>
+    public string GitHubRepo { get; set; } = "pgermishuys/weave-fleet";
 
     /// <summary>
     /// Where Fleet looks for releases instead of GitHub, for a live check or a test. <c>{ReleasesBaseUrl}/releases</c>
@@ -436,7 +436,7 @@ public sealed class UpdateOptions
 
     /// <summary>
     /// Where Fleet reads its Bun manifest (<c>bun.json</c>: the Bun it recommends and the oldest safe version). Empty
-    /// uses <c>bun.json</c> on the main branch of <see cref="GitHubRepo"/> at raw.githubusercontent.com. Default: empty.
+    /// uses <c>bun/bun.json</c> on the main branch of <see cref="GitHubRepo"/> at raw.githubusercontent.com. Default: empty.
     /// </summary>
     public string BunManifestUrl { get; set; } = "";
 }

@@ -7,7 +7,7 @@ Installable local Fleet server builds are published through GitHub Releases.
 ### macOS / Linux (`linux-x64`, `osx-arm64`)
 
 ```bash
-curl -fsSL https://github.com/pgermishuys/fleet-releases/releases/latest/download/install.sh | sh
+curl -fsSL https://github.com/pgermishuys/weave-fleet/releases/latest/download/install.sh | sh
 export PATH="$HOME/.weave/fleet/bin:$PATH"
 fleet version
 ```
@@ -15,7 +15,7 @@ fleet version
 ### Windows PowerShell (`win-x64`, `win-arm64`)
 
 ```powershell
-irm https://github.com/pgermishuys/fleet-releases/releases/latest/download/install.ps1 | iex
+irm https://github.com/pgermishuys/weave-fleet/releases/latest/download/install.ps1 | iex
 fleet version
 ```
 
@@ -23,11 +23,11 @@ fleet version
 
 The newest installer for each platform:
 
-- macOS (Apple Silicon): https://github.com/pgermishuys/fleet-releases/releases/latest/download/Fleet-mac-arm64.dmg
-- Windows x64: https://github.com/pgermishuys/fleet-releases/releases/latest/download/Fleet-win-x64-setup.exe
-- Windows arm64: https://github.com/pgermishuys/fleet-releases/releases/latest/download/Fleet-win-arm64-setup.exe
-- Linux AppImage: https://github.com/pgermishuys/fleet-releases/releases/latest/download/Fleet-linux-x86_64.AppImage
-- Linux `.deb`: https://github.com/pgermishuys/fleet-releases/releases/latest/download/Fleet-linux-amd64.deb
+- macOS (Apple Silicon): https://github.com/pgermishuys/weave-fleet/releases/latest/download/Fleet-mac-arm64.dmg
+- Windows x64: https://github.com/pgermishuys/weave-fleet/releases/latest/download/Fleet-win-x64-setup.exe
+- Windows arm64: https://github.com/pgermishuys/weave-fleet/releases/latest/download/Fleet-win-arm64-setup.exe
+- Linux AppImage: https://github.com/pgermishuys/weave-fleet/releases/latest/download/Fleet-linux-x86_64.AppImage
+- Linux `.deb`: https://github.com/pgermishuys/weave-fleet/releases/latest/download/Fleet-linux-amd64.deb
 
 The installers aren't signed yet; [RELEASE.md](RELEASE.md#desktop-installers-are-unsigned-for-now) says how to open them.
 

@@ -39,9 +39,9 @@ export interface FleetDesktopBridge {
   onReportProblem?(callback: () => void): () => void;
 }
 
-/** The release notes for a version, on the public mirror both the app and the CLI update from. */
+/** The release notes for a version, on the repository both the app and the CLI update from. */
 export function releaseNotesUrl(version: string): string {
-  return `https://github.com/pgermishuys/fleet-releases/releases/tag/v${version.replace(/^v/, "")}`;
+  return `https://github.com/pgermishuys/weave-fleet/releases/tag/v${version.replace(/^v/, "")}`;
 }
 
 export function getDesktopBridge(): FleetDesktopBridge | null {

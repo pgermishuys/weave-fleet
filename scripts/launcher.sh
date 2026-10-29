@@ -15,7 +15,7 @@ DEV_VERSION_FILE="$ROOT_DIR/Directory.Build.props"
 TRIAL_FILE="$ROOT_DIR/update-trial.json"
 FAILED_FILE="$ROOT_DIR/update-failed.json"
 PREV_DB_DIR="$ROOT_DIR/update.prev"
-INSTALL_SCRIPT_URL="${WEAVE_FLEET_INSTALL_SCRIPT_URL:-https://github.com/pgermishuys/fleet-releases/releases/latest/download/install.sh}"
+INSTALL_SCRIPT_URL="${WEAVE_FLEET_INSTALL_SCRIPT_URL:-https://github.com/pgermishuys/weave-fleet/releases/latest/download/install.sh}"
 
 # ── Apply staged update (if any) ─────────────────────────────────────────────
 apply_staged_update() {

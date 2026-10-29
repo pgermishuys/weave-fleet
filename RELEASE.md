@@ -4,8 +4,8 @@ This repository releases installable Weave Fleet builds from Git tags. The relea
 
 GitHub Releases is the primary public distribution channel. The supported installer entrypoints are the release-hosted assets:
 
-- `https://github.com/pgermishuys/fleet-releases/releases/latest/download/install.sh`
-- `https://github.com/pgermishuys/fleet-releases/releases/latest/download/install.ps1`
+- `https://github.com/pgermishuys/weave-fleet/releases/latest/download/install.sh`
+- `https://github.com/pgermishuys/weave-fleet/releases/latest/download/install.ps1`
 
 ## Version source of truth
 
@@ -48,11 +48,11 @@ GitHub Releases is the primary public distribution channel. The supported instal
 5. **Wait for the `Release` GitHub Actions workflow** to finish.
 6. **Verify the GitHub Release** and release-hosted installer endpoints.
 7. **Optional: write a highlight.** Edit the release on `pgermishuys/weave-fleet` and put a sentence or two above
-   "What's Changed", saying what's worth knowing about this version. The `Release notes` workflow copies the edit to
-   the `fleet-releases` mirror. Fleet's What's new card (shown once after an update) leads with the first line of it,
-   and Settings → System → What's new shows all of it. A known issue goes there too: lines starting "Known issue" are
-   shown in Settings but never used as the highlight. Without a highlight, the card lists the first new and fixed
-   changes. Tests, refactors, docs, CI and other behind-the-scenes changes are only counted, never listed.
+   "What's Changed", saying what's worth knowing about this version. Fleet's What's new card (shown once after an
+   update) leads with the first line of it, and Settings → System → What's new shows all of it. A known issue goes
+   there too: lines starting "Known issue" are shown in Settings but never used as the highlight. Without a highlight,
+   the card lists the first new and fixed changes. Tests, refactors, docs, CI and other behind-the-scenes changes are
+   only counted, never listed.
 
 ## What the workflow publishes
 
@@ -71,14 +71,14 @@ It then publishes a GitHub Release containing:
 - 4 platform archives (`.tar.gz` on Unix, `.zip` on Windows)
 - desktop installers: `Fleet-<version>-linux-x86_64.AppImage`, `Fleet-<version>-linux-amd64.deb`,
   `Fleet-<version>-mac-arm64.dmg` (and `.zip`), `Fleet-<version>-win-x64-setup.exe`, `Fleet-<version>-win-arm64-setup.exe`
-- on the `fleet-releases` mirror only, a copy of each installer without the version, with its own `.sha256`, so
+- a copy of each installer without the version, with its own `.sha256`, so
   these links always get the newest one (`scripts/add-unversioned-installers.sh`; the update feeds keep pointing at the
   versioned files):
-  - `https://github.com/pgermishuys/fleet-releases/releases/latest/download/Fleet-mac-arm64.dmg`
-  - `https://github.com/pgermishuys/fleet-releases/releases/latest/download/Fleet-win-x64-setup.exe`
-  - `https://github.com/pgermishuys/fleet-releases/releases/latest/download/Fleet-win-arm64-setup.exe`
-  - `https://github.com/pgermishuys/fleet-releases/releases/latest/download/Fleet-linux-x86_64.AppImage`
-  - `https://github.com/pgermishuys/fleet-releases/releases/latest/download/Fleet-linux-amd64.deb`
+  - `https://github.com/pgermishuys/weave-fleet/releases/latest/download/Fleet-mac-arm64.dmg`
+  - `https://github.com/pgermishuys/weave-fleet/releases/latest/download/Fleet-win-x64-setup.exe`
+  - `https://github.com/pgermishuys/weave-fleet/releases/latest/download/Fleet-win-arm64-setup.exe`
+  - `https://github.com/pgermishuys/weave-fleet/releases/latest/download/Fleet-linux-x86_64.AppImage`
+  - `https://github.com/pgermishuys/weave-fleet/releases/latest/download/Fleet-linux-amd64.deb`
 - the desktop app's update feed: `latest.yml` (Windows, x64 and arm64 merged), `latest-mac.yml`, `latest-linux.yml`,
   and `.blockmap` files for smaller downloads
 - per-asset `.sha256` files
@@ -100,7 +100,7 @@ artifacts.
 - **Linux:** nothing to do. The AppImage needs FUSE 2 (`libfuse2`) and updates itself like Windows; the `.deb`
   installs to `/opt/Fleet` and says when a new version is out.
 
-The app reads its update feed from `pgermishuys/fleet-releases`, so a release reaches it once the mirror job has run.
+The app reads its update feed from this repository's releases.
 
 Signing isn't wired yet (Phase 3 of `.weave/plans/desktop-app.md`). It will need a Developer ID certificate and App
 Store Connect API key for macOS, and Azure Trusted Signing for Windows, as t3code's `docs/operations/release.md`
@@ -199,7 +199,7 @@ After the tag is pushed, verify all of the following:
 ### Unix/macOS
 
 ```bash
-curl -fsSL https://github.com/pgermishuys/fleet-releases/releases/latest/download/install.sh | sh
+curl -fsSL https://github.com/pgermishuys/weave-fleet/releases/latest/download/install.sh | sh
 export PATH="$HOME/.weave/fleet/bin:$PATH"
 fleet version
 fleet
@@ -209,7 +209,7 @@ curl -fsS http://127.0.0.1:6262/healthz
 ### Windows PowerShell
 
 ```powershell
-irm https://github.com/pgermishuys/fleet-releases/releases/latest/download/install.ps1 | iex
+irm https://github.com/pgermishuys/weave-fleet/releases/latest/download/install.ps1 | iex
 fleet version
 fleet
 Invoke-WebRequest -UseBasicParsing http://127.0.0.1:6262/healthz

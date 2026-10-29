@@ -442,7 +442,7 @@ describe("Settings → Machines", () => {
     });
 
     const plan = { error: "Fleet isn't installed there.", host: "falcon", os: "linux", canInstall: true, docs: "https://fleet.tryweave.io/docs", commands: [
-      "curl -fsSL https://github.com/pgermishuys/fleet-releases/releases/latest/download/install.sh | sh",
+      "curl -fsSL https://github.com/pgermishuys/weave-fleet/releases/latest/download/install.sh | sh",
       "$HOME/.weave/fleet/bin/fleet node install-service",
     ] };
 
@@ -462,7 +462,7 @@ describe("Settings → Machines", () => {
 
       const card = wrapper.find("[data-testid='machines-install-plan']");
       expect(card.exists()).toBe(true);
-      expect(wrapper.find("[data-testid='machines-install-commands']").text()).toContain("$ curl -fsSL https://github.com/pgermishuys/fleet-releases/releases/latest/download/install.sh | sh");
+      expect(wrapper.find("[data-testid='machines-install-commands']").text()).toContain("$ curl -fsSL https://github.com/pgermishuys/weave-fleet/releases/latest/download/install.sh | sh");
       expect(card.text()).toContain("$ $HOME/.weave/fleet/bin/fleet node install-service");
       expect(card.text()).toContain("127.0.0.1 only");
       expect(card.text()).toContain("fleet node uninstall-service");
