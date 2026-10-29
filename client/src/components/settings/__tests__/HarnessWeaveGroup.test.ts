@@ -122,6 +122,13 @@ describe("HarnessWeaveGroup", () => {
     expect(ensureLoaded).toHaveBeenCalledTimes(1);
   });
 
+  it("doesn't ask again on its own after asking failed: Check again does", async () => {
+    error.value = "HTTP 500";
+    await mountGroup("opencode", null);
+
+    expect(ensureLoaded).not.toHaveBeenCalled();
+  });
+
   it("doesn't ask again when Fleet has answered already", async () => {
     await mountGroup("opencode", config());
 

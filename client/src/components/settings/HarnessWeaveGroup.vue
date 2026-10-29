@@ -66,7 +66,8 @@ const root = useTemplateRef<HTMLElement>("root");
 let watcher: IntersectionObserver | undefined;
 
 onMounted(() => {
-  if (view.value) return;
+  // Answered, or asking failed: Check again asks from here, not every tab switch.
+  if (view.value || error.value) return;
   if (typeof IntersectionObserver === "undefined" || !root.value) {
     ensureLoaded();
     return;
