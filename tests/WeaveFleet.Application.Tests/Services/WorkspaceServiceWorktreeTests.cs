@@ -61,6 +61,20 @@ public sealed class WorkspaceServiceWorktreeTests
     }
 
     [Fact]
+    public async Task SessionsStartedAtOnceForOneBranchName_EachGetTheirOwnWorktree()
+    {
+        using var repository = new RealGitRepository();
+
+        var results = await Task.WhenAll(Enumerable.Range(0, 6)
+            .Select(_ => Task.Run(() => _service.CreateWorkspaceAsync(repository.Path, "worktree", "fleet/fix-login"))));
+
+        foreach (var result in results)
+            result.IsSuccess.ShouldBeTrue(ErrorOf(result));
+        results.Select(r => r.Value.Branch).Distinct().Count().ShouldBe(6);
+        results.Select(r => r.Value.Directory).Distinct().Count().ShouldBe(6);
+    }
+
+    [Fact]
     public async Task ExistingBranchNotCheckedOut_IsCheckedOutAsIs()
     {
         using var repository = new RealGitRepository();
