@@ -944,7 +944,7 @@ public sealed class AcpHarnessSessionTests
     }
 
     [Fact]
-    public async Task compacting_shows_the_session_busy_then_idle_and_holds_a_prompt_meanwhile()
+    public async Task compacting_shows_the_session_busy_then_idle_and_holds_a_prompt_or_shell_command_meanwhile()
     {
         await using var agent = new FakeAcpAgent();
         var release = new TaskCompletionSource();
@@ -964,6 +964,7 @@ public sealed class AcpHarnessSessionTests
 
         var compacting = session.CompactAsync(new CompactOptions(), CancellationToken.None);
         await Should.ThrowAsync<HarnessBusyException>(() => session.SendPromptAsync("too soon", null, CancellationToken.None));
+        await Should.ThrowAsync<HarnessBusyException>(() => session.RunShellCommandAsync(new ShellCommandOptions { Command = "ls" }, CancellationToken.None));
         release.SetResult();
         await compacting;
         var events = await ReadAsync(session, Idle);

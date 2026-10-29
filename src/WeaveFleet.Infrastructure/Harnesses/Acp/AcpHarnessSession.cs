@@ -716,6 +716,8 @@ internal sealed partial class AcpHarnessSession : IHarnessSession
         ObjectDisposedException.ThrowIf(_disposed, this);
         if (Status == HarnessSessionStatus.Running)
             throw new HarnessBusyException("The agent is still working on the last prompt.");
+        if (_compacting)
+            throw new HarnessBusyException("The session is compacting its context.");
 
         _mapper.ExpectShell(options.MessageId);
         try
