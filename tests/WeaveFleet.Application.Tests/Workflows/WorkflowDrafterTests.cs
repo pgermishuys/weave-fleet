@@ -369,7 +369,7 @@ public sealed class WorkflowDrafterTests : IDisposable
     {
         var result = await _sut.FromDescriptionAsync(_repo, "Fix a bug.", "pi", null, CancellationToken.None);
 
-        result.Error.Description.ShouldBe("Workflows aren't available on Pi. Pick OpenCode, OpenCode 2 or Claude Code.");
+        result.Error.Description.ShouldBe("Workflows aren't available on Pi. Pick OpenCode or Claude Code.");
         _runtime.OffTheRecordCalls.ShouldBeEmpty();
     }
 

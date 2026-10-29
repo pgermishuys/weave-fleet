@@ -31,6 +31,7 @@ public sealed partial class WorkflowRunnerTests
         public required AutomationRunService Runs { get; init; }
         public required InMemoryAutomationRunRepository RunRows { get; init; }
         public required FakeHarnessRuntime Harness { get; init; }
+        public required FakeHarnessRegistry Registry { get; init; }
         public required WorkflowService Workflows { get; init; }
 
         public void Dispose() => Repository.Dispose();
@@ -76,6 +77,7 @@ public sealed partial class WorkflowRunnerTests
             Repository = repository,
             RunRows = runRows,
             Harness = runtime,
+            Registry = registry,
             Workflows = workflows,
             Runs = new AutomationRunService(runRows, executor, _activity, TimeProvider.System, NullLogger<AutomationRunService>.Instance, FakeMachine.Unused, automationWorkflows),
         };
@@ -150,6 +152,24 @@ public sealed partial class WorkflowRunnerTests
 
         started.IsSuccess.ShouldBeTrue(started.IsFailure ? started.Error.Description : null);
         started.Value.StartedBy.ShouldBeNull();
+    }
+
+    [Fact]
+    public async Task a_run_with_no_harness_that_runs_workflows_installed_and_on_says_so_and_where_to_set_one_up()
+    {
+        using var rig = NewAutomationRig();
+        _preferences.Seed(BuiltInSkillService.PreferenceKey, "fleet-code-review");
+        _preferences.Seed("opencode.enabled", "false");
+        // On, but not installed: no runtime answers for it.
+        rig.Registry.Register(new FakeHarness("claude-code", "Claude Code", new HarnessCapabilities { SupportsWorkflowSteps = true }));
+        rig.Registry.Register(new FakeHarness("pi", "Pi", new HarnessCapabilities()));
+
+        var started = await rig.Workflows.StartAsync(
+            new StartWorkflowRunRequest("builtin:build-a-feature", rig.Repository.Path, "Add a shortcut sheet"), CancellationToken.None);
+
+        started.IsFailure.ShouldBeTrue();
+        started.Error.Description.ShouldBe("Workflows run on OpenCode or Claude Code, and none of them is installed and on. Set one up in Settings → Harnesses.");
+        _sessions.Started.ShouldBeEmpty();
     }
 
     [Fact]

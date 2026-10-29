@@ -2,15 +2,33 @@ import { flushPromises, mount } from "@vue/test-utils";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { ref } from "vue";
 
-const { apiFetchMock } = vi.hoisted(() => ({ apiFetchMock: vi.fn() }));
+const { apiFetchMock, harnessList, setActiveSectionMock } = vi.hoisted(() => {
+  const harness = (type: string, displayName: string, supportsWorkflowSteps: boolean, ready = true) =>
+    ({ type, displayName, available: ready, userEnabled: true, capabilities: { supportsWorkflowSteps } });
+  const all = {
+    opencode: harness("opencode", "OpenCode", true),
+    opencode2: harness("opencode2", "OpenCode 2", true),
+    claudeCode: harness("claude-code", "Claude Code", true),
+    copilot: harness("copilot", "GitHub Copilot", true),
+    pi: harness("pi", "Pi", false),
+  };
+  return {
+    apiFetchMock: vi.fn(),
+    setActiveSectionMock: vi.fn(),
+    harnessList: { all, harnesses: [all.opencode] as ReturnType<typeof harness>[], enabled: [all.opencode] as ReturnType<typeof harness>[], defaultType: "opencode" },
+  };
+});
 vi.mock("@/lib/api-client", () => ({ apiFetch: apiFetchMock }));
 vi.mock("@tanstack/vue-router", () => ({ useRouter: () => ({ navigate: vi.fn() }) }));
 vi.mock("@/composables/use-signalr-socket", () => ({ onGlobalEvent: () => () => {} }));
 vi.mock("@/composables/use-built-in-skills", () => ({ useBuiltInSkills: () => ({ skills: ref([]) }) }));
-vi.mock("@/composables/use-enabled-harnesses", () => {
-  const openCode = { type: "opencode", displayName: "OpenCode", capabilities: { supportsWorkflowSteps: true } };
-  return { useEnabledHarnesses: () => ({ harnesses: ref([openCode]), enabledHarnesses: ref([openCode]), defaultHarnessType: ref("opencode") }) };
-});
+vi.mock("@/composables/use-enabled-harnesses", () => ({
+  useEnabledHarnesses: () => ({
+    harnesses: ref(harnessList.harnesses),
+    enabledHarnesses: ref(harnessList.enabled),
+    defaultHarnessType: ref(harnessList.defaultType),
+  }),
+}));
 vi.mock("@/composables/use-harness-catalog", () => ({ useHarnessCatalog: () => ({ models: ref([]), isSupported: ref(false) }) }));
 vi.mock("@/composables/use-model-roles", async (original) => ({
   ...(await original<typeof import("@/composables/use-model-roles")>()),
@@ -21,7 +39,7 @@ vi.mock("@/composables/use-repositories", () => ({
   useRepositories: () => ({ repositories: ref([]), scannedAt: ref("2026-09-23T10:00:00Z"), error: ref(null), refresh: vi.fn() }),
 }));
 vi.mock("@/composables/use-repository-detail", () => ({ useRepositoryDetail: () => ({ detail: ref(null), isLoading: ref(false) }) }));
-vi.mock("@/composables/use-settings-nav", () => ({ useSettingsNav: () => ({ setActiveSection: vi.fn() }) }));
+vi.mock("@/composables/use-settings-nav", () => ({ useSettingsNav: () => ({ setActiveSection: setActiveSectionMock }) }));
 vi.mock("@/composables/use-projects", () => ({
   useProjects: () => ({ projects: ref([{ id: "proj-1", name: "Dependencies", type: "standard" }]) }),
 }));
@@ -60,6 +78,10 @@ describe("WorkflowRunBox", () => {
   beforeEach(() => {
     apiFetchMock.mockReset();
     apiFetchMock.mockImplementation(() => respond(buildRun()));
+    setActiveSectionMock.mockReset();
+    harnessList.harnesses = [harnessList.all.opencode];
+    harnessList.enabled = [harnessList.all.opencode];
+    harnessList.defaultType = "opencode";
   });
 
   it("starts a run with Check with me after each step switched on", async () => {
@@ -112,5 +134,32 @@ describe("WorkflowRunBox", () => {
     await flushPromises();
 
     expect(JSON.parse((apiFetchMock.mock.calls[0] as [string, RequestInit])[1].body as string)).toMatchObject({ projectId: "proj-1" });
+  });
+
+  it("says no harness that runs workflows is ready, by name, and points to Settings → Harnesses", async () => {
+    const { opencode, opencode2, claudeCode, copilot, pi } = harnessList.all;
+    // OpenCode 2 is the default but isn't installed; only Pi, which can't run workflows, is ready.
+    harnessList.harnesses = [{ ...opencode2, available: false }, { ...opencode, available: false }, { ...claudeCode, userEnabled: false }, { ...copilot, available: false }, pi];
+    harnessList.enabled = [pi];
+    harnessList.defaultType = "opencode2";
+    const wrapper = mount(WorkflowRunBox, { props: { workflow }, global: { stubs } });
+
+    const warning = wrapper.get('[data-testid="workflow-no-harness"]');
+    expect(warning.text()).toContain(
+      "Workflows run on OpenCode 2, OpenCode, Claude Code or GitHub Copilot, and none of them is installed and on.");
+    expect(warning.text()).not.toContain("opencode2");
+    expect(warning.text()).not.toContain("Pick");
+    await warning.get("button").trigger("click");
+    expect(setActiveSectionMock).toHaveBeenCalledWith("harnesses");
+    expect(wrapper.get('[data-testid="workflow-run"]').attributes("disabled")).toBeDefined();
+  });
+
+  it("says nothing about harnesses while one that runs workflows is ready", () => {
+    harnessList.harnesses = [harnessList.all.pi, harnessList.all.opencode];
+    harnessList.enabled = [harnessList.all.pi, harnessList.all.opencode];
+    harnessList.defaultType = "pi";
+    const wrapper = mount(WorkflowRunBox, { props: { workflow }, global: { stubs } });
+
+    expect(wrapper.find('[data-testid="workflow-no-harness"]').exists()).toBe(false);
   });
 });
