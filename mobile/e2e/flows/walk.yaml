@@ -74,6 +74,12 @@ appId: io.tryweave.fleet
 - extendedWaitUntil:
     notVisible: "Finished.*"
     timeout: 30000
+# Always scroll up at least once: on iOS Maestro counts a message hidden under the header as visible, so right after
+# sending, "show-page please" can pass for on screen while the conversation still sits at the newest message (and
+# rightly follows the reply off the screen).
+- swipe:
+    start: 50%, 15%
+    end: 50%, 38%
 - repeat:
     times: 8
     while:
