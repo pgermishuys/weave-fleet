@@ -394,7 +394,7 @@ internal sealed partial class AcpHarnessSession : IHarnessSession
             SessionId = _fleetSessionId,
             Kind = PermissionKinds.Classify(tool),
             Tool = tool,
-            Title = AcpMapper.Str(call, "title"),
+            Title = _mapper.CommandOf(call, AcpMapper.Str(call, "toolCallId")) ?? AcpMapper.Str(call, "title"),
             CallId = AcpMapper.Str(call, "toolCallId"),
             Directory = _workingDirectory,
         };
