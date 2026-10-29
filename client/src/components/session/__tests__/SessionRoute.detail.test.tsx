@@ -6,6 +6,9 @@ import { clearPendingPrompts, clearSentPrompts } from "@/composables/use-send-pr
 import { MACHINE_TARGET, type MachineTarget } from "@/lib/machine-target";
 import { useSessionsStore } from "@/stores/sessions";
 import { useArchiveQueueStore } from "@/stores/archive-queue";
+// Imported statically (vi.mock is hoisted above it) so loading the route's module graph happens while the
+// file is collected, not inside the first test's 5 s timeout: under load that load alone took over 5 s.
+import { Route } from "@/routes/sessions.$id";
 import type { SessionListItem } from "@/api/client";
 
 const h = vi.hoisted(() => ({
@@ -146,7 +149,6 @@ afterEach(() => {
 });
 
 async function mountRoute(machine?: MachineTarget) {
-  const { Route } = await import("@/routes/sessions.$id");
   const Page = (Route as unknown as { config: { component: DefineComponent } }).config.component;
   const wrapper = mount(Page, {
     attachTo: document.body,
