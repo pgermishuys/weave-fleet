@@ -36,7 +36,7 @@ public sealed class SessionContextEndpointTests : IClassFixture<SessionContextEn
         response.StatusCode.ShouldBe(HttpStatusCode.OK);
         var context = await response.Content.ReadFromJsonAsync<JsonElement>(JsonSerializerOptions.Web);
         context.GetRawText().ShouldBe(
-            """{"sessionId":"session-with-context","used":76000,"limit":200000,"compactsAt":167000,"modelId":"claude-opus-5","providerId":"anthropic","lastCall":{"input":1000,"cacheRead":74500,"cacheWrite":0,"output":500,"reasoning":0,"used":76000},"lastCallAt":"2026-10-06T10:00:00+00:00","compacting":false,"compactedAt":null,"compactionError":null,"turns":[{"used":76000,"limit":200000,"at":"2026-10-06T10:00:00+00:00","afterCompaction":false}],"updatedAt":"2026-10-06T10:00:00+00:00"}""");
+            """{"sessionId":"session-with-context","used":76000,"limit":200000,"compactsAt":167000,"modelId":"claude-opus-5","providerId":"anthropic","lastCall":{"input":1000,"cacheRead":74500,"cacheWrite":0,"output":500,"reasoning":0,"totalOnly":false,"used":76000},"lastCallAt":"2026-10-06T10:00:00+00:00","compacting":false,"compactedAt":null,"compactionError":null,"turns":[{"used":76000,"limit":200000,"at":"2026-10-06T10:00:00+00:00","afterCompaction":false}],"updatedAt":"2026-10-06T10:00:00+00:00"}""");
     }
 
     [Fact]

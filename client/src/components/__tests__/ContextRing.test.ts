@@ -112,6 +112,34 @@ describe("ContextRing", () => {
     wrapper.unmount();
   });
 
+  it("shows the call's split by kind for a normal call", async () => {
+    publish();
+    const wrapper = mountRing();
+    await flushPromises();
+    await wrapper.get('[data-testid="context-ring"]').trigger("click");
+    await flushPromises();
+
+    const text = popover()?.textContent ?? "";
+    expect(text).toContain("Read from cache");
+    expect(text).toContain("New input");
+    expect(text).toContain("Output");
+    wrapper.unmount();
+  });
+
+  it("leaves out the split when the harness gave only the call's total, but keeps the size", async () => {
+    publish({ lastCall: { input: 76_000, cacheRead: 0, cacheWrite: 0, output: 0, reasoning: 0, used: 76_000, totalOnly: true } });
+    const wrapper = mountRing();
+    await flushPromises();
+    await wrapper.get('[data-testid="context-ring"]').trigger("click");
+    await flushPromises();
+
+    const text = popover()?.textContent ?? "";
+    expect(text).not.toContain("Read from cache");
+    expect(text).not.toContain("New input");
+    expect(text).toContain("76,000 of 200,000 tokens");
+    wrapper.unmount();
+  });
+
   it("compacts now, and says why when Fleet refuses", async () => {
     publish();
     mockApi.POST.mockResolvedValueOnce({ data: undefined, error: undefined, response: new Response(null, { status: 202 }) } as never);

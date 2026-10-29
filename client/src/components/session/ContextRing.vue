@@ -134,6 +134,8 @@ const chartCaption = computed(() => {
 });
 
 const turnsLeft = computed(() => (context.value ? turnsBeforeCompaction(context.value) : null));
+/** The last call's tokens by kind; none when the harness gave only the total (GitHub Copilot). */
+const splitCall = computed(() => (context.value?.lastCall?.totalOnly ? null : (context.value?.lastCall ?? null)));
 
 const cost = computed(() => {
   const total = session.value?.totalCost;
@@ -286,18 +288,18 @@ const error = computed(() => requestError.value ?? context.value?.compactionErro
         </template>
 
         <dl
-          v-if="context.lastCall || turnsLeft !== null || cost"
+          v-if="splitCall || turnsLeft !== null || cost"
           class="context-card__rows"
         >
-          <template v-if="context.lastCall">
+          <template v-if="splitCall">
             <dt>Read from cache</dt>
-            <dd>{{ context.lastCall.cacheRead.toLocaleString() }}</dd>
+            <dd>{{ splitCall.cacheRead.toLocaleString() }}</dd>
             <dt>New input</dt>
-            <dd>{{ (context.lastCall.input + context.lastCall.cacheWrite).toLocaleString() }}</dd>
+            <dd>{{ (splitCall.input + splitCall.cacheWrite).toLocaleString() }}</dd>
             <dt>Output</dt>
             <dd>
-              {{ context.lastCall.output.toLocaleString() }}
-              <span v-if="context.lastCall.reasoning">· {{ context.lastCall.reasoning.toLocaleString() }} reasoning</span>
+              {{ splitCall.output.toLocaleString() }}
+              <span v-if="splitCall.reasoning">· {{ splitCall.reasoning.toLocaleString() }} reasoning</span>
             </dd>
           </template>
           <template v-if="turnsLeft !== null">

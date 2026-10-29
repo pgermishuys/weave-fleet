@@ -24,8 +24,15 @@ namespace WeaveFleet.Infrastructure.Harnesses.Acp;
 /// What Fleet's MCP server kept about one of its own tool calls (the card's title, and the canvas, screenshot or page it
 /// made), by the tool's name and the arguments the agent called it with; null when it kept nothing.
 /// </param>
-internal sealed class AcpMapper(string sessionId, Func<string, JsonElement, FleetToolCallRecord?>? fleetToolCall = null)
+/// <param name="model">The model the session runs on now, for its context reports.</param>
+internal sealed class AcpMapper(string sessionId, Func<string, JsonElement, FleetToolCallRecord?>? fleetToolCall = null, Func<string?>? model = null)
 {
+    /// <summary>
+    /// How full Copilot lets the context get before it compacts it in the background: the SDK's default
+    /// (<c>InfiniteSessions.BackgroundCompactionThreshold</c>), which weave-copilot leaves as it is.
+    /// </summary>
+    internal const double CompactsAtShare = 0.80;
+
     /// <summary>The tool name a HydraFusion pass is shown under; the client draws it as a row of its own.</summary>
     internal const string PassTool = "hydrafusion_pass";
 
@@ -149,9 +156,33 @@ internal sealed class AcpMapper(string sessionId, Func<string, JsonElement, Flee
             case "plan":
                 Plan(events, update);
                 break;
+            case "usage_update" when ContextUsage(update) is { } usage:
+                events.Add(usage);
+                break;
         }
 
         return events;
+    }
+
+    /// <summary>
+    /// A <c>usage_update</c>: the tokens in the context now (<c>used</c>) and the model's window (<c>size</c>), which
+    /// Copilot sends after each model call. It gives no split, so the whole count is the call's input, marked
+    /// <see cref="ContextCall.TotalOnly"/>.
+    /// </summary>
+    private HarnessEvent? ContextUsage(JsonElement update)
+    {
+        var used = Number(update, "used");
+        int? limit = Number(update, "size") is > 0 and var size ? (int)size : null;
+        if (used is not >= 0 && limit is null)
+            return null;
+        return ContextEvents.Usage(new ContextUsageReport
+        {
+            Call = used is >= 0 and var tokens ? new ContextCall { Input = (int)tokens, TotalOnly = true } : null,
+            Limit = limit,
+            CompactsAt = limit is { } window ? (int)(window * CompactsAtShare) : null,
+            ModelId = model?.Invoke(),
+            ProviderId = "copilot",
+        }, sessionId);
     }
 
     /// <summary>

@@ -349,15 +349,16 @@ until they're back on.
 
 ## Harnesses
 
-Workflows run on **OpenCode**, **OpenCode 2** and **Claude Code**. `fleet_step_done` is a tool only step sessions see:
-with workflows on, every other session on the same OpenCode process or server has a rule that denies it, and Fleet
-refuses a call from any session that isn't the running step's own, including a step's subagents. Claude Code runs one
-process per session, and gets Fleet's tools from Fleet's MCP server, so only a step's process lists `fleet_step_done`.
-Its subagents run in the same process and see the tool too; Fleet refuses their calls. Pi has no Fleet tools, so
-workflows aren't available on it.
+Workflows run on **OpenCode**, **OpenCode 2**, **Claude Code** and **GitHub Copilot**. `fleet_step_done` is a tool only
+step sessions see: with workflows on, every other session on the same OpenCode process or server has a rule that denies
+it, and Fleet refuses a call from any session that isn't the running step's own, including a step's subagents. Claude
+Code and GitHub Copilot run one process per session, and get Fleet's tools from Fleet's MCP server, so only a step's
+process lists `fleet_step_done`. Claude Code's subagents run in the same process and see the tool too; Fleet refuses
+their calls. Pi has no Fleet tools, so workflows aren't available on it.
 
-On Claude Code a step's `agent:` is ignored (Claude Code has no agents to pick from, so a Plan step can edit files). Its
-`skill:` works as on OpenCode: Claude Code loads the built-in skills you turned on.
+On Claude Code and GitHub Copilot a step's `agent:` is ignored (they have no agents to pick from, so a Plan step can
+edit files). On Claude Code a step's `skill:` works as on OpenCode: Claude Code loads the built-in skills you turned on.
+GitHub Copilot doesn't load Fleet's built-in skills yet, so there `skill:` is only the line Fleet adds to the prompt.
 
 ## Errors
 

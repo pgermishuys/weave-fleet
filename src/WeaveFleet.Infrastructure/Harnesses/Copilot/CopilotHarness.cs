@@ -33,6 +33,8 @@ public sealed class CopilotHarness : IHarness
         // Fleet's MCP server gives the agent Fleet's tools (CopilotFleetTools).
         SupportsFleetTools = true,
         SupportsSteering = true,
+        // Copilot reads a steer at its next step, in the turn that's running.
+        SteersByDefault = true,
         SupportsPermissionLevels = true,
         ReportsFileWrites = true,
         HistoryLivesInHarness = true,
@@ -41,6 +43,9 @@ public sealed class CopilotHarness : IHarness
         ReportsTodos = true,
         SupportsProviderSignIn = true,
         TakesModelNotes = false,
+        // Fleet's browser tools and the step tool come over Fleet's MCP server, which lists them per session.
+        SupportsAgentBrowser = true,
+        SupportsWorkflowSteps = true,
     };
 
     /// <inheritdoc />
@@ -50,6 +55,7 @@ public sealed class CopilotHarness : IHarness
         Eyebrow = "Experimental",
         Description = "GitHub Copilot through weave-copilot, with HydraFusion's passes when you turn them on.",
         Icon = HarnessIcons.Hexagon,
+        AgentBrowser = "Fleet's browser tools: read the page, act on it.",
         PermissionModes = new(
             Ask: "Fleet allows reading and asks you about edits and commands",
             Edits: "Fleet allows reading and edits, and asks you about commands",

@@ -41,6 +41,12 @@ public sealed record ContextCall
     public int Reasoning { get; init; }
 
     /// <summary>
+    /// The harness gave only the call's total (GitHub Copilot): it's all in <see cref="Input"/>, and how it splits
+    /// into cached, new and output tokens isn't known.
+    /// </summary>
+    public bool TotalOnly { get; init; }
+
+    /// <summary>
     /// How much of the context window the call filled: everything it read plus everything it wrote, which the next
     /// call starts from. The figure OpenCode, OpenCode 2 and Pi show for their own context.
     /// </summary>
