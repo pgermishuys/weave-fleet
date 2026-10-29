@@ -1,6 +1,7 @@
 using System.Text.Json;
 using WeaveFleet.Application.Sessions;
 using WeaveFleet.Domain.Entities;
+using WeaveFleet.Domain.Events;
 using WeaveFleet.Domain.Harnesses;
 using WeaveFleet.Testing.Fakes;
 using WeaveFleet.Testing.Fakes.Repositories;
@@ -83,6 +84,20 @@ public sealed class RunningWorkTests
         payload.GetProperty("sessionId").GetString().ShouldBe(Parent);
         payload.GetProperty("kind").GetString().ShouldBe("shell");
         payload.GetProperty("canStop").GetBoolean().ShouldBeTrue();
+    }
+
+    [Fact]
+    public async Task New_work_is_stored_whole_so_a_read_while_it_starts_sees_all_its_report_says()
+    {
+        RunningWorkItem? seen = null;
+        _work.AfterInsert = async _ => seen = (await _sut.GetWorkAsync(Parent)).Single();
+
+        await _sut.HandleWorkReportedAsync(Parent, Shell());
+
+        seen.ShouldNotBeNull();
+        seen.Background.ShouldBeTrue();
+        seen.CanStop.ShouldBeTrue();
+        seen.CanReadOutput.ShouldBeTrue();
     }
 
     [Fact]
