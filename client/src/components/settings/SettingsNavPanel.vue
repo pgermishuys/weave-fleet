@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import type { Component } from "vue";
 import { computed, onMounted } from "vue";
-import { Cable, FlaskConical, FolderGit2, Lightbulb, Palette, RefreshCw, Server, ShieldCheck, SlidersHorizontal, Waves, Workflow, Wrench, Settings2 } from "lucide-vue-next";
+import { Cable, FlaskConical, FolderGit2, Lightbulb, Palette, RefreshCw, Server, ShieldCheck, SlidersHorizontal, Workflow, Wrench, Settings2 } from "lucide-vue-next";
 import { useFleetUpdatesWatch } from "@/composables/use-fleet-updates";
 import type { SettingsSectionId } from "@/composables/use-settings-nav";
 import { useUpdateStatus } from "@/composables/use-update-status";
@@ -42,7 +42,7 @@ const { waiting: updatesWaiting } = useFleetUpdatesWatch();
 const mods = useModsStore();
 onMounted(() => { void mods.loadSwitch(); });
 
-// Weave and Workflows stay here until their pages are folded into Harnesses and the Workflows rail page.
+// Workflows stays here until its page is folded into the Workflows rail page.
 const coreGroups: readonly SettingsNavGroup[] = [
   {
     id: "you",
@@ -60,7 +60,6 @@ const coreGroups: readonly SettingsNavGroup[] = [
       { id: "permissions", label: "Permissions", icon: ShieldCheck },
       { id: "skills", label: "Skills & tools", icon: Wrench },
       { id: "memory", label: "Memory", icon: Lightbulb },
-      { id: "weave", label: "Weave", icon: Waves },
       { id: "workflows", label: "Workflows", icon: Workflow },
     ],
   },

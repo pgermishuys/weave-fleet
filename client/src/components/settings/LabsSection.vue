@@ -27,7 +27,7 @@ const preferencesStore = usePreferencesStore();
 const modsRuntime = useModsRuntimeStore();
 const machines = useMachinesStore();
 const router = useRouter();
-const { setActiveSection } = useSettingsNav();
+const { openHarness, setActiveSection } = useSettingsNav();
 preferencesStore.ensureLoaded();
 
 /** GitHub Copilot is a harness the server hides until this is on (`CopilotHarness.FeaturePreferenceKey`). */
@@ -321,7 +321,7 @@ function openRoute(path: string): void {
         title="GitHub Copilot"
         summary="Start sessions on Copilot. Needs weave-copilot on PATH."
         :adds="addsWhenOn(copilot.enabled.value, 'GitHub Copilot in Harnesses')"
-        @open="setActiveSection('harnesses')"
+        @open="openHarness('copilot')"
       >
         <template #more>
           Start sessions on GitHub Copilot, with HydraFusion's passes when you turn them on under Settings → Harnesses.

@@ -13,7 +13,6 @@ export type SettingsPageId =
   | "machines"
   | "labs"
   | "updates"
-  | "weave"
   | "workflows"
   | "credentials"
   | `integration:${string}`;
@@ -27,13 +26,14 @@ export type LegacySettingsSectionId =
   | "tools"
   | "mods"
   | "system"
+  | "weave"
   | "plugins";
 
 export type SettingsSectionId = SettingsPageId | LegacySettingsSectionId;
 
 export interface SettingsTarget {
   section: SettingsPageId;
-  /** A group or tab on the page to scroll to or open (`storage`, `browser`, `tools`, `mods`). */
+  /** A group or tab on the page to scroll to or open (`storage`, `browser`, `tools`, `mods`, `weave`, `may-do`). */
   anchor: string | null;
 }
 
@@ -46,6 +46,8 @@ export const LEGACY_SECTION_TARGETS: Readonly<Record<Exclude<LegacySettingsSecti
   tools: { section: "skills", anchor: "tools" },
   mods: { section: "skills", anchor: "mods" },
   system: { section: "updates", anchor: null },
+  // Weave is on each harness's tab. Which tab is decided by the Harnesses page: the default harness's, or the first with Weave.
+  weave: { section: "harnesses", anchor: "weave" },
 };
 
 export function resolveSettingsTarget(
@@ -67,6 +69,8 @@ export function resolveSettingsTarget(
 const activeSection = ref<SettingsPageId>("general");
 /** The group or tab the page should open at, set with the section; the page clears it once it has gone there. */
 const activeAnchor = ref<string | null>(null);
+/** The harness tab Harnesses shows, remembered while Settings is open. Null until one is picked: the default harness's. */
+const activeHarness = ref<string | null>(null);
 /** A repository Settings → Memory should show when it opens, set by whatever sent the user there. */
 const memoryRepository = ref<string | null>(null);
 
@@ -75,6 +79,14 @@ export function useSettingsNav() {
     const target = resolveSettingsTarget(section, anchor);
     activeSection.value = target.section;
     activeAnchor.value = target.anchor;
+    // The old Weave page has no harness of its own: let Harnesses pick the tab that has Weave.
+    if (section === "weave") activeHarness.value = null;
+  }
+
+  /** Goes to Harnesses on a harness's tab, optionally at one of its groups (`weave`, `may-do`); the caller navigates to /settings. */
+  function openHarness(harnessId: string, anchor: string | null = null): void {
+    activeHarness.value = harnessId;
+    setActiveSection("harnesses", anchor);
   }
 
   /** Goes to Memory with the repository selected; the caller navigates to /settings. */
@@ -86,7 +98,9 @@ export function useSettingsNav() {
   return {
     activeSection,
     activeAnchor,
+    activeHarness,
     memoryRepository,
+    openHarness,
     openMemory,
     setActiveSection,
   };

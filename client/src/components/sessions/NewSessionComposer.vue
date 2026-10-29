@@ -1087,6 +1087,7 @@ onUnmounted(() => {
               v-if="showProfilePicker"
               v-model="selectedProfileId"
               :profiles="profiles"
+              :harness-type="resolvedHarnessType || undefined"
               :disabled="isStarting"
               @close-auto-focus="returnFocusToMessage"
             />

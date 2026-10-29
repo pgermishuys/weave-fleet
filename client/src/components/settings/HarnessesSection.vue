@@ -1,13 +1,23 @@
 <script setup lang="ts">
 import type { Component } from "vue";
-import { computed, onBeforeUnmount, onMounted, shallowRef, watch } from "vue";
+import { computed, nextTick, onBeforeUnmount, onMounted, shallowRef, watch } from "vue";
 import { storeToRefs } from "pinia";
-import { Cable, Download, LoaderCircle, RefreshCw, Star } from "lucide-vue-next";
+import { Download, RefreshCw, Star } from "lucide-vue-next";
 import HarnessInstallPanel from "@/components/settings/HarnessInstallPanel.vue";
 import HarnessPathField from "@/components/settings/HarnessPathField.vue";
 import HarnessProfilesPanel from "@/components/settings/HarnessProfilesPanel.vue";
 import HarnessSignInPanel from "@/components/settings/HarnessSignInPanel.vue";
 import HarnessUpdateStrip from "@/components/settings/HarnessUpdateStrip.vue";
+import HarnessWeaveGroup from "@/components/settings/HarnessWeaveGroup.vue";
+import SettingGroup from "@/components/settings/SettingGroup.vue";
+import SettingRow from "@/components/settings/SettingRow.vue";
+import SettingSwitch from "@/components/settings/SettingSwitch.vue";
+import { Button } from "@/components/ui/button";
+import { useAgentBrowserSettings } from "@/composables/use-agent-browser-settings";
+import { useSettingsNav } from "@/composables/use-settings-nav";
+import { useWeaveConfig } from "@/composables/use-weave-config";
+import { PERMISSION_LEVEL_NAMES } from "@/lib/permissions";
+import { PERMISSION_LEVELS, useHarnessPermissions } from "@/composables/use-harness-permissions";
 import { forgetHarnessCatalogs } from "@/composables/use-harness-catalog";
 import { refreshAllHarnesses, useHarnesses } from "@/composables/use-harnesses";
 import { useAppShellStore } from "@/stores/app-shell";
@@ -48,6 +58,9 @@ interface HarnessCard {
   settings: readonly HarnessSetting[];
   /** The harness as the server described it, for its update. */
   info: HarnessInfo;
+  /** Fleet can hand it a permission level, and its agents get Fleet's browser. */
+  supportsPermissionLevels: boolean;
+  supportsBrowser: boolean;
 }
 
 const prefsStore = usePreferencesStore();
@@ -89,7 +102,61 @@ const harnesses = computed<readonly HarnessCard[]>(() => {
   return registeredHarnesses.value.map(toHarnessCard);
 });
 
-const defaultHarness = computed(() => harnesses.value.find((harness) => harness.id === defaultHarnessId.value));
+const weave = useWeaveConfig();
+const permissions = useHarnessPermissions();
+const { settings: browserSettings, load: loadBrowser } = useAgentBrowserSettings();
+const { activeHarness, activeAnchor } = useSettingsNav();
+
+onMounted(() => {
+  void weave.load();
+  void loadBrowser();
+});
+
+/** The tab shown: the one picked (remembered while Settings is open), else the default harness's, else the first. */
+const selected = computed(() =>
+  harnesses.value.find((harness) => harness.id === activeHarness.value)
+  ?? harnesses.value.find((harness) => harness.id === defaultHarnessId.value)
+  ?? harnesses.value[0]);
+
+function selectHarness(id: string): void {
+  activeHarness.value = id;
+}
+
+// The old Weave page lands here with no harness: the default's tab if Weave is asked about there, else the first that is.
+watch([activeAnchor, activeHarness, () => weave.view.value, harnesses], () => {
+  if (activeAnchor.value !== "weave" || activeHarness.value !== null || !weave.view.value) return;
+  const detected = new Set(weave.view.value.harnesses.map((detection) => detection.harnessType));
+  const pick = detected.has(defaultHarnessId.value)
+    ? defaultHarnessId.value
+    : harnesses.value.find((harness) => detected.has(harness.id))?.id;
+  if (pick) activeHarness.value = pick;
+}, { immediate: true });
+
+// Scroll to the group a link named (Weave, What it may do) once it is on the page; Weave's arrives after Fleet asks.
+watch([activeAnchor, selected, () => weave.view.value], async () => {
+  if (!activeAnchor.value) return;
+  await nextTick();
+  document.querySelector(`[data-setting-group="${activeAnchor.value.replace(/"/g, "")}"]`)
+    ?.scrollIntoView({ block: "start", behavior: "smooth" });
+}, { flush: "post" });
+
+function dotClass(status: HarnessStatus): string {
+  switch (status) {
+    case "ready":
+      return "bg-running";
+    case "sign-in-required":
+    case "update-needed":
+    case "not-working":
+      return "bg-idle";
+    default:
+      return "bg-muted/50";
+  }
+}
+
+async function changeDefault(event: Event): Promise<void> {
+  const target = harnesses.value.find((harness) => harness.id === (event.target as HTMLSelectElement).value);
+  if (target) await makeDefaultHarness(target);
+}
 
 /** Off stops Fleet looking up harnesses' latest versions on npm (`HarnessEndpoints.UpdateChecksPreference`). */
 const UPDATE_CHECKS_PREFERENCE_KEY = "harnessUpdates.check";
@@ -173,6 +240,8 @@ function toHarnessCard(harness: HarnessInfo): HarnessCard {
     describesInstall: Boolean(harness.setup?.mode),
     settings: harness.settings ?? [],
     info: harness,
+    supportsPermissionLevels: harness.capabilities?.supportsPermissionLevels === true,
+    supportsBrowser: harness.capabilities?.supportsAgentBrowser === true,
   };
 }
 
@@ -197,307 +266,343 @@ function statusForHarness(harness: HarnessInfo, enabled: boolean): HarnessStatus
 
 <template>
   <div class="grid gap-6">
-    <section class="rounded-card border border-border bg-card-bg p-6 shadow-sm">
-      <div class="flex flex-col gap-4 md:flex-row md:items-start md:justify-between">
-        <div class="flex items-start gap-3">
-          <div class="rounded-btn border border-border bg-main-bg p-2 text-text">
-            <Cable
-              :size="18"
-              aria-hidden="true"
-            />
+    <SettingGroup
+      id="default-harness"
+      title="Default harness"
+      hint="Used when a new session doesn't pick one."
+    >
+      <SettingRow
+        id="default-harness"
+        title="Default harness"
+        :summary="checkedLabel ? undefined : 'The harness a new session starts on.'"
+      >
+        <template #below>
+          <p
+            v-if="checkedLabel"
+            class="mt-0.5 text-xs text-muted"
+            data-testid="harnesses-checked-at"
+          >
+            {{ isCheckingHarnesses ? "Checking…" : checkedLabel }}
+          </p>
+        </template>
+        <template #control>
+          <div class="flex flex-wrap items-center justify-end gap-2">
+            <select
+              class="h-8 rounded-btn border border-border bg-main-bg px-2 text-xs text-text"
+              aria-label="Default harness"
+              data-testid="harnesses-default-select"
+              :value="defaultHarnessId"
+              @change="changeDefault"
+            >
+              <option
+                v-for="harness in harnesses"
+                :key="harness.id"
+                :value="harness.id"
+                :disabled="!harness.enabled || !harness.canDefault"
+              >
+                {{ harness.name }}
+              </option>
+            </select>
+            <Button
+              v-if="!config.cloudMode"
+              variant="outline"
+              size="sm"
+              data-testid="harnesses-set-up"
+              @click="harnessSetup.open('harnesses')"
+            >
+              <Download aria-hidden="true" />
+              Set up a harness
+            </Button>
+            <!-- Check again looks for each harness now, so one installed a moment ago shows up here. -->
+            <Button
+              variant="outline"
+              size="sm"
+              :disabled="isCheckingHarnesses"
+              data-testid="harnesses-check-again"
+              @click="void checkHarnessesAgain()"
+            >
+              <RefreshCw
+                :class="isCheckingHarnesses ? 'animate-spin' : ''"
+                aria-hidden="true"
+              />
+              Check again
+            </Button>
           </div>
-          <div class="space-y-2">
-            <div class="flex flex-wrap items-center gap-2">
-              <h2 class="text-lg font-semibold text-text">
-                Harnesses
-              </h2>
-            </div>
-            <p class="max-w-2xl text-sm text-muted">
-              Harnesses define the runtimes Weave can use to drive sessions.
-            </p>
-            <div class="flex flex-wrap items-center gap-2 pt-1 text-xs text-muted">
-              <span>Default harness:</span>
-              <span class="inline-flex items-center gap-1 rounded-full border border-accent/25 bg-accent/10 px-2 py-0.5 font-medium text-accent">
-                <Star
-                  :size="11"
-                  aria-hidden="true"
-                />
-                {{ defaultHarness?.name ?? "None selected" }}
-              </span>
-            </div>
-          </div>
-        </div>
-
-        <div class="flex shrink-0 flex-wrap items-start gap-2">
-          <button
-            v-if="!config.cloudMode"
-            type="button"
-            role="switch"
-            :aria-checked="areUpdateChecksOn"
-            class="inline-flex items-center gap-2 rounded-btn px-1 py-1.5 text-xs font-medium text-muted"
+        </template>
+      </SettingRow>
+      <SettingRow
+        v-if="!config.cloudMode"
+        id="harness-update-checks"
+        title="Check for updates"
+        summary="Fleet looks up each harness's latest version on npm."
+      >
+        <template #control>
+          <SettingSwitch
+            :checked="areUpdateChecksOn"
+            aria-label="Check for updates"
             data-testid="harnesses-update-checks"
             @click="void toggleUpdateChecks()"
-          >
-            <span>Check for updates</span>
-            <span
-              class="relative inline-flex h-5 w-9 shrink-0 rounded-full border-2 border-transparent transition-colors"
-              :class="areUpdateChecksOn ? 'bg-accent' : 'bg-border'"
-            >
-              <span
-                class="pointer-events-none inline-block h-4 w-4 rounded-full bg-white shadow transition-transform"
-                :class="areUpdateChecksOn ? 'translate-x-4' : 'translate-x-0'"
-              />
-            </span>
-          </button>
-          <button
-            v-if="!config.cloudMode"
-            type="button"
-            class="inline-flex items-center gap-1.5 rounded-btn border border-border bg-main-bg px-3 py-1.5 text-xs font-medium text-text transition-colors hover:border-accent/50"
-            data-testid="harnesses-set-up"
-            @click="harnessSetup.open('harnesses')"
-          >
-            <Download
-              :size="12"
-              aria-hidden="true"
-            />
-            Set up a harness
-          </button>
-          <span
-            v-if="checkedLabel"
-            class="self-center text-xs text-muted"
-            data-testid="harnesses-checked-at"
-          >{{ isCheckingHarnesses ? "Checking…" : checkedLabel }}</span>
-          <!-- Check again looks for each harness now, so one installed a moment ago shows up here. -->
-          <button
-            type="button"
-            class="inline-flex shrink-0 items-center gap-1.5 self-start rounded-btn border border-border bg-main-bg px-3 py-1.5 text-xs font-medium text-text transition-colors hover:border-accent/50 disabled:cursor-not-allowed disabled:opacity-60"
-            :disabled="isCheckingHarnesses"
-            data-testid="harnesses-check-again"
-            @click="void checkHarnessesAgain()"
-          >
-            <RefreshCw
-              :size="12"
-              :class="isCheckingHarnesses ? 'animate-spin' : ''"
-              aria-hidden="true"
-            />
-            Check again
-          </button>
-        </div>
-      </div>
-    </section>
+          />
+        </template>
+      </SettingRow>
+    </SettingGroup>
 
-    <section class="grid gap-4">
-      <article
+    <div
+      class="flex gap-1 overflow-x-auto border-b border-border"
+      role="tablist"
+      aria-label="Harnesses"
+    >
+      <button
         v-for="harness in harnesses"
         :key="harness.id"
-        class="group rounded-card border border-border bg-card-bg p-5 shadow-sm transition-colors"
-        :class="[
-          harness.enabled ? 'hover:border-accent/50 hover:bg-panel-bg' : 'opacity-80',
-          defaultHarnessId === harness.id ? 'border-accent/45' : '',
-        ]"
+        type="button"
+        role="tab"
+        class="-mb-px inline-flex shrink-0 items-center gap-2 border-b-2 px-3 py-2 text-sm"
+        :class="selected?.id === harness.id ? 'border-accent text-text' : 'border-transparent text-muted hover:text-text'"
+        :aria-selected="selected?.id === harness.id"
+        :data-testid="`harness-tab-${harness.id}`"
+        @click="selectHarness(harness.id)"
       >
-        <div class="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
-          <div class="flex min-w-0 items-start gap-4">
-            <div class="rounded-2xl border border-border bg-main-bg p-3 text-text shadow-sm">
-              <component
-                :is="harness.icon"
-                :size="20"
-                aria-hidden="true"
-              />
-            </div>
+        <span
+          class="size-1.5 rounded-full"
+          :class="dotClass(harness.status)"
+          :title="statusLabel(harness.status)"
+          aria-hidden="true"
+        />
+        {{ harness.name }}
+      </button>
+    </div>
 
-            <div class="min-w-0 space-y-2">
-              <div class="flex flex-wrap items-center gap-2">
-                <p class="text-[11px] font-semibold uppercase tracking-[0.16em] text-muted">
-                  {{ harness.eyebrow }}
-                </p>
-                <span
-                  class="inline-flex items-center gap-1 rounded-full border px-2 py-0.5 text-[10px] font-medium"
-                  :class="statusClasses(harness.status)"
-                >
-                  <component
-                    :is="statusIcon(harness.status)"
-                    :size="11"
-                    aria-hidden="true"
-                  />
-                  {{ statusLabel(harness.status) }}
-                </span>
-                <span
-                  v-if="defaultHarnessId === harness.id"
-                  class="inline-flex items-center gap-1 rounded-full border border-accent/25 bg-accent/10 px-2 py-0.5 text-[10px] font-medium text-accent"
-                >
-                  <Star
-                    :size="11"
-                    aria-hidden="true"
-                  />
-                  Default
-                </span>
-              </div>
-
-              <div>
-                <h3 class="text-base font-semibold text-text">
-                  {{ harness.name }}
-                </h3>
-                <p class="mt-1 text-sm text-muted">
-                  {{ harness.description }}
-                </p>
-              </div>
-
-              <p class="text-xs text-muted">
-                {{ harness.summary }}
-              </p>
-              <p
-                v-if="harness.location"
-                class="break-all font-mono text-[11px] text-muted"
-                data-testid="harness-location"
-              >
-                {{ harness.location }}
-              </p>
-            </div>
-          </div>
-
-          <div class="flex shrink-0 flex-col gap-3 sm:items-end">
-            <button
-              type="button"
-              role="switch"
-              :aria-checked="harness.enabled"
-              :disabled="!harness.canToggle"
-              class="inline-flex items-center gap-2 text-xs font-medium text-muted disabled:cursor-not-allowed disabled:opacity-50"
-              @click="toggleHarness(harness)"
+    <article
+      v-if="selected"
+      :key="selected.id"
+      class="grid gap-6"
+      role="tabpanel"
+      :data-testid="`harness-panel-${selected.id}`"
+    >
+      <div class="flex items-start justify-between gap-4">
+        <div class="min-w-0">
+          <div class="flex flex-wrap items-center gap-2">
+            <h2 class="text-lg font-semibold text-text">
+              {{ selected.name }}
+            </h2>
+            <span
+              v-if="defaultHarnessId === selected.id"
+              class="inline-flex items-center gap-1 rounded-full border border-accent/25 bg-accent/10 px-2 py-0.5 text-[10px] font-medium uppercase text-accent"
             >
-              <span>{{ harness.enabled ? "Enabled" : "Disabled" }}</span>
-              <span
-                class="relative inline-flex h-6 w-11 shrink-0 rounded-full border-2 border-transparent transition-colors"
-                :class="harness.enabled ? 'bg-accent' : 'bg-border'"
-              >
-                <span
-                  class="pointer-events-none inline-block h-5 w-5 rounded-full bg-white shadow transition-transform"
-                  :class="harness.enabled ? 'translate-x-5' : 'translate-x-0'"
-                />
-              </span>
-            </button>
-
-            <div class="flex flex-wrap items-center gap-2 sm:justify-end">
-              <button
-                type="button"
-                class="inline-flex items-center gap-1 rounded-btn border border-border bg-main-bg px-2.5 py-1.5 text-xs font-medium text-text transition-colors hover:border-accent/50 disabled:cursor-not-allowed disabled:opacity-50"
-                :disabled="!harness.canDefault || !harness.enabled || defaultHarnessId === harness.id"
-                @click="makeDefaultHarness(harness)"
-              >
-                <Star
-                  :size="12"
-                  aria-hidden="true"
-                />
-                {{ defaultHarnessId === harness.id ? "Default" : "Set default" }}
-              </button>
-
-              <span
-                v-if="harness.settings.length === 0 && !harness.describesInstall"
-                class="inline-flex items-center rounded-btn px-2.5 py-1.5 text-xs font-medium text-muted"
-              >
-                No settings yet
-              </span>
-            </div>
-          </div>
-        </div>
-
-        <HarnessUpdateStrip
-          v-if="harness.enabled && !config.cloudMode"
-          class="mt-4"
-          :harness="harness.info"
-        />
-
-        <HarnessInstallPanel
-          v-if="harness.describesInstall && !config.cloudMode"
-          class="mt-4"
-          :harness="harness.info"
-          :signs-in-here="harness.offersSignIn"
-        />
-
-        <!-- Listing providers starts the harness, so one that isn't turned on waits for a click. -->
-        <HarnessSignInPanel
-          v-if="harness.offersSignIn && !config.cloudMode"
-          class="mt-4"
-          :harness-type="harness.id"
-          :harness-name="harness.name"
-          :sign-in-command="harness.info.setup?.signInCommand ?? null"
-          :auto-load="harness.enabled"
-        />
-
-        <!-- GitHub Copilot runs weave-copilot, which Fleet finds on PATH unless the user names it here. -->
-        <HarnessPathField
-          v-if="harness.id === 'copilot' && !config.cloudMode"
-          class="mt-4"
-          :harness="harness.info"
-          preference-key="copilot.path"
-          program="weave-copilot"
-          empty-meaning="use the copy Fleet installed, or weave-copilot on PATH"
-        />
-
-        <div
-          v-if="harness.settings.length > 0"
-          class="mt-4 grid gap-3 border-t border-border pt-4"
-        >
-          <div
-            v-for="setting in harness.settings"
-            :key="setting.key"
-            class="flex items-start justify-between gap-4 rounded-card border border-border bg-main-bg p-4"
-            :data-testid="`harness-setting-${setting.key}`"
-          >
-            <div>
-              <p class="text-sm font-medium text-text">
-                {{ setting.label }}
-              </p>
-              <p class="mt-1 text-xs text-muted">
-                {{ setting.default ? "On" : "Off" }} by default. {{ setting.description }}
-              </p>
-              <p
-                v-if="settingError?.key === setting.key"
-                class="mt-2 text-xs text-red-300"
-                role="alert"
-              >
-                {{ settingError.message }}
-              </p>
-            </div>
-
-            <div class="flex items-center gap-2">
-              <LoaderCircle
-                v-if="savingSetting === setting.key"
-                :size="16"
-                class="animate-spin text-muted"
+              <Star
+                :size="11"
                 aria-hidden="true"
               />
-              <button
-                type="button"
-                role="switch"
-                :aria-checked="isSettingOn(setting)"
-                :disabled="prefsStore.isLoading || savingSetting !== null"
-                :aria-label="setting.label"
-                class="relative inline-flex h-6 w-11 shrink-0 cursor-pointer rounded-full border-2 border-transparent transition-colors duration-200 ease-in-out focus:outline-none focus:ring-2 focus:ring-accent focus:ring-offset-2 focus:ring-offset-main-bg disabled:cursor-not-allowed disabled:opacity-60"
-                :class="isSettingOn(setting) ? 'bg-accent' : 'bg-border'"
-                :data-testid="`harness-setting-toggle-${setting.key}`"
-                @click="toggleSetting(setting)"
-              >
-                <span
-                  class="pointer-events-none inline-block h-5 w-5 rounded-full bg-white shadow ring-0 transition duration-200 ease-in-out"
-                  :class="isSettingOn(setting) ? 'translate-x-5' : 'translate-x-0'"
-                />
-              </button>
-            </div>
+              Default
+            </span>
+            <span
+              class="inline-flex items-center gap-1 rounded-full border px-2 py-0.5 text-[10px] font-medium uppercase"
+              :class="statusClasses(selected.status)"
+            >
+              <component
+                :is="statusIcon(selected.status)"
+                :size="11"
+                aria-hidden="true"
+              />
+              {{ statusLabel(selected.status) }}
+            </span>
           </div>
+          <p class="mt-1 text-xs text-muted">
+            {{ selected.eyebrow }} · {{ selected.description }}
+          </p>
+          <p class="mt-1 text-xs text-muted">
+            {{ selected.summary }}
+          </p>
+          <p
+            v-if="selected.location"
+            class="mt-1 break-all font-mono text-[11px] text-muted"
+            data-testid="harness-location"
+          >
+            {{ selected.location }}
+          </p>
         </div>
-
-        <div
-          v-if="harness.supportsProfiles"
-          class="mt-4 border-t border-border pt-4"
-        >
-          <HarnessProfilesPanel
-            :harness-type="harness.id"
-            :harness-name="harness.name"
-            :profile-note="harness.info.presentation?.profileNote ?? null"
+        <label class="flex shrink-0 items-center gap-2 text-xs font-medium text-muted">
+          {{ selected.enabled ? "Enabled" : "Disabled" }}
+          <SettingSwitch
+            :checked="selected.enabled"
+            :disabled="!selected.canToggle"
+            :aria-label="`${selected.name} enabled`"
+            data-testid="harness-enabled-switch"
+            @click="toggleHarness(selected)"
           />
-        </div>
-      </article>
-    </section>
+        </label>
+      </div>
+
+      <!-- The version and, when there is one, its update; each panel names itself and draws nothing when it has nothing to say. -->
+      <div
+        v-if="!config.cloudMode"
+        data-setting-group="version"
+        class="scroll-mt-4 grid gap-2 empty:hidden"
+      >
+        <HarnessUpdateStrip
+          v-if="selected.enabled && !config.cloudMode"
+          :harness="selected.info"
+        />
+        <HarnessInstallPanel
+          v-if="selected.describesInstall && !config.cloudMode"
+          :harness="selected.info"
+          :signs-in-here="selected.offersSignIn"
+        />
+      </div>
+
+      <!-- Listing providers starts the harness, so one that isn't turned on waits for a click. -->
+      <section
+        v-if="selected.offersSignIn && !config.cloudMode"
+        data-setting-group="providers"
+        class="scroll-mt-4 grid gap-2"
+      >
+        <h3 class="px-1 text-sm font-semibold text-text">
+          Providers
+        </h3>
+        <HarnessSignInPanel
+          :harness-type="selected.id"
+          :harness-name="selected.name"
+          :sign-in-command="selected.info.setup?.signInCommand ?? null"
+          :auto-load="selected.enabled"
+        />
+      </section>
+
+      <SettingGroup
+        id="may-do"
+        title="What it may do"
+      >
+        <SettingRow
+          v-if="selected.supportsPermissionLevels"
+          id="harness-permissions"
+          title="Permissions"
+          summary="Applies from each session's next message."
+        >
+          <template #below>
+            <p
+              class="mt-1 font-mono text-[11.5px] text-muted"
+              :data-testid="`permission-handed-${selected.id}`"
+            >
+              {{ permissions.handedText(selected.info) }}
+            </p>
+          </template>
+          <template #control>
+            <select
+              :id="`permission-harness-${selected.id}`"
+              class="h-8 rounded-btn border border-border bg-main-bg px-2 text-xs text-text"
+              :aria-label="`${selected.name} permissions`"
+              :value="permissions.ownLevel(selected.id) ?? 'default'"
+              @change="permissions.setHarnessLevel(selected.id, ($event.target as HTMLSelectElement).value)"
+            >
+              <option value="default">
+                Default ({{ PERMISSION_LEVEL_NAMES[permissions.defaultLevel.value] }})
+              </option>
+              <option
+                v-for="level in PERMISSION_LEVELS"
+                :key="level"
+                :value="level"
+              >
+                {{ PERMISSION_LEVEL_NAMES[level] }}
+              </option>
+            </select>
+          </template>
+        </SettingRow>
+        <SettingRow
+          v-else
+          id="harness-permissions"
+          title="Permissions"
+          :summary="`Fleet can't hand ${selected.name} a permission level yet.`"
+        >
+          <template #below>
+            <span
+              class="sr-only"
+              :data-testid="`permission-handed-${selected.id}`"
+            >Fleet can't hand {{ selected.name }} a permission level yet.</span>
+          </template>
+          <template #control>
+            <span class="text-xs text-muted">Not available</span>
+          </template>
+        </SettingRow>
+        <SettingRow
+          id="harness-browser"
+          title="Browser"
+          :data-testid="`browser-harness-${selected.id}`"
+          :summary="selected.supportsBrowser
+            ? `${browserSettings.enabled ? 'On' : 'Off'} · ${selected.info.presentation?.agentBrowser ?? 'Fleet\'s browser tools.'}`
+            : `Off: Fleet can't add tools to ${selected.name} yet.`"
+        >
+          <template #control>
+            <span class="text-xs text-muted">{{ selected.supportsBrowser && browserSettings.enabled ? "On" : "Off" }}</span>
+          </template>
+        </SettingRow>
+      </SettingGroup>
+
+      <HarnessWeaveGroup
+        :harness-type="selected.id"
+        :weave="weave"
+      />
+
+      <section
+        v-if="selected.supportsProfiles"
+        data-setting-group="profiles"
+        class="scroll-mt-4 grid gap-2"
+      >
+        <HarnessProfilesPanel
+          :harness-type="selected.id"
+          :harness-name="selected.name"
+          :profile-note="selected.info.presentation?.profileNote ?? null"
+        />
+      </section>
+
+      <!-- GitHub Copilot runs weave-copilot, which Fleet finds on PATH unless the user names it here. -->
+      <HarnessPathField
+        v-if="selected.id === 'copilot' && !config.cloudMode"
+        :harness="selected.info"
+        preference-key="copilot.path"
+        program="weave-copilot"
+        empty-meaning="use the copy Fleet installed, or weave-copilot on PATH"
+      />
+
+      <SettingGroup
+        v-if="selected.settings.length > 0"
+        id="harness-settings"
+        :title="`${selected.name} settings`"
+      >
+        <SettingRow
+          v-for="setting in selected.settings"
+          :id="`harness-setting-${setting.key}`"
+          :key="setting.key"
+          :title="setting.label"
+          :summary="`${setting.default ? 'On' : 'Off'} by default. ${setting.description}`"
+          :data-testid="`harness-setting-${setting.key}`"
+        >
+          <template #below>
+            <p
+              v-if="settingError?.key === setting.key"
+              class="mt-2 text-xs text-red-300"
+              role="alert"
+            >
+              {{ settingError.message }}
+            </p>
+          </template>
+          <template #control>
+            <SettingSwitch
+              :checked="isSettingOn(setting)"
+              :disabled="prefsStore.isLoading || savingSetting !== null"
+              :saving="savingSetting === setting.key"
+              :aria-label="setting.label"
+              :data-testid="`harness-setting-toggle-${setting.key}`"
+              @click="toggleSetting(setting)"
+            />
+          </template>
+        </SettingRow>
+      </SettingGroup>
+      <p
+        v-else-if="!selected.describesInstall"
+        class="px-1 text-xs text-muted"
+      >
+        No settings yet
+      </p>
+    </article>
   </div>
 </template>

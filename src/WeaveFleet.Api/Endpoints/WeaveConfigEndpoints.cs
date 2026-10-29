@@ -5,7 +5,7 @@ namespace WeaveFleet.Api.Endpoints;
 
 #pragma warning disable IL2026 // RDG intercepts MapX calls in Web SDK projects making them trim-safe
 
-/// <summary>Settings → Weave: which Weave each harness loads, and the config Fleet keeps for it.</summary>
+/// <summary>Settings → Harnesses → (a harness) → Weave: which Weave each harness loads, and the config Fleet keeps for it.</summary>
 public static class WeaveConfigEndpoints
 {
     public static IEndpointRouteBuilder MapWeaveConfigEndpoints(this IEndpointRouteBuilder app)

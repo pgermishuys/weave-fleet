@@ -1,10 +1,11 @@
 import { flushPromises, mount } from "@vue/test-utils";
 import { createPinia, getActivePinia, setActivePinia } from "pinia";
-import { beforeEach, describe, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import HarnessesSection from "@/components/settings/HarnessesSection.vue";
 import type { HarnessInfo } from "@/api/client";
 import { useAppShellStore } from "@/stores/app-shell";
 import { useHarnessSetupStore } from "@/stores/harness-setup";
+import { useSettingsNav } from "@/composables/use-settings-nav";
 
 const { apiFetchMock } = vi.hoisted(() => ({
   apiFetchMock: vi.fn(),
@@ -57,6 +58,14 @@ function createHarness(type: string, displayName: string, overrides: Partial<Har
   };
 }
 
+/** What Fleet says each harness loads of Weave; only the harnesses listed here get a Weave group. */
+let weaveHarnesses: unknown[] = [];
+
+async function openTab(wrapper: Awaited<ReturnType<typeof mountHarnessesSection>>, id: string): Promise<void> {
+  await wrapper.get(`[data-testid='harness-tab-${id}']`).trigger("click");
+  await flushPromises();
+}
+
 function mockApiResponses(
   preferences: Record<string, string>,
   harnesses: () => HarnessInfo[] = () => [createHarness("opencode", "OpenCode")],
@@ -74,9 +83,20 @@ function mockApiResponses(
       return reply(null);
     }
 
+    if (path === "/api/weave") {
+      return reply({ source: "own", files: {}, updatedAt: null, apply: null, harnesses: weaveHarnesses });
+    }
+
+    if (path === "/api/agent-browser/settings") {
+      return reply({ enabled: true, pages: "session", scripts: false });
+    }
+
     return reply({ error: "unexpected path" }, 404);
   });
 }
+
+// The Settings state is shared, so a wrapper left mounted would keep reacting to the next test's links.
+const mounted: { unmount: () => void }[] = [];
 
 async function mountHarnessesSection() {
   const wrapper = mount(HarnessesSection, {
@@ -85,14 +105,22 @@ async function mountHarnessesSection() {
     },
   });
 
+  mounted.push(wrapper);
   await flushPromises();
   return wrapper;
 }
 
 describe("HarnessesSection", () => {
+  afterEach(() => {
+    for (const wrapper of mounted.splice(0)) wrapper.unmount();
+  });
+
   beforeEach(() => {
     apiFetchMock.mockReset();
     setActivePinia(createPinia());
+    weaveHarnesses = [];
+    useSettingsNav().activeHarness.value = null;
+    useSettingsNav().activeAnchor.value = null;
   });
 
   it("renders harnesses section", async () => {
@@ -100,7 +128,7 @@ describe("HarnessesSection", () => {
 
     const wrapper = await mountHarnessesSection();
 
-    expect(wrapper.text()).toContain("Harnesses");
+    expect(wrapper.text()).toContain("Default harness");
   });
 
   it("shows a harness on until the user turns it off, so a computer with only Claude Code works", async () => {
@@ -111,11 +139,12 @@ describe("HarnessesSection", () => {
 
     const wrapper = await mountHarnessesSection();
 
-    const switchOf = (name: string) => wrapper.findAll("article")
-      .find((card) => card.text().includes(name))
-      ?.find("[role='switch']").attributes("aria-checked");
-    expect(switchOf("Claude Code")).toBe("true");
-    expect(switchOf("OpenCode")).toBe("false");
+    const switchOf = async (id: string) => {
+      await openTab(wrapper, id);
+      return wrapper.get("[data-testid='harness-enabled-switch']").attributes("aria-checked");
+    };
+    expect(await switchOf("claude-code")).toBe("true");
+    expect(await switchOf("opencode")).toBe("false");
   });
 
   it("says a harness isn't installed, and why", async () => {
@@ -172,7 +201,9 @@ describe("HarnessesSection", () => {
     expect(install.text()).toContain("OpenCode 2 keeps its own provider sign-ins here.");
     expect(install.get("[data-testid='harness-install-sign-in']").text()).toContain("OPENCODE_CONFIG_DIR=/c OPENCODE_DB=/d");
     // Pi says nothing about its install, so it keeps the placeholder.
-    expect(wrapper.findAll("article").map((card) => card.text().includes("No settings yet"))).toEqual([false, true]);
+    expect(wrapper.get("article").text()).not.toContain("No settings yet");
+    await openTab(wrapper, "pi");
+    expect(wrapper.get("article").text()).toContain("No settings yet");
     expect(wrapper.find("[data-testid^='harness-setting-']").exists()).toBe(false);
   });
 
@@ -187,12 +218,13 @@ describe("HarnessesSection", () => {
 
     const wrapper = await mountHarnessesSection();
 
-    const acme = wrapper.findAll("article")[0]!;
+    const acme = wrapper.get("article");
     expect(acme.text()).toContain("Cloud harness");
     expect(acme.text()).toContain("An invented harness for tests.");
     expect(acme.text()).toContain("Default");
     // One that sends no presentation (an older Fleet) still shows, plainly.
-    expect(wrapper.findAll("article")[1]!.text()).toContain("Harness runtime registered by the backend.");
+    await openTab(wrapper, "pi");
+    expect(wrapper.get("article").text()).toContain("Harness runtime registered by the backend.");
   });
 
   it("shows a harness's own switches, on by the default it sends until the user sets them", async () => {
@@ -207,7 +239,7 @@ describe("HarnessesSection", () => {
     const toggle = wrapper.get("[data-testid='harness-setting-toggle-acme.fast']");
     expect(toggle.attributes("aria-checked")).toBe("true");
     // A harness with switches has settings; one without, and no install to describe, says so.
-    expect(wrapper.findAll("article").map((card) => card.text().includes("No settings yet"))).toEqual([false, true]);
+    expect(wrapper.get("article").text()).not.toContain("No settings yet");
 
     await toggle.trigger("click");
     await flushPromises();
@@ -403,6 +435,121 @@ describe("HarnessesSection", () => {
       const wrapper = await mountHarnessesSection();
 
       expect(wrapper.find("[data-testid='harness-path-field']").exists()).toBe(false);
+    });
+  });
+
+  describe("tabs", () => {
+    function withPermissions(type: string, name: string, supported: boolean): HarnessInfo {
+      return createHarness(type, name, {
+        capabilities: { ...createHarness(type, name).capabilities, supportsPermissionLevels: supported, supportsAgentBrowser: supported },
+        presentation: { order: 0, eyebrow: "CLI", description: "", icon: "terminal", permissionModes: { ask: "Asks for most", edits: "Asks for commands", all: "Asks for nothing" } },
+      });
+    }
+
+    it("has one tab per harness Fleet lists, in its order, on the default harness's first", async () => {
+      mockApiResponses({}, () => [createHarness("opencode2", "OpenCode 2", { isDefault: true }), createHarness("opencode", "OpenCode"), createHarness("pi", "Pi")]);
+
+      const wrapper = await mountHarnessesSection();
+
+      expect(wrapper.findAll("[role='tab']").map((tab) => tab.text())).toEqual(["OpenCode 2", "OpenCode", "Pi"]);
+      expect(wrapper.get("[data-testid='harness-tab-opencode2']").attributes("aria-selected")).toBe("true");
+    });
+
+    it("lists GitHub Copilot only when Fleet does, which is while its Labs switch is on", async () => {
+      mockApiResponses({}, () => [createHarness("opencode", "OpenCode")]);
+      expect((await mountHarnessesSection()).find("[data-testid='harness-tab-copilot']").exists()).toBe(false);
+
+      mockApiResponses({}, () => [createHarness("opencode", "OpenCode"), createHarness("copilot", "GitHub Copilot")]);
+      expect((await mountHarnessesSection()).find("[data-testid='harness-tab-copilot']").exists()).toBe(true);
+    });
+
+    it("remembers the tab while Settings is open", async () => {
+      mockApiResponses({}, () => [createHarness("opencode", "OpenCode"), createHarness("pi", "Pi")]);
+      await openTab(await mountHarnessesSection(), "pi");
+
+      const again = await mountHarnessesSection();
+
+      expect(again.get("[data-testid='harness-tab-pi']").attributes("aria-selected")).toBe("true");
+    });
+
+    it("opens the tab a link names", async () => {
+      mockApiResponses({}, () => [createHarness("opencode", "OpenCode"), createHarness("pi", "Pi")]);
+      useSettingsNav().openHarness("pi", "may-do");
+
+      const wrapper = await mountHarnessesSection();
+
+      expect(wrapper.get("[data-testid='harness-tab-pi']").attributes("aria-selected")).toBe("true");
+      expect(wrapper.find("[data-setting-group='may-do']").exists()).toBe(true);
+    });
+
+    it("the old Weave id opens the default harness's tab when Weave is asked about there", async () => {
+      weaveHarnesses = [
+        { harnessType: "opencode", harnessName: "OpenCode", checked: true, installs: [] },
+        { harnessType: "opencode2", harnessName: "OpenCode 2", checked: true, installs: [] },
+      ];
+      mockApiResponses({}, () => [createHarness("opencode", "OpenCode"), createHarness("opencode2", "OpenCode 2"), createHarness("pi", "Pi")]);
+      useSettingsNav().setActiveSection("weave");
+
+      const wrapper = await mountHarnessesSection();
+
+      expect(wrapper.get("[data-testid='harness-tab-opencode']").attributes("aria-selected")).toBe("true");
+      expect(wrapper.find("[data-setting-group='weave']").exists()).toBe(true);
+    });
+
+    it("the old Weave id falls to the first harness with Weave when the default has none", async () => {
+      weaveHarnesses = [{ harnessType: "opencode2", harnessName: "OpenCode 2", checked: true, installs: [] }];
+      mockApiResponses({}, () => [createHarness("pi", "Pi", { isDefault: true }), createHarness("opencode2", "OpenCode 2")]);
+      useSettingsNav().setActiveSection("weave");
+
+      const wrapper = await mountHarnessesSection();
+
+      expect(wrapper.get("[data-testid='harness-tab-opencode2']").attributes("aria-selected")).toBe("true");
+    });
+
+    it("shows a Weave group only on harnesses Weave supports", async () => {
+      weaveHarnesses = [{ harnessType: "opencode", harnessName: "OpenCode", checked: true, installs: [] }];
+      mockApiResponses({}, () => [createHarness("opencode", "OpenCode"), createHarness("pi", "Pi")]);
+
+      const wrapper = await mountHarnessesSection();
+      expect(wrapper.find("[data-setting-group='weave']").exists()).toBe(true);
+      await openTab(wrapper, "pi");
+      expect(wrapper.find("[data-setting-group='weave']").exists()).toBe(false);
+    });
+
+    it("sets a harness's own permission level, and back to the default clears it", async () => {
+      mockApiResponses({ PermissionLevel: "ask" }, () => [withPermissions("claude-code", "Claude Code", true)]);
+      const wrapper = await mountHarnessesSection();
+      const select = wrapper.get<HTMLSelectElement>("#permission-harness-claude-code");
+
+      expect(wrapper.get("[data-testid='permission-handed-claude-code']").text()).toBe("Asks for most");
+      await select.setValue("edits");
+      expect(apiFetchMock).toHaveBeenCalledWith("/api/preferences/{key}", expect.objectContaining({
+        params: { path: { key: "PermissionLevel.claude-code" } }, body: { value: "edits" },
+      }));
+      expect(wrapper.get("[data-testid='permission-handed-claude-code']").text()).toBe("Asks for commands");
+
+      await select.setValue("default");
+      expect(apiFetchMock).toHaveBeenCalledWith("/api/preferences/{key}", expect.objectContaining({
+        params: { path: { key: "PermissionLevel.claude-code" } }, body: { value: "" },
+      }));
+    });
+
+    it("says a harness that can't take a level has none to set, and that its browser is off", async () => {
+      mockApiResponses({}, () => [withPermissions("pi", "Pi", false)]);
+
+      const wrapper = await mountHarnessesSection();
+
+      expect(wrapper.find("#permission-harness-pi").exists()).toBe(false);
+      expect(wrapper.get("[data-testid='permission-handed-pi']").text()).toContain("can't hand Pi a permission level");
+      expect(wrapper.get("[data-testid='browser-harness-pi']").text()).toContain("Off: Fleet can't add tools to Pi yet.");
+    });
+
+    it("shows the browser as on for a harness that gets it while agents may use one", async () => {
+      mockApiResponses({}, () => [withPermissions("opencode2", "OpenCode 2", true)]);
+
+      const wrapper = await mountHarnessesSection();
+
+      expect(wrapper.get("[data-testid='browser-harness-opencode2']").text()).toContain("On");
     });
   });
 });

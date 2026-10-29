@@ -10,6 +10,8 @@ import { profileSummary } from "@/lib/harness-profile";
 
 const props = defineProps<{
   profiles: readonly HarnessProfile[];
+  /** The harness the profiles belong to: Manage profiles opens its tab in Settings → Harnesses. */
+  harnessType?: string;
   disabled?: boolean;
 }>();
 
@@ -21,7 +23,7 @@ const emit = defineEmits<{
 const profileId = defineModel<string>({ required: true });
 
 const navigate = useNavigate();
-const { setActiveSection } = useSettingsNav();
+const { openHarness, setActiveSection } = useSettingsNav();
 
 const selectedName = computed(() =>
   profileId.value === NO_PROFILE
@@ -30,7 +32,8 @@ const selectedName = computed(() =>
 );
 
 function manageProfiles(): void {
-  setActiveSection("harnesses");
+  if (props.harnessType) openHarness(props.harnessType, "profiles");
+  else setActiveSection("harnesses");
   void navigate({ to: "/settings" });
 }
 </script>

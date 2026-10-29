@@ -1,22 +1,13 @@
 <script setup lang="ts">
-import { computed, onMounted, shallowRef } from "vue";
+import { onMounted } from "vue";
 import { Info, LoaderCircle } from "lucide-vue-next";
-import { useEnabledHarnesses } from "@/composables/use-enabled-harnesses";
-import { apiFetch } from "@/lib/api-client";
+import { useAgentBrowserSettings, type BrowserPages as Pages } from "@/composables/use-agent-browser-settings";
 
 /**
- * Settings → Permissions: whether agents can use a browser of their own, which pages it may open, and whether page scripts
- * run. Fleet runs every browser action, so these limits hold whatever an agent writes. The rows below say how each
- * harness gets the browser, or why it doesn't.
+ * Settings → Permissions → Browser: whether agents can use a browser of their own, which pages it may open, and whether
+ * page scripts run. Fleet runs every browser action, so these limits hold whatever an agent writes. How each harness gets
+ * the browser is on that harness's tab, under What it may do.
  */
-
-type Pages = "session" | "machine" | "any";
-
-interface BrowserSettings {
-  enabled: boolean;
-  pages: Pages;
-  scripts: boolean;
-}
 
 const PAGES: readonly { id: Pages; label: string; description: string }[] = [
   { id: "session", label: "This session's pages", description: "Apps it started and pages in its canvases, on this machine. Recommended." },
@@ -24,57 +15,9 @@ const PAGES: readonly { id: Pages; label: string; description: string }[] = [
   { id: "any", label: "Any address", description: "Includes the internet. Pages can then send what they read anywhere." },
 ];
 
-const settings = shallowRef<BrowserSettings>({ enabled: true, pages: "session", scripts: false });
-const loading = shallowRef(true);
-const saving = shallowRef(false);
-const error = shallowRef<string | null>(null);
-const { harnesses } = useEnabledHarnesses();
+const { settings, loading, saving, error, load, save } = useAgentBrowserSettings();
 
-const rows = computed(() =>
-  harnesses.value.map((harness) => {
-    const supported = harness.capabilities?.supportsAgentBrowser === true;
-    return {
-      type: harness.type,
-      name: harness.displayName ?? harness.type,
-      on: supported && settings.value.enabled,
-      // How it gets the browser, as the harness says; the ones without it are off with a reason.
-      how: supported ? harness.presentation?.agentBrowser ?? "Fleet's browser tools." : `Off: Fleet can't add tools to ${harness.displayName ?? harness.type} yet.`,
-    };
-  }),
-);
-
-onMounted(async () => {
-  try {
-    const response = await apiFetch("/api/agent-browser/settings");
-    if (!response.ok) throw new Error(`HTTP ${response.status}`);
-    settings.value = (await response.json()) as BrowserSettings;
-  } catch {
-    error.value = "Fleet couldn't load the browser settings. Try again in a moment.";
-  } finally {
-    loading.value = false;
-  }
-});
-
-async function save(change: Partial<BrowserSettings>): Promise<void> {
-  const before = settings.value;
-  settings.value = { ...before, ...change };
-  saving.value = true;
-  error.value = null;
-  try {
-    const response = await apiFetch("/api/agent-browser/settings", {
-      method: "PUT",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify(change),
-    });
-    if (!response.ok) throw new Error(`HTTP ${response.status}`);
-    settings.value = (await response.json()) as BrowserSettings;
-  } catch {
-    settings.value = before;
-    error.value = "Fleet couldn't save that. Try again.";
-  } finally {
-    saving.value = false;
-  }
-}
+onMounted(() => void load());
 </script>
 
 <template>
@@ -112,7 +55,7 @@ async function save(change: Partial<BrowserSettings>): Promise<void> {
       <div class="browser-row">
         <div class="browser-row__text">
           <b>Agents can use a browser</b>
-          <small>Adds browser tools to sessions that can have them (below). Off: OpenCode 2 doesn't see its browser tools, Claude Code and GitHub Copilot don't see Fleet's from their next message, and OpenCode's answer that the browser is off.</small>
+          <small>Adds browser tools to sessions that can have them (each harness's tab says which). Off: OpenCode 2 doesn't see its browser tools, Claude Code and GitHub Copilot don't see Fleet's from their next message, and OpenCode's answer that the browser is off.</small>
         </div>
         <button
           type="button"
@@ -202,27 +145,6 @@ async function save(change: Partial<BrowserSettings>): Promise<void> {
           <small>Later. OpenCode 2 offers them; Fleet answers "not supported" until they're built.</small>
         </div>
         <span class="browser-later">Later</span>
-      </div>
-    </div>
-
-    <div class="mt-5 grid gap-2">
-      <h3 class="text-sm font-semibold text-text">
-        Each harness
-      </h3>
-      <div class="browser-harnesses">
-        <div
-          v-for="row in rows"
-          :key="row.type"
-          class="browser-harness"
-          :data-testid="`browser-harness-${row.type}`"
-        >
-          <span class="browser-harness__name">{{ row.name }}</span>
-          <span class="browser-harness__how">{{ row.how }}</span>
-          <span
-            class="browser-harness__state"
-            :class="row.on ? 'browser-harness__state--on' : ''"
-          >{{ row.on ? "On" : "Off" }}</span>
-        </div>
       </div>
     </div>
 
@@ -362,51 +284,6 @@ async function save(change: Partial<BrowserSettings>): Promise<void> {
   background: color-mix(in srgb, var(--text) 7%, transparent);
 }
 
-.browser-harnesses {
-  border: 1px solid var(--border);
-  border-radius: var(--radius-card);
-  background: var(--main-bg);
-}
-
-.browser-harness {
-  display: grid;
-  grid-template-columns: 130px minmax(0, 1fr) auto;
-  gap: 4px 12px;
-  align-items: center;
-  padding: 10px 16px;
-  border-bottom: 1px solid var(--border);
-  font-size: 12.5px;
-}
-
-.browser-harness:last-child {
-  border-bottom: 0;
-}
-
-.browser-harness__name {
-  font-weight: 600;
-  color: var(--text);
-}
-
-.browser-harness__how {
-  color: var(--muted);
-}
-
-.browser-harness__state {
-  padding: 1px 7px;
-  border-radius: 4px;
-  font-size: 10.5px;
-  font-weight: 700;
-  letter-spacing: 0.04em;
-  text-transform: uppercase;
-  color: var(--muted);
-  background: color-mix(in srgb, var(--text) 7%, transparent);
-}
-
-.browser-harness__state--on {
-  color: var(--running);
-  background: color-mix(in srgb, var(--running) 15%, transparent);
-}
-
 .browser-fine {
   display: flex;
   gap: 8px;
@@ -418,16 +295,5 @@ async function save(change: Partial<BrowserSettings>): Promise<void> {
 .browser-fine :deep(svg) {
   flex-shrink: 0;
   margin-top: 2px;
-}
-
-@media (max-width: 640px) {
-  .browser-harness {
-    grid-template-columns: minmax(0, 1fr) auto;
-  }
-
-  .browser-harness__how {
-    grid-column: 1 / -1;
-    grid-row: 2;
-  }
 }
 </style>

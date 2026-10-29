@@ -9,7 +9,7 @@ using WeaveFleet.Infrastructure.Users;
 namespace WeaveFleet.IntegrationTests.Harnesses.OpenCode2;
 
 /// <summary>
-/// Weave in OpenCode 2, with a real <c>opencode2</c> and Weave's real V2 adapter from npm: Settings → Weave finds it,
+/// Weave in OpenCode 2, with a real <c>opencode2</c> and Weave's real V2 adapter from npm: Settings → Harnesses → OpenCode 2 → Weave finds it,
 /// Add Weave puts it in the user's (scratch) config and running servers load it without a restart, and a config kept
 /// in Fleet reaches them. Needs npm, and an OpenCode 2 the adapter supports (<see cref="WeaveOpenCode2FactAttribute"/>).
 /// </summary>
