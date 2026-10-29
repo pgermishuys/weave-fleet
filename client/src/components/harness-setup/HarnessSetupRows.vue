@@ -1,11 +1,12 @@
 <script setup lang="ts">
-import { computed, onBeforeUnmount, shallowRef, watch } from "vue";
+import { computed, onBeforeUnmount, shallowRef, toRef, watch } from "vue";
 import { storeToRefs } from "pinia";
 import { Check, CheckCircle2, Copy, Download, ExternalLink, KeyRound, LoaderCircle, X } from "lucide-vue-next";
 import HarnessSignInPanel from "@/components/settings/HarnessSignInPanel.vue";
 import HarnessUpdateStrip from "@/components/settings/HarnessUpdateStrip.vue";
 import TerminalView from "@/components/terminal/TerminalView.vue";
 import type { HarnessInfo, HarnessInstallChoice } from "@/api/client";
+import { useHarnessUpdatePoll } from "@/composables/use-harness-update-poll";
 import { refreshAllHarnesses } from "@/composables/use-harnesses";
 import {
   harnessDisplay,
@@ -57,6 +58,8 @@ const copied = shallowRef(false);
 /** The install place picked per harness type; the recommended one until the user picks another. */
 const picked = shallowRef<Readonly<Record<string, string>>>({});
 let checkTimer: ReturnType<typeof setInterval> | undefined;
+// GitHub Copilot installs from its row: its download's progress, and its end, show here.
+useHarnessUpdatePoll(toRef(props, "harnesses"));
 
 /** One Fleet downloads itself (GitHub Copilot) has no command to type: it installs from the row, and signs in below it. */
 function fleetInstalls(harness: HarnessInfo): boolean {

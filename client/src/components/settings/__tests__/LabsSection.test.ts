@@ -49,16 +49,11 @@ describe("LabsSection", () => {
     expect(toggle.attributes("aria-checked")).toBe("true");
   });
 
-  it("keeps GitHub Copilot off until it's turned on, and saves the choice", async () => {
+  it("has no GitHub Copilot switch: Copilot is a harness like the others", async () => {
     const wrapper = await mountSection();
-    const toggle = wrapper.get("[data-testid='copilot-switch']");
-    expect(toggle.attributes("aria-checked")).toBe("false");
 
-    await toggle.trigger("click");
-    await flushPromises();
-
-    expect(putMock).toHaveBeenCalledWith("/api/preferences/{key}", { params: { path: { key: "Copilot" } }, body: { value: "true" } });
-    expect(toggle.attributes("aria-checked")).toBe("true");
+    expect(wrapper.find("[data-testid='copilot-switch']").exists()).toBe(false);
+    expect(wrapper.find("[data-setting-row='copilot']").exists()).toBe(false);
   });
 
   it("keeps Updates in Machines off until it's turned on, and saves the choice", async () => {

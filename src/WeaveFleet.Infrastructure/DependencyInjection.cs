@@ -725,7 +725,7 @@ public static class DependencyInjection
         services.AddSingleton<PiHarnessRuntime>();
         services.AddSingleton<IHarnessRuntime>(sp => sp.GetRequiredService<PiHarnessRuntime>());
 
-        // GitHub Copilot through weave-copilot (ACP). Experimental: unavailable until Settings → Labs turns it on.
+        // GitHub Copilot through weave-copilot (ACP), which Fleet installs from Settings → Harnesses.
         services.AddSingleton<CopilotHarness>();
         services.AddSingleton<IHarness>(sp => sp.GetRequiredService<CopilotHarness>());
         services.AddSingleton<CopilotHarnessRuntime>();

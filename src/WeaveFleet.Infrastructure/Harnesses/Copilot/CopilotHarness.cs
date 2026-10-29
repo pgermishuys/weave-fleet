@@ -4,16 +4,13 @@ using WeaveFleet.Domain.Harnesses;
 namespace WeaveFleet.Infrastructure.Harnesses.Copilot;
 
 /// <summary>
-/// GitHub Copilot, through weave-copilot: an ACP agent built on GitHub's Copilot SDK that runs the Copilot CLI. Experimental
-/// (Settings → Labs), so it is off until the user turns it on.
+/// GitHub Copilot, through weave-copilot: an ACP agent built on GitHub's Copilot SDK that runs the Copilot CLI. Fleet
+/// installs both from Settings → Harnesses.
 /// </summary>
 public sealed class CopilotHarness : IHarness
 {
     /// <summary>The harness type, as sessions and preferences name it.</summary>
     public const string TypeName = "copilot";
-
-    /// <summary>The preference behind the Settings → Labs switch for GitHub Copilot.</summary>
-    public const string FeaturePreferenceKey = "Copilot";
 
     /// <summary>The preference behind the HydraFusion switch in the harness's settings (off unless turned on).</summary>
     public const string HydraFusionPreferenceKey = "copilot.hydrafusion";
@@ -63,8 +60,10 @@ public sealed class CopilotHarness : IHarness
     /// <inheritdoc />
     public HarnessPresentation Presentation { get; } = new()
     {
-        Order = 5,
-        Eyebrow = "Experimental",
+        // Third, after OpenCode 2 (and OpenCode) and Claude Code, before Pi.
+        Order = 3,
+        Eyebrow = "CLI harness",
+        Pitch = "GitHub's coding agent. Needs a GitHub Copilot subscription.",
         Description = "GitHub Copilot through weave-copilot, with HydraFusion's passes when you turn them on.",
         Icon = HarnessIcons.Hexagon,
         AgentBrowser = "Fleet's browser tools: read the page, act on it.",

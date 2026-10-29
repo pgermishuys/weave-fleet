@@ -5,8 +5,6 @@ import SettingGroup from "@/components/settings/SettingGroup.vue";
 import SettingRow from "@/components/settings/SettingRow.vue";
 import SettingSwitch from "@/components/settings/SettingSwitch.vue";
 import ModsRuntimePanel from "@/components/settings/mods/ModsRuntimePanel.vue";
-import { forgetHarnessCatalogs } from "@/composables/use-harness-catalog";
-import { refreshAllHarnesses } from "@/composables/use-harnesses";
 import { usePreferenceSwitch } from "@/composables/use-preference-switch";
 import { useSettingsNav } from "@/composables/use-settings-nav";
 import { useWorkflowsFeature } from "@/composables/use-workflows-feature";
@@ -27,11 +25,8 @@ const preferencesStore = usePreferencesStore();
 const modsRuntime = useModsRuntimeStore();
 const machines = useMachinesStore();
 const router = useRouter();
-const { openHarness, setActiveSection } = useSettingsNav();
+const { setActiveSection } = useSettingsNav();
 preferencesStore.ensureLoaded();
-
-/** GitHub Copilot is a harness the server hides until this is on (`CopilotHarness.FeaturePreferenceKey`). */
-const COPILOT_PREFERENCE_KEY = "Copilot";
 
 const sessionMessages = usePreferenceSwitch(SESSION_MESSAGES_PREFERENCE_KEY);
 const liveMachines = usePreferenceSwitch(LIVE_MACHINES_PREFERENCE_KEY);
@@ -41,13 +36,6 @@ const jobs = usePreferenceSwitch(JOBS_PREFERENCE_KEY);
 const missionControl = usePreferenceSwitch(MISSION_CONTROL_PREFERENCE_KEY);
 const dreaming = usePreferenceSwitch(DREAMING_PREFERENCE_KEY);
 const pageChoice = usePreferenceSwitch(PAGE_CHOICE_PREFERENCE_KEY);
-const copilot = usePreferenceSwitch(COPILOT_PREFERENCE_KEY, {
-  // The composer shows Copilot (or stops showing it) at once, not when its last check is a minute old.
-  afterSave: () => {
-    forgetHarnessCatalogs("copilot");
-    refreshAllHarnesses();
-  },
-});
 
 const { isWorkflowsEnabled, setWorkflowsEnabled } = useWorkflowsFeature();
 const isSavingWorkflows = shallowRef(false);
@@ -312,29 +300,6 @@ function openRoute(path: string): void {
             aria-label="Enable choosing on a page"
             data-testid="page-choice-switch"
             @click="pageChoice.toggle"
-          />
-        </template>
-      </SettingRow>
-
-      <SettingRow
-        id="copilot"
-        title="GitHub Copilot"
-        summary="Start sessions on Copilot. Needs weave-copilot on PATH."
-        :adds="addsWhenOn(copilot.enabled.value, 'GitHub Copilot in Harnesses')"
-        @open="openHarness('copilot')"
-      >
-        <template #more>
-          Start sessions on GitHub Copilot, with HydraFusion's passes when you turn them on under Settings → Harnesses.
-          Needs weave-copilot, which Fleet finds on PATH.
-        </template>
-        <template #control>
-          <SettingSwitch
-            :checked="copilot.enabled.value"
-            :saving="copilot.saving.value"
-            :disabled="preferencesStore.isLoading || copilot.saving.value"
-            aria-label="Enable GitHub Copilot"
-            data-testid="copilot-switch"
-            @click="copilot.toggle"
           />
         </template>
       </SettingRow>

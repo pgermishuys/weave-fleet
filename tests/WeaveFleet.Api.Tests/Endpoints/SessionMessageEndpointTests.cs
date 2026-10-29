@@ -133,7 +133,6 @@ public sealed class SessionMessageEndpointTests : IClassFixture<SessionMessageEn
     [Theory]
     [InlineData("PermissionLevel", "allow")]
     [InlineData("Mods", "true")]
-    [InlineData("Copilot", "true")]
     [InlineData("copilot.hydrafusion", "true")]
     [InlineData("BuiltInSkills", "true")]
     public async Task An_agent_cannot_change_any_preference_but_the_user_can(string key, string value)
