@@ -429,6 +429,8 @@ public sealed class DelegationService(
                     WorkId = report.WorkId,
                     Label = report.Label,
                 };
+                // Stored whole: a read before the update below would otherwise see it neither in the background nor stoppable.
+                Merge(work, report);
                 await delegationRepository.InsertAsync(work).ConfigureAwait(false);
             }
         }

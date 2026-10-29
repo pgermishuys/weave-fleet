@@ -37,6 +37,9 @@ public sealed class InMemoryDelegationRepository : IDelegationRepository
     /// </summary>
     public Func<string, string, Task<Delegation?>>? GetByParentToolCallIdBehavior { get; set; }
 
+    /// <summary>Optional: runs right after <see cref="InsertAsync(Delegation)"/> stored a row, as a reader that comes in then would.</summary>
+    public Func<Delegation, Task>? AfterInsert { get; set; }
+
     // ── IDelegationRepository ────────────────────────────────────────────────
 
     public Task InsertAsync(Delegation delegation)
@@ -45,7 +48,7 @@ public sealed class InMemoryDelegationRepository : IDelegationRepository
             delegation.WorkId = delegation.ParentToolCallId ?? delegation.Id;
         _store[delegation.Id] = delegation;
         InsertedDelegations.Add(delegation);
-        return Task.CompletedTask;
+        return AfterInsert?.Invoke(delegation) ?? Task.CompletedTask;
     }
 
     public Task InsertAsync(IDbConnection connection, IDbTransaction? transaction, Delegation delegation)
