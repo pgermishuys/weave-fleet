@@ -118,13 +118,16 @@ public sealed class WorkflowService(
             projectId = project.Id;
         }
 
+        // Before the harness: with none ready, the default is only Fleet's fallback, and naming it helps nobody.
+        if (!await AnyToRunOnAsync(ct).ConfigureAwait(false))
+            return FleetError.ValidationError("HarnessType", NoneToRunOn(harnesses));
         var harnessType = string.IsNullOrWhiteSpace(request.HarnessType)
             ? await DefaultHarnessAsync(ct).ConfigureAwait(false)
             : request.HarnessType.Trim();
         if (harnesses.GetByType(harnessType) is not { } harness)
             return FleetError.NotFoundFor("Harness", harnessType);
         if (!harness.Capabilities.SupportsWorkflowSteps)
-            return FleetError.ValidationError("HarnessType", NotAvailableOn(harness.DisplayName));
+            return FleetError.ValidationError("HarnessType", NotAvailableOn(harness.DisplayName, harnesses));
 
         var entry = await WorkflowCatalog.FindAsync(request.WorkflowId, repository.Value.Path, ct).ConfigureAwait(false);
         if (entry is null)
@@ -257,8 +260,19 @@ public sealed class WorkflowService(
         return created.IsFailure ? created.Error : WorkflowFileDto.From(created.Value);
     }
 
-    public static string NotAvailableOn(string harnessName)
-        => $"Workflows aren't available on {harnessName}. Pick OpenCode, OpenCode 2 or Claude Code.";
+    public static string NotAvailableOn(string harnessName, IHarnessRegistry harnesses)
+        => $"Workflows aren't available on {harnessName}. Pick {WorkflowHarnessNames(harnesses)}.";
+
+    /// <summary>None of the harnesses that run workflows is installed and on. The Run box says the same.</summary>
+    public static string NoneToRunOn(IHarnessRegistry harnesses)
+        => $"Workflows run on {WorkflowHarnessNames(harnesses)}, and none of them is installed and on. Set one up in Settings → Harnesses.";
+
+    /// <summary>"OpenCode, OpenCode 2, Claude Code or GitHub Copilot": the harnesses that run workflow steps.</summary>
+    private static string WorkflowHarnessNames(IHarnessRegistry harnesses)
+    {
+        var names = harnesses.GetAll().Where(harness => harness.Capabilities.SupportsWorkflowSteps).Select(harness => harness.DisplayName).ToList();
+        return names.Count <= 1 ? names.FirstOrDefault() ?? "" : $"{string.Join(", ", names[..^1])} or {names[^1]}";
+    }
 
     /// <summary>A run's title: the request's first line, cut at a word.</summary>
     internal static string TitleFrom(string request)
@@ -281,6 +295,18 @@ public sealed class WorkflowService(
             ? null
             : (await harnessAvailability.GetAsync(fresh: false, ct).ConfigureAwait(false)).Harnesses;
         return HarnessPreferences.DefaultHarness(values, known);
+    }
+
+    /// <summary>Whether a harness that runs workflows is installed and on; true while Fleet can't say.</summary>
+    private async Task<bool> AnyToRunOnAsync(CancellationToken ct)
+    {
+        if (harnessAvailability is null)
+            return true;
+        var known = (await harnessAvailability.GetAsync(fresh: false, ct).ConfigureAwait(false)).Harnesses;
+        if (known.Count == 0)
+            return true;
+        var values = await preferences.GetAllAsync().ConfigureAwait(false);
+        return known.Any(harness => harness.Available && harness.Capabilities.SupportsWorkflowSteps && HarnessPreferences.IsEnabled(harness.Type, values));
     }
 
     private async Task<string?> CheckSkillsAsync(IEnumerable<WorkflowAgentStep> steps)

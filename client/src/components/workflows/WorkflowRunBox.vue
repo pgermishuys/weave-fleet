@@ -72,11 +72,16 @@ const harnessType = computed({
     ?? (workflowHarnesses.value.some((h) => h.type === defaultHarnessType.value) ? defaultHarnessType.value : workflowHarnesses.value[0]?.type ?? defaultHarnessType.value),
   set: (value: string) => { harnessChoice.value = value; },
 });
-const harnessName = (type: string) => enabledHarnesses.value.find((h) => h.type === type)?.displayName ?? type;
-// Said only once the list has loaded: until then there's nothing to go on.
-const notAvailable = computed(() => allHarnesses.value.length > 0 && workflowHarnesses.value.length === 0
-  ? `Workflows aren't available on ${harnessName(defaultHarnessType.value)}. Pick OpenCode, OpenCode 2 or Claude Code.`
-  : null);
+/**
+ * None of the harnesses that run workflows is installed and on: which they are, by name (`WorkflowService.NoneToRunOn`
+ * says the same). Said only once the list has loaded: until then there's nothing to go on.
+ */
+const noHarness = computed(() => {
+  if (allHarnesses.value.length === 0 || workflowHarnesses.value.length > 0) return null;
+  const names = allHarnesses.value.filter((h) => h.capabilities.supportsWorkflowSteps).map((h) => h.displayName);
+  const list = names.length <= 1 ? names[0] : `${names.slice(0, -1).join(", ")} or ${names[names.length - 1]}`;
+  return `Workflows run on ${list}, and none of them is installed and on.`;
+});
 
 const { models, isSupported: offersModels } = useHarnessCatalog(
   computed(() => (repositoryPath.value ? harnessType.value : "")),
@@ -107,11 +112,9 @@ const skillOff = computed(() => {
   return skillsInUse(props.workflow, optionalOn).find(({ skill }) => shipped.get(skill) === false) ?? null;
 });
 
-const cannotRun = computed(() => props.workflow.errors.length > 0
-  ? "Fix the workflow file first."
-  : notAvailable.value);
+const cannotRun = computed(() => props.workflow.errors.length > 0 ? "Fix the workflow file first." : null);
 
-const canRun = computed(() => !isStarting.value && !cannotRun.value && !skillOff.value
+const canRun = computed(() => !isStarting.value && !cannotRun.value && !noHarness.value && !skillOff.value
   && workflowHarnesses.value.length > 0 && request.value.trim().length > 0 && repositoryPath.value !== null);
 
 function toggleOptional(stepId: string): void {
@@ -146,6 +149,11 @@ watch(() => props.workflow.id, () => {
 
 function openSkillsSettings(): void {
   setActiveSection("skills");
+  void router.navigate({ to: "/settings" });
+}
+
+function openHarnessesSettings(): void {
+  setActiveSection("harnesses");
   void router.navigate({ to: "/settings" });
 }
 
@@ -377,6 +385,21 @@ function handleKeydown(event: KeyboardEvent): void {
       role="alert"
     >
       {{ cannotRun }}
+    </p>
+    <p
+      v-else-if="noHarness"
+      class="wf-run__warn"
+      role="alert"
+      data-testid="workflow-no-harness"
+    >
+      {{ noHarness }}
+      <button
+        type="button"
+        class="wf-run__link"
+        @click="openHarnessesSettings"
+      >
+        Set one up in Settings → Harnesses
+      </button>
     </p>
     <p
       v-else-if="skillOff"

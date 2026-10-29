@@ -98,12 +98,12 @@ public sealed partial class WorkflowDrafter(
         if (harnesses.GetByType(type) is not { } harness)
             return FleetError.NotFoundFor("Harness", type);
         if (!harness.Capabilities.SupportsWorkflowSteps)
-            return FleetError.ValidationError("HarnessType", WorkflowService.NotAvailableOn(harness.DisplayName));
+            return FleetError.ValidationError("HarnessType", WorkflowService.NotAvailableOn(harness.DisplayName, harnesses));
         // Claude Code runs workflow steps, but has no way to ask a question off the record.
         if (!harness.Capabilities.SupportsOffTheRecordPrompt)
             return FleetError.ValidationError("HarnessType", CantDescribeOn(harness.DisplayName));
         if (harnesses.GetRuntimeByType(type) is not { } runtime)
-            return FleetError.ValidationError("HarnessType", WorkflowService.NotAvailableOn(harness.DisplayName));
+            return FleetError.ValidationError("HarnessType", WorkflowService.NotAvailableOn(harness.DisplayName, harnesses));
 
         if (string.IsNullOrWhiteSpace(directory))
             return FleetError.ValidationError("Directory", "Pick the repository the workflow goes in.");
