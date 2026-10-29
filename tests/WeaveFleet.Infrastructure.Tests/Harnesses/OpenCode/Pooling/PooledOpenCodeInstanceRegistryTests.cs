@@ -623,6 +623,39 @@ public sealed class PooledOpenCodeInstanceRegistryTests
     }
 
     [Fact]
+    public async Task crash_whose_replacement_fails_to_start_faults_the_leases_and_allows_a_fresh_acquire()
+    {
+        var attempts = 0;
+        var spawnFailure = new InvalidOperationException("replacement failed to start");
+        var factory = new TestInstanceFactory();
+        await using var registry = new PooledOpenCodeInstanceRegistry(
+            async (key, ct) =>
+            {
+                if (Interlocked.Increment(ref attempts) == 2)
+                {
+                    throw spawnFailure;
+                }
+
+                return await factory.CreateAsync(key, ct).ConfigureAwait(false);
+            },
+            TimeSpan.FromMinutes(1),
+            NullLogger<PooledOpenCodeInstanceRegistry>.Instance);
+        var lease = await registry.AcquireAsync("credential-hash", CancellationToken.None);
+
+        await lease.Instance.ReportCrashAsync(new InvalidOperationException("process crashed"));
+
+        // Without word the lease's holders would wait for a replacement forever.
+        var exception = await Should.ThrowAsync<InvalidOperationException>(() => lease.Replacement.WaitAsync(TimeSpan.FromSeconds(5)));
+        exception.ShouldBeSameAs(spawnFailure);
+
+        var fresh = await registry.AcquireAsync("credential-hash", CancellationToken.None);
+        fresh.Instance.IsAvailable.ShouldBeTrue();
+        attempts.ShouldBe(3);
+
+        await fresh.DisposeAsync();
+    }
+
+    [Fact]
     public async Task release_after_registry_dispose_removes_lease_without_throwing()
     {
         var factory = new TestInstanceFactory();

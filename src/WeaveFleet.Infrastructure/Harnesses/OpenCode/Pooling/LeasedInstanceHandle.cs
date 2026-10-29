@@ -311,16 +311,12 @@ internal sealed class LeasedInstanceHandle : IOpenCodeInstanceHandle
                 if (completedTask == faultTask)
                 {
                     await faultTask.ConfigureAwait(false);
-                    if (!channelSwapped)
+
+                    // Nothing restarts a stream that ends, so it carries on on the server the pool starts in the dead
+                    // one's place, and ends only when there won't be one.
+                    if (!channelSwapped && !await FollowReplacementAsync(subscribedLease, ct).ConfigureAwait(false))
                     {
-                        if (TryGetCurrentLease()?.Replacement.IsCompleted == true)
-                        {
-                            await ReconnectIfDisconnectedAsync(ct).ConfigureAwait(false);
-                        }
-                        else
-                        {
-                            yield break;
-                        }
+                        yield break;
                     }
 
                     channelSwapped = false;
@@ -579,9 +575,14 @@ internal sealed class LeasedInstanceHandle : IOpenCodeInstanceHandle
             var subscription = await CreateEventSubscriptionAsync(replacement, replacementLeaseGeneration, ct).ConfigureAwait(false);
             var disposeSubscription = false;
 
+            var disposed = false;
             lock (_sync)
             {
-                if (!ReferenceEquals(_lease, lease))
+                if (Volatile.Read(ref _disposed) != 0)
+                {
+                    disposeSubscription = disposed = true;
+                }
+                else if (!ReferenceEquals(_lease, lease))
                 {
                     disposeSubscription = true;
                 }
@@ -601,9 +602,60 @@ internal sealed class LeasedInstanceHandle : IOpenCodeInstanceHandle
             if (disposeSubscription)
             {
                 await subscription.Registration.DisposeAsync().ConfigureAwait(false);
+                if (disposed)
+                {
+                    return;
+                }
+
                 continue;
             }
         }
+    }
+
+    /// <summary>
+    /// Waits for the server the pool starts in place of <paramref name="lease"/>'s and moves to it, unless the fault
+    /// monitor already has. False when the pool gave up on it.
+    /// </summary>
+    private async Task<bool> FollowReplacementAsync(InstanceLease lease, CancellationToken ct)
+    {
+        try
+        {
+            await lease.Replacement.WaitAsync(ct).ConfigureAwait(false);
+        }
+        catch (Exception) when (!ct.IsCancellationRequested)
+        {
+            return false;
+        }
+
+        if (Volatile.Read(ref _disposed) != 0)
+        {
+            return false;
+        }
+
+        await _acquireLock.WaitAsync(ct).ConfigureAwait(false);
+        try
+        {
+            if (Volatile.Read(ref _disposed) != 0)
+            {
+                return false;
+            }
+
+            if (ReferenceEquals(TryGetCurrentLease(), lease))
+            {
+                if (Interlocked.Exchange(ref _disconnected, 1) == 0)
+                {
+                    ProcessExited?.Invoke(this, -1);
+                }
+
+                await ReconnectAsync(ct).ConfigureAwait(false);
+            }
+        }
+        finally
+        {
+            _acquireLock.Release();
+        }
+
+        return true;
     }
 
     private async Task ReconnectIfDisconnectedAsync(CancellationToken ct)
@@ -664,15 +716,24 @@ internal sealed class LeasedInstanceHandle : IOpenCodeInstanceHandle
     {
         try
         {
+            var stopping = _faultMonitorCancellation.Token;
             var lease = CurrentLease;
-            await lease.Faulted.WaitAsync(_faultMonitorCancellation.Token).ConfigureAwait(false);
+            await lease.Faulted.WaitAsync(stopping).ConfigureAwait(false);
             if (Interlocked.Exchange(ref _disconnected, 1) == 0)
             {
                 ProcessExited?.Invoke(this, -1);
             }
+
+            // Move to the server the pool starts in its place as soon as it's up. It often takes the dead one's port
+            // with a new password, so whatever still used the old client (answering a question, reading history, the
+            // event stream) would get 401s from it; only a prompt reconnects on its own.
+            await lease.Replacement.WaitAsync(stopping).ConfigureAwait(false);
+            await ReconnectIfDisconnectedAsync(stopping).ConfigureAwait(false);
         }
-        catch (OperationCanceledException) when (_faultMonitorCancellation.IsCancellationRequested)
+        catch (Exception)
         {
+            // Disposed meanwhile, no replacement (the pool gave up restarting it) or reconnecting failed: the next call
+            // that needs the server reconnects itself and reports why it can't.
         }
     }
 }

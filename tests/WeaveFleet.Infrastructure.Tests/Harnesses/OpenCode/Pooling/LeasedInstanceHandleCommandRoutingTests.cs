@@ -293,8 +293,8 @@ public sealed class LeasedInstanceHandleCommandRoutingTests
         firstLease.NotifyFaulted(new InvalidOperationException("process crashed"));
         firstLease.NotifyReplaced(secondLease);
 
+        // The replacement is already there, so the handle may have moved to it on its own by now.
         (await exited.Task.WaitAsync(TimeSpan.FromSeconds(5))).ShouldBe(-1);
-        handle.IsRunning.ShouldBeFalse();
 
         await handle.EnsureConnectedAsync(CancellationToken.None);
         var binding = await handle.BindSessionAsync("oc-session-1", CancellationToken.None);
@@ -302,6 +302,65 @@ public sealed class LeasedInstanceHandleCommandRoutingTests
         binding.Instance.ShouldBeSameAs(secondInstance);
         binding.LeaseGeneration.ShouldBe(8);
         handle.IsRunning.ShouldBeTrue();
+
+        await handle.DisposeAsync();
+    }
+
+    [Fact]
+    public async Task crash_moves_the_client_and_event_stream_to_the_replacement_before_the_next_prompt()
+    {
+        // The replacement server often takes the dead one's port with a new password, so the old client gets 401s
+        // from it. Answering a question or reading history doesn't reconnect the handle the way a prompt does, so the
+        // handle has to move over as soon as the replacement is up.
+        var firstHandler = new RecordingHttpMessageHandler();
+        var secondHandler = new RecordingHttpMessageHandler();
+        var bindingTable = new PoolDemuxBindingTable();
+        var streamFactory = new FakeStreamFactory();
+        await using var demultiplexer = new SseEventDemultiplexer(
+            bindingTable,
+            streamFactory,
+            NullLogger<SseEventDemultiplexer>.Instance,
+            TimeSpan.Zero,
+            TimeSpan.Zero);
+        var firstInstance = CreateInstance(firstHandler);
+        var secondInstance = CreateInstance(secondHandler);
+        var firstLease = firstInstance.CreateLease(static (lease, _) =>
+        {
+            lease.Instance.RemoveLease(lease);
+            return ValueTask.CompletedTask;
+        });
+        var secondLease = secondInstance.CreateLease(static (lease, _) =>
+        {
+            lease.Instance.RemoveLease(lease);
+            return ValueTask.CompletedTask;
+        });
+        var handle = new LeasedInstanceHandle(
+            firstLease,
+            demultiplexer,
+            bindingTable,
+            "/repo/one",
+            "fleet-session-1",
+            "user-1",
+            Guid.NewGuid(),
+            leaseGeneration: 1);
+        await handle.BindSessionAsync("oc-session-1", CancellationToken.None);
+        var firstStream = await streamFactory.WaitForSubscriptionAsync(firstInstance, "/repo/one", 1);
+
+        await firstInstance.ReportCrashAsync(new InvalidOperationException("process crashed"));
+        firstLease.NotifyReplaced(secondLease);
+
+        await streamFactory.WaitForSubscriptionAsync(secondInstance, "/repo/one", 1);
+        await firstStream.Canceled.WaitAsync(TimeSpan.FromSeconds(5));
+        var timeoutAt = DateTimeOffset.UtcNow.AddSeconds(5);
+        while (!handle.IsRunning && DateTimeOffset.UtcNow < timeoutAt)
+            await Task.Delay(10);
+        handle.IsRunning.ShouldBeTrue();
+
+        await handle.HttpClient.AnswerQuestionAsync("que_1", [["Rename it"]], "/repo/one", CancellationToken.None);
+
+        secondHandler.RequestPaths.ShouldContain(path => path.StartsWith("/question/que_1/reply", StringComparison.Ordinal));
+        firstHandler.RequestPaths.ShouldNotContain(path => path.StartsWith("/question/", StringComparison.Ordinal));
+        bindingTable.TryGetBinding(secondInstance, "/repo/one", "oc-session-1", 2, out _).ShouldBeTrue();
 
         await handle.DisposeAsync();
     }
@@ -451,13 +510,71 @@ public sealed class LeasedInstanceHandleCommandRoutingTests
         (await firstMove.WaitAsync(TimeSpan.FromSeconds(5))).ShouldBeTrue();
         enumerator.Current.ShouldBeSameAs(routedEvent);
 
-        lease.NotifyFaulted(new InvalidOperationException("process crashed"));
+        // The stream ends only when the pool won't start a replacement.
+        var crash = new InvalidOperationException("process crashed");
+        lease.NotifyFaulted(crash);
+        lease.NotifyPermanentFault(crash);
         (await enumerator.MoveNextAsync().AsTask().WaitAsync(TimeSpan.FromSeconds(5))).ShouldBeFalse();
         await enumerator.DisposeAsync();
 
         bindingTable.TryGetBinding(instance, "/repo/one", "oc-session-1", 3, out _).ShouldBeTrue();
         await handle.DisposeAsync();
         bindingTable.TryGetBinding(instance, "/repo/one", "oc-session-1", 3, out _).ShouldBeFalse();
+    }
+
+    [Fact]
+    public async Task subscribe_carries_on_with_the_replacement_server_after_a_crash()
+    {
+        // Nothing restarts a session's event stream that ends, so ending it at a crash left the session deaf to every
+        // turn after the restart.
+        var firstInstance = CreateInstance(new RecordingHttpMessageHandler());
+        var secondInstance = CreateInstance(new RecordingHttpMessageHandler());
+        var firstLease = firstInstance.CreateLease(static (releasedLease, _) =>
+        {
+            releasedLease.Instance.RemoveLease(releasedLease);
+            return ValueTask.CompletedTask;
+        });
+        var secondLease = secondInstance.CreateLease(static (releasedLease, _) =>
+        {
+            releasedLease.Instance.RemoveLease(releasedLease);
+            return ValueTask.CompletedTask;
+        });
+        var bindingTable = new PoolDemuxBindingTable();
+        var streamFactory = new FakeStreamFactory();
+        await using var demultiplexer = new SseEventDemultiplexer(
+            bindingTable,
+            streamFactory,
+            NullLogger<SseEventDemultiplexer>.Instance,
+            TimeSpan.Zero,
+            TimeSpan.Zero);
+        var handle = new LeasedInstanceHandle(
+            firstLease,
+            demultiplexer,
+            bindingTable,
+            "/repo/one",
+            "fleet-session-1",
+            "user-1",
+            Guid.NewGuid(),
+            leaseGeneration: 3);
+        await handle.BindSessionAsync("oc-session-1", CancellationToken.None);
+        var enumerator = handle.SubscribeEvents("oc-session-1", CancellationToken.None).GetAsyncEnumerator();
+        var move = enumerator.MoveNextAsync().AsTask();
+        await firstInstance.WaitForEventSubscriptionAsync("oc-session-1").WaitAsync(TimeSpan.FromSeconds(5));
+
+        await firstInstance.ReportCrashAsync(new InvalidOperationException("process crashed"));
+        await Task.Delay(100);
+        move.IsCompleted.ShouldBeFalse();
+        firstLease.NotifyReplaced(secondLease);
+
+        var stream = await streamFactory.WaitForSubscriptionAsync(secondInstance, "/repo/one", 1);
+        var afterRestart = CreateSseEvent("question.asked", "oc-session-1");
+        await stream.WriteAsync(afterRestart);
+
+        (await move.WaitAsync(TimeSpan.FromSeconds(5))).ShouldBeTrue();
+        enumerator.Current.ShouldBeSameAs(afterRestart);
+
+        await enumerator.DisposeAsync();
+        await handle.DisposeAsync();
     }
 
     [Fact]
@@ -661,6 +778,8 @@ public sealed class LeasedInstanceHandleCommandRoutingTests
         public ValueTask WriteAsync(OpenCodeSseEvent evt) => _events.Writer.WriteAsync(evt);
 
         public void Cancel() => _events.Writer.TryComplete();
+
+        public Task Canceled => _events.Reader.Completion;
 
         public IAsyncEnumerable<OpenCodeSseEvent> ReadAllAsync(CancellationToken ct) => _events.Reader.ReadAllAsync(ct);
     }
