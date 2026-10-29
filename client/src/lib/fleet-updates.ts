@@ -1,14 +1,14 @@
 /**
- * Updates in Settings → Machines: what each Fleet you run says about its own version. Pure mapping from what a machine reported
+ * Updates in Settings → Updates & about: what each Fleet you run says about its own version. Pure mapping from what a machine reported
  * (`update` in `GET /api/machine`, or the desktop app's bridge) to the row the page draws, so every state has one test.
  */
 import type { DesktopUpdateState } from "@/lib/desktop";
 import { formatRelativeTime } from "@/lib/format-utils";
 
-/** Settings → Labs: shows each machine's version, update rule and Restart in Settings → Machines. Off until turned on. */
+/** Settings → Labs: shows each machine's version, update rule and Restart in Settings → Updates & about. Off until turned on. */
 export const FLEET_UPDATES_PREFERENCE_KEY = "FleetUpdates";
 
-/** Settings → Machines: the rule the user chose for every machine, unless one has its own. */
+/** Settings → Updates & about › Machines: the rule the user chose for every machine, unless one has its own. */
 export const UPDATE_RULE_DEFAULT_KEY = "FleetUpdateRule";
 
 /** A JSON object: machine key (`home` for this one) to the rule that machine follows. */
@@ -418,7 +418,7 @@ function selfUpdateText(rule: UpdateRule, working: number, state: FleetUpdateSta
     : "updates itself in a minute";
 }
 
-/** The line along the bottom of a machine card in Settings → Machines: its version, and where it is with updating. */
+/** The line along the bottom of a machine card in Settings → Updates & about › Machines: its version, and where it is with updating. */
 export function describeVersionLine(row: FleetUpdateRow, rollout: Rollout | null): VersionLine {
   const { state } = row;
   const step = rollout?.status === "running" ? rollout.steps.find((candidate) => candidate.machineId === row.key) : undefined;
@@ -484,7 +484,7 @@ export interface ReleaseLine {
   text: string;
 }
 
-/** The strip at the top of Settings → Machines when no rollout runs. `checkedAt` is the newest check any machine made. */
+/** The strip at the top of Settings → Updates & about › Machines when no rollout runs. `checkedAt` is the newest check any machine made. */
 export function describeReleaseLine(
   summary: { latest: string | null; waiting: number; downloaded: number },
   checkedAt: string | null,

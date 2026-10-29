@@ -12,21 +12,19 @@ const installTarget = shallowRef<InstallTarget>(GLOBAL_TARGET);
 </script>
 
 <template>
-  <section class="rounded-card border border-border bg-card-bg p-6 shadow-sm">
-    <div class="flex flex-col gap-1">
-      <h2 class="text-lg font-semibold text-text">
-        Skills
-      </h2>
-      <p class="text-sm text-muted">
-        Manage installed skills, turn on the ones that come with Fleet, browse the catalog, or install from a custom source.
-      </p>
-    </div>
+  <section data-testid="skills-section">
+    <p class="px-1 text-xs text-muted">
+      Manage installed skills, turn on the ones that come with Fleet, browse the catalog, or install from a custom source.
+    </p>
 
     <Tabs
       default-value="installed"
       class="mt-5"
     >
-      <TabsList variant="underline" class="grid w-full grid-cols-4">
+      <TabsList
+        variant="underline"
+        class="grid w-full grid-cols-4"
+      >
         <TabsTrigger value="installed">
           Installed
         </TabsTrigger>

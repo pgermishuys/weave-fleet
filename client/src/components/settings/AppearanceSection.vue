@@ -1,6 +1,8 @@
 <script setup lang="ts">
 import { computed } from "vue";
 import { Check, Monitor } from "lucide-vue-next";
+import SettingGroup from "@/components/settings/SettingGroup.vue";
+import SettingRow from "@/components/settings/SettingRow.vue";
 import {
   useThemeStore,
   themes,
@@ -47,189 +49,182 @@ function selectFontSize(size: FontSize): void {
 </script>
 
 <template>
-  <section class="rounded-card border border-border bg-card-bg p-6 shadow-sm">
-    <div class="flex flex-col gap-1">
-      <h2 class="text-lg font-semibold text-text">
-        Appearance
-      </h2>
-      <p class="text-sm text-muted">
-        Choose how Weave should look across the workspace shell.
-      </p>
-    </div>
-
-    <div class="mt-5 grid gap-3 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4">
-      <!-- System option -->
-      <button
-        type="button"
-        class="flex flex-col gap-3 rounded-card border p-3 text-left transition-colors"
-        :class="activeTheme === 'system'
-          ? 'border-accent bg-accent-dim'
-          : 'border-border hover:border-accent/50'"
-        @click="selectTheme('system')"
+  <div class="grid gap-6">
+    <SettingGroup
+      id="look"
+      title="Look"
+    >
+      <SettingRow
+        id="theme"
+        title="Theme"
+        :summary="`Active: ${themeStore.resolvedTheme.label}. System follows your computer.`"
       >
-        <div class="flex h-10 items-center justify-center rounded-btn border border-border/60 bg-gradient-to-r from-[#0a0a0b] via-[#0a0a0b] to-[#f1f5f9]">
-          <Monitor
-            :size="14"
-            class="text-white/70"
-          />
-        </div>
+        <template #below>
+          <div class="mt-3">
+            <div class="grid gap-3 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4">
+              <!-- System option -->
+              <button
+                type="button"
+                class="flex flex-col gap-3 rounded-card border p-3 text-left transition-colors"
+                :class="activeTheme === 'system'
+                  ? 'border-accent bg-accent-dim'
+                  : 'border-border hover:border-accent/50'"
+                @click="selectTheme('system')"
+              >
+                <div class="flex h-10 items-center justify-center rounded-btn border border-border/60 bg-gradient-to-r from-[#0a0a0b] via-[#0a0a0b] to-[#f1f5f9]">
+                  <Monitor
+                    :size="14"
+                    class="text-white/70"
+                  />
+                </div>
 
-        <div class="flex items-center justify-between gap-2">
-          <span class="text-xs font-medium text-text">System</span>
-          <Check
-            v-if="activeTheme === 'system'"
-            :size="14"
-            class="text-accent"
-          />
-        </div>
-      </button>
+                <div class="flex items-center justify-between gap-2">
+                  <span class="text-xs font-medium text-text">System</span>
+                  <Check
+                    v-if="activeTheme === 'system'"
+                    :size="14"
+                    class="text-accent"
+                  />
+                </div>
+              </button>
 
-      <!-- Theme options -->
-      <button
-        v-for="theme in themes"
-        :key="theme.id"
-        type="button"
-        class="flex flex-col gap-3 rounded-card border p-3 text-left transition-colors"
-        :class="activeTheme === theme.id
-          ? 'border-accent bg-accent-dim'
-          : 'border-border hover:border-accent/50'"
-        @click="selectTheme(theme.id)"
+              <!-- Theme options -->
+              <button
+                v-for="theme in themes"
+                :key="theme.id"
+                type="button"
+                class="flex flex-col gap-3 rounded-card border p-3 text-left transition-colors"
+                :class="activeTheme === theme.id
+                  ? 'border-accent bg-accent-dim'
+                  : 'border-border hover:border-accent/50'"
+                @click="selectTheme(theme.id)"
+              >
+                <!-- Mini preview swatch -->
+                <div
+                  class="flex h-10 items-end gap-0.5 overflow-hidden rounded-btn border border-border/60 p-1.5"
+                  :style="{ backgroundColor: theme.swatches[0] }"
+                >
+                  <div
+                    class="h-full flex-1 rounded-sm"
+                    :style="{ backgroundColor: theme.swatches[1] }"
+                  />
+                  <div
+                    class="h-3/4 w-2 rounded-sm"
+                    :style="{ backgroundColor: theme.swatches[2] }"
+                  />
+                  <div
+                    class="h-1/2 w-2 rounded-sm"
+                    :style="{ backgroundColor: theme.swatches[3], opacity: 0.6 }"
+                  />
+                </div>
+
+                <div class="flex items-center justify-between gap-2">
+                  <span class="text-xs font-medium text-text">{{ theme.label }}</span>
+                  <Check
+                    v-if="activeTheme === theme.id"
+                    :size="14"
+                    class="text-accent"
+                  />
+                </div>
+              </button>
+            </div>
+          </div>
+        </template>
+      </SettingRow>
+      <SettingRow
+        id="font"
+        title="Font"
+        summary="The interface font."
       >
-        <!-- Mini preview swatch -->
-        <div
-          class="flex h-10 items-end gap-0.5 overflow-hidden rounded-btn border border-border/60 p-1.5"
-          :style="{ backgroundColor: theme.swatches[0] }"
-        >
-          <div
-            class="h-full flex-1 rounded-sm"
-            :style="{ backgroundColor: theme.swatches[1] }"
-          />
-          <div
-            class="h-3/4 w-2 rounded-sm"
-            :style="{ backgroundColor: theme.swatches[2] }"
-          />
-          <div
-            class="h-1/2 w-2 rounded-sm"
-            :style="{ backgroundColor: theme.swatches[3], opacity: 0.6 }"
-          />
-        </div>
-
-        <div class="flex items-center justify-between gap-2">
-          <span class="text-xs font-medium text-text">{{ theme.label }}</span>
-          <Check
-            v-if="activeTheme === theme.id"
-            :size="14"
-            class="text-accent"
-          />
-        </div>
-      </button>
-    </div>
-
-    <div class="mt-6 flex flex-col gap-3">
-      <div class="flex flex-col gap-1">
-        <h3 class="text-sm font-medium text-text">
-          Font
-        </h3>
-        <p class="text-xs text-muted">
-          Choose the interface font used across the workspace shell.
-        </p>
-      </div>
-
-      <div class="grid gap-3 sm:grid-cols-2">
-        <button
-          v-for="font in fontOptions"
-          :key="font.id"
-          type="button"
-          class="flex items-center justify-between gap-3 rounded-card border p-3 text-left transition-colors"
-          :class="activeFontFamily === font.id
-            ? 'border-accent bg-accent-dim'
-            : 'border-border hover:border-accent/50'"
-          :style="{ fontFamily: font.fontFamily }"
-          @click="selectFontFamily(font.id)"
-        >
-          <span class="text-sm font-medium text-text">{{ font.label }}</span>
-          <Check
-            v-if="activeFontFamily === font.id"
-            :size="14"
-            class="shrink-0 text-accent"
-          />
-        </button>
-      </div>
-    </div>
-
-    <div class="mt-6 flex flex-col gap-3">
-      <div class="flex flex-col gap-1">
-        <h3 class="text-sm font-medium text-text">
-          Font Size
-        </h3>
-        <p class="text-xs text-muted">
-          Adjust the base font size for the interface.
-        </p>
-      </div>
-
-      <div class="inline-flex gap-0 rounded-card border border-border">
-        <button
-          v-for="(size, index) in fontSizes"
-          :key="size.id"
-          type="button"
-          class="flex items-center justify-center px-4 py-2 text-sm font-medium transition-colors"
-          :class="[
-            activeFontSize === size.id
-              ? 'bg-accent text-white'
-              : 'text-muted hover:text-text hover:bg-card-bg',
-            index === 0 ? 'rounded-l-card' : '',
-            index === fontSizes.length - 1 ? 'rounded-r-card' : '',
-            index > 0 ? 'border-l border-border' : '',
-          ]"
-          @click="selectFontSize(size.id)"
-        >
-          {{ size.label }}
-        </button>
-      </div>
-    </div>
-
-    <div class="mt-6 flex flex-col gap-3">
-      <div class="flex flex-col gap-1">
-        <h3 class="text-sm font-medium text-text">
-          Thinking
-        </h3>
-        <p class="text-xs text-muted">
-          How the model's thinking shows in conversations.
-        </p>
-      </div>
-
-      <div
-        class="inline-flex self-start gap-0 rounded-card border border-border"
-        role="group"
-        aria-label="Thinking"
+        <template #control>
+          <div class="grid gap-3 sm:grid-cols-2">
+            <button
+              v-for="font in fontOptions"
+              :key="font.id"
+              type="button"
+              class="flex items-center justify-between gap-3 rounded-card border p-3 text-left transition-colors"
+              :class="activeFontFamily === font.id
+                ? 'border-accent bg-accent-dim'
+                : 'border-border hover:border-accent/50'"
+              :style="{ fontFamily: font.fontFamily }"
+              @click="selectFontFamily(font.id)"
+            >
+              <span class="text-sm font-medium text-text">{{ font.label }}</span>
+              <Check
+                v-if="activeFontFamily === font.id"
+                :size="14"
+                class="shrink-0 text-accent"
+              />
+            </button>
+          </div>
+        </template>
+      </SettingRow>
+      <SettingRow
+        id="font-size"
+        title="Font size"
+        summary="The base size of the interface."
       >
-        <button
-          v-for="(option, index) in thinkingOptions"
-          :key="option.id"
-          type="button"
-          class="flex items-center justify-center px-4 py-2 text-sm font-medium transition-colors"
-          :class="[
-            activeThinking.id === option.id
-              ? 'bg-accent text-white'
-              : 'text-muted hover:text-text hover:bg-card-bg',
-            index === 0 ? 'rounded-l-card' : '',
-            index === thinkingOptions.length - 1 ? 'rounded-r-card' : '',
-            index > 0 ? 'border-l border-border' : '',
-          ]"
-          :aria-pressed="activeThinking.id === option.id"
-          :data-testid="`thinking-${option.id}`"
-          @click="themeStore.setThinking(option.id)"
-        >
-          {{ option.label }}
-        </button>
-      </div>
-      <p class="text-xs text-muted">
-        {{ activeThinking.help }}
-      </p>
-    </div>
+        <template #control>
+          <div class="inline-flex gap-0 rounded-card border border-border">
+            <button
+              v-for="(size, index) in fontSizes"
+              :key="size.id"
+              type="button"
+              class="flex items-center justify-center px-4 py-2 text-sm font-medium transition-colors"
+              :class="[
+                activeFontSize === size.id
+                  ? 'bg-accent text-white'
+                  : 'text-muted hover:text-text hover:bg-card-bg',
+                index === 0 ? 'rounded-l-card' : '',
+                index === fontSizes.length - 1 ? 'rounded-r-card' : '',
+                index > 0 ? 'border-l border-border' : '',
+              ]"
+              @click="selectFontSize(size.id)"
+            >
+              {{ size.label }}
+            </button>
+          </div>
+        </template>
+      </SettingRow>
+    </SettingGroup>
 
-    <p class="mt-4 text-xs text-muted">
-      Active: <span class="font-medium text-text">{{ themeStore.resolvedTheme.label }}</span>
-    </p>
-  </section>
+    <SettingGroup
+      id="conversation"
+      title="Conversation"
+    >
+      <SettingRow
+        id="thinking"
+        title="Thinking"
+        :summary="`${activeThinking.help}`"
+      >
+        <template #control>
+          <div
+            class="inline-flex self-start gap-0 rounded-card border border-border"
+            role="group"
+            aria-label="Thinking"
+          >
+            <button
+              v-for="(option, index) in thinkingOptions"
+              :key="option.id"
+              type="button"
+              class="flex items-center justify-center px-4 py-2 text-sm font-medium transition-colors"
+              :class="[
+                activeThinking.id === option.id
+                  ? 'bg-accent text-white'
+                  : 'text-muted hover:text-text hover:bg-card-bg',
+                index === 0 ? 'rounded-l-card' : '',
+                index === thinkingOptions.length - 1 ? 'rounded-r-card' : '',
+                index > 0 ? 'border-l border-border' : '',
+              ]"
+              :aria-pressed="activeThinking.id === option.id"
+              :data-testid="`thinking-${option.id}`"
+              @click="themeStore.setThinking(option.id)"
+            >
+              {{ option.label }}
+            </button>
+          </div>
+        </template>
+      </SettingRow>
+    </SettingGroup>
+  </div>
 </template>

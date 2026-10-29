@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { computed, onMounted } from "vue";
-import { AlertTriangle, GitPullRequest, Loader2, MessageSquareText, Plus, Sparkles } from "lucide-vue-next";
+import { AlertTriangle, GitPullRequest, Loader2, MessageSquareText, Plus, SlidersHorizontal, Sparkles } from "lucide-vue-next";
 import StatusGlyph from "@/components/sessions/StatusGlyph.vue";
 import { DRAFT_ID, useWorkflowsNav } from "@/composables/use-workflows-nav";
 import type { Workflow } from "@/lib/workflows";
@@ -57,6 +57,14 @@ function rowMeta(workflow: Workflow): { label: string; tone: string } {
       @click="nav.startCreate()"
     >
       <Plus aria-hidden="true" />New workflow
+    </button>
+    <button
+      type="button"
+      class="model-roles"
+      data-testid="workflow-model-roles"
+      @click="nav.modelRolesOpen.value = true"
+    >
+      <SlidersHorizontal aria-hidden="true" />Model roles
     </button>
 
     <nav
@@ -177,7 +185,8 @@ function rowMeta(workflow: Workflow): { label: string; tone: string } {
   background: transparent;
 }
 
-.new-workflow {
+.new-workflow,
+.model-roles {
   display: flex;
   align-items: center;
   gap: 6px;
@@ -193,7 +202,8 @@ function rowMeta(workflow: Workflow): { label: string; tone: string } {
   cursor: pointer;
 }
 
-.new-workflow:hover:not(:disabled) {
+.new-workflow:hover:not(:disabled),
+.model-roles:hover {
   border-color: color-mix(in srgb, var(--accent) 50%, var(--border));
   color: var(--text);
 }
@@ -203,7 +213,8 @@ function rowMeta(workflow: Workflow): { label: string; tone: string } {
   opacity: 0.6;
 }
 
-.new-workflow svg {
+.new-workflow svg,
+.model-roles svg {
   width: 14px;
   height: 14px;
 }

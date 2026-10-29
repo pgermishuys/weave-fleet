@@ -173,12 +173,12 @@ onMounted(load);
 </script>
 
 <template>
-  <section class="rounded-card border border-border bg-card-bg p-6 shadow-sm">
+  <section class="rounded-card border border-border bg-card-bg px-4 py-4">
     <div class="flex flex-col gap-1">
-      <h2 class="text-lg font-semibold text-text">
+      <h2 class="text-sm font-semibold text-text">
         Memory
       </h2>
-      <p class="text-sm text-muted">
+      <p class="text-xs text-muted">
         Let agents keep notes about each repository (test commands, conventions, your corrections) and about this machine
         (disk space, memory, crashes, tools that don't work here). New sessions start with both, so agents get better the
         longer you work with them.

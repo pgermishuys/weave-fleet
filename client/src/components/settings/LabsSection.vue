@@ -211,11 +211,11 @@ function openRoute(path: string): void {
         id="fleet-updates"
         title="Updates in Machines"
         summary="Each machine's version, update rule and Restart."
-        :adds="addsWhenOn(fleetUpdates.enabled.value, 'Versions and update rules in Machines')"
-        @open="setActiveSection('machines')"
+        :adds="addsWhenOn(fleetUpdates.enabled.value, 'Machine versions and update rules in Updates & about')"
+        @open="setActiveSection('updates', 'machines')"
       >
         <template #more>
-          Shows each machine's version, update rule and Restart in Settings → Machines, plus Update machines now,
+          Shows each machine's version, update rule and Restart in Settings → Updates & about, plus Update machines now,
           which restarts every machine that has an update downloaded, one at a time.
         </template>
         <template #control>

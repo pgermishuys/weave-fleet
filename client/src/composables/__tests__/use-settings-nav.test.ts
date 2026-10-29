@@ -11,6 +11,7 @@ describe("old Settings ids", () => {
     ["mods", "skills", "mods"],
     ["system", "updates", null],
     ["weave", "harnesses", "weave"],
+    ["workflows", "labs", "workflows"],
   ] as const)("%s lands on %s (%s)", (old, section, anchor) => {
     expect(resolveSettingsTarget(old)).toEqual({ section, anchor });
   });

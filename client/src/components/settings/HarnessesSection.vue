@@ -7,7 +7,6 @@ import HarnessInstallPanel from "@/components/settings/HarnessInstallPanel.vue";
 import HarnessPathField from "@/components/settings/HarnessPathField.vue";
 import HarnessProfilesPanel from "@/components/settings/HarnessProfilesPanel.vue";
 import HarnessSignInPanel from "@/components/settings/HarnessSignInPanel.vue";
-import HarnessUpdateStrip from "@/components/settings/HarnessUpdateStrip.vue";
 import HarnessWeaveGroup from "@/components/settings/HarnessWeaveGroup.vue";
 import SettingGroup from "@/components/settings/SettingGroup.vue";
 import SettingRow from "@/components/settings/SettingRow.vue";
@@ -105,7 +104,7 @@ const harnesses = computed<readonly HarnessCard[]>(() => {
 const weave = useWeaveConfig();
 const permissions = useHarnessPermissions();
 const { settings: browserSettings, load: loadBrowser } = useAgentBrowserSettings();
-const { activeHarness, activeAnchor } = useSettingsNav();
+const { activeHarness, activeAnchor, setActiveSection } = useSettingsNav();
 
 onMounted(() => {
   void weave.load();
@@ -161,32 +160,7 @@ async function changeDefault(event: Event): Promise<void> {
   if (target) await makeDefaultHarness(target);
 }
 
-/** Off stops Fleet looking up harnesses' latest versions on npm (`HarnessEndpoints.UpdateChecksPreference`). */
-const UPDATE_CHECKS_PREFERENCE_KEY = "harnessUpdates.check";
-const areUpdateChecksOn = computed(() => prefsStore.get(UPDATE_CHECKS_PREFERENCE_KEY, "true") !== "false");
-
-async function toggleUpdateChecks(): Promise<void> {
-  await prefsStore.set(UPDATE_CHECKS_PREFERENCE_KEY, areUpdateChecksOn.value ? "false" : "true");
-  refreshAllHarnesses();
-}
-
-/** While an update waits or runs, check on it every 2 seconds. */
-const UPDATE_POLL_MS = 2000;
-let updatePoll: ReturnType<typeof setInterval> | undefined;
-const isUpdating = computed(() =>
-  registeredHarnesses.value.some((harness) => harness.update?.job?.phase === "waiting" || harness.update?.job?.phase === "running"));
-
-watch(isUpdating, (updating) => {
-  if (updating && updatePoll === undefined) {
-    updatePoll = setInterval(refreshAllHarnesses, UPDATE_POLL_MS);
-  } else if (!updating && updatePoll !== undefined) {
-    clearInterval(updatePoll);
-    updatePoll = undefined;
-  }
-}, { immediate: true });
-
 onBeforeUnmount(() => {
-  if (updatePoll !== undefined) clearInterval(updatePoll);
   clearInterval(clock);
 });
 
@@ -333,21 +307,6 @@ function statusForHarness(harness: HarnessInfo, enabled: boolean): HarnessStatus
           </div>
         </template>
       </SettingRow>
-      <SettingRow
-        v-if="!config.cloudMode"
-        id="harness-update-checks"
-        title="Check for updates"
-        summary="Fleet looks up each harness's latest version on npm."
-      >
-        <template #control>
-          <SettingSwitch
-            :checked="areUpdateChecksOn"
-            aria-label="Check for updates"
-            data-testid="harnesses-update-checks"
-            @click="void toggleUpdateChecks()"
-          />
-        </template>
-      </SettingRow>
     </SettingGroup>
 
     <div
@@ -437,16 +396,23 @@ function statusForHarness(harness: HarnessInfo, enabled: boolean): HarnessStatus
         </label>
       </div>
 
-      <!-- The version and, when there is one, its update; each panel names itself and draws nothing when it has nothing to say. -->
+      <!-- How it's installed; its version and update are on Updates & about. -->
       <div
         v-if="!config.cloudMode"
         data-setting-group="version"
-        class="scroll-mt-4 grid gap-2 empty:hidden"
+        class="scroll-mt-4 grid gap-2"
       >
-        <HarnessUpdateStrip
-          v-if="selected.enabled && !config.cloudMode"
-          :harness="selected.info"
-        />
+        <p class="px-1 text-xs text-muted">
+          Its version and updates are on
+          <button
+            type="button"
+            class="text-accent hover:underline focus-visible:outline focus-visible:outline-2 focus-visible:outline-accent"
+            data-testid="harness-updates-link"
+            @click="setActiveSection('updates', 'harnesses')"
+          >
+            Updates &amp; about
+          </button>.
+        </p>
         <HarnessInstallPanel
           v-if="selected.describesInstall && !config.cloudMode"
           :harness="selected.info"

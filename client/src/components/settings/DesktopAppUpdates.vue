@@ -44,7 +44,7 @@ const actionLabel = computed(() => {
 
 <template>
   <div
-    class="flex flex-col gap-2 rounded-card border border-border bg-main-bg px-4 py-3"
+    class="flex flex-col gap-2 px-4 py-3"
     data-testid="desktop-app-updates"
   >
     <div class="flex items-center justify-between gap-3">

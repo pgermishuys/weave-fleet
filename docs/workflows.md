@@ -2,7 +2,7 @@
 
 A workflow is a short list of steps that Fleet runs for you. Each agent step is an ordinary Fleet session with its own
 agent, model and optional skill. Fleet moves the run from step to step, which costs no tokens, and stops wherever a
-step asks you. Workflows are experimental and off until you turn them on in **Settings → Workflows**.
+step asks you. Workflows are experimental and off until you turn them on in **Settings → Labs**.
 
 Fleet ships two workflows. **Build a feature** turns a sentence into a reviewed pull request, stopping once for you
 to approve the plan. Its plan is a Weave plan in `.weave/plans/`, with a `- [ ]` line per task that Implement ticks
@@ -255,7 +255,7 @@ Built-in steps ask for a **role**, not a model, because the same model has a dif
 | `standard` | Doing the work: writing and running code              | Implement, Check it runs        |
 | `fast`     | Reading and sorting: short tasks with a clear answer  | Push and open the PR            |
 
-Settings → Workflows → **Model roles** maps each role to one of your models, per harness, with an effort. A role you
+**Model roles** on the Workflows page maps each role to one of your models, per harness, with an effort. A role you
 haven't set uses the composer's default model. The mapping is yours, kept in Fleet, not in the repository. The Run
 box's **Models** menu changes the roles for one run. A step can pin an exact `provider/model` instead; anyone without
 that model can't run it. If a step's model isn't available when you press Run, the run doesn't start and says which
@@ -313,7 +313,7 @@ draft opens in the designer **unsaved**: nothing is written to the repository un
   `generate`, which leaves no trace. The session's history doesn't change. A harness that can't ask off the record
   (Claude Code, Pi) doesn't offer it.
 - **New workflow → Describe it** takes a sentence ("What should it do?") and asks the harness you pick, on its
-  **Standard** model (Settings → Workflows → Model roles). There's no session to read, so Fleet asks a throwaway one and
+  **Standard** model (Model roles on the Workflows page). There's no session to read, so Fleet asks a throwaway one and
   deletes it.
 
 The answer goes through the same check the designer uses. If it has errors, Fleet asks once more in the same
@@ -337,7 +337,7 @@ Library's **Repeat on a schedule…** opens the composer with the workflow and w
 
 - The automation's message is the run's `{{request}}`.
 - A run starts the same way as from the Run box, so it has the same checks: Workflows on, a harness that runs
-  workflows, a file without errors, and every step's model and skill. Model roles are read from Settings → Workflows
+  workflows, a file without errors, and every step's model and skill. Model roles are read from Model roles on the Workflows page
   when the automation fires, not when it was saved.
 - **Check with me** is always off, since nobody is watching. A You decide step still stops the run under Needs you,
   with the usual notification.

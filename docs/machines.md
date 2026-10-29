@@ -202,8 +202,8 @@ machines now**. When there's nothing to do it's one quiet line saying every mach
 latest version, and when it last checked.
 
 A chip in the status bar counts the machines that can update ("↑ 2 machines can update"), or follows a rollout
-("Updating machines · 1 of 3"), and opens Settings → Machines. The desktop app's own update stays in Settings →
-System, whose Fleet line points to Machines when an update is waiting.
+("Updating machines · 1 of 3"), and opens Settings → Updates & about. The desktop app's own update stays in Settings →
+Updates & about, whose Fleet line points to its Machines group when an update is waiting.
 
 ### Restarting into an update
 

@@ -126,12 +126,12 @@ async function removeWorkspaceRoot(root: WorkspaceRootItem): Promise<void> {
 </script>
 
 <template>
-  <section class="rounded-card border border-border bg-card-bg p-6 shadow-sm">
+  <section class="rounded-card border border-border bg-card-bg px-4 py-4">
     <div class="flex flex-col gap-1">
-      <h2 class="text-lg font-semibold text-text">
+      <h2 class="text-sm font-semibold text-text">
         Folders
       </h2>
-      <p class="text-sm text-muted">
+      <p class="text-xs text-muted">
         Fleet lists the repositories it finds in these locations, up to three folders deep. New folders and
         clones go in the one you used last. A folder you open or create anywhere else is added here.
       </p>

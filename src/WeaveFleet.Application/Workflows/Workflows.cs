@@ -67,7 +67,7 @@ public sealed record WorkflowModelChoice(string? Model, string? Effort)
 }
 
 /// <summary>
-/// Which of the user's models does each kind of work, per harness: Settings → Workflows → Model roles. Kept in Fleet
+/// Which of the user's models does each kind of work, per harness: Model roles on the Workflows page. Kept in Fleet
 /// for the user, not in the repo, so a workflow file someone shares works on the reader's providers.
 /// </summary>
 public sealed class WorkflowModelRoles(IUserPreferenceRepository preferences)

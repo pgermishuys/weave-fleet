@@ -42,7 +42,7 @@ const COME_BACK_LIMIT_MS = 3 * 60_000;
 
 const DESKTOP_PLATFORMS: Record<string, string> = { darwin: "macos", win32: "windows", linux: "linux" };
 
-/** Settings → Labs: whether Settings → Machines shows each machine's version, update rule and Restart. */
+/** Settings → Labs: whether Settings → Updates & about shows each machine's version, update rule and Restart. */
 export function useFleetUpdatesEnabled() {
   const preferences = usePreferencesStore();
   preferences.ensureLoaded();

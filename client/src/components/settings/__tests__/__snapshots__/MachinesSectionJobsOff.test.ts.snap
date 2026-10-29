@@ -1,52 +1,64 @@
 // Vitest Snapshot v1, https://vitest.dev/guide/snapshot.html
 
 exports[`Settings → Machines with Jobs off > renders as it always did and asks nothing about jobs 1`] = `
-"<section data-v-bdf3156a="" class="rounded-card border border-border bg-card-bg p-6 shadow-sm" data-testid="machines-section">
-  <div data-v-bdf3156a="" class="flex flex-col gap-3 md:flex-row md:items-start md:justify-between">
-    <div data-v-bdf3156a="" class="space-y-1">
-      <h2 data-v-bdf3156a="" class="text-lg font-semibold text-text"> Machines </h2>
-      <p data-v-bdf3156a="" class="max-w-prose text-sm text-muted"> Every machine runs its own Fleet and keeps its own sessions, repositories and sign-ins. A session stays on the machine it started on. The sessions list shows them all; the one you're working in is live. </p>
-    </div><button data-v-bdf3156a="" type="button" class="inline-flex items-center justify-center gap-2 rounded-btn bg-primary px-3 py-2 text-sm font-medium text-white transition-opacity hover:opacity-90 disabled:cursor-not-allowed disabled:opacity-60" data-testid="machines-add"><svg data-v-bdf3156a="" xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" class="lucide lucide-plus-icon lucide-plus">
-        <path d="M5 12h14"></path>
-        <path d="M12 5v14"></path>
-      </svg> Add a machine </button>
-  </div>
-  <!--v-if-->
-  <!--v-if-->
-  <!--v-if-->
-  <ul data-v-bdf3156a="" class="mt-5 grid gap-2" aria-label="Machines">
-    <li data-v-bdf3156a="" class="machine-card" data-testid="machine-card" data-machine="home"><span data-v-bdf3156a="" class="machine-card__dot machine-card__dot--ok" aria-hidden="true"></span>
-      <div data-v-bdf3156a="" class="machine-card__names"><span data-v-bdf3156a="" class="machine-card__name">atlas <span data-v-bdf3156a="" class="machine-card__os">linux</span><span data-v-bdf3156a="" class="machine-card__live">Live</span></span><span data-v-bdf3156a="" class="machine-card__url">this machine</span><span data-v-bdf3156a="" class="machine-card__state machine-card__state--ok">live</span>
-        <!--v-if-->
-        <!--v-if-->
-        <!--v-if-->
-        <!--v-if-->
-      </div>
-      <div data-v-bdf3156a="" class="machine-card__actions">
-        <!--v-if-->
-        <!--v-if--><button data-v-bdf3156a="" type="button" class="inline-flex items-center justify-center gap-2 rounded-btn border border-border bg-main-bg px-3 py-1.5 text-sm font-medium text-text transition-colors hover:border-accent/50 disabled:cursor-not-allowed disabled:opacity-60"> Rename </button>
-        <!--v-if-->
-        <!--v-if-->
+"<div data-v-bdf3156a="" class="grid gap-6" data-testid="machines-section">
+  <section data-v-bdf3156a="" id="settings-group-machines" class="scroll-mt-4" data-setting-group="machines">
+    <div class="mb-2 flex items-baseline justify-between gap-3 px-1">
+      <h2 class="text-sm font-semibold text-text">Machines</h2>
+      <!--v-if-->
+    </div>
+    <div class="divide-y divide-border overflow-hidden rounded-card border border-border bg-card-bg">
+      <div data-v-bdf3156a="" id="settings-row-add-machine" class="flex items-start justify-between gap-4 px-4 py-3" data-setting-row="add-machine">
+        <div class="min-w-0 flex-1">
+          <p class="flex items-center gap-2 text-sm font-medium text-text">Add a machine </p>
+          <p class="mt-0.5 text-xs text-muted">Every machine runs its own Fleet and keeps its own sessions, repositories and sign-ins. A session stays on the machine it started on. The sessions list shows them all; the one you're working in is live.
+            <!--v-if-->
+          </p>
+          <!--v-if-->
+          <!--v-if-->
+        </div>
+        <div class="shrink-0"><button data-v-bdf3156a="" type="button" class="inline-flex items-center justify-center gap-2 rounded-btn bg-primary px-3 py-2 text-sm font-medium text-white transition-opacity hover:opacity-90 disabled:cursor-not-allowed disabled:opacity-60" data-testid="machines-add"><svg data-v-bdf3156a="" xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" class="lucide lucide-plus-icon lucide-plus">
+              <path d="M5 12h14"></path>
+              <path d="M12 5v14"></path>
+            </svg> Add a machine </button></div>
       </div>
       <!--v-if-->
-    </li>
-    <li data-v-bdf3156a="" class="machine-card" data-testid="machine-card" data-machine="bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb"><span data-v-bdf3156a="" class="machine-card__dot machine-card__dot--bad" aria-hidden="true"></span>
-      <div data-v-bdf3156a="" class="machine-card__names"><span data-v-bdf3156a="" class="machine-card__name">mini <span data-v-bdf3156a="" class="machine-card__os">macos</span>
-        <!--v-if--></span><span data-v-bdf3156a="" class="machine-card__url">http://100.64.12.40:2113</span><span data-v-bdf3156a="" class="machine-card__state machine-card__state--bad">mini answered 404.</span>
-        <!--v-if-->
-        <!--v-if-->
-        <!--v-if-->
-        <!--v-if-->
-      </div>
-      <div data-v-bdf3156a="" class="machine-card__actions">
-        <!--v-if--><button data-v-bdf3156a="" type="button" class="inline-flex items-center justify-center gap-2 rounded-btn border border-border bg-main-bg px-3 py-1.5 text-sm font-medium text-text transition-colors hover:border-accent/50 disabled:cursor-not-allowed disabled:opacity-60" data-testid="machine-open"> Work here </button><button data-v-bdf3156a="" type="button" class="inline-flex items-center justify-center gap-2 rounded-btn border border-border bg-main-bg px-3 py-1.5 text-sm font-medium text-text transition-colors hover:border-accent/50 disabled:cursor-not-allowed disabled:opacity-60"> Rename </button><button data-v-bdf3156a="" type="button" class="inline-flex items-center justify-center gap-2 rounded-btn border border-border bg-main-bg px-3 py-1.5 text-sm font-medium text-text transition-colors hover:border-accent/50 disabled:cursor-not-allowed disabled:opacity-60"> New token </button><button data-v-bdf3156a="" type="button" class="inline-flex items-center justify-center gap-2 rounded-btn border border-border bg-main-bg px-3 py-1.5 text-sm font-medium text-text transition-colors hover:border-red-500/60 hover:text-red-400 disabled:cursor-not-allowed disabled:opacity-60" data-testid="machine-forget"> Forget </button>
-      </div>
       <!--v-if-->
-    </li>
-  </ul>
-  <div data-v-bdf3156a="" class="mt-8 border-t border-border pt-6" data-testid="machine-access">
-    <h3 data-v-bdf3156a="" class="text-sm font-semibold text-text"> Let other devices reach atlas</h3>
-    <p data-v-bdf3156a="" class="mt-2 text-sm text-muted">This Fleet doesn't hand out access tokens: it signs people in with an identity provider, or it's too old for machines.</p>
-  </div>
-</section>"
+      <ul data-v-bdf3156a="" class="divide-y divide-border" aria-label="Machines">
+        <li data-v-bdf3156a="" class="machine-card" data-testid="machine-card" data-machine="home"><span data-v-bdf3156a="" class="machine-card__dot machine-card__dot--ok" aria-hidden="true"></span>
+          <div data-v-bdf3156a="" class="machine-card__names"><span data-v-bdf3156a="" class="machine-card__name">atlas <span data-v-bdf3156a="" class="machine-card__os">linux</span><span data-v-bdf3156a="" class="machine-card__live">Live</span></span><span data-v-bdf3156a="" class="machine-card__url">this machine</span><span data-v-bdf3156a="" class="machine-card__state machine-card__state--ok">live</span>
+            <!--v-if-->
+            <!--v-if-->
+            <!--v-if-->
+            <!--v-if-->
+          </div>
+          <div data-v-bdf3156a="" class="machine-card__actions">
+            <!--v-if--><button data-v-bdf3156a="" type="button" class="inline-flex items-center justify-center gap-2 rounded-btn border border-border bg-main-bg px-3 py-1.5 text-sm font-medium text-text transition-colors hover:border-accent/50 disabled:cursor-not-allowed disabled:opacity-60"> Rename </button>
+            <!--v-if-->
+            <!--v-if-->
+          </div>
+        </li>
+        <li data-v-bdf3156a="" class="machine-card" data-testid="machine-card" data-machine="bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb"><span data-v-bdf3156a="" class="machine-card__dot machine-card__dot--bad" aria-hidden="true"></span>
+          <div data-v-bdf3156a="" class="machine-card__names"><span data-v-bdf3156a="" class="machine-card__name">mini <span data-v-bdf3156a="" class="machine-card__os">macos</span>
+            <!--v-if--></span><span data-v-bdf3156a="" class="machine-card__url">http://100.64.12.40:2113</span><span data-v-bdf3156a="" class="machine-card__state machine-card__state--bad">mini answered 404.</span>
+            <!--v-if-->
+            <!--v-if-->
+            <!--v-if-->
+            <!--v-if-->
+          </div>
+          <div data-v-bdf3156a="" class="machine-card__actions"><button data-v-bdf3156a="" type="button" class="inline-flex items-center justify-center gap-2 rounded-btn border border-border bg-main-bg px-3 py-1.5 text-sm font-medium text-text transition-colors hover:border-accent/50 disabled:cursor-not-allowed disabled:opacity-60" data-testid="machine-open"> Work here </button><button data-v-bdf3156a="" type="button" class="inline-flex items-center justify-center gap-2 rounded-btn border border-border bg-main-bg px-3 py-1.5 text-sm font-medium text-text transition-colors hover:border-accent/50 disabled:cursor-not-allowed disabled:opacity-60"> Rename </button><button data-v-bdf3156a="" type="button" class="inline-flex items-center justify-center gap-2 rounded-btn border border-border bg-main-bg px-3 py-1.5 text-sm font-medium text-text transition-colors hover:border-accent/50 disabled:cursor-not-allowed disabled:opacity-60"> New token </button><button data-v-bdf3156a="" type="button" class="inline-flex items-center justify-center gap-2 rounded-btn border border-border bg-main-bg px-3 py-1.5 text-sm font-medium text-text transition-colors hover:border-red-500/60 hover:text-red-400 disabled:cursor-not-allowed disabled:opacity-60" data-testid="machine-forget"> Forget </button></div>
+        </li>
+      </ul>
+    </div>
+  </section>
+  <section data-v-bdf3156a="" id="settings-group-phones" class="scroll-mt-4" data-setting-group="phones" data-testid="machine-access">
+    <div class="mb-2 flex items-baseline justify-between gap-3 px-1">
+      <h2 class="text-sm font-semibold text-text">Let other devices reach atlas</h2>
+      <p class="text-xs text-muted">Phones and devices, and the access token.</p>
+    </div>
+    <div class="divide-y divide-border overflow-hidden rounded-card border border-border bg-card-bg">
+      <p data-v-bdf3156a="" class="px-4 py-3 text-sm text-muted">This Fleet doesn't hand out access tokens: it signs people in with an identity provider, or it's too old for machines.</p>
+    </div>
+  </section>
+</div>"
 `;

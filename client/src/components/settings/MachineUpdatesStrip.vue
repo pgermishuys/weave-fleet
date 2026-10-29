@@ -12,7 +12,7 @@ import {
 } from "@/lib/fleet-updates";
 
 /**
- * The release line at the top of Settings → Machines (with Updates in Machines on): what is out, how many machines have
+ * The release line at the top of Settings → Updates & about › Machines (with Updates in Machines on): what is out, how many machines have
  * it, the rule every machine follows unless it has its own, Check now and Update machines now; or, while a rollout
  * runs, where it is and how to stop it.
  */

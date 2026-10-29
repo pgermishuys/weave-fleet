@@ -22,15 +22,15 @@ onMounted(() => void load());
 
 <template>
   <section
-    class="rounded-card border border-border bg-card-bg p-6 shadow-sm"
+    class="rounded-card border border-border bg-card-bg px-4 py-4"
     data-testid="browser-section"
   >
     <div class="flex items-start gap-4">
       <div class="flex min-w-0 flex-1 flex-col gap-1">
-        <h2 class="text-lg font-semibold text-text">
+        <h2 class="text-sm font-semibold text-text">
           Browser
         </h2>
-        <p class="text-sm text-muted">
+        <p class="text-xs text-muted">
           Agents can open their own tab on a page, read it, click and type, to try what they built. They use Fleet's
           headless browser, not yours, so your view and your sign-ins don't change.
         </p>

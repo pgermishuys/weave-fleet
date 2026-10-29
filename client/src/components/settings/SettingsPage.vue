@@ -11,9 +11,7 @@ import MemorySection from "@/components/settings/MemorySection.vue";
 import PermissionsSection from "@/components/settings/PermissionsSection.vue";
 import SkillsToolsPage from "@/components/settings/SkillsToolsPage.vue";
 import StorageSection from "@/components/settings/StorageSection.vue";
-import SystemSection from "@/components/settings/SystemSection.vue";
-import WhatsNewSection from "@/components/settings/WhatsNewSection.vue";
-import WorkflowsSection from "@/components/settings/WorkflowsSection.vue";
+import UpdatesSection from "@/components/settings/UpdatesSection.vue";
 import WorkspaceSection from "@/components/settings/WorkspaceSection.vue";
 import WorktreeNamingSection from "@/components/settings/WorktreeNamingSection.vue";
 import { useSettingsNav } from "@/composables/use-settings-nav";
@@ -30,11 +28,10 @@ const PAGES: Readonly<Record<string, { title: string; line: string }>> = {
   permissions: { title: "Permissions", line: "What agents may do without asking, and whether they can use a browser." },
   skills: { title: "Skills & tools", line: "What agents can use: skills, tools and, with Mods on, mods." },
   memory: { title: "Memory", line: "What Fleet remembers about each repository." },
-  workflows: { title: "Workflows", line: "Model roles for workflow steps." },
   folders: { title: "Folders", line: "Where your repositories are, how worktrees are named, and the disk they take." },
   machines: { title: "Machines", line: "The machines you work on, phones and devices, and the access token." },
   labs: { title: "Labs", line: "Experiments. They can change or go away, and each is off until you turn it on." },
-  updates: { title: "Updates & about", line: "Fleet's version and updates, and what's new." },
+  updates: { title: "Updates & about", line: "Every version and update: Fleet, harnesses and machines, and what's new." },
   credentials: { title: "API keys", line: "Credentials for model providers." },
 };
 
@@ -64,7 +61,7 @@ watch(
     if (!activeAnchor.value) return;
     await nextTick();
     document
-      .querySelector(`[data-settings-anchor="${CSS.escape(activeAnchor.value)}"]`)
+      .querySelector(`[data-settings-anchor="${CSS.escape(activeAnchor.value)}"], [data-setting-group="${CSS.escape(activeAnchor.value)}"], [data-setting-row="${CSS.escape(activeAnchor.value)}"]`)
       ?.scrollIntoView({ block: "start", behavior: "smooth" });
   },
   { flush: "post", immediate: true },
@@ -109,8 +106,6 @@ watch(
 
     <MemorySection v-else-if="activeSection === 'memory'" />
 
-    <WorkflowsSection v-else-if="activeSection === 'workflows'" />
-
     <template v-else-if="activeSection === 'folders'">
       <WorkspaceSection />
       <WorktreeNamingSection />
@@ -123,10 +118,7 @@ watch(
 
     <LabsSection v-else-if="activeSection === 'labs'" />
 
-    <template v-else-if="activeSection === 'updates'">
-      <SystemSection />
-      <WhatsNewSection />
-    </template>
+    <UpdatesSection v-else-if="activeSection === 'updates'" />
 
     <CredentialsSection v-else-if="activeSection === 'credentials'" />
 

@@ -22,7 +22,7 @@ export function pathFromKey(key: string): string | null {
 }
 
 /**
- * Which of the user's models does each kind of work, per harness: Settings → Workflows → Model roles. A per-user
+ * Which of the user's models does each kind of work, per harness: Model roles on the Workflows page. A per-user
  * Fleet preference, not stored in the repo, so a workflow someone shares works on the reader's providers.
  */
 export function useModelRoles() {

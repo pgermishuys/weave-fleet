@@ -61,7 +61,7 @@ function shown<T>(path: string, matches: T[]): T[] {
 
     <div v-else-if="failure?.kind === 'unsupported'" class="find-results__note find-results__note--warn" role="alert">
       <strong>This machine can't search inside files yet.</strong>
-      <span>The Fleet running on it is older. Update it from Settings → Machines, then search again.</span>
+      <span>The Fleet running on it is older. Update it from Settings → Updates & about, then search again.</span>
     </div>
 
     <div v-else-if="failure" class="find-results__note find-results__note--error" role="alert">

@@ -56,7 +56,7 @@ public static class WorkflowOutcomes
     public const string Failed = "failed";
 }
 
-/// <summary>The roles a step's model can name; Settings → Workflows maps each to a model.</summary>
+/// <summary>The roles a step's model can name; Model roles on the Workflows page maps each to a model.</summary>
 public static class WorkflowRoles
 {
     public const string Strong = "strong";

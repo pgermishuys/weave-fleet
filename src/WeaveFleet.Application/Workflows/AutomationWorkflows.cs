@@ -55,7 +55,7 @@ public sealed class AutomationWorkflows(
         if (string.IsNullOrWhiteSpace(automation.WorkspaceId))
             return AutomationWorkflowStart.Skipped("the automation doesn't say which repository to run in.");
 
-        // No role overrides: the roles are read from Settings → Workflows now, when it fires, not when it was saved.
+        // No role overrides: the roles are read from Model roles on the Workflows page now, when it fires, not when it was saved.
         var started = await workflows.StartAsync(
             new StartWorkflowRunRequest(
                 automation.WorkflowId,

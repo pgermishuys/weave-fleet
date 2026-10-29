@@ -1,19 +1,18 @@
 <script setup lang="ts">
-import { computed, onMounted, shallowRef } from "vue";
+import { computed, shallowRef, watch } from "vue";
 import { Check } from "lucide-vue-next";
+import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import ModelSelector from "@/components/session/ModelSelector.vue";
 import SelectorDropdown from "@/components/session/SelectorDropdown.vue";
 import { useEnabledHarnesses } from "@/composables/use-enabled-harnesses";
 import { useHarnessCatalog } from "@/composables/use-harness-catalog";
 import { keyFromPath, pathFromKey, useModelRoles } from "@/composables/use-model-roles";
-import { useSettingsNav } from "@/composables/use-settings-nav";
 import { useWorkflowsFeature } from "@/composables/use-workflows-feature";
 import { useWorkflowsNav } from "@/composables/use-workflows-nav";
 import { describeDefaults } from "@/lib/agent-model-choice";
 import { ROLE_DESCRIPTIONS, ROLE_NAMES, WORKFLOW_ROLES, type WorkflowRole } from "@/lib/workflows";
 
 const { isWorkflowsEnabled } = useWorkflowsFeature();
-const { setActiveSection } = useSettingsNav();
 const { harnesses: allHarnesses, enabledHarnesses, defaultHarnessType } = useEnabledHarnesses();
 const { choiceFor, setChoice } = useModelRoles();
 const nav = useWorkflowsNav();
@@ -37,7 +36,7 @@ const harnessType = computed(() => harnessChoice.value
   ?? (harnesses.value.some((h) => h.type === defaultHarnessType.value) ? defaultHarnessType.value : harnesses.value[0]?.type ?? ""));
 
 const { catalog, models, isSupported } = useHarnessCatalog(
-  computed(() => (isWorkflowsEnabled.value ? harnessType.value : "")),
+  computed(() => (isWorkflowsEnabled.value && nav.modelRolesOpen.value ? harnessType.value : "")),
   nav.repositoryPath,
 );
 const defaultLabels = computed(() => describeDefaults(isSupported.value ? catalog.value : null, { agent: "", model: "" }));
@@ -81,66 +80,40 @@ function usedBy(role: WorkflowRole): string[] {
   return [...titles];
 }
 
-onMounted(() => {
-  if (!nav.library.value && isWorkflowsEnabled.value) void nav.reload();
+watch(() => nav.modelRolesOpen.value, (open) => {
+  if (open && !nav.library.value && isWorkflowsEnabled.value) void nav.reload();
 });
 </script>
 
 <template>
-  <div class="flex flex-col gap-4">
-    <section
-      v-if="!isWorkflowsEnabled"
-      class="rounded-card border border-border bg-card-bg p-6 shadow-sm"
-      data-testid="workflows-off-card"
-    >
-      <h2 class="text-lg font-semibold text-text">
-        Workflows is off
-      </h2>
-      <p class="mt-1 text-sm text-muted">
-        Turn it on in
-        <button
-          type="button"
-          class="text-accent hover:underline focus-visible:outline focus-visible:outline-2 focus-visible:outline-accent"
-          data-testid="workflows-labs-link"
-          @click="setActiveSection('labs')"
-        >Settings → Labs</button>
-        to show Workflows in the rail and set the model roles here.
-      </p>
-    </section>
-
-    <section
-      v-if="isWorkflowsEnabled"
-      class="rounded-card border border-border bg-card-bg p-6 shadow-sm"
+  <Dialog v-model:open="nav.modelRolesOpen.value">
+    <DialogContent
+      class="max-h-[90vh] overflow-y-auto sm:max-w-2xl"
       data-testid="workflows-roles-card"
     >
-      <div class="flex items-start justify-between gap-4">
-        <div>
-          <h2 class="text-lg font-semibold text-text">
-            Model roles
-          </h2>
-          <p class="mt-1 text-sm text-muted">
-            Workflow steps ask for a role, not a model, so a workflow file someone shares works on your providers.
-            Pick which of your models does each kind of work. Kept in Fleet for you, not in the repo.
-          </p>
-        </div>
-        <div
-          v-if="harnesses.length > 1"
-          class="wf-seg"
-          role="group"
-          aria-label="Harness"
+      <DialogHeader>
+        <DialogTitle>Model roles</DialogTitle>
+        <DialogDescription>
+          Workflow steps ask for a role, not a model, so a workflow file someone shares works on your providers.
+          Pick which of your models does each kind of work. Kept in Fleet for you, not in the repo.
+        </DialogDescription>
+      </DialogHeader>
+      <div
+        v-if="harnesses.length > 1"
+        class="wf-seg w-fit"
+        role="group"
+        aria-label="Harness"
+      >
+        <button
+          v-for="harness in harnesses"
+          :key="harness.type"
+          type="button"
+          :aria-pressed="harness.type === harnessType"
+          @click="harnessChoice = harness.type"
         >
-          <button
-            v-for="harness in harnesses"
-            :key="harness.type"
-            type="button"
-            :aria-pressed="harness.type === harnessType"
-            @click="harnessChoice = harness.type"
-          >
-            {{ harness.displayName }}
-          </button>
-        </div>
+          {{ harness.displayName }}
+        </button>
       </div>
-
       <p
         v-if="harnesses.length === 0 && allHarnesses.length > 0"
         class="mt-4 text-sm text-muted"
@@ -207,8 +180,8 @@ onMounted(() => {
           A run can use different models from the Models menu in its Run box without changing these.
         </p>
       </template>
-    </section>
-  </div>
+    </DialogContent>
+  </Dialog>
 </template>
 
 <style scoped>

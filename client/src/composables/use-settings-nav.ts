@@ -13,7 +13,6 @@ export type SettingsPageId =
   | "machines"
   | "labs"
   | "updates"
-  | "workflows"
   | "credentials"
   | `integration:${string}`;
 
@@ -27,13 +26,14 @@ export type LegacySettingsSectionId =
   | "mods"
   | "system"
   | "weave"
+  | "workflows"
   | "plugins";
 
 export type SettingsSectionId = SettingsPageId | LegacySettingsSectionId;
 
 export interface SettingsTarget {
   section: SettingsPageId;
-  /** A group or tab on the page to scroll to or open (`storage`, `browser`, `tools`, `mods`, `weave`, `may-do`). */
+  /** A group or tab on the page to scroll to or open (`storage`, `browser`, `tools`, `mods`, `weave`, `may-do`, `harnesses`, `machines`). */
   anchor: string | null;
 }
 
@@ -48,6 +48,8 @@ export const LEGACY_SECTION_TARGETS: Readonly<Record<Exclude<LegacySettingsSecti
   system: { section: "updates", anchor: null },
   // Weave is on each harness's tab. Which tab is decided by the Harnesses page: the default harness's, or the first with Weave.
   weave: { section: "harnesses", anchor: "weave" },
+  // Model roles moved to the Workflows page in the rail, which Settings can't open: the Workflows switch, which says where.
+  workflows: { section: "labs", anchor: "workflows" },
 };
 
 export function resolveSettingsTarget(
