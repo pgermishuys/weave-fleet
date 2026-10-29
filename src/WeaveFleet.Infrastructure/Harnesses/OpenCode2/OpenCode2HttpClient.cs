@@ -254,7 +254,7 @@ internal sealed partial class OpenCode2HttpClient(HttpClient http, HttpClient ev
             new OpenCode2FormReply { Answer = answer },
             OpenCode2JsonContext.Default.OpenCode2FormReply,
             ct).ConfigureAwait(false);
-        await EnsureSuccessAsync(response, "answer the question", ct).ConfigureAwait(false);
+        await EnsureFormFoundAsync(response, formId, "answer the question", ct).ConfigureAwait(false);
     }
 
     /// <summary>Dismisses a form. V2 fails the tool call that asked, which ends the turn.</summary>
@@ -262,7 +262,18 @@ internal sealed partial class OpenCode2HttpClient(HttpClient http, HttpClient ev
     {
         using var response = await http.DeleteAsync(
             $"api/session/{Uri.EscapeDataString(sessionId)}/form/{Uri.EscapeDataString(formId)}", ct).ConfigureAwait(false);
-        await EnsureSuccessAsync(response, "dismiss the question", ct).ConfigureAwait(false);
+        await EnsureFormFoundAsync(response, formId, "dismiss the question", ct).ConfigureAwait(false);
+    }
+
+    /// <summary>
+    /// V2 answers 404 (<c>FormNotFoundError</c>) for a form it no longer holds: answered elsewhere, dismissed, or its
+    /// server restarted since it asked. Any other failure stays an error.
+    /// </summary>
+    private static async Task EnsureFormFoundAsync(HttpResponseMessage response, string formId, string action, CancellationToken ct)
+    {
+        if (response.StatusCode == HttpStatusCode.NotFound)
+            throw new KeyNotFoundException($"OpenCode 2 isn't waiting on question '{formId}' any more.");
+        await EnsureSuccessAsync(response, action, ct).ConfigureAwait(false);
     }
 
     /// <summary>Answers a permission request: <paramref name="decision"/> is <c>once</c>, <c>always</c> or <c>reject</c>.</summary>

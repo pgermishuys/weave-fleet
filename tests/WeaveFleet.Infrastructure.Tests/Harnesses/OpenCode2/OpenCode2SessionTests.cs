@@ -193,6 +193,52 @@ public sealed class OpenCode2SessionTests
     }
 
     [Fact]
+    public async Task An_answer_to_a_form_v2_no_longer_holds_says_the_question_is_gone_and_forgets_it()
+    {
+        // Fleet remembers the form, but V2's server restarted since it asked: the reply finds no form.
+        var api = new StubHandler(request => request.Method == HttpMethod.Get
+            ? Json("""{"data":[]}""")
+            : new HttpResponseMessage(HttpStatusCode.NotFound)
+            {
+                Content = new StringContent($$"""{"_tag":"FormNotFoundError","id":"{{Form}}"}""", Encoding.UTF8, "application/json"),
+            });
+        await using var server = Server(api);
+        await using var session = NewSession(server);
+        session.OnEvent(FormCreated());
+
+        await Should.ThrowAsync<KeyNotFoundException>(() => session.AnswerQuestionAsync(Call, [["A"]], CancellationToken.None));
+
+        // Asked again, Fleet looks on the server instead of replying to the form it lost.
+        await Should.ThrowAsync<KeyNotFoundException>(() => session.AnswerQuestionAsync(Call, [["A"]], CancellationToken.None));
+        api.Requests.Select(r => (r.Method.Method, r.Path)).ShouldBe(
+        [
+            ("POST", $"/api/session/{Session}/form/{Form}/reply"),
+            ("GET", $"/api/session/{Session}/form"),
+        ]);
+    }
+
+    [Fact]
+    public async Task Dismissing_a_form_v2_no_longer_holds_says_the_question_is_gone()
+    {
+        await using var server = Server(new StubHandler(_ => new HttpResponseMessage(HttpStatusCode.NotFound)));
+        await using var session = NewSession(server);
+        session.OnEvent(FormCreated());
+
+        await Should.ThrowAsync<KeyNotFoundException>(() => session.RejectQuestionAsync(Call, CancellationToken.None));
+    }
+
+    [Fact]
+    public async Task Any_other_failure_answering_stays_an_error()
+    {
+        await using var server = Server(new StubHandler(_ => new HttpResponseMessage(HttpStatusCode.InternalServerError)));
+        await using var session = NewSession(server);
+        session.OnEvent(FormCreated());
+
+        var ex = await Should.ThrowAsync<HttpRequestException>(() => session.AnswerQuestionAsync(Call, [["A"]], CancellationToken.None));
+        ex.StatusCode.ShouldBe(HttpStatusCode.InternalServerError);
+    }
+
+    [Fact]
     public void Chosen_labels_are_sent_as_values_typed_answers_as_typed_and_a_multiselect_as_a_list()
     {
         var form = JsonSerializer.Deserialize("""

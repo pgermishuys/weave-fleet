@@ -1,5 +1,6 @@
-import { mount } from "@vue/test-utils";
+import { flushPromises, mount } from "@vue/test-utils";
 import { describe, expect, it, vi } from "vitest";
+import { QuestionGoneError } from "@/composables/use-question-answer";
 import QuestionCard from "@/components/session/QuestionCard.vue";
 import type { AccumulatedToolPart } from "@/lib/client-types";
 
@@ -88,5 +89,22 @@ describe("QuestionCard", () => {
     const { wrapper } = mountCard({ status: "error", input: { questions } });
 
     expect(wrapper.get("[data-testid='question-card-dismissed']").text()).toContain("Skipped");
+  });
+
+  it("says the agent isn't waiting and lets the user dismiss the leftover card here, sending nothing", async () => {
+    const onSubmit = vi.fn(async () => { throw new QuestionGoneError(); });
+    const { wrapper, onDismiss } = mountCard({ status: "running", input: { questions } }, onSubmit);
+
+    await wrapper.get("[data-testid='question-pill-Staging']").trigger("click");
+    await wrapper.get("[data-testid='question-submit-button']").trigger("click");
+    await flushPromises();
+
+    expect(wrapper.get("[role='alert']").text()).toContain("The agent isn't waiting for this question any more");
+    expect(wrapper.get("[data-testid='question-dismiss-button']").text()).toBe("Dismiss");
+
+    await wrapper.get("[data-testid='question-dismiss-button']").trigger("click");
+
+    expect(onDismiss).not.toHaveBeenCalled();
+    expect(wrapper.find("[data-testid='question-card-active']").exists()).toBe(false);
   });
 });

@@ -2,11 +2,19 @@ import { shallowRef } from "vue";
 import type { components } from "@/api/generated/schema";
 import { useMachineTarget } from "@/lib/machine-target";
 
-const ALREADY_ANSWERED = "This question was already answered.";
+const NOT_WAITING = "The agent isn't waiting for this question any more. It was answered somewhere else, or Fleet or the agent restarted.";
 
-/** A question answered from another device is gone by the time this one answers (404, or 409): say so, not "Not Found". */
+/** The agent no longer holds the question: answered from another device, or Fleet or the agent restarted since. */
+export class QuestionGoneError extends Error {
+  constructor() {
+    super(NOT_WAITING);
+    this.name = "QuestionGoneError";
+  }
+}
+
+/** A question the agent no longer waits on is gone by the time this one answers (404, or 409): say so, not "Not Found". */
 function failure(response: Response, fallback: string): Error {
-  return new Error(response.status === 404 || response.status === 409 ? ALREADY_ANSWERED : `${fallback}: ${response.statusText}`);
+  return response.status === 404 || response.status === 409 ? new QuestionGoneError() : new Error(`${fallback}: ${response.statusText}`);
 }
 
 /**
