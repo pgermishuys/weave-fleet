@@ -128,7 +128,7 @@ When SSH works but Fleet isn't on the other machine, **Add a machine** shows the
 waits:
 
 ```sh
-curl -fsSL https://github.com/pgermishuys/fleet-releases/releases/latest/download/install.sh | sh
+curl -fsSL https://github.com/pgermishuys/weave-fleet/releases/latest/download/install.sh | sh
 $HOME/.weave/fleet/bin/fleet node install-service
 ```
 

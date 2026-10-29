@@ -143,7 +143,7 @@ describe("update notices", () => {
         title: "Fleet 0.37.0 is ready",
         body: "Installs when you restart.",
         chip: "Fleet 0.37.0 ready",
-        link: { label: "What's new", href: "https://github.com/pgermishuys/fleet-releases/releases/tag/v0.37.0" },
+        link: { label: "What's new", href: "https://github.com/pgermishuys/weave-fleet/releases/tag/v0.37.0" },
       });
       expect(store.open?.actions?.map((action) => action.label)).toEqual(["Restart", "Later"]);
     });

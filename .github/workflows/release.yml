@@ -379,6 +379,11 @@ jobs:
           release_dir.joinpath('checksums.txt').write_text('\n'.join(lines) + '\n', encoding='utf-8')
           PY
 
+      # Fleet-mac-arm64.dmg and friends, so latest/download/<name> links never change.
+      - name: Add installers without the version
+        shell: bash
+        run: scripts/add-unversioned-installers.sh "${{ github.ref_name }}" release-assets
+
       - name: Stage installer scripts
         shell: bash
         run: |
@@ -518,6 +523,8 @@ jobs:
             https://api.github.com/repos/pgermishuys/weave-website/dispatches \
             -d "{\"event_type\":\"fleet-version-update\",\"client_payload\":{\"version\":\"${version}\"}}"
 
+  # Installs from before v0.64.0 only look for updates in fleet-releases, so v0.64.0 is mirrored there one last time
+  # to move them onto weave-fleet. This job goes once it has run.
   mirror-release:
     name: Mirror release assets
     runs-on: ubuntu-latest

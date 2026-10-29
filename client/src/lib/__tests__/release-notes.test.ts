@@ -10,7 +10,7 @@ import {
   type ReleaseNote,
 } from "@/lib/release-notes";
 
-// v0.44.0's notes as the fleet-releases mirror has them: written highlights, GitHub's list, the link back.
+// v0.44.0's notes: written highlights, then GitHub's list.
 const V044 = `## Fleet on your phone
 
 Pair a phone from **Settings → Machines → Add a phone**.
@@ -27,9 +27,6 @@ Pair a phone from **Settings → Machines → Add a phone**.
 * @someone made their first contribution in https://github.com/pgermishuys/weave-fleet/pull/370
 
 **Full Changelog**: https://github.com/pgermishuys/weave-fleet/compare/v0.43.0...v0.44.0
-
----
-Release notes from https://github.com/pgermishuys/weave-fleet/releases/tag/v0.44.0
 `;
 
 // A release the way GitHub generates them: no written intro, tests and refactors in among the changes.
@@ -71,12 +68,11 @@ describe("parseReleaseNotes", () => {
     ]);
   });
 
-  it("leaves out the full changelog, new contributors and the mirror's link back", () => {
+  it("leaves out the full changelog and new contributors", () => {
     const markdown = releaseNotesMarkdown(parseReleaseNotes(V044));
 
     expect(markdown).not.toContain("Full Changelog");
     expect(markdown).not.toContain("first contribution");
-    expect(markdown).not.toContain("Release notes from");
   });
 
   it("reads a release with nothing but a placeholder as an intro", () => {

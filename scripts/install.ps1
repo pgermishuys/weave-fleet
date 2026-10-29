@@ -5,7 +5,7 @@ $ErrorActionPreference = 'Stop'
 # Ensure TLS 1.2+ is available (required for GitHub; Windows PowerShell 5.1 defaults to TLS 1.0/1.1)
 [Net.ServicePointManager]::SecurityProtocol = [Net.ServicePointManager]::SecurityProtocol -bor [Net.SecurityProtocolType]::Tls12
 
-$repo = if ($env:WEAVE_FLEET_GITHUB_REPO) { $env:WEAVE_FLEET_GITHUB_REPO } else { 'pgermishuys/fleet-releases' }
+$repo = if ($env:WEAVE_FLEET_GITHUB_REPO) { $env:WEAVE_FLEET_GITHUB_REPO } else { 'pgermishuys/weave-fleet' }
 $homeDirectory = [Environment]::GetFolderPath('UserProfile')
 $installDir = if ($env:WEAVE_FLEET_INSTALL_DIR) { $env:WEAVE_FLEET_INSTALL_DIR } else { Join-Path $homeDirectory '.weave/fleet' }
 $checksumsName = if ($env:WEAVE_FLEET_CHECKSUMS_NAME) { $env:WEAVE_FLEET_CHECKSUMS_NAME } else { 'checksums.txt' }

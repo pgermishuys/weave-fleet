@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 # Adds copies of the desktop installers without the version in their names (Fleet-mac-arm64.dmg, ...), each with a
-# .sha256, to a folder of release assets. The fleet-releases mirror uploads them so a link like
-# https://github.com/pgermishuys/fleet-releases/releases/latest/download/Fleet-mac-arm64.dmg always gets the newest
+# .sha256, to a folder of release assets. The release uploads them so a link like
+# https://github.com/pgermishuys/weave-fleet/releases/latest/download/Fleet-mac-arm64.dmg always gets the newest
 # installer. The versioned files and the update feeds (latest*.yml) stay as they are: electron-updater only downloads
 # what the feeds name.
 #

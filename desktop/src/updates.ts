@@ -41,7 +41,7 @@ export type UpdaterEvent =
   | { type: "downloaded"; version: string }
   | { type: "error"; message: string };
 
-export const RELEASES = "https://github.com/pgermishuys/fleet-releases/releases";
+export const RELEASES = "https://github.com/pgermishuys/weave-fleet/releases";
 
 /** The next state after an updater event. Pure, so the rules can be tested without electron-updater. */
 export function nextState(state: UpdateState, event: UpdaterEvent, now: Date): UpdateState {

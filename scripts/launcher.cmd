@@ -16,7 +16,7 @@ set "REPO_CONTENT_ROOT=%ROOT_DIR%\src\WeaveFleet.Api"
 set "VERSION_FILE=%ROOT_DIR%\VERSION"
 set "DEV_VERSION_FILE=%ROOT_DIR%\Directory.Build.props"
 set "INSTALL_SCRIPT_URL=%WEAVE_FLEET_INSTALL_SCRIPT_URL%"
-if not defined INSTALL_SCRIPT_URL set "INSTALL_SCRIPT_URL=https://github.com/pgermishuys/fleet-releases/releases/latest/download/install.ps1"
+if not defined INSTALL_SCRIPT_URL set "INSTALL_SCRIPT_URL=https://github.com/pgermishuys/weave-fleet/releases/latest/download/install.ps1"
 
 set "APP_DIR="
 set "APP_BIN="

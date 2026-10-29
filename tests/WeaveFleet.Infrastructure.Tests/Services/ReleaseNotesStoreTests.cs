@@ -35,11 +35,11 @@ public sealed class ReleaseNotesStoreTests : IDisposable
 
         notes.Releases.Select(r => r.Version).ShouldBe(["0.46.0", "0.45.0"]);
         notes.Releases[0].Body.ShouldContain("Plan pages");
-        notes.Releases[0].Url.ShouldBe("https://github.com/acme/fleet-releases/releases/tag/v0.46.0");
+        notes.Releases[0].Url.ShouldBe("https://github.com/acme/fleet/releases/tag/v0.46.0");
         notes.FetchedAt.ShouldBe(_time.GetUtcNow());
         notes.Error.ShouldBeNull();
         _github.Requests.ShouldBe(1);
-        _github.LastPathAndQuery.ShouldBe("/repos/acme/fleet-releases/releases?per_page=20");
+        _github.LastPathAndQuery.ShouldBe("/repos/acme/fleet/releases?per_page=20");
     }
 
     [Fact]
@@ -137,13 +137,13 @@ public sealed class ReleaseNotesStoreTests : IDisposable
     private FleetOptions Options() => new()
     {
         DatabasePath = Path.Combine(_dataDir, "fleet.db"),
-        Update = new UpdateOptions { GitHubRepo = "acme/fleet-releases", CheckIntervalHours = 4 },
+        Update = new UpdateOptions { GitHubRepo = "acme/fleet", CheckIntervalHours = 4 },
     };
 
     private static JsonObject Release(string tag, string body, bool draft = false, bool prerelease = false) => new()
     {
         ["tag_name"] = tag,
-        ["html_url"] = $"https://github.com/acme/fleet-releases/releases/tag/{tag}",
+        ["html_url"] = $"https://github.com/acme/fleet/releases/tag/{tag}",
         ["body"] = body,
         ["published_at"] = "2026-10-07T08:06:17Z",
         ["draft"] = draft,

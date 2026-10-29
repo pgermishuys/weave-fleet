@@ -113,7 +113,7 @@ today's archives; a headless smoke test (xvfb, scratch `HOME`, `/readyz`, quit, 
 
 ## Phase 3: updates and signing
 
-electron-updater against `fleet-releases` (Linux and Windows unsigned; macOS once signed), a
+electron-updater against `weave-fleet` (Linux and Windows unsigned; macOS once signed), a
 warning before an update interrupts working sessions, signing turned on by secrets.
 
 ### Phase 3 as built, unsigned (2026-09-15)
@@ -125,7 +125,7 @@ The user decided to stay unsigned for now. Updates without signing:
   row with **Restart to update**; restarting asks first if sessions are working, then stops Fleet cleanly.
 - **macOS and the `.deb` only say a new version is out**, with a notification and a **Download** button to the release
   page: an unsigned Mac app can't install an update, and the `.deb` would need a password prompt.
-- The feed is `pgermishuys/fleet-releases` (GitHub provider). Both Windows builds write `latest.yml`; they're renamed
+- The feed is `pgermishuys/weave-fleet` (GitHub provider). Both Windows builds write `latest.yml`; they're renamed
   per architecture in the package jobs and merged in the release's publish job
   (`desktop/scripts/merge-update-manifests.mjs`). electron-updater picks the installer whose name has the machine's
   architecture in it.

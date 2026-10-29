@@ -57,10 +57,10 @@ internal sealed partial class BunManifestReleases(
     /// <inheritdoc />
     public event EventHandler<BunReleaseChangedEventArgs>? Changed;
 
-    /// <summary>Where the manifest is read from: the configured address, else <c>bun.json</c> on the update repository's main branch.</summary>
+    /// <summary>Where the manifest is read from: the configured address, else <c>bun/bun.json</c> on the update repository's main branch.</summary>
     internal static Uri UrlFor(FleetOptions options) =>
         new(string.IsNullOrWhiteSpace(options.Update.BunManifestUrl)
-            ? $"https://raw.githubusercontent.com/{options.Update.GitHubRepo}/main/bun.json"
+            ? $"https://raw.githubusercontent.com/{options.Update.GitHubRepo}/main/bun/bun.json"
             : options.Update.BunManifestUrl.Trim());
 
     /// <inheritdoc />
