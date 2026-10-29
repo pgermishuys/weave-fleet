@@ -187,12 +187,21 @@ jobs:
           restore-keys: pods-${{ runner.os }}-
       # The pods (RNScreens, Reanimated, SVG, Worklets…) still compile ~570 C++ files from source: ccache keeps them
       # between runs. Keyed on the Xcode build and the lockfile; it's saved right after the build, so a walk that
-      # fails later still leaves it for the next run. Xcode doesn't pass CCACHE_DIR on to the compiler, so it's ccache's
-      # own default folder.
+      # fails later still leaves it for the next run. Xcode runs the compiler without the step's environment, so
+      # React Native's wrapper (USE_CCACHE=1) finds no CCACHE_BINARY and runs plain clang: the build gets wrappers that
+      # name ccache, its folder and clang by path.
       - name: Install ccache
         id: ccache
         run: |
           HOMEBREW_NO_AUTO_UPDATE=1 HOMEBREW_NO_INSTALL_CLEANUP=1 brew install ccache
+          export CCACHE_DIR="$HOME/Library/Caches/ccache"
+          echo "CCACHE_DIR=$CCACHE_DIR" >> "$GITHUB_ENV"
+          mkdir -p "$HOME/ccache-wrap"
+          for cc in clang clang++; do
+            printf '#!/bin/sh\nexport CCACHE_DIR=%s\nexec %s %s "$@"\n' "$CCACHE_DIR" "$(command -v ccache)" "$(xcrun -f "$cc")" > "$HOME/ccache-wrap/$cc"
+            chmod +x "$HOME/ccache-wrap/$cc"
+          done
+          echo "CCACHE_WRAP=$HOME/ccache-wrap" >> "$GITHUB_ENV"
           prefix="ccache-ios-$(xcodebuild -version | awk '/Build version/ {print $3}')-"
           echo "prefix=$prefix" >> "$GITHUB_OUTPUT"
           echo "key=${prefix}${{ hashFiles('mobile/bun.lock') }}" >> "$GITHUB_OUTPUT"
@@ -203,9 +212,9 @@ jobs:
           key: ${{ steps.ccache.outputs.key }}
           restore-keys: ${{ steps.ccache.outputs.prefix }}
       # SDK 58 links precompiled React Native and Expo modules by default (no expo-build-properties needed), which
-      # is what the spike's 36 minute build lacked. USE_CCACHE=1 makes pod install compile through ccache.
+      # is what the spike's 36 minute build lacked.
       - name: Generate the iOS project
-        run: CI=1 USE_CCACHE=1 bunx expo prebuild -p ios
+        run: CI=1 bunx expo prebuild -p ios
         working-directory: mobile
 
       - name: Boot a simulator
@@ -221,10 +230,16 @@ jobs:
         working-directory: mobile/ios
         run: |
           WS=$(ls -d *.xcworkspace | head -1); SCHEME=${WS%.xcworkspace}
+          # React Native's ccache settings (scripts/xcode/ccache.conf): Xcode's index store, modules and PCH flags
+          # otherwise make every call a miss.
+          ccache --set-config sloppiness=clang_index_store,file_stat_matches,include_file_ctime,include_file_mtime,ivfsoverlay,pch_defines,modules,system_headers,time_macros
+          ccache --set-config depend_mode=true
+          ccache --set-config file_clone=true
           ccache -z > /dev/null
           set -o pipefail
           xcodebuild -workspace "$WS" -scheme "$SCHEME" -configuration Release -sdk iphonesimulator \
             -destination "id=$UDID" -derivedDataPath build ONLY_ACTIVE_ARCH=YES \
+            CC="$CCACHE_WRAP/clang" CXX="$CCACHE_WRAP/clang++" \
             CODE_SIGN_IDENTITY=- CODE_SIGNING_REQUIRED=NO build \
             | tee "$RUNNER_TEMP/xcodebuild.log" | grep -E "error:|\*\* BUILD" || true
           ccache -s
