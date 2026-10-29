@@ -506,6 +506,23 @@ public sealed class AcpMapperTests
         => JsonSerializer.SerializeToElement(new { sessionId = "s1", phase, trigger, tokensBefore = before, tokensAfter = after, summary, error });
 
     [Fact]
+    public void a_usage_update_after_a_main_agent_call_carries_its_split()
+    {
+        var mapper = new AcpMapper("s1");
+
+        var report = ContextEvents.ReadUsage(mapper.Update(J("""
+            {"sessionUpdate":"usage_update","used":23214,"size":100000,
+             "_meta":{"call":{"input":23038,"cacheRead":4,"cacheWrite":23030,"output":176,"reasoning":88}}}
+            """)).Single())!;
+
+        // Each token counted once: input and output without the cached tokens and the reasoning.
+        report.Call.ShouldBeEquivalentTo(new ContextCall { Input = 4, CacheRead = 4, CacheWrite = 23030, Output = 88, Reasoning = 88 });
+        report.Call!.TotalOnly.ShouldBeFalse();
+        report.Call.Used.ShouldBe(23214);
+        (report.Limit, report.CompactsAt).ShouldBe((100000, 80000));
+    }
+
+    [Fact]
     public void a_compaction_starting_and_failing_are_context_events_with_no_divider()
     {
         var mapper = new AcpMapper("s1");

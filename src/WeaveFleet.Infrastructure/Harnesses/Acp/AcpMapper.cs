@@ -174,9 +174,10 @@ internal sealed class AcpMapper(string sessionId, Func<string, JsonElement, Flee
     }
 
     /// <summary>
-    /// A <c>usage_update</c>: the tokens in the context now (<c>used</c>) and the model's window (<c>size</c>), which
-    /// Copilot sends after each model call. It gives no split, so the whole count is the call's input, marked
-    /// <see cref="ContextCall.TotalOnly"/>.
+    /// A <c>usage_update</c>: the tokens in the context (<c>used</c>) and the model's window (<c>size</c>). weave-copilot sends
+    /// one before each model call with only the total, so the whole count is the call's input, marked
+    /// <see cref="ContextCall.TotalOnly"/>; and one after each of the main agent's calls with the call's own split in
+    /// <c>_meta.call</c> (input and output counting the cached and the reasoning, as Copilot counts them).
     /// </summary>
     private HarnessEvent? ContextUsage(JsonElement update)
     {
@@ -186,12 +187,29 @@ internal sealed class AcpMapper(string sessionId, Func<string, JsonElement, Flee
             return null;
         return ContextEvents.Usage(new ContextUsageReport
         {
-            Call = used is >= 0 and var tokens ? new ContextCall { Input = (int)tokens, TotalOnly = true } : null,
+            Call = SplitCall(update) ?? (used is >= 0 and var tokens ? new ContextCall { Input = (int)tokens, TotalOnly = true } : null),
             Limit = limit,
             CompactsAt = limit is { } window ? (int)(window * CompactsAtShare) : null,
             ModelId = model?.Invoke(),
             ProviderId = "copilot",
         }, sessionId);
+    }
+
+    /// <summary>The call's tokens in <c>_meta.call</c>, each counted once; null when the update has none.</summary>
+    private static ContextCall? SplitCall(JsonElement update)
+    {
+        if (!update.TryGetProperty("_meta", out var meta) || meta.ValueKind != JsonValueKind.Object
+            || !meta.TryGetProperty("call", out var call) || call.ValueKind != JsonValueKind.Object)
+            return null;
+        int Count(string name) => (int)Math.Max(0, Number(call, name) ?? 0);
+        return new ContextCall
+        {
+            Input = Math.Max(0, Count("input") - Count("cacheRead") - Count("cacheWrite")),
+            CacheRead = Count("cacheRead"),
+            CacheWrite = Count("cacheWrite"),
+            Output = Math.Max(0, Count("output") - Count("reasoning")),
+            Reasoning = Count("reasoning"),
+        };
     }
 
     /// <summary>
