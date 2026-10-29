@@ -119,10 +119,7 @@ public sealed class GitCommandTests
         await File.WriteAllTextAsync(askpass, $"#!/bin/sh\necho asked >> '{called}'\necho secret\n");
         File.SetUnixFileMode(askpass, UnixFileMode.UserRead | UnixFileMode.UserWrite | UnixFileMode.UserExecute);
 
-        using var listener = new System.Net.HttpListener();
-        var port = FreePort();
-        listener.Prefixes.Add($"http://127.0.0.1:{port}/");
-        listener.Start();
+        var listener = StartListener(out var port);
         var serving = Task.Run(async () =>
         {
             while (listener.IsListening)
@@ -148,9 +145,30 @@ public sealed class GitCommandTests
         {
             Environment.SetEnvironmentVariable("GIT_ASKPASS", saved.Item1);
             Environment.SetEnvironmentVariable("SSH_ASKPASS", saved.Item2);
-            listener.Stop();
+            // Close only: on Linux, Stop and then Dispose binds the port again to remove it, and throws if another test took it in between.
+            listener.Close();
             try { await serving; } catch (Exception) { }
             Directory.Delete(folder, recursive: true);
+        }
+    }
+
+    /// <summary>A started listener on a free loopback port; tries another port if a parallel test takes this one first.</summary>
+    private static System.Net.HttpListener StartListener(out int port)
+    {
+        for (var attempt = 1; ; attempt++)
+        {
+            port = FreePort();
+            var listener = new System.Net.HttpListener();
+            listener.Prefixes.Add($"http://127.0.0.1:{port}/");
+            try
+            {
+                listener.Start();
+                return listener;
+            }
+            catch (System.Net.HttpListenerException) when (attempt < 10)
+            {
+                listener.Close();
+            }
         }
     }
 
