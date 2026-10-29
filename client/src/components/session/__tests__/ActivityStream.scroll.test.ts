@@ -1,4 +1,4 @@
-import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { afterEach, beforeAll, beforeEach, describe, expect, it, vi } from "vitest";
 import { mount, type VueWrapper } from "@vue/test-utils";
 import { createPinia, setActivePinia } from "pinia";
 import { nextTick, shallowRef } from "vue";
@@ -120,6 +120,10 @@ async function open(messages: AccumulatedMessage[], geometry: Geometry) {
 }
 
 describe("ActivityStream scrolling and incremental mount", () => {
+  beforeAll(async () => {
+    await import("@/components/session/ActivityStream.vue");
+  }, 30_000);
+
   beforeEach(() => {
     setActivePinia(createPinia());
     if (sent.prompts) sent.prompts.value = [];
