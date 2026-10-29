@@ -66,6 +66,23 @@ public sealed class OpenCode2ProfilesTests : IDisposable
             settings!.RootElement.GetProperty("model").GetString().ShouldBe("work/big");
     }
 
+    [Theory]
+    [InlineData("""{ "experimental": { "image_generate": true, "schedules": true }, "timezone": "Africa/Johannesburg" }""")]
+    [InlineData("""{ "experimental": { "image_generate": { "model": "openai/gpt-image-2" }, "schedules": false } }""")]
+    public void Experimental_keys_of_2_2_1_read_as_known_settings(string profile)
+    {
+        // image_generate is a bool or an object, schedules a bool, timezone a top-level IANA name (OpenCode 2.2.1).
+        OpenCode2Profiles.ReadSettings(profile, out var settings).ShouldBeNull();
+
+        using (settings)
+        {
+            // Judge also accepts a setting V2 stored nothing for when it's on the known list.
+            using var stored = JsonDocument.Parse("{}");
+            var config = new[] { new OpenCode2ConfigSource { Type = "document", Path = ProfilePath, Info = stored.RootElement.Clone() } };
+            OpenCode2Profiles.Judge(ProfilePath, settings!.RootElement, config, null, []).Ok.ShouldBeTrue();
+        }
+    }
+
     [Fact]
     public void Broken_JSON_says_where_it_breaks()
     {

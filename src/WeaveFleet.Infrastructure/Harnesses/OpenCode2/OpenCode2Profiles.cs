@@ -43,8 +43,8 @@ internal static partial class OpenCode2Profiles
     {
         "$schema", "agents", "commands", "compaction", "default_agent", "enterprise", "experimental", "formatter",
         "instructions", "lsp", "mcp", "media", "model", "permissions", "plugins", "providers", "references", "share",
-        "shell", "skills", "snapshots", "tool_output", "update", "username", "warming", "watcher", "websearch",
-        "worktree",
+        "shell", "skills", "snapshots", "timezone", "tool_output", "update", "username", "warming", "watcher",
+        "websearch", "worktree",
         // V1
         "agent", "mode", "command", "plugin", "permission", "tools", "provider", "snapshot", "autoshare",
         "autoupdate", "small_model", "enabled_providers", "disabled_providers", "attachments", "logLevel", "server",
