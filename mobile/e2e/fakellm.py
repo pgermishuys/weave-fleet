@@ -23,20 +23,26 @@ REPLY = (
 )
 
 
-RUNS = [0]
-PAGES = [0]  # its own count: the walk waits for the page reply of run 1, then run 2
-LONGS = [0]
+def text_of(m):
+    c = m.get("content")
+    if isinstance(c, str):
+        return c
+    if isinstance(c, list):
+        return " ".join(p.get("text", "") for p in c if isinstance(p, dict))
+    return ""
 
 
 def last_user_text(msgs):
     for m in reversed(msgs):
         if m["role"] == "user":
-            c = m.get("content")
-            if isinstance(c, str):
-                return c
-            if isinstance(c, list):
-                return " ".join(p.get("text", "") for p in c if isinstance(p, dict))
+            return text_of(m)
     return ""
+
+
+def next_run(msgs, phrase):
+    """The walk runs twice (light, dark) in one conversation; the number lets it wait for the new reply. It's counted
+    from the conversation, not kept here, so a walk run again on a fresh session starts at run 1."""
+    return 1 + sum(phrase in text_of(m) for m in msgs if m["role"] == "assistant")
 
 
 def tool_call_name(msgs):
@@ -71,13 +77,10 @@ class H(BaseHTTPRequestHandler):
         call, reply, pace = None, None, 0.06
         slow = "slow-task" in text and "bash" in tools
         if last_role == "tool" and page_tool and "fleet_page_show" in str(msgs[-1].get("name", "")) + tool_call_name(msgs):
-            PAGES[0] += 1
             m = re.search(r'"[Ss]ummary"\s*:\s*"([^"]*)"', str(msgs[-1].get("content", "")))
-            reply = f"Going with **{m.group(1) if m else 'nothing'}**, run {PAGES[0]} of the suite."
+            reply = f"Going with **{m.group(1) if m else 'nothing'}**, run {next_run(msgs, 'Going with ')} of the suite."
         elif last_role == "tool":
-            # The walk runs twice (light, dark) in one conversation; the number lets it wait for the new reply.
-            RUNS[0] += 1
-            reply = f"Ran it, run {RUNS[0]} of the suite. **All 42 tests pass** and the build is clean."
+            reply = f"Ran it, run {next_run(msgs, 'Ran it, run ')} of the suite. **All 42 tests pass** and the build is clean."
         elif "title" in text.lower() and "generate" in text.lower() or (msgs and "title" in str(msgs[0].get("content", ""))[:400].lower() and not tools):
             reply = "Fix pagination off-by-one"
         elif slow:
@@ -88,8 +91,7 @@ class H(BaseHTTPRequestHandler):
         elif "run-tests" in text and "bash" in tools:
             call = ("bash", {"command": "ls -la && echo tests passed", "description": "Run the tests"})
         elif "long-reply" in text:
-            LONGS[0] += 1
-            reply = "Every step:\n\n" + "\n".join(f"{i}. Step {i}" for i in range(1, 41)) + f"\n\nThat's every step, run {LONGS[0]}."
+            reply = "Every step:\n\n" + "\n".join(f"{i}. Step {i}" for i in range(1, 41)) + f"\n\nThat's every step, run {next_run(msgs, 'every step, run ')}."
             pace = 1.2  # about 100 s: each Maestro step on the emulator takes ~15 s, and the walk scrolls up mid-stream
         elif "ask-me" in text and "question" in tools:
             call = ("question", {"questions": [{"header": "Database", "question": "Which database should the cache use?",

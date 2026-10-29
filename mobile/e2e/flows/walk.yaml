@@ -1,5 +1,6 @@
 # Every screen of the app against the scratch Fleet, after pair.yaml. Run once per colour scheme; RUN is 1 for the
-# first and 2 for the second, so the wait for the suite's reply is for a new one, not the earlier run's.
+# first and 2 for the second (1 again for a walk run again on a fresh session), so the wait for the suite's reply is for
+# a new one, not the earlier run's.
 # maestro test -e RUN=1 --test-output-dir shots flows/walk.yaml
 appId: io.tryweave.fleet
 ---
