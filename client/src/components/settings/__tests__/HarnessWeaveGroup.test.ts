@@ -1,12 +1,21 @@
 import { flushPromises, mount } from "@vue/test-utils";
 import { defineComponent, h, markRaw, shallowRef } from "vue";
-import { beforeEach, describe, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import type { WeaveConfigView, WeaveInstall, WeavePluginChange } from "@/api/client";
 import HarnessWeaveGroup from "@/components/settings/HarnessWeaveGroup.vue";
 
 const view = shallowRef<WeaveConfigView | null>(null);
 const error = shallowRef<string | null>(null);
 const load = vi.fn(async () => {});
+const ensureLoaded = vi.fn();
+const changingPlugin = shallowRef<string | null>(null);
+const pluginNotices = shallowRef<Record<string, { text: string; tone: "ok" | "warn" | "error" }>>({});
+function setPluginNotice(harnessType: string, notice: { text: string; tone: "ok" | "warn" | "error" } | null): void {
+  const next = { ...pluginNotices.value };
+  if (notice) next[harnessType] = notice;
+  else delete next[harnessType];
+  pluginNotices.value = next;
+}
 const changePlugin = vi.fn(async (): Promise<WeavePluginChange> => { throw new Error("not set up"); });
 
 const Inline = defineComponent({ setup: (_, { slots }) => () => h("div", slots.default?.()) });
@@ -46,19 +55,33 @@ const without = config({
 
 async function mountGroup(harnessType: string, initial: WeaveConfigView | null) {
   view.value = initial;
-  const state = markRaw({ view, loading: shallowRef(false), error, load, check: vi.fn(), save: vi.fn(), readOwn: vi.fn(), changePlugin });
+  const state = markRaw({
+    view, loading: shallowRef(false), error, load, ensureLoaded, check: vi.fn(), save: vi.fn(), readOwn: vi.fn(), changePlugin,
+    changingPlugin, pluginNotices, setPluginNotice,
+  });
   const wrapper = mount(HarnessWeaveGroup as any, { // eslint-disable-line @typescript-eslint/no-explicit-any
     props: { harnessType, weave: state },
+    attachTo: document.body,
     global: { stubs: { Dialog: Inline, DialogContent: Inline, DialogHeader: Inline, DialogTitle: Inline, DialogDescription: Inline } },
   });
+  mounted.push(wrapper);
   await flushPromises();
   return wrapper;
 }
 
+const mounted: { unmount: () => void }[] = [];
+
 beforeEach(() => {
   view.value = null;
   error.value = null;
+  changingPlugin.value = null;
+  pluginNotices.value = {};
   vi.clearAllMocks();
+});
+
+afterEach(() => {
+  for (const wrapper of mounted.splice(0)) wrapper.unmount();
+  vi.unstubAllGlobals();
 });
 
 describe("HarnessWeaveGroup", () => {
@@ -75,9 +98,41 @@ describe("HarnessWeaveGroup", () => {
     expect(wrapper.get("[data-setting-group='weave']").text()).toContain("Weave");
   });
 
-  it("is absent for a harness Fleet can't ask about Weave, and before Fleet has asked", async () => {
+  it("is absent for a harness Fleet can't ask about Weave", async () => {
     expect((await mountGroup("pi", config())).find("[data-setting-group='weave']").exists()).toBe(false);
-    expect((await mountGroup("opencode", null)).find("[data-setting-group='weave']").exists()).toBe(false);
+  });
+
+  it("says it's asking the harnesses until Fleet answers", async () => {
+    const wrapper = await mountGroup("opencode", null);
+
+    expect(wrapper.get("[data-setting-group='weave']").text()).toContain("Asking your harnesses which plugins they load…");
+  });
+
+  it("asks only once the group is seen, since asking can start a harness", async () => {
+    let seen: (entries: { isIntersecting: boolean }[]) => void = () => {};
+    vi.stubGlobal("IntersectionObserver", class {
+      constructor(callback: typeof seen) { seen = callback; }
+      observe() {}
+      disconnect() {}
+    });
+    await mountGroup("opencode", null);
+    expect(ensureLoaded).not.toHaveBeenCalled();
+
+    seen([{ isIntersecting: true }]);
+    expect(ensureLoaded).toHaveBeenCalledTimes(1);
+  });
+
+  it("doesn't ask again on its own after asking failed: Check again does", async () => {
+    error.value = "HTTP 500";
+    await mountGroup("opencode", null);
+
+    expect(ensureLoaded).not.toHaveBeenCalled();
+  });
+
+  it("doesn't ask again when Fleet has answered already", async () => {
+    await mountGroup("opencode", config());
+
+    expect(ensureLoaded).not.toHaveBeenCalled();
   });
 
   it("says why it can't be asked when Fleet couldn't load Weave", async () => {
@@ -87,21 +142,55 @@ describe("HarnessWeaveGroup", () => {
     expect(wrapper.get("[data-setting-group='weave']").text()).toContain("HTTP 500");
   });
 
-  it("offers nothing to edit while no harness loads Weave", async () => {
+  it("says Weave isn't running in any harness, what it adds, and offers nothing to edit", async () => {
     const wrapper = await mountGroup("opencode2", without);
 
-    expect(wrapper.get("[data-testid='weave-edit-config']").attributes("disabled")).toBeDefined();
-    expect(wrapper.text()).toContain("Weave isn't running in any harness yet");
+    const none = wrapper.get("[data-testid='weave-none']");
+    expect(none.text()).toContain("Weave isn't running in any harness");
+    expect(none.text()).toContain("Add Weave above puts it there for you.");
+    expect(none.get("a").attributes("href")).toBe("https://tryweave.io/docs/quickstart/");
+    expect(wrapper.find("[data-testid='weave-edit-config']").exists()).toBe(false);
   });
 
-  it("opens the config dialog from Edit, and says whose config Weave reads", async () => {
+  it("asks for the config dialog from Edit, and says whose config Weave reads", async () => {
     const wrapper = await mountGroup("opencode", config({ source: "fleet", files: { "config.weave": "" } }));
 
-    const dialog = wrapper.findComponent({ name: "WeaveConfigDialog" });
     expect(wrapper.text()).toContain("Kept in Fleet");
-    expect(dialog.props("open")).toBe(false);
     await wrapper.get("[data-testid='weave-edit-config']").trigger("click");
-    expect(dialog.props("open")).toBe(true);
+    expect(wrapper.emitted("editConfig")).toHaveLength(1);
+  });
+
+  it("says why Check again failed, even with what Fleet found before still shown", async () => {
+    const wrapper = await mountGroup("opencode", config());
+    error.value = "HTTP 500";
+    await flushPromises();
+
+    const failed = wrapper.get("[data-testid='weave-error']");
+    expect(failed.text()).toContain("HTTP 500");
+    expect(failed.attributes("role")).toBe("alert");
+  });
+
+  it("asks for an update only on the tab whose harness loads the old Weave", async () => {
+    const mixed = config({
+      harnesses: [
+        { harnessType: "opencode2", harnessName: "OpenCode 2", checked: true, installs: [v2Install] },
+        {
+          harnessType: "opencode", harnessName: "OpenCode", checked: true,
+          installs: [{ flavor: "legacy", package: "@opencode_weave/weave", entry: "@opencode_weave/weave@0.8.2", acceptsFleetConfig: false }],
+        },
+      ],
+    });
+
+    expect((await mountGroup("opencode2", mixed)).find("[data-testid='weave-outdated']").exists()).toBe(false);
+    expect((await mountGroup("opencode", mixed)).find("[data-testid='weave-outdated']").exists()).toBe(true);
+  });
+
+  it("holds Add Weave while another harness's plugin list is being changed", async () => {
+    changingPlugin.value = "opencode";
+    const wrapper = await mountGroup("opencode2", without);
+
+    expect(wrapper.get("[data-testid='weave-add-opencode2']").attributes("disabled")).toBeDefined();
+    expect(wrapper.get("[data-testid='weave-add-opencode2']").text()).toBe("Add Weave");
   });
 
   it("asks for an update when the installed Weave can't read Fleet's folder", async () => {

@@ -1,9 +1,10 @@
 import { flushPromises, mount } from "@vue/test-utils";
-import { beforeEach, describe, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import StorageSection from "@/components/settings/StorageSection.vue";
+import { forgetStorageSizes } from "@/lib/storage-size-cache";
 
 const { GET, POST } = vi.hoisted(() => ({ GET: vi.fn(), POST: vi.fn() }));
-vi.mock("@/lib/machine-target", () => ({ liveTarget: () => ({ api: { GET, POST } }) }));
+vi.mock("@/lib/machine-target", () => ({ liveTarget: () => ({ key: "home", api: { GET, POST } }) }));
 
 const checkout = (id: string, repository: string, title: string, verdict: string, reason: string) => ({
   workspaceId: id, sessionId: `s-${id}`, title, repository, directory: `/w/${id}`, branch: `fleet/${id}`, verdict, reason, unpushedCommits: null, archivedAt: null,
@@ -19,6 +20,9 @@ const list = [
 const GB = 1024 ** 3;
 
 beforeEach(() => {
+  // Without an observer the section measures right away; the test setup's stand-in never reports.
+  vi.stubGlobal("IntersectionObserver", undefined);
+  forgetStorageSizes();
   GET.mockReset();
   POST.mockReset();
   GET.mockImplementation(async (path: string, options?: { params?: { path?: { workspaceId: string } } }) => {
@@ -27,7 +31,13 @@ beforeEach(() => {
   });
 });
 
+const sizeCalls = () => GET.mock.calls.filter(([path]) => path === "/api/storage/worktrees/{workspaceId}/size");
+
 describe("StorageSection", () => {
+  afterEach(() => {
+    vi.unstubAllGlobals();
+  });
+
   it("shows the counts, fills sizes in, and previews what would go", async () => {
     const wrapper = mount(StorageSection);
     await flushPromises();
@@ -74,5 +84,60 @@ describe("StorageSection", () => {
     expect(wrapper.get("[data-testid='storage-preview']").attributes("disabled")).toBeDefined();
     expect(wrapper.text()).toContain("Nothing to remove right now. Only checkouts of sessions archived for 7 days or more can go.");
     expect(wrapper.get("[data-testid='storage-total']").text()).toContain("≥ 1.0 GB");
+  });
+
+  it("shows the sizes it just measured on the next visit instead of walking every folder again", async () => {
+    const first = mount(StorageSection);
+    await flushPromises();
+    expect(sizeCalls()).toHaveLength(5);
+    first.unmount();
+
+    const again = mount(StorageSection);
+    await flushPromises();
+
+    expect(sizeCalls()).toHaveLength(5);
+    expect(again.get("[data-testid='storage-total']").text()).toBe("9.0 GB in 5 checkouts");
+  });
+
+  it("measures again once the remembered sizes are old", async () => {
+    vi.useFakeTimers();
+    try {
+      const first = mount(StorageSection);
+      await flushPromises();
+      first.unmount();
+
+      vi.setSystemTime(Date.now() + 6 * 60 * 1000);
+      mount(StorageSection);
+      await flushPromises();
+
+      expect(sizeCalls()).toHaveLength(10);
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it("waits to measure until the section is on screen", async () => {
+    let report: (entries: { isIntersecting: boolean }[]) => void = () => {};
+    vi.stubGlobal("IntersectionObserver", class {
+      constructor(callback: (entries: { isIntersecting: boolean }[]) => void) {
+        report = callback;
+      }
+      observe() {}
+      disconnect() {}
+    });
+    const wrapper = mount(StorageSection);
+    await flushPromises();
+
+    expect(wrapper.get("[data-testid='storage-total']").text()).toBe("— in 5 checkouts");
+    expect(sizeCalls()).toHaveLength(0);
+
+    report([{ isIntersecting: false }]);
+    await flushPromises();
+    expect(sizeCalls()).toHaveLength(0);
+
+    report([{ isIntersecting: true }]);
+    await flushPromises();
+    expect(sizeCalls()).toHaveLength(5);
+    expect(wrapper.get("[data-testid='storage-total']").text()).toBe("9.0 GB in 5 checkouts");
   });
 });

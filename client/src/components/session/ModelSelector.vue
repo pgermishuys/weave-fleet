@@ -20,6 +20,8 @@ const props = withDefaults(
     showRecent?: boolean;
     disabled?: boolean;
     testId?: string;
+    /** Passed to the menu: "auto" opens it downward when there's no room above. */
+    placement?: "up" | "auto";
   }>(),
   {
     defaultLabel: "Default",
@@ -28,6 +30,7 @@ const props = withDefaults(
     showRecent: true,
     disabled: false,
     testId: undefined,
+    placement: "up",
   },
 );
 
@@ -96,6 +99,7 @@ const placeholder = computed(() => modelFromKey(selectedModelId.value)?.modelID 
     :sections="sections"
     :disabled="disabled"
     :test-id="testId"
+    :placement="placement"
     @toggle-star="toggleStar"
   />
 </template>

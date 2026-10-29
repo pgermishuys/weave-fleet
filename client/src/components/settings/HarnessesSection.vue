@@ -8,6 +8,7 @@ import HarnessPathField from "@/components/settings/HarnessPathField.vue";
 import HarnessProfilesPanel from "@/components/settings/HarnessProfilesPanel.vue";
 import HarnessSignInPanel from "@/components/settings/HarnessSignInPanel.vue";
 import HarnessWeaveGroup from "@/components/settings/HarnessWeaveGroup.vue";
+import WeaveConfigDialog from "@/components/settings/WeaveConfigDialog.vue";
 import SettingGroup from "@/components/settings/SettingGroup.vue";
 import SettingRow from "@/components/settings/SettingRow.vue";
 import SettingSwitch from "@/components/settings/SettingSwitch.vue";
@@ -18,6 +19,7 @@ import { useWeaveConfig } from "@/composables/use-weave-config";
 import { PERMISSION_LEVEL_NAMES } from "@/lib/permissions";
 import { PERMISSION_LEVELS, useHarnessPermissions } from "@/composables/use-harness-permissions";
 import { forgetHarnessCatalogs } from "@/composables/use-harness-catalog";
+import { useHarnessUpdatePoll } from "@/composables/use-harness-update-poll";
 import { refreshAllHarnesses, useHarnesses } from "@/composables/use-harnesses";
 import { useAppShellStore } from "@/stores/app-shell";
 import { useHarnessSetupStore } from "@/stores/harness-setup";
@@ -101,13 +103,19 @@ const harnesses = computed<readonly HarnessCard[]>(() => {
   return registeredHarnesses.value.map(toHarnessCard);
 });
 
+// A tab's header shows its harness's state, so an update started on Updates & about is followed here too.
+useHarnessUpdatePoll(registeredHarnesses);
+
+// Each tab's Weave group asks once it's seen; the config dialog is the page's, so its draft outlives a tab switch.
 const weave = useWeaveConfig();
+const weaveConfigOpen = shallowRef(false);
 const permissions = useHarnessPermissions();
 const { settings: browserSettings, load: loadBrowser } = useAgentBrowserSettings();
 const { activeHarness, activeAnchor, setActiveSection } = useSettingsNav();
 
 onMounted(() => {
-  void weave.load();
+  // The old Weave page needs Fleet's answer to pick a tab.
+  if (activeAnchor.value === "weave") weave.ensureLoaded();
   void loadBrowser();
 });
 
@@ -133,8 +141,10 @@ watch([activeAnchor, activeHarness, () => weave.view.value, harnesses], () => {
 
 // Scroll to the group a link named (Weave, What it may do) once it is on the page; Weave's arrives after Fleet asks.
 // Once there, the anchor is spent, so a later save or refresh doesn't pull the page back to it.
-watch([activeAnchor, selected, () => weave.view.value], async () => {
+watch([activeAnchor, selected, () => weave.view.value, () => weave.error.value], async () => {
   if (!activeAnchor.value) return;
+  // Weave's tab is picked from Fleet's answer: until then the anchor waits for it.
+  if (activeAnchor.value === "weave" && !weave.view.value && !weave.error.value) return;
   await nextTick();
   const group = document.querySelector(`[data-setting-group="${activeAnchor.value.replace(/"/g, "")}"]`);
   if (!group) return;
@@ -509,6 +519,7 @@ function statusForHarness(harness: HarnessInfo, enabled: boolean): HarnessStatus
       <HarnessWeaveGroup
         :harness-type="selected.id"
         :weave="weave"
+        @edit-config="weaveConfigOpen = true"
       />
 
       <section
@@ -573,5 +584,10 @@ function statusForHarness(harness: HarnessInfo, enabled: boolean): HarnessStatus
         No settings yet
       </p>
     </article>
+
+    <WeaveConfigDialog
+      v-model:open="weaveConfigOpen"
+      :weave="weave"
+    />
   </div>
 </template>

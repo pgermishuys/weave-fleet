@@ -36,11 +36,14 @@ const props = withDefaults(
     placeholder?: string;
     disabled?: boolean;
     testId?: string;
+    /** "up" always opens above, as the composer at the bottom of the screen wants; "auto" opens below when there's no room above. */
+    placement?: "up" | "auto";
   }>(),
   {
     placeholder: "Select",
     disabled: false,
     testId: undefined,
+    placement: "up",
     sections: undefined,
   },
 );
@@ -50,6 +53,9 @@ const emit = defineEmits<{ (event: "toggle-star", id: string): void }>();
 const selectedId = defineModel<string>({ required: true });
 
 const isOpen = shallowRef(false);
+const opensDown = shallowRef(false);
+/** Set only by "auto": the room on the chosen side, so the menu stays inside its dialog. */
+const menuMaxHeight = shallowRef<string | undefined>(undefined);
 const rootRef = useTemplateRef<HTMLElement>("root");
 const filterInputRef = useTemplateRef<HTMLInputElement>("filterInput");
 const filterText = ref("");
@@ -116,11 +122,36 @@ watch(activeIndex, async () => {
   listRef.value?.querySelector<HTMLElement>("[data-active='true']")?.scrollIntoView?.({ block: "nearest" });
 });
 
+/** The tallest the menu gets, matching `.selector-dropdown`'s `min(320px, 60vh)`. */
+function menuHeight(): number {
+  return Math.min(320, window.innerHeight * 0.6);
+}
+
+/** Opens downward only when the room above is shorter than the menu and the room below is bigger. */
+function place(): void {
+  opensDown.value = false;
+  menuMaxHeight.value = undefined;
+  const root = rootRef.value;
+  if (props.placement !== "auto" || !root) return;
+
+  const rect = root.getBoundingClientRect();
+  const bounds = root.closest('[role="dialog"]')?.getBoundingClientRect() ?? { top: 0, bottom: window.innerHeight };
+  const gap = 6;
+  const margin = 8;
+  const above = rect.top - bounds.top - gap;
+  const below = bounds.bottom - rect.bottom - gap;
+  opensDown.value = above < menuHeight() && below > above;
+  const room = (opensDown.value ? below : above) - margin;
+  menuMaxHeight.value = `${Math.max(120, Math.min(menuHeight(), room))}px`;
+}
+
 watch(isOpen, async (open) => {
   if (!open) {
     filterText.value = "";
     return;
   }
+
+  place();
 
   activeIndex.value = Math.max(0, rows.value.findIndex((row) => row.item.id === selectedId.value));
   await nextTick();
@@ -134,6 +165,13 @@ function toggleOpen(): void {
 function closeDropdown(): void {
   isOpen.value = false;
   filterText.value = "";
+}
+
+/** Escape belongs to the menu only while it's open; closed, it must reach whatever holds the selector, like a dialog. */
+function onEscape(event: KeyboardEvent): void {
+  if (!isOpen.value) return;
+  event.preventDefault();
+  closeDropdown();
 }
 
 function moveActive(step: 1 | -1): void {
@@ -155,7 +193,7 @@ function selectItem(itemId: string): void {
   <div
     ref="root"
     class="selector-dropdown-root"
-    @keydown.escape.prevent="closeDropdown"
+    @keydown.escape="onEscape"
   >
     <button
       type="button"
@@ -178,6 +216,8 @@ function selectItem(itemId: string): void {
       v-if="isOpen"
       ref="list"
       class="selector-dropdown"
+      :class="{ 'selector-dropdown--down': opensDown }"
+      :style="menuMaxHeight ? { maxHeight: menuMaxHeight } : undefined"
     >
       <div class="selector-dropdown__filter-wrap">
         <input
@@ -193,7 +233,6 @@ function selectItem(itemId: string): void {
           :aria-activedescendant="rows.length > 0 ? optionId(activeIndex) : undefined"
           :placeholder="filterPlaceholder"
           :aria-label="filterAriaLabel"
-          @keydown.escape.prevent="closeDropdown"
           @keydown.down.prevent="moveActive(1)"
           @keydown.up.prevent="moveActive(-1)"
           @keydown.enter.prevent="pickActive"
@@ -407,6 +446,11 @@ function selectItem(itemId: string): void {
   background: var(--card-bg);
   z-index: 200;
   box-shadow: 0 10px 30px rgba(0, 0, 0, 0.3);
+}
+
+.selector-dropdown--down {
+  top: calc(100% + 6px);
+  bottom: auto;
 }
 
 .selector-dropdown__filter-wrap {

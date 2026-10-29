@@ -73,7 +73,7 @@ describe("SettingsNavPanel", () => {
     update.available.value = false;
   });
 
-  it("puts the number of machines that can update on Updates & about, in place of the dot", async () => {
+  it("puts the number of machines that can update on Updates & about, beside the dot", async () => {
     updates.waiting.value = 0;
     expect((await mountNav(false)).find("[data-testid='updates-badge']").exists()).toBe(false);
 
@@ -82,7 +82,8 @@ describe("SettingsNavPanel", () => {
     const wrapper = await mountNav(false);
     const entry = wrapper.findAll("button").find((b) => b.text().startsWith("Updates"))!;
     expect(entry.get("[data-testid='updates-badge']").text()).toBe("3");
-    expect(entry.find("[aria-label='Update available']").exists()).toBe(false);
+    // Fleet's own update is still shown while machines can update.
+    expect(entry.find("[aria-label='Update available']").exists()).toBe(true);
     expect(wrapper.findAll("[data-testid='updates-badge']")).toHaveLength(1);
     await entry.trigger("click");
     expect(wrapper.emitted("update:modelValue")![0]).toEqual(["updates"]);

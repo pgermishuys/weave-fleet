@@ -1,11 +1,13 @@
 import { flushPromises, mount } from "@vue/test-utils";
 import { createPinia, getActivePinia, setActivePinia } from "pinia";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { defineComponent, h } from "vue";
 import HarnessesSection from "@/components/settings/HarnessesSection.vue";
 import type { HarnessInfo } from "@/api/client";
 import { useAppShellStore } from "@/stores/app-shell";
 import { useHarnessSetupStore } from "@/stores/harness-setup";
 import { useSettingsNav } from "@/composables/use-settings-nav";
+import { forgetWeaveConfig } from "@/composables/use-weave-config";
 
 const { apiFetchMock } = vi.hoisted(() => ({
   apiFetchMock: vi.fn(),
@@ -113,12 +115,20 @@ async function mountHarnessesSection() {
 describe("HarnessesSection", () => {
   afterEach(() => {
     for (const wrapper of mounted.splice(0)) wrapper.unmount();
+    vi.unstubAllGlobals();
   });
 
   beforeEach(() => {
     apiFetchMock.mockReset();
     setActivePinia(createPinia());
     weaveHarnesses = [];
+    forgetWeaveConfig();
+    // Everything on the page is in view, so each tab's Weave group is seen as soon as it's drawn.
+    vi.stubGlobal("IntersectionObserver", class {
+      constructor(private readonly seen: (entries: { isIntersecting: boolean }[]) => void) {}
+      observe() { this.seen([{ isIntersecting: true }]); }
+      disconnect() {}
+    });
     useSettingsNav().activeHarness.value = null;
     useSettingsNav().activeAnchor.value = null;
   });
@@ -515,6 +525,92 @@ describe("HarnessesSection", () => {
       const wrapper = await mountHarnessesSection();
 
       expect(wrapper.get("[data-testid='harness-tab-opencode2']").attributes("aria-selected")).toBe("true");
+    });
+
+    it("asks the harnesses about Weave once, not on every visit", async () => {
+      weaveHarnesses = [{ harnessType: "opencode", harnessName: "OpenCode", checked: true, installs: [] }];
+      mockApiResponses({}, () => [createHarness("opencode", "OpenCode")]);
+      const weaveCalls = () => apiFetchMock.mock.calls.filter(([path]) => path === "/api/weave").length;
+
+      (await mountHarnessesSection()).unmount();
+      const again = await mountHarnessesSection();
+
+      expect(weaveCalls()).toBe(1);
+      expect(again.find("[data-setting-group='weave']").exists()).toBe(true);
+    });
+
+    it("holds Add Weave on every tab while one harness's plugin list is being changed", async () => {
+      weaveHarnesses = [
+        { harnessType: "opencode", harnessName: "OpenCode", checked: true, installs: [], addTo: "/home/you/.config/opencode/opencode.json" },
+        { harnessType: "opencode2", harnessName: "OpenCode 2", checked: true, installs: [], addTo: "/home/you/.weave/opencode.json" },
+      ];
+      mockApiResponses({}, () => [createHarness("opencode", "OpenCode"), createHarness("opencode2", "OpenCode 2")]);
+      const respond = apiFetchMock.getMockImplementation()!;
+      let finish: () => void = () => {};
+      apiFetchMock.mockImplementation((path: string, options?: unknown) => path === "/api/weave/harnesses/{harnessType}/plugin"
+        ? new Promise((resolve) => {
+          finish = () => resolve(reply({
+            configPath: "/home/you/.config/opencode/opencode.json", entry: "@weaveio/weave-adapter-opencode", loaded: true, message: "Added.",
+            config: { source: "own", files: {}, updatedAt: null, apply: null, harnesses: weaveHarnesses },
+          }));
+        })
+        : respond(path, options));
+      const wrapper = await mountHarnessesSection();
+
+      await wrapper.get("[data-testid='weave-add-opencode']").trigger("click");
+      await openTab(wrapper, "opencode2");
+      expect(wrapper.get("[data-testid='weave-add-opencode2']").attributes("disabled")).toBeDefined();
+
+      finish();
+      await flushPromises();
+      expect(wrapper.get("[data-testid='weave-add-opencode2']").attributes("disabled")).toBeUndefined();
+    });
+
+    it("keeps the Weave config draft across a tab switch", async () => {
+      weaveHarnesses = [
+        { harnessType: "opencode", harnessName: "OpenCode", checked: true, installs: [{ flavor: "weave", package: "@weaveio/weave-adapter-opencode", entry: "@weaveio/weave-adapter-opencode@0.2.0-next.1", acceptsFleetConfig: true }] },
+        { harnessType: "opencode2", harnessName: "OpenCode 2", checked: true, installs: [] },
+      ];
+      mockApiResponses({}, () => [createHarness("opencode", "OpenCode"), createHarness("opencode2", "OpenCode 2")]);
+      // The dialog drawn in place, so its draft can be read whether or not it's open.
+      const Inline = defineComponent({ setup: (_, { slots }) => () => h("div", slots.default?.()) });
+      const wrapper = mount(HarnessesSection, {
+        global: {
+          plugins: [getActivePinia()!],
+          stubs: { ProfileConfigEditor: true, Dialog: Inline, DialogContent: Inline, DialogHeader: Inline, DialogTitle: Inline, DialogDescription: Inline },
+        },
+      });
+      mounted.push(wrapper);
+      await flushPromises();
+      const fleetSource = () => wrapper.get("[data-testid='weave-source-fleet']");
+
+      await wrapper.get("[data-testid='weave-edit-config']").trigger("click");
+      await fleetSource().trigger("click");
+      expect(fleetSource().attributes("aria-checked")).toBe("true");
+      await openTab(wrapper, "opencode2");
+      await openTab(wrapper, "opencode");
+
+      expect(fleetSource().attributes("aria-checked")).toBe("true");
+    });
+
+    it("follows a harness update from its tab, not only from Updates & about", async () => {
+      vi.useFakeTimers();
+      try {
+        let phase = "running";
+        mockApiResponses({}, () => [createHarness("opencode", "OpenCode", {
+          update: { job: { phase } } as unknown as HarnessInfo["update"],
+        })]);
+        await mountHarnessesSection();
+        const harnessCalls = () => apiFetchMock.mock.calls.filter(([path]) => path === "/api/harnesses").length;
+        const before = harnessCalls();
+
+        phase = "succeeded";
+        await vi.advanceTimersByTimeAsync(2100);
+
+        expect(harnessCalls()).toBeGreaterThan(before);
+      } finally {
+        vi.useRealTimers();
+      }
     });
 
     it("shows a Weave group only on harnesses Weave supports", async () => {

@@ -1,10 +1,11 @@
 <script setup lang="ts">
-import { computed, onMounted, shallowRef } from "vue";
+import { computed, onBeforeUnmount, onMounted, shallowRef, watch } from "vue";
 import { AlertCircle, LoaderCircle } from "lucide-vue-next";
 import type { components } from "@/api/generated/schema";
 import { extractApiError } from "@/lib/api-error";
 import { formatBytes } from "@/lib/format-utils";
 import { liveTarget } from "@/lib/machine-target";
+import { recentStorageSizes, rememberStorageSize } from "@/lib/storage-size-cache";
 
 type Checkout = components["schemas"]["WorktreeCheckout"];
 type Report = components["schemas"]["WorktreeCleanupReport"];
@@ -24,6 +25,12 @@ const report = shallowRef<Report | null>(null);
 /** The sizes at the time of the run, so the report still has them after the reload. */
 const reportSizes = shallowRef<Record<string, { bytes: number; complete: boolean }>>({});
 let generation = 0;
+const root = shallowRef<HTMLElement | null>(null);
+/** Sizes cost a walk of every folder, so they wait until the section is seen; without an observer there is nothing to wait for. */
+const seen = shallowRef(typeof IntersectionObserver === "undefined");
+/** The checkouts waiting for their sizes to be measured, and the load they came from. */
+let unmeasured: { list: Checkout[]; run: number; machine: string } | null = null;
+let observer: IntersectionObserver | null = null;
 
 const byVerdict = (verdicts: string[]) => checkouts.value.filter((c) => verdicts.includes(c.verdict));
 const removable = computed(() => byVerdict(["remove"]));
@@ -61,7 +68,7 @@ const splits = computed(() => [
   { key: "remove", label: "could be freed", list: removable.value },
 ]);
 
-async function loadSizes(list: Checkout[], run: number): Promise<void> {
+async function loadSizes(list: Checkout[], run: number, machine: string): Promise<void> {
   const queue = [...list];
   const worker = async (): Promise<void> => {
     for (let next = queue.shift(); next && run === generation; next = queue.shift()) {
@@ -69,6 +76,7 @@ async function loadSizes(list: Checkout[], run: number): Promise<void> {
         const { data } = await liveTarget().api.GET("/api/storage/worktrees/{workspaceId}/size", {
           params: { path: { workspaceId: next.workspaceId } },
         });
+        if (data) rememberStorageSize(machine, next.workspaceId, data);
         if (data && run === generation) sizes.value = { ...sizes.value, [next.workspaceId]: data };
       } catch {
         // A folder that can't be measured stays "—".
@@ -76,6 +84,13 @@ async function loadSizes(list: Checkout[], run: number): Promise<void> {
     }
   };
   await Promise.all(Array.from({ length: SIZE_CONCURRENCY }, worker));
+}
+
+function measureSizes(): void {
+  if (!seen.value || !unmeasured) return;
+  const { list, run, machine } = unmeasured;
+  unmeasured = null;
+  void loadSizes(list, run, machine);
 }
 
 async function load(): Promise<void> {
@@ -93,8 +108,15 @@ async function load(): Promise<void> {
     archivedDays.value = data.archivedDays;
     isLoading.value = false;
     // Counts first; sizes fill in as they arrive, removable folders first since they matter most.
-    const order = [...data.checkouts].sort((a, b) => Number(b.verdict === "remove") - Number(a.verdict === "remove"));
-    void loadSizes(order, run);
+    // Folders measured a few minutes ago keep that size.
+    const machine = liveTarget().key;
+    const recentSizes = recentStorageSizes(machine);
+    sizes.value = { ...sizes.value, ...recentSizes };
+    const order = [...data.checkouts]
+      .filter((c) => !recentSizes[c.workspaceId])
+      .sort((a, b) => Number(b.verdict === "remove") - Number(a.verdict === "remove"));
+    unmeasured = { list: order, run, machine };
+    measureSizes();
   } catch (cause) {
     if (run === generation) error.value = extractApiError(cause, "Couldn't load the worktree checkouts.");
   } finally {
@@ -130,11 +152,26 @@ async function clean(): Promise<void> {
 const noun = (n: number) => `${n} ${n === 1 ? "checkout" : "checkouts"}`;
 const freed = computed(() => report.value ? sumOf(report.value.removed, reportSizes.value) : null);
 
-onMounted(load);
+watch(seen, measureSizes);
+
+onMounted(() => {
+  if (!seen.value && root.value) {
+    observer = new IntersectionObserver((entries) => {
+      if (!entries.some((entry) => entry.isIntersecting)) return;
+      seen.value = true;
+      observer?.disconnect();
+    });
+    observer.observe(root.value);
+  }
+  void load();
+});
+
+onBeforeUnmount(() => observer?.disconnect());
 </script>
 
 <template>
   <section
+    ref="root"
     class="rounded-card border border-border bg-card-bg px-4 py-4"
     data-testid="storage-section"
   >
