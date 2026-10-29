@@ -1,5 +1,5 @@
 import { useExportMarkdown } from "@/composables/use-export-markdown";
-import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { afterEach, beforeAll, beforeEach, describe, expect, it, vi } from "vitest";
 import { mount } from "@vue/test-utils";
 import { createPinia, setActivePinia } from "pinia";
 import { defineComponent, h, nextTick, shallowRef } from "vue";
@@ -91,6 +91,10 @@ function message(id: string, role: "user" | "assistant", text: string, callId?: 
 }
 
 describe("ActivityStream answering commands", () => {
+  beforeAll(async () => {
+    await import("@/components/session/ActivityStream.vue");
+  }, 30_000);
+
   let wrapper: { get(selector: string): { element: Element }; unmount(): void };
   let prompt: HTMLTextAreaElement;
 
