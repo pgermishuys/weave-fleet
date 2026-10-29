@@ -211,6 +211,7 @@ public sealed class OpenCode2LiveFleet : IAsyncLifetime
             {
               "model": "fake/fake-model",
               "small_model": "fake/fake-model",
+              "experimental": { "schedules": true },
               "agent": {
                 "reviewer": { "description": "Reviews code", "mode": "primary", "prompt": "You review code. {{ReviewerMarker}}" }
               },

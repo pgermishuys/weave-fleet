@@ -102,7 +102,7 @@ internal sealed class OpenCode2Mapper(string fleetSessionId, string? workingDire
             "session.tool.failed" => ToolEnded(evt, data, failed: true),
             "form.created" => QuestionAsked(data),
             "form.replied" or "form.cancelled" => QuestionSettled(data),
-            "session.inbox.enqueued" => BackgroundNotice(evt, data),
+            "session.inbox.enqueued" => ReadScheduledPrompt(data) is { } fired ? ScheduledPrompt(evt, data, fired) : BackgroundNotice(evt, data),
             "session.shell.started" => ShellStarted(evt, data),
             "session.shell.ended" => ShellEnded(evt, data),
             "session.inbox.delivered" => Delivered(data),
@@ -555,6 +555,33 @@ internal sealed class OpenCode2Mapper(string fleetSessionId, string? workingDire
             && ReadString(item, "type") == "user"
                 ? ReadString(evt.Data, "inboxID")
                 : null;
+
+    /// <summary>
+    /// The text of a prompt a schedule sent into the session (<c>experimental.schedules</c>): a <c>user</c> item that
+    /// carries <c>metadata.schedule</c>. Fleet didn't send it, so no message of Fleet's shows it.
+    /// </summary>
+    private static string? ReadScheduledPrompt(JsonElement data)
+        => data.TryGetProperty("item", out var item)
+            && item.ValueKind == JsonValueKind.Object
+            && ReadString(item, "type") == "user"
+            && item.TryGetProperty("payload", out var payload)
+            && payload.ValueKind == JsonValueKind.Object
+            && payload.TryGetProperty("metadata", out var metadata)
+            && metadata.ValueKind == JsonValueKind.Object
+            && metadata.TryGetProperty("schedule", out var schedule)
+            && schedule.ValueKind == JsonValueKind.Object
+                ? ReadString(payload, "text") ?? string.Empty
+                : null;
+
+    /// <summary>
+    /// A scheduled prompt as a message of the session's own, under the id V2 gave it (history has the user message under
+    /// the same one). Not <c>user</c>: the relay drops a harness's user messages as echoes of Fleet's own.
+    /// </summary>
+    private List<HarnessEvent> ScheduledPrompt(OpenCode2Event evt, JsonElement data, string text)
+        => NoticeMessage(
+            ReadString(data, "inboxID") ?? evt.Id ?? $"{fleetSessionId}-scheduled",
+            evt.Created ?? DateTimeOffset.UtcNow.ToUnixTimeMilliseconds(),
+            text);
 
     /// <summary>The synthetic item an inbox event carries, when it carries one.</summary>
     private static JsonElement? ReadNoticeItem(JsonElement data)

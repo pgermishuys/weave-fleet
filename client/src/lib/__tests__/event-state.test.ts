@@ -430,6 +430,24 @@ describe("message ordering", () => {
       expect(compareMessageIds("msg_0ec1ad2f2_18", "msg_0ec1ae749000FlcM")).toBeLessThan(0);
     });
 
+    it("puts_a_scheduled_prompt_where_it_happened_not_after_every_message", () => {
+      // OpenCode 2 names a schedule's prompt msg_sch_<schedule>_<run>: as text it sorts after every msg_<time> id.
+      const at = (id: string, created: number, role = "assistant") => ({ id, role, sessionID: "s", time: { created } });
+      let messages = ensureMessage([], at("msg_1867b23b5000Xzf2bren2Fjn2Q", 1000, "user"));
+      messages = ensureMessage(messages, at("msg_1867b24360010HFWaH3z4iPiGE", 1010));
+      messages = ensureMessage(messages, at("msg_sch_18662af63001G2JCjtpTAOtXq4_1", 2000, "user"));
+      messages = ensureMessage(messages, at("msg_1867b6bdc001pz7oLomlez6UFG", 2010));
+      messages = ensureMessage(messages, at("msg_1867c0000001abc", 3000, "user"));
+
+      expect(messages.map((m) => m.messageId)).toEqual([
+        "msg_1867b23b5000Xzf2bren2Fjn2Q",
+        "msg_1867b24360010HFWaH3z4iPiGE",
+        "msg_sch_18662af63001G2JCjtpTAOtXq4_1",
+        "msg_1867b6bdc001pz7oLomlez6UFG",
+        "msg_1867c0000001abc",
+      ]);
+    });
+
     it("keeps_a_forks_conversation_in_order_as_it_arrives", () => {
       let messages = ensureMessage([], { id: "msg_0ec1ad2f2_17", role: "user", sessionID: "s" });
       messages = ensureMessage(messages, { id: "msg_0ec1ad2f2_6", role: "user", sessionID: "s" });
