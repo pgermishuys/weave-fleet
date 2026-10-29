@@ -5,6 +5,7 @@ import { FolderGit2, LoaderCircle, RefreshCw, Settings2, TriangleAlert } from "l
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { api } from "@/api/client";
+import { useSettingsNav } from "@/composables/use-settings-nav";
 import type { RepositoryScanResponse, ScannedRepository } from "@/api/client";
 
 const router = useRouter();
@@ -72,7 +73,10 @@ async function loadRepositories(forceRefresh = false): Promise<void> {
   }
 }
 
+const { setActiveSection } = useSettingsNav();
+
 function goToSettings(): void {
+  setActiveSection("folders");
   void router.navigate({ to: "/settings" });
 }
 </script>
