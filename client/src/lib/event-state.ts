@@ -57,6 +57,24 @@ export function compareMessageIds(a: string, b: string): number {
 }
 
 /**
+ * OpenCode 2 names the prompt a schedule sends `msg_sch_<schedule>_<run>`. The part after `msg_` is the schedule's, not
+ * the message's time, so as text it sorts after every other `msg_<time>` id; such a message goes by when it was created.
+ */
+const SCHEDULED_ID = /^msg_sch_/;
+
+function compareMessages(a: AccumulatedMessage, b: AccumulatedMessage): number {
+  if (
+    (SCHEDULED_ID.test(a.messageId) || SCHEDULED_ID.test(b.messageId)) &&
+    typeof a.createdAt === "number" &&
+    typeof b.createdAt === "number" &&
+    a.createdAt !== b.createdAt
+  ) {
+    return a.createdAt - b.createdAt;
+  }
+  return compareMessageIds(a.messageId, b.messageId);
+}
+
+/**
  * Insert a message into the array in stable sorted position by message ID (ascending, see {@link compareMessageIds}).
  * Message IDs with `msg_` prefix contain hex-encoded timestamps that sort lexicographically
  * in chronological order. Uses binary search for O(log n) insertion.
@@ -87,7 +105,7 @@ function insertMessageSorted(
       continue;
     }
 
-    if (compareMessageIds(midId, newId) < 0) {
+    if (compareMessages(messages[mid]!, newMsg) < 0) {
       left = mid + 1;
     } else {
       right = mid;
