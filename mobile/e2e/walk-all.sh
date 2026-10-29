@@ -68,6 +68,13 @@ fresh_session() {
 }
 
 ready
+# iOS's "slide to type" introduction can rise over the keyboard on any keyboard show, and Maestro then reads it instead
+# of the conversation (run 40913188161 failed at "Going with…" with the reply on screen). Mark it shown, and swiping off.
+if [ "$PLATFORM" = ios ]; then
+  xcrun simctl spawn "$UDID" defaults write com.apple.keyboard.preferences DidShowContinuousPathIntroduction -bool true
+  xcrun simctl spawn "$UDID" defaults write com.apple.keyboard.preferences KeyboardContinuousPathEnabled -bool false
+  xcrun simctl spawn "$UDID" defaults read com.apple.keyboard.preferences
+fi
 appearance light
 if ! maestro_run --test-output-dir "$OUT/pair" flows/pair.yaml; then
   echo "pair failed; once more"
