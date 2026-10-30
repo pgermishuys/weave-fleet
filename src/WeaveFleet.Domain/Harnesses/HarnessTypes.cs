@@ -745,6 +745,12 @@ public sealed record ModelInfo
     public required string Id { get; init; }
     public string? Name { get; init; }
     public IReadOnlyList<string>? Variants { get; init; }
+
+    /// <summary>How expensive the model is to run: <c>low</c>, <c>medium</c>, <c>high</c> or <c>very_high</c>; null when the harness doesn't say.</summary>
+    public string? PriceTier { get; init; }
+
+    /// <summary>The class of model, such as <c>lightweight</c>, <c>versatile</c> or <c>powerful</c>; null when the harness doesn't say.</summary>
+    public string? Capability { get; init; }
 }
 
 /// <summary>
