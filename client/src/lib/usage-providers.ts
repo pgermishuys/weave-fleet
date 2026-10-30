@@ -23,6 +23,8 @@ export interface ProviderCredits {
   remaining: number | null;
   limit: number | null;
   used: number | null;
+  /** Null for dollars; "ai_credits" for GitHub's AI credits ($0.01 each). */
+  unit: string | null;
 }
 
 export interface ProviderUsage {
@@ -83,7 +85,7 @@ function toProvider(raw: unknown): ProviderUsage | null {
     windows: Array.isArray(wire.windows)
       ? wire.windows.map(toWindow).filter((window): window is UsageLimitWindow => window !== null)
       : [],
-    credits: credits ? { remaining: num(credits.remaining), limit: num(credits.limit), used: num(credits.used) } : null,
+    credits: credits ? { remaining: num(credits.remaining), limit: num(credits.limit), used: num(credits.used), unit: typeof credits.unit === "string" ? credits.unit : null } : null,
   };
 }
 

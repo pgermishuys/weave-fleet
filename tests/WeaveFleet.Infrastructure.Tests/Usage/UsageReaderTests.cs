@@ -341,6 +341,78 @@ public sealed class UsageReaderTests : IDisposable
     }
 
     [Fact]
+    public async Task copilot_unlimited_premium_with_no_quota_left_is_the_organizations_limit_used_up()
+    {
+        CopilotReplies("""
+            {"authenticated":true,"login":"octo-invented","plan":"enterprise","resetAt":"2026-11-01T00:00:00Z","quotas":[
+              {"id":"premium_interactions","entitlement":0,"remaining":0,"percentRemaining":100,"unlimited":true,"creditsUsed":307846,"hasQuota":false,"tokenBasedBilling":true},
+              {"id":"chat","entitlement":0,"remaining":0,"percentRemaining":100,"unlimited":true}]}
+            """);
+
+        var reading = await Copilot().ReadAsync(default);
+
+        reading.State.ShouldBe(UsageStates.Ok);
+        var window = reading.Windows!.Single();
+        (window.Window, window.Utilization, window.Status).ShouldBe(("organization", 1.0, "rejected"));
+        window.ResetsAt.ShouldBe(new DateTimeOffset(2026, 11, 1, 0, 0, 0, TimeSpan.Zero));
+        window.WindowSeconds.ShouldBe(31 * 86400);
+    }
+
+    [Fact]
+    public async Task copilot_unlimited_premium_with_quota_reports_the_ai_credits_used()
+    {
+        CopilotReplies("""
+            {"authenticated":true,"login":"octo-invented","plan":"enterprise","resetAt":"2026-11-01T00:00:00Z","quotas":[
+              {"id":"premium_interactions","entitlement":0,"remaining":0,"percentRemaining":100,"unlimited":true,"creditsUsed":307846,"hasQuota":true,"tokenBasedBilling":true}]}
+            """);
+
+        var reading = await Copilot().ReadAsync(default);
+
+        reading.State.ShouldBe(UsageStates.NoWindow);
+        reading.Credits.ShouldBe(new UsageCredits(null, null, 307846, "ai_credits"));
+    }
+
+    [Fact]
+    public async Task copilot_answer_without_the_credit_fields_gives_no_credits()
+    {
+        CopilotReplies("""
+            {"authenticated":true,"login":"octo-invented","plan":"enterprise","resetAt":"2026-11-01T00:00:00Z","quotas":[
+              {"id":"premium_interactions","entitlement":0,"remaining":0,"percentRemaining":100,"unlimited":true,"creditsUsed":null,"hasQuota":null,"tokenBasedBilling":null}]}
+            """);
+
+        var reading = await Copilot().ReadAsync(default);
+
+        reading.State.ShouldBe(UsageStates.NoWindow);
+        reading.Credits.ShouldBeNull();
+    }
+
+    [Theory]
+    [InlineData(false, "Ok")]
+    [InlineData(true, "NoWindow")]
+    public async Task copilot_for_pi_reads_the_credit_fields_from_the_raw_snapshot(bool hasQuota, string expected)
+    {
+        _copilotReady = false;
+        _githubToken = "gh-secret";
+        _api.Reply = (HttpStatusCode.OK, """
+            {"login":"octo-invented","copilot_plan":"enterprise","quota_reset_date":"2026-11-01","quota_snapshots":{
+              "premium_interactions":{"quota_id":"premium_interactions","entitlement":0,"remaining":0,"percent_remaining":100,"unlimited":true,"token_based_billing":true,"credits_used":307846,"has_quota":HAS_QUOTA}}}
+            """.Replace("HAS_QUOTA", hasQuota ? "true" : "false"));
+
+        var reading = await Copilot().ReadAsync(default);
+
+        if (expected == "Ok")
+        {
+            reading.State.ShouldBe(UsageStates.Ok);
+            reading.Windows!.Single().Window.ShouldBe("organization");
+        }
+        else
+        {
+            reading.State.ShouldBe(UsageStates.NoWindow);
+            reading.Credits.ShouldBe(new UsageCredits(null, null, 307846, "ai_credits"));
+        }
+    }
+
+    [Fact]
     public async Task copilot_has_a_sign_in_when_the_harness_is_ready_or_pi_has_a_github_token()
     {
         _copilotReady = false;
