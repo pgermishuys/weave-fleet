@@ -43,18 +43,36 @@ appId: io.tryweave.fleet
     visible: "Pick on the page"
     timeout: 90000
 - takeScreenshot: 05-page-pick
-- tapOn:
-    id: "page-pick-open"
+# On a busy iOS runner the simulator now and then drops a tap: it reaches the app's window and nothing happens, on the
+# dock's button and in the page alike (runs 40929670735, 40914464750). Each tap waits for what it does, and taps again
+# only when that hasn't happened.
+- retry:
+    maxRetries: 2
+    commands:
+      - runFlow:
+          when:
+            visible:
+              id: "page-pick-open"
+          commands:
+            - tapOn:
+                id: "page-pick-open"
+      - extendedWaitUntil:
+          visible:
+            id: "page-screen"
+          timeout: 15000
 # Android's WebView reads each option as one node ("B. Paged table Twenty rows…"), so match inside it.
 - extendedWaitUntil:
     visible: ".*Infinite scroll.*"
     timeout: 30000
 - takeScreenshot: 06-page
-- tapOn: ".*Paged table.*"
 # Send pick is there from the start, waiting; the sentence says the page proposed a pick.
-- extendedWaitUntil:
-    visible: "You picked Paged table."
-    timeout: 30000
+- retry:
+    maxRetries: 2
+    commands:
+      - tapOn: ".*Paged table.*"
+      - extendedWaitUntil:
+          visible: "You picked Paged table."
+          timeout: 15000
 - takeScreenshot: 07-page-picked
 - tapOn:
     id: "page-choice-send"
