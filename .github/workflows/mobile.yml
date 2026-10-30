@@ -202,7 +202,9 @@ jobs:
             chmod +x "$HOME/ccache-wrap/$cc"
           done
           echo "CCACHE_WRAP=$HOME/ccache-wrap" >> "$GITHUB_ENV"
-          prefix="ccache-ios-$(xcodebuild -version | awk '/Build version/ {print $3}')-"
+          xcode=$(xcodebuild -version | awk '/Build version/ {print $3}')
+          echo "XCODE_BUILD=$xcode" >> "$GITHUB_ENV"
+          prefix="ccache-ios-xcode-$xcode-"
           echo "prefix=$prefix" >> "$GITHUB_OUTPUT"
           echo "key=${prefix}${{ hashFiles('mobile/bun.lock') }}" >> "$GITHUB_OUTPUT"
       - uses: actions/cache/restore@v4
@@ -235,6 +237,9 @@ jobs:
           ccache --set-config sloppiness=clang_index_store,file_stat_matches,include_file_ctime,include_file_mtime,ivfsoverlay,pch_defines,modules,system_headers,time_macros
           ccache --set-config depend_mode=true
           ccache --set-config file_clone=true
+          # Runners roll between images that carry the same Xcode with different file times, and ccache's default
+          # check (the compiler's mtime) then misses every call: the Xcode build names the compiler instead.
+          ccache --set-config compiler_check="string:$XCODE_BUILD"
           ccache -z > /dev/null
           set -o pipefail
           xcodebuild -workspace "$WS" -scheme "$SCHEME" -configuration Release -sdk iphonesimulator \
