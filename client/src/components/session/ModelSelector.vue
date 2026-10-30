@@ -49,6 +49,8 @@ const defaultItem = computed(() => ({
   description: isHydraFusion(props.defaultLabel) ? HYDRAFUSION_NOTE : props.defaultDescription,
 }));
 
+const PRICE_LABELS: Record<string, string> = { low: "Low cost", medium: "Medium cost", high: "High cost", very_high: "Very high cost" };
+
 const modelsByKey = computed(() => new Map(props.models.map((model) => [model.selectionKey, model])));
 
 function itemFor(model: ModelOption) {
@@ -57,6 +59,8 @@ function itemFor(model: ModelOption) {
     label: model.name,
     description: isHydraFusion(model.id) ? HYDRAFUSION_NOTE : model.description,
     meta: model.provider,
+    price: model.priceTier ? PRICE_LABELS[model.priceTier] : undefined,
+    priceNote: model.capability ? model.capability.charAt(0).toUpperCase() + model.capability.slice(1) : undefined,
     starred: props.harnessType
       ? picker.favourites.includes(modelPickerKey(props.harnessType, model.providerId, model.id))
       : undefined,

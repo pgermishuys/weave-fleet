@@ -74,6 +74,8 @@ export function windowLabel(window: string): string {
       return "Weekly Opus limit";
     case "seven_day_sonnet":
       return "Weekly Sonnet limit";
+    case "organization":
+      return "Organization limit";
     default:
       return `${window.replace(/_/g, " ")} limit`;
   }
@@ -90,6 +92,8 @@ export function windowShortLabel(window: string): string {
       return "Opus week";
     case "seven_day_sonnet":
       return "Sonnet week";
+    case "organization":
+      return "org";
     default:
       return window.replace(/_/g, " ");
   }

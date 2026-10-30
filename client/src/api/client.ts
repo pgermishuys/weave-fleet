@@ -251,6 +251,10 @@ export interface AvailableModel {
   id: string;
   name: string;
   variants?: string[];
+  /** How expensive the model is: low, medium, high or very_high; only some harnesses say. */
+  priceTier?: string | null;
+  /** The class of model, such as powerful; shown as the price chip's tooltip. */
+  capability?: string | null;
 }
 
 export interface AvailableProvider {

@@ -14,6 +14,9 @@ export interface ModelOption {
   provider: string;
   description: string;
   variants?: readonly string[];
+  /** low, medium, high or very_high, when the harness says what the model costs. */
+  priceTier?: string;
+  capability?: string;
 }
 
 export function createModelSelectionKey(providerId: string, modelId: string): string {
@@ -30,6 +33,8 @@ export function toModelOptions(providers: readonly AvailableProvider[]): ModelOp
       provider: provider.name,
       description: "",
       variants: model.variants,
+      priceTier: model.priceTier ?? undefined,
+      capability: model.capability ?? undefined,
     }));
   });
 }

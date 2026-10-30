@@ -64,3 +64,35 @@ describe("selector dropdown", () => {
     expect(wrapper.find(".selector-dropdown__heading").exists()).toBe(false);
   });
 });
+
+describe("selector dropdown price chip", () => {
+  const priced: ModelOption[] = [
+    { ...models[0]!, priceTier: "high", capability: "powerful" },
+    { ...models[1]!, priceTier: "very_high" },
+    { ...models[2]! },
+  ];
+
+  it("shows the tier on a model that has one, with its capability as the tooltip", async () => {
+    const wrapper = await open({ models: priced });
+    const chips = wrapper.findAll('[data-testid="model-price"]');
+    expect(chips.map((chip) => chip.text())).toEqual(["High cost", "Very high cost"]);
+    expect(chips[0]!.attributes("title")).toBe("Powerful");
+    expect(chips[1]!.attributes("title")).toBeUndefined();
+  });
+
+  it("puts the chip in the option's name and leaves Default and unpriced models bare", async () => {
+    const wrapper = await open({ models: priced });
+    const options = wrapper.findAll('[role="option"]');
+    expect(options[0]!.find('[data-testid="model-price"]').exists()).toBe(false);
+    expect(options[1]!.text()).toContain("High cost");
+    expect(options[3]!.find('[data-testid="model-price"]').exists()).toBe(false);
+  });
+
+  it("draws no chip for an unknown tier, and the closed picker is unchanged", async () => {
+    const wrapper = await open({ models: [{ ...models[0]!, priceTier: "gold" }], modelValue: models[0]!.selectionKey });
+    expect(wrapper.find('[data-testid="model-price"]').exists()).toBe(false);
+    wrapper.unmount();
+    const closed = mount(ModelSelector, { props: { models: priced, modelValue: priced[0]!.selectionKey, harnessType: "opencode" } });
+    expect(closed.get("button").text()).toBe("one");
+  });
+});
