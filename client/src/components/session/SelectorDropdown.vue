@@ -8,7 +8,7 @@ interface SelectorItem {
   label: string;
   description?: string;
   meta?: string;
-  /** A quiet price chip next to the label, e.g. "High cost"; `priceNote` is its tooltip. */
+  /** A quiet price note under `meta`, e.g. "High cost"; `priceNote` is its tooltip. */
   price?: string;
   priceNote?: string;
   /** Defined: the row has a star to favourite it with. */
@@ -296,21 +296,24 @@ function selectItem(itemId: string): void {
             @click="selectItem(item.id)"
           >
             <span class="selector-dropdown__copy">
-              <span class="selector-dropdown__item-label">{{ item.label }}<span
-                v-if="item.price"
-                class="selector-dropdown__price"
-                :title="item.priceNote"
-                data-testid="model-price"
-              >{{ item.price }}</span></span>
+              <span class="selector-dropdown__item-label">{{ item.label }}</span>
               <span
                 v-if="item.description"
                 class="selector-dropdown__item-description"
               >{{ item.description }}</span>
             </span>
             <span
-              v-if="item.meta"
+              v-if="item.meta || item.price"
               class="selector-dropdown__item-meta"
-            >{{ item.meta }}</span>
+            >
+              <span v-if="item.meta">{{ item.meta }}</span>
+              <span
+                v-if="item.price"
+                class="selector-dropdown__price"
+                :title="item.priceNote"
+                data-testid="model-price"
+              >{{ item.price }}</span>
+            </span>
           </button>
           <button
             v-if="item.starred !== undefined"
@@ -590,10 +593,7 @@ function selectItem(itemId: string): void {
 }
 
 .selector-dropdown__price {
-  margin-left: 6px;
-  color: var(--muted);
-  font-size: 10.5px;
-  font-weight: 400;
+  font-size: 11px;
 }
 
 .selector-dropdown__item-description {
@@ -603,6 +603,10 @@ function selectItem(itemId: string): void {
 }
 
 .selector-dropdown__item-meta {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  gap: 2px;
   color: var(--muted);
   font-size: 12px;
   white-space: nowrap;
