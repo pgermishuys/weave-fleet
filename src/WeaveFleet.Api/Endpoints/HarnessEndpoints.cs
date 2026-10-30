@@ -153,7 +153,7 @@ public static class HarnessEndpoints
         var providers = catalog.Providers.Select(p => new InstanceProviderItem(
             p.Id,
             p.Name ?? p.Id,
-            p.Models.Select(m => new InstanceModelItem(m.Id, m.Name ?? m.Id, m.Variants)).ToList())).ToList();
+            p.Models.Select(m => new InstanceModelItem(m.Id, m.Name ?? m.Id, m.Variants, m.PriceTier, m.Capability)).ToList())).ToList();
         var defaultModel = catalog.DefaultModelProviderId is { Length: > 0 } providerId && catalog.DefaultModelId is { Length: > 0 } modelId
             ? new InstanceAgentModelRef(providerId, modelId)
             : null;

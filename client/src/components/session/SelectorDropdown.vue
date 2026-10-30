@@ -8,6 +8,9 @@ interface SelectorItem {
   label: string;
   description?: string;
   meta?: string;
+  /** A quiet price chip next to the label, e.g. "High cost"; `priceNote` is its tooltip. */
+  price?: string;
+  priceNote?: string;
   /** Defined: the row has a star to favourite it with. */
   starred?: boolean;
 }
@@ -293,7 +296,12 @@ function selectItem(itemId: string): void {
             @click="selectItem(item.id)"
           >
             <span class="selector-dropdown__copy">
-              <span class="selector-dropdown__item-label">{{ item.label }}</span>
+              <span class="selector-dropdown__item-label">{{ item.label }}<span
+                v-if="item.price"
+                class="selector-dropdown__price"
+                :title="item.priceNote"
+                data-testid="model-price"
+              >{{ item.price }}</span></span>
               <span
                 v-if="item.description"
                 class="selector-dropdown__item-description"
@@ -579,6 +587,13 @@ function selectItem(itemId: string): void {
   color: var(--text);
   font-size: 13px;
   font-weight: 500;
+}
+
+.selector-dropdown__price {
+  margin-left: 6px;
+  color: var(--muted);
+  font-size: 10.5px;
+  font-weight: 400;
 }
 
 .selector-dropdown__item-description {

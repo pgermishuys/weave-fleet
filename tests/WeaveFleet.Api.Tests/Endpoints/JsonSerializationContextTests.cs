@@ -27,6 +27,15 @@ public sealed class JsonSerializationContextTests
     }
 
     [Fact]
+    public void Model_items_serialize_their_price_tier_and_capability()
+    {
+        var json = JsonSerializer.Serialize(new InstanceModelItem("m1", "Model One", null, "high", "powerful"), ApiJsonContext.Default.InstanceModelItem);
+
+        Assert.Contains("\"priceTier\":\"high\"", json, StringComparison.Ordinal);
+        Assert.Contains("\"capability\":\"powerful\"", json, StringComparison.Ordinal);
+    }
+
+    [Fact]
     public void Session_progress_serializes_from_the_source_generated_context()
     {
         // The HTTP JSON options fall back to reflection, which hides a missing registration until an AOT build.

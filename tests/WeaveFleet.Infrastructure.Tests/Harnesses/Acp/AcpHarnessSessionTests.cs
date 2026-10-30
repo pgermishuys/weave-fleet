@@ -595,6 +595,35 @@ public sealed class AcpHarnessSessionTests
         (report.Call!.Used, report.Limit, report.ModelId).ShouldBe((4200, 128000, "m1"));
     }
 
+    private const string PricedModels = """
+        [{"modelId":"claude-haiku-5.5","name":"Claude Haiku 5.5","_meta":{"copilotPriceTier":"low","copilotCategory":"Lightweight"}},
+         {"modelId":"auto","name":"Auto"},
+         {"modelId":"odd","name":"Odd","_meta":{"copilotPriceTier":"gold","copilotCategory":""}}]
+        """;
+
+    private static void ShouldHaveReadTiers(IReadOnlyList<ModelInfo> models)
+    {
+        (models[0].PriceTier, models[0].Capability).ShouldBe(("low", "lightweight"));
+        (models[1].PriceTier, models[1].Capability).ShouldBe((null, null));
+        (models[2].PriceTier, models[2].Capability).ShouldBe((null, null));
+    }
+
+    [Fact]
+    public void the_model_list_carries_each_models_price_tier_and_class()
+    {
+        var (models, _) = AcpHarnessSession.ParseModelList(JsonDocument.Parse("{\"models\":" + PricedModels + "}").RootElement);
+
+        ShouldHaveReadTiers(models);
+    }
+
+    [Fact]
+    public void a_new_sessions_models_carry_each_models_price_tier_and_class()
+    {
+        var (models, _) = AcpHarnessSession.ParseModels(JsonDocument.Parse("{\"models\":{\"availableModels\":" + PricedModels + "}}").RootElement);
+
+        ShouldHaveReadTiers(models);
+    }
+
     private static JsonNode? CommandsAnswer() => JsonNode.Parse("""
         {"commands":[
           {"name":"demo-skill","description":"A demo skill","hint":null,"kind":"skill"},

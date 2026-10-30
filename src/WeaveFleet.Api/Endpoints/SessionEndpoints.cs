@@ -1049,7 +1049,7 @@ public static class SessionEndpoints
                     var items = providers.Select(p => new InstanceProviderItem(
                         p.Id,
                         p.Name ?? p.Id,
-                        p.Models.Select(m => new InstanceModelItem(m.Id, m.Name ?? m.Id, m.Variants)).ToList())).ToList();
+                        p.Models.Select(m => new InstanceModelItem(m.Id, m.Name ?? m.Id, m.Variants, m.PriceTier, m.Capability)).ToList())).ToList();
                     return Results.Ok(items);
                 },
                 err => err.ToSessionApiResult());
