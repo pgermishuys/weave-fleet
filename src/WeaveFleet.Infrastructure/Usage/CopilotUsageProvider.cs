@@ -72,13 +72,14 @@ internal sealed class CopilotUsageProvider(
         {
             foreach (var q in list.EnumerateArray())
                 if (UsageRead.Text(q, "id") is { } id)
-                    quotas.Add(new Quota(id, UsageRead.Number(q, "entitlement"), UsageRead.Number(q, "remaining"), UsageRead.Number(q, "percentRemaining"), q.TryGetProperty("unlimited", out var u) && u.ValueKind == JsonValueKind.True));
+                    quotas.Add(new Quota(id, UsageRead.Number(q, "entitlement"), UsageRead.Number(q, "remaining"), UsageRead.Number(q, "percentRemaining"), q.TryGetProperty("unlimited", out var u) && u.ValueKind == JsonValueKind.True,
+                        UsageRead.Number(q, "creditsUsed"), Flag(q, "hasQuota"), Flag(q, "tokenBasedBilling")));
         }
 
         return Build(UsageRead.Text(reply, "plan") ?? UsageRead.Text(reply, "login"), ParseDate(UsageRead.Text(reply, "resetAt")), quotas) with { AccountId = UsageRead.Text(reply, "login") };
     }
 
-    /// <summary>GitHub's own answer: <c>{ login, copilot_plan, quota_reset_date, quota_snapshots: { premium_interactions: { entitlement, remaining, percent_remaining, unlimited }, … } }</c>.</summary>
+    /// <summary>GitHub's own answer: <c>{ login, copilot_plan, quota_reset_date, quota_snapshots: { premium_interactions: { entitlement, remaining, percent_remaining, unlimited, credits_used, has_quota, token_based_billing }, … } }</c>.</summary>
     private static UsageReading FromGitHub(JsonElement root)
     {
         if (root.ValueKind != JsonValueKind.Object || !root.TryGetProperty("quota_snapshots", out var snapshots) || snapshots.ValueKind != JsonValueKind.Object)
@@ -91,7 +92,9 @@ internal sealed class CopilotUsageProvider(
                 continue;
             var q = snapshot.Value;
             quotas.Add(new Quota(UsageRead.Text(q, "quota_id") ?? snapshot.Name, UsageRead.Number(q, "entitlement"), UsageRead.Number(q, "remaining"),
-                UsageRead.Number(q, "percent_remaining"), q.TryGetProperty("unlimited", out var u) && u.ValueKind == JsonValueKind.True));
+                UsageRead.Number(q, "percent_remaining"), q.TryGetProperty("unlimited", out var u) && u.ValueKind == JsonValueKind.True,
+                UsageRead.Number(q, "credits_used"), Flag(q, "has_quota"),
+                Flag(q, "token_based_billing") ?? Flag(root, "token_based_billing")));
         }
 
         return Build(UsageRead.Text(root, "copilot_plan") ?? UsageRead.Text(root, "login"),
@@ -121,14 +124,31 @@ internal sealed class CopilotUsageProvider(
             });
         }
 
+        // Premium requests unlimited on a token-billed seat: GitHub counts AI credits used, and a pooled organisation limit can run out.
+        var premium = quotas.FirstOrDefault(q => q.Unlimited && q.Id == "premium_interactions");
+        if (premium is { HasQuota: false, TokenBasedBilling: not false })
+        {
+            windows.Add(new UsageLimitWindow
+            {
+                Window = "organization",
+                Utilization = 1,
+                ResetsAt = resetsAt,
+                WindowSeconds = resetsAt is { } end ? (int)(end - end.AddMonths(-1)).TotalSeconds : null,
+                Status = UsageRead.StatusFor(1),
+            });
+        }
+
         // Every quota unlimited (an enterprise seat billed in AI credits per token): there's no limit to show, which is the answer.
         if (windows.Count == 0 && quotas.Count > 0 && quotas.All(q => q.Unlimited))
-            return new UsageReading(UsageStates.NoWindow, account);
+            return new UsageReading(UsageStates.NoWindow, account, Credits: premium is { CreditsUsed: >= 0 and var used } ? new UsageCredits(null, null, used, "ai_credits") : null);
         return windows.Count == 0 ? new UsageReading(UsageStates.Unreadable) : new UsageReading(UsageStates.Ok, account, windows);
     }
 
     private static DateTimeOffset? ParseDate(string? text)
         => text is not null && DateTimeOffset.TryParse(text, CultureInfo.InvariantCulture, DateTimeStyles.AssumeUniversal | DateTimeStyles.AdjustToUniversal, out var at) ? at : null;
 
-    private sealed record Quota(string Id, double? Entitlement, double? Remaining, double? PercentRemaining, bool Unlimited);
+    private sealed record Quota(string Id, double? Entitlement, double? Remaining, double? PercentRemaining, bool Unlimited, double? CreditsUsed = null, bool? HasQuota = null, bool? TokenBasedBilling = null);
+
+    private static bool? Flag(JsonElement q, string name)
+        => q.TryGetProperty(name, out var v) && v.ValueKind is JsonValueKind.True or JsonValueKind.False ? v.ValueKind == JsonValueKind.True : null;
 }

@@ -102,9 +102,17 @@ function tickPercent(window: UsageLimitWindow): number | null {
   return share === null ? null : Math.round(share * 100);
 }
 
+const aiCredits = new Intl.NumberFormat(undefined, { maximumFractionDigits: 2 });
+
+/** GitHub's AI credits used this month; null for any other credits. */
+const aiCreditsLine = (provider: ProviderUsage) => {
+  const c = provider.credits;
+  return c?.unit === "ai_credits" && c.used !== null ? `AI credits used this month: ${aiCredits.format(c.used)}` : null;
+};
+
 const credits = (provider: ProviderUsage) => {
   const c = provider.credits;
-  if (!c) return null;
+  if (!c || c.unit === "ai_credits") return null;
   const dollars = (value: number) => `$${value.toFixed(2)}`;
   if (c.remaining !== null) return `${dollars(c.remaining)} left${c.limit !== null ? ` of ${dollars(c.limit)}` : ""}`;
   return c.used !== null ? `${dollars(c.used)} used` : null;
@@ -223,6 +231,13 @@ async function onAllow(provider: string): Promise<void> {
           >
             Credits: {{ credits(provider) }}
           </p>
+          <p
+            v-if="aiCreditsLine(provider)"
+            class="usage-pop__credits"
+            title="GitHub's count; it can run a few minutes behind."
+          >
+            {{ aiCreditsLine(provider) }}
+          </p>
         </template>
 
         <template v-else-if="provider.state === 'not_allowed'">
@@ -247,12 +262,18 @@ async function onAllow(provider: string): Promise<void> {
             Allow
           </button>
         </template>
-        <p
-          v-else-if="provider.state === 'no_window'"
-          class="usage-pop__note"
-        >
-          Pay-per-token: no limits to show.
-        </p>
+        <template v-else-if="provider.state === 'no_window'">
+          <p class="usage-pop__note">
+            Pay-per-token: no limits to show.
+          </p>
+          <p
+            v-if="aiCreditsLine(provider)"
+            class="usage-pop__credits"
+            title="GitHub's count; it can run a few minutes behind."
+          >
+            {{ aiCreditsLine(provider) }}
+          </p>
+        </template>
         <p
           v-else-if="provider.state === 'signed_out'"
           class="usage-pop__note"
