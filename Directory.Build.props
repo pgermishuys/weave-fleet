@@ -9,7 +9,7 @@
     <NoWarn>$(NoWarn);DAP005</NoWarn>
     <EnforceCodeStyleInBuild>true</EnforceCodeStyleInBuild>
     <AnalysisLevel>latest-recommended</AnalysisLevel>
-    <Version>0.65.0</Version>
+    <Version>0.65.1</Version>
   </PropertyGroup>
 
   <!-- Suppress NuGet audit for MessagePack 2.5.x pulled transitively by the Aspire SDK (the dev-only AppHost) -->
