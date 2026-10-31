@@ -46,7 +46,7 @@ public static class ProblemReportComposer
             Line(body, redactor, "System", facts.System);
             Line(body, redactor, "Runtime", facts.Runtime);
             foreach (var harness in facts.Harnesses)
-                Line(body, redactor, harness.Name, harness.Value);
+                Line(body, redactor, harness.Name, harness.Value, nameIsFixed: true);
         }
 
         if (include.Where)
@@ -121,9 +121,11 @@ public static class ProblemReportComposer
         return new string(chars).Trim('-');
     }
 
-    private static void Line(StringBuilder body, ReportRedactor redactor, string name, string? value)
+    // A fixed name is Fleet's own text (a harness's display name), so a folder or session called "Claude Code"
+    // can't turn it into a label. The value is still redacted.
+    private static void Line(StringBuilder body, ReportRedactor redactor, string name, string? value, bool nameIsFixed = false)
     {
         if (string.IsNullOrWhiteSpace(value)) return;
-        body.Append("- **").Append(redactor.Redact(name)).Append(":** ").Append(redactor.Redact(value.Trim())).Append('\n');
+        body.Append("- **").Append(nameIsFixed ? name : redactor.Redact(name)).Append(":** ").Append(redactor.Redact(value.Trim())).Append('\n');
     }
 }
