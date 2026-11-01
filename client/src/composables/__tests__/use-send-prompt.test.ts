@@ -284,6 +284,37 @@ describe("use-send-prompt picks the harness no longer lists", () => {
     expect(record).toHaveBeenCalledWith("opencode:p/m")
   })
 
+  it("says why the server refused a prompt, from the error the API client already read", async () => {
+    const sessionId = "session-refused"
+    vi.spyOn(useSessionsStore(), "sessionById").mockReturnValue({ harnessType: "claude-code", lifecycleStatus: "running" } as never)
+    const message = "This session's folder isn't there any more: /work/harbor-api. The conversation is kept."
+    // The API client reads the body to give the error, so the response's own body is used up by then.
+    const response = new Response(JSON.stringify({ error: message }), { status: 409 })
+    await response.text()
+    mockApi.POST.mockResolvedValueOnce({ error: { error: message }, response })
+    useDraftState(sessionId, { agentId: "", modelId: "" }).setText("hello")
+    const send = useSendPrompt(sessionId)
+
+    send.sendPrompt()
+    await new Promise((resolve) => setTimeout(resolve, 0))
+
+    expect(send.error.value).toBe(message)
+  })
+
+  it("puts a session the server refused a prompt for back as it was, instead of leaving it working", async () => {
+    const sessionId = "session-refused-status"
+    const session = { harnessType: "claude-code", activityStatus: "idle", lifecycleStatus: "stopped", sessionStatus: "stopped", capabilities: { canPrompt: true } }
+    vi.spyOn(useSessionsStore(), "sessionById").mockReturnValue(session as never)
+    mockApi.POST.mockResolvedValueOnce({ error: { error: "This session's folder isn't there any more." }, response: new Response(null, { status: 409 }) })
+    useDraftState(sessionId, { agentId: "", modelId: "" }).setText("hello")
+
+    useSendPrompt(sessionId).sendPrompt()
+    expect(session.activityStatus).toBe("busy")
+    await new Promise((resolve) => setTimeout(resolve, 0))
+
+    expect(session).toMatchObject({ activityStatus: "idle", lifecycleStatus: "stopped", sessionStatus: "stopped" })
+  })
+
   it("sends neither when the draft is on Default", async () => {
     const sessionId = "session-default-picks"
     useDraftState(sessionId, { agentId: "", modelId: "" }).setText("hello")

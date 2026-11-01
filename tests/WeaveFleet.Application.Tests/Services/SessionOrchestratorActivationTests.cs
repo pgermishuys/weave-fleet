@@ -237,6 +237,51 @@ public sealed class SessionOrchestratorActivationTests : IAsyncDisposable
         keepsHistory.ResumeCalls.ShouldHaveSingleItem().WorkingDirectory.ShouldBe(directory);
     }
 
+    [Fact]
+    public async Task reading_a_session_whose_folder_is_gone_leaves_it_asleep_and_not_in_error()
+    {
+        var gone = SeedFolderGone();
+        SeedSession(resumeToken: "token-saved", workspaceId: "ws-folder-gone");
+        _builder.Build();
+
+        var result = await _builder.Activation.ActivateToReadAsync(SessionId);
+
+        result.IsFailure.ShouldBeTrue();
+        result.Error.Code.ShouldBe("Session.FolderGone");
+        result.Error.Description.ShouldBe($"This session's folder isn't there any more: {gone}. The conversation is kept.");
+        (await _builder.SessionRepository.GetByIdAsync(SessionId))!.Status.ShouldBe("stopped");
+        _builder.EventBroadcaster.Broadcasts.ShouldBeEmpty();
+    }
+
+    [Fact]
+    public async Task a_message_to_a_session_whose_folder_is_gone_says_so_and_leaves_it_able_to_take_the_next()
+    {
+        var gone = SeedFolderGone();
+        SeedSession(resumeToken: "token-saved", workspaceId: "ws-folder-gone");
+        var sut = _builder.Build();
+
+        var result = await sut.PromptSessionAsync(SessionId, "Add the rate limit headers");
+
+        result.IsFailure.ShouldBeTrue();
+        result.Error.Code.ShouldBe("Session.FolderGone");
+        result.Error.Description.ShouldBe($"This session's folder isn't there any more: {gone}. The conversation is kept.");
+        (await _builder.SessionRepository.GetByIdAsync(SessionId))!.Status.ShouldBe("stopped");
+        _builder.EventBroadcaster.Broadcasts.ShouldNotContain(b => b.Type == "session.status");
+    }
+
+    /// <summary>A workspace whose folder was deleted outside Fleet; resuming in it fails the way every harness does.</summary>
+    private string SeedFolderGone()
+    {
+        var gone = Path.Combine(Path.GetTempPath(), $"fleet-folder-gone-{Guid.NewGuid():N}");
+        _builder.WorkspaceRepository.Seed(new Workspace
+        {
+            Id = "ws-folder-gone", Directory = gone, SourceDirectory = Path.GetTempPath(), IsolationStrategy = "worktree", Branch = "fleet/rate-limits",
+            CreatedAt = "2026-10-01", UserId = "user-1",
+        });
+        _runtime.ResumeBehavior = (options, _) => throw new ArgumentException($"Working directory does not exist: '{options.WorkingDirectory}'", "directory");
+        return gone;
+    }
+
     private void SeedRemovedCheckout(RealGitRepository repository, string directory, string branch) => _builder.WorkspaceRepository.Seed(new Workspace
     {
         Id = "ws-removed", Directory = directory, SourceDirectory = repository.Path, IsolationStrategy = "worktree", Branch = branch,
