@@ -2,6 +2,7 @@ using System.IO.Pipelines;
 using System.Text;
 using System.Text.Json;
 using Microsoft.Extensions.Logging.Abstractions;
+using Microsoft.Extensions.Time.Testing;
 using WeaveFleet.Application.Mods.Host;
 using WeaveFleet.Infrastructure.Mods.Host;
 
@@ -25,8 +26,8 @@ public sealed class ModHostRpcTests : IAsyncDisposable
             await _rpc.DisposeAsync();
     }
 
-    private ModHostRpc Rpc(int maxLineBytes = 8 * 1024 * 1024)
-        => _rpc = new ModHostRpc(_toFleet.Reader.AsStream(), _fromFleet.Writer.AsStream(), new Calls(), NullLogger.Instance, maxLineBytes);
+    private ModHostRpc Rpc(int maxLineBytes = 8 * 1024 * 1024, TimeProvider? time = null)
+        => _rpc = new ModHostRpc(_toFleet.Reader.AsStream(), _fromFleet.Writer.AsStream(), new Calls(), NullLogger.Instance, maxLineBytes, time);
 
     private async Task SendAsync(string text)
     {
@@ -144,10 +145,15 @@ public sealed class ModHostRpcTests : IAsyncDisposable
     [Fact]
     public async Task A_peer_that_never_answers_times_out()
     {
-        var pending = Rpc().RequestAsync("a", null, TimeSpan.FromMilliseconds(100));
+        // The deadline covers the write too, so on real time a busy runner can let it pass before the request is sent.
+        // Time moves only once the peer has the request.
+        var time = new FakeTimeProvider();
+        var pending = Rpc(time: time).RequestAsync("a", null, TimeSpan.FromMilliseconds(100));
         await ReadAsync();
+        pending.IsCompleted.ShouldBeFalse();
 
-        await Should.ThrowAsync<TimeoutException>(pending);
+        time.Advance(TimeSpan.FromMilliseconds(100));
+        await Should.ThrowAsync<TimeoutException>(pending.WaitAsync(Wait));
     }
 
     [Fact]

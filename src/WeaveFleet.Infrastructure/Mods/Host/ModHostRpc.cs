@@ -23,6 +23,7 @@ internal sealed class ModHostRpc : IAsyncDisposable
     private readonly IModHostCalls _calls;
     private readonly ILogger _logger;
     private readonly int _maxLineBytes;
+    private readonly TimeProvider _time;
     private readonly CancellationTokenSource _stop = new();
     private readonly SemaphoreSlim _writeLock = new(1, 1);
     private readonly ConcurrentDictionary<long, TaskCompletionSource<JsonElement>> _pending = new();
@@ -30,9 +31,9 @@ internal sealed class ModHostRpc : IAsyncDisposable
     private bool _isClosed;
 
     /// <summary>Starts reading <paramref name="input"/> (the host's stdout) at once; requests go to <paramref name="output"/> (its stdin).</summary>
-    public ModHostRpc(Stream input, Stream output, IModHostCalls calls, ILogger logger, int maxLineBytes = 8 * 1024 * 1024)
+    public ModHostRpc(Stream input, Stream output, IModHostCalls calls, ILogger logger, int maxLineBytes = 8 * 1024 * 1024, TimeProvider? time = null)
     {
-        (_input, _output, _calls, _logger, _maxLineBytes) = (input, output, calls, logger, maxLineBytes);
+        (_input, _output, _calls, _logger, _maxLineBytes, _time) = (input, output, calls, logger, maxLineBytes, time ?? TimeProvider.System);
         _ = Task.Run(ReadLoopAsync);
     }
 
@@ -43,7 +44,7 @@ internal sealed class ModHostRpc : IAsyncDisposable
     /// </summary>
     public async Task<JsonElement> RequestAsync(string method, JsonElement? parameters, TimeSpan timeout)
     {
-        using var deadline = new CancellationTokenSource(timeout);
+        using var deadline = new CancellationTokenSource(timeout, _time);
         var id = Interlocked.Increment(ref _lastId);
         var answer = new TaskCompletionSource<JsonElement>(TaskCreationOptions.RunContinuationsAsynchronously);
         _pending[id] = answer;
