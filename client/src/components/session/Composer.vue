@@ -30,7 +30,7 @@ import { useRunShellCommand } from "@/composables/use-run-shell-command";
 import { useSideConversation, type SideQuestionChoice } from "@/composables/use-side-conversation";
 import { useHarnesses } from "@/composables/use-harnesses";
 import { useModels } from "@/composables/use-models";
-import { useDraftAttachments } from "@/composables/use-draft-attachments";
+import { useDraftAttachments, type PendingAttachment } from "@/composables/use-draft-attachments";
 import { useDraftFiles } from "@/composables/use-draft-files";
 import { uploadSessionAttachment } from "@/api/session-attachments";
 import {
@@ -49,9 +49,9 @@ import {
 } from "@/lib/attached-files";
 import { useMachineTarget } from "@/lib/machine-target";
 import { usePreferencesStore } from "@/stores/preferences";
-import { useDraftTerminalContext } from "@/composables/use-draft-terminal-context";
+import { addDraftTerminalContext, useDraftTerminalContext } from "@/composables/use-draft-terminal-context";
 import { describeSessionDefaults, modelFromKey } from "@/lib/agent-model-choice";
-import { formatTerminalContext, terminalLineRange } from "@/lib/format-terminal-context";
+import { formatTerminalContext, terminalLineRange, type TerminalContextDraft } from "@/lib/format-terminal-context";
 import { sessionReferencesIn } from "@/lib/session-references";
 import { sessionSkillNames, skillDeliveries, skillListHint, skillNamesIn } from "@/lib/skill-mentions";
 import { useSendPrompt } from "@/composables/use-send-prompt";
@@ -846,17 +846,36 @@ function sendCurrentDraft(steer = false): boolean {
 
   // Terminal lines go in front of what was typed, as fenced blocks. If the send is refused, the draft is put back.
   const typed = draft.text;
-  const withTerminalLines = terminalContexts.value.length > 0;
-  if (withTerminalLines) setText(formatTerminalContext(terminalContexts.value, typed));
+  const contexts = [...terminalContexts.value];
+  const withTerminalLines = contexts.length > 0;
+  const sentText = withTerminalLines ? formatTerminalContext(contexts, typed) : typed;
+  if (withTerminalLines) setText(sentText);
 
-  const attachments: ImageAttachment[] = pendingAttachments.value.map(({ mime, filename, data }) => ({ mime, filename, data }));
-  clearAttachments();
-  const sent = sendPrompt(attachments.length > 0 ? attachments : undefined, undefined, steer ? { steer: true } : undefined);
-  if (withTerminalLines) {
-    if (sent) clearTerminalContexts();
-    else setText(typed);
+  const images = [...pendingAttachments.value];
+  const attachments: ImageAttachment[] = images.map(({ mime, filename, data }) => ({ mime, filename, data }));
+  const onRefused = () => putBackRefused(typed, sentText, images, contexts);
+  const sent = sendPrompt(attachments.length > 0 ? attachments : undefined, undefined, { steer, onRefused });
+  if (sent) {
+    clearAttachments();
+    clearTerminalContexts();
+  } else if (withTerminalLines) {
+    setText(typed);
   }
   return sent;
+}
+
+/**
+ * The server refused a message, after the composer cleared: its images and terminal lines come back beside anything
+ * added since. The text is back already, with the terminal lines in front, unless something new was typed.
+ */
+function putBackRefused(typed: string, sentText: string, images: PendingAttachment[], contexts: TerminalContextDraft[]): void {
+  if (sentText !== typed && draft.text === sentText) setText(typed);
+  for (const image of images) {
+    // Sending let go of the preview's blob URL.
+    if (!pendingAttachments.value.some((a) => a.id === image.id)) addAttachment({ ...image, previewUrl: `data:${image.mime};base64,${image.data}` });
+  }
+  // The same lines of the same terminal are only added once.
+  for (const context of contexts) addDraftTerminalContext(props.sessionId, context);
 }
 
 /**

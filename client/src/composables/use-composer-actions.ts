@@ -1,7 +1,7 @@
 import { computed, shallowRef } from "vue";
 import { storeToRefs } from "pinia";
 import { useAbortSession } from "@/composables/use-session-actions";
-import { useDraftState } from "@/composables/use-draft-state";
+import { appendDraftText, useDraftState } from "@/composables/use-draft-state";
 import { useHarnesses } from "@/composables/use-harnesses";
 import { useRunShellCommand } from "@/composables/use-run-shell-command";
 import { useSendCommand } from "@/composables/use-send-command";
@@ -174,7 +174,7 @@ export function useComposerActions(sessionId: string) {
   }
 
   /** Sends the draft where `routeDraft` says. Returns what it did. */
-  function submit(options: { steer?: boolean; attachments?: ImageAttachment[] } = {}): DraftRoute {
+  function submit(options: { steer?: boolean; attachments?: ImageAttachment[]; onRefused?: () => void } = {}): DraftRoute {
     if (disabled.value) return { kind: "empty" };
     const typed = draft.text;
     const route = routeDraft(typed, { status: status.value, steer: options.steer === true, caps: caps.value, sideOpen: side.isOpen.value });
@@ -208,7 +208,7 @@ export function useComposerActions(sessionId: string) {
           queueText(typed, typed.trim(), { kind: "prompt", ...choices() });
           break;
         }
-        if (sendPrompt(options.attachments?.length ? options.attachments : undefined, undefined, route.kind === "prompt" && route.steer ? { steer: true } : undefined)) {
+        if (sendPrompt(options.attachments?.length ? options.attachments : undefined, undefined, { steer: route.kind === "prompt" && route.steer, onRefused: options.onRefused })) {
           markBusy();
           trackAction(route.kind === "prompt" && route.steer ? "session.prompt.steer" : "session.prompt", sessionId);
         }
@@ -225,7 +225,8 @@ export function useComposerActions(sessionId: string) {
     if (status.value === "busy") {
       return (await enqueue(text, { kind: "prompt", ...choices() })) ? null : (queueError.value ?? "Couldn't queue it.");
     }
-    if (!sendPrompt(undefined, text)) return promptError.value ?? "Couldn't send it.";
+    // Refused once it's on its way: the held message is already gone, so it comes back in the box.
+    if (!sendPrompt(undefined, text, { onRefused: () => appendDraftText(sessionId, text) })) return promptError.value ?? "Couldn't send it.";
     markBusy();
     return null;
   }

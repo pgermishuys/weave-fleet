@@ -435,6 +435,54 @@ describe("Composer", () => {
     expect(wrapper.find(".terminal-context-chip").exists()).toBe(false);
   });
 
+  it("puts a refused message back with its image and terminal lines, and says why", async () => {
+    clearDraftTerminalContext("session-1");
+    addDraftTerminalContext("session-1", { terminalId: "t1", label: "zsh", from: 3, to: 3, text: "npm ERR! missing script" });
+    const fallback = mockApi.POST.getMockImplementation() as unknown as (url: string, init?: unknown) => Promise<unknown>;
+    mockApi.POST.mockImplementation((async (url: string, init?: unknown) => {
+      if (url === "/api/sessions/{id}/prompt") {
+        return { data: undefined, error: { error: "This session's folder isn't there any more." }, response: new Response(null, { status: 409 }) };
+      }
+      return fallback(url, init);
+    }) as never);
+    const wrapper = mountComposer();
+    await flushPromises();
+    const textarea = wrapper.get("[data-testid='prompt-input']");
+    useDraftAttachments("session-1").addAttachment({ id: "img-1", mime: "image/png", filename: "shot.png", data: "AAAA", previewUrl: "blob:x" });
+
+    await textarea.setValue("Why does this fail?");
+    textarea.element.dispatchEvent(new KeyboardEvent("keydown", { key: "Enter", bubbles: true, cancelable: true }));
+    await flushPromises();
+
+    expect((textarea.element as HTMLTextAreaElement).value).toBe("Why does this fail?");
+    expect(useDraftAttachments("session-1").attachments.value.map((a) => a.filename)).toEqual(["shot.png"]);
+    expect(wrapper.findAll(".terminal-context-chip")).toHaveLength(1);
+    expect(wrapper.get("[data-testid='send-prompt-error']").text()).toBe("This session's folder isn't there any more.");
+    clearDraftAttachments("session-1");
+    clearDraftTerminalContext("session-1");
+  });
+
+  it("puts a refused slash command back and says why", async () => {
+    const fallback = mockApi.POST.getMockImplementation() as unknown as (url: string, init?: unknown) => Promise<unknown>;
+    mockApi.POST.mockImplementation((async (url: string, init?: unknown) => {
+      if (url === "/api/sessions/{id}/command") {
+        return { data: undefined, error: { error: "Unknown command" }, response: new Response(JSON.stringify({ error: "Unknown command" }), { status: 400 }) };
+      }
+      return fallback(url, init);
+    }) as never);
+    const wrapper = mountComposer();
+    await flushPromises();
+    const textarea = wrapper.get("[data-testid='prompt-input']");
+
+    await textarea.setValue("/start-work now");
+    textarea.element.dispatchEvent(new KeyboardEvent("keydown", { key: "Enter", bubbles: true, cancelable: true }));
+    await flushPromises();
+
+    expect((mockApi.POST.mock.calls as unknown[][]).some(([url]) => url === "/api/sessions/{id}/command")).toBe(true);
+    expect((textarea.element as HTMLTextAreaElement).value).toBe("/start-work now");
+    expect(wrapper.get("[data-testid='send-prompt-error']").text()).toBe("Unknown command");
+  });
+
   it("routes slash commands to the command endpoint", async () => {
     const wrapper = mountComposer();
     const textarea = wrapper.get("[data-testid='prompt-input']");
