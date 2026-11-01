@@ -96,8 +96,13 @@ function submit(steer = false): void {
     void actions.stop();
     return;
   }
-  const attachments = photos.value.map(({ mime, filename, data }) => ({ mime, filename, data }));
-  const route = actions.submit({ steer, attachments });
+  const sentPhotos = photos.value;
+  const attachments = sentPhotos.map(({ mime, filename, data }) => ({ mime, filename, data }));
+  // Refused: the photos come back ahead of any picked since, as the text does unless something new was typed.
+  const onRefused = () => {
+    photos.value = [...sentPhotos.filter((photo) => !photos.value.includes(photo)), ...photos.value];
+  };
+  const route = actions.submit({ steer, attachments, onRefused });
   if (route.kind === "empty" && !attachments.length) return;
   if (route.kind === "side") emit("side");
   photos.value = [];

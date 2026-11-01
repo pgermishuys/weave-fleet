@@ -234,6 +234,84 @@ describe("use-send-prompt retry", () => {
   })
 })
 
+describe("use-send-prompt refused sends", () => {
+  const refused = () => ({ error: { error: "This session's folder isn't there any more." }, response: new Response(null, { status: 409 }) })
+  const settle = () => new Promise((resolve) => setTimeout(resolve, 0))
+
+  it("clears the composer at once and puts what was typed back when the server refuses it", async () => {
+    const sessionId = "session-refused-text"
+    const draft = useDraftState(sessionId, { agentId: "", modelId: "" })
+    draft.setText("  fix the flaky login test\n")
+    let answer: (value: unknown) => void = () => {}
+    mockApi.POST.mockReturnValueOnce(new Promise((resolve) => { answer = resolve }))
+
+    useSendPrompt(sessionId).sendPrompt()
+    expect(draft.draft.text).toBe("")
+
+    answer(refused())
+    await settle()
+    expect(draft.draft.text).toBe("  fix the flaky login test\n")
+  })
+
+  it("puts what was typed back when the request never reaches the server", async () => {
+    const sessionId = "session-refused-network"
+    const draft = useDraftState(sessionId, { agentId: "", modelId: "" })
+    draft.setText("hello")
+    mockApi.POST.mockRejectedValueOnce(new TypeError("Failed to fetch"))
+
+    useSendPrompt(sessionId).sendPrompt()
+    await settle()
+
+    expect(draft.draft.text).toBe("hello")
+  })
+
+  it("leaves what was typed while it was sending alone, and still says what came back", async () => {
+    const sessionId = "session-refused-typed-meanwhile"
+    const draft = useDraftState(sessionId, { agentId: "", modelId: "" })
+    draft.setText("first message")
+    let answer: (value: unknown) => void = () => {}
+    mockApi.POST.mockReturnValueOnce(new Promise((resolve) => { answer = resolve }))
+    const onRefused = vi.fn()
+
+    useSendPrompt(sessionId).sendPrompt(undefined, undefined, { onRefused })
+    draft.setText("something new")
+    answer(refused())
+    await settle()
+
+    expect(draft.draft.text).toBe("something new")
+    expect(onRefused).toHaveBeenCalledTimes(1)
+  })
+
+  it("tells the caller a send was refused, so it can put back what it cleared, and not one that was taken", async () => {
+    const sessionId = "session-refused-callback"
+    const draft = useDraftState(sessionId, { agentId: "", modelId: "" })
+    const onRefused = vi.fn()
+
+    draft.setText("taken")
+    mockApi.POST.mockResolvedValueOnce({ data: { correlationId: "c" }, response: new Response(null, { status: 202 }) })
+    useSendPrompt(sessionId).sendPrompt(undefined, undefined, { onRefused })
+    await settle()
+    expect(onRefused).not.toHaveBeenCalled()
+
+    draft.setText("refused")
+    mockApi.POST.mockResolvedValueOnce(refused())
+    useSendPrompt(sessionId).sendPrompt(undefined, undefined, { onRefused })
+    await settle()
+    expect(onRefused).toHaveBeenCalledTimes(1)
+  })
+
+  it("leaves the composer alone when a re-sent prompt is refused", async () => {
+    const sessionId = "session-refused-retry"
+    const draft = useDraftState(sessionId, { agentId: "", modelId: "" })
+    mockApi.POST.mockResolvedValueOnce(refused())
+
+    useSendPrompt(sessionId).retryPrompt("the prompt that failed")
+    await settle()
+
+    expect(draft.draft.text).toBe("")
+  })
+})
+
 describe("use-send-prompt picks the harness no longer lists", () => {
   function sentBody(): { agent?: string; model?: unknown } {
     const promptCall = (mockApi.POST.mock.calls as unknown[][]).find(([url]) => url === "/api/sessions/{id}/prompt")

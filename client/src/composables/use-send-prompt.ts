@@ -429,10 +429,15 @@ interface BackendSendPromptRequest {
 export interface SendPromptOptions {
   /** Send into the running turn instead of waiting for it to end; only for a harness that supports steering. */
   steer?: boolean;
+  /**
+   * Called when the server refuses the prompt or it never gets there, after the typed text is back in the composer:
+   * for whatever else the caller cleared when it sent (images, terminal lines).
+   */
+  onRefused?: () => void;
 }
 
 /** How the session was shown before a send marked it working, to put back if the server refuses the prompt. */
-type SessionStatusBeforeSend = Pick<SessionListItem, "activityStatus" | "lifecycleStatus" | "sessionStatus">;
+export type SessionStatusBeforeSend = Pick<SessionListItem, "activityStatus" | "lifecycleStatus" | "sessionStatus">;
 
 interface BackendSendPromptResponse {
   eventId?: number | null;
@@ -443,7 +448,7 @@ interface BackendSendPromptResponse {
  * What the server said when it refused a prompt. The API client has already read the body into `error` (parsed when it
  * was JSON), so the response's own body is used up by then.
  */
-function readPromptErrorMessage(error: unknown, response: Response): string {
+export function readPromptErrorMessage(error: unknown, response: Response): string {
   if (typeof error === "string" && error.trim().length > 0) {
     return error.trim();
   }
@@ -468,7 +473,7 @@ export function useSendPrompt(sessionId: string) {
   const { defaultAgentId, agentsById } = useAgents(sessionId);
   const { defaultModelKey, modelsByKey } = useModels(sessionId);
   const sendError = shallowRef<string | undefined>(undefined);
-  const { draft, resetText } = useDraftState(sessionId, {
+  const { draft, setText, resetText } = useDraftState(sessionId, {
     agentId: "",
     modelId: "",
   });
@@ -495,7 +500,7 @@ export function useSendPrompt(sessionId: string) {
     return session.lifecycleStatus === "running";
   });
 
-  async function postPrompt(promptId: string, request: BackendSendPromptRequest, before?: SessionStatusBeforeSend): Promise<void> {
+  async function postPrompt(request: BackendSendPromptRequest, onRefused: () => void, before?: SessionStatusBeforeSend): Promise<void> {
     try {
       const { data, error, response } = await api.POST("/api/sessions/{id}/prompt", {
         params: {
@@ -530,12 +535,14 @@ export function useSendPrompt(sessionId: string) {
       const message = caughtError instanceof Error ? caughtError.message : "Failed to send prompt";
       sendError.value = message;
       console.error("Failed to send prompt", caughtError);
+      onRefused();
     }
   }
 
   /**
    * Sends the composer draft, or `overrideText` when re-sending a prompt whose turn failed or sending a queued one now.
    * An override leaves the draft alone: the user may well have started typing something else.
+   * The draft clears at once and comes back if the server refuses it, unless something new was typed meanwhile.
    */
   function sendPrompt(attachments?: ImageAttachment[], overrideText?: string, options?: SendPromptOptions): boolean {
     if (!canSend.value) {
@@ -543,7 +550,8 @@ export function useSendPrompt(sessionId: string) {
     }
 
     const isRetry = typeof overrideText === "string";
-    const body = (isRetry ? overrideText : draft.text).trim();
+    const typed = draft.text;
+    const body = (isRetry ? overrideText : typed).trim();
     if (!body && (!attachments || attachments.length === 0)) {
       return false;
     }
@@ -646,7 +654,11 @@ export function useSendPrompt(sessionId: string) {
       request.skills = skills;
     }
 
-    void postPrompt(promptId, request, before);
+    const onRefused = (): void => {
+      if (!isRetry && draft.text.length === 0) setText(typed);
+      options?.onRefused?.();
+    };
+    void postPrompt(request, onRefused, before);
 
     return true;
   }
