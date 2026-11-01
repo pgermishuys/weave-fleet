@@ -220,6 +220,14 @@ public sealed partial class SessionActivation(
         {
             throw;
         }
+        catch (Exception) when (!Directory.Exists(directory))
+        {
+            // Every harness refuses a folder deleted outside Fleet. That isn't the session failing, so it stays asleep rather
+            // than in error: opening it (which reads its models, agents and commands at once) changes nothing, a message
+            // sent to it says why it couldn't go, and once the folder is back the next message wakes it.
+            LogFolderGone(session.Id, directory);
+            return new FleetError("Session.FolderGone", $"This session's folder isn't there any more: {directory}. The conversation is kept.");
+        }
         catch (Exception ex)
         {
             LogAutomaticActivationFailed(ex, session.Id, session.HarnessType);
@@ -424,6 +432,9 @@ public sealed partial class SessionActivation(
     [LoggerMessage(Level = LogLevel.Error,
         Message = "Failed to automatically activate session {SessionId} for harness {HarnessType}")]
     private partial void LogAutomaticActivationFailed(Exception ex, string sessionId, string harnessType);
+
+    [LoggerMessage(Level = LogLevel.Warning, Message = "Session {SessionId} wasn't woken: its folder {Directory} is gone")]
+    private partial void LogFolderGone(string sessionId, string directory);
 
     [LoggerMessage(Level = LogLevel.Warning,
         Message = "Event subscription readiness timed out for session {SessionId} after {TimeoutMs}ms — proceeding with prompt")]

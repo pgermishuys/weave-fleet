@@ -1,4 +1,5 @@
 import { computed, reactive, readonly, shallowRef } from "vue";
+import type { SessionListItem } from "@/api/client";
 import type { components } from "@/api/generated/schema";
 import { useAgents } from "@/composables/use-agents";
 import { useDraftState, type EffortLevel } from "@/composables/use-draft-state";
@@ -430,34 +431,30 @@ export interface SendPromptOptions {
   steer?: boolean;
 }
 
+/** How the session was shown before a send marked it working, to put back if the server refuses the prompt. */
+type SessionStatusBeforeSend = Pick<SessionListItem, "activityStatus" | "lifecycleStatus" | "sessionStatus">;
+
 interface BackendSendPromptResponse {
   eventId?: number | null;
   correlationId?: string;
 }
 
-async function readPromptErrorMessage(response: Response): Promise<string> {
-  const bodyText = await response.text().catch(() => "");
-  if (!bodyText) {
-    return `HTTP ${response.status}`;
+/**
+ * What the server said when it refused a prompt. The API client has already read the body into `error` (parsed when it
+ * was JSON), so the response's own body is used up by then.
+ */
+function readPromptErrorMessage(error: unknown, response: Response): string {
+  if (typeof error === "string" && error.trim().length > 0) {
+    return error.trim();
   }
 
-  try {
-    const body = JSON.parse(bodyText) as Record<string, unknown>;
-
-    if (typeof body.error === "string" && body.error.trim().length > 0) {
-      return body.error;
-    }
-
-    if (typeof body.detail === "string" && body.detail.trim().length > 0) {
-      return body.detail;
-    }
-
-    if (typeof body.title === "string" && body.title.trim().length > 0) {
-      return body.title;
-    }
-  } catch {
-    if (bodyText.trim().length > 0) {
-      return bodyText.trim();
+  if (error && typeof error === "object") {
+    const body = error as Record<string, unknown>;
+    for (const field of ["error", "detail", "title"]) {
+      const value = body[field];
+      if (typeof value === "string" && value.trim().length > 0) {
+        return value;
+      }
     }
   }
 
@@ -498,7 +495,7 @@ export function useSendPrompt(sessionId: string) {
     return session.lifecycleStatus === "running";
   });
 
-  async function postPrompt(promptId: string, request: BackendSendPromptRequest): Promise<void> {
+  async function postPrompt(promptId: string, request: BackendSendPromptRequest, before?: SessionStatusBeforeSend): Promise<void> {
     try {
       const { data, error, response } = await api.POST("/api/sessions/{id}/prompt", {
         params: {
@@ -508,7 +505,7 @@ export function useSendPrompt(sessionId: string) {
       });
 
       if (error || !response.ok) {
-        throw new Error(await readPromptErrorMessage(response));
+        throw new Error(readPromptErrorMessage(error, response));
       }
 
       const receipt = data as unknown as BackendSendPromptResponse;
@@ -526,6 +523,10 @@ export function useSendPrompt(sessionId: string) {
     } catch (caughtError) {
       removeSentPromptByCorrelationId(sessionId, request.correlationId);
       decrementPendingPrompts(sessionId);
+      // Nothing started, so no status event will come to undo the working it was shown as.
+      if (before && selectedSession.value?.activityStatus === "busy") {
+        Object.assign(selectedSession.value, before);
+      }
       const message = caughtError instanceof Error ? caughtError.message : "Failed to send prompt";
       sendError.value = message;
       console.error("Failed to send prompt", caughtError);
@@ -586,6 +587,13 @@ export function useSendPrompt(sessionId: string) {
     incrementPendingPrompts(sessionId);
     schedulePromptConfirmationTimeout(sessionId, correlationId);
 
+    const before = selectedSession.value
+      ? {
+          activityStatus: selectedSession.value.activityStatus,
+          lifecycleStatus: selectedSession.value.lifecycleStatus,
+          sessionStatus: selectedSession.value.sessionStatus,
+        }
+      : undefined;
     if (selectedSession.value) {
       selectedSession.value.activityStatus = "busy";
       selectedSession.value.lifecycleStatus = "running";
@@ -638,7 +646,7 @@ export function useSendPrompt(sessionId: string) {
       request.skills = skills;
     }
 
-    void postPrompt(promptId, request);
+    void postPrompt(promptId, request, before);
 
     return true;
   }

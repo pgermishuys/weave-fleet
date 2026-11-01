@@ -1014,7 +1014,7 @@ public sealed class SessionOrchestratorTests : IAsyncDisposable
         _builder.WorkspaceRepository.Seed(new Workspace
         {
             Id = "workspace-error",
-            Directory = "/tmp/auto-error-session",
+            Directory = Path.GetTempPath(),
             IsolationStrategy = "existing",
             CreatedAt = "2026-01-01",
             UserId = "user-1"
@@ -1026,7 +1026,7 @@ public sealed class SessionOrchestratorTests : IAsyncDisposable
             InstanceId = "inst-error-stopped",
             Title = "Automatic Error",
             Status = "stopped",
-            Directory = "/tmp/auto-error-session",
+            Directory = Path.GetTempPath(),
             CreatedAt = "2026-01-01",
             RetentionStatus = "active",
             HarnessType = "opencode",
