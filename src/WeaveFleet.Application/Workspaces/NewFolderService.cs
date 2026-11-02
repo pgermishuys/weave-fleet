@@ -245,7 +245,7 @@ public sealed partial class NewFolderService(
         catch (GitCommandException ex)
         {
             DeletePartialClone(fullPath);
-            return FleetError.ValidationError("Clone", $"Couldn't clone {url}: {ex.GitMessage}");
+            return FleetError.ValidationError("Clone", HideSecrets($"Couldn't clone {url}: {ex.GitMessage}"));
         }
         catch (OperationCanceledException)
         {
@@ -253,6 +253,18 @@ public sealed partial class NewFolderService(
             throw;
         }
     }
+
+    /// <summary>
+    /// A clone address can carry a secret: a password or token before the host, or a token in the query. The address is
+    /// echoed in the error (git repeats it too), which is shown and logged, so both parts are left out.
+    /// </summary>
+    internal static string HideSecrets(string text) => AddressQueryPattern().Replace(AddressUserInfoPattern().Replace(text, "$1"), string.Empty);
+
+    [GeneratedRegex(@"([a-z][a-z0-9+.-]*://)[^/@\s'""]+@", RegexOptions.IgnoreCase | RegexOptions.CultureInvariant)]
+    private static partial Regex AddressUserInfoPattern();
+
+    [GeneratedRegex(@"(?<=[a-z0-9/.-])\?[^\s'"":]*", RegexOptions.IgnoreCase | RegexOptions.CultureInvariant)]
+    private static partial Regex AddressQueryPattern();
 
     /// <summary>Reads one of git's progress lines, e.g. <c>Receiving objects:  38% (380/1000)</c>.</summary>
     internal static CloneProgress? ParseProgress(string line)
