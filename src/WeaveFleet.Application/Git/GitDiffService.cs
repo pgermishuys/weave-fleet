@@ -76,9 +76,8 @@ public sealed class GitDiffService
         if (string.IsNullOrWhiteSpace(directory) || !Directory.Exists(directory))
             return null;
 
-        var result = await RunGitAsync(directory, ["symbolic-ref", "--quiet", "--short", "HEAD"], ct).ConfigureAwait(false);
-        var branch = result.StandardOutput.Trim();
-        return result.IsSuccess && branch.Length > 0 ? branch : null;
+        var result = await RunGitAsync(directory, ["symbolic-ref", "--quiet", "HEAD"], ct).ConfigureAwait(false);
+        return result.IsSuccess ? GitCommand.BranchNameOf(result.StandardOutput) : null;
     }
 
     /// <summary>
@@ -125,9 +124,9 @@ public sealed class GitDiffService
 
     private async Task<GitDiffBase?> ResolveBranchBaseAsync(string repoRoot, CancellationToken ct)
     {
-        var branchResult = await RunGitAsync(repoRoot, ["symbolic-ref", "--quiet", "--short", "HEAD"], ct).ConfigureAwait(false);
-        var branch = branchResult.StandardOutput.Trim();
-        if (!branchResult.IsSuccess || branch.Length == 0)
+        var branchResult = await RunGitAsync(repoRoot, ["symbolic-ref", "--quiet", "HEAD"], ct).ConfigureAwait(false);
+        var branch = branchResult.IsSuccess ? GitCommand.BranchNameOf(branchResult.StandardOutput) : null;
+        if (branch is null)
             return null;
 
         var main = await FindMainBranchAsync(repoRoot, ct).ConfigureAwait(false);

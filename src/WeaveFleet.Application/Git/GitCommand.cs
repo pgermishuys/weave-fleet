@@ -231,6 +231,17 @@ internal static class GitCommand
         return message.Length > 0 ? string.Join(' ', message) : "git exited with an error";
     }
 
+    /// <summary>
+    /// The branch a <c>git symbolic-ref HEAD</c> answer names (<c>refs/heads/main</c> is <c>main</c>). Asked with
+    /// <c>--short</c>, git says <c>heads/main</c> when a tag is also called <c>main</c>.
+    /// </summary>
+    public static string? BranchNameOf(string? symbolicRef)
+    {
+        var name = symbolicRef?.Trim();
+        const string Heads = "refs/heads/";
+        return name is not null && name.StartsWith(Heads, StringComparison.Ordinal) && name.Length > Heads.Length ? name[Heads.Length..] : null;
+    }
+
     public static string[] ParseLines(string output) =>
         output.Split('\n', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries);
 }
