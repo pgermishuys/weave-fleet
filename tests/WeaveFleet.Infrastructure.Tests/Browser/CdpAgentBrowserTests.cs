@@ -162,6 +162,38 @@ public sealed class CdpAgentBrowserTests
         after.ShouldContain("[checkbox] \"I agree\" checked=true");
     }
 
+    private const string Locked = """
+        <!doctype html><title>Locked demo</title>
+        <label for="ro">Read only</label><input id="ro" readonly value="fixed">
+        <label for="off">Disabled</label><input id="off" disabled value="fixed">
+        <label for="reset">Resets</label><input id="reset" oninput="this.value=''">
+        <label for="lockedplan">Locked plan</label><select id="lockedplan" disabled><option value="free">Free</option><option value="pro">Pro</option></select>
+        <label for="bounce">Bounce plan</label><select id="bounce" onchange="this.value='free'"><option value="free">Free</option><option value="pro">Pro</option></select>
+        """;
+
+    [Fact]
+    public async Task A_fill_or_pick_the_page_didnt_take_is_a_failure_not_a_success()
+    {
+        if (Chrome() is not { } options)
+            return;
+        using var site = new LocalSite(Locked);
+        await using var browser = Browser(options, new Steps(), Limits(site));
+        var tab = (await Run(browser, new AgentBrowserAction(AgentBrowserKinds.TabsOpen) { Url = site.Url })).Tab.ShouldNotBeNull();
+        var page = (await Run(browser, new AgentBrowserAction(AgentBrowserKinds.Snapshot) { TabId = tab.Id })).Content!;
+
+        foreach (var label in new[] { "Read only", "Disabled", "Resets" })
+        {
+            var fill = await Run(browser, new AgentBrowserAction(AgentBrowserKinds.Fill) { TabId = tab.Id, Ref = Ref(page, $"[textbox] \"{label}\""), Text = "Ada" });
+            fill.Failure.ShouldNotBeNull($"filling \"{label}\" reported success");
+        }
+
+        foreach (var label in new[] { "Locked plan", "Bounce plan" })
+        {
+            var pick = await Run(browser, new AgentBrowserAction(AgentBrowserKinds.Select) { TabId = tab.Id, Ref = Ref(page, $"[combobox] \"{label}\""), Values = ["pro"] });
+            pick.Failure.ShouldNotBeNull($"picking in \"{label}\" reported success");
+        }
+    }
+
     [Fact]
     public async Task A_failed_request_shows_in_the_tabs_requests()
     {
