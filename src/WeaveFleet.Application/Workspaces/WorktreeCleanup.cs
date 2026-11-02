@@ -205,7 +205,7 @@ public sealed partial class WorktreeCleanup(
             if (strayIgnored is not null)
                 return Keep($"Has an ignored file you may want: {strayIgnored}");
 
-            var branch = (await TryGitAsync(workspace.Directory, "symbolic-ref", "--quiet", "--short", "HEAD").ConfigureAwait(false))?.Trim();
+            var branch = GitCommand.BranchNameOf(await TryGitAsync(workspace.Directory, "symbolic-ref", "--quiet", "HEAD").ConfigureAwait(false));
             if (string.IsNullOrEmpty(branch))
                 return Keep("It isn't on a branch, so it couldn't come back.");
 

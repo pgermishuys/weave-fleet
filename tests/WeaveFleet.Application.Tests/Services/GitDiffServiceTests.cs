@@ -299,6 +299,30 @@ public sealed class GitDiffServiceTests
     }
 
     [Fact]
+    public async Task a_tag_named_like_the_branch_does_not_rename_the_branch()
+    {
+        var tempRoot = CreateTempDirectory();
+        var service = new GitDiffService();
+
+        try
+        {
+            await InitRepoOnMainAsync(tempRoot);
+            await RunGitAsync(tempRoot, "tag", "main");
+            var baseline = await service.CaptureBaselineAsync(tempRoot, "tagged", CancellationToken.None);
+            baseline.ShouldNotBeNull();
+
+            // git's --short would say "heads/main" here, which is not main's name.
+            (await service.CurrentBranchAsync(tempRoot, CancellationToken.None)).ShouldBe("main");
+            var onMain = await service.ResolveDiffBaseAsync(tempRoot, baseline.RefName, CancellationToken.None);
+            onMain.ShouldBe(new GitDiffBase(baseline.RefName, GitDiffBaseKind.SessionStart, MainBranch: null));
+        }
+        finally
+        {
+            DeleteRepo(tempRoot);
+        }
+    }
+
+    [Fact]
     public async Task on_main_or_a_detached_head_changes_are_compared_with_the_session_start()
     {
         var tempRoot = CreateTempDirectory();

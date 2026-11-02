@@ -232,7 +232,7 @@ public sealed partial class WorkspaceService(
         if (System.IO.Directory.Exists(workspace.Directory) && System.IO.Directory.EnumerateFileSystemEntries(workspace.Directory).Any())
         {
             // Put back by hand already: it's the checkout if git says it's a worktree of this branch.
-            var current = (await TryRunGitAsync(workspace.Directory, "symbolic-ref", "--quiet", "--short", "HEAD"))?.Trim();
+            var current = GitCommand.BranchNameOf(await TryRunGitAsync(workspace.Directory, "symbolic-ref", "--quiet", "HEAD"));
             if (current is null || current != branch)
                 return FleetError.ValidationError("Workspace.Restore", $"Something else is in {workspace.Directory} now, so the checkout can't come back there. The conversation is kept.");
         }
@@ -581,9 +581,10 @@ public sealed partial class WorkspaceService(
 
     private static async Task<string?> ResolveOriginDefaultBranchAsync(string sourceDir)
     {
-        var originHead = (await TryRunGitAsync(sourceDir, "symbolic-ref", "--quiet", "--short", "refs/remotes/origin/HEAD"))?.Trim();
-        if (originHead is not null && originHead.StartsWith("origin/", StringComparison.Ordinal))
-            return originHead["origin/".Length..];
+        var originHead = (await TryRunGitAsync(sourceDir, "symbolic-ref", "--quiet", "refs/remotes/origin/HEAD"))?.Trim();
+        const string OriginRemote = "refs/remotes/origin/";
+        if (originHead is not null && originHead.StartsWith(OriginRemote, StringComparison.Ordinal))
+            return originHead[OriginRemote.Length..];
 
         foreach (var candidate in _defaultBranchCandidates)
         {
