@@ -108,3 +108,14 @@ describe("QuestionCard", () => {
     expect(wrapper.find("[data-testid='question-card-active']").exists()).toBe(false);
   });
 });
+
+describe("QuestionCard line breaks", () => {
+  it("keeps the line breaks agents put in the question and option descriptions", async () => {
+    const { readFileSync } = await import("node:fs");
+    const source = readFileSync("src/components/session/QuestionCard.vue", "utf8");
+    for (const selector of [".qcard__text", ".qcard__choice-desc"]) {
+      const rule = source.match(new RegExp(`^\\${selector} \\{([^}]*)\\}`, "m"))?.[1] ?? "";
+      expect(rule, selector).toMatch(/white-space:\s*pre-line/);
+    }
+  });
+});

@@ -435,6 +435,8 @@ function answerText(questionIdx: number): string {
   font-size: 14px;
   line-height: 1.5;
   text-wrap: pretty;
+  /* Agents send line breaks in the question; keep them. */
+  white-space: pre-line;
 }
 
 .qcard__hint {
@@ -538,6 +540,7 @@ function answerText(questionIdx: number): string {
   color: var(--muted);
   font-size: 12px;
   line-height: 1.45;
+  white-space: pre-line;
 }
 
 .qcard__other-input {
