@@ -311,4 +311,42 @@ describe("useDiffs", () => {
 
     wrapper.unmount();
   });
+  it("leaves a closed panel's diffs alone while files change, and catches up when it opens", async () => {
+    vi.useFakeTimers();
+    try {
+      apiFetchMock.mockResolvedValue({
+        data: { diffs: [{ file: "a.ts", status: "modified", additions: 1, deletions: 0 }], available: true },
+        error: undefined,
+        response: createJsonResponse({}),
+      });
+      const open = shallowRef(false);
+      const { useDiffs } = await import("@/composables/use-diffs");
+      const { result, wrapper } = await mountComposable(() => useDiffs("session-1", { isWanted: () => open.value }));
+
+      const changed = (): DomainEvent => ({
+        type: "files.changed",
+        payload: { sessionId: "session-1", files: [{ path: "a.ts", changeType: "modified" }] },
+      } as DomainEvent);
+      for (let i = 0; i < 3; i++) {
+        v2EventCallback?.(changed());
+        await vi.advanceTimersByTimeAsync(600);
+      }
+      expect(apiFetchMock).not.toHaveBeenCalled();
+      expect(result.isStale.value).toBe(true);
+
+      open.value = true;
+      await vi.advanceTimersByTimeAsync(0);
+      await flushAll();
+      expect(apiFetchMock).toHaveBeenCalledTimes(1);
+      expect(result.isStale.value).toBe(false);
+
+      v2EventCallback?.(changed());
+      await vi.advanceTimersByTimeAsync(600);
+      expect(apiFetchMock).toHaveBeenCalledTimes(2);
+
+      wrapper.unmount();
+    } finally {
+      vi.useRealTimers();
+    }
+  });
 });
