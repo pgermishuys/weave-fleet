@@ -683,11 +683,11 @@ public static class DependencyInjection
         services.AddSingleton(new PortAllocator(options.HarnessPortRangeStart, options.HarnessPortRangeEnd));
 
         // Named HttpClient used by OpenCodeHarnessRuntime.SpawnAsync to create per-instance clients.
-        services.AddHttpClient("OpenCode");
+        services.AddLoopbackHttpClient("OpenCode");
 
         // A new OpenCode process's first request can take over the default 100 s while OpenCode installs its plugin
         // packages; OpenCodeFirstRunPreparation applies its own limit.
-        services.AddHttpClient(OpenCodeHarnessRuntime.PreparationHttpClientName, client => client.Timeout = Timeout.InfiniteTimeSpan);
+        services.AddLoopbackHttpClient(OpenCodeHarnessRuntime.PreparationHttpClientName, client => client.Timeout = Timeout.InfiniteTimeSpan);
 
         // Register OpenCodeHarness (descriptor) and OpenCodeHarnessRuntime (provisioning) as separate singletons.
         services.AddSingleton<OpenCodeHarness>();
@@ -735,7 +735,7 @@ public static class DependencyInjection
         services.AddSingleton<WeaveFleet.Application.FleetTools.IHarnessMcpCalls>(sp => new CopilotMcpCalls(sp.GetRequiredService<CopilotHarnessRuntime>().FleetTools));
 
         // OpenCode 2: a harness of its own next to OpenCode, off until the user turns it on (opencode2.enabled).
-        services.AddHttpClient(OpenCode2HarnessRuntime.HttpClientName);
+        services.AddLoopbackHttpClient(OpenCode2HarnessRuntime.HttpClientName);
         services.AddHttpClient(OpenCode2HarnessRuntime.SignInCallbackHttpClientName, client => client.Timeout = TimeSpan.FromSeconds(15))
             .ConfigurePrimaryHttpMessageHandler(() => new SocketsHttpHandler { AllowAutoRedirect = false, UseProxy = false })
             .RemoveAllLoggers();
