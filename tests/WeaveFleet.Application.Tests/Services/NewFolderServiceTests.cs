@@ -199,6 +199,21 @@ public sealed class NewFolderServiceTests : IDisposable
         Directory.Exists(path).ShouldBeFalse();
     }
 
+    [Theory]
+    [InlineData("https://deploy:SECRET-PW@127.0.0.1:1/owner/repo.git", "SECRET-PW")]
+    [InlineData("https://ghp_SECRETTOKEN@127.0.0.1:1/owner/repo.git", "ghp_SECRETTOKEN")]
+    [InlineData("https://127.0.0.1:1/owner/repo.git?token=SECRET-QUERY", "SECRET-QUERY")]
+    public async Task Clone_ThatFails_DoesNotRepeatASecretInTheAddress(string url, string secret)
+    {
+        var result = await Service().CloneFromUrlAsync(
+            url, Path.Combine(_root, "never"), new Dictionary<string, string> { ["GIT_TERMINAL_PROMPT"] = "0" }, null, CancellationToken.None);
+
+        result.IsFailure.ShouldBeTrue();
+        result.Error.Description.ShouldStartWith("Couldn't clone");
+        result.Error.Description.ShouldNotContain(secret);
+        result.Error.Description.ShouldContain("127.0.0.1:1/owner/repo.git: ");
+    }
+
     [Fact]
     public async Task Clone_OfARepositoryAddress_IsRefusedForAnExistingFolder()
     {
