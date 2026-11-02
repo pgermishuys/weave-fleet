@@ -29,8 +29,14 @@ export function baseKey(base: SessionDiffBase | null | undefined): string {
   return base.kind === "branch" ? `branch:${base.commit ?? ""}` : "session";
 }
 
+export interface UseDiffsOptions {
+  /** False while nothing shows the diffs (the right panel is closed): file changes only mark them stale, and they load once this turns true. */
+  isWanted?: () => boolean;
+}
+
 export function useDiffs(
   sessionId: MaybeRefOrGetter<string | null | undefined>,
+  options: UseDiffsOptions = {},
 ): UseDiffsResult {
   const machine = useMachineTarget();
   // Replaced whole, never mutated: a session can change hundreds of files.
@@ -115,6 +121,11 @@ export function useDiffs(
   }
 
   function debouncedFetchDiffs(): void {
+    if (options.isWanted && !options.isWanted()) {
+      markStale();
+      return;
+    }
+
     if (debounceTimeoutId) {
       clearTimeout(debounceTimeoutId);
     }
@@ -138,6 +149,15 @@ export function useDiffs(
     },
     { immediate: true },
   );
+
+  if (options.isWanted) {
+    const isWanted = options.isWanted;
+    watch(isWanted, (wanted) => {
+      if (wanted && isStale.value && currentSessionId.value && !isLoading.value) {
+        void fetchDiffs();
+      }
+    });
+  }
 
   watch(
     currentSessionId,

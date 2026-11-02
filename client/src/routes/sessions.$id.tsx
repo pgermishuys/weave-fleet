@@ -22,6 +22,7 @@ import TerminalToggleButton from "@/components/terminal/TerminalToggleButton.vue
 import RightPanelSheetButton from "@/components/layout/RightPanelSheetButton.vue";
 import { closeExportMarkdown, openExportMarkdown, useExportMarkdown } from "@/composables/use-export-markdown";
 import { useDiffs } from "@/composables/use-diffs";
+import { useSidebarStore } from "@/stores/sidebar";
 import { useSessionDetail } from "@/composables/use-session-detail";
 import { useSessionDetailActions } from "@/composables/use-session-detail-actions";
 import { useSentPrompts } from "@/composables/use-send-prompt";
@@ -139,8 +140,13 @@ const SessionDetailPage = defineComponent({
         ?? undefined;
     });
 
+    // Closed panel, closed tray: nothing shows the diffs, so file changes don't fetch them; they load when one opens.
+    const sidebarStore = useSidebarStore();
     const diffState = useDiffs(
       () => params.value.id,
+      {
+        isWanted: () => !sidebarStore.rightPanelCollapsed || sidebarStore.rightPanelSheetOpen || isDiffsTrayOpen.value,
+      },
     );
     function openDiffsTray(): void {
       if (viewMode.value !== "chat") {
