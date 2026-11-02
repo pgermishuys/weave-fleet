@@ -1062,6 +1062,14 @@ public sealed partial class CdpAgentBrowser : IAgentBrowser, IAsyncDisposable
         + "if(this.isContentEditable){const r=document.createRange();r.selectNodeContents(this);const s=getSelection();s.removeAllRanges();s.addRange(r);return 'editable'}"
         + "if('value' in this&&this.tagName!=='SELECT'&&this.type!=='checkbox'&&this.type!=='radio'){try{this.select()}catch(e){}return 'input'}return 'other'}";
 
+    private const string ReadText = "function(){return this.isContentEditable?this.textContent:this.value}";
+
+    private static async Task<string?> ReadTextAsync(Page page, ElementRef element, CancellationToken ct)
+    {
+        var value = await page.CallAsync(element, ReadText, null, ct);
+        return value.ValueKind == JsonValueKind.String ? value.GetString() : null;
+    }
+
     private static async Task FillAsync(Page page, string reference, string text, StepNote note, CancellationToken ct)
     {
         var element = page.Tab.Element(reference);
@@ -1071,6 +1079,7 @@ public sealed partial class CdpAgentBrowser : IAgentBrowser, IAsyncDisposable
         if (kind.ValueKind != JsonValueKind.String || kind.GetString() == "other")
             throw new ElementException($"{element.Label} doesn't take text. Use a text box's ref; use select for dropdowns and check for checkboxes.");
 
+        var before = await ReadTextAsync(page, element, ct);
         if (text.Length == 0)
         {
             await page.KeyAsync("keyDown", "Backspace", "Backspace", 8, null, 0, ct);
@@ -1080,6 +1089,11 @@ public sealed partial class CdpAgentBrowser : IAgentBrowser, IAsyncDisposable
         {
             (await page.SendAsync("Input.insertText", w => w.WriteString("text", text), ct)).Dispose();
         }
+
+        // A read-only or disabled field, or a page that puts its own value back, takes the keys and changes nothing.
+        var after = await ReadTextAsync(page, element, ct);
+        if (after is not null && before is not null && after == before && after != text)
+            throw new ElementException($"{element.Label} didn't take the text: it still reads \"{after}\". It may be read-only or disabled, or the page put its own value back.");
     }
 
     private static async Task FillFormAsync(Page page, AgentBrowserAction action, StepNote note, CancellationToken ct)
@@ -1107,11 +1121,14 @@ public sealed partial class CdpAgentBrowser : IAgentBrowser, IAsyncDisposable
 
     private const string SelectValues =
         "function(values){if(this.tagName!=='SELECT')return {error:'not a dropdown'};"
+        + "if(this.disabled)return {error:'it is disabled'};"
         + "const options=[...this.options];const missing=values.filter(v=>!options.some(o=>o.value===v));"
         + "if(missing.length)return {error:'no option '+JSON.stringify(missing)+'; options are '+JSON.stringify(options.map(o=>o.value))};"
         + "if(!this.multiple&&values.length>1)return {error:'it takes one value'};"
         + "for(const o of options)o.selected=values.includes(o.value);"
-        + "this.dispatchEvent(new Event('input',{bubbles:true}));this.dispatchEvent(new Event('change',{bubbles:true}));return {ok:true}}";
+        + "this.dispatchEvent(new Event('input',{bubbles:true}));this.dispatchEvent(new Event('change',{bubbles:true}));"
+        + "const now=[...this.selectedOptions].map(o=>o.value);"
+        + "if(now.length!==values.length||!values.every(v=>now.includes(v)))return {error:'the page changed it back to '+JSON.stringify(now)};return {ok:true}}";
 
     private static async Task SelectAsync(Page page, string reference, IReadOnlyList<string> values, StepNote note, CancellationToken ct)
     {
