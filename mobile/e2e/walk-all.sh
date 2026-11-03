@@ -109,5 +109,13 @@ for i in 1 2; do
     ready
   done
 done
+# Starting a session from the phone, in both schemes. Its own pass, after the walks: the sessions it starts would
+# otherwise be in the list the second walk reads.
+for scheme in light dark; do
+  appearance "$scheme"
+  sleep 3
+  ready
+  maestro_run --test-output-dir "$OUT/$PLATFORM-$scheme-start" flows/start-session.yaml || { echo "starting a session ($scheme) failed"; FAILED=1; }
+done
 find "$OUT" -name "*.png" | sort
 exit $FAILED

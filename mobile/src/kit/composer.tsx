@@ -1,15 +1,21 @@
+import type { ReactNode } from "react";
 import { ActivityIndicator, Pressable, TextInput, View } from "react-native";
 import { useTheme } from "~/theme";
 import { StatusGlyph } from "./glyph";
 import { Icon } from "./icons";
 import { Text } from "./text";
 
-export function Composer({ value, onChangeText, onSend, placeholder = "Message", sending, working, machine, model, disabled }: {
+export function Composer({ value, onChangeText, onSend, placeholder = "Message", sending, working, machine, model, disabled, chip, sendDisabled, autoFocus }: {
   value: string; onChangeText: (text: string) => void; onSend: () => void; placeholder?: string;
   sending?: boolean; working?: boolean; machine?: string; model?: string; disabled?: boolean;
+  /** Replaces the machine and model text in the toolbar: a tappable chip. */
+  chip?: ReactNode;
+  /** Send is off, but the box still takes text. */
+  sendDisabled?: boolean;
+  autoFocus?: boolean;
 }) {
   const { color, font, radius } = useTheme();
-  const canSend = !disabled && !sending && value.trim().length > 0;
+  const canSend = !disabled && !sendDisabled && !sending && value.trim().length > 0;
   return (
     <View style={{
       borderWidth: 1, borderColor: color.tint9, borderRadius: radius.panel, backgroundColor: color.card,
@@ -23,7 +29,7 @@ export function Composer({ value, onChangeText, onSend, placeholder = "Message",
       ) : null}
       <TextInput
         testID="composer" value={value} onChangeText={onChangeText} placeholder={placeholder} placeholderTextColor={color.muted}
-        editable={!disabled} multiline
+        editable={!disabled} multiline autoFocus={autoFocus}
         style={{ color: color.text, fontFamily: font.regular, fontSize: 16, minHeight: 40, maxHeight: 140, paddingTop: 8, paddingBottom: 6, textAlignVertical: "top" }}
       />
       <View style={{ flexDirection: "row", alignItems: "center", gap: 6 }}>
@@ -31,6 +37,7 @@ export function Composer({ value, onChangeText, onSend, placeholder = "Message",
           <Icon name="paperclip" size={18} color={color.muted} />
         </Pressable>
         <View style={{ flex: 1, flexDirection: "row", alignItems: "center", gap: 12 }}>
+          {chip}
           {machine ? <Text size={12.5} tone="muted" numberOfLines={1} style={{ flexShrink: 1 }}>{machine}</Text> : null}
           {model ? <Text size={12.5} tone="muted" numberOfLines={1} style={{ flexShrink: 1 }}>{model}</Text> : null}
         </View>

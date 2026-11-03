@@ -5,7 +5,7 @@ import { Pressable, RefreshControl, SectionList, View } from "react-native";
 import { manager, useFleet } from "~/fleet/hooks";
 import { newPagesOf, pagesSeen, usePagesSeen } from "~/fleet/pages-seen";
 import { rowAge, rowDetail } from "~/fleet/session-list";
-import { EmptyState, FleetMark, SectionHeader, SessionRow, Text, glyphStatusOf } from "~/kit";
+import { Button, EmptyState, FleetMark, SectionHeader, SessionRow, Text, glyphStatusOf } from "~/kit";
 import { Heading, PanelPage } from "~/ui/page";
 import { useTheme } from "~/theme";
 import type { ConnectionState } from "~/fleet/hub";
@@ -28,10 +28,11 @@ export default function Sessions() {
   return (
     <PanelPage
       bar={
-        <View style={{ paddingHorizontal: 18, paddingVertical: 10 }}>
+        <View style={{ paddingHorizontal: 18, paddingVertical: 6, flexDirection: "row", alignItems: "center", justifyContent: "space-between" }}>
           <Pressable onLongPress={() => router.push("/kit")} delayLongPress={600} accessibilityLabel="Fleet" testID="fleet-mark" style={{ alignSelf: "flex-start" }}>
             <FleetMark height={22} />
           </Pressable>
+          <Button label="New session" icon="plus" variant="primary" size="sm" testID="new-session" onPress={() => router.push("/new")} disabled={machines.length === 0} />
         </View>
       }
     >

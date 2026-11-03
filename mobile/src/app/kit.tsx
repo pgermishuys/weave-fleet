@@ -3,9 +3,9 @@ import { useState, type ReactNode } from "react";
 import { Pressable, ScrollView, View } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import {
-  Button, Card, Chip, Composer, EmptyState, FleetMark, glyphStatusOf, Markdown, PageCard, PageChoiceBar, PagePickCard,
-  PageReplyBar, PageRow, PermissionCard, Pill, QuestionCard, SectionHeader, Segments, SessionRow, Sheet, StatusGlyph, Text,
-  ToolBox, ToolRow, UserBubble, type GlyphStatus,
+  Button, Card, Chip, Composer, EmptyState, FleetMark, glyphStatusOf, Markdown, ModelChip, Notice, OptionRow, PageCard, PageChoiceBar, PagePickCard,
+  PageReplyBar, PageRow, PermissionCard, Pill, QuestionCard, SearchField, SectionHeader, Segments, SessionRow, Sheet, StatusGlyph, Text,
+  ToolBox, ToolRow, UserBubble, WhereLine, type GlyphStatus,
 } from "~/kit";
 import { ThemeProvider, useTheme, type Scheme } from "~/theme";
 
@@ -189,6 +189,19 @@ function Gallery({ override, setOverride }: { override: Scheme | null; setOverri
 
         <Section label="Empty state">
           <EmptyState title="No workflows yet" body="Workflows you run on a machine show up here." action={{ label: "Pair a machine", onPress: noop }} />
+        </Section>
+
+        <Section label="New session">
+          <Notice tone="warning" lead="travel-laptop is offline." rest="Pick another machine, or wait for it to come back." />
+          <Notice tone="error" lead="No harness is ready on studio-pc." rest="Set one up in Fleet on that computer." />
+          <Composer value="" onChangeText={noop} onSend={noop} placeholder="Describe the task" sendDisabled chip={<ModelChip label="OpenCode 2 · Default" onPress={noop} />} />
+          <Composer value="Make the upload retry on a timeout" onChangeText={noop} onSend={noop} placeholder="Describe the task" chip={<ModelChip label="No harness" tone="warning" onPress={noop} />} />
+          <WhereLine onPress={noop} parts={[{ key: "m", label: "studio-pc" }, { key: "f", label: "demo-app" }, { key: "w", label: "New worktree" }]} />
+          <WhereLine onPress={noop} parts={[{ key: "m", label: "travel-laptop", tone: "warning" }, { key: "f", label: "Pick a folder", tone: "warning" }]} />
+          <SearchField value="" onChangeText={noop} placeholder="Search folders on studio-pc" />
+          <OptionRow icon="folder" mono title="demo-app" detail="~/code/demo-app" selected onPress={noop} />
+          <OptionRow icon="folder" mono title="billing-service" detail="~/code/billing-service" onPress={noop} />
+          <OptionRow icon="branch" title="New worktree" detail="From the default branch. Your checkout stays as it is." onPress={noop} />
         </Section>
 
         <Section label="Sheet">

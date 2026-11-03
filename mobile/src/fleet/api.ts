@@ -1,5 +1,6 @@
 // Fleet's REST API on one machine, with that machine's device key. No React Native in here.
-import type { SessionListItem } from "@fleet/api/client";
+import type { CreateSessionResponse, HarnessCatalog, HarnessInfo, RepositoryScanResponse, RepositoryWorktreesResponse, SessionListItem } from "@fleet/api/client";
+import type { NewSessionRequest } from "@fleet/lib/new-session-request";
 import type { PermissionAsk } from "@fleet/composables/use-session-permissions";
 import type { ServerCanvasSnapshot } from "@fleet/lib/server-canvas";
 import type { Machine } from "~/fleet/machines-core";
@@ -47,6 +48,15 @@ export function machineApi(machine: Pick<Machine, "baseUrl" | "token">, onSigned
         text, agent: null, model: null, attachments: null, userMessageId: null, effort: null,
         correlationId: `phone-${Date.now().toString(36)}`,
       }),
+    /** What the New session screen reads: the folders Fleet found, a repository's worktrees, the harnesses and what one offers in a folder. */
+    repositories: () => request<RepositoryScanResponse>("/api/repositories"),
+    worktrees: (path: string) => request<RepositoryWorktreesResponse>(`/api/repositories/worktrees?path=${id(path)}`),
+    harnesses: () => request<HarnessInfo[]>("/api/harnesses"),
+    catalog: (harnessType: string, directory?: string) =>
+      request<HarnessCatalog>(`/api/harnesses/${id(harnessType)}/catalog${directory ? `?directory=${id(directory)}` : ""}`),
+    /** Starts a session from the desktop's request builder's answer; the first message goes along as `initialPrompt`. */
+    createSession: ({ directory, options }: NewSessionRequest) =>
+      post<CreateSessionResponse>("/api/sessions", { directory: directory ?? null, ...options }),
     permissions: (sessionId: string) => request<PermissionAsk[]>(`/api/sessions/${id(sessionId)}/permissions`),
     replyPermission: (sessionId: string, requestId: string, reply: "once" | "always" | "reject") =>
       post(`/api/sessions/${id(sessionId)}/permissions/${id(requestId)}`, { reply }),
