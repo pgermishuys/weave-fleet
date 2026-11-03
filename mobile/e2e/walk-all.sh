@@ -109,5 +109,18 @@ for i in 1 2; do
     ready
   done
 done
+# Starting a session from the phone, in both schemes. Its own pass, after the walks: the sessions it starts would
+# otherwise be in the list the second walk reads.
+for scheme in light dark; do
+  appearance "$scheme"
+  sleep 3
+  ready
+  # Maestro now and then exits mid-command with no error of its own (as in the walks): try again, up to three times.
+  # A try that got as far as Send leaves its session in the list; the next one adds another, which is harmless.
+  for try in 1 2 3; do
+    maestro_run --test-output-dir "$OUT/$PLATFORM-$scheme-start-try$try" flows/start-session.yaml && break
+    if [ "$try" = 3 ]; then echo "starting a session ($scheme) failed"; FAILED=1; else echo "starting a session ($scheme) failed; once more"; sleep 5; ready; fi
+  done
+done
 find "$OUT" -name "*.png" | sort
 exit $FAILED

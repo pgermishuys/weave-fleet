@@ -8,3 +8,4 @@ export { Composer, UserBubble } from "./composer";
 export { Sheet } from "./sheet";
 export { Markdown } from "./markdown";
 export { PageCard, PageChoiceBar, PagePickCard, PageReplyBar, PageRow, Segments } from "./pages";
+export { ModelChip, Notice, OptionRow, SearchField, WhereLine, type WherePart } from "./new-session";

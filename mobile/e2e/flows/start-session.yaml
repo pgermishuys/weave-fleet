@@ -1,0 +1,66 @@
+# Starts a session from the phone against the scratch Fleet: New session, the sheets, a message, Send, and the new
+# session working in a new worktree of demo-app; Back lands on the list with it. Run once per colour scheme, after the
+# walk (the app is already paired).
+# maestro test --test-output-dir shots flows/start-session.yaml
+appId: io.tryweave.fleet
+---
+- launchApp
+- extendedWaitUntil:
+    visible:
+      id: "new-session"
+    timeout: 60000
+- takeScreenshot: 20-sessions-new-button
+- tapOn:
+    id: "new-session"
+- extendedWaitUntil:
+    visible: "What should we work on?"
+    timeout: 30000
+# The defaults are in: the folder of the newest session, a new worktree, the machine's default harness.
+- extendedWaitUntil:
+    visible:
+      id: "where-worktree"
+    timeout: 30000
+- extendedWaitUntil:
+    visible: ".*Default.*"
+    timeout: 30000
+- takeScreenshot: 21-new-session
+
+# Each part of the line opens a sheet.
+- tapOn:
+    id: "model-chip"
+- extendedWaitUntil:
+    visible:
+      id: "model-default"
+    timeout: 30000
+- takeScreenshot: 22-harness-and-model
+- tapOn:
+    id: "sheet-close"
+- tapOn:
+    id: "where-folder"
+- extendedWaitUntil:
+    visible:
+      id: "folder-none"
+    timeout: 30000
+- takeScreenshot: 23-folder
+- tapOn:
+    id: "sheet-close"
+
+- tapOn:
+    id: "composer"
+- inputText: "make the upload retry on a timeout"
+- takeScreenshot: 24-typed
+- tapOn:
+    id: "send"
+# Replaced by the new session: its first message, and the agent's reply, which arrives as it works.
+- extendedWaitUntil:
+    visible: "Here's the plan.*"
+    timeout: 90000
+- takeScreenshot: 25-started
+
+# Back goes to the list, not to an empty New session screen, and the session is on it.
+- tapOn:
+    id: "session-back"
+- extendedWaitUntil:
+    visible: ".*make the upload retry on a timeout.*"
+    timeout: 30000
+- takeScreenshot: 26-list-with-new-session
