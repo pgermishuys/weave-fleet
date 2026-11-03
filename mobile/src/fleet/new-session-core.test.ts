@@ -1,7 +1,7 @@
 import { describe, expect, test } from "bun:test";
 import type { HarnessInfo, SessionListItem } from "@fleet/api/client";
 import type { KeyValueStorage } from "./machines-core";
-import { NewSessionRecents, blockerOf, chooseFolder, chooseHarness, chooseMachine, folderFor, readyHarnesses, recentFolders } from "./new-session-core";
+import { NewSessionRecents, blockerOf, canStart, chooseFolder, chooseHarness, chooseMachine, folderFor, readyHarnesses, recentFolders } from "./new-session-core";
 
 const memory = () => {
   const data = new Map<string, string>();
@@ -61,7 +61,7 @@ describe("folders", () => {
 });
 
 describe("blockerOf", () => {
-  const ok = { machineName: "studio-pc", state: "connected", otherMachines: true, harnessesLoaded: true, harnessReady: true, hasFolder: true };
+  const ok = { machineName: "studio-pc", state: "connected", otherMachines: true, harnessesLoaded: true, harnessReady: true, hasFolder: true, folderSession: true, repositories: "loaded" as const };
   test("nothing blocks a connected machine with a ready harness", () => expect(blockerOf(ok)).toBeNull());
   test("an offline machine says so and what to do", () => {
     const blocker = blockerOf({ ...ok, machineName: "travel-laptop", state: "offline" });
@@ -73,6 +73,33 @@ describe("blockerOf", () => {
   test("no ready harness says to set one up on the computer", () => {
     expect(blockerOf({ ...ok, harnessReady: false })?.rest).toBe("Set one up in Fleet on that computer.");
     expect(blockerOf({ ...ok, harnessReady: false, harnessesLoaded: false })).toBeNull();
+  });
+});
+
+describe("a folder session waits for the repositories", () => {
+  const ok = { machineName: "studio-pc", state: "connected", otherMachines: true, harnessesLoaded: true, harnessReady: true, hasFolder: true, folderSession: true };
+  const go = { blocked: false, hasHarness: true, hasFolder: true, folderSession: true };
+  test("pending: can't start, and no notice yet", () => {
+    expect(canStart({ ...go, repositories: "pending" })).toBe(false);
+    expect(blockerOf({ ...ok, repositories: "pending" })).toBeNull();
+  });
+  test("failed: can't start with a folder, and says so; a quick chat still can", () => {
+    expect(canStart({ ...go, repositories: "failed" })).toBe(false);
+    expect(blockerOf({ ...ok, repositories: "failed" })?.lead).toBe("Couldn't read the folders on studio-pc.");
+    expect(blockerOf({ ...ok, folderSession: false, repositories: "failed" })).toBeNull();
+    expect(canStart({ ...go, folderSession: false, repositories: "failed" })).toBe(true);
+    expect(canStart({ ...go, folderSession: false, repositories: "pending" })).toBe(true);
+  });
+  test("loaded: can start, as a repository with a new worktree when the folder is listed, else as a plain folder", () => {
+    expect(canStart({ ...go, repositories: "loaded" })).toBe(true);
+    const repositories = [{ name: "demo-app", path: "/code/demo-app", parentRoot: "/code" }];
+    expect(folderFor("/code/demo-app", repositories).kind).toBe("repository");
+    expect(folderFor("/tmp/notes", repositories).kind).toBe("directory");
+  });
+  test("blocked or without a harness or folder: can't start", () => {
+    expect(canStart({ ...go, blocked: true, repositories: "loaded" })).toBe(false);
+    expect(canStart({ ...go, hasHarness: false, repositories: "loaded" })).toBe(false);
+    expect(canStart({ ...go, hasFolder: false, repositories: "loaded" })).toBe(false);
   });
 });
 

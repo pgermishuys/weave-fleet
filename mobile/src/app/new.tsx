@@ -8,7 +8,7 @@ import type { HarnessInfo, ScannedRepository } from "@fleet/api/client";
 import { buildCreateSessionRequest, type NewSessionWorkspace } from "@fleet/lib/new-session-request";
 import { manager, useFleet } from "~/fleet/hooks";
 import { newSessionRecents } from "~/fleet/new-session";
-import { blockerOf, chooseFolder, chooseHarness, chooseMachine, folderFor, folderLabel, readyHarnesses, recentFolders } from "~/fleet/new-session-core";
+import { blockerOf, canStart as canStartOf, chooseFolder, chooseHarness, chooseMachine, folderFor, folderLabel, readyHarnesses, recentFolders, type RepositoriesState } from "~/fleet/new-session-core";
 import { Composer, Icon, ModelChip, Notice, Panel, Text, WhereLine, type WherePart } from "~/kit";
 import { FolderSheet, MachineSheet, ModelSheet, WorktreeSheet, type ModelPick } from "~/ui/new-session-sheets";
 import { useTheme } from "~/theme";
@@ -32,6 +32,7 @@ export default function NewSession() {
   const [sending, setSending] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [repositories, setRepositories] = useState<ScannedRepository[]>([]);
+  const [reposState, setReposState] = useState<RepositoriesState>("pending");
   const [harnesses, setHarnesses] = useState<HarnessInfo[] | null>(null);
 
   useEffect(() => { void newSessionRecents.load(machines.map((m) => m.machineId)).finally(() => setRecentsReady(true)); }, [machines.length]); // eslint-disable-line react-hooks/exhaustive-deps
@@ -43,24 +44,31 @@ export default function NewSession() {
   const connected = machine?.state === "connected";
 
   // What the machine has: its repositories and harnesses, read again when the machine changes or comes back.
+  const readRepositories = () => {
+    if (!api) return;
+    setReposState("pending");
+    void api.repositories().then((answer) => { setRepositories(answer.repositories); setReposState("loaded"); }).catch(() => setReposState("failed"));
+  };
   useEffect(() => {
     setRepositories([]);
+    setReposState("pending");
     setHarnesses(null);
     if (!api || !connected) return;
-    void api.repositories().then((answer) => setRepositories(answer.repositories)).catch(() => {});
+    readRepositories();
     void api.harnesses().then(setHarnesses).catch(() => {});
-  }, [api, connected]);
+  }, [api, connected]); // eslint-disable-line react-hooks/exhaustive-deps
 
   const sessions = useMemo(() => sections.flatMap((section) => section.data).filter((entry) => entry.machineId === machineId).map((entry) => entry.item), [sections, machineId]);
   const phoneFolders = machineId ? newSessionRecents.folders(machineId) : [];
   const folderPath = folderPick !== undefined ? folderPick : machineId ? chooseFolder(phoneFolders, sessions) : undefined;
   const folder = folderPath ? folderFor(folderPath, repositories) : folderPath === null ? ({ kind: "none" } as const) : null;
+  const folderSession = folder !== null && folder.kind !== "none";
   const isRepository = folder?.kind === "repository";
   const ready = harnesses ? readyHarnesses(harnesses) : [];
   const harness = harnesses ? (ready.find((h) => h.type === harnessPick) ?? chooseHarness(harnesses)) : undefined;
 
-  const blocker = machine ? blockerOf({ machineName: machine.machineName, state: machine.state, otherMachines: machines.length > 1, harnessesLoaded: harnesses !== null, harnessReady: !!harness, hasFolder: folder !== null }) : null;
-  const canStart = !!machine && !blocker && !!harness && folder !== null;
+  const blocker = machine ? blockerOf({ machineName: machine.machineName, state: machine.state, otherMachines: machines.length > 1, harnessesLoaded: harnesses !== null, harnessReady: !!harness, hasFolder: folder !== null, folderSession, repositories: reposState }) : null;
+  const canStart = !!machine && canStartOf({ blocked: !!blocker, hasHarness: !!harness, hasFolder: folder !== null, folderSession, repositories: reposState });
 
   const pickMachine = (id: string) => { setMachinePick(id); setFolderPick(undefined); setHarnessPick(undefined); setModel(null); setWorkspace({ kind: "new" }); setSheet(null); };
   const pickFolder = (next: ReturnType<typeof folderFor> | { kind: "none" }) => { setFolderPick(next.kind === "none" ? null : next.path); setWorkspace({ kind: "new" }); setModel(null); setSheet(null); };
@@ -116,7 +124,7 @@ export default function NewSession() {
         </View>
       </Panel>
       <MachineSheet open={sheet === "machine"} onClose={() => setSheet(null)} machines={machines} current={machineId ?? ""} onPick={pickMachine} />
-      <FolderSheet open={sheet === "folder"} onClose={() => setSheet(null)} machineName={machine?.machineName ?? ""} recent={recentFolders(phoneFolders, sessions)} repositories={repositories} current={folder} onPick={pickFolder} />
+      <FolderSheet open={sheet === "folder"} onClose={() => setSheet(null)} onOpen={() => { if (reposState === "failed") readRepositories(); }} machineName={machine?.machineName ?? ""} recent={recentFolders(phoneFolders, sessions)} repositories={repositories} current={folder} onPick={pickFolder} />
       <WorktreeSheet open={sheet === "worktree"} onClose={() => setSheet(null)} api={api} folder={isRepository && folderPath ? { path: folderPath, name: folderLabel(folder, repositories) } : null} workspace={workspace} onPick={(next) => { setWorkspace(next); setSheet(null); }} />
       <ModelSheet
         open={sheet === "model"} onClose={() => setSheet(null)} api={api} harnesses={ready} harness={harness} directory={folderPath || undefined} model={model}

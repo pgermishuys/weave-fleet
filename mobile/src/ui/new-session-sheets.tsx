@@ -26,12 +26,12 @@ export function MachineSheet({ open, onClose, machines, current, onPick }: {
 }
 
 /** Recent folders first (the phone's and the machine's newest sessions'), then every repository Fleet found there, then none. */
-export function FolderSheet({ open, onClose, machineName, recent, repositories, current, onPick }: {
-  open: boolean; onClose: () => void; machineName: string; recent: string[]; repositories: readonly ScannedRepository[];
+export function FolderSheet({ open, onClose, onOpen, machineName, recent, repositories, current, onPick }: {
+  open: boolean; onClose: () => void; onOpen: () => void; machineName: string; recent: string[]; repositories: readonly ScannedRepository[];
   current: NewSessionFolder | null | undefined; onPick: (folder: NewSessionFolder) => void;
 }) {
   const [query, setQuery] = useState("");
-  useEffect(() => { if (!open) setQuery(""); }, [open]);
+  useEffect(() => { if (!open) setQuery(""); else onOpen(); }, [open]); // eslint-disable-line react-hooks/exhaustive-deps
   const currentPath = current && current.kind !== "none" ? current.path : undefined;
   const row = (path: string, key: string) => (
     <OptionRow key={`${key}:${path}`} testID={`folder-${nameOf(path)}`} icon="folder" mono title={folderLabel(folderFor(path, repositories), repositories)} detail={path} selected={path === currentPath} onPress={() => onPick(folderFor(path, repositories))} />

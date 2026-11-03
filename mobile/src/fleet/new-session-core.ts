@@ -64,6 +64,9 @@ export function folderFor(path: string, repositories: readonly ScannedRepository
 export const folderLabel = (folder: NewSessionFolder | null, repositories: readonly ScannedRepository[]) =>
   folder ? folderName(folder, repositories) : "Pick a folder";
 
+/** Whether the machine's repositories have been read: a folder is only known to be a repository (and to get a worktree) once they have. */
+export type RepositoriesState = "pending" | "loaded" | "failed";
+
 export interface Blocker {
   /** `error` when starting can't work without a change on the computer; `warning` when the user can change it here. */
   tone: "warning" | "error";
@@ -77,6 +80,8 @@ export interface Blocker {
 /** Why Send is off before anything is typed, most blocking first; none when it can start. */
 export function blockerOf(input: {
   machineName: string; state: string | undefined; otherMachines: boolean; harnessesLoaded: boolean; harnessReady: boolean; hasFolder: boolean;
+  /** A folder session (not a quick chat) needs the repositories read, or it would start in the checkout instead of a new worktree. */
+  folderSession: boolean; repositories: RepositoriesState;
 }): Blocker | null {
   if (input.state !== "connected") {
     const reason = input.state === "signed-out" ? "has removed this phone" : "is offline";
@@ -88,7 +93,15 @@ export function blockerOf(input: {
   if (input.harnessesLoaded && !input.harnessReady) {
     return { tone: "error", lead: `No harness is ready on ${input.machineName}.`, rest: "Set one up in Fleet on that computer.", part: "harness" };
   }
+  if (input.folderSession && input.repositories === "failed") {
+    return { tone: "warning", lead: `Couldn't read the folders on ${input.machineName}.`, rest: "Open Folder to try again, or pick No folder for a quick chat.", part: "folder" };
+  }
   return null;
+}
+
+/** Send is on: nothing blocks, a harness and a folder (or none) are chosen, and a folder session knows whether it's a repository. */
+export function canStart(input: { blocked: boolean; hasHarness: boolean; hasFolder: boolean; folderSession: boolean; repositories: RepositoriesState }): boolean {
+  return !input.blocked && input.hasHarness && input.hasFolder && (!input.folderSession || input.repositories === "loaded");
 }
 
 interface MachineRecents {
