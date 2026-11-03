@@ -122,6 +122,30 @@ public sealed class AcpHarnessSessionTests
     }
 
     [Fact]
+    public async Task a_permission_ask_the_agent_abandons_when_it_ends_the_turn_is_settled()
+    {
+        await using var agent = new FakeAcpAgent();
+        agent.Handle = async (method, args) =>
+        {
+            // The agent asks, then ends the turn without waiting for the answer.
+            if (method == "session/prompt")
+            {
+                _ = agent.AskAsync("session/request_permission", Ask());
+                await Task.Delay(300);
+            }
+
+            return new JsonObject { ["stopReason"] = "cancelled" };
+        };
+        await using var session = NewSession(agent);
+        await session.ApplyPermissionsAsync(new PermissionPolicy(PermissionLevels.Ask), CancellationToken.None);
+
+        await session.SendPromptAsync("write it", null, CancellationToken.None);
+        var seen = await ReadAsync(session, s => Idle(s) && s.Any(e => e.Type == EventTypes.PermissionAsked));
+
+        seen.ShouldContain(e => e.Type == EventTypes.PermissionReplied);
+    }
+
+    [Fact]
     public async Task a_permission_ask_waits_for_the_user_and_the_answer_picks_the_matching_option()
     {
         await using var agent = new FakeAcpAgent();

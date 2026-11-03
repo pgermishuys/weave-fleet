@@ -358,6 +358,7 @@ internal sealed partial class AcpHarnessSession : IHarnessSession
                 blocks.Add((JsonNode)new JsonObject { ["type"] = "image", ["data"] = image.Data, ["mimeType"] = image.Mime, ["uri"] = image.Filename });
             var result = await _agent.Client.RequestAsync("session/prompt", request, CancellationToken.None).ConfigureAwait(false);
             Status = HarnessSessionStatus.Idle;
+            SettleAbandonedAsks();
             if (result.ValueKind == JsonValueKind.Object && result.TryGetProperty("usage", out var usage) && usage.ValueKind == JsonValueKind.Object)
             {
                 Emit(_mapper.Usage(usage));
@@ -371,6 +372,7 @@ internal sealed partial class AcpHarnessSession : IHarnessSession
         {
             var alive = !_agent.Client.IsClosed;
             Status = alive ? HarnessSessionStatus.Idle : HarnessSessionStatus.Error;
+            SettleAbandonedAsks();
             var why = alive || _agent.Stderr.Length == 0 ? ex.Message : $"{ex.Message} {_agent.Stderr}";
             Emit(_mapper.Fail(why));
             EndSyncChildren();
@@ -516,6 +518,13 @@ internal sealed partial class AcpHarnessSession : IHarnessSession
         }
 
         return new JsonObject { ["outcome"] = new JsonObject { ["outcome"] = "cancelled" } };
+    }
+
+    /// <summary>A turn that ended has no use for an ask the agent never waited out: the card and Needs you come down.</summary>
+    private void SettleAbandonedAsks()
+    {
+        foreach (var id in _asks.Keys)
+            Settle(id, PermissionReplies.Gone, null);
     }
 
     private void Settle(string id, string reply, string? _)
