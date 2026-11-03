@@ -124,3 +124,30 @@ describe("parseUnifiedDiff (real git patches)", () => {
     expect(lines.map((line) => line.content)).toEqual(["  indented", "-- item", "- item"]);
   });
 });
+
+describe("parseUnifiedDiff paths", () => {
+  it.each([
+    ["default", "a/src/f.ts", "b/src/f.ts"],
+    ["diff.mnemonicPrefix (commit to worktree)", "c/src/f.ts", "w/src/f.ts"],
+    ["diff.mnemonicPrefix (index to worktree)", "i/src/f.ts", "w/src/f.ts"],
+    ["diff.mnemonicPrefix (commit to index)", "c/src/f.ts", "i/src/f.ts"],
+    ["diff.noprefix", "src/f.ts", "src/f.ts"],
+  ])("names_the_file_without_a_prefix_for_%s", (_name, oldPath, newPath) => {
+    const { paths } = parseUnifiedDiff(`--- ${oldPath}\n+++ ${newPath}\n@@ -1 +1 @@\n-a\n+b\n`);
+
+    expect(paths).toEqual(["src/f.ts"]);
+  });
+
+  it("names_a_new_file_under_mnemonic_prefixes", () => {
+    const { paths, created } = parseUnifiedDiff("--- /dev/null\n+++ w/h.txt\n@@ -0,0 +1 @@\n+x\n");
+
+    expect(created).toBe(true);
+    expect(paths).toEqual(["h.txt"]);
+  });
+
+  it("keeps_a_folder_named_like_a_prefix_when_git_writes_no_prefix", () => {
+    const { paths } = parseUnifiedDiff("--- w/f.ts\n+++ w/f.ts\n@@ -1 +1 @@\n-a\n+b\n");
+
+    expect(paths).toEqual(["w/f.ts"]);
+  });
+});
