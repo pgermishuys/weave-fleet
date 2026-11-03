@@ -130,6 +130,7 @@ export function parseUnifiedDiff(patch: string): { lines: DiffLine[]; created: b
   const lines: DiffLine[] = [];
   const paths: string[] = [];
   let created = false;
+  let oldHeader = "";
   let oldLine = 0;
   let newLine = 0;
   const hunks = new HunkTracker();
@@ -166,12 +167,13 @@ export function parseUnifiedDiff(patch: string): { lines: DiffLine[]; created: b
     }
 
     if (raw.startsWith("--- ")) {
-      if (raw.slice(4).trim() === "/dev/null") created = true;
+      oldHeader = raw.slice(4).trim();
+      if (oldHeader === "/dev/null") created = true;
       continue;
     }
 
     if (raw.startsWith("+++ ")) {
-      const path = stripPatchPathPrefix(raw.slice(4).trim());
+      const path = stripPatchPathPrefix(raw.slice(4).trim(), oldHeader);
       if (path && path !== "/dev/null") paths.push(path);
       continue;
     }
@@ -208,7 +210,17 @@ export function parseUnifiedDiff(patch: string): { lines: DiffLine[]; created: b
   return { lines, created, paths };
 }
 
-function stripPatchPathPrefix(path: string): string {
+/**
+ * The path a "+++" line names, without git's prefix. Git writes a/ and b/, or with diff.mnemonicPrefix c/ (commit),
+ * i/ (index), w/ (worktree) and o/ (object); diff.noprefix writes none. A prefix is only taken off when the "---"
+ * line before it carries a matching one (or the file is new), so a real folder called "w" survives noprefix.
+ */
+function stripPatchPathPrefix(path: string, oldHeader: string): string {
   const withoutTab = path.split("\t")[0] ?? path;
-  return withoutTab.replace(/^[ab]\//, "");
+  const before = (oldHeader.split("\t")[0] ?? "").trim();
+  const prefixed = /^([bwio2])\/(.+)$/.exec(withoutTab);
+  if (!prefixed) return withoutTab;
+  const [, , rest] = prefixed;
+  const old = /^[acio1]\/(.+)$/.exec(before);
+  return before === "/dev/null" || before === "" ? rest! : old && old[1] === rest ? rest! : withoutTab;
 }
