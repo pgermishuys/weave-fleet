@@ -79,6 +79,16 @@ internal static class GitCommand
         }
     }
 
+    private static readonly string[] ParsedOutputConfig =
+    [
+        "log.showSignature=false",
+        "diff.suppressBlankEmpty=false",
+        "diff.noprefix=false",
+        "diff.mnemonicPrefix=false",
+        "color.ui=false",
+        "color.diff=false",
+    ];
+
     private static ProcessStartInfo StartInfo(string workingDir, IReadOnlyList<string> args, IReadOnlyDictionary<string, string>? environment)
     {
         var start = new ProcessStartInfo
@@ -91,6 +101,15 @@ internal static class GitCommand
             UseShellExecute = false,
             CreateNoWindow = true,
         };
+        // Fleet reads git's output, so the user's config mustn't reshape it: a gpg report in front of every `git log`
+        // line (log.showSignature), a blank context line without its space (diff.suppressBlankEmpty) or a/b swapped
+        // for c/w (diff.mnemonicPrefix) and none (diff.noprefix) in a patch, escape codes in a diff.
+        foreach (var setting in ParsedOutputConfig)
+        {
+            start.ArgumentList.Add("-c");
+            start.ArgumentList.Add(setting);
+        }
+
         foreach (var arg in args)
             start.ArgumentList.Add(arg);
 

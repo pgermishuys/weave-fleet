@@ -181,6 +181,108 @@ public sealed class GitCommandTests
         return port;
     }
 
+    [Fact]
+    public async Task A_patch_is_the_same_whatever_diff_settings_the_user_has()
+    {
+        var folder = Directory.CreateTempSubdirectory("fleet-gitconfig-").FullName;
+        try
+        {
+            var userConfig = await WriteUserConfigAsync(folder, "[diff]\n\tsuppressBlankEmpty = true\n\tmnemonicPrefix = true\n[color]\n\tui = always\n");
+            var repo = Path.Combine(folder, "repo");
+            Directory.CreateDirectory(repo);
+            await Git(repo, userConfig, "init", "-q");
+            await File.WriteAllTextAsync(Path.Combine(repo, "f.txt"), "a\n\nb\n");
+            await Git(repo, userConfig, "add", "f.txt");
+            await Git(repo, userConfig, "-c", "user.name=t", "-c", "user.email=t@t", "commit", "-qm", "one");
+            await File.WriteAllTextAsync(Path.Combine(repo, "f.txt"), "a\n\nB\n");
+
+            var patch = (await GitCommand.ExecAsync(repo, ["diff", "-U3"], TimeSpan.FromSeconds(20), CancellationToken.None, userConfig)).StandardOutput;
+
+            patch.ShouldContain("--- a/f.txt");
+            patch.ShouldContain("+++ b/f.txt");
+            patch.ShouldContain("\n \n");
+            patch.ShouldNotContain("\u001b");
+        }
+        finally
+        {
+            Directory.Delete(folder, recursive: true);
+        }
+    }
+
+    [Fact]
+    public async Task A_commit_subject_is_not_preceded_by_the_signature_report_the_user_asks_git_for()
+    {
+        if (OperatingSystem.IsWindows() || !HasGpg())
+            return;
+
+        var folder = Directory.CreateTempSubdirectory("fleet-gitsig-").FullName;
+        try
+        {
+            var gnupg = Path.Combine(folder, "gnupg");
+            Directory.CreateDirectory(gnupg, UnixFileMode.UserRead | UnixFileMode.UserWrite | UnixFileMode.UserExecute);
+            var userConfig = await WriteUserConfigAsync(folder, "[log]\n\tshowSignature = true\n");
+            userConfig["GNUPGHOME"] = gnupg;
+            var made = await Run("gpg", folder, userConfig, "--batch", "--quiet", "--passphrase", "", "--quick-gen-key", "t <t@t>", "ed25519", "sign", "never");
+            if (made != 0)
+                return;
+
+            var repo = Path.Combine(folder, "repo");
+            Directory.CreateDirectory(repo);
+            await Git(repo, userConfig, "init", "-q");
+            await File.WriteAllTextAsync(Path.Combine(repo, "f.txt"), "a\n");
+            await Git(repo, userConfig, "add", "f.txt");
+            await Git(repo, userConfig, "-c", "user.name=t", "-c", "user.email=t@t", "-c", "user.signingkey=t@t", "-c", "commit.gpgsign=true", "commit", "-qm", "signed subject");
+
+            var subject = (await GitCommand.ExecAsync(repo, ["log", "-1", "--format=%s"], TimeSpan.FromSeconds(20), CancellationToken.None, userConfig)).StandardOutput;
+
+            subject.Trim().ShouldBe("signed subject");
+        }
+        finally
+        {
+            Directory.Delete(folder, recursive: true);
+        }
+    }
+
+    /// <summary>A global git config of its own, so the test stands in for a user with those settings.</summary>
+    private static async Task<Dictionary<string, string>> WriteUserConfigAsync(string folder, string content)
+    {
+        var path = Path.Combine(folder, "user.gitconfig");
+        await File.WriteAllTextAsync(path, content);
+        return new Dictionary<string, string> { ["GIT_CONFIG_GLOBAL"] = path, ["GIT_CONFIG_SYSTEM"] = Path.Combine(folder, "none") };
+    }
+
+    private static async Task Git(string folder, IReadOnlyDictionary<string, string> environment, params string[] args)
+    {
+        var result = await Run("git", folder, environment, args);
+        result.ShouldBe(0);
+    }
+
+    private static async Task<int> Run(string file, string folder, IReadOnlyDictionary<string, string> environment, params string[] args)
+    {
+        var start = new System.Diagnostics.ProcessStartInfo(file) { WorkingDirectory = folder, RedirectStandardOutput = true, RedirectStandardError = true };
+        foreach (var arg in args)
+            start.ArgumentList.Add(arg);
+        foreach (var (key, value) in environment)
+            start.Environment[key] = value;
+        using var process = System.Diagnostics.Process.Start(start)!;
+        await process.WaitForExitAsync();
+        return process.ExitCode;
+    }
+
+    private static bool HasGpg()
+    {
+        try
+        {
+            using var process = System.Diagnostics.Process.Start(new System.Diagnostics.ProcessStartInfo("gpg", "--version") { RedirectStandardOutput = true });
+            process!.WaitForExit();
+            return process.ExitCode == 0;
+        }
+        catch (System.ComponentModel.Win32Exception)
+        {
+            return false;
+        }
+    }
+
     private static string[] Alias(string shell) => ["-c", $"alias.fleet-test=!{shell}", "fleet-test"];
 
     /// <summary>A sleep length no other process on the machine is using, so the test can find its own.</summary>
