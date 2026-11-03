@@ -301,6 +301,36 @@ describe("what a round wrote", () => {
     expect(turn!.additions).toBe(3);
     expect(turn!.deletions).toBe(1);
   });
+
+  it("keeps a removed SQL comment in its file instead of starting a new one", () => {
+    // Real `git diff` output: the removed line "-- drop" reads "--- drop".
+    const patch = [
+      "diff --git a/q.sql b/q.sql",
+      "index 1111111..2222222 100644",
+      "--- a/q.sql",
+      "+++ b/q.sql",
+      "@@ -1,3 +1,2 @@",
+      " select 1;",
+      "--- drop",
+      "+-- keep",
+      " select 2;",
+      "diff --git a/b.sql b/b.sql",
+      "--- a/b.sql",
+      "+++ b/b.sql",
+      "@@ -1 +1 @@",
+      "-x",
+      "+y",
+    ].join("\n");
+
+    const [turn] = deriveTurns([
+      user("u1", "Apply the patch"),
+      assistant("a1", [tool("apply_patch", { status: "completed", input: { patchText: patch } })]),
+    ]);
+
+    expect(turn!.files.map((file) => file.path)).toEqual(["q.sql", "b.sql"]);
+    expect(turn!.files[0]!.deletions).toBe(1);
+    expect(turn!.files[0]!.additions).toBe(1);
+  });
 });
 
 describe("cost, timing and totals", () => {
