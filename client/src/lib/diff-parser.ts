@@ -87,6 +87,42 @@ function buildLcsLengths(beforeLines: string[], afterLines: string[]): number[][
 }
 
 /**
+ * Follows a unified diff's hunks by the line counts in each "@@ -a,b +c,d @@" header, so a hunk's own lines are never
+ * mistaken for something else: a removed "-- x" arrives as "--- x" and an added "++ x" as "+++ x" (both look like file
+ * headers), and with git's diff.suppressBlankEmpty a blank context line is an empty line, not " ".
+ */
+export class HunkTracker {
+  private oldLeft = 0;
+  private newLeft = 0;
+
+  /** True while the hunk still owes lines: whatever comes next is that hunk's content, not a header. */
+  get inside(): boolean {
+    return this.oldLeft > 0 || this.newLeft > 0;
+  }
+
+  /** Reads a hunk header; returns its starting line numbers, or null when the line isn't one. */
+  start(raw: string): { oldLine: number; newLine: number } | null {
+    const hunk = /^@@ -(\d+)(?:,(\d+))? \+(\d+)(?:,(\d+))? @@/.exec(raw);
+    if (!hunk) return null;
+    this.oldLeft = hunk[2] === undefined ? 1 : Number(hunk[2]);
+    this.newLeft = hunk[4] === undefined ? 1 : Number(hunk[4]);
+    return { oldLine: Number(hunk[1]), newLine: Number(hunk[3]) };
+  }
+
+  /** Counts a line of the hunk off; call it for every line while {@link inside}. */
+  consume(type: DiffLine["type"]): void {
+    if (type !== "add") this.oldLeft = Math.max(0, this.oldLeft - 1);
+    if (type !== "remove") this.newLeft = Math.max(0, this.newLeft - 1);
+  }
+
+  /** A line ending the hunk early (a new file's "diff --git"): the counts were wrong, stop trusting them. */
+  reset(): void {
+    this.oldLeft = 0;
+    this.newLeft = 0;
+  }
+}
+
+/**
  * Parse a unified diff (what most harnesses attach to an edit) into lines. Hunk headers give the
  * line numbers; "--- /dev/null" means the file is new.
  */
@@ -96,12 +132,36 @@ export function parseUnifiedDiff(patch: string): { lines: DiffLine[]; created: b
   let created = false;
   let oldLine = 0;
   let newLine = 0;
+  const hunks = new HunkTracker();
 
-  for (const raw of patch.split("\n")) {
-    const hunk = /^@@ -(\d+)(?:,\d+)? \+(\d+)(?:,\d+)? @@/.exec(raw);
+  const rows = patch.split("\n");
+  for (const [index, raw] of rows.entries()) {
+    if (raw.startsWith("diff ")) hunks.reset();
+    // The newline ending the patch isn't a blank context line, even when a harness's hunk header counts too many.
+    if (raw === "" && index === rows.length - 1) continue;
+
+    if (hunks.inside && !raw.startsWith("\\ ")) {
+      const type = raw.startsWith("+") ? "add" : raw.startsWith("-") ? "remove" : "context";
+      hunks.consume(type);
+      const content = raw.slice(1);
+      if (type === "add") {
+        lines.push({ type, content, newLineNumber: newLine });
+        newLine += 1;
+      } else if (type === "remove") {
+        lines.push({ type, content, oldLineNumber: oldLine });
+        oldLine += 1;
+      } else {
+        lines.push({ type, content, oldLineNumber: oldLine, newLineNumber: newLine });
+        oldLine += 1;
+        newLine += 1;
+      }
+      continue;
+    }
+
+    const hunk = hunks.start(raw);
     if (hunk) {
-      oldLine = Number(hunk[1]);
-      newLine = Number(hunk[2]);
+      oldLine = hunk.oldLine;
+      newLine = hunk.newLine;
       continue;
     }
 

@@ -15,7 +15,7 @@
 import { getTool, type ResolvedTool } from "@/lib/tools";
 import { toolDiffLines, toolDiffText, toolInput, toolStatus } from "@/components/session/activity-stream-tool-card";
 import type { AccumulatedMessage, AccumulatedToolPart, DelegationDto } from "@/lib/client-types";
-import { parseDiffLines, parseUnifiedDiff, type DiffLine } from "@/lib/diff-parser";
+import { HunkTracker, parseDiffLines, parseUnifiedDiff, type DiffLine } from "@/lib/diff-parser";
 
 export { parseUnifiedDiff };
 import { formatSlashCommand } from "@/lib/slash-command-utils";
@@ -218,9 +218,15 @@ function fileEditsOf(part: AccumulatedToolPart): readonly TurnFileEdit[] {
 function splitPatchByFile(patchText: string, declaredPath: string | undefined): TurnFileEdit[] {
   const sections: { header: string; body: string[] }[] = [];
   let current: { header: string; body: string[] } | null = null;
+  const hunks = new HunkTracker();
 
   for (const raw of patchText.split("\n")) {
-    const isHeader = raw.startsWith("--- ") || /^\*\*\* (Add|Update|Delete) File: /.test(raw);
+    if (raw.startsWith("diff ")) hunks.reset();
+    // Inside a hunk a removed "-- x" reads "--- x": that's a line of the hunk, not the next file.
+    const inHunk = hunks.inside && !raw.startsWith("\\ ");
+    if (inHunk) hunks.consume(raw.startsWith("+") ? "add" : raw.startsWith("-") ? "remove" : "context");
+    else hunks.start(raw);
+    const isHeader = !inHunk && (raw.startsWith("--- ") || /^\*\*\* (Add|Update|Delete) File: /.test(raw));
     if (isHeader && current && current.body.length > 0) {
       sections.push(current);
       current = null;
