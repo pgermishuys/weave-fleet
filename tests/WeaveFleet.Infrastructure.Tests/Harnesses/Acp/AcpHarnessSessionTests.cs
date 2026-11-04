@@ -220,6 +220,33 @@ public sealed class AcpHarnessSessionTests
     }
 
     [Fact]
+    public async Task always_allow_falls_back_to_allow_once_when_the_agent_offers_no_allow_always()
+    {
+        await using var agent = new FakeAcpAgent();
+        var answered = new TaskCompletionSource<JsonElement>();
+        var onlyOnce = Ask();
+        onlyOnce["options"] = new JsonArray(
+            new JsonObject { ["optionId"] = "allow", ["name"] = "Allow", ["kind"] = "allow_once" },
+            new JsonObject { ["optionId"] = "deny", ["name"] = "Deny", ["kind"] = "reject_once" });
+        agent.Handle = async (method, _) =>
+        {
+            if (method == "session/prompt")
+                answered.SetResult(await agent.AskAsync("session/request_permission", onlyOnce));
+            return new JsonObject { ["stopReason"] = "end_turn" };
+        };
+        await using var session = NewSession(agent);
+        await session.ApplyPermissionsAsync(new PermissionPolicy(PermissionLevels.Ask), CancellationToken.None);
+
+        await session.SendPromptAsync("write it", null, CancellationToken.None);
+        var asked = (await ReadAsync(session, seen => seen.Any(e => e.Type == EventTypes.PermissionAsked))).Last();
+        await session.ReplyToPermissionAsync(PermissionEvents.ReadAsk(asked)!.Id, PermissionReplies.Always, null, CancellationToken.None);
+
+        var outcome = (await answered.Task.WaitAsync(TimeSpan.FromSeconds(5))).GetProperty("outcome");
+        outcome.GetProperty("outcome").GetString().ShouldBe("selected");
+        outcome.GetProperty("optionId").GetString().ShouldBe("allow");
+    }
+
+    [Fact]
     public async Task rejecting_picks_the_reject_option()
     {
         await using var agent = new FakeAcpAgent();

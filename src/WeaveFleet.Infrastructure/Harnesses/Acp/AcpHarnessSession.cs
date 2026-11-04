@@ -504,16 +504,27 @@ internal sealed partial class AcpHarnessSession : IHarnessSession
         return Outcome(parameters, reply);
     }
 
-    /// <summary>The ACP answer for Fleet's: the option of the matching kind, or a cancelled outcome when there is none.</summary>
+    /// <summary>
+    /// The ACP answer for Fleet's: the option of the matching kind, or for Always one that allows once when the agent offers
+    /// no <c>allow_always</c> (Fleet remembers the rule itself), or a cancelled outcome when there is none.
+    /// </summary>
     private static JsonObject Outcome(JsonElement request, string reply)
     {
-        var wanted = reply switch { PermissionReplies.Once => "allow_once", PermissionReplies.Always => "allow_always", _ => "reject_once" };
+        string[] wanted = reply switch
+        {
+            PermissionReplies.Once => ["allow_once"],
+            PermissionReplies.Always => ["allow_always", "allow_once"],
+            _ => ["reject_once"],
+        };
         if (request.TryGetProperty("options", out var options) && options.ValueKind == JsonValueKind.Array)
         {
-            foreach (var option in options.EnumerateArray())
+            foreach (var kind in wanted)
             {
-                if (AcpMapper.Str(option, "kind") == wanted && AcpMapper.Str(option, "optionId") is { } optionId)
-                    return new JsonObject { ["outcome"] = new JsonObject { ["outcome"] = "selected", ["optionId"] = optionId } };
+                foreach (var option in options.EnumerateArray())
+                {
+                    if (AcpMapper.Str(option, "kind") == kind && AcpMapper.Str(option, "optionId") is { } optionId)
+                        return new JsonObject { ["outcome"] = new JsonObject { ["outcome"] = "selected", ["optionId"] = optionId } };
+                }
             }
         }
 
