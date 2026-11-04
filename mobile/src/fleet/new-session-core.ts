@@ -39,6 +39,22 @@ export function chooseHarness(harnesses: readonly HarnessInfo[]): HarnessInfo | 
   return ready.find((harness) => harness.isDefault) ?? ready[0];
 }
 
+/**
+ * Why no harness can start a session, in the machine's own words, as the desktop says it: the reason of the harness the
+ * user would have got (the default, else the first in Fleet's order), so "OpenCode --version didn't finish within 10
+ * seconds." isn't read as a missing setup. Null when Fleet gave none.
+ */
+export function noHarnessReason(harnesses: readonly HarnessInfo[]): string | null {
+  const rank = (harness: HarnessInfo) => {
+    const at = HARNESS_ORDER.indexOf(harness.type);
+    return at === -1 ? HARNESS_ORDER.length : at;
+  };
+  const turnedOn = harnesses.filter((harness) => harness.userEnabled !== false).sort((a, b) => rank(a) - rank(b));
+  if (turnedOn.length === 0) return harnesses.length > 0 ? "Every harness is turned off." : null;
+  const wanted = turnedOn.find((harness) => harness.isDefault) ?? turnedOn[0]!;
+  return wanted.reason?.trim() || null;
+}
+
 /** A session's folder: the repository a worktree session came from, else where it ran. */
 export const sessionFolder = (item: SessionListItem): string => item.sourceDirectory || item.workspaceDirectory;
 
@@ -79,7 +95,7 @@ export interface Blocker {
 
 /** Why Send is off before anything is typed, most blocking first; none when it can start. */
 export function blockerOf(input: {
-  machineName: string; state: string | undefined; otherMachines: boolean; harnessesLoaded: boolean; harnessReady: boolean; hasFolder: boolean;
+  machineName: string; state: string | undefined; otherMachines: boolean; harnessesLoaded: boolean; harnessReady: boolean; /** Why not, from `noHarnessReason`. */ harnessReason?: string | null; hasFolder: boolean;
   /** A folder session (not a quick chat) needs the repositories read, or it would start in the checkout instead of a new worktree. */
   folderSession: boolean; repositories: RepositoriesState;
 }): Blocker | null {
@@ -91,7 +107,7 @@ export function blockerOf(input: {
     };
   }
   if (input.harnessesLoaded && !input.harnessReady) {
-    return { tone: "error", lead: `No harness is ready on ${input.machineName}.`, rest: "Set one up in Fleet on that computer.", part: "harness" };
+    return { tone: "error", lead: `No harness is ready on ${input.machineName}.`, rest: input.harnessReason || "Set one up in Fleet on that computer.", part: "harness" };
   }
   if (input.folderSession && input.repositories === "failed") {
     return { tone: "warning", lead: `Couldn't read the folders on ${input.machineName}.`, rest: "Open Folder to try again, or pick No folder for a quick chat.", part: "folder" };
