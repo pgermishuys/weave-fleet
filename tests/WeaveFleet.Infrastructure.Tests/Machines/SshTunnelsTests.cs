@@ -69,6 +69,27 @@ public sealed class SshTunnelsTests : IAsyncLifetime
         return _tunnels;
     }
 
+    /// <summary>
+    /// A port nothing holds, from below the range the OS hands to <c>port 0</c> binds. A port freed by asking for 0 can be
+    /// given to another test running in parallel before Fleet binds it, and Fleet then rightly moves the machine to another.
+    /// </summary>
+    private static int UnusedPortOutsideTheEphemeralRange()
+    {
+        while (true)
+        {
+            var port = Random.Shared.Next(12000, 30000);
+            try
+            {
+                using var listener = new System.Net.Sockets.TcpListener(System.Net.IPAddress.Loopback, port);
+                listener.Start();
+                return port;
+            }
+            catch (System.Net.Sockets.SocketException)
+            {
+            }
+        }
+    }
+
     private string[] Calls() => File.Exists(Path.Combine(_dir, "calls")) ? File.ReadAllLines(Path.Combine(_dir, "calls")) : [];
 
     private static async Task Eventually(Func<bool> condition, string what)
@@ -192,10 +213,7 @@ public sealed class SshTunnelsTests : IAsyncLifetime
             return; // The fake ssh is a shell script.
 
         var tunnels = Tunnels(FakeSsh("exec sleep 60"));
-        var free = System.Net.Sockets.TcpListener.Create(0);
-        free.Start();
-        var port = ((System.Net.IPEndPoint)free.LocalEndpoint).Port;
-        free.Stop();
+        var port = UnusedPortOutsideTheEphemeralRange();
         await _repository.UpsertAsync(Machine("m1", $"http://127.0.0.1:{port}", "alice@falcon"));
         await _repository.UpsertAsync(Machine("m2", "https://atlas.test", null));
 
