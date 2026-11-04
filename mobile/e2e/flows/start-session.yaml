@@ -51,10 +51,13 @@ appId: io.tryweave.fleet
 - takeScreenshot: 24-typed
 - tapOn:
     id: "send"
-# Replaced by the new session: its first message, and the agent's reply, which arrives as it works.
+# Replaced by the new session: its first message, and the agent's reply, which arrives as it works. A new worktree is a
+# folder OpenCode has never seen: starting its session and first turn took 4 to 88 s over 40 runs (iOS is the slow
+# one; two tries ran past the old 90 s limit, at 92 and 93 s). A try cut off while that start is still running leaves
+# OpenCode busy, and the next try's New session screen can then say "No harness is ready". Wait for the worst case.
 - extendedWaitUntil:
     visible: "Here's the plan.*"
-    timeout: 90000
+    timeout: 240000
 - takeScreenshot: 25-started
 
 # Back goes to the list, not to an empty New session screen, and the session is on it.
