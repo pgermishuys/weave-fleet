@@ -185,6 +185,34 @@ jobs:
             ~/.cocoapods
           key: pods-${{ runner.os }}-${{ hashFiles('mobile/bun.lock') }}
           restore-keys: pods-${{ runner.os }}-
+      # The pods (RNScreens, Reanimated, SVG, Worklets…) still compile ~570 C++ files from source: ccache keeps them
+      # between runs. Keyed on the Xcode build and the lockfile; it's saved right after the build, so a walk that
+      # fails later still leaves it for the next run. Xcode runs the compiler without the step's environment, so
+      # React Native's wrapper (USE_CCACHE=1) finds no CCACHE_BINARY and runs plain clang: the build gets wrappers that
+      # name ccache, its folder and clang by path.
+      - name: Install ccache
+        id: ccache
+        run: |
+          HOMEBREW_NO_AUTO_UPDATE=1 HOMEBREW_NO_INSTALL_CLEANUP=1 brew install ccache
+          export CCACHE_DIR="$HOME/Library/Caches/ccache"
+          echo "CCACHE_DIR=$CCACHE_DIR" >> "$GITHUB_ENV"
+          mkdir -p "$HOME/ccache-wrap"
+          for cc in clang clang++; do
+            printf '#!/bin/sh\nexport CCACHE_DIR=%s\nexec %s %s "$@"\n' "$CCACHE_DIR" "$(command -v ccache)" "$(xcrun -f "$cc")" > "$HOME/ccache-wrap/$cc"
+            chmod +x "$HOME/ccache-wrap/$cc"
+          done
+          echo "CCACHE_WRAP=$HOME/ccache-wrap" >> "$GITHUB_ENV"
+          xcode=$(xcodebuild -version | awk '/Build version/ {print $3}')
+          echo "XCODE_BUILD=$xcode" >> "$GITHUB_ENV"
+          prefix="ccache-ios-xcode-$xcode-"
+          echo "prefix=$prefix" >> "$GITHUB_OUTPUT"
+          echo "key=${prefix}${{ hashFiles('mobile/bun.lock') }}" >> "$GITHUB_OUTPUT"
+      - uses: actions/cache/restore@v4
+        id: ccache-restore
+        with:
+          path: ~/Library/Caches/ccache
+          key: ${{ steps.ccache.outputs.key }}
+          restore-keys: ${{ steps.ccache.outputs.prefix }}
       # SDK 58 links precompiled React Native and Expo modules by default (no expo-build-properties needed), which
       # is what the spike's 36 minute build lacked.
       - name: Generate the iOS project
@@ -198,17 +226,35 @@ jobs:
           xcrun simctl bootstatus "$UDID" -b
           echo "UDID=$UDID" >> "$GITHUB_ENV"
 
-      # Release, so the JS is bundled; no signing.
+      # Release, so the JS is bundled; no signing. Only the simulator's own arch: Release builds arm64 and x86_64
+      # otherwise, every file twice.
       - name: Build for the simulator
         working-directory: mobile/ios
         run: |
           WS=$(ls -d *.xcworkspace | head -1); SCHEME=${WS%.xcworkspace}
+          # React Native's ccache settings (scripts/xcode/ccache.conf): Xcode's index store, modules and PCH flags
+          # otherwise make every call a miss.
+          ccache --set-config sloppiness=clang_index_store,file_stat_matches,include_file_ctime,include_file_mtime,ivfsoverlay,pch_defines,modules,system_headers,time_macros
+          ccache --set-config depend_mode=true
+          ccache --set-config file_clone=true
+          # Runners roll between images that carry the same Xcode with different file times, and ccache's default
+          # check (the compiler's mtime) then misses every call: the Xcode build names the compiler instead.
+          ccache --set-config compiler_check="string:$XCODE_BUILD"
+          ccache -z > /dev/null
           set -o pipefail
           xcodebuild -workspace "$WS" -scheme "$SCHEME" -configuration Release -sdk iphonesimulator \
-            -destination "id=$UDID" -derivedDataPath build CODE_SIGN_IDENTITY=- CODE_SIGNING_REQUIRED=NO build \
+            -destination "id=$UDID" -derivedDataPath build ONLY_ACTIVE_ARCH=YES \
+            CC="$CCACHE_WRAP/clang" CXX="$CCACHE_WRAP/clang++" \
+            CODE_SIGN_IDENTITY=- CODE_SIGNING_REQUIRED=NO build \
             | tee "$RUNNER_TEMP/xcodebuild.log" | grep -E "error:|\*\* BUILD" || true
+          ccache -s
           grep -q "BUILD SUCCEEDED" "$RUNNER_TEMP/xcodebuild.log"
           echo "APP=$PWD/$(ls -d build/Build/Products/Release-iphonesimulator/*.app | head -1)" >> "$GITHUB_ENV"
+      - uses: actions/cache/save@v4
+        if: steps.ccache-restore.outputs.cache-hit != 'true'
+        with:
+          path: ~/Library/Caches/ccache
+          key: ${{ steps.ccache.outputs.key }}
       - name: Install the app
         run: xcrun simctl install "$UDID" "$APP"
 
