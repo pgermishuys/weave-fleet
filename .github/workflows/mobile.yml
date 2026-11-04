@@ -137,6 +137,10 @@ jobs:
           arch: x86_64
           profile: pixel_6
           disable-animations: true
+          # The default 2.5 GB is too little for the app, Maestro's driver and Android's own services: the guest's low
+          # memory killer runs all through the walk, and in about 1 run in 3 the emulator then drops its adb link and
+          # Maestro dies mid-command (6 of 20 runs, then 9 of 18 with 4 cores; 0 of 38 with 4 GB). Cores don't matter.
+          ram-size: 4096M
           script: |
             adb reverse tcp:5431 tcp:5431
             adb install -r mobile/android/app/build/outputs/apk/release/app-release.apk
@@ -145,7 +149,8 @@ jobs:
       - name: Shots in the summary
         if: always()
         run: |
-          { echo "### Android screenshots"; find "$RUNNER_TEMP/shots" -name "*.png" 2>/dev/null | sed "s|$RUNNER_TEMP/shots/||" | sort | sed 's/^/- /'; } >> "$GITHUB_STEP_SUMMARY"
+          drops=$(grep -c 'connection terminated' "$RUNNER_TEMP/shots/adb-server.log" 2>/dev/null || true)
+          { echo "### Android screenshots"; echo "adb link drops: ${drops:-0} (any retry of a walk above was for these)"; echo; find "$RUNNER_TEMP/shots" -name "*.png" 2>/dev/null | sed "s|$RUNNER_TEMP/shots/||" | sort | sed 's/^/- /'; } >> "$GITHUB_STEP_SUMMARY"
       - uses: actions/upload-artifact@v4
         if: always()
         with:
