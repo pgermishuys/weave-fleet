@@ -119,15 +119,36 @@ jobs:
       - name: Start a scratch Fleet
         run: FLEET_E2E_DIR="$RUNNER_TEMP/fleet-e2e" bash mobile/e2e/start-fleet.sh
       - name: Install Maestro
-        run: |
-          curl -fsSL "https://get.maestro.mobile.dev" | bash
-          echo "$HOME/.maestro/bin" >> "$GITHUB_PATH"
+        run: bash mobile/e2e/install-maestro.sh
 
       - name: Enable KVM
         run: |
           echo 'KERNEL=="kvm", GROUP="kvm", MODE="0666", OPTIONS+="static_node=kvm"' | sudo tee /etc/udev/rules.d/99-kvm4all.rules
           sudo udevadm control --reload-rules
           sudo udevadm trigger --name-match=kvm
+
+      - name: Install the emulator and system image
+        # reactivecircus/android-emulator-runner runs sdkmanager itself, but a truncated download only prints
+        # "Error on ZipFile unknown archive" (exit 0) and the job dies later with no emulator. Install them here with a
+        # retry that checks for that warning (it also appears as "No space left on device"); the action then finds
+        # them up to date.
+        run: |
+          # The build leaves the runner short of disk: on one run the image failed with "No space left on device".
+          df -h / | tail -1
+          sudo rm -rf /opt/ghc /usr/local/.ghcup /usr/share/swift /opt/hostedtoolcache/CodeQL "$ANDROID_HOME/ndk"
+          rm -rf mobile/android/app/.cxx mobile/android/app/build/intermediates mobile/android/build
+          df -h / | tail -1
+          sdk="$ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager"
+          yes | "$sdk" --licenses > /dev/null || true
+          for attempt in 1 2 3 4; do
+            out="$("$sdk" --install emulator 'system-images;android-35;google_apis;x86_64' --channel=0 2>&1)" || true
+            if ! grep -q "error occurred while preparing" <<< "$out" \
+              && [ -x "$ANDROID_HOME/emulator/emulator" ] \
+              && [ -f "$ANDROID_HOME/system-images/android-35/google_apis/x86_64/system.img" ]; then break; fi
+            echo "$out" | grep -i -E "error|warning: an error" || true
+            if [ "$attempt" -eq 4 ]; then echo "Emulator or system image install failed"; exit 1; fi
+            sleep $((attempt * 10))
+          done
 
       - name: Walk through the app
         uses: reactivecircus/android-emulator-runner@v2
@@ -276,9 +297,7 @@ jobs:
       - name: Start a scratch Fleet
         run: FLEET_E2E_DIR="$RUNNER_TEMP/fleet-e2e" bash mobile/e2e/start-fleet.sh
       - name: Install Maestro
-        run: |
-          curl -fsSL "https://get.maestro.mobile.dev" | bash
-          echo "$HOME/.maestro/bin" >> "$GITHUB_PATH"
+        run: bash mobile/e2e/install-maestro.sh
 
       - name: Walk through the app
         run: bash mobile/e2e/walk-all.sh ios "$RUNNER_TEMP/shots" "$UDID"
