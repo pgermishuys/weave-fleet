@@ -1,7 +1,7 @@
 import { describe, expect, test } from "bun:test";
 import type { HarnessInfo, SessionListItem } from "@fleet/api/client";
 import type { KeyValueStorage } from "./machines-core";
-import { NewSessionRecents, blockerOf, canStart, chooseFolder, chooseHarness, chooseMachine, folderFor, readyHarnesses, recentFolders } from "./new-session-core";
+import { NewSessionRecents, blockerOf, canStart, chooseFolder, chooseHarness, chooseMachine, folderFor, noHarnessReason, readyHarnesses, recentFolders } from "./new-session-core";
 
 const memory = () => {
   const data = new Map<string, string>();
@@ -73,6 +73,28 @@ describe("blockerOf", () => {
   test("no ready harness says to set one up on the computer", () => {
     expect(blockerOf({ ...ok, harnessReady: false })?.rest).toBe("Set one up in Fleet on that computer.");
     expect(blockerOf({ ...ok, harnessReady: false, harnessesLoaded: false })).toBeNull();
+  });
+  test("no ready harness gives the machine's own reason when it has one", () => {
+    const blocker = blockerOf({ ...ok, harnessReady: false, harnessReason: "opencode --version didn't finish within 10 seconds." });
+    expect(blocker?.lead).toBe("No harness is ready on studio-pc.");
+    expect(blocker?.rest).toBe("opencode --version didn't finish within 10 seconds.");
+  });
+});
+
+describe("noHarnessReason", () => {
+  const harness = (type: string, extra: Partial<HarnessInfo> = {}) => ({ type, displayName: type, available: false, userEnabled: true, ...extra }) as HarnessInfo;
+  test("is the reason of the default harness", () => {
+    const list = [harness("opencode", { reason: "OpenCode isn't installed." }), harness("claude-code", { isDefault: true, reason: "Sign in to Claude Code." })];
+    expect(noHarnessReason(list)).toBe("Sign in to Claude Code.");
+  });
+  test("without a default, the first in Fleet's order that is turned on", () => {
+    const list = [harness("pi", { reason: "Pi isn't installed." }), harness("opencode", { reason: "opencode --version exited with code 1." }), harness("copilot", { userEnabled: false, reason: "off" })];
+    expect(noHarnessReason(list)).toBe("opencode --version exited with code 1.");
+  });
+  test("every harness turned off says so; no reason from Fleet gives none", () => {
+    expect(noHarnessReason([harness("opencode", { userEnabled: false })])).toBe("Every harness is turned off.");
+    expect(noHarnessReason([harness("opencode")])).toBeNull();
+    expect(noHarnessReason([])).toBeNull();
   });
 });
 

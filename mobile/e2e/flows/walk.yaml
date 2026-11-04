@@ -27,7 +27,19 @@ appId: io.tryweave.fleet
     visible: "Allow once"
     timeout: 90000
 - takeScreenshot: 03-permission
-- tapOn: "Allow once"
+# A dropped tap again (run 41777658006: Allow once stayed up, the command never ran, and the dark walk then opened on
+# the same card): tap only while the card is up, and wait for it to go.
+- retry:
+    maxRetries: 2
+    commands:
+      - runFlow:
+          when:
+            visible: "Allow once"
+          commands:
+            - tapOn: "Allow once"
+      - extendedWaitUntil:
+          notVisible: "Allow once"
+          timeout: 15000
 - extendedWaitUntil:
     visible: ".*run ${RUN} of the suite.*"
     timeout: 90000

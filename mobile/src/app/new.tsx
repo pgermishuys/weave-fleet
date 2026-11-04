@@ -8,7 +8,7 @@ import type { HarnessInfo, ScannedRepository } from "@fleet/api/client";
 import { buildCreateSessionRequest, type NewSessionWorkspace } from "@fleet/lib/new-session-request";
 import { manager, useFleet } from "~/fleet/hooks";
 import { newSessionRecents } from "~/fleet/new-session";
-import { blockerOf, canStart as canStartOf, chooseFolder, chooseHarness, chooseMachine, folderFor, folderLabel, readyHarnesses, recentFolders, type RepositoriesState } from "~/fleet/new-session-core";
+import { blockerOf, canStart as canStartOf, chooseFolder, chooseHarness, chooseMachine, folderFor, folderLabel, noHarnessReason, readyHarnesses, recentFolders, type RepositoriesState } from "~/fleet/new-session-core";
 import { Composer, Icon, ModelChip, Notice, Panel, Text, WhereLine, type WherePart } from "~/kit";
 import { FolderSheet, MachineSheet, ModelSheet, WorktreeSheet, type ModelPick } from "~/ui/new-session-sheets";
 import { useTheme } from "~/theme";
@@ -67,7 +67,7 @@ export default function NewSession() {
   const ready = harnesses ? readyHarnesses(harnesses) : [];
   const harness = harnesses ? (ready.find((h) => h.type === harnessPick) ?? chooseHarness(harnesses)) : undefined;
 
-  const blocker = machine ? blockerOf({ machineName: machine.machineName, state: machine.state, otherMachines: machines.length > 1, harnessesLoaded: harnesses !== null, harnessReady: !!harness, hasFolder: folder !== null, folderSession, repositories: reposState }) : null;
+  const blocker = machine ? blockerOf({ machineName: machine.machineName, state: machine.state, otherMachines: machines.length > 1, harnessesLoaded: harnesses !== null, harnessReady: !!harness, harnessReason: harnesses ? noHarnessReason(harnesses) : null, hasFolder: folder !== null, folderSession, repositories: reposState }) : null;
   const canStart = !!machine && canStartOf({ blocked: !!blocker, hasHarness: !!harness, hasFolder: folder !== null, folderSession, repositories: reposState });
 
   const pickMachine = (id: string) => { setMachinePick(id); setFolderPick(undefined); setHarnessPick(undefined); setModel(null); setWorkspace({ kind: "new" }); setSheet(null); };

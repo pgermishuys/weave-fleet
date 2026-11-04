@@ -194,6 +194,7 @@ function Gallery({ override, setOverride }: { override: Scheme | null; setOverri
         <Section label="New session">
           <Notice tone="warning" lead="travel-laptop is offline." rest="Pick another machine, or wait for it to come back." />
           <Notice tone="error" lead="No harness is ready on studio-pc." rest="Set one up in Fleet on that computer." />
+          <Notice tone="error" lead="No harness is ready on studio-pc." rest="opencode --version didn't finish within 10 seconds." />
           <Composer value="" onChangeText={noop} onSend={noop} placeholder="Describe the task" sendDisabled chip={<ModelChip label="OpenCode 2 · Default" onPress={noop} />} />
           <Composer value="Make the upload retry on a timeout" onChangeText={noop} onSend={noop} placeholder="Describe the task" chip={<ModelChip label="No harness" tone="warning" onPress={noop} />} />
           <WhereLine onPress={noop} parts={[{ key: "m", label: "studio-pc" }, { key: "f", label: "demo-app" }, { key: "w", label: "New worktree" }]} />

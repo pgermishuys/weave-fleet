@@ -67,6 +67,25 @@ fresh_session() {
   SESSION_ID=$(bash new-session.sh)
 }
 
+# What Fleet says about its harnesses (state, availability and reason), kept in harness-states.log with the shots: the
+# New session screen shows "No harness is ready" from this list (runs 41768381456 and others). With "show", the block
+# also goes to the job log and the job summary, so a failed try says why without downloading anything.
+harness_states() {
+  local block
+  block="== $1 $(date -u +%T)
+$(curl -sS -m 30 -H "Authorization: Bearer $FLEET_TOKEN" "$FLEET_URL/api/harnesses" 2>&1 | python3 -c 'import json,sys
+text = sys.stdin.read()
+try:
+    for h in json.loads(text): print(h["type"], h.get("state"), "available" if h.get("available") else "unavailable", "on" if h.get("userEnabled") else "off", "-", h.get("reason"))
+except Exception:
+    print("no usable answer:", text[:300])' 2>&1)"
+  echo "$block" >> "$OUT/harness-states.log"
+  if [ "${2:-}" = show ]; then
+    echo "$block"
+    [ -z "${GITHUB_STEP_SUMMARY:-}" ] || printf '```\n%s\n```\n' "$block" >> "$GITHUB_STEP_SUMMARY"
+  fi
+}
+
 ready
 # iOS's "slide to type" introduction can rise over the keyboard on any keyboard show, and Maestro then reads it instead
 # of the conversation (run 40913188161 failed at "Going with…" with the reply on screen). Mark it shown, and swiping off.
@@ -118,7 +137,9 @@ for scheme in light dark; do
   # Maestro now and then exits mid-command with no error of its own (as in the walks): try again, up to three times.
   # A try that got as far as Send leaves its session in the list; the next one adds another, which is harmless.
   for try in 1 2 3; do
+    harness_states "before $scheme try $try"
     maestro_run --test-output-dir "$OUT/$PLATFORM-$scheme-start-try$try" flows/start-session.yaml && break
+    harness_states "after $scheme try $try (failed)" show
     if [ "$try" = 3 ]; then echo "starting a session ($scheme) failed"; FAILED=1; else echo "starting a session ($scheme) failed; once more"; sleep 5; ready; fi
   done
 done
