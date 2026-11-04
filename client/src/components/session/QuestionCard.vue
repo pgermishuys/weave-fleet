@@ -3,6 +3,7 @@ import { computed, ref, shallowRef } from "vue";
 import { Check, MessageCircleQuestion } from "lucide-vue-next";
 import StatusGlyph from "@/components/sessions/StatusGlyph.vue";
 import { QuestionGoneError } from "@/composables/use-question-answer";
+import { linkifyText } from "@/lib/linkify-text";
 import type { AccumulatedToolPart } from "@/lib/client-types";
 import {
   getQuestionInput,
@@ -266,9 +267,11 @@ function answerText(questionIdx: number): string {
       >
         {{ q.header }}
       </p>
-      <p class="qcard__text">
-        {{ q.question }}
-      </p>
+      <!-- eslint-disable-next-line vue/no-v-html -->
+      <p
+        class="qcard__text"
+        v-html="linkifyText(q.question)"
+      />
       <p
         v-if="q.multiple"
         class="qcard__hint"
@@ -437,6 +440,12 @@ function answerText(questionIdx: number): string {
   text-wrap: pretty;
   /* Agents send line breaks in the question; keep them. */
   white-space: pre-line;
+}
+
+.qcard__text :deep(a) {
+  color: var(--accent);
+  text-decoration: underline;
+  text-underline-offset: 2px;
 }
 
 .qcard__hint {

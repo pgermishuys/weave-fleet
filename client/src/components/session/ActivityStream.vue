@@ -41,6 +41,7 @@ import { messagesAfter } from "@/lib/side-conversation";
 import { splitTurnErrorMessage } from "@/lib/turn-error";
 import { limitTitle } from "@/lib/turn-retry";
 import { scheduledRetryOf } from "@/composables/use-session-retry";
+import { linkifyText } from "@/lib/linkify-text";
 import TurnFailureRetry from "@/components/session/TurnFailureRetry.vue";
 import SessionInterruptedCard from "@/components/session/SessionInterruptedCard.vue";
 import ImproveSkillDialog from "@/components/skills/ImproveSkillDialog.vue";
@@ -711,7 +712,11 @@ function handleImproveSkill(skill: string, toolId: string): void {
             />
             <span class="turn-failure__title">{{ limitTitle(message.turnError.kind) ?? "This turn stopped early" }}</span>
           </div>
-          <p class="turn-failure__message">{{ splitTurnErrorMessage(message.turnError.message).summary }}</p>
+          <!-- eslint-disable-next-line vue/no-v-html -->
+          <p
+            class="turn-failure__message"
+            v-html="linkifyText(splitTurnErrorMessage(message.turnError.message).summary)"
+          />
           <details
             v-if="splitTurnErrorMessage(message.turnError.message).details"
             class="turn-failure__details"
@@ -972,6 +977,12 @@ function handleImproveSkill(skill: string, toolId: string): void {
   font-size: 13px;
   line-height: 1.45;
   overflow-wrap: anywhere;
+}
+
+.turn-failure__message :deep(a) {
+  color: var(--accent);
+  text-decoration: underline;
+  text-underline-offset: 2px;
 }
 
 .turn-failure__details {
