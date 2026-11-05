@@ -5,6 +5,7 @@ import BottomSheet from "@/components/phone/BottomSheet.vue";
 import CommandText from "@/components/phone/CommandText.vue";
 import PermissionChoices from "@/components/phone/PermissionChoices.vue";
 import QuestionChoices from "@/components/phone/QuestionChoices.vue";
+import QuestionQuickAnswers from "@/components/phone/QuestionQuickAnswers.vue";
 import { showToast } from "@/composables/phone/use-phone-toast";
 import { collapse } from "@/lib/phone/animate";
 import { dontAskAgainWording, permissionHeading } from "@/lib/tools";
@@ -36,7 +37,6 @@ let collapsed = false;
 
 const permission = computed(() => (props.item.ask?.kind === "permission" ? props.item.ask.ask : null));
 const question = computed(() => (props.item.ask?.kind === "question" ? props.item.ask : null));
-const quickOptions = computed(() => (question.value && !question.value.question.multiple ? question.value.question.options.slice(0, 2) : []));
 const failed = computed(() => props.item.status === "error");
 const heading = computed(() => (failed.value ? "Stopped with an error" : permission.value ? permissionHeading(permission.value) : question.value ? "Question" : "Waiting on you"));
 const busy = computed(() => sent.value !== null);
@@ -176,36 +176,15 @@ function openFromSheet(): void {
         <span>More…</span>
       </button>
     </div>
-    <div
+    <QuestionQuickAnswers
       v-else-if="question && !item.stale"
-      class="ph-btns"
-      :class="quickOptions.length === 2 ? 'ph-btns--q' : quickOptions.length === 1 ? 'ph-btns--q-one' : 'ph-btns--q-none'"
-    >
-      <button
-        v-for="option in quickOptions"
-        :key="option.label"
-        type="button"
-        class="ph-btn ph-btn--outline"
-        :class="{ 'ph-btn--done': sent === option.label }"
-        :disabled="busy"
-        @click="answerQuestion([option.label])"
-      >
-        <Check
-          v-if="sent === option.label"
-          aria-hidden="true"
-        />
-        <span>{{ option.label }}</span>
-      </button>
-      <button
-        type="button"
-        class="ph-btn ph-btn--outline"
-        :disabled="busy"
-        data-testid="inbox-more"
-        @click="sheet = true"
-      >
-        <span>{{ quickOptions.length ? "More…" : "Answer…" }}</span>
-      </button>
-    </div>
+      :question="question.question"
+      :sent="sent"
+      :busy="busy"
+      more-test-id="inbox-more"
+      @pick="(label) => answerQuestion([label])"
+      @more="sheet = true"
+    />
 
     <BottomSheet
       ref="sheet"
