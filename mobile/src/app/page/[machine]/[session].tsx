@@ -81,7 +81,9 @@ export default function PageScreen() {
         keepPageState(page.pageId, message.state);
         break;
       case "fleet:page-choice":
-        if (live) setProposal({ value: message.value, summary: message.summary });
+        // Kept even while the session's status hasn't loaded (live is false then): the bar only shows a pick once the
+        // choice is live, and a tap on a freshly opened page can land before that.
+        setProposal({ value: message.value, summary: message.summary });
         break;
       case "fleet:page-reply":
         setReply(message.text);
