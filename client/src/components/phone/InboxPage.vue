@@ -5,9 +5,11 @@ import { Bell, Check, ChevronDown, ChevronRight, ExternalLink, Laptop, Plus, Sea
 import weaveLogo from "@/assets/weave_logo.png";
 import InboxAskRow from "@/components/phone/InboxAskRow.vue";
 import InboxSessionRow from "@/components/phone/InboxSessionRow.vue";
+import NoHarnessNotice from "@/components/phone/NoHarnessNotice.vue";
 import PhoneTabBar, { type PhoneTab } from "@/components/phone/PhoneTabBar.vue";
 import PullIndicator from "@/components/phone/PullIndicator.vue";
 import SwipeRow from "@/components/phone/SwipeRow.vue";
+import { useEnabledHarnesses } from "@/composables/use-enabled-harnesses";
 import { INBOX, useInbox } from "@/composables/phone/use-inbox";
 import { useLargeTitle } from "@/composables/phone/use-large-title";
 import { usePhoneNav } from "@/composables/phone/use-phone-nav";
@@ -37,6 +39,7 @@ const nav = usePhoneNav();
 // PhoneStack keeps the inbox, so a session pushed over this page reads the same feeds.
 const { inbox, machines, loading, now, answerPermission, answerQuestion, setArchived, refreshAll, targetFor } = inject(INBOX, null) ?? useInbox();
 const machineList = useMachinesStore();
+const { noHarnessReason } = useEnabledHarnesses();
 
 // Browsers rotate and drop push subscriptions: check on open and whenever the app comes back on screen. A dropped one
 // is quietly made again; permission taken away gets a banner.
@@ -412,6 +415,7 @@ const pull = usePullToRefresh({
                   @question="onQuestion"
                 />
               </div>
+              <NoHarnessNotice v-else-if="noHarnessReason !== null" />
               <p
                 v-else
                 class="ph-empty ph-fade-in"
