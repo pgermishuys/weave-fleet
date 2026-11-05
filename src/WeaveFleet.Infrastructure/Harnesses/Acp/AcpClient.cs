@@ -129,8 +129,12 @@ internal sealed partial class AcpClient : IAsyncDisposable
         {
             if (message.TryGetProperty("error", out var error))
             {
-                var text = error.TryGetProperty("message", out var t) && t.ValueKind == JsonValueKind.String ? t.GetString() : "The agent reported an error.";
-                var code = error.TryGetProperty("code", out var c) && c.TryGetInt32(out var number) ? number : -32603;
+                // An error that isn't an object ({"error": "boom"}) still settles the request: dropping the line would leave
+                // the turn pending, and the session Working, for good.
+                var isObject = error.ValueKind == JsonValueKind.Object;
+                var text = isObject && error.TryGetProperty("message", out var t) && t.ValueKind == JsonValueKind.String ? t.GetString()
+                    : error.ValueKind == JsonValueKind.String ? error.GetString() : "The agent reported an error.";
+                var code = isObject && error.TryGetProperty("code", out var c) && c.ValueKind == JsonValueKind.Number && c.TryGetInt32(out var number) ? number : -32603;
                 waiting.TrySetException(new AcpException(text ?? "The agent reported an error.", code));
             }
             else
