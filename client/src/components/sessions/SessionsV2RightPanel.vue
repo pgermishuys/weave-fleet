@@ -63,6 +63,7 @@ const sharedDiffs: UseDiffsResult = {
   available: computed(() => activeDiffs.value.available.value),
   base: computed(() => activeDiffs.value.base.value),
   isLoading: computed(() => activeDiffs.value.isLoading.value),
+  hasLoaded: computed(() => activeDiffs.value.hasLoaded.value),
   isStale: computed(() => activeDiffs.value.isStale.value),
   error: computed(() => activeDiffs.value.error.value),
   fetchDiffs: () => activeDiffs.value.fetchDiffs(),

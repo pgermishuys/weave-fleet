@@ -81,7 +81,14 @@ function isOpen(path: string): boolean {
       >{{ baseLabel.commit }}</span>
     </p>
     <p
-      v-if="changedFiles.length === 0"
+      v-if="changedFiles.length === 0 && sharedDiffs && !sharedDiffs.hasLoaded.value"
+      class="changes-canvas__empty"
+      data-testid="changes-loading"
+    >
+      Loading changes…
+    </p>
+    <p
+      v-else-if="changedFiles.length === 0"
       class="changes-canvas__empty"
     >
       {{ base?.kind === "branch" ? "No changes on this branch yet." : "No changes in this session yet." }}
