@@ -1,8 +1,9 @@
 <script setup lang="ts">
-import { computed, ref, shallowRef } from "vue";
+import { computed, onMounted, ref, shallowRef } from "vue";
 import { Check, MessageCircleQuestion } from "lucide-vue-next";
 import StatusGlyph from "@/components/sessions/StatusGlyph.vue";
 import { QuestionGoneError } from "@/composables/use-question-answer";
+import { focusBlockingCard, moveChoiceFocus } from "@/lib/focus-blocking-card";
 import { linkifyText } from "@/lib/linkify-text";
 import type { AccumulatedToolPart } from "@/lib/client-types";
 import {
@@ -100,6 +101,7 @@ function focusedQuestionIndex(target: EventTarget | null): number {
 
 function handleCardKeydown(event: KeyboardEvent) {
   if (!questionInput.value || loading.value) return;
+  if (moveChoiceFocus(event, cardRef.value, ".qcard__choice[role]")) return;
   if (event.target instanceof HTMLInputElement) {
     if (event.key === "Enter" && hasAnyAnswer.value) {
       event.preventDefault();
@@ -133,6 +135,11 @@ function handleCardKeydown(event: KeyboardEvent) {
 }
 
 const cardRef = ref<HTMLElement | null>(null);
+
+// The card is what the turn waits on: keyboard focus starts here, unless the user is typing in the composer.
+onMounted(() => {
+  if (isActive.value) focusBlockingCard(cardRef.value, ".qcard__choice[role]");
+});
 
 // ── Submission ────────────────────────────────────────────────────────────────
 

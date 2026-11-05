@@ -26,6 +26,27 @@ function mountCard(value: PermissionAsk, onAnswer = vi.fn(async () => {})) {
 }
 
 describe("PermissionCard", () => {
+  it("takes keyboard focus on its first choice and moves it with the arrow keys", async () => {
+    const { wrapper } = mountCard(ask());
+    const once = wrapper.get("[data-testid='permission-allow-once']").element;
+    expect(document.activeElement).toBe(once);
+
+    await wrapper.get("[data-testid='permission-allow-once']").trigger("keydown", { key: "ArrowDown" });
+    expect(document.activeElement).toBe(wrapper.get("[data-testid='permission-allow-always']").element);
+    wrapper.unmount();
+  });
+
+  it("leaves focus alone while the user types in the composer", () => {
+    const box = document.createElement("textarea");
+    document.body.append(box);
+    box.value = "half a sentence";
+    box.focus();
+    const { wrapper } = mountCard(ask());
+    expect(document.activeElement).toBe(box);
+    wrapper.unmount();
+    box.remove();
+  });
+
   it("shows the command and that the session needs you", () => {
     const { wrapper } = mountCard(ask({ directory: "~/source/weave-fleet" }));
     const card = wrapper.get("[data-testid='permission-card']");
