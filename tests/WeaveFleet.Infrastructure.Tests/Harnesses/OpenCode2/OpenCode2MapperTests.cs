@@ -136,6 +136,21 @@ public sealed class OpenCode2MapperTests
         failed.Payload.Error.Kind.ShouldBe(TurnErrorKinds.Overloaded);
     }
 
+    [Theory]
+    [InlineData("""{"sessionID":"ses_1","error":{"type":"a.brand.new.code","message":"Something new.","status":"teapot"}}""")]
+    [InlineData("""{"sessionID":"ses_1","error":"plain text"}""")]
+    [InlineData("""{"sessionID":"ses_1","error":{"type":42,"message":{"deep":true}}}""")]
+    [InlineData("""{"sessionID":"ses_1"}""")]
+    public void A_failed_turn_with_an_error_shape_Fleet_does_not_know_still_ends_the_turn(string payload)
+    {
+        var mapper = new OpenCode2Mapper(FleetSession);
+        mapper.Map(Event("session.execution.started", """{"sessionID":"ses_1"}"""));
+
+        var events = mapper.Map(Event("session.execution.failed", payload));
+
+        events.Select(e => e.Type).ShouldBe([EventTypes.SessionError, EventTypes.SessionIdle]);
+    }
+
     [Fact]
     public void A_usage_limit_V2_gave_up_on_is_a_usage_limit()
     {
