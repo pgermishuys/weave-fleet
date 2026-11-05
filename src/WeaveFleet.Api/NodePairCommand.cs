@@ -89,8 +89,8 @@ public static class NodePairCommand
 
         if (link is null)
         {
-            await output.WriteLineAsync($"{name} only listens on this computer, so no other machine can reach it yet.");
-            await output.WriteLineAsync("Start it with --host 0.0.0.0, or put tailscale serve in front of it, then run fleet node pair again.");
+            await output.WriteLineAsync($"{name} only listens on this computer, so no other machine can reach it directly.");
+            await output.WriteLineAsync("Run fleet node up and pick Tailscale or Local network, then run fleet node pair again.");
             return 0;
         }
 
