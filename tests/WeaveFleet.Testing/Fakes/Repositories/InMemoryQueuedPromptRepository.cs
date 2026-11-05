@@ -29,6 +29,26 @@ public sealed class InMemoryQueuedPromptRepository : IQueuedPromptRepository
 
     public Task<bool> ReturnToFrontAsync(QueuedPrompt item) => Insert(item, front: true);
 
+    public Task<bool> ReturnBeforeAsync(QueuedPrompt item, string? beforeItemId)
+    {
+        lock (_gate)
+        {
+            if (KnownSessions is { } known && !known.Contains(item.SessionId))
+                return Task.FromResult(false);
+            if (beforeItemId is null)
+                return Insert(item, front: false);
+            var before = _items.FindIndex(i => i.Item.SessionId == item.SessionId && i.Item.Id == beforeItemId);
+            if (before < 0)
+                return Insert(item, front: true);
+            var at = _items[before].Position;
+            for (var n = 0; n < _items.Count; n++)
+                if (_items[n].Item.SessionId == item.SessionId && _items[n].Position >= at)
+                    _items[n] = (_items[n].Position + 1, _items[n].Item);
+            _items.Add((at, item));
+            return Task.FromResult(true);
+        }
+    }
+
     public Task<QueuedPrompt?> TakeAsync(string sessionId, string itemId)
     {
         lock (_gate)

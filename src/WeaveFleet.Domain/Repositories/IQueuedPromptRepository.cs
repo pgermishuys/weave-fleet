@@ -17,6 +17,12 @@ public interface IQueuedPromptRepository
     /// <summary>Puts <paramref name="item"/> back at the front of its session's queue, after sending it failed.</summary>
     Task<bool> ReturnToFrontAsync(QueuedPrompt item);
 
+    /// <summary>
+    /// Puts <paramref name="item"/> back just before <paramref name="beforeItemId"/>, the item that was behind it, after
+    /// sending it failed. At the end when it was last (<see langword="null"/>); at the front when that item has gone too.
+    /// </summary>
+    Task<bool> ReturnBeforeAsync(QueuedPrompt item, string? beforeItemId);
+
     /// <summary>Takes one item out of the queue and returns it; <see langword="null"/> when it isn't there (any more).</summary>
     Task<QueuedPrompt?> TakeAsync(string sessionId, string itemId);
 

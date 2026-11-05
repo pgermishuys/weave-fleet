@@ -86,6 +86,27 @@ public sealed class QueuedPromptRepositoryTests
     }
 
     [Fact]
+    public async Task An_item_put_back_before_the_one_that_was_behind_it_keeps_its_place()
+    {
+        var (keeper, factory) = await TestDbHelper.CreateSharedDbAsync();
+        await using var _ = keeper;
+        var (_, _, session) = await RepositoryOwnershipTestHelper.SeedOwnedSessionGraphAsync(factory, OwnerId);
+        var repository = new QueuedPromptRepository(factory, new TestUserContext(OwnerId));
+        foreach (var id in new[] { "q1", "q2", "q3", "q4" })
+            await repository.AddAsync(Item(session.Id, id, id));
+
+        var taken = await repository.TakeAsync(session.Id, "q2");
+        (await repository.ReturnBeforeAsync(taken!, "q3")).ShouldBeTrue();
+        (await repository.ListAsync(session.Id)).Select(i => i.Id).ShouldBe(["q1", "q2", "q3", "q4"]);
+
+        var last = await repository.TakeAsync(session.Id, "q4");
+        (await repository.ReturnBeforeAsync(last!, null)).ShouldBeTrue();
+        var gone = await repository.TakeAsync(session.Id, "q1");
+        (await repository.ReturnBeforeAsync(gone!, "missing")).ShouldBeTrue();
+        (await repository.ListAsync(session.Id)).Select(i => i.Id).ShouldBe(["q1", "q2", "q3", "q4"]);
+    }
+
+    [Fact]
     public async Task Another_users_session_can_be_neither_queued_to_nor_read_nor_taken_from()
     {
         var (keeper, factory) = await TestDbHelper.CreateSharedDbAsync();

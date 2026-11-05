@@ -161,6 +161,10 @@ public sealed partial class PromptQueueService(
                 return FleetError.ValidationError("Prompt.Delivery", "This session's harness can't take a message while it works. It's sent when the turn ends.");
         }
 
+        // Where it stood, so a failed send puts it back there and not ahead of the items that were before it.
+        var before = (await queue.ListAsync(sessionId).ConfigureAwait(false)).ToList();
+        var position = before.FindIndex(i => i.Id == itemId);
+        var behind = position >= 0 && position + 1 < before.Count ? before[position + 1].Id : null;
         var item = await queue.TakeAsync(sessionId, itemId).ConfigureAwait(false);
         if (item is null)
             return FleetError.NotFoundFor(nameof(QueuedPrompt), itemId);
@@ -169,7 +173,7 @@ public sealed partial class PromptQueueService(
         var sent = await SendAsync(item, inTurn ? PromptDelivery.Steer : PromptDelivery.Queue, ct).ConfigureAwait(false);
         if (sent.IsFailure)
         {
-            await queue.ReturnToFrontAsync(item).ConfigureAwait(false);
+            await queue.ReturnBeforeAsync(item, behind).ConfigureAwait(false);
             await BroadcastAsync(sessionId, ct).ConfigureAwait(false);
         }
 
