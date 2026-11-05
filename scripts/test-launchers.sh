@@ -298,6 +298,20 @@ run_service linux node up --lan --ssh-only && fail "node up --lan --ssh-only sho
 run_service linux node up --lan --host 0.0.0.0 && fail "node up --host should fail"
 run_service linux node --lan && fail "fleet node --lan should fail"
 
+# The first run's menu without Tailscale names nothing as current or recommended. (Needs a terminal; script's -c is
+# Linux only.)
+if [ "$(uname -s)" = Linux ] && command -v script >/dev/null 2>&1; then
+  touch "$WORK/tailscale-down"
+  rm -f "$UNIT"
+  (cd "$WORK" && echo 3 | env FLEET_TEST_TAILSCALE_DOWN="$WORK/tailscale-down" HOME="$WORK/home" PATH="$WORK/stubs:$PATH" WEAVE_FLEET_DATA_DIR="$WORK/data" \
+    FLEET_TEST_OUT="$WORK/out" FLEET_TEST_CALLS="$WORK/calls" script -qec "$WORK/fleet/bin/fleet node up --port 5512" /dev/null > "$WORK/stdout" 2>&1) || fail "node up menu failed: $(cat "$WORK/stdout")"
+  expect_output "3) Only over SSH" "node up menu without Tailscale"
+  case "$(cat "$WORK/stdout")" in
+    *"(current)"*|*"(recommended)"*) fail "node up menu on a first run without Tailscale has a label: $(cat "$WORK/stdout")" ;;
+  esac
+  rm -f "$UNIT" "$WORK/tailscale-down"
+fi
+
 # macOS: the LaunchAgent gets the same host.
 run_service macos node up --lan --port 5512 || fail "macOS node up failed: $(cat "$WORK/stdout")"
 grep -q '<string>0.0.0.0</string>' "$PLIST" 2>/dev/null || fail "macOS node up didn't write host 0.0.0.0"

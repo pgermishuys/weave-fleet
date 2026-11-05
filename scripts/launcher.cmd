@@ -671,11 +671,18 @@ if "!CURRENT_HOST!"=="127.0.0.1" set "RECOMMENDED=ssh-only"
 if defined TS_IP if "!CURRENT_HOST!"=="!TS_IP!" set "RECOMMENDED=tailscale"
 if not defined UP_CHOICE if defined ASSUME_YES set "UP_CHOICE=!RECOMMENDED!"
 if not defined UP_CHOICE (
+    set "MARK_TS="
+    set "MARK_LAN="
+    set "MARK_SSH="
+    rem "(current)" marks what is installed; "(recommended)" Tailscale on a machine with nothing installed yet.
+    if defined TS_IP if not defined CURRENT_HOST set "MARK_TS=  (recommended)"
+    if "!CURRENT_HOST!"=="0.0.0.0" set "MARK_LAN=  (current)"
+    if "!CURRENT_HOST!"=="127.0.0.1" set "MARK_SSH=  (current)"
+    if defined TS_IP if "!CURRENT_HOST!"=="!TS_IP!" set "MARK_TS=  (current)"
     echo How should your other machines reach this one?
-    echo   1^) Tailscale        only your devices can reach it
-    echo   2^) Local network    anyone on it can try a code
-    echo   3^) Only over SSH    listens on this machine only
-    echo Recommended: !RECOMMENDED!
+    echo   1^) Tailscale        only your devices can reach it!MARK_TS!
+    echo   2^) Local network    anyone on it can try a code!MARK_LAN!
+    echo   3^) Only over SSH    listens on this machine only!MARK_SSH!
     choice /c 123 /n /m "Choose 1-3: "
     if errorlevel 4 (
         echo Error: fleet node up needs a choice when it can't ask. Add --tailscale, --lan or --ssh-only. >&2

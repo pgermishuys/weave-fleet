@@ -527,9 +527,20 @@ node_up_choose() {
   echo "How should your other machines reach ${NAME:-this machine}?"
   tailscale_note="only your devices can reach it"
   [ -n "$TAILSCALE_IP" ] || tailscale_note="needs Tailscale installed and signed in"
-  printf '  1) Tailscale        %s%s\n' "$tailscale_note" "$([ "$RECOMMENDED" = tailscale ] && echo '  (recommended)')"
-  printf '  2) Local network    anyone on it can try a code%s\n' "$([ "$RECOMMENDED" = lan ] && echo '  (current)')"
-  printf '  3) Only over SSH    listens on this machine only%s\n' "$([ "$RECOMMENDED" = ssh-only ] && echo '  (current)')"
+  # "(current)" marks what is installed; "(recommended)" Tailscale on a machine with nothing installed yet.
+  mark_tailscale=""
+  [ -n "$TAILSCALE_IP" ] && [ -z "$CURRENT_HOST" ] && mark_tailscale="  (recommended)"
+  mark_lan=""
+  mark_ssh=""
+  case "$CURRENT_HOST" in
+    "") ;;
+    0.0.0.0) mark_lan="  (current)" ;;
+    127.0.0.1) mark_ssh="  (current)" ;;
+    "$TAILSCALE_IP") mark_tailscale="  (current)" ;;
+  esac
+  printf '  1) Tailscale        %s%s\n' "$tailscale_note" "$mark_tailscale"
+  printf '  2) Local network    anyone on it can try a code%s\n' "$mark_lan"
+  printf '  3) Only over SSH    listens on this machine only%s\n' "$mark_ssh"
   case "$RECOMMENDED" in tailscale) default=1 ;; lan) default=2 ;; *) default=3 ;; esac
   while :; do
     printf 'Choose 1-3 [%s]: ' "$default"
