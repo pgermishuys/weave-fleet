@@ -237,7 +237,18 @@ public sealed partial class SessionPrompting(
                 ? new PromptOptions { MessageId = generatedMessageId, ModelNotes = modelNotes, MemoryNotes = memoryNotes }
                 : options with { MessageId = generatedMessageId, ModelNotes = modelNotes, MemoryNotes = memoryNotes };
 
-            await instanceResult.Value.SendPromptAsync(wireText, promptOptionsWithMessageId, ct);
+            try
+            {
+                await instanceResult.Value.SendPromptAsync(wireText, promptOptionsWithMessageId, ct);
+            }
+            catch (Exception ex) when (IsSendTimeout(ex, ct))
+            {
+                // Fleet stopped waiting; the harness may still take the prompt. A failure here would show an error row for
+                // a message that arrives, and put a queued prompt back to be sent a second time. The turn's own events say
+                // whether it started.
+                LogPromptUnconfirmed(ex, id);
+            }
+
             if (lostWork.Count > 0)
                 await delegationService.MarkLostWorkReportedAsync(lostWork).ConfigureAwait(false);
 
@@ -582,6 +593,14 @@ public sealed partial class SessionPrompting(
             ? withChoices with { ProviderId = session.SelectedProviderId, ModelId = session.SelectedModelId }
             : withChoices;
     }
+
+    private static bool IsSendTimeout(Exception ex, CancellationToken ct)
+        => !ct.IsCancellationRequested
+            && (ex is TimeoutException || ex is TaskCanceledException { InnerException: TimeoutException });
+
+    [LoggerMessage(Level = LogLevel.Warning,
+        Message = "Sending a prompt to session {SessionId} timed out; the harness may still take it")]
+    private partial void LogPromptUnconfirmed(Exception ex, string sessionId);
 
     [LoggerMessage(Level = LogLevel.Warning,
         Message = "Failed to send prompt to session {SessionId}")]
