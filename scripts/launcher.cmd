@@ -179,15 +179,18 @@ exit /b 0
 call :read_version
 echo Fleet v!VERSION!
 echo.
-echo Usage: fleet node [--port ^<port^>] [--host ^<host^>] [--data-dir ^<path^>] [--profile ^<name^>]
+echo Usage: fleet node up [--tailscale ^| --lan ^| --ssh-only] [--yes] [--port ^<port^>] [--data-dir ^<path^>] [--profile ^<name^>]
+echo        fleet node [--port ^<port^>] [--host ^<host^>] [--data-dir ^<path^>] [--profile ^<name^>]
 echo        fleet node install-service [--port ^<port^>] [--host ^<host^>] [--data-dir ^<path^>] [--profile ^<name^>] [--print]
 echo        fleet node uninstall-service
 echo        fleet node pair [--port ^<port^>] [--data-dir ^<path^>] [--profile ^<name^>]
 echo.
 echo Starts Fleet as a node: the API without the web app. Every request needs the access token,
-echo even from this machine. Add the node to another Fleet in Settings ^> Machines ^> Add a machine.
+echo even from this machine. Run "fleet node up" to set it up, then add it to another Fleet in Settings ^> Machines ^> Add a machine.
 echo.
 echo Commands:
+echo   up                  Set this machine up: ask how other machines reach it, keep it running in the background,
+echo                       and print a pairing link. Run it again to change the choice or get a new link.
 echo   install-service     Keep the node running as you: now, when you log on, and if it stops
 echo                       ^(a scheduled task named "Fleet node"^)
 echo   uninstall-service   Stop the node and remove that task
@@ -199,6 +202,10 @@ echo   --port ^<port^>       Override the server port
 echo   --host ^<host^>       Override the bind host ^(0.0.0.0 lets other machines connect^)
 echo   --data-dir ^<path^>   Override the data directory (default: %%USERPROFILE%%\.weave)
 echo   --profile ^<name^>    Use a profile-specific data directory
+echo   --tailscale         With up: listen on this machine's Tailscale address
+echo   --lan               With up: listen on every network this machine is on
+echo   --ssh-only          With up: listen on this machine only; other machines connect over SSH
+echo   --yes               With up: don't ask. Uses the choice above, else what is set up, else Tailscale when it's up, else --ssh-only
 echo   --print             With install-service: show what it would register and run, and change nothing
 exit /b 0
 
@@ -211,6 +218,9 @@ set "REQUIRE_TOKEN="
 set "NODE="
 set "SERVICE_ACTION="
 set "NODE_PAIR="
+set "NODE_UP="
+set "UP_CHOICE="
+set "ASSUME_YES="
 set "PRINT_ONLY="
 
 rem "fleet node ..." takes the same server options; it only has to come first.
@@ -227,6 +237,9 @@ if defined NODE (
         shift
     ) else if /i "%~1"=="pair" (
         set "NODE_PAIR=1"
+        shift
+    ) else if /i "%~1"=="up" (
+        set "NODE_UP=1"
         shift
     )
 )
@@ -296,6 +309,19 @@ if /i "%~1"=="--require-token" (
 if /i "%~1"=="--json" (
     if not defined NODE_PAIR goto :json_without_pair
     set "NODE_PAIR_JSON=--json"
+    shift
+    goto :parse_args_loop
+)
+for %%C in (tailscale lan ssh-only) do if /i "%~1"=="--%%C" (
+    if not defined NODE_UP goto :up_option_without_up
+    if defined UP_CHOICE if /i not "!UP_CHOICE!"=="%%C" goto :up_two_choices
+    set "UP_CHOICE=%%C"
+    shift
+    goto :parse_args_loop
+)
+if /i "%~1"=="--yes" (
+    if not defined NODE_UP goto :up_option_without_up
+    set "ASSUME_YES=1"
     shift
     goto :parse_args_loop
 )
@@ -441,6 +467,8 @@ if not defined Fleet__AnalyticsDatabasePath set "Fleet__AnalyticsDatabasePath=%A
 if not defined Fleet__DataProtection__KeyPath set "Fleet__DataProtection__KeyPath=%KEY_DIR_DEFAULT%"
 if defined REQUIRE_TOKEN set "Fleet__Auth__RequireToken=true"
 
+if defined NODE_UP goto :do_node_up
+
 if defined NODE_PAIR (
     rem Asks the node already running with these settings for a code, prints it and stops.
     "%APP_BIN%" --node-pair %NODE_PAIR_JSON% --urls "%LISTEN_URL%" --contentRoot "%APP_CONTENT_ROOT%"
@@ -526,7 +554,111 @@ rem you at log on, hidden, and starts it again when it stops (not after exit cod
 rem data directory). Never a Windows service, which would run as SYSTEM, away from your sign-ins and repositories.
 :do_service
 if "%SERVICE_ACTION%"=="uninstall-service" (
-    if defined PORT_OVERRIDE goto :service_no_options
+    if defined PORT_OVERRIDE goto :up_option_without_up
+echo Error: %~1 only works with fleet node up. >&2
+exit /b 1
+
+:up_two_choices
+echo Error: choose one of --tailscale, --lan and --ssh-only. >&2
+exit /b 1
+
+rem fleet node up: asks how other machines should reach this one, runs install-service with that host, waits until
+rem the node answers and prints the pairing link it gives. The "Fleet node" task is the same one install-service makes.
+:do_node_up
+if defined HOST_OVERRIDE (
+    echo Error: fleet node up picks the host from your choice. Use --tailscale, --lan or --ssh-only. >&2
+    exit /b 1
+)
+set "TS_IP="
+where tailscale >nul 2>&1 && for /f "delims=" %%A in ('tailscale ip -4 2^>nul') do if not defined TS_IP set "TS_IP=%%A"
+set "CURRENT_HOST="
+for /f "usebackq delims=" %%H in (`%PS_CMD% -NoProfile -Command "$t = Get-ScheduledTask -TaskName 'Fleet node' -ErrorAction SilentlyContinue; if ($t -and $t.Actions[0].Arguments -match '--host ''([^'']*)''') { $Matches[1] }"`) do set "CURRENT_HOST=%%H"
+set "RECOMMENDED=ssh-only"
+if defined TS_IP set "RECOMMENDED=tailscale"
+if "!CURRENT_HOST!"=="0.0.0.0" set "RECOMMENDED=lan"
+if "!CURRENT_HOST!"=="127.0.0.1" set "RECOMMENDED=ssh-only"
+if defined TS_IP if "!CURRENT_HOST!"=="!TS_IP!" set "RECOMMENDED=tailscale"
+if not defined UP_CHOICE if defined ASSUME_YES set "UP_CHOICE=!RECOMMENDED!"
+if not defined UP_CHOICE (
+    echo How should your other machines reach this one?
+    echo   1^) Tailscale        only your devices can reach it
+    echo   2^) Local network    anyone on it can try a code
+    echo   3^) Only over SSH    listens on this machine only
+    echo Recommended: !RECOMMENDED!
+    choice /c 123 /n /m "Choose 1-3: "
+    if errorlevel 4 (
+        echo Error: fleet node up needs a choice when it can't ask. Add --tailscale, --lan or --ssh-only. >&2
+        exit /b 1
+    )
+    if errorlevel 3 (set "UP_CHOICE=ssh-only") else if errorlevel 2 (set "UP_CHOICE=lan") else (set "UP_CHOICE=tailscale")
+    echo.
+)
+if "!UP_CHOICE!"=="tailscale" (
+    if not defined TS_IP (
+        where tailscale >nul 2>&1 || (
+            echo Error: Tailscale isn't installed here. Install it from tailscale.com, run tailscale up, then fleet node up again. >&2
+            exit /b 1
+        )
+        echo Error: Tailscale isn't signed in. Run tailscale up, then fleet node up again. >&2
+        exit /b 1
+    )
+    set "UP_HOST=!TS_IP!"
+) else if "!UP_CHOICE!"=="lan" (
+    set "UP_HOST=0.0.0.0"
+) else (
+    set "UP_HOST=127.0.0.1"
+)
+set "WEAVE_FLEET_HOST=!UP_HOST!"
+set "LISTEN_URL=http://!UP_HOST!:%WEAVE_FLEET_PORT%"
+set "ASPNETCORE_URLS=!LISTEN_URL!"
+set "URLS=!LISTEN_URL!"
+set "Fleet__Host=!UP_HOST!"
+for %%I in ("%DATA_DIR%") do set "DATA_DIR=%%~fI"
+set "LINK_FILE=%TEMP%\fleet-node-link-%RANDOM%.txt"
+
+set "UP_RUNNING="
+if "!CURRENT_HOST!"=="!UP_HOST!" (
+    "%APP_BIN%" --node-pair --urls "!LISTEN_URL!" --contentRoot "%APP_CONTENT_ROOT%" >"%LINK_FILE%" 2>nul && set "UP_RUNNING=1"
+)
+if defined UP_RUNNING (
+    call :up_step "Already running on !UP_HOST!:%WEAVE_FLEET_PORT%"
+    goto :up_answered
+)
+call "%LAUNCHER_PATH%" node install-service --port %WEAVE_FLEET_PORT% --host !UP_HOST! --data-dir "%DATA_DIR%" >nul
+if errorlevel 1 exit /b 1
+call :up_step "Listening on !UP_HOST!:%WEAVE_FLEET_PORT%"
+call :up_step "Runs in the background, starts at log on"
+set /a UP_ATTEMPTS=0
+:up_wait
+"%APP_BIN%" --node-pair --urls "!LISTEN_URL!" --contentRoot "%APP_CONTENT_ROOT%" >"%LINK_FILE%" 2>nul
+if not errorlevel 1 goto :up_answered
+set /a UP_ATTEMPTS+=1
+if !UP_ATTEMPTS! geq 30 (
+    del "%LINK_FILE%" >nul 2>&1
+    echo Error: the machine didn't answer in 30 seconds. Look at its task in Task Scheduler ^(Fleet node^). >&2
+    exit /b 1
+)
+ping -n 2 127.0.0.1 >nul
+goto :up_wait
+
+:up_answered
+call :up_step "Master token stays on this machine"
+echo.
+type "%LINK_FILE%"
+del "%LINK_FILE%" >nul 2>&1
+if "!UP_CHOICE!"=="ssh-only" (
+    echo.
+    echo From the Fleet you work from, open Settings ^> Machines ^> Add a machine ^> Over SSH.
+)
+exit /b 0
+
+rem One finished step, with a check mark. PowerShell draws the mark because a batch file can't hold it safely.
+:up_step
+set "FLEET_STEP=%~1"
+%PS_CMD% -NoProfile -Command "Write-Host ([string][char]0x2713 + ' ' + $env:FLEET_STEP)"
+exit /b 0
+
+:service_no_options
     if defined HOST_OVERRIDE goto :service_no_options
     if defined DATA_DIR_OVERRIDE goto :service_no_options
     if defined PROFILE_NAME goto :service_no_options

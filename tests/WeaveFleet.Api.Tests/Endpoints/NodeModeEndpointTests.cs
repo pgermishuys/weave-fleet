@@ -204,7 +204,7 @@ public sealed class NodeModeEndpointTests :
 
         var lines = NodeEndpoints.StartupLines(options, new LoopbackAuthPolicy(options.Host, requireToken: true), new StubTokens("atlas-token-0123456789", LocalTokenSource.Environment), "/data/fleet.machine.json");
 
-        lines.ShouldContain(line => line.Contains("other machines can't reach it yet", StringComparison.Ordinal));
+        lines.ShouldContain(line => line.Contains("other machines can't reach it directly yet", StringComparison.Ordinal));
         lines.ShouldNotContain("    fleet node pair");
         lines.ShouldContain("  Scripts can use the master token in WEAVE_FLEET_AUTH_TOKEN.");
     }

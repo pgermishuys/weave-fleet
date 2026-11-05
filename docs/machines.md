@@ -55,7 +55,15 @@ agents and opening terminals. Treat it like a password.
 ### Run a node without the web UI
 
 A machine that only does the work, such as a server or a Mac mini under the desk, doesn't need Fleet's web app.
-Start it as a node:
+Set it up with one command:
+
+```sh
+fleet node up
+```
+
+It asks how your other machines should reach this one, keeps the node running in the background and prints a pairing
+link. See [Set a machine up with `fleet node up`](#set-a-machine-up-with-fleet-node-up). To run a node in the
+foreground instead, for example in a container, start it with the flags:
 
 ```sh
 fleet node --host 0.0.0.0 --port 2113
@@ -88,7 +96,7 @@ It prints one pairing link, `<address>/add-machine#<CODE>`, for example
 `http://100.64.90.72:2113/add-machine#K3MQ-9ZDT`. The address keeps its scheme and port; the code sits in the
 fragment, so it never reaches a server log. When the node has several reachable addresses, the link uses the first
 (tailnet first) and the others are listed under "Also reachable at". When the node only listens on loopback, it says
-so and how to fix it (`--host 0.0.0.0`, or `tailscale serve`), and prints no link.
+so and tells you to run `fleet node up` and pick Tailscale or Local network, and prints no link.
 
 In the other Fleet, open Settings → Machines → **Add a machine** and paste the link into **Pairing link**. Fleet looks
 at the machine first, without using the code up, and shows its name, system, Fleet version and how it was reached,
@@ -153,6 +161,32 @@ needs a prompt, such as a missing `curl` or a Linux machine with no user systemd
 there the way you would anywhere. A remote Windows machine isn't automated: Fleet says so and links the
 [install docs](https://fleet.tryweave.io/docs). `POST /api/machines/ssh` answers `409` with `host`, `os`,
 `canInstall` and `commands` for this case, and `POST /api/machines/ssh/install` runs them.
+
+### Set a machine up with `fleet node up`
+
+On the machine you want to add, with Fleet installed:
+
+```sh
+fleet node up
+```
+
+It asks how other machines should reach this one:
+
+| Choice | Listens on | Good for |
+|---|---|---|
+| **Tailscale** (preselected when `tailscale` is installed and signed in) | this machine's tailnet address, `tailscale ip -4` | only your devices can reach it |
+| **Local network** | `0.0.0.0` | anyone on the network can try a code |
+| **Only over SSH** | `127.0.0.1` | other machines connect from Settings → Machines → Add a machine → Over SSH |
+
+Then it installs the background service below with that choice, waits until the machine answers, and prints the
+pairing link from `fleet node pair`. Each finished step prints a ✓ line. Run it again to change the choice. When
+nothing changes it says the machine is already running, and prints a fresh link.
+
+For scripts, give the choice as a flag, so nothing is asked: `--tailscale`, `--lan` or `--ssh-only`. `--yes` also
+doesn't ask: it keeps what is set up, else uses Tailscale when it is up, else `--ssh-only`. Without a terminal and
+without one of these, `fleet node up` exits with an error. `--port`, `--data-dir` and `--profile` work as in
+`fleet node`; `--host` doesn't, because the choice sets it. On Linux and macOS it writes the service and on Windows the
+scheduled task, as `fleet node install-service` does, which stays the way to pass any other `--host`.
 
 ### Keep a node running
 

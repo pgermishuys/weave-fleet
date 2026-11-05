@@ -65,7 +65,7 @@ public sealed class NodePairCommandTests
 
         exit.ShouldBe(0);
         output.ShouldContain("only listens on this computer");
-        output.ShouldContain("--host 0.0.0.0");
+        output.ShouldContain("fleet node up");
         output.ShouldNotContain("add-machine#");
     }
 

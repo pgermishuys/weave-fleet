@@ -26,6 +26,9 @@ cat > "$WORK/fleet/app/WeaveFleet.Api" <<'EOF'
   echo "port=${Fleet__Port:-}"
   echo "require_token=${Fleet__Auth__RequireToken:-}"
 } > "$FLEET_TEST_OUT"
+case " $* " in
+  *" --node-pair "*) printf 'Pairing link for stub\n\n    http://stub/add-machine#CODE\n' ;;
+esac
 EOF
 chmod +x "$WORK/fleet/app/WeaveFleet.Api"
 
@@ -119,6 +122,7 @@ NODE_HELP_OPTIONS="$(grep -o -- '--[a-z][a-z-]*' "$WORK/stdout" | sort -u)"
 for option in $NODE_HELP_OPTIONS; do
   case "$option" in
     --print) continue ;;  # install-service only; checked below
+    --tailscale|--lan|--ssh-only|--yes) continue ;;  # up only; checked below
     --json) continue ;;  # pair only; checked below
     --port) run_fleet node "$option" 2113 ;;
     --host) run_fleet node "$option" 127.0.0.1 ;;
@@ -247,6 +251,59 @@ launchctl bootout gui/$(id -u)/io.tryweave.fleet-node
 launchctl bootstrap gui/$(id -u) $PLIST" "macOS install-service again"
 run_service macos node uninstall-service || fail "macOS uninstall-service failed: $(cat "$WORK/stdout")"
 [ -f "$PLIST" ] && fail "macOS uninstall-service left $PLIST"
+
+# fleet node up: the choice becomes the host of the service, and it prints the link the node gives. tailscale is a
+# stand-in that prints an address, or fails like a signed-out one.
+printf '#!/bin/sh\n[ -f "$FLEET_TEST_TAILSCALE_DOWN" ] && exit 1\necho 100.64.90.72\n' > "$WORK/stubs/tailscale"
+chmod +x "$WORK/stubs/tailscale"
+rm -f "$UNIT"
+
+run_service linux node up --lan --port 5512 --data-dir node-data || fail "node up --lan failed: $(cat "$WORK/stdout")"
+grep -qF '"--host" "0.0.0.0"' "$UNIT" 2>/dev/null || fail "node up --lan didn't write host 0.0.0.0: $(cat "$UNIT" 2>/dev/null)"
+expect_output "✓ Listening on 0.0.0.0:5512" "node up --lan"
+expect_output "✓ Runs in the background, starts at login" "node up --lan"
+expect_output "http://stub/add-machine#CODE" "node up --lan"
+expect_calls "systemctl --user daemon-reload
+systemctl --user enable fleet-node.service
+systemctl --user restart fleet-node.service" "node up --lan"
+
+# Same choice again: nothing is rewritten or restarted, and a fresh link prints.
+run_service linux node up --lan --port 5512 --data-dir node-data || fail "node up again failed: $(cat "$WORK/stdout")"
+expect_output "✓ Already running on 0.0.0.0:5512" "node up again"
+expect_output "http://stub/add-machine#CODE" "node up again"
+expect_calls "" "node up again"
+
+# A different choice changes the service.
+run_service linux node up --tailscale --port 5512 --data-dir node-data || fail "node up --tailscale failed: $(cat "$WORK/stdout")"
+grep -qF '"--host" "100.64.90.72"' "$UNIT" 2>/dev/null || fail "node up --tailscale didn't write the tailnet address: $(cat "$UNIT" 2>/dev/null)"
+expect_output "✓ Listening on 100.64.90.72:5512" "node up --tailscale"
+run_service linux node up --ssh-only --port 5512 --data-dir node-data || fail "node up --ssh-only failed: $(cat "$WORK/stdout")"
+grep -qF '"--host" "127.0.0.1"' "$UNIT" 2>/dev/null || fail "node up --ssh-only didn't write loopback: $(cat "$UNIT" 2>/dev/null)"
+expect_output "Over SSH" "node up --ssh-only"
+
+# --yes keeps what is set up. On a fresh machine it takes Tailscale when that is up, and Only over SSH when it isn't.
+# Without a choice and a terminal, it stops.
+run_service linux node up --yes --port 5512 --data-dir node-data || fail "node up --yes on top of a service failed"
+expect_output "✓ Already running on 127.0.0.1:5512" "node up --yes on top of a service"
+rm -f "$UNIT"
+run_service linux node up --yes --port 5512 --data-dir node-data || fail "node up --yes failed: $(cat "$WORK/stdout")"
+expect_output "✓ Listening on 100.64.90.72:5512" "node up --yes"
+touch "$WORK/tailscale-down"
+(cd "$WORK" && env FLEET_TEST_TAILSCALE_DOWN="$WORK/tailscale-down" HOME="$WORK/home" PATH="$WORK/stubs:$PATH" WEAVE_FLEET_DATA_DIR="$WORK/data" \
+  FLEET_TEST_OUT="$WORK/out" FLEET_TEST_CALLS="$WORK/calls" "$WORK/fleet/bin/fleet" node up --tailscale --port 5512 > "$WORK/stdout" 2>&1) && fail "node up --tailscale should fail when Tailscale is signed out"
+expect_output "Run tailscale up, then fleet node up again" "node up --tailscale signed out"
+run_service linux node up --port 5512 < /dev/null && fail "node up without a choice or a terminal should fail"
+expect_output "Add --tailscale, --lan or --ssh-only" "node up without a choice"
+run_service linux node up --lan --ssh-only && fail "node up --lan --ssh-only should fail"
+run_service linux node up --lan --host 0.0.0.0 && fail "node up --host should fail"
+run_service linux node --lan && fail "fleet node --lan should fail"
+
+# macOS: the LaunchAgent gets the same host.
+run_service macos node up --lan --port 5512 || fail "macOS node up failed: $(cat "$WORK/stdout")"
+grep -q '<string>0.0.0.0</string>' "$PLIST" 2>/dev/null || fail "macOS node up didn't write host 0.0.0.0"
+run_service macos node up --lan --port 5512 || fail "macOS node up again failed"
+expect_output "✓ Already running on 0.0.0.0:5512" "macOS node up again"
+rm -f "$PLIST" "$UNIT" "$WORK/loaded"
 
 # No call ever named the user's own fleet.service.
 grep -qE '(^| )fleet\.service' "$WORK/calls.all" && fail "a call named fleet.service: $(cat "$WORK/calls.all")"

@@ -89,8 +89,8 @@ public static class NodeEndpoints
         }
         else
         {
-            lines.Add($"  It listens on {options.Host} only, so other machines can't reach it yet. Start it with");
-            lines.Add("  --host 0.0.0.0, or put tailscale serve in front of it, then run fleet node pair.");
+            lines.Add($"  It listens on {options.Host} only, so other machines can't reach it directly yet. Run");
+            lines.Add("  fleet node up and pick Tailscale or Local network, then run fleet node pair.");
         }
 
         lines.Add("");

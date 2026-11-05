@@ -23,6 +23,7 @@ public static class Program
             "port=" + Environment.GetEnvironmentVariable("Fleet__Port"),
             "require_token=" + Environment.GetEnvironmentVariable("Fleet__Auth__RequireToken"),
         });
+        if (Array.IndexOf(args, "--node-pair") >= 0) Console.WriteLine("Pairing link for stub\n\n    http://stub/add-machine#CODE");
     }
 }
 '@
@@ -122,6 +123,7 @@ $nodeValues = @{
 }
 foreach ($option in ([regex]::Matches($nodeHelp, '--[a-z][a-z-]*') | ForEach-Object { $_.Value } | Sort-Object -Unique)) {
     if ($option -eq '--print') { continue }  # install-service only; checked below
+    if ($option -in '--tailscale', '--lan', '--ssh-only', '--yes') { continue }  # up only; checked below
     if ($option -eq '--json') { continue }  # pair only; checked below
     if (-not $nodeValues.ContainsKey($option)) {
         Fail "fleet node help lists $option, which this test doesn't know how to run"
@@ -189,6 +191,30 @@ if (Get-ScheduledTask -TaskName $taskName -ErrorAction SilentlyContinue) { Fail 
 if ($output -notmatch 'removed it') { Fail "fleet node uninstall-service: unexpected output: $output" }
 $output = Invoke-Fleet 'node uninstall-service'
 if ($output -notmatch "There's no Fleet node task") { Fail "fleet node uninstall-service with nothing installed: unexpected output: $output" }
+
+# fleet node up registers the task with the host it chose and prints the link the node gives.
+$nodeData = "`"$(Join-Path $work 'node data')`""
+$output = Invoke-Fleet "node up --lan --port 5512 --data-dir $nodeData"
+if ($script:fleetExitCode -ne 0) { Fail "fleet node up --lan failed: $output" }
+foreach ($expected in 'Listening on 0.0.0.0:5512', 'Runs in the background', 'http://stub/add-machine#CODE') {
+    if (-not $output.Contains($expected)) { Fail "fleet node up --lan: missing '$expected' in: $output" }
+}
+$task = Get-ScheduledTask -TaskName $taskName -ErrorAction SilentlyContinue
+if (-not $task -or $task.Actions[0].Arguments -notmatch "--host '0\.0\.0\.0'") { Fail "fleet node up --lan didn't register host 0.0.0.0: $($task.Actions[0].Arguments)" }
+Write-Host '--- fleet node up --lan --port 5512 (Windows) ---'
+Write-Host $output
+Write-Host '---'
+$output = Invoke-Fleet "node up --lan --port 5512 --data-dir $nodeData"
+if ($output -notmatch 'Already running on 0\.0\.0\.0:5512') { Fail "fleet node up again didn't say it was running: $output" }
+$output = Invoke-Fleet "node up --ssh-only --port 5512 --data-dir $nodeData"
+if ($output -notmatch 'Listening on 127\.0\.0\.1:5512' -or $output -notmatch 'Over SSH') { Fail "fleet node up --ssh-only: unexpected output: $output" }
+$task = Get-ScheduledTask -TaskName $taskName -ErrorAction SilentlyContinue
+if (-not $task -or $task.Actions[0].Arguments -notmatch "--host '127\.0\.0\.1'") { Fail "fleet node up --ssh-only didn't register loopback" }
+Invoke-Fleet 'node uninstall-service' | Out-Null
+$output = Invoke-Fleet 'node up --lan --ssh-only'
+if ($script:fleetExitCode -eq 0) { Fail "fleet node up --lan --ssh-only should fail: $output" }
+$output = Invoke-Fleet 'node --lan'
+if ($script:fleetExitCode -eq 0) { Fail "fleet node --lan should fail: $output" }
 
 # Every option `fleet help` lists is accepted.
 $help = Invoke-Fleet 'help'

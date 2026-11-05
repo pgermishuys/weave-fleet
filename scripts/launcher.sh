@@ -208,15 +208,18 @@ show_node_help() {
   VERSION="$(read_version)"
   echo "Fleet v${VERSION}"
   echo ""
-  echo "Usage: fleet node [--port <port>] [--host <host>] [--data-dir <path>] [--profile <name>]"
+  echo "Usage: fleet node up [--tailscale | --lan | --ssh-only] [--yes] [--port <port>] [--data-dir <path>] [--profile <name>]"
+  echo "       fleet node [--port <port>] [--host <host>] [--data-dir <path>] [--profile <name>]"
   echo "       fleet node install-service [--port <port>] [--host <host>] [--data-dir <path>] [--profile <name>] [--print]"
   echo "       fleet node uninstall-service"
   echo "       fleet node pair [--port <port>] [--data-dir <path>] [--profile <name>] [--json]"
   echo ""
   echo "Starts Fleet as a node: the API without the web app. Every request needs the access token,"
-  echo "even from this machine. Add the node to another Fleet in Settings > Machines > Add a machine."
+  echo "even from this machine. Run 'fleet node up' to set it up, then add it to another Fleet in Settings > Machines > Add a machine."
   echo ""
   echo "Commands:"
+  echo "  up                  Set this machine up: ask how other machines reach it, keep it running in the background,"
+  echo "                      and print a pairing link. Run it again to change the choice or get a new link."
   echo "  install-service     Keep the node running as you: now, when you log in, and if it stops"
   echo "                      (a systemd user service on Linux, a LaunchAgent on macOS)"
   echo "  uninstall-service   Stop the node and remove that service"
@@ -228,6 +231,10 @@ show_node_help() {
   echo "  --host <host>       Override the bind host (0.0.0.0 lets other machines connect)"
   echo "  --data-dir <path>   Override the data directory (default: ~/.weave)"
   echo "  --profile <name>    Use a profile-specific data directory"
+  echo "  --tailscale         With up: listen on this machine's Tailscale address"
+  echo "  --lan               With up: listen on every network this machine is on"
+  echo "  --ssh-only          With up: listen on this machine only; other machines connect over SSH"
+  echo "  --yes               With up: don't ask. Uses the choice above, else what is set up, else Tailscale when it's up, else --ssh-only"
   echo "  --json              With pair: print the code and addresses as one line of JSON, for another Fleet over SSH"
   echo "  --print             With install-service: show what it would write and run, and change nothing"
 }
@@ -337,13 +344,34 @@ service_platform() {
   esac
 }
 
-install_service() {
+# Sets PLATFORM and TARGET, the file the service lives in.
+set_service_target() {
   PLATFORM="$(service_platform)" || exit 1
   if [ "$PLATFORM" = linux ]; then
     TARGET="$(systemd_unit_path)"
   else
     TARGET="$(launchd_plist_path)"
   fi
+}
+
+# The service gets what this run resolved, so it starts the same node whatever its own environment holds.
+set_service_args() {
+  case "$DATA_DIR" in
+    /*) ;;
+    *) DATA_DIR="$PWD/$DATA_DIR" ;;
+  esac
+  SERVICE_ARGS="$SCRIPT_DIR/$(basename "$0")
+node
+--port
+$PORT
+--host
+$HOST
+--data-dir
+$DATA_DIR"
+}
+
+install_service() {
+  set_service_target
 
   if [ "$PRINT_ONLY" -eq 1 ]; then
     echo "fleet node install-service would write $TARGET:"
@@ -424,12 +452,7 @@ install_service() {
 }
 
 uninstall_service() {
-  PLATFORM="$(service_platform)" || exit 1
-  if [ "$PLATFORM" = linux ]; then
-    TARGET="$(systemd_unit_path)"
-  else
-    TARGET="$(launchd_plist_path)"
-  fi
+  set_service_target
   if [ ! -f "$TARGET" ]; then
     echo "There's no $SERVICE_NAME service to remove."
     return 0
@@ -449,10 +472,148 @@ uninstall_service() {
   echo "Its data stays where it was. To start it again: fleet node install-service"
 }
 
+# ── fleet node up ─────────────────────────────────────────────────────────────
+# Asks how other machines should reach this one, installs or updates the service with that bind, waits until the node
+# answers and prints a pairing link. It runs the same install-service as above, so there is one way to write the service.
+tailscale_ip() {
+  for cli in tailscale /Applications/Tailscale.app/Contents/MacOS/Tailscale; do
+    if command -v "$cli" >/dev/null 2>&1; then
+      "$cli" ip -4 2>/dev/null | head -n 1
+      return 0
+    fi
+  done
+}
+
+# The host the installed service listens on, if there is one.
+installed_host() {
+  [ -f "$TARGET" ] || return 0
+  if [ "$PLATFORM" = linux ]; then
+    sed -n 's/.*"--host" "\([^"]*\)".*/\1/p' "$TARGET"
+  else
+    grep -A1 '<string>--host</string>' "$TARGET" | sed -n 's/.*<string>\([^<]*\)<\/string>.*/\1/p' | tail -n 1
+  fi
+}
+
+# Asks the node for a pairing link: its output on success, nothing while it isn't answering.
+ask_node_for_link() {
+  "$APP_BIN" --node-pair --urls "$LISTEN_URL" --contentRoot "$APP_CONTENT_ROOT" 2>/dev/null
+}
+
+node_up_choose() {
+  TAILSCALE_IP="$(tailscale_ip)"
+  CURRENT_HOST="$(installed_host)"
+  RECOMMENDED=ssh-only
+  [ -n "$TAILSCALE_IP" ] && RECOMMENDED=tailscale
+  case "$CURRENT_HOST" in
+    "") ;;
+    0.0.0.0) RECOMMENDED=lan ;;
+    127.0.0.1) RECOMMENDED=ssh-only ;;
+    "$TAILSCALE_IP") RECOMMENDED=tailscale ;;
+  esac
+  [ -n "$UP_CHOICE" ] && return 0
+  if [ "$ASSUME_YES" -eq 1 ]; then
+    UP_CHOICE="$RECOMMENDED"
+    return 0
+  fi
+  if [ ! -t 0 ]; then
+    echo "Error: fleet node up needs a choice when it can't ask. Add --tailscale, --lan or --ssh-only." >&2
+    exit 1
+  fi
+
+  NAME="$(hostname 2>/dev/null | sed 's/\..*//')"
+  echo "Set up ${NAME:-this machine} as a Fleet machine"
+  echo "$(service_platform_name) · Fleet $VERSION"
+  echo ""
+  echo "How should your other machines reach ${NAME:-this machine}?"
+  tailscale_note="only your devices can reach it"
+  [ -n "$TAILSCALE_IP" ] || tailscale_note="needs Tailscale installed and signed in"
+  printf '  1) Tailscale        %s%s\n' "$tailscale_note" "$([ "$RECOMMENDED" = tailscale ] && echo '  (recommended)')"
+  printf '  2) Local network    anyone on it can try a code%s\n' "$([ "$RECOMMENDED" = lan ] && echo '  (current)')"
+  printf '  3) Only over SSH    listens on this machine only%s\n' "$([ "$RECOMMENDED" = ssh-only ] && echo '  (current)')"
+  case "$RECOMMENDED" in tailscale) default=1 ;; lan) default=2 ;; *) default=3 ;; esac
+  while :; do
+    printf 'Choose 1-3 [%s]: ' "$default"
+    read -r answer || { echo "" >&2; exit 1; }
+    case "${answer:-$default}" in
+      1) UP_CHOICE=tailscale; break ;;
+      2) UP_CHOICE=lan; break ;;
+      3) UP_CHOICE=ssh-only; break ;;
+    esac
+  done
+  echo ""
+}
+
+service_platform_name() {
+  case "$(uname -s)" in
+    Darwin) echo macOS ;;
+    *) uname -s ;;
+  esac
+}
+
+node_up() {
+  set_service_target
+  node_up_choose
+  case "$UP_CHOICE" in
+    tailscale)
+      if [ -z "$TAILSCALE_IP" ]; then
+        if [ -z "$(command -v tailscale)" ] && [ ! -x /Applications/Tailscale.app/Contents/MacOS/Tailscale ]; then
+          echo "Error: Tailscale isn't installed here. Install it from tailscale.com, run tailscale up, then fleet node up again." >&2
+        else
+          echo "Error: Tailscale isn't signed in. Run tailscale up, then fleet node up again." >&2
+        fi
+        exit 1
+      fi
+      HOST="$TAILSCALE_IP"
+      ;;
+    lan) HOST=0.0.0.0 ;;
+    *) HOST=127.0.0.1 ;;
+  esac
+  LISTEN_URL="http://${HOST}:${PORT}"
+  export ASPNETCORE_URLS="$LISTEN_URL" URLS="$LISTEN_URL" Fleet__Host="$HOST"
+  set_service_args
+
+  LINK_OUTPUT=""
+  [ "$CURRENT_HOST" = "$HOST" ] && LINK_OUTPUT="$(ask_node_for_link)"
+  if [ -n "$LINK_OUTPUT" ]; then
+    echo "✓ Already running on ${HOST}:${PORT}"
+  else
+    install_service >/dev/null
+    echo "✓ Listening on ${HOST}:${PORT}"
+    echo "✓ Runs in the background, starts at login"
+    attempts=0
+    while LINK_OUTPUT="$(ask_node_for_link)"; [ -z "$LINK_OUTPUT" ]; do
+      attempts=$((attempts + 1))
+      if [ "$attempts" -ge 30 ]; then
+        echo "Error: the machine didn't answer in 30 seconds. Look at the log: $(service_log_hint)" >&2
+        exit 1
+      fi
+      sleep 1
+    done
+  fi
+  echo "✓ Master token stays on this machine"
+  echo ""
+  echo "$LINK_OUTPUT"
+  if [ "$UP_CHOICE" = ssh-only ]; then
+    echo ""
+    echo "From the Fleet you work from, open Settings → Machines → Add a machine → Over SSH."
+  fi
+}
+
+service_log_hint() {
+  if [ "$PLATFORM" = linux ]; then
+    echo "journalctl --user -u $SERVICE_NAME"
+  else
+    echo "$HOME/Library/Logs/$SERVICE_NAME.log"
+  fi
+}
+
 # `fleet node …` takes the same server options; it only has to come first.
 NODE=0
 NODE_PAIR=0
 NODE_PAIR_JSON=""
+NODE_UP=0
+UP_CHOICE=""
+ASSUME_YES=0
 SERVICE_ACTION=""
 if [ "${1:-}" = "node" ]; then
   NODE=1
@@ -464,6 +625,10 @@ if [ "${1:-}" = "node" ]; then
       ;;
     pair)
       NODE_PAIR=1
+      shift
+      ;;
+    up)
+      NODE_UP=1
       shift
       ;;
   esac
@@ -607,6 +772,24 @@ while [ "$#" -gt 0 ]; do
       fi
       NODE_PAIR_JSON="--json"
       ;;
+    --tailscale|--lan|--ssh-only)
+      if [ "$NODE_UP" -ne 1 ]; then
+        echo "Error: $1 only works with fleet node up." >&2
+        exit 1
+      fi
+      if [ -n "$UP_CHOICE" ] && [ "$UP_CHOICE" != "${1#--}" ]; then
+        echo "Error: choose one of --tailscale, --lan and --ssh-only." >&2
+        exit 1
+      fi
+      UP_CHOICE="${1#--}"
+      ;;
+    --yes|-y)
+      if [ "$NODE_UP" -ne 1 ]; then
+        echo "Error: $1 only works with fleet node up." >&2
+        exit 1
+      fi
+      ASSUME_YES=1
+      ;;
     --print)
       if [ "$SERVICE_ACTION" != "install-service" ]; then
         echo "Error: --print only works with fleet node install-service." >&2
@@ -651,6 +834,11 @@ if [ -n "$PROFILE_NAME" ]; then
   DATA_DIR="$DATA_DIR/profiles/$PROFILE_NAME"
 fi
 
+if [ "$NODE_UP" -eq 1 ] && [ -n "$HOST_OVERRIDE" ]; then
+  echo "Error: fleet node up picks the host from your choice. Use --tailscale, --lan or --ssh-only." >&2
+  exit 1
+fi
+
 if [ -n "$SERVICE_ACTION" ]; then
   if [ "$SERVICE_ACTION" = "uninstall-service" ]; then
     if [ -n "$PORT_OVERRIDE$HOST_OVERRIDE$DATA_DIR_OVERRIDE$PROFILE_NAME" ]; then
@@ -660,19 +848,7 @@ if [ -n "$SERVICE_ACTION" ]; then
     uninstall_service
     exit 0
   fi
-  # The service gets what this run resolved, so it starts the same node whatever its own environment holds.
-  case "$DATA_DIR" in
-    /*) ;;
-    *) DATA_DIR="$PWD/$DATA_DIR" ;;
-  esac
-  SERVICE_ARGS="$SCRIPT_DIR/$(basename "$0")
-node
---port
-$PORT
---host
-$HOST
---data-dir
-$DATA_DIR"
+  set_service_args
   install_service
   exit 0
 fi
@@ -695,6 +871,10 @@ export Fleet__AnalyticsDatabasePath="${Fleet__AnalyticsDatabasePath:-$ANALYTICS_
 export Fleet__DataProtection__KeyPath="${Fleet__DataProtection__KeyPath:-$KEY_DIR_DEFAULT}"
 if [ "$REQUIRE_TOKEN" -eq 1 ]; then
   export Fleet__Auth__RequireToken=true
+fi
+if [ "$NODE_UP" -eq 1 ]; then
+  node_up
+  exit 0
 fi
 if [ "$NODE_PAIR" -eq 1 ]; then
   # Asks the node already running with these settings for a code, prints it and stops.
