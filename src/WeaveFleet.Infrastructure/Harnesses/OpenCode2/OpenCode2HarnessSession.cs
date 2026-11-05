@@ -1202,6 +1202,7 @@ internal sealed partial class OpenCode2HarnessSession : IHarnessSession, IOpenCo
                 ?? PermissionEvents.String(metadata, "filepath")
                 ?? PermissionEvents.String(metadata, "path")
                 ?? PermissionEvents.String(metadata, "url")
+                ?? ToolInput(metadata)
                 ?? (resources.Count > 0 ? string.Join(", ", resources) : PermissionEvents.String(data, "message")),
             Detail = PermissionEvents.String(metadata, "diff"),
             Directory = PermissionEvents.String(metadata, "cwd") ?? PermissionEvents.String(metadata, "workdir"),
@@ -1216,6 +1217,17 @@ internal sealed partial class OpenCode2HarnessSession : IHarnessSession, IOpenCo
             _events.Writer.TryWrite(_mapper.Status(ActivityStatuses.WaitingInput));
         }
     }
+
+    /// <summary>
+    /// What an MCP tool's ask carries: V2 asks for its name with the resource <c>*</c> and the call's input under
+    /// <c>metadata.input</c>, so the input is what the user decides on. Null when there's none to show.
+    /// </summary>
+    private static string? ToolInput(JsonElement metadata)
+        => metadata.ValueKind == JsonValueKind.Object
+            && metadata.TryGetProperty("input", out var input)
+            && input is { ValueKind: JsonValueKind.Object } && input.EnumerateObject().Any()
+                ? input.GetRawText()
+                : null;
 
     /// <summary>The ask no longer waits; once none does, the turn is working again.</summary>
     private void SettlePermission(string requestId, string reply)
