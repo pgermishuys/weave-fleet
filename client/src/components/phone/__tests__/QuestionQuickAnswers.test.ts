@@ -1,6 +1,10 @@
 import { describe, expect, it } from "vitest";
 import { mount } from "@vue/test-utils";
-import QuestionQuickAnswers from "../QuestionQuickAnswers.vue";
+import QuickAnswersComponent from "../QuestionQuickAnswers.vue";
+
+// CI's older @vue/test-utils rejects this component's generated props type
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+const QuestionQuickAnswers = QuickAnswersComponent as any;
 
 const opt = (label: string, description = "") => ({ label, description });
 const base = { sent: null, busy: false, moreTestId: "more" };
