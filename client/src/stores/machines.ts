@@ -49,6 +49,15 @@ export interface MachineInfo {
   update?: MachineUpdate | null;
 }
 
+/** The machine a pairing code belongs to, as it answered before the code was used. `version` is null for an older Fleet. */
+export interface PairingPreview {
+  machineId: string;
+  name: string;
+  os: string | null;
+  version: string | null;
+  baseUrl: string;
+}
+
 /** A harness as a machine last checked it. */
 export interface MachineHarness {
   type: string;
@@ -517,6 +526,21 @@ export const useMachinesStore = defineStore("machines", () => {
     return connection;
   }
 
+  /**
+   * Asks home to look at the machine a pairing code belongs to, without using the code up: who it is and which Fleet
+   * it runs. Throws with the reason when it can't be reached or the code is wrong.
+   */
+  async function previewPairing(url: string, code: string): Promise<PairingPreview> {
+    if (source.value !== "server") throw new Error("This Fleet can't pair a machine from here. Add it by address with its token instead.");
+    const response = await fetchOnMachine(null, "/api/machines/pair/preview", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ baseUrl: url.trim(), code: code.trim() }),
+    });
+    if (!response.ok) throw new Error(await readError(response, "Couldn't reach the machine."));
+    return await response.json() as PairingPreview;
+  }
+
   /** The hosts in ~/.ssh/config on the machine running Fleet; null until loaded. Empty when it has none or can't say. */
   const sshHosts = shallowRef<SshHost[] | null>(null);
 
@@ -958,6 +982,7 @@ export const useMachinesStore = defineStore("machines", () => {
     loadHome,
     addMachine,
     pairMachine,
+    previewPairing,
     sshHosts,
     loadSshHosts,
     addOverSsh,

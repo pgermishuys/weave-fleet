@@ -42,6 +42,18 @@ public static class MachinesEndpoints
         .Produces<MachineEntryResponse>(200)
         .WithName("AddMachine");
 
+        // What Add a machine shows once a pairing link is pasted: the machine behind it, before the code is used.
+        group.MapPost("/pair/preview", async (PairMachineRequest request, RemoteMachineService machines, CancellationToken cancellationToken) =>
+        {
+            var (found, error) = await machines.PreviewByCodeAsync(request.BaseUrl ?? "", request.Code ?? "", cancellationToken);
+            return found is null
+                ? Results.BadRequest(new ErrorResponse(error!))
+                : Results.Ok(new PairMachinePreviewResponse(found.MachineId, found.Name, found.Os, found.Version, found.BaseUrl));
+        })
+        .RequireAuthorization(FleetClaims.MachineOwnerPolicy)
+        .Produces<PairMachinePreviewResponse>(200)
+        .WithName("PreviewPairMachine");
+
         group.MapPost("/pair", async (PairMachineRequest request, RemoteMachineService machines, ISshTunnels tunnels, CancellationToken cancellationToken) =>
         {
             var (machine, error) = await machines.AddByCodeAsync(request.BaseUrl ?? "", request.Code ?? "", cancellationToken);

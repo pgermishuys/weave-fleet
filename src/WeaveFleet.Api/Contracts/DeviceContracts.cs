@@ -28,7 +28,7 @@ public sealed record CreatePairingResponse(
 public sealed record PairingPreviewRequest(string? Secret, string? ManualCode);
 
 /// <summary>The machine a pairing code would connect to.</summary>
-public sealed record PairingPreviewResponse(string MachineId, string MachineName, string Os, DateTimeOffset ExpiresAt);
+public sealed record PairingPreviewResponse(string MachineId, string MachineName, string Os, DateTimeOffset ExpiresAt, string? Version = null);
 
 /// <summary>Redeems a pairing code for a device token.</summary>
 /// <param name="DeviceName">What the device is called in Settings: 1–60 characters.</param>
@@ -39,15 +39,22 @@ public sealed record PairingRedeemRequest(string? Secret, string? ManualCode, st
 /// <summary>A pairing code for another Fleet to redeem (<c>fleet node pair</c>), and where to find this machine.</summary>
 /// <param name="ManualCode">The code, <c>XXXX-XXXX</c>.</param>
 /// <param name="Addresses">URLs another machine might use, best first. Empty when Fleet only listens on loopback.</param>
+/// <param name="Link">The pairing link for the first address (<c>&lt;address&gt;/add-machine#CODE</c>); null when there is no address.</param>
 public sealed record MachinePairingCodeResponse(
     string ManualCode,
     DateTimeOffset ExpiresAt,
     string MachineId,
     string MachineName,
-    IReadOnlyList<string> Addresses);
+    IReadOnlyList<string> Addresses,
+    string? Link = null);
 
 /// <summary>Adds a machine by the address it listens on and a code from <c>fleet node pair</c>.</summary>
 public sealed record PairMachineRequest(string? BaseUrl, string? Code);
+
+/// <summary>The machine a pairing link points at, as it answered before the code was used.</summary>
+/// <param name="Version">The Fleet version it runs; null for a Fleet too old to say.</param>
+/// <param name="BaseUrl">The address as Fleet will use it.</param>
+public sealed record PairMachinePreviewResponse(string MachineId, string Name, string? Os, string? Version, string BaseUrl);
 
 /// <summary>A paired device's token. Returned once; Fleet keeps only a hash.</summary>
 public sealed record PairingRedeemResponse(string DeviceId, string Token, MachineResponse Machine);

@@ -121,31 +121,7 @@
 
   .path { font-weight: 500; }
 
-  .address {
-    display: flex;
-    align-items: center;
-    gap: 8px;
-    margin-top: 8px;
-    padding: 8px 8px 8px 12px;
-    background: var(--inset-bg);
-    border: 1px solid var(--border);
-    border-radius: 8px;
-  }
-
-  .address code { flex: 1; min-width: 0; overflow-wrap: anywhere; font: 13px var(--mono); color: var(--text); }
-
-  button {
-    flex: none;
-    padding: 4px 10px;
-    background: transparent;
-    border: 1px solid var(--border);
-    border-radius: 8px;
-    color: var(--muted);
-    font: 500 12px var(--sans);
-    cursor: pointer;
-  }
-
-  button:hover { color: var(--text); border-color: var(--accent); }
+  .steps code { font: 13px var(--mono); padding: 1px 6px; background: var(--inset-bg); border: 1px solid var(--border); border-radius: 6px; }
 
   .note { font-size: 13px; }
   .note code { font: 12px var(--mono); color: var(--text); }
@@ -175,43 +151,21 @@
     <span class="badge"><span class="dot"></span>Fleet node</span>
   </div>
 
-  <h1>This computer runs sessions for another Fleet</h1>
-  <p class="lead">A node has no web app of its own, so there's nothing to sign in to here. You work with it from another Fleet.</p>
+  <h1>This machine runs sessions for another Fleet</h1>
+  <p class="lead">It has no web app of its own, so there's nothing to sign in to here. You work with it from another Fleet.</p>
 
   <ol class="steps">
+    <li><span>Run <code>fleet node pair</code> on this machine.</span></li>
     <li><span>Open Fleet on the computer you work from, or the desktop app.</span></li>
-    <li><span>Go to <span class="path">Settings → Machines → Add a machine</span>.</span></li>
-    <li>
-      <div>
-        Paste this address and the node's access token:
-        <div class="address">
-          <code id="address">this page's address</code>
-          <button id="copy" type="button" hidden>Copy</button>
-        </div>
-      </div>
-    </li>
+    <li><span>Go to <span class="path">Settings → Machines → Add a machine</span> and paste the link it printed.</span></li>
   </ol>
 
-  <p class="note">The token was printed when the node started. The node keeps it next to its data, in <code>fleet.machine.json</code>.</p>
+  <p class="note">The link works once and expires in 10 minutes. Opening it in a browser only brings you here.</p>
 
   <footer>
-    <a href="{{docs}}">How nodes work</a>
+    <a href="{{docs}}">How machines work</a>
     <span>{{version}}</span>
   </footer>
 </main>
-<script>
-  // The address the browser used is the one to add: behind tailscale serve, it's the https name, not Fleet's own.
-  const address = document.getElementById("address");
-  address.textContent = location.origin;
-  const copy = document.getElementById("copy");
-  if (navigator.clipboard) {
-    copy.hidden = false;
-    copy.addEventListener("click", async () => {
-      await navigator.clipboard.writeText(location.origin);
-      copy.textContent = "Copied";
-      setTimeout(() => { copy.textContent = "Copy"; }, 1500);
-    });
-  }
-</script>
 </body>
 </html>

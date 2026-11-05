@@ -5,8 +5,7 @@ using WeaveFleet.Application.Configuration;
 namespace WeaveFleet.Api;
 
 /// <summary>
-/// <c>fleet node pair</c>: asks the node that is running here for a one-time code and prints it with the node's
-/// address. The code lasts 10 minutes and works once; whoever redeems it gets a token of their own that this node lists
+/// <c>fleet node pair</c>: asks the node that is running here for a one-time code and prints it as a pairing link. The code lasts 10 minutes and works once; whoever redeems it gets a token of their own that this node lists
 /// and can remove, so the master token never moves. The request goes to this machine over loopback, signed with the
 /// machine token that sits next to the database (or <c>WEAVE_FLEET_AUTH_TOKEN</c>).
 /// </summary>
@@ -62,6 +61,7 @@ public static class NodePairCommand
         var code = root.GetProperty("manualCode").GetString();
         var name = root.GetProperty("machineName").GetString();
         var addresses = root.GetProperty("addresses").EnumerateArray().Select(a => a.GetString()!).ToList();
+        var link = root.TryGetProperty("link", out var linkElement) ? linkElement.GetString() : null;
         if (addresses.Count == 0)
             addresses.Add($"http://localhost:{port}");
 
@@ -74,6 +74,8 @@ public static class NodePairCommand
                 writer.WriteStartObject();
                 writer.WriteString("code", code);
                 writer.WriteString("machineName", name);
+                if (link is not null)
+                    writer.WriteString("link", link);
                 writer.WriteStartArray("addresses");
                 foreach (var address in addresses)
                     writer.WriteStringValue(address);
@@ -85,15 +87,28 @@ public static class NodePairCommand
             return 0;
         }
 
-        await output.WriteLineAsync($"Pairing code for {name}");
+        if (link is null)
+        {
+            await output.WriteLineAsync($"{name} only listens on this computer, so no other machine can reach it yet.");
+            await output.WriteLineAsync("Start it with --host 0.0.0.0, or put tailscale serve in front of it, then run fleet node pair again.");
+            return 0;
+        }
+
+        await output.WriteLineAsync($"Pairing link for {name}");
         await output.WriteLineAsync();
-        await output.WriteLineAsync($"    Code:     {code}");
-        for (var i = 0; i < addresses.Count; i++)
-            await output.WriteLineAsync($"    {(i == 0 ? "Address:" : ""),-9} {addresses[i]}");
+        await output.WriteLineAsync($"    {link}");
         await output.WriteLineAsync();
-        await output.WriteLineAsync("On the other machine: Settings → Machines → Add a machine → With a pairing code.");
-        await output.WriteLineAsync("The code works once and expires in 10 minutes. It adds this node with a token of its own,");
-        await output.WriteLineAsync("which you can remove here later without changing the master token.");
+        await output.WriteLineAsync("In the Fleet you work from, open Settings → Machines → Add a machine and paste it.");
+        await output.WriteLineAsync("The link works once and expires in 10 minutes. It adds this machine with a key of its own,");
+        await output.WriteLineAsync("which you can remove here later.");
+        if (addresses.Count > 1)
+        {
+            await output.WriteLineAsync();
+            await output.WriteLineAsync("Also reachable at");
+            foreach (var address in addresses.Skip(1))
+                await output.WriteLineAsync($"    {address}");
+        }
+
         return 0;
     }
 }

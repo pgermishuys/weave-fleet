@@ -161,6 +161,13 @@ public static class MachineEndpoints
             !policy.AllowsLoopbackAutoAuth,
             policy.IsRemoteReachable ? ReachableAddresses(options) : []);
 
+    /// <summary>
+    /// The link another Fleet pastes into Add a machine: the first address, then <c>/add-machine</c>, with the code in
+    /// the fragment so it never reaches a server log. Null when there is no address.
+    /// </summary>
+    internal static string? PairingLink(IReadOnlyList<string> addresses, string manualCode)
+        => addresses.Count == 0 ? null : $"{addresses[0].TrimEnd('/')}/add-machine#{manualCode}";
+
     /// <summary>Addresses another device could use, when Fleet listens beyond loopback. Tailnet first: it's the one that travels.</summary>
     internal static List<MachineAddress> ReachableAddresses(FleetOptions options)
     {

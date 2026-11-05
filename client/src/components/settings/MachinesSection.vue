@@ -2,7 +2,7 @@
 import { computed, onMounted, onUnmounted, reactive, shallowRef, watch } from "vue";
 import { storeToRefs } from "pinia";
 import { AlertCircle, Check, Copy, Eye, EyeOff, LoaderCircle, Plus, RefreshCw } from "lucide-vue-next";
-import { SshNotInstalledError, useMachinesStore, type MachineAccess, type MachineEntry, type MachineHarness, type SshInstallPlan } from "@/stores/machines";
+import { SshNotInstalledError, useMachinesStore, type MachineAccess, type MachineEntry, type MachineHarness, type PairingPreview, type SshInstallPlan } from "@/stores/machines";
 import SettingGroup from "@/components/settings/SettingGroup.vue";
 import SettingRow from "@/components/settings/SettingRow.vue";
 import AddPhonePanel from "@/components/settings/AddPhonePanel.vue";
@@ -11,6 +11,8 @@ import { useJobsFeature } from "@/composables/use-jobs-feature";
 import DevicesList from "@/components/settings/DevicesList.vue";
 import { listDevices, type PairedDevice } from "@/lib/devices-api";
 import { AGENT_HANDOFF_PREFERENCE_KEY } from "@/lib/machines";
+import { describeReach, parsePairingInput } from "@/lib/pairing-link";
+import { normalizeManualCode } from "@/lib/pairing";
 import { SESSION_MESSAGES_PREFERENCE_KEY } from "@/lib/session-messages";
 import { usePreferencesStore } from "@/stores/preferences";
 
@@ -35,31 +37,21 @@ const { isJobsEnabled: jobsOn } = useJobsFeature();
 
 // ── Add ──────────────────────────────────────────────────────────────────────
 const showAddForm = shallowRef(false);
-const addForm = reactive({ url: "", token: "", code: "", ssh: "" });
-type AddMode = "ssh" | "code" | "address";
-/**
- * How the machine is added. With hosts in ~/.ssh/config, Over SSH comes first and is the default; otherwise a code is
- * the default (no token is typed and the master token never moves) and Over SSH, still open to a typed user@host, is last.
- */
-const addMode = shallowRef<AddMode>("code");
-const hasSshHosts = computed(() => (sshHosts.value?.length ?? 0) > 0);
-const addModes = computed<AddMode[]>(() => hasSshHosts.value ? ["ssh", "code", "address"] : ["code", "address", "ssh"]);
-const modeLabels: Record<AddMode, string> = { ssh: "Over SSH", code: "With a pairing code", address: "By address" };
-/** Moves to the first tab once the hosts arrive, unless the user already picked one. */
-const pickedMode = shallowRef(false);
+const addForm = reactive({ link: "", token: "", code: "", ssh: "" });
+type AddMode = "link" | "ssh";
+const addModes: AddMode[] = ["link", "ssh"];
+const modeLabels: Record<AddMode, string> = { link: "Pairing link", ssh: "Over SSH" };
+const addMode = shallowRef<AddMode>("link");
 function pickMode(mode: AddMode): void {
   addMode.value = mode;
-  pickedMode.value = true;
   addError.value = null;
 }
 async function openAddForm(): Promise<void> {
   showAddForm.value = true;
   addError.value = null;
   justAdded.value = null;
-  pickedMode.value = false;
-  addMode.value = addModes.value[0]!;
+  addMode.value = "link";
   await machines.loadSshHosts();
-  if (!pickedMode.value && showAddForm.value) addMode.value = addModes.value[0]!;
 }
 function hostLabel(host: { alias: string; hostName: string | null; user: string | null }): string {
   const target = host.hostName ? (host.user ? `${host.user}@${host.hostName}` : host.hostName) : null;
@@ -74,21 +66,80 @@ const isAdding = shallowRef(false);
 const addError = shallowRef<string | null>(null);
 const justAdded = shallowRef<string | null>(null);
 
+// What the Pairing link field holds: a whole link, or an address that still needs its code.
+const pasted = computed(() => parsePairingInput(addForm.link));
+const pairTarget = computed(() => {
+  const input = pasted.value;
+  if (input?.kind === "link") return { baseUrl: input.baseUrl, code: input.code };
+  const code = input?.kind === "address" ? normalizeManualCode(addForm.code) : null;
+  return input?.kind === "address" && code ? { baseUrl: input.baseUrl, code } : null;
+});
+/** With the master token typed under Advanced there is no code to look at; Fleet checks the token when it adds. */
+const usesToken = computed(() => pasted.value?.kind === "address" && addForm.token.trim().length > 0);
+
+/** The machine behind the pasted link, once Fleet has looked at it; `previewError` says why not. */
+const found = shallowRef<PairingPreview | null>(null);
+const previewError = shallowRef<string | null>(null);
+const isLooking = shallowRef(false);
+const allowAgents = shallowRef(false);
+let lookToken = 0;
+
+watch(pairTarget, async (target) => {
+  const mine = ++lookToken;
+  found.value = null;
+  previewError.value = null;
+  allowAgents.value = false;
+  isLooking.value = target !== null;
+  if (!target) return;
+  try {
+    const preview = await machines.previewPairing(target.baseUrl, target.code);
+    if (mine === lookToken) found.value = preview;
+  } catch (error) {
+    if (mine === lookToken) previewError.value = error instanceof Error ? error.message : String(error);
+  } finally {
+    if (mine === lookToken) isLooking.value = false;
+  }
+}, { immediate: true });
+
+const showsAllowAgents = computed(() => found.value !== null && isAgentHandoffOn.value && source.value === "server");
+const foundLine = computed(() => found.value
+  ? [found.value.name, found.value.os ? osLabel(found.value.os) : null, found.value.version ? `Fleet ${found.value.version}` : null].filter(Boolean).join(" · ")
+  : "");
+const foundReach = computed(() => found.value ? `Reached ${describeReach(found.value.baseUrl)}` : "");
+const addLabel = computed(() => addMode.value === "link" && found.value && !usesToken.value ? `Add ${found.value.name}` : "Add machine");
+const canAdd = computed(() => addMode.value === "ssh"
+  ? addForm.ssh.trim().length > 0
+  : usesToken.value || (found.value !== null && pairTarget.value !== null));
+
+function osLabel(os: string): string {
+  return ({ linux: "Linux", macos: "macOS", windows: "Windows" } as Record<string, string>)[os.toLowerCase()] ?? os;
+}
+
+function clearAddForm(): void {
+  addForm.link = "";
+  addForm.token = "";
+  addForm.code = "";
+  addForm.ssh = "";
+}
+
 async function addMachine(): Promise<void> {
   isAdding.value = true;
   addError.value = null;
   installPlan.value = null;
   try {
+    const target = pairTarget.value;
+    const input = pasted.value;
     const machine = addMode.value === "ssh"
       ? await machines.addOverSsh(addForm.ssh)
-      : addMode.value === "code"
-        ? await machines.pairMachine(addForm.url, addForm.code)
-        : await machines.addMachine(addForm.url, addForm.token);
+      : usesToken.value && input?.kind === "address"
+        ? await machines.addMachine(input.baseUrl, addForm.token)
+        : await machines.pairMachine(target!.baseUrl, target!.code);
+    if (allowAgents.value && showsAllowAgents.value)
+      await machines.setAgentsAllowed(machine.id, true).catch(() => {
+        // The machine is added; the switch stays off and can be set on its card.
+      });
     justAdded.value = machine.name;
-    addForm.url = "";
-    addForm.token = "";
-    addForm.code = "";
-    addForm.ssh = "";
+    clearAddForm();
     showAddForm.value = false;
   } catch (error) {
     if (error instanceof SshNotInstalledError) installPlan.value = error.plan;
@@ -105,10 +156,7 @@ async function installNode(): Promise<void> {
   try {
     const machine = await machines.installOverSsh(addForm.ssh);
     justAdded.value = machine.name;
-    addForm.url = "";
-    addForm.token = "";
-    addForm.code = "";
-    addForm.ssh = "";
+    clearAddForm();
     installPlan.value = null;
     showAddForm.value = false;
   } catch (error) {
@@ -372,117 +420,183 @@ onUnmounted(() => stopPolling?.());
             {{ modeLabels[mode] }}
           </button>
         </div>
-        <p
-          v-if="addMode === 'ssh'"
-          class="text-xs text-muted"
-          data-testid="machines-add-ssh-help"
-        >
-          Fleet logs in with your own SSH keys and asks the other machine for a pairing code. No password is asked, no
-          token is pasted.
-        </p>
-        <p
-          v-else-if="addMode === 'code'"
-          class="text-xs text-muted"
-          data-testid="machines-add-code-help"
-        >
-          On the other machine, run <code class="machine-code">fleet node pair</code>. It prints an address and a code
-          that works once for 10 minutes. The other machine keeps a token of its own for this one, which you can remove
-          there.
-        </p>
-        <p
-          v-else
-          class="text-xs text-muted"
-        >
-          The other machine has to listen beyond 127.0.0.1: start it with <code class="machine-code">--host 0.0.0.0</code>,
-          or behind <code class="machine-code">tailscale serve</code> with <code class="machine-code">--require-token</code>.
-        </p>
-        <label
-          v-if="addMode === 'ssh'"
-          class="grid gap-1 text-sm text-text"
-        >
-          <span class="text-xs font-medium uppercase tracking-wide text-muted">Host</span>
-          <input
-            v-model="addForm.ssh"
-            type="text"
-            list="machines-ssh-hosts"
-            autocomplete="off"
-            autocapitalize="none"
-            spellcheck="false"
-            :class="inputClass"
-            placeholder="falcon or alice@falcon"
-            :disabled="isAdding"
-            data-testid="machines-add-ssh-host"
+        <template v-if="addMode === 'ssh'">
+          <p
+            class="text-xs text-muted"
+            data-testid="machines-add-ssh-help"
           >
-          <datalist id="machines-ssh-hosts">
-            <option
-              v-for="host in sshHosts ?? []"
-              :key="host.alias"
-              :value="host.destination"
-              :label="hostLabel(host)"
-            />
-          </datalist>
-        </label>
-        <label
-          v-else
-          class="grid gap-1 text-sm text-text"
-        >
-          <span class="text-xs font-medium uppercase tracking-wide text-muted">Address</span>
-          <input
-            v-model="addForm.url"
-            type="text"
-            inputmode="url"
-            autocomplete="off"
-            spellcheck="false"
-            :class="inputClass"
-            placeholder="http://100.64.90.72:2113"
-            :disabled="isAdding"
-            data-testid="machines-add-url"
-          >
-        </label>
-        <label
-          v-if="addMode === 'code'"
-          class="grid gap-1 text-sm text-text"
-        >
-          <span class="text-xs font-medium uppercase tracking-wide text-muted">Pairing code</span>
-          <input
-            v-model="addForm.code"
-            type="text"
-            autocomplete="off"
-            autocapitalize="characters"
-            spellcheck="false"
-            :class="[inputClass, 'font-mono tracking-widest']"
-            placeholder="ABCD-EFGH"
-            :disabled="isAdding"
-            data-testid="machines-add-code"
-          >
-        </label>
-        <template v-else-if="addMode === 'address'">
-          <button
-            v-if="!showAdvanced"
-            type="button"
-            class="justify-self-start text-xs text-muted underline-offset-2 hover:text-text hover:underline"
-            data-testid="machines-add-advanced"
-            @click="showAdvanced = true"
-          >
-            Advanced: use the machine's access token
-          </button>
-          <label
-            v-else
-            class="grid gap-1 text-sm text-text"
-          >
-            <span class="text-xs font-medium uppercase tracking-wide text-muted">Access token</span>
+            Fleet logs in with your own SSH keys and asks the other machine for a pairing code. No password is asked, no
+            token is pasted.
+          </p>
+          <label class="grid gap-1 text-sm text-text">
+            <span class="text-xs font-medium uppercase tracking-wide text-muted">Host</span>
             <input
-              v-model="addForm.token"
-              type="password"
+              v-model="addForm.ssh"
+              type="text"
+              list="machines-ssh-hosts"
+              autocomplete="off"
+              autocapitalize="none"
+              spellcheck="false"
+              :class="inputClass"
+              placeholder="falcon or alice@falcon"
+              :disabled="isAdding"
+              data-testid="machines-add-ssh-host"
+            >
+            <datalist id="machines-ssh-hosts">
+              <option
+                v-for="host in sshHosts ?? []"
+                :key="host.alias"
+                :value="host.destination"
+                :label="hostLabel(host)"
+              />
+            </datalist>
+          </label>
+        </template>
+        <template v-else>
+          <p
+            class="text-xs text-muted"
+            data-testid="machines-add-link-help"
+          >
+            On the other machine, run <code class="machine-code">fleet node pair</code>. It prints a pairing link that
+            works once for 10 minutes. Paste it here.
+          </p>
+          <label class="grid gap-1 text-sm text-text">
+            <span class="text-xs font-medium uppercase tracking-wide text-muted">Pairing link</span>
+            <input
+              v-model="addForm.link"
+              type="text"
+              inputmode="url"
               autocomplete="off"
               spellcheck="false"
               :class="inputClass"
-              placeholder="Paste the machine's token"
+              placeholder="http://100.64.90.72:2113/add-machine#ABCD-EFGH"
               :disabled="isAdding"
-              data-testid="machines-add-token"
+              data-testid="machines-add-link"
             >
-            <span class="text-xs text-muted">This is the machine's full-access token. A pairing code is safer.</span>
+            <span class="text-xs text-muted">Or just the machine's address, then its code.</span>
           </label>
+          <p
+            v-if="pasted?.kind === 'invalid'"
+            class="text-xs text-red-300"
+            data-testid="machines-add-link-invalid"
+          >
+            {{ pasted.message }}
+          </p>
+          <template v-else-if="pasted?.kind === 'address'">
+            <label
+              v-if="!usesToken"
+              class="grid gap-1 text-sm text-text"
+            >
+              <span class="text-xs font-medium uppercase tracking-wide text-muted">Pairing code</span>
+              <input
+                v-model="addForm.code"
+                type="text"
+                autocomplete="off"
+                autocapitalize="characters"
+                spellcheck="false"
+                :class="[inputClass, 'font-mono tracking-widest']"
+                placeholder="ABCD-EFGH"
+                :disabled="isAdding"
+                data-testid="machines-add-code"
+              >
+            </label>
+            <button
+              v-if="!showAdvanced"
+              type="button"
+              class="justify-self-start text-xs text-muted underline-offset-2 hover:text-text hover:underline"
+              data-testid="machines-add-advanced"
+              @click="showAdvanced = true"
+            >
+              Advanced: use the machine's access token
+            </button>
+            <label
+              v-else
+              class="grid gap-1 text-sm text-text"
+            >
+              <span class="text-xs font-medium uppercase tracking-wide text-muted">Access token</span>
+              <input
+                v-model="addForm.token"
+                type="password"
+                autocomplete="off"
+                spellcheck="false"
+                :class="inputClass"
+                placeholder="Paste the machine's token"
+                :disabled="isAdding"
+                data-testid="machines-add-token"
+              >
+              <span class="text-xs text-muted">This is the machine's full-access token. A pairing link is safer.</span>
+            </label>
+          </template>
+          <p
+            v-if="isLooking"
+            class="flex items-center gap-2 text-xs text-muted"
+            data-testid="machines-add-looking"
+          >
+            <LoaderCircle
+              :size="14"
+              class="animate-spin"
+              aria-hidden="true"
+            />
+            Looking for the machine…
+          </p>
+          <div
+            v-if="previewError"
+            class="flex items-start gap-2 rounded-card border border-red-500/30 bg-red-500/10 px-3 py-2 text-sm text-red-300"
+            role="alert"
+            data-testid="machines-add-preview-error"
+          >
+            <AlertCircle
+              :size="16"
+              class="mt-0.5 shrink-0"
+              aria-hidden="true"
+            />
+            <span>{{ previewError }}</span>
+          </div>
+          <div
+            v-if="found && !usesToken"
+            class="grid gap-3 rounded-card border border-border bg-card-bg p-3"
+            data-testid="machines-add-found"
+          >
+            <div>
+              <p
+                class="flex items-center gap-2 text-sm font-medium text-text"
+                data-testid="machines-add-found-line"
+              >
+                <Check
+                  :size="16"
+                  class="text-[var(--running)]"
+                  aria-hidden="true"
+                />
+                {{ foundLine }}
+              </p>
+              <p
+                class="mt-0.5 pl-6 text-xs text-muted"
+                data-testid="machines-add-found-reach"
+              >
+                {{ foundReach }}
+              </p>
+            </div>
+            <ul
+              class="m-0 grid list-disc gap-1 pl-5 text-xs text-muted"
+              data-testid="machines-add-note"
+            >
+              <li>Sessions you start on {{ found.name }} run there, with {{ found.name }}'s sign-ins, folders and agents.</li>
+              <li>This Fleet can run agents, change files and open terminals on {{ found.name }}.</li>
+              <li>{{ found.name }} gives this Fleet a key of its own. Forget {{ found.name }} here to stop.</li>
+            </ul>
+            <label
+              v-if="showsAllowAgents"
+              class="flex items-center gap-2 text-sm text-text"
+            >
+              <input
+                v-model="allowAgents"
+                type="checkbox"
+                :disabled="isAdding"
+                data-testid="machines-add-allow-agents"
+              >
+              Agents can hand work to {{ found.name }}
+            </label>
+          </div>
         </template>
         <div
           v-if="addError"
@@ -591,7 +705,7 @@ onUnmounted(() => stopPolling?.());
           <button
             type="submit"
             :class="buttonPrimaryClass"
-            :disabled="isAdding || (addMode === 'ssh' ? !addForm.ssh.trim() : !addForm.url.trim() || !(addMode === 'code' ? addForm.code.trim() : addForm.token.trim()))"
+            :disabled="isAdding || !canAdd"
             data-testid="machines-add-submit"
           >
             <LoaderCircle
@@ -600,7 +714,7 @@ onUnmounted(() => stopPolling?.());
               class="animate-spin"
               aria-hidden="true"
             />
-            {{ isAdding ? "Checking…" : "Add machine" }}
+            {{ isAdding ? "Checking…" : addLabel }}
           </button>
           <button
             type="button"

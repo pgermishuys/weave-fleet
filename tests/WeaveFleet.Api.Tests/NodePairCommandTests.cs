@@ -7,7 +7,7 @@ namespace WeaveFleet.Api.Tests;
 /// <summary><c>fleet node pair</c>: asks the node on this machine for a code and prints it with the address.</summary>
 public sealed class NodePairCommandTests
 {
-    private const string Answer = """{"manualCode":"7K3M-Q9ZD","expiresAt":"2026-10-24T10:10:00Z","machineId":"m1","machineName":"falcon","addresses":["http://100.64.90.72:2113","http://falcon:2113"]}""";
+    private const string Answer = """{"manualCode":"7K3M-Q9ZD","expiresAt":"2026-10-24T10:10:00Z","machineId":"m1","machineName":"falcon","addresses":["http://100.64.90.72:2113","http://falcon:2113"],"link":"http://100.64.90.72:2113/add-machine#7K3M-Q9ZD"}""";
 
     [Fact]
     public async Task It_prints_the_code_and_the_addresses_and_signs_with_the_token_from_the_environment()
@@ -16,10 +16,11 @@ public sealed class NodePairCommandTests
         var (exit, output, error) = await RunAsync(handler, "0.0.0.0", "env-token-0123456789");
 
         exit.ShouldBe(0, error);
-        output.ShouldContain("7K3M-Q9ZD");
-        output.ShouldContain("http://100.64.90.72:2113");
-        output.ShouldContain("http://falcon:2113");
+        output.ShouldContain("    http://100.64.90.72:2113/add-machine#7K3M-Q9ZD");
+        output.ShouldContain("paste it");
         output.ShouldContain("10 minutes");
+        output.ShouldContain("Also reachable at");
+        output.ShouldContain("    http://falcon:2113");
         handler.Url.ShouldBe("http://127.0.0.1:2113/api/machine/pairing/code");
         handler.Authorization.ShouldBe("Bearer env-token-0123456789");
     }
@@ -38,6 +39,7 @@ public sealed class NodePairCommandTests
         line.ShouldNotContain("\n");
         using var json = System.Text.Json.JsonDocument.Parse(line);
         json.RootElement.GetProperty("code").GetString().ShouldBe("7K3M-Q9ZD");
+        json.RootElement.GetProperty("link").GetString().ShouldBe("http://100.64.90.72:2113/add-machine#7K3M-Q9ZD");
         json.RootElement.GetProperty("machineName").GetString().ShouldBe("falcon");
         json.RootElement.GetProperty("addresses").GetArrayLength().ShouldBe(2);
     }
@@ -56,12 +58,15 @@ public sealed class NodePairCommandTests
     }
 
     [Fact]
-    public async Task With_no_reachable_address_it_gives_the_local_one()
+    public async Task With_no_reachable_address_it_says_how_to_fix_that_and_prints_no_link()
     {
-        var handler = new Handler(HttpStatusCode.OK, Answer.Replace("\"http://100.64.90.72:2113\",\"http://falcon:2113\"", ""));
-        var (_, output, _) = await RunAsync(handler, "127.0.0.1", "env-token-0123456789");
+        var handler = new Handler(HttpStatusCode.OK, Answer.Replace("\"http://100.64.90.72:2113\",\"http://falcon:2113\"", "").Replace(",\"link\":\"http://100.64.90.72:2113/add-machine#7K3M-Q9ZD\"", ""));
+        var (exit, output, _) = await RunAsync(handler, "127.0.0.1", "env-token-0123456789");
 
-        output.ShouldContain("http://localhost:2113");
+        exit.ShouldBe(0);
+        output.ShouldContain("only listens on this computer");
+        output.ShouldContain("--host 0.0.0.0");
+        output.ShouldNotContain("add-machine#");
     }
 
     [Fact]

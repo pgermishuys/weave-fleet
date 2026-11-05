@@ -99,17 +99,10 @@ public sealed class RemoteMachineService(
     /// </summary>
     public async Task<(RemoteMachine? Machine, string? Error)> AddByCodeAsync(string baseUrl, string code, CancellationToken cancellationToken, string? sshDestination = null)
     {
-        var normalized = NormalizeBaseUrl(baseUrl);
-        if (normalized is null)
-            return (null, "That isn't an address. Try something like http://100.64.90.72:2113.");
-        if (PairingCodeStore.NormalizeManualCode(code) is null)
-            return (null, "That isn't a pairing code. It looks like ABCD-EFGH; run fleet node pair on the other machine.");
-
-        var (preview, previewError) = await PostPairingAsync(normalized, "preview", new Dictionary<string, string> { ["manualCode"] = code }, cancellationToken);
-        if (preview is null)
+        var (found, previewError) = await PreviewByCodeAsync(baseUrl, code, cancellationToken);
+        if (found is null)
             return (null, previewError);
-        if (preview.Value.TryGetProperty("machineId", out var machineId) && machineId.GetString() == identity.Get().Id)
-            return (null, "That's this machine.");
+        var normalized = found.BaseUrl;
 
         var (redeemed, redeemError) = await PostPairingAsync(
             normalized,
@@ -129,6 +122,35 @@ public sealed class RemoteMachineService(
         if (string.IsNullOrEmpty(token))
             return (null, "That isn't a Fleet.");
         return await AddAsync(normalized, token, cancellationToken, sshDestination);
+    }
+
+    /// <summary>
+    /// Looks at the machine a code belongs to without using the code up: who it is and which Fleet it runs, so Add a
+    /// machine can say what it found before adding it. Refuses this machine.
+    /// </summary>
+    public async Task<(PairingPreview? Found, string? Error)> PreviewByCodeAsync(string baseUrl, string code, CancellationToken cancellationToken)
+    {
+        var normalized = NormalizeBaseUrl(baseUrl);
+        if (normalized is null)
+            return (null, "That isn't an address. Try something like http://100.64.90.72:2113.");
+        if (PairingCodeStore.NormalizeManualCode(code) is null)
+            return (null, "That isn't a pairing code. It looks like ABCD-EFGH; run fleet node pair on the other machine.");
+
+        var (preview, error) = await PostPairingAsync(normalized, "preview", new Dictionary<string, string> { ["manualCode"] = code }, cancellationToken);
+        if (preview is null)
+            return (null, error);
+
+        var element = preview.Value;
+        var machineId = element.TryGetProperty("machineId", out var idElement) ? idElement.GetString() : null;
+        if (machineId == identity.Get().Id)
+            return (null, "That's this machine.");
+
+        return (new PairingPreview(
+            normalized,
+            machineId ?? "",
+            element.TryGetProperty("machineName", out var name) ? name.GetString() ?? normalized : normalized,
+            element.TryGetProperty("os", out var os) ? os.GetString() : null,
+            element.TryGetProperty("version", out var version) ? version.GetString() : null), null);
     }
 
     private static string ToJson(Dictionary<string, string> values)
@@ -362,3 +384,6 @@ public sealed record RemoteMachineInfo(string Id, string Name, string? Os);
 
 /// <summary>A machine from a browser's own list (<c>weave:machines</c>), as it kept it.</summary>
 public sealed record ImportedMachine(string Id, string? Name, string BaseUrl, string Token, string? Os, DateTimeOffset? AddedAt);
+
+/// <summary>What a machine said about itself when asked about a pairing code. <c>Version</c> is null for an older Fleet.</summary>
+public sealed record PairingPreview(string BaseUrl, string MachineId, string Name, string? Os, string? Version);

@@ -352,6 +352,7 @@ internal sealed record ErrorResponse(string Error);
 [JsonSerializable(typeof(WeaveFleet.Api.Contracts.PairingRedeemRequest))]
 [JsonSerializable(typeof(WeaveFleet.Api.Contracts.MachinePairingCodeResponse))]
 [JsonSerializable(typeof(WeaveFleet.Api.Contracts.PairMachineRequest))]
+[JsonSerializable(typeof(WeaveFleet.Api.Contracts.PairMachinePreviewResponse))]
 [JsonSerializable(typeof(WeaveFleet.Api.Contracts.PairingRedeemResponse))]
 [JsonSerializable(typeof(WeaveFleet.Api.Contracts.DeviceListResponse))]
 [JsonSerializable(typeof(WeaveFleet.Application.Devices.DeviceSummary))]
