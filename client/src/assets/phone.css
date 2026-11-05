@@ -961,6 +961,47 @@ html[data-phone]:not([data-phone-scheme="light"]) .ph-btn--primary.is-pressed {
   padding: 0 12px;
 }
 
+/* A docked question's options as full-width rows: the whole label, a one-line description */
+.ph-qa {
+  display: grid;
+  gap: 8px;
+  margin-top: 12px;
+}
+
+.ph-qa__row {
+  justify-content: space-between;
+  width: 100%;
+  height: auto;
+  min-height: 44px;
+  padding: 8px 12px;
+  text-align: left;
+  white-space: normal;
+}
+
+.ph-qa__main {
+  display: grid;
+  min-width: 0;
+  gap: 2px;
+}
+
+.ph-qa__t {
+  overflow-wrap: anywhere;
+}
+
+.ph-qa__s {
+  overflow: hidden;
+  color: var(--muted);
+  font-size: var(--ph-t-meta);
+  font-weight: 400;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.ph-qa__else {
+  justify-content: center;
+  color: var(--muted);
+}
+
 .ph-inline-code {
   padding: 1px 6px;
   border-radius: 5px;

@@ -1,13 +1,14 @@
 <script setup lang="ts">
-import { computed, shallowRef, useTemplateRef } from "vue";
-import { Check, CircleHelp } from "lucide-vue-next";
+import { shallowRef, useTemplateRef } from "vue";
+import { CircleHelp } from "lucide-vue-next";
 import BottomSheet from "@/components/phone/BottomSheet.vue";
 import QuestionChoices from "@/components/phone/QuestionChoices.vue";
+import QuestionQuickAnswers from "@/components/phone/QuestionQuickAnswers.vue";
 import type { PendingQuestion } from "@/lib/phone/dock-state";
 
 /**
- * The agent's question docked above the composer, compact: the question, its first two options as buttons (one tap
- * answers) and More… (every option, your own words, Skip, in a sheet). A question that takes several answers has
+ * The agent's question docked above the composer, compact: the question, its options as rows (one tap
+ * answers; past four, the first two as buttons) and More… (every option, your own words, Skip, in a sheet). A question that takes several answers has
  * Answer… instead. Later folds it into "1 waiting · Review".
  */
 const props = defineProps<{
@@ -23,7 +24,6 @@ const sheetRef = useTemplateRef<InstanceType<typeof BottomSheet>>("sheet");
 const more = shallowRef(false);
 const sent = shallowRef<string | null>(null);
 const error = shallowRef<string | null>(null);
-const quick = computed(() => (props.pending.question.multiple ? [] : props.pending.question.options.slice(0, 2)));
 
 async function run(label: string, action: () => Promise<void>): Promise<void> {
   more.value = false;
@@ -72,35 +72,14 @@ function answerWith(labels: string[]): void {
     >
       {{ error }}
     </p>
-    <div
-      class="ph-btns"
-      :class="quick.length === 2 ? 'ph-btns--q' : quick.length === 1 ? 'ph-btns--q-one' : 'ph-btns--q-none'"
-    >
-      <button
-        v-for="option in quick"
-        :key="option.label"
-        type="button"
-        class="ph-btn ph-btn--outline"
-        :class="{ 'ph-btn--done': sent === option.label }"
-        :disabled="sent !== null"
-        @click="answerWith([option.label])"
-      >
-        <Check
-          v-if="sent === option.label"
-          aria-hidden="true"
-        />
-        <span>{{ option.label }}</span>
-      </button>
-      <button
-        type="button"
-        class="ph-btn ph-btn--outline"
-        :disabled="sent !== null"
-        data-testid="docked-more"
-        @click="more = true"
-      >
-        <span>{{ quick.length ? "More…" : "Answer…" }}</span>
-      </button>
-    </div>
+    <QuestionQuickAnswers
+      :question="pending.question"
+      :sent="sent"
+      :busy="sent !== null"
+      more-test-id="docked-more"
+      @pick="(label) => answerWith([label])"
+      @more="more = true"
+    />
 
     <BottomSheet
       ref="sheet"
