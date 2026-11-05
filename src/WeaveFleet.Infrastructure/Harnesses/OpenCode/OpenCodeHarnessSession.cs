@@ -121,6 +121,9 @@ internal sealed partial class OpenCodeHarnessSession : IHarnessSession
     /// </summary>
     private readonly ConcurrentDictionary<string, string> _toolCallToQuestionId = new();
 
+    /// <summary>The questions the agent has asked and the user hasn't answered or dismissed, by question id.</summary>
+    private readonly ConcurrentDictionary<string, byte> _pendingQuestions = new(StringComparer.Ordinal);
+
     /// <summary>What every OpenCode question ID starts with (its <c>QuestionID</c> schema).</summary>
     private const string QuestionIdPrefix = "que";
 
@@ -867,6 +870,8 @@ internal sealed partial class OpenCodeHarnessSession : IHarnessSession
             if (harnessEvent.Type == OpenCodeMapper.QuestionAskedEventType)
                 TryCacheQuestionMapping(harnessEvent);
 
+            TrackPendingQuestion(sseEvt);
+
             yield return harnessEvent;
 
             // A task call is running work in a child session: Fleet records it, and makes the child a session of its own.
@@ -1138,6 +1143,31 @@ internal sealed partial class OpenCodeHarnessSession : IHarnessSession
     }
 
     /// <summary>
+    /// Keeps <see cref="_pendingQuestions"/>: a <c>question.asked</c> adds its id, its reply or rejection (by
+    /// <c>requestID</c>) removes it, and the turn ending drops what is left.
+    /// </summary>
+    private void TrackPendingQuestion(OpenCodeSseEvent evt)
+    {
+        string? Read(string property) => evt.Properties is { ValueKind: JsonValueKind.Object } props
+            && props.TryGetProperty(property, out var el) && el.ValueKind == JsonValueKind.String ? el.GetString() : null;
+
+        if (evt.Type == OpenCodeMapper.QuestionAskedEventType)
+        {
+            if (Read("id") is { Length: > 0 } id)
+                _pendingQuestions[id] = 0;
+        }
+        else if (Array.IndexOf(OpenCodeMapper.QuestionSettledEventTypes, evt.Type) >= 0)
+        {
+            if (Read("requestID") is { } requestId)
+                _pendingQuestions.TryRemove(requestId, out _);
+        }
+        else if (evt.Type == "session.idle")
+        {
+            _pendingQuestions.Clear();
+        }
+    }
+
+    /// <summary>
     /// Extracts the tool-call-ID → question-ID mapping from a <c>question.asked</c> event.
     /// The event payload is <c>{ id: "que_...", tool: { callID: "tooluse_..." } }</c>.
     /// </summary>
@@ -1357,8 +1387,8 @@ internal sealed partial class OpenCodeHarnessSession : IHarnessSession
                 return targetStatus switch
                 {
                     OpenCodeIdleStatus => "idle",
-                    // A turn stopped on a permission ask needs the user; OpenCode itself reports it busy.
-                    OpenCodeBusyStatus or OpenCodeRetryStatus when _permissions.Pending.Any => ActivityStatuses.WaitingInput,
+                    // A turn stopped on a permission ask or a question needs the user; OpenCode itself reports it busy.
+                    OpenCodeBusyStatus or OpenCodeRetryStatus when _permissions.Pending.Any || !_pendingQuestions.IsEmpty => ActivityStatuses.WaitingInput,
                     OpenCodeBusyStatus => "busy",
                     OpenCodeRetryStatus => "busy", // Treat retry as busy
                     _ => "idle" // Default to idle for unknown status types
@@ -1637,6 +1667,7 @@ internal sealed partial class OpenCodeHarnessSession : IHarnessSession
 
             _agentModelCache = null;
             _toolCallToQuestionId.Clear();
+            _pendingQuestions.Clear();
             _status = HarnessSessionStatus.Idle;
         }
     }

@@ -151,6 +151,26 @@ public sealed class OpenCodePermissionTests
         (await session.GetActivityStatusAsync(CancellationToken.None)).ShouldBe(ActivityStatuses.Busy);
     }
 
+    [Fact]
+    public async Task A_resync_while_a_question_waits_still_reads_needs_you_and_busy_once_it_is_answered()
+    {
+        var (_, events, session) = Start();
+        await using var _ = session;
+        var stream = session.SubscribeAsync(CancellationToken.None).GetAsyncEnumerator();
+
+        (await session.GetActivityStatusAsync(CancellationToken.None)).ShouldBe(ActivityStatuses.Busy);
+
+        await events.Writer.WriteAsync(Sse("question.asked", """{"id":"que_1","sessionID":"oc-1","questions":[],"tool":{"messageID":"msg_1","callID":"call_1"}}"""));
+        (await NextAsync(stream)).Type.ShouldBe("question.asked");
+        Status(await NextAsync(stream)).ShouldBe(ActivityStatuses.WaitingInput);
+        (await session.GetActivityStatusAsync(CancellationToken.None)).ShouldBe(ActivityStatuses.WaitingInput);
+
+        await events.Writer.WriteAsync(Sse("question.replied", """{"sessionID":"oc-1","requestID":"que_1","answers":[["Staging"]]}"""));
+        (await NextAsync(stream)).Type.ShouldBe("question.replied");
+        Status(await NextAsync(stream)).ShouldBe(ActivityStatuses.Busy);
+        (await session.GetActivityStatusAsync(CancellationToken.None)).ShouldBe(ActivityStatuses.Busy);
+    }
+
     private static (RecordingHandler Http, Channel<OpenCodeSseEvent> Events, OpenCodeHarnessSession Session) Start(string waiting = "[]")
     {
         var http = new RecordingHandler(waiting);
