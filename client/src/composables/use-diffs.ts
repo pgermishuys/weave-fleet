@@ -13,6 +13,8 @@ export interface UseDiffsResult {
   /** What the changes are compared with; it moves when the branch is rebased onto a newer main. */
   base: Readonly<ShallowRef<SessionDiffBase | null>>;
   isLoading: Readonly<ShallowRef<boolean>>;
+  /** True once the first /diffs answer (or failure) has arrived for this session; until then an empty list means "not known yet". */
+  hasLoaded: Readonly<ShallowRef<boolean>>;
   isStale: Readonly<ShallowRef<boolean>>;
   error: Readonly<ShallowRef<string | undefined>>;
   fetchDiffs: () => Promise<void>;
@@ -44,6 +46,7 @@ export function useDiffs(
   const available = shallowRef(false);
   const base = shallowRef<SessionDiffBase | null>(null);
   const isLoading = shallowRef(false);
+  const hasLoaded = shallowRef(false);
   const isStale = shallowRef(false);
   const error = shallowRef<string | undefined>(undefined);
   const currentSessionId = computed(() => toValue(sessionId) ?? "");
@@ -61,6 +64,7 @@ export function useDiffs(
       available.value = false;
       base.value = null;
       isLoading.value = false;
+      hasLoaded.value = false;
       isStale.value = false;
       error.value = undefined;
       return;
@@ -108,6 +112,7 @@ export function useDiffs(
     } finally {
       if (currentRequestId === requestId) {
         isLoading.value = false;
+        hasLoaded.value = true;
       }
     }
   }
@@ -144,6 +149,7 @@ export function useDiffs(
       available.value = false;
       base.value = null;
       isLoading.value = false;
+      hasLoaded.value = false;
       isStale.value = false;
       error.value = undefined;
     },
@@ -199,6 +205,7 @@ export function useDiffs(
     available: readonly(available),
     base: readonly(base),
     isLoading: readonly(isLoading),
+    hasLoaded: readonly(hasLoaded),
     isStale: readonly(isStale),
     error: readonly(error),
     fetchDiffs,

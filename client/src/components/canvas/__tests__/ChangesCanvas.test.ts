@@ -16,6 +16,7 @@ vi.mock("@/api/session-files", () => ({
 }));
 
 const sharedDiffs = {
+  hasLoaded: ref(true),
   diffs: ref<FileDiffItem[]>([]),
   base: ref<SessionDiffBase | null>(null),
   byFile: computed((): ReadonlyMap<string, FileDiffItem> => new Map(sharedDiffs.diffs.value.map((diff) => [diff.file, diff]))),
@@ -42,6 +43,7 @@ describe("ChangesCanvas", () => {
     readSessionFileMock.mockReset();
     sharedDiffs.diffs.value = [];
     sharedDiffs.base.value = null;
+    sharedDiffs.hasLoaded.value = true;
   });
 
   it("says so when the session has no changes", async () => {
@@ -49,6 +51,22 @@ describe("ChangesCanvas", () => {
     await flushPromises();
 
     expect(wrapper.text()).toContain("No changes in this session yet.");
+  });
+
+  it("says it is loading, not empty, until the first answer arrives", async () => {
+    sharedDiffs.hasLoaded.value = false;
+
+    const wrapper = mountCanvas();
+    await flushPromises();
+
+    expect(wrapper.text()).toContain("Loading changes…");
+    expect(wrapper.text()).not.toContain("No changes");
+
+    sharedDiffs.hasLoaded.value = true;
+    await flushPromises();
+
+    expect(wrapper.text()).toContain("No changes in this session yet.");
+    expect(wrapper.text()).not.toContain("Loading changes");
   });
 
   it("says a branch is compared with where it left main", async () => {

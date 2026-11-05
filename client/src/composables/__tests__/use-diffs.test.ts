@@ -50,6 +50,28 @@ describe("useDiffs", () => {
     v2EventCallback = null;
   });
 
+  it("is not loaded until the first answer arrives, and not loaded again for another session", async () => {
+    let resolveFetch: (value: unknown) => void = () => {};
+    apiFetchMock.mockReturnValue(new Promise((resolve) => { resolveFetch = resolve; }));
+
+    const sessionId = shallowRef("session-1");
+    const { useDiffs } = await import("@/composables/use-diffs");
+    const { result, wrapper } = await mountComposable(() => useDiffs(sessionId));
+
+    const pending = result.fetchDiffs();
+    expect(result.hasLoaded.value).toBe(false);
+
+    resolveFetch({ data: { diffs: [], available: true }, error: undefined, response: createJsonResponse({}) });
+    await pending;
+    expect(result.hasLoaded.value).toBe(true);
+
+    sessionId.value = "session-2";
+    await flushAll();
+    expect(result.hasLoaded.value).toBe(false);
+
+    wrapper.unmount();
+  });
+
   it("fetches latest diffs when a turn ends for the current session", async () => {
     apiFetchMock.mockResolvedValue({
       data: {
