@@ -57,6 +57,15 @@ export interface Inbox {
 /** Finished sessions stay on the home screen for a day. */
 export const FINISHED_FOR_MS = 24 * 60 * 60_000;
 
+/** How many finished sessions the home screen lists before "Show all". */
+export const FINISHED_PREVIEW = 3;
+
+/** The rows a section lists: the newest few, or all of them once expanded. `hidden` is how many "Show all" reveals. */
+export function sectionRows<T>(items: readonly T[], expanded: boolean, preview = FINISHED_PREVIEW): { rows: T[]; hidden: number } {
+  if (expanded || items.length <= preview) return { rows: [...items], hidden: 0 };
+  return { rows: items.slice(0, preview), hidden: items.length - preview };
+}
+
 /** The folder a session works in, by name: the project's or workspace's, else the last part of its path. */
 export function sessionFolder(session: Pick<SessionListItem, "projectName" | "workspaceDisplayName" | "sourceDirectory" | "workspaceDirectory">): string | null {
   const named = session.projectName?.trim() || session.workspaceDisplayName?.trim();

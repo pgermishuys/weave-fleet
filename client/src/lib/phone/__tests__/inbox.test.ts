@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import type { SessionListItem } from "@/api/client";
-import { askPreview, buildInbox, machinesStatus, rowGlyph, rowMeta, rowPlace, type InboxMachineState } from "../inbox";
+import { askPreview, buildInbox, machinesStatus, rowGlyph, rowMeta, rowPlace, sectionRows, type InboxMachineState } from "../inbox";
 
 const NOW = Date.parse("2026-10-05T14:07:00Z");
 
@@ -110,5 +110,21 @@ describe("the inbox's machines line", () => {
     expect(machinesStatus([{ name: "hangar", status: "live" }, { name: "falcon", status: "connecting" }]).note).toBe("1 connecting");
     expect(machinesStatus([{ name: "hangar", status: "connecting" }])).toEqual({ machines: [{ name: "hangar", tone: "connecting" }], note: "connecting…" });
     expect(machinesStatus([{ name: "a", status: "unreachable" }, { name: "b", status: "unreachable" }]).note).toBe("a and b unreachable");
+  });
+});
+
+describe("sectionRows", () => {
+  const five = ["a", "b", "c", "d", "e"];
+
+  it("lists the newest few and says how many Show all reveals, so the heading's count and the rows can agree", () => {
+    expect(sectionRows(five, false)).toEqual({ rows: ["a", "b", "c"], hidden: 2 });
+  });
+
+  it("lists every row once expanded", () => {
+    expect(sectionRows(five, true)).toEqual({ rows: five, hidden: 0 });
+  });
+
+  it("has nothing to reveal when everything already fits", () => {
+    expect(sectionRows(["a", "b", "c"], false)).toEqual({ rows: ["a", "b", "c"], hidden: 0 });
   });
 });

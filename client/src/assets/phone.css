@@ -573,6 +573,16 @@ html[data-phone]:not([data-phone-scheme="light"]) .ph-btn--primary.is-pressed {
   padding: 0 6px;
 }
 
+.ph-rows__more {
+  display: block;
+  width: 100%;
+  padding: 12px 12px;
+  text-align: left;
+  font-size: var(--ph-t-meta);
+  font-weight: 500;
+  color: var(--muted);
+}
+
 .ph-srow {
   position: relative;
   display: flex;
