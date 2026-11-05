@@ -10,6 +10,7 @@ import PhonePlusSheet, { type PlusChoice } from "@/components/phone/session/Phon
 import { useAgents } from "@/composables/use-agents";
 import { primaryAction, useComposerActions } from "@/composables/use-composer-actions";
 import { useDraftState } from "@/composables/use-draft-state";
+import { sessionDefaultModelKey } from "@/lib/agent-model-choice";
 import { useModels } from "@/composables/use-models";
 import { useSessionsStore } from "@/stores/sessions";
 import type { ImageAttachment } from "@/lib/client-types";
@@ -60,7 +61,17 @@ const primary = computed(() => props.reachable ? primaryAction(actions.status.va
 const offerSendNow = computed(() => props.reachable && actions.caps.value.canSteer && actions.status.value === "busy" && hasContent.value);
 
 const agentId = computed(() => draft.agentId || defaultAgentId.value || "");
-const modelKey = computed(() => draft.modelId || defaultModelKey.value || "");
+// What desktop's "Default (…)" resolves to for this session; the catalog's first model only when nothing says.
+const sessionDefaultKey = computed(() => {
+  const session = sessionsStore.sessionById(props.sessionId);
+  return sessionDefaultModelKey({
+    sessionModel: session?.selectedModel,
+    agentModel: agents.value.find((candidate) => candidate.id === agentId.value)?.model,
+    lastModelId: session?.lastAssistantModelId,
+    models: models.value,
+  });
+});
+const modelKey = computed(() => draft.modelId || sessionDefaultKey.value || defaultModelKey.value || "");
 const agentOptions = computed<ChipOption[]>(() => agents.value.map((agent) => ({ id: agent.id, label: agent.name, detail: agent.description })));
 const effortVariants = computed(() => modelsByKey.value[modelKey.value]?.variants ?? ["low", "medium", "high"]);
 const effortOptions = computed<ChipOption[]>(() => effortVariants.value.map((variant) => ({ id: variant, label: variant.charAt(0).toUpperCase() + variant.slice(1) })));

@@ -153,3 +153,24 @@ export function describeSessionDefaults(input: {
     modelDescription: input.sessionModel ? `This session's model: ${name}` : `${forAgent}'s own model: ${name}`,
   };
 }
+
+/**
+ * The selection key of the model a session's next prompt runs on when no model is picked for it: the one it was
+ * given, its agent's own, else the one that answered last. Null when only the harness knows, so a caller must not
+ * guess with the catalog's first entry.
+ */
+export function sessionDefaultModelKey(input: {
+  sessionModel: ModelReference | null | undefined;
+  agentModel?: ModelReference | null;
+  lastModelId?: string | null;
+  models: readonly ModelOption[];
+}): string | null {
+  const named = input.sessionModel ?? input.agentModel ?? null;
+  if (named) {
+    return keyForModel(named);
+  }
+  if (input.lastModelId) {
+    return input.models.find((candidate) => candidate.id === input.lastModelId)?.selectionKey ?? null;
+  }
+  return null;
+}

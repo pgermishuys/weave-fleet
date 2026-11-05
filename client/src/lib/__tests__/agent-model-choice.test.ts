@@ -8,6 +8,7 @@ import {
   modelFromKey,
   modelFromPath,
   modelToPath,
+  sessionDefaultModelKey,
 } from "@/lib/agent-model-choice";
 
 const catalog: HarnessCatalog = {
@@ -131,6 +132,28 @@ describe("agent-model-choice", () => {
         models,
         lastModelId: "claude-haiku-4.5",
       })).toMatchObject({ modelLabel: "Default (Claude Haiku 4.5)", modelDescription: "The model that answered last: Claude Haiku 4.5" });
+    });
+  });
+
+  describe("sessionDefaultModelKey", () => {
+    const models = [
+      { id: "claude-opus-4.7", name: "Claude Opus 4.7", providerId: "p", selectionKey: keyForModel({ providerID: "p", modelID: "claude-opus-4.7" }), provider: "P", description: "" },
+      { id: "claude-haiku-4.5", name: "Claude Haiku 4.5", providerId: "p", selectionKey: keyForModel({ providerID: "p", modelID: "claude-haiku-4.5" }), provider: "P", description: "" },
+    ];
+
+    it("follows the model that answered last, not the catalog's first entry", () => {
+      expect(sessionDefaultModelKey({ sessionModel: null, lastModelId: "claude-haiku-4.5", models })).toBe(models[1]!.selectionKey);
+    });
+
+    it("prefers the session's own model, then the agent's", () => {
+      const own = { providerID: "p", modelID: "claude-haiku-4.5" };
+      const agentsOwn = { providerID: "p", modelID: "claude-opus-4.7" };
+      expect(sessionDefaultModelKey({ sessionModel: own, agentModel: agentsOwn, lastModelId: "x", models })).toBe(models[1]!.selectionKey);
+      expect(sessionDefaultModelKey({ sessionModel: null, agentModel: agentsOwn, models })).toBe(models[0]!.selectionKey);
+    });
+
+    it("is null when only the harness knows", () => {
+      expect(sessionDefaultModelKey({ sessionModel: null, models })).toBeNull();
     });
   });
 });
