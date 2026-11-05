@@ -1920,10 +1920,13 @@ describe("NewSessionComposer", () => {
       await flushPromises();
     }
 
-    it("has no machine chip until another machine is added", async () => {
+    it("shows the machine chip on a desktop with one machine, and its menu ends with Add a machine", async () => {
       const view = await mountComposer();
 
-      expect(view.find("[data-testid='new-session-machine']").exists()).toBe(false);
+      expect(view.find("[data-testid='new-session-machine']").exists()).toBe(true);
+      await openMachineMenu(view);
+      const items = inDocument().findAll("[data-testid^='new-session-machine-']");
+      expect(items.map((item) => item.attributes("data-testid"))).toEqual(["new-session-machine-home", "new-session-machine-add"]);
     });
 
     it("shows the machine first, and lists every machine with whether it can be reached", async () => {
@@ -1969,6 +1972,7 @@ describe("NewSessionComposer", () => {
       await flushPromises();
 
       expect(useSettingsNav().activeSection.value).toBe("machines");
+      expect(useSettingsNav().addMachineRequested.value).toBe(true);
       expect(mocks.navigate).toHaveBeenCalledWith({ to: "/settings" });
     });
 

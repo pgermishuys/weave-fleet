@@ -4,6 +4,7 @@ import { createPinia, setActivePinia } from "pinia";
 import { HOME_MACHINE_KEY, saveMachines, setActiveMachine, type MachineConnection } from "@/lib/machines";
 import { useMachinesStore, type MachineCapabilities, type MachineInfo } from "@/stores/machines";
 import { usePreferencesStore } from "@/stores/preferences";
+import { useSettingsNav } from "@/composables/use-settings-nav";
 import MachinesSection from "@/components/settings/MachinesSection.vue";
 
 vi.mock("@tanstack/vue-router", () => ({ useRouter: () => ({ navigate: vi.fn() }) }));
@@ -76,6 +77,27 @@ describe("Settings → Machines", () => {
   afterEach(() => {
     setActiveMachine(null);
     vi.unstubAllGlobals();
+  });
+
+  it("opens the Add a machine form when something else asked for it", async () => {
+    const nav = useSettingsNav();
+    const wrapper = mount(MachinesSection);
+    await flushPromises();
+    expect(wrapper.find("[data-testid='machines-add-form']").exists()).toBe(false);
+
+    nav.openAddMachine();
+    await flushPromises();
+
+    expect(wrapper.find("[data-testid='machines-add-form']").exists()).toBe(true);
+    expect(nav.addMachineRequested.value).toBe(false);
+  });
+
+  it("opens the form at once when it was asked for before Machines was shown", async () => {
+    useSettingsNav().openAddMachine();
+    const wrapper = mount(MachinesSection);
+    await flushPromises();
+
+    expect(wrapper.find("[data-testid='machines-add-form']").exists()).toBe(true);
   });
 
   it("shows each machine's ready harnesses and how many sessions work there", async () => {
@@ -411,6 +433,7 @@ describe("Settings → Machines", () => {
       await flushPromises();
 
       expect(wrapper.find("[data-testid='machines-setup-title']").text()).toBe("Setting up falcon");
+      expect(wrapper.find("[data-testid='machines-add-cancel']").text()).toBe("Close");
       expect(wrapper.findAll("[data-testid='machines-setup-steps'] li").map((li) => li.attributes("data-state"))).toEqual(["running", "pending", "pending", "pending"]);
       expect(wrapper.find("[data-testid='machines-add-note']").text()).toContain("This Fleet can run agents, change files and open terminals on falcon.");
       await wrapper.find("[data-testid='machines-setup-commands-toggle']").trigger("click");

@@ -6,6 +6,7 @@ import SessionsPanel from "@/components/sessions/SessionsPanel.vue";
 import type { ProjectResponse, SessionListItem } from "@/api/client";
 import { HOME_MACHINE_KEY, saveMachines, setActiveMachine, type MachineConnection } from "@/lib/machines";
 import { saveSessionListScroll } from "@/lib/session-list-scroll";
+import { useSettingsNav } from "@/composables/use-settings-nav";
 import { useMachinesStore } from "@/stores/machines";
 import { usePreferencesStore } from "@/stores/preferences";
 import { useSessionsStore } from "@/stores/sessions";
@@ -99,6 +100,17 @@ describe("SessionsPanel across machines", () => {
     await flushPromises();
 
     expect(headers(view)).toEqual(["This machine (live)", "aurora", "hangar"]);
+  });
+
+  it("ends the machine groups with an Add a machine row that opens Settings → Machines with the form asked for", async () => {
+    const view = mountPanel();
+    await flushPromises();
+
+    await view.get("[data-testid='sessions-add-machine']").trigger("click");
+
+    expect(useSettingsNav().activeSection.value).toBe("machines");
+    expect(useSettingsNav().addMachineRequested.value).toBe(true);
+    useSettingsNav().addMachineRequested.value = false;
   });
 
   it("keeps that order when another machine is live: only the Live tag moves", async () => {

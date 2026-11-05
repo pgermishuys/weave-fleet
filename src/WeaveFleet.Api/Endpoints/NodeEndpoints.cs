@@ -50,7 +50,7 @@ public static class NodeEndpoints
                 if (!http.Request.Headers.Accept.ToString().Contains("text/html", StringComparison.OrdinalIgnoreCase))
                     return Results.Ok(new NodeNoteResponse(
                         "fleet-node",
-                        "This is a Fleet node. It has no web app. On this machine run fleet node pair, then paste the link it prints into Add a machine in another Fleet.",
+                        "This is a Fleet machine without the web app. On this machine run fleet node pair, then paste the link it prints into Add a machine in another Fleet.",
                         DocsUrl));
 
                 // The page's own inline style, its inlined logo, and nothing else; no one may frame it.

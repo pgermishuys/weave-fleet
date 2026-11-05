@@ -18,6 +18,7 @@ import { AGENT_HANDOFF_PREFERENCE_KEY } from "@/lib/machines";
 import { describeReach, parsePairingInput } from "@/lib/pairing-link";
 import { normalizeManualCode } from "@/lib/pairing";
 import { SESSION_MESSAGES_PREFERENCE_KEY } from "@/lib/session-messages";
+import { useSettingsNav } from "@/composables/use-settings-nav";
 import { usePreferencesStore } from "@/stores/preferences";
 
 /**
@@ -48,12 +49,16 @@ const modeLabels: Record<AddMode, string> = { setup: "Set it up from here", link
 const addMode = shallowRef<AddMode>("link");
 /** Set when a machine can't be set up from here: the link card says which machine and what to run on it. */
 const linkHint = shallowRef<string | null>(null);
+/** A set-up is running in the card: leaving the dialog doesn't stop it, so the button says Close. */
+const setupRunning = shallowRef(false);
 function pickMode(mode: AddMode): void {
   addMode.value = mode;
+  setupRunning.value = false;
   addError.value = null;
   linkHint.value = null;
 }
 async function openAddForm(): Promise<void> {
+  setupRunning.value = false;
   showAddForm.value = true;
   addError.value = null;
   linkHint.value = null;
@@ -75,6 +80,14 @@ const isAdding = shallowRef(false);
 const addError = shallowRef<string | null>(null);
 const addDiagnosis = shallowRef<MachineDiagnosis | null>(null);
 const justAdded = shallowRef<string | null>(null);
+
+// Sent here by the composer chip, the sessions list or the command palette: open the form once, as if clicked.
+const { addMachineRequested } = useSettingsNav();
+watch(addMachineRequested, (requested) => {
+  if (!requested) return;
+  addMachineRequested.value = false;
+  void openAddForm();
+}, { immediate: true });
 
 // What the Pairing link field holds: a whole link, or an address that still needs its code.
 const pasted = computed(() => parsePairingInput(addForm.link));
@@ -422,6 +435,7 @@ onUnmounted(() => stopPolling?.());
           v-if="addMode === 'setup'"
           @added="onSetUp"
           @use-link="onUseLink"
+          @running="setupRunning = $event"
         />
         <template v-else>
           <p
@@ -614,9 +628,10 @@ onUnmounted(() => stopPolling?.());
             type="button"
             :class="buttonSecondaryClass"
             :disabled="isAdding"
+            data-testid="machines-add-cancel"
             @click="showAddForm = false"
           >
-            Cancel
+            {{ addMode === "setup" && setupRunning ? "Close" : "Cancel" }}
           </button>
         </div>
       </form>
@@ -987,7 +1002,7 @@ onUnmounted(() => stopPolling?.());
               WEAVE_FLEET_AUTH_TOKEN sets it; change the variable and restart Fleet to replace it.
             </template>
             <template v-else>
-              Whoever has it can do anything Fleet can on this machine. Replacing it locks out every device that
+              Anyone who has it can run agents, change files and open terminals on this machine. Replacing it locks out every device that
               has the old one.
             </template>
           </p>

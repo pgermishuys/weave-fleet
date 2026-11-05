@@ -14,6 +14,8 @@ import { useMachinesStore, type CandidateProbe, type MachineCandidate, type Setu
 const emit = defineEmits<{
   added: [name: string, machineId: string];
   useLink: [name: string];
+  /** Whether a set-up is running, so the dialog can say Close instead of Cancel. */
+  running: [running: boolean];
 }>();
 
 const MAX_ROWS = 8;
@@ -112,6 +114,7 @@ async function setUp(candidate: MachineCandidate): Promise<void> {
 }
 
 const isRunning = computed(() => settingUp.value !== null && failure.value === null);
+watch(isRunning, (running) => emit("running", running));
 
 function back(): void {
   settingUp.value = null;

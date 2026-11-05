@@ -17,6 +17,7 @@ import {
   Maximize2,
   Menu,
   MessageSquare,
+  Monitor,
   MoonStar,
   PanelLeftClose,
   PanelRightClose,
@@ -38,6 +39,7 @@ import { commandPoint } from "@/lib/command-registry";
 import { runSessionCommand } from "@/lib/session-commands";
 import { matchesKeyboardShortcut, useKeyboardShortcut } from "@/composables/use-keyboard-shortcut";
 import { useAbortSession, useForkSession, useNewSessionInFolder } from "@/composables/use-session-actions";
+import { useSettingsNav } from "@/composables/use-settings-nav";
 import { useMachinesStore } from "@/stores/machines";
 import type { SessionListItem } from "@/api/client";
 import { api } from "@/api/client";
@@ -100,6 +102,7 @@ export function useCommands() {
   const { toggleSidebar, isMobileNav, mobileDrawerOpen, isRightPanelVisible, toggleRightPanel, showRightPanel } = useSidebarMobile();
   // The commands work on the open session, which may be on another machine (opened in place); they ask its machine.
   const machines = useMachinesStore();
+  const { openAddMachine } = useSettingsNav();
   const sessionMachine = (sessionId: string) => machines.sessionTarget(sessionId);
   const { abortSession } = useAbortSession(sessionMachine);
   const { forkSession } = useForkSession(sessionMachine);
@@ -376,6 +379,18 @@ export function useCommands() {
         paletteHotkey: bindingFor("nav-settings")?.paletteHotkey ?? undefined,
         keywords: ["preferences", "config", "settings"],
         action: () => navigateToRoute("/settings"),
+      },
+      {
+        id: "add-machine",
+        label: "Add a machine",
+        description: "Connect another computer to this Fleet.",
+        icon: Monitor,
+        category: "Navigation",
+        keywords: ["machine", "computer", "pair", "pairing link", "ssh", "remote", "connect"],
+        action: () => {
+          openAddMachine();
+          navigateToRoute("/settings");
+        },
       },
       {
         id: "new-session",

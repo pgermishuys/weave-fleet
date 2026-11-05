@@ -7,6 +7,7 @@ export const COMMAND_IDS = [
   "nav-board",
   "nav-analytics",
   "nav-settings",
+  "add-machine",
   "nav-go-to-session",
   "nav-next-session",
   "nav-prev-session",

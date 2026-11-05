@@ -79,7 +79,7 @@ const isEditing = computed(() => props.automation !== null);
 const machines = useMachinesStore();
 const target = useMachineTarget();
 const navigate = useNavigate();
-const { setActiveSection } = useSettingsNav();
+const { openAddMachine } = useSettingsNav();
 const showMachineChip = computed(() => machines.hasMachines && machines.live.isHome);
 const targetName = computed(() => machines.entries.find((entry) => entry.key === target.key)?.name ?? machines.live.name);
 
@@ -106,7 +106,7 @@ function pickMachine(machineKey: string): void {
 }
 
 function addMachine(): void {
-  setActiveSection("machines");
+  openAddMachine();
   void navigate({ to: "/settings" });
 }
 

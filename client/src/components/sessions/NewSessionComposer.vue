@@ -73,7 +73,7 @@ const { config } = storeToRefs(useAppShellStore());
 const workspaceUiStore = useWorkspaceUiStore();
 const { newSessionInitialSource } = storeToRefs(workspaceUiStore);
 const { harnesses, enabledHarnesses, defaultHarnessType, noHarnessReason } = useEnabledHarnesses();
-const { setActiveSection } = useSettingsNav();
+const { setActiveSection, openAddMachine } = useSettingsNav();
 // A new session starts on the machine you're working in, unless the draft picked another: the route provides it, and
 // everything in the box (folders, harnesses, agents and models, profiles) asks that machine.
 const machines = useMachinesStore();
@@ -86,7 +86,7 @@ function pickMachine(machineKey: string): void {
 }
 
 function addMachine(): void {
-  setActiveSection("machines");
+  openAddMachine();
   void navigate({ to: "/settings" });
 }
 
@@ -99,6 +99,9 @@ const harnessSetup = useHarnessSetupStore();
 const defaults = useNewSessionDefaults();
 const modelPicker = useModelPickerStore();
 const isMobile = useIsMobile();
+// Desktop shows the chip from the first machine on, so its menu can say machines are possible; phones keep it for
+// when there are others.
+const showMachineChip = computed(() => machines.hasMachines || !isMobile.value);
 
 const { repositories, scannedAt, error: repositoriesError, refresh: refreshRepositories } = useRepositories();
 const { projects } = useProjects();
@@ -1134,7 +1137,7 @@ onUnmounted(() => {
       </div>
 
       <div class="new-session__strip">
-        <template v-if="machines.hasMachines">
+        <template v-if="showMachineChip">
           <MachinePicker
             :machines="machines.entries"
             :selected="target.key"

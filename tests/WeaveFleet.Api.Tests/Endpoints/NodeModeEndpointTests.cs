@@ -43,7 +43,7 @@ public sealed class NodeModeEndpointTests :
         response.Content.Headers.ContentType?.MediaType.ShouldBe("text/html");
         response.Headers.GetValues("Content-Security-Policy").Single().ShouldContain("default-src 'none'");
         var page = await response.Content.ReadAsStringAsync();
-        page.ShouldContain("Fleet node");
+        page.ShouldContain("Fleet machine");
         page.ShouldContain("fleet node pair");
         page.ShouldContain("Settings → Machines → Add a machine");
         page.ShouldNotContain("access token");
