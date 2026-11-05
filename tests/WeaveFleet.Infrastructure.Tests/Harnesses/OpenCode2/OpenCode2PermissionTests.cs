@@ -182,6 +182,37 @@ public sealed class OpenCode2PermissionTests
         => OpenCode2HttpClient.RulesFor(level, hideStepTool: false)
             .Any(rule => rule is { Action: "*", Effect: "ask" }).ShouldBe(asks);
 
+    [Fact]
+    public async Task A_resync_while_an_ask_waits_still_reads_needs_you_and_busy_once_it_is_answered()
+    {
+        // ResyncActivityStatusAsync trusts this read after a reconnect: a pending ask must not read as Working.
+        var api = new StubHandler(request => request.RequestUri!.AbsolutePath switch
+        {
+            "/api/session/active" => Json("{\"data\":{\"" + Session + "\":{}}}"),
+            var path when path == $"/api/session/{Session}/form" => Json("""{"data":[]}"""),
+            var path when path == $"/api/session/{Session}" && request.Method == HttpMethod.Get => Json("{\"data\":{\"id\":\"" + Session + "\"}}"),
+            _ => new HttpResponseMessage(HttpStatusCode.NoContent),
+        });
+        var server = new OpenCode2Server("local-user", OpenCode2Fixtures.ClientServing("", api), "token", process: null, NullLogger.Instance);
+        await using var session = new OpenCode2HarnessSession(
+            "opencode2-1",
+            new OpenCode2SessionInfo { Id = Session },
+            new OpenCode2SessionContext("fleet-1", "local-user", "/work", null, null),
+            server,
+            _ => Task.FromResult(server),
+            analytics: null,
+            NullLogger.Instance);
+        await session.ApplyPermissionsAsync(new PermissionPolicy(PermissionLevels.Ask), CancellationToken.None);
+
+        (await session.GetActivityStatusAsync(CancellationToken.None)).ShouldBe(ActivityStatuses.Busy);
+
+        session.OnEvent(Asked("per_1", "shell", "git push origin main", command: "git push origin main"));
+        (await session.GetActivityStatusAsync(CancellationToken.None)).ShouldBe(ActivityStatuses.WaitingInput);
+    }
+
+    private static HttpResponseMessage Json(string body)
+        => new(HttpStatusCode.OK) { Content = new StringContent(body, Encoding.UTF8, "application/json") };
+
     private static (StubHandler Api, OpenCode2Server Server, OpenCode2HarnessSession Session) Start(bool hidesStepTool = false)
     {
         var permissions = hidesStepTool
