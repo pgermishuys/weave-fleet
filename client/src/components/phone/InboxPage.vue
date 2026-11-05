@@ -19,7 +19,7 @@ import { rememberPhoneMachine } from "@/lib/machines";
 import { useMachinesStore } from "@/stores/machines";
 import { haptic } from "@/lib/phone/haptics";
 import { holdKeyboard } from "@/lib/phone/keyboard";
-import { buildInbox, machinesStatus, type InboxItem } from "@/lib/phone/inbox";
+import { buildInbox, machinesStatus, sectionRows, type InboxItem } from "@/lib/phone/inbox";
 import { ago, clock } from "@/lib/phone/time";
 import type { AnswerOutcome, PermissionReply } from "@/lib/push/answer";
 
@@ -61,8 +61,10 @@ const archived = shallowRef<ReadonlySet<string>>(new Set());
 const shown = (items: readonly InboxItem[]): InboxItem[] => items.filter((item) => !archived.value.has(item.key));
 const working = computed(() => shown(inbox.value.working));
 const finishedAll = computed(() => shown(inbox.value.finished));
-/** The newest few; the rest are a tap away under Sessions. */
-const finished = computed(() => finishedAll.value.slice(0, 3));
+/** The newest few; "Show all" lists the rest in place. */
+const finishedExpanded = shallowRef(false);
+const finishedSection = computed(() => sectionRows(finishedAll.value, finishedExpanded.value));
+const finished = computed(() => finishedSection.value.rows);
 
 /** Every session from the last 30 days, by machine: what needs you first, then newest first. */
 const query = shallowRef("");
@@ -461,6 +463,15 @@ const pull = usePullToRefresh({
                       @open="open"
                     />
                   </SwipeRow>
+                  <button
+                    v-if="finishedSection.hidden"
+                    type="button"
+                    class="ph-rows__more ph-press"
+                    data-testid="inbox-show-all-finished"
+                    @click="finishedExpanded = true"
+                  >
+                    Show all {{ finishedAll.length }}
+                  </button>
                 </div>
               </template>
             </div>
