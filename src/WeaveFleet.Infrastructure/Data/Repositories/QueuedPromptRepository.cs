@@ -40,6 +40,33 @@ public sealed class QueuedPromptRepository(IDbConnectionFactory connectionFactor
     public Task<bool> ReturnToFrontAsync(QueuedPrompt item)
         => InsertAsync(item, "COALESCE((SELECT MIN(position) FROM queued_prompts WHERE session_id = @SessionId), 1) - 1");
 
+    public async Task<bool> ReturnBeforeAsync(QueuedPrompt item, string? beforeItemId)
+    {
+        if (beforeItemId is null)
+            return await AddAsync(item).ConfigureAwait(false);
+        if ((await ListAsync(item.SessionId).ConfigureAwait(false)).All(i => i.Id != beforeItemId))
+            return await ReturnToFrontAsync(item).ConfigureAwait(false);
+
+        // Make room at the place: it and everything behind it move back one.
+        var beforeId = beforeItemId;
+        using (var conn = connectionFactory.CreateConnection())
+        {
+            await conn.ExecuteNonQueryAsync(
+                """
+                UPDATE queued_prompts SET position = position + 1
+                WHERE session_id = @SessionId
+                  AND position >= (SELECT position FROM queued_prompts WHERE id = @BeforeId)
+                """,
+                cmd =>
+                {
+                    cmd.AddParameter("SessionId", item.SessionId);
+                    cmd.AddParameter("BeforeId", beforeId);
+                }).ConfigureAwait(false);
+        }
+
+        return await InsertAsync(item, "(SELECT position FROM queued_prompts WHERE id = @BeforeId) - 1", cmd => cmd.AddParameter("BeforeId", beforeId)).ConfigureAwait(false);
+    }
+
     public async Task<QueuedPrompt?> TakeAsync(string sessionId, string itemId)
     {
         using var conn = connectionFactory.CreateConnection();
@@ -82,7 +109,7 @@ public sealed class QueuedPromptRepository(IDbConnectionFactory connectionFactor
             Read);
     }
 
-    private async Task<bool> InsertAsync(QueuedPrompt item, string positionSql)
+    private async Task<bool> InsertAsync(QueuedPrompt item, string positionSql, Action<DbCommand>? extra = null)
     {
         using var conn = connectionFactory.CreateConnection();
         var inserted = await conn.ExecuteNonQueryAsync(
@@ -109,6 +136,7 @@ public sealed class QueuedPromptRepository(IDbConnectionFactory connectionFactor
                 cmd.AddParameter("Skills", item.Skills is { Count: > 0 } ? string.Join(' ', item.Skills) : null);
                 cmd.AddParameter("CreatedAt", item.CreatedAt.ToString("O", CultureInfo.InvariantCulture));
                 cmd.AddParameter("UserId", userContext.UserId);
+                extra?.Invoke(cmd);
             });
         return inserted > 0;
     }

@@ -151,6 +151,64 @@ public sealed class PromptQueueServiceTests : IAsyncDisposable
         call.Arguments.ShouldBe("src");
     }
 
+    private async Task<(PromptQueueService Service, string A, string B, string C)> QueueThreeAsync()
+    {
+        Seed();
+        Busy();
+        var service = Build();
+        return (service, await QueueAsync(service, "a"), await QueueAsync(service, "b"), await QueueAsync(service, "c"));
+    }
+
+    [Fact]
+    public async Task Removing_the_middle_item_leaves_its_siblings_in_order()
+    {
+        var (service, _, b, _) = await QueueThreeAsync();
+
+        (await service.RemoveAsync("s1", b)).IsSuccess.ShouldBeTrue();
+
+        (await _queue.ListAsync("s1")).Select(i => i.Text).ShouldBe(["a", "c"]);
+        LastBroadcastTexts().ShouldBe(["a", "c"]);
+    }
+
+    [Fact]
+    public async Task Sending_the_middle_item_now_steers_only_it_and_leaves_its_siblings_in_order()
+    {
+        var (service, _, b, _) = await QueueThreeAsync();
+
+        (await service.SendNowAsync("s1", b)).IsSuccess.ShouldBeTrue();
+
+        _harness.SendPromptCalls.ShouldHaveSingleItem().Text.ShouldBe("b");
+        (await _queue.ListAsync("s1")).Select(i => i.Text).ShouldBe(["a", "c"]);
+        LastBroadcastTexts().ShouldBe(["a", "c"]);
+    }
+
+    [Fact]
+    public async Task A_failed_send_now_puts_the_middle_item_back_where_it_was()
+    {
+        var (service, _, b, _) = await QueueThreeAsync();
+        _harness.SendPromptBehavior = (_, _, _) => throw new InvalidOperationException("harness refused");
+
+        (await service.SendNowAsync("s1", b)).IsFailure.ShouldBeTrue();
+
+        (await _queue.ListAsync("s1")).Select(i => i.Text).ShouldBe(["a", "b", "c"]);
+        LastBroadcastTexts().ShouldBe(["a", "b", "c"]);
+    }
+
+    [Fact]
+    public async Task A_failed_send_now_does_not_bring_back_a_sibling_removed_meanwhile()
+    {
+        var (service, a, b, _) = await QueueThreeAsync();
+        _harness.SendPromptBehavior = async (_, _, ct) =>
+        {
+            await service.RemoveAsync("s1", a, ct);
+            throw new InvalidOperationException("harness refused");
+        };
+
+        (await service.SendNowAsync("s1", b)).IsFailure.ShouldBeTrue();
+
+        (await _queue.ListAsync("s1")).Select(i => i.Text).ShouldBe(["b", "c"]);
+    }
+
     [Fact]
     public async Task Send_now_while_the_agent_works_steers_the_message_into_the_turn()
     {
