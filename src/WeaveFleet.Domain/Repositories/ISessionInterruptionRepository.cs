@@ -21,6 +21,15 @@ public interface ISessionInterruptionRepository
     /// <summary>Every session flagged as mid-turn, for every user.</summary>
     Task<IReadOnlyList<FlaggedTurn>> ListFlaggedAsync();
 
+    /// <summary>The session's turn stopped on a failure (<c>sessions.turn_failed_at</c>): marks it.</summary>
+    Task SetFailureAsync(string sessionId, DateTimeOffset at, string message);
+
+    /// <summary>A new turn started: clears the mark. True when there was one.</summary>
+    Task<bool> ClearFailureAsync(string sessionId);
+
+    /// <summary>The current user's sessions whose last turn failed and hasn't been followed by another, by session id.</summary>
+    Task<IReadOnlyDictionary<string, SessionFailure>> ListFailuresForUserAsync();
+
     Task<SessionInterruption?> GetAsync(string sessionId);
 
     /// <summary>The current user's interruptions, for the sessions list.</summary>

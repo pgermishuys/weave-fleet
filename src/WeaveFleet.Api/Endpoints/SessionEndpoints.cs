@@ -116,6 +116,9 @@ public static class SessionEndpoints
                             .ToDictionary(item => item.SessionId, SessionInterruptionView.From, StringComparer.Ordinal)
                         : new Dictionary<string, SessionInterruptionView>(StringComparer.Ordinal);
 
+                    var failedBySessionId = (await interruptionRepository.ListFailuresForUserAsync())
+                        .ToDictionary(item => item.Key, item => SessionFailureView.From(item.Value), StringComparer.Ordinal);
+
                     return Results.Ok(sessions.Select(session => ToListResponse(session, parentIdsWithBusyChildren, projectNamesById, originsBySessionId, activityTracker, capabilitiesResolver, workspacesById) with
                     {
                         Progress = progressBySessionId.GetValueOrDefault(session.Id),
@@ -124,6 +127,7 @@ public static class SessionEndpoints
                         LastPageShownAt = pagesBySessionId.GetValueOrDefault(session.Id)?.LastShownAt,
                         ScheduledRetry = retriesBySessionId.GetValueOrDefault(session.Id),
                         Interrupted = interruptedBySessionId.GetValueOrDefault(session.Id),
+                        Failed = failedBySessionId.GetValueOrDefault(session.Id),
                     }).ToList());
                 },
                 error => Task.FromResult(Results.Problem(error.Description) as IResult));

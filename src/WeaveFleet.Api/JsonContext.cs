@@ -294,6 +294,7 @@ internal sealed record ErrorResponse(string Error);
 [JsonSerializable(typeof(WeaveFleet.Application.Sessions.QueuedPromptView))]
 [JsonSerializable(typeof(WeaveFleet.Application.Sessions.ScheduledRetryView))]
 [JsonSerializable(typeof(WeaveFleet.Application.Sessions.SessionInterruptionView))]
+[JsonSerializable(typeof(WeaveFleet.Application.Sessions.SessionFailureView))]
 [JsonSerializable(typeof(List<WeaveFleet.Application.Sessions.QueuedPromptView>))]
 [JsonSerializable(typeof(List<WeaveFleet.Application.Sessions.PermissionRuleView>))]
 [JsonSerializable(typeof(SideSeenApiRequest))]

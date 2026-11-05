@@ -14,6 +14,26 @@ function item(sessionStatus: string, overrides: Partial<SessionListItem> = {}, u
   } as unknown as SessionListItem;
 }
 
+describe("sessionRowStatus: a failed last turn", () => {
+  const failed = { at: new Date(NOW - 2 * 60 * MIN).toISOString(), message: "Provider returned 529: overloaded" };
+
+  it("says Failed in the error tone instead of the age", () => {
+    const status = sessionRowStatus(item("idle", { failed }), NOW);
+    expect(status.label).toBe("Failed");
+    expect(status.tone).toBe("error");
+    expect(status.description).toContain("Provider returned 529: overloaded");
+  });
+
+  it("leaves a retry Fleet has scheduled to say so", () => {
+    const scheduledRetry = { dueAt: new Date(NOW + 5 * MIN).toISOString(), attempt: 1, kind: "rate_limit", reason: "limit" };
+    expect(sessionRowStatus(item("idle", { failed, scheduledRetry: scheduledRetry as never }), NOW).tone).toBe("retry");
+  });
+
+  it("is plain idle once the failure is cleared", () => {
+    expect(sessionRowStatus(item("idle", { failed: null }), NOW)).toMatchObject({ label: "2h", tone: "quiet" });
+  });
+});
+
 describe("formatCompactAge", () => {
   it.each([
     [NOW - 20_000, "now"],

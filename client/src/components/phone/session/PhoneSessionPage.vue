@@ -128,6 +128,7 @@ const status = computed(() => headerStatus({
   updatedAt: updatedAt.value,
   lastMessageAt: lastMessageAt.value,
   hasMessages: stream.messages.value.length > 0,
+  failed: Boolean(session.value?.failed),
   unreachableSince: reachability.reachable.value ? null : reachability.lastHeardAt.value,
   now: now.value,
 }));

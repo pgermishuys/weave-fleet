@@ -24,6 +24,11 @@ describe("headerStatus", () => {
     expect(headerStatus({ ...base, streamStatus: "idle", sessionStatus: "waiting_input" }).tone).toBe("needs-you");
   });
 
+  it("says a failed last turn stopped with an error, not finished", () => {
+    const status = headerStatus({ ...base, streamStatus: "idle", sessionStatus: "idle", failed: true });
+    expect(status).toEqual({ tone: "error", state: "Stopped with an error", detail: "" });
+  });
+
   it("says finished with the time", () => {
     const status = headerStatus({ ...base, streamStatus: "idle", sessionStatus: "idle" });
     expect(status.tone).toBe("finished");

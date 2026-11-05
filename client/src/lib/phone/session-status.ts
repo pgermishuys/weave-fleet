@@ -18,6 +18,8 @@ export interface HeaderStatusInput {
   /** When the last message arrived. */
   lastMessageAt: number | null;
   hasMessages: boolean;
+  /** The last turn stopped on a failure and no turn has started since. */
+  failed?: boolean;
   /** Set while the machine isn't answering: when it last did. */
   unreachableSince: number | null;
   now: number;
@@ -45,6 +47,8 @@ export function headerStatus(input: HeaderStatusInput): HeaderStatus {
     const what = input.streamStatus === "retry" ? "Retrying" : input.streamStatus === "delegating" ? "Delegating" : "Working";
     return { tone: "working", state: what, detail: duration(input.turnStartedAt, input.now) };
   }
+
+  if (input.failed) return { tone: "error", state: "Stopped with an error", detail: "" };
 
   if (input.hasMessages) {
     return { tone: "finished", state: "Finished", detail: input.lastMessageAt ? clock(input.lastMessageAt) : "" };

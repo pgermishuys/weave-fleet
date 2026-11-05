@@ -24,5 +24,8 @@ public sealed record SessionInterruption
     public int? ChangedFiles { get; init; }
 }
 
+/// <summary>A session whose last turn stopped on a failure, until its next turn starts.</summary>
+public sealed record SessionFailure(DateTimeOffset At, string Message);
+
 /// <summary>A session's turn as the last Fleet left it.</summary>
 public sealed record FlaggedTurn(string SessionId, string UserId, DateTimeOffset StartedAt, bool Waiting);

@@ -24,6 +24,19 @@ public sealed record SessionInterruptionView(string At, bool Waiting, string? La
         interruption.ChangedFiles);
 }
 
+/// <summary>A session whose last turn failed, as clients show it.</summary>
+public sealed record SessionFailureView(string At, string Message)
+{
+    public static SessionFailureView From(SessionFailure failure) => new(
+        failure.At.ToUniversalTime().ToString("O", CultureInfo.InvariantCulture),
+        failure.Message);
+}
+
+/// <summary>The <c>session.failure</c> event: the session's failed last turn now, or <see langword="null"/> once a new turn started.</summary>
+public sealed record SessionFailureChanged(
+    string SessionId,
+    [property: System.Text.Json.Serialization.JsonIgnore(Condition = System.Text.Json.Serialization.JsonIgnoreCondition.Never)] SessionFailureView? Failure);
+
 /// <summary>The <c>session.interrupted</c> event: the session's interruption now, or <see langword="null"/> when it has none.</summary>
 public sealed record SessionInterruptionChanged(
     string SessionId,
@@ -50,6 +63,12 @@ public sealed partial class SessionInterruptions(
 {
     /// <summary>The event carrying a session's interruption after it changed (<see cref="SessionInterruptionChanged"/>).</summary>
     public const string ChangedEvent = "session.interrupted";
+
+    /// <summary>The event carrying a session's failed last turn after it changed (<see cref="SessionFailureChanged"/>).</summary>
+    public const string FailureEvent = "session.failure";
+
+    /// <summary>How many characters of a failure's message the list keeps.</summary>
+    private const int FailureMessageLimit = 300;
 
     /// <summary>How many of a session's newest messages the history check reads.</summary>
     private const int HistoryWindow = 12;
@@ -200,6 +219,32 @@ public sealed partial class SessionInterruptions(
 
     internal Task OnTurnEndedAsync(string sessionId) => interruptions.ClearTurnAsync(sessionId);
 
+    /// <summary>A turn stopped on a failure: the session's row says so until its next turn starts.</summary>
+    internal async Task OnTurnFailedAsync(string sessionId, string message, CancellationToken ct = default)
+    {
+        // Harness errors can carry a stack trace; the row's tooltip wants the reason.
+        var reason = message.Split('\n', 2)[0].Trim();
+        var failure = new SessionFailure(time.GetUtcNow(), reason.Length > FailureMessageLimit ? reason[..FailureMessageLimit] : reason);
+        await interruptions.SetFailureAsync(sessionId, failure.At, failure.Message).ConfigureAwait(false);
+        await BroadcastFailureAsync(sessionId, failure, ct).ConfigureAwait(false);
+    }
+
+    /// <summary>A new turn started: the failure before it is no longer the session's last word.</summary>
+    internal async Task OnTurnStartedClearFailureAsync(string sessionId, CancellationToken ct = default)
+    {
+        if (await interruptions.ClearFailureAsync(sessionId).ConfigureAwait(false))
+            await BroadcastFailureAsync(sessionId, null, ct).ConfigureAwait(false);
+    }
+
+    private async Task BroadcastFailureAsync(string sessionId, SessionFailure? failure, CancellationToken ct)
+    {
+        var payload = JsonSerializer.SerializeToElement(
+            new SessionFailureChanged(sessionId, failure is null ? null : SessionFailureView.From(failure)),
+            ApplicationJsonContext.Default.SessionFailureChanged);
+        await broadcaster.BroadcastAsync($"session:{sessionId}", FailureEvent, payload, userContext.UserId, ct).ConfigureAwait(false);
+        await broadcaster.BroadcastAsync("sessions", FailureEvent, payload, userContext.UserId, ct).ConfigureAwait(false);
+    }
+
     internal Task OnWaitingChangedAsync(string sessionId, bool waiting) => interruptions.SetWaitingAsync(sessionId, waiting);
 
     private async Task BroadcastAsync(string sessionId, SessionInterruption? interruption, CancellationToken ct)
@@ -249,13 +294,27 @@ public sealed partial class TurnFlagger(IServiceScopeFactory scopeFactory, Fleet
     /// <param name="status">The harness's reported status, when this event was a status change.</param>
     public void Observe(string sessionId, string? userId, Domain.Events.DomainEvent? domainEvent, string? status = null)
     {
-        if (!options.Harness.RestartContinue || string.IsNullOrEmpty(userId))
+        if (string.IsNullOrEmpty(userId))
             return;
 
+        // The restart flag only matters when Continue is on; the failed-turn mark the list shows is always kept.
+        var restart = options.Harness.RestartContinue;
         Func<SessionInterruptions, CancellationToken, Task>? work = domainEvent switch
         {
-            Domain.Events.TurnStarted => (service, ct) => service.OnTurnStartedAsync(sessionId, ct),
-            Domain.Events.SessionIdled or Domain.Events.TurnFailed => (service, _) => service.OnTurnEndedAsync(sessionId),
+            Domain.Events.TurnStarted => async (service, ct) =>
+            {
+                await service.OnTurnStartedClearFailureAsync(sessionId, ct).ConfigureAwait(false);
+                if (restart)
+                    await service.OnTurnStartedAsync(sessionId, ct).ConfigureAwait(false);
+            },
+            Domain.Events.TurnFailed failed => async (service, ct) =>
+            {
+                if (restart)
+                    await service.OnTurnEndedAsync(sessionId).ConfigureAwait(false);
+                await service.OnTurnFailedAsync(sessionId, failed.Payload.Error.Message, ct).ConfigureAwait(false);
+            },
+            _ when !restart => null,
+            Domain.Events.SessionIdled => (service, _) => service.OnTurnEndedAsync(sessionId),
             _ when status == ActivityStatuses.WaitingInput => (service, _) => service.OnWaitingChangedAsync(sessionId, true),
             _ when status is not null => (service, _) => service.OnWaitingChangedAsync(sessionId, false),
             _ => null,
