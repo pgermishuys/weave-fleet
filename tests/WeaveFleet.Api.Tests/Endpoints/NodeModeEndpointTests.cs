@@ -44,11 +44,26 @@ public sealed class NodeModeEndpointTests :
         response.Headers.GetValues("Content-Security-Policy").Single().ShouldContain("default-src 'none'");
         var page = await response.Content.ReadAsStringAsync();
         page.ShouldContain("Fleet node");
+        page.ShouldContain("fleet node pair");
         page.ShouldContain("Settings → Machines → Add a machine");
+        page.ShouldNotContain("access token");
+        page.ShouldNotContain("<script");
         page.ShouldContain("src=\"data:image/png;base64,");
         page.ShouldContain(NodeEndpoints.DocsUrl);
         page.ShouldNotContain("{{");
         page.ShouldNotContain("<div id=\"app\">");
+    }
+
+    [Fact]
+    public async Task A_pairing_link_opened_in_a_browser_gets_the_same_page()
+    {
+        using var client = CreateClient(_node);
+        client.DefaultRequestHeaders.Accept.ParseAdd("text/html");
+
+        var response = await client.GetAsync("/add-machine");
+
+        response.StatusCode.ShouldBe(HttpStatusCode.OK);
+        (await response.Content.ReadAsStringAsync()).ShouldContain("paste the link it printed");
     }
 
     [Fact]
@@ -63,7 +78,7 @@ public sealed class NodeModeEndpointTests :
         response.Content.Headers.ContentType?.MediaType.ShouldBe("application/json");
         var note = await response.Content.ReadFromJsonAsync<JsonElement>();
         note.GetProperty("kind").GetString().ShouldBe("fleet-node");
-        note.GetProperty("message").GetString()!.ShouldContain("Settings → Machines");
+        note.GetProperty("message").GetString()!.ShouldContain("fleet node pair");
         note.GetProperty("docs").GetString().ShouldBe(NodeEndpoints.DocsUrl);
     }
 
@@ -175,10 +190,10 @@ public sealed class NodeModeEndpointTests :
 
         var lines = NodeEndpoints.StartupLines(options, new LoopbackAuthPolicy(options.Host, requireToken: true), new StubTokens("atlas-token-0123456789", LocalTokenSource.Saved), "/data/fleet.machine.json");
 
-        lines.ShouldContain(line => line.Contains("Settings → Machines → Add a machine", StringComparison.Ordinal));
-        lines.ShouldContain(line => line.StartsWith("    URL:  ", StringComparison.Ordinal) && line.EndsWith(":5512", StringComparison.Ordinal));
-        lines.ShouldContain("    Token:  atlas-token-0123456789");
-        lines.ShouldContain("  Fleet keeps the token in /data/fleet.machine.json, so it stays the same after a restart.");
+        lines.ShouldContain("    fleet node pair");
+        lines.ShouldContain(line => line.Contains("paste the link it prints into Settings → Machines → Add a machine", StringComparison.Ordinal));
+        lines.ShouldContain("  Scripts can use the master token in /data/fleet.machine.json.");
+        lines.ShouldNotContain(line => line.Contains("atlas-token-0123456789", StringComparison.Ordinal));
         lines.ShouldNotContain(line => line.Contains("can't reach it", StringComparison.Ordinal));
     }
 
@@ -189,9 +204,9 @@ public sealed class NodeModeEndpointTests :
 
         var lines = NodeEndpoints.StartupLines(options, new LoopbackAuthPolicy(options.Host, requireToken: true), new StubTokens("atlas-token-0123456789", LocalTokenSource.Environment), "/data/fleet.machine.json");
 
-        lines.ShouldContain("    URL:    http://localhost:5512");
         lines.ShouldContain(line => line.Contains("other machines can't reach it yet", StringComparison.Ordinal));
-        lines.ShouldContain("  WEAVE_FLEET_AUTH_TOKEN sets the token.");
+        lines.ShouldNotContain("    fleet node pair");
+        lines.ShouldContain("  Scripts can use the master token in WEAVE_FLEET_AUTH_TOKEN.");
     }
 
     private static ApiWebApplicationFactory CreateNode()

@@ -3,6 +3,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { createPinia, setActivePinia } from "pinia";
 import { HOME_MACHINE_KEY, saveMachines, setActiveMachine, type MachineConnection } from "@/lib/machines";
 import { useMachinesStore, type MachineCapabilities, type MachineInfo } from "@/stores/machines";
+import { usePreferencesStore } from "@/stores/preferences";
 import MachinesSection from "@/components/settings/MachinesSection.vue";
 
 vi.mock("@tanstack/vue-router", () => ({ useRouter: () => ({ navigate: vi.fn() }) }));
@@ -147,42 +148,56 @@ describe("Settings → Machines", () => {
       return wrapper;
     }
 
-    it("starts with a pairing code, and keeps the token form under Advanced", async () => {
+    const falconPreview = { machineId: "ffffffffffffffffffffffffffffffff", name: "falcon", os: "linux", version: "0.65.2", baseUrl: "http://100.64.90.72:2113" };
+    const falconMachine = { id: "ffffffffffffffffffffffffffffffff", name: "falcon", baseUrl: "http://100.64.90.72:2113", os: "linux", status: "online", addedAt: "2026-10-24T00:00:00.000Z", lastSeenAt: null, token: "fdt_d1.secret" };
+    const link = "http://100.64.90.72:2113/add-machine#ABCD-EFGH";
+
+    async function paste(wrapper: VueWrapper, text: string) {
+      await wrapper.find("[data-testid='machines-add-link']").setValue(text);
+      await flushPromises();
+    }
+
+    it("opens on one Pairing link field, with Over SSH as the other choice", async () => {
       const wrapper = await openAddForm();
 
-      expect(wrapper.find("[data-testid='machines-add-mode-code']").attributes("aria-selected")).toBe("true");
-      expect(wrapper.find("[data-testid='machines-add-code']").exists()).toBe(true);
-      expect(wrapper.find("[data-testid='machines-add-code-help']").text()).toContain("fleet node pair");
-      expect(wrapper.find("[data-testid='machines-add-token']").exists()).toBe(false);
-
-      await wrapper.find("[data-testid='machines-add-mode-address']").trigger("click");
+      expect(wrapper.findAll("[role='tab']").map((tab) => tab.text())).toEqual(["Pairing link", "Over SSH"]);
+      expect(wrapper.find("[data-testid='machines-add-link']").exists()).toBe(true);
+      expect(wrapper.find("[data-testid='machines-add-link-help']").text()).toContain("fleet node pair");
       expect(wrapper.find("[data-testid='machines-add-code']").exists()).toBe(false);
-      expect(wrapper.find("[data-testid='machines-add-token']").exists()).toBe(false);
-      await wrapper.find("[data-testid='machines-add-advanced']").trigger("click");
-      expect(wrapper.find("[data-testid='machines-add-token']").exists()).toBe(true);
+      expect(wrapper.find("[data-testid='machines-add-submit']").attributes("disabled")).toBeDefined();
     });
 
-    it("needs an address and a code before it can add", async () => {
+    it("looks at the machine behind a pasted link and says what adding it means", async () => {
       const wrapper = await openAddForm();
-      const submit = wrapper.find("[data-testid='machines-add-submit']");
-      expect(submit.attributes("disabled")).toBeDefined();
-
-      await wrapper.find("[data-testid='machines-add-url']").setValue("http://100.64.90.72:2113");
-      expect(submit.attributes("disabled")).toBeDefined();
-      await wrapper.find("[data-testid='machines-add-code']").setValue("ABCD-EFGH");
-      expect(submit.attributes("disabled")).toBeUndefined();
-    });
-
-    it("adds the machine with the code and says so", async () => {
-      const wrapper = await openAddForm();
-      let sent: unknown = null;
-      routes["/api/machines/pair"] = (_, init) => {
-        sent = JSON.parse(String(init?.body));
-        return json({ id: "ffffffffffffffffffffffffffffffff", name: "falcon", baseUrl: "http://100.64.90.72:2113", os: "linux", status: "online", addedAt: "2026-10-24T00:00:00.000Z", lastSeenAt: null, token: "fdt_d1.secret" });
+      let looked: unknown = null;
+      routes["/api/machines/pair/preview"] = (_, init) => {
+        looked = JSON.parse(String(init?.body));
+        return json(falconPreview);
       };
 
-      await wrapper.find("[data-testid='machines-add-url']").setValue("http://100.64.90.72:2113");
-      await wrapper.find("[data-testid='machines-add-code']").setValue("ABCD-EFGH");
+      await paste(wrapper, link);
+
+      expect(looked).toEqual({ baseUrl: "http://100.64.90.72:2113", code: "ABCD-EFGH" });
+      expect(wrapper.find("[data-testid='machines-add-found-line']").text()).toBe("falcon · Linux · Fleet 0.65.2");
+      expect(wrapper.find("[data-testid='machines-add-found-reach']").text()).toBe("Reached over Tailscale at 100.64.90.72:2113");
+      const note = wrapper.find("[data-testid='machines-add-note']").text();
+      expect(note).toContain("run there, with falcon's sign-ins, folders and agents");
+      expect(note).toContain("run agents, change files and open terminals on falcon");
+      expect(note).toContain("Forget falcon here to stop");
+      expect(wrapper.find("[data-testid='machines-add-submit']").text()).toBe("Add falcon");
+      expect(wrapper.find("[data-testid='machines-add-allow-agents']").exists()).toBe(false);
+    });
+
+    it("adds the machine from the link and says so", async () => {
+      const wrapper = await openAddForm();
+      let sent: unknown = null;
+      routes["/api/machines/pair/preview"] = () => json(falconPreview);
+      routes["/api/machines/pair"] = (_, init) => {
+        sent = JSON.parse(String(init?.body));
+        return json(falconMachine);
+      };
+      await paste(wrapper, link);
+
       await wrapper.find("[data-testid='machines-add-form']").trigger("submit");
       await flushPromises();
 
@@ -191,16 +206,72 @@ describe("Settings → Machines", () => {
       expect(wrapper.find("[data-testid='machines-add-form']").exists()).toBe(false);
     });
 
-    it("shows the error from a code that was used", async () => {
+    it("offers to let agents hand work to the machine when that switch is on, and sets it at add time", async () => {
       const wrapper = await openAddForm();
-      routes["/api/machines/pair"] = () => json({ error: "That code has expired or was already used. Run fleet node pair on the other machine for a new one." }, 400);
+      usePreferencesStore().preferences = { AgentHandoff: "true", SessionMessages: "true" };
+      let allowed: unknown = null;
+      routes["/api/machines/pair/preview"] = () => json(falconPreview);
+      routes["/api/machines/pair"] = () => json(falconMachine);
+      routes[`/api/machines/${falconMachine.id}`] = (_, init) => {
+        allowed = JSON.parse(String(init?.body));
+        return json({ ...falconMachine, agentsAllowed: true });
+      };
+      await paste(wrapper, link);
 
-      await wrapper.find("[data-testid='machines-add-url']").setValue("http://100.64.90.72:2113");
-      await wrapper.find("[data-testid='machines-add-code']").setValue("ABCD-EFGH");
+      await wrapper.find("[data-testid='machines-add-allow-agents']").setValue(true);
       await wrapper.find("[data-testid='machines-add-form']").trigger("submit");
       await flushPromises();
 
-      expect(wrapper.find("[data-testid='machines-add-error']").text()).toContain("already used");
+      expect(allowed).toEqual({ agentsAllowed: true });
+    });
+
+    it("takes a bare address, asks for the code, then looks", async () => {
+      const wrapper = await openAddForm();
+      routes["/api/machines/pair/preview"] = () => json(falconPreview);
+
+      await paste(wrapper, "100.64.90.72:2113");
+      expect(wrapper.find("[data-testid='machines-add-code']").exists()).toBe(true);
+      expect(wrapper.find("[data-testid='machines-add-found']").exists()).toBe(false);
+      expect(wrapper.find("[data-testid='machines-add-submit']").attributes("disabled")).toBeDefined();
+
+      await wrapper.find("[data-testid='machines-add-code']").setValue("abcd-efgh");
+      await flushPromises();
+      expect(wrapper.find("[data-testid='machines-add-found-line']").text()).toContain("falcon");
+      expect(wrapper.find("[data-testid='machines-add-submit']").attributes("disabled")).toBeUndefined();
+    });
+
+    it("keeps the master token under Advanced, for an address", async () => {
+      const wrapper = await openAddForm();
+      let sent: unknown = null;
+      routes["/api/machine"] = () => json(atlasInfo);
+      routes["http://100.64.90.72:2113/api/machine"] = () => json({ ...atlasInfo, id: falconMachine.id, name: "falcon" });
+      routes["/api/machines/import"] = (_, init) => {
+        sent = JSON.parse(String(init?.body));
+        return json({ machines: [falconMachine] });
+      };
+      await paste(wrapper, "100.64.90.72:2113");
+      expect(wrapper.find("[data-testid='machines-add-token']").exists()).toBe(false);
+
+      await wrapper.find("[data-testid='machines-add-advanced']").trigger("click");
+      await wrapper.find("[data-testid='machines-add-token']").setValue("master-token-0123456789");
+      expect(wrapper.find("[data-testid='machines-add-submit']").attributes("disabled")).toBeUndefined();
+      await wrapper.find("[data-testid='machines-add-form']").trigger("submit");
+      await flushPromises();
+
+      expect(sent).toMatchObject({ machines: [{ baseUrl: "http://100.64.90.72:2113", token: "master-token-0123456789" }] });
+    });
+
+    it("says why a link can't be used, and why the machine wasn't found", async () => {
+      const wrapper = await openAddForm();
+
+      await paste(wrapper, "http://100.64.90.72:2113/add-machine#NOPE");
+      expect(wrapper.find("[data-testid='machines-add-link-invalid']").text()).toContain("no valid code");
+
+      routes["/api/machines/pair/preview"] = () => json({ error: "That code has expired or was already used. Run fleet node pair on the other machine for a new one." }, 400);
+      await paste(wrapper, link);
+      expect(wrapper.find("[data-testid='machines-add-preview-error']").text()).toContain("already used");
+      expect(wrapper.find("[data-testid='machines-add-found']").exists()).toBe(false);
+      expect(wrapper.find("[data-testid='machines-add-submit']").attributes("disabled")).toBeDefined();
     });
 
   describe("Add a machine over SSH", () => {
@@ -217,32 +288,17 @@ describe("Settings → Machines", () => {
       await flushPromises();
       await wrapper.find("[data-testid='machines-add']").trigger("click");
       await flushPromises();
+      await wrapper.find("[data-testid='machines-add-mode-ssh']").trigger("click");
       return wrapper;
     }
 
-    function tabs(wrapper: VueWrapper): string[] {
-      return wrapper.findAll("[role='tab']").map((tab) => tab.attributes("data-testid")!);
-    }
-
-    it("puts Over SSH first and selected when ~/.ssh/config has hosts", async () => {
+    it("lists the hosts from ~/.ssh/config", async () => {
       const wrapper = await openForm(true);
 
-      expect(tabs(wrapper)).toEqual(["machines-add-mode-ssh", "machines-add-mode-code", "machines-add-mode-address"]);
       expect(wrapper.find("[data-testid='machines-add-mode-ssh']").attributes("aria-selected")).toBe("true");
       expect(wrapper.find("[data-testid='machines-add-ssh-host']").exists()).toBe(true);
-      expect(wrapper.find("[data-testid='machines-add-url']").exists()).toBe(false);
-      // The token form is the By address tab's own.
-      expect(wrapper.find("[data-testid='machines-add-advanced']").exists()).toBe(false);
+      expect(wrapper.find("[data-testid='machines-add-link']").exists()).toBe(false);
       expect(wrapper.findAll("datalist option").map((option) => option.attributes("label"))).toEqual(["falcon (alice@100.64.90.72)", "atlas"]);
-    });
-
-    it("keeps the pairing code first and Over SSH last when there are no hosts", async () => {
-      const wrapper = await openForm(false);
-
-      expect(tabs(wrapper)).toEqual(["machines-add-mode-code", "machines-add-mode-address", "machines-add-mode-ssh"]);
-      expect(wrapper.find("[data-testid='machines-add-mode-code']").attributes("aria-selected")).toBe("true");
-      await wrapper.find("[data-testid='machines-add-mode-ssh']").trigger("click");
-      expect(wrapper.find("[data-testid='machines-add-ssh-host']").exists()).toBe(true);
     });
 
     it("sends the typed destination and says it was added", async () => {

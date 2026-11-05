@@ -4,6 +4,7 @@ using System.Net.Http.Json;
 using System.Text.Json;
 using Microsoft.AspNetCore.Mvc.Testing;
 using Microsoft.Extensions.DependencyInjection;
+using WeaveFleet.Api.Endpoints;
 using WeaveFleet.Api.Tests.Infrastructure;
 using WeaveFleet.Application.Users;
 
@@ -34,6 +35,31 @@ public sealed class MachinePairingEndpointTests : IClassFixture<MachinePairingEn
 
         var phone = await owner.PostAsJsonAsync("/api/machine/pairing", new { baseUrl = "https://harbor.example.test" });
         phone.StatusCode.ShouldBe(HttpStatusCode.Conflict);
+    }
+
+    [Fact]
+    public void The_link_is_the_first_address_with_the_code_in_the_fragment()
+    {
+        MachineEndpoints.PairingLink(["http://100.64.90.72:2113/", "http://falcon:2113"], "K3MQ-9ZDT")
+            .ShouldBe("http://100.64.90.72:2113/add-machine#K3MQ-9ZDT");
+        MachineEndpoints.PairingLink([], "K3MQ-9ZDT").ShouldBeNull();
+    }
+
+    [Fact]
+    public async Task Looking_at_a_code_names_the_machine_and_its_version_without_using_the_code_up()
+    {
+        await using var factory = CreateNode();
+        using var owner = Client(factory, MasterToken(factory));
+        using var other = Client(factory);
+        var manualCode = await NewCodeAsync(owner);
+
+        var preview = await other.PostAsJsonAsync("/api/pairing/preview", new { manualCode });
+
+        preview.StatusCode.ShouldBe(HttpStatusCode.OK);
+        var body = await preview.Content.ReadFromJsonAsync<JsonElement>();
+        body.GetProperty("machineName").GetString().ShouldNotBeNullOrEmpty();
+        body.GetProperty("version").GetString().ShouldNotBeNullOrEmpty();
+        (await other.PostAsJsonAsync("/api/pairing/redeem", new { manualCode, deviceName = "studio-mac", kind = "machine" })).StatusCode.ShouldBe(HttpStatusCode.OK);
     }
 
     [Fact]

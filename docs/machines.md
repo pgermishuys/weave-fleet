@@ -63,20 +63,20 @@ fleet node --host 0.0.0.0 --port 2113
 
 A node is the same Fleet API, hub and terminals, with two differences:
 
-- **No web app.** A browser at `/` gets a short page saying it's a Fleet node and how to add it; anything else
-  gets the same as JSON (`{ kind: "fleet-node", message, docs }`). Other pages are `404`.
+- **No web app.** A browser at `/` or `/add-machine` gets a short page saying it's a Fleet node and how to add it;
+  anything else gets the same as JSON (`{ kind: "fleet-node", message, docs }`). Other pages are `404`.
 - **The token on every request**, whatever address it listens on, this machine's own requests included (as
   `--require-token`).
 
-At startup it prints its addresses and its token. Add it from another Fleet in Settings → Machines → **Add a
-machine**, and work in its sessions from there. The token is kept next to its database, as on any Fleet (see
-[The access token](#the-access-token)). `fleet node` takes `--host`, `--port`, `--data-dir` and `--profile`, like
+At startup it says to run `fleet node pair` on this machine and paste the link that prints into Settings → Machines →
+**Add a machine** in another Fleet; it names the file that holds the master token for scripts. The token is kept next
+to its database, as on any Fleet (see [The access token](#the-access-token)). `fleet node` takes `--host`, `--port`, `--data-dir` and `--profile`, like
 `fleet`. Behind `tailscale serve`, leave out `--host`.
 
 A node can't pair a phone itself (`POST /api/machine/pairing` returns `409`), because the pairing link opens a page
 it doesn't serve. Pair the phone with the Fleet that has the node in its list; the phone reaches the node through it.
 
-### Add a node with a pairing code
+### Add a node with a pairing link
 
 You don't have to paste the node's master token. On the node, while it is running:
 
@@ -84,9 +84,18 @@ You don't have to paste the node's master token. On the node, while it is runnin
 fleet node pair
 ```
 
-It prints a code like `7K3M-Q9ZD` and the node's address. In the other Fleet, open Settings → Machines → **Add a
-machine** → **With a pairing code**, and enter the address and the code. The code works once and expires after 10
-minutes.
+It prints one pairing link, `<address>/add-machine#<CODE>`, for example
+`http://100.64.90.72:2113/add-machine#K3MQ-9ZDT`. The address keeps its scheme and port; the code sits in the
+fragment, so it never reaches a server log. When the node has several reachable addresses, the link uses the first
+(tailnet first) and the others are listed under "Also reachable at". When the node only listens on loopback, it says
+so and how to fix it (`--host 0.0.0.0`, or `tailscale serve`), and prints no link.
+
+In the other Fleet, open Settings → Machines → **Add a machine** and paste the link into **Pairing link**. Fleet looks
+at the machine first, without using the code up, and shows its name, system, Fleet version and how it was reached,
+with a note on what adding it means: sessions started there run there, this Fleet can run agents, change files and
+open terminals on it, and it keeps a key of its own for this Fleet. **Add falcon** adds it. A bare address works too:
+a Code field appears. The code works once and expires after 10 minutes. A browser that opens the link lands on the
+node's own page, which says to paste it into Fleet instead.
 
 What the other Fleet gets is a token of its own, a device of kind `machine` (named after that Fleet's machine). The
 node lists it in `GET /api/machine/devices` and removes it with `DELETE /api/machine/devices/{id}`; the other Fleet
@@ -94,22 +103,22 @@ loses access at once and nothing else changes. The master token never leaves the
 machine token can't manage access (no pairing codes, no device list). `fleet node pair` takes `--port`, `--data-dir`
 and `--profile` like `fleet node`: use the ones the node was started with.
 
-"By address" is still there, with the token form under **Advanced**.
+With an address typed, the master-token form is still there under **Advanced**.
 
 ### Add a node over SSH
 
 No Tailscale and no open port: if you can `ssh` to the machine, Fleet can add it. Settings → Machines → **Add a
 machine** → **Over SSH**. Pick a host from `~/.ssh/config` on the machine running Fleet (wildcard entries are skipped),
-or type `user@host[:port]`. The tab comes first when that file has hosts; otherwise the pairing code stays first.
+or type `user@host[:port]`. It sits next to **Pairing link** at the top of the dialog.
 
 Fleet runs your own `ssh`, so your keys, agent and `StrictHostKeyChecking` apply. It always uses `BatchMode=yes`: it
 never asks for a password and never trusts an unknown host key on its own (run `ssh host` once to accept it). It then:
 
 1. runs `fleet node pair --json` on the node through SSH to get a one-time code (one line of JSON: `code`,
-   `machineName`, `addresses`);
+   `machineName`, `addresses`, `link`);
 2. opens a tunnel, `ssh -N -L 127.0.0.1:<free port>:127.0.0.1:2113 host`, and uses `http://127.0.0.1:<port>` as the
    machine's address;
-3. redeems the code through the tunnel, exactly like **With a pairing code**. No token is pasted.
+3. redeems the code through the tunnel, exactly like a pairing link. No token is pasted.
 
 If SSH works but `fleet` isn't there, or nothing answers on the node port, Fleet says so and shows what it could
 install (see [Install the node over SSH](#install-the-node-over-ssh)). It installs nothing until you click.
@@ -436,14 +445,18 @@ Local mode only.
   Crockford base32). A code works once, for 10 minutes; at most 5 are live; codes live in memory, so a restart
   forgets them. A node (`fleet node`) returns `409`: it doesn't serve the page the link opens.
 - `POST /api/pairing/preview` (anyone) with `{ "secret" }` or `{ "manualCode" }`: `{ machineId, machineName, os,
-  expiresAt }`, or `404` when the code is unknown, used or expired. Doesn't use the code up.
+  expiresAt, version }` (`version` is missing from a Fleet older than the link), or `404` when the code is unknown, used or expired. Doesn't use the code up.
 - `POST /api/pairing/redeem` (anyone) with the code and `{ "deviceName", "platform" }` (`ios`, `android`, `other`;
   a name of 1–60 characters): `{ deviceId, token, machine }`, where `machine` is the `GET /api/machine` shape. It also
   signs the browser in with a device cookie. `404` for a used or expired code; a bad name doesn't use the code up.
   `/api/pairing/*` takes 10 requests a minute in all, and typed codes 5 a minute. `"kind": "machine"` (another
   Fleet redeeming) makes a device of kind `machine` and sets no cookie; any other kind is `400`.
-- `POST /api/machine/pairing/code` (owner): `{ manualCode, expiresAt, machineId, machineName, addresses }`, a code for
-  another Fleet to redeem. Works on a node too (`fleet node pair` calls it).
+- `POST /api/machine/pairing/code` (owner): `{ manualCode, expiresAt, machineId, machineName, addresses, link }`, a code for
+  another Fleet to redeem. `link` is the pairing link for the first address (null when there is none). Works on a node
+  too (`fleet node pair` calls it).
+- `POST /api/machines/pair/preview` (owner) with `{ baseUrl, code }`: this Fleet previews the code at that address
+  without using it up and returns `{ machineId, name, os, version, baseUrl }`; `400` with the reason when it can't, or
+  when the address is this machine.
 - `POST /api/machines/pair` (owner) with `{ baseUrl, code }`: this Fleet previews the code at that address, refuses its
   own id, redeems it as a machine and saves the machine with the token it got.
 - `GET /api/machine/devices` (owner): `{ devices: [{ id, name, platform, createdAt, lastUsedAt, pairedVia, kind }] }`.

@@ -5,6 +5,7 @@ using WeaveFleet.Api.Auth;
 using WeaveFleet.Api.Contracts;
 using WeaveFleet.Application.Configuration;
 using WeaveFleet.Application.Devices;
+using WeaveFleet.Application.Diagnostics;
 using WeaveFleet.Domain.Entities;
 
 namespace WeaveFleet.Api.Endpoints;
@@ -82,7 +83,7 @@ public static class DeviceEndpoints
             var addresses = policy.IsRemoteReachable
                 ? MachineEndpoints.ReachableAddresses(fleetOptions).Select(address => address.Url).ToList()
                 : [];
-            return Results.Ok(new MachinePairingCodeResponse(code.ManualCode, code.ExpiresAt, identity.Id, identity.Name ?? Environment.MachineName, addresses));
+            return Results.Ok(new MachinePairingCodeResponse(code.ManualCode, code.ExpiresAt, identity.Id, identity.Name ?? Environment.MachineName, addresses, MachineEndpoints.PairingLink(addresses, code.ManualCode)));
         })
         .RequireAuthorization(FleetClaims.MachineOwnerPolicy)
         .Produces<MachinePairingCodeResponse>(200)
@@ -168,7 +169,7 @@ public static class DeviceEndpoints
                 return Results.NotFound(new ErrorResponse(CodeNotFound));
 
             var identity = identities.Get();
-            return Results.Ok(new PairingPreviewResponse(identity.Id, identity.Name ?? Environment.MachineName, MachineEndpoints.OperatingSystemName(), ticket.ExpiresAt));
+            return Results.Ok(new PairingPreviewResponse(identity.Id, identity.Name ?? Environment.MachineName, MachineEndpoints.OperatingSystemName(), ticket.ExpiresAt, FleetInstrumentation.ServiceVersion.Split('+')[0]));
         })
         .AllowAnonymous()
         .Produces<PairingPreviewResponse>(200)

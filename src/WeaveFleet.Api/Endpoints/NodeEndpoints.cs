@@ -14,7 +14,7 @@ namespace WeaveFleet.Api.Endpoints;
 /// </summary>
 public static class NodeEndpoints
 {
-    public const string DocsUrl = "https://github.com/pgermishuys/weave-fleet/blob/main/docs/machines.md#run-a-node-without-the-web-ui";
+    public const string DocsUrl = "https://fleet.tryweave.io/docs/machines/";
 
     /// <summary>
     /// The page a browser gets at <c>/</c>, in Fleet's theme: what this is and how to add it. Built once, with Fleet's
@@ -39,21 +39,23 @@ public static class NodeEndpoints
 
     /// <summary>
     /// <c>/</c> says what answers here: a page for someone who opens the node's address in a browser, and a short JSON
-    /// note for anything else (curl, scripts).
+    /// note for anything else (curl, scripts). <c>/add-machine</c> answers the same, so a pairing link opened in a
+    /// browser says to paste it into Fleet instead.
     /// </summary>
     public static IEndpointRouteBuilder MapNodeNote(this IEndpointRouteBuilder app)
     {
-        app.MapGet("/", (HttpContext http) =>
+        foreach (var path in new[] { "/", "/add-machine" })
+            app.MapGet(path, (HttpContext http) =>
             {
                 if (!http.Request.Headers.Accept.ToString().Contains("text/html", StringComparison.OrdinalIgnoreCase))
                     return Results.Ok(new NodeNoteResponse(
                         "fleet-node",
-                        "This is a Fleet node. It has no web app. Add it to another Fleet under Settings → Machines, with this address and its access token.",
+                        "This is a Fleet node. It has no web app. On this machine run fleet node pair, then paste the link it prints into Add a machine in another Fleet.",
                         DocsUrl));
 
-                // The page's own inline style and script, its inlined logo, and nothing else; no one may frame it.
+                // The page's own inline style, its inlined logo, and nothing else; no one may frame it.
                 var headers = http.Response.Headers;
-                headers.ContentSecurityPolicy = "default-src 'none'; img-src data:; style-src 'unsafe-inline'; script-src 'unsafe-inline'; frame-ancestors 'none'";
+                headers.ContentSecurityPolicy = "default-src 'none'; img-src data:; style-src 'unsafe-inline'; frame-ancestors 'none'";
                 headers.XContentTypeOptions = "nosniff";
                 headers.CacheControl = "no-cache";
                 return Results.Content(Page.Value, "text/html; charset=utf-8");
@@ -73,31 +75,30 @@ public static class NodeEndpoints
     {
         var lines = new List<string>
         {
-            $"  Fleet node on {options.Host}:{options.Port}, without the web app. Every request needs the access token.",
+            $"  Fleet node on {options.Host}:{options.Port}, a machine without the web app.",
             "",
-            "  To add it, open another Fleet: Settings → Machines → Add a machine.",
         };
 
-        var urls = policy.IsRemoteReachable
-            ? MachineEndpoints.ReachableAddresses(options).Select(address => address.Url).ToList()
-            : [$"http://localhost:{options.Port}"];
-        for (var i = 0; i < urls.Count; i++)
-            lines.Add($"    {(i == 0 ? "URL:" : ""),-6}  {urls[i]}");
-        lines.Add($"    Token:  {tokens.Token}");
-        lines.Add("");
-
-        if (!policy.IsRemoteReachable)
+        if (policy.IsRemoteReachable)
+        {
+            lines.Add("  To add it to another Fleet, run this on this machine:");
+            lines.Add("");
+            lines.Add("    fleet node pair");
+            lines.Add("");
+            lines.Add("  Then paste the link it prints into Settings → Machines → Add a machine.");
+        }
+        else
         {
             lines.Add($"  It listens on {options.Host} only, so other machines can't reach it yet. Start it with");
-            lines.Add("  --host 0.0.0.0, or put tailscale serve in front of it (see docs/machines.md).");
-            lines.Add("");
+            lines.Add("  --host 0.0.0.0, or put tailscale serve in front of it, then run fleet node pair.");
         }
 
+        lines.Add("");
         lines.Add(tokens.Source switch
         {
-            LocalTokenSource.Environment => "  WEAVE_FLEET_AUTH_TOKEN sets the token.",
-            LocalTokenSource.Saved => $"  Fleet keeps the token in {tokenFilePath}, so it stays the same after a restart.",
-            _ => "  This token lasts until Fleet stops.",
+            LocalTokenSource.Environment => "  Scripts can use the master token in WEAVE_FLEET_AUTH_TOKEN.",
+            LocalTokenSource.Saved => $"  Scripts can use the master token in {tokenFilePath}.",
+            _ => "  Scripts can use the master token, which lasts until Fleet stops.",
         });
 
         return lines;

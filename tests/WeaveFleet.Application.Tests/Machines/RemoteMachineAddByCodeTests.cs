@@ -44,6 +44,33 @@ public sealed class RemoteMachineAddByCodeTests : IDisposable
     }
 
     [Fact]
+    public async Task Looking_at_a_code_says_who_answers_and_leaves_the_code_unused()
+    {
+        _falcon.Answer = line => line == "POST /api/pairing/preview"
+            ? (HttpStatusCode.OK, Preview.Replace("\"os\"", "\"version\":\"0.65.2\",\"os\""))
+            : null;
+
+        var (found, error) = await _falcon.Service.PreviewByCodeAsync("http://falcon.test:2113/", "abcd-efgh", CancellationToken.None);
+
+        error.ShouldBeNull();
+        found!.Name.ShouldBe("falcon");
+        found.Os.ShouldBe("Linux");
+        found.Version.ShouldBe("0.65.2");
+        found.BaseUrl.ShouldBe("http://falcon.test:2113");
+        _falcon.Requests.ShouldNotContain(r => r.Request == "POST /api/pairing/redeem");
+    }
+
+    [Fact]
+    public async Task A_Fleet_too_old_to_say_its_version_still_shows()
+    {
+        _falcon.Answer = line => line == "POST /api/pairing/preview" ? (HttpStatusCode.OK, Preview) : null;
+
+        var (found, _) = await _falcon.Service.PreviewByCodeAsync("http://falcon.test:2113", "ABCD-EFGH", CancellationToken.None);
+
+        found!.Version.ShouldBeNull();
+    }
+
+    [Fact]
     public async Task An_expired_code_says_how_to_get_a_new_one()
     {
         var (machine, error) = await _falcon.Service.AddByCodeAsync("http://falcon.test:2113", "ABCD-EFGH", CancellationToken.None);
