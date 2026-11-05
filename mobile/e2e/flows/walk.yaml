@@ -131,8 +131,17 @@ appId: io.tryweave.fleet
 
 # A page shown since the phone last opened this session's Pages: back on the list, its row says so.
 # By id: with the keyboard up, Android's own "Back" (the keyboard's collapse key) matches the text too.
-- tapOn:
-    id: "session-back"
+# Tap until the list is up: a tap that lands while the dock or keyboard is still moving is dropped (the run that
+# failed here sat on the conversation with the keyboard up), and waiting longer for the row can't recover from that.
+- retry:
+    maxRetries: 3
+    commands:
+      - tapOn:
+          id: "session-back"
+      - extendedWaitUntil:
+          visible:
+            id: "new-session"
+          timeout: 10000
 - extendedWaitUntil:
     visible: ".*Fix pagination off-by-one.*1 new page.*"
     timeout: 30000
@@ -166,8 +175,15 @@ appId: io.tryweave.fleet
 - takeScreenshot: 10-pages
 - tapOn:
     id: "sheet-close"
-- tapOn:
-    id: "session-back"
+- retry:
+    maxRetries: 3
+    commands:
+      - tapOn:
+          id: "session-back"
+      - extendedWaitUntil:
+          visible:
+            id: "new-session"
+          timeout: 10000
 - extendedWaitUntil:
     visible: "Sessions"
     timeout: 30000

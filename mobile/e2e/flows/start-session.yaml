@@ -61,8 +61,15 @@ appId: io.tryweave.fleet
 - takeScreenshot: 25-started
 
 # Back goes to the list, not to an empty New session screen, and the session is on it.
-- tapOn:
-    id: "session-back"
+- retry:
+    maxRetries: 3
+    commands:
+      - tapOn:
+          id: "session-back"
+      - extendedWaitUntil:
+          visible:
+            id: "new-session"
+          timeout: 10000
 - extendedWaitUntil:
     visible: ".*make the upload retry on a timeout.*"
     timeout: 30000
