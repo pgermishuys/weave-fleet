@@ -27,6 +27,21 @@ public sealed class AcpClientTests
     }
 
     [Fact]
+    public async Task an_error_response_that_is_not_an_object_still_settles_the_request()
+    {
+        // An agent that answers {"error": "boom"} (or an error with an unrecognised code type) must end the turn as a
+        // failure; the reading used to drop the line and leave the prompt pending, so the session read Working forever.
+        await using var agent = new FakeAcpAgent { Handle = (_, _) => new TaskCompletionSource<JsonNode?>().Task };
+        var pending = agent.Client.RequestAsync("session/prompt", null, CancellationToken.None);
+        await Task.Delay(100);
+
+        agent.Send(new JsonObject { ["jsonrpc"] = "2.0", ["id"] = 1, ["error"] = "boom" });
+
+        var failure = await Should.ThrowAsync<AcpException>(pending.WaitAsync(TimeSpan.FromSeconds(3)));
+        failure.Message.ShouldContain("boom");
+    }
+
+    [Fact]
     public async Task notifications_arrive_in_order_and_before_the_response_that_follows_them()
     {
         var seen = new List<string>();
