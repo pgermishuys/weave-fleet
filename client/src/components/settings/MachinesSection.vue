@@ -49,12 +49,16 @@ const modeLabels: Record<AddMode, string> = { setup: "Set it up from here", link
 const addMode = shallowRef<AddMode>("link");
 /** Set when a machine can't be set up from here: the link card says which machine and what to run on it. */
 const linkHint = shallowRef<string | null>(null);
+/** A set-up is running in the card: leaving the dialog doesn't stop it, so the button says Close. */
+const setupRunning = shallowRef(false);
 function pickMode(mode: AddMode): void {
   addMode.value = mode;
+  setupRunning.value = false;
   addError.value = null;
   linkHint.value = null;
 }
 async function openAddForm(): Promise<void> {
+  setupRunning.value = false;
   showAddForm.value = true;
   addError.value = null;
   linkHint.value = null;
@@ -431,6 +435,7 @@ onUnmounted(() => stopPolling?.());
           v-if="addMode === 'setup'"
           @added="onSetUp"
           @use-link="onUseLink"
+          @running="setupRunning = $event"
         />
         <template v-else>
           <p
@@ -623,9 +628,10 @@ onUnmounted(() => stopPolling?.());
             type="button"
             :class="buttonSecondaryClass"
             :disabled="isAdding"
+            data-testid="machines-add-cancel"
             @click="showAddForm = false"
           >
-            Cancel
+            {{ addMode === "setup" && setupRunning ? "Close" : "Cancel" }}
           </button>
         </div>
       </form>

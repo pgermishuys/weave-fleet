@@ -433,6 +433,7 @@ describe("Settings → Machines", () => {
       await flushPromises();
 
       expect(wrapper.find("[data-testid='machines-setup-title']").text()).toBe("Setting up falcon");
+      expect(wrapper.find("[data-testid='machines-add-cancel']").text()).toBe("Close");
       expect(wrapper.findAll("[data-testid='machines-setup-steps'] li").map((li) => li.attributes("data-state"))).toEqual(["running", "pending", "pending", "pending"]);
       expect(wrapper.find("[data-testid='machines-add-note']").text()).toContain("This Fleet can run agents, change files and open terminals on falcon.");
       await wrapper.find("[data-testid='machines-setup-commands-toggle']").trigger("click");
