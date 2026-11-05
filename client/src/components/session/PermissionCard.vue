@@ -1,8 +1,9 @@
 <script setup lang="ts">
-import { computed, ref, shallowRef } from "vue";
+import { computed, onMounted, ref, shallowRef } from "vue";
 import { useNavigate } from "@tanstack/vue-router";
 import { ShieldAlert } from "lucide-vue-next";
 import StatusGlyph from "@/components/sessions/StatusGlyph.vue";
+import { focusBlockingCard, moveChoiceFocus } from "@/lib/focus-blocking-card";
 import { useSettingsNav } from "@/composables/use-settings-nav";
 import type { PermissionAsk, PermissionReply } from "@/composables/use-session-permissions";
 import { dontAskAgainWording, permissionHeading } from "@/lib/tools";
@@ -52,6 +53,9 @@ const loading = shallowRef(false);
 const error = shallowRef<string | null>(null);
 const cardRef = ref<HTMLElement | null>(null);
 
+// The ask is what the turn waits on: keyboard focus starts on "Allow once", unless the user is typing in the composer.
+onMounted(() => focusBlockingCard(cardRef.value, "button.pcard__choice"));
+
 async function answer(reply: PermissionReply): Promise<void> {
   if (loading.value) return;
   loading.value = true;
@@ -66,6 +70,7 @@ async function answer(reply: PermissionReply): Promise<void> {
 }
 
 function handleCardKeydown(event: KeyboardEvent): void {
+  if (moveChoiceFocus(event, cardRef.value, "button.pcard__choice")) return;
   if (event.metaKey || event.ctrlKey || event.altKey) return;
   const typing = event.target instanceof HTMLInputElement;
   if (event.key === "Escape") {

@@ -1190,6 +1190,7 @@ function handleKeydown(event: KeyboardEvent): void {
           class="composer-frame__textarea"
           dir="auto"
           data-testid="prompt-input"
+          aria-label="Message"
           :aria-controls="hasValidSessionId && autocomplete.activeOptionId.value ? AUTOCOMPLETE_LISTBOX_ID : undefined"
           :aria-activedescendant="hasValidSessionId ? autocomplete.activeOptionId.value : undefined"
           :value="draft.text"
@@ -1293,6 +1294,8 @@ function handleKeydown(event: KeyboardEvent): void {
         type="file"
         multiple
         class="sr-only"
+        aria-label="Attach files"
+        tabindex="-1"
         @change="handleFileInput"
       >
 
@@ -1327,6 +1330,7 @@ function handleKeydown(event: KeyboardEvent): void {
             variant="toolbar-icon"
             size="toolbar"
             title="Attach files"
+            aria-label="Attach files"
             :disabled="isDisabled"
             @click="fileInputRef?.click()"
           >

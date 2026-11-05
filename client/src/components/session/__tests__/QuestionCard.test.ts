@@ -20,11 +20,34 @@ function part(state: Record<string, unknown>): AccumulatedToolPart {
 function mountCard(state: Record<string, unknown>, onSubmit = vi.fn(async () => {}), onDismiss = vi.fn(async () => {})) {
   const wrapper = mount(QuestionCard, {
     props: { part: part(state), sessionId: "s1", onSubmit, onDismiss },
+    attachTo: document.body,
   });
   return { wrapper, onSubmit, onDismiss };
 }
 
 describe("QuestionCard", () => {
+  it("takes keyboard focus on its first option, and the arrow keys move between options", async () => {
+    const { wrapper } = mountCard({ status: "running", input: { questions } });
+    expect(document.activeElement).toBe(wrapper.get("[data-testid='question-pill-Staging']").element);
+
+    await wrapper.get("[data-testid='question-pill-Staging']").trigger("keydown", { key: "ArrowDown" });
+    expect(document.activeElement).toBe(wrapper.get("[data-testid='question-pill-Production']").element);
+    await wrapper.get("[data-testid='question-pill-Production']").trigger("click");
+    expect(wrapper.get("[data-testid='question-pill-Production']").attributes("aria-checked")).toBe("true");
+    wrapper.unmount();
+  });
+
+  it("leaves focus alone while the user types in the composer", () => {
+    const box = document.createElement("textarea");
+    document.body.append(box);
+    box.value = "half a sentence";
+    box.focus();
+    const { wrapper } = mountCard({ status: "running", input: { questions } });
+    expect(document.activeElement).toBe(box);
+    wrapper.unmount();
+    box.remove();
+  });
+
   it("asks for an answer and marks itself as needing you", () => {
     const { wrapper } = mountCard({ status: "running", input: { questions } });
     const card = wrapper.get("[data-testid='question-card-active']");
@@ -117,5 +140,17 @@ describe("QuestionCard line breaks", () => {
       const rule = source.match(new RegExp(`^\\${selector} \\{([^}]*)\\}`, "m"))?.[1] ?? "";
       expect(rule, selector).toMatch(/white-space:\s*pre-line/);
     }
+  });
+});
+
+describe("QuestionCard focus with an empty composer", () => {
+  it("still takes focus from an empty composer that autofocused", () => {
+    const box = document.createElement("textarea");
+    document.body.append(box);
+    box.focus();
+    const { wrapper } = mountCard({ status: "running", input: { questions } });
+    expect(document.activeElement).toBe(wrapper.get("[data-testid='question-pill-Staging']").element);
+    wrapper.unmount();
+    box.remove();
   });
 });
