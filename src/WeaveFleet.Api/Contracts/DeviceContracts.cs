@@ -54,6 +54,12 @@ public sealed record PairMachineRequest(string? BaseUrl, string? Code);
 /// <summary>The machine a pairing link points at, as it answered before the code was used.</summary>
 /// <param name="Version">The Fleet version it runs; null for a Fleet too old to say.</param>
 /// <param name="BaseUrl">The address as Fleet will use it.</param>
+/// <summary>Why a machine couldn't be reached or added: <c>Error</c> is one line for older clients, <c>Diagnosis</c> names the step that broke.</summary>
+public sealed record MachineErrorResponse(string Error, WeaveFleet.Application.Machines.MachineDiagnosis? Diagnosis);
+
+/// <summary>What <c>POST /api/machines/{id}/check</c> found: <c>Diagnosis</c> is null when the machine answers.</summary>
+public sealed record MachineCheckResponse(bool Reachable, string? Error, WeaveFleet.Application.Machines.MachineDiagnosis? Diagnosis);
+
 public sealed record PairMachinePreviewResponse(string MachineId, string Name, string? Os, string? Version, string BaseUrl);
 
 /// <summary>A paired device's token. Returned once; Fleet keeps only a hash.</summary>

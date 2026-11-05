@@ -31,6 +31,7 @@ exports[`Settings → Machines with Jobs off > renders as it always did and asks
             <!--v-if-->
             <!--v-if-->
             <!--v-if-->
+            <!--v-if-->
           </div>
           <div data-v-bdf3156a="" class="machine-card__actions">
             <!--v-if--><button data-v-bdf3156a="" type="button" class="inline-flex items-center justify-center gap-2 rounded-btn border border-border bg-main-bg px-3 py-1.5 text-sm font-medium text-text transition-colors hover:border-accent/50 disabled:cursor-not-allowed disabled:opacity-60"> Rename </button>
@@ -41,6 +42,7 @@ exports[`Settings → Machines with Jobs off > renders as it always did and asks
         <li data-v-bdf3156a="" class="machine-card" data-testid="machine-card" data-machine="bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb"><span data-v-bdf3156a="" class="machine-card__dot machine-card__dot--bad" aria-hidden="true"></span>
           <div data-v-bdf3156a="" class="machine-card__names"><span data-v-bdf3156a="" class="machine-card__name">mini <span data-v-bdf3156a="" class="machine-card__os">macos</span>
             <!--v-if--></span><span data-v-bdf3156a="" class="machine-card__url">http://100.64.12.40:2113</span><span data-v-bdf3156a="" class="machine-card__state machine-card__state--bad">mini answered 404.</span>
+            <!--v-if-->
             <!--v-if-->
             <!--v-if-->
             <!--v-if-->

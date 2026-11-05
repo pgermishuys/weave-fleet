@@ -62,6 +62,9 @@ internal sealed class FakeMachine : HttpMessageHandler, IHttpClientFactory
     /// <summary>The machine is off: nothing answers.</summary>
     public bool Away { get; set; }
 
+    /// <summary>When set, a request fails with this, as a network failure would.</summary>
+    public Exception? Fails { get; set; }
+
     public List<(string Request, string? Token, string? Body)> Requests { get; } = [];
 
     HttpClient IHttpClientFactory.CreateClient(string name) => new(this, disposeHandler: false);
@@ -73,6 +76,8 @@ internal sealed class FakeMachine : HttpMessageHandler, IHttpClientFactory
         lock (Requests)
             Requests.Add((line, request.Headers.Authorization?.Parameter, body));
 
+        if (Fails is not null)
+            throw Fails;
         if (Away)
             throw new HttpRequestException("Connection refused");
         if (BeforeAnswer is { } before)

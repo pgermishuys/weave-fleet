@@ -19,6 +19,7 @@ import {
   switchToMachine,
   type MachineConnection,
 } from "@/lib/machines";
+import { DiagnosedError, mixedContentDiagnosis, type MachineDiagnosis } from "@/lib/machine-diagnosis";
 import { readCredentialsSync } from "@/lib/device-credentials";
 import type { MachineUpdate } from "@/lib/fleet-updates";
 import { FeedError, HIDDEN_CLOSE_MS, MachineFeed, type FeedRequest } from "@/lib/machine-feed";
@@ -262,6 +263,17 @@ async function readError(response: Response, fallback: string): Promise<string> 
   }
 }
 
+/** The error for a failed response: carries the server's diagnosis when it sent one, so the screen can show the steps. */
+async function readFailure(response: Response, fallback: string): Promise<Error> {
+  try {
+    const body = await response.json() as { error?: string; message?: string; diagnosis?: MachineDiagnosis | null };
+    const message = body.error ?? body.message ?? fallback;
+    return body.diagnosis ? new DiagnosedError(message, body.diagnosis) : new Error(message);
+  } catch {
+    return new Error(fallback);
+  }
+}
+
 function describeFailure(error: unknown, machineName: string): string {
   if (error instanceof TypeError) return `Can't reach ${machineName}.`;
   return error instanceof Error ? error.message : String(error);
@@ -375,6 +387,9 @@ export const useMachinesStore = defineStore("machines", () => {
     connections.value = listed.map(fromServer).filter((connection): connection is MachineConnection => connection !== null);
     agentsAllowed.value = Object.fromEntries(listed.map((machine) => [machine.id, machine.agentsAllowed === true]));
     persist();
+    // A machine can fail before home's list is read, when there is no one to ask yet.
+    for (const [key, state] of Object.entries(others.value))
+      if (state.error) void diagnose(key);
   }
 
   function alreadyImported(): boolean {
@@ -514,7 +529,7 @@ export const useMachinesStore = defineStore("machines", () => {
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ baseUrl: url.trim(), code: code.trim() }),
     });
-    if (!response.ok) throw new Error(await readError(response, "Couldn't pair the machine."));
+    if (!response.ok) throw await readFailure(response, "Couldn't pair the machine.");
     const connection = fromServer(await response.json() as ServerMachine);
     if (!connection) throw new Error("Couldn't pair the machine.");
 
@@ -537,7 +552,7 @@ export const useMachinesStore = defineStore("machines", () => {
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ baseUrl: url.trim(), code: code.trim() }),
     });
-    if (!response.ok) throw new Error(await readError(response, "Couldn't reach the machine."));
+    if (!response.ok) throw await readFailure(response, "Couldn't reach the machine.");
     return await response.json() as PairingPreview;
   }
 
@@ -587,7 +602,7 @@ export const useMachinesStore = defineStore("machines", () => {
         });
       }
     }
-    if (!response.ok) throw new Error(await readError(response, fallback));
+    if (!response.ok) throw await readFailure(response, fallback);
     const connection = fromServer(await response.json() as ServerMachine);
     if (!connection) throw new Error(fallback);
 
@@ -706,6 +721,7 @@ export const useMachinesStore = defineStore("machines", () => {
       ...others.value,
       [entry.key]: { sessions: read.sessions, projects: read.projects ?? current.projects, error: null, loadedAt: Date.now(), loading: false },
     };
+    setDiagnosis(entry.key, null);
     saveCachedSessions(others.value);
     rememberSessions(entry.key, read.sessions.map((item) => item.session.id));
   }
@@ -713,6 +729,46 @@ export const useMachinesStore = defineStore("machines", () => {
   /** Keeps the last list: an unreachable machine's sessions stay, marked as such. */
   function markUnreachable(key: string, error: string): void {
     others.value = { ...others.value, [key]: { ...sessionsOf(key), error, loading: false } };
+    void diagnose(key);
+  }
+
+  /** Which step broke for each machine that isn't answering, by key; a machine that answers has none. */
+  const diagnoses = ref<Record<string, MachineDiagnosis>>({});
+
+  function setDiagnosis(key: string, diagnosis: MachineDiagnosis | null): void {
+    const rest = { ...diagnoses.value };
+    delete rest[key];
+    diagnoses.value = diagnosis ? { ...rest, [key]: diagnosis } : rest;
+  }
+
+  /**
+   * Works out why a machine isn't answering: a page that can't call an http address is known here, and a tunnel that is
+   * down is the card's to say; anything else asks home to look (`POST /api/machines/{id}/check`). The card falls back to its one-line error
+   * while this runs or when home can't say.
+   */
+  async function diagnose(key: string): Promise<void> {
+    const entry = entries.value.find((candidate) => candidate.key === key);
+    if (!entry?.connection) return;
+    if (entry.tunnelUp === false) return;
+    const mixed = mixedContentDiagnosis(window.location.protocol, entry.connection.baseUrl, entry.name);
+    if (mixed || source.value !== "server") {
+      setDiagnosis(key, mixed);
+      return;
+    }
+    try {
+      const response = await fetchOnMachine(null, `/api/machines/${encodeURIComponent(entry.connection.id)}/check`, { method: "POST" });
+      if (!response.ok) return;
+      const body = await response.json() as { diagnosis?: MachineDiagnosis | null };
+      if (others.value[key]?.error) setDiagnosis(key, body.diagnosis ?? null);
+    } catch {
+      // Home can't say either: the card keeps its one-line error.
+    }
+  }
+
+  /** The card's Retry: reads the machine again and looks again at why it isn't answering. */
+  async function retryMachine(key: string): Promise<void> {
+    await refreshMachine(key);
+    if (others.value[key]?.error) await diagnose(key);
   }
 
   /** Fetches the session list of a machine that isn't live, or has its live feed read it again. */
@@ -983,6 +1039,8 @@ export const useMachinesStore = defineStore("machines", () => {
     addMachine,
     pairMachine,
     previewPairing,
+    diagnoses,
+    retryMachine,
     sshHosts,
     loadSshHosts,
     addOverSsh,

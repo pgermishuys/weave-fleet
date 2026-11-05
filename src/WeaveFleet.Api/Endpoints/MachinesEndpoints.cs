@@ -35,7 +35,7 @@ public static class MachinesEndpoints
         {
             var (machine, error) = await machines.AddAsync(request.BaseUrl ?? "", request.Token ?? "", cancellationToken);
             return machine is null
-                ? Results.BadRequest(new ErrorResponse(error!))
+                ? Results.BadRequest(ToError(error!))
                 : Results.Ok(ToResponse(machine, machines.TokenOf(machine), tunnels));
         })
         .RequireAuthorization(FleetClaims.MachineOwnerPolicy)
@@ -47,7 +47,7 @@ public static class MachinesEndpoints
         {
             var (found, error) = await machines.PreviewByCodeAsync(request.BaseUrl ?? "", request.Code ?? "", cancellationToken);
             return found is null
-                ? Results.BadRequest(new ErrorResponse(error!))
+                ? Results.BadRequest(ToError(error!))
                 : Results.Ok(new PairMachinePreviewResponse(found.MachineId, found.Name, found.Os, found.Version, found.BaseUrl));
         })
         .RequireAuthorization(FleetClaims.MachineOwnerPolicy)
@@ -58,7 +58,7 @@ public static class MachinesEndpoints
         {
             var (machine, error) = await machines.AddByCodeAsync(request.BaseUrl ?? "", request.Code ?? "", cancellationToken);
             return machine is null
-                ? Results.BadRequest(new ErrorResponse(error!))
+                ? Results.BadRequest(ToError(error!))
                 : Results.Ok(ToResponse(machine, machines.TokenOf(machine), tunnels));
         })
         .RequireAuthorization(FleetClaims.MachineOwnerPolicy)
@@ -91,12 +91,24 @@ public static class MachinesEndpoints
         {
             var (machine, error) = await machines.UpdateAsync(id, request.BaseUrl, request.Token, request.Name, cancellationToken, request.AgentsAllowed);
             if (machine is null)
-                return error == "No such machine." ? Results.NotFound(new ErrorResponse(error)) : Results.BadRequest(new ErrorResponse(error!));
+                return error!.Message == "No such machine." ? Results.NotFound(new ErrorResponse(error.Message)) : Results.BadRequest(ToError(error));
             return Results.Ok(ToResponse(machine, machines.TokenOf(machine), tunnels));
         })
         .RequireAuthorization(FleetClaims.MachineOwnerPolicy)
         .Produces<MachineEntryResponse>(200)
         .WithName("UpdateRemoteMachine");
+
+        // Asks a saved machine who it is, so its card can say which step broke. Writes nothing.
+        group.MapPost("/{id}/check", async (string id, RemoteMachineService machines, CancellationToken cancellationToken) =>
+        {
+            var (found, problem) = await machines.CheckAsync(id, cancellationToken);
+            return !found
+                ? Results.NotFound(new ErrorResponse("No such machine."))
+                : Results.Ok(new MachineCheckResponse(problem is null, problem?.Message, problem?.Diagnosis));
+        })
+        .RequireAuthorization(FleetClaims.MachineOwnerPolicy)
+        .Produces<MachineCheckResponse>(200)
+        .WithName("CheckRemoteMachine");
 
         // Phones' tokens on the machine go first, while there's still a token to remove them with.
         group.MapDelete("/{id}", async (string id, RemoteMachineService machines, DeviceGrantService grants, CancellationToken cancellationToken) =>
@@ -147,12 +159,14 @@ public static class MachinesEndpoints
         return app;
     }
 
+    private static MachineErrorResponse ToError(MachineProblem problem) => new(problem.Message, problem.Diagnosis);
+
     private static IResult ToResult(SshAddResult result, RemoteMachineService machines, ISshTunnels tunnels) =>
         result.Machine is not null
             ? Results.Ok(ToResponse(result.Machine, machines.TokenOf(result.Machine), tunnels))
             : result.Plan is { } plan
                 ? Results.Conflict(new SshNotInstalledResponse(result.Error!, plan.Host, plan.Os, plan.CanInstall, plan.Commands, plan.Docs))
-                : Results.BadRequest(new ErrorResponse(result.Error!));
+                : Results.BadRequest(new MachineErrorResponse(result.Error!, result.Diagnosis));
 
     private static MachineEntryResponse ToResponse(RemoteMachine machine, string? token, ISshTunnels tunnels) =>
         new(machine.Id, machine.Name, machine.BaseUrl, machine.Os, machine.Status, machine.AddedAt, machine.LastSeenAt, token, machine.AgentsAllowed,

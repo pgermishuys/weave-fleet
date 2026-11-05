@@ -6,10 +6,12 @@ import { SshNotInstalledError, useMachinesStore, type MachineAccess, type Machin
 import SettingGroup from "@/components/settings/SettingGroup.vue";
 import SettingRow from "@/components/settings/SettingRow.vue";
 import AddPhonePanel from "@/components/settings/AddPhonePanel.vue";
+import MachineDiagnosisPanel from "@/components/settings/MachineDiagnosisPanel.vue";
 import MachineJobSeats from "@/components/settings/MachineJobSeats.vue";
 import { useJobsFeature } from "@/composables/use-jobs-feature";
 import DevicesList from "@/components/settings/DevicesList.vue";
 import { listDevices, type PairedDevice } from "@/lib/devices-api";
+import { diagnosisOf, tunnelDownDiagnosis, type MachineDiagnosis } from "@/lib/machine-diagnosis";
 import { AGENT_HANDOFF_PREFERENCE_KEY } from "@/lib/machines";
 import { describeReach, parsePairingInput } from "@/lib/pairing-link";
 import { normalizeManualCode } from "@/lib/pairing";
@@ -64,6 +66,7 @@ watch(() => addForm.ssh, () => { installPlan.value = null; });
 const showAdvanced = shallowRef(false);
 const isAdding = shallowRef(false);
 const addError = shallowRef<string | null>(null);
+const addDiagnosis = shallowRef<MachineDiagnosis | null>(null);
 const justAdded = shallowRef<string | null>(null);
 
 // What the Pairing link field holds: a whole link, or an address that still needs its code.
@@ -80,6 +83,7 @@ const usesToken = computed(() => pasted.value?.kind === "address" && addForm.tok
 /** The machine behind the pasted link, once Fleet has looked at it; `previewError` says why not. */
 const found = shallowRef<PairingPreview | null>(null);
 const previewError = shallowRef<string | null>(null);
+const previewDiagnosis = shallowRef<MachineDiagnosis | null>(null);
 const isLooking = shallowRef(false);
 const allowAgents = shallowRef(false);
 let lookToken = 0;
@@ -88,6 +92,7 @@ watch(pairTarget, async (target) => {
   const mine = ++lookToken;
   found.value = null;
   previewError.value = null;
+  previewDiagnosis.value = null;
   allowAgents.value = false;
   isLooking.value = target !== null;
   if (!target) return;
@@ -95,7 +100,10 @@ watch(pairTarget, async (target) => {
     const preview = await machines.previewPairing(target.baseUrl, target.code);
     if (mine === lookToken) found.value = preview;
   } catch (error) {
-    if (mine === lookToken) previewError.value = error instanceof Error ? error.message : String(error);
+    if (mine === lookToken) {
+      previewDiagnosis.value = diagnosisOf(error);
+      previewError.value = previewDiagnosis.value?.headline ?? (error instanceof Error ? error.message : String(error));
+    }
   } finally {
     if (mine === lookToken) isLooking.value = false;
   }
@@ -125,6 +133,7 @@ function clearAddForm(): void {
 async function addMachine(): Promise<void> {
   isAdding.value = true;
   addError.value = null;
+  addDiagnosis.value = null;
   installPlan.value = null;
   try {
     const target = pairTarget.value;
@@ -143,7 +152,10 @@ async function addMachine(): Promise<void> {
     showAddForm.value = false;
   } catch (error) {
     if (error instanceof SshNotInstalledError) installPlan.value = error.plan;
-    else addError.value = error instanceof Error ? error.message : String(error);
+    else {
+      addDiagnosis.value = diagnosisOf(error);
+      addError.value = addDiagnosis.value?.headline ?? (error instanceof Error ? error.message : String(error));
+    }
   } finally {
     isAdding.value = false;
   }
@@ -237,11 +249,16 @@ function forget(entry: MachineEntry): void {
   machines.forgetMachine(entry.key);
 }
 
+/** Why a machine isn't answering, when known: its tunnel being down, or what home or this page found. */
+function diagnosisFor(entry: MachineEntry): MachineDiagnosis | null {
+  return entry.tunnelUp === false ? tunnelDownDiagnosis(entry.name, entry.sshDestination ?? null) : machines.diagnoses[entry.key] ?? null;
+}
+
 function stateLine(entry: MachineEntry): { text: string; tone: "ok" | "bad" | "muted" } {
-  if (entry.tunnelUp === false) return { text: "Tunnel down", tone: "bad" };
+  if (entry.tunnelUp === false) return { text: diagnosisFor(entry)!.headline, tone: "bad" };
   if (entry.isLive) return { text: "live", tone: "ok" };
   const state = others.value[entry.key];
-  if (state?.error) return { text: state.error, tone: "bad" };
+  if (state?.error) return { text: diagnosisFor(entry)?.headline ?? state.error, tone: "bad" };
   if (state?.loadedAt) return { text: `reachable · ${state.sessions.length} ${state.sessions.length === 1 ? "session" : "sessions"}`, tone: "ok" };
   return { text: "checking…", tone: "muted" };
 }
@@ -550,7 +567,13 @@ onUnmounted(() => stopPolling?.());
               class="mt-0.5 shrink-0"
               aria-hidden="true"
             />
-            <span>{{ previewError }}</span>
+            <div>
+              <span>{{ previewError }}</span>
+              <MachineDiagnosisPanel
+                v-if="previewDiagnosis"
+                :diagnosis="previewDiagnosis"
+              />
+            </div>
           </div>
           <div
             v-if="found && !usesToken"
@@ -609,7 +632,13 @@ onUnmounted(() => stopPolling?.());
             class="mt-0.5 shrink-0"
             aria-hidden="true"
           />
-          <span>{{ addError }}</span>
+          <div>
+            <span>{{ addError }}</span>
+            <MachineDiagnosisPanel
+              v-if="addDiagnosis"
+              :diagnosis="addDiagnosis"
+            />
+          </div>
         </div>
         <div
           v-if="installPlan"
@@ -869,6 +898,20 @@ onUnmounted(() => stopPolling?.());
                 Cancel
               </button>
             </form>
+            <details
+              v-if="diagnosisFor(entry)"
+              class="mt-1 text-xs"
+              data-testid="machine-details"
+            >
+              <summary class="cursor-pointer text-text-muted">
+                Details
+              </summary>
+              <MachineDiagnosisPanel
+                :diagnosis="diagnosisFor(entry)!"
+                retryable
+                @retry="machines.retryMachine(entry.key)"
+              />
+            </details>
             <p
               v-if="rowError[entry.key]"
               class="mt-1 text-xs text-red-400"

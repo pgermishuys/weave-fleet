@@ -276,6 +276,59 @@ Only the machine's owner token can restart a Fleet, change its rule or start a r
 does a paired phone. A hosted Fleet updates itself and has none of this. The other machines are called with the
 token this Fleet keeps for each of them.
 
+## When a machine can't be reached
+
+Fleet says which step broke instead of "couldn't reach". Adding or pairing a machine that fails answers `400` with
+`{ error, diagnosis }`: `error` is one line (what older clients show), `diagnosis` is
+`{ code, headline, steps, try }`. `steps` are six checks in order, each `{ label, state, detail }` with `state` `ok`,
+`failed` or `notChecked`: **Name found**, **Machine answers**, **Port answers**, **It's Fleet**, **Version fits**,
+**Key accepted**. Steps before the broken one are `ok`, steps after it `notChecked`. Settings → Machines shows the
+headline on the machine's card, with the steps under **Details**, and the same under Add a machine. The headlines,
+by `code`:
+
+### Can't find falcon
+`name-not-found`. Nothing on this network knows the name. Check the address.
+
+### falcon isn't answering
+`not-answering`. Nothing came back in 5 seconds: the machine is off, behind a firewall, or not on your tailnet.
+
+### Can't connect to falcon
+`cant-connect`. Another network failure, or a secure connection that couldn't be opened. Use an http address inside
+your tailnet, or the machine's `tailscale serve` address.
+
+### Fleet isn't running on falcon
+`fleet-not-running`. The connection was refused: the machine is up and Fleet is not. On it, run `fleet node up`.
+
+### falcon isn't Fleet
+`not-fleet`. Something answered, but not the way Fleet does. Check the port (Fleet's default is 2113).
+
+### falcon sends you elsewhere
+`redirected`. The address redirects; use the address it redirects to.
+
+### Fleet on falcon is too old
+`too-old`. It has no `GET /api/machine`. Update Fleet there.
+
+### Fleet on falcon speaks another version
+`version-mismatch`. Its machine contract number differs from this Fleet's. Update the older one.
+
+### falcon signs in another way
+`unsupported-sign-in`. It uses an identity provider, which machines don't support yet.
+
+### falcon didn't accept the key
+`key-rejected`. The token or code was turned away. Run `fleet node pair` on it for a new code, or paste its current
+token. The same code shows when this Fleet can't read the token it saved (its keys changed).
+
+### That code has expired
+`code-expired`. Pairing codes work once and only for a few minutes. Run `fleet node pair` for a new one.
+
+### Too many codes tried
+`too-many-codes`. The machine paused after wrong codes. Wait a minute.
+
+Two more headlines come from the browser, not the server. **This page can't call falcon** (`https-page`) shows when
+the page is https and the machine's address is http: the browser blocks that call, so use the machine's
+`tailscale serve` address. **The SSH tunnel to falcon is down** (`tunnel-down`) shows for a machine added Over SSH
+whose tunnel isn't up; Fleet opens it again by itself.
+
 ## Adding a machine to a client
 
 In Fleet: Settings → Machines → **Add a machine**. Paste the machine's URL and its token. Fleet checks both
@@ -485,6 +538,8 @@ Each machine keeps the list of other machines its clients know.
 - `PUT /api/machines/{id}` (owner) with any of `{ baseUrl, token, name, agentsAllowed }`; a new address or token is
   checked first. `agentsAllowed` lets agents here hand work to that machine (see below); it starts `false`, and adding
   the machine again keeps it.
+- `POST /api/machines/{id}/check` (owner): asks the saved machine who it is with its saved token and answers
+  `{ reachable, error, diagnosis }`. It writes nothing. `diagnosis` is `null` when the machine answers.
 - `DELETE /api/machines/{id}` (owner). First removes the device tokens this machine got its phones there; if that
   machine doesn't answer, those tokens stay until they're removed on it (or go unused for 30 days).
 - `POST /api/machines/import` (owner) with `{ machines: [{ id, name, baseUrl, token, os, addedAt }] }`: saves a

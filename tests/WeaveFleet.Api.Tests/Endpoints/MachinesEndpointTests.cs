@@ -109,10 +109,29 @@ public sealed class MachinesEndpointTests : IClassFixture<MachinesEndpointTests.
 
         var wrongToken = await owner.PostAsJsonAsync("/api/machines", new { baseUrl = FalconUrl, token = "not-the-token-0123456789" });
         wrongToken.StatusCode.ShouldBe(HttpStatusCode.BadRequest);
-        (await wrongToken.Content.ReadFromJsonAsync<JsonElement>()).GetProperty("error").GetString().ShouldBe("That token wasn't accepted.");
+        var refusal = await wrongToken.Content.ReadFromJsonAsync<JsonElement>();
+        refusal.GetProperty("error").GetString().ShouldBe("That token wasn't accepted.");
+        refusal.GetProperty("diagnosis").GetProperty("code").GetString().ShouldBe("key-rejected");
+        refusal.GetProperty("diagnosis").GetProperty("steps").GetArrayLength().ShouldBe(6);
 
         (await owner.PostAsJsonAsync("/api/machines", new { baseUrl = "ftp://falcon", token = Token(falcon) })).StatusCode.ShouldBe(HttpStatusCode.BadRequest);
         (await owner.PostAsJsonAsync("/api/machines", new { baseUrl = "https://user:pw@falcon", token = Token(falcon) })).StatusCode.ShouldBe(HttpStatusCode.BadRequest);
+    }
+
+    [Fact]
+    public async Task Checking_a_saved_machine_says_it_answers_then_which_step_broke_when_its_token_changes()
+    {
+        var falcon = _falcon;
+        var hangar = _hangar;
+        using var owner = Client(hangar, Token(hangar));
+        var id = Identity(falcon).Id;
+        (await owner.PostAsJsonAsync("/api/machines", new { baseUrl = FalconUrl, token = Token(falcon) })).StatusCode.ShouldBe(HttpStatusCode.OK);
+
+        var answering = await (await owner.PostAsync($"/api/machines/{id}/check", null)).Content.ReadFromJsonAsync<JsonElement>();
+        answering.GetProperty("reachable").GetBoolean().ShouldBeTrue();
+        answering.GetProperty("diagnosis").ValueKind.ShouldBe(JsonValueKind.Null);
+
+        (await owner.PostAsync("/api/machines/nope/check", null)).StatusCode.ShouldBe(HttpStatusCode.NotFound);
     }
 
     [Fact]
