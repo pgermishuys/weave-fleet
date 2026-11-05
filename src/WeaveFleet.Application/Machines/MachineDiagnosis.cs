@@ -140,9 +140,98 @@ public static class MachineDiagnoses
         Problem(5, TooManyCodes, "Too many codes tried", "That machine counts wrong codes and pauses for a minute.",
             "Wait a minute, then try the code again.", "Too many codes tried on that machine. Wait a minute and try again.");
 
-    private static MachineProblem Problem(int failedStep, string code, string headline, string detail, string tryText, string message)
+    public const string SshMissing = "ssh-missing";
+    public const string SshUnreachable = "ssh-unreachable";
+    public const string SshHostKey = "ssh-host-key";
+    public const string SshKeyRejected = "ssh-key-rejected";
+    public const string InstallUnsupported = "install-unsupported";
+    public const string InstallNoCurl = "install-no-curl";
+    public const string InstallFailed = "install-failed";
+    public const string ServiceFailed = "service-failed";
+    public const string NotStarting = "not-starting";
+
+    private static readonly string[] SshStepLabels =
+    [
+        "SSH reaches it",
+        "SSH logs in",
+        "Fleet installs",
+        "Fleet starts",
+    ];
+
+    /// <summary>Which part of setting a machine up over SSH a command belonged to.</summary>
+    public enum SshStage { Login, Install, Start }
+
+    /// <summary>The problem for a failed <c>ssh</c> command (<paramref name="result"/> is not a success) during <paramref name="stage"/>.</summary>
+    public static MachineProblem FromSsh(SshDestination destination, SshResult result, SshStage stage)
     {
-        var steps = StepLabels.Select((label, index) => index < failedStep
+        var host = destination.Host;
+        var error = result.Error;
+        var lastLines = string.Join(" ", error.Split('\n', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries).TakeLast(3));
+        var firstLine = error.Split('\n', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries).FirstOrDefault() ?? "";
+        if (result.ExitCode == -1)
+            return Ssh(0, SshMissing, "Fleet couldn't run ssh", "ssh didn't start.",
+                "Install OpenSSH and make sure ssh is on the PATH of the machine running Fleet.",
+                "Fleet couldn't run ssh. Install OpenSSH and make sure ssh is on the PATH of the machine running Fleet.");
+        if (result.ExitCode == 255)
+        {
+            if (error.Contains("Host key verification failed", StringComparison.OrdinalIgnoreCase)
+                || error.Contains("REMOTE HOST IDENTIFICATION HAS CHANGED", StringComparison.OrdinalIgnoreCase))
+                return Ssh(1, SshHostKey, $"SSH doesn't trust {host} yet", "The host key isn't one you have accepted.",
+                    $"Run ssh {destination.Text} once in a terminal and check its host key.",
+                    $"SSH doesn't trust {host} yet. Run ssh {destination.Text} once in a terminal and check its host key.");
+            if (error.Contains("Permission denied", StringComparison.OrdinalIgnoreCase))
+                return Ssh(1, SshKeyRejected, $"SSH turned your keys away at {host}", "No key you have loaded was accepted.",
+                    "Fleet never asks for a password. Load a key in ssh-agent or set IdentityFile for it in ~/.ssh/config.",
+                    $"SSH turned your keys away at {destination.Text}. Fleet never asks for a password: load a key in ssh-agent or set IdentityFile for it in ~/.ssh/config.");
+            if (error.Contains("Could not resolve", StringComparison.OrdinalIgnoreCase))
+                return Ssh(0, NameNotFound, $"SSH can't find {host}", "Nothing on this network knows that name.",
+                    "Check the name.", $"SSH can't find {host}. Check the name.");
+            return Ssh(0, SshUnreachable, $"SSH can't reach {host}", firstLine.Length > 0 ? firstLine : "The connection failed.",
+                $"Check that {host} is on and that ssh {destination.Text} works in a terminal.",
+                $"SSH couldn't connect to {destination.Text}. {firstLine}".TrimEnd());
+        }
+
+        return stage switch
+        {
+            SshStage.Install when error.Contains("curl", StringComparison.OrdinalIgnoreCase) && error.Contains("not found", StringComparison.OrdinalIgnoreCase) =>
+                Ssh(2, InstallNoCurl, $"{host} has no curl", "The installer needs curl.",
+                    $"Install curl on {host}, or install Fleet there yourself ({SshInstallDocs}).",
+                    $"{host} has no curl. Install curl there, or install Fleet yourself ({SshInstallDocs})."),
+            SshStage.Install => Ssh(2, InstallFailed, $"The install on {host} stopped", lastLines,
+                $"Fix what it says, or install Fleet on {host} yourself ({SshInstallDocs}).", $"The install on {host} stopped. {lastLines}".TrimEnd()),
+            SshStage.Start when error.Contains("systemctl", StringComparison.OrdinalIgnoreCase) || error.Contains("systemd", StringComparison.OrdinalIgnoreCase) =>
+                Ssh(3, ServiceFailed, $"Fleet's service on {host} couldn't start", lastLines,
+                    $"On {host}, run fleet node up in a terminal.", $"Fleet installed on {host}, but its user service couldn't start. {lastLines}".TrimEnd()),
+            SshStage.Start => Ssh(3, ServiceFailed, $"Fleet on {host} couldn't start", lastLines,
+                $"On {host}, run fleet node up in a terminal.", $"Fleet on {host} couldn't start. {lastLines}".TrimEnd()),
+            _ => Ssh(1, SshUnreachable, $"SSH on {host} answered oddly", lastLines.Length > 0 ? lastLines : "It exited with an error.",
+                $"Check that ssh {destination.Text} works in a terminal.", $"SSH on {host} answered oddly. {lastLines}".TrimEnd()),
+        };
+    }
+
+    /// <summary>Fleet logged in and started, but the node never answered on its port.</summary>
+    public static MachineProblem NodeNotStarting(SshDestination destination) =>
+        Ssh(3, NotStarting, $"Fleet on {destination.Host} isn't answering", $"It was installed, but nothing answers on port {SshMachineService.NodePort}.",
+            $"On {destination.Host}, journalctl --user -u fleet-node (Linux) or ~/Library/Logs/fleet-node.log (macOS) says why.",
+            $"Fleet is installed on {destination.Host}, but it hasn't started answering on port {SshMachineService.NodePort}. On that machine, journalctl --user -u fleet-node (Linux) or ~/Library/Logs/fleet-node.log (macOS) says why.");
+
+    /// <summary>Fleet installs itself over SSH on Linux and macOS only.</summary>
+    public static MachineProblem InstallNotSupported(SshDestination destination) =>
+        Ssh(2, InstallUnsupported, $"Fleet can't install itself on {destination.Host}", "It sets machines up over SSH on Linux and macOS only.",
+            $"Install Fleet on {destination.Host} yourself ({SshInstallDocs}), run fleet node up there, then paste its link here.",
+            $"Fleet can install itself over SSH on Linux and macOS only. Install it on {destination.Host} yourself ({SshInstallDocs}).");
+
+    public const string SshInstallDocs = "https://fleet.tryweave.io/docs";
+
+    private static MachineProblem Ssh(int failedStep, string code, string headline, string detail, string tryText, string message) =>
+        Problem(SshStepLabels, failedStep, code, headline, detail, tryText, message);
+
+    private static MachineProblem Problem(int failedStep, string code, string headline, string detail, string tryText, string message) =>
+        Problem(StepLabels, failedStep, code, headline, detail, tryText, message);
+
+    private static MachineProblem Problem(string[] labels, int failedStep, string code, string headline, string detail, string tryText, string message)
+    {
+        var steps = labels.Select((label, index) => index < failedStep
             ? new MachineStep(label, MachineStepStates.Ok)
             : index == failedStep
                 ? new MachineStep(label, MachineStepStates.Failed, detail)

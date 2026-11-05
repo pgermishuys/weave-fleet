@@ -4,11 +4,11 @@ using WeaveFleet.Domain.Entities;
 namespace WeaveFleet.Application.Machines;
 
 /// <summary>
-/// Adds a machine Over SSH: asks the node there for a pairing code through the user's own SSH login
-/// (<c>fleet node pair --json</c>), opens a tunnel to its port, and redeems the code through the tunnel with the same
-/// path as "With a pairing code". No token is typed or moved, and Fleet never answers a password prompt. Fleet only
-/// reads the remote until the user has seen <see cref="SshInstallPlan"/> and asked for the install
-/// (<see cref="InstallAndAddAsync"/>): nothing is installed on the other machine on its own.
+/// Sets a machine up from here over SSH: looks at it (<see cref="ProbeAsync"/>), then installs Fleet when it isn't there,
+/// starts it in the background, asks it for a pairing code through the user's own SSH login (<c>fleet node pair --json</c>),
+/// opens a tunnel to its port and redeems the code through the tunnel with the same path as a pasted pairing link
+/// (<see cref="SetUpAsync"/>). No token is typed or moved, and Fleet never answers a password prompt. Fleet only reads the
+/// remote until the user asks to set it up: <see cref="Commands"/> is everything that can run.
 /// </summary>
 public sealed class SshMachineService(RemoteMachineService machines, ISshTunnels tunnels, ISshRunner ssh, SshInstallOptions? install = null)
 {
@@ -18,165 +18,194 @@ public sealed class SshMachineService(RemoteMachineService machines, ISshTunnels
     public const int NodePort = 2113;
 
     // A non-interactive ssh has the short PATH, and the installer puts Fleet in ~/.weave/fleet/bin.
-    private const string PairCommand = "env PATH=\"$HOME/.weave/fleet/bin:$PATH\" fleet node pair --json";
+    private const string RemotePath = "env PATH=\"$HOME/.weave/fleet/bin:$PATH\"";
+    private const string PairCommand = RemotePath + " fleet node pair --json";
 
-    public Task<SshAddResult> AddAsync(string destinationText, CancellationToken cancellationToken) =>
-        AddCoreAsync(destinationText, waitForNode: false, cancellationToken);
+    /// <summary>Asks a machine what it runs: its operating system, then the Fleet version, or <c>none</c>. Changes nothing.</summary>
+    public const string ProbeCommand = "uname -s && { " + RemotePath + " fleet version 2>/dev/null || echo none; }";
 
-    private async Task<SshAddResult> AddCoreAsync(string destinationText, bool waitForNode, CancellationToken cancellationToken)
+    /// <summary>Installs Fleet where it isn't.</summary>
+    public const string InstallCommand = "curl -fsSL https://github.com/pgermishuys/weave-fleet/releases/latest/download/install.sh | sh";
+
+    /// <summary>Starts the node as a background service that listens on 127.0.0.1 only.</summary>
+    public const string StartCommand = "$HOME/.weave/fleet/bin/fleet node install-service";
+
+    /// <summary>Everything that can run on the other machine, in order, for "Show the commands".</summary>
+    public static readonly IReadOnlyList<string> Commands = [ProbeCommand, InstallCommand, StartCommand, PairCommand];
+
+    /// <summary>Looks at a machine over SSH: whether it logs in, what it runs and whether Fleet is there.</summary>
+    public async Task<SshProbe> ProbeAsync(string destinationText, CancellationToken cancellationToken)
     {
         var destination = SshDestination.Parse(destinationText);
         if (destination is null)
-            return SshAddResult.Failed("That isn't an SSH host. Pick one from the list or type user@host.");
+            return SshProbe.CantLogIn(BadDestination);
+        return await ProbeAsync(destination, cancellationToken);
+    }
 
-        var result = await ssh.RunAsync(destination, PairCommand, cancellationToken);
-        // Right after an install the service may still be starting.
-        for (var attempt = 0; waitForNode && attempt < _install.StartAttempts && IsNotInstalled(result); attempt++)
+    private async Task<SshProbe> ProbeAsync(SshDestination destination, CancellationToken cancellationToken)
+    {
+        var result = await ssh.RunAsync(destination, ProbeCommand, cancellationToken);
+        if (result.ExitCode is -1 or 255)
+            return SshProbe.CantLogIn(MachineDiagnoses.FromSsh(destination, result, MachineDiagnoses.SshStage.Login));
+        if (result.ExitCode != 0)
+            return SshProbe.Other("windows", MachineDiagnoses.InstallNotSupported(destination));
+
+        var lines = result.Output.Split('\n', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries);
+        var os = lines.FirstOrDefault() switch { "Linux" => "linux", "Darwin" => "macos", _ => null };
+        if (os is null)
+            return SshProbe.Other("unknown", MachineDiagnoses.InstallNotSupported(destination));
+        var version = lines.Length > 1 && lines[1] != "none" ? lines[1] : null;
+        return new SshProbe(version is null ? SshProbeStates.NoFleet : SshProbeStates.Ready, os, version, null);
+    }
+
+    /// <summary>
+    /// Sets the machine up and adds it, telling <paramref name="progress"/> about each step as it happens. Starts Fleet
+    /// there when it isn't answering (installing it first when it isn't there). No sudo, no prompts: it fails with the step
+    /// that broke instead.
+    /// </summary>
+    public async Task<SshAddResult> SetUpAsync(string destinationText, SetupProgress progress, CancellationToken cancellationToken)
+    {
+        var destination = SshDestination.Parse(destinationText);
+        if (destination is null)
         {
-            await Task.Delay(_install.StartPause, cancellationToken);
-            result = await ssh.RunAsync(destination, PairCommand, cancellationToken);
+            progress.Fail(SetupSteps.Login, BadDestination.Message);
+            return SshAddResult.Failed(BadDestination);
         }
 
-        var failure = Explain(destination, result);
-        if (failure is not null && waitForNode && IsNotInstalled(result))
-            return SshAddResult.Failed($"Fleet is installed on {destination.Host}, but it hasn't started answering on port {NodePort}. On that machine, journalctl --user -u fleet-node (Linux) or ~/Library/Logs/fleet-node.log (macOS) says why.");
-        if (failure is not null)
-            return IsNotInstalled(result) && !waitForNode
-                ? new SshAddResult(null, failure, await PlanAsync(destination, cancellationToken))
-                : SshAddResult.Failed(failure);
-
-        string? code;
-        try
+        progress.Begin(SetupSteps.Login);
+        var probe = await ProbeAsync(destination, cancellationToken);
+        if (probe.Problem is { } cantSetUp)
         {
-            using var document = JsonDocument.Parse(result.Output.Trim().Split('\n')[^1]);
-            code = document.RootElement.GetProperty("code").GetString();
-        }
-        catch (Exception ex) when (ex is JsonException or KeyNotFoundException or InvalidOperationException)
-        {
-            code = null;
+            progress.Fail(SetupSteps.Login, cantSetUp.Diagnosis?.Headline ?? cantSetUp.Message);
+            return SshAddResult.Failed(cantSetUp);
         }
 
-        if (string.IsNullOrEmpty(code))
-            return SshAddResult.Failed("Fleet there answered, but not with a pairing code. Update Fleet on that machine.");
+        progress.Finish(SetupSteps.Login, $"Logged in to {destination.Host} · {OsLabel(probe.Os)}");
 
+        progress.Begin(SetupSteps.Install);
+        if (probe.Version is { } version)
+            progress.Skip(SetupSteps.Install, $"Fleet {version} is already there");
+        else
+        {
+            var installed = await ssh.RunAsync(destination, InstallCommand, cancellationToken, _install.Timeout);
+            if (installed.ExitCode != 0)
+                return Fail(progress, SetupSteps.Install, MachineDiagnoses.FromSsh(destination, installed, MachineDiagnoses.SshStage.Install));
+            progress.Finish(SetupSteps.Install, $"Fleet installed on {destination.Host}");
+        }
+
+        progress.Begin(SetupSteps.Start);
+        var code = await FetchCodeAsync(destination, cancellationToken);
+        if (code.NotAnswering)
+        {
+            var started = await ssh.RunAsync(destination, StartCommand, cancellationToken, _install.Timeout);
+            if (started.ExitCode != 0)
+                return Fail(progress, SetupSteps.Start, MachineDiagnoses.FromSsh(destination, started, MachineDiagnoses.SshStage.Start));
+            for (var attempt = 0; attempt < _install.StartAttempts && code.NotAnswering; attempt++)
+            {
+                await Task.Delay(_install.StartPause, cancellationToken);
+                code = await FetchCodeAsync(destination, cancellationToken);
+            }
+
+            if (code.NotAnswering)
+                return Fail(progress, SetupSteps.Start, MachineDiagnoses.NodeNotStarting(destination));
+        }
+
+        if (code.Problem is { } noCode)
+            return Fail(progress, SetupSteps.Start, noCode);
+        progress.Finish(SetupSteps.Start, "Running in the background, starts at login");
+
+        progress.Begin(SetupSteps.Pair);
         // The tunnel is named for the code until the machine's id is known; the tunnel service then adopts it.
         var key = $"pending:{Guid.NewGuid():N}";
         var (port, openError) = await tunnels.OpenAsync(key, destination, preferredPort: null, cancellationToken);
         if (openError is not null)
-            return SshAddResult.Failed(openError);
+            return Fail(progress, SetupSteps.Pair, openError);
 
-        var (machine, error) = await machines.AddByCodeAsync($"http://127.0.0.1:{port}", code, cancellationToken, destination.Text);
+        var (machine, error) = await machines.AddByCodeAsync($"http://127.0.0.1:{port}", code.Code!, cancellationToken, destination.Text);
         if (machine is null)
+        {
             tunnels.Close(key);
-        return new SshAddResult(machine, error?.Message, null, error?.Diagnosis);
+            return Fail(progress, SetupSteps.Pair, error!);
+        }
+
+        progress.Finish(SetupSteps.Pair, $"{machine.Name} is added");
+        return new SshAddResult(machine, null);
     }
 
-    /// <summary>
-    /// What Fleet would run on a machine that has no Fleet, so the user can read it first. Only reads the remote's
-    /// operating system. Windows is not automated.
-    /// </summary>
-    private async Task<SshInstallPlan> PlanAsync(SshDestination destination, CancellationToken cancellationToken)
+    private static string OsLabel(string? os) => os switch { "linux" => "Linux", "macos" => "macOS", _ => "Unknown system" };
+
+    private static SshAddResult Fail(SetupProgress progress, string step, MachineProblem problem)
     {
-        var os = await ssh.RunAsync(destination, "uname -s", cancellationToken);
-        var kind = os.ExitCode == 0 ? os.Output.Trim() : "";
-        var supported = kind is "Linux" or "Darwin";
-        return new SshInstallPlan(destination.Text, destination.Host, kind switch { "Linux" => "linux", "Darwin" => "macos", _ => "unsupported" },
-            supported, supported ? InstallCommands : [], SshInstallPlan.InstallDocs);
+        progress.Fail(step, problem.Diagnosis?.Headline ?? problem.Message);
+        return SshAddResult.Failed(problem);
     }
 
-    /// <summary>The lines shown to the user and run as one command, in this order.</summary>
-    public static readonly IReadOnlyList<string> InstallCommands =
-    [
-        "curl -fsSL https://github.com/pgermishuys/weave-fleet/releases/latest/download/install.sh | sh",
-        "$HOME/.weave/fleet/bin/fleet node install-service",
-    ];
+    private static readonly MachineProblem BadDestination = "That isn't an SSH host. Pick one from the list or type user@host.";
 
-    /// <summary>
-    /// Installs the node on the other machine with <see cref="InstallCommands"/> (after the user clicked), waits for it
-    /// to answer, then pairs like <see cref="AddAsync(string, CancellationToken)"/>. No sudo, no prompts: it fails in
-    /// plain words instead.
-    /// </summary>
-    public async Task<SshAddResult> InstallAndAddAsync(string destinationText, CancellationToken cancellationToken)
+    /// <summary>Asks the node for a pairing code. <c>NotAnswering</c> when the command isn't there or no node answers yet.</summary>
+    private async Task<FetchedCode> FetchCodeAsync(SshDestination destination, CancellationToken cancellationToken)
     {
-        var destination = SshDestination.Parse(destinationText);
-        if (destination is null)
-            return SshAddResult.Failed("That isn't an SSH host. Pick one from the list or type user@host.");
+        var result = await ssh.RunAsync(destination, PairCommand, cancellationToken);
+        if (result.ExitCode == 0)
+        {
+            try
+            {
+                using var document = JsonDocument.Parse(result.Output.Trim().Split('\n')[^1]);
+                if (document.RootElement.GetProperty("code").GetString() is { Length: > 0 } code)
+                    return new FetchedCode(code, false, null);
+            }
+            catch (Exception ex) when (ex is JsonException or KeyNotFoundException or InvalidOperationException)
+            {
+            }
 
-        var plan = await PlanAsync(destination, cancellationToken);
-        if (!plan.CanInstall)
-            return SshAddResult.Failed($"Fleet can install itself over SSH on Linux and macOS only. Install it on {destination.Host} yourself ({SshInstallPlan.InstallDocs}).");
+            return new FetchedCode(null, false, "Fleet there answered, but not with a pairing code. Update Fleet on that machine.");
+        }
 
-        var result = await ssh.RunAsync(destination, string.Join(" && ", InstallCommands), cancellationToken, _install.Timeout);
-        if (result.ExitCode != 0)
-            return SshAddResult.Failed(ExplainInstall(destination, result) ?? "The install failed.");
-
-        return await AddCoreAsync(destination.Text, waitForNode: true, cancellationToken);
+        return IsNotAnswering(result)
+            ? new FetchedCode(null, true, null)
+            : new FetchedCode(null, false, MachineDiagnoses.FromSsh(destination, result, MachineDiagnoses.SshStage.Login));
     }
 
-    private static string? ExplainInstall(SshDestination destination, SshResult result)
-    {
-        if (result.ExitCode == -1 || result.ExitCode == 255)
-            return Explain(destination, result);
-        var lastLines = string.Join(" ", result.Error.Split('\n', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries).TakeLast(3));
-        var why = result.Error.Contains("curl", StringComparison.OrdinalIgnoreCase) && result.Error.Contains("not found", StringComparison.OrdinalIgnoreCase)
-            ? $"{destination.Host} has no curl. Install curl there, or install Fleet yourself ({SshInstallPlan.InstallDocs})."
-            : result.Error.Contains("systemctl", StringComparison.OrdinalIgnoreCase) || result.Error.Contains("systemd", StringComparison.OrdinalIgnoreCase)
-                ? $"Fleet installed on {destination.Host}, but its user service couldn't start. {lastLines}".TrimEnd()
-                : $"The install on {destination.Host} stopped. {lastLines}".TrimEnd();
-        return why;
-    }
+    private readonly record struct FetchedCode(string? Code, bool NotAnswering, MachineProblem? Problem);
 
-    private static bool IsNotInstalled(SshResult result) =>
+    private static bool IsNotAnswering(SshResult result) =>
         result.ExitCode != 0 && result.ExitCode != 255 && result.ExitCode != -1
         && (result.ExitCode == 127
             || result.Error.Contains("command not found", StringComparison.OrdinalIgnoreCase)
-            || result.Error.Contains("is not recognized", StringComparison.OrdinalIgnoreCase)
             || result.Error.Contains("No Fleet answered", StringComparison.Ordinal));
-
-    // Nothing here runs anything on the remote beyond printing a code; a missing Fleet is reported, not fixed.
-    private static string? Explain(SshDestination destination, SshResult result)
-    {
-        var error = result.Error;
-        if (result.ExitCode == 0)
-            return null;
-        if (result.ExitCode == -1)
-            return "Fleet couldn't run ssh. Install OpenSSH and make sure ssh is on the PATH of the machine running Fleet.";
-        if (result.ExitCode == 255)
-        {
-            if (error.Contains("Host key verification failed", StringComparison.OrdinalIgnoreCase)
-                || error.Contains("REMOTE HOST IDENTIFICATION HAS CHANGED", StringComparison.OrdinalIgnoreCase))
-                return $"SSH doesn't trust {destination.Host} yet. Run ssh {destination.Text} once in a terminal and check its host key.";
-            if (error.Contains("Permission denied", StringComparison.OrdinalIgnoreCase))
-                return $"SSH turned your keys away at {destination.Text}. Fleet never asks for a password: load a key in ssh-agent or set IdentityFile for it in ~/.ssh/config.";
-            if (error.Contains("Could not resolve", StringComparison.OrdinalIgnoreCase))
-                return $"SSH can't find {destination.Host}. Check the name.";
-            return $"SSH couldn't connect to {destination.Text}. {FirstLine(error)}".TrimEnd();
-        }
-
-        if (IsNotInstalled(result))
-            return $"Fleet isn't installed there. SSH works, but nothing answers on port {NodePort} at {destination.Host}.";
-        return $"Fleet on {destination.Host} couldn't make a pairing code. {FirstLine(error)}".TrimEnd();
-    }
-
-    private static string FirstLine(string text) => text.Split('\n', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries).FirstOrDefault() ?? "";
 }
 
-/// <summary>The outcome of adding a machine Over SSH: the machine, or why not, and when Fleet isn't there, what installing would run.</summary>
-public sealed record SshAddResult(RemoteMachine? Machine, string? Error, SshInstallPlan? Plan, MachineDiagnosis? Diagnosis = null)
+/// <summary>What Fleet saw on a machine over SSH. <see cref="State"/> is one of <see cref="SshProbeStates"/>.</summary>
+public sealed record SshProbe(string State, string? Os, string? Version, MachineProblem? Problem)
 {
-    public static SshAddResult Failed(string error) => new(null, error, null);
+    public static SshProbe CantLogIn(MachineProblem problem) => new(SshProbeStates.CantLogIn, null, null, problem);
 
-    public void Deconstruct(out RemoteMachine? machine, out string? error)
-    {
-        machine = Machine;
-        error = Error;
-    }
+    public static SshProbe Other(string os, MachineProblem problem) => new(SshProbeStates.Unsupported, os, null, problem);
 }
 
-/// <summary>What Fleet would run on <see cref="Host"/> to install the node. <see cref="Commands"/> is empty when it can't (<see cref="CanInstall"/> is false).</summary>
-public sealed record SshInstallPlan(string Destination, string Host, string Os, bool CanInstall, IReadOnlyList<string> Commands, string Docs)
+public static class SshProbeStates
 {
-    public const string InstallDocs = "https://fleet.tryweave.io/docs";
+    /// <summary>SSH works and Fleet is installed.</summary>
+    public const string Ready = "ready";
+
+    /// <summary>SSH works and Fleet isn't installed.</summary>
+    public const string NoFleet = "noFleet";
+
+    /// <summary>SSH doesn't log in.</summary>
+    public const string CantLogIn = "cantLogIn";
+
+    /// <summary>SSH works, but it is not a Linux or macOS machine, so Fleet can't set it up.</summary>
+    public const string Unsupported = "unsupported";
+}
+
+/// <summary>The outcome of setting a machine up over SSH: the machine, or why not.</summary>
+public sealed record SshAddResult(RemoteMachine? Machine, MachineProblem? Problem)
+{
+    public string? Error => Problem?.Message;
+
+    public MachineDiagnosis? Diagnosis => Problem?.Diagnosis;
+
+    public static SshAddResult Failed(MachineProblem problem) => new(null, problem);
 }
 
 /// <summary>How long the install may take, and how long Fleet waits for the new node to answer.</summary>

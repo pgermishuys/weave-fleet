@@ -343,6 +343,12 @@ public static class DependencyInjection
         services.AddSingleton<WeaveFleet.Application.Machines.ISshTunnels>(sp => sp.GetRequiredService<WeaveFleet.Infrastructure.Machines.SshTunnels>());
         services.AddHostedService(sp => sp.GetRequiredService<WeaveFleet.Infrastructure.Machines.SshTunnels>());
         services.AddSingleton<WeaveFleet.Application.Machines.SshMachineService>();
+        services.AddSingleton<WeaveFleet.Application.Machines.SshSetupJobs>();
+        // FLEET_TAILSCALE_EXECUTABLE: another tailscale than the one on the PATH.
+        services.AddSingleton<WeaveFleet.Application.Machines.ITailscale>(_ => new WeaveFleet.Infrastructure.Machines.TailscaleProcess(
+            Environment.GetEnvironmentVariable("FLEET_TAILSCALE_EXECUTABLE") is { Length: > 0 } tailscale ? tailscale : "tailscale"));
+        services.AddSingleton<WeaveFleet.Application.Machines.MachineCandidates>(sp => new WeaveFleet.Application.Machines.MachineCandidates(
+            sp.GetRequiredService<WeaveFleet.Application.Machines.ITailscale>()));
         services.AddSingleton<WeaveFleet.Infrastructure.Machines.RemoteMachineWatcher>();
         // Sessions there that a session here waits to hear from are followed over the watcher's connections.
         services.AddSingleton<WeaveFleet.Application.Machines.RemoteSessionTurns>();

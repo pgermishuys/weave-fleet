@@ -65,27 +65,40 @@ public static class MachinesEndpoints
         .Produces<MachineEntryResponse>(200)
         .WithName("PairMachine");
 
-        // Hosts from ~/.ssh/config on this machine, for Add a machine → Over SSH.
-        group.MapGet("/ssh-hosts", () =>
-            Results.Ok(new SshHostListResponse(SshConfigHosts.ReadDefault()
-                .Select(h => new SshHostResponse(h.Alias, h.Alias, h.HostName, h.User, h.Port)).ToList())))
+        // The machines Add a machine → Set it up from here lists: ~/.ssh/config hosts and online Tailscale peers.
+        group.MapGet("/candidates", async (RemoteMachineService machines, MachineCandidates candidates, CancellationToken cancellationToken) =>
+        {
+            var added = (await machines.ListAsync()).Select(m => m.SshDestination).OfType<string>().ToHashSet(StringComparer.Ordinal);
+            var list = await candidates.ListAsync(added, cancellationToken);
+            return Results.Ok(new MachineCandidateListResponse(
+                list.Select(c => new MachineCandidateResponse(c.Name, c.Destination, c.Source, c.Os)).ToList(), SshMachineService.Commands));
+        })
         .RequireAuthorization(FleetClaims.MachineOwnerPolicy)
-        .Produces<SshHostListResponse>(200)
-        .WithName("ListSshHosts");
+        .Produces<MachineCandidateListResponse>(200)
+        .WithName("ListMachineCandidates");
 
-        group.MapPost("/ssh", async (AddSshMachineRequest request, SshMachineService ssh, RemoteMachineService machines, ISshTunnels tunnels, CancellationToken cancellationToken) =>
-            ToResult(await ssh.AddAsync(request.Destination ?? "", cancellationToken), machines, tunnels))
+        // Looks at one listed machine over SSH. Changes nothing there.
+        group.MapPost("/candidates/probe", async (AddSshMachineRequest request, SshMachineService ssh, CancellationToken cancellationToken) =>
+        {
+            var probe = await ssh.ProbeAsync(request.Destination ?? "", cancellationToken);
+            return Results.Ok(new SshProbeResponse(probe.State, probe.Os, probe.Version, probe.Problem?.Message, probe.Problem?.Diagnosis));
+        })
         .RequireAuthorization(FleetClaims.MachineOwnerPolicy)
-        .Produces<MachineEntryResponse>(200)
-        .Produces<SshNotInstalledResponse>(409)
-        .WithName("AddMachineOverSsh");
+        .Produces<SshProbeResponse>(200)
+        .WithName("ProbeMachineCandidate");
 
-        // Runs the install commands that 409 above showed. Only called after the user clicked.
-        group.MapPost("/ssh/install", async (AddSshMachineRequest request, SshMachineService ssh, RemoteMachineService machines, ISshTunnels tunnels, CancellationToken cancellationToken) =>
-            ToResult(await ssh.InstallAndAddAsync(request.Destination ?? "", cancellationToken), machines, tunnels))
+        // Sets the machine up over SSH in the background; the steps are read with GET /setup/{id}. Only called after the user clicked.
+        group.MapPost("/setup", (AddSshMachineRequest request, SshSetupJobs jobs, RemoteMachineService machines, ISshTunnels tunnels) =>
+            Results.Ok(ToResponse(jobs.Start(request.Destination ?? ""), machines, tunnels)))
         .RequireAuthorization(FleetClaims.MachineOwnerPolicy)
-        .Produces<MachineEntryResponse>(200)
-        .WithName("InstallNodeOverSsh");
+        .Produces<SetupJobResponse>(200)
+        .WithName("StartMachineSetup");
+
+        group.MapGet("/setup/{id}", (string id, SshSetupJobs jobs, RemoteMachineService machines, ISshTunnels tunnels) =>
+            jobs.Get(id) is { } job ? Results.Ok(ToResponse(job, machines, tunnels)) : Results.NotFound(new ErrorResponse("No such set-up.")))
+        .RequireAuthorization(FleetClaims.MachineOwnerPolicy)
+        .Produces<SetupJobResponse>(200)
+        .WithName("GetMachineSetup");
 
         group.MapPut("/{id}", async (string id, UpdateRemoteMachineRequest request, RemoteMachineService machines, ISshTunnels tunnels, CancellationToken cancellationToken) =>
         {
@@ -161,12 +174,9 @@ public static class MachinesEndpoints
 
     private static MachineErrorResponse ToError(MachineProblem problem) => new(problem.Message, problem.Diagnosis);
 
-    private static IResult ToResult(SshAddResult result, RemoteMachineService machines, ISshTunnels tunnels) =>
-        result.Machine is not null
-            ? Results.Ok(ToResponse(result.Machine, machines.TokenOf(result.Machine), tunnels))
-            : result.Plan is { } plan
-                ? Results.Conflict(new SshNotInstalledResponse(result.Error!, plan.Host, plan.Os, plan.CanInstall, plan.Commands, plan.Docs))
-                : Results.BadRequest(new MachineErrorResponse(result.Error!, result.Diagnosis));
+    private static SetupJobResponse ToResponse(SshSetupJob job, RemoteMachineService machines, ISshTunnels tunnels) =>
+        new(job.Id, job.Destination, job.Status, job.Progress.Steps,
+            job.Result?.Machine is { } machine ? ToResponse(machine, machines.TokenOf(machine), tunnels) : null, job.Result?.Error, job.Result?.Diagnosis);
 
     private static MachineEntryResponse ToResponse(RemoteMachine machine, string? token, ISshTunnels tunnels) =>
         new(machine.Id, machine.Name, machine.BaseUrl, machine.Os, machine.Status, machine.AddedAt, machine.LastSeenAt, token, machine.AgentsAllowed,

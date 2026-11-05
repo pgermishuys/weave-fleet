@@ -81,229 +81,265 @@ public sealed class SshMachineTests : IDisposable
         hosts.Single(h => h.Alias == "box1").User.ShouldBe("shared");
     }
 
-    [Fact]
-    public async Task The_code_comes_through_ssh_and_is_redeemed_through_the_tunnel()
+    private const string Probe = SshMachineService.ProbeCommand;
+
+    private void HomeAcceptsTheCode() => _home.Answer = line => line switch
     {
-        _runner.Result = new SshResult(0, PairJson + "\n", "");
-        _home.Answer = line => line switch
-        {
-            "POST /api/pairing/preview" => (HttpStatusCode.OK, Preview),
-            "POST /api/pairing/redeem" => (HttpStatusCode.OK, Redeemed),
-            "GET /api/machine" => (HttpStatusCode.OK, Identity),
-            _ => null,
-        };
+        "POST /api/pairing/preview" => (HttpStatusCode.OK, Preview),
+        "POST /api/pairing/redeem" => (HttpStatusCode.OK, Redeemed),
+        "GET /api/machine" => (HttpStatusCode.OK, Identity),
+        _ => null,
+    };
 
-        var (machine, error) = await Service.AddAsync("alice@falcon", CancellationToken.None);
+    [Fact]
+    public async Task A_machine_with_Fleet_logs_in_skips_the_install_and_pairs_through_a_tunnel()
+    {
+        _runner.Script = command => command == Probe ? new SshResult(0, "Darwin\n0.65.2\n", "") : new SshResult(0, PairJson + "\n", "");
+        HomeAcceptsTheCode();
+        var progress = new SetupProgress();
 
-        error.ShouldBeNull();
-        _runner.Ran.ShouldBe([("alice@falcon", PairCommand)]);
-        machine!.BaseUrl.ShouldBe("http://127.0.0.1:41999");
-        machine.SshDestination.ShouldBe("alice@falcon");
+        var result = await Service.SetUpAsync("alice@orion", progress, CancellationToken.None);
+
+        result.Error.ShouldBeNull();
+        var machine = result.Machine.ShouldNotBeNull();
+        machine.BaseUrl.ShouldBe("http://127.0.0.1:41999");
+        machine.SshDestination.ShouldBe("alice@orion");
         _home.Service.TokenOf(machine).ShouldBe("fdt_d1.secret");
         _home.Requests.Single(r => r.Request == "POST /api/pairing/redeem").Body.ShouldNotBeNull().ShouldContain("7K3M-Q9ZD");
+        _runner.Ran.Select(r => r.Command).ShouldBe([Probe, PairCommand]);
+        progress.Steps.Select(step => (step.Key, step.State)).ShouldBe([
+            ("login", "done"), ("install", "skipped"), ("start", "done"), ("pair", "done")]);
+        progress.Steps[1].Detail.ShouldBe("Fleet 0.65.2 is already there");
         _tunnels.Closed.ShouldBeEmpty();
     }
 
     [Fact]
-    public async Task A_code_that_does_not_redeem_closes_the_tunnel_again()
+    public async Task A_machine_without_Fleet_gets_it_installed_started_and_paired_in_that_order()
     {
-        _runner.Result = new SshResult(0, PairJson, "");
+        var installed = false;
+        var started = false;
+        _runner.Script = command =>
+        {
+            if (command == Probe) return new SshResult(0, "Linux\nnone\n", "");
+            if (command == SshMachineService.InstallCommand) { installed = true; return new SshResult(0, "", ""); }
+            if (command == SshMachineService.StartCommand) { started = true; return new SshResult(0, "", ""); }
+            return installed && started ? new SshResult(0, PairJson, "") : new SshResult(127, "", "sh: fleet: command not found");
+        };
+        HomeAcceptsTheCode();
+        var progress = new SetupProgress();
 
-        var (machine, error) = await Service.AddAsync("falcon", CancellationToken.None);
+        var result = await Service.SetUpAsync("alice@falcon", progress, CancellationToken.None);
 
-        machine.ShouldBeNull();
-        error.ShouldNotBeNull();
+        result.Machine.ShouldNotBeNull();
+        _runner.Ran.Select(r => r.Command).ShouldBe([Probe, SshMachineService.InstallCommand, PairCommand, SshMachineService.StartCommand, PairCommand]);
+        _runner.Timeouts[1].ShouldBe(TimeSpan.FromMinutes(3));
+        progress.Steps.Select(step => step.State).ShouldBe(["done", "done", "done", "done"]);
         _tunnels.Opened.Count.ShouldBe(1);
-        _tunnels.Closed.ShouldBe(_tunnels.Opened);
-    }
-
-    [Theory]
-    [InlineData(127, "", "bash: fleet: command not found", "Fleet isn't installed there")]
-    [InlineData(1, "", "No Fleet answered on port 2113. Start the node first", "Fleet isn't installed there")]
-    [InlineData(255, "", "Host key verification failed.", "doesn't trust falcon")]
-    [InlineData(255, "", "alice@falcon: Permission denied (publickey).", "never asks for a password")]
-    [InlineData(255, "", "ssh: Could not resolve hostname falcon", "can't find falcon")]
-    [InlineData(-1, "", "No such file", "couldn't run ssh")]
-    public async Task What_went_wrong_is_said_plainly_and_nothing_is_tunnelled(int exit, string output, string stderr, string expected)
-    {
-        _runner.Result = new SshResult(exit, output, stderr);
-
-        var (machine, error) = await Service.AddAsync("falcon", CancellationToken.None);
-
-        machine.ShouldBeNull();
-        error.ShouldNotBeNull().ShouldContain(expected);
-        _tunnels.Opened.ShouldBeEmpty();
-        _home.Requests.ShouldBeEmpty();
     }
 
     [Fact]
-    public async Task A_bad_destination_runs_nothing()
+    public async Task Setting_up_waits_for_the_new_service_to_answer()
     {
-        var (machine, error) = await Service.AddAsync("-oProxyCommand=x", CancellationToken.None);
+        var pairs = 0;
+        _runner.Script = command =>
+        {
+            if (command == Probe) return new SshResult(0, "Darwin\nnone\n", "");
+            if (command is SshMachineService.InstallCommand or SshMachineService.StartCommand) return new SshResult(0, "", "");
+            return ++pairs < 5 ? new SshResult(1, "", "No Fleet answered on port 2113.") : new SshResult(0, PairJson, "");
+        };
+        HomeAcceptsTheCode();
 
-        machine.ShouldBeNull();
-        error.ShouldNotBeNull();
-        _runner.Ran.ShouldBeEmpty();
+        var result = await Service.SetUpAsync("falcon", new SetupProgress(), CancellationToken.None);
+
+        result.Machine.ShouldNotBeNull();
+        pairs.ShouldBe(5);
+    }
+
+    [Fact]
+    public async Task A_node_that_never_answers_names_the_start_step_and_tunnels_nothing()
+    {
+        _runner.Script = command => command switch
+        {
+            Probe => new SshResult(0, "Linux\nnone\n", ""),
+            SshMachineService.InstallCommand or SshMachineService.StartCommand => new SshResult(0, "", ""),
+            _ => new SshResult(1, "", "No Fleet answered on port 2113."),
+        };
+        var progress = new SetupProgress();
+
+        var result = await Service.SetUpAsync("falcon", progress, CancellationToken.None);
+
+        result.Machine.ShouldBeNull();
+        result.Error.ShouldNotBeNull().ShouldContain("hasn't started answering");
+        result.Diagnosis.ShouldNotBeNull().Code.ShouldBe(MachineDiagnoses.NotStarting);
+        progress.Steps.Select(step => step.State).ShouldBe(["done", "done", "failed", "pending"]);
+        _tunnels.Opened.ShouldBeEmpty();
+    }
+
+    [Theory]
+    [InlineData(255, "alice@falcon: Permission denied (publickey).", "never asks for a password", "ssh-key-rejected")]
+    [InlineData(255, "Host key verification failed.", "doesn't trust falcon", "ssh-host-key")]
+    [InlineData(255, "ssh: Could not resolve hostname falcon", "can't find falcon", "name-not-found")]
+    [InlineData(255, "ssh: connect to host falcon port 22: Connection refused", "couldn't connect", "ssh-unreachable")]
+    [InlineData(-1, "No such file", "couldn't run ssh", "ssh-missing")]
+    public async Task A_login_that_fails_names_the_login_step_and_runs_nothing_more(int exit, string stderr, string expected, string code)
+    {
+        _runner.Result = new SshResult(exit, "", stderr);
+        var progress = new SetupProgress();
+
+        var result = await Service.SetUpAsync("alice@falcon", progress, CancellationToken.None);
+
+        result.Machine.ShouldBeNull();
+        result.Error.ShouldNotBeNull().ShouldContain(expected);
+        result.Diagnosis.ShouldNotBeNull().Code.ShouldBe(code);
+        progress.Steps[0].State.ShouldBe("failed");
+        _runner.Ran.Count.ShouldBe(1);
+        _tunnels.Opened.ShouldBeEmpty();
+    }
+
+    [Theory]
+    [InlineData(23, "curl: (23) Failure writing output\nsh: curl: command not found", "has no curl", "install-no-curl")]
+    [InlineData(1, "install: no space left on device", "install on falcon stopped", "install-failed")]
+    public async Task A_failed_install_is_said_plainly_and_nothing_is_started_or_paired(int exit, string stderr, string expected, string code)
+    {
+        _runner.Script = command => command switch
+        {
+            Probe => new SshResult(0, "Linux\nnone\n", ""),
+            SshMachineService.InstallCommand => new SshResult(exit, "", stderr),
+            _ => new SshResult(127, "", "command not found"),
+        };
+        var progress = new SetupProgress();
+
+        var result = await Service.SetUpAsync("falcon", progress, CancellationToken.None);
+
+        result.Error.ShouldNotBeNull().ShouldContain(expected);
+        result.Diagnosis.ShouldNotBeNull().Code.ShouldBe(code);
+        progress.Steps.Select(step => step.State).ShouldBe(["done", "failed", "pending", "pending"]);
+        _runner.Ran.Select(r => r.Command).ShouldBe([Probe, SshMachineService.InstallCommand]);
+    }
+
+    [Fact]
+    public async Task A_service_that_cannot_start_names_the_start_step()
+    {
+        _runner.Script = command => command switch
+        {
+            Probe => new SshResult(0, "Linux\n0.65.2\n", ""),
+            SshMachineService.StartCommand => new SshResult(1, "", "Failed to connect to bus: No such file\nsystemctl --user failed"),
+            _ => new SshResult(1, "", "No Fleet answered on port 2113."),
+        };
+        var progress = new SetupProgress();
+
+        var result = await Service.SetUpAsync("falcon", progress, CancellationToken.None);
+
+        result.Diagnosis.ShouldNotBeNull().Code.ShouldBe(MachineDiagnoses.ServiceFailed);
+        progress.Steps.Select(step => step.State).ShouldBe(["done", "skipped", "failed", "pending"]);
+    }
+
+    [Fact]
+    public async Task A_code_that_does_not_redeem_closes_the_tunnel_and_names_the_pair_step()
+    {
+        _runner.Script = command => command == Probe ? new SshResult(0, "Linux\n0.65.2\n", "") : new SshResult(0, PairJson, "");
+        var progress = new SetupProgress();
+
+        var result = await Service.SetUpAsync("falcon", progress, CancellationToken.None);
+
+        result.Machine.ShouldBeNull();
+        result.Error.ShouldNotBeNull();
+        progress.Steps[3].State.ShouldBe("failed");
+        _tunnels.Closed.ShouldBe(_tunnels.Opened);
     }
 
     [Fact]
     public async Task A_tunnel_that_does_not_open_is_reported()
     {
-        _runner.Result = new SshResult(0, PairJson, "");
+        _runner.Script = command => command == Probe ? new SshResult(0, "Linux\n0.65.2\n", "") : new SshResult(0, PairJson, "");
         _tunnels.OpenError = "SSH logged in to falcon, but the tunnel to port 2113 didn't open.";
 
-        var (_, error) = await Service.AddAsync("falcon", CancellationToken.None);
+        var result = await Service.SetUpAsync("falcon", new SetupProgress(), CancellationToken.None);
 
-        error.ShouldBe(_tunnels.OpenError);
+        result.Error.ShouldBe(_tunnels.OpenError);
     }
 
-    private static readonly string Install = string.Join(" && ", SshMachineService.InstallCommands);
-
-    [Theory]
-    [InlineData("Linux\n", "linux", true)]
-    [InlineData("Darwin\n", "macos", true)]
-    [InlineData("FreeBSD\n", "unsupported", false)]
-    public async Task A_machine_without_Fleet_gets_the_commands_to_read_and_nothing_runs(string uname, string os, bool canInstall)
+    [Fact]
+    public async Task A_bad_destination_runs_nothing()
     {
-        _runner.Script = command => command == "uname -s" ? new SshResult(0, uname, "") : new SshResult(127, "", "sh: fleet: command not found");
-
-        var result = await Service.AddAsync("alice@falcon", CancellationToken.None);
+        var result = await Service.SetUpAsync("-oProxyCommand=x", new SetupProgress(), CancellationToken.None);
 
         result.Machine.ShouldBeNull();
-        result.Error.ShouldNotBeNull().ShouldContain("Fleet isn't installed there");
-        var plan = result.Plan.ShouldNotBeNull();
-        plan.Os.ShouldBe(os);
-        plan.CanInstall.ShouldBe(canInstall);
-        plan.Commands.ShouldBe(canInstall ? SshMachineService.InstallCommands : []);
-        _runner.Ran.Select(r => r.Command).ShouldBe([PairCommand, "uname -s"]);
-        _tunnels.Opened.ShouldBeEmpty();
+        result.Error.ShouldNotBeNull();
+        _runner.Ran.ShouldBeEmpty();
+    }
+
+    [Theory]
+    [InlineData("Linux\n0.65.2\n", "ready", "linux", "0.65.2")]
+    [InlineData("Darwin\nnone\n", "noFleet", "macos", null)]
+    public async Task A_probe_says_what_runs_there_and_changes_nothing(string output, string state, string os, string? version)
+    {
+        _runner.Result = new SshResult(0, output, "");
+
+        var probe = await Service.ProbeAsync("falcon", CancellationToken.None);
+
+        (probe.State, probe.Os, probe.Version).ShouldBe((state, os, version));
+        _runner.Ran.ShouldBe([("falcon", Probe)]);
     }
 
     [Fact]
-    public async Task A_windows_machine_is_not_installed_for_you()
+    public async Task A_probe_of_a_windows_machine_says_it_cannot_be_set_up_from_here()
     {
-        _runner.Script = command => command == "uname -s"
-            ? new SshResult(1, "", "'uname' is not recognized as an internal or external command")
-            : new SshResult(1, "", "'env' is not recognized as an internal or external command");
+        _runner.Result = new SshResult(1, "", "'uname' is not recognized as an internal or external command");
 
-        var result = await Service.AddAsync("falcon", CancellationToken.None);
+        var probe = await Service.ProbeAsync("falcon", CancellationToken.None);
 
-        result.Plan.ShouldNotBeNull().CanInstall.ShouldBeFalse();
-        result.Plan!.Commands.ShouldBeEmpty();
-        result.Plan.Docs.ShouldStartWith("https://");
+        probe.State.ShouldBe("unsupported");
+        probe.Problem.ShouldNotBeNull().Diagnosis!.Code.ShouldBe(MachineDiagnoses.InstallUnsupported);
     }
 
     [Fact]
-    public void The_install_commands_are_fixed_and_only_use_the_documented_install_source()
+    public async Task A_probe_that_cannot_log_in_says_why()
     {
-        SshMachineService.InstallCommands.ShouldBe([
+        _runner.Result = new SshResult(255, "", "alice@falcon: Permission denied (publickey).");
+
+        var probe = await Service.ProbeAsync("alice@falcon", CancellationToken.None);
+
+        probe.State.ShouldBe("cantLogIn");
+        probe.Problem.ShouldNotBeNull().Diagnosis!.Code.ShouldBe(MachineDiagnoses.SshKeyRejected);
+    }
+
+    [Fact]
+    public void Every_command_that_can_run_is_listed_and_the_install_uses_only_the_documented_source()
+    {
+        SshMachineService.Commands.ShouldBe([
+            SshMachineService.ProbeCommand,
             "curl -fsSL https://github.com/pgermishuys/weave-fleet/releases/latest/download/install.sh | sh",
             "$HOME/.weave/fleet/bin/fleet node install-service",
+            PairCommand,
         ]);
     }
 
     [Fact]
-    public async Task Install_runs_the_commands_then_pairs_through_a_tunnel()
+    public async Task Jobs_run_in_the_background_and_a_second_start_for_the_same_machine_joins_the_first()
     {
-        var installed = false;
-        _runner.Script = command =>
-        {
-            if (command == "uname -s") return new SshResult(0, "Linux\n", "");
-            if (command == Install) { installed = true; return new SshResult(0, "", ""); }
-            return installed ? new SshResult(0, PairJson, "") : new SshResult(127, "", "sh: fleet: command not found");
-        };
-        _home.Answer = line => line switch
-        {
-            "POST /api/pairing/preview" => (HttpStatusCode.OK, Preview),
-            "POST /api/pairing/redeem" => (HttpStatusCode.OK, Redeemed),
-            "GET /api/machine" => (HttpStatusCode.OK, Identity),
-            _ => null,
-        };
+        var release = new TaskCompletionSource();
+        _runner.Gate = release.Task;
+        _runner.Script = command => command == Probe ? new SshResult(0, "Linux\n0.65.2\n", "") : new SshResult(0, PairJson, "");
+        HomeAcceptsTheCode();
+        var jobs = new SshSetupJobs(Service);
 
-        var result = await Service.InstallAndAddAsync("alice@falcon", CancellationToken.None);
+        var first = jobs.Start("falcon");
+        var second = jobs.Start("falcon");
 
-        result.Error.ShouldBeNull();
-        result.Machine.ShouldNotBeNull().SshDestination.ShouldBe("alice@falcon");
-        _runner.Ran.Select(r => r.Command).ShouldBe(["uname -s", Install, PairCommand]);
-        _runner.Timeouts[1].ShouldBe(TimeSpan.FromMinutes(3));
-        _tunnels.Opened.Count.ShouldBe(1);
+        second.ShouldBeSameAs(first);
+        first.Status.ShouldBe("running");
+        jobs.Get(first.Id).ShouldBeSameAs(first);
+        release.SetResult();
+        await Eventually(() => first.Status == "done");
+        first.Result!.Machine.ShouldNotBeNull();
     }
 
-    [Fact]
-    public async Task Install_waits_for_the_new_service_to_answer()
+    private static async Task Eventually(Func<bool> condition)
     {
-        var pairs = 0;
-        _runner.Script = command =>
-        {
-            if (command == "uname -s") return new SshResult(0, "Darwin\n", "");
-            if (command == Install) return new SshResult(0, "", "");
-            return ++pairs < 4 ? new SshResult(1, "", "No Fleet answered on port 2113.") : new SshResult(0, PairJson, "");
-        };
-        _home.Answer = line => line switch
-        {
-            "POST /api/pairing/preview" => (HttpStatusCode.OK, Preview),
-            "POST /api/pairing/redeem" => (HttpStatusCode.OK, Redeemed),
-            "GET /api/machine" => (HttpStatusCode.OK, Identity),
-            _ => null,
-        };
-
-        var result = await Service.InstallAndAddAsync("falcon", CancellationToken.None);
-
-        result.Machine.ShouldNotBeNull();
-        pairs.ShouldBe(4);
-    }
-
-    [Fact]
-    public async Task Install_says_so_when_the_node_never_starts_and_tunnels_nothing()
-    {
-        _runner.Script = command => command switch
-        {
-            "uname -s" => new SshResult(0, "Linux\n", ""),
-            _ when command == Install => new SshResult(0, "", ""),
-            _ => new SshResult(1, "", "No Fleet answered on port 2113."),
-        };
-
-        var result = await Service.InstallAndAddAsync("falcon", CancellationToken.None);
-
-        result.Machine.ShouldBeNull();
-        result.Error.ShouldNotBeNull().ShouldContain("Fleet is installed on falcon, but it hasn't started answering");
-        result.Plan.ShouldBeNull();
-        _tunnels.Opened.ShouldBeEmpty();
-    }
-
-    [Theory]
-    [InlineData(23, "curl: (23) Failure writing output\nsh: curl: command not found", "has no curl")]
-    [InlineData(1, "Failed to connect to bus: No such file\nsystemctl --user failed", "user service couldn't start")]
-    [InlineData(1, "install: no space left on device", "install on falcon stopped")]
-    [InlineData(255, "alice@falcon: Permission denied (publickey).", "never asks for a password")]
-    public async Task A_failed_install_is_said_plainly_and_nothing_is_paired(int exit, string stderr, string expected)
-    {
-        _runner.Script = command => command switch
-        {
-            "uname -s" => new SshResult(0, "Linux\n", ""),
-            _ when command == Install => new SshResult(exit, "", stderr),
-            _ => new SshResult(127, "", "command not found"),
-        };
-
-        var result = await Service.InstallAndAddAsync("falcon", CancellationToken.None);
-
-        result.Machine.ShouldBeNull();
-        result.Error.ShouldNotBeNull().ShouldContain(expected);
-        _tunnels.Opened.ShouldBeEmpty();
-        _runner.Ran.Select(r => r.Command).ShouldNotContain(PairCommand);
-    }
-
-    [Fact]
-    public async Task Install_refuses_a_remote_windows_and_a_bad_destination_without_running_the_install()
-    {
-        _runner.Script = _ => new SshResult(1, "", "'uname' is not recognized");
-        var windows = await Service.InstallAndAddAsync("falcon", CancellationToken.None);
-        windows.Error.ShouldNotBeNull().ShouldContain("Linux and macOS only");
-
-        var bad = await Service.InstallAndAddAsync("-oProxyCommand=x", CancellationToken.None);
-        bad.Error.ShouldNotBeNull();
-
-        _runner.Ran.Select(r => r.Command).ShouldNotContain(Install);
+        for (var i = 0; i < 200 && !condition(); i++)
+            await Task.Delay(10);
+        condition().ShouldBeTrue();
     }
 
     private sealed class FakeRunner : ISshRunner
@@ -316,11 +352,16 @@ public sealed class SshMachineTests : IDisposable
         public List<(string Target, string Command)> Ran { get; } = [];
         public List<TimeSpan?> Timeouts { get; } = [];
 
-        public Task<SshResult> RunAsync(SshDestination destination, string command, CancellationToken cancellationToken, TimeSpan? timeout = null)
+        /// <summary>When set, commands wait for it before answering.</summary>
+        public Task? Gate { get; set; }
+
+        public async Task<SshResult> RunAsync(SshDestination destination, string command, CancellationToken cancellationToken, TimeSpan? timeout = null)
         {
             Ran.Add((destination.Text, command));
             Timeouts.Add(timeout);
-            return Task.FromResult(Script?.Invoke(command) ?? Result);
+            if (Gate is not null)
+                await Gate;
+            return Script?.Invoke(command) ?? Result;
         }
     }
 
