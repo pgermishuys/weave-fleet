@@ -59,7 +59,7 @@ public sealed class RemoteMachineService(
     }
 
     /// <summary>Checks the address and token against the machine and saves it. Error is what to tell the user.</summary>
-    public async Task<(RemoteMachine? Machine, string? Error)> AddAsync(string baseUrl, string token, CancellationToken cancellationToken, string? sshDestination = null)
+    public async Task<(RemoteMachine? Machine, MachineProblem? Error)> AddAsync(string baseUrl, string token, CancellationToken cancellationToken, string? sshDestination = null)
     {
         var normalized = NormalizeBaseUrl(baseUrl);
         if (normalized is null)
@@ -97,7 +97,7 @@ public sealed class RemoteMachineService(
     /// answers first (the code isn't used up), refuses this machine, then redeems the code for a token of its own
     /// that the machine lists and can remove. The master token stays where it is.
     /// </summary>
-    public async Task<(RemoteMachine? Machine, string? Error)> AddByCodeAsync(string baseUrl, string code, CancellationToken cancellationToken, string? sshDestination = null)
+    public async Task<(RemoteMachine? Machine, MachineProblem? Error)> AddByCodeAsync(string baseUrl, string code, CancellationToken cancellationToken, string? sshDestination = null)
     {
         var (found, previewError) = await PreviewByCodeAsync(baseUrl, code, cancellationToken);
         if (found is null)
@@ -120,7 +120,7 @@ public sealed class RemoteMachineService(
 
         var token = redeemed.Value.TryGetProperty("token", out var tokenElement) ? tokenElement.GetString() : null;
         if (string.IsNullOrEmpty(token))
-            return (null, "That isn't a Fleet.");
+            return (null, MachineDiagnoses.NotAFleet(normalized));
         return await AddAsync(normalized, token, cancellationToken, sshDestination);
     }
 
@@ -128,7 +128,7 @@ public sealed class RemoteMachineService(
     /// Looks at the machine a code belongs to without using the code up: who it is and which Fleet it runs, so Add a
     /// machine can say what it found before adding it. Refuses this machine.
     /// </summary>
-    public async Task<(PairingPreview? Found, string? Error)> PreviewByCodeAsync(string baseUrl, string code, CancellationToken cancellationToken)
+    public async Task<(PairingPreview? Found, MachineProblem? Error)> PreviewByCodeAsync(string baseUrl, string code, CancellationToken cancellationToken)
     {
         var normalized = NormalizeBaseUrl(baseUrl);
         if (normalized is null)
@@ -168,7 +168,7 @@ public sealed class RemoteMachineService(
     }
 
     // The pairing endpoints take no token. Fleet sends only the code, which is good for one use.
-    private async Task<(JsonElement? Body, string? Error)> PostPairingAsync(string baseUrl, string action, Dictionary<string, string> body, CancellationToken cancellationToken)
+    private async Task<(JsonElement? Body, MachineProblem? Error)> PostPairingAsync(string baseUrl, string action, Dictionary<string, string> body, CancellationToken cancellationToken)
     {
         using var request = new HttpRequestMessage(HttpMethod.Post, $"{baseUrl}/api/pairing/{action}")
         {
@@ -179,22 +179,22 @@ public sealed class RemoteMachineService(
         {
             using var response = await httpClients.CreateClient(HttpClientName).SendAsync(request, cancellationToken);
             if (response.StatusCode == HttpStatusCode.NotFound)
-                return (null, "That code has expired or was already used. Run fleet node pair on the other machine for a new one.");
+                return (null, MachineDiagnoses.CodeExpiredOn(baseUrl));
             if (response.StatusCode == HttpStatusCode.TooManyRequests)
-                return (null, "Too many codes tried on that machine. Wait a minute and try again.");
+                return (null, MachineDiagnoses.TooManyCodesOn());
             if (!response.IsSuccessStatusCode)
-                return (null, $"The machine answered {(int)response.StatusCode}.");
+                return (null, MachineDiagnoses.FromStatus(response.StatusCode, baseUrl));
 
             using var document = JsonDocument.Parse(await response.Content.ReadAsStringAsync(cancellationToken));
             return (document.RootElement.Clone(), null);
         }
         catch (Exception ex) when (ex is HttpRequestException or TaskCanceledException)
         {
-            return (null, $"Couldn't reach {baseUrl}. Check the address, that Fleet is running there, and that this machine can reach it.");
+            return (null, MachineDiagnoses.FromException(ex, baseUrl));
         }
         catch (JsonException)
         {
-            return (null, "That isn't a Fleet.");
+            return (null, MachineDiagnoses.NotAFleet(baseUrl));
         }
     }
 
@@ -202,7 +202,7 @@ public sealed class RemoteMachineService(
     /// Changes a machine's address, token, name, or whether agents may hand work to it. A new address or token is checked
     /// against the machine first.
     /// </summary>
-    public async Task<(RemoteMachine? Machine, string? Error)> UpdateAsync(
+    public async Task<(RemoteMachine? Machine, MachineProblem? Error)> UpdateAsync(
         string id,
         string? baseUrl,
         string? token,
@@ -224,7 +224,7 @@ public sealed class RemoteMachineService(
             if (string.IsNullOrWhiteSpace(token) && !string.Equals(normalized, current.BaseUrl, StringComparison.OrdinalIgnoreCase))
                 return (null, "Give the machine's token again when you change its address. The saved one is only sent to the address it was made for.");
             var plainToken = string.IsNullOrWhiteSpace(token) ? TokenOf(current) : token.Trim();
-            var (info, error) = await IdentifyAsync(normalized, plainToken, cancellationToken);
+            var (info, error) = await IdentifyAsync(normalized, plainToken, cancellationToken, current.Name);
             if (info is null)
                 return (null, error);
             if (info.Id != id)
@@ -306,12 +306,33 @@ public sealed class RemoteMachineService(
     /// <summary>Tells listeners (the watcher, the client's poll) that something about a machine changed, e.g. its tunnel.</summary>
     public void NotifyChanged(string id) => Changed?.Invoke(id);
 
+    /// <summary>
+    /// Asks a saved machine who it is, with its saved token, and says which step broke when it can't. Null when it
+    /// answers. Writes nothing: the watcher owns the machine's status.
+    /// </summary>
+    public async Task<(bool Found, MachineProblem? Problem)> CheckAsync(string id, CancellationToken cancellationToken)
+    {
+        var machine = await machines.GetAsync(id);
+        if (machine is null)
+            return (false, null);
+        if (TryTokenOf(machine) is not { } token)
+            return (true, MachineDiagnoses.KeyUnreadable(machine.BaseUrl, machine.Name));
+
+        var (info, problem) = await IdentifyAsync(machine.BaseUrl, token, cancellationToken, machine.Name);
+        if (info is null)
+            return (true, problem);
+        return (true, info.Id == id ? null : new MachineProblem($"That address is {info.Name}, not {machine.Name}."));
+    }
+
     /// <summary>Records what the watcher saw of a machine.</summary>
     public Task SetStatusAsync(string id, string status, bool seen) =>
         machines.UpdateStatusAsync(id, status, seen ? time.GetUtcNow() : null);
 
-    /// <summary>Asks <paramref name="baseUrl"/> who it is with <paramref name="token"/>.</summary>
-    public async Task<(RemoteMachineInfo? Info, string? Error)> IdentifyAsync(string baseUrl, string token, CancellationToken cancellationToken)
+    /// <summary>
+    /// Asks <paramref name="baseUrl"/> who it is with <paramref name="token"/>. <paramref name="machineName"/> is what a problem
+    /// calls the machine, when it is already known; the address' host otherwise.
+    /// </summary>
+    public async Task<(RemoteMachineInfo? Info, MachineProblem? Error)> IdentifyAsync(string baseUrl, string token, CancellationToken cancellationToken, string? machineName = null)
     {
         using var request = new HttpRequestMessage(HttpMethod.Get, $"{baseUrl}/api/machine");
         request.Headers.Authorization = new AuthenticationHeaderValue("Bearer", token);
@@ -323,19 +344,13 @@ public sealed class RemoteMachineService(
         }
         catch (Exception ex) when (ex is HttpRequestException or TaskCanceledException)
         {
-            return (null, $"Couldn't reach {baseUrl}. Check the address, that Fleet is running there, and that this machine can reach it.");
+            return (null, MachineDiagnoses.FromException(ex, baseUrl, machineName));
         }
 
         using (response)
         {
-            if (response.StatusCode == HttpStatusCode.Unauthorized)
-                return (null, "That token wasn't accepted.");
-            if (response.StatusCode == HttpStatusCode.NotFound)
-                return (null, "That Fleet is too old to add as a machine. Update it first.");
-            if ((int)response.StatusCode is >= 300 and < 400)
-                return (null, $"{baseUrl} redirects elsewhere. Use the address it redirects to.");
-            if (!response.IsSuccessStatusCode)
-                return (null, $"The machine answered {(int)response.StatusCode}.");
+            if (!response.IsSuccessStatusCode || (int)response.StatusCode is >= 300 and < 400)
+                return (null, MachineDiagnoses.FromStatus(response.StatusCode, baseUrl, machineName));
 
             try
             {
@@ -343,12 +358,12 @@ public sealed class RemoteMachineService(
                 var root = document.RootElement;
                 var apiVersion = root.TryGetProperty("apiVersion", out var v) && v.TryGetInt32(out var version) ? version : 0;
                 if (apiVersion != SupportedApiVersion)
-                    return (null, $"That Fleet speaks machine contract {apiVersion}; this one speaks {SupportedApiVersion}. Update the older one.");
+                    return (null, MachineDiagnoses.VersionMismatchOf(apiVersion, SupportedApiVersion, baseUrl, machineName));
                 if (!root.TryGetProperty("authMode", out var mode) || mode.GetString() != "token")
-                    return (null, "That Fleet signs people in with an identity provider, which machines don't support yet.");
+                    return (null, MachineDiagnoses.SignInUnsupported(baseUrl, machineName));
                 var id = root.GetProperty("id").GetString();
                 if (string.IsNullOrEmpty(id))
-                    return (null, "That isn't a Fleet.");
+                    return (null, MachineDiagnoses.NotAFleet(baseUrl, machineName));
 
                 return (new RemoteMachineInfo(
                     id,
@@ -357,7 +372,7 @@ public sealed class RemoteMachineService(
             }
             catch (Exception ex) when (ex is JsonException or KeyNotFoundException or InvalidOperationException)
             {
-                return (null, "That isn't a Fleet.");
+                return (null, MachineDiagnoses.NotAFleet(baseUrl, machineName));
             }
         }
     }

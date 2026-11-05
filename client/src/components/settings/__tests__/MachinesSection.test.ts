@@ -274,6 +274,67 @@ describe("Settings → Machines", () => {
       expect(wrapper.find("[data-testid='machines-add-submit']").attributes("disabled")).toBeDefined();
     });
 
+  describe("When a machine isn't answering", () => {
+    const refused = {
+      code: "fleet-not-running",
+      headline: "Fleet isn't running on mini",
+      steps: [
+        { label: "Name found", state: "ok" },
+        { label: "Machine answers", state: "ok" },
+        { label: "Port answers", state: "failed", detail: "The connection was refused, so the machine is up and Fleet is not." },
+        { label: "It's Fleet", state: "notChecked" },
+      ],
+      try: "On mini, run fleet node up. It starts Fleet in the background.",
+    };
+    const miniOnServer = { id: mini.id, name: "mini", baseUrl: mini.baseUrl, os: "macos", status: "unreachable", addedAt: mini.addedAt, lastSeenAt: null, token: mini.token };
+
+    function stopMini(): void {
+      routes["/api/machines"] = () => json({ machines: [miniOnServer] });
+      routes["http://100.64.12.40:2113/api/sessions"] = () => { throw new TypeError("Failed to fetch"); };
+      routes[`/api/machines/${mini.id}/check`] = () => json({ reachable: false, error: "Couldn't reach it.", diagnosis: refused });
+    }
+
+    it("names the step that broke on the card, with the steps under Details", async () => {
+      stopMini();
+      const wrapper = mount(MachinesSection);
+      await flushPromises();
+
+      const card = wrapper.get(`[data-testid='machine-card'][data-machine='${mini.id}']`);
+      expect(card.get(".machine-card__state").text()).toBe("Fleet isn't running on mini");
+      const steps = card.findAll("[data-step-state]").map((step) => [step.attributes("data-step-state"), step.text()]);
+      expect(steps.map(([state]) => state)).toEqual(["ok", "ok", "failed", "notChecked"]);
+      expect(steps[2]![1]).toContain("Port answers");
+      expect(card.get("[data-testid='machine-diagnosis-try']").text()).toBe("Try On mini, run fleet node up. It starts Fleet in the background.");
+    });
+
+    it("Retry now reads the machine again and clears the headline once it answers", async () => {
+      stopMini();
+      const wrapper = mount(MachinesSection);
+      await flushPromises();
+
+      routes["http://100.64.12.40:2113/api/sessions"] = () => json([]);
+      await wrapper.get("[data-testid='machine-diagnosis-retry']").trigger("click");
+      await flushPromises();
+
+      expect(wrapper.find("[data-testid='machine-diagnosis']").exists()).toBe(false);
+      expect(wrapper.get(`[data-machine='${mini.id}'] .machine-card__state`).text()).toContain("reachable");
+    });
+
+    it("shows the steps under Add a machine when the check fails", async () => {
+      routes["/api/machines"] = () => json({ machines: [] });
+      routes["/api/machines/pair/preview"] = () => json({ error: "Couldn't reach it.", diagnosis: refused }, 400);
+      const wrapper = mount(MachinesSection);
+      await flushPromises();
+      await wrapper.find("[data-testid='machines-add']").trigger("click");
+      await wrapper.find("[data-testid='machines-add-link']").setValue("http://100.64.12.40:2113/add-machine#ABCD-EFGH");
+      await flushPromises();
+
+      const error = wrapper.get("[data-testid='machines-add-preview-error']");
+      expect(error.text()).toContain("Fleet isn't running on mini");
+      expect(error.findAll("[data-step-state]")).toHaveLength(4);
+    });
+  });
+
   describe("Add a machine over SSH", () => {
     const hosts = { hosts: [
       { alias: "falcon", destination: "falcon", hostName: "100.64.90.72", user: "alice", port: null },
@@ -423,7 +484,7 @@ describe("Settings → Machines", () => {
 
       expect(wrapper.findAll("[data-testid='machine-ssh-line']").map((line) => line.text())).toEqual(["Over SSH as alice@falcon", "Over SSH as alice@osprey"]);
       expect(wrapper.findAll("[data-testid='machine-tunnel-down']")).toHaveLength(1);
-      expect(wrapper.get("[data-testid='machine-tunnel-down']").text()).toBe("Tunnel down");
+      expect(wrapper.get("[data-testid='machine-tunnel-down']").text()).toBe("The SSH tunnel to osprey is down");
     });
   });
   });

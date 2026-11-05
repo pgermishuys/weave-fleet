@@ -22,7 +22,7 @@ public sealed class RemoteMachineAddressChangeTests : IDisposable
         var (machine, error) = await _atlas.Service.UpdateAsync(FakeMachine.Id, "https://elsewhere.test", null, null, CancellationToken.None);
 
         machine.ShouldBeNull();
-        error.ShouldNotBeNullOrEmpty();
+        error.ShouldNotBeNull().Message.ShouldNotBeNullOrEmpty();
         _atlas.Requests.ShouldBeEmpty();
         (await _atlas.Machines.GetAsync(FakeMachine.Id))!.BaseUrl.ShouldBe("https://atlas.test");
     }

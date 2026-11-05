@@ -76,7 +76,7 @@ public sealed class RemoteMachineAddByCodeTests : IDisposable
         var (machine, error) = await _falcon.Service.AddByCodeAsync("http://falcon.test:2113", "ABCD-EFGH", CancellationToken.None);
 
         machine.ShouldBeNull();
-        error.ShouldNotBeNull().ShouldContain("fleet node pair");
+        error.ShouldNotBeNull().Message.ShouldContain("fleet node pair");
         _falcon.Requests.ShouldNotContain(r => r.Request == "POST /api/pairing/redeem");
     }
 
@@ -92,7 +92,7 @@ public sealed class RemoteMachineAddByCodeTests : IDisposable
         var (machine, error) = await self.Service.AddByCodeAsync("http://me.test:2113", "ABCD-EFGH", CancellationToken.None);
 
         machine.ShouldBeNull();
-        error.ShouldBe("That's this machine.");
+        error.ShouldNotBeNull().Message.ShouldBe("That's this machine.");
         self.Requests.ShouldNotContain(r => r.Request == "POST /api/pairing/redeem");
     }
 
@@ -105,7 +105,7 @@ public sealed class RemoteMachineAddByCodeTests : IDisposable
         var (machine, error) = await _falcon.Service.AddByCodeAsync(address, code, CancellationToken.None);
 
         machine.ShouldBeNull();
-        error.ShouldNotBeNullOrEmpty();
+        error.ShouldNotBeNull().Message.ShouldNotBeNullOrEmpty();
         _falcon.Requests.ShouldBeEmpty();
     }
 
@@ -116,6 +116,6 @@ public sealed class RemoteMachineAddByCodeTests : IDisposable
 
         var (_, error) = await _falcon.Service.AddByCodeAsync("http://falcon.test:2113", "ABCD-EFGH", CancellationToken.None);
 
-        error.ShouldNotBeNull().ShouldContain("Couldn't reach");
+        error.ShouldNotBeNull().Message.ShouldContain("Couldn't reach");
     }
 }

@@ -68,7 +68,7 @@ public sealed class SshMachineService(RemoteMachineService machines, ISshTunnels
         var (machine, error) = await machines.AddByCodeAsync($"http://127.0.0.1:{port}", code, cancellationToken, destination.Text);
         if (machine is null)
             tunnels.Close(key);
-        return new SshAddResult(machine, error, null);
+        return new SshAddResult(machine, error?.Message, null, error?.Diagnosis);
     }
 
     /// <summary>
@@ -162,7 +162,7 @@ public sealed class SshMachineService(RemoteMachineService machines, ISshTunnels
 }
 
 /// <summary>The outcome of adding a machine Over SSH: the machine, or why not, and when Fleet isn't there, what installing would run.</summary>
-public sealed record SshAddResult(RemoteMachine? Machine, string? Error, SshInstallPlan? Plan)
+public sealed record SshAddResult(RemoteMachine? Machine, string? Error, SshInstallPlan? Plan, MachineDiagnosis? Diagnosis = null)
 {
     public static SshAddResult Failed(string error) => new(null, error, null);
 
