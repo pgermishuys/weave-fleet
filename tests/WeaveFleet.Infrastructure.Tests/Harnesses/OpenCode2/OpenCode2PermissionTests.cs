@@ -52,6 +52,27 @@ public sealed class OpenCode2PermissionTests
     }
 
     [Fact]
+    public async Task An_ask_for_an_mcp_tool_shows_its_name_and_its_input_not_the_wildcard_resource()
+    {
+        var (_, server, session) = Start();
+        await using var _ = server;
+        await using var __ = session;
+        await session.ApplyPermissionsAsync(new PermissionPolicy(PermissionLevels.Ask), CancellationToken.None);
+
+        // What V2's MCP tools assert: the tool's name, resource "*", and the call's input under metadata.input.
+        session.OnEvent(Event("permission.asked", $$$"""
+            {"id":"per_mcp","sessionID":"{{{Session}}}","action":"tracker_create_issue","resources":["*"],"save":["*"],
+             "metadata":{"input":{"title":"Fix login","labels":["bug"]}},"source":{"type":"tool","messageID":"msg_1","id":"call_1"}}
+            """));
+
+        var events = await ReadAvailableAsync(session);
+        var asked = events.Where(e => e.Type == EventTypes.PermissionAsked).ShouldHaveSingleItem().Payload!.Value;
+        asked.GetProperty("tool").GetString().ShouldBe("tracker_create_issue");
+        asked.GetProperty("title").GetString().ShouldNotBe("*");
+        asked.GetProperty("title").GetString()!.ShouldContain("Fix login");
+    }
+
+    [Fact]
     public async Task Dont_ask_again_answers_this_ask_once_and_the_next_matching_one_without_the_user()
     {
         var (api, server, session) = Start();
