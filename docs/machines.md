@@ -113,54 +113,52 @@ and `--profile` like `fleet node`: use the ones the node was started with.
 
 With an address typed, the master-token form is still there under **Advanced**.
 
-### Add a node over SSH
+### Set a machine up from here (over SSH)
 
-No Tailscale and no open port: if you can `ssh` to the machine, Fleet can add it. Settings → Machines → **Add a
-machine** → **Over SSH**. Pick a host from `~/.ssh/config` on the machine running Fleet (wildcard entries are skipped),
-or type `user@host[:port]`. It sits next to **Pairing link** at the top of the dialog.
+No command on the other machine: if you can `ssh` to it, Fleet sets it up. Settings → Machines → **Add a machine** →
+**Set it up from here**. It is the first card when Fleet sees at least one machine, and sits next to **Paste a pairing
+link**.
+
+The list holds the hosts in `~/.ssh/config` on the machine running Fleet (wildcard entries are skipped) and the online
+peers of `tailscale status --json`, when `tailscale` is installed (`FLEET_TAILSCALE_EXECUTABLE` picks another one). A
+host that is in both is one row. Machines already added are left out. Nothing is scanned: each shown row (the first eight
+matching the search) is looked at once, three at a time, with one short `ssh` that prints the operating system and the
+Fleet version. The row then says "SSH works · no Fleet yet", "Fleet 0.65.2" or "can't log in over SSH". Type
+`user@host[:port]` in the search to set up a machine that isn't listed. A Windows peer is not looked at.
 
 Fleet runs your own `ssh`, so your keys, agent and `StrictHostKeyChecking` apply. It always uses `BatchMode=yes`: it
-never asks for a password and never trusts an unknown host key on its own (run `ssh host` once to accept it). It then:
+never asks for a password and never trusts an unknown host key on its own (run `ssh host` once to accept it). **Set up**
+(no Fleet yet) and **Add** (Fleet is there) show four steps, live, and **Show the commands** lists exactly what runs:
 
-1. runs `fleet node pair --json` on the node through SSH to get a one-time code (one line of JSON: `code`,
-   `machineName`, `addresses`, `link`);
-2. opens a tunnel, `ssh -N -L 127.0.0.1:<free port>:127.0.0.1:2113 host`, and uses `http://127.0.0.1:<port>` as the
-   machine's address;
-3. redeems the code through the tunnel, exactly like a pairing link. No token is pasted.
+1. **Log in over SSH**: the look above.
+2. **Install Fleet**: skipped when Fleet is there. Otherwise the install command from the [README](../README.md#install),
+   up to 3 minutes. Linux and macOS only; no sudo, no prompts.
+3. **Start it in the background**: when no node answers, `fleet node install-service` starts a background service named
+   `fleet-node` (a systemd user service on Linux, a LaunchAgent on macOS) that listens on `127.0.0.1` only, so it opens no
+   port and leaves other services alone (see [Keep a node running](#keep-a-node-running); `fleet node uninstall-service`
+   removes it). Fleet waits up to 30 seconds for the node to answer.
+4. **Pair and add the machine**: `fleet node pair --json` on the node through SSH gives a one-time code (`code`,
+   `machineName`, `addresses`, `link`); Fleet opens a tunnel, `ssh -N -L 127.0.0.1:<free port>:127.0.0.1:2113 host`, uses
+   `http://127.0.0.1:<port>` as the machine's address and redeems the code through it, exactly like a pairing link.
 
-If SSH works but `fleet` isn't there, or nothing answers on the node port, Fleet says so and shows what it could
-install (see [Install the node over SSH](#install-the-node-over-ssh)). It installs nothing until you click.
+It installs Fleet only, never a harness: set OpenCode, Claude Code and the rest up there the way you would anywhere. The
+set-up runs on the server, so closing the dialog doesn't stop it. A failure names the step that broke, with the same
+panel as every other machine failure (`ssh-key-rejected`, `ssh-host-key`, `name-not-found`, `ssh-unreachable`,
+`ssh-missing`, `install-no-curl`, `install-failed`, `install-unsupported`, `service-failed`, `not-starting`). A machine Fleet
+can't log in to or can't set up (Windows) offers **Use a link**, which opens the other card with a hint to run
+`fleet node up` there.
 
 Fleet keeps the tunnel open: when ssh exits it starts it again after 1 s, doubling up to 30 s. The machine's row says
 "Over SSH as user@host" and shows "Tunnel down" while it's down. Removing the machine, or stopping Fleet, ends the
 tunnel; on Linux a Fleet that is killed outright also ends it within seconds, and on Windows a Job Object does.
 The saved destination (`ssh_destination`, migration 067) brings the tunnel back when Fleet starts, on the same local port
-if it's still free. `GET /api/machines/ssh-hosts` lists the config hosts; `POST /api/machines/ssh` with
-`{"destination": "falcon"}` adds one. For a node that listens on another port than 2113, start Fleet with
-`FLEET_SSH_NODE_PORT`; `FLEET_SSH_EXECUTABLE` picks another `ssh`.
+if it's still free. For a node that listens on another port than 2113, start Fleet with `FLEET_SSH_NODE_PORT`;
+`FLEET_SSH_EXECUTABLE` picks another `ssh`.
 
-#### Install the node over SSH
-
-When SSH works but Fleet isn't on the other machine, **Add a machine** shows the commands it would run there, and
-waits:
-
-```sh
-curl -fsSL https://github.com/pgermishuys/weave-fleet/releases/latest/download/install.sh | sh
-$HOME/.weave/fleet/bin/fleet node install-service
-```
-
-The first is the install command from the [README](../README.md#install). The second starts a background service
-named `fleet-node` (a systemd user service on Linux, a LaunchAgent on macOS) that listens on `127.0.0.1` only, so it
-opens no port and leaves other services alone; see [Keep a node running](#keep-a-node-running). To remove it, run
-`fleet node uninstall-service` there. Nothing runs until you click **Install and pair**; **I'll do it myself** goes
-back.
-
-After the click, Fleet runs both over the same non-interactive `ssh` as the tunnel (`BatchMode=yes`: no sudo, no
-password prompts, your keys only), waits up to 30 seconds for the node to answer, then pairs as above. If something
-needs a prompt, such as a missing `curl` or a Linux machine with no user systemd, it stops and says what. It installs Fleet only, never a harness: set OpenCode, Claude Code and the rest up
-there the way you would anywhere. A remote Windows machine isn't automated: Fleet says so and links the
-[install docs](https://fleet.tryweave.io/docs). `POST /api/machines/ssh` answers `409` with `host`, `os`,
-`canInstall` and `commands` for this case, and `POST /api/machines/ssh/install` runs them.
+The API (owner only): `GET /api/machines/candidates` lists the rows and the commands; `POST /api/machines/candidates/probe`
+with `{"destination": "falcon"}` looks at one; `POST /api/machines/setup` with the same body starts a set-up and answers
+`{ id, status, steps, machine, error, diagnosis }`; `GET /api/machines/setup/{id}` reads it again (`status` is `running`,
+`done` or `failed`, and a finished set-up is kept for 10 minutes).
 
 ### Set a machine up with `fleet node up`
 
@@ -176,7 +174,7 @@ It asks how other machines should reach this one:
 |---|---|---|
 | **Tailscale** (preselected when `tailscale` is installed and signed in) | this machine's tailnet address, `tailscale ip -4` | only your devices can reach it |
 | **Local network** | `0.0.0.0` | anyone on the network can try a code |
-| **Only over SSH** | `127.0.0.1` | other machines connect from Settings → Machines → Add a machine → Over SSH |
+| **Only over SSH** | `127.0.0.1` | other machines connect from Settings → Machines → Add a machine → Set it up from here |
 
 Then it installs the background service below with that choice, waits until the machine answers, and prints the
 pairing link from `fleet node pair`. Each finished step prints a ✓ line. Run it again to change the choice. When
@@ -360,7 +358,7 @@ token. The same code shows when this Fleet can't read the token it saved (its ke
 
 Two more headlines come from the browser, not the server. **This page can't call falcon** (`https-page`) shows when
 the page is https and the machine's address is http: the browser blocks that call, so use the machine's
-`tailscale serve` address. **The SSH tunnel to falcon is down** (`tunnel-down`) shows for a machine added Over SSH
+`tailscale serve` address. **The SSH tunnel to falcon is down** (`tunnel-down`) shows for a machine added over SSH
 whose tunnel isn't up; Fleet opens it again by itself.
 
 ## Adding a machine to a client

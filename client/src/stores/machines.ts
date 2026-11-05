@@ -138,30 +138,29 @@ interface ServerMachine {
   tunnelUp?: boolean | null;
 }
 
-/** A host from the ~/.ssh/config of the machine running Fleet. `destination` is what to send back to add it. */
-export interface SshHost {
-  alias: string;
+/** A machine Fleet can already see, from ~/.ssh/config or Tailscale. `destination` is what to log in to. */
+export interface MachineCandidate {
+  name: string;
   destination: string;
-  hostName: string | null;
-  user: string | null;
-  port: number | null;
+  source: string;
+  os: string | null;
 }
 
-/** What Fleet would run on a machine with no Fleet on it (the 409 of adding Over SSH). Nothing has run yet. */
-export interface SshInstallPlan {
-  host: string;
-  os: "linux" | "macos" | "unsupported";
-  canInstall: boolean;
-  commands: string[];
-  docs: string;
+/** What Fleet saw on a candidate over SSH: Fleet running, SSH working with no Fleet, no login, or a system it can't set up. */
+export interface CandidateProbe {
+  state: "ready" | "noFleet" | "cantLogIn" | "unsupported";
+  os: string | null;
+  version: string | null;
+  error: string | null;
+  diagnosis: MachineDiagnosis | null;
 }
 
-/** Adding Over SSH found no Fleet on the other machine: `plan` is what installing it would run. */
-export class SshNotInstalledError extends Error {
-  constructor(message: string, readonly plan: SshInstallPlan) {
-    super(message);
-    this.name = "SshNotInstalledError";
-  }
+/** One step of setting a machine up from here. */
+export interface SetupStep {
+  key: string;
+  label: string;
+  state: "pending" | "running" | "done" | "skipped" | "failed";
+  detail: string | null;
 }
 
 /**
@@ -556,55 +555,53 @@ export const useMachinesStore = defineStore("machines", () => {
     return await response.json() as PairingPreview;
   }
 
-  /** The hosts in ~/.ssh/config on the machine running Fleet; null until loaded. Empty when it has none or can't say. */
-  const sshHosts = shallowRef<SshHost[] | null>(null);
+  /** The machines Fleet can already see (ssh config, Tailscale); null until loaded. Empty when it sees none or can't say. */
+  const candidates = shallowRef<MachineCandidate[] | null>(null);
+  /** Everything setting a machine up can run on it, in order, for "Show the commands". */
+  const setupCommands = shallowRef<string[]>([]);
 
-  async function loadSshHosts(): Promise<void> {
+  async function loadCandidates(): Promise<void> {
     try {
-      const response = await fetchOnMachine(null, "/api/machines/ssh-hosts");
-      const body = response.ok ? await response.json() as { hosts?: SshHost[] } : null;
-      sshHosts.value = Array.isArray(body?.hosts) ? body.hosts : [];
+      const response = await fetchOnMachine(null, "/api/machines/candidates");
+      const body = response.ok ? await response.json() as { candidates?: MachineCandidate[]; commands?: string[] } : null;
+      candidates.value = Array.isArray(body?.candidates) ? body.candidates : [];
+      setupCommands.value = Array.isArray(body?.commands) ? body.commands : [];
     } catch {
-      sshHosts.value = [];
+      candidates.value = [];
     }
   }
 
-  /**
-   * Adds a machine over SSH: home logs in with the user's own keys, asks the other machine for a pairing code and
-   * redeems it. `destination` is a host from ~/.ssh/config or a typed `user@host[:port]`. Takes several seconds.
-   * Throws `SshNotInstalledError` when there is no Fleet there; `installOverSsh` is the click that installs it.
-   */
-  function addOverSsh(destination: string): Promise<MachineConnection> {
-    return postOverSsh("/api/machines/ssh", destination, "Couldn't add the machine over SSH.");
-  }
-
-  /** Installs the node on the other machine (Linux, macOS) with the commands the plan showed, then pairs. Takes up to a minute or two. */
-  function installOverSsh(destination: string): Promise<MachineConnection> {
-    return postOverSsh("/api/machines/ssh/install", destination, "Couldn't install Fleet over SSH.");
-  }
-
-  async function postOverSsh(path: string, destination: string, fallback: string): Promise<MachineConnection> {
-    if (source.value !== "server") throw new Error("This Fleet can't add a machine over SSH from here. Add it by address with its token instead.");
-    const response = await fetchOnMachine(null, path, {
+  /** Looks at one candidate over SSH. Changes nothing there. */
+  async function probeCandidate(destination: string): Promise<CandidateProbe> {
+    const response = await fetchOnMachine(null, "/api/machines/candidates/probe", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ destination: destination.trim() }),
     });
-    if (response.status === 409) {
-      const body = await response.clone().json().catch(() => null) as (Partial<SshInstallPlan> & { error?: string }) | null;
-      if (body && Array.isArray(body.commands) && typeof body.host === "string") {
-        throw new SshNotInstalledError(body.error ?? "Fleet isn't installed there.", {
-          host: body.host,
-          os: body.os ?? "unsupported",
-          canInstall: body.canInstall === true,
-          commands: body.commands,
-          docs: body.docs ?? "",
-        });
-      }
+    if (!response.ok) throw await readFailure(response, "Couldn't look at the machine.");
+    return await response.json() as CandidateProbe;
+  }
+
+  /**
+   * Sets a machine up from here over SSH with the user's own keys: installs Fleet when it isn't there, starts it in
+   * the background, pairs and adds it. Home does the work and keeps going if this page closes; `onSteps` hears each
+   * step as it moves. Throws with the step that broke (a diagnosis) when it fails.
+   */
+  async function setUpMachine(destination: string, onSteps: (steps: SetupStep[]) => void, pauseMs = 700): Promise<MachineConnection> {
+    if (source.value !== "server") throw new Error("This Fleet can't set a machine up from here. Run fleet node up on it and paste its link instead.");
+    let job = await sendSetup("/api/machines/setup", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ destination: destination.trim() }) });
+    onSteps(job.steps);
+    while (job.status === "running") {
+      await new Promise((resolve) => setTimeout(resolve, pauseMs));
+      job = await sendSetup(`/api/machines/setup/${job.id}`);
+      onSteps(job.steps);
     }
-    if (!response.ok) throw await readFailure(response, fallback);
-    const connection = fromServer(await response.json() as ServerMachine);
-    if (!connection) throw new Error(fallback);
+
+    const connection = job.machine ? fromServer(job.machine) : null;
+    if (job.status !== "done" || !connection) {
+      const message = job.error ?? "Couldn't set the machine up.";
+      throw job.diagnosis ? new DiagnosedError(message, job.diagnosis) : new Error(message);
+    }
 
     connections.value = connections.value.some((candidate) => candidate.id === connection.id)
       ? connections.value.map((candidate) => candidate.id === connection.id ? connection : candidate)
@@ -612,6 +609,12 @@ export const useMachinesStore = defineStore("machines", () => {
     persist();
     void refreshMachine(connection.id);
     return connection;
+  }
+
+  async function sendSetup(path: string, init?: RequestInit): Promise<{ id: string; status: "running" | "done" | "failed"; steps: SetupStep[]; machine: ServerMachine | null; error: string | null; diagnosis: MachineDiagnosis | null }> {
+    const response = await fetchOnMachine(null, path, init);
+    if (!response.ok) throw await readFailure(response, "Couldn't set the machine up.");
+    return await response.json();
   }
 
   function forgetMachine(id: string): void {
@@ -1041,10 +1044,11 @@ export const useMachinesStore = defineStore("machines", () => {
     previewPairing,
     diagnoses,
     retryMachine,
-    sshHosts,
-    loadSshHosts,
-    addOverSsh,
-    installOverSsh,
+    candidates,
+    setupCommands,
+    loadCandidates,
+    probeCandidate,
+    setUpMachine,
     forgetMachine,
     renameMachine,
     updateToken,

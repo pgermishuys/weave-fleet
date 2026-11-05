@@ -2,11 +2,13 @@
 import { computed, onMounted, onUnmounted, reactive, shallowRef, watch } from "vue";
 import { storeToRefs } from "pinia";
 import { AlertCircle, Check, Copy, Eye, EyeOff, LoaderCircle, Plus, RefreshCw } from "lucide-vue-next";
-import { SshNotInstalledError, useMachinesStore, type MachineAccess, type MachineEntry, type MachineHarness, type PairingPreview, type SshInstallPlan } from "@/stores/machines";
+import { useMachinesStore, type MachineAccess, type MachineEntry, type MachineHarness, type PairingPreview } from "@/stores/machines";
 import SettingGroup from "@/components/settings/SettingGroup.vue";
 import SettingRow from "@/components/settings/SettingRow.vue";
 import AddPhonePanel from "@/components/settings/AddPhonePanel.vue";
+import MachineAddNote from "@/components/settings/MachineAddNote.vue";
 import MachineDiagnosisPanel from "@/components/settings/MachineDiagnosisPanel.vue";
+import MachineSetupCard from "@/components/settings/MachineSetupCard.vue";
 import MachineJobSeats from "@/components/settings/MachineJobSeats.vue";
 import { useJobsFeature } from "@/composables/use-jobs-feature";
 import DevicesList from "@/components/settings/DevicesList.vue";
@@ -30,7 +32,7 @@ const buttonDangerClass = "inline-flex items-center justify-center gap-2 rounded
 const inputClass = "w-full rounded-btn border border-border bg-main-bg px-3 py-2 text-sm text-text outline-none transition-colors placeholder:text-muted focus:border-accent";
 
 const machines = useMachinesStore();
-const { entries, others, home, liveReachable, source, sshHosts } = storeToRefs(machines);
+const { entries, others, home, liveReachable, source, candidates } = storeToRefs(machines);
 const preferencesStore = usePreferencesStore();
 preferencesStore.ensureLoaded();
 // Each card draws MachineJobSeats from a list that is empty with Jobs off, not under a v-if: a false v-if still leaves a
@@ -39,30 +41,35 @@ const { isJobsEnabled: jobsOn } = useJobsFeature();
 
 // ── Add ──────────────────────────────────────────────────────────────────────
 const showAddForm = shallowRef(false);
-const addForm = reactive({ link: "", token: "", code: "", ssh: "" });
-type AddMode = "link" | "ssh";
-const addModes: AddMode[] = ["link", "ssh"];
-const modeLabels: Record<AddMode, string> = { link: "Pairing link", ssh: "Over SSH" };
+const addForm = reactive({ link: "", token: "", code: "" });
+type AddMode = "setup" | "link";
+const addModes: AddMode[] = ["setup", "link"];
+const modeLabels: Record<AddMode, string> = { setup: "Set it up from here", link: "Paste a pairing link" };
 const addMode = shallowRef<AddMode>("link");
+/** Set when a machine can't be set up from here: the link card says which machine and what to run on it. */
+const linkHint = shallowRef<string | null>(null);
 function pickMode(mode: AddMode): void {
   addMode.value = mode;
   addError.value = null;
+  linkHint.value = null;
 }
 async function openAddForm(): Promise<void> {
   showAddForm.value = true;
   addError.value = null;
+  linkHint.value = null;
   justAdded.value = null;
   addMode.value = "link";
-  await machines.loadSshHosts();
+  await machines.loadCandidates();
+  if (showAddForm.value && (candidates.value?.length ?? 0) > 0) addMode.value = "setup";
 }
-function hostLabel(host: { alias: string; hostName: string | null; user: string | null }): string {
-  const target = host.hostName ? (host.user ? `${host.user}@${host.hostName}` : host.hostName) : null;
-  return target && target !== host.alias ? `${host.alias} (${target})` : host.alias;
+function onSetUp(name: string): void {
+  justAdded.value = name;
+  showAddForm.value = false;
 }
-/** Set when Over SSH found no Fleet there: what installing would run, shown until the user clicks or changes the host. */
-const installPlan = shallowRef<SshInstallPlan | null>(null);
-const isInstalling = shallowRef(false);
-watch(() => addForm.ssh, () => { installPlan.value = null; });
+function onUseLink(name: string): void {
+  addMode.value = "link";
+  linkHint.value = name;
+}
 const showAdvanced = shallowRef(false);
 const isAdding = shallowRef(false);
 const addError = shallowRef<string | null>(null);
@@ -114,10 +121,8 @@ const foundLine = computed(() => found.value
   ? [found.value.name, found.value.os ? osLabel(found.value.os) : null, found.value.version ? `Fleet ${found.value.version}` : null].filter(Boolean).join(" · ")
   : "");
 const foundReach = computed(() => found.value ? `Reached ${describeReach(found.value.baseUrl)}` : "");
-const addLabel = computed(() => addMode.value === "link" && found.value && !usesToken.value ? `Add ${found.value.name}` : "Add machine");
-const canAdd = computed(() => addMode.value === "ssh"
-  ? addForm.ssh.trim().length > 0
-  : usesToken.value || (found.value !== null && pairTarget.value !== null));
+const addLabel = computed(() => found.value && !usesToken.value ? `Add ${found.value.name}` : "Add machine");
+const canAdd = computed(() => usesToken.value || (found.value !== null && pairTarget.value !== null));
 
 function osLabel(os: string): string {
   return ({ linux: "Linux", macos: "macOS", windows: "Windows" } as Record<string, string>)[os.toLowerCase()] ?? os;
@@ -127,22 +132,18 @@ function clearAddForm(): void {
   addForm.link = "";
   addForm.token = "";
   addForm.code = "";
-  addForm.ssh = "";
 }
 
 async function addMachine(): Promise<void> {
   isAdding.value = true;
   addError.value = null;
   addDiagnosis.value = null;
-  installPlan.value = null;
   try {
     const target = pairTarget.value;
     const input = pasted.value;
-    const machine = addMode.value === "ssh"
-      ? await machines.addOverSsh(addForm.ssh)
-      : usesToken.value && input?.kind === "address"
-        ? await machines.addMachine(input.baseUrl, addForm.token)
-        : await machines.pairMachine(target!.baseUrl, target!.code);
+    const machine = usesToken.value && input?.kind === "address"
+      ? await machines.addMachine(input.baseUrl, addForm.token)
+      : await machines.pairMachine(target!.baseUrl, target!.code);
     if (allowAgents.value && showsAllowAgents.value)
       await machines.setAgentsAllowed(machine.id, true).catch(() => {
         // The machine is added; the switch stays off and can be set on its card.
@@ -151,30 +152,10 @@ async function addMachine(): Promise<void> {
     clearAddForm();
     showAddForm.value = false;
   } catch (error) {
-    if (error instanceof SshNotInstalledError) installPlan.value = error.plan;
-    else {
-      addDiagnosis.value = diagnosisOf(error);
-      addError.value = addDiagnosis.value?.headline ?? (error instanceof Error ? error.message : String(error));
-    }
+    addDiagnosis.value = diagnosisOf(error);
+    addError.value = addDiagnosis.value?.headline ?? (error instanceof Error ? error.message : String(error));
   } finally {
     isAdding.value = false;
-  }
-}
-
-/** The click on "Install and pair": runs the commands the plan showed, then pairs like any other SSH add. */
-async function installNode(): Promise<void> {
-  isInstalling.value = true;
-  addError.value = null;
-  try {
-    const machine = await machines.installOverSsh(addForm.ssh);
-    justAdded.value = machine.name;
-    clearAddForm();
-    installPlan.value = null;
-    showAddForm.value = false;
-  } catch (error) {
-    addError.value = error instanceof Error ? error.message : String(error);
-  } finally {
-    isInstalling.value = false;
   }
 }
 
@@ -437,39 +418,19 @@ onUnmounted(() => stopPolling?.());
             {{ modeLabels[mode] }}
           </button>
         </div>
-        <template v-if="addMode === 'ssh'">
-          <p
-            class="text-xs text-muted"
-            data-testid="machines-add-ssh-help"
-          >
-            Fleet logs in with your own SSH keys and asks the other machine for a pairing code. No password is asked, no
-            token is pasted.
-          </p>
-          <label class="grid gap-1 text-sm text-text">
-            <span class="text-xs font-medium uppercase tracking-wide text-muted">Host</span>
-            <input
-              v-model="addForm.ssh"
-              type="text"
-              list="machines-ssh-hosts"
-              autocomplete="off"
-              autocapitalize="none"
-              spellcheck="false"
-              :class="inputClass"
-              placeholder="falcon or alice@falcon"
-              :disabled="isAdding"
-              data-testid="machines-add-ssh-host"
-            >
-            <datalist id="machines-ssh-hosts">
-              <option
-                v-for="host in sshHosts ?? []"
-                :key="host.alias"
-                :value="host.destination"
-                :label="hostLabel(host)"
-              />
-            </datalist>
-          </label>
-        </template>
+        <MachineSetupCard
+          v-if="addMode === 'setup'"
+          @added="onSetUp"
+          @use-link="onUseLink"
+        />
         <template v-else>
+          <p
+            v-if="linkHint"
+            class="text-xs text-text"
+            data-testid="machines-add-link-hint"
+          >
+            Fleet can't set up {{ linkHint }} from here. On {{ linkHint }}, run <code class="machine-code">fleet node up</code> and paste the link it prints.
+          </p>
           <p
             class="text-xs text-muted"
             data-testid="machines-add-link-help"
@@ -599,14 +560,7 @@ onUnmounted(() => stopPolling?.());
                 {{ foundReach }}
               </p>
             </div>
-            <ul
-              class="m-0 grid list-disc gap-1 pl-5 text-xs text-muted"
-              data-testid="machines-add-note"
-            >
-              <li>Sessions you start on {{ found.name }} run there, with {{ found.name }}'s sign-ins, folders and agents.</li>
-              <li>This Fleet can run agents, change files and open terminals on {{ found.name }}.</li>
-              <li>{{ found.name }} gives this Fleet a key of its own. Forget {{ found.name }} here to stop.</li>
-            </ul>
+            <MachineAddNote :name="found.name" />
             <label
               v-if="showsAllowAgents"
               class="flex items-center gap-2 text-sm text-text"
@@ -640,98 +594,9 @@ onUnmounted(() => stopPolling?.());
             />
           </div>
         </div>
-        <div
-          v-if="installPlan"
-          class="grid gap-3 rounded-card border border-border bg-main-bg p-3"
-          data-testid="machines-install-plan"
-        >
-          <h4 class="text-sm font-semibold text-text">
-            Set up {{ installPlan.host }}
-          </h4>
-          <template v-if="installPlan.canInstall">
-            <p class="text-xs text-muted">
-              SSH works, but Fleet isn't on {{ installPlan.host }}. Fleet can run these two commands there as you.
-              Nothing runs until you click.
-            </p>
-            <pre
-              class="m-0 overflow-x-auto rounded-btn border border-border bg-card-bg px-3 py-2 font-mono text-xs text-text"
-              data-testid="machines-install-commands"
-            ><template
-            v-for="command in installPlan.commands"
-            :key="command"
-          >$ {{ command }}
-</template></pre>
-            <p class="text-xs text-muted">
-              The second one starts a background service named <code class="machine-code">fleet-node</code> that listens on
-              127.0.0.1 only. It opens no port and leaves other services alone. To remove it, run
-              <code class="machine-code">fleet node uninstall-service</code> there. No sudo and no password prompts: if
-              something needs them, it stops and says so.
-            </p>
-            <p class="text-xs text-muted">
-              Harnesses (OpenCode, Claude Code…) aren't installed. Set those up on {{ installPlan.host }} the way you
-              would anywhere.
-            </p>
-            <div class="flex flex-wrap gap-2">
-              <button
-                type="button"
-                :class="buttonPrimaryClass"
-                :disabled="isInstalling"
-                data-testid="machines-install-run"
-                @click="installNode"
-              >
-                <LoaderCircle
-                  v-if="isInstalling"
-                  :size="16"
-                  class="animate-spin"
-                  aria-hidden="true"
-                />
-                {{ isInstalling ? `Installing on ${installPlan.host}…` : "Install and pair" }}
-              </button>
-              <button
-                type="button"
-                :class="buttonSecondaryClass"
-                :disabled="isInstalling"
-                data-testid="machines-install-cancel"
-                @click="installPlan = null"
-              >
-                I'll do it myself
-              </button>
-            </div>
-            <p
-              v-if="isInstalling"
-              class="text-xs text-muted"
-            >
-              Downloading Fleet and starting it. This can take a minute or two.
-            </p>
-          </template>
-          <template v-else>
-            <p class="text-xs text-muted">
-              SSH works, but Fleet isn't on {{ installPlan.host }}, and Fleet only installs itself over SSH on Linux and
-              macOS. Install it there yourself, then add it again.
-              <a
-                :href="installPlan.docs"
-                target="_blank"
-                rel="noopener"
-                class="text-accent underline-offset-2 hover:underline"
-                data-testid="machines-install-docs"
-              >How to install Fleet</a>
-            </p>
-            <div>
-              <button
-                type="button"
-                :class="buttonSecondaryClass"
-                @click="installPlan = null"
-              >
-                OK
-              </button>
-            </div>
-          </template>
-        </div>
-        <div
-          v-if="!installPlan"
-          class="flex flex-wrap gap-2"
-        >
+        <div class="flex flex-wrap gap-2">
           <button
+            v-if="addMode === 'link'"
             type="submit"
             :class="buttonPrimaryClass"
             :disabled="isAdding || !canAdd"

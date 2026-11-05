@@ -1,3 +1,5 @@
+using WeaveFleet.Application.Machines;
+
 namespace WeaveFleet.Api.Contracts;
 
 /// <summary>
@@ -34,13 +36,17 @@ public sealed record ImportMachinesRequest(IReadOnlyList<ImportMachineEntry>? Ma
 /// <summary>The phone's own token on another machine. Kept by the phone; home keeps only the other machine's id for it.</summary>
 public sealed record DeviceGrantResponse(string MachineId, string BaseUrl, string Token);
 
-/// <summary>A host from <c>~/.ssh/config</c> on the machine running Fleet. <paramref name="Destination"/> is what to send back.</summary>
-public sealed record SshHostResponse(string Alias, string Destination, string? HostName, string? User, int? Port);
+/// <summary>A machine Fleet can already see (<c>~/.ssh/config</c> or Tailscale). <paramref name="Destination"/> is what to send back.</summary>
+public sealed record MachineCandidateResponse(string Name, string Destination, string Source, string? Os);
 
-public sealed record SshHostListResponse(IReadOnlyList<SshHostResponse> Hosts);
+/// <param name="Commands">Everything setting a machine up can run on it, in order.</param>
+public sealed record MachineCandidateListResponse(IReadOnlyList<MachineCandidateResponse> Candidates, IReadOnlyList<string> Commands);
 
 /// <param name="Destination">An <c>~/.ssh/config</c> alias or <c>user@host[:port]</c>.</param>
 public sealed record AddSshMachineRequest(string? Destination);
 
-/// <summary>Fleet isn't on the other machine: what installing it would run (nothing has run), or that it can't be automated.</summary>
-public sealed record SshNotInstalledResponse(string Error, string Host, string Os, bool CanInstall, IReadOnlyList<string> Commands, string Docs);
+/// <summary>What Fleet saw on a machine over SSH: <paramref name="State"/> is ready, noFleet, cantLogIn or unsupported.</summary>
+public sealed record SshProbeResponse(string State, string? Os, string? Version, string? Error, MachineDiagnosis? Diagnosis);
+
+/// <summary>A machine being set up: <paramref name="Status"/> is running, done or failed. <paramref name="Machine"/> is there when done.</summary>
+public sealed record SetupJobResponse(string Id, string Destination, string Status, IReadOnlyList<SetupStep> Steps, MachineEntryResponse? Machine, string? Error, MachineDiagnosis? Diagnosis);

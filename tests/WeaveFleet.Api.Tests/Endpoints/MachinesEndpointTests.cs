@@ -60,30 +60,45 @@ public sealed class MachinesEndpointTests : IClassFixture<MachinesEndpointTests.
     }
 
     [Fact]
-    public async Task Over_ssh_lists_config_hosts_for_the_owner_and_refuses_a_destination_that_could_be_an_ssh_option()
+    public async Task Set_up_from_here_lists_candidates_with_the_commands_and_refuses_a_destination_that_could_be_an_ssh_option()
     {
         var hangar = _hangar;
         using var owner = Client(hangar, Token(hangar));
 
-        var hosts = await owner.GetAsync("/api/machines/ssh-hosts");
-        hosts.StatusCode.ShouldBe(HttpStatusCode.OK);
-        (await hosts.Content.ReadFromJsonAsync<JsonElement>()).GetProperty("hosts").ValueKind.ShouldBe(JsonValueKind.Array);
+        var candidates = await owner.GetAsync("/api/machines/candidates");
+        candidates.StatusCode.ShouldBe(HttpStatusCode.OK);
+        var list = await candidates.Content.ReadFromJsonAsync<JsonElement>();
+        list.GetProperty("candidates").ValueKind.ShouldBe(JsonValueKind.Array);
+        list.GetProperty("commands").GetArrayLength().ShouldBe(SshMachineService.Commands.Count);
 
-        var refused = await owner.PostAsJsonAsync("/api/machines/ssh", new { destination = "-oProxyCommand=touch-pwned" });
-        refused.StatusCode.ShouldBe(HttpStatusCode.BadRequest);
-        (await refused.Content.ReadFromJsonAsync<JsonElement>()).GetProperty("error").GetString()!.ShouldContain("isn't an SSH host");
+        var probe = await owner.PostAsJsonAsync("/api/machines/candidates/probe", new { destination = "-oProxyCommand=touch-pwned" });
+        probe.StatusCode.ShouldBe(HttpStatusCode.OK);
+        var probed = await probe.Content.ReadFromJsonAsync<JsonElement>();
+        probed.GetProperty("state").GetString().ShouldBe("cantLogIn");
+        probed.GetProperty("error").GetString()!.ShouldContain("isn't an SSH host");
     }
 
     [Fact]
-    public async Task Installing_over_ssh_refuses_a_destination_that_could_be_an_ssh_option()
+    public async Task Setting_up_a_destination_that_could_be_an_ssh_option_fails_the_job_and_runs_nothing()
     {
         var hangar = _hangar;
         using var owner = Client(hangar, Token(hangar));
 
-        var refused = await owner.PostAsJsonAsync("/api/machines/ssh/install", new { destination = "-oProxyCommand=touch-pwned" });
+        var started = await (await owner.PostAsJsonAsync("/api/machines/setup", new { destination = "-oProxyCommand=touch-pwned" })).ReadSuccessAsync();
 
-        refused.StatusCode.ShouldBe(HttpStatusCode.BadRequest);
-        (await refused.Content.ReadFromJsonAsync<JsonElement>()).GetProperty("error").GetString()!.ShouldContain("isn't an SSH host");
+        var id = started.GetProperty("id").GetString();
+        JsonElement job = default;
+        for (var i = 0; i < 100; i++)
+        {
+            job = await owner.GetFromJsonAsync<JsonElement>($"/api/machines/setup/{id}");
+            if (job.GetProperty("status").GetString() != "running")
+                break;
+            await Task.Delay(20);
+        }
+
+        job.GetProperty("status").GetString().ShouldBe("failed");
+        job.GetProperty("error").GetString()!.ShouldContain("isn't an SSH host");
+        (await owner.GetAsync("/api/machines/setup/nope")).StatusCode.ShouldBe(HttpStatusCode.NotFound);
     }
 
     [Fact]
