@@ -190,6 +190,54 @@ public sealed class MessageIdGenerationTests : IAsyncDisposable
     }
 
 
+    [Fact]
+    public async Task prompt_session_async_treats_a_send_that_timed_out_as_unconfirmed_not_failed()
+    {
+        // A slow harness (Pi's 30 s request wait, OpenCode 2's HTTP timeout) can accept the prompt after Fleet gave up
+        // waiting: a failure here would show a false error and send the queued item a second time.
+        _builder.SessionRepository.Seed(new Session
+        {
+            Id = "s1",
+            InstanceId = "inst-1",
+            Title = "Test",
+            Status = "active",
+            Directory = "/tmp",
+            CreatedAt = "2026-01-01",
+            RetentionStatus = "active"
+        });
+        _defaultSession.SendPromptBehavior = (_, _, _) => Task.FromException(new TimeoutException("Timed out waiting for the response."));
+        _tracker.Register("inst-1", _defaultSession);
+        var sut = BuildSutWithTracker();
+
+        var result = await sut.PromptSessionAsync("s1", "hello");
+
+        result.IsSuccess.ShouldBeTrue();
+        _defaultSession.SendPromptCalls.Count.ShouldBe(1);
+    }
+
+    [Fact]
+    public async Task prompt_session_async_treats_an_http_timeout_as_unconfirmed_not_failed()
+    {
+        _builder.SessionRepository.Seed(new Session
+        {
+            Id = "s1",
+            InstanceId = "inst-1",
+            Title = "Test",
+            Status = "active",
+            Directory = "/tmp",
+            CreatedAt = "2026-01-01",
+            RetentionStatus = "active"
+        });
+        _defaultSession.SendPromptBehavior = (_, _, _) => Task.FromException(
+            new TaskCanceledException("The request was canceled due to the configured HttpClient.Timeout.", new TimeoutException()));
+        _tracker.Register("inst-1", _defaultSession);
+        var sut = BuildSutWithTracker();
+
+        var result = await sut.PromptSessionAsync("s1", "hello");
+
+        result.IsSuccess.ShouldBeTrue();
+    }
+
     private SessionOrchestrator BuildSutWithTracker()
     {
         var userContext = new TestUserContext("user-1");
