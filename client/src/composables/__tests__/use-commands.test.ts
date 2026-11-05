@@ -20,6 +20,7 @@ vi.mock("@tanstack/vue-router", async () => {
 vi.mock("@/api/client", () => ({ api: { GET: vi.fn(async () => ({ data: [], response: { ok: true } })) } }));
 
 import { useCommands } from "@/composables/use-commands";
+import { useSettingsNav } from "@/composables/use-settings-nav";
 import { useCanvasesStore } from "@/stores/canvases";
 import { useCommandStore } from "@/stores/commands";
 import { useFindInFilesStore } from "@/stores/find-in-files";
@@ -108,6 +109,7 @@ describe("useCommands", () => {
         "Session: Refresh sessions",
         "Session: Scroll to bottom",
         "Session: Scroll to top",
+        "Navigation: Add a machine",
         "Navigation: Go to Analytics",
         "Navigation: Go to Board",
         "Navigation: Go to Sessions",
@@ -125,6 +127,16 @@ describe("useCommands", () => {
         "Fleet: Open marketplace panel",
         "Fleet: Report a problem",
       ]);
+    });
+
+    it("add_machine_opens_settings_machines_with_the_add_form_requested", async () => {
+      await start();
+      byId("add-machine").action?.();
+
+      const nav = useSettingsNav();
+      expect(nav.activeSection.value).toBe("machines");
+      expect(nav.addMachineRequested.value).toBe(true);
+      expect(navigate).toHaveBeenCalledWith({ to: "/settings" });
     });
 
     it("find_in_files_opens_the_files_tab_and_asks_it_to_search_inside_files_on_ctrl_shift_f", async () => {

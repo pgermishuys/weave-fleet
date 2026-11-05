@@ -75,6 +75,8 @@ const activeAnchor = ref<string | null>(null);
 const activeHarness = ref<string | null>(null);
 /** A repository Settings → Memory should show when it opens, set by whatever sent the user there. */
 const memoryRepository = ref<string | null>(null);
+/** Set by whatever sent the user to Add a machine; Settings → Machines opens the form and clears it. */
+const addMachineRequested = ref(false);
 
 export function useSettingsNav() {
   function setActiveSection(section: SettingsSectionId, anchor: string | null = null): void {
@@ -97,11 +99,19 @@ export function useSettingsNav() {
     setActiveSection("memory");
   }
 
+  /** Goes to Machines with the Add a machine form open; the caller navigates to /settings. */
+  function openAddMachine(): void {
+    addMachineRequested.value = true;
+    setActiveSection("machines", "add-machine");
+  }
+
   return {
     activeSection,
     activeAnchor,
     activeHarness,
     memoryRepository,
+    addMachineRequested,
+    openAddMachine,
     openHarness,
     openMemory,
     setActiveSection,

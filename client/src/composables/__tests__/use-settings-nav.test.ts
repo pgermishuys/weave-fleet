@@ -64,3 +64,15 @@ describe("useSettingsNav", () => {
     expect(nav.memoryRepository.value).toBe("/r/demo");
   });
 });
+
+describe("openAddMachine", () => {
+  it("goes to Machines at the Add a machine row and asks for the form", () => {
+    const nav = useSettingsNav();
+    nav.openAddMachine();
+
+    expect(nav.activeSection.value).toBe("machines");
+    expect(nav.activeAnchor.value).toBe("add-machine");
+    expect(nav.addMachineRequested.value).toBe(true);
+    nav.addMachineRequested.value = false;
+  });
+});

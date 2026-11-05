@@ -305,7 +305,7 @@ public sealed record MachineUpdate(
 public sealed record UpdateMachineRequest(string? Name, string? PublicUrl = null);
 
 /// <summary>How another device reaches this Fleet.</summary>
-/// <param name="Token">The access token. Whoever has it can do anything this Fleet can.</param>
+/// <param name="Token">The access token. Anyone who has it can run agents, change files and open terminals on this machine.</param>
 /// <param name="TokenSource"><c>saved</c> (Fleet keeps it; it can be replaced), <c>environment</c> (WEAVE_FLEET_AUTH_TOKEN) or <c>ephemeral</c>.</param>
 /// <param name="Host">The address Fleet binds to.</param>
 /// <param name="Port">The port Fleet listens on.</param>

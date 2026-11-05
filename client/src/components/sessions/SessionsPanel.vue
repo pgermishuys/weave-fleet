@@ -28,6 +28,7 @@ import { useSessionSelectionStore } from "@/stores/session-selection";
 import { useSessionsStore } from "@/stores/sessions";
 import { machineGroupKey, projectGroupKey, useSidebarStore } from "@/stores/sidebar";
 import { useWorkspaceUiStore } from "@/stores/workspace-ui";
+import { useSettingsNav } from "@/composables/use-settings-nav";
 import { useMachinesStore, type MachineEntry } from "@/stores/machines";
 
 import { Button } from "@/components/ui/button";
@@ -136,6 +137,7 @@ const runningSubagents = computed(() => runningSubagentsBySession(runningWork.va
 // Other machines: every machine is listed, in a fixed order (home, then the others as they were added), so switching
 // machines only moves the Live tag. The live one is listed in full, the rest as their last polled list.
 const machines = useMachinesStore();
+const { openAddMachine } = useSettingsNav();
 const { entries: machineEntries, hasMachines, others: machineSessions } = storeToRefs(machines);
 const showMachines = computed(() => hasMachines.value && !isArchivedView.value);
 const liveMachineEntry = computed(() => machineEntries.value.find((entry) => entry.isLive) ?? machineEntries.value[0]);
@@ -363,6 +365,12 @@ watch(newSessionMachine, (machineKey) => {
     sidebarStore.setGroupCollapsed(machineGroupKey(machineKey), false);
   }
 });
+
+function handleAddMachine(): void {
+  openAddMachine();
+  sidebarStore.setActiveRail("settings");
+  void router.navigate({ to: "/settings" });
+}
 
 function handleOpenDraft(): void {
   sidebarStore.setActiveRail("sessions");
@@ -819,6 +827,20 @@ function handleCompleteDropZoneDrop(event: DragEvent): void {
         />
       </template>
 
+      <button
+        v-if="showMachines"
+        type="button"
+        class="sessions-add-machine"
+        data-testid="sessions-add-machine"
+        @click="handleAddMachine"
+      >
+        <Plus
+          class="sessions-add-machine__icon"
+          aria-hidden="true"
+        />
+        Add a machine
+      </button>
+
       <!-- Complete drop zone -->
       <Transition name="complete-drop-zone">
         <div
@@ -1127,6 +1149,31 @@ function handleCompleteDropZoneDrop(event: DragEvent): void {
 .panel-search input:focus {
   background: var(--panel-bg);
   border-color: color-mix(in srgb, var(--accent) 55%, transparent);
+}
+
+.sessions-add-machine {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  width: 100%;
+  padding: 6px 12px;
+  border: 0;
+  background: none;
+  color: color-mix(in srgb, var(--muted) 80%, transparent);
+  font: inherit;
+  font-size: 12px;
+  text-align: left;
+  cursor: pointer;
+}
+
+.sessions-add-machine:hover,
+.sessions-add-machine:focus-visible {
+  color: var(--text);
+}
+
+.sessions-add-machine__icon {
+  width: 13px;
+  height: 13px;
 }
 
 .sessions-list {

@@ -18,6 +18,7 @@ import { AGENT_HANDOFF_PREFERENCE_KEY } from "@/lib/machines";
 import { describeReach, parsePairingInput } from "@/lib/pairing-link";
 import { normalizeManualCode } from "@/lib/pairing";
 import { SESSION_MESSAGES_PREFERENCE_KEY } from "@/lib/session-messages";
+import { useSettingsNav } from "@/composables/use-settings-nav";
 import { usePreferencesStore } from "@/stores/preferences";
 
 /**
@@ -75,6 +76,14 @@ const isAdding = shallowRef(false);
 const addError = shallowRef<string | null>(null);
 const addDiagnosis = shallowRef<MachineDiagnosis | null>(null);
 const justAdded = shallowRef<string | null>(null);
+
+// Sent here by the composer chip, the sessions list or the command palette: open the form once, as if clicked.
+const { addMachineRequested } = useSettingsNav();
+watch(addMachineRequested, (requested) => {
+  if (!requested) return;
+  addMachineRequested.value = false;
+  void openAddForm();
+}, { immediate: true });
 
 // What the Pairing link field holds: a whole link, or an address that still needs its code.
 const pasted = computed(() => parsePairingInput(addForm.link));
@@ -987,7 +996,7 @@ onUnmounted(() => stopPolling?.());
               WEAVE_FLEET_AUTH_TOKEN sets it; change the variable and restart Fleet to replace it.
             </template>
             <template v-else>
-              Whoever has it can do anything Fleet can on this machine. Replacing it locks out every device that
+              Anyone who has it can run agents, change files and open terminals on this machine. Replacing it locks out every device that
               has the old one.
             </template>
           </p>
