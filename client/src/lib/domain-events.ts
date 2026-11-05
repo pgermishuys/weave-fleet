@@ -672,6 +672,15 @@ export interface SessionInterrupted extends EventCursorMetadata {
 }
 
 /**
+ * A session's turn stopped on a failure, or a new turn started after it (`failure` null). Sent on the session's topic
+ * and `sessions`; the session list item carries the same as `failed`.
+ */
+export interface SessionFailureChanged extends EventCursorMetadata {
+  type: "session.failure";
+  payload: { sessionId: string; failure: { at: string; message: string } | null };
+}
+
+/**
  * The agent asks to do something the session's permission level doesn't allow. Sent on the topic of the session it's
  * shown on (a subagent's on the session it works for). Not persisted; waiting asks load from
  * `GET /api/sessions/{id}/permissions`.
@@ -966,6 +975,7 @@ export type DomainEvent =
   | SessionRetryChanged
   | SessionPagesChanged
   | SessionInterrupted
+  | SessionFailureChanged
   | PermissionAsked
   | PermissionReplied
   | SessionMessaged

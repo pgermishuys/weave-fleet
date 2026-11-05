@@ -115,6 +115,12 @@ export function sessionRowStatus(item: SessionListItem, now: number, machineAnsw
           description: `Stopped by ${limitName(retry.kind)}. Fleet tries again at ${clock} (${formatRetryIn(retry.dueAt, now)})`,
         };
       }
+      // The last turn stopped on an error and nobody has carried on: not the same as a quiet idle.
+      if (item.failed) {
+        const reason = item.failed.message.trim();
+        const description = reason ? `Last turn failed: ${reason}` : "Last turn failed";
+        return { label: "Failed", tone: "error", description };
+      }
       const time = item.session.time;
       return {
         label: formatCompactAge(time?.updated ?? time?.created ?? "", now),

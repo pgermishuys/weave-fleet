@@ -35,6 +35,27 @@ public sealed class SessionInterruptionRepositoryTests
     }
 
     [Fact]
+    public async Task A_failed_turn_is_marked_until_the_next_turn_starts()
+    {
+        var (keeper, factory) = await TestDbHelper.CreateSharedDbAsync();
+        await using var _ = keeper;
+        var (_, _, session) = await RepositoryOwnershipTestHelper.SeedOwnedSessionGraphAsync(factory, OwnerId);
+        var repository = new SessionInterruptionRepository(factory, new TestUserContext(OwnerId));
+
+        (await repository.ListFailuresForUserAsync()).ShouldBeEmpty();
+
+        await repository.SetFailureAsync(session.Id, Started, "Provider returned 529: overloaded");
+        var failure = (await repository.ListFailuresForUserAsync()).ShouldHaveSingleItem();
+        failure.Key.ShouldBe(session.Id);
+        failure.Value.At.ShouldBe(Started);
+        failure.Value.Message.ShouldBe("Provider returned 529: overloaded");
+
+        (await repository.ClearFailureAsync(session.Id)).ShouldBeTrue();
+        (await repository.ClearFailureAsync(session.Id)).ShouldBeFalse();
+        (await repository.ListFailuresForUserAsync()).ShouldBeEmpty();
+    }
+
+    [Fact]
     public async Task An_interruption_comes_back_as_saved_and_is_removed_once()
     {
         var (keeper, factory) = await TestDbHelper.CreateSharedDbAsync();

@@ -85,6 +85,9 @@ public sealed record SessionListResponse(
 
     /// <summary>When a Fleet restart cut the session's turn off, or null: the row says so.</summary>
     public WeaveFleet.Application.Sessions.SessionInterruptionView? Interrupted { get; init; }
+
+    /// <summary>When the session's last turn stopped on a failure and no turn has started since, or null: the row says so.</summary>
+    public WeaveFleet.Application.Sessions.SessionFailureView? Failed { get; init; }
 }
 
 /// <summary>A model as the harness names one.</summary>

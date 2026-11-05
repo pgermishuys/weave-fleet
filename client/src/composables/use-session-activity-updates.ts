@@ -6,6 +6,7 @@ import type { DomainEvent } from "@/lib/domain-events"
 import { deriveSessionStatus } from "@/lib/session-status"
 import { toScheduledRetry } from "@/lib/turn-retry"
 import { toSessionInterruption } from "@/lib/session-interruption"
+import { toSessionFailure } from "@/lib/session-failure"
 
 /**
  * Subscribes to global "sessions" topic to receive activity_status events
@@ -35,6 +36,12 @@ export function useSessionActivityUpdates(): void {
       // A Fleet restart cut a turn off (or the user carried on): the session's row says so.
       if (event.type === "session.interrupted") {
         sessionsStore.patchSession(event.payload.sessionId, { interrupted: toSessionInterruption(event.payload.interruption) })
+        return
+      }
+
+      // A turn failed, or a new one started after it: the session's row says so.
+      if (event.type === "session.failure") {
+        sessionsStore.patchSession(event.payload.sessionId, { failed: toSessionFailure(event.payload.failure) })
         return
       }
 

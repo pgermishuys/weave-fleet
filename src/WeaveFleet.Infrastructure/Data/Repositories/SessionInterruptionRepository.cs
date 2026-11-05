@@ -61,6 +61,37 @@ public sealed class SessionInterruptionRepository(IDbConnectionFactory connectio
                 r.GetInt64(3) != 0));
     }
 
+    public async Task SetFailureAsync(string sessionId, DateTimeOffset at, string message)
+    {
+        using var conn = connectionFactory.CreateConnection();
+        await conn.ExecuteNonQueryAsync(
+            "UPDATE sessions SET turn_failed_at = @At, turn_failed_message = @Message WHERE id = @SessionId",
+            cmd =>
+            {
+                cmd.AddParameter("SessionId", sessionId);
+                cmd.AddParameter("At", Format(at));
+                cmd.AddParameter("Message", message);
+            });
+    }
+
+    public async Task<bool> ClearFailureAsync(string sessionId)
+    {
+        using var conn = connectionFactory.CreateConnection();
+        return await conn.ExecuteNonQueryAsync(
+            "UPDATE sessions SET turn_failed_at = NULL, turn_failed_message = NULL WHERE id = @SessionId AND turn_failed_at IS NOT NULL",
+            cmd => cmd.AddParameter("SessionId", sessionId)) > 0;
+    }
+
+    public async Task<IReadOnlyDictionary<string, SessionFailure>> ListFailuresForUserAsync()
+    {
+        using var conn = connectionFactory.CreateConnection();
+        var rows = await conn.QueryAsync(
+            "SELECT id, turn_failed_at, turn_failed_message FROM sessions WHERE user_id = @UserId AND turn_failed_at IS NOT NULL",
+            cmd => cmd.AddParameter("UserId", userContext.UserId),
+            r => (Id: r.GetString(0), Failure: new SessionFailure(Parse(r.GetString(1)), r.IsDBNull(2) ? string.Empty : r.GetString(2))));
+        return rows.ToDictionary(row => row.Id, row => row.Failure, StringComparer.Ordinal);
+    }
+
     public async Task<SessionInterruption?> GetAsync(string sessionId)
     {
         using var conn = connectionFactory.CreateConnection();

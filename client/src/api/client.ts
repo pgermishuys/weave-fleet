@@ -3,6 +3,7 @@ import type { paths } from "./generated/schema";
 import type { SessionProgressSummary } from "@/lib/session-progress";
 import type { ScheduledRetry } from "@/lib/turn-retry";
 import type { SessionInterruption } from "@/lib/session-interruption";
+import type { SessionFailure } from "@/lib/session-failure";
 import { apiUrlOn, setApiBase } from "@/lib/api-client";
 import { getActiveMachine, machineRequestInit, type MachineConnection } from "@/lib/machines";
 
@@ -877,6 +878,8 @@ export interface SessionListItem {
   scheduledRetry?: ScheduledRetry | null;
   /** When a Fleet restart cut off the session's turn and the user hasn't carried on; kept current by `session.interrupted` on `sessions`. */
   interrupted?: SessionInterruption | null;
+  /** When the session's last turn stopped on a failure and no turn has started since; kept current by `session.failure` on `sessions`. */
+  failed?: SessionFailure | null;
   /** How many attempts the harness makes in all, when it says. */
   retryMaxAttempts?: number | null;
   /** Why the model call failed, e.g. "API overloaded (529)". */
