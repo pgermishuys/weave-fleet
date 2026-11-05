@@ -1168,9 +1168,12 @@ internal sealed class OpenCode2Mapper(string fleetSessionId, string? workingDire
         return [Status(ActivityStatuses.WaitingInput)];
     }
 
-    /// <summary>An answered question lets the turn go on; a dismissed one ends it (V2 interrupts the turn next).</summary>
+    /// <summary>
+    /// An answered question lets the turn go on; a dismissed one ends it (V2 interrupts the turn next). While another
+    /// question is still open the session keeps waiting on the user.
+    /// </summary>
     private List<HarnessEvent> QuestionSettled(JsonElement data)
-        => ReadString(data, "id") is { } formId && _questions.Remove(formId)
+        => ReadString(data, "id") is { } formId && _questions.Remove(formId) && _questions.Count == 0
             ? [Status(ActivityStatuses.Busy)]
             : [];
 
