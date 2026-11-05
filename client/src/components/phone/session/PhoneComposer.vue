@@ -10,7 +10,7 @@ import PhonePlusSheet, { type PlusChoice } from "@/components/phone/session/Phon
 import { useAgents } from "@/composables/use-agents";
 import { primaryAction, useComposerActions } from "@/composables/use-composer-actions";
 import { useDraftState } from "@/composables/use-draft-state";
-import { sessionDefaultModelKey } from "@/lib/agent-model-choice";
+import { describeSessionDefaults, sessionDefaultModelKey } from "@/lib/agent-model-choice";
 import { useModels } from "@/composables/use-models";
 import { useSessionsStore } from "@/stores/sessions";
 import type { ImageAttachment } from "@/lib/client-types";
@@ -71,12 +71,27 @@ const sessionDefaultKey = computed(() => {
     models: models.value,
   });
 });
+const defaultLabels = computed(() => {
+  const session = sessionsStore.sessionById(props.sessionId);
+  return describeSessionDefaults({
+    sessionAgent: session?.selectedAgent,
+    sessionModel: session?.selectedModel,
+    draftAgent: draft.agentId,
+    defaultAgent: defaultAgentId.value,
+    agents: agents.value,
+    models: models.value,
+    lastModelId: session?.lastAssistantModelId,
+  });
+});
 const modelKey = computed(() => draft.modelId || sessionDefaultKey.value || defaultModelKey.value || "");
 const agentOptions = computed<ChipOption[]>(() => agents.value.map((agent) => ({ id: agent.id, label: agent.name, detail: agent.description })));
 const effortVariants = computed(() => modelsByKey.value[modelKey.value]?.variants ?? ["low", "medium", "high"]);
 const effortOptions = computed<ChipOption[]>(() => effortVariants.value.map((variant) => ({ id: variant, label: variant.charAt(0).toUpperCase() + variant.slice(1) })));
 const agentLabel = computed(() => agents.value.find((agent) => agent.id === agentId.value)?.name ?? "Agent");
-const modelLabel = computed(() => models.value.find((model) => model.selectionKey === modelKey.value)?.name ?? "Model");
+// A picked model shows its name; otherwise the chip reads like desktop's "Default (…)".
+const modelLabel = computed(() => draft.modelId
+  ? models.value.find((model) => model.selectionKey === draft.modelId)?.name ?? "Model"
+  : defaultLabels.value.modelLabel);
 const effortLabel = computed(() => (draft.effort || "medium").replace(/^./, (c) => c.toUpperCase()));
 /** Effort only where the model has levels of it. */
 const hasEffort = computed(() => (modelsByKey.value[modelKey.value]?.variants?.length ?? 0) > 0);
