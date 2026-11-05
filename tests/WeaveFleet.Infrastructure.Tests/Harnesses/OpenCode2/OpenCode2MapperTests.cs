@@ -12,6 +12,26 @@ public sealed class OpenCode2MapperTests
     private const string FleetSession = "fleet-session-1";
 
     [Fact]
+    public void Answering_one_of_two_open_questions_keeps_the_session_waiting_on_the_other()
+    {
+        var mapper = new OpenCode2Mapper(FleetSession);
+        static string Form(string id, string call) =>
+            """{"sessionID":"ses_1","form":{"id":"ID","sessionID":"ses_1","metadata":{"kind":"question","tool":{"id":"CALL"}}}}"""
+                .Replace("ID", id).Replace("CALL", call);
+
+        var asked = mapper.Map(Event("form.created", Form("frm_old", "call_old")))
+            .Concat(mapper.Map(Event("form.created", Form("frm_new", "call_new")))).ToList();
+        asked.Select(Describe).ShouldAllBe(d => d == "session.status waiting_input");
+
+        var answeredNewer = mapper.Map(Event("form.replied", """{"sessionID":"ses_1","id":"frm_new"}"""));
+        answeredNewer.ShouldBeEmpty();
+        mapper.IsWaitingOnQuestion.ShouldBeTrue();
+
+        var answeredOlder = mapper.Map(Event("form.cancelled", """{"sessionID":"ses_1","id":"frm_old"}"""));
+        answeredOlder.Select(Describe).ShouldBe(["session.status busy"]);
+    }
+
+    [Fact]
     public async Task A_recorded_text_turn_streams_a_reply_and_goes_idle()
     {
         var events = await MapSessionAsync("text-and-tool-turn.sse", OpenCode2Fixtures.TextSession, turns: 1);
