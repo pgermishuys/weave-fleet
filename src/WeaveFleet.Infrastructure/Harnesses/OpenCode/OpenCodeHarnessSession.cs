@@ -1357,6 +1357,8 @@ internal sealed partial class OpenCodeHarnessSession : IHarnessSession
                 return targetStatus switch
                 {
                     OpenCodeIdleStatus => "idle",
+                    // A turn stopped on a permission ask needs the user; OpenCode itself reports it busy.
+                    OpenCodeBusyStatus or OpenCodeRetryStatus when _permissions.Pending.Any => ActivityStatuses.WaitingInput,
                     OpenCodeBusyStatus => "busy",
                     OpenCodeRetryStatus => "busy", // Treat retry as busy
                     _ => "idle" // Default to idle for unknown status types

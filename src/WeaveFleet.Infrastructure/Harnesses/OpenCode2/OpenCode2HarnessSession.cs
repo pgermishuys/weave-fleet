@@ -218,10 +218,11 @@ internal sealed partial class OpenCode2HarnessSession : IHarnessSession, IOpenCo
             if (!active.Contains(ResumeToken))
                 return ActivityStatuses.Idle;
 
-            // A turn stopped on a question needs the user. Read the forms too: after a restart Fleet hasn't seen them.
+            // A turn stopped on a question or a permission ask needs the user. Read the forms too: after a restart Fleet
+            // hasn't seen them. Asks are only ever known from their events, and are answered or dropped with the turn.
             foreach (var form in await server.Client.GetFormsAsync(ResumeToken, ct).ConfigureAwait(false))
                 RememberQuestion(form);
-            return _questions.IsEmpty ? ActivityStatuses.Busy : ActivityStatuses.WaitingInput;
+            return _questions.IsEmpty && !_permissions.Pending.Any ? ActivityStatuses.Busy : ActivityStatuses.WaitingInput;
         }
         catch (Exception ex) when (ex is HttpRequestException or TaskCanceledException && !ct.IsCancellationRequested)
         {

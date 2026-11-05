@@ -128,6 +128,29 @@ public sealed class OpenCodePermissionTests
         http.Bodies("POST /permission/per_other/reply").ShouldBeEmpty();
     }
 
+    [Fact]
+    public async Task A_resync_while_an_ask_waits_still_reads_needs_you_and_busy_once_it_is_answered()
+    {
+        // ResyncActivityStatusAsync trusts this read after a reconnect: a pending ask must not read as Working.
+        var (_, events, session) = Start();
+        await using var _ = session;
+        await session.ApplyPermissionsAsync(new PermissionPolicy(PermissionLevels.Ask), CancellationToken.None);
+        var stream = session.SubscribeAsync(CancellationToken.None).GetAsyncEnumerator();
+
+        (await session.GetActivityStatusAsync(CancellationToken.None)).ShouldBe(ActivityStatuses.Busy);
+
+        await events.Writer.WriteAsync(Asked("per_1", "oc-1", "bash", "git push origin main", "git push *"));
+        (await NextAsync(stream)).Type.ShouldBe(EventTypes.PermissionAsked);
+        Status(await NextAsync(stream)).ShouldBe(ActivityStatuses.WaitingInput);
+        (await session.GetActivityStatusAsync(CancellationToken.None)).ShouldBe(ActivityStatuses.WaitingInput);
+
+        await session.ReplyToPermissionAsync("per_1", PermissionReplies.Once, null, CancellationToken.None);
+        await events.Writer.WriteAsync(Sse("permission.replied", """{"sessionID":"oc-1","requestID":"per_1","reply":"once"}"""));
+        (await NextAsync(stream)).Type.ShouldBe(EventTypes.PermissionReplied);
+        Status(await NextAsync(stream)).ShouldBe(ActivityStatuses.Busy);
+        (await session.GetActivityStatusAsync(CancellationToken.None)).ShouldBe(ActivityStatuses.Busy);
+    }
+
     private static (RecordingHandler Http, Channel<OpenCodeSseEvent> Events, OpenCodeHarnessSession Session) Start(string waiting = "[]")
     {
         var http = new RecordingHandler(waiting);
@@ -205,6 +228,7 @@ public sealed class OpenCodePermissionTests
             var answer = key switch
             {
                 "GET /permission" => waiting,
+                "GET /session/status" => """{"oc-1":{"type":"busy"}}""",
                 "GET /session/oc-someone-else" => """{"id":"oc-someone-else","parentID":"oc-unrelated"}""",
                 _ => "true",
             };
