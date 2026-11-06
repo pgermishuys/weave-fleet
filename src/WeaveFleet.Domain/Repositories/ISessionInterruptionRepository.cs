@@ -35,6 +35,9 @@ public interface ISessionInterruptionRepository
     /// <summary>The current user's interruptions, for the sessions list.</summary>
     Task<IReadOnlyList<SessionInterruption>> ListForUserAsync();
 
+    /// <summary>Every user's interruptions, for the automatic continue after a restart.</summary>
+    Task<IReadOnlyList<SessionInterruption>> ListAllAsync();
+
     Task SaveAsync(SessionInterruption interruption);
 
     /// <summary>Removes the session's interruption and returns it; <see langword="null"/> when it had none. Only one caller gets it.</summary>

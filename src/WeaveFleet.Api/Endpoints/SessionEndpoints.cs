@@ -113,7 +113,7 @@ public static class SessionEndpoints
 
                     var interruptedBySessionId = restartInterruptions.Enabled
                         ? (await interruptionRepository.ListForUserAsync())
-                            .ToDictionary(item => item.SessionId, SessionInterruptionView.From, StringComparer.Ordinal)
+                            .ToDictionary(item => item.SessionId, item => SessionInterruptionView.From(item, restartInterruptions.WillContinueByItself(item.SessionId)), StringComparer.Ordinal)
                         : new Dictionary<string, SessionInterruptionView>(StringComparer.Ordinal);
 
                     var failedBySessionId = (await interruptionRepository.ListFailuresForUserAsync())
@@ -510,7 +510,7 @@ public static class SessionEndpoints
             return result.Match(
                 item => item is null
                     ? Results.NoContent()
-                    : Results.Json(SessionInterruptionView.From(item), ApiJsonContext.Default.SessionInterruptionView),
+                    : Results.Json(SessionInterruptionView.From(item, interruptions.WillContinueByItself(id)), ApiJsonContext.Default.SessionInterruptionView),
                 err => err.ToSessionApiResult());
         })
         .WithName("GetSessionInterruption");
@@ -518,10 +518,18 @@ public static class SessionEndpoints
         // POST /api/sessions/{id}/interruption/continue — sends "Continue where you left off." as the user's message.
         group.MapPost("/{id}/interruption/continue", async (string id, SessionInterruptions interruptions, CancellationToken ct) =>
         {
-            var result = await interruptions.ContinueAsync(id, ct);
+            var result = await interruptions.ContinueAsync(id, ct: ct);
             return result.Match(_ => Results.Accepted(), err => err.ToSessionApiResult());
         })
         .WithName("ContinueInterruptedSession");
+
+        // POST /api/sessions/interruptions/stop-automatic — Stop all: what Fleet was going to continue by itself waits for the user.
+        group.MapPost("/interruptions/stop-automatic", async (SessionInterruptions interruptions, IUserContext userContext, CancellationToken ct) =>
+        {
+            await interruptions.StopAutomaticAsync(userContext.UserId, ct);
+            return Results.NoContent();
+        })
+        .WithName("StopAutomaticInterruptionContinue");
 
         // DELETE /api/sessions/{id}/interruption — dismiss: the user takes it from here.
         group.MapDelete("/{id}/interruption", async (string id, SessionInterruptions interruptions, CancellationToken ct) =>

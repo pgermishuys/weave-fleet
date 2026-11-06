@@ -300,6 +300,9 @@ public static class DependencyInjection
         services.AddScoped<IScheduledRetryRepository, ScheduledRetryRepository>();
         services.AddScoped<ISessionInterruptionRepository, SessionInterruptionRepository>();
         services.AddScoped<SessionInterruptions>();
+        // Singleton: the sessions Fleet continues by itself after a restart, and the pace it does it at.
+        services.AddSingleton<RestartContinuer>();
+        services.AddHostedService<RestartContinueStartup>();
         // Singleton: harness sessions read the rules outside any request, and the API shares their in-memory copy.
         services.AddSingleton<ISessionPermissionRuleRepository, SessionPermissionRuleRepository>();
         services.AddSingleton<SessionPermissionRules>();
