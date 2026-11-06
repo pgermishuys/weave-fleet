@@ -22,6 +22,7 @@ import {
   summarizeRows,
   type FleetUpdateRow,
   type MachineUpdate,
+  UPDATE_RULES,
 } from "@/lib/fleet-updates";
 
 function update(patch: Partial<MachineUpdate>): MachineUpdate {
@@ -364,5 +365,16 @@ describe("the status bar chip", () => {
     expect(describeUpdateChip(3, rollout(steps))).toBe("Updating machines · 2 of 3");
     expect(describeUpdateChip(0, rollout([{ state: "done" }, { state: "skipped" }, { state: "done" }]))).toBe("Updating machines · 3 of 3");
     expect(describeUpdateChip(2, rollout(steps, "done"))).toBe("↑ 2 machines can update");
+  });
+});
+
+describe("the idle rule's text", () => {
+  it("says it waits 15 quiet minutes with no turn, question, prompt or answer from any device, and that Restart is immediate", () => {
+    const idle = UPDATE_RULES.find((r) => r.value === "idle")!;
+    expect(idle.detail).toContain("15 minutes");
+    expect(idle.detail).toMatch(/no turn/);
+    expect(idle.detail).toMatch(/any device/);
+    expect(idle.detail).toMatch(/Restart is immediate/);
+    expect(idle.detail).not.toContain("a minute or two");
   });
 });

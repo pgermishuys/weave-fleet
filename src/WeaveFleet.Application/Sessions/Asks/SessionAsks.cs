@@ -1,5 +1,6 @@
 using Microsoft.Extensions.Logging;
 using WeaveFleet.Application.Sessions.Activation;
+using WeaveFleet.Application.Updates;
 using WeaveFleet.Domain.Common;
 using WeaveFleet.Domain.Harnesses;
 using WeaveFleet.Domain.Repositories;
@@ -14,7 +15,8 @@ public sealed class SessionAsks(
     ISessionRepository sessionRepository,
     InstanceTracker instanceTracker,
     SessionActivation activation,
-    ILogger<SessionAsks> logger)
+    ILogger<SessionAsks> logger,
+    UserActivityClock? activity = null)
 {
     public async Task<Result<Unit>> AnswerQuestionAsync(
         string id,
@@ -22,6 +24,7 @@ public sealed class SessionAsks(
         IReadOnlyList<IReadOnlyList<string>> answers,
         CancellationToken ct = default)
     {
+        activity?.Touch();
         using var _ = logger.BeginSessionScope(id);
         var sessionResult = await sessionRepository.GetSessionAsync(id);
         if (sessionResult.IsFailure)
@@ -52,6 +55,7 @@ public sealed class SessionAsks(
         string requestId,
         CancellationToken ct = default)
     {
+        activity?.Touch();
         using var _ = logger.BeginSessionScope(id);
         var sessionResult = await sessionRepository.GetSessionAsync(id);
         if (sessionResult.IsFailure)
@@ -88,6 +92,7 @@ public sealed class SessionAsks(
         string? message,
         CancellationToken ct = default)
     {
+        activity?.Touch();
         using var _ = logger.BeginSessionScope(id);
         if (!PermissionReplies.IsAnswer(reply))
             return FleetError.ValidationError("Permission.Reply", "Answer once, always or reject.");

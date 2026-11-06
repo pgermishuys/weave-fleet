@@ -42,11 +42,11 @@ const buttonSecondaryClass = "inline-flex items-center justify-center gap-2 roun
 const release = computed(() => describeReleaseLine(props.summary, props.checkedAt));
 const narrative = computed(() => (props.rolloutRunning && props.rollout ? describeRolloutNarrative(props.rollout, props.unreachable) : null));
 
-/** "" is no chosen rule: a node updates when nothing is working on it and a full Fleet asks first. */
+/** "" is no chosen rule: a node updates when nothing has been in use for 15 minutes and a full Fleet asks first. */
 const RULE_OPTIONS: { value: string; label: string; detail: string }[] = [
-  { value: "", label: "Default: nodes when idle, Fleets ask", detail: "Until you choose, a node updates when nothing is working on it and a full Fleet asks first." },
+  { value: "", label: "Default: nodes when idle, Fleets ask", detail: "Until you choose, a node updates when nothing has been in use for 15 minutes and a full Fleet asks first." },
   { value: "ask", label: "Ask me first, every machine", detail: UPDATE_RULES[0]!.detail },
-  { value: "idle", label: "When nothing is working, every machine", detail: UPDATE_RULES[1]!.detail },
+  { value: "idle", label: "When nothing is in use, every machine", detail: UPDATE_RULES[1]!.detail },
   { value: "overnight", label: "Only overnight, 02:00–05:00", detail: UPDATE_RULES[2]!.detail },
 ];
 const ruleDetail = computed(() => RULE_OPTIONS.find((option) => option.value === (props.chosenRule ?? ""))?.detail ?? "");

@@ -95,6 +95,7 @@ public sealed class SessionOrchestratorBuilder
     private AgentMemoryService? _agentMemory;
     private WeaveFleet.Application.Mods.ModPromptHook? _modPrompts;
     private SessionUpdates? _updates;
+    private WeaveFleet.Application.Updates.UserActivityClock? _activity;
     private readonly List<ISessionSourceProvider> _additionalSourceProviders = [];
 
     /// <summary>Adds a session source provider beyond the local-directory one Build() always registers.</summary>
@@ -149,6 +150,12 @@ public sealed class SessionOrchestratorBuilder
     public SessionOrchestratorBuilder WithModPrompts(WeaveFleet.Application.Mods.ModPromptHook modPrompts)
     {
         _modPrompts = modPrompts;
+        return this;
+    }
+
+    public SessionOrchestratorBuilder WithUserActivity(WeaveFleet.Application.Updates.UserActivityClock activity)
+    {
+        _activity = activity;
         return this;
     }
 
@@ -217,8 +224,8 @@ public sealed class SessionOrchestratorBuilder
         Prompting = new SessionPrompting(
             SessionRepository, HarnessRegistry, Activation, ActivityTracker, delegationService, sessionSourceResolutionService,
             SessionSourceUsageRepository, EventBroadcaster, _userContext, NullLogger<SessionPrompting>.Instance,
-            MessageRepository, agentMemory: _agentMemory, modPrompts: _modPrompts, updates: _updates);
-        Asks = new SessionAsks(SessionRepository, InstanceTracker, Activation, NullLogger<SessionAsks>.Instance);
+            MessageRepository, agentMemory: _agentMemory, modPrompts: _modPrompts, updates: _updates, activity: _activity);
+        Asks = new SessionAsks(SessionRepository, InstanceTracker, Activation, NullLogger<SessionAsks>.Instance, _activity);
         Catalog = new SessionCatalog(SessionRepository, Activation, NullLogger<SessionCatalog>.Instance);
         History = new SessionHistory(SessionRepository, SessionMessageProxy, _options, NullLogger<SessionHistory>.Instance);
         Compaction = new SessionCompaction(SessionRepository, HarnessRegistry, ActivityTracker, Activation, NullLogger<SessionCompaction>.Instance);
