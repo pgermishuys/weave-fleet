@@ -74,7 +74,7 @@ defineExpose({ panelWidth, isResizing, resizeBy });
 
 .context-panel :deep(.context-panel__eyebrow) {
   margin: 0;
-  font-size: 10px;
+  font-size: 0.7143rem;
   font-weight: 600;
   letter-spacing: 0.05em;
   text-transform: uppercase;
@@ -83,14 +83,14 @@ defineExpose({ panelWidth, isResizing, resizeBy });
 
 .context-panel :deep(.context-panel__title) {
   margin: 0;
-  font-size: 18px;
+  font-size: 1.286rem;
   font-weight: 600;
   color: var(--text);
 }
 
 .context-panel :deep(.context-panel__description) {
   margin: 0;
-  font-size: 13px;
+  font-size: 0.9286rem;
   line-height: 1.5;
   color: var(--muted);
 }

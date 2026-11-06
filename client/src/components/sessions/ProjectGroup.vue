@@ -843,14 +843,14 @@ async function handleDelete(mode: DeleteProjectMode): Promise<void> {
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
-  font-size: 12px;
+  font-size: 0.8571rem;
   font-weight: 600;
   line-height: 1.3;
 }
 
 .project-count {
   flex-shrink: 0;
-  font-size: 12px;
+  font-size: 0.8571rem;
   font-weight: 500;
   color: color-mix(in srgb, var(--muted) 70%, transparent);
   font-variant-numeric: tabular-nums;
@@ -956,7 +956,7 @@ async function handleDelete(mode: DeleteProjectMode): Promise<void> {
   border: 1.5px dashed color-mix(in srgb, var(--muted) 45%, transparent);
   border-radius: var(--radius-btn);
   color: var(--muted);
-  font-size: 12px;
+  font-size: 0.8571rem;
 }
 
 .pinned-empty svg {

@@ -179,7 +179,7 @@ const note = computed(() => {
 .machine-group__error,
 .machine-group__empty {
   margin: 2px 10px 4px 26px;
-  font-size: 11.5px;
+  font-size: 0.8214rem;
   line-height: 1.4;
   color: var(--muted);
 }

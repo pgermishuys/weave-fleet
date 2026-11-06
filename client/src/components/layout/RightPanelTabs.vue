@@ -78,7 +78,7 @@ function handleCollapse(): void {
   flex: 1;
   text-align: center;
   padding: 8px 0;
-  font-size: 10px;
+  font-size: 0.7143rem;
   font-weight: 500;
   color: var(--muted);
   cursor: pointer;
