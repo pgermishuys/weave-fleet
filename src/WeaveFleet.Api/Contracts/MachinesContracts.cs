@@ -9,6 +9,7 @@ namespace WeaveFleet.Api.Contracts;
 /// <param name="Status"><c>unknown</c>, <c>online</c>, <c>unreachable</c> or <c>unauthorized</c>, as this Fleet last saw it.</param>
 /// <param name="AgentsAllowed">Whether agents here may hand work to it, with "Hand work to other machines" on.</param>
 /// <param name="Diagnosis">Why this Fleet last couldn't reach it, while it can't; older clients ignore it.</param>
+/// <param name="Addresses">Every address it can be reached at, in the order this Fleet tries them; <c>BaseUrl</c> is the one in use. Empty before it has reported any.</param>
 public sealed record MachineEntryResponse(
     string Id,
     string Name,
@@ -21,14 +22,24 @@ public sealed record MachineEntryResponse(
     bool AgentsAllowed,
     string? SshDestination = null,
     bool? TunnelUp = null,
-    MachineDiagnosis? Diagnosis = null);
+    MachineDiagnosis? Diagnosis = null,
+    IReadOnlyList<MachineAddressEntry>? Addresses = null);
+
+/// <summary>One of a machine's addresses, in the order Fleet tries them.</summary>
+/// <param name="Url">Base URL without a trailing slash.</param>
+/// <param name="Kind"><c>tailnet</c> (its Tailscale name), <c>tailnet-ip</c>, <c>lan</c>, <c>hostname</c> or <c>other</c>.</param>
+/// <param name="Learned">The machine reported it; false for the address it was added with.</param>
+/// <param name="LastResult">What came of this Fleet's last try: <c>ok</c>, <c>no-answer</c> or <c>other-machine</c>; null before any.</param>
+/// <param name="LastTriedAt">When that was.</param>
+public sealed record MachineAddressEntry(string Url, string Kind, bool Learned, string? LastResult, DateTimeOffset? LastTriedAt);
 
 public sealed record MachineListResponse(IReadOnlyList<MachineEntryResponse> Machines);
 
 public sealed record AddMachineRequest(string? BaseUrl, string? Token);
 
 /// <param name="AgentsAllowed">Whether agents here may hand work to it; left out, it stays as it is.</param>
-public sealed record UpdateRemoteMachineRequest(string? BaseUrl, string? Token, string? Name, bool? AgentsAllowed = null);
+/// <param name="Addresses">Every one of the machine's addresses, in the order to try them. Turned away when the list changed since it was read.</param>
+public sealed record UpdateRemoteMachineRequest(string? BaseUrl, string? Token, string? Name, bool? AgentsAllowed = null, IReadOnlyList<string>? Addresses = null);
 
 /// <summary>One machine from a browser's own list (<c>localStorage["weave:machines"]</c>).</summary>
 public sealed record ImportMachineEntry(string? Id, string? Name, string? BaseUrl, string? Token, string? Os, DateTimeOffset? AddedAt);

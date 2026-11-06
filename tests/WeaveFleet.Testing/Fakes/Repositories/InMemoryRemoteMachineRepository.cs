@@ -37,6 +37,17 @@ public sealed class InMemoryRemoteMachineRepository : IRemoteMachineRepository
         }
     }
 
+    public Task UpdateAddressesAsync(string id, string baseUrl, IReadOnlyList<RemoteMachineAddress> addresses)
+    {
+        lock (_gate)
+        {
+            if (_machines.TryGetValue(id, out var machine))
+                _machines[id] = machine with { BaseUrl = baseUrl, Addresses = addresses };
+        }
+
+        return Task.CompletedTask;
+    }
+
     public Task UpdateStatusAsync(string id, string status, DateTimeOffset? lastSeenAt)
     {
         lock (_gate)

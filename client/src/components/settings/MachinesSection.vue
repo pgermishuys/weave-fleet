@@ -10,6 +10,8 @@ import MachineAddNote from "@/components/settings/MachineAddNote.vue";
 import MachineDiagnosisPanel from "@/components/settings/MachineDiagnosisPanel.vue";
 import MachineSetupCard from "@/components/settings/MachineSetupCard.vue";
 import MachineJobSeats from "@/components/settings/MachineJobSeats.vue";
+import MachineAddressList from "@/components/settings/MachineAddressList.vue";
+import { isTailscale, kindOf, type MachineAddress } from "@/lib/machine-routes";
 import { useJobsFeature } from "@/composables/use-jobs-feature";
 import DevicesList from "@/components/settings/DevicesList.vue";
 import { listDevices, type PairedDevice } from "@/lib/devices-api";
@@ -284,6 +286,34 @@ function readyHarnesses(entry: MachineEntry): MachineHarness[] {
 function harnessVersions(entry: MachineEntry): string | undefined {
   const versions = readyHarnesses(entry).map((harness) => harness.version ? `${harness.name} ${harness.version}` : harness.name);
   return versions.length ? versions.join(", ") : undefined;
+}
+
+// The route line and the address list are drawn by v-for over a list that is empty for most cards, not v-if: a false
+// v-if leaves a comment node, and a card without addresses must render exactly as it did.
+/** The addresses of a saved machine reached by URL; none for home or one reached over SSH. */
+function addressesOf(entry: MachineEntry): MachineAddress[] {
+  if (entry.isHome || entry.sshDestination || entry.connection?.sshDestination) return [];
+  return entry.connection?.addresses ?? [];
+}
+
+/** How this tab is connected, while the machine answers: from the kind of the address in use. */
+function routeLine(entry: MachineEntry): { text: string; note: string | null } | null {
+  const addresses = addressesOf(entry);
+  if (!addresses.length || stateLine(entry).tone !== "ok") return null;
+  const kind = kindOf(entry.baseUrl);
+  const text = isTailscale(kind) ? "Connected over Tailscale"
+    : kind === "lan" ? "Connected on your network"
+      : kind === "hostname" ? "Connected by host name"
+        : `Connected at ${entry.baseUrl}`;
+  const first = addresses[0];
+  // Only when Fleet fell back off Tailscale: on its IP after its name failed, Tailscale itself works.
+  const note = first.url !== entry.baseUrl && isTailscale(first.kind) && !isTailscale(kind) ? "Tailscale isn't answering" : null;
+  return { text, note };
+}
+
+function saveAddresses(entry: MachineEntry, urls: string[]): Promise<void> {
+  rowError[entry.key] = null;
+  return machines.reorderAddresses(entry.key, urls);
 }
 
 function location(entry: MachineEntry): string {
@@ -724,6 +754,28 @@ onUnmounted(() => stopPolling?.());
               :class="`machine-card__state--${stateLine(entry).tone}`"
               :data-testid="entry.tunnelUp === false ? 'machine-tunnel-down' : undefined"
             >{{ stateLine(entry).text }}</span>
+            <template
+              v-for="route in routeLine(entry) ? [routeLine(entry)!] : []"
+              :key="route.text"
+            >
+              <span
+                class="machine-card__state machine-card__state--ok"
+                data-testid="machine-route"
+              >{{ route.text }}<span
+                v-if="route.note"
+                class="machine-card__route-note"
+                data-testid="machine-route-note"
+              > · {{ route.note }}</span></span>
+            </template>
+            <MachineAddressList
+              v-for="list in addressesOf(entry).length ? [addressesOf(entry)] : []"
+              :key="list.length"
+              :name="entry.name"
+              :addresses="list"
+              :in-use="entry.baseUrl"
+              :save="(urls) => saveAddresses(entry, urls)"
+              @failed="rowError[entry.key] = $event"
+            />
             <span
               v-if="capabilityLine(entry)"
               class="machine-card__capabilities"
@@ -1090,6 +1142,10 @@ onUnmounted(() => stopPolling?.());
 .machine-card__state {
   font-family: var(--font-mono);
   font-size: 11.5px;
+  color: var(--muted);
+}
+
+.machine-card__route-note {
   color: var(--muted);
 }
 

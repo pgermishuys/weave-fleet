@@ -102,6 +102,73 @@ public sealed class MachinesEndpointTests : IClassFixture<MachinesEndpointTests.
     }
 
     [Fact]
+    public async Task Adding_a_machine_keeps_the_address_given_and_learns_the_ones_it_reports()
+    {
+        using var owner = Client(_hangar, Token(_hangar));
+
+        var body = await (await owner.PostAsJsonAsync("/api/machines", new { baseUrl = FalconUrl, token = Token(_falcon) })).ReadSuccessAsync();
+
+        var addresses = body.GetProperty("addresses").EnumerateArray().ToList();
+        var given = addresses.Single(a => a.GetProperty("url").GetString() == FalconUrl);
+        given.GetProperty("kind").GetString().ShouldBe("tailnet");
+        given.GetProperty("learned").GetBoolean().ShouldBeFalse();
+        // Falcon listens on 0.0.0.0, so it reports at least its host name.
+        addresses.Count(a => a.GetProperty("learned").GetBoolean()).ShouldBeGreaterThan(0);
+    }
+
+    [Fact]
+    public async Task The_owner_puts_a_machines_addresses_in_their_own_order_and_a_stale_order_is_refused()
+    {
+        using var owner = Client(_hangar, Token(_hangar));
+        var id = (await (await owner.PostAsJsonAsync("/api/machines", new { baseUrl = FalconUrl, token = Token(_falcon) })).ReadSuccessAsync()).GetProperty("id").GetString()!;
+        var routes = _hangar.Services.GetRequiredService<WeaveFleet.Domain.Repositories.IRemoteMachineRepository>();
+        await routes.UpdateAddressesAsync(id, FalconUrl,
+        [
+            new(FalconUrl, "tailnet", false),
+            new("http://100.88.14.3:2113", "tailnet-ip", true),
+            new("http://192.168.1.42:2113", "lan", true),
+        ]);
+
+        var reordered = await (await owner.PutAsJsonAsync($"/api/machines/{id}", new { addresses = new[] { "http://192.168.1.42:2113", FalconUrl, "http://100.88.14.3:2113" } })).ReadSuccessAsync();
+        reordered.GetProperty("addresses").EnumerateArray().Select(a => a.GetProperty("url").GetString())
+            .ShouldBe(["http://192.168.1.42:2113", FalconUrl, "http://100.88.14.3:2113"]);
+        reordered.GetProperty("baseUrl").GetString().ShouldBe(FalconUrl);
+
+        var stale = await owner.PutAsJsonAsync($"/api/machines/{id}", new { addresses = new[] { FalconUrl, "http://192.168.1.42:2113" } });
+        stale.StatusCode.ShouldBe(HttpStatusCode.BadRequest);
+    }
+
+    [Fact]
+    public async Task Anyone_can_ask_who_answers_at_an_address_but_nothing_else_without_the_token()
+    {
+        using var anonymous = _falcon.CreateClient(new WebApplicationFactoryClientOptions { AllowAutoRedirect = false, HandleCookies = false });
+
+        var probe = await anonymous.GetFromJsonAsync<JsonElement>("/api/machine/id");
+        probe.GetProperty("id").GetString().ShouldBe(Identity(_falcon).Id);
+        probe.GetProperty("apiVersion").GetInt32().ShouldBe(1);
+        probe.EnumerateObject().Select(p => p.Name).ShouldBe(["id", "apiVersion"], ignoreOrder: true);
+
+        (await anonymous.GetAsync("/api/machine")).StatusCode.ShouldBe(HttpStatusCode.Unauthorized);
+
+        // A page on another machine reads it too, before it sends the token there.
+        using var fromPage = new HttpRequestMessage(HttpMethod.Get, "/api/machine/id");
+        fromPage.Headers.Add("Origin", "http://hangar.tail9c2e.ts.net:2113");
+        using var answer = await anonymous.SendAsync(fromPage);
+        answer.Headers.GetValues("Access-Control-Allow-Origin").ShouldContain("http://hangar.tail9c2e.ts.net:2113");
+    }
+
+    [Fact]
+    public async Task A_machine_reports_where_it_can_be_reached()
+    {
+        using var owner = Client(_falcon, Token(_falcon));
+
+        var machine = await owner.GetFromJsonAsync<JsonElement>("/api/machine");
+
+        var urls = machine.GetProperty("addresses").EnumerateArray().Select(a => a.GetProperty("url").GetString()!).ToList();
+        urls.ShouldContain($"http://{Environment.MachineName.ToLowerInvariant()}:{_falcon.Services.GetRequiredService<FleetOptions>().Port}");
+    }
+
+    [Fact]
     public async Task A_machine_reached_by_address_has_no_ssh_fields()
     {
         var falcon = _falcon;

@@ -331,6 +331,7 @@ internal sealed record ErrorResponse(string Error);
 [JsonSerializable(typeof(AuthStatusResponse))]
 // Machine
 [JsonSerializable(typeof(MachineResponse))]
+[JsonSerializable(typeof(MachineIdResponse))]
 [JsonSerializable(typeof(MachineUpdate))]
 [JsonSerializable(typeof(WeaveFleet.Infrastructure.Updates.RolloutRun))]
 [JsonSerializable(typeof(RolloutRequest))]
@@ -367,6 +368,7 @@ internal sealed record ErrorResponse(string Error);
 [JsonSerializable(typeof(WeaveFleet.Api.Contracts.PeerSessionPageResponse))]
 // Machines (server-side list)
 [JsonSerializable(typeof(WeaveFleet.Api.Contracts.MachineEntryResponse))]
+[JsonSerializable(typeof(WeaveFleet.Api.Contracts.MachineAddressEntry))]
 [JsonSerializable(typeof(WeaveFleet.Api.Contracts.MachineCandidateListResponse))]
 [JsonSerializable(typeof(WeaveFleet.Api.Contracts.SshProbeResponse))]
 [JsonSerializable(typeof(WeaveFleet.Api.Contracts.SetupJobResponse))]

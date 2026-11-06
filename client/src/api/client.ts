@@ -5,7 +5,8 @@ import type { ScheduledRetry } from "@/lib/turn-retry";
 import type { SessionInterruption } from "@/lib/session-interruption";
 import type { SessionFailure } from "@/lib/session-failure";
 import { apiUrlOn, setApiBase } from "@/lib/api-client";
-import { getActiveMachine, machineRequestInit, type MachineConnection } from "@/lib/machines";
+import { getActiveMachine, isRead, machineRequestInit, type MachineConnection } from "@/lib/machines";
+import { baseUrlOf, repickAddress } from "@/lib/machine-routes";
 
 /**
  * Typed API client for Weave Fleet API
@@ -98,7 +99,17 @@ function createApiClient(machineOf: () => MachineConnection | null) {
       }
     }
 
-    return fetch(input, machineRequestInit(machine, { ...init, headers }));
+    const requestInit = machineRequestInit(machine, { ...init, headers });
+    if (!machine || !isRead(method)) return fetch(input, requestInit);
+    // A read that can't reach the machine goes again once another of its addresses answers.
+    const before = baseUrlOf(machine);
+    return fetch(input, requestInit).catch(async (error: unknown) => {
+      if (!(await repickAddress(machine))) throw error;
+      const moved = (url: string) => url.startsWith(before) ? baseUrlOf(machine) + url.slice(before.length) : url;
+      return input instanceof Request
+        ? fetch(new Request(moved(input.url), input), requestInit)
+        : fetch(moved(typeof input === "string" ? input : input.toString()), requestInit);
+    });
   };
 
   return createClient<paths>({

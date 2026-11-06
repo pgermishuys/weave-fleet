@@ -148,7 +148,7 @@ rd /s /q "%ROOT_DIR%" >nul 2>&1 & echo Done. & exit /b 0
 call :read_version
 echo Fleet v!VERSION!
 echo.
-echo Usage: fleet [command] [--port ^<port^>] [--host ^<host^>] [--data-dir ^<path^>] [--profile ^<name^>] [--require-token]
+echo Usage: fleet [command] [--port ^<port^>] [--host ^<host^>] [--data-dir ^<path^>] [--profile ^<name^>] [--require-token] [--private-networks]
 echo.
 echo Commands:
 echo   (none)       Start the Fleet server
@@ -165,6 +165,7 @@ echo   --host ^<host^>       Override the bind host
 echo   --data-dir ^<path^>   Override the data directory (default: %%USERPROFILE%%\.weave)
 echo   --profile ^<name^>    Use a profile-specific data directory
 echo   --require-token     Ask for the access token even over loopback ^(behind tailscale serve^)
+echo   --private-networks  Answer only on loopback, private and Tailscale addresses, never a public one
 echo.
 echo Environment variables:
 echo   WEAVE_FLEET_PORT                Server port ^(default: 6262^)
@@ -202,7 +203,8 @@ echo   --port ^<port^>       Override the server port
 echo   --host ^<host^>       Override the bind host ^(0.0.0.0 lets other machines connect^)
 echo   --data-dir ^<path^>   Override the data directory (default: %%USERPROFILE%%\.weave)
 echo   --profile ^<name^>    Use a profile-specific data directory
-echo   --tailscale         With up: listen on this machine's Tailscale address
+echo   --private-networks  Answer only on loopback, private and Tailscale addresses, never a public one
+echo   --tailscale         With up: listen on Tailscale and your local network, never on a public address
 echo   --lan               With up: listen on every network this machine is on
 echo   --ssh-only          With up: listen on this machine only; other machines connect over SSH
 echo   --yes               With up: don't ask. Uses the choice above, else what is set up, else Tailscale when it's up, else --ssh-only
@@ -215,6 +217,7 @@ set "HOST_OVERRIDE="
 set "DATA_DIR_OVERRIDE="
 set "PROFILE_NAME="
 set "REQUIRE_TOKEN="
+set "PRIVATE_NETWORKS="
 set "NODE="
 set "SERVICE_ACTION="
 set "NODE_PAIR="
@@ -302,6 +305,12 @@ if /i "%~1"=="--profile" (
 
 if /i "%~1"=="--require-token" (
     set "REQUIRE_TOKEN=1"
+    shift
+    goto :parse_args_loop
+)
+
+if /i "%~1"=="--private-networks" (
+    set "PRIVATE_NETWORKS=1"
     shift
     goto :parse_args_loop
 )
@@ -466,6 +475,7 @@ if not defined Fleet__DatabasePath set "Fleet__DatabasePath=%DB_PATH_DEFAULT%"
 if not defined Fleet__AnalyticsDatabasePath set "Fleet__AnalyticsDatabasePath=%ANALYTICS_DB_PATH_DEFAULT%"
 if not defined Fleet__DataProtection__KeyPath set "Fleet__DataProtection__KeyPath=%KEY_DIR_DEFAULT%"
 if defined REQUIRE_TOKEN set "Fleet__Auth__RequireToken=true"
+if defined PRIVATE_NETWORKS set "Fleet__PrivateNetworksOnly=true"
 
 if defined NODE_UP goto :do_node_up
 
@@ -499,6 +509,7 @@ if not defined FLEET_UPDATE_TRIAL_SECONDS set "FLEET_UPDATE_TRIAL_SECONDS=120"
 set "RESTART_ARGS=--port %WEAVE_FLEET_PORT% --host %WEAVE_FLEET_HOST% --data-dir "%DATA_DIR%""
 if defined NODE set "RESTART_ARGS=node !RESTART_ARGS!"
 if defined REQUIRE_TOKEN set "RESTART_ARGS=!RESTART_ARGS! --require-token"
+if defined PRIVATE_NETWORKS set "RESTART_ARGS=!RESTART_ARGS! --private-networks"
 set "APP_ARGS=--urls "%LISTEN_URL%" --contentRoot "%APP_CONTENT_ROOT%" !EXTRA_ARGS!"
 if exist "%ROOT_DIR%\update-trial.json" (
     call :run_on_trial
@@ -568,6 +579,8 @@ set "FLEET_SVC_LAUNCHER=%LAUNCHER_PATH%"
 set "FLEET_SVC_PORT=%WEAVE_FLEET_PORT%"
 set "FLEET_SVC_HOST=%WEAVE_FLEET_HOST%"
 set "FLEET_SVC_DATA_DIR=%DATA_DIR%"
+set "FLEET_SVC_PRIVATE="
+if defined PRIVATE_NETWORKS set "FLEET_SVC_PRIVATE=1"
 %PS_CMD% -NoProfile -ExecutionPolicy Bypass -Command ^
   "$ErrorActionPreference = 'Stop';" ^
   "$name = 'Fleet node';" ^
@@ -583,6 +596,7 @@ set "FLEET_SVC_DATA_DIR=%DATA_DIR%"
   "$dq = [char]34; $nl = [char]10;" ^
   "$quote = { param($s) '''' + ($s -replace '''', '''''') + '''' };" ^
   "$run = '& ' + (& $quote $env:FLEET_SVC_LAUNCHER) + ' node --port ' + (& $quote $env:FLEET_SVC_PORT) + ' --host ' + (& $quote $env:FLEET_SVC_HOST) + ' --data-dir ' + (& $quote $env:FLEET_SVC_DATA_DIR);" ^
+  "if ($env:FLEET_SVC_PRIVATE -eq '1') { $run = $run + ' --private-networks' };" ^
   "$loop = 'while ($true) { ' + $run + '; if ($LASTEXITCODE -eq 75) { break }; Start-Sleep -Seconds 5 }';" ^
   "$arguments = '-NoProfile -ExecutionPolicy Bypass -WindowStyle Hidden -Command ' + $dq + $loop + $dq;" ^
   "$user = [System.Security.Principal.WindowsIdentity]::GetCurrent().Name;" ^
@@ -664,15 +678,23 @@ set "TS_IP="
 where tailscale >nul 2>&1 && for /f "delims=" %%A in ('tailscale ip -4 2^>nul') do if not defined TS_IP set "TS_IP=%%A"
 set "CURRENT_HOST="
 for /f "usebackq delims=" %%H in (`%PS_CMD% -NoProfile -Command "$t = Get-ScheduledTask -TaskName 'Fleet node' -ErrorAction SilentlyContinue; if ($t -and $t.Actions[0].Arguments -match '--host ''([^'']*)''') { $Matches[1] }"`) do set "CURRENT_HOST=%%H"
+set "CURRENT_PRIVATE="
+for /f "usebackq delims=" %%H in (`%PS_CMD% -NoProfile -Command "$t = Get-ScheduledTask -TaskName 'Fleet node' -ErrorAction SilentlyContinue; if ($t -and $t.Actions[0].Arguments -match '--private-networks') { 'yes' }"`) do set "CURRENT_PRIVATE=%%H"
 if not defined CURRENT_HOST if exist "%DATA_DIR%\fleet.instance.json" (
     echo Error: %DATA_DIR% belongs to the Fleet you open in a browser. Run fleet node up --profile node to give this machine its own. >&2
     exit /b 1
 )
+rem What is installed: Tailscale is 0.0.0.0 with --private-networks, or the Tailscale address an older install listens on.
+set "CURRENT_CHOICE="
+if "!CURRENT_HOST!"=="0.0.0.0" (
+    if defined CURRENT_PRIVATE (set "CURRENT_CHOICE=tailscale") else (set "CURRENT_CHOICE=lan")
+)
+if "!CURRENT_HOST!"=="127.0.0.1" set "CURRENT_CHOICE=ssh-only"
+if defined TS_IP if "!CURRENT_HOST!"=="!TS_IP!" set "CURRENT_CHOICE=tailscale"
+if "!CURRENT_HOST:~0,4!"=="100." set "CURRENT_CHOICE=tailscale"
 set "RECOMMENDED=ssh-only"
 if defined TS_IP set "RECOMMENDED=tailscale"
-if "!CURRENT_HOST!"=="0.0.0.0" set "RECOMMENDED=lan"
-if "!CURRENT_HOST!"=="127.0.0.1" set "RECOMMENDED=ssh-only"
-if defined TS_IP if "!CURRENT_HOST!"=="!TS_IP!" set "RECOMMENDED=tailscale"
+if defined CURRENT_CHOICE set "RECOMMENDED=!CURRENT_CHOICE!"
 if not defined UP_CHOICE if defined ASSUME_YES set "UP_CHOICE=!RECOMMENDED!"
 if not defined UP_CHOICE (
     set "MARK_TS="
@@ -680,11 +702,11 @@ if not defined UP_CHOICE (
     set "MARK_SSH="
     rem "(current)" marks what is installed; "(recommended)" Tailscale on a machine with nothing installed yet.
     if defined TS_IP if not defined CURRENT_HOST set "MARK_TS=  (recommended)"
-    if "!CURRENT_HOST!"=="0.0.0.0" set "MARK_LAN=  (current)"
-    if "!CURRENT_HOST!"=="127.0.0.1" set "MARK_SSH=  (current)"
-    if defined TS_IP if "!CURRENT_HOST!"=="!TS_IP!" set "MARK_TS=  (current)"
+    if "!CURRENT_CHOICE!"=="lan" set "MARK_LAN=  (current)"
+    if "!CURRENT_CHOICE!"=="ssh-only" set "MARK_SSH=  (current)"
+    if "!CURRENT_CHOICE!"=="tailscale" set "MARK_TS=  (current)"
     echo How should your other machines reach this one?
-    echo   1^) Tailscale        only your devices can reach it!MARK_TS!
+    echo   1^) Tailscale        falls back to your local network; only your devices can reach it!MARK_TS!
     echo   2^) Local network    anyone on it can try a code!MARK_LAN!
     echo   3^) Only over SSH    listens on this machine only!MARK_SSH!
     set "UP_DEFAULT=1"
@@ -707,12 +729,16 @@ if "!UP_CHOICE!"=="tailscale" (
         echo Error: Tailscale isn't signed in. Run tailscale up, then fleet node up again. >&2
         exit /b 1
     )
-    set "UP_HOST=!TS_IP!"
+    rem Tailscale first, the local network when it's down; the server turns away public addresses.
+    set "UP_HOST=0.0.0.0"
+    set "PRIVATE_NETWORKS=1"
 ) else if "!UP_CHOICE!"=="lan" (
     set "UP_HOST=0.0.0.0"
 ) else (
     set "UP_HOST=127.0.0.1"
 )
+set "UP_PRIVATE_ARG="
+if defined PRIVATE_NETWORKS set "UP_PRIVATE_ARG=--private-networks"
 set "WEAVE_FLEET_HOST=!UP_HOST!"
 set "LISTEN_URL=http://!UP_HOST!:%WEAVE_FLEET_PORT%"
 set "ASPNETCORE_URLS=!LISTEN_URL!"
@@ -722,16 +748,22 @@ for %%I in ("%DATA_DIR%") do set "DATA_DIR=%%~fI"
 set "LINK_FILE=%TEMP%\fleet-node-link-%RANDOM%.txt"
 
 set "UP_RUNNING="
-if "!CURRENT_HOST!"=="!UP_HOST!" (
+set "UP_WANT_PRIVATE="
+if defined PRIVATE_NETWORKS set "UP_WANT_PRIVATE=yes"
+if "!CURRENT_HOST!"=="!UP_HOST!" if "!CURRENT_PRIVATE!"=="!UP_WANT_PRIVATE!" (
     "%APP_BIN%" --node-pair --urls "!LISTEN_URL!" --contentRoot "%APP_CONTENT_ROOT%" >"%LINK_FILE%" 2>nul && set "UP_RUNNING=1"
 )
 if defined UP_RUNNING (
     call :up_step "Already running on !UP_HOST!:%WEAVE_FLEET_PORT%"
     goto :up_answered
 )
-call "%LAUNCHER_PATH%" node install-service --port %WEAVE_FLEET_PORT% --host !UP_HOST! --data-dir "%DATA_DIR%" >nul
+call "%LAUNCHER_PATH%" node install-service --port %WEAVE_FLEET_PORT% --host !UP_HOST! --data-dir "%DATA_DIR%" !UP_PRIVATE_ARG! >nul
 if errorlevel 1 exit /b 1
-call :up_step "Listening on !UP_HOST!:%WEAVE_FLEET_PORT%"
+if "!UP_CHOICE!"=="tailscale" (
+    call :up_step "Listening on Tailscale (!TS_IP!) and your local network, port %WEAVE_FLEET_PORT%"
+) else (
+    call :up_step "Listening on !UP_HOST!:%WEAVE_FLEET_PORT%"
+)
 call :up_step "Runs in the background, starts at log on"
 set /a UP_ATTEMPTS=0
 :up_wait

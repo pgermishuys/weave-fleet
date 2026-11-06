@@ -18,6 +18,10 @@ namespace WeaveFleet.Api.Auth;
 /// any origin when that list includes <c>Authorization</c>; the real request then either presents a valid token
 /// or gets a 401. Credentials (cookies) are never allowed cross-origin.
 /// </para>
+/// <para>
+/// <c>GET /api/machine/id</c> is readable by any origin without a token: it only says which machine answers, and a
+/// page checks that before it sends the token to another of the machine's addresses.
+/// </para>
 /// </summary>
 public sealed class MachineCorsPolicyProvider(IOptions<CorsOptions> options) : ICorsPolicyProvider
 {
@@ -32,11 +36,14 @@ public sealed class MachineCorsPolicyProvider(IOptions<CorsOptions> options) : I
 
     public Task<CorsPolicy?> GetPolicyAsync(HttpContext context, string? policyName)
     {
-        if (policyName is null && (BearerTokenHandler.PresentsToken(context.Request) || IsTokenPreflight(context.Request)))
+        if (policyName is null && (BearerTokenHandler.PresentsToken(context.Request) || IsTokenPreflight(context.Request) || IsIdProbe(context.Request)))
             return Task.FromResult<CorsPolicy?>(TokenPolicy);
 
         return _configured.GetPolicyAsync(context, policyName);
     }
+
+    private static bool IsIdProbe(HttpRequest request)
+        => HttpMethods.IsGet(request.Method) && request.Path.Equals("/api/machine/id", StringComparison.OrdinalIgnoreCase);
 
     private static bool IsTokenPreflight(HttpRequest request)
     {

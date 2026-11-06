@@ -89,6 +89,8 @@ public sealed class RemoteMachineService(
             Status = RemoteMachineStatuses.Online,
             AgentsAllowed = existing?.AgentsAllowed ?? false,
             SshDestination = sshDestination,
+            // Over SSH the tunnel is the way in; otherwise the address given, and the ones the machine reports.
+            Addresses = sshDestination is null ? MachineAddresses.Learn(existing?.Addresses ?? [], info.Addresses ?? [], normalized) : [],
         };
         await machines.UpsertAsync(machine);
         Changed?.Invoke(machine.Id);
@@ -247,6 +249,14 @@ public sealed class RemoteMachineService(
                 // A new address isn't the tunnel's any more.
                 SshDestination = string.Equals(normalized, current.BaseUrl, StringComparison.OrdinalIgnoreCase) ? current.SshDestination : null,
             };
+            // A new address starts the list again from what the machine says there.
+            if (next.SshDestination is null)
+                next = next with
+                {
+                    Addresses = string.Equals(normalized, current.BaseUrl, StringComparison.OrdinalIgnoreCase)
+                        ? MachineAddresses.Learn(current.Addresses, info.Addresses ?? [], normalized)
+                        : MachineAddresses.Learn([], info.Addresses ?? [], normalized),
+                };
         }
 
         if (!string.IsNullOrWhiteSpace(name))
@@ -284,6 +294,8 @@ public sealed class RemoteMachineService(
                 Status = existing?.Status ?? RemoteMachineStatuses.Unknown,
                 AgentsAllowed = existing?.AgentsAllowed ?? false,
                 SshDestination = existing?.SshDestination,
+                // A browser only knows one address; the ones the machine reported stay, with the browser's among them.
+                Addresses = existing is { SshDestination: null } ? MachineAddresses.Include(existing.Addresses, normalized) : [],
             });
             Changed?.Invoke(entry.Id);
         }
@@ -386,13 +398,25 @@ public sealed class RemoteMachineService(
                 return (new RemoteMachineInfo(
                     id,
                     root.TryGetProperty("name", out var name) ? name.GetString() ?? id : id,
-                    root.TryGetProperty("os", out var os) ? os.GetString() : null), null);
+                    root.TryGetProperty("os", out var os) ? os.GetString() : null,
+                    ReadAddresses(root)), null);
             }
             catch (Exception ex) when (ex is JsonException or KeyNotFoundException or InvalidOperationException)
             {
                 return (null, MachineDiagnoses.NotAFleet(baseUrl, machineName));
             }
         }
+    }
+
+    // Where the machine says it can be reached now; null from a Fleet that doesn't say (older, or loopback only).
+    private static List<string>? ReadAddresses(JsonElement root)
+    {
+        if (!root.TryGetProperty("addresses", out var addresses) || addresses.ValueKind != JsonValueKind.Array)
+            return null;
+        return addresses.EnumerateArray()
+            .Select(address => address.ValueKind == JsonValueKind.Object && address.TryGetProperty("url", out var url) ? url.GetString() : null)
+            .OfType<string>()
+            .ToList();
     }
 
     /// <summary>An absolute http(s) URL as scheme, host, port and path, without a trailing slash; null otherwise.</summary>
@@ -412,8 +436,8 @@ public sealed class RemoteMachineService(
     }
 }
 
-/// <summary>Who a machine says it is.</summary>
-public sealed record RemoteMachineInfo(string Id, string Name, string? Os);
+/// <summary>Who a machine says it is, and where it says it can be reached (null when it doesn't say).</summary>
+public sealed record RemoteMachineInfo(string Id, string Name, string? Os, IReadOnlyList<string>? Addresses = null);
 
 /// <summary>A machine from a browser's own list (<c>weave:machines</c>), as it kept it.</summary>
 public sealed record ImportedMachine(string Id, string? Name, string BaseUrl, string Token, string? Os, DateTimeOffset? AddedAt);

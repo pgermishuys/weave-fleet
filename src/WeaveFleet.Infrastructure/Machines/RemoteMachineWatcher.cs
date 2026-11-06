@@ -30,7 +30,8 @@ public sealed partial class RemoteMachineWatcher(
     ILoggerFactory loggerFactory,
     DeviceGrantService? grants = null,
     RemoteSessionTurns? turns = null,
-    TimeProvider? time = null) : IHostedService, IAsyncDisposable, IRemoteSessionEvents
+    TimeProvider? time = null,
+    MachineRoutes? routes = null) : IHostedService, IAsyncDisposable, IRemoteSessionEvents
 {
     private readonly ILogger _logger = loggerFactory.CreateLogger<RemoteMachineWatcher>();
     private readonly ConcurrentDictionary<string, RemoteMachineConnection> _connections = new(StringComparer.Ordinal);
@@ -168,7 +169,8 @@ public sealed partial class RemoteMachineWatcher(
                 Handler,
                 () => FollowedOn(machine.Id),
                 (sessionId, domainEvent) => OnSessionEventAsync(machine.Id, sessionId, domainEvent),
-                sessionId => OnFollowingAsync(machine.Id, sessionId));
+                sessionId => OnFollowingAsync(machine.Id, sessionId),
+                routes);
             if (!_connections.TryAdd(machine.Id, connection))
             {
                 await connection.DisposeAsync();

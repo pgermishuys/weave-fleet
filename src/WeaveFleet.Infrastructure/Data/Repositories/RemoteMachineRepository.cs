@@ -1,15 +1,16 @@
 using System.Data.Common;
 using System.Globalization;
+using System.Text.Json;
 using WeaveFleet.Application.Data;
 using WeaveFleet.Domain.Entities;
 using WeaveFleet.Domain.Repositories;
 
 namespace WeaveFleet.Infrastructure.Data.Repositories;
 
-/// <summary>The <c>machines</c> and <c>device_grants</c> tables (migration 053).</summary>
+/// <summary>The <c>machines</c> and <c>device_grants</c> tables (migration 053; addresses in 071).</summary>
 public sealed class RemoteMachineRepository(IDbConnectionFactory connectionFactory) : IRemoteMachineRepository
 {
-    private const string MachineColumns = "id, name, base_url, encrypted_token, os, added_at, last_seen_at, status, agents_allowed, ssh_destination";
+    private const string MachineColumns = "id, name, base_url, encrypted_token, os, added_at, last_seen_at, status, agents_allowed, ssh_destination, addresses";
     private const string GrantColumns = "device_id, machine_id, remote_device_id, created_at, revoked_at";
 
     public async Task<IReadOnlyList<RemoteMachine>> ListAsync()
@@ -29,8 +30,8 @@ public sealed class RemoteMachineRepository(IDbConnectionFactory connectionFacto
         using var conn = connectionFactory.CreateConnection();
         await conn.ExecuteNonQueryAsync(
             """
-            INSERT INTO machines (id, name, base_url, encrypted_token, os, added_at, last_seen_at, status, agents_allowed, ssh_destination)
-            VALUES (@Id, @Name, @BaseUrl, @Token, @Os, @AddedAt, @LastSeenAt, @Status, @AgentsAllowed, @SshDestination)
+            INSERT INTO machines (id, name, base_url, encrypted_token, os, added_at, last_seen_at, status, agents_allowed, ssh_destination, addresses)
+            VALUES (@Id, @Name, @BaseUrl, @Token, @Os, @AddedAt, @LastSeenAt, @Status, @AgentsAllowed, @SshDestination, @Addresses)
             ON CONFLICT (id) DO UPDATE SET
               name = excluded.name,
               base_url = excluded.base_url,
@@ -39,7 +40,8 @@ public sealed class RemoteMachineRepository(IDbConnectionFactory connectionFacto
               last_seen_at = COALESCE(excluded.last_seen_at, machines.last_seen_at),
               status = excluded.status,
               agents_allowed = excluded.agents_allowed,
-              ssh_destination = excluded.ssh_destination
+              ssh_destination = excluded.ssh_destination,
+              addresses = excluded.addresses
             """,
             cmd =>
             {
@@ -53,6 +55,20 @@ public sealed class RemoteMachineRepository(IDbConnectionFactory connectionFacto
                 cmd.AddParameter("Status", machine.Status);
                 cmd.AddParameter("AgentsAllowed", machine.AgentsAllowed ? 1 : 0);
                 cmd.AddParameter("SshDestination", machine.SshDestination);
+                cmd.AddParameter("Addresses", WriteAddresses(machine.Addresses));
+            });
+    }
+
+    public async Task UpdateAddressesAsync(string id, string baseUrl, IReadOnlyList<RemoteMachineAddress> addresses)
+    {
+        using var conn = connectionFactory.CreateConnection();
+        await conn.ExecuteNonQueryAsync(
+            "UPDATE machines SET base_url = @BaseUrl, addresses = @Addresses WHERE id = @Id",
+            cmd =>
+            {
+                cmd.AddParameter("Id", id);
+                cmd.AddParameter("BaseUrl", baseUrl);
+                cmd.AddParameter("Addresses", WriteAddresses(addresses));
             });
     }
 
@@ -176,7 +192,62 @@ public sealed class RemoteMachineRepository(IDbConnectionFactory connectionFacto
         Status = r.GetString(r.GetOrdinal("status")),
         AgentsAllowed = r.GetInt64(r.GetOrdinal("agents_allowed")) != 0,
         SshDestination = r.GetNullableString(r.GetOrdinal("ssh_destination")),
+        Addresses = ReadAddresses(r.GetNullableString(r.GetOrdinal("addresses"))),
     };
+
+    // Written by hand, like the rest of this table, so the column's shape is plain to read here.
+    private static string? WriteAddresses(IReadOnlyList<RemoteMachineAddress> addresses)
+    {
+        if (addresses.Count == 0)
+            return null;
+        using var stream = new MemoryStream();
+        using (var writer = new Utf8JsonWriter(stream))
+        {
+            writer.WriteStartArray();
+            foreach (var address in addresses)
+            {
+                writer.WriteStartObject();
+                writer.WriteString("url", address.Url);
+                writer.WriteString("kind", address.Kind);
+                writer.WriteBoolean("learned", address.Learned);
+                if (address.LastResult is { } result)
+                    writer.WriteString("lastResult", result);
+                if (address.LastTriedAt is { } at)
+                    writer.WriteString("lastTriedAt", Format(at));
+                writer.WriteEndObject();
+            }
+            writer.WriteEndArray();
+        }
+
+        return System.Text.Encoding.UTF8.GetString(stream.ToArray());
+    }
+
+    private static List<RemoteMachineAddress> ReadAddresses(string? json)
+    {
+        if (string.IsNullOrEmpty(json))
+            return [];
+        try
+        {
+            using var document = JsonDocument.Parse(json);
+            var list = new List<RemoteMachineAddress>();
+            foreach (var element in document.RootElement.EnumerateArray())
+            {
+                if (!element.TryGetProperty("url", out var url) || url.GetString() is not { Length: > 0 } value)
+                    continue;
+                list.Add(new RemoteMachineAddress(
+                    value,
+                    element.TryGetProperty("kind", out var kind) ? kind.GetString() ?? "other" : "other",
+                    element.TryGetProperty("learned", out var learned) && learned.ValueKind == JsonValueKind.True,
+                    element.TryGetProperty("lastResult", out var result) ? result.GetString() : null,
+                    element.TryGetProperty("lastTriedAt", out var at) && at.GetString() is { } text ? Parse(text) : null));
+            }
+            return list;
+        }
+        catch (Exception ex) when (ex is JsonException or InvalidOperationException or FormatException)
+        {
+            return [];
+        }
+    }
 
     private static DeviceGrant ReadGrant(DbDataReader r) => new()
     {

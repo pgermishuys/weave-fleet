@@ -5,6 +5,7 @@ import { liveTarget, type MachineTarget } from "@/lib/machine-target"
 import type { DomainEvent } from "@/lib/domain-events"
 import type { FeedHub } from "@/lib/machine-feed"
 import type { SessionHistoryPage, SessionSnapshot } from "@/lib/session-snapshot"
+import { betterAddress, hasChoices, isBestAddress, pickAddress, RECHECK_MS, useAddress } from "@/lib/machine-routes"
 
 /**
  * Live events, one hub connection per machine. Every call names the machine it's about (a `MachineTarget`): code
@@ -217,8 +218,12 @@ class MachineHub {
 
   /** Opens the connection, or waits for the one already opening. */
   connect(): Promise<void> {
+    // Opening may still be picking the machine's address, before there is a connection to see.
+    if (this.opening !== null) {
+      return this.opening
+    }
     if (this.connection !== null) {
-      return this.opening ?? Promise.resolve()
+      return Promise.resolve()
     }
 
     if (suspendConnectionsForTesting) {
@@ -231,27 +236,37 @@ class MachineHub {
     return this.opening
   }
 
-  private async open(): Promise<void> {
-    // Home takes the cookie; another machine takes its token in place of it. SignalR sends the token as a header
-    // where it can and as access_token on the WebSocket, where a browser can't.
+  /**
+   * A connection to the machine, its events going to this hub's listeners while it's the one in use. Home takes the
+   * cookie; another machine takes its token in place of it. SignalR sends the token as a header where it can and as
+   * access_token on the WebSocket, where a browser can't.
+   */
+  private build(address?: string): HubConnection {
     const machine = this.machine.connection
+    // At `address` when given, without making it the address in use yet: requests keep going where they work.
+    const at = machine && address ? { ...machine, baseUrl: address, addresses: null } : machine
     const hubConnection = new HubConnectionBuilder()
       .withUrl(
-        apiUrlOn(machine, HUB_PATH),
+        apiUrlOn(at, HUB_PATH),
         machine ? { accessTokenFactory: () => machine.token, withCredentials: false } : {},
       )
       .withAutomaticReconnect([1000, 2000, 5000, 10000])
       .build()
 
-    this.connection = hubConnection
+    // A connection left behind by a move to a better address says nothing more: its replacement speaks for the hub.
+    const current = () => this.connection === hubConnection
 
-    // Register event handler for incoming events
-    hubConnection.on("Event", (topic: string, eventId: number | null, data: unknown) => this.handleHubEvent(topic, eventId, data))
+    hubConnection.on("Event", (topic: string, eventId: number | null, data: unknown) => {
+      if (current()) this.handleHubEvent(topic, eventId, data)
+    })
 
-    hubConnection.onreconnecting(() => this.notifyConnectionLost())
+    hubConnection.onreconnecting(() => {
+      if (current()) this.notifyConnectionLost()
+    })
 
     // Handle reconnection
     hubConnection.onreconnected(async () => {
+      if (!current()) return
       await this.resubscribeAll()
 
       // Re-subscribe to global topics
@@ -262,16 +277,27 @@ class MachineHub {
 
     // Handle disconnection
     hubConnection.onclose(() => {
-      if (this.connection === hubConnection) {
-        this.connection = null
-      }
+      if (!current()) return
+      this.connection = null
 
       this.notifyDisconnected()
       this.notifyConnectionLost()
       // SignalR has given up (or the connection dropped for good). Without this the app stayed
-      // deaf, showing every session as it last was, until a reload.
+      // deaf, showing every session as it last was, until a reload. The next connect picks the address again.
       this.scheduleReconnect()
     })
+
+    return hubConnection
+  }
+
+  private async open(): Promise<void> {
+    // A machine with several addresses starts on the one that answers as itself (see machine-routes).
+    const machine = this.machine.connection
+    if (machine && hasChoices(machine)) await pickAddress(machine)
+    if (!this.wantsConnection()) return
+
+    const hubConnection = this.build()
+    this.connection = hubConnection
 
     try {
       await hubConnection.start()
@@ -280,12 +306,62 @@ class MachineHub {
       // Subscribe to global topics (e.g., "sessions" for activity_status events)
       await this.subscribeToGlobalTopics()
       this.reconnectAttempt = 0
+      this.watchForBetterAddress()
     } catch (error) {
       console.error("Failed to start SignalR connection:", error)
       if (this.connection === hubConnection) {
         this.connection = null
       }
       this.scheduleReconnect()
+    }
+  }
+
+  private betterTimer: ReturnType<typeof setInterval> | null = null
+  private moving = false
+
+  /** While on a lower address, look for a better one every minute (and when back online or on the tab). */
+  private watchForBetterAddress(): void {
+    const machine = this.machine.connection
+    if (this.betterTimer !== null || !machine || !hasChoices(machine)) return
+    this.betterTimer = setInterval(() => void this.tryBetterAddress(), RECHECK_MS)
+  }
+
+  /**
+   * Moves the connection to a better address that answers again. The new connection is opened and subscribed to
+   * the sessions topic first; only then does it become the one in use, listeners get fresh snapshots through it,
+   * and the old one closes. A better address that answers but won't hold a connection is left alone, so a healthy
+   * connection is never dropped for one that doesn't work.
+   */
+  async tryBetterAddress(): Promise<void> {
+    const machine = this.machine.connection
+    const old = this.connection
+    if (!machine || this.moving || !old || !this.isConnected() || isBestAddress(machine)) return
+    this.moving = true
+    let next: HubConnection | null = null
+    try {
+      const better = await betterAddress(machine)
+      if (!better || this.connection !== old || !this.isConnected()) return
+
+      next = this.build(better)
+      await next.start()
+      await next.invoke("SubscribeToSessionsTopicAsync")
+      if (this.connection !== old || !this.isConnected()) {
+        await next.stop()
+        return
+      }
+
+      // It holds: from here its events count and the old one's don't. Listeners get fresh snapshots through it.
+      this.connection = next
+      next = null
+      useAddress(machine.id, better)
+      await this.resubscribeAll()
+      this.notifyReconnected()
+      await old.stop().catch(() => {})
+    } catch (error) {
+      console.warn("Stayed on the address in use; the better one didn't hold a connection:", error)
+      await next?.stop().catch(() => {})
+    } finally {
+      this.moving = false
     }
   }
 
@@ -350,6 +426,10 @@ class MachineHub {
 
   async disconnect(): Promise<void> {
     this.cancelReconnect()
+    if (this.betterTimer !== null) {
+      clearInterval(this.betterTimer)
+      this.betterTimer = null
+    }
     this.reconnectAttempt = 0
     if (this.connection !== null) {
       try {
@@ -539,7 +619,11 @@ if (import.meta.hot) {
 
 if (typeof window !== "undefined") {
   const reconnectIfClosed = () => {
-    for (const hub of hubs.values()) hub.reconnectIfClosed()
+    for (const hub of hubs.values()) {
+      hub.reconnectIfClosed()
+      // The network changed or the tab is back: a better address may answer again.
+      if (document.visibilityState !== "hidden") void hub.tryBetterAddress()
+    }
   }
   window.addEventListener("online", reconnectIfClosed)
   document.addEventListener("visibilitychange", reconnectIfClosed)
