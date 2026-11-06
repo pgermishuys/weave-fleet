@@ -205,6 +205,7 @@ function onFocusOut(event: FocusEvent): void {
 function onCardKeydown(event: KeyboardEvent): void {
   if (event.key !== "Escape") return;
   event.stopPropagation();
+  open.value?.onEscape?.();
   dismiss();
 }
 

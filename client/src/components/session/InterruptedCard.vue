@@ -70,8 +70,16 @@ const clock = computed(() => formatRetryClock(props.interruption.at));
     >
       {{ error }}
     </p>
+    <p
+      v-if="interruption.auto"
+      class="interrupted__line"
+      data-testid="interrupted-auto"
+    >
+      Fleet is continuing this by itself.
+    </p>
     <div class="interrupted__actions">
       <button
+        v-if="!interruption.auto"
         class="interrupted__button interrupted__button--primary"
         type="button"
         data-testid="interrupted-continue"

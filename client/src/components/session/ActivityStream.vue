@@ -615,7 +615,7 @@ function handleImproveSkill(skill: string, toolId: string): void {
           v-if="message.mod"
           class="peer-from"
           data-testid="mod-mark"
-          :title="message.mod.kind === 'sent' ? 'A mod sent this message, not you.' : 'A mod reworded what you typed before it was sent.'"
+          :title="message.mod.kind === 'sent' ? (message.mod.name.startsWith('Fleet') ? 'Fleet sent this message, not you.' : 'A mod sent this message, not you.') : 'A mod reworded what you typed before it was sent.'"
         >
           <Puzzle
             class="peer-from__icon"

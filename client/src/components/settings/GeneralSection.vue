@@ -7,6 +7,7 @@ import { useBoardFeature } from "@/composables/use-board-feature";
 import { usePreferenceSwitch } from "@/composables/use-preference-switch";
 import { SESSION_RECAP_PREFERENCE_KEY } from "@/composables/use-session-recap";
 import { RETRY_AFTER_LIMITS_PREFERENCE_KEY } from "@/composables/use-session-retry";
+import { RESTART_CONTINUE_AUTO_PREFERENCE_KEY } from "@/composables/use-restart-notice";
 import { USAGE_LIMITS_CHIP_PREFERENCE_KEY } from "@/lib/usage-providers";
 import { LARGE_PASTES_PREFERENCE_KEY } from "@/lib/attached-files";
 import { STARTERS_PREFERENCE_KEY } from "@/lib/starters";
@@ -30,6 +31,8 @@ const starters = usePreferenceSwitch(STARTERS_PREFERENCE_KEY, { defaultOn: true 
 const recap = usePreferenceSwitch(SESSION_RECAP_PREFERENCE_KEY);
 // On unless turned off: a turn a model provider's limit stopped carries on by itself.
 const retryAfterLimits = usePreferenceSwitch(RETRY_AFTER_LIMITS_PREFERENCE_KEY, { defaultOn: true });
+// Off unless turned on: it sends a message the user didn't type.
+const restartContinue = usePreferenceSwitch(RESTART_CONTINUE_AUTO_PREFERENCE_KEY);
 // On unless turned off.
 const usageChip = usePreferenceSwitch(USAGE_LIMITS_CHIP_PREFERENCE_KEY, { defaultOn: true });
 
@@ -199,6 +202,27 @@ async function toggleBoardFeature(): Promise<void> {
             :disabled="preferencesStore.isLoading || recap.saving.value"
             aria-label="Enable session recap"
             @click="recap.toggle"
+          />
+        </template>
+      </SettingRow>
+      <SettingRow
+        id="restart-continue"
+        title="Continue cut-off sessions by itself"
+        summary="After a restart, picks up the sessions it cut off mid-turn, two at a time."
+      >
+        <template #more>
+          When Fleet restarts while a session is mid-turn, Fleet sends it a message labelled "Sent by Fleet after the
+          restart" that names the call that didn't finish. Only sessions cut off less than 2 hours ago, not waiting on
+          a question, with their folder still there. Two at a time. A notice lists them and has Stop all.
+        </template>
+        <template #control>
+          <SettingSwitch
+            :checked="restartContinue.enabled.value"
+            :saving="restartContinue.saving.value"
+            :disabled="preferencesStore.isLoading || restartContinue.saving.value"
+            aria-label="Continue cut-off sessions by itself"
+            data-testid="restart-continue-switch"
+            @click="restartContinue.toggle"
           />
         </template>
       </SettingRow>

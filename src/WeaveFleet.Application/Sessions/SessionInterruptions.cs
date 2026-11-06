@@ -15,13 +15,15 @@ using WeaveFleet.Domain.Repositories;
 namespace WeaveFleet.Application.Sessions;
 
 /// <summary>A session a restart cut off as clients show it.</summary>
-public sealed record SessionInterruptionView(string At, bool Waiting, string? LastCall, int? ChangedFiles)
+/// <param name="Auto">Fleet continues the session by itself, once its turn comes (Stop all calls that off).</param>
+public sealed record SessionInterruptionView(string At, bool Waiting, string? LastCall, int? ChangedFiles, bool Auto = false)
 {
-    public static SessionInterruptionView From(SessionInterruption interruption) => new(
+    public static SessionInterruptionView From(SessionInterruption interruption, bool auto = false) => new(
         interruption.At.ToUniversalTime().ToString("O", CultureInfo.InvariantCulture),
         interruption.Waiting,
         interruption.LastCall,
-        interruption.ChangedFiles);
+        interruption.ChangedFiles,
+        auto);
 }
 
 /// <summary>A session whose last turn failed, as clients show it.</summary>
@@ -58,6 +60,7 @@ public sealed partial class SessionInterruptions(
     IEventBroadcaster broadcaster,
     IUserContext userContext,
     IBackgroundUserScope backgroundUser,
+    RestartContinuer continuer,
     TimeProvider time,
     ILogger<SessionInterruptions> logger)
 {
@@ -86,6 +89,9 @@ public sealed partial class SessionInterruptions(
             return FleetError.NotFoundFor(nameof(Session), sessionId);
         return Enabled ? await interruptions.GetAsync(sessionId).ConfigureAwait(false) : null;
     }
+
+    /// <summary>Whether Fleet will continue the session by itself (<see cref="SessionInterruptionView.Auto"/>).</summary>
+    public bool WillContinueByItself(string sessionId) => continuer.IsPending(sessionId);
 
     /// <summary>
     /// Startup, before sessions are marked stopped: turns each flagged session into an interruption, or clears it when
@@ -230,9 +236,22 @@ public sealed partial class SessionInterruptions(
         return text + " Check where you got to and continue.";
     }
 
-    /// <summary>Continue: sends <see cref="ContinueMessage"/> as the user's own message. Only one caller gets to send it.</summary>
-    public async Task<Result<Unit>> ContinueAsync(string sessionId, CancellationToken ct = default)
+    /// <summary>The label on a message Fleet sent by itself after the restart.</summary>
+    public const string AutomaticLabel = "Fleet after the restart";
+
+    internal static PromptOptions ContinueOptions(bool automatic) => new()
     {
+        Delivery = PromptDelivery.Queue,
+        SentByMod = automatic ? AutomaticLabel : null,
+    };
+
+    /// <summary>
+    /// Continue: sends <see cref="ContinueMessage"/> as the user's own message. Only one caller gets to send it. With
+    /// <paramref name="automatic"/> the user didn't click: the message says Fleet sent it.
+    /// </summary>
+    public async Task<Result<Unit>> ContinueAsync(string sessionId, bool automatic = false, CancellationToken ct = default)
+    {
+        continuer.Forget(sessionId);
         var interruption = Enabled ? await interruptions.RemoveAsync(sessionId).ConfigureAwait(false) : null;
         if (interruption is null)
             return FleetError.NotFoundFor(nameof(SessionInterruption), sessionId);
@@ -241,16 +260,31 @@ public sealed partial class SessionInterruptions(
         var sent = await prompting.PromptSessionAsync(
             sessionId,
             ContinueMessage(interruption),
-            new PromptOptions { Delivery = PromptDelivery.Queue },
+            ContinueOptions(automatic),
             ct).ConfigureAwait(false);
         if (!sent.IsSuccess)
             LogContinueFailed(sessionId, sent.Error.Description);
         return sent.IsSuccess ? Unit.Value : sent.Error;
     }
 
+    /// <summary>
+    /// Stop all: the sessions Fleet was going to continue by itself keep their cards, with Continue. A turn already running
+    /// isn't touched.
+    /// </summary>
+    public async Task StopAutomaticAsync(string userId, CancellationToken ct = default)
+    {
+        foreach (var sessionId in continuer.Stop(userId))
+        {
+            var interruption = await interruptions.GetAsync(sessionId).ConfigureAwait(false);
+            if (interruption is not null)
+                await BroadcastAsync(sessionId, interruption, ct).ConfigureAwait(false);
+        }
+    }
+
     /// <summary>Dismiss: the user takes it from here.</summary>
     public async Task<Result<Unit>> DismissAsync(string sessionId, CancellationToken ct = default)
     {
+        continuer.Forget(sessionId);
         if (!Enabled || await interruptions.RemoveAsync(sessionId).ConfigureAwait(false) is null)
             return FleetError.NotFoundFor(nameof(SessionInterruption), sessionId);
         await BroadcastAsync(sessionId, null, ct).ConfigureAwait(false);
@@ -260,6 +294,7 @@ public sealed partial class SessionInterruptions(
     /// <summary>A turn started: one the user started before choosing replaces the card.</summary>
     internal async Task OnTurnStartedAsync(string sessionId, CancellationToken ct = default)
     {
+        continuer.Forget(sessionId);
         if (await interruptions.RemoveAsync(sessionId).ConfigureAwait(false) is not null)
             await BroadcastAsync(sessionId, null, ct).ConfigureAwait(false);
         await interruptions.FlagTurnAsync(sessionId, time.GetUtcNow(), waiting: false).ConfigureAwait(false);
@@ -298,7 +333,7 @@ public sealed partial class SessionInterruptions(
     private async Task BroadcastAsync(string sessionId, SessionInterruption? interruption, CancellationToken ct)
     {
         var payload = JsonSerializer.SerializeToElement(
-            new SessionInterruptionChanged(sessionId, interruption is null ? null : SessionInterruptionView.From(interruption)),
+            new SessionInterruptionChanged(sessionId, interruption is null ? null : SessionInterruptionView.From(interruption, continuer.IsPending(sessionId))),
             ApplicationJsonContext.Default.SessionInterruptionChanged);
         await broadcaster.BroadcastAsync($"session:{sessionId}", ChangedEvent, payload, userContext.UserId, ct).ConfigureAwait(false);
         await broadcaster.BroadcastAsync("sessions", ChangedEvent, payload, userContext.UserId, ct).ConfigureAwait(false);
@@ -324,7 +359,7 @@ public sealed partial class SessionInterruptions(
 /// Keeps each session's <c>turn_started_at</c> up to date. The relay hands it every event it translates, on its pump;
 /// the writes run one session at a time, in the order the events came, as the session's owner.
 /// </summary>
-public sealed partial class TurnFlagger(IServiceScopeFactory scopeFactory, FleetOptions options, ILogger<TurnFlagger> logger)
+public sealed partial class TurnFlagger(IServiceScopeFactory scopeFactory, FleetOptions options, RestartContinuer continuer, ILogger<TurnFlagger> logger)
 {
     private readonly Lock _gate = new();
     private readonly Dictionary<string, Task> _tails = new(StringComparer.Ordinal);
@@ -347,6 +382,8 @@ public sealed partial class TurnFlagger(IServiceScopeFactory scopeFactory, Fleet
 
         // The restart flag only matters when Continue is on; the failed-turn mark the list shows is always kept.
         var restart = options.Harness.RestartContinue;
+        if (domainEvent is Domain.Events.TurnStarted)
+            continuer.NotifyTurnStarted(sessionId);
         Func<SessionInterruptions, CancellationToken, Task>? work = domainEvent switch
         {
             Domain.Events.TurnStarted => async (service, ct) =>

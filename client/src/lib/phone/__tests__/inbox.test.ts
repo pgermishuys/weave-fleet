@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import type { SessionListItem } from "@/api/client";
-import { askPreview, buildInbox, machinesStatus, rowGlyph, rowMeta, rowPlace, sectionRows, type InboxMachineState } from "../inbox";
+import { askPreview, buildInbox, machinesStatus, rowGlyph, rowMeta, restartRow, rowPlace, sectionRows, type InboxMachineState } from "../inbox";
 
 const NOW = Date.parse("2026-10-05T14:07:00Z");
 
@@ -126,5 +126,20 @@ describe("sectionRows", () => {
 
   it("has nothing to reveal when everything already fits", () => {
     expect(sectionRows(["a", "b", "c"], false)).toEqual({ rows: ["a", "b", "c"], hidden: 0 });
+  });
+});
+
+describe("restartRow", () => {
+  it("says how many sessions a restart cut off, and is absent when none were", () => {
+    expect(restartRow([{ cutOff: false }])).toBeNull();
+    expect(restartRow([{ cutOff: true }, { cutOff: false }])).toEqual({ count: 1, text: "Fleet restarted. 1 session was cut off." });
+    expect(restartRow([{ cutOff: true }, { cutOff: true }])?.text).toBe("Fleet restarted. 2 sessions were cut off.");
+  });
+
+  it("marks an inbox item cut off when its session has an interruption", () => {
+    const cut = { session: { id: "a", title: "A" }, sessionStatus: "idle", interrupted: { at: "2026-11-06T09:00:00Z", waiting: false, lastCall: null, changedFiles: null, auto: false } } as unknown as SessionListItem;
+    const machine = { id: "m", name: "M", isHome: true, status: "live", sessions: [cut], asks: {} } as unknown as InboxMachineState;
+    const built = buildInbox([machine], Date.now(), Number.MAX_SAFE_INTEGER);
+    expect([...built.needsYou, ...built.working, ...built.finished].map((entry) => entry.cutOff)).toEqual([true]);
   });
 });

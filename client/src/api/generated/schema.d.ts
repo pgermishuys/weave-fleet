@@ -965,6 +965,22 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/sessions/interruptions/stop-automatic": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post: operations["StopAutomaticInterruptionContinue"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/sessions/{id}/retry": {
         parameters: {
             query?: never;
@@ -4172,6 +4188,7 @@ export interface components {
             lastCall?: null | string;
             /** Format: int32 */
             changedFiles?: null | number;
+            auto?: boolean;
         };
         ScheduledRetryView: {
             dueAt: string;
@@ -6825,6 +6842,24 @@ export interface operations {
             };
             /** @description Not Found */
             404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+        };
+    };
+    StopAutomaticInterruptionContinue: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description No Content */
+            204: {
                 headers: {
                     [name: string]: unknown;
                 };

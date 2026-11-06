@@ -21,7 +21,7 @@ import { rememberPhoneMachine } from "@/lib/machines";
 import { useMachinesStore } from "@/stores/machines";
 import { haptic } from "@/lib/phone/haptics";
 import { holdKeyboard } from "@/lib/phone/keyboard";
-import { buildInbox, machinesStatus, sectionRows, type InboxItem } from "@/lib/phone/inbox";
+import { buildInbox, machinesStatus, restartRow, sectionRows, type InboxItem } from "@/lib/phone/inbox";
 import { ago, clock } from "@/lib/phone/time";
 import type { AnswerOutcome, PermissionReply } from "@/lib/push/answer";
 
@@ -79,6 +79,10 @@ const allSessions = computed(() => {
   const words = query.value.trim().toLowerCase();
   return recent.value.filter((item) => !words || [item.title, item.machineName, item.folder ?? "", item.branch ?? ""].some((text) => text.toLowerCase().includes(words)));
 });
+// After a restart: a row at the top says how many sessions it cut off, and opens the list of them.
+const cutOff = computed(() => recent.value.filter((entry) => entry.cutOff));
+const restart = computed(() => restartRow(cutOff.value));
+const restartOpen = shallowRef(false);
 const byMachine = computed(() => machines.value
   .map((machine) => ({
     machine,
@@ -501,6 +505,38 @@ const pull = usePullToRefresh({
               <h1>Sessions</h1>
               <p>{{ sessionsLine }}</p>
             </div>
+            <div
+              v-if="restart"
+              class="ph-card inbox__restart"
+              data-testid="phone-restart-row"
+            >
+              <button
+                type="button"
+                class="ph-set ph-set--accent"
+                :aria-expanded="restartOpen"
+                @click="restartOpen = !restartOpen"
+              >
+                <span class="ph-set__main"><span class="ph-set__t">{{ restart.text }}</span></span>
+                <ChevronRight
+                  class="ph-set__chev"
+                  aria-hidden="true"
+                />
+              </button>
+              <div
+                v-if="restartOpen"
+                class="ph-rows"
+                data-testid="phone-restart-list"
+              >
+                <InboxSessionRow
+                  v-for="entry in cutOff"
+                  :key="entry.key"
+                  :item="entry"
+                  :now="now"
+                  by="machine"
+                  @open="open"
+                />
+              </div>
+            </div>
             <div class="inbox__filter">
               <label class="ph-field">
                 <Search aria-hidden="true" />
@@ -739,6 +775,10 @@ const pull = usePullToRefresh({
 
 .inbox__gap {
   margin-top: 18px;
+}
+
+.inbox__restart {
+  margin: 0 16px 12px;
 }
 
 .inbox__first-card {

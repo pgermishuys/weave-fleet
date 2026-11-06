@@ -114,6 +114,12 @@ public sealed class SessionInterruptionRepository(IDbConnectionFactory connectio
             Read);
     }
 
+    public async Task<IReadOnlyList<SessionInterruption>> ListAllAsync()
+    {
+        using var conn = connectionFactory.CreateConnection();
+        return await conn.QueryAsync($"SELECT {Columns} FROM session_interruptions", _ => { }, Read);
+    }
+
     public async Task SaveAsync(SessionInterruption interruption)
     {
         using var conn = connectionFactory.CreateConnection();

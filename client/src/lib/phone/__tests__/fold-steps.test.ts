@@ -15,6 +15,13 @@ function message(id: string, role: AccumulatedMessage["role"], parts: Accumulate
 }
 
 describe("foldMessages", () => {
+  it("keeps who sent a user message when Fleet did", () => {
+    const sent = { ...message("u1", "user", [text("u1t", "Continue")]), mod: { kind: "sent", name: "Fleet after the restart" } } as AccumulatedMessage;
+    const blocks = foldMessages([sent, message("u2", "user", [text("u2t", "Hi")])]);
+    expect(blocks[0].kind === "user" && blocks[0].sentBy).toBe("Fleet after the restart");
+    expect(blocks[1].kind === "user" && blocks[1].sentBy).toBeUndefined();
+  });
+
   it("folds a run of tool calls into one row and keeps the agent's words", () => {
     const blocks = foldMessages([
       message("u1", "user", [text("u1t", "The reconnect test fails about 1 in 10 runs on CI.")]),

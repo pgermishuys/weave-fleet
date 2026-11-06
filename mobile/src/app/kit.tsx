@@ -3,7 +3,7 @@ import { useState, type ReactNode } from "react";
 import { Pressable, ScrollView, View } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import {
-  Button, Card, Chip, Composer, EmptyState, FleetMark, glyphStatusOf, Markdown, ModelChip, Notice, OptionRow, PageCard, PageChoiceBar, PagePickCard,
+  Button, Card, Chip, Composer, EmptyState, FleetMark, glyphStatusOf, InterruptedCard, InterruptionBanner, Markdown, ModelChip, Notice, OptionRow, PageCard, PageChoiceBar, PagePickCard,
   PageReplyBar, PageRow, PermissionCard, Pill, QuestionCard, SearchField, SectionHeader, Segments, SessionRow, Sheet, StatusGlyph, Text,
   ToolBox, ToolRow, UserBubble, WhereLine, type GlyphStatus,
 } from "~/kit";
@@ -127,6 +127,13 @@ function Gallery({ override, setOverride }: { override: Scheme | null; setOverri
         <Section label="Question card">
           <QuestionCard question="Which window should the limiter use?" onAnswer={noop}
             options={[{ label: "Sliding window", description: "Smoother, a little more memory" }, { label: "Fixed window" }, { label: "Token bucket", description: "Allows short bursts" }]} />
+        </Section>
+
+        <Section label="Interrupted">
+          <InterruptionBanner text="Fleet restarted. 2 sessions were cut off." onPress={noop} />
+          <InterruptionBanner text="Fleet restarted. Continuing 2 sessions." onPress={noop} onStopAll={noop} />
+          <InterruptedCard waiting={false} auto={false} lastCall="bun test" changedFiles={3} onContinue={noop} onDismiss={noop} />
+          <InterruptedCard waiting auto lastCall={null} changedFiles={null} onContinue={noop} onDismiss={noop} />
         </Section>
 
         <Section label="Tool box">

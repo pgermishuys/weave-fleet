@@ -66,6 +66,10 @@ export function machineApi(machine: Pick<Machine, "baseUrl" | "token">, onSigned
     /** Sends the pick made on a waiting page, as the desktop's bar under the page does. */
     sendPageChoice: (sessionId: string, callId: string, value: string, summary: string) =>
       post(`/api/sessions/${id(sessionId)}/page-choices/${id(callId)}/send`, { value, summary }),
+    /** After a restart cut a turn off: carry on, drop the card, or stop Fleet continuing sessions by itself. */
+    continueInterrupted: (sessionId: string) => post(`/api/sessions/${id(sessionId)}/interruption/continue`, {}),
+    dismissInterruption: (sessionId: string) => request(`/api/sessions/${id(sessionId)}/interruption`, { method: "DELETE" }),
+    stopAutomatic: () => post("/api/sessions/interruptions/stop-automatic", {}),
     skipPageChoice: (sessionId: string, callId: string) => post(`/api/sessions/${id(sessionId)}/page-choices/${id(callId)}/skip`, {}),
   };
 }

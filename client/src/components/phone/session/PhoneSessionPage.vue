@@ -516,9 +516,10 @@ onUnmounted(() => {
                 </button>
               </div>
               <span
-                v-if="block.steered || block.images"
+                v-if="block.steered || block.images || block.sentBy"
                 class="ph-umsg-meta"
               >
+                <template v-if="block.sentBy">Sent by {{ block.sentBy }}</template>
                 <template v-if="block.steered"><CornerDownRight
                   :size="12"
                   aria-hidden="true"

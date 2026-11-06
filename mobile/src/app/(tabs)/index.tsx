@@ -4,15 +4,19 @@ import { useEffect, useState } from "react";
 import { Pressable, RefreshControl, SectionList, View } from "react-native";
 import { manager, useFleet } from "~/fleet/hooks";
 import { newPagesOf, pagesSeen, usePagesSeen } from "~/fleet/pages-seen";
+import { interruptionBanner } from "~/fleet/interruption-core";
 import { rowAge, rowDetail } from "~/fleet/session-list";
-import { Button, EmptyState, FleetMark, SectionHeader, SessionRow, Text, glyphStatusOf } from "~/kit";
+import { Button, EmptyState, FleetMark, InterruptionBanner, SectionHeader, SessionRow, Sheet, Text, glyphStatusOf } from "~/kit";
 import { Heading, PanelPage } from "~/ui/page";
 import { useTheme } from "~/theme";
 import type { ConnectionState } from "~/fleet/hub";
 
 export default function Sessions() {
   const { color } = useTheme();
-  const { machines, sections, loading } = useFleet();
+  const { machines, sections, loading, interrupted } = useFleet();
+  const [cutOff, setCutOff] = useState(false);
+  const [stopping, setStopping] = useState(false);
+  const banner = interruptionBanner(interrupted);
   const [refreshing, setRefreshing] = useState(false);
   const [now, setNow] = useState(Date.now());
   usePagesSeen();
@@ -52,6 +56,12 @@ export default function Sessions() {
         sections={sections}
         keyExtractor={(entry) => entry.key}
         stickySectionHeadersEnabled={false}
+        ListHeaderComponent={banner ? (
+          <InterruptionBanner
+            testID="interruption-banner" text={banner.text} onPress={() => setCutOff(true)} busy={stopping}
+            onStopAll={banner.automatic ? () => { setStopping(true); void manager.stopAutomatic().catch(() => {}).finally(() => setStopping(false)); } : undefined}
+          />
+        ) : undefined}
         contentContainerStyle={{ paddingBottom: 24 }}
         refreshControl={<RefreshControl refreshing={refreshing} tintColor={color.muted} onRefresh={() => { setRefreshing(true); void manager.refresh().finally(() => setRefreshing(false)); }} />}
         renderSectionHeader={({ section }) => <SectionHeader label={section.label} count={section.data.length} />}
@@ -69,6 +79,18 @@ export default function Sessions() {
         )}
         ListEmptyComponent={loading ? undefined : <EmptyState title="No sessions yet" body="Start one on the computer and it shows up here." />}
       />
+      <Sheet open={cutOff && interrupted.length > 0} onClose={() => setCutOff(false)} title="Cut off by the restart" testID="interrupted-sheet">
+        <View style={{ marginHorizontal: -16 }}>
+          {interrupted.map((entry) => (
+            <SessionRow
+              key={entry.key} testID="interrupted-row" title={entry.item.session.title}
+              detail={entry.interruption.auto ? "Fleet is continuing this" : entry.interruption.waiting ? "Question lost" : rowDetail(entry.item)}
+              status="idle" age={rowAge(entry.item, now)} machine={machines.length > 1 ? entry.machineName : undefined}
+              onPress={() => { setCutOff(false); router.push(`/s/${entry.machineId}/${entry.item.session.id}`); }}
+            />
+          ))}
+        </View>
+      </Sheet>
     </PanelPage>
   );
 }

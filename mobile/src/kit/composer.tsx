@@ -54,11 +54,14 @@ export function Composer({ value, onChangeText, onSend, placeholder = "Message",
   );
 }
 
-export function UserBubble({ text }: { text: string }) {
+export function UserBubble({ text, sentBy }: { text: string; sentBy?: string }) {
   const { color } = useTheme();
   return (
-    <View style={{ alignSelf: "flex-end", maxWidth: "84%", paddingHorizontal: 12, paddingVertical: 8, borderRadius: 14, backgroundColor: color.tint5, borderWidth: 1, borderColor: color.border }}>
-      <Text selectable>{text}</Text>
+    <View style={{ alignSelf: "flex-end", maxWidth: "84%", gap: 3, alignItems: "flex-end" }}>
+      {sentBy ? <Text size={12} tone="muted">Sent by {sentBy}</Text> : null}
+      <View style={{ paddingHorizontal: 12, paddingVertical: 8, borderRadius: 14, backgroundColor: color.tint5, borderWidth: 1, borderColor: color.border }}>
+        <Text selectable>{text}</Text>
+      </View>
     </View>
   );
 }
