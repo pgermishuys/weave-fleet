@@ -3,10 +3,16 @@ import { defineContributionPoint } from "@/lib/contributions";
 import { getSidebarPanels, getSidebarViews } from "@/plugins/slots";
 
 /** The rails Fleet itself ships; the plugins' rails are open-ended, so a rail id is any string. */
-export type BuiltInRailId = "board" | "sessions" | "analytics" | "automations" | "workflows" | "jobs" | "settings";
+export type BuiltInRailId = "board" | "sessions" | "fleet" | "analytics" | "automations" | "workflows" | "jobs" | "settings";
 
 // `string & {}` keeps the built-in ids in editor completions while accepting a plugin's id.
 export type SidebarRail = BuiltInRailId | (string & {});
+
+/**
+ * The active rail on a route no rail owns (`/welcome`, `/repositories`): the context area has no panel and the page
+ * fills it. Never a rail id anyone contributes.
+ */
+export const NO_RAIL = "none";
 
 /**
  * Where a rail's icon sits in the icon rail: the top group, the group under the divider, or the bottom group
@@ -22,8 +28,13 @@ export interface RailDefinition {
   /** The route the rail opens; a rail without one only switches the panel. */
   to?: string;
   placement: RailPlacement;
-  /** What fills the context panel while this rail is active. */
+  /** The rail's own menu or list, left of its page. Every rail brings its own: no rail borrows another's panel. */
   panel: Component;
+  /**
+   * No panel while this returns true (a feature switched off): the page's notice fills the whole context area.
+   * Read inside a computed.
+   */
+  noPanel?: () => boolean;
   /** Within a placement, lower comes first. */
   order?: number;
   /** Shown dimmed with a marker while this returns true (a feature switched off). Read inside a computed. */
@@ -95,6 +106,12 @@ export const rails = computed<readonly RailDefinition[]>(() =>
 
 export function getRail(id: string): RailDefinition | undefined {
   return rails.value.find((rail) => rail.id === id);
+}
+
+/** The panel left of the rail's page, or null when the page fills the whole context area. */
+export function railPanel(rail: RailDefinition | undefined): Component | null {
+  if (!rail || rail.noPanel?.()) return null;
+  return rail.panel;
 }
 
 export function isSidebarRail(value: string): boolean {

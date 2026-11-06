@@ -19,6 +19,11 @@ The application shell is a composable layout built from named panels:
 - **Rail** — Always-visible icon navigation fixed to the left edge. Controls which view fills the context area.
 - **Context** — Everything to the right of the rail. Its composition changes per route.
 
+**The rule:** whatever the user picks in the rail owns the whole Context area. No view shows another view's panel (the
+session list belongs to Sessions only). A view that is switched off fills the whole Context area with its notice. A view
+that needs a left panel supplies its own menu or list, like Settings does with `settings-menu` and `settings-detail`.
+A route no rail owns (`/welcome`, `/repositories`) renders full width.
+
 ### Route Compositions
 
 | Route        | Context layout                              |
@@ -26,6 +31,7 @@ The application shell is a composable layout built from named panels:
 | Sessions     | `[session-list][conversation][content]`     |
 | Settings     | `[settings-menu][settings-detail]`          |
 | Automations  | `[automations-list][automations-detail]`    |
+| Analytics    | `[analytics-menu][analytics-detail]`        |
 | Workflows    | `[workflows-list][workflows-detail]`        |
 
 ### Panel Definitions
@@ -39,6 +45,8 @@ The application shell is a composable layout built from named panels:
 | `settings-menu`   | Left nav for settings categories                                            |
 | `settings-detail` | Detail pane for the selected settings category                              |
 | `automations-list`| List of automations in the left nav panel                                   |
+| `analytics-menu`  | Spend (Overview, Daily) and Breakdown (Projects, Models, Sessions) with counts, then the From/To/Project filters and Export. On a phone, a chip strip above the page |
+| `analytics-detail`| The selected section; each has its own route (`/analytics`, `/analytics/daily`, …) |
 | `automations-detail`| Detail pane for the selected automation                                   |
 | `workflows-list`  | The workflow library: built into Fleet, then the repo's `.weave/workflows`   |
 | `workflows-detail`| The selected workflow's steps, recent runs and Run box                     |

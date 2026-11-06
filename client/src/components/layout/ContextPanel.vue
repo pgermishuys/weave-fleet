@@ -1,21 +1,8 @@
 <script setup lang="ts">
-import type { Component } from "vue";
-import { computed, shallowRef } from "vue";
-import { storeToRefs } from "pinia";
-import SessionsPanel from "@/components/sessions/SessionsPanel.vue";
-import "@/components/layout/core-rails";
-import { getRail } from "@/lib/rails";
-import { useSidebarStore } from "@/stores/sidebar";
+import { shallowRef } from "vue";
+import { useContextPanel } from "@/composables/use-context-panel";
 
-const sidebarStore = useSidebarStore();
-const { activeRail } = storeToRefs(sidebarStore);
-
-// A rail nobody has contributed (an id left over from a plugin that is gone) shows the sessions list.
-const activeDefinition = computed(() => getRail(activeRail.value));
-
-const activePanel = computed<Component>(() => activeDefinition.value?.panel ?? SessionsPanel);
-
-const activePanelKey = computed(() => activeDefinition.value?.id ?? "sessions");
+const { panel: activePanel, panelKey: activePanelKey } = useContextPanel();
 
 const props = defineProps<{
   /** Fill the container instead of the resizable width (the phone menu drawer). */
@@ -36,6 +23,7 @@ defineExpose({ panelWidth, isResizing, resizeBy });
 
 <template>
   <aside
+    v-if="activePanel"
     class="context-panel"
     :class="{ 'context-panel--fill': props.fill }"
     :style="props.fill ? undefined : { width: `${panelWidth}px`, minWidth: `${panelWidth}px` }"

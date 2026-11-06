@@ -1,9 +1,10 @@
 import { flushPromises, mount } from "@vue/test-utils";
-import { ref } from "vue";
+import { defineComponent, ref } from "vue";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import ContextPanel from "@/components/layout/ContextPanel.vue";
 import IconRail from "@/components/layout/IconRail.vue";
 import { usePluginRuntime } from "@/plugins/composable";
+import { useStaleRailRedirect } from "@/composables/use-context-panel";
 import { useSidebarStore } from "@/stores/sidebar";
 import githubPluginManifest from "@/plugins/builtin/github";
 import marketplacePluginManifest from "@/plugins/builtin/marketplace";
@@ -36,6 +37,7 @@ const panel = vi.hoisted(() => (name: string) => async () => {
 });
 vi.mock("@/components/sessions/SessionsPanel.vue", panel("sessions"));
 vi.mock("@/components/board/BoardControlsPanel.vue", panel("board"));
+vi.mock("@/components/analytics/AnalyticsNavPanel.vue", panel("analytics"));
 vi.mock("@/components/settings/SettingsNavPanel.vue", panel("settings"));
 vi.mock("@/components/automations/AutomationsNavPanel.vue", panel("automations"));
 vi.mock("@/components/workflows/WorkflowsNavPanel.vue", panel("workflows"));
@@ -134,15 +136,29 @@ describe("the icon rail", () => {
     expect(navigate).toHaveBeenLastCalledWith({ to: "/github" });
   });
 
-  it("follows the route to a rail, and leaves the rail alone on a route that has none", () => {
+  it("follows the route to a rail, and to no rail on a route none owns", () => {
     const store = useSidebarStore();
     pathname.value = "/analytics";
     mount(IconRail);
     expect(store.activeRail).toBe("analytics");
 
-    pathname.value = "/somewhere-else";
+    pathname.value = "/analytics/models";
     mount(IconRail);
     expect(store.activeRail).toBe("analytics");
+
+    // The last rail's panel must not stay behind on /welcome or /repositories.
+    for (const orphan of ["/welcome", "/repositories", "/somewhere-else"]) {
+      pathname.value = orphan;
+      mount(IconRail);
+      expect(store.activeRail).toBe("none");
+    }
+  });
+
+  it("keeps Settings active on its sub-pages", () => {
+    pathname.value = "/settings/plugins/some-plugin";
+    mount(IconRail);
+
+    expect(useSidebarStore().activeRail).toBe("settings");
   });
 
   it("highlights Fleet, not Sessions, on mission control", () => {
@@ -193,7 +209,7 @@ describe("the context panel per rail", () => {
 
   it.each([
     ["sessions", "panel-sessions"],
-    ["analytics", "panel-sessions"],
+    ["analytics", "panel-analytics"],
     ["automations", "panel-automations"],
     ["settings", "panel-settings"],
     ["github", "panel-github"],
@@ -201,14 +217,14 @@ describe("the context panel per rail", () => {
     expect(shown(rail)).toBe(expected);
   });
 
-  it("shows the workflows library only while Workflows is on", () => {
-    expect(shown("workflows")).toBe("panel-sessions");
+  it("shows the workflows library only while Workflows is on, and no panel while it's off", () => {
+    expect(shown("workflows")).toBe("");
     workflowsOn.value = true;
     expect(shown("workflows")).toBe("panel-workflows");
   });
 
-  it("shows the sessions panel for Board while Board is off", () => {
-    expect(shown("board")).toBe("panel-sessions");
+  it("shows no panel for Board while Board is off, so its notice fills the context area", () => {
+    expect(shown("board")).toBe("");
   });
 
   it("shows the board controls for Board while Board is on", () => {
@@ -216,8 +232,35 @@ describe("the context panel per rail", () => {
     expect(shown("board")).toBe("panel-board");
   });
 
-  it("falls back to the sessions panel for a rail nobody knows", () => {
-    expect(shown("no-such-rail")).toBe("panel-sessions");
+  it("never borrows another view's panel: a rail nobody knows, or no rail, shows none", () => {
+    expect(shown("no-such-rail")).toBe("");
+    expect(shown("none")).toBe("");
+  });
+
+  describe("a rail nobody contributes", () => {
+    const mountRedirect = () => mount(defineComponent({ setup: () => { useStaleRailRedirect(); return () => null; } }));
+
+    beforeEach(() => navigate.mockClear());
+
+    it("redirects to Sessions", () => {
+      const store = useSidebarStore();
+      store.setActiveRail("no-such-rail" as never);
+
+      mountRedirect();
+
+      expect(store.activeRail).toBe("sessions");
+      expect(navigate).toHaveBeenCalledWith({ to: "/" });
+    });
+
+    it("leaves a known rail and the no-rail state alone", () => {
+      const store = useSidebarStore();
+      store.setActiveRail("analytics");
+      mountRedirect();
+      store.setActiveRail("none");
+
+      expect(store.activeRail).toBe("none");
+      expect(navigate).not.toHaveBeenCalled();
+    });
   });
 
   it("keeps an unknown rail id in the store without persisting it", () => {

@@ -16,6 +16,7 @@ import ProblemReportDialog from "@/components/report/ProblemReportDialog.vue";
 import BoardRightPanel from "@/components/board/BoardRightPanel.vue";
 import CenterContent from "@/components/layout/CenterContent.vue";
 import ContextPanel from "@/components/layout/ContextPanel.vue";
+import { useContextPanel, useStaleRailRedirect } from "@/composables/use-context-panel";
 import IconRail from "@/components/layout/IconRail.vue";
 import StatusBar from "@/components/layout/StatusBar.vue";
 import SessionsV2RightPanel from "@/components/sessions/SessionsV2RightPanel.vue";
@@ -89,6 +90,11 @@ const { isMobileNav, mobileDrawerOpen, openDrawer, closeDrawer } = useSidebarMob
 const { isBoardFeatureEnabled } = useBoardFeature();
 
 const { panelCollapsed, activeRail, rightPanelSheetOpen } = storeToRefs(sidebarStore);
+
+// Some views own the whole context area (a switched-off Board, a route no rail owns): no panel, no gutter.
+const { panel: contextPanel } = useContextPanel();
+const showContextPanel = computed(() => !panelCollapsed.value && contextPanel.value !== null);
+useStaleRailRedirect();
 
 const isSettingsRoute = computed(() => pathname.value.startsWith("/settings"));
 
@@ -349,9 +355,9 @@ function onGutterPointerDown(e: PointerEvent): void {
       <!-- Desktop: inline nav -->
       <template v-if="!isMobileNav">
         <IconRail />
-        <ContextPanel v-if="!panelCollapsed" ref="contextPanelRef" />
+        <ContextPanel v-if="showContextPanel" ref="contextPanelRef" />
         <div
-          v-if="!panelCollapsed"
+          v-if="showContextPanel"
           class="resize-gutter"
           :class="{ active: isLeftGutterDragging }"
           @pointerdown.prevent="onLeftGutterPointerDown"
