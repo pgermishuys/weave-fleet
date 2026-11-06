@@ -8,7 +8,9 @@ describe("toSessionInterruption", () => {
       waiting: false,
       lastCall: "bash: bun run build",
       changedFiles: 3,
+      auto: false,
     });
+    expect(toSessionInterruption({ at: "2026-10-17T14:02:00Z", auto: true })?.auto).toBe(true);
   });
 
   it("fills in what is missing", () => {
@@ -17,6 +19,7 @@ describe("toSessionInterruption", () => {
       waiting: false,
       lastCall: null,
       changedFiles: null,
+      auto: false,
     });
   });
 
