@@ -3,8 +3,9 @@ import { computed } from "vue";
 import { Puzzle } from "lucide-vue-next";
 import SettingSwitch from "@/components/settings/SettingSwitch.vue";
 import { useSettingsNav } from "@/composables/use-settings-nav";
+import { setPluginEnabledEverywhere } from "@/plugins/use-plugin-switch";
 import { usePluginRuntime } from "@/plugins/composable";
-import { describeContributions, getConfigPage, isPluginEnabled, setPluginEnabled } from "@/plugins/slots";
+import { describeContributions, getConfigPage, isPluginEnabled } from "@/plugins/slots";
 
 // Everything here is read from the plugin registry and each plugin's contribution points; no plugin is named.
 const pluginRuntime = usePluginRuntime();
@@ -105,7 +106,7 @@ const rows = computed(() =>
           :checked="row.enabled"
           :aria-label="`${row.name} on or off`"
           :data-testid="`plugin-switch-${row.id}`"
-          @click="setPluginEnabled(row.id, !row.enabled)"
+          @click="void setPluginEnabledEverywhere(row.id, !row.enabled)"
         />
       </article>
     </div>

@@ -8,6 +8,7 @@ import "./assets/main.css";
 import githubPluginManifest from "@/plugins/builtin/github";
 import marketplacePluginManifest from "@/plugins/builtin/marketplace";
 import { usePluginRuntime } from "@/plugins/composable";
+import { hasCachedDisabledPlugins, holdPluginsUntilKnown } from "@/plugins/registry";
 import { getPromptTrackingState } from "@/composables/use-send-prompt";
 import { useSessionsStore } from "@/stores/sessions";
 import { useThemeStore } from "@/stores/theme";
@@ -32,6 +33,10 @@ await startWithoutModsFromAddress();
 
 const app = createApp(App);
 const pluginRuntime = usePluginRuntime();
+
+// Which plugins are off is a server preference. A browser with no copy of it yet waits for the answer before
+// plugins add anything, so a plugin that is off never flashes in.
+if (!hasCachedDisabledPlugins()) holdPluginsUntilKnown();
 
 pluginRuntime.registerPlugins([
   githubPluginManifest,
