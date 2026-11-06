@@ -1,5 +1,6 @@
 using WeaveFleet.Application.SessionSources;
 using WeaveFleet.Domain.Entities;
+using WeaveFleet.Domain.Harnesses;
 
 namespace WeaveFleet.Application.Sessions.Creation;
 
@@ -18,6 +19,8 @@ public sealed record CreateSessionRequest
     public string? HarnessProfileId { get; init; }
     public string? ProjectId { get; init; }
     public string? InitialPrompt { get; init; }
+    /// <summary>Images that go with <see cref="InitialPrompt"/>, as they would with any prompt.</summary>
+    public IReadOnlyList<HarnessAttachment>? InitialAttachments { get; init; }
     /// <summary>
     /// The sessions <see cref="InitialPrompt"/> references by token. They are expanded into the prompt the harness gets,
     /// before anything is created; the branch name and title still come from the typed text.

@@ -906,6 +906,34 @@ describe("NewSessionComposer", () => {
       });
     });
 
+    it("a pasted image goes with the first prompt", async () => {
+      harnesses.value = [{ ...opencode, capabilities: { supportsImageAttachments: true } } as HarnessInfo];
+      URL.createObjectURL = vi.fn(() => "blob:shot");
+      URL.revokeObjectURL = vi.fn();
+      rememberFolder({ kind: "repository", path: rocket.path });
+      const view = await mountComposer();
+      const image = new File([new Uint8Array(8)], "login-error.png", { type: "image/png" });
+
+      await type(view, "What is wrong here?");
+      await view.get("[data-testid='new-session-message']").trigger("paste", { clipboardData: { files: [image], getData: () => "" } });
+      await vi.waitFor(() => expect(view.findAll("[data-testid='image-attachment-chip']")).toHaveLength(1));
+      await pressEnter(view);
+
+      const [, options] = lastCreateCall();
+      expect(options.attachments).toEqual([{ mime: "image/png", filename: "login-error.png", data: expect.any(String) }]);
+    });
+
+    it("says so when the harness can't take images", async () => {
+      rememberFolder({ kind: "repository", path: rocket.path });
+      const view = await mountComposer();
+      const image = new File([new Uint8Array(8)], "login-error.png", { type: "image/png" });
+
+      await view.get("[data-testid='new-session-message']").trigger("paste", { clipboardData: { files: [image], getData: () => "" } });
+
+      expect(view.find("[data-testid='image-attachment-chip']").exists()).toBe(false);
+      expect(view.text()).toContain("This session's harness can't take images.");
+    });
+
     it("Shift+Enter is a new line, not a send", async () => {
       rememberFolder({ kind: "repository", path: rocket.path });
       const view = await mountComposer();

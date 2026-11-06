@@ -346,6 +346,7 @@ export function seedSentPrompt(
   body: string,
   createdAt: number = Date.now(),
   sessionReferences: readonly SessionReference[] = [],
+  images: readonly SentPromptImage[] = [],
 ): void {
   const text = body.trim();
   if (!text) {
@@ -364,7 +365,7 @@ export function seedSentPrompt(
     modelId: "",
     modelName: "",
     effort: "medium",
-    images: [],
+    images: [...images],
     ...(sessionReferences.length > 0 ? { sessionReferences: [...sessionReferences] } : {}),
   });
   incrementPendingPrompts(sessionId);

@@ -322,6 +322,7 @@ public static class SessionEndpoints
                 HarnessType = req.HarnessType,
                 HarnessProfileId = req.HarnessProfileId,
                 InitialPrompt = req.InitialPrompt,
+                InitialAttachments = req.Attachments?.Select(a => new HarnessAttachment(a.Mime, a.Filename ?? "image.png", a.Data)).ToList(),
                 SessionReferences = ToSessionReferences(req.SessionReferences),
                 Source = req.Source,
                 OnCompleteTargetSessionId = req.OnComplete?.NotifySessionId,
@@ -1537,7 +1538,8 @@ internal sealed record CreateSessionApiRequest(
     string? HarnessProfileId = null,
     string? Agent = null,
     ModelRef? Model = null,
-    SessionReferenceDto[]? SessionReferences = null);
+    SessionReferenceDto[]? SessionReferences = null,
+    ImageAttachmentDto[]? Attachments = null);
 
 [JsonUnmappedMemberHandling(JsonUnmappedMemberHandling.Disallow)]
 internal sealed record OnCompleteInfo(string NotifySessionId, string NotifyInstanceId);

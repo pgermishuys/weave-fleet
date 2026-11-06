@@ -2,7 +2,7 @@
 import "@/components/sessions/new-session/new-session.css";
 import { computed, nextTick, onMounted, onUnmounted, shallowRef, toRefs, useTemplateRef, watch } from "vue";
 import { useNavigate, useSearch } from "@tanstack/vue-router";
-import { ArrowUp, CircleAlert, CircleDot, GitPullRequest, LoaderCircle, X } from "lucide-vue-next";
+import { ArrowUp, CircleAlert, CircleDot, GitPullRequest, LoaderCircle, Paperclip, X } from "lucide-vue-next";
 import { storeToRefs } from "pinia";
 import { Button } from "@/components/ui/button";
 import AgentSelector from "@/components/session/AgentSelector.vue";
@@ -34,6 +34,10 @@ import { useReferableSessions } from "@/composables/use-referable-sessions";
 import { useRepositories } from "@/composables/use-repositories";
 import { useRepositoryDetail } from "@/composables/use-repository-detail";
 import { seedSentPrompt } from "@/composables/use-send-prompt";
+import ImageAttachmentChips from "@/components/session/ImageAttachmentChips.vue";
+import { harnessCapabilities } from "@/composables/use-composer-actions";
+import { useImageAttachments } from "@/composables/use-image-attachments";
+import { ALLOWED_IMAGE_MIMES } from "@/lib/image-validation";
 import { useCreateSession } from "@/composables/use-session-actions";
 import { useWorkflowsFeature } from "@/composables/use-workflows-feature";
 import { useWorktrees } from "@/composables/use-worktrees";
@@ -296,6 +300,43 @@ function handlePickerKeydown(event: KeyboardEvent): boolean {
 }
 const areRepositoriesReady = computed(() => scannedAt.value !== null || repositoriesError.value !== null);
 const showHarnessPicker = computed(() => enabledHarnesses.value.length > 1);
+// Images go with the first message, to the harness picked here.
+const supportsImages = computed(() => harnessCapabilities(resolvedHarnessType.value, harnesses.value).supportsImages);
+const {
+  attachments: pendingImages,
+  removeAttachment: removeImage,
+  clearAttachments: clearImages,
+  pasteError: imageError,
+  addImage,
+} = useImageAttachments(draft.rowKey, supportsImages);
+const isDragging = shallowRef(false);
+const fileInputRef = useTemplateRef<HTMLInputElement>("fileInput");
+
+function addImages(files: File[]): void {
+  for (const file of files) addImage(file);
+}
+
+/** A paste that carries an image is taken; a text paste goes in as text. */
+function handlePaste(event: ClipboardEvent): void {
+  const files = Array.from(event.clipboardData?.files ?? []).filter((file) => ALLOWED_IMAGE_MIMES.has(file.type));
+  // Spreadsheets and word processors put a picture beside the text: where images can't go, the text is meant.
+  if (files.length === 0 || (!supportsImages.value && event.clipboardData?.getData("text/plain"))) return;
+  event.preventDefault();
+  addImages(files);
+}
+
+function handleDrop(event: DragEvent): void {
+  event.preventDefault();
+  isDragging.value = false;
+  addImages(Array.from(event.dataTransfer?.files ?? []));
+}
+
+function handleFileInput(event: Event): void {
+  const input = event.target as HTMLInputElement;
+  addImages(Array.from(input.files ?? []));
+  input.value = "";
+}
+
 const hasMessage = computed(() => message.value.trim().length > 0);
 const isStarting = computed(() => isCreating.value || draft.isStarting);
 /** A clone for the chosen folder is still running; the session starts in it once it's there. */
@@ -388,7 +429,7 @@ const placeholder = computed(() => {
   return folder.value?.kind === "none" ? "Ask anything…" : "Describe the task, or ask a question…";
 });
 
-const errorMessage = computed(() => validationError.value ?? createError.value ?? null);
+const errorMessage = computed(() => validationError.value ?? imageError.value ?? createError.value ?? null);
 
 const resolvedHarnessType = computed(() => {
   if (enabledHarnesses.value.some((harness) => harness.type === harnessType.value)) {
@@ -691,6 +732,7 @@ async function submit(withoutMessage: boolean): Promise<void> {
     agent: sendsAgentAndModel.value ? agent.value : undefined,
     model: sendsAgentAndModel.value ? modelFromKey(model.value) : null,
     sessionReferences: withoutMessage ? [] : sessionReferencesIn(draft.rowKey, message.value),
+    attachments: withoutMessage ? [] : pendingImages.value.map(({ mime, filename, data }) => ({ mime, filename, data })),
   });
 
   if (!request.ok) {
@@ -707,6 +749,7 @@ async function submit(withoutMessage: boolean): Promise<void> {
   const firstMessage = request.options.initialPrompt ?? null;
   const firstReferences = firstMessage ? sessionReferencesIn(draft.rowKey, firstMessage) : [];
   const draftKey = draft.rowKey;
+  const firstImages = [...pendingImages.value];
   sentAt.value = Date.now();
   folderNotice.value = null;
 
@@ -728,6 +771,7 @@ async function submit(withoutMessage: boolean): Promise<void> {
     if (!target.isLive) machines.rememberSessions(target.key, [sessionId]);
     forgetSessionReferences(draftKey);
     forgetFileReferences(draftKey);
+    clearImages();
     if (!target.isLive && !machines.opensInPlace) {
       workspaceUiStore.handOffNewSessionDraft(sessionId);
       const instance = response.instanceId ? `?instanceId=${encodeURIComponent(response.instanceId)}` : "";
@@ -738,7 +782,7 @@ async function submit(withoutMessage: boolean): Promise<void> {
     // All in one tick: the session page has the message before its history loads, and the
     // session's row replaces the draft row where it stands.
     if (firstMessage) {
-      seedSentPrompt(sessionId, firstMessage, sentAt.value, firstReferences);
+      seedSentPrompt(sessionId, firstMessage, sentAt.value, firstReferences, firstImages.map((a) => ({ url: `data:${a.mime};base64,${a.data}`, filename: a.filename ?? "image.png" })));
     }
     // The live machine's list holds only its own sessions.
     const row = buildCreatedSessionRow(response, request, projectForRow());
@@ -999,7 +1043,12 @@ onUnmounted(() => {
           @hover="pickerIndex = $event"
         />
 
-        <ComposerFrame>
+        <ComposerFrame
+          :dragging="isDragging"
+          @dragover.prevent="isDragging = true"
+          @dragleave="isDragging = false"
+          @drop="handleDrop"
+        >
           <AutocompletePopup
             :open="autocomplete.isOpen.value"
             :items="autocomplete.items.value"
@@ -1070,6 +1119,7 @@ onUnmounted(() => {
               :placeholder="placeholder"
               :readonly="isStarting"
               @input="handleInput"
+              @paste="handlePaste"
               @keydown="handleKeydown"
               @keyup="moveCaret"
               @click="moveCaret"
@@ -1078,7 +1128,41 @@ onUnmounted(() => {
             />
           </div>
 
+          <div
+            v-if="pendingImages.length > 0 && !isStarting"
+            class="new-session__images"
+            data-testid="new-session-images"
+          >
+            <ImageAttachmentChips
+              :attachments="pendingImages"
+              @remove="removeImage"
+            />
+          </div>
+
+          <input
+            ref="fileInput"
+            type="file"
+            accept="image/png,image/jpeg,image/gif,image/webp"
+            multiple
+            class="sr-only"
+            aria-label="Attach images"
+            tabindex="-1"
+            @change="handleFileInput"
+          >
+
           <template #toolbar>
+            <Button
+              v-if="supportsImages"
+              variant="toolbar-icon"
+              size="toolbar"
+              title="Attach images"
+              aria-label="Attach images"
+              data-testid="new-session-attach"
+              :disabled="isStarting"
+              @click="fileInputRef?.click()"
+            >
+              <Paperclip class="size-3.5" />
+            </Button>
             <HarnessPicker
               v-if="showHarnessPicker"
               v-model="harnessType"
@@ -1408,6 +1492,13 @@ onUnmounted(() => {
   text-decoration: underline;
   text-underline-offset: 2px;
   cursor: pointer;
+}
+
+.new-session__images {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  padding: 8px 12px 4px;
 }
 
 .new-session__attachments {

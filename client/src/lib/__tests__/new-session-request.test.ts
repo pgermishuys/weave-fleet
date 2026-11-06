@@ -207,6 +207,19 @@ describe("buildCreateSessionRequest", () => {
   });
 
   describe("no folder", () => {
+    it("sends the images with the first message", () => {
+      const image = { mime: "image/png", filename: "screenshot.png", data: "aGVsbG8=" };
+
+      expect(build({ message: "What is this?", attachments: [image] }).options.attachments).toEqual([image]);
+    });
+
+    it("leaves images out when there's no message or none were added", () => {
+      const image = { mime: "image/png", filename: "screenshot.png", data: "aGVsbG8=" };
+
+      expect(build({ message: "", attachments: [image] }).options).not.toHaveProperty("attachments");
+      expect(build({ message: "Hi", attachments: [] }).options).not.toHaveProperty("attachments");
+    });
+
     it.each([
       { kind: "current" } as const,
       { kind: "new" } as const,
