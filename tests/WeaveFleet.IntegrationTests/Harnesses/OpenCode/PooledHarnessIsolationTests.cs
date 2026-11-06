@@ -1178,7 +1178,19 @@ public sealed class PooledHarnessIsolationTests
         {
             foreach (var subscriber in _subscribers.Values)
             {
-                subscriber.Add($"data: {json}\n\n");
+                try
+                {
+                    subscriber.Add($"data: {json}\n\n");
+                }
+                catch (ObjectDisposedException)
+                {
+                    // The stream was closed (e.g. a crashed process's SSE connection torn down) between
+                    // the snapshot of subscribers and this Add; a closed subscriber just misses the event.
+                }
+                catch (InvalidOperationException)
+                {
+                    // Same race, queue already completed.
+                }
             }
         }
 
