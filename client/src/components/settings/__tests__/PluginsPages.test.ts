@@ -11,7 +11,7 @@ const { default: PluginPage } = await import("@/components/settings/PluginPage.v
 
 enableAutoUnmount(afterEach);
 
-const Stub = defineComponent({ name: "Stub", render: () => h("div", { "data-testid": "own-settings" }, "own settings") });
+const Stub = defineComponent({ name: "StubPane", render: () => h("div", { "data-testid": "own-settings" }, "own settings") });
 
 beforeEach(() => {
   localStorage.clear();

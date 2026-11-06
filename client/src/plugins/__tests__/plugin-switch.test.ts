@@ -12,7 +12,7 @@ import {
 } from "@/plugins/slots";
 import type { FleetPluginManifest } from "@/plugins/types";
 
-const Stub = defineComponent({ name: "Stub", render: () => h("div") });
+const Stub = defineComponent({ name: "StubPane", render: () => h("div") });
 
 const full: FleetPluginManifest = {
   descriptor: { id: "full", displayName: "Full", trustLevel: "built-in", hasFrontend: true, hasBackend: false },
