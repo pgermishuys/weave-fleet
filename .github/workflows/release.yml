@@ -25,7 +25,7 @@ jobs:
             runs_on: ubuntu-latest
             archive_extension: .tar.gz
           - rid: osx-arm64
-            runs_on: macos-14
+            runs_on: macos-15
             archive_extension: .tar.gz
           - rid: win-x64
             runs_on: windows-latest

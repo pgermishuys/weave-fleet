@@ -48,7 +48,7 @@ jobs:
               desktop/release/Fleet-*.AppImage
               desktop/release/Fleet-*.deb
           - rid: osx-arm64
-            runs_on: macos-14
+            runs_on: macos-15
             builder_args: --mac --arm64
             app: release/mac-arm64/Fleet.app/Contents/MacOS/Fleet
             installers: |
