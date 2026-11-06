@@ -7,7 +7,6 @@ import App from "./App.vue";
 import "./assets/main.css";
 import builtInSkillsPluginManifest from "@/plugins/builtin/built-in-skills";
 import githubPluginManifest from "@/plugins/builtin/github";
-import marketplacePluginManifest from "@/plugins/builtin/marketplace";
 import modsPluginManifest from "@/plugins/builtin/mods";
 import { usePluginRuntime } from "@/plugins/composable";
 import { hasCachedDisabledPlugins, holdPluginsUntilKnown } from "@/plugins/registry";
@@ -44,7 +43,6 @@ pluginRuntime.registerPlugins([
   githubPluginManifest,
   modsPluginManifest,
   builtInSkillsPluginManifest,
-  marketplacePluginManifest,
 ]);
 
 const pinia = createPinia();

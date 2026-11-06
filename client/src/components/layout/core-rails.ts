@@ -50,7 +50,7 @@ const workflowsOff = () => !useWorkflowsFeature().isWorkflowsEnabled.value;
 const jobsOff = () => !useJobsFeature().isJobsEnabled.value;
 const missionControlOff = () => !useMissionControlFeature().isMissionControlEnabled.value;
 
-/** The rails Fleet ships. Plugin rails (GitHub, Plugins) come from the plugins' own sidebar contributions. */
+/** The rails Fleet ships. Plugin rails (GitHub) come from the plugins' own sidebar contributions. */
 railPoint.contribute("core", [
   // Fleet (mission control) comes first and leaves the rail while it's switched off, like Board. It owns its context:
   // the fleet-menu (Needs you, one entry per machine) beside the selected view; off, the page's notice fills the area.

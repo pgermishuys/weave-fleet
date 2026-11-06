@@ -7,7 +7,6 @@ import { usePluginRuntime } from "@/plugins/composable";
 import { useStaleRailRedirect } from "@/composables/use-context-panel";
 import { useSidebarStore } from "@/stores/sidebar";
 import githubPluginManifest from "@/plugins/builtin/github";
-import marketplacePluginManifest from "@/plugins/builtin/marketplace";
 
 const { navigate, pathname, boardOn, workflowsOn, missionOn, jobsOn } = vi.hoisted(() => ({
   navigate: vi.fn(),
@@ -47,7 +46,6 @@ vi.mock("@/components/automations/AutomationsNavPanel.vue", panel("automations")
 vi.mock("@/components/workflows/WorkflowsNavPanel.vue", panel("workflows"));
 vi.mock("@/plugins/builtin/github/GitHubPanel.vue", panel("github"));
 vi.mock("@/plugins/builtin/github/GitHubSettings.vue", panel("github-settings"));
-vi.mock("@/plugins/builtin/marketplace/MarketplacePanel.vue", panel("marketplace"));
 
 function railLabels(wrapper: { findAll: (selector: string) => { attributes: (name: string) => string | undefined }[] }): string[] {
   return wrapper.findAll("nav.rail-nav button.rail-item").map((button) => button.attributes("aria-label") ?? "");
@@ -59,7 +57,7 @@ describe("the icon rail", () => {
   beforeEach(() => {
     localStorage.clear();
     runtime.clear();
-    runtime.registerPlugins([githubPluginManifest, marketplacePluginManifest]);
+    runtime.registerPlugins([githubPluginManifest]);
     pathname.value = "/";
     boardOn.value = false;
     workflowsOn.value = false;
@@ -72,7 +70,7 @@ describe("the icon rail", () => {
     const wrapper = mount(IconRail);
 
     expect(railLabels(wrapper)).toEqual([
-      "Sessions", "Workflows", "Automations", "Analytics", "GitHub", "Plugins", "Settings", "Help",
+      "Sessions", "Workflows", "Automations", "Analytics", "GitHub", "Settings", "Help",
     ]);
     expect(wrapper.findAll("nav.rail-nav .rail-label").map((label) => label.text())).toEqual(railLabels(wrapper));
     expect(wrapper.find("[data-tooltip]").exists()).toBe(false);
@@ -129,12 +127,6 @@ describe("the icon rail", () => {
     await wrapper.find("[aria-label=Automations]").trigger("click");
     expect(store.activeRail).toBe("automations");
     expect(navigate).toHaveBeenLastCalledWith({ to: "/automations" });
-
-    navigate.mockClear();
-    await wrapper.find("[aria-label=Plugins]").trigger("click");
-    // A shortcut into Settings › Plugins: the route makes Settings the active rail, so the rail itself isn't set.
-    expect(store.activeRail).toBe("automations");
-    expect(navigate).toHaveBeenLastCalledWith({ to: "/settings/plugins" });
 
     await wrapper.find("[aria-label=GitHub]").trigger("click");
     expect(store.activeRail).toBe("github");
@@ -210,7 +202,7 @@ describe("the context panel per rail", () => {
   beforeEach(() => {
     localStorage.clear();
     runtime.clear();
-    runtime.registerPlugins([githubPluginManifest, marketplacePluginManifest]);
+    runtime.registerPlugins([githubPluginManifest]);
     boardOn.value = false;
     workflowsOn.value = false;
     missionOn.value = false;
