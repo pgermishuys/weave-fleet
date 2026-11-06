@@ -375,6 +375,7 @@ public static class DependencyInjection
         services.AddSingleton<PendingPermissionStore>();
         services.AddSingleton<RunningWorkRecorder>();
         services.AddScoped<SessionContextService>();
+        services.AddScoped<SessionBranchService>();
         // Singleton: the relay hands it every context report and every event; it keeps how full each session's context is.
         services.AddSingleton<SessionContextRecorder>();
         services.TryAddSingleton(TimeProvider.System);

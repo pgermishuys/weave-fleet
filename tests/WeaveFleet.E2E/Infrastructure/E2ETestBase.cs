@@ -31,6 +31,9 @@ public abstract class E2ETestBase : IAsyncLifetime
     /// <summary>The server base URL for this test (e.g. "http://127.0.0.1:54321").</summary>
     protected string ServerUrl => _factory.ServerUrl;
 
+    /// <summary>The running server's services, for reaching what the API doesn't expose.</summary>
+    protected IServiceProvider ServerServices => _factory.KestrelServices;
+
     /// <summary>The TestHarness singleton for configuring mock scenarios.</summary>
     protected TestHarness.TestHarness TestHarness => _factory.TestHarness;
 

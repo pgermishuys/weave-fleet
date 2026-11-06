@@ -802,6 +802,12 @@ export interface SessionCheckoutChanged extends EventCursorMetadata {
   payload: { workspaceId: string; state: "removed" | "restoring" | "restored"; removedAt: string | null };
 }
 
+/** The branch checked out in a workspace's folder changed (an agent ran `git switch`). Sent on the `sessions` topic, for every session in the workspace. */
+export interface SessionBranchChanged extends EventCursorMetadata {
+  type: "session_branch";
+  payload: { workspaceId: string; branch: string };
+}
+
 /** A session's progress, with its todos and plan. Sent on the session's topic. */
 export interface ProgressUpdated extends EventCursorMetadata {
   type: "progress.updated";
@@ -989,6 +995,7 @@ export type DomainEvent =
   | SessionListDeleted
   | SessionProgressChanged
   | SessionCheckoutChanged
+  | SessionBranchChanged
   | ProgressUpdated
   | SessionTokensCounted
   | SmartLinkUpdated

@@ -23,23 +23,27 @@ public sealed partial class SessionContextRecorder(IServiceScopeFactory scopeFac
 
     /// <summary>A model call's size, or the model's limits, for session <paramref name="sessionId"/>.</summary>
     public void Observe(string sessionId, string? userId, ContextUsageReport report)
-        => Queue(sessionId, userId, (service, ct) => service.RecordUsageAsync(sessionId, report, ct));
+        => Queue(sessionId, userId, (sp, ct) => sp.GetRequiredService<SessionContextService>().RecordUsageAsync(sessionId, report, ct));
 
     /// <summary>A compaction of session <paramref name="sessionId"/>'s context started, ended or failed.</summary>
     public void Observe(string sessionId, string? userId, ContextCompactionReport report)
-        => Queue(sessionId, userId, (service, ct) => service.RecordCompactionAsync(sessionId, report, ct));
+        => Queue(sessionId, userId, (sp, ct) => sp.GetRequiredService<SessionContextService>().RecordCompactionAsync(sessionId, report, ct));
 
     /// <summary>Called for every event the relay translates, on its pump: a turn's end is the one it acts on.</summary>
     public void Observe(string sessionId, string? userId, DomainEvent? domainEvent)
     {
-        if (domainEvent is SessionIdled)
-            Queue(sessionId, userId, (service, ct) => service.RecordTurnEndedAsync(sessionId, ct));
+        if (domainEvent is not SessionIdled)
+            return;
+
+        Queue(sessionId, userId, (sp, ct) => sp.GetRequiredService<SessionContextService>().RecordTurnEndedAsync(sessionId, ct));
+        // The turn's end is also the cheap moment to see a `git switch` the agent made in the session's folder.
+        Queue(sessionId, userId, (sp, ct) => sp.GetRequiredService<SessionBranchService>().RefreshAsync(sessionId, ct));
     }
 
     /// <summary>Completes when every report queued for the session so far is handled. Tests wait on it.</summary>
     internal Task Idle(string sessionId) => _tails.TryGetValue(sessionId, out var tail) ? tail : Task.CompletedTask;
 
-    private void Queue(string sessionId, string? userId, Func<SessionContextService, CancellationToken, Task> handle)
+    private void Queue(string sessionId, string? userId, Func<IServiceProvider, CancellationToken, Task> handle)
     {
         if (string.IsNullOrEmpty(userId))
             return;
@@ -53,13 +57,13 @@ public sealed partial class SessionContextRecorder(IServiceScopeFactory scopeFac
         }
     }
 
-    private async Task RunAsync(string sessionId, string userId, Func<SessionContextService, CancellationToken, Task> handle)
+    private async Task RunAsync(string sessionId, string userId, Func<IServiceProvider, CancellationToken, Task> handle)
     {
         try
         {
             using var scope = scopeFactory.CreateScope();
             using var user = scope.ServiceProvider.GetRequiredService<IBackgroundUserScope>().Begin(userId);
-            await handle(scope.ServiceProvider.GetRequiredService<SessionContextService>(), CancellationToken.None).ConfigureAwait(false);
+            await handle(scope.ServiceProvider, CancellationToken.None).ConfigureAwait(false);
         }
         catch (Exception ex)
         {

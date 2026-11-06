@@ -136,6 +136,7 @@ internal sealed record QuickChatSourceInput;
 [JsonSerializable(typeof(SessionCreatedOutboxPayload))]
 [JsonSerializable(typeof(SessionArchivedOutboxPayload))]
 [JsonSerializable(typeof(WeaveFleet.Application.Workspaces.SessionCheckoutPayload))]
+[JsonSerializable(typeof(WeaveFleet.Application.Sessions.SessionBranchPayload))]
 [JsonSerializable(typeof(SessionUnarchivedOutboxPayload))]
 [JsonSerializable(typeof(SessionDeletedOutboxPayload))]
 [JsonSerializable(typeof(ActivityStatusBroadcastPayload))]
