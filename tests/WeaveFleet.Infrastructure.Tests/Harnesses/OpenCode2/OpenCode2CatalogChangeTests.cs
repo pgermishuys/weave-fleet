@@ -2,6 +2,7 @@ using System.Collections.Concurrent;
 using System.Net;
 using System.Text.Json;
 using Microsoft.Extensions.Logging.Abstractions;
+using Microsoft.Extensions.Time.Testing;
 using WeaveFleet.Infrastructure.Harnesses.OpenCode2;
 
 namespace WeaveFleet.Infrastructure.Tests.Harnesses.OpenCode2;
@@ -9,12 +10,14 @@ namespace WeaveFleet.Infrastructure.Tests.Harnesses.OpenCode2;
 /// <summary>
 /// V2 rebuilds a folder's agents, models and commands whenever a file it watches changes, and says so with
 /// <c>*.updated</c> events (kind and folder, never what). The server tells Fleet once per change, for folders Fleet uses,
-/// and not while a folder is still loading. Event shapes are from 2.0.9.
+/// and not while a folder is still loading. Event shapes are from 2.0.9. The server's clock is the test's, so a busy
+/// machine running other tests can't make V2 seem to go quiet late.
 /// </summary>
 public sealed class OpenCode2CatalogChangeTests
 {
     private const string Folder = "/work/rocket";
     private static readonly TimeSpan Quiet = TimeSpan.FromMilliseconds(250);
+    private readonly FakeTimeProvider _time = new();
 
     // The rounds V2 sends for one agent file written in a loaded folder (2.0.9 sends two or three).
     private static readonly string[] AgentFileWritten =
@@ -28,7 +31,7 @@ public sealed class OpenCode2CatalogChangeTests
 
         foreach (var type in AgentFileWritten)
             server.Route(Updated(type, Folder));
-        await Task.Delay(Quiet * 4);
+        await AdvanceAsync(Quiet * 4);
 
         changes.ShouldBe([Folder]);
     }
@@ -42,11 +45,11 @@ public sealed class OpenCode2CatalogChangeTests
         for (var i = 0; i < 5; i++)
         {
             server.Route(Updated("agent.updated", Folder));
-            await Task.Delay(Quiet / 5);
+            await AdvanceAsync(Quiet / 5);
         }
         changes.ShouldBeEmpty();
 
-        await Task.Delay(Quiet * 4);
+        await AdvanceAsync(Quiet * 4);
         changes.ShouldBe([Folder]);
     }
 
@@ -57,9 +60,9 @@ public sealed class OpenCode2CatalogChangeTests
         await using var server = await LoadedServerAsync(changes);
 
         server.Route(Updated("agent.updated", Folder));
-        await Task.Delay(Quiet * 4);
+        await AdvanceAsync(Quiet * 4);
         server.Route(Updated("model.updated", Folder));
-        await Task.Delay(Quiet * 4);
+        await AdvanceAsync(Quiet * 4);
 
         changes.ShouldBe([Folder, Folder]);
     }
@@ -74,7 +77,7 @@ public sealed class OpenCode2CatalogChangeTests
         foreach (var type in LoadEvents.Concat(AgentFileWritten))
             server.Route(Updated(type, Folder));
         await loading.WaitAsync(TimeSpan.FromSeconds(5));
-        await Task.Delay(Quiet * 4);
+        await AdvanceAsync(Quiet * 4);
 
         changes.ShouldBeEmpty();
     }
@@ -89,7 +92,7 @@ public sealed class OpenCode2CatalogChangeTests
 
         foreach (var type in LoadEvents)
             server.Route(Updated(type, Folder));
-        await Task.Delay(Quiet * 4);
+        await AdvanceAsync(Quiet * 4);
 
         changes.ShouldBeEmpty();
     }
@@ -104,7 +107,7 @@ public sealed class OpenCode2CatalogChangeTests
 
         foreach (var type in LoadEvents)
             server.Route(Updated(type, Folder));
-        await Task.Delay(Quiet * 4);
+        await AdvanceAsync(Quiet * 4);
 
         changes.ShouldBeEmpty();
     }
@@ -116,7 +119,7 @@ public sealed class OpenCode2CatalogChangeTests
         await using var server = await LoadedServerAsync(changes);
 
         server.Route(Updated("agent.updated", "/work/comet"));
-        await Task.Delay(Quiet * 4);
+        await AdvanceAsync(Quiet * 4);
 
         changes.ShouldBeEmpty();
     }
@@ -131,7 +134,7 @@ public sealed class OpenCode2CatalogChangeTests
             server.Route(Updated(type, "/home/you"));
 
         server.Route(Updated("agent.updated", "/home/you"));
-        await Task.Delay(Quiet * 4);
+        await AdvanceAsync(Quiet * 4);
 
         changes.ShouldBeEmpty();
     }
@@ -147,7 +150,7 @@ public sealed class OpenCode2CatalogChangeTests
             server.Route(Updated(type, Folder));
 
         server.Route(Updated("command.updated", Folder));
-        await Task.Delay(Quiet * 4);
+        await AdvanceAsync(Quiet * 4);
 
         changes.ShouldBe([Folder]);
         server.SessionsIn(Folder).ShouldBe(["fleet-1"]);
@@ -164,15 +167,21 @@ public sealed class OpenCode2CatalogChangeTests
         await using var server = await LoadedServerAsync(changes);
 
         server.Route(Updated(type, Folder));
-        await Task.Delay(Quiet * 4);
+        await AdvanceAsync(Quiet * 4);
 
         changes.ShouldBeEmpty();
     }
 
+    /// <summary>
+    /// Moves the server's clock on, off xUnit's synchronization context: on it, the server's wait finishing is queued to
+    /// the thread pool instead of run inside <see cref="FakeTimeProvider.Advance"/>, and a busy pool runs it late.
+    /// </summary>
+    private Task AdvanceAsync(TimeSpan by) => Task.Run(() => _time.Advance(by));
+
     private static readonly string[] LoadEvents = ["integration.updated", "provider.updated", "model.updated", "agent.updated", "command.updated"];
 
     /// <summary>A server that has loaded <see cref="Folder"/> for a catalog read, with no settle time after it.</summary>
-    private static async Task<OpenCode2Server> LoadedServerAsync(ConcurrentQueue<string> changes)
+    private async Task<OpenCode2Server> LoadedServerAsync(ConcurrentQueue<string> changes)
     {
         var server = Server(changes);
         var loading = server.LoadLocationAsync(Folder, CancellationToken.None);
@@ -182,9 +191,10 @@ public sealed class OpenCode2CatalogChangeTests
         return server;
     }
 
-    private static OpenCode2Server Server(ConcurrentQueue<string> changes, TimeSpan? settle = null)
+    private OpenCode2Server Server(ConcurrentQueue<string> changes, TimeSpan? settle = null)
         => new("local-user", OpenCode2Fixtures.ClientServing("", new StubHandler(_ => new HttpResponseMessage(HttpStatusCode.OK))), "token", process: null, NullLogger.Instance)
         {
+            Time = _time,
             CatalogChanged = (_, directory) => changes.Enqueue(directory),
             CatalogChangeQuietTime = Quiet,
             LocationSettleTime = settle ?? TimeSpan.Zero,
