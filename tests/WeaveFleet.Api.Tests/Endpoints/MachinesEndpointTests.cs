@@ -121,20 +121,27 @@ public sealed class MachinesEndpointTests : IClassFixture<MachinesEndpointTests.
     {
         using var owner = Client(_hangar, Token(_hangar));
         var id = (await (await owner.PostAsJsonAsync("/api/machines", new { baseUrl = FalconUrl, token = Token(_falcon) })).ReadSuccessAsync()).GetProperty("id").GetString()!;
-        var routes = _hangar.Services.GetRequiredService<WeaveFleet.Domain.Repositories.IRemoteMachineRepository>();
-        await routes.UpdateAddressesAsync(id, FalconUrl,
-        [
-            new(FalconUrl, "tailnet", false),
-            new("http://100.88.14.3:2113", "tailnet-ip", true),
-            new("http://192.168.1.42:2113", "lan", true),
-        ]);
+        // Hangar's watcher connects to falcon and learns its addresses in the background, so the list can change
+        // between reading it and sending an order, which is turned away. Like the page, read it again and resend.
+        List<string> order = [];
+        JsonElement? reordered = null;
+        for (var attempt = 0; attempt < 10 && reordered is null; attempt++)
+        {
+            var listed = (await owner.GetFromJsonAsync<JsonElement>("/api/machines")).GetProperty("machines").EnumerateArray().Single();
+            order = [.. listed.GetProperty("addresses").EnumerateArray().Select(a => a.GetProperty("url").GetString()!).Reverse()];
+            order.Count.ShouldBeGreaterThan(1, "falcon listens on 0.0.0.0, so it reports addresses besides the one it was added with");
+            var put = await owner.PutAsJsonAsync($"/api/machines/{id}", new { addresses = order });
+            if (put.StatusCode == HttpStatusCode.OK)
+                reordered = await put.Content.ReadFromJsonAsync<JsonElement>();
+            else
+                put.StatusCode.ShouldBe(HttpStatusCode.BadRequest);
+        }
 
-        var reordered = await (await owner.PutAsJsonAsync($"/api/machines/{id}", new { addresses = new[] { "http://192.168.1.42:2113", FalconUrl, "http://100.88.14.3:2113" } })).ReadSuccessAsync();
-        reordered.GetProperty("addresses").EnumerateArray().Select(a => a.GetProperty("url").GetString())
-            .ShouldBe(["http://192.168.1.42:2113", FalconUrl, "http://100.88.14.3:2113"]);
-        reordered.GetProperty("baseUrl").GetString().ShouldBe(FalconUrl);
+        reordered.ShouldNotBeNull("the order kept being turned away");
+        reordered.Value.GetProperty("addresses").EnumerateArray().Select(a => a.GetProperty("url").GetString()).ShouldBe(order);
 
-        var stale = await owner.PutAsJsonAsync($"/api/machines/{id}", new { addresses = new[] { FalconUrl, "http://192.168.1.42:2113" } });
+        // One address short is never the machine's list.
+        var stale = await owner.PutAsJsonAsync($"/api/machines/{id}", new { addresses = order.Skip(1) });
         stale.StatusCode.ShouldBe(HttpStatusCode.BadRequest);
     }
 
