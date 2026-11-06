@@ -53,12 +53,19 @@ public static class WebAppEndpoints
     /// </summary>
     public static IEndpointRouteBuilder MapUnknownServerPaths(this IEndpointRouteBuilder app)
     {
+        // A RequestDelegate, not a handler: the request delegate generator (on in Release) rewrites
+        // MapFallback(pattern, handler) without its pattern, which made it a second SPA fallback.
+        RequestDelegate notFound = http =>
+        {
+            http.Response.StatusCode = StatusCodes.Status404NotFound;
+            return http.Response.WriteAsJsonAsync(
+                new ErrorResponse($"Fleet has nothing at {http.Request.Method} {http.Request.Path}."),
+                ApiJsonContext.Default.ErrorResponse);
+        };
+
         foreach (var prefix in ServerPathPrefixes)
         {
-            app.MapFallback(prefix + "/{**path}", (HttpContext http) => Results.Json(
-                    new ErrorResponse($"Fleet has nothing at {http.Request.Method} {http.Request.Path}."),
-                    ApiJsonContext.Default.ErrorResponse,
-                    statusCode: StatusCodes.Status404NotFound))
+            app.MapFallback(prefix + "/{**path}", notFound)
                 .WithMetadata(new HttpMethodMetadata([HttpMethods.Get, HttpMethods.Head]))
                 .AllowAnonymous();
         }
