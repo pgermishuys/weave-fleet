@@ -187,12 +187,12 @@ public sealed class TestHarnessSession : IHarnessSession
         await PushEventCoreAsync(new HarnessEvent
         {
             Type = EventTypes.SessionStatus,
-            SessionId = InstanceId,
+            SessionId = _fleetSessionId,
             FleetSessionId = _fleetSessionId,
             Timestamp = DateTimeOffset.UtcNow,
             Payload = JsonSerializer.SerializeToElement(new
             {
-                sessionID = InstanceId,
+                sessionID = _fleetSessionId,
                 status = new { type = "idle" }
             })
         }, ct).ConfigureAwait(false);
@@ -200,12 +200,12 @@ public sealed class TestHarnessSession : IHarnessSession
         await PushEventCoreAsync(new HarnessEvent
         {
             Type = EventTypes.SessionIdle,
-            SessionId = InstanceId,
+            SessionId = _fleetSessionId,
             FleetSessionId = _fleetSessionId,
             Timestamp = DateTimeOffset.UtcNow,
             Payload = JsonSerializer.SerializeToElement(new
             {
-                sessionID = InstanceId
+                sessionID = _fleetSessionId
             })
         }, ct).ConfigureAwait(false);
     }
@@ -225,18 +225,18 @@ public sealed class TestHarnessSession : IHarnessSession
         var evt = new HarnessEvent
         {
             Type = "message.part.updated",
-            SessionId = InstanceId,
+            SessionId = _fleetSessionId,
             Timestamp = DateTimeOffset.UtcNow,
             Payload = JsonSerializer.SerializeToElement(new
             {
-                sessionID = InstanceId,
+                sessionID = _fleetSessionId,
                 part = new
                 {
                     type = "tool",
                     id = requestId,
                     callID = requestId,
                     tool = "question",
-                    sessionID = InstanceId,
+                    sessionID = _fleetSessionId,
                     messageID = _lastQuestionMessageId ?? "msg-question",
                     state = new
                     {
@@ -541,7 +541,7 @@ public sealed class TestHarnessSession : IHarnessSession
         await PushEventCoreAsync(new HarnessEvent
         {
             Type = EventTypes.PermissionAsked,
-            SessionId = InstanceId,
+            SessionId = _fleetSessionId,
             FleetSessionId = _fleetSessionId,
             Timestamp = DateTimeOffset.UtcNow,
             Payload = JsonSerializer.SerializeToElement(ask, PermissionJson),
@@ -561,7 +561,7 @@ public sealed class TestHarnessSession : IHarnessSession
         await PushEventCoreAsync(new HarnessEvent
         {
             Type = EventTypes.PermissionReplied,
-            SessionId = InstanceId,
+            SessionId = _fleetSessionId,
             FleetSessionId = _fleetSessionId,
             Timestamp = DateTimeOffset.UtcNow,
             Payload = JsonSerializer.SerializeToElement(new PermissionReplied { Id = ask.Id, SessionId = ask.SessionId, Reply = reply }, PermissionJson),
@@ -572,10 +572,10 @@ public sealed class TestHarnessSession : IHarnessSession
     private ValueTask PushStatusAsync(string status, CancellationToken ct) => PushEventCoreAsync(new HarnessEvent
     {
         Type = EventTypes.SessionStatus,
-        SessionId = InstanceId,
+        SessionId = _fleetSessionId,
         FleetSessionId = _fleetSessionId,
         Timestamp = DateTimeOffset.UtcNow,
-        Payload = JsonSerializer.SerializeToElement(new { sessionID = InstanceId, status = new { type = status } }),
+        Payload = JsonSerializer.SerializeToElement(new { sessionID = _fleetSessionId, status = new { type = status } }),
     }, ct);
 
     private async ValueTask PushEventCoreAsync(HarnessEvent evt, CancellationToken ct)

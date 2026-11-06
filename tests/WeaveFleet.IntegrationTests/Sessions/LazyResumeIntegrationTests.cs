@@ -184,6 +184,40 @@ public sealed class LazyResumeIntegrationTests : IAsyncLifetime, IDisposable
         }
     }
 
+    [Fact]
+    public async Task Prompt_AfterRestart_WakesTheSessionOnANewInstance()
+    {
+        // Each wake registers a new instances row, so the harness must hand back a new instance id every time.
+        var sessionId = await CreateSessionAsync();
+        string originalInstanceId;
+        {
+            using var scope = _server.Services.CreateScope();
+            var sessionRepo = scope.ServiceProvider.GetRequiredService<ISessionRepository>();
+            var instanceTracker = scope.ServiceProvider.GetRequiredService<InstanceTracker>();
+            var session = await sessionRepo.GetByIdAsync(sessionId);
+            session.ShouldNotBeNull();
+            originalInstanceId = session.InstanceId!;
+            instanceTracker.Remove(originalInstanceId);
+            await sessionRepo.UpdateStatusAsync(sessionId, "stopped", DateTime.UtcNow.ToString("O"));
+        }
+
+        using var http = new HttpClient { BaseAddress = new Uri(_server.ServerUrl) };
+        var response = await http.PostAsync($"/api/sessions/{sessionId}/prompt",
+            new StringContent("""{"text":"hello after restart"}""", System.Text.Encoding.UTF8, "application/json"));
+
+        var body = await response.Content.ReadAsStringAsync();
+        response.IsSuccessStatusCode.ShouldBeTrue($"HTTP {(int)response.StatusCode}: {body}");
+        {
+            using var scope = _server.Services.CreateScope();
+            var sessionRepo = scope.ServiceProvider.GetRequiredService<ISessionRepository>();
+            var instanceTracker = scope.ServiceProvider.GetRequiredService<InstanceTracker>();
+            var woken = await sessionRepo.GetByIdAsync(sessionId);
+            woken.ShouldNotBeNull();
+            woken.InstanceId.ShouldNotBe(originalInstanceId);
+            instanceTracker.Get(woken.InstanceId!).ShouldNotBeNull();
+        }
+    }
+
     private async Task<string> CreateSessionAsync()
     {
         using var http = new HttpClient { BaseAddress = new Uri(_server.ServerUrl) };

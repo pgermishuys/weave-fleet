@@ -34,7 +34,7 @@ public sealed class TestHarnessRuntime : IHarnessRuntime
             throw new InvalidOperationException("TestHarness: configured to fail on spawn.");
 
         IHarnessSession instance = new TestHarnessSession(
-            instanceId: options.SessionId,
+            instanceId: NewInstanceId(),
             scenario: scenario,
             fleetSessionId: options.SessionId,
             scopeFactory: _scopeFactory,
@@ -52,7 +52,7 @@ public sealed class TestHarnessRuntime : IHarnessRuntime
             throw new InvalidOperationException("TestHarness: configured to fail on resume.");
 
         IHarnessSession instance = new TestHarnessSession(
-            instanceId: options.SessionId,
+            instanceId: NewInstanceId(),
             scenario: _scenario,
             fleetSessionId: options.SessionId,
             scopeFactory: _scopeFactory,
@@ -60,6 +60,10 @@ public sealed class TestHarnessRuntime : IHarnessRuntime
 
         return Task.FromResult(instance);
     }
+
+    // Every spawn and resume is a new instance row, as with the real harnesses: reusing the session id made the
+    // second wake (after a restart or a sleep) fail on instances.id.
+    private static string NewInstanceId() => $"test-{Guid.NewGuid():N}";
 
     /// <inheritdoc/>
     public Task<bool> WarmupPooledInstanceAsync(string ownerUserId, CancellationToken ct)
