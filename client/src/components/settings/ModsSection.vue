@@ -62,8 +62,8 @@ onMounted(load);
         type="button"
         class="text-accent hover:underline focus-visible:outline focus-visible:outline-2 focus-visible:outline-accent"
         data-testid="mods-features-link"
-        @click="setActiveSection('labs')"
-      >Labs</button>.
+        @click="setActiveSection('plugin:mods')"
+      >Plugins › Mods</button>.
     </p>
 
     <p
@@ -71,13 +71,13 @@ onMounted(load);
       class="mt-5 rounded-card border border-dashed border-border p-6 text-center text-sm text-muted"
       data-testid="mods-switched-off"
     >
-      Mods are off. Turn Mods on in Settings →
+      Mods are off. Turn Mods on in
       <button
         type="button"
         class="text-accent hover:underline"
         data-testid="mods-features-link"
-        @click="setActiveSection('labs')"
-      >Labs</button>.
+        @click="setActiveSection('plugin:mods')"
+      >Plugins › Mods</button>.
     </p>
 
     <template v-else>

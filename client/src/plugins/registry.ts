@@ -102,6 +102,9 @@ export function holdPluginsUntilKnown(): void {
 const disabledIds = shallowRef<ReadonlySet<string>>(loadDisabled());
 
 export function isPluginEnabled(pluginId: string): boolean {
+  const manifest = pluginManifests.get(pluginId);
+  if (manifest?.ownSwitch) return manifest.ownSwitch.isOn();
+  if (manifest?.descriptor.switchless) return true;
   return !disabledIds.value.has(pluginId);
 }
 
@@ -153,7 +156,9 @@ function contribute(manifest: FleetPluginManifest): void {
 
   // Contributing again replaces the plugin, so what the old one contributed goes first.
   removePlugin(pluginId);
-  if (!manifest.descriptor.alwaysOn && (held.value || !isPluginEnabled(pluginId))) return;
+  // A plugin with its own switch (or none) keeps what it adds registered: readers check isPluginEnabled, which follows it.
+  const ownedSwitch = Boolean(manifest.ownSwitch) || Boolean(manifest.descriptor.switchless);
+  if (!manifest.descriptor.alwaysOn && !ownedSwitch && (held.value || !isPluginEnabled(pluginId))) return;
 
   sidebarItems.contribute(pluginId, withPluginId(pluginId, contributions?.sidebarItems));
   sidebarPanels.contribute(pluginId, withPluginId(pluginId, contributions?.sidebarPanels));

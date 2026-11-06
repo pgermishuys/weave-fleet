@@ -5,8 +5,10 @@ import "@fontsource-variable/inter";
 import "@fontsource-variable/jetbrains-mono";
 import App from "./App.vue";
 import "./assets/main.css";
+import builtInSkillsPluginManifest from "@/plugins/builtin/built-in-skills";
 import githubPluginManifest from "@/plugins/builtin/github";
 import marketplacePluginManifest from "@/plugins/builtin/marketplace";
+import modsPluginManifest from "@/plugins/builtin/mods";
 import { usePluginRuntime } from "@/plugins/composable";
 import { hasCachedDisabledPlugins, holdPluginsUntilKnown } from "@/plugins/registry";
 import { getPromptTrackingState } from "@/composables/use-send-prompt";
@@ -40,6 +42,8 @@ if (!hasCachedDisabledPlugins()) holdPluginsUntilKnown();
 
 pluginRuntime.registerPlugins([
   githubPluginManifest,
+  modsPluginManifest,
+  builtInSkillsPluginManifest,
   marketplacePluginManifest,
 ]);
 

@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { computed } from "vue";
+import { computed, onMounted } from "vue";
 import { ChevronRight, Puzzle } from "lucide-vue-next";
 import SettingSwitch from "@/components/settings/SettingSwitch.vue";
 import { useSettingsNav } from "@/composables/use-settings-nav";
@@ -14,6 +14,9 @@ const pluginRuntime = usePluginRuntime();
 const { setActiveSection } = useSettingsNav();
 
 const manifest = computed(() => pluginRuntime.manifests.value.find((m) => m.descriptor.id === props.pluginId));
+onMounted(() => manifest.value?.ownSwitch?.load?.());
+const own = computed(() => manifest.value?.ownSwitch);
+const switchless = computed(() => descriptor.value?.switchless === true);
 const enabled = computed(() => isPluginEnabled(props.pluginId));
 const page = computed(() => getConfigPage(props.pluginId));
 const descriptor = computed(() => manifest.value?.descriptor);
@@ -74,18 +77,30 @@ const name = computed(() => descriptor.value?.displayName ?? props.pluginId);
             <span class="rounded-full border border-border px-1.5 text-[0.71429rem] font-semibold text-muted">Built in</span>
           </h2>
           <p class="mt-0.5 text-sm text-muted">
-            <span :class="enabled ? 'text-running' : ''">{{ enabled ? "On" : "Off" }}</span>
-            <template v-if="enabled && status"> · {{ status.status === "connected" ? "Connected" : status.status === "error" ? "Needs attention" : "Not connected" }}</template>
-            <template v-if="descriptor?.description"> · {{ descriptor.description }}</template>
+            <span
+              v-if="!switchless"
+              :class="enabled ? 'text-running' : ''"
+            >{{ enabled ? "On" : "Off" }}</span>
+            <template v-if="!switchless && enabled && status"> · {{ status.status === "connected" ? "Connected" : status.status === "error" ? "Needs attention" : "Not connected" }}</template>
+            <template v-if="descriptor?.description"><template v-if="!switchless"> · </template>{{ descriptor.description }}</template>
           </p>
         </div>
         <SettingSwitch
+          v-if="!switchless"
           :checked="enabled"
+          :saving="own?.saving?.()"
+          :pending="own?.pending?.()"
           :aria-label="`${name} on or off`"
           data-testid="plugin-page-switch"
           @click="void setPluginEnabledEverywhere(pluginId, !enabled)"
         />
       </header>
+
+      <component
+        :is="own?.panel"
+        v-if="own?.panel"
+        data-testid="plugin-page-panel"
+      />
 
       <template v-if="enabled && page">
         <div class="flex items-baseline justify-between gap-4">
@@ -107,7 +122,13 @@ const name = computed(() => descriptor.value?.displayName ?? props.pluginId);
         class="rounded-card border border-dashed border-border bg-card-bg p-4 text-sm text-muted"
         data-testid="plugin-off-note"
       >
-        {{ name }} is off. Its rail icon, settings and pickers are gone until you turn it on.
+        {{ name }} is off.
+        <template v-if="own">
+          Turn it on with the switch above.
+        </template>
+        <template v-else>
+          Its rail icon, settings and pickers are gone until you turn it on.
+        </template>
       </p>
 
       <div v-if="additions.length > 0">
