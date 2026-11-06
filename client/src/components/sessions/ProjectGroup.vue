@@ -525,6 +525,19 @@ async function handleDelete(mode: DeleteProjectMode): Promise<void> {
 
             <span class="project-count">{{ project.sessionCount }}</span>
           </button>
+
+          <button
+            v-if="canShowContextMenu"
+            type="button"
+            class="project-new"
+            data-testid="project-new-session"
+            :aria-label="`New session in ${project.name}`"
+            :title="`New session in ${project.name}`"
+            :disabled="isAnyActionPending"
+            @click.stop="handleNewSessionRequest"
+          >
+            <Plus aria-hidden="true" />
+          </button>
         </div>
       </ContextMenuTrigger>
 
@@ -609,6 +622,19 @@ async function handleDelete(mode: DeleteProjectMode): Promise<void> {
 
         <span class="project-count">{{ project.sessionCount }}</span>
       </button>
+
+        <button
+          v-if="canShowContextMenu && !isInlineEditing"
+          type="button"
+          class="project-new"
+          data-testid="project-new-session"
+          :aria-label="`New session in ${project.name}`"
+          :title="`New session in ${project.name}`"
+          :disabled="isAnyActionPending"
+          @click.stop="handleNewSessionRequest"
+        >
+          <Plus aria-hidden="true" />
+        </button>
 
       <div
         v-else
@@ -776,7 +802,65 @@ async function handleDelete(mode: DeleteProjectMode): Promise<void> {
 }
 
 .project-shell {
+  position: relative;
   width: 100%;
+}
+
+/* The + sits in a slot the title always reserves (margin on .project-title), so nothing moves when it appears. */
+.project-shell > .project-header .project-title {
+  margin-right: 28px;
+}
+
+.project-new {
+  position: absolute;
+  top: 2px;
+  right: 34px;
+  width: 22px;
+  height: 22px;
+  display: grid;
+  place-items: center;
+  padding: 0;
+  border: 0;
+  border-radius: 6px;
+  background: transparent;
+  color: var(--muted);
+  cursor: pointer;
+  opacity: 0;
+  transition: opacity var(--transition), background var(--transition), color var(--transition);
+}
+
+.project-new svg {
+  width: 15px;
+  height: 15px;
+}
+
+.project-shell:hover .project-new,
+.project-shell:focus-within .project-new {
+  opacity: 1;
+}
+
+.project-new:hover {
+  background: color-mix(in srgb, var(--text) 10%, transparent);
+  color: var(--accent);
+}
+
+.project-new:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: -1px;
+}
+
+/* No hover on touch: always shown, with a 44px hit area around the 22px mark. */
+@media (hover: none) {
+  .project-new {
+    opacity: 1;
+    color: color-mix(in srgb, var(--text) 65%, transparent);
+  }
+
+  .project-new::after {
+    content: "";
+    position: absolute;
+    inset: -11px;
+  }
 }
 
 .project-header {

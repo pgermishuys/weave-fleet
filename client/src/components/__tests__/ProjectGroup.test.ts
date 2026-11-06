@@ -58,6 +58,22 @@ describe("ProjectGroup", () => {
     });
   }
 
+  it("shows a New session + button that emits newSession without toggling", async () => {
+    const wrapper = mountProjectGroup();
+    const button = wrapper.get('[data-testid="project-new-session"]');
+    expect(button.attributes("aria-label")).toBe("New session in Project B");
+    expect(button.attributes("title")).toBe("New session in Project B");
+    expect(button.element.tagName).toBe("BUTTON");
+    await button.trigger("click");
+    expect(wrapper.emitted("newSession")).toEqual([["project-2"]]);
+    expect(wrapper.emitted("toggle")).toBeUndefined();
+  });
+
+  it("has no + button for the ungrouped group", () => {
+    const wrapper = mountProjectGroup({ project: { ...createProjectGroup(), projectId: null, isUngrouped: true } });
+    expect(wrapper.find('[data-testid="project-new-session"]').exists()).toBe(false);
+  });
+
   it("ignores drops without app-local active drag state", async () => {
     const wrapper = mountProjectGroup();
 
