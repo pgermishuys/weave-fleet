@@ -18,9 +18,10 @@ appId: io.tryweave.fleet
 - takeScreenshot: 02-conversation
 
 # A command waits for approval.
-- tapOn:
-    id: "composer"
-- inputText: "run-tests please"
+- runFlow:
+    file: type-in-composer.yaml
+    env:
+      TEXT: "run-tests please"
 - tapOn:
     id: "send"
 - extendedWaitUntil:
@@ -46,9 +47,10 @@ appId: io.tryweave.fleet
 - takeScreenshot: 04-tool-box
 
 # An agent shows a page and waits for the pick: the docked card opens it full screen, a tap in the page picks, the bar sends.
-- tapOn:
-    id: "composer"
-- inputText: "show-page please"
+- runFlow:
+    file: type-in-composer.yaml
+    env:
+      TEXT: "show-page please"
 - tapOn:
     id: "send"
 - extendedWaitUntil:
@@ -95,9 +97,10 @@ appId: io.tryweave.fleet
 
 # A reply taller than the screen. Scrolled up to an older message while it streams, the conversation stays there,
 # as the web client's does; at the newest message it follows (every wait for a reply above relies on that).
-- tapOn:
-    id: "composer"
-- inputText: "long-reply please"
+- runFlow:
+    file: type-in-composer.yaml
+    env:
+      TEXT: "long-reply please"
 - tapOn:
     id: "send"
 # The reply takes about 100 s: scroll up as soon as the turn starts. The swipes stay in the top of the screen, on the
