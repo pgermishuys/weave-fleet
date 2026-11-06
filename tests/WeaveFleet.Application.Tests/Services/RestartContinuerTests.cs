@@ -54,7 +54,7 @@ public sealed class RestartContinuerTests
     {
         var continuer = new RestartContinuer(NullLogger<RestartContinuer>.Instance);
         var sent = new List<string>();
-        var run = continuer.RunAsync("u", ["a", "b", "c", "d"], (id, _) =>
+        var run = RunAfterBegin(continuer, ["a", "b", "c", "d"], (id, _) =>
         {
             lock (sent)
                 sent.Add(id);
@@ -82,7 +82,7 @@ public sealed class RestartContinuerTests
     {
         var continuer = new RestartContinuer(NullLogger<RestartContinuer>.Instance);
         var sent = new List<string>();
-        var run = continuer.RunAsync("u", ["a", "b", "c"], (id, _) =>
+        var run = RunAfterBegin(continuer, ["a", "b", "c"], (id, _) =>
         {
             lock (sent)
                 sent.Add(id);
@@ -107,7 +107,7 @@ public sealed class RestartContinuerTests
     {
         var continuer = new RestartContinuer(NullLogger<RestartContinuer>.Instance) { StartTimeout = TimeSpan.FromMilliseconds(50) };
         var sent = new List<string>();
-        await continuer.RunAsync("u", ["a", "b", "c"], (id, _) =>
+        await RunAfterBegin(continuer, ["a", "b", "c"], (id, _) =>
         {
             lock (sent)
                 sent.Add(id);
@@ -121,7 +121,7 @@ public sealed class RestartContinuerTests
     {
         var continuer = new RestartContinuer(NullLogger<RestartContinuer>.Instance);
         var sent = new List<string>();
-        var run = continuer.RunAsync("u", ["a", "b", "c"], (id, _) =>
+        var run = RunAfterBegin(continuer, ["a", "b", "c"], (id, _) =>
         {
             lock (sent)
                 sent.Add(id);
@@ -158,6 +158,28 @@ public sealed class RestartContinuerTests
             ApplicationJsonContext.Default.SessionInterruptionChanged);
         payload.GetProperty("interruption").GetProperty("auto").GetBoolean().ShouldBeTrue();
         payload.GetProperty("sessionId").GetString().ShouldBe("s1");
+    }
+
+    private static Task RunAfterBegin(RestartContinuer continuer, string[] ids, Func<string, CancellationToken, Task<bool>> send, CancellationToken ct)
+    {
+        continuer.Begin("u", ids);
+        return continuer.RunAsync(ids, send, ct);
+    }
+
+    [Fact]
+    public async Task Stop_all_during_the_wait_before_the_first_send_sends_nothing()
+    {
+        var continuer = new RestartContinuer(NullLogger<RestartContinuer>.Instance);
+        continuer.Begin("u", ["a", "b"]);
+        continuer.IsPending("a").ShouldBeTrue();
+        continuer.Stop("u").ShouldBe(["a", "b"]);
+        var sent = new List<string>();
+        await continuer.RunAsync(["a", "b"], (id, _) =>
+        {
+            sent.Add(id);
+            return Task.FromResult(true);
+        }, CancellationToken.None);
+        sent.ShouldBeEmpty();
     }
 
     private static async Task WaitForAsync(Func<bool> condition)

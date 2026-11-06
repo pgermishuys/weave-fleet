@@ -69,19 +69,25 @@ public sealed partial class RestartContinuer(ILogger<RestartContinuer> logger)
         }
     }
 
-    /// <summary>Marks the sessions pending, then sends them at the pace above. <paramref name="send"/> is true when the message went.</summary>
-    public async Task RunAsync(
-        string userId,
-        IReadOnlyList<string> sessionIds,
-        Func<string, CancellationToken, Task<bool>> send,
-        CancellationToken ct)
+    /// <summary>
+    /// Marks the sessions pending the moment the restart is recognised, before the grace period, so every list says Fleet
+    /// is continuing them and Stop all has something to stop.
+    /// </summary>
+    public void Begin(string userId, IReadOnlyList<string> sessionIds)
     {
         lock (_gate)
         {
             foreach (var id in sessionIds)
                 _pending[id] = userId;
         }
+    }
 
+    /// <summary>Sends the sessions <see cref="Begin"/> marked and Stop all hasn't taken, at the pace above. <paramref name="send"/> is true when the message went.</summary>
+    public async Task RunAsync(
+        IReadOnlyList<string> sessionIds,
+        Func<string, CancellationToken, Task<bool>> send,
+        CancellationToken ct)
+    {
         using var slots = new SemaphoreSlim(Concurrency);
         var releases = new List<Task>();
         foreach (var id in sessionIds)

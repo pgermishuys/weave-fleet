@@ -15,7 +15,7 @@ import { pageChoiceRowTitle } from "@/lib/page-choice";
 import { asRecord, getTool, parseToolInput, type ToolCategory } from "@/lib/tools";
 
 export type PhoneBlock =
-  | { kind: "user"; key: string; messageId: string; text: string; createdAt?: number; images: number; steered: boolean }
+  | { kind: "user"; key: string; messageId: string; text: string; createdAt?: number; images: number; steered: boolean; sentBy?: string }
   | { kind: "text"; key: string; messageId: string; text: string; createdAt?: number }
   | { kind: "steps"; key: string; steps: FoldedStep[]; summary: string; running: boolean; failed: number }
   | { kind: "subagent"; key: string; title: string; agent: string; running: boolean; childSessionId: string | null }
@@ -155,7 +155,7 @@ export function foldMessages(messages: readonly AccumulatedMessage[]): PhoneBloc
       const text = message.parts.filter((part) => part.type === "text").map((part) => (part as { text: string }).text).join("\n").trim();
       const images = message.parts.filter((part) => part.type === "file").length;
       if (text || images) {
-        blocks.push({ kind: "user", key: `u:${message.messageId}`, messageId: message.messageId, text, createdAt: message.createdAt, images, steered: message.steered === true });
+        blocks.push({ kind: "user", key: `u:${message.messageId}`, messageId: message.messageId, text, createdAt: message.createdAt, images, steered: message.steered === true, ...(message.mod?.kind === "sent" ? { sentBy: message.mod.name } : {}) });
       }
       continue;
     }

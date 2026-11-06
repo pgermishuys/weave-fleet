@@ -30,7 +30,6 @@ public sealed partial class RestartContinueStartup(
             var started = new TaskCompletionSource();
             await using (lifetime.ApplicationStarted.Register(() => started.TrySetResult()))
                 await started.Task.WaitAsync(stoppingToken).ConfigureAwait(false);
-            await Task.Delay(GracePeriod, time, stoppingToken).ConfigureAwait(false);
 
             List<(string UserId, List<string> SessionIds)> runs;
             using (var scope = scopeFactory.CreateScope())
@@ -45,7 +44,10 @@ public sealed partial class RestartContinueStartup(
                 }
             }
 
-            // Marks every user's sessions pending before the first send, so every list says so at once.
+            // Pending at once, so the notice says Fleet is continuing them and has Stop all through the grace period.
+            foreach (var run in runs)
+                continuer.Begin(run.UserId, run.SessionIds);
+            await Task.Delay(GracePeriod, time, stoppingToken).ConfigureAwait(false);
             await Task.WhenAll(runs.Select(run => RunAsync(run.UserId, run.SessionIds, stoppingToken))).ConfigureAwait(false);
         }
         catch (OperationCanceledException)
@@ -92,7 +94,7 @@ public sealed partial class RestartContinueStartup(
     private async Task RunAsync(string userId, List<string> ids, CancellationToken ct)
     {
         LogContinuing(userId, ids.Count);
-        await continuer.RunAsync(userId, ids, async (sessionId, token) =>
+        await continuer.RunAsync(ids, async (sessionId, token) =>
         {
             using var scope = scopeFactory.CreateScope();
             using var user = scope.ServiceProvider.GetRequiredService<IBackgroundUserScope>().Begin(userId);
