@@ -1,5 +1,6 @@
 import { defineComponent, h } from "vue";
 import { BarChart3, LayoutGrid, ListTodo, Radar, MessageSquare, Settings, Workflow, Zap } from "lucide-vue-next";
+import FleetNavPanel from "@/components/mission-control/FleetNavPanel.vue";
 import AnalyticsNavPanel from "@/components/analytics/AnalyticsNavPanel.vue";
 import BoardControlsPanel from "@/components/board/BoardControlsPanel.vue";
 import SessionsPanel from "@/components/sessions/SessionsPanel.vue";
@@ -50,15 +51,16 @@ const missionControlOff = () => !useMissionControlFeature().isMissionControlEnab
 
 /** The rails Fleet ships. Plugin rails (GitHub, Plugins) come from the plugins' own sidebar contributions. */
 railPoint.contribute("core", [
-  // Fleet (mission control) comes first and leaves the rail while it's switched off, like Board.
-  { id: "fleet", label: "Fleet", icon: Radar, to: "/fleet", placement: "top", order: -10, panel: SessionsPanel, hidden: missionControlOff },
+  // Fleet (mission control) comes first and leaves the rail while it's switched off, like Board. It owns its context:
+  // the fleet-menu (Needs you, one entry per machine) beside the selected view; off, the page's notice fills the area.
+  { id: "fleet", label: "Fleet", icon: Radar, to: "/fleet", placement: "top", order: -10, panel: FleetNavPanel, hidden: missionControlOff, noPanel: missionControlOff },
   { id: "sessions", label: "Sessions", icon: MessageSquare, to: "/", placement: "top", order: 0, panel: SessionsPanel },
   // Board leaves the rail while it's switched off. Workflows stays, dimmed; with either off, the page's "turn it on"
   // notice fills the whole context area (noPanel), so no other view's panel sits beside it.
   { id: "board", label: "Board", icon: LayoutGrid, to: "/board", placement: "top", order: 10, panel: BoardControlsPanel, hidden: boardOff, noPanel: boardOff },
   { id: "workflows", label: "Workflows", icon: Workflow, to: "/workflows", placement: "top", order: 20, panel: WorkflowsNavPanel, off: workflowsOff, noPanel: workflowsOff },
-  // TODO(rail-owns-context): Jobs and Fleet borrow the sessions list. Each gets its own menu (jobs-list/jobs-detail,
-  // fleet-menu/fleet-detail) in a follow-up, copying Analytics: a nav panel here, a route per item, a ContextPanel test.
+  // TODO(rail-owns-context): Jobs borrows the sessions list. It gets its own menu (jobs-list/jobs-detail) in a
+  // follow-up, copying Analytics: a nav panel here, a route per item, a ContextPanel test.
   // Jobs leaves the rail while it's switched off, like Board.
   { id: "jobs", label: "Jobs", icon: ListTodo, to: "/jobs", placement: "top", order: 25, panel: SessionsPanel, hidden: jobsOff },
   { id: "automations", label: "Automations", icon: Zap, to: "/automations", placement: "top", order: 30, panel: AutomationsContextPanel },

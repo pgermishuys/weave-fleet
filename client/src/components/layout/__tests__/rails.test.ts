@@ -38,6 +38,7 @@ const panel = vi.hoisted(() => (name: string) => async () => {
 vi.mock("@/components/sessions/SessionsPanel.vue", panel("sessions"));
 vi.mock("@/components/board/BoardControlsPanel.vue", panel("board"));
 vi.mock("@/components/analytics/AnalyticsNavPanel.vue", panel("analytics"));
+vi.mock("@/components/mission-control/FleetNavPanel.vue", panel("fleet"));
 vi.mock("@/components/settings/SettingsNavPanel.vue", panel("settings"));
 vi.mock("@/components/automations/AutomationsNavPanel.vue", panel("automations"));
 vi.mock("@/components/workflows/WorkflowsNavPanel.vue", panel("workflows"));
@@ -198,6 +199,7 @@ describe("the context panel per rail", () => {
     runtime.registerPlugins([githubPluginManifest, marketplacePluginManifest]);
     boardOn.value = false;
     workflowsOn.value = false;
+    missionOn.value = false;
   });
 
   function shown(rail: string): string {
@@ -221,6 +223,12 @@ describe("the context panel per rail", () => {
     expect(shown("workflows")).toBe("");
     workflowsOn.value = true;
     expect(shown("workflows")).toBe("panel-workflows");
+  });
+
+  it("shows the fleet menu for Fleet while Mission control is on, and no panel while it's off", () => {
+    expect(shown("fleet")).toBe("");
+    missionOn.value = true;
+    expect(shown("fleet")).toBe("panel-fleet");
   });
 
   it("shows no panel for Board while Board is off, so its notice fills the context area", () => {

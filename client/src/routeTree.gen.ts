@@ -18,12 +18,12 @@ import { Route as PairRouteImport } from './routes/pair'
 import { Route as LoginRouteImport } from './routes/login'
 import { Route as JobsRouteImport } from './routes/jobs'
 import { Route as GithubRouteImport } from './routes/github'
-import { Route as FleetRouteImport } from './routes/fleet'
 import { Route as BoardRouteImport } from './routes/board'
 import { Route as AutomationsRouteImport } from './routes/automations'
 import { Route as IndexRouteImport } from './routes/index'
 import { Route as PhoneIndexRouteImport } from './routes/phone.index'
 import { Route as GithubIndexRouteImport } from './routes/github.index'
+import { Route as FleetIndexRouteImport } from './routes/fleet.index'
 import { Route as AnalyticsIndexRouteImport } from './routes/analytics.index'
 import { Route as SessionsNewRouteImport } from './routes/sessions.new'
 import { Route as SessionsIdRouteImport } from './routes/sessions.$id'
@@ -34,6 +34,7 @@ import { Route as AnalyticsSectionRouteImport } from './routes/analytics.$sectio
 import { Route as SettingsPluginsIndexRouteImport } from './routes/settings_.plugins.index'
 import { Route as SettingsPluginsPluginIdRouteImport } from './routes/settings_.plugins.$pluginId'
 import { Route as GithubOwnerRepoRouteImport } from './routes/github.$owner.$repo'
+import { Route as FleetMachinesMachineIdRouteImport } from './routes/fleet.machines.$machineId'
 import { Route as GithubOwnerRepoIndexRouteImport } from './routes/github.$owner.$repo.index'
 import { Route as PhoneSMachineIdSessionIdRouteImport } from './routes/phone.s.$machineId.$sessionId'
 import { Route as GithubOwnerRepoPullsNumberRouteImport } from './routes/github.$owner.$repo.pulls.$number'
@@ -84,11 +85,6 @@ const GithubRoute = GithubRouteImport.update({
   path: '/github',
   getParentRoute: () => rootRouteImport,
 } as any)
-const FleetRoute = FleetRouteImport.update({
-  id: '/fleet',
-  path: '/fleet',
-  getParentRoute: () => rootRouteImport,
-} as any)
 const BoardRoute = BoardRouteImport.update({
   id: '/board',
   path: '/board',
@@ -113,6 +109,11 @@ const GithubIndexRoute = GithubIndexRouteImport.update({
   id: '/',
   path: '/',
   getParentRoute: () => GithubRoute,
+} as any)
+const FleetIndexRoute = FleetIndexRouteImport.update({
+  id: '/fleet/',
+  path: '/fleet/',
+  getParentRoute: () => rootRouteImport,
 } as any)
 const AnalyticsIndexRoute = AnalyticsIndexRouteImport.update({
   id: '/analytics/',
@@ -164,6 +165,11 @@ const GithubOwnerRepoRoute = GithubOwnerRepoRouteImport.update({
   path: '/$owner/$repo',
   getParentRoute: () => GithubRoute,
 } as any)
+const FleetMachinesMachineIdRoute = FleetMachinesMachineIdRouteImport.update({
+  id: '/fleet/machines/$machineId',
+  path: '/fleet/machines/$machineId',
+  getParentRoute: () => rootRouteImport,
+} as any)
 const GithubOwnerRepoIndexRoute = GithubOwnerRepoIndexRouteImport.update({
   id: '/',
   path: '/',
@@ -192,7 +198,6 @@ export interface FileRoutesByFullPath {
   '/': typeof IndexRoute
   '/automations': typeof AutomationsRoute
   '/board': typeof BoardRoute
-  '/fleet': typeof FleetRoute
   '/github': typeof GithubRouteWithChildren
   '/jobs': typeof JobsRoute
   '/login': typeof LoginRoute
@@ -209,8 +214,10 @@ export interface FileRoutesByFullPath {
   '/sessions/$id': typeof SessionsIdRoute
   '/sessions/new': typeof SessionsNewRoute
   '/analytics/': typeof AnalyticsIndexRoute
+  '/fleet/': typeof FleetIndexRoute
   '/github/': typeof GithubIndexRoute
   '/phone/': typeof PhoneIndexRoute
+  '/fleet/machines/$machineId': typeof FleetMachinesMachineIdRoute
   '/github/$owner/$repo': typeof GithubOwnerRepoRouteWithChildren
   '/settings/plugins/$pluginId': typeof SettingsPluginsPluginIdRoute
   '/settings/plugins/': typeof SettingsPluginsIndexRoute
@@ -223,7 +230,6 @@ export interface FileRoutesByTo {
   '/': typeof IndexRoute
   '/automations': typeof AutomationsRoute
   '/board': typeof BoardRoute
-  '/fleet': typeof FleetRoute
   '/jobs': typeof JobsRoute
   '/login': typeof LoginRoute
   '/pair': typeof PairRoute
@@ -238,8 +244,10 @@ export interface FileRoutesByTo {
   '/sessions/$id': typeof SessionsIdRoute
   '/sessions/new': typeof SessionsNewRoute
   '/analytics': typeof AnalyticsIndexRoute
+  '/fleet': typeof FleetIndexRoute
   '/github': typeof GithubIndexRoute
   '/phone': typeof PhoneIndexRoute
+  '/fleet/machines/$machineId': typeof FleetMachinesMachineIdRoute
   '/settings/plugins/$pluginId': typeof SettingsPluginsPluginIdRoute
   '/settings/plugins': typeof SettingsPluginsIndexRoute
   '/phone/s/$machineId/$sessionId': typeof PhoneSMachineIdSessionIdRoute
@@ -252,7 +260,6 @@ export interface FileRoutesById {
   '/': typeof IndexRoute
   '/automations': typeof AutomationsRoute
   '/board': typeof BoardRoute
-  '/fleet': typeof FleetRoute
   '/github': typeof GithubRouteWithChildren
   '/jobs': typeof JobsRoute
   '/login': typeof LoginRoute
@@ -269,8 +276,10 @@ export interface FileRoutesById {
   '/sessions/$id': typeof SessionsIdRoute
   '/sessions/new': typeof SessionsNewRoute
   '/analytics/': typeof AnalyticsIndexRoute
+  '/fleet/': typeof FleetIndexRoute
   '/github/': typeof GithubIndexRoute
   '/phone/': typeof PhoneIndexRoute
+  '/fleet/machines/$machineId': typeof FleetMachinesMachineIdRoute
   '/github/$owner/$repo': typeof GithubOwnerRepoRouteWithChildren
   '/settings_/plugins/$pluginId': typeof SettingsPluginsPluginIdRoute
   '/settings_/plugins/': typeof SettingsPluginsIndexRoute
@@ -285,7 +294,6 @@ export interface FileRouteTypes {
     | '/'
     | '/automations'
     | '/board'
-    | '/fleet'
     | '/github'
     | '/jobs'
     | '/login'
@@ -302,8 +310,10 @@ export interface FileRouteTypes {
     | '/sessions/$id'
     | '/sessions/new'
     | '/analytics/'
+    | '/fleet/'
     | '/github/'
     | '/phone/'
+    | '/fleet/machines/$machineId'
     | '/github/$owner/$repo'
     | '/settings/plugins/$pluginId'
     | '/settings/plugins/'
@@ -316,7 +326,6 @@ export interface FileRouteTypes {
     | '/'
     | '/automations'
     | '/board'
-    | '/fleet'
     | '/jobs'
     | '/login'
     | '/pair'
@@ -331,8 +340,10 @@ export interface FileRouteTypes {
     | '/sessions/$id'
     | '/sessions/new'
     | '/analytics'
+    | '/fleet'
     | '/github'
     | '/phone'
+    | '/fleet/machines/$machineId'
     | '/settings/plugins/$pluginId'
     | '/settings/plugins'
     | '/phone/s/$machineId/$sessionId'
@@ -344,7 +355,6 @@ export interface FileRouteTypes {
     | '/'
     | '/automations'
     | '/board'
-    | '/fleet'
     | '/github'
     | '/jobs'
     | '/login'
@@ -361,8 +371,10 @@ export interface FileRouteTypes {
     | '/sessions/$id'
     | '/sessions/new'
     | '/analytics/'
+    | '/fleet/'
     | '/github/'
     | '/phone/'
+    | '/fleet/machines/$machineId'
     | '/github/$owner/$repo'
     | '/settings_/plugins/$pluginId'
     | '/settings_/plugins/'
@@ -376,7 +388,6 @@ export interface RootRouteChildren {
   IndexRoute: typeof IndexRoute
   AutomationsRoute: typeof AutomationsRoute
   BoardRoute: typeof BoardRoute
-  FleetRoute: typeof FleetRoute
   GithubRoute: typeof GithubRouteWithChildren
   JobsRoute: typeof JobsRoute
   LoginRoute: typeof LoginRoute
@@ -390,6 +401,8 @@ export interface RootRouteChildren {
   SessionsIdRoute: typeof SessionsIdRoute
   SessionsNewRoute: typeof SessionsNewRoute
   AnalyticsIndexRoute: typeof AnalyticsIndexRoute
+  FleetIndexRoute: typeof FleetIndexRoute
+  FleetMachinesMachineIdRoute: typeof FleetMachinesMachineIdRoute
   SettingsPluginsPluginIdRoute: typeof SettingsPluginsPluginIdRoute
   SettingsPluginsIndexRoute: typeof SettingsPluginsIndexRoute
 }
@@ -459,13 +472,6 @@ declare module '@tanstack/vue-router' {
       preLoaderRoute: typeof GithubRouteImport
       parentRoute: typeof rootRouteImport
     }
-    '/fleet': {
-      id: '/fleet'
-      path: '/fleet'
-      fullPath: '/fleet'
-      preLoaderRoute: typeof FleetRouteImport
-      parentRoute: typeof rootRouteImport
-    }
     '/board': {
       id: '/board'
       path: '/board'
@@ -500,6 +506,13 @@ declare module '@tanstack/vue-router' {
       fullPath: '/github/'
       preLoaderRoute: typeof GithubIndexRouteImport
       parentRoute: typeof GithubRoute
+    }
+    '/fleet/': {
+      id: '/fleet/'
+      path: '/fleet'
+      fullPath: '/fleet/'
+      preLoaderRoute: typeof FleetIndexRouteImport
+      parentRoute: typeof rootRouteImport
     }
     '/analytics/': {
       id: '/analytics/'
@@ -570,6 +583,13 @@ declare module '@tanstack/vue-router' {
       fullPath: '/github/$owner/$repo'
       preLoaderRoute: typeof GithubOwnerRepoRouteImport
       parentRoute: typeof GithubRoute
+    }
+    '/fleet/machines/$machineId': {
+      id: '/fleet/machines/$machineId'
+      path: '/fleet/machines/$machineId'
+      fullPath: '/fleet/machines/$machineId'
+      preLoaderRoute: typeof FleetMachinesMachineIdRouteImport
+      parentRoute: typeof rootRouteImport
     }
     '/github/$owner/$repo/': {
       id: '/github/$owner/$repo/'
@@ -653,7 +673,6 @@ const rootRouteChildren: RootRouteChildren = {
   IndexRoute: IndexRoute,
   AutomationsRoute: AutomationsRoute,
   BoardRoute: BoardRoute,
-  FleetRoute: FleetRoute,
   GithubRoute: GithubRouteWithChildren,
   JobsRoute: JobsRoute,
   LoginRoute: LoginRoute,
@@ -667,6 +686,8 @@ const rootRouteChildren: RootRouteChildren = {
   SessionsIdRoute: SessionsIdRoute,
   SessionsNewRoute: SessionsNewRoute,
   AnalyticsIndexRoute: AnalyticsIndexRoute,
+  FleetIndexRoute: FleetIndexRoute,
+  FleetMachinesMachineIdRoute: FleetMachinesMachineIdRoute,
   SettingsPluginsPluginIdRoute: SettingsPluginsPluginIdRoute,
   SettingsPluginsIndexRoute: SettingsPluginsIndexRoute,
 }

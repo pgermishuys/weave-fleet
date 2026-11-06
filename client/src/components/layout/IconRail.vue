@@ -106,7 +106,7 @@ const currentRouteRail = computed<string>(() => {
     return "jobs";
   }
 
-  if (pathname.value === "/fleet") {
+  if (pathname.value === "/fleet" || pathname.value.startsWith("/fleet/")) {
     return "fleet";
   }
 
