@@ -3,6 +3,7 @@ import type { SessionListItem } from "@fleet/api/client";
 import type { DomainEvent } from "@fleet/lib/domain-events";
 import { isTopLevel, sessionBucket, sessionUpdatedAt, type SessionBucket } from "@fleet/lib/needs-you";
 import { deriveSessionStatus } from "@fleet/lib/session-status";
+import { toInterruption } from "~/fleet/interruption-core";
 import { short } from "@fleet/lib/phone/time";
 
 /** The wire calls a hub event's payload "properties" (same as the web client's toDomainEvent). */
@@ -38,6 +39,14 @@ export function applySessionsEvent(list: SessionListItem[], event: DomainEvent):
       list: list.map((item) => item.session.id !== payload.sessionId ? item : {
         ...item, pageCount: pages.pageCount ?? 0, lastPageShownAt: pages.lastPageShownAt ?? null,
       }),
+    };
+  }
+  // A restart cut the session's turn off (or the user continued/dismissed it): the mark on the row.
+  if (type === "session.interrupted" && payload.sessionId) {
+    const interruption = toInterruption((event.payload as { interruption?: unknown }).interruption);
+    return {
+      refetch: !list.some((item) => item.session.id === payload.sessionId),
+      list: list.map((item) => item.session.id !== payload.sessionId ? item : { ...item, interrupted: interruption }),
     };
   }
   if (type === "session_archived" || type === "session_deleted") {

@@ -1,5 +1,6 @@
 // Every paired machine's connection and session list, in one place. No React Native in here: the app tells it when it
 // goes to the background (`setForeground`), and hooks.ts reads it.
+import { interruptedEntries, interruptionOf, type InterruptedEntry, type Interruption } from "~/fleet/interruption-core";
 import { applySessionsEvent, sectionSessions, type SessionSection } from "~/fleet/session-list";
 import { machineApi, type MachineApi, type SessionListItem } from "~/fleet/api";
 import { MachineHub, type ConnectionState } from "~/fleet/hub";
@@ -15,6 +16,8 @@ export interface MachineView {
 export interface FleetSnapshot {
   machines: MachineView[];
   sections: SessionSection[];
+  /** Sessions a restart cut off, on every machine. */
+  interrupted: InterruptedEntry[];
   /** True until each machine has answered once. */
   loading: boolean;
 }
@@ -32,7 +35,7 @@ export class FleetManager {
   private conns = new Map<string, Conn>();
   private listeners = new Set<() => void>();
   private foreground = true;
-  private cached: FleetSnapshot = { machines: [], sections: [], loading: false };
+  private cached: FleetSnapshot = { machines: [], sections: [], interrupted: [], loading: false };
 
   constructor(private store: MachinesStore) {
     store.subscribe(() => this.sync());
@@ -130,9 +133,23 @@ export class FleetManager {
     return this.conns.get(machineId)?.items.find((item) => item.session.id === sessionId)?.activityStatus ?? undefined;
   }
 
+  /** The session's cut-off mark as the list has it, kept live by `session.interrupted`. */
+  interruptionOf(machineId: string, sessionId: string): Interruption | null {
+    const item = this.conns.get(machineId)?.items.find((i) => i.session.id === sessionId);
+    return item ? interruptionOf(item) : null;
+  }
+
+  /** Stop all: every machine with sessions Fleet is continuing by itself stops doing so. */
+  async stopAutomatic(): Promise<void> {
+    const auto = [...this.conns.values()].filter((c) => interruptedEntries([{ machineId: "", machineName: "", items: c.items }]).some((e) => e.interruption.auto));
+    await Promise.all(auto.map((c) => c.api.stopAutomatic()));
+    await Promise.all(auto.map((c) => this.refetch(c)));
+  }
+
   private publish() {
     const conns = [...this.conns.values()];
     this.cached = {
+      interrupted: interruptedEntries(conns.map((c) => ({ machineId: c.machine.machineId, machineName: c.machine.machineName, items: c.items }))),
       machines: conns.map((c) => ({ machineId: c.machine.machineId, machineName: c.machine.machineName, baseUrl: c.machine.baseUrl, state: c.hub.state })),
       sections: sectionSessions(conns.map((c) => ({ machineId: c.machine.machineId, machineName: c.machine.machineName, items: c.items }))),
       loading: conns.some((c) => !c.loaded && c.hub.state !== "signed-out" && c.hub.state !== "offline"),

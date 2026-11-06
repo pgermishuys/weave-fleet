@@ -114,3 +114,9 @@ export function useSessionPages(machineId: string, sessionId: string) {
   useEffect(reload, [reload]);
   return { pages, reload, onEvent };
 }
+
+/** The session's cut-off mark (Continue / Dismiss clear it through `session.interrupted`), live from the sessions list. */
+export function useSessionInterruption(machineId: string, sessionId: string) {
+  useFleet();
+  return manager.interruptionOf(machineId, sessionId);
+}

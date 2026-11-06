@@ -11,12 +11,12 @@ import { foldMessages, groupTools, stepDetail, stepRow, type FoldedStep, type Ph
 import { headerStatus, type HeaderTone } from "@fleet/lib/phone/session-status";
 import { duration, short } from "@fleet/lib/phone/time";
 import { dontAskAgainWording, permissionHeading } from "@fleet/lib/tools/permission-wording";
-import { manager, useFleet, useSessionActivity, useSessionPages, useSessionStream } from "~/fleet/hooks";
+import { manager, useFleet, useSessionActivity, useSessionInterruption, useSessionPages, useSessionStream } from "~/fleet/hooks";
 import { conversationPages, waitingPage, type SessionPage } from "~/fleet/pages";
 import { pagesSeen, usePagesSeen } from "~/fleet/pages-seen";
 import type { PermissionAsk } from "~/fleet/api";
 import {
-  Composer, Icon, Panel, Markdown, PageCard, PagePickCard, PageRow, PermissionCard, QuestionCard, SectionHeader, Segments, Sheet,
+  Composer, Icon, InterruptedCard, Panel, Markdown, PageCard, PagePickCard, PageRow, PermissionCard, QuestionCard, SectionHeader, Segments, Sheet,
   StatusGlyph, Text, ToolBox, ToolRow, UserBubble, type GlyphStatus,
 } from "~/kit";
 import { useTheme } from "~/theme";
@@ -62,6 +62,10 @@ export default function Session() {
   }, []);
 
   const messages = useMemo(() => state?.messages ?? [], [state]);
+  const interruption = useSessionInterruption(machine, id);
+  const [resolving, setResolving] = useState(false);
+  // Messages a mod (Fleet after a restart, say) sent rather than you: "Sent by …" under the bubble.
+  const sentBy = useMemo(() => new Map(messages.flatMap((m) => (m.role === "user" && m.mod?.kind === "sent" ? [[m.messageId, m.mod.name] as const] : []))), [messages]);
   // Newest first, for a list drawn upside down: it opens on the latest message, and older ones are up the screen.
   const items = useMemo(() => groupTools(foldMessages(messages)).reverse(), [messages]);
   // As the web client's conversation: within 80 px of the newest message it follows new ones, further up it keeps your
@@ -103,6 +107,18 @@ export default function Session() {
     }
   }
 
+  async function resolveInterruption(run: () => Promise<unknown> | undefined) {
+    setResolving(true);
+    setError(null);
+    try {
+      await run();
+    } catch (e) {
+      setError(e instanceof Error ? e.message : String(e));
+    } finally {
+      setResolving(false);
+    }
+  }
+
   async function send() {
     const text = draft.trim();
     if (!text) return;
@@ -141,12 +157,21 @@ export default function Session() {
         inverted
         data={items}
         keyExtractor={(item) => item.key}
-        renderItem={({ item }) => <Item item={item} pages={allPages} waiting={pick} onOpen={openPage} />}
+        renderItem={({ item }) => <Item item={item} pages={allPages} waiting={pick} onOpen={openPage} sentBy={item.kind === "user" ? sentBy.get(item.messageId) : undefined} />}
         ItemSeparatorComponent={Gap}
         onScroll={(e) => setFollowing(e.nativeEvent.contentOffset.y <= FOLLOW_THRESHOLD)}
         maintainVisibleContentPosition={keepPlace}
         // The header sits under the newest message; flex-end keeps a short conversation at the top, not the bottom.
-        ListHeaderComponent={working && dock.kind === "composer" && !pick ? (
+        ListHeaderComponent={interruption ? (
+          <View style={{ paddingTop: 14 }}>
+            <InterruptedCard
+              testID="interrupted-card" waiting={interruption.waiting} auto={interruption.auto} lastCall={interruption.lastCall}
+              changedFiles={interruption.changedFiles} busy={resolving}
+              onContinue={() => void resolveInterruption(() => api?.continueInterrupted(id))}
+              onDismiss={() => void resolveInterruption(() => api?.dismissInterruption(id))}
+            />
+          </View>
+        ) : working && dock.kind === "composer" && !pick ? (
           <View style={{ flexDirection: "row", alignItems: "center", gap: 8, paddingTop: 14 }}>
             <StatusGlyph status="working" size={10} />
             <Text tone="muted" size={13}>Working · {duration(lastUser?.createdAt ?? null, now)}</Text>
@@ -286,10 +311,10 @@ function stepPage(step: FoldedStep, pages: readonly SessionPage[]): SessionPage 
     ?? pages.find((page) => page.place === "tab" && page.title === state.input?.title);
 }
 
-function Item({ item, pages, waiting, onOpen }: { item: PhoneItem; pages: readonly SessionPage[]; waiting: SessionPage | null; onOpen: (page: SessionPage) => void }) {
+function Item({ item, pages, waiting, onOpen, sentBy }: { sentBy?: string; item: PhoneItem; pages: readonly SessionPage[]; waiting: SessionPage | null; onOpen: (page: SessionPage) => void }) {
   switch (item.kind) {
     case "user":
-      return <UserBubble text={item.text} />;
+      return <UserBubble text={item.text} sentBy={sentBy} />;
     case "text":
       return <Markdown text={item.text} />;
     case "tools": {
