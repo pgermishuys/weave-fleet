@@ -1,6 +1,7 @@
 // Pairing with a Fleet: reading what was scanned or typed, and the two calls that trade a one-time code for a device key.
 import { decodePairingFragment, normalizeManualCode } from "@fleet/lib/pairing";
 import type { Machine } from "~/fleet/machines-core";
+import { seedAddresses } from "~/fleet/routes-core";
 
 export class PairingError extends Error {}
 
@@ -77,6 +78,8 @@ export async function redeemPairing(target: PairingTarget, deviceName: string, p
     machineId: body.machine.id,
     machineName: body.machine.name ?? "Fleet",
     baseUrl: target.baseUrl,
+    // The rest of its addresses come from the machine itself once the phone is connected.
+    addresses: seedAddresses(target.baseUrl),
     token: body.token,
     deviceId: body.deviceId,
     pairedAt: Date.now(),

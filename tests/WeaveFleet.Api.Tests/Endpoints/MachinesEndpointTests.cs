@@ -258,6 +258,52 @@ public sealed class MachinesEndpointTests : IClassFixture<MachinesEndpointTests.
     }
 
     [Fact]
+    public async Task A_device_puts_a_machines_addresses_in_another_order_and_changes_nothing_else()
+    {
+        using var owner = Client(_hangar, Token(_hangar));
+        var id = (await (await owner.PostAsJsonAsync("/api/machines", new { baseUrl = FalconUrl, token = Token(_falcon) })).ReadSuccessAsync()).GetProperty("id").GetString()!;
+        var (_, deviceToken) = await _hangar.Services.GetRequiredService<DeviceTokenService>().IssueAsync("Pixel", "android");
+        using var phone = Client(_hangar, deviceToken);
+
+        // As the owner's test does: the watcher may learn an address between the read and the order, so read again.
+        List<string> order = [];
+        JsonElement? reordered = null;
+        for (var attempt = 0; attempt < 10 && reordered is null; attempt++)
+        {
+            var listed = (await phone.GetFromJsonAsync<JsonElement>("/api/machines")).GetProperty("machines").EnumerateArray().Single();
+            order = [.. listed.GetProperty("addresses").EnumerateArray().Select(a => a.GetProperty("url").GetString()!).Reverse()];
+            var put = await phone.PutAsJsonAsync($"/api/machines/{id}", new { addresses = order });
+            if (put.StatusCode == HttpStatusCode.OK)
+                reordered = await put.Content.ReadFromJsonAsync<JsonElement>();
+            else
+                put.StatusCode.ShouldBe(HttpStatusCode.BadRequest);
+        }
+
+        reordered.ShouldNotBeNull("the order kept being turned away");
+        reordered.Value.GetProperty("addresses").EnumerateArray().Select(a => a.GetProperty("url").GetString()).ShouldBe(order);
+        reordered.Value.GetProperty("token").ValueKind.ShouldBe(JsonValueKind.Null);
+        reordered.Value.GetRawText().ShouldNotContain(Token(_falcon));
+
+        // Anything besides the order is the owner's, on its own or riding along with an order.
+        foreach (object body in new object[]
+        {
+            new { name = "renamed" },
+            new { addresses = order, name = "renamed" },
+            new { addresses = order, baseUrl = "http://192.168.1.99:2113" },
+            new { addresses = order, token = "another-token-0123456789" },
+            new { addresses = order, agentsAllowed = true },
+        })
+        {
+            var refused = await phone.PutAsJsonAsync($"/api/machines/{id}", body);
+            refused.StatusCode.ShouldBe(HttpStatusCode.Forbidden);
+        }
+
+        var after = (await owner.GetFromJsonAsync<JsonElement>("/api/machines")).GetProperty("machines").EnumerateArray().Single();
+        after.GetProperty("name").GetString().ShouldNotBe("renamed");
+        after.GetProperty("token").GetString().ShouldBe(Token(_falcon));
+    }
+
+    [Fact]
     public async Task Importing_a_browsers_list_is_idempotent_and_skips_this_machine()
     {
         var hangar = _hangar;

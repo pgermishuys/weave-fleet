@@ -100,8 +100,13 @@ public static class MachinesEndpoints
         .Produces<SetupJobResponse>(200)
         .WithName("GetMachineSetup");
 
-        group.MapPut("/{id}", async (string id, UpdateRemoteMachineRequest request, RemoteMachineService machines, MachineRoutes routes, ISshTunnels tunnels, CancellationToken cancellationToken) =>
+        group.MapPut("/{id}", async (string id, UpdateRemoteMachineRequest request, HttpContext http, RemoteMachineService machines, MachineRoutes routes, ISshTunnels tunnels, CancellationToken cancellationToken) =>
         {
+            // A paired phone may put a machine's addresses in another order, and change nothing else: the order is how
+            // the owner wants to reach it, the rest of the machine list is managing access.
+            if (!FleetClaims.IsOwner(http.User) && !(FleetClaims.IsDevice(http.User) && request is { Addresses: not null, BaseUrl: null, Token: null, Name: null, AgentsAllowed: null }))
+                return Results.Json(new ErrorResponse("A phone can only change the order of a machine's addresses."), ApiJsonContext.Default.ErrorResponse, statusCode: StatusCodes.Status403Forbidden);
+
             // The owner's order goes first, on its own: the watcher may be moving the machine to another address meanwhile.
             if (request.Addresses is { } order)
             {
@@ -114,10 +119,11 @@ public static class MachinesEndpoints
             var (machine, error) = await machines.UpdateAsync(id, request.BaseUrl, request.Token, request.Name, cancellationToken, request.AgentsAllowed);
             if (machine is null)
                 return error!.Message == "No such machine." ? Results.NotFound(new ErrorResponse(error.Message)) : Results.BadRequest(ToError(error));
-            return Results.Ok(ToResponse(machine, machines.TokenOf(machine), tunnels, machines));
+            return Results.Ok(ToResponse(machine, FleetClaims.IsOwner(http.User) ? machines.TokenOf(machine) : null, tunnels, machines));
         })
-        .RequireAuthorization(FleetClaims.MachineOwnerPolicy)
+        .RequireAuthorization("FleetUser")
         .Produces<MachineEntryResponse>(200)
+        .Produces<ErrorResponse>(403)
         .WithName("UpdateRemoteMachine");
 
         // Asks a saved machine who it is, so its card can say which step broke. Writes nothing.

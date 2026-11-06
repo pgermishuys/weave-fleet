@@ -15,14 +15,23 @@ export class FleetError extends Error {
 
 const id = encodeURIComponent;
 
-/** `onSignedOut` runs on a 401: the computer removed this phone, so the machine reads "signed out" instead of every call failing loudly. */
-export function machineApi(machine: Pick<Machine, "baseUrl" | "token">, onSignedOut: () => void = () => {}) {
+/**
+ * `onSignedOut` runs on a 401: the computer removed this phone, so the machine reads "signed out" instead of every call
+ * failing loudly. `onUnreachable` runs when a read can't reach the machine: it picks again among the machine's
+ * addresses (changing `machine.baseUrl`) and says whether it moved, and the read then goes once more.
+ */
+export function machineApi(machine: Pick<Machine, "baseUrl" | "token">, onSignedOut: () => void = () => {}, onUnreachable: () => Promise<boolean> = async () => false) {
   async function request<T>(path: string, init: RequestInit = {}): Promise<T> {
+    const send = () => fetch(machine.baseUrl + path, {
+      ...init,
+      headers: { Authorization: `Bearer ${machine.token}`, "Content-Type": "application/json", ...(init.headers ?? {}) },
+    });
     let response: Response;
     try {
-      response = await fetch(machine.baseUrl + path, {
-        ...init,
-        headers: { Authorization: `Bearer ${machine.token}`, "Content-Type": "application/json", ...(init.headers ?? {}) },
+      response = await send().catch(async (error: unknown) => {
+        // Only reads go again: a write that never arrived can't be told from one whose answer was lost.
+        if ((init.method ?? "GET") !== "GET" || !(await onUnreachable())) throw error;
+        return send();
       });
     } catch {
       throw new FleetError("Fleet didn't answer.", 0);
@@ -70,6 +79,12 @@ export function machineApi(machine: Pick<Machine, "baseUrl" | "token">, onSigned
     continueInterrupted: (sessionId: string) => post(`/api/sessions/${id(sessionId)}/interruption/continue`, {}),
     dismissInterruption: (sessionId: string) => request(`/api/sessions/${id(sessionId)}/interruption`, { method: "DELETE" }),
     stopAutomatic: () => post("/api/sessions/interruptions/stop-automatic", {}),
+    /** Where the machine says it answers now: its Tailscale name and IP, its local network addresses, its host name. */
+    machine: () => request<{ id: string; addresses?: { url: string; kind: string }[] | null }>("/api/machine"),
+    /** The machines this one is home to, each with its addresses in the owner's order. */
+    machines: () => request<{ machines: { id: string; addresses?: { url: string }[] | null }[] }>("/api/machines"),
+    /** Saves a machine's addresses in a new order on its home (every one of them, as home lists them). */
+    reorderAddresses: (machineId: string, urls: string[]) => request(`/api/machines/${id(machineId)}`, { method: "PUT", body: JSON.stringify({ addresses: urls }) }),
     skipPageChoice: (sessionId: string, callId: string) => post(`/api/sessions/${id(sessionId)}/page-choices/${id(callId)}/skip`, {}),
   };
 }

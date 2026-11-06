@@ -1,5 +1,5 @@
-// Fleet's phone app. FLEET_E2E=1 builds the walk-through variant: the only build that may talk plain http, and only
-// to this device itself (the scratch Fleet the walk-through starts). Every other build is https only.
+// Fleet's phone app. FLEET_E2E=1 builds the walk-through variant, which runs its own JS instead of over-the-air updates.
+// Plain http goes only where plugins/with-home-network.ts says: Tailscale, the home network and this device.
 import type { ExpoConfig } from "expo/config";
 
 const e2e = process.env.FLEET_E2E === "1";
@@ -39,7 +39,7 @@ const config: ExpoConfig = {
     "expo-dev-client",
     "expo-updates",
     ["expo-camera", { cameraPermission: "Fleet scans the pairing code your computer shows.", recordAudioAndroid: false }],
-    ...(e2e ? ["./plugins/with-local-cleartext.ts"] : []),
+    "./plugins/with-home-network.ts",
   ],
   // An update only reaches builds whose native side matches it.
   runtimeVersion: { policy: "fingerprint" },

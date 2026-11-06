@@ -92,7 +92,7 @@ jobs:
       - name: App dependencies
         run: bun install --frozen-lockfile
         working-directory: mobile
-      # FLEET_E2E=1 adds the cleartext-to-localhost network config; no other build can talk plain http.
+      # FLEET_E2E=1 builds the walk-through variant (its own JS, no over-the-air updates).
       - name: Generate the Android project
         run: CI=1 bunx expo prebuild -p android
         working-directory: mobile

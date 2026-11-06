@@ -3,11 +3,20 @@ import { useState, type ReactNode } from "react";
 import { Pressable, ScrollView, View } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import {
-  Button, Card, Chip, Composer, EmptyState, FleetMark, glyphStatusOf, InterruptedCard, InterruptionBanner, Markdown, ModelChip, Notice, OptionRow, PageCard, PageChoiceBar, PagePickCard,
-  PageReplyBar, PageRow, PermissionCard, Pill, QuestionCard, SearchField, SectionHeader, Segments, SessionRow, Sheet, StatusGlyph, Text,
+  AddressList, Button, Card, Chip, Composer, EmptyState, FleetMark, glyphStatusOf, InterruptedCard, InterruptionBanner, Markdown, ModelChip, Notice, OptionRow, PageCard, PageChoiceBar, PagePickCard,
+  PageReplyBar, PageRow, PermissionCard, Pill, QuestionCard, RouteLine, SearchField, SectionHeader, Segments, SessionRow, Sheet, StatusGlyph, Text,
   ToolBox, ToolRow, UserBubble, WhereLine, type GlyphStatus,
 } from "~/kit";
+import { moveAddress, type MachineAddress } from "~/fleet/routes-core";
 import { ThemeProvider, useTheme, type Scheme } from "~/theme";
+
+const ADDRESSES: MachineAddress[] = [
+  { url: "https://studio-desktop.tail4f2a.ts.net", kind: "tailnet", learned: false, lastResult: "no-answer" },
+  { url: "http://100.88.14.3:2113", kind: "tailnet-ip", learned: true, lastResult: "no-answer" },
+  { url: "http://192.168.1.42:2113", kind: "lan", learned: true, lastResult: "ok" },
+  { url: "http://192.168.1.17:2113", kind: "lan", learned: true, lastResult: "other-machine" },
+  { url: "http://studio-desktop:2113", kind: "hostname", learned: true },
+];
 
 const STATUSES: GlyphStatus[] = ["working", "retry", "needs-you", "idle", "error", "done", "running"];
 const MARKDOWN = `## Why the burst got through
@@ -59,6 +68,7 @@ function Gallery({ override, setOverride }: { override: Scheme | null; setOverri
   const [text, setText] = useState("Add a retry budget to the webhooks");
   const [sheet, setSheet] = useState(false);
   const [segment, setSegment] = useState<"changes" | "pages">("pages");
+  const [addresses, setAddresses] = useState(ADDRESSES);
   const noop = () => {};
   const variants = ["primary", "secondary", "ghost", "danger"] as const;
   const insets = useSafeAreaInsets();
@@ -115,6 +125,19 @@ function Gallery({ override, setOverride }: { override: Scheme | null; setOverri
         <Section label="Cards">
           <Card><Text weight="semibold">Default card</Text><Text size={14} tone="muted">Raised on the panel, hairline border.</Text></Card>
           <Card tone="waiting"><Text weight="semibold">Waiting card</Text><Text size={14} tone="muted">Amber edge and a warm tint.</Text></Card>
+        </Section>
+
+        <Section label="Machine addresses">
+          <Card>
+            <Text weight="semibold" size={16}>studio-desktop</Text>
+            <RouteLine addresses={addresses} inUse={ADDRESSES[2].url} />
+            <AddressList addresses={addresses} inUse={ADDRESSES[2].url} onMove={(from, to) => setAddresses((list) => moveAddress(list, from, to))} />
+          </Card>
+          <Card>
+            <Text weight="semibold" size={16}>hangar</Text>
+            <RouteLine addresses={ADDRESSES.slice(0, 1)} inUse={ADDRESSES[0].url} />
+            <AddressList addresses={ADDRESSES.slice(0, 1)} inUse={ADDRESSES[0].url} />
+          </Card>
         </Section>
 
         <Section label="Permission card">

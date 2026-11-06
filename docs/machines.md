@@ -212,6 +212,13 @@ network comes back or the tab is in front again) and moves only once a connectio
 The home Fleet and each browser tab pick on their own, because they may sit on different networks: `GET /api/machines`
 gives each machine's `addresses` with home's last result at each, and `baseUrl` is the one home uses.
 
+The phone app does the same for each machine it's paired with: it learns the addresses from the machine, takes the
+order from home when the phone is paired with home too, and picks, probes and moves back the same way (every minute,
+and when the app comes back to the front). Its Machines screen says how it's connected and lists the addresses with
+arrows to reorder them; a new order is saved on home with the phone's own key (a phone can change the order and
+nothing else). The phone pairs over https, and uses plain http only to a machine's Tailscale and home-network
+addresses, after its id answers there.
+
 ### Keep a node running
 
 `fleet node install-service` keeps the node running: now, when you log in, and after a crash. It takes the same
@@ -649,7 +656,9 @@ Each machine keeps the list of other machines its clients know.
   1, token auth, not this machine) and keeps it. These calls go out from Fleet: http(s) only, 5-second timeout, no
   redirects.
 - `PUT /api/machines/{id}` (owner) with any of `{ baseUrl, token, name, agentsAllowed }`; a new address or token is
-  checked first. `agentsAllowed` lets agents here hand work to that machine (see below); it starts `false`, and adding
+  checked first. `{ addresses }` puts the machine's addresses in a new order (every one of them; a list that changed
+  meanwhile is turned away with 400). A paired phone may send `{ addresses }` alone and nothing else (403), and its
+  answer carries no token. `agentsAllowed` lets agents here hand work to that machine (see below); it starts `false`, and adding
   the machine again keeps it.
 - `POST /api/machines/{id}/check` (owner): asks the saved machine who it is with its saved token and answers
   `{ reachable, error, diagnosis }`. It writes nothing. `diagnosis` is `null` when the machine answers.
