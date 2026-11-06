@@ -137,6 +137,15 @@ public sealed partial class SessionCreation(
             sourceResolutionResult.Value.Input.Provenance);
         var runtimeMode = await ResolveRuntimeModeAsync(harnessType).ConfigureAwait(false);
         var harness = harnessRegistry.GetByType(harnessType);
+
+        // Images ride with the first message, so they need one, and a harness that passes them on.
+        if (request.InitialAttachments is { Count: > 0 })
+        {
+            if (string.IsNullOrWhiteSpace(request.InitialPrompt))
+                return FleetError.ValidationError("InitialAttachments", "Images need a first message to go with.");
+            if (harness is null || !harness.Capabilities.SupportsImageAttachments || harness.Capabilities.RequiresInitialPrompt)
+                return FleetError.ValidationError("InitialAttachments", "This session's harness can't take images. Start the session without them.");
+        }
         if (harness is null)
             return FleetError.NotFoundFor("Harness", harnessType);
 
@@ -416,7 +425,7 @@ public sealed partial class SessionCreation(
             var promptResult = await prompting.PromptSessionCoreAsync(
                 sessionId,
                 initialPrompt!,
-                options: null,
+                options: request.InitialAttachments is { Count: > 0 } ? new PromptOptions { Attachments = request.InitialAttachments.ToList() } : null,
                 userMessageId: null,
                 correlationId: null,
                 saveUserMessage: true,

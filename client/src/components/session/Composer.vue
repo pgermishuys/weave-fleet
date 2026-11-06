@@ -6,7 +6,7 @@ import AutocompletePopup from "@/components/session/AutocompletePopup.vue";
 import ReferenceMirror from "@/components/session/ReferenceMirror.vue";
 import ComposerFrame from "@/components/session/ComposerFrame.vue";
 import ContextRing from "@/components/session/ContextRing.vue";
-import ImageLightbox from "@/components/session/ImageLightbox.vue";
+import ImageAttachmentChips from "@/components/session/ImageAttachmentChips.vue";
 import AgentSelector from "@/components/session/AgentSelector.vue";
 import ModelSelector from "@/components/session/ModelSelector.vue";
 import EffortToggle from "@/components/session/EffortToggle.vue";
@@ -30,7 +30,8 @@ import { useRunShellCommand } from "@/composables/use-run-shell-command";
 import { useSideConversation, type SideQuestionChoice } from "@/composables/use-side-conversation";
 import { useHarnesses } from "@/composables/use-harnesses";
 import { useModels } from "@/composables/use-models";
-import { useDraftAttachments, type PendingAttachment } from "@/composables/use-draft-attachments";
+import { type PendingAttachment } from "@/composables/use-draft-attachments";
+import { useImageAttachments } from "@/composables/use-image-attachments";
 import { useDraftFiles } from "@/composables/use-draft-files";
 import { uploadSessionAttachment } from "@/api/session-attachments";
 import {
@@ -61,7 +62,7 @@ import { parseSideQuestion, SIDE_QUESTION_COMMAND } from "@/lib/side-conversatio
 import { trackAction } from "@/lib/track-action";
 import { useSessionsStore } from "@/stores/sessions";
 import type { ImageAttachment } from "@/lib/client-types";
-import { ALLOWED_IMAGE_MIMES, MAX_IMAGE_BYTES, MAX_ATTACHMENTS_PER_PROMPT } from "@/lib/image-validation";
+import { ALLOWED_IMAGE_MIMES, MAX_ATTACHMENTS_PER_PROMPT } from "@/lib/image-validation";
 
 defineOptions({
   name: "SessionComposer",
@@ -111,9 +112,7 @@ const sendError = computed(() => sideDraftError.value
 let disabledStateObserver: MutationObserver | null = null;
 let statusIndicatorTimer: ReturnType<typeof setTimeout> | null = null;
 let statusIndicatorDotsTimer: ReturnType<typeof setInterval> | null = null;
-let pasteErrorTimer: ReturnType<typeof setTimeout> | null = null;
 
-const { attachments: pendingAttachments, addAttachment, removeAttachment: removeDraftAttachment, clearAttachments } = useDraftAttachments(props.sessionId);
 const {
   contexts: terminalContexts,
   removeContext: removeTerminalContext,
@@ -127,64 +126,8 @@ const isUploading = shallowRef(false);
 const largePastes = computed(() => preferencesStore.get(LARGE_PASTES_PREFERENCE_KEY, "ask") as LargePastes);
 /** A big paste waiting for a choice: the text and where the caret was, so Paste as text goes back there. */
 const pasteOffer = shallowRef<{ text: string; start: number; end: number; choice: "attach" | "text" } | null>(null);
-const pasteError = shallowRef<string | undefined>(undefined);
 const isDragging = shallowRef(false);
-const lightboxUrl = shallowRef<string | null>(null);
 const fileInputRef = useTemplateRef<HTMLInputElement>("fileInput");
-
-function clearPasteError(): void {
-  pasteError.value = undefined;
-  if (pasteErrorTimer) {
-    clearTimeout(pasteErrorTimer);
-    pasteErrorTimer = null;
-  }
-}
-
-function setPasteError(message: string): void {
-  pasteError.value = message;
-  if (pasteErrorTimer) {
-    clearTimeout(pasteErrorTimer);
-  }
-  pasteErrorTimer = setTimeout(() => {
-    pasteError.value = undefined;
-    pasteErrorTimer = null;
-  }, 5000);
-}
-
-function processImageBlob(blob: File): void {
-  if (!ALLOWED_IMAGE_MIMES.has(blob.type)) {
-    setPasteError(`Unsupported image type: ${blob.type || "unknown"}`);
-    return;
-  }
-  if (blob.size > MAX_IMAGE_BYTES) {
-    setPasteError(`Image exceeds 5MB limit (${(blob.size / 1024 / 1024).toFixed(1)}MB)`);
-    return;
-  }
-  if (pendingAttachments.value.length >= MAX_ATTACHMENTS_PER_PROMPT) {
-    setPasteError(`Too many images (max ${MAX_ATTACHMENTS_PER_PROMPT})`);
-    return;
-  }
-
-  const reader = new FileReader();
-  reader.onload = () => {
-    const dataUrl = reader.result as string;
-    const base64 = dataUrl.split(",")[1] ?? "";
-    const previewUrl = URL.createObjectURL(blob);
-    addAttachment({
-      id: `${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
-      mime: blob.type,
-      filename: blob.name || "image.png",
-      data: base64,
-      previewUrl,
-    });
-    clearPasteError();
-  };
-  reader.readAsDataURL(blob);
-}
-
-function removeAttachment(id: string): void {
-  removeDraftAttachment(id);
-}
 
 const MAX_FILE_BYTES = 25 * 1024 * 1024;
 
@@ -204,7 +147,7 @@ function addFiles(files: File[], pasted = false): void {
       setPasteError(`${MAX_ATTACHMENTS_PER_PROMPT} files at most per prompt.`);
       continue;
     }
-    if (isImage) processImageBlob(file);
+    if (isImage) addImage(file);
     else addFile(file, pasted);
   }
 }
@@ -357,6 +300,16 @@ const capabilities = computed(() => harnessCapabilities(selectedSession.value?.h
 const supportsShellCommands = computed(() => capabilities.value.supportsShell);
 /** The session's harness passes images on to the model; elsewhere Attach image isn't offered. */
 const supportsImages = computed(() => capabilities.value.supportsImages);
+const {
+  attachments: pendingAttachments,
+  addAttachment,
+  removeAttachment,
+  clearAttachments,
+  pasteError,
+  setPasteError,
+  clearPasteError,
+  addImage,
+} = useImageAttachments(props.sessionId, supportsImages);
 
 /** The session's harness can fork it for a side conversation (`/btw`); the `/` popup offers it only then. */
 /** The agent reads an @-referenced session with fleet_session_read; without Fleet's tools it gets a recap instead. */
@@ -1210,33 +1163,10 @@ function handleKeydown(event: KeyboardEvent): void {
         v-if="pendingAttachments.length > 0 || draftFiles.length > 0"
         class="attachment-strip"
       >
-        <div
-          v-for="att in pendingAttachments"
-          :key="att.id"
-          class="attachment-chip"
-        >
-          <button
-            type="button"
-            class="attachment-chip__thumb-btn"
-            title="Click to preview"
-            @click="lightboxUrl = att.previewUrl"
-          >
-            <img
-              :src="att.previewUrl"
-              :alt="att.filename ?? 'image'"
-              class="attachment-chip__thumb"
-            >
-          </button>
-          <span class="attachment-chip__name">{{ att.filename ?? 'image.png' }}</span>
-          <button
-            type="button"
-            class="attachment-chip__remove"
-            :title="`Remove ${att.filename ?? 'image'}`"
-            @click="removeAttachment(att.id)"
-          >
-            <X class="attachment-chip__remove-icon" />
-          </button>
-        </div>
+        <ImageAttachmentChips
+          :attachments="pendingAttachments"
+          @remove="removeAttachment"
+        />
         <div
           v-for="file in draftFiles"
           :key="file.id"
@@ -1420,10 +1350,6 @@ function handleKeydown(event: KeyboardEvent): void {
       </template>
     </ComposerFrame>
 
-    <ImageLightbox
-      :src="lightboxUrl"
-      @close="lightboxUrl = null"
-    />
   </section>
 </template>
 
@@ -1648,35 +1574,6 @@ function handleKeydown(event: KeyboardEvent): void {
   font-size: 11px;
   color: var(--text);
   position: relative;
-}
-
-.attachment-chip__thumb-btn {
-  display: inline-flex;
-  padding: 0;
-  border: none;
-  background: transparent;
-  cursor: pointer;
-  border-radius: calc(var(--radius-btn) - 3px);
-}
-
-.attachment-chip__thumb-btn:hover {
-  opacity: 0.8;
-}
-
-.attachment-chip__thumb {
-  width: 80px;
-  height: 80px;
-  border-radius: calc(var(--radius-btn) - 3px);
-  object-fit: cover;
-}
-
-.attachment-chip__name {
-  max-width: 80px;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-  color: var(--muted);
-  font-size: 10px;
 }
 
 .attachment-chip__remove {

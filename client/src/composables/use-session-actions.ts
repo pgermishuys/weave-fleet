@@ -14,6 +14,7 @@ import type {
   UpdateProjectRequest,
 } from "@/api/client";
 import { useMachineTarget, type MachineTarget } from "@/lib/machine-target";
+import type { ImageAttachment } from "@/lib/client-types";
 import { trackAction } from "@/lib/track-action";
 import { dispatchSessionUpsert } from "@/lib/session-sync";
 import { useSessionsStore } from "@/stores/sessions";
@@ -36,6 +37,8 @@ export interface CreateSessionOptions {
   model?: ModelReference;
   /** Sessions the first message `@`-references: Fleet adds the block naming them for the agent. */
   sessionReferences?: { token: string; sessionId: string }[];
+  /** Images that go with the first message; the harness must take images. */
+  attachments?: ImageAttachment[];
 }
 
 export interface UseCreateSessionResult {
@@ -252,6 +255,7 @@ export function useCreateSession(): UseCreateSessionResult {
         ...(opts?.agent ? { agent: opts.agent } : {}),
         ...(opts?.model ? { model: opts.model } : {}),
         ...(opts?.sessionReferences?.length ? { sessionReferences: opts.sessionReferences } : {}),
+        ...(opts?.attachments?.length ? { attachments: opts.attachments.map((a) => ({ mime: a.mime, filename: a.filename ?? null, data: a.data })) } : {}),
       };
 
       const { data, error, response } = await api.POST("/api/sessions", {

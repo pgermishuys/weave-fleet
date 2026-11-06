@@ -3801,6 +3801,7 @@ export interface components {
             agent?: null | string;
             model?: unknown;
             sessionReferences?: null | components["schemas"]["SessionReferenceDto"][];
+            attachments?: null | components["schemas"]["ImageAttachmentDto"][];
         };
         CreateTerminalRequest: {
             /** Format: int32 */
