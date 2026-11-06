@@ -1,7 +1,6 @@
 import { ref } from "vue";
-import { getConfigPages } from "@/plugins/slots";
 
-/** The pages the Settings menu shows. An add-on's page is `integration:<plugin id>`. */
+/** The pages the Settings menu shows. Plugins is the overview; a plugin's own page is `plugin:<plugin id>`. */
 export type SettingsPageId =
   | "general"
   | "appearance"
@@ -14,7 +13,8 @@ export type SettingsPageId =
   | "labs"
   | "updates"
   | "credentials"
-  | `integration:${string}`;
+  | "plugins"
+  | `plugin:${string}`;
 
 /** Ids from before the pages were grouped. They still work: each lands on the page that holds the setting now. */
 export type LegacySettingsSectionId =
@@ -27,7 +27,7 @@ export type LegacySettingsSectionId =
   | "system"
   | "weave"
   | "workflows"
-  | "plugins";
+  | `integration:${string}`;
 
 export type SettingsSectionId = SettingsPageId | LegacySettingsSectionId;
 
@@ -37,8 +37,8 @@ export interface SettingsTarget {
   anchor: string | null;
 }
 
-/** Where each old id lands. `plugins` is decided at call time: the first integration, or General. */
-export const LEGACY_SECTION_TARGETS: Readonly<Record<Exclude<LegacySettingsSectionId, "plugins">, SettingsTarget>> = {
+/** Where each old id lands. `integration:<id>` (from before Plugins) lands on that plugin's page. */
+export const LEGACY_SECTION_TARGETS: Readonly<Record<Exclude<LegacySettingsSectionId, `integration:${string}`>, SettingsTarget>> = {
   features: { section: "general", anchor: null },
   workspace: { section: "folders", anchor: null },
   storage: { section: "folders", anchor: "storage" },
@@ -52,14 +52,9 @@ export const LEGACY_SECTION_TARGETS: Readonly<Record<Exclude<LegacySettingsSecti
   workflows: { section: "labs", anchor: "workflows" },
 };
 
-export function resolveSettingsTarget(
-  id: SettingsSectionId,
-  anchor: string | null = null,
-  firstIntegration: () => string | null = () => getConfigPages()[0]?.pluginId ?? null,
-): SettingsTarget {
-  if (id === "plugins") {
-    const plugin = firstIntegration();
-    return plugin ? { section: `integration:${plugin}`, anchor } : { section: "general", anchor };
+export function resolveSettingsTarget(id: SettingsSectionId, anchor: string | null = null): SettingsTarget {
+  if (id.startsWith("integration:")) {
+    return { section: `plugin:${id.slice("integration:".length)}`, anchor };
   }
   if (id in LEGACY_SECTION_TARGETS) {
     const target = LEGACY_SECTION_TARGETS[id as keyof typeof LEGACY_SECTION_TARGETS];

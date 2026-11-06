@@ -11,6 +11,7 @@ export const githubPluginManifest = {
     trustLevel: "built-in",
     hasFrontend: true,
     hasBackend: true,
+    description: "Pull requests, issues and checks beside your sessions.",
   },
   contributions: {
     sidebarItems: [

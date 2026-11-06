@@ -15,7 +15,7 @@ vi.mock("@/composables/use-update-status", () => ({
   useUpdateStatus: () => ({ isUpdateAvailable: ref(update.available.value), isUpdateStaged: ref(false) }),
 }));
 
-const { registerPlugin, clearPlugins } = await import("@/plugins/registry");
+const { registerPlugin, clearPlugins, setPluginEnabled } = await import("@/plugins/registry");
 const { default: SettingsNavPanel } = await import("@/components/settings/SettingsNavPanel.vue");
 
 enableAutoUnmount(afterEach);
@@ -32,13 +32,14 @@ describe("SettingsNavPanel", () => {
     const wrapper = await mountNav(false);
     const groups = wrapper.findAll("[data-settings-nav-group]").map((group) => [
       group.attributes("data-settings-nav-group"),
-      group.findAll("button").map((b) => b.text()),
+      group.findAll(".settings-nav__item").map((b) => b.text()),
     ]);
     expect(groups).toEqual([
       ["you", ["General", "Appearance"]],
       ["agents", ["Harnesses", "Permissions", "Skills & tools", "Memory"]],
       ["work", ["Folders", "Machines"]],
       ["fleet", ["Labs", "Updates & about"]],
+      ["plugins", ["Plugins0"]],
     ]);
     expect(wrapper.text()).not.toContain("Features");
   });
@@ -47,18 +48,47 @@ describe("SettingsNavPanel", () => {
     expect((await mountNav(true)).text()).not.toContain("Mods");
   });
 
-  it("adds an Integrations group with one entry per add-on page, through the contribution point", async () => {
+  const demo = {
+    descriptor: { id: "demo", displayName: "Demo", trustLevel: "built-in", hasFrontend: true, hasBackend: false },
+    contributions: { configPage: { title: "Demo integration", navLabel: "Demo", component: { template: "<div />" } } },
+  } as const;
+
+  it("has a Plugins entry, no Integrations group, and a child per plugin that is on, from the registry", async () => {
     const wrapper = await mountNav(false);
     expect(wrapper.find("[data-settings-nav-group='integrations']").exists()).toBe(false);
-    registerPlugin({
-      descriptor: { id: "demo", displayName: "Demo", trustLevel: "built-in", hasFrontend: true, hasBackend: false },
-      contributions: { configPage: { title: "Demo integration", navLabel: "Demo", component: { template: "<div />" } } },
-    });
+    const group = () => wrapper.get("[data-settings-nav-group='plugins']");
+    expect(group().findAll(".settings-nav__item").map((b) => b.text())).toEqual(["Plugins0"]);
+
+    registerPlugin(demo);
     await flushPromises();
-    const entry = wrapper.get("[data-settings-nav-group='integrations']").get("button");
-    expect(entry.text()).toBe("Demo");
-    await entry.trigger("click");
-    expect(wrapper.emitted("update:modelValue")![0]).toEqual(["integration:demo"]);
+    expect(group().get("[data-testid='settings-nav-count']").text()).toBe("1");
+    await wrapper.setProps({ modelValue: "plugins" });
+    const child = group().findAll("button").find((b) => b.text() === "Demo")!;
+    await child.trigger("click");
+    expect(wrapper.emitted("update:modelValue")![0]).toEqual(["plugin:demo"]);
+    clearPlugins();
+  });
+
+  it("drops a plugin's child when it is switched off, and brings it back when it is on", async () => {
+    registerPlugin(demo);
+    const wrapper = await mountNav(false);
+    await wrapper.setProps({ modelValue: "plugin:demo" });
+    expect(wrapper.text()).toContain("Demo");
+    setPluginEnabled("demo", false);
+    await flushPromises();
+    expect(wrapper.findAll("button").some((b) => b.text() === "Demo")).toBe(false);
+    setPluginEnabled("demo", true);
+    await flushPromises();
+    expect(wrapper.findAll("button").some((b) => b.text() === "Demo")).toBe(true);
+    clearPlugins();
+  });
+
+  it("folds the Plugins entry with its chevron", async () => {
+    registerPlugin(demo);
+    const wrapper = await mountNav(false);
+    await wrapper.setProps({ modelValue: "plugins" });
+    await wrapper.get("[aria-label='Fold Plugins']").trigger("click");
+    expect(wrapper.findAll("button").some((b) => b.text() === "Demo")).toBe(false);
     clearPlugins();
   });
 

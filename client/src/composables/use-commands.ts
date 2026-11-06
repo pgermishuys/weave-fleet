@@ -765,12 +765,15 @@ export function useCommands() {
       },
       {
         id: "open-marketplace-panel",
-        label: "Open marketplace panel",
-        description: "Show plugin and integration options.",
+        label: "Open plugins",
+        description: "Turn plugins on or off in Settings.",
         icon: Puzzle,
         category: "Fleet",
         keywords: ["plugins", "integrations", "marketplace"],
-        action: () => sidebarStore.setActiveRail("marketplace"),
+        action: () => {
+          sidebarStore.setActiveRail("settings");
+          void router.navigate({ to: "/settings/plugins" });
+        },
       },
       {
         id: "report-problem",

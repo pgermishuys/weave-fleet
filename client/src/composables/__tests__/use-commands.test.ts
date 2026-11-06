@@ -124,7 +124,7 @@ describe("useCommands", () => {
         "View: Toggle full screen",
         "View: Zoom in",
         "View: Zoom out",
-        "Fleet: Open marketplace panel",
+        "Fleet: Open plugins",
         "Fleet: Report a problem",
       ]);
     });

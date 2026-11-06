@@ -125,8 +125,9 @@ describe("the icon rail", () => {
 
     navigate.mockClear();
     await wrapper.find("[aria-label=Plugins]").trigger("click");
-    expect(store.activeRail).toBe("marketplace");
-    expect(navigate).not.toHaveBeenCalled();
+    // A shortcut into Settings › Plugins: the route makes Settings the active rail, so the rail itself isn't set.
+    expect(store.activeRail).toBe("automations");
+    expect(navigate).toHaveBeenLastCalledWith({ to: "/settings/plugins" });
 
     await wrapper.find("[aria-label=GitHub]").trigger("click");
     expect(store.activeRail).toBe("github");
@@ -196,7 +197,6 @@ describe("the context panel per rail", () => {
     ["automations", "panel-automations"],
     ["settings", "panel-settings"],
     ["github", "panel-github"],
-    ["marketplace", "panel-marketplace"],
   ])("shows %s as %s", (rail, expected) => {
     expect(shown(rail)).toBe(expected);
   });

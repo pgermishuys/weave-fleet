@@ -15,9 +15,11 @@ import WorkspaceSection from "@/components/settings/WorkspaceSection.vue";
 import WorktreeNamingSection from "@/components/settings/WorktreeNamingSection.vue";
 import { useSettingsNav } from "@/composables/use-settings-nav";
 import { useMachinesStore } from "@/stores/machines";
-import { getConfigPage } from "@/plugins/slots";
+import PluginPage from "@/components/settings/PluginPage.vue";
+import PluginsOverview from "@/components/settings/PluginsOverview.vue";
+import { pluginManifests } from "@/plugins/registry";
 
-const INTEGRATION_PREFIX = "integration:";
+const PLUGIN_PREFIX = "plugin:";
 
 /** Each page's own title and one line under it. */
 const PAGES: Readonly<Record<string, { title: string; line: string }>> = {
@@ -31,6 +33,7 @@ const PAGES: Readonly<Record<string, { title: string; line: string }>> = {
   machines: { title: "Machines", line: "The machines you work on, phones and devices, and the access token." },
   labs: { title: "Labs", line: "Experiments. They can change or go away, and each is off until you turn it on." },
   updates: { title: "Updates & about", line: "Every version and update: Fleet, harnesses and machines, and what's new." },
+  plugins: { title: "Plugins", line: "Add-ons that put things in Fleet: rail icons, settings pages and pickers. Turn one off and everything it adds goes with it." },
   credentials: { title: "API keys", line: "Credentials for model providers." },
 };
 
@@ -38,17 +41,15 @@ const { activeSection, activeAnchor } = useSettingsNav();
 // Settings belong to a machine: when another one is live, these are its settings.
 const machines = useMachinesStore();
 
-// An add-on's page comes through the plugin contribution point; core never imports the add-on.
-const integrationPage = computed(() =>
-  activeSection.value.startsWith(INTEGRATION_PREFIX)
-    ? getConfigPage(activeSection.value.slice(INTEGRATION_PREFIX.length))
-    : undefined,
+// A plugin's page is drawn from the plugin registry; core never imports the plugin.
+const pluginId = computed(() =>
+  activeSection.value.startsWith(PLUGIN_PREFIX) ? activeSection.value.slice(PLUGIN_PREFIX.length) : null,
 );
 
 const header = computed(() => {
-  if (activeSection.value.startsWith(INTEGRATION_PREFIX)) {
-    const page = integrationPage.value;
-    return { title: page?.navLabel ?? page?.title ?? "Integration", line: page?.title ?? "" };
+  if (pluginId.value) {
+    const descriptor = pluginManifests.get(pluginId.value)?.descriptor;
+    return { title: descriptor?.displayName ?? "Plugin", line: descriptor?.description ?? "" };
   }
   return PAGES[activeSection.value] ?? PAGES.general;
 });
@@ -122,9 +123,11 @@ watch(
 
     <CredentialsSection v-else-if="activeSection === 'credentials'" />
 
-    <component
-      :is="integrationPage.component"
-      v-else-if="integrationPage"
+    <PluginsOverview v-else-if="activeSection === 'plugins'" />
+
+    <PluginPage
+      v-else-if="pluginId"
+      :plugin-id="pluginId"
     />
   </section>
 </template>
