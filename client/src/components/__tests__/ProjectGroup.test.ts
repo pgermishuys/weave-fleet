@@ -69,6 +69,12 @@ describe("ProjectGroup", () => {
     expect(wrapper.emitted("toggle")).toBeUndefined();
   });
 
+  it("shows no rename input for the ungrouped group", () => {
+    const wrapper = mountProjectGroup({ project: { ...createProjectGroup(), projectId: null, isUngrouped: true } });
+    expect(wrapper.find(".project-header--editing").exists()).toBe(false);
+    expect(wrapper.find("button.project-header").exists()).toBe(true);
+  });
+
   it("has no + button for the ungrouped group", () => {
     const wrapper = mountProjectGroup({ project: { ...createProjectGroup(), projectId: null, isUngrouped: true } });
     expect(wrapper.find('[data-testid="project-new-session"]').exists()).toBe(false);

@@ -623,19 +623,6 @@ async function handleDelete(mode: DeleteProjectMode): Promise<void> {
         <span class="project-count">{{ project.sessionCount }}</span>
       </button>
 
-        <button
-          v-if="canShowContextMenu && !isInlineEditing"
-          type="button"
-          class="project-new"
-          data-testid="project-new-session"
-          :aria-label="`New session in ${project.name}`"
-          :title="`New session in ${project.name}`"
-          :disabled="isAnyActionPending"
-          @click.stop="handleNewSessionRequest"
-        >
-          <Plus aria-hidden="true" />
-        </button>
-
       <div
         v-else
         class="project-header project-header--editing"
