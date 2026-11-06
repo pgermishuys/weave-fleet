@@ -378,6 +378,19 @@ public sealed class OpenCode2ProfilesTests : IDisposable
         (await servers.GetAsync(key, OpenCode2ServerSetup.None, CancellationToken.None)).ShouldNotBeSameAs(before);
     }
 
+    [Fact]
+    public async Task Sessions_starting_at_once_on_one_setup_share_one_server_and_none_is_stopped()
+    {
+        var started = new List<OpenCode2ServerKey>();
+        await using var servers = Servers(started);
+        var key = OpenCode2ServerKey.For("local-user", null);
+
+        var got = await Task.WhenAll(Enumerable.Range(0, 10).Select(_ => servers.GetAsync(key, OpenCode2ServerSetup.None, CancellationToken.None)));
+
+        started.Count.ShouldBe(1);
+        got.ShouldAllBe(server => ReferenceEquals(server, got[0]) && server.IsRunning);
+    }
+
     private static OpenCode2Servers Servers(
         List<OpenCode2ServerKey> started,
         string active = """{"data":{}}""",

@@ -16,7 +16,16 @@ internal sealed class UsageSources(string homeDirectory, Func<string, string?> e
     public static UsageSources FromEnvironment() => new(
         Environment.GetFolderPath(Environment.SpecialFolder.UserProfile), Environment.GetEnvironmentVariable);
 
-    public string ClaudeCredentialsFile => Path.Combine(homeDirectory, ".claude", ".credentials.json");
+    /// <summary>Claude Code's sign-in file, in <c>CLAUDE_CONFIG_DIR</c> when Fleet's environment sets it (Claude Code, run by Fleet, reads the same one).</summary>
+    public string ClaudeCredentialsFile
+    {
+        get
+        {
+            var configDir = environment("CLAUDE_CONFIG_DIR");
+            var root = !string.IsNullOrWhiteSpace(configDir) && Path.IsPathRooted(configDir) ? configDir : Path.Combine(homeDirectory, ".claude");
+            return Path.Combine(root, ".credentials.json");
+        }
+    }
 
     /// <summary>OpenCode 1's sign-in file, in <c>XDG_DATA_HOME</c> when that's set.</summary>
     public string OpenCodeAuthFile

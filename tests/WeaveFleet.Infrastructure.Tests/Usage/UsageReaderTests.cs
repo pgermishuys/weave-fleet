@@ -174,6 +174,20 @@ public sealed class UsageReaderTests : IDisposable
     }
 
     [Fact]
+    public async Task claude_reads_the_config_dir_Claude_Code_runs_with()
+    {
+        // ~/.claude holds a stale default sign-in; CLAUDE_CONFIG_DIR is where the working login is.
+        ClaudeSignIn(_time.GetUtcNow().AddMinutes(-1).ToUnixTimeMilliseconds());
+        var dir = Path.Combine(_home, "work-profile");
+        Directory.CreateDirectory(dir);
+        File.WriteAllText(Path.Combine(dir, ".credentials.json"), """{"claudeAiOauth":{"accessToken":"work-secret"}}""");
+        _env["CLAUDE_CONFIG_DIR"] = dir;
+        _api.Reply = (HttpStatusCode.OK, ClaudeBody);
+
+        (await Claude().ReadAsync(default)).State.ShouldNotBe(UsageStates.SignedOut);
+    }
+
+    [Fact]
     public async Task codex_honors_xdg_data_home()
     {
         var xdg = Path.Combine(_home, "elsewhere");
