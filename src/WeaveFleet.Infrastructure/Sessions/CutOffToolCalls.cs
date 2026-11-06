@@ -20,7 +20,7 @@ namespace WeaveFleet.Infrastructure.Sessions;
 public static class CutOffToolCalls
 {
     /// <summary>The error a cut-off call shows.</summary>
-    public const string Message = "The turn ended before this call finished.";
+    public const string Message = CutOffCall.Message;
 
     /// <summary>
     /// <paramref name="messages"/> with every cut-off call shown as failed. <paramref name="stillWorking"/> says, by call

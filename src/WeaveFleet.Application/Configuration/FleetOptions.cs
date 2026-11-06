@@ -226,9 +226,9 @@ public sealed class HarnessOptions
 
     /// <summary>
     /// Remembers which sessions were working when Fleet stopped, and shows each a restart cut off with an Interrupted card
-    /// and Continue. Off unless turned on (<c>Fleet__Harness__RestartContinue=true</c>) while it is built. Default: false.
+    /// and Continue. On unless turned off (<c>Fleet__Harness__RestartContinue=false</c>). It sends nothing by itself. Default: true.
     /// </summary>
-    public bool RestartContinue { get; set; }
+    public bool RestartContinue { get; set; } = true;
 
     /// <summary>
     /// Lets the agent write mods (small TypeScript modules that change how Fleet looks and behaves for the user) and

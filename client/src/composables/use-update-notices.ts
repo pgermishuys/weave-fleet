@@ -1,4 +1,4 @@
-import { onMounted, onUnmounted, watch } from "vue";
+import { onMounted, onUnmounted, shallowRef, watch } from "vue";
 import { ExternalLink, RotateCw, Sparkles, TriangleAlert } from "lucide-vue-next";
 import { api } from "@/api/client";
 import { useReleaseNotes } from "@/composables/use-release-notes";
@@ -14,6 +14,9 @@ export const UPDATED_CHIP_MS = 12_000;
 /** How long What's new stays before it settles: there's a list to read. */
 export const WHATS_NEW_HOLD_MS = 20_000;
 const LAST_VERSION_KEY = "weave:last-version";
+
+/** The version this page just restarted into, once it knows Fleet updated (null when the restart wasn't an update). */
+export const updatedToVersion = shallowRef<string | null>(null);
 
 const APP = "update:app:";
 const SERVER = "update:server:";
@@ -257,6 +260,7 @@ export function useUpdateNotices(): void {
     const previous = readLastVersion(source);
     writeLastVersion(source, version);
     if (!previous || !isNewerVersion(version, previous)) return;
+    updatedToVersion.value = version;
     const summary = whatsNewSummary(await notesFor(version), previous, version);
     if (summary) postWhatsNew(source, summary, previous, version);
     else postUpdated(source, version);
