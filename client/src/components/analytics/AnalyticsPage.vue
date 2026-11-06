@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { computed, shallowRef, watch } from "vue";
-import AnalyticsFilters from "@/components/analytics/AnalyticsFilters.vue";
-import AnalyticsTabs, { type AnalyticsTabId } from "@/components/analytics/AnalyticsTabs.vue";
+import AnalyticsSectionStrip from "@/components/analytics/AnalyticsSectionStrip.vue";
+import DailyTab from "@/components/analytics/tabs/DailyTab.vue";
 import ModelsTab from "@/components/analytics/tabs/ModelsTab.vue";
 import OverviewTab from "@/components/analytics/tabs/OverviewTab.vue";
 import ProjectsTab from "@/components/analytics/tabs/ProjectsTab.vue";
@@ -14,15 +14,17 @@ import {
   type AnalyticsSessionsSortBy,
   type AnalyticsSessionsSortDir,
 } from "@/composables/use-analytics-sessions";
+import { useAnalyticsSection } from "@/composables/use-analytics-section";
 import { useAnalyticsSummary } from "@/composables/use-analytics-summary";
 
-const activeTab = shallowRef<AnalyticsTabId>("overview");
+// The menu in the context panel picks the section; it is in the address, so a reload keeps it.
+const activeTab = useAnalyticsSection();
 const sessionsSortBy = shallowRef<AnalyticsSessionsSortBy>("createdAt");
 const sessionsSortDir = shallowRef<AnalyticsSessionsSortDir>("desc");
 const isRefreshingAnalytics = shallowRef(false);
 const isRefreshingSessions = shallowRef(false);
 
-const { filters, isDefault, resetFilters, setFrom, setProjectId, setTo, topProjects } = useAnalyticsFilters();
+const { filters } = useAnalyticsFilters();
 
 const normalizedProjectId = computed(() => filters.value.projectId.trim());
 const fromDate = computed(() => filters.value.from || undefined);
@@ -84,10 +86,6 @@ watch([sessionsSortBy, sessionsSortDir], () => {
   void refreshSessionsOnly();
 });
 
-const filterProjects = computed(() => {
-  return withSelectedProject(topProjects.value, projectId.value);
-});
-
 const scopedTopProjects = computed<AnalyticsProjectOption[]>(() => {
   const summaryProjects = (summary.value?.topProjects ?? []).map((project) => ({
     id: project.name,
@@ -136,6 +134,11 @@ const overviewTabProps = computed(() => ({
   projectsEmptyMessage: projectsEmptyMessage.value,
 }));
 
+const dailyTabProps = computed(() => ({
+  daily: daily.value,
+  emptyMessage: dailyEmptyMessage.value,
+}));
+
 const projectsTabProps = computed(() => ({
   topProjects: scopedTopProjects.value,
   emptyMessage: projectsEmptyMessage.value,
@@ -159,6 +162,7 @@ const modelsTabProps = computed(() => ({
 
 const tabComponents = {
   overview: OverviewTab,
+  daily: DailyTab,
   projects: ProjectsTab,
   sessions: SessionsTab,
   models: ModelsTab,
@@ -170,6 +174,8 @@ const activeTabProps = computed(() => {
   switch (activeTab.value) {
     case "overview":
       return overviewTabProps.value;
+    case "daily":
+      return dailyTabProps.value;
     case "projects":
       return projectsTabProps.value;
     case "sessions":
@@ -191,10 +197,6 @@ const activeTabListeners = computed(() => {
     "update:sortDir": handleSessionsSortDirUpdate,
   };
 });
-
-function handleTabSelect(tabId: AnalyticsTabId): void {
-  activeTab.value = tabId;
-}
 
 function handleSessionsSortByUpdate(value: AnalyticsSessionsSortBy): void {
   sessionsSortBy.value = value;
@@ -270,24 +272,8 @@ function formatFetchMessage(error: string | undefined, fallback: string): string
       </p>
     </header>
 
-    <div class="analytics-page__toolbar">
-      <AnalyticsTabs
-        :active-tab="activeTab"
-        @select="handleTabSelect"
-      />
-
-      <AnalyticsFilters
-        :from="filters.from"
-        :to="filters.to"
-        :project-id="filters.projectId"
-        :projects="filterProjects"
-        :is-default="isDefault"
-        @update:from="setFrom"
-        @update:to="setTo"
-        @update:project-id="setProjectId"
-        @reset="resetFilters"
-      />
-    </div>
+    <!-- On a phone the menu is a strip of chips here; beside the page it is the context panel. -->
+    <AnalyticsSectionStrip class="analytics-page__strip" />
 
     <component
       :is="activeTabComponent"
@@ -328,12 +314,13 @@ function formatFetchMessage(error: string | undefined, fallback: string): string
   line-height: 1.5;
 }
 
-/* The view switcher on the left, the filters on the right; they wrap under each other when narrow. */
-.analytics-page__toolbar {
-  display: flex;
-  flex-wrap: wrap;
-  align-items: center;
-  justify-content: space-between;
-  gap: 8px 16px;
+.analytics-page__strip {
+  display: none;
+}
+
+@media (max-width: 767px) {
+  .analytics-page__strip {
+    display: flex;
+  }
 }
 </style>

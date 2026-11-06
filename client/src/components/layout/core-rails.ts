@@ -1,5 +1,6 @@
 import { defineComponent, h } from "vue";
 import { BarChart3, LayoutGrid, ListTodo, Radar, MessageSquare, Settings, Workflow, Zap } from "lucide-vue-next";
+import AnalyticsNavPanel from "@/components/analytics/AnalyticsNavPanel.vue";
 import BoardControlsPanel from "@/components/board/BoardControlsPanel.vue";
 import SessionsPanel from "@/components/sessions/SessionsPanel.vue";
 import SettingsNavPanel from "@/components/settings/SettingsNavPanel.vue";
@@ -40,26 +41,6 @@ const AutomationsContextPanel = defineComponent({
   },
 });
 
-// Its filters are for the board itself; with Board off the page only says how to turn it on.
-const BoardContextPanel = defineComponent({
-  name: "BoardContextPanel",
-  setup() {
-    const { isBoardFeatureEnabled } = useBoardFeature();
-
-    return () => h(isBoardFeatureEnabled.value ? BoardControlsPanel : SessionsPanel);
-  },
-});
-
-// Its library is for running workflows; with them off the page only says how to turn them on.
-const WorkflowsContextPanel = defineComponent({
-  name: "WorkflowsContextPanel",
-  setup() {
-    const { isWorkflowsEnabled } = useWorkflowsFeature();
-
-    return () => h(isWorkflowsEnabled.value ? WorkflowsNavPanel : SessionsPanel);
-  },
-});
-
 // The icon rail reads these inside a computed, after its own setup has already asked for both features
 // (which starts loading the preferences), so asking again here only reads.
 const boardOff = () => !useBoardFeature().isBoardFeatureEnabled.value;
@@ -72,13 +53,16 @@ railPoint.contribute("core", [
   // Fleet (mission control) comes first and leaves the rail while it's switched off, like Board.
   { id: "fleet", label: "Fleet", icon: Radar, to: "/fleet", placement: "top", order: -10, panel: SessionsPanel, hidden: missionControlOff },
   { id: "sessions", label: "Sessions", icon: MessageSquare, to: "/", placement: "top", order: 0, panel: SessionsPanel },
-  // Board leaves the rail while it's switched off. Workflows stays, dimmed; its page says how to turn it on.
-  { id: "board", label: "Board", icon: LayoutGrid, to: "/board", placement: "top", order: 10, panel: BoardContextPanel, hidden: boardOff },
-  { id: "workflows", label: "Workflows", icon: Workflow, to: "/workflows", placement: "top", order: 20, panel: WorkflowsContextPanel, off: workflowsOff },
-  // Jobs leaves the rail while it's switched off, like Board. Its page is the whole context; the sessions list stays beside it.
+  // Board leaves the rail while it's switched off. Workflows stays, dimmed; with either off, the page's "turn it on"
+  // notice fills the whole context area (noPanel), so no other view's panel sits beside it.
+  { id: "board", label: "Board", icon: LayoutGrid, to: "/board", placement: "top", order: 10, panel: BoardControlsPanel, hidden: boardOff, noPanel: boardOff },
+  { id: "workflows", label: "Workflows", icon: Workflow, to: "/workflows", placement: "top", order: 20, panel: WorkflowsNavPanel, off: workflowsOff, noPanel: workflowsOff },
+  // TODO(rail-owns-context): Jobs and Fleet borrow the sessions list. Each gets its own menu (jobs-list/jobs-detail,
+  // fleet-menu/fleet-detail) in a follow-up, copying Analytics: a nav panel here, a route per item, a ContextPanel test.
+  // Jobs leaves the rail while it's switched off, like Board.
   { id: "jobs", label: "Jobs", icon: ListTodo, to: "/jobs", placement: "top", order: 25, panel: SessionsPanel, hidden: jobsOff },
   { id: "automations", label: "Automations", icon: Zap, to: "/automations", placement: "top", order: 30, panel: AutomationsContextPanel },
-  // Analytics is a full page; its context column keeps the sessions list.
-  { id: "analytics", label: "Analytics", icon: BarChart3, to: "/analytics", placement: "secondary", order: 0, panel: SessionsPanel },
+  // Analytics owns its context: the analytics-menu (sections, filters, export) beside the selected section.
+  { id: "analytics", label: "Analytics", icon: BarChart3, to: "/analytics", placement: "secondary", order: 0, panel: AnalyticsNavPanel },
   { id: "settings", label: "Settings", icon: Settings, to: "/settings", placement: "bottom", order: 40, panel: SettingsContextPanel },
 ]);

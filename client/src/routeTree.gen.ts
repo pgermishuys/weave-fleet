@@ -21,15 +21,16 @@ import { Route as GithubRouteImport } from './routes/github'
 import { Route as FleetRouteImport } from './routes/fleet'
 import { Route as BoardRouteImport } from './routes/board'
 import { Route as AutomationsRouteImport } from './routes/automations'
-import { Route as AnalyticsRouteImport } from './routes/analytics'
 import { Route as IndexRouteImport } from './routes/index'
 import { Route as PhoneIndexRouteImport } from './routes/phone.index'
 import { Route as GithubIndexRouteImport } from './routes/github.index'
+import { Route as AnalyticsIndexRouteImport } from './routes/analytics.index'
 import { Route as SessionsNewRouteImport } from './routes/sessions.new'
 import { Route as SessionsIdRouteImport } from './routes/sessions.$id'
 import { Route as PhoneSetupRouteImport } from './routes/phone.setup'
 import { Route as PhoneNewRouteImport } from './routes/phone.new'
 import { Route as PhoneAnsweredRouteImport } from './routes/phone.answered'
+import { Route as AnalyticsSectionRouteImport } from './routes/analytics.$section'
 import { Route as SettingsPluginsIndexRouteImport } from './routes/settings_.plugins.index'
 import { Route as SettingsPluginsPluginIdRouteImport } from './routes/settings_.plugins.$pluginId'
 import { Route as GithubOwnerRepoRouteImport } from './routes/github.$owner.$repo'
@@ -98,11 +99,6 @@ const AutomationsRoute = AutomationsRouteImport.update({
   path: '/automations',
   getParentRoute: () => rootRouteImport,
 } as any)
-const AnalyticsRoute = AnalyticsRouteImport.update({
-  id: '/analytics',
-  path: '/analytics',
-  getParentRoute: () => rootRouteImport,
-} as any)
 const IndexRoute = IndexRouteImport.update({
   id: '/',
   path: '/',
@@ -117,6 +113,11 @@ const GithubIndexRoute = GithubIndexRouteImport.update({
   id: '/',
   path: '/',
   getParentRoute: () => GithubRoute,
+} as any)
+const AnalyticsIndexRoute = AnalyticsIndexRouteImport.update({
+  id: '/analytics/',
+  path: '/analytics/',
+  getParentRoute: () => rootRouteImport,
 } as any)
 const SessionsNewRoute = SessionsNewRouteImport.update({
   id: '/sessions/new',
@@ -142,6 +143,11 @@ const PhoneAnsweredRoute = PhoneAnsweredRouteImport.update({
   id: '/answered',
   path: '/answered',
   getParentRoute: () => PhoneRoute,
+} as any)
+const AnalyticsSectionRoute = AnalyticsSectionRouteImport.update({
+  id: '/analytics/$section',
+  path: '/analytics/$section',
+  getParentRoute: () => rootRouteImport,
 } as any)
 const SettingsPluginsIndexRoute = SettingsPluginsIndexRouteImport.update({
   id: '/settings_/plugins/',
@@ -184,7 +190,6 @@ const GithubOwnerRepoIssuesNumberRoute =
 
 export interface FileRoutesByFullPath {
   '/': typeof IndexRoute
-  '/analytics': typeof AnalyticsRoute
   '/automations': typeof AutomationsRoute
   '/board': typeof BoardRoute
   '/fleet': typeof FleetRoute
@@ -197,11 +202,13 @@ export interface FileRoutesByFullPath {
   '/settings': typeof SettingsRoute
   '/welcome': typeof WelcomeRoute
   '/workflows': typeof WorkflowsRoute
+  '/analytics/$section': typeof AnalyticsSectionRoute
   '/phone/answered': typeof PhoneAnsweredRoute
   '/phone/new': typeof PhoneNewRoute
   '/phone/setup': typeof PhoneSetupRoute
   '/sessions/$id': typeof SessionsIdRoute
   '/sessions/new': typeof SessionsNewRoute
+  '/analytics/': typeof AnalyticsIndexRoute
   '/github/': typeof GithubIndexRoute
   '/phone/': typeof PhoneIndexRoute
   '/github/$owner/$repo': typeof GithubOwnerRepoRouteWithChildren
@@ -214,7 +221,6 @@ export interface FileRoutesByFullPath {
 }
 export interface FileRoutesByTo {
   '/': typeof IndexRoute
-  '/analytics': typeof AnalyticsRoute
   '/automations': typeof AutomationsRoute
   '/board': typeof BoardRoute
   '/fleet': typeof FleetRoute
@@ -225,11 +231,13 @@ export interface FileRoutesByTo {
   '/settings': typeof SettingsRoute
   '/welcome': typeof WelcomeRoute
   '/workflows': typeof WorkflowsRoute
+  '/analytics/$section': typeof AnalyticsSectionRoute
   '/phone/answered': typeof PhoneAnsweredRoute
   '/phone/new': typeof PhoneNewRoute
   '/phone/setup': typeof PhoneSetupRoute
   '/sessions/$id': typeof SessionsIdRoute
   '/sessions/new': typeof SessionsNewRoute
+  '/analytics': typeof AnalyticsIndexRoute
   '/github': typeof GithubIndexRoute
   '/phone': typeof PhoneIndexRoute
   '/settings/plugins/$pluginId': typeof SettingsPluginsPluginIdRoute
@@ -242,7 +250,6 @@ export interface FileRoutesByTo {
 export interface FileRoutesById {
   __root__: typeof rootRouteImport
   '/': typeof IndexRoute
-  '/analytics': typeof AnalyticsRoute
   '/automations': typeof AutomationsRoute
   '/board': typeof BoardRoute
   '/fleet': typeof FleetRoute
@@ -255,11 +262,13 @@ export interface FileRoutesById {
   '/settings': typeof SettingsRoute
   '/welcome': typeof WelcomeRoute
   '/workflows': typeof WorkflowsRoute
+  '/analytics/$section': typeof AnalyticsSectionRoute
   '/phone/answered': typeof PhoneAnsweredRoute
   '/phone/new': typeof PhoneNewRoute
   '/phone/setup': typeof PhoneSetupRoute
   '/sessions/$id': typeof SessionsIdRoute
   '/sessions/new': typeof SessionsNewRoute
+  '/analytics/': typeof AnalyticsIndexRoute
   '/github/': typeof GithubIndexRoute
   '/phone/': typeof PhoneIndexRoute
   '/github/$owner/$repo': typeof GithubOwnerRepoRouteWithChildren
@@ -274,7 +283,6 @@ export interface FileRouteTypes {
   fileRoutesByFullPath: FileRoutesByFullPath
   fullPaths:
     | '/'
-    | '/analytics'
     | '/automations'
     | '/board'
     | '/fleet'
@@ -287,11 +295,13 @@ export interface FileRouteTypes {
     | '/settings'
     | '/welcome'
     | '/workflows'
+    | '/analytics/$section'
     | '/phone/answered'
     | '/phone/new'
     | '/phone/setup'
     | '/sessions/$id'
     | '/sessions/new'
+    | '/analytics/'
     | '/github/'
     | '/phone/'
     | '/github/$owner/$repo'
@@ -304,7 +314,6 @@ export interface FileRouteTypes {
   fileRoutesByTo: FileRoutesByTo
   to:
     | '/'
-    | '/analytics'
     | '/automations'
     | '/board'
     | '/fleet'
@@ -315,11 +324,13 @@ export interface FileRouteTypes {
     | '/settings'
     | '/welcome'
     | '/workflows'
+    | '/analytics/$section'
     | '/phone/answered'
     | '/phone/new'
     | '/phone/setup'
     | '/sessions/$id'
     | '/sessions/new'
+    | '/analytics'
     | '/github'
     | '/phone'
     | '/settings/plugins/$pluginId'
@@ -331,7 +342,6 @@ export interface FileRouteTypes {
   id:
     | '__root__'
     | '/'
-    | '/analytics'
     | '/automations'
     | '/board'
     | '/fleet'
@@ -344,11 +354,13 @@ export interface FileRouteTypes {
     | '/settings'
     | '/welcome'
     | '/workflows'
+    | '/analytics/$section'
     | '/phone/answered'
     | '/phone/new'
     | '/phone/setup'
     | '/sessions/$id'
     | '/sessions/new'
+    | '/analytics/'
     | '/github/'
     | '/phone/'
     | '/github/$owner/$repo'
@@ -362,7 +374,6 @@ export interface FileRouteTypes {
 }
 export interface RootRouteChildren {
   IndexRoute: typeof IndexRoute
-  AnalyticsRoute: typeof AnalyticsRoute
   AutomationsRoute: typeof AutomationsRoute
   BoardRoute: typeof BoardRoute
   FleetRoute: typeof FleetRoute
@@ -375,8 +386,10 @@ export interface RootRouteChildren {
   SettingsRoute: typeof SettingsRoute
   WelcomeRoute: typeof WelcomeRoute
   WorkflowsRoute: typeof WorkflowsRoute
+  AnalyticsSectionRoute: typeof AnalyticsSectionRoute
   SessionsIdRoute: typeof SessionsIdRoute
   SessionsNewRoute: typeof SessionsNewRoute
+  AnalyticsIndexRoute: typeof AnalyticsIndexRoute
   SettingsPluginsPluginIdRoute: typeof SettingsPluginsPluginIdRoute
   SettingsPluginsIndexRoute: typeof SettingsPluginsIndexRoute
 }
@@ -467,13 +480,6 @@ declare module '@tanstack/vue-router' {
       preLoaderRoute: typeof AutomationsRouteImport
       parentRoute: typeof rootRouteImport
     }
-    '/analytics': {
-      id: '/analytics'
-      path: '/analytics'
-      fullPath: '/analytics'
-      preLoaderRoute: typeof AnalyticsRouteImport
-      parentRoute: typeof rootRouteImport
-    }
     '/': {
       id: '/'
       path: '/'
@@ -494,6 +500,13 @@ declare module '@tanstack/vue-router' {
       fullPath: '/github/'
       preLoaderRoute: typeof GithubIndexRouteImport
       parentRoute: typeof GithubRoute
+    }
+    '/analytics/': {
+      id: '/analytics/'
+      path: '/analytics'
+      fullPath: '/analytics/'
+      preLoaderRoute: typeof AnalyticsIndexRouteImport
+      parentRoute: typeof rootRouteImport
     }
     '/sessions/new': {
       id: '/sessions/new'
@@ -529,6 +542,13 @@ declare module '@tanstack/vue-router' {
       fullPath: '/phone/answered'
       preLoaderRoute: typeof PhoneAnsweredRouteImport
       parentRoute: typeof PhoneRoute
+    }
+    '/analytics/$section': {
+      id: '/analytics/$section'
+      path: '/analytics/$section'
+      fullPath: '/analytics/$section'
+      preLoaderRoute: typeof AnalyticsSectionRouteImport
+      parentRoute: typeof rootRouteImport
     }
     '/settings_/plugins/': {
       id: '/settings_/plugins/'
@@ -631,7 +651,6 @@ const PhoneRouteWithChildren = PhoneRoute._addFileChildren(PhoneRouteChildren)
 
 const rootRouteChildren: RootRouteChildren = {
   IndexRoute: IndexRoute,
-  AnalyticsRoute: AnalyticsRoute,
   AutomationsRoute: AutomationsRoute,
   BoardRoute: BoardRoute,
   FleetRoute: FleetRoute,
@@ -644,8 +663,10 @@ const rootRouteChildren: RootRouteChildren = {
   SettingsRoute: SettingsRoute,
   WelcomeRoute: WelcomeRoute,
   WorkflowsRoute: WorkflowsRoute,
+  AnalyticsSectionRoute: AnalyticsSectionRoute,
   SessionsIdRoute: SessionsIdRoute,
   SessionsNewRoute: SessionsNewRoute,
+  AnalyticsIndexRoute: AnalyticsIndexRoute,
   SettingsPluginsPluginIdRoute: SettingsPluginsPluginIdRoute,
   SettingsPluginsIndexRoute: SettingsPluginsIndexRoute,
 }

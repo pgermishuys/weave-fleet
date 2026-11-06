@@ -11,7 +11,7 @@ import type { PluginCatalogResponse } from "@/api/client";
 import { usePluginRuntime } from "@/plugins/composable";
 import "@/components/layout/core-rails";
 import RailButton from "@/components/layout/RailButton.vue";
-import { isSidebarRail, rails, type RailDefinition } from "@/lib/rails";
+import { isSidebarRail, NO_RAIL, rails, type RailDefinition } from "@/lib/rails";
 import { useBoardFeature } from "@/composables/use-board-feature";
 import { useJobsFeature } from "@/composables/use-jobs-feature";
 import { useMissionControlFeature } from "@/composables/use-mission-control-feature";
@@ -85,7 +85,7 @@ watch(isWorkflowsEnabled, (enabled) => {
   if (enabled) void workflowsStore.ensureLoaded();
 }, { immediate: true });
 
-const currentRouteRail = computed<string | null>(() => {
+const currentRouteRail = computed<string>(() => {
   if (pathname.value === "/board") {
     return "board";
   }
@@ -139,13 +139,15 @@ const currentRouteRail = computed<string | null>(() => {
     return matchingPluginRail.id;
   }
 
-  return null;
+  // No rail owns this route (/welcome, /repositories): no rail is active and the page fills the context area,
+  // instead of the last rail's panel staying behind.
+  return NO_RAIL;
 });
 
 watch(
   currentRouteRail,
   (rail) => {
-    if (rail && isSidebarRail(rail)) {
+    if (rail && (rail === NO_RAIL || isSidebarRail(rail))) {
       sidebarStore.setActiveRail(rail);
     }
   },

@@ -42,14 +42,15 @@ describe("ContextPanel plugin panels", () => {
   });
 
   // Core no longer names the GitHub rail: a rail exists once a plugin contributes it, so one nobody has
-  // registered is an unknown rail and shows the sessions list.
-  it("shows the sessions list for a plugin rail nobody has registered", () => {
+  // registered is an unknown rail. It shows no panel (the shell sends the user to Sessions), never the sessions list.
+  it("shows no panel for a plugin rail nobody has registered", () => {
     openGitHubRail();
 
     const wrapper = mount(ContextPanel);
 
     expect(wrapper.find("[data-testid=real-github-panel]").exists()).toBe(false);
-    expect(wrapper.text()).toContain("sessions");
+    expect(wrapper.find("aside").exists()).toBe(false);
+    expect(wrapper.text()).not.toContain("sessions");
   });
 
   it("shows a placeholder for a plugin rail whose plugin has an icon but no panel", () => {

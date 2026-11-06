@@ -17,6 +17,8 @@ interface Props {
   projects: readonly AnalyticsProjectOption[];
   /** Nothing to reset: the filters are the defaults. */
   isDefault?: boolean;
+  /** One control per row, for the narrow menu beside the page. */
+  stacked?: boolean;
 }
 
 interface Emits {
@@ -28,7 +30,7 @@ interface Emits {
 
 const ALL_PROJECTS_VALUE = "__all_projects__";
 
-const props = withDefaults(defineProps<Props>(), { isDefault: false });
+const props = withDefaults(defineProps<Props>(), { isDefault: false, stacked: false });
 const emit = defineEmits<Emits>();
 
 const selectedProjectValue = computed({
@@ -48,6 +50,7 @@ function onDate(event: Event, which: "update:from" | "update:to"): void {
 <template>
   <div
     class="analytics-filters"
+    :class="{ 'analytics-filters--stacked': stacked }"
     role="group"
     aria-label="Analytics filters"
   >
@@ -128,6 +131,24 @@ function onDate(event: Event, which: "update:from" | "update:to"): void {
   flex-wrap: wrap;
   align-items: center;
   gap: 8px;
+}
+
+.analytics-filters--stacked {
+  flex-direction: column;
+  align-items: stretch;
+}
+
+.analytics-filters--stacked .analytics-filters__range {
+  justify-content: space-between;
+}
+
+.analytics-filters--stacked :deep(.analytics-filters__project) {
+  max-width: none;
+  width: 100%;
+}
+
+.analytics-filters--stacked .analytics-filters__reset {
+  justify-content: flex-start;
 }
 
 .analytics-filters__range {
