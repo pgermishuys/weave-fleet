@@ -1,5 +1,6 @@
 using System.Net;
 using System.Text.Json;
+using Microsoft.Extensions.Logging;
 using WeaveFleet.Domain.Entities;
 using WeaveFleet.Domain.Repositories;
 
@@ -13,9 +14,19 @@ namespace WeaveFleet.Application.Machines;
 /// address where the machine's own id answers is used, so its token never goes to a device that took over an old
 /// address. While on a lower address, <see cref="BetterAsync"/> finds a better one that answers again; the watcher
 /// moves there once its new connection is up. A machine with one address, or reached over SSH, keeps it as it is.
+/// Probes go through their own client (<see cref="HttpClientName"/>), and a probe that gets no answer is logged once,
+/// when the address stops answering, not every minute while it stays down.
 /// </summary>
-public sealed class MachineRoutes(IRemoteMachineRepository machines, RemoteMachineService service, IHttpClientFactory httpClients, TimeProvider time) : IDisposable
+public sealed partial class MachineRoutes(
+    IRemoteMachineRepository machines,
+    RemoteMachineService service,
+    IHttpClientFactory httpClients,
+    TimeProvider time,
+    ILogger<MachineRoutes> logger) : IDisposable
 {
+    /// <summary>The probes' client: its request logging is at Debug, as a dead address is probed every minute.</summary>
+    public const string HttpClientName = "MachineProbes";
+
     public static readonly TimeSpan ProbeTimeout = TimeSpan.FromSeconds(3);
     public static readonly TimeSpan Stagger = TimeSpan.FromMilliseconds(750);
 
@@ -24,6 +35,9 @@ public sealed class MachineRoutes(IRemoteMachineRepository machines, RemoteMachi
 
     // Reads and writes of a machine's list go one at a time, so a probe's result doesn't undo a reorder.
     private readonly SemaphoreSlim _gate = new(1, 1);
+
+    // The addresses whose last probe got no answer, by machine and address: what a probe compares with to log a change.
+    private readonly HashSet<(string MachineId, string Url)> _silent = [];
 
     /// <summary>For tests: how long a probe waits and how far apart they start.</summary>
     internal TimeSpan Timeout { get; init; } = ProbeTimeout;
@@ -41,14 +55,14 @@ public sealed class MachineRoutes(IRemoteMachineRepository machines, RemoteMachi
         if (!HasChoices(machine))
             return machine.BaseUrl;
 
-        var current = await ProbeAsync(machine.BaseUrl, machine.Id, ct);
+        var current = await ProbeAsync(machine.BaseUrl, machine, ct);
         await RecordAsync(machine.Id, [(machine.BaseUrl, current)]);
         // An older Fleet there can't say who it is; the address it was added with is still trusted, as before.
         if (current is ProbeOutcome.Ok or ProbeOutcome.NoProbe)
             return machine.BaseUrl;
 
         var others = machine.Addresses.Select(address => address.Url).Where(url => !SameUrl(url, machine.BaseUrl)).ToList();
-        var (winner, outcomes) = await RaceAsync(others, (url, token) => ProbeAsync(url, machine.Id, token), Gap, ct);
+        var (winner, outcomes) = await RaceAsync(others, (url, token) => ProbeAsync(url, machine, token), Gap, ct);
         await RecordAsync(machine.Id, outcomes);
         if (winner is null)
             return machine.BaseUrl;
@@ -70,7 +84,7 @@ public sealed class MachineRoutes(IRemoteMachineRepository machines, RemoteMachi
         if (above.Count == machine.Addresses.Count || above.Count == 0)
             return null;
 
-        var (winner, outcomes) = await RaceAsync(above, (url, token) => ProbeAsync(url, machine.Id, token), Gap, ct);
+        var (winner, outcomes) = await RaceAsync(above, (url, token) => ProbeAsync(url, machine, token), Gap, ct);
         await RecordAsync(machine.Id, outcomes);
         return winner;
     }
@@ -173,35 +187,62 @@ public sealed class MachineRoutes(IRemoteMachineRepository machines, RemoteMachi
     private static bool SameUrl(string a, string b) => string.Equals(a, b, StringComparison.OrdinalIgnoreCase);
 
     /// <summary>
-    /// Asks who answers at <paramref name="url"/>, without a token. <see cref="ProbeOutcome.NoProbe"/> is a Fleet too old
-    /// to say, or something that isn't Fleet.
+    /// Asks who answers at <paramref name="url"/>, without a token, and logs when the address stops or starts answering.
+    /// A probe the race stops early ends cancelled and changes nothing.
     /// </summary>
-    internal async Task<ProbeOutcome> ProbeAsync(string url, string machineId, CancellationToken ct)
+    internal async Task<ProbeOutcome> ProbeAsync(string url, RemoteMachine machine, CancellationToken ct)
+    {
+        var (outcome, reason) = await AskAsync(url, machine.Id, ct);
+        bool changed;
+        lock (_silent)
+            changed = outcome == ProbeOutcome.NoAnswer ? _silent.Add((machine.Id, url)) : _silent.Remove((machine.Id, url));
+        if (changed && outcome == ProbeOutcome.NoAnswer)
+            LogNoAnswer(logger, machine.Name, url, reason!);
+        else if (changed)
+            LogAnswers(logger, machine.Name, url);
+        return outcome;
+    }
+
+    /// <summary>
+    /// <see cref="ProbeOutcome.NoProbe"/> is a Fleet too old to say, or something that isn't Fleet. The reason says why
+    /// nothing answered.
+    /// </summary>
+    private async Task<(ProbeOutcome Outcome, string? Reason)> AskAsync(string url, string machineId, CancellationToken ct)
     {
         using var timeout = CancellationTokenSource.CreateLinkedTokenSource(ct);
         timeout.CancelAfter(Timeout);
         try
         {
-            using var response = await httpClients.CreateClient(RemoteMachineService.HttpClientName)
+            using var response = await httpClients.CreateClient(HttpClientName)
                 .GetAsync($"{url}/api/machine/id", timeout.Token);
             if (response.StatusCode == HttpStatusCode.NotFound || !response.IsSuccessStatusCode
                 || response.Content.Headers.ContentType?.MediaType != "application/json")
-                return ProbeOutcome.NoProbe;
+                return (ProbeOutcome.NoProbe, null);
 
             using var document = JsonDocument.Parse(await response.Content.ReadAsStringAsync(timeout.Token));
             return document.RootElement.TryGetProperty("id", out var id) && id.ValueKind == JsonValueKind.String
-                ? id.GetString() == machineId ? ProbeOutcome.Ok : ProbeOutcome.OtherMachine
-                : ProbeOutcome.NoProbe;
+                ? (id.GetString() == machineId ? ProbeOutcome.Ok : ProbeOutcome.OtherMachine, null)
+                : (ProbeOutcome.NoProbe, null);
         }
-        catch (Exception ex) when (ex is HttpRequestException or OperationCanceledException && !ct.IsCancellationRequested)
+        catch (HttpRequestException ex) when (!ct.IsCancellationRequested)
         {
-            return ProbeOutcome.NoAnswer;
+            return (ProbeOutcome.NoAnswer, ex.Message);
+        }
+        catch (OperationCanceledException) when (!ct.IsCancellationRequested)
+        {
+            return (ProbeOutcome.NoAnswer, $"no answer in {Timeout.TotalSeconds:0.#} s");
         }
         catch (JsonException)
         {
-            return ProbeOutcome.NoProbe;
+            return (ProbeOutcome.NoProbe, null);
         }
     }
+
+    [LoggerMessage(Level = LogLevel.Information, Message = "{Machine} doesn't answer at {Url}: {Reason}.")]
+    private static partial void LogNoAnswer(ILogger logger, string machine, string url, string reason);
+
+    [LoggerMessage(Level = LogLevel.Information, Message = "{Machine} answers at {Url} again.")]
+    private static partial void LogAnswers(ILogger logger, string machine, string url);
 
     /// <summary>
     /// Probes <paramref name="urls"/> in order, each starting <paramref name="gap"/> after the one before or as soon as

@@ -322,8 +322,14 @@ public static class DependencyInjection
         services.AddSingleton<WeaveFleet.Application.Machines.RemoteMachineService>();
         services.AddHttpClient(WeaveFleet.Application.Machines.RemoteMachineService.HttpClientName, client => client.Timeout = TimeSpan.FromSeconds(5))
             .ConfigurePrimaryHttpMessageHandler(() => new System.Net.Http.SocketsHttpHandler { AllowAutoRedirect = false });
-        // Which of a machine's addresses to use; the watcher moves between them.
+        // Which of a machine's addresses to use; the watcher moves between them. Its probes log requests at Debug: a dead
+        // address is asked every minute.
         services.AddSingleton<WeaveFleet.Application.Machines.MachineRoutes>();
+        services.TryAddSingleton<WeaveFleet.Infrastructure.Machines.MachineProbeRequestLogger>();
+        services.AddHttpClient(WeaveFleet.Application.Machines.MachineRoutes.HttpClientName, client => client.Timeout = TimeSpan.FromSeconds(5))
+            .ConfigurePrimaryHttpMessageHandler(() => new System.Net.Http.SocketsHttpHandler { AllowAutoRedirect = false })
+            .RemoveAllLoggers()
+            .AddLogger<WeaveFleet.Infrastructure.Machines.MachineProbeRequestLogger>();
         services.AddSingleton<WeaveFleet.Application.Machines.DeviceGrantService>();
         // Scoped: it counts the caller's own sessions.
         services.AddScoped<WeaveFleet.Application.Machines.MachineCapabilitiesReader>();
