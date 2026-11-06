@@ -201,6 +201,7 @@ const machinesLine = computed(() => {
 
 function machineDetail(machine: (typeof machines.value)[number]): string {
   if (machine.problem) return machine.problem;
+  if (machine.status === "unreachable" && machine.diagnosis) return `${machine.diagnosis.headline} · last heard ${ago(machine.lastHeardAt, now.value) || "never"}`;
   if (machine.status === "unreachable") return `Unreachable · last heard ${ago(machine.lastHeardAt, now.value) || "never"}`;
   if (machine.status === "connecting") return "Connecting…";
   const count = `${machine.sessions.length} session${machine.sessions.length === 1 ? "" : "s"}`;

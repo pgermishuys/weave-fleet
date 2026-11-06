@@ -6,6 +6,7 @@ using Microsoft.AspNetCore.SignalR.Client;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging;
 using WeaveFleet.Application;
+using WeaveFleet.Application.Machines;
 using WeaveFleet.Domain.Entities;
 using WeaveFleet.Domain.Events;
 
@@ -26,7 +27,7 @@ internal sealed partial class RemoteMachineConnection : IAsyncDisposable
     private readonly RemoteMachine _machine;
     private readonly string _token;
     private readonly Func<SessionNotificationPayload, Task> _onNotification;
-    private readonly Func<string, bool, Task> _onStatus;
+    private readonly Func<string, bool, MachineDiagnosis?, Task> _onStatus;
     private readonly Func<Task> _onConnected;
     private readonly Func<IReadOnlyCollection<string>> _followed;
     private readonly Func<string, DomainEvent, Task> _onSessionEvent;
@@ -41,7 +42,7 @@ internal sealed partial class RemoteMachineConnection : IAsyncDisposable
         RemoteMachine machine,
         string token,
         Func<SessionNotificationPayload, Task> onNotification,
-        Func<string, bool, Task> onStatus,
+        Func<string, bool, MachineDiagnosis?, Task> onStatus,
         Func<Task> onConnected,
         ILogger logger,
         HttpMessageHandler? handler = null,
@@ -76,7 +77,7 @@ internal sealed partial class RemoteMachineConnection : IAsyncDisposable
             {
                 await hub.StartAsync(stopping);
                 await hub.InvokeAsync("SubscribeToSessionsTopicAsync", stopping);
-                await _onStatus(RemoteMachineStatuses.Online, true);
+                await _onStatus(RemoteMachineStatuses.Online, true, null);
                 LogConnected(_logger, _machine.Name);
                 delay = FirstRetry;
                 await _onConnected();
@@ -86,7 +87,7 @@ internal sealed partial class RemoteMachineConnection : IAsyncDisposable
                     await SubscribeAsync(hub, sessionId, stopping);
                 await closed.Task.WaitAsync(stopping);
                 _live = null;
-                await _onStatus(RemoteMachineStatuses.Unreachable, false);
+                await _onStatus(RemoteMachineStatuses.Unreachable, false, MachineDiagnoses.ConnectionLost(_machine.BaseUrl, _machine.Name).Diagnosis);
             }
             catch (OperationCanceledException) when (stopping.IsCancellationRequested)
             {
@@ -95,14 +96,14 @@ internal sealed partial class RemoteMachineConnection : IAsyncDisposable
             catch (HttpRequestException ex) when (ex.StatusCode is HttpStatusCode.Unauthorized or HttpStatusCode.Forbidden)
             {
                 // Someone replaced the token there. Retrying won't help until the token here changes.
-                await _onStatus(RemoteMachineStatuses.Unauthorized, false);
+                await _onStatus(RemoteMachineStatuses.Unauthorized, false, MachineDiagnoses.FromStatus(HttpStatusCode.Unauthorized, _machine.BaseUrl, _machine.Name).Diagnosis);
                 LogUnauthorized(_logger, _machine.Name);
                 return;
             }
             catch (Exception ex)
             {
                 _live = null;
-                await _onStatus(RemoteMachineStatuses.Unreachable, false);
+                await _onStatus(RemoteMachineStatuses.Unreachable, false, MachineDiagnoses.FromException(ex, _machine.BaseUrl, _machine.Name).Diagnosis);
                 LogUnreachable(_logger, _machine.Name, ex.Message);
             }
 

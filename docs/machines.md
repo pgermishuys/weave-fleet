@@ -143,8 +143,8 @@ never asks for a password and never trusts an unknown host key on its own (run `
 
 It installs Fleet only, never a harness: set OpenCode, Claude Code and the rest up there the way you would anywhere. The
 set-up runs on the server, so closing the dialog doesn't stop it. A failure names the step that broke, with the same
-panel as every other machine failure (`ssh-key-rejected`, `ssh-host-key`, `name-not-found`, `ssh-unreachable`,
-`ssh-missing`, `install-no-curl`, `install-failed`, `install-unsupported`, `service-failed`, `not-starting`). A machine Fleet
+panel as every other machine failure (`ssh-key-rejected`, `ssh-host-key`, `ssh-host-key-changed`, `ssh-refused`,
+`ssh-timed-out`, `name-not-found`, `ssh-unreachable`, `ssh-missing`, `install-no-curl`, `install-failed`, `install-unsupported`, `service-failed`, `not-starting`). A machine Fleet
 can't log in to or can't set up (Windows) offers **Use a link**, which opens the other card with a hint to run
 `fleet node up` there.
 
@@ -319,7 +319,8 @@ headline on the machine's card, with the steps under **Details**, and the same u
 by `code`:
 
 ### Can't find falcon
-`name-not-found`. Nothing on this network knows the name. Check the address.
+`name-not-found`. Nothing on this network knows the name. Check the address. For a `*.ts.net` name the Try line says to turn on MagicDNS in Tailscale on this machine, or to paste the 100.x
+address `fleet node pair` lists under Also reachable at, with the code.
 
 ### falcon isn't answering
 `not-answering`. Nothing came back in 5 seconds: the machine is off, behind a firewall, or not on your tailnet.
@@ -353,13 +354,67 @@ token. The same code shows when this Fleet can't read the token it saved (its ke
 ### That code has expired
 `code-expired`. Pairing codes work once and only for a few minutes. Run `fleet node pair` for a new one.
 
+### Fleet on falcon is too old for pairing links
+`no-pairing-links`. It has no pairing route at all, which is different from knowing the route and not the code (that is
+**That code has expired**). Update Fleet there, or add it with its master token under Advanced.
+
 ### Too many codes tried
 `too-many-codes`. The machine paused after wrong codes. Wait a minute.
+
+The headlines for setting a machine up over SSH name **SSH reaches it**, **SSH logs in**, **Fleet installs** or
+**Fleet starts** as the broken step, and the set-up card marks **Log in over SSH** or **Install Fleet** as failed:
+
+### Fleet couldn't run ssh
+`ssh-missing`. Install OpenSSH and make sure `ssh` is on the PATH of the machine running Fleet.
+
+### SSH doesn't trust falcon yet
+`ssh-host-key`. The host key isn't one you have accepted. Run `ssh falcon` once and accept its key. Fleet never trusts
+a host key on its own.
+
+### falcon's SSH host key has changed
+`ssh-host-key-changed`. The key isn't the one you accepted before. If you expect that (a reinstall), run
+`ssh-keygen -R falcon`, then `ssh falcon` once. If you don't expect it, don't connect.
+
+### SSH turned your keys away at falcon
+`ssh-key-rejected`. No key you have loaded was accepted. Fleet never asks for a password: load a key in ssh-agent or set
+`IdentityFile` for the host in `~/.ssh/config`.
+
+### falcon refuses SSH connections
+`ssh-refused`. The machine answered and nothing listens for SSH on that port. Turn on SSH there (Remote Login on a
+Mac, the `sshd` service on Linux), or check the port.
+
+### falcon isn't answering on SSH
+`ssh-timed-out`. Nothing came back before ssh gave up. Check that the machine is on, on the same network or tailnet,
+and that no firewall blocks the SSH port.
+
+### SSH can't reach falcon
+`ssh-unreachable`. Any other connection failure; the detail has ssh's own words.
+
+### falcon has no curl
+`install-no-curl`. The installer needs `curl`. Install it, or install Fleet there yourself and run `fleet node up`.
+
+### The install on falcon stopped
+`install-failed`. The installer failed; the detail has its last lines. Fix what it says, or install Fleet there yourself.
+
+### Fleet can't install itself on falcon
+`install-unsupported`. Fleet installs itself over SSH on Linux and macOS only.
+
+### Fleet's service on falcon couldn't start
+`service-failed`. Fleet is installed but its background service didn't start. On it, run `fleet node up` in a terminal.
+
+### Fleet on falcon isn't answering
+`not-starting`. Fleet is installed and started, but nothing answers on port 2113. Its log says why
+(`journalctl --user -u fleet-node`, or `~/Library/Logs/fleet-node.log` on macOS).
 
 Two more headlines come from the browser, not the server. **This page can't call falcon** (`https-page`) shows when
 the page is https and the machine's address is http: the browser blocks that call, so use the machine's
 `tailscale serve` address. **The SSH tunnel to falcon is down** (`tunnel-down`) shows for a machine added over SSH
 whose tunnel isn't up; Fleet opens it again by itself.
+
+While a machine isn't answering, Fleet keeps the last headline for it in memory (not in the database; it starts again
+when Fleet restarts) and sends it as `diagnosis` on that machine's entry in `GET /api/machines`. The sidebar shows it
+as the tooltip of "unreachable", and the phone's machine row says it instead of "Unreachable". Clients that don't know
+the field ignore it.
 
 ## Adding a machine to a client
 

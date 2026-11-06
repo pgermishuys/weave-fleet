@@ -6,6 +6,7 @@ import type { SessionListItem } from "@/api/client";
 import type { PermissionAsk } from "@/composables/use-session-permissions";
 import { isTopLevel, sessionBucket, sessionUpdatedAt } from "@/lib/needs-you";
 import type { FeedStatus } from "@/lib/machine-feed";
+import type { MachineDiagnosis } from "@/lib/machine-diagnosis";
 import type { QuestionInfo } from "@/lib/question-types";
 import { askPreviewWording } from "@/lib/tools";
 
@@ -29,6 +30,8 @@ export interface InboxMachineState {
   asks: Record<string, InboxAsk>;
   /** Why the phone can't reach it at all (no key, http only), when it can't. */
   problem?: string | null;
+  /** Why home last couldn't reach it, when home says. */
+  diagnosis?: MachineDiagnosis | null;
 }
 
 export interface InboxItem {

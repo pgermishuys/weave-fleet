@@ -50,6 +50,7 @@ public static class MachineDiagnoses
     public const string KeyRejected = "key-rejected";
     public const string CodeExpired = "code-expired";
     public const string TooManyCodes = "too-many-codes";
+    public const string NoPairingLinks = "no-pairing-links";
 
     private static readonly string[] StepLabels =
     [
@@ -69,7 +70,9 @@ public static class MachineDiagnoses
         if ((exception as HttpRequestException)?.HttpRequestError == HttpRequestError.NameResolutionError
             || socket?.SocketErrorCode is SocketError.HostNotFound or SocketError.TryAgain or SocketError.NoData)
             return Problem(0, NameNotFound, $"Can't find {host}", "Nothing on this network knows that name.",
-                "Check the address. A tailnet name looks like falcon.tail9c2e.ts.net.", Unreached(baseUrl));
+                HostOf(baseUrl).EndsWith(".ts.net", StringComparison.OrdinalIgnoreCase)
+                    ? "Turn on MagicDNS in Tailscale on this machine, or paste the 100.x address that fleet node pair lists under Also reachable at, with the code."
+                    : "Check the address. A tailnet name looks like falcon.tail9c2e.ts.net.", Unreached(baseUrl));
         if (socket?.SocketErrorCode == SocketError.ConnectionRefused)
             return Problem(2, FleetNotRunning, $"Fleet isn't running on {host}", "The connection was refused, so the machine is up and Fleet is not.",
                 $"On {host}, run fleet node up. It starts Fleet in the background.", Unreached(baseUrl));
@@ -81,6 +84,14 @@ public static class MachineDiagnoses
                 $"Check that {host} is on, on the same network or tailnet as this machine, and not behind a firewall.", Unreached(baseUrl));
         return Problem(1, CantConnect, $"Can't connect to {host}", exception.Message,
             $"Check the address and that {host} is on this machine's network.", Unreached(baseUrl));
+    }
+
+    /// <summary>The watcher's connection to a machine that had answered closed.</summary>
+    public static MachineProblem ConnectionLost(string baseUrl, string? name = null)
+    {
+        var host = name ?? HostOf(baseUrl);
+        return Problem(1, NotAnswering, $"{host} isn't answering", "The connection closed and nothing has come back.",
+            $"Check that {host} is on, on the same network or tailnet as this machine, and not behind a firewall.", Unreached(baseUrl));
     }
 
     /// <summary>The problem for a machine that answered with <paramref name="status"/> to a request for who it is.</summary>
@@ -136,6 +147,14 @@ public static class MachineDiagnoses
             $"On {host}, run fleet node pair for a new one.", "That code has expired or was already used. Run fleet node pair on the other machine for a new one.");
     }
 
+    /// <summary>The machine has no pairing route at all (an older Fleet), as opposed to knowing the route and not the code.</summary>
+    public static MachineProblem PairingLinksUnsupportedOn(string baseUrl, string? name = null)
+    {
+        var host = name ?? HostOf(baseUrl);
+        return Problem(4, NoPairingLinks, $"Fleet on {host} is too old for pairing links", "It has no pairing route.",
+            "Update it, or add it with its master token under Advanced.", $"Fleet on {host} is too old for pairing links. Update it, or add it with its master token under Advanced.");
+    }
+
     public static MachineProblem TooManyCodesOn() =>
         Problem(5, TooManyCodes, "Too many codes tried", "That machine counts wrong codes and pauses for a minute.",
             "Wait a minute, then try the code again.", "Too many codes tried on that machine. Wait a minute and try again.");
@@ -143,6 +162,9 @@ public static class MachineDiagnoses
     public const string SshMissing = "ssh-missing";
     public const string SshUnreachable = "ssh-unreachable";
     public const string SshHostKey = "ssh-host-key";
+    public const string SshHostKeyChanged = "ssh-host-key-changed";
+    public const string SshRefused = "ssh-refused";
+    public const string SshTimedOut = "ssh-timed-out";
     public const string SshKeyRejected = "ssh-key-rejected";
     public const string InstallUnsupported = "install-unsupported";
     public const string InstallNoCurl = "install-no-curl";
@@ -174,11 +196,14 @@ public static class MachineDiagnoses
                 "Fleet couldn't run ssh. Install OpenSSH and make sure ssh is on the PATH of the machine running Fleet.");
         if (result.ExitCode == 255)
         {
-            if (error.Contains("Host key verification failed", StringComparison.OrdinalIgnoreCase)
-                || error.Contains("REMOTE HOST IDENTIFICATION HAS CHANGED", StringComparison.OrdinalIgnoreCase))
+            if (error.Contains("REMOTE HOST IDENTIFICATION HAS CHANGED", StringComparison.OrdinalIgnoreCase))
+                return Ssh(1, SshHostKeyChanged, $"{host}'s SSH host key has changed", "It isn't the key you accepted before.",
+                    $"If you expect that (a new install), run ssh-keygen -R {host}, then ssh {destination.Text} once and accept the new key. If you don't, don't connect.",
+                    $"{host}'s SSH host key has changed. If you expect that, run ssh-keygen -R {host}, then ssh {destination.Text} once and accept the new key.");
+            if (error.Contains("Host key verification failed", StringComparison.OrdinalIgnoreCase))
                 return Ssh(1, SshHostKey, $"SSH doesn't trust {host} yet", "The host key isn't one you have accepted.",
-                    $"Run ssh {destination.Text} once in a terminal and check its host key.",
-                    $"SSH doesn't trust {host} yet. Run ssh {destination.Text} once in a terminal and check its host key.");
+                    $"Run ssh {destination.Text} once and accept its key.",
+                    $"SSH doesn't trust {host} yet. Run ssh {destination.Text} once and accept its key.");
             if (error.Contains("Permission denied", StringComparison.OrdinalIgnoreCase))
                 return Ssh(1, SshKeyRejected, $"SSH turned your keys away at {host}", "No key you have loaded was accepted.",
                     "Fleet never asks for a password. Load a key in ssh-agent or set IdentityFile for it in ~/.ssh/config.",
@@ -186,6 +211,14 @@ public static class MachineDiagnoses
             if (error.Contains("Could not resolve", StringComparison.OrdinalIgnoreCase))
                 return Ssh(0, NameNotFound, $"SSH can't find {host}", "Nothing on this network knows that name.",
                     "Check the name.", $"SSH can't find {host}. Check the name.");
+            if (error.Contains("Connection refused", StringComparison.OrdinalIgnoreCase))
+                return Ssh(0, SshRefused, $"{host} refuses SSH connections", "The machine answered, and nothing listens for SSH on that port.",
+                    $"Turn on SSH on {host} (Remote Login on a Mac, the sshd service on Linux), or check the port in {destination.Text}.",
+                    $"{host} refuses SSH connections. Turn on SSH there, or check the port in {destination.Text}.");
+            if (error.Contains("timed out", StringComparison.OrdinalIgnoreCase))
+                return Ssh(0, SshTimedOut, $"{host} isn't answering on SSH", "Nothing came back before ssh gave up.",
+                    $"Check that {host} is on, on the same network or tailnet as this machine, and that no firewall blocks the SSH port.",
+                    $"{host} isn't answering on SSH. Check that it is on and on the same network or tailnet as this machine.");
             return Ssh(0, SshUnreachable, $"SSH can't reach {host}", firstLine.Length > 0 ? firstLine : "The connection failed.",
                 $"Check that {host} is on and that ssh {destination.Text} works in a terminal.",
                 $"SSH couldn't connect to {destination.Text}. {firstLine}".TrimEnd());

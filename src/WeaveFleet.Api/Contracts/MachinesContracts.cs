@@ -8,6 +8,7 @@ namespace WeaveFleet.Api.Contracts;
 /// </summary>
 /// <param name="Status"><c>unknown</c>, <c>online</c>, <c>unreachable</c> or <c>unauthorized</c>, as this Fleet last saw it.</param>
 /// <param name="AgentsAllowed">Whether agents here may hand work to it, with "Hand work to other machines" on.</param>
+/// <param name="Diagnosis">Why this Fleet last couldn't reach it, while it can't; older clients ignore it.</param>
 public sealed record MachineEntryResponse(
     string Id,
     string Name,
@@ -19,7 +20,8 @@ public sealed record MachineEntryResponse(
     string? Token,
     bool AgentsAllowed,
     string? SshDestination = null,
-    bool? TunnelUp = null);
+    bool? TunnelUp = null,
+    MachineDiagnosis? Diagnosis = null);
 
 public sealed record MachineListResponse(IReadOnlyList<MachineEntryResponse> Machines);
 

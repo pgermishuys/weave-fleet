@@ -1,6 +1,8 @@
 <script setup lang="ts">
 import { computed } from "vue";
 import { ChevronDown, Monitor, Plus } from "lucide-vue-next";
+import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
+import type { MachineDiagnosis } from "@/lib/machine-diagnosis";
 import {
   ContextMenu,
   ContextMenuContent,
@@ -22,12 +24,14 @@ const props = withDefaults(defineProps<{
   unreachable?: boolean;
   /** Short note on the right: "4s ago", "unreachable". */
   note?: string | null;
+  /** Why the machine isn't answering, when Fleet knows: shown when hovering the note. */
+  why?: MachineDiagnosis | null;
   /** Collapsible groups show a chevron and report their state. */
   expanded?: boolean | null;
   count?: number | null;
   /** Right-click offers New session (and Work here on a machine that isn't live). */
   menu?: boolean;
-}>(), { live: false, unreachable: false, note: null, expanded: null, count: null, menu: false });
+}>(), { live: false, unreachable: false, note: null, why: null, expanded: null, count: null, menu: false });
 
 const emit = defineEmits<{ toggle: []; newSession: []; workHere: [] }>();
 
@@ -69,10 +73,33 @@ const tag = computed(() => (props.expanded === null || props.expanded === undefi
           class="machine-header__live"
           title="The machine you're working in"
         >Live</span>
+        <TooltipProvider
+          v-if="note && why"
+          :delay-duration="150"
+        >
+          <Tooltip>
+            <TooltipTrigger as-child>
+              <span
+                class="machine-header__note machine-header__note--down"
+                data-testid="machine-header-note"
+              >{{ note }}</span>
+            </TooltipTrigger>
+            <TooltipContent
+              side="bottom"
+              class="max-w-64"
+            >
+              <p class="font-medium">
+                {{ why.headline }}
+              </p>
+              <p>{{ why.try }}</p>
+            </TooltipContent>
+          </Tooltip>
+        </TooltipProvider>
         <span
-          v-if="note"
+          v-else-if="note"
           class="machine-header__note"
           :class="{ 'machine-header__note--down': unreachable }"
+          data-testid="machine-header-note"
         >{{ note }}</span>
         <span
           v-else-if="count !== null && count !== undefined"

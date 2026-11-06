@@ -32,6 +32,9 @@ public sealed class RemoteMachineService(
 
     private readonly IDataProtector _tokens = dataProtection.CreateProtector("MachineTokens");
 
+    // Why the watcher last couldn't reach each machine. In memory only: it says nothing once Fleet restarts and asks again.
+    private readonly System.Collections.Concurrent.ConcurrentDictionary<string, MachineDiagnosis> _lastDiagnoses = new(StringComparer.Ordinal);
+
     /// <summary>Raised after the list changes (added, changed, removed), with the machine's id.</summary>
     public event Action<string>? Changed;
 
@@ -178,8 +181,11 @@ public sealed class RemoteMachineService(
         try
         {
             using var response = await httpClients.CreateClient(HttpClientName).SendAsync(request, cancellationToken);
+            // Fleet turns an unknown code away with a JSON 404; any other 404 is a Fleet that doesn't have the route.
             if (response.StatusCode == HttpStatusCode.NotFound)
-                return (null, MachineDiagnoses.CodeExpiredOn(baseUrl));
+                return (null, response.Content.Headers.ContentType?.MediaType == "application/json"
+                    ? MachineDiagnoses.CodeExpiredOn(baseUrl)
+                    : MachineDiagnoses.PairingLinksUnsupportedOn(baseUrl));
             if (response.StatusCode == HttpStatusCode.TooManyRequests)
                 return (null, MachineDiagnoses.TooManyCodesOn());
             if (!response.IsSuccessStatusCode)
@@ -289,7 +295,10 @@ public sealed class RemoteMachineService(
     {
         var deleted = await machines.DeleteAsync(id);
         if (deleted)
+        {
+            _lastDiagnoses.TryRemove(id, out _);
             Changed?.Invoke(id);
+        }
         return deleted;
     }
 
@@ -324,9 +333,18 @@ public sealed class RemoteMachineService(
         return (true, info.Id == id ? null : new MachineProblem($"That address is {info.Name}, not {machine.Name}."));
     }
 
-    /// <summary>Records what the watcher saw of a machine.</summary>
-    public Task SetStatusAsync(string id, string status, bool seen) =>
-        machines.UpdateStatusAsync(id, status, seen ? time.GetUtcNow() : null);
+    /// <summary>Records what the watcher saw of a machine, and why when it couldn't reach it.</summary>
+    public Task SetStatusAsync(string id, string status, bool seen, MachineDiagnosis? diagnosis = null)
+    {
+        if (diagnosis is null)
+            _lastDiagnoses.TryRemove(id, out _);
+        else
+            _lastDiagnoses[id] = diagnosis;
+        return machines.UpdateStatusAsync(id, status, seen ? time.GetUtcNow() : null);
+    }
+
+    /// <summary>Why the watcher last couldn't reach a machine; null while it answers, or before the watcher has tried.</summary>
+    public MachineDiagnosis? LastDiagnosisOf(string id) => _lastDiagnoses.GetValueOrDefault(id);
 
     /// <summary>
     /// Asks <paramref name="baseUrl"/> who it is with <paramref name="token"/>. <paramref name="machineName"/> is what a problem

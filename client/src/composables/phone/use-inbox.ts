@@ -76,6 +76,7 @@ export function useInbox() {
     sessions: entry.snapshot?.sessions ?? [],
     asks: entry.snapshot?.asks ?? {},
     problem: entry.problem,
+    diagnosis: entry.listed.diagnosis ?? null,
   })));
 
   const inbox = computed(() => buildInbox(machines.value, now.value));

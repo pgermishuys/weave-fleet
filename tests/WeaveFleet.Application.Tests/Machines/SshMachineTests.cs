@@ -177,9 +177,12 @@ public sealed class SshMachineTests : IDisposable
 
     [Theory]
     [InlineData(255, "alice@falcon: Permission denied (publickey).", "never asks for a password", "ssh-key-rejected")]
-    [InlineData(255, "Host key verification failed.", "doesn't trust falcon", "ssh-host-key")]
+    [InlineData(255, "Host key verification failed.", "Run ssh alice@falcon once and accept its key", "ssh-host-key")]
+    [InlineData(255, "@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@\n@    WARNING: REMOTE HOST IDENTIFICATION HAS CHANGED!     @\n@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@\nHost key verification failed.", "ssh-keygen -R falcon", "ssh-host-key-changed")]
     [InlineData(255, "ssh: Could not resolve hostname falcon", "can't find falcon", "name-not-found")]
-    [InlineData(255, "ssh: connect to host falcon port 22: Connection refused", "couldn't connect", "ssh-unreachable")]
+    [InlineData(255, "ssh: connect to host falcon port 22: Connection refused", "refuses SSH connections", "ssh-refused")]
+    [InlineData(255, "ssh: connect to host falcon port 22: Connection timed out", "isn't answering on SSH", "ssh-timed-out")]
+    [InlineData(255, "ssh: connect to host falcon port 22: No route to host", "couldn't connect", "ssh-unreachable")]
     [InlineData(-1, "No such file", "couldn't run ssh", "ssh-missing")]
     public async Task A_login_that_fails_names_the_login_step_and_runs_nothing_more(int exit, string stderr, string expected, string code)
     {

@@ -105,6 +105,8 @@ export interface MachineEntry {
   /** `user@host` when it is reached over SSH; the tunnel's state is `tunnelUp`. */
   sshDestination?: string | null;
   tunnelUp?: boolean | null;
+  /** Why this Fleet last couldn't reach it, while it can't. Missing from an older home. */
+  diagnosis?: MachineDiagnosis | null;
 }
 
 /** A machine that isn't live, as its sidebar group shows it: the last session and project lists it returned. */
@@ -136,6 +138,8 @@ interface ServerMachine {
   /** Missing from a home too old to reach machines over SSH. */
   sshDestination?: string | null;
   tunnelUp?: boolean | null;
+  /** Missing from a home too old to say why it can't reach a machine. */
+  diagnosis?: MachineDiagnosis | null;
 }
 
 /** A machine Fleet can already see, from ~/.ssh/config or Tailscale. `destination` is what to log in to. */
@@ -340,7 +344,7 @@ export const useMachinesStore = defineStore("machines", () => {
   function fromServer(machine: ServerMachine): MachineConnection | null {
     const token = machine.token ?? readCredentialsSync()?.grants.find((grant) => grant.machineId === machine.id)?.token ?? null;
     if (!token) return null;
-    return { id: machine.id, name: machine.name, baseUrl: machine.baseUrl, token, os: machine.os ?? undefined, addedAt: machine.addedAt, sshDestination: machine.sshDestination ?? null, tunnelUp: machine.tunnelUp ?? null };
+    return { id: machine.id, name: machine.name, baseUrl: machine.baseUrl, token, os: machine.os ?? undefined, addedAt: machine.addedAt, sshDestination: machine.sshDestination ?? null, tunnelUp: machine.tunnelUp ?? null, diagnosis: machine.diagnosis ?? null };
   }
 
   /**
@@ -464,6 +468,7 @@ export const useMachinesStore = defineStore("machines", () => {
       connection,
       sshDestination: connection.sshDestination ?? null,
       tunnelUp: connection.tunnelUp ?? null,
+      diagnosis: connection.diagnosis ?? null,
       capabilities: identities.value[connection.id]?.capabilities ?? null,
       info: identities.value[connection.id] ?? null,
     })),

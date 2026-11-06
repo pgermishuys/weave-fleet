@@ -1,6 +1,7 @@
 /**
  * Which machines a paired phone still needs its own token for, and asking its home machine for one. No Vue.
  */
+import type { MachineDiagnosis } from "@/lib/machine-diagnosis";
 import type { DeviceCredentials, MachineGrant } from "@/lib/device-credentials";
 
 /** A machine in home's list, as the phone sees it (no token). */
@@ -11,6 +12,8 @@ export interface ListedMachine {
   os?: string | null;
   status?: string;
   lastSeenAt?: string | null;
+  /** Why home last couldn't reach it; missing from an older home. */
+  diagnosis?: MachineDiagnosis | null;
 }
 
 /** Why the phone can't talk to a machine directly, or null when it can. */

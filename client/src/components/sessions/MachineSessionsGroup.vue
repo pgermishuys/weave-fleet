@@ -89,6 +89,9 @@ const note = computed(() => {
   if (!props.state?.loadedAt) return props.state?.loading ? "…" : null;
   return null;
 });
+
+/** Why the machine isn't answering: this browser's own check when it has run, else home's last look at it. */
+const why = computed(() => (unreachable.value ? machines.diagnoses[props.machine.key] ?? props.machine.diagnosis ?? null : null));
 </script>
 
 <template>
@@ -103,6 +106,7 @@ const note = computed(() => {
       :name="machine.name"
       :unreachable="unreachable"
       :note="note"
+      :why="why"
       :count="count"
       :expanded="expanded"
       menu

@@ -17,6 +17,15 @@ public sealed class MachineDiagnosisTests
         new(error, "failed", socket is null ? null : new SocketException((int)socket));
 
     [Fact]
+    public void A_tailnet_name_that_does_not_resolve_points_at_MagicDNS()
+    {
+        var problem = MachineDiagnoses.FromException(Network(HttpRequestError.NameResolutionError, null), "http://falcon.tail9c2e.ts.net:2113");
+
+        problem.Diagnosis!.Code.ShouldBe(MachineDiagnoses.NameNotFound);
+        problem.Diagnosis.Try.ShouldBe("Turn on MagicDNS in Tailscale on this machine, or paste the 100.x address that fleet node pair lists under Also reachable at, with the code.");
+    }
+
+    [Fact]
     public async Task A_refused_connection_says_fleet_is_not_running_with_the_name_and_port_steps()
     {
         var machine = new FakeMachine { Fails = Network(HttpRequestError.ConnectionError, SocketError.ConnectionRefused) };
