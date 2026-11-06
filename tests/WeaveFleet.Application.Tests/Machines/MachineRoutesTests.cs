@@ -1,6 +1,7 @@
 using System.Net;
 using System.Text;
 using Microsoft.AspNetCore.DataProtection;
+using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Time.Testing;
 using Shouldly;
 using WeaveFleet.Application.Configuration;
@@ -24,6 +25,7 @@ public sealed class MachineRoutesTests : IDisposable
     private const string Host = "http://studio:2113";
 
     private readonly Network _network = new();
+    private readonly ListLogger _log = new();
     private readonly InMemoryRemoteMachineRepository _machines = new();
     private readonly MachineRoutes _routes;
     private readonly RemoteMachineService _service;
@@ -34,7 +36,7 @@ public sealed class MachineRoutesTests : IDisposable
         var protection = new EphemeralDataProtectionProvider();
         _service = new RemoteMachineService(
             _machines, _network, protection, new MachineIdentityStore(Path.Combine(Path.GetTempPath(), $"fleet-{Guid.NewGuid():N}.db")), time);
-        _routes = new MachineRoutes(_machines, _service, _network, time) { Timeout = TimeSpan.FromMilliseconds(400), Gap = TimeSpan.FromMilliseconds(50) };
+        _routes = new MachineRoutes(_machines, _service, _network, time, _log) { Timeout = TimeSpan.FromMilliseconds(400), Gap = TimeSpan.FromMilliseconds(50) };
         _machines.UpsertAsync(new RemoteMachine
         {
             Id = Id,
@@ -144,6 +146,36 @@ public sealed class MachineRoutesTests : IDisposable
     }
 
     [Fact]
+    public async Task An_address_that_stops_answering_is_logged_once_and_again_only_when_it_answers()
+    {
+        await _machines.UpsertAsync((await _machines.GetAsync(Id))! with
+        {
+            Addresses = [new RemoteMachineAddress(Name, "tailnet", false), new RemoteMachineAddress(Lan, "lan", true)],
+        });
+        await _routes.UseAsync(Id, Lan);
+        _network.Answers[Lan] = Id;
+
+        // The watcher looks for a better address every minute; Tailscale stays down.
+        for (var minute = 0; minute < 3; minute++)
+            (await _routes.BetterAsync(Id, Lan, CancellationToken.None)).ShouldBeNull();
+        _log.Lines.ShouldBe([$"studio doesn't answer at {Name}: Connection refused."]);
+
+        _network.Answers[Name] = Id;
+        for (var minute = 0; minute < 2; minute++)
+            (await _routes.BetterAsync(Id, Lan, CancellationToken.None)).ShouldBe(Name);
+        _network.Answers.Remove(Name);
+        (await _routes.BetterAsync(Id, Lan, CancellationToken.None)).ShouldBeNull();
+
+        _log.Lines.ShouldBe([
+            $"studio doesn't answer at {Name}: Connection refused.",
+            $"studio answers at {Name} again.",
+            $"studio doesn't answer at {Name}: Connection refused.",
+        ]);
+        _log.Entries.ShouldAllBe(entry => entry.Level == LogLevel.Information && entry.Exception == null);
+        _network.Clients.Distinct().ShouldBe([MachineRoutes.HttpClientName], "probes don't go through the client real requests log on");
+    }
+
+    [Fact]
     public async Task The_race_takes_the_first_in_order_even_when_a_later_one_answers_sooner()
     {
         var (winner, _) = await MachineRoutes.RaceAsync(
@@ -209,8 +241,14 @@ public sealed class MachineRoutesTests : IDisposable
         public Dictionary<string, string> Identity { get; } = [];
         public List<string> Asked { get; } = [];
         public List<(string Url, string Token)> Tokens { get; } = [];
+        public List<string> Clients { get; } = [];
 
-        public HttpClient CreateClient(string name) => new(this, disposeHandler: false);
+        public HttpClient CreateClient(string name)
+        {
+            lock (Clients)
+                Clients.Add(name);
+            return new HttpClient(this, disposeHandler: false);
+        }
 
         protected override Task<HttpResponseMessage> SendAsync(HttpRequestMessage request, CancellationToken cancellationToken)
         {
@@ -232,5 +270,22 @@ public sealed class MachineRoutesTests : IDisposable
 
         private static HttpResponseMessage Json(string body)
             => new(HttpStatusCode.OK) { Content = new StringContent(body, Encoding.UTF8, "application/json") };
+    }
+
+    private sealed class ListLogger : ILogger<MachineRoutes>
+    {
+        public List<(LogLevel Level, string Message, Exception? Exception)> Entries { get; } = [];
+
+        public IEnumerable<string> Lines => Entries.Select(entry => entry.Message);
+
+        public IDisposable? BeginScope<TState>(TState state) where TState : notnull => null;
+
+        public bool IsEnabled(LogLevel logLevel) => true;
+
+        public void Log<TState>(LogLevel logLevel, EventId eventId, TState state, Exception? exception, Func<TState, Exception?, string> formatter)
+        {
+            lock (Entries)
+                Entries.Add((logLevel, formatter(state, exception), exception));
+        }
     }
 }
