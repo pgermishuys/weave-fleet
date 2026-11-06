@@ -347,6 +347,8 @@ public static class DependencyInjection
         // FLEET_TAILSCALE_EXECUTABLE: another tailscale than the one on the PATH.
         services.AddSingleton<WeaveFleet.Application.Machines.ITailscale>(_ => new WeaveFleet.Infrastructure.Machines.TailscaleProcess(
             Environment.GetEnvironmentVariable("FLEET_TAILSCALE_EXECUTABLE") is { Length: > 0 } tailscale ? tailscale : "tailscale"));
+        services.AddSingleton<WeaveFleet.Application.Machines.TailnetName>(sp => new WeaveFleet.Application.Machines.TailnetName(
+            sp.GetRequiredService<WeaveFleet.Application.Machines.ITailscale>()));
         services.AddSingleton<WeaveFleet.Application.Machines.MachineCandidates>(sp => new WeaveFleet.Application.Machines.MachineCandidates(
             sp.GetRequiredService<WeaveFleet.Application.Machines.ITailscale>()));
         services.AddSingleton<WeaveFleet.Infrastructure.Machines.RemoteMachineWatcher>();

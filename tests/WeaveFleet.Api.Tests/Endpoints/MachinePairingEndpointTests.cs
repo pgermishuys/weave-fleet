@@ -6,6 +6,7 @@ using Microsoft.AspNetCore.Mvc.Testing;
 using Microsoft.Extensions.DependencyInjection;
 using WeaveFleet.Api.Endpoints;
 using WeaveFleet.Api.Tests.Infrastructure;
+using WeaveFleet.Application.Configuration;
 using WeaveFleet.Application.Users;
 
 namespace WeaveFleet.Api.Tests.Endpoints;
@@ -43,6 +44,25 @@ public sealed class MachinePairingEndpointTests : IClassFixture<MachinePairingEn
         MachineEndpoints.PairingLink(["http://100.64.90.72:2113/", "http://falcon:2113"], "K3MQ-9ZDT")
             .ShouldBe("http://100.64.90.72:2113/add-machine#K3MQ-9ZDT");
         MachineEndpoints.PairingLink([], "K3MQ-9ZDT").ShouldBeNull();
+    }
+
+    [Fact]
+    public void The_tailnet_name_comes_before_the_tailnet_address()
+    {
+        var addresses = MachineEndpoints.ReachableAddresses(new FleetOptions { Host = "100.64.90.72", Port = 2113 }, "falcon.tail9c2e.ts.net");
+
+        addresses.Select(a => a.Url).ShouldBe(["http://falcon.tail9c2e.ts.net:2113", "http://100.64.90.72:2113"]);
+        MachineEndpoints.PairingLink(addresses.Select(a => a.Url).ToList(), "K3MQ-9ZDT")
+            .ShouldBe("http://falcon.tail9c2e.ts.net:2113/add-machine#K3MQ-9ZDT");
+    }
+
+    [Fact]
+    public void Without_a_tailnet_address_the_name_is_left_out()
+    {
+        MachineEndpoints.ReachableAddresses(new FleetOptions { Host = "192.168.1.20", Port = 2113 }, "falcon.tail9c2e.ts.net")
+            .Select(a => a.Url).ShouldBe(["http://192.168.1.20:2113"]);
+        MachineEndpoints.ReachableAddresses(new FleetOptions { Host = "100.64.90.72", Port = 2113 }, null)
+            .Select(a => a.Url).ShouldBe(["http://100.64.90.72:2113"]);
     }
 
     [Fact]

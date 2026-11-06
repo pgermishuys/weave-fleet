@@ -76,19 +76,19 @@ public static class MachineEndpoints
         .RequireAuthorization(FleetClaims.MachineOwnerPolicy)
         .WithName("UpdateMachine");
 
-        group.MapGet("/access", (ILocalTokenAuthService tokens, LoopbackAuthPolicy policy) =>
-            Results.Ok(ToAccessResponse(tokens, fleetOptions, policy)))
+        group.MapGet("/access", async (ILocalTokenAuthService tokens, LoopbackAuthPolicy policy, TailnetName tailnet, CancellationToken ct) =>
+            Results.Ok(ToAccessResponse(tokens, fleetOptions, policy, await tailnet.GetAsync(ct))))
             .Produces<MachineAccessResponse>(200)
             .RequireAuthorization(FleetClaims.MachineOwnerPolicy)
             .WithName("GetMachineAccess");
 
-        group.MapPost("/access/token", (ILocalTokenAuthService tokens, LoopbackAuthPolicy policy) =>
+        group.MapPost("/access/token", async (ILocalTokenAuthService tokens, LoopbackAuthPolicy policy, TailnetName tailnet, CancellationToken ct) =>
         {
             if (!tokens.TryReplaceToken(out _))
                 return Results.Conflict(new ErrorResponse(
                     "WEAVE_FLEET_AUTH_TOKEN sets this machine's token. Change the variable and restart Fleet to replace it."));
 
-            return Results.Ok(ToAccessResponse(tokens, fleetOptions, policy));
+            return Results.Ok(ToAccessResponse(tokens, fleetOptions, policy, await tailnet.GetAsync(ct)));
         })
         .Produces<MachineAccessResponse>(200)
         .RequireAuthorization(FleetClaims.MachineOwnerPolicy)
@@ -146,7 +146,7 @@ public static class MachineEndpoints
             rules.Last);
     }
 
-    private static MachineAccessResponse ToAccessResponse(ILocalTokenAuthService tokens, FleetOptions options, LoopbackAuthPolicy policy)
+    private static MachineAccessResponse ToAccessResponse(ILocalTokenAuthService tokens, FleetOptions options, LoopbackAuthPolicy policy, string? tailnetName)
         => new(
             tokens.Token,
             tokens.Source switch
@@ -159,7 +159,7 @@ public static class MachineEndpoints
             options.Port,
             policy.IsRemoteReachable,
             !policy.AllowsLoopbackAutoAuth,
-            policy.IsRemoteReachable ? ReachableAddresses(options) : []);
+            policy.IsRemoteReachable ? ReachableAddresses(options, tailnetName) : []);
 
     /// <summary>
     /// The link another Fleet pastes into Add a machine: the first address, then <c>/add-machine</c>, with the code in
@@ -168,8 +168,19 @@ public static class MachineEndpoints
     internal static string? PairingLink(IReadOnlyList<string> addresses, string manualCode)
         => addresses.Count == 0 ? null : $"{addresses[0].TrimEnd('/')}/add-machine#{manualCode}";
 
-    /// <summary>Addresses another device could use, when Fleet listens beyond loopback. Tailnet first: it's the one that travels.</summary>
-    internal static List<MachineAddress> ReachableAddresses(FleetOptions options)
+    /// <summary>
+    /// Addresses another device could use, when Fleet listens beyond loopback. Tailnet first: it's the one that travels,
+    /// and when Tailscale gave this machine a name, the name goes before its IP.
+    /// </summary>
+    internal static List<MachineAddress> ReachableAddresses(FleetOptions options, string? tailnetName = null)
+    {
+        var addresses = AddressesFor(options);
+        if (tailnetName is not null && addresses.Any(address => address.Kind == "tailnet"))
+            addresses.Insert(0, new MachineAddress($"http://{tailnetName}:{options.Port}", "tailnet"));
+        return addresses;
+    }
+
+    private static List<MachineAddress> AddressesFor(FleetOptions options)
     {
         var addresses = new List<MachineAddress>();
 
