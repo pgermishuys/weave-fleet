@@ -83,4 +83,18 @@ public sealed class SessionInterruptionsJudgeTests
 
         SessionInterruptions.Judge([Message("user", 0), Message("assistant", 1, finish: "stop", parts: failed)]).LastCall.ShouldBeNull();
     }
+
+    [Theory]
+    [InlineData("tool-calls")]
+    [InlineData("tool_use")]
+    public void A_message_that_ended_on_its_tool_calls_was_cut_off_and_names_the_last_call(string finish)
+    {
+        // OpenCode 2 ends a running call with "Killed by SIGTERM" when Fleet stops it: the call completes, the model never answers.
+        var killed = new ToolUsePart("call-1", "shell", JsonDocument.Parse("""{"command":"echo start && sleep 600"}""").RootElement, ToolUseState.Completed);
+
+        var (finished, call) = SessionInterruptions.Judge([Message("user", 0), Message("assistant", 1, finish: finish, parts: killed)]);
+
+        finished.ShouldBeFalse();
+        call.ShouldBe("shell (echo start && sleep 600)");
+    }
 }
