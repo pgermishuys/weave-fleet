@@ -30,8 +30,10 @@ public sealed class ApiWebApplicationFactory(
     bool requireToken = false,
     bool serveUi = true) : WebApplicationFactory<Program>
 {
-    private readonly string _dbPath = Path.Combine(Path.GetTempPath(), $"fleet-api-tests-{Guid.NewGuid():N}.db");
-    private readonly string _analyticsDbPath = Path.Combine(Path.GetTempPath(), $"fleet-api-tests-analytics-{Guid.NewGuid():N}.db");
+    // A folder of its own: what Fleet keeps next to its database (screenshots, pages, terminals) isn't another test server's.
+    private readonly string _dataPath = Path.Combine(Path.GetTempPath(), $"fleet-api-tests-{Guid.NewGuid():N}");
+    private string DbPath => Path.Combine(_dataPath, "fleet.db");
+    private string AnalyticsDbPath => Path.Combine(_dataPath, "analytics.db");
     private readonly string _webRootPath = Path.Combine(Path.GetTempPath(), $"fleet-api-tests-wwwroot-{Guid.NewGuid():N}");
     private readonly string _updateStagingPath = Path.Combine(Path.GetTempPath(), $"fleet-api-tests-update-{Guid.NewGuid():N}");
 
@@ -53,11 +55,12 @@ public sealed class ApiWebApplicationFactory(
             // So Keep and /check keep working without a host here, with no report, as they did before the host's check.
             services.AddScoped<WeaveFleet.Application.Mods.IModChecker, WeaveFleet.Application.Mods.NoModChecker>();
         });
+        Directory.CreateDirectory(_dataPath);
         EnsureWebRootExists();
 
         builder.UseEnvironment("Testing");
-        builder.UseSetting("Fleet:DatabasePath", _dbPath);
-        builder.UseSetting("Fleet:AnalyticsDatabasePath", _analyticsDbPath);
+        builder.UseSetting("Fleet:DatabasePath", DbPath);
+        builder.UseSetting("Fleet:AnalyticsDatabasePath", AnalyticsDbPath);
         builder.UseSetting("Fleet:AnalyticsEnabled", "false");
         builder.UseSetting("Fleet:Port", "0");
         if (host is not null)
@@ -153,11 +156,7 @@ public sealed class ApiWebApplicationFactory(
     protected override void Dispose(bool disposing)
     {
         base.Dispose(disposing);
-        TryDelete(_dbPath);
-        TryDelete(_analyticsDbPath);
-        TryDelete($"{_dbPath}-wal");
-        TryDelete($"{_dbPath}-shm");
-        TryDelete(Path.ChangeExtension(_dbPath, ".machine.json"));
+        TryDeleteDirectory(_dataPath);
         TryDeleteDirectory(_webRootPath);
         TryDeleteDirectory(_updateStagingPath);
     }
@@ -181,18 +180,6 @@ public sealed class ApiWebApplicationFactory(
         {
             await Task.Delay(Timeout.Infinite, cancellationToken);
             throw new OperationCanceledException(cancellationToken);
-        }
-    }
-
-    private static void TryDelete(string path)
-    {
-        try
-        {
-            if (File.Exists(path))
-                File.Delete(path);
-        }
-        catch
-        {
         }
     }
 
