@@ -38,11 +38,47 @@ public static class WebAppEndpoints
         };
     }
 
+    /// <summary>
+    /// Paths only the server answers. None is a page of the web app, so a request under one that no endpoint takes is
+    /// a mistake (a mistyped call, a URL missing its id) and gets a 404 rather than index.html.
+    /// </summary>
+    internal static readonly string[] ServerPathPrefixes = ["/api", "/hubs", "/pages", "/auth", "/openapi"];
+
+    /// <summary>
+    /// A 404 with an <see cref="ErrorResponse"/> for a GET or HEAD of a server path nothing answers. Without it the SPA
+    /// fallback answered with index.html and a 200, so a client, another machine or an agent read HTML where it
+    /// expected JSON. A fallback ranks below every real endpoint, and its literal prefix above the SPA's catch-all.
+    /// GET and HEAD only, like the SPA fallback: one that took every method would also take a POST an endpoint turns
+    /// away for its method or content type, and answer 404 where routing answers 405 or 415.
+    /// </summary>
+    public static IEndpointRouteBuilder MapUnknownServerPaths(this IEndpointRouteBuilder app)
+    {
+        // A RequestDelegate, not a handler: the request delegate generator (on in Release) rewrites
+        // MapFallback(pattern, handler) without its pattern, which made it a second SPA fallback.
+        RequestDelegate notFound = http =>
+        {
+            http.Response.StatusCode = StatusCodes.Status404NotFound;
+            return http.Response.WriteAsJsonAsync(
+                new ErrorResponse($"Fleet has nothing at {http.Request.Method} {http.Request.Path}."),
+                ApiJsonContext.Default.ErrorResponse);
+        };
+
+        foreach (var prefix in ServerPathPrefixes)
+        {
+            app.MapFallback(prefix + "/{**path}", notFound)
+                .WithMetadata(new HttpMethodMetadata([HttpMethods.Get, HttpMethods.Head]))
+                .AllowAnonymous();
+        }
+
+        return app;
+    }
+
     public static WebApplication UseFleetWebApp(this WebApplication app)
     {
         var options = StaticFileOptions();
         app.UseDefaultFiles(); // Serves index.html for "/"
         app.UseStaticFiles(options);
+        app.MapUnknownServerPaths();
 
         // SPA fallback — any unmatched route serves index.html for client-side routing. It takes the same options:
         // "/" and every deep link (/settings, /sessions/…) end here rather than in UseStaticFiles above, and without

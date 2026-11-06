@@ -56,6 +56,15 @@ public sealed class SessionScreenshotEndpointTests : IClassFixture<SessionScreen
         (await _client.GetAsync($"/api/sessions/{sessionId}/screenshots/{screenshotId}")).StatusCode.ShouldBe(HttpStatusCode.NotFound);
     }
 
+    [Fact]
+    public async Task A_screenshot_url_without_its_id_is_not_found_rather_than_the_web_app()
+    {
+        var response = await _client.GetAsync("/api/sessions/sess-mine/screenshots/");
+
+        response.StatusCode.ShouldBe(HttpStatusCode.NotFound);
+        response.Content.Headers.ContentType!.MediaType.ShouldBe("application/json");
+    }
+
     public sealed class Server : IAsyncLifetime
     {
         public ApiWebApplicationFactory Factory { get; } = new(authEnabled: true, useTestAuthentication: true);
@@ -83,8 +92,8 @@ public sealed class SessionScreenshotEndpointTests : IClassFixture<SessionScreen
                 """);
 
             var store = scope.ServiceProvider.GetRequiredService<ISessionScreenshotStore>();
-            Mine = (await store.SaveAsync("sess-mine", Png))!;
-            Theirs = (await store.SaveAsync("sess-other", Png))!;
+            Mine = (await store.SaveAsync("sess-mine", Png)).ShouldNotBeNull("saving sess-mine's screenshot failed");
+            Theirs = (await store.SaveAsync("sess-other", Png)).ShouldNotBeNull("saving sess-other's screenshot failed");
         }
 
         public async Task DisposeAsync() => await Factory.DisposeAsync();
