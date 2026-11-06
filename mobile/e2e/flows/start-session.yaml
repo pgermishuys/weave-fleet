@@ -45,9 +45,10 @@ appId: io.tryweave.fleet
 - tapOn:
     id: "sheet-close"
 
-- tapOn:
-    id: "composer"
-- inputText: "make the upload retry on a timeout"
+- runFlow:
+    file: type-in-composer.yaml
+    env:
+      TEXT: "make the upload retry on a timeout"
 - takeScreenshot: 24-typed
 - tapOn:
     id: "send"

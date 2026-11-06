@@ -1,0 +1,15 @@
+# Types TEXT into the composer, for walk.yaml and start-session.yaml: runFlow with env TEXT.
+# Typing on the iOS simulator sometimes drops characters, as on the pair screen: run 42257508721 sent "s" for
+# "show-page please", so no page came and every later step waited on it. Retry until the composer holds what was typed.
+appId: io.tryweave.fleet
+---
+- retry:
+    maxRetries: 3
+    commands:
+      - tapOn:
+          id: "composer"
+      - eraseText: 60
+      - inputText: ${TEXT}
+      - assertVisible:
+          id: "composer"
+          text: ${TEXT}
