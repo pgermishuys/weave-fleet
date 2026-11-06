@@ -6,6 +6,8 @@ namespace WeaveFleet.Infrastructure.Tests.Harnesses;
 
 public sealed class HarnessProbeTests : IDisposable
 {
+    private static readonly TimeSpan ShortTimeout = TimeSpan.FromSeconds(1);
+
     private readonly string _root = Directory.CreateTempSubdirectory("fleet-probe-").FullName;
 
     public void Dispose() => Directory.Delete(_root, recursive: true);
@@ -58,6 +60,66 @@ public sealed class HarnessProbeTests : IDisposable
         result.State.ShouldBe(HarnessStates.NotWorking);
         result.Reason.ShouldBe("opencode --version exited with code 3.");
         result.ExecutablePath.ShouldBe(script);
+    }
+
+    [Fact]
+    public async Task An_executable_that_never_finishes_is_not_working()
+    {
+        if (OperatingSystem.IsWindows()) return;
+        var script = Script("opencode", "sleep 5");
+
+        var result = await HarnessProbe.CheckInstalledAsync("OpenCode", "opencode", script, NullLogger.Instance, CancellationToken.None, ShortTimeout);
+
+        result.State.ShouldBe(HarnessStates.NotWorking);
+        result.Reason.ShouldBe("opencode --version didn't finish within 1 seconds.");
+    }
+
+    // On a busy machine (the iOS walk-through's runner: load averages of 100 to 300) a cold start of OpenCode's binary
+    // sometimes takes 8 to 27 s, and the New session screen then said "No harness" for minutes.
+    [Fact]
+    public async Task An_executable_that_answered_before_and_is_only_slow_now_stays_ready()
+    {
+        if (OperatingSystem.IsWindows()) return;
+        var answered = Path.Combine(_root, "answered");
+        var script = Script("opencode", $"[ -f '{answered}' ] && sleep 5; touch '{answered}'; echo 1.18.31");
+
+        await HarnessProbe.CheckInstalledAsync("OpenCode", "opencode", script, NullLogger.Instance, CancellationToken.None, ShortTimeout);
+        var slow = await HarnessProbe.CheckInstalledAsync("OpenCode", "opencode", script, NullLogger.Instance, CancellationToken.None, ShortTimeout);
+
+        slow.Available.ShouldBeTrue();
+        slow.State.ShouldBe(HarnessStates.Ready);
+        slow.Version.ShouldBe("1.18.31");
+        slow.ExecutablePath.ShouldBe(script);
+    }
+
+    [Fact]
+    public async Task An_executable_replaced_since_it_answered_is_not_working_when_it_never_finishes()
+    {
+        if (OperatingSystem.IsWindows()) return;
+        var script = Script("opencode", "echo 1.18.31");
+        await HarnessProbe.CheckInstalledAsync("OpenCode", "opencode", script, NullLogger.Instance, CancellationToken.None, ShortTimeout);
+
+        Script("opencode", "sleep 5");
+        File.SetLastWriteTimeUtc(script, DateTime.UtcNow.AddMinutes(1));
+        var result = await HarnessProbe.CheckInstalledAsync("OpenCode", "opencode", script, NullLogger.Instance, CancellationToken.None, ShortTimeout);
+
+        result.State.ShouldBe(HarnessStates.NotWorking);
+    }
+
+    [Fact]
+    public async Task An_executable_that_failed_since_it_answered_is_not_working_when_it_never_finishes()
+    {
+        if (OperatingSystem.IsWindows()) return;
+        var runs = Path.Combine(_root, "runs");
+        // Answers, then exits 3, then hangs.
+        var script = Script("opencode", $"echo x >> '{runs}'; n=$(wc -l < '{runs}'); [ $n -eq 1 ] && echo 1.18.31 && exit 0; [ $n -eq 2 ] && exit 3; sleep 5");
+
+        await HarnessProbe.CheckInstalledAsync("OpenCode", "opencode", script, NullLogger.Instance, CancellationToken.None, ShortTimeout);
+        var failed = await HarnessProbe.CheckInstalledAsync("OpenCode", "opencode", script, NullLogger.Instance, CancellationToken.None, ShortTimeout);
+        var hung = await HarnessProbe.CheckInstalledAsync("OpenCode", "opencode", script, NullLogger.Instance, CancellationToken.None, ShortTimeout);
+
+        failed.Reason.ShouldBe("opencode --version exited with code 3.");
+        hung.State.ShouldBe(HarnessStates.NotWorking);
     }
 
     [Fact]
