@@ -47,10 +47,10 @@ describe("PhoneComposer model chip", () => {
   beforeEach(() => setActivePinia(createPinia()));
 
   it("names the model that answered last when the session has none chosen, like desktop's Default (…)", () => {
-    expect(chip({ lastAssistantModelId: "claude-haiku-4.5" })).toContain("Claude Haiku 4.5");
+    expect(chip({ lastAssistantModelId: "claude-haiku-4.5" })).toContain("Default (Claude Haiku 4.5)");
   });
 
-  it("names the session's own model", () => {
-    expect(chip({ selectedModel: { providerID: "claude", modelID: "claude-haiku-4.5" } })).toContain("Claude Haiku 4.5");
+  it("reads Default (…) for the session's own model, as desktop does", () => {
+    expect(chip({ selectedModel: { providerID: "claude", modelID: "claude-haiku-4.5" } })).toContain("Default (Claude Haiku 4.5)");
   });
 });
