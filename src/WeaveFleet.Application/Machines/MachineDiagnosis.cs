@@ -70,7 +70,9 @@ public static class MachineDiagnoses
         if ((exception as HttpRequestException)?.HttpRequestError == HttpRequestError.NameResolutionError
             || socket?.SocketErrorCode is SocketError.HostNotFound or SocketError.TryAgain or SocketError.NoData)
             return Problem(0, NameNotFound, $"Can't find {host}", "Nothing on this network knows that name.",
-                "Check the address. A tailnet name looks like falcon.tail9c2e.ts.net.", Unreached(baseUrl));
+                HostOf(baseUrl).EndsWith(".ts.net", StringComparison.OrdinalIgnoreCase)
+                    ? "Turn on MagicDNS in Tailscale on this machine, or paste the 100.x address that fleet node pair lists under Also reachable at, with the code."
+                    : "Check the address. A tailnet name looks like falcon.tail9c2e.ts.net.", Unreached(baseUrl));
         if (socket?.SocketErrorCode == SocketError.ConnectionRefused)
             return Problem(2, FleetNotRunning, $"Fleet isn't running on {host}", "The connection was refused, so the machine is up and Fleet is not.",
                 $"On {host}, run fleet node up. It starts Fleet in the background.", Unreached(baseUrl));

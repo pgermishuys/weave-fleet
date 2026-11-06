@@ -319,7 +319,8 @@ headline on the machine's card, with the steps under **Details**, and the same u
 by `code`:
 
 ### Can't find falcon
-`name-not-found`. Nothing on this network knows the name. Check the address.
+`name-not-found`. Nothing on this network knows the name. Check the address. For a `*.ts.net` name the Try line says to turn on MagicDNS in Tailscale on this machine, or to paste the 100.x
+address `fleet node pair` lists under Also reachable at, with the code.
 
 ### falcon isn't answering
 `not-answering`. Nothing came back in 5 seconds: the machine is off, behind a firewall, or not on your tailnet.
