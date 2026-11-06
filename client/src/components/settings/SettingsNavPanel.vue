@@ -1,11 +1,12 @@
 <script setup lang="ts">
 import type { Component } from "vue";
-import { computed, onMounted } from "vue";
-import { Cable, FlaskConical, FolderGit2, Lightbulb, Palette, RefreshCw, Server, ShieldCheck, SlidersHorizontal, Wrench, Settings2 } from "lucide-vue-next";
+import { computed, onMounted, shallowRef } from "vue";
+import { Cable, ChevronDown, FlaskConical, FolderGit2, Lightbulb, Palette, Puzzle, RefreshCw, Server, ShieldCheck, SlidersHorizontal, Wrench, Settings2 } from "lucide-vue-next";
 import { useFleetUpdatesWatch } from "@/composables/use-fleet-updates";
 import type { SettingsSectionId } from "@/composables/use-settings-nav";
 import { useUpdateStatus } from "@/composables/use-update-status";
-import { getConfigPages } from "@/plugins/slots";
+import { usePluginRuntime } from "@/plugins/composable";
+import { getConfigPages, isPluginEnabled } from "@/plugins/slots";
 import { useModsStore } from "@/stores/mods";
 
 interface Props {
@@ -20,6 +21,10 @@ interface SettingsNavItem {
   id: SettingsSectionId;
   label: string;
   icon: Component;
+  /** Entries nested under this one, shown while it is unfolded. */
+  children?: readonly SettingsNavItem[];
+  /** A small number beside the label. */
+  count?: number;
 }
 
 interface SettingsNavGroup {
@@ -28,7 +33,7 @@ interface SettingsNavGroup {
   items: readonly SettingsNavItem[];
 }
 
-defineProps<Props>();
+const props = defineProps<Props>();
 const emit = defineEmits<Emits>();
 
 const { isUpdateAvailable, isUpdateStaged } = useUpdateStatus();
@@ -79,17 +84,35 @@ const coreGroups: readonly SettingsNavGroup[] = [
   },
 ];
 
-// One entry per add-on that offers a settings page, through the plugin contribution point.
-const groups = computed<readonly SettingsNavGroup[]>(() => {
-  const integrations = getConfigPages().map((page): SettingsNavItem => ({
-    id: `integration:${page.pluginId}`,
+// Plugins is one entry. It unfolds into one child per plugin that is on and has a settings page, through the plugin
+// contribution point, so turning a plugin off removes its child and core never names a plugin.
+const pluginRuntime = usePluginRuntime();
+
+const pluginsItem = computed<SettingsNavItem>(() => ({
+  id: "plugins",
+  label: "Plugins",
+  icon: Puzzle,
+  count: pluginRuntime.manifests.value.filter((m) => !m.descriptor.alwaysOn && isPluginEnabled(m.descriptor.id)).length,
+  children: getConfigPages().map((page): SettingsNavItem => ({
+    id: `plugin:${page.pluginId}`,
     label: page.navLabel ?? page.title,
     icon: page.icon ?? Settings2,
-  }));
-  return integrations.length > 0
-    ? [...coreGroups, { id: "integrations", label: "Integrations", items: integrations }]
-    : coreGroups;
-});
+  })),
+}));
+
+const groups = computed<readonly SettingsNavGroup[]>(() => [
+  ...coreGroups,
+  { id: "plugins", label: "Plugins", items: [pluginsItem.value] },
+]);
+
+const inPlugins = computed(() => props.modelValue === "plugins" || props.modelValue.startsWith("plugin:"));
+// Unfolded while one of its pages is open; the chevron folds it or opens it from anywhere.
+const folded = shallowRef<boolean | null>(null);
+const unfolded = computed(() => folded.value === null ? inPlugins.value : !folded.value);
+
+function toggleFold(): void {
+  folded.value = unfolded.value;
+}
 
 function selectSection(sectionId: SettingsSectionId): void {
   emit("update:modelValue", sectionId);
@@ -122,37 +145,81 @@ function selectSection(sectionId: SettingsSectionId): void {
         <p class="settings-nav__group-label">
           {{ group.label }}
         </p>
-        <button
+        <template
           v-for="item in group.items"
           :key="item.id"
-          type="button"
-          class="settings-nav__item"
-          :class="{ 'settings-nav__item--active': modelValue === item.id }"
-          :aria-current="modelValue === item.id ? 'page' : undefined"
-          @click="selectSection(item.id)"
         >
-          <component
-            :is="item.icon"
-            :size="16"
-            class="settings-nav__icon"
-            aria-hidden="true"
-          />
-          <span>{{ item.label }}</span>
-          <!-- Update notification dot for Updates & about -->
-          <span
-            v-if="item.id === 'updates' && showUpdateDot"
-            class="ml-auto h-2 w-2 shrink-0 rounded-full"
-            :class="isUpdateStaged ? 'bg-warn' : 'bg-accent'"
-            aria-label="Update available"
-          />
-          <span
-            v-if="item.id === 'updates' && updatesWaiting"
-            :class="showUpdateDot ? 'ml-1.5' : 'ml-auto'"
-            class="rounded-full bg-accent px-1.5 text-[0.71429rem] font-semibold leading-4 text-white"
-            :aria-label="`${updatesWaiting} ${updatesWaiting === 1 ? 'machine' : 'machines'} can update`"
-            data-testid="updates-badge"
-          >{{ updatesWaiting }}</span>
-        </button>
+          <div class="settings-nav__row">
+            <button
+              type="button"
+              class="settings-nav__item"
+              :class="{ 'settings-nav__item--active': modelValue === item.id }"
+              :aria-current="modelValue === item.id ? 'page' : undefined"
+              @click="selectSection(item.id)"
+            >
+              <component
+                :is="item.icon"
+                :size="16"
+                class="settings-nav__icon"
+                aria-hidden="true"
+              />
+              <span>{{ item.label }}</span>
+              <!-- Update notification dot for Updates & about -->
+              <span
+                v-if="item.id === 'updates' && showUpdateDot"
+                class="ml-auto h-2 w-2 shrink-0 rounded-full"
+                :class="isUpdateStaged ? 'bg-warn' : 'bg-accent'"
+                aria-label="Update available"
+              />
+              <span
+                v-if="item.id === 'updates' && updatesWaiting"
+                :class="showUpdateDot ? 'ml-1.5' : 'ml-auto'"
+                class="rounded-full bg-accent px-1.5 text-[0.71429rem] font-semibold leading-4 text-white"
+                :aria-label="`${updatesWaiting} ${updatesWaiting === 1 ? 'machine' : 'machines'} can update`"
+                data-testid="updates-badge"
+              >{{ updatesWaiting }}</span>
+              <span
+                v-if="item.count !== undefined"
+                class="ml-auto text-[0.78571rem] text-muted"
+                data-testid="settings-nav-count"
+              >{{ item.count }}</span>
+            </button>
+            <button
+              v-if="item.children"
+              type="button"
+              class="settings-nav__fold"
+              :aria-label="unfolded ? `Fold ${item.label}` : `Unfold ${item.label}`"
+              :aria-expanded="unfolded"
+              @click="toggleFold"
+            >
+              <ChevronDown
+                :size="14"
+                class="settings-nav__chevron"
+                :class="{ 'settings-nav__chevron--folded': !unfolded }"
+                aria-hidden="true"
+              />
+            </button>
+          </div>
+          <template v-if="item.children && unfolded">
+            <button
+              v-for="child in item.children"
+              :key="child.id"
+              type="button"
+              class="settings-nav__item settings-nav__item--child"
+              :class="{ 'settings-nav__item--active': modelValue === child.id }"
+              :aria-current="modelValue === child.id ? 'page' : undefined"
+              @click="selectSection(child.id)"
+            >
+              <component
+                :is="child.icon"
+                :size="15"
+                class="settings-nav__icon"
+                aria-hidden="true"
+              />
+              <span>{{ child.label }}</span>
+            </button>
+          </template>
+        </template>
       </div>
     </nav>
   </section>
@@ -238,6 +305,46 @@ function selectSection(sectionId: SettingsSectionId): void {
   border-color: color-mix(in srgb, var(--accent) 40%, transparent);
   background: color-mix(in srgb, var(--panel-bg) 88%, var(--accent) 12%);
   color: var(--text);
+}
+
+.settings-nav__row {
+  position: relative;
+  display: flex;
+}
+
+.settings-nav__row .settings-nav__item {
+  padding-right: 36px;
+}
+
+.settings-nav__fold {
+  position: absolute;
+  top: 0;
+  right: 4px;
+  bottom: 0;
+  display: grid;
+  place-items: center;
+  width: 28px;
+  border: 0;
+  background: transparent;
+  color: var(--muted);
+}
+
+.settings-nav__fold:hover {
+  color: var(--text);
+}
+
+.settings-nav__chevron {
+  transition: transform var(--transition);
+}
+
+.settings-nav__chevron--folded {
+  transform: rotate(-90deg);
+}
+
+.settings-nav__item--child {
+  min-height: 32px;
+  margin-left: 14px;
+  width: calc(100% - 14px);
 }
 
 .settings-nav__icon {

@@ -110,7 +110,8 @@ const currentRouteRail = computed<string | null>(() => {
     return "fleet";
   }
 
-  if (pathname.value === "/settings") {
+  // Settings and its sub-addresses (/settings/plugins...) are all the Settings rail, even the Plugins shortcut's.
+  if (pathname.value === "/settings" || pathname.value.startsWith("/settings/")) {
     return "settings";
   }
 
@@ -190,7 +191,8 @@ async function loadPluginStatuses(): Promise<void> {
 }
 
 function handleSelect(item: RailItem): void {
-  if (isSidebarRail(item.id)) {
+  // A shortcut into Settings leaves the Settings rail active; the route sets it.
+  if (isSidebarRail(item.id) && !item.to?.startsWith("/settings")) {
     sidebarStore.setActiveRail(item.id);
   }
 

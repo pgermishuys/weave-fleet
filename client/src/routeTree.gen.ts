@@ -30,6 +30,7 @@ import { Route as SessionsIdRouteImport } from './routes/sessions.$id'
 import { Route as PhoneSetupRouteImport } from './routes/phone.setup'
 import { Route as PhoneNewRouteImport } from './routes/phone.new'
 import { Route as PhoneAnsweredRouteImport } from './routes/phone.answered'
+import { Route as SettingsPluginsIndexRouteImport } from './routes/settings_.plugins.index'
 import { Route as SettingsPluginsPluginIdRouteImport } from './routes/settings_.plugins.$pluginId'
 import { Route as GithubOwnerRepoRouteImport } from './routes/github.$owner.$repo'
 import { Route as GithubOwnerRepoIndexRouteImport } from './routes/github.$owner.$repo.index'
@@ -142,6 +143,11 @@ const PhoneAnsweredRoute = PhoneAnsweredRouteImport.update({
   path: '/answered',
   getParentRoute: () => PhoneRoute,
 } as any)
+const SettingsPluginsIndexRoute = SettingsPluginsIndexRouteImport.update({
+  id: '/settings_/plugins/',
+  path: '/settings/plugins/',
+  getParentRoute: () => rootRouteImport,
+} as any)
 const SettingsPluginsPluginIdRoute = SettingsPluginsPluginIdRouteImport.update({
   id: '/settings_/plugins/$pluginId',
   path: '/settings/plugins/$pluginId',
@@ -200,6 +206,7 @@ export interface FileRoutesByFullPath {
   '/phone/': typeof PhoneIndexRoute
   '/github/$owner/$repo': typeof GithubOwnerRepoRouteWithChildren
   '/settings/plugins/$pluginId': typeof SettingsPluginsPluginIdRoute
+  '/settings/plugins/': typeof SettingsPluginsIndexRoute
   '/phone/s/$machineId/$sessionId': typeof PhoneSMachineIdSessionIdRoute
   '/github/$owner/$repo/': typeof GithubOwnerRepoIndexRoute
   '/github/$owner/$repo/issues/$number': typeof GithubOwnerRepoIssuesNumberRoute
@@ -226,6 +233,7 @@ export interface FileRoutesByTo {
   '/github': typeof GithubIndexRoute
   '/phone': typeof PhoneIndexRoute
   '/settings/plugins/$pluginId': typeof SettingsPluginsPluginIdRoute
+  '/settings/plugins': typeof SettingsPluginsIndexRoute
   '/phone/s/$machineId/$sessionId': typeof PhoneSMachineIdSessionIdRoute
   '/github/$owner/$repo': typeof GithubOwnerRepoIndexRoute
   '/github/$owner/$repo/issues/$number': typeof GithubOwnerRepoIssuesNumberRoute
@@ -256,6 +264,7 @@ export interface FileRoutesById {
   '/phone/': typeof PhoneIndexRoute
   '/github/$owner/$repo': typeof GithubOwnerRepoRouteWithChildren
   '/settings_/plugins/$pluginId': typeof SettingsPluginsPluginIdRoute
+  '/settings_/plugins/': typeof SettingsPluginsIndexRoute
   '/phone/s/$machineId/$sessionId': typeof PhoneSMachineIdSessionIdRoute
   '/github/$owner/$repo/': typeof GithubOwnerRepoIndexRoute
   '/github/$owner/$repo/issues/$number': typeof GithubOwnerRepoIssuesNumberRoute
@@ -287,6 +296,7 @@ export interface FileRouteTypes {
     | '/phone/'
     | '/github/$owner/$repo'
     | '/settings/plugins/$pluginId'
+    | '/settings/plugins/'
     | '/phone/s/$machineId/$sessionId'
     | '/github/$owner/$repo/'
     | '/github/$owner/$repo/issues/$number'
@@ -313,6 +323,7 @@ export interface FileRouteTypes {
     | '/github'
     | '/phone'
     | '/settings/plugins/$pluginId'
+    | '/settings/plugins'
     | '/phone/s/$machineId/$sessionId'
     | '/github/$owner/$repo'
     | '/github/$owner/$repo/issues/$number'
@@ -342,6 +353,7 @@ export interface FileRouteTypes {
     | '/phone/'
     | '/github/$owner/$repo'
     | '/settings_/plugins/$pluginId'
+    | '/settings_/plugins/'
     | '/phone/s/$machineId/$sessionId'
     | '/github/$owner/$repo/'
     | '/github/$owner/$repo/issues/$number'
@@ -366,6 +378,7 @@ export interface RootRouteChildren {
   SessionsIdRoute: typeof SessionsIdRoute
   SessionsNewRoute: typeof SessionsNewRoute
   SettingsPluginsPluginIdRoute: typeof SettingsPluginsPluginIdRoute
+  SettingsPluginsIndexRoute: typeof SettingsPluginsIndexRoute
 }
 
 declare module '@tanstack/vue-router' {
@@ -517,6 +530,13 @@ declare module '@tanstack/vue-router' {
       preLoaderRoute: typeof PhoneAnsweredRouteImport
       parentRoute: typeof PhoneRoute
     }
+    '/settings_/plugins/': {
+      id: '/settings_/plugins/'
+      path: '/settings/plugins'
+      fullPath: '/settings/plugins/'
+      preLoaderRoute: typeof SettingsPluginsIndexRouteImport
+      parentRoute: typeof rootRouteImport
+    }
     '/settings_/plugins/$pluginId': {
       id: '/settings_/plugins/$pluginId'
       path: '/settings/plugins/$pluginId'
@@ -627,6 +647,7 @@ const rootRouteChildren: RootRouteChildren = {
   SessionsIdRoute: SessionsIdRoute,
   SessionsNewRoute: SessionsNewRoute,
   SettingsPluginsPluginIdRoute: SettingsPluginsPluginIdRoute,
+  SettingsPluginsIndexRoute: SettingsPluginsIndexRoute,
 }
 export const routeTree = rootRouteImport
   ._addFileChildren(rootRouteChildren)

@@ -16,9 +16,10 @@ describe("old Settings ids", () => {
     expect(resolveSettingsTarget(old)).toEqual({ section, anchor });
   });
 
-  it("sends plugins to the first integration, or General when there is none", () => {
-    expect(resolveSettingsTarget("plugins", null, () => "github")).toEqual({ section: "integration:github", anchor: null });
-    expect(resolveSettingsTarget("plugins", null, () => null)).toEqual({ section: "general", anchor: null });
+  it("sends an old integration id to that plugin's page, and keeps plugins as the overview", () => {
+    expect(resolveSettingsTarget("integration:github")).toEqual({ section: "plugin:github", anchor: null });
+    expect(resolveSettingsTarget("plugins")).toEqual({ section: "plugins", anchor: null });
+    expect(resolveSettingsTarget("plugin:github")).toEqual({ section: "plugin:github", anchor: null });
   });
 
   it("leaves current ids alone", () => {

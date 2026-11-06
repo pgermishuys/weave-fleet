@@ -10,6 +10,10 @@ export interface FleetPluginDescriptor {
   trustLevel: FleetPluginTrustLevel;
   hasFrontend: boolean;
   hasBackend: boolean;
+  /** One line under the name on the Plugins page. */
+  description?: string;
+  /** The plugin has no switch and is left off the Plugins page: Fleet's own way of reaching the page. */
+  alwaysOn?: boolean;
 }
 
 export type PluginConnectionStatus = "connected" | "disconnected" | "error";
@@ -55,7 +59,7 @@ export interface FleetPluginSettingsSection {
 
 export interface FleetPluginConfigPage {
   title: string;
-  /** The entry's name under Integrations in Settings; the title when absent. */
+  /** The entry's name under Plugins in Settings; the title when absent. */
   navLabel?: string;
   component: Component;
   icon?: Component;

@@ -1,3 +1,4 @@
+import { shallowRef } from "vue";
 import { defineContributionPoint } from "@/lib/contributions";
 import type {
   FleetPluginBoardSource,
@@ -55,14 +56,55 @@ export const boardSources = defineContributionPoint<FleetPluginBoardSource>({
 const withPluginId = <T extends object>(pluginId: string, items: readonly T[] | undefined) =>
   (items ?? []).map((item) => ({ ...item, pluginId }));
 
+const DISABLED_STORAGE_KEY = "fleet.plugins.disabled";
+
+function loadDisabled(): ReadonlySet<string> {
+  try {
+    const parsed: unknown = JSON.parse(localStorage.getItem(DISABLED_STORAGE_KEY) ?? "[]");
+    return new Set(Array.isArray(parsed) ? parsed.filter((id): id is string => typeof id === "string") : []);
+  } catch {
+    return new Set();
+  }
+}
+
+// The switch a user flips on the Plugins page: the ids that are off, kept in this browser like other preferences.
+// A plugin is on unless it is listed, so a plugin added later starts on.
+const disabledIds = shallowRef<ReadonlySet<string>>(loadDisabled());
+
+export function isPluginEnabled(pluginId: string): boolean {
+  return !disabledIds.value.has(pluginId);
+}
+
+/** Turns a plugin on or off: off removes everything it contributes (rail icon, settings page, pickers) until it is on again. */
+export function setPluginEnabled(pluginId: string, enabled: boolean): void {
+  const next = new Set(disabledIds.value);
+  if (enabled) next.delete(pluginId);
+  else next.add(pluginId);
+  disabledIds.value = next;
+  try {
+    localStorage.setItem(DISABLED_STORAGE_KEY, JSON.stringify([...next]));
+  } catch {
+    // Storage can be full or blocked; the switch still works until the page is reloaded.
+  }
+
+  const manifest = pluginManifests.get(pluginId);
+  if (manifest) contribute(manifest);
+}
+
+/** Registers a plugin. It is listed whether or not it is on; it only contributes while it is on. */
 export function registerPlugin(manifest: FleetPluginManifest): void {
+  pluginManifests.contribute(manifest.descriptor.id, [manifest]);
+  contribute(manifest);
+}
+
+function contribute(manifest: FleetPluginManifest): void {
   const pluginId = manifest.descriptor.id;
   const contributions = manifest.contributions;
 
-  // Registering an id again replaces the plugin, so what the old one contributed goes first.
+  // Contributing again replaces the plugin, so what the old one contributed goes first.
   removePlugin(pluginId);
+  if (!isPluginEnabled(pluginId) && !manifest.descriptor.alwaysOn) return;
 
-  pluginManifests.contribute(pluginId, [manifest]);
   sidebarItems.contribute(pluginId, withPluginId(pluginId, contributions?.sidebarItems));
   sidebarPanels.contribute(pluginId, withPluginId(pluginId, contributions?.sidebarPanels));
   settingsSections.contribute(pluginId, withPluginId(pluginId, contributions?.settingsSections));
