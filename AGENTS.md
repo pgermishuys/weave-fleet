@@ -28,6 +28,7 @@ A route no rail owns (`/welcome`, `/repositories`) renders full width.
 
 | Route        | Context layout                              |
 |--------------|---------------------------------------------|
+| Fleet        | `[fleet-menu][fleet-detail]`                |
 | Sessions     | `[session-list][conversation][content]`     |
 | Settings     | `[settings-menu][settings-detail]`          |
 | Automations  | `[automations-list][automations-detail]`    |
@@ -48,6 +49,8 @@ A route no rail owns (`/welcome`, `/repositories`) renders full width.
 | `analytics-menu`  | Spend (Overview, Daily) and Breakdown (Projects, Models, Sessions) with counts, then the From/To/Project filters and Export. On a phone, a chip strip above the page |
 | `analytics-detail`| The selected section; each has its own route (`/analytics`, `/analytics/daily`, …) |
 | `automations-detail`| Detail pane for the selected automation                                   |
+| `fleet-menu`      | Fleet (mission control, in Labs): Needs you first, then one entry per machine with its count; on a phone, a chip strip above the page |
+| `fleet-detail`    | The selected view: every ask waiting on you, or one machine's sessions; each has its own route (`/fleet`, `/fleet/machines/{id}`) |
 | `workflows-list`  | The workflow library: built into Fleet, then the repo's `.weave/workflows`   |
 | `workflows-detail`| The selected workflow's steps, recent runs and Run box                     |
 

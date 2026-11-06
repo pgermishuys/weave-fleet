@@ -1,11 +1,13 @@
 import { enableAutoUnmount, flushPromises, mount } from "@vue/test-utils";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { ref } from "vue";
 import { createPinia, setActivePinia } from "pinia";
 import MissionControlPage from "@/components/pages/MissionControlPage.vue";
 import { saveMachines, setActiveMachine } from "@/lib/machines";
 
 const navigate = vi.hoisted(() => vi.fn());
-vi.mock("@tanstack/vue-router", () => ({ useRouter: () => ({ navigate }) }));
+const path = vi.hoisted(() => ({ value: "/fleet" }));
+vi.mock("@tanstack/vue-router", () => ({ useRouter: () => ({ navigate }), useLocation: () => ref(path.value) }));
 vi.mock("@/composables/use-signalr-socket", () => ({
   feedHubFor: () => ({
     start: async () => { throw new Error("no hub"); },
@@ -54,6 +56,7 @@ describe("Mission control page", () => {
     setActivePinia(createPinia());
     navigate.mockClear();
     enabled = true;
+    path.value = "/fleet";
     permissionAnswered = false;
     questionAnswered = false;
     atlasNow = "bash · pnpm test webhooks";
@@ -98,22 +101,40 @@ describe("Mission control page", () => {
     expect(requests.filter((request) => !request.endsWith("/api/preferences"))).toEqual([]);
   });
 
-  it("puts every machine's sessions on the wall with their now lines, and regroups them", async () => {
+  it("lists one machine's sessions with their now lines, and regroups them", async () => {
+    path.value = "/fleet/machines/home";
     const wrapper = mount(MissionControlPage);
     await flushPromises();
 
     const tiles = wrapper.findAll("[data-testid='mission-tile']");
-    expect(tiles).toHaveLength(3);
-    expect(tiles.map((tile) => tile.find("[data-testid='tile-machine']").text()).sort()).toEqual(["This machine", "This machine", "mini"]);
+    expect(tiles.map((tile) => tile.find("[data-testid='tile-machine']").text())).toEqual(["This machine", "This machine"]);
     expect(wrapper.find("[data-state='working'] [data-testid='tile-now']").text()).toBe("bash · pnpm test webhooks");
-    // The old machine has no now line and no error: its tile shows the question.
-    expect(wrapper.text()).toContain("Retry three times or five?");
+    expect(wrapper.find("[data-testid='group-machine']").exists()).toBe(false);
 
-    await wrapper.find("[data-testid='group-machine']").trigger("click");
-    expect(wrapper.findAll("[data-testid='mission-group'] h3").map((heading) => heading.text().replace(/\s+\d+$/, "")).sort()).toEqual(["This machine", "mini"]);
+    await wrapper.find("[data-testid='group-state']").trigger("click");
+    expect(wrapper.findAll("[data-testid='mission-group'] h3").map((heading) => heading.text().replace(/\s+\d+$/, ""))).toEqual(["Needs you", "Working"]);
+  });
+
+  it("shows the asks of every machine on Needs you, and only those", async () => {
+    const wrapper = mount(MissionControlPage);
+    await flushPromises();
+
+    expect(wrapper.find("[data-testid='fleet-needs-you-view']").exists()).toBe(true);
+    expect(wrapper.findAll("[data-testid='mission-tile']")).toHaveLength(0);
+    expect(wrapper.text()).toContain("Retry three times or five?");
+    expect(wrapper.text()).toContain("pnpm install");
+  });
+
+  it("says so for a machine that isn't in the list", async () => {
+    path.value = "/fleet/machines/gone";
+    const wrapper = mount(MissionControlPage);
+    await flushPromises();
+
+    expect(wrapper.find("[data-testid='fleet-machine-gone']").exists()).toBe(true);
   });
 
   it("follows each machine's now line every few seconds", async () => {
+    path.value = "/fleet/machines/home";
     vi.useFakeTimers({ toFake: ["setInterval", "clearInterval"] });
     try {
       const wrapper = mount(MissionControlPage);
@@ -146,6 +167,7 @@ describe("Mission control page", () => {
   });
 
   it("peeks at a tile and sends a nudge to its machine, steering where the harness does", async () => {
+    path.value = "/fleet/machines/home";
     const wrapper = mount(MissionControlPage);
     await flushPromises();
 

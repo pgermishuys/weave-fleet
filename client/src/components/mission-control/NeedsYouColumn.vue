@@ -4,7 +4,7 @@ import { Button } from "@/components/ui/button";
 import type { Tile } from "@/lib/mission-control";
 import type { AnswerOutcome, PermissionReply } from "@/lib/push/answer";
 
-defineProps<{ items: readonly Tile[] }>();
+defineProps<{ items: readonly Tile[]; wide?: boolean }>();
 const emit = defineEmits<{
   answerQuestion: [tile: Tile, requestId: string, answers: string[][], done: (outcome: AnswerOutcome) => void];
   answerPermission: [tile: Tile, reply: PermissionReply, done: (outcome: AnswerOutcome) => void];
@@ -36,7 +36,8 @@ function answerPermission(tile: Tile, reply: PermissionReply): void {
 
 <template>
   <aside
-    class="flex w-80 shrink-0 flex-col gap-3 overflow-y-auto border-r border-border p-4"
+    class="flex shrink-0 flex-col gap-3 overflow-y-auto p-4"
+    :class="wide ? 'min-w-0 flex-1' : 'w-80 border-r border-border'"
     aria-label="Needs you"
     data-testid="mission-needs-you"
   >

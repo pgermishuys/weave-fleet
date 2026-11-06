@@ -1,4 +1,4 @@
-import { computed, onUnmounted, shallowRef, watch } from "vue";
+import { computed, onScopeDispose, shallowRef, watch } from "vue";
 import { feedHubFor } from "@/composables/use-signalr-socket";
 import { targetFor } from "@/lib/machine-target";
 import { buildTiles, groupTiles, needsYou, summarize, type Grouping, type MissionMachine, type SessionNow, type Tile } from "@/lib/mission-control";
@@ -77,7 +77,7 @@ export function useMissionControl() {
   const nowTimer = setInterval(() => {
     if (document.visibilityState !== "hidden") for (const { entry } of open.value) void pollNow(entry);
   }, NOW_POLL_MS);
-  onUnmounted(() => {
+  onScopeDispose(() => {
     clearInterval(nowTimer);
     for (const candidate of open.value) void candidate.feed.stop();
     open.value = [];
