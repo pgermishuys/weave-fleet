@@ -197,7 +197,7 @@ function rowMeta(workflow: Workflow): { label: string; tone: string } {
   background: none;
   color: var(--muted);
   font: inherit;
-  font-size: 0.9286rem;
+  font-size: 0.92857rem;
   text-align: left;
   cursor: pointer;
 }
@@ -226,7 +226,7 @@ function rowMeta(workflow: Workflow): { label: string; tone: string } {
 .panel-header {
   margin: 0;
   padding: 14px 16px 10px;
-  font-size: 0.7143rem;
+  font-size: 0.71429rem;
   font-weight: 600;
   text-transform: uppercase;
   letter-spacing: 0.05em;
@@ -247,7 +247,7 @@ function rowMeta(workflow: Workflow): { label: string; tone: string } {
   justify-content: space-between;
   gap: 8px;
   padding: 12px 10px 6px;
-  font-size: 0.7857rem;
+  font-size: 0.78571rem;
   font-weight: 500;
   color: var(--muted);
 }
@@ -301,7 +301,7 @@ function rowMeta(workflow: Workflow): { label: string; tone: string } {
   flex: 1 1 auto;
   min-width: 0;
   overflow: hidden;
-  font-size: 0.9286rem;
+  font-size: 0.92857rem;
   line-height: 1.3;
   text-overflow: ellipsis;
   white-space: nowrap;
@@ -310,7 +310,7 @@ function rowMeta(workflow: Workflow): { label: string; tone: string } {
 .workflow-row__meta {
   flex-shrink: 0;
   color: color-mix(in srgb, var(--muted) 80%, transparent);
-  font-size: 0.8571rem;
+  font-size: 0.85714rem;
   font-weight: 400;
   white-space: nowrap;
 }
@@ -353,7 +353,7 @@ function rowMeta(workflow: Workflow): { label: string; tone: string } {
 .empty-message {
   margin: 0;
   padding: 4px 10px;
-  font-size: 0.8571rem;
+  font-size: 0.85714rem;
   color: var(--muted);
 }
 

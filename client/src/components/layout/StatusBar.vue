@@ -262,7 +262,7 @@ const tokenCount = computed(() => {
   min-height: 28px;
   padding: 0 12px 2px;
   background: var(--main-bg);
-  font-size: 0.7857rem;
+  font-size: 0.78571rem;
   color: var(--muted);
   user-select: none;
   z-index: 10;
@@ -360,7 +360,7 @@ button.shortcut-hint:disabled,
   display: inline-block;
   padding: 2px 4px;
   font-family: inherit;
-  font-size: 0.7143rem;
+  font-size: 0.71429rem;
   font-weight: 500;
   line-height: 1;
   color: var(--text);
@@ -384,14 +384,14 @@ button.shortcut-hint:disabled,
 }
 
 .model-badge {
-  font-size: 0.7857rem;
+  font-size: 0.78571rem;
   font-weight: 500;
   color: var(--muted);
   font-family: ui-monospace, SFMono-Regular, "SF Mono", Menlo, Consolas, "Liberation Mono", monospace;
 }
 
 .token-count {
-  font-size: 0.7857rem;
+  font-size: 0.78571rem;
   color: var(--muted);
   font-variant-numeric: tabular-nums;
 }

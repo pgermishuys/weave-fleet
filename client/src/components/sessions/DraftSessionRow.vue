@@ -107,7 +107,7 @@ const label = computed(() => (props.draft.isStarting ? "Starting…" : "Draft"))
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
-  font-size: 0.9286rem;
+  font-size: 0.92857rem;
   line-height: 1.3;
 }
 
@@ -118,7 +118,7 @@ const label = computed(() => (props.draft.isStarting ? "Starting…" : "Draft"))
 .draft-row__meta {
   flex-shrink: 0;
   color: color-mix(in srgb, var(--muted) 80%, transparent);
-  font-size: 0.8571rem;
+  font-size: 0.85714rem;
   font-weight: 400;
   line-height: 1.3;
   white-space: nowrap;

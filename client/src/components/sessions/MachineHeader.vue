@@ -158,7 +158,7 @@ const tag = computed(() => (props.expanded === null || props.expanded === undefi
 
 :global(.machine-header__menu-name) {
   font-family: var(--font-mono, ui-monospace, monospace);
-  font-size: 0.8214rem;
+  font-size: 0.82143rem;
   font-weight: 600;
 }
 
@@ -201,7 +201,7 @@ const tag = computed(() => (props.expanded === null || props.expanded === undefi
   text-overflow: ellipsis;
   white-space: nowrap;
   font-family: var(--font-mono, ui-monospace, monospace);
-  font-size: 0.8214rem;
+  font-size: 0.82143rem;
   font-weight: 600;
   letter-spacing: 0.02em;
   transition: color var(--transition);
@@ -214,7 +214,7 @@ const tag = computed(() => (props.expanded === null || props.expanded === undefi
   background: color-mix(in srgb, var(--coral) 14%, transparent);
   color: var(--coral);
   font-family: var(--font-mono, ui-monospace, monospace);
-  font-size: 0.6786rem;
+  font-size: 0.67857rem;
   font-weight: 700;
   letter-spacing: 0.09em;
   text-transform: uppercase;
@@ -223,7 +223,7 @@ const tag = computed(() => (props.expanded === null || props.expanded === undefi
 .machine-header__note {
   margin-left: auto;
   flex-shrink: 0;
-  font-size: 0.7857rem;
+  font-size: 0.78571rem;
   color: color-mix(in srgb, var(--muted) 80%, transparent);
   font-variant-numeric: tabular-nums;
 }

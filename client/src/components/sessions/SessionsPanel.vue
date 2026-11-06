@@ -956,7 +956,7 @@ function handleCompleteDropZoneDrop(event: DragEvent): void {
   border-radius: var(--radius-btn);
   background: transparent;
   color: var(--text);
-  font-size: 0.9286rem;
+  font-size: 0.92857rem;
   font-weight: 600;
   cursor: pointer;
   transition: background var(--transition);
@@ -988,7 +988,7 @@ function handleCompleteDropZoneDrop(event: DragEvent): void {
   border-radius: var(--radius-btn);
   background: transparent;
   color: var(--muted);
-  font-size: 0.8571rem;
+  font-size: 0.85714rem;
   cursor: pointer;
   transition: background var(--transition), color var(--transition);
 }
@@ -1014,7 +1014,7 @@ function handleCompleteDropZoneDrop(event: DragEvent): void {
   border-radius: var(--radius-card);
   background: var(--card-bg);
   box-shadow: 0 12px 32px -12px rgba(0, 0, 0, 0.35);
-  font-size: 0.8571rem;
+  font-size: 0.85714rem;
 }
 
 .selection-bar__count {
@@ -1060,7 +1060,7 @@ function handleCompleteDropZoneDrop(event: DragEvent): void {
 .panel-header {
   margin: 0;
   padding: 8px 12px 6px;
-  font-size: 0.7143rem;
+  font-size: 0.71429rem;
   font-weight: 600;
   text-transform: uppercase;
   letter-spacing: 0.05em;
@@ -1082,7 +1082,7 @@ function handleCompleteDropZoneDrop(event: DragEvent): void {
   border-radius: var(--radius-btn);
   background: var(--card-bg);
   color: var(--text);
-  font-size: 0.9286rem;
+  font-size: 0.92857rem;
   font-weight: 500;
   transition: background var(--transition), border-color var(--transition), color var(--transition);
 }
@@ -1136,7 +1136,7 @@ function handleCompleteDropZoneDrop(event: DragEvent): void {
   border: 1px solid transparent;
   border-radius: var(--radius-btn);
   padding: 0 10px 0 30px;
-  font-size: 0.9286rem;
+  font-size: 0.92857rem;
   color: var(--text);
   outline: none;
   transition: background var(--transition), border-color var(--transition);
@@ -1161,7 +1161,7 @@ function handleCompleteDropZoneDrop(event: DragEvent): void {
   background: none;
   color: color-mix(in srgb, var(--muted) 80%, transparent);
   font: inherit;
-  font-size: 0.8571rem;
+  font-size: 0.85714rem;
   text-align: left;
   cursor: pointer;
 }
@@ -1213,7 +1213,7 @@ function handleCompleteDropZoneDrop(event: DragEvent): void {
 
 .sessions-feedback-banner__copy {
   margin: 0;
-  font-size: 0.7857rem;
+  font-size: 0.78571rem;
   color: var(--text);
 }
 
@@ -1224,7 +1224,7 @@ function handleCompleteDropZoneDrop(event: DragEvent): void {
   border-radius: 0;
   background: transparent;
   color: var(--muted);
-  font-size: 0.7857rem;
+  font-size: 0.78571rem;
   font-weight: 500;
   transition: background var(--transition), color var(--transition), border-color var(--transition);
 }
@@ -1252,14 +1252,14 @@ function handleCompleteDropZoneDrop(event: DragEvent): void {
 
 .sessions-feedback-state__title {
   margin: 0;
-  font-size: 0.8571rem;
+  font-size: 0.85714rem;
   font-weight: 600;
   color: var(--text);
 }
 
 .sessions-feedback-state__copy {
   margin: 0;
-  font-size: 0.7857rem;
+  font-size: 0.78571rem;
   color: var(--muted);
 }
 
@@ -1270,7 +1270,7 @@ function handleCompleteDropZoneDrop(event: DragEvent): void {
   border-radius: 0;
   background: transparent;
   color: var(--muted);
-  font-size: 0.7857rem;
+  font-size: 0.78571rem;
   font-weight: 500;
   transition: background var(--transition), color var(--transition), border-color var(--transition);
 }
@@ -1288,14 +1288,14 @@ function handleCompleteDropZoneDrop(event: DragEvent): void {
 
 .sessions-empty-state__title {
   margin: 0;
-  font-size: 0.8571rem;
+  font-size: 0.85714rem;
   font-weight: 600;
   color: var(--text);
 }
 
 .sessions-empty-state__copy {
   margin: 0;
-  font-size: 0.7857rem;
+  font-size: 0.78571rem;
   color: var(--muted);
 }
 
@@ -1331,7 +1331,7 @@ function handleCompleteDropZoneDrop(event: DragEvent): void {
   border: 2px dashed var(--muted);
   background: transparent;
   color: var(--muted);
-  font-size: 0.8571rem;
+  font-size: 0.85714rem;
   font-weight: 500;
   transition: all 0.2s ease;
   cursor: pointer;

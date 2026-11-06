@@ -30,7 +30,7 @@ const noPadding = computed(() => location.value.pathname.startsWith("/sessions/"
 .center__placeholder {
   padding: 12px 24px;
   border-bottom: 1px solid var(--border);
-  font-size: 0.7143rem;
+  font-size: 0.71429rem;
   font-weight: 600;
   letter-spacing: 0.05em;
   text-transform: uppercase;

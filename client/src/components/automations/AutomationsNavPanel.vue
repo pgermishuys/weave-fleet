@@ -190,7 +190,7 @@ function handleCreate(): void {
 .panel-header {
   margin: 0;
   padding: 14px 16px 10px;
-  font-size: 0.7143rem;
+  font-size: 0.71429rem;
   font-weight: 600;
   text-transform: uppercase;
   letter-spacing: 0.05em;
@@ -213,7 +213,7 @@ function handleCreate(): void {
   border-radius: var(--radius-btn);
   background: var(--bg);
   color: var(--text);
-  font-size: 0.8571rem;
+  font-size: 0.85714rem;
   font-weight: 500;
   transition: background-color var(--transition), border-color var(--transition);
 }
@@ -293,7 +293,7 @@ function handleCreate(): void {
   flex: 1 1 auto;
   min-width: 0;
   overflow: hidden;
-  font-size: 0.9286rem;
+  font-size: 0.92857rem;
   line-height: 1.3;
   text-overflow: ellipsis;
   white-space: nowrap;
@@ -306,7 +306,7 @@ function handleCreate(): void {
   overflow: hidden;
   color: var(--coral);
   font-family: var(--font-mono-stack);
-  font-size: 0.8214rem;
+  font-size: 0.82143rem;
   text-overflow: ellipsis;
   white-space: nowrap;
 }
@@ -314,7 +314,7 @@ function handleCreate(): void {
 .automation-row__meta {
   flex-shrink: 0;
   color: color-mix(in srgb, var(--muted) 80%, transparent);
-  font-size: 0.8571rem;
+  font-size: 0.85714rem;
   font-variant-numeric: tabular-nums;
   font-weight: 400;
   line-height: 1.3;
@@ -327,7 +327,7 @@ function handleCreate(): void {
   border-radius: 999px;
   padding: 0 7px;
   color: var(--muted);
-  font-size: 0.7857rem;
+  font-size: 0.78571rem;
   font-weight: 500;
 }
 
@@ -363,7 +363,7 @@ function handleCreate(): void {
 
 .empty-message {
   margin: 0;
-  font-size: 0.8571rem;
+  font-size: 0.85714rem;
   color: var(--muted);
 }
 

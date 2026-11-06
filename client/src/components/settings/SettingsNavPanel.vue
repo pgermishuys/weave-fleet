@@ -148,7 +148,7 @@ function selectSection(sectionId: SettingsSectionId): void {
           <span
             v-if="item.id === 'updates' && updatesWaiting"
             :class="showUpdateDot ? 'ml-1.5' : 'ml-auto'"
-            class="rounded-full bg-accent px-1.5 text-[0.7143rem] font-semibold leading-4 text-white"
+            class="rounded-full bg-accent px-1.5 text-[0.71429rem] font-semibold leading-4 text-white"
             :aria-label="`${updatesWaiting} ${updatesWaiting === 1 ? 'machine' : 'machines'} can update`"
             data-testid="updates-badge"
           >{{ updatesWaiting }}</span>
@@ -174,7 +174,7 @@ function selectSection(sectionId: SettingsSectionId): void {
 .panel-header {
   margin: 0;
   padding: 14px 16px 10px;
-  font-size: 0.7143rem;
+  font-size: 0.71429rem;
   font-weight: 600;
   text-transform: uppercase;
   letter-spacing: 0.05em;
@@ -199,7 +199,7 @@ function selectSection(sectionId: SettingsSectionId): void {
 .settings-nav__group-label {
   margin: 8px 0 2px;
   padding: 0 12px;
-  font-size: 0.7143rem;
+  font-size: 0.71429rem;
   font-weight: 600;
   text-transform: uppercase;
   letter-spacing: 0.05em;
@@ -218,7 +218,7 @@ function selectSection(sectionId: SettingsSectionId): void {
   border-radius: var(--radius-btn);
   background: transparent;
   color: var(--muted);
-  font-size: 0.8571rem;
+  font-size: 0.85714rem;
   font-weight: 500;
   text-align: left;
   transition: background-color var(--transition), border-color var(--transition), color var(--transition);

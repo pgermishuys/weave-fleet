@@ -352,7 +352,7 @@ async function onAllow(provider: string): Promise<void> {
   border-radius: 999px;
   background: transparent;
   color: var(--muted);
-  font-size: 0.7857rem;
+  font-size: 0.78571rem;
   font-weight: 500;
   font-variant-numeric: tabular-nums;
   white-space: nowrap;
@@ -414,7 +414,7 @@ async function onAllow(provider: string): Promise<void> {
   border-radius: var(--radius-panel);
   background: var(--card-bg);
   box-shadow: var(--menu-shadow);
-  font-size: 0.8571rem;
+  font-size: 0.85714rem;
 }
 
 .usage-pop__provider + .usage-pop__provider {
@@ -429,7 +429,7 @@ async function onAllow(provider: string): Promise<void> {
   gap: 8px;
   margin: 0 0 2px;
   color: var(--text);
-  font-size: 0.8571rem;
+  font-size: 0.85714rem;
   font-weight: 600;
 }
 
@@ -485,7 +485,7 @@ async function onAllow(provider: string): Promise<void> {
   grid-column: 1 / -1;
   margin: 0;
   color: var(--status-waiting);
-  font-size: 0.7857rem;
+  font-size: 0.78571rem;
 }
 
 .usage-pop__percent {
@@ -508,7 +508,7 @@ async function onAllow(provider: string): Promise<void> {
   border-radius: 6px;
   background: var(--accent);
   color: #fff;
-  font-size: 0.8571rem;
+  font-size: 0.85714rem;
   font-weight: 500;
 }
 
@@ -529,7 +529,7 @@ async function onAllow(provider: string): Promise<void> {
 .usage-pop__machine {
   margin: 0 0 6px;
   color: var(--muted);
-  font-size: 0.7143rem;
+  font-size: 0.71429rem;
   font-weight: 600;
   letter-spacing: 0.06em;
   text-transform: uppercase;

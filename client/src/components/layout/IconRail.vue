@@ -415,7 +415,7 @@ function handleSelect(item: RailItem): void {
 }
 
 .rail-label {
-  font-size: 0.7143rem;
+  font-size: 0.71429rem;
   font-weight: 500;
   line-height: 1;
   white-space: nowrap;
@@ -443,7 +443,7 @@ function handleSelect(item: RailItem): void {
   right: 2px;
   background: var(--error);
   color: #fff;
-  font-size: 0.6429rem;
+  font-size: 0.64286rem;
   font-weight: 700;
   min-width: 14px;
   height: 14px;
@@ -463,7 +463,7 @@ function handleSelect(item: RailItem): void {
   transform: translate(0, -50%);
   background: var(--color-popover);
   color: var(--color-popover-foreground);
-  font-size: 0.7857rem;
+  font-size: 0.78571rem;
   padding: 4px 10px;
   border-radius: 0;
   white-space: nowrap;

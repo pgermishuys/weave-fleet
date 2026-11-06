@@ -159,7 +159,7 @@ function handleExpand(): void {
 
 .collapsed-rail__progress-count {
   position: absolute;
-  font-size: 0.7143rem;
+  font-size: 0.71429rem;
   font-weight: 700;
   line-height: 1;
 }
@@ -169,7 +169,7 @@ function handleExpand(): void {
   flex-direction: column;
   align-items: center;
   gap: 2px;
-  font-size: 0.7143rem;
+  font-size: 0.71429rem;
   font-weight: 700;
   color: var(--muted);
 }

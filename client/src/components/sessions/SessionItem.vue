@@ -944,7 +944,7 @@ function removeSessionFromStore(): void {
             >
               <span>Fork</span>
               <span
-                class="text-[0.8214rem] text-muted"
+                class="text-[0.82143rem] text-muted"
                 data-testid="session-context-fork-note"
               >{{ forkDisabledReason }}</span>
             </span>
@@ -1299,13 +1299,13 @@ function removeSessionFromStore(): void {
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
-  font-size: 0.9286rem;
+  font-size: 0.92857rem;
   line-height: 1.3;
 }
 
 .session-meta {
   flex-shrink: 0;
-  font-size: 0.8571rem;
+  font-size: 0.85714rem;
   font-weight: 400;
   line-height: 1.3;
   color: color-mix(in srgb, var(--muted) 80%, transparent);
@@ -1334,7 +1334,7 @@ function removeSessionFromStore(): void {
   border-radius: 999px;
   background: color-mix(in srgb, var(--running) 14%, transparent);
   color: var(--running);
-  font-size: 0.7857rem;
+  font-size: 0.78571rem;
   font-weight: 600;
   font-variant-numeric: tabular-nums;
 }
@@ -1390,7 +1390,7 @@ function removeSessionFromStore(): void {
 }
 
 .session-progress__count {
-  font-size: 0.8571rem;
+  font-size: 0.85714rem;
   line-height: 1.3;
   color: var(--muted);
   font-variant-numeric: tabular-nums;
