@@ -117,6 +117,30 @@ public sealed class SessionScreenshotStoreTests : IDisposable
     }
 
     [Fact]
+    public async Task A_session_s_first_screenshot_is_kept_while_old_ones_are_being_cleared()
+    {
+        // Each save makes its session's folder, empty until the file is in it: the cleanup mustn't take it in between.
+        using var stop = new CancellationTokenSource();
+        var clearing = Task.Run(() =>
+        {
+            while (!stop.IsCancellationRequested)
+                _store.DeleteOlderThan(DateTimeOffset.UtcNow - SessionScreenshotStore.Retention);
+        });
+
+        var lost = 0;
+        for (var i = 0; i < 1000; i++)
+        {
+            await _store.DeleteSessionAsync("ses-1");
+            if (await _store.SaveAsync("ses-1", Png) is null)
+                lost++;
+        }
+
+        await stop.CancelAsync();
+        await clearing;
+        lost.ShouldBe(0);
+    }
+
+    [Fact]
     public void Clearing_old_screenshots_before_any_were_taken_does_nothing()
     {
         var store = new SessionScreenshotStore(Path.Combine(_root, "never-made"), NullLogger<SessionScreenshotStore>.Instance);

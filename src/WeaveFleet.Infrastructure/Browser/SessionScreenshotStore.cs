@@ -18,6 +18,12 @@ internal sealed partial class SessionScreenshotStore(string root, ILogger<Sessio
     private const string Prefix = "shot_";
     private const string Extension = ".png";
 
+    /// <summary>
+    /// Held while a save makes its session's folder and file, and while the cleanup drops an empty folder: a save's
+    /// folder is empty until its file is in it, and the cleanup would otherwise take it in between.
+    /// </summary>
+    private readonly Lock _folders = new();
+
     public async Task<string?> SaveAsync(string sessionId, byte[] png, CancellationToken ct = default)
     {
         ArgumentNullException.ThrowIfNull(png);
@@ -28,8 +34,15 @@ internal sealed partial class SessionScreenshotStore(string root, ILogger<Sessio
         var path = Path.Combine(root, sessionId, id + Extension);
         try
         {
-            Directory.CreateDirectory(Path.GetDirectoryName(path)!);
-            await File.WriteAllBytesAsync(path, png, ct).ConfigureAwait(false);
+            FileStream file;
+            lock (_folders)
+            {
+                Directory.CreateDirectory(Path.GetDirectoryName(path)!);
+                file = new FileStream(path, FileMode.CreateNew, FileAccess.Write, FileShare.None, bufferSize: 4096, useAsync: true);
+            }
+
+            await using (file.ConfigureAwait(false))
+                await file.WriteAsync(png, ct).ConfigureAwait(false);
             return id;
         }
         catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
@@ -91,8 +104,11 @@ internal sealed partial class SessionScreenshotStore(string root, ILogger<Sessio
                     deleted++;
                 }
 
-                if (!Directory.EnumerateFileSystemEntries(folder).Any())
-                    Directory.Delete(folder);
+                lock (_folders)
+                {
+                    if (!Directory.EnumerateFileSystemEntries(folder).Any())
+                        Directory.Delete(folder);
+                }
             }
             catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
             {
