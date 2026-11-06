@@ -72,6 +72,9 @@ jobs:
 
       - name: Report unit test results
         if: success() || failure()
+        # Reporting is cosmetic: a GitHub API blip (a 404 updating a check run it just created, run 42178932750) must not
+        # fail a job whose tests passed. The test step above still gates on its own exit code.
+        continue-on-error: true
         uses: dorny/test-reporter@v3
         with:
           name: Unit Test Results
@@ -206,6 +209,9 @@ jobs:
 
       - name: Report live test results
         if: success() || failure()
+        # Reporting is cosmetic: a GitHub API blip (a 404 updating a check run it just created, run 42178932750) must not
+        # fail a job whose tests passed. The test step above still gates on its own exit code.
+        continue-on-error: true
         uses: dorny/test-reporter@v3
         with:
           name: Live Test Results
@@ -290,6 +296,9 @@ jobs:
 
       - name: Report client test results
         if: success() || failure()
+        # Reporting is cosmetic: a GitHub API blip (a 404 updating a check run it just created, run 42178932750) must not
+        # fail a job whose tests passed. The test step above still gates on its own exit code.
+        continue-on-error: true
         uses: dorny/test-reporter@v3
         with:
           name: Client Test Results (${{ matrix.shard }}/2)
@@ -650,6 +659,9 @@ jobs:
 
       - name: Report E2E test results
         if: success() || failure()
+        # Reporting is cosmetic: a GitHub API blip (a 404 updating a check run it just created, run 42178932750) must not
+        # fail a job whose tests passed. The test step above still gates on its own exit code.
+        continue-on-error: true
         uses: dorny/test-reporter@v3
         with:
           name: E2E Results
