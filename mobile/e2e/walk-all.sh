@@ -93,6 +93,11 @@ if [ "$PLATFORM" = ios ]; then
   xcrun simctl spawn "$UDID" defaults write com.apple.keyboard.preferences DidShowContinuousPathIntroduction -bool true
   xcrun simctl spawn "$UDID" defaults write com.apple.keyboard.preferences KeyboardContinuousPathEnabled -bool false
   xcrun simctl spawn "$UDID" defaults read com.apple.keyboard.preferences
+  # On the runner the simulator's push daemon reconnects to Apple's push sandbox about 8 times a second from boot (no
+  # certificate, so it drops each connection and dials again at once), logging ~200 lines a time: 180 MB of
+  # device-simulator.log per walk, and load on a runner already at load averages of 100 to 300. The app doesn't use push.
+  xcrun simctl spawn "$UDID" launchctl disable system/com.apple.apsd || true
+  xcrun simctl spawn "$UDID" launchctl bootout system/com.apple.apsd || true
 fi
 appearance light
 if ! maestro_run --test-output-dir "$OUT/pair" flows/pair.yaml; then
@@ -128,17 +133,6 @@ for i in 1 2; do
     ready
   done
 done
-# OpenCode's `--version` probe has a 10 s limit, and a runner still busy with the last walk's session can miss it: Fleet
-# then calls OpenCode not working, the New session chip reads "No harness" and the flow's ".*Default.*" never shows (dark
-# start-session, run 42117173251; all three tries failed). Wait, up to 3 minutes, until Fleet reports a harness ready.
-wait_harness_ready() {
-  for _ in $(seq 36); do
-    curl -sS -m 30 -H "Authorization: Bearer $FLEET_TOKEN" "$FLEET_URL/api/harnesses" 2>/dev/null | python3 -c 'import json,sys
-sys.exit(0 if any(h.get("available") and h.get("userEnabled") for h in json.load(sys.stdin)) else 1)' 2>/dev/null && return 0
-    sleep 5
-  done
-  echo "no harness reported ready after 3 minutes"
-}
 # Starting a session from the phone, in both schemes. Its own pass, after the walks: the sessions it starts would
 # otherwise be in the list the second walk reads.
 for scheme in light dark; do
@@ -148,7 +142,6 @@ for scheme in light dark; do
   # Maestro now and then exits mid-command with no error of its own (as in the walks): try again, up to three times.
   # A try that got as far as Send leaves its session in the list; the next one adds another, which is harmless.
   for try in 1 2 3; do
-    wait_harness_ready
     harness_states "before $scheme try $try"
     maestro_run --test-output-dir "$OUT/$PLATFORM-$scheme-start-try$try" flows/start-session.yaml && break
     harness_states "after $scheme try $try (failed)" show
