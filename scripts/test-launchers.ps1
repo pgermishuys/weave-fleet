@@ -211,6 +211,13 @@ if ($output -notmatch 'Listening on 127\.0\.0\.1:5512' -or $output -notmatch 'Ov
 $task = Get-ScheduledTask -TaskName $taskName -ErrorAction SilentlyContinue
 if (-not $task -or $task.Actions[0].Arguments -notmatch "--host '127\.0\.0\.1'") { Fail "fleet node up --ssh-only didn't register loopback" }
 Invoke-Fleet 'node uninstall-service' | Out-Null
+# A data directory a plain Fleet already runs from: it stops before it registers anything.
+$sharedData = Join-Path $work 'shared data'
+New-Item -ItemType Directory -Path $sharedData -Force | Out-Null
+Set-Content -Path (Join-Path $sharedData 'fleet.instance.json') -Value '{}'
+$output = Invoke-Fleet "node up --lan --port 5512 --data-dir `"$sharedData`""
+if ($script:fleetExitCode -eq 0 -or $output -notmatch 'belongs to the Fleet you open in a browser\. Run fleet node up --profile node') { Fail "fleet node up on a plain Fleet's data directory should stop: $output" }
+if (Get-ScheduledTask -TaskName $taskName -ErrorAction SilentlyContinue) { Fail "fleet node up on a plain Fleet's data directory registered the task" }
 $output = Invoke-Fleet 'node up --lan --ssh-only'
 if ($script:fleetExitCode -eq 0) { Fail "fleet node up --lan --ssh-only should fail: $output" }
 $output = Invoke-Fleet 'node --lan'

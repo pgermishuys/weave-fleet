@@ -563,6 +563,11 @@ service_platform_name() {
 
 node_up() {
   set_service_target
+  # A node can't share a data directory with a Fleet that is already running there; stop before anything changes.
+  if [ ! -f "$TARGET" ] && [ -f "$DATA_DIR/fleet.instance.json" ]; then
+    echo "Error: $DATA_DIR belongs to the Fleet you open in a browser. Run fleet node up --profile node to give this machine its own." >&2
+    exit 1
+  fi
   node_up_choose
   case "$UP_CHOICE" in
     tailscale)

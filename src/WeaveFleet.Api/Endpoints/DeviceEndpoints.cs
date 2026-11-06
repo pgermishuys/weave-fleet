@@ -6,6 +6,7 @@ using WeaveFleet.Api.Contracts;
 using WeaveFleet.Application.Configuration;
 using WeaveFleet.Application.Devices;
 using WeaveFleet.Application.Diagnostics;
+using WeaveFleet.Application.Machines;
 using WeaveFleet.Domain.Entities;
 
 namespace WeaveFleet.Api.Endpoints;
@@ -73,15 +74,17 @@ public static class DeviceEndpoints
 
         // A code for another Fleet (kind "machine"), made by `fleet node pair` on the machine itself. Unlike the phone
         // code it needs no web app, so a node can make one.
-        machine.MapPost("/pairing/code", (
+        machine.MapPost("/pairing/code", async (
             PairingCodeStore codes,
             MachineIdentityStore identities,
-            LoopbackAuthPolicy policy) =>
+            LoopbackAuthPolicy policy,
+            TailnetName tailnet,
+            CancellationToken ct) =>
         {
             var identity = identities.Get();
             var code = codes.Create();
             var addresses = policy.IsRemoteReachable
-                ? MachineEndpoints.ReachableAddresses(fleetOptions).Select(address => address.Url).ToList()
+                ? MachineEndpoints.ReachableAddresses(fleetOptions, await tailnet.GetAsync(ct)).Select(address => address.Url).ToList()
                 : [];
             return Results.Ok(new MachinePairingCodeResponse(code.ManualCode, code.ExpiresAt, identity.Id, identity.Name ?? Environment.MachineName, addresses, MachineEndpoints.PairingLink(addresses, code.ManualCode)));
         })

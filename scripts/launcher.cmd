@@ -664,6 +664,10 @@ set "TS_IP="
 where tailscale >nul 2>&1 && for /f "delims=" %%A in ('tailscale ip -4 2^>nul') do if not defined TS_IP set "TS_IP=%%A"
 set "CURRENT_HOST="
 for /f "usebackq delims=" %%H in (`%PS_CMD% -NoProfile -Command "$t = Get-ScheduledTask -TaskName 'Fleet node' -ErrorAction SilentlyContinue; if ($t -and $t.Actions[0].Arguments -match '--host ''([^'']*)''') { $Matches[1] }"`) do set "CURRENT_HOST=%%H"
+if not defined CURRENT_HOST if exist "%DATA_DIR%\fleet.instance.json" (
+    echo Error: %DATA_DIR% belongs to the Fleet you open in a browser. Run fleet node up --profile node to give this machine its own. >&2
+    exit /b 1
+)
 set "RECOMMENDED=ssh-only"
 if defined TS_IP set "RECOMMENDED=tailscale"
 if "!CURRENT_HOST!"=="0.0.0.0" set "RECOMMENDED=lan"
@@ -683,12 +687,15 @@ if not defined UP_CHOICE (
     echo   1^) Tailscale        only your devices can reach it!MARK_TS!
     echo   2^) Local network    anyone on it can try a code!MARK_LAN!
     echo   3^) Only over SSH    listens on this machine only!MARK_SSH!
-    choice /c 123 /n /m "Choose 1-3: "
-    if errorlevel 4 (
+    set "UP_DEFAULT=1"
+    if "!RECOMMENDED!"=="lan" set "UP_DEFAULT=2"
+    if "!RECOMMENDED!"=="ssh-only" set "UP_DEFAULT=3"
+    %PS_CMD% -NoProfile -Command "if ([Console]::IsInputRedirected) { exit 1 }"
+    if errorlevel 1 (
         echo Error: fleet node up needs a choice when it can't ask. Add --tailscale, --lan or --ssh-only. >&2
         exit /b 1
     )
-    if errorlevel 3 (set "UP_CHOICE=ssh-only") else if errorlevel 2 (set "UP_CHOICE=lan") else (set "UP_CHOICE=tailscale")
+    call :up_ask
     echo.
 )
 if "!UP_CHOICE!"=="tailscale" (
@@ -748,6 +755,14 @@ if "!UP_CHOICE!"=="ssh-only" (
     echo.
     echo From the Fleet you work from, open Settings ^> Machines ^> Add a machine ^> Over SSH.
 )
+exit /b 0
+
+rem Asks until the answer is 1-3; Enter takes the default.
+:up_ask
+set "UP_ANSWER="
+set /p "UP_ANSWER=Choose 1-3 [!UP_DEFAULT!]: "
+if not defined UP_ANSWER set "UP_ANSWER=!UP_DEFAULT!"
+if "!UP_ANSWER!"=="1" (set "UP_CHOICE=tailscale") else if "!UP_ANSWER!"=="2" (set "UP_CHOICE=lan") else if "!UP_ANSWER!"=="3" (set "UP_CHOICE=ssh-only") else goto :up_ask
 exit /b 0
 
 rem One finished step, with a check mark. PowerShell draws the mark because a batch file can't hold it safely.
