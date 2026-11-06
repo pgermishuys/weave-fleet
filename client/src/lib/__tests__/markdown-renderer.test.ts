@@ -163,3 +163,39 @@ describe("text direction", () => {
     expect(html).not.toMatch(/<code[^>]*dir=/);
   });
 });
+
+describe("ordered lists after a line of text", () => {
+  const render = (src: string) => createMarkdownRenderer().render(src);
+
+  it("draws a list that starts above 1 as a list, not part of the paragraph", () => {
+    const html = render("**Follow-ups**\n3. c\n4. d");
+
+    expect(html).toContain("<ol");
+    expect(html).toContain("<li");
+    expect(html).not.toContain("3. c");
+  });
+
+  it("handles the 1) style", () => {
+    expect(render("Next steps\n2) b\n3) c")).toContain("<ol");
+  });
+
+  it("leaves a number inside a sentence alone", () => {
+    const html = render("We shipped\nversion 3. It works");
+
+    expect(html).not.toContain("<ol");
+  });
+
+  it("leaves code fences alone", () => {
+    const html = render("```\ntext\n3. c\n```");
+
+    expect(html).not.toContain("<ol");
+    expect(html).toContain("3. c");
+  });
+
+  it("keeps a nested list in its parent item", () => {
+    const html = render("- a\n  1. x\n  2. y\n- b");
+
+    expect((html.match(/<ul/g) ?? []).length).toBe(1);
+    expect((html.match(/<ol/g) ?? []).length).toBe(1);
+  });
+});

@@ -27,6 +27,7 @@ import powershell from "highlight.js/lib/languages/powershell";
 import ruby from "highlight.js/lib/languages/ruby";
 import sql from "highlight.js/lib/languages/sql";
 import swift from "highlight.js/lib/languages/swift";
+import { separateOrderedLists } from "@/lib/separate-ordered-lists";
 import { bareFileNamesAreText, fileReferences } from "@/lib/file-references";
 
 hljs.registerLanguage("bash", bash);
@@ -254,6 +255,13 @@ function textDirection(md: MarkdownIt): void {
   });
 }
 
+/** Agents write "**Follow-ups**\n3. a" with no blank line; CommonMark would fold that into the paragraph. */
+function orderedListsAfterText(md: MarkdownIt): void {
+  md.core.ruler.before("block", "ordered-lists-after-text", (state) => {
+    state.src = separateOrderedLists(state.src);
+  });
+}
+
 export function createMarkdownRenderer(): MarkdownIt {
   return new MarkdownIt({
     html: false,
@@ -274,5 +282,5 @@ export function createMarkdownRenderer(): MarkdownIt {
 
       return `<pre class="hljs"><code>${escapeHtml(code)}</code></pre>`;
     },
-  }).use(folds).use(taskLists).use(bareFileNamesAreText).use(fileReferences).use(textDirection);
+  }).use(orderedListsAfterText).use(folds).use(taskLists).use(bareFileNamesAreText).use(fileReferences).use(textDirection);
 }
