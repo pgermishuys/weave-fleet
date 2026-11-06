@@ -168,8 +168,15 @@ public sealed partial class SessionInterruptions(
             || (tool.State is ToolUseState.Error && tool.Error == CutOffCall.Message));
         if (open is not null)
             return (false, DescribeCall(open));
+
+        // A message that ended on its tool calls was waiting for the model to read their results: when the harness stops
+        // (OpenCode 2 ends a running call with "Killed by SIGTERM"), the calls complete but nothing answers them.
+        if (EndedOnToolCalls(last.Finish) && last.Parts.OfType<ToolUsePart>().LastOrDefault() is { } lastTool)
+            return (false, DescribeCall(lastTool));
         return (!string.IsNullOrEmpty(last.Finish) || last.Error is not null, null);
     }
+
+    private static bool EndedOnToolCalls(string? finish) => finish is "tool-calls" or "tool_calls" or "tool_use";
 
     /// <summary>The call's name, with the command it ran when it has one: "bash (bun test)".</summary>
     private static string DescribeCall(ToolUsePart tool)
