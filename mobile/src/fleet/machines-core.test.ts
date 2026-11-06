@@ -53,4 +53,18 @@ describe("MachinesStore", () => {
     await new MachinesStore(storage).add(machine("a/b c"));
     expect(data.has("fleet.machine.a_b_c")).toBe(true);
   });
+
+  test("an update keeps the address in use and the list, and survives a reload", async () => {
+    const { storage } = memory();
+    const store = new MachinesStore(storage);
+    await store.add(machine("a"));
+    const addresses = [{ url: "https://a.example", kind: "other" as const, learned: false }, { url: "http://192.168.1.42:2113", kind: "lan" as const, learned: true }];
+    await store.update("a", { baseUrl: "http://192.168.1.42:2113", addresses });
+    await store.update("gone", { baseUrl: "http://x" });
+    const again = await new MachinesStore(storage).load();
+    expect(again).toHaveLength(1);
+    expect(again[0].baseUrl).toBe("http://192.168.1.42:2113");
+    expect(again[0].addresses).toEqual(addresses);
+    expect(again[0].token).toBe("t1");
+  });
 });

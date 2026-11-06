@@ -12,7 +12,7 @@ platform's own widgets.
   Kit, which shows each one in each state, in light and dark.
 - `src/fleet/`: pairing, the connection to a machine, the session stream.
 - `src/app/`: screens (Expo Router).
-- `app.config.ts`, `eas.json`, `plugins/`: app config, EAS build profiles, and the walk-through's cleartext plugin.
+- `app.config.ts`, `eas.json`, `plugins/`: app config, EAS build profiles, and the plugin that lets the app reach a machine on the home network.
 - `e2e/`: the scratch Fleet and the Maestro walk-through.
 
 The conversation logic isn't ported: `metro.config.js` lets the app import the web client's `client/src/lib` files
@@ -58,8 +58,11 @@ The screenshots are the artifacts `mobile-android-shots` and `mobile-ios-shots`,
   for a pick), opens it, picks in the WebView and sends the pick. `e2e/check-pages.sh` runs the same exchange against the
   scratch Fleet's API, without a phone.
 - `e2e/flows/pair.yaml` and `walk.yaml` are the flows; `e2e/walk-all.sh` runs them and switches the appearance.
-- `FLEET_E2E=1` at prebuild time lets the app talk plain http to `localhost` and `127.0.0.1` only (Android network
-  security config, iOS `NSAllowsLocalNetworking`). Without it the app is https only.
+- `FLEET_E2E=1` at prebuild time builds the walk-through variant: it runs its own JS, never an over-the-air update.
+- Pairing takes an https address, or plain http to `localhost` and `127.0.0.1` (the walk-through's Fleet). Once paired,
+  the app learns the machine's other addresses and may use plain http to its Tailscale and home-network ones, only
+  after the machine's id answers there (`src/fleet/routes-core.ts`; `plugins/with-home-network.ts` lets the platforms
+  open them).
 
 The checks job (tokens, typecheck, tests) runs on every change to `mobile/**`, `client/src/lib/**`, the tool-card
 component and `main.css`.

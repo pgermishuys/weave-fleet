@@ -23,6 +23,12 @@ public static class FleetClaims
     /// <summary>The authorization policy for owner-only endpoints.</summary>
     public const string MachineOwnerPolicy = "MachineOwner";
 
+    /// <summary>Whether <paramref name="user"/> is a paired device (a phone), not an agent.</summary>
+    public static bool IsDevice(ClaimsPrincipal user)
+        => user.Identity?.IsAuthenticated == true
+            && !user.HasClaim(BearerTokenHandler.MethodClaim, BearerTokenHandler.AgentMethod)
+            && user.HasClaim(c => c.Type == DeviceId);
+
     public static bool IsOwner(ClaimsPrincipal user)
     {
         if (user.Identity?.IsAuthenticated != true)

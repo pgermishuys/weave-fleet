@@ -1,8 +1,15 @@
 // The phone's list of paired machines. Pure: the storage (Keychain/Keystore on a phone) comes in from outside.
+import type { MachineAddress } from "~/fleet/routes-core";
+
 export interface Machine {
   machineId: string;
   machineName: string;
+  /** The address in use: the one that answered as this machine last (see routes-core). Every request and socket uses it. */
   baseUrl: string;
+  /** Every address the machine can be reached at, in the order to try them. Missing until it first reports them. */
+  addresses?: MachineAddress[];
+  /** The owner put the addresses in an order on this phone, so home's order no longer replaces it. */
+  ownOrder?: boolean;
   token: string;
   deviceId: string;
   pairedAt: number;
@@ -51,6 +58,16 @@ export class MachinesStore {
     await this.storage.set(keyOf(machine.machineId), JSON.stringify(machine));
     this.list = [...this.list.filter((m) => m.machineId !== machine.machineId), machine];
     await this.storage.set(INDEX_KEY, JSON.stringify(this.list.map((m) => m.machineId)));
+    this.emit();
+  }
+
+  /** Saves a change to a paired machine's address in use or its addresses. Nothing happens for one it forgot meanwhile. */
+  async update(machineId: string, patch: Partial<Pick<Machine, "baseUrl" | "addresses" | "ownOrder">>): Promise<void> {
+    const current = this.get(machineId);
+    if (!current) return;
+    const next = { ...current, ...patch };
+    this.list = this.list.map((m) => (m.machineId === machineId ? next : m));
+    await this.storage.set(keyOf(machineId), JSON.stringify(next));
     this.emit();
   }
 

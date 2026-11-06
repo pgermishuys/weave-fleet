@@ -87,7 +87,10 @@ If home is off or unreachable, notifications stop for every machine, and the inb
   machine (home or any machine the phone has a key for), the folder (recent ones first, then the machine's
   repositories, or no folder), where in a repository (a new worktree or the folder itself), the harness, agent and
   model. They start where you left them last time on that machine. **Start** opens the session.
-- **Machines**: which machines the phone reaches, and why not when it can't.
+- **Machines**: which machines the phone reaches, and why not when it can't. A machine with several addresses says how
+  the phone reaches it ("Connected over Tailscale", "Connected on your network · Tailscale isn't answering") and lists
+  them in the order the phone tries them, with arrows to reorder; see
+  [One machine, several addresses](machines.md#one-machine-several-addresses).
 - **A session**: the header says the machine and what it's doing. Each run of tool calls is one row ("Read 4 files ·
   edited 1"); tap it for the steps and a step for its diff or output. When the agent asks, the ask replaces the
   composer. The send button is **Send** when idle, **Queue** while the agent works and **Stop** when there's nothing
