@@ -73,6 +73,9 @@ public sealed partial class SessionInterruptions(
     /// <summary>How many of a session's newest messages the history check reads.</summary>
     private const int HistoryWindow = 12;
 
+    /// <summary>How many characters of a command the call's description keeps.</summary>
+    private const int CommandLimit = 60;
+
     private static readonly TimeSpan GitTimeout = TimeSpan.FromSeconds(10);
 
     public bool Enabled => options.Harness.RestartContinue;
@@ -159,10 +162,28 @@ public sealed partial class SessionInterruptions(
         if (last is not { Role: "assistant" })
             return (false, null);
 
-        var open = last.Parts.OfType<ToolUsePart>().LastOrDefault(tool => tool.State is ToolUseState.Pending or ToolUseState.Running);
+        // History read outside a turn shows a call that never finished as failed with CutOffCall.Message.
+        var open = last.Parts.OfType<ToolUsePart>().LastOrDefault(tool =>
+            tool.State is ToolUseState.Pending or ToolUseState.Running
+            || (tool.State is ToolUseState.Error && tool.Error == CutOffCall.Message));
         if (open is not null)
-            return (false, open.ToolName);
+            return (false, DescribeCall(open));
         return (!string.IsNullOrEmpty(last.Finish) || last.Error is not null, null);
+    }
+
+    /// <summary>The call's name, with the command it ran when it has one: "bash (bun test)".</summary>
+    private static string DescribeCall(ToolUsePart tool)
+    {
+        if (tool.Arguments.ValueKind == JsonValueKind.Object
+            && tool.Arguments.TryGetProperty("command", out var command)
+            && command.ValueKind == JsonValueKind.String
+            && command.GetString()?.Trim() is { Length: > 0 } text)
+        {
+            var line = text.Split('\n', 2)[0].Trim();
+            return $"{tool.ToolName} ({(line.Length > CommandLimit ? line[..CommandLimit] + "…" : line)})";
+        }
+
+        return tool.ToolName;
     }
 
     private async Task<int?> CountChangedFilesAsync(string sessionId)
@@ -183,16 +204,36 @@ public sealed partial class SessionInterruptions(
         }
     }
 
-    /// <summary>Continue: sends "Continue where you left off." as the user's own message. Only one caller gets to send it.</summary>
+    /// <summary>
+    /// What Continue sends: names the call that didn't finish and the files changed, when Fleet stored them. With neither
+    /// (or a lost question), the plain "Continue where you left off.".
+    /// </summary>
+    internal static string ContinueMessage(SessionInterruption interruption)
+    {
+        var call = interruption.Waiting ? null : interruption.LastCall;
+        var files = interruption.Waiting ? null : interruption.ChangedFiles;
+        if (string.IsNullOrWhiteSpace(call) && files is not > 0)
+            return TurnRetryService.ContinueText;
+
+        var text = "Fleet restarted and cut off your last turn.";
+        if (!string.IsNullOrWhiteSpace(call))
+            text += $" The call that didn't finish: {call}.";
+        if (files is > 0)
+            text += $" {files} {(files == 1 ? "file" : "files")} changed so far, still on disk.";
+        return text + " Check where you got to and continue.";
+    }
+
+    /// <summary>Continue: sends <see cref="ContinueMessage"/> as the user's own message. Only one caller gets to send it.</summary>
     public async Task<Result<Unit>> ContinueAsync(string sessionId, CancellationToken ct = default)
     {
-        if (!Enabled || await interruptions.RemoveAsync(sessionId).ConfigureAwait(false) is null)
+        var interruption = Enabled ? await interruptions.RemoveAsync(sessionId).ConfigureAwait(false) : null;
+        if (interruption is null)
             return FleetError.NotFoundFor(nameof(SessionInterruption), sessionId);
 
         await BroadcastAsync(sessionId, null, ct).ConfigureAwait(false);
         var sent = await prompting.PromptSessionAsync(
             sessionId,
-            TurnRetryService.ContinueText,
+            ContinueMessage(interruption),
             new PromptOptions { Delivery = PromptDelivery.Queue },
             ct).ConfigureAwait(false);
         if (!sent.IsSuccess)

@@ -42,6 +42,7 @@ import { useMemoryNotices } from "@/composables/use-memory-notices";
 import { useDreamNotices } from "@/composables/use-dream-notices";
 import { useModsRuntimeStore } from "@/stores/mods-runtime";
 import { useUpdateNotices } from "@/composables/use-update-notices";
+import { useRestartNotice } from "@/composables/use-restart-notice";
 import { useFleetUpdateNotices } from "@/composables/use-fleet-update-notices";
 import { useStaleWindowNotice } from "@/composables/use-stale-window-notice";
 import { useSidebarMobile } from "@/composables/use-sidebar-mobile";
@@ -67,6 +68,7 @@ useDreamNotices();
 // Keeps the Mods row current: an install runs on after Settings closes.
 useModsRuntimeStore().listen();
 useUpdateNotices();
+useRestartNotice();
 useFleetUpdateNotices();
 useStaleWindowNotice();
 useVisualViewport();

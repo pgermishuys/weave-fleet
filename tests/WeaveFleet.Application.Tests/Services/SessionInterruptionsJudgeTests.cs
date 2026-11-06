@@ -61,4 +61,26 @@ public sealed class SessionInterruptionsJudgeTests
 
         SessionInterruptions.Judge([newer, older]).Finished.ShouldBeFalse();
     }
+
+    [Fact]
+    public void A_call_history_shows_as_cut_off_names_the_call_and_its_command()
+    {
+        var cutOff = new ToolUsePart("call-1", "bash", JsonDocument.Parse("""{"command":"bun test\nmore"}""").RootElement, ToolUseState.Error)
+        {
+            Error = CutOffCall.Message,
+        };
+
+        var (finished, call) = SessionInterruptions.Judge([Message("user", 0), Message("assistant", 1, parts: cutOff)]);
+
+        finished.ShouldBeFalse();
+        call.ShouldBe("bash (bun test)");
+    }
+
+    [Fact]
+    public void A_call_that_failed_for_its_own_reason_is_not_the_cut_off_call()
+    {
+        var failed = Tool("bash", ToolUseState.Error) with { Error = "exit 1" };
+
+        SessionInterruptions.Judge([Message("user", 0), Message("assistant", 1, finish: "stop", parts: failed)]).LastCall.ShouldBeNull();
+    }
 }
