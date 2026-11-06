@@ -12,17 +12,20 @@ export interface SessionInterruption {
   lastCall: string | null;
   /** Files changed in the session's worktree, when Fleet could count them. */
   changedFiles: number | null;
+  /** Fleet continues it by itself once its turn comes ("Continue cut-off sessions by itself" is on); Stop all calls that off. */
+  auto: boolean;
 }
 
 export function toSessionInterruption(value: unknown): SessionInterruption | null {
   if (!value || typeof value !== "object") return null;
-  const { at, waiting, lastCall, changedFiles } = value as Record<string, unknown>;
+  const { at, waiting, lastCall, changedFiles, auto } = value as Record<string, unknown>;
   if (typeof at !== "string" || !Number.isFinite(Date.parse(at))) return null;
   return {
     at,
     waiting: waiting === true,
     lastCall: typeof lastCall === "string" && lastCall.trim() ? lastCall : null,
     changedFiles: typeof changedFiles === "number" && Number.isFinite(changedFiles) ? changedFiles : null,
+    auto: auto === true,
   };
 }
 

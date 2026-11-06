@@ -30,7 +30,7 @@ describe("toSessionInterruption", () => {
 
 describe("wording", () => {
   it("names the row by what was lost", () => {
-    const base = { at: "2026-10-17T14:02:00Z", lastCall: null, changedFiles: null };
+    const base = { at: "2026-10-17T14:02:00Z", lastCall: null, changedFiles: null, auto: false };
     expect(interruptionRowLabel({ ...base, waiting: false })).toBe("Cut off by a restart");
     expect(interruptionRowLabel({ ...base, waiting: true })).toBe("Cut off · question lost");
   });

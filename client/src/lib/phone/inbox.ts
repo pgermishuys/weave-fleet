@@ -49,6 +49,8 @@ export interface InboxItem {
   ask: InboxAsk | null;
   /** The machine didn't answer last time: this is how it was then. */
   stale: boolean;
+  /** A Fleet restart cut the session's turn off and nobody has carried on. */
+  cutOff: boolean;
 }
 
 export interface Inbox {
@@ -91,6 +93,7 @@ function item(machine: InboxMachineState, session: SessionListItem): InboxItem {
     activity: session.activityStatus ?? null,
     ask: machine.asks[session.session.id] ?? null,
     stale: machine.status === "unreachable",
+    cutOff: Boolean(session.interrupted),
   };
 }
 
@@ -120,6 +123,13 @@ export function buildInbox(machines: readonly InboxMachineState[], now: number, 
   }
 
   return { needsYou: needsYou.sort(newestFirst), working: working.sort(newestFirst), finished: finished.sort(newestFirst) };
+}
+
+/** The row at the top of the Sessions list after a restart: how many sessions it cut off, and which. Null when none. */
+export function restartRow(items: readonly Pick<InboxItem, "cutOff">[]): { count: number; text: string } | null {
+  const count = items.filter((entry) => entry.cutOff).length;
+  if (count === 0) return null;
+  return { count, text: `Fleet restarted. ${count} ${count === 1 ? "session was" : "sessions were"} cut off.` };
 }
 
 /** The one-line preview of what a session waits on, for the card. */

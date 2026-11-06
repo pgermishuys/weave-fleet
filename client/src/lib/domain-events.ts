@@ -667,7 +667,7 @@ export interface SessionInterrupted extends EventCursorMetadata {
   type: "session.interrupted";
   payload: {
     sessionId: string;
-    interruption: { at: string; waiting: boolean; lastCall: string | null; changedFiles: number | null } | null;
+    interruption: { at: string; waiting: boolean; lastCall: string | null; changedFiles: number | null; auto?: boolean } | null;
   };
 }
 

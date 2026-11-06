@@ -47,6 +47,8 @@ export interface Notice extends NoticeContent {
   onChipClick?: () => void;
   /** How long the card stays before it settles, instead of NOTICE_HOLD_MS. */
   holdMs?: number;
+  /** Esc on the focused card runs this before the card settles: for a card whose Esc stops something. */
+  onEscape?: () => void;
   /** Shows the time left as a bar that drains, for a card whose action (Undo) only lasts that long. */
   countdown?: boolean;
 }

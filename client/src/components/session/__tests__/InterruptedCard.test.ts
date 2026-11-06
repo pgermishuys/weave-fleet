@@ -4,7 +4,7 @@ import InterruptedCard from "@/components/session/InterruptedCard.vue";
 import type { SessionInterruption } from "@/lib/session-interruption";
 
 function interruption(overrides: Partial<SessionInterruption> = {}): SessionInterruption {
-  return { at: "2026-10-17T14:02:00Z", waiting: false, lastCall: "bash: bun run build", changedFiles: 3, ...overrides };
+  return { at: "2026-10-17T14:02:00Z", waiting: false, lastCall: "bash: bun run build", changedFiles: 3, auto: false, ...overrides };
 }
 
 describe("InterruptedCard", () => {
@@ -43,5 +43,12 @@ describe("InterruptedCard", () => {
 
     await wrapper.setProps({ busy: true });
     expect(wrapper.get('[data-testid="interrupted-continue"]').attributes("disabled")).toBeDefined();
+  });
+
+  it("says Fleet is continuing it by itself and hides Continue", () => {
+    const wrapper = mount(InterruptedCard, { props: { interruption: interruption({ auto: true }) } });
+    expect(wrapper.get('[data-testid="interrupted-auto"]').text()).toBe("Fleet is continuing this by itself.");
+    expect(wrapper.find('[data-testid="interrupted-continue"]').exists()).toBe(false);
+    expect(wrapper.find('[data-testid="interrupted-dismiss"]').exists()).toBe(true);
   });
 });
