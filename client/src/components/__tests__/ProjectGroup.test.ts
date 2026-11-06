@@ -128,6 +128,7 @@ describe("ProjectGroup", () => {
     const session = {
       instanceId: "instance-1",
       workspaceId: "workspace-1",
+      harnessType: "opencode",
       workspaceDirectory: "/repo",
       workspaceDisplayName: null,
       isolationStrategy: "worktree",
