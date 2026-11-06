@@ -92,8 +92,8 @@ internal sealed partial class OpenCode2Server : IAsyncDisposable
     private readonly ConcurrentDictionary<string, TaskCompletionSource> _locations = new(StringComparer.Ordinal);
     private readonly ConcurrentDictionary<string, HashSet<string>> _locationEvents = new(StringComparer.Ordinal);
 
-    // When each folder finished loading (Environment.TickCount64), the folders Fleet asked V2 about, and the folders
-    // whose catalog changed and is waiting for V2 to go quiet, with the time of the last event.
+    // When each folder finished loading (Time.GetTimestamp), the folders Fleet asked V2 about, and the folders whose
+    // catalog changed and is waiting for V2 to go quiet, with the time of the last event.
     private readonly ConcurrentDictionary<string, long> _loadedAt = new(StringComparer.Ordinal);
     private readonly ConcurrentDictionary<string, byte> _asked = new(StringComparer.Ordinal);
     private readonly Dictionary<string, long> _catalogChanges = new(StringComparer.Ordinal);
@@ -158,7 +158,7 @@ internal sealed partial class OpenCode2Server : IAsyncDisposable
     /// <summary>Notes that the server is in use now, so it isn't stopped as idle.</summary>
     public void Touch() => Interlocked.Exchange(ref _lastUsedTicks, DateTimeOffset.UtcNow.UtcTicks);
 
-    /// <summary>The clock a sign-in's expiry is read against.</summary>
+    /// <summary>The clock a sign-in's expiry, a folder's settle time and a catalog change's quiet time are read against.</summary>
     internal TimeProvider Time { get; init; } = TimeProvider.System;
 
     /// <summary>
@@ -250,7 +250,7 @@ internal sealed partial class OpenCode2Server : IAsyncDisposable
         if (!_locations.GetOrAdd(directory, static _ => new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously)).TrySetResult())
             return false;
 
-        _loadedAt.TryAdd(directory, Environment.TickCount64);
+        _loadedAt.TryAdd(directory, Time.GetTimestamp());
         return true;
     }
 
@@ -291,8 +291,8 @@ internal sealed partial class OpenCode2Server : IAsyncDisposable
             return;
         }
 
-        var now = Environment.TickCount64;
-        if (now - loadedAt < (long)LocationSettleTime.TotalMilliseconds || !Uses(directory))
+        var now = Time.GetTimestamp();
+        if (Time.GetElapsedTime(loadedAt, now) < LocationSettleTime || !Uses(directory))
             return;
 
         lock (_catalogChanges)
@@ -317,21 +317,20 @@ internal sealed partial class OpenCode2Server : IAsyncDisposable
     {
         try
         {
-            var quiet = (long)CatalogChangeQuietTime.TotalMilliseconds;
             while (true)
             {
-                long wait;
+                TimeSpan wait;
                 lock (_catalogChanges)
                 {
-                    wait = _catalogChanges[directory] + quiet - Environment.TickCount64;
-                    if (wait <= 0)
+                    wait = CatalogChangeQuietTime - Time.GetElapsedTime(_catalogChanges[directory]);
+                    if (wait <= TimeSpan.Zero)
                     {
                         _catalogChanges.Remove(directory);
                         break;
                     }
                 }
 
-                await Task.Delay(TimeSpan.FromMilliseconds(wait), _stopping.Token).ConfigureAwait(false);
+                await Task.Delay(wait, Time, _stopping.Token).ConfigureAwait(false);
             }
 
             LogCatalogChanged(_logger, ProcessId ?? 0, directory);
