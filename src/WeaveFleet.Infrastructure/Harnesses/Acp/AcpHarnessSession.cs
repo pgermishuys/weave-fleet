@@ -151,11 +151,30 @@ internal sealed partial class AcpHarnessSession : IHarnessSession
             foreach (var model in available.EnumerateArray())
             {
                 if (AcpMapper.Str(model, "modelId") is { } id && list.All(m => m.Id != id))
-                    list.Add(new ModelInfo { Id = id, Name = AcpMapper.Str(model, "name") ?? id });
+                    list.Add(ReadModel(model, id));
             }
         }
 
         return (list, AcpMapper.Str(models, "currentModelId"));
+    }
+
+    private static readonly string[] PriceTiers = ["low", "medium", "high", "very_high"];
+
+    /// <summary>A model entry; the agent may tell its price tier and class in <c>_meta</c>, which others leave out.</summary>
+    private static ModelInfo ReadModel(JsonElement model, string id)
+    {
+        string? tier = null, capability = null;
+        if (model.TryGetProperty("_meta", out var meta) && meta.ValueKind == JsonValueKind.Object)
+        {
+            tier = AcpMapper.Str(meta, "copilotPriceTier")?.ToLowerInvariant();
+            if (!PriceTiers.Contains(tier))
+                tier = null;
+            capability = AcpMapper.Str(meta, "copilotCategory")?.Trim().ToLowerInvariant();
+            if (string.IsNullOrEmpty(capability))
+                capability = null;
+        }
+
+        return new ModelInfo { Id = id, Name = AcpMapper.Str(model, "name") ?? id, PriceTier = tier, Capability = capability };
     }
 
     /// <summary>The models of a <c>_fleet/models</c> result (<c>models</c>: <c>[{modelId, name}]</c>) and the current one.</summary>
@@ -167,7 +186,7 @@ internal sealed partial class AcpHarnessSession : IHarnessSession
             foreach (var model in models.EnumerateArray())
             {
                 if (AcpMapper.Str(model, "modelId") is { } id && list.All(m => m.Id != id))
-                    list.Add(new ModelInfo { Id = id, Name = AcpMapper.Str(model, "name") ?? id });
+                    list.Add(ReadModel(model, id));
             }
         }
 

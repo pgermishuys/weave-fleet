@@ -108,7 +108,7 @@ describe("UsageLimitsPopover", () => {
           { window: "seven_day", utilization: 0.1, resetsAt: inHours(100), status: "allowed" },
         ],
       }),
-      provider({ provider: "openrouter", name: "OpenRouter", source: "OpenCode", credits: { remaining: 7.6, limit: 10, used: 2.4 } }),
+      provider({ provider: "openrouter", name: "OpenRouter", source: "OpenCode", credits: { remaining: 7.6, limit: 10, used: 2.4, unit: null } }),
     ]);
     const claude = document.body.querySelector("[data-testid=usage-provider-claude]")!;
     expect(claude.textContent).toContain("Max plan");
@@ -118,6 +118,31 @@ describe("UsageLimitsPopover", () => {
     expect(claude.textContent).toContain("5-hour limit");
     expect(claude.textContent).toContain("resets");
     expect(document.body.querySelector("[data-testid=usage-provider-openrouter]")!.textContent).toContain("$7.60 left of $10.00");
+    wrapper.unmount();
+  });
+
+  it("shows GitHub's AI credits as a count, never dollars, even with no window", async () => {
+    const wrapper = await mountOpen([
+      provider({ provider: "copilot", name: "GitHub Copilot", state: "no_window", credits: { remaining: null, limit: null, used: 307846, unit: "ai_credits" } }),
+    ]);
+    const text = document.body.querySelector("[data-testid=usage-provider-copilot]")!.textContent!;
+    expect(text).toContain("Pay-per-token: no limits to show.");
+    expect(text).toContain("AI credits used this month: 307,846");
+    expect(text).not.toContain("$");
+    expect(text).not.toContain("Credits:");
+    expect(text).not.toContain("Can't read this right now");
+    wrapper.unmount();
+  });
+
+  it("labels the organization's pooled limit", async () => {
+    const wrapper = await mountOpen([
+      provider({ provider: "copilot", name: "GitHub Copilot", windows: [{ window: "organization", utilization: 1, resetsAt: inHours(100), status: "rejected" }] }),
+    ]);
+    const text = document.body.querySelector("[data-testid=usage-provider-copilot]")!.textContent!;
+    expect(text).toContain("Organization limit");
+    expect(text).toContain("100%");
+    expect(document.body.querySelector("[data-testid=usage-limits-chip]")!.textContent).toContain("GitHub Copilot org");
+    expect(text).not.toContain("Can't read this right now");
     wrapper.unmount();
   });
 
@@ -133,6 +158,9 @@ describe("UsageLimitsPopover", () => {
     expect(text("b")).toContain("Can't read this right now");
     expect(text("c")).toContain("Sign in again in Claude Code");
     expect(text("d")).toContain("Fleet can't read this sign-in yet");
+    // Each state says only its own line.
+    expect(text("a")).not.toContain("Can't read this right now");
+    expect(text("c")).not.toContain("Can't read this right now");
     wrapper.unmount();
   });
 

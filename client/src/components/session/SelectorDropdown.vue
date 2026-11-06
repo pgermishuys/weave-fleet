@@ -8,6 +8,9 @@ interface SelectorItem {
   label: string;
   description?: string;
   meta?: string;
+  /** A quiet price note under `meta`, e.g. "High cost"; `priceNote` is its tooltip. */
+  price?: string;
+  priceNote?: string;
   /** Defined: the row has a star to favourite it with. */
   starred?: boolean;
 }
@@ -300,9 +303,17 @@ function selectItem(itemId: string): void {
               >{{ item.description }}</span>
             </span>
             <span
-              v-if="item.meta"
+              v-if="item.meta || item.price"
               class="selector-dropdown__item-meta"
-            >{{ item.meta }}</span>
+            >
+              <span v-if="item.meta">{{ item.meta }}</span>
+              <span
+                v-if="item.price"
+                class="selector-dropdown__price"
+                :title="item.priceNote"
+                data-testid="model-price"
+              >{{ item.price }}</span>
+            </span>
           </button>
           <button
             v-if="item.starred !== undefined"
@@ -581,6 +592,10 @@ function selectItem(itemId: string): void {
   font-weight: 500;
 }
 
+.selector-dropdown__price {
+  font-size: 11px;
+}
+
 .selector-dropdown__item-description {
   color: var(--muted);
   font-size: 12px;
@@ -588,6 +603,10 @@ function selectItem(itemId: string): void {
 }
 
 .selector-dropdown__item-meta {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  gap: 2px;
   color: var(--muted);
   font-size: 12px;
   white-space: nowrap;

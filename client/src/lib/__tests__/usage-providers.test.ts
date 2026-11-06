@@ -12,8 +12,13 @@ describe("toUsageLimits", () => {
         readAt: at(0), windows: [], credits: { remaining: 7.6, limit: 10, used: 2.4 },
       }],
     });
-    expect(limits?.providers[0]).toMatchObject({ provider: "openrouter", source: "OpenCode", credits: { remaining: 7.6, limit: 10 } });
+    expect(limits?.providers[0]).toMatchObject({ provider: "openrouter", source: "OpenCode", credits: { remaining: 7.6, limit: 10, unit: null } });
     expect(limits?.providers[0].readAt).toBeTypeOf("number");
+  });
+
+  it("reads the credits unit", () => {
+    const limits = toUsageLimits({ enabled: true, providers: [{ provider: "copilot", state: "no_window", credits: { remaining: null, limit: null, used: 5, unit: "ai_credits" } }] });
+    expect(limits?.providers[0]?.credits).toEqual({ remaining: null, limit: null, used: 5, unit: "ai_credits" });
   });
 
   it("refuses what isn't a body, and skips entries and windows that don't read", () => {

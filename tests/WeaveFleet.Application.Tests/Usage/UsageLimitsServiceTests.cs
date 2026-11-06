@@ -311,8 +311,24 @@ public sealed class UsageLimitsServiceTests
 
         json.GetProperty("account").ValueKind.ShouldBe(JsonValueKind.Null);
         json.GetProperty("credits").GetProperty("remaining").GetDouble().ShouldBe(5);
+        // Always sent: null means dollars.
+        json.GetProperty("credits").GetProperty("unit").ValueKind.ShouldBe(JsonValueKind.Null);
         json.GetProperty("readAt").GetDateTimeOffset().ShouldBe(Now);
         json.GetProperty("windows").GetArrayLength().ShouldBe(0);
+    }
+
+    [Fact]
+    public void AI_credits_serialize_with_their_unit()
+    {
+        var snapshot = new UsageLimitsSnapshot(true,
+        [
+            new ProviderUsage("copilot", "GitHub Copilot", UsageStates.NoWindow, ["copilot"], [], null, "weave-copilot", Now, new UsageCredits(null, null, 307846, "ai_credits")),
+        ]);
+
+        var credits = JsonSerializer.SerializeToElement(snapshot, ApplicationJsonContext.Default.UsageLimitsSnapshot).GetProperty("providers")[0].GetProperty("credits");
+
+        credits.GetProperty("unit").GetString().ShouldBe("ai_credits");
+        credits.GetProperty("used").GetDouble().ShouldBe(307846);
     }
 
     private sealed class FakeProvider(string provider, string name, bool needsConsent, params string[] harnesses) : IUsageProvider

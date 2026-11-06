@@ -25,11 +25,12 @@ public static class UsageStates
     public const string Unsupported = "unsupported";
 }
 
-/// <summary>What a provider's account has spent of what it may (OpenRouter's key limit).</summary>
+/// <summary>What a provider's account has spent of what it may (OpenRouter's key limit). <c>Unit</c> null means dollars; "ai_credits" is GitHub's AI credits ($0.01 each), used only.</summary>
 public sealed record UsageCredits(
     [property: JsonIgnore(Condition = JsonIgnoreCondition.Never)] double? Remaining,
     [property: JsonIgnore(Condition = JsonIgnoreCondition.Never)] double? Limit,
-    [property: JsonIgnore(Condition = JsonIgnoreCondition.Never)] double? Used);
+    [property: JsonIgnore(Condition = JsonIgnoreCondition.Never)] double? Used,
+    [property: JsonIgnore(Condition = JsonIgnoreCondition.Never)] string? Unit = null);
 
 /// <summary>What a reader found, before Fleet adds the provider's name and when it asked.</summary>
 public sealed record UsageReading(
