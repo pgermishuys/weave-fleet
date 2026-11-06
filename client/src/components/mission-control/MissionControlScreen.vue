@@ -156,7 +156,8 @@ function nudge(tile: Tile, text: string, done: (outcome: AnswerOutcome & { queue
 <style scoped>
 .fleet-view-strip {
   display: none;
-  padding: 10px 16px 0;
+  /* 1rem, like the page's p-4 below it (the root font is 14px, so not 16px). */
+  padding: 10px 1rem 0;
 }
 
 @media (max-width: 767px) {
