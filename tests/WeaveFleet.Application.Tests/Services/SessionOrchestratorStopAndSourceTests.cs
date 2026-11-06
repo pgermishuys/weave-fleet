@@ -115,6 +115,36 @@ public sealed class SessionOrchestratorStopAndSourceTests : IAsyncDisposable
     }
 
     [Fact]
+    public async Task a_prompt_sent_into_a_turn_an_update_started_lets_that_turn_ask_to_hear_back()
+    {
+        var updates = new SessionUpdates(
+            _builder.ActivityTracker,
+            TestServiceScopeFactory.Create(services =>
+            {
+                services.AddSingleton<IBackgroundUserScope>(new NoUserScope());
+                services.AddSingleton<ISessionUpdateSender>(new RecordingSender());
+            }),
+            NullLogger<SessionUpdates>.Instance);
+        _builder.WithSessionUpdates(updates);
+        var sut = Build();
+        updates.Watch(new SessionUpdateWatch(SessionId, "s-target", "user-1", "msg-1"));
+        updates.Observe("s-target", new MessageUpdated
+        {
+            Payload = new MessageLifecyclePayload
+            {
+                Info = new MessageEventInfo { Id = "reply-1", Role = "assistant", SessionId = "s-target", ParentId = "msg-1", Time = new MessageEventTime { Created = 0 } },
+            },
+        });
+        updates.Observe("s-target", new SessionIdled { Payload = new SessionIdledPayload { SessionId = "s-target" } });
+        await updates.Pending;
+        updates.IsStartedByUpdate(SessionId).ShouldBeTrue();
+
+        (await sut.PromptSessionAsync(SessionId, "And another one.")).IsSuccess.ShouldBeTrue();
+
+        updates.IsStartedByUpdate(SessionId).ShouldBeFalse();
+    }
+
+    [Fact]
     public async Task stop_on_an_archived_session_is_refused()
     {
         var sut = Build(retention: "archived");

@@ -22,6 +22,9 @@ public sealed partial class OpenCode2LiveTests
         const string askAgain = "And another one. (messages: ask again)";
         const string update = "<fleet-session-update";
         using var cts = new CancellationTokenSource(Timeout);
+        // The user's second prompt arrives while the turn the first update started is still running: V2 runs it in
+        // that same turn, with no idle in between, and it may still ask to hear back.
+        using var askedAgain = new ManualResetEventSlim();
         var folder = fleet.NewFolder("session-messages");
 
         await SetSessionMessagesAsync(true);
@@ -36,7 +39,7 @@ public sealed partial class OpenCode2LiveTests
                 : LlmRequest.Continues(request, ask) || LlmRequest.Continues(request, askAgain) ? new ScriptedLlmResponse { Text = "Sent." }
                 : LlmRequest.Starts(request, "round 1.") ? new ScriptedLlmResponse { Text = "Round 1 is done." }
                 : LlmRequest.Starts(request, "round 2.") ? new ScriptedLlmResponse { Text = "Round 2 is done." }
-                : LlmRequest.Starts(request, update) ? new ScriptedLlmResponse { Text = "Thanks." }
+                : LlmRequest.Starts(request, update) && askedAgain.Wait(TimeSpan.FromSeconds(30)) ? new ScriptedLlmResponse { Text = "Thanks." }
                 : null);
             var events = fleet.Watch(cts.Token, sender, receiver);
             List<string> Updates() => fleet.Llm.Queue.Requests.Where(r => LlmRequest.Starts(r, update)).Select(r => LlmRequest.LastUserText(r)!).ToList();
@@ -44,6 +47,7 @@ public sealed partial class OpenCode2LiveTests
             await PromptAsync(sender, ask, options: null, cts.Token);
             await WaitForAsync(events, () => Updates().Count == 1, cts.Token);
             await PromptAsync(sender, askAgain, options: null, cts.Token);
+            askedAgain.Set();
             await WaitForAsync(events, () => Updates().Count == 2, cts.Token);
             await Task.Delay(3000, cts.Token);
 
