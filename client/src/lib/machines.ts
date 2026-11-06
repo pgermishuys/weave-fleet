@@ -13,6 +13,7 @@
  */
 
 import type { MachineDiagnosis } from "@/lib/machine-diagnosis";
+import { baseUrlOf, repickAddress, type MachineAddress } from "@/lib/machine-routes";
 
 /** A machine the client has been given: where it is and the token to present. The client owns this record. */
 export interface MachineConnection {
@@ -20,8 +21,13 @@ export interface MachineConnection {
   id: string;
   /** What the machine calls itself; the client refreshes it from `GET /api/machine`. */
   name: string;
-  /** Base URL without a trailing slash, e.g. `http://100.64.90.72:2113`. */
+  /**
+   * Base URL without a trailing slash, e.g. `http://100.64.90.72:2113`: the address home uses. Requests go to
+   * `baseUrlOf(machine)`, the one this tab picked from `addresses` (see `@/lib/machine-routes`).
+   */
   baseUrl: string;
+  /** Every address the machine can be reached at, in the order to try them; missing from an older home. */
+  addresses?: MachineAddress[] | null;
   /** The machine's access token. */
   token: string;
   /** `linux`, `macos`, `windows` or `other`, when known. */
@@ -63,7 +69,7 @@ export function normalizeBaseUrl(url: string): string {
 
 /** The URL for `path` on `machine`, or on the home machine through `homeBase` (empty: same origin). */
 export function machineUrl(machine: MachineConnection | null, path: string, homeBase = ""): string {
-  const base = machine ? machine.baseUrl : homeBase;
+  const base = machine ? baseUrlOf(machine) : homeBase;
   return base ? `${base}${path}` : path;
 }
 
@@ -87,7 +93,7 @@ export function machineSocketUrl(machine: MachineConnection | null, path: string
   const toSocket = (base: string) => base.replace(/^http(s?):\/\//, (_, s: string) => `ws${s}://`);
   if (machine) {
     const separator = path.includes("?") ? "&" : "?";
-    return `${toSocket(machine.baseUrl)}${path}${separator}access_token=${encodeURIComponent(machine.token)}`;
+    return `${toSocket(baseUrlOf(machine))}${path}${separator}access_token=${encodeURIComponent(machine.token)}`;
   }
   if (homeBase) return `${toSocket(homeBase)}${path}`;
   if (typeof window === "undefined") return path;
@@ -95,9 +101,22 @@ export function machineSocketUrl(machine: MachineConnection | null, path: string
   return `${protocol}//${window.location.host}${path}`;
 }
 
-/** A bare, Vue-free probe of a machine (the sidebar polls with it); the app's API requests use `apiFetchOn`. */
-export function fetchOnMachine(machine: MachineConnection | null, path: string, init?: RequestInit): Promise<Response> {
-  return fetch(machineUrl(machine, path), machineRequestInit(machine, init));
+/**
+ * A bare, Vue-free probe of a machine (the sidebar polls with it); the app's API requests use `apiFetchOn`. A read
+ * that can't reach the machine is tried once more when another of its addresses answers.
+ */
+export async function fetchOnMachine(machine: MachineConnection | null, path: string, init?: RequestInit): Promise<Response> {
+  try {
+    return await fetch(machineUrl(machine, path), machineRequestInit(machine, init));
+  } catch (error) {
+    if (!machine || !isRead(init?.method) || !(await repickAddress(machine))) throw error;
+    return fetch(machineUrl(machine, path), machineRequestInit(machine, init));
+  }
+}
+
+/** Requests that can safely go again: they change nothing there. */
+export function isRead(method: string | undefined): boolean {
+  return ["GET", "HEAD"].includes((method ?? "GET").toUpperCase());
 }
 
 // ─── Storage ──────────────────────────────────────────────────────────────────

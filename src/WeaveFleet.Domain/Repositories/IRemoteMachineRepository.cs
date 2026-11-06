@@ -17,6 +17,9 @@ public interface IRemoteMachineRepository
 
     Task UpdateStatusAsync(string id, string status, DateTimeOffset? lastSeenAt);
 
+    /// <summary>Sets the address in use and the list of addresses, and nothing else.</summary>
+    Task UpdateAddressesAsync(string id, string baseUrl, IReadOnlyList<RemoteMachineAddress> addresses);
+
     Task<DeviceGrant?> GetGrantAsync(string deviceId, string machineId);
 
     Task SaveGrantAsync(DeviceGrant grant);

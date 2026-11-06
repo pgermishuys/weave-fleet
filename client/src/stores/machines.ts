@@ -4,6 +4,7 @@ import type { SessionListItem } from "@/api/client";
 import type { ProjectSummary } from "@/lib/session-project-groups";
 import { feedHubFor, onDisconnect, onReconnect, retryConnection } from "@/composables/use-signalr-socket";
 import { liveTarget, targetFor, type MachineTarget } from "@/lib/machine-target";
+import { baseUrlOf, onAddressChange, type MachineAddress } from "@/lib/machine-routes";
 import {
   HOME_MACHINE_KEY,
   LIVE_MACHINES_PREFERENCE_KEY,
@@ -93,7 +94,7 @@ export interface MachineEntry {
   key: string;
   name: string;
   os: string | null;
-  /** Where it is; empty for home, which is the page's own origin. */
+  /** Where this tab reaches it: the address in use (see `@/lib/machine-routes`); empty for home, the page's own origin. */
   baseUrl: string;
   isHome: boolean;
   isLive: boolean;
@@ -140,6 +141,8 @@ interface ServerMachine {
   tunnelUp?: boolean | null;
   /** Missing from a home too old to say why it can't reach a machine. */
   diagnosis?: MachineDiagnosis | null;
+  /** Every address it can be reached at, in the order to try them. Missing from a home too old to keep them. */
+  addresses?: MachineAddress[] | null;
 }
 
 /** A machine Fleet can already see, from ~/.ssh/config or Tailscale. `destination` is what to log in to. */
@@ -344,7 +347,7 @@ export const useMachinesStore = defineStore("machines", () => {
   function fromServer(machine: ServerMachine): MachineConnection | null {
     const token = machine.token ?? readCredentialsSync()?.grants.find((grant) => grant.machineId === machine.id)?.token ?? null;
     if (!token) return null;
-    return { id: machine.id, name: machine.name, baseUrl: machine.baseUrl, token, os: machine.os ?? undefined, addedAt: machine.addedAt, sshDestination: machine.sshDestination ?? null, tunnelUp: machine.tunnelUp ?? null, diagnosis: machine.diagnosis ?? null };
+    return { id: machine.id, name: machine.name, baseUrl: machine.baseUrl, token, os: machine.os ?? undefined, addedAt: machine.addedAt, sshDestination: machine.sshDestination ?? null, tunnelUp: machine.tunnelUp ?? null, diagnosis: machine.diagnosis ?? null, addresses: machine.addresses ?? null };
   }
 
   /**
@@ -446,6 +449,12 @@ export const useMachinesStore = defineStore("machines", () => {
   /** Whether the client knows any machine besides home. Everything machine-shaped hides until it does. */
   const hasMachines = computed(() => connections.value.length > 0);
 
+  // Bumped when this tab moves a machine to another of its addresses, so rows and feeds follow.
+  const addressMoves = ref(0);
+  onAddressChange(() => {
+    addressMoves.value += 1;
+  });
+
   const entries = computed<MachineEntry[]>(() => [
     {
       key: HOME_MACHINE_KEY,
@@ -462,7 +471,7 @@ export const useMachinesStore = defineStore("machines", () => {
       key: connection.id,
       name: connection.name,
       os: connection.os ?? null,
-      baseUrl: connection.baseUrl,
+      baseUrl: addressMoves.value >= 0 ? baseUrlOf(connection) : connection.baseUrl,
       isHome: false,
       isLive: liveKey === connection.id,
       connection,
@@ -647,6 +656,25 @@ export const useMachinesStore = defineStore("machines", () => {
 
   /** Renames a machine for every client, on the machine itself. */
   /** Lets agents here hand work to the machine, or stops them; kept on home, which makes the calls. */
+  /**
+   * Puts a machine's addresses in the owner's order (every one of them, as listed); Fleet tries them in it from then
+   * on. Home turns an order away when the list changed meanwhile; the error says so.
+   */
+  async function reorderAddresses(id: string, urls: readonly string[]): Promise<void> {
+    const response = await fetchOnMachine(null, `/api/machines/${encodeURIComponent(id)}`, {
+      method: "PUT",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ addresses: urls }),
+    });
+    if (!response.ok) {
+      void syncFromServer();
+      throw await readFailure(response, "Couldn't save the order.");
+    }
+    const saved = await response.json() as ServerMachine;
+    connections.value = connections.value.map((connection) => connection.id === id ? { ...connection, addresses: saved.addresses ?? null } : connection);
+    persist();
+  }
+
   async function setAgentsAllowed(id: string, allowed: boolean): Promise<void> {
     const response = await fetchOnMachine(null, `/api/machines/${encodeURIComponent(id)}`, {
       method: "PUT",
@@ -1068,6 +1096,7 @@ export const useMachinesStore = defineStore("machines", () => {
     keyOfMachine,
     agentsAllowed,
     setAgentsAllowed,
+    reorderAddresses,
     opensInPlace,
     isAnswering,
     sessionTarget,

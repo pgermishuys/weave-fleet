@@ -22,6 +22,7 @@ public static class Program
             "host=" + Environment.GetEnvironmentVariable("Fleet__Host"),
             "port=" + Environment.GetEnvironmentVariable("Fleet__Port"),
             "require_token=" + Environment.GetEnvironmentVariable("Fleet__Auth__RequireToken"),
+            "private_networks=" + Environment.GetEnvironmentVariable("Fleet__PrivateNetworksOnly"),
         });
         if (Array.IndexOf(args, "--node-pair") >= 0) Console.WriteLine("Pairing link for stub\n\n    http://stub/add-machine#CODE");
     }
@@ -33,6 +34,7 @@ $out = Join-Path $work 'out.txt'
 $env:FLEET_TEST_OUT = $out
 $env:WEAVE_FLEET_DATA_DIR = Join-Path $work 'data'
 Remove-Item Env:\Fleet__Auth__RequireToken -ErrorAction SilentlyContinue
+Remove-Item Env:\Fleet__PrivateNetworksOnly -ErrorAction SilentlyContinue
 Remove-Item Env:\WEAVE_FLEET_PORT -ErrorAction SilentlyContinue
 Remove-Item Env:\WEAVE_FLEET_HOST -ErrorAction SilentlyContinue
 
@@ -71,6 +73,11 @@ if (Test-Started '--port 2113 --require-token' $output) {
     Test-Record 'require_token=true' '--port 2113 --require-token'
     Test-Record 'port=2113' '--port 2113 --require-token'
     Test-Record 'host=127.0.0.1' '--port 2113 --require-token'
+}
+# --private-networks reaches the app as Fleet:PrivateNetworksOnly.
+$output = Invoke-Fleet '--port 2113 --private-networks'
+if (Test-Started '--port 2113 --private-networks' $output) {
+    Test-Record 'private_networks=true' '--port 2113 --private-networks'
 }
 $output = Invoke-Fleet '--require-token --host 127.0.0.1'
 if (Test-Started '--require-token --host 127.0.0.1' $output) {
@@ -116,6 +123,7 @@ $nodeHelp = Invoke-Fleet 'node help'
 if (Test-Path $out) { Fail "fleet node help started the app" }
 if ($nodeHelp -notmatch 'Usage: fleet node') { Fail "fleet node help: unexpected output: $nodeHelp" }
 $nodeValues = @{
+    '--private-networks' = ''
     '--port' = '2113'
     '--host' = '127.0.0.1'
     '--profile' = 'test'
@@ -229,6 +237,7 @@ $helpOptions = [regex]::Matches($help, '--[a-z][a-z-]*') | ForEach-Object { $_.V
 if (-not $helpOptions) { Fail "fleet help listed no options: $help" }
 $values = @{
     '--require-token' = ''
+    '--private-networks' = ''
     '--port' = '2113'
     '--host' = '127.0.0.1'
     '--profile' = 'test'

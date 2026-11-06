@@ -649,6 +649,9 @@ using (var scope = app.Services.CreateScope())
 
 // An agent process started with messages between sessions on calls Fleet under /agent/{token}. The prefix comes off
 // before routing, so its calls reach the same endpoints and the endpoints can tell them apart.
+// A node set up for Tailscale listens on every network as a fallback, but never answers on a public address.
+app.UsePrivateNetworksOnly(fleetOptions);
+
 app.UseAgentRequests();
 app.UseRouting();
 

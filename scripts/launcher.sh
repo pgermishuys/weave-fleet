@@ -177,7 +177,7 @@ show_help() {
   VERSION="$(read_version)"
   echo "Fleet v${VERSION}"
   echo ""
-  echo "Usage: fleet [command] [--port <port>] [--host <host>] [--data-dir <path>] [--profile <name>] [--require-token]"
+  echo "Usage: fleet [command] [--port <port>] [--host <host>] [--data-dir <path>] [--profile <name>] [--require-token] [--private-networks]"
   echo ""
   echo "Commands:"
   echo "  (none)       Start the Fleet server"
@@ -194,6 +194,7 @@ echo "  --host <host>       Override the bind host"
 echo "  --data-dir <path>   Override the data directory (default: ~/.weave)"
 echo "  --profile <name>    Use a profile-specific data directory"
 echo "  --require-token     Ask for the access token even over loopback (behind tailscale serve)"
+echo "  --private-networks  Answer only on loopback, private and Tailscale addresses, never a public one"
   echo ""
 echo "Environment variables:"
 echo "  WEAVE_FLEET_PORT                Server port (default: 6262)"
@@ -231,7 +232,8 @@ show_node_help() {
   echo "  --host <host>       Override the bind host (0.0.0.0 lets other machines connect)"
   echo "  --data-dir <path>   Override the data directory (default: ~/.weave)"
   echo "  --profile <name>    Use a profile-specific data directory"
-  echo "  --tailscale         With up: listen on this machine's Tailscale address"
+  echo "  --private-networks  Answer only on loopback, private and Tailscale addresses, never a public one"
+  echo "  --tailscale         With up: listen on Tailscale and your local network, never on a public address"
   echo "  --lan               With up: listen on every network this machine is on"
   echo "  --ssh-only          With up: listen on this machine only; other machines connect over SSH"
   echo "  --yes               With up: don't ask. Uses the choice above, else what is set up, else Tailscale when it's up, else --ssh-only"
@@ -368,6 +370,8 @@ $PORT
 $HOST
 --data-dir
 $DATA_DIR"
+  if [ "$PRIVATE_NETWORKS" -eq 1 ]; then SERVICE_ARGS="$SERVICE_ARGS
+--private-networks"; fi
 }
 
 install_service() {
@@ -494,6 +498,17 @@ installed_host() {
   fi
 }
 
+# Whether the installed service refuses public addresses (--private-networks).
+installed_private() {
+  [ -f "$TARGET" ] || return 0
+  if [ "$PLATFORM" = linux ]; then
+    grep -q '"--private-networks"' "$TARGET" && echo 1
+  else
+    grep -q '<string>--private-networks</string>' "$TARGET" && echo 1
+  fi
+  return 0
+}
+
 # Asks the node for a pairing link: its output on success, nothing while it isn't answering.
 ask_node_for_link() {
   "$APP_BIN" --node-pair --urls "$LISTEN_URL" --contentRoot "$APP_CONTENT_ROOT" 2>/dev/null
@@ -502,14 +517,18 @@ ask_node_for_link() {
 node_up_choose() {
   TAILSCALE_IP="$(tailscale_ip)"
   CURRENT_HOST="$(installed_host)"
-  RECOMMENDED=ssh-only
-  [ -n "$TAILSCALE_IP" ] && RECOMMENDED=tailscale
+  CURRENT_PRIVATE="$(installed_private)"
+  # What is installed: Tailscale is 0.0.0.0 with --private-networks, or the Tailscale address an older install listens on.
+  CURRENT_CHOICE=""
   case "$CURRENT_HOST" in
     "") ;;
-    0.0.0.0) RECOMMENDED=lan ;;
-    127.0.0.1) RECOMMENDED=ssh-only ;;
-    "$TAILSCALE_IP") RECOMMENDED=tailscale ;;
+    0.0.0.0) if [ -n "$CURRENT_PRIVATE" ]; then CURRENT_CHOICE=tailscale; else CURRENT_CHOICE=lan; fi ;;
+    127.0.0.1) CURRENT_CHOICE=ssh-only ;;
+    100.*|"$TAILSCALE_IP") CURRENT_CHOICE=tailscale ;;
   esac
+  RECOMMENDED=ssh-only
+  [ -n "$TAILSCALE_IP" ] && RECOMMENDED=tailscale
+  [ -n "$CURRENT_CHOICE" ] && RECOMMENDED="$CURRENT_CHOICE"
   [ -n "$UP_CHOICE" ] && return 0
   if [ "$ASSUME_YES" -eq 1 ]; then
     UP_CHOICE="$RECOMMENDED"
@@ -525,18 +544,18 @@ node_up_choose() {
   echo "$(service_platform_name) · Fleet $VERSION"
   echo ""
   echo "How should your other machines reach ${NAME:-this machine}?"
-  tailscale_note="only your devices can reach it"
+  tailscale_note="falls back to your local network; only your devices can reach it"
   [ -n "$TAILSCALE_IP" ] || tailscale_note="needs Tailscale installed and signed in"
   # "(current)" marks what is installed; "(recommended)" Tailscale on a machine with nothing installed yet.
   mark_tailscale=""
   [ -n "$TAILSCALE_IP" ] && [ -z "$CURRENT_HOST" ] && mark_tailscale="  (recommended)"
   mark_lan=""
   mark_ssh=""
-  case "$CURRENT_HOST" in
+  case "$CURRENT_CHOICE" in
     "") ;;
-    0.0.0.0) mark_lan="  (current)" ;;
-    127.0.0.1) mark_ssh="  (current)" ;;
-    "$TAILSCALE_IP") mark_tailscale="  (current)" ;;
+    lan) mark_lan="  (current)" ;;
+    ssh-only) mark_ssh="  (current)" ;;
+    tailscale) mark_tailscale="  (current)" ;;
   esac
   printf '  1) Tailscale        %s%s\n' "$tailscale_note" "$mark_tailscale"
   printf '  2) Local network    anyone on it can try a code%s\n' "$mark_lan"
@@ -579,7 +598,9 @@ node_up() {
         fi
         exit 1
       fi
-      HOST="$TAILSCALE_IP"
+      # Tailscale first, the local network when it's down; the server turns away public addresses.
+      HOST=0.0.0.0
+      PRIVATE_NETWORKS=1
       ;;
     lan) HOST=0.0.0.0 ;;
     *) HOST=127.0.0.1 ;;
@@ -589,12 +610,16 @@ node_up() {
   set_service_args
 
   LINK_OUTPUT=""
-  [ "$CURRENT_HOST" = "$HOST" ] && LINK_OUTPUT="$(ask_node_for_link)"
+  [ "$CURRENT_HOST" = "$HOST" ] && [ "${CURRENT_PRIVATE:-0}" = "$PRIVATE_NETWORKS" ] && LINK_OUTPUT="$(ask_node_for_link)"
   if [ -n "$LINK_OUTPUT" ]; then
     echo "✓ Already running on ${HOST}:${PORT}"
   else
     install_service >/dev/null
-    echo "✓ Listening on ${HOST}:${PORT}"
+    if [ "$UP_CHOICE" = tailscale ]; then
+      echo "✓ Listening on Tailscale (${TAILSCALE_IP}) and your local network, port ${PORT}"
+    else
+      echo "✓ Listening on ${HOST}:${PORT}"
+    fi
     echo "✓ Runs in the background, starts at login"
     attempts=0
     while LINK_OUTPUT="$(ask_node_for_link)"; [ -z "$LINK_OUTPUT" ]; do
@@ -656,6 +681,7 @@ HOST_OVERRIDE=""
 DATA_DIR_OVERRIDE=""
 PROFILE_NAME=""
 REQUIRE_TOKEN=0
+PRIVATE_NETWORKS=0
 EXTRA_ARGS=""
 
 while [ "$#" -gt 0 ]; do
@@ -781,6 +807,9 @@ while [ "$#" -gt 0 ]; do
     --require-token)
       REQUIRE_TOKEN=1
       ;;
+    --private-networks)
+      PRIVATE_NETWORKS=1
+      ;;
     --json)
       if [ "$NODE_PAIR" -ne 1 ]; then
         echo "Error: --json only works with fleet node pair." >&2
@@ -888,6 +917,9 @@ export Fleet__DataProtection__KeyPath="${Fleet__DataProtection__KeyPath:-$KEY_DI
 if [ "$REQUIRE_TOKEN" -eq 1 ]; then
   export Fleet__Auth__RequireToken=true
 fi
+if [ "$PRIVATE_NETWORKS" -eq 1 ]; then
+  export Fleet__PrivateNetworksOnly=true
+fi
 if [ "$NODE_UP" -eq 1 ]; then
   node_up
   exit 0
@@ -972,6 +1004,7 @@ restart_launcher() {
   if [ "$NODE" -eq 1 ]; then set -- node; else set --; fi
   set -- "$@" --port "$PORT" --host "$HOST" --data-dir "$DATA_DIR"
   if [ "$REQUIRE_TOKEN" -eq 1 ]; then set -- "$@" --require-token; fi
+  if [ "$PRIVATE_NETWORKS" -eq 1 ]; then set -- "$@" --private-networks; fi
   echo "Restarting Fleet to finish updating..."
   exec "$SCRIPT_DIR/$(basename "$0")" "$@"
 }

@@ -8,8 +8,17 @@ public sealed record RemoteMachine
 
     public required string Name { get; init; }
 
-    /// <summary>Base URL without a trailing slash, e.g. <c>https://falcon.tail9c2e.ts.net</c>.</summary>
+    /// <summary>
+    /// The address in use: base URL without a trailing slash, e.g. <c>https://falcon.tail9c2e.ts.net</c>. One of
+    /// <see cref="Addresses"/> when it has any; Fleet moves it to whichever answers first in their order.
+    /// </summary>
     public required string BaseUrl { get; init; }
+
+    /// <summary>
+    /// Every address it can be reached at, in the order Fleet tries them: the one it was added with, and those it
+    /// reports itself. Empty for a machine saved before Fleet kept them, or one reached over SSH.
+    /// </summary>
+    public IReadOnlyList<RemoteMachineAddress> Addresses { get; init; } = [];
 
     /// <summary>Its access token, encrypted with Data Protection. Never sent to a paired device.</summary>
     public required string EncryptedToken { get; init; }
@@ -34,6 +43,23 @@ public sealed record RemoteMachine
     /// tunnel to it open and <see cref="BaseUrl"/> is the tunnel's local address. Null otherwise.
     /// </summary>
     public string? SshDestination { get; init; }
+}
+
+/// <summary>One address of a <see cref="RemoteMachine"/>.</summary>
+/// <param name="Url">Base URL without a trailing slash.</param>
+/// <param name="Kind"><c>tailnet</c>, <c>tailnet-ip</c>, <c>lan</c>, <c>hostname</c> or <c>other</c>.</param>
+/// <param name="Learned">The machine reported it; false for the address it was added with.</param>
+/// <param name="LastResult">What came of the last try: <c>ok</c>, <c>no-answer</c> or <c>other-machine</c>.</param>
+/// <param name="LastTriedAt">When that was.</param>
+public sealed record RemoteMachineAddress(string Url, string Kind, bool Learned, string? LastResult = null, DateTimeOffset? LastTriedAt = null);
+
+public static class RemoteMachineAddressResults
+{
+    public const string Ok = "ok";
+    public const string NoAnswer = "no-answer";
+
+    /// <summary>Something answered, but not this machine: another device has the address now. No token went there.</summary>
+    public const string OtherMachine = "other-machine";
 }
 
 public static class RemoteMachineStatuses

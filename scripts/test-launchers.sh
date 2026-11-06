@@ -25,6 +25,7 @@ cat > "$WORK/fleet/app/WeaveFleet.Api" <<'EOF'
   echo "host=${Fleet__Host:-}"
   echo "port=${Fleet__Port:-}"
   echo "require_token=${Fleet__Auth__RequireToken:-}"
+  echo "private_networks=${Fleet__PrivateNetworksOnly:-}"
 } > "$FLEET_TEST_OUT"
 case " $* " in
   *" --node-pair "*) printf 'Pairing link for stub\n\n    http://stub/add-machine#CODE\n' ;;
@@ -41,7 +42,7 @@ fail() {
 # Runs bin/fleet with a scratch HOME and data dir; the stub's record lands in $WORK/out.
 run_fleet() {
   rm -f "$WORK/out"
-  env -u Fleet__Auth__RequireToken HOME="$WORK/home" WEAVE_FLEET_DATA_DIR="$WORK/data" FLEET_TEST_OUT="$WORK/out" \
+  env -u Fleet__Auth__RequireToken -u Fleet__PrivateNetworksOnly HOME="$WORK/home" WEAVE_FLEET_DATA_DIR="$WORK/data" FLEET_TEST_OUT="$WORK/out" \
     "$WORK/fleet/bin/fleet" "$@" > "$WORK/stdout" 2>&1
 }
 
@@ -69,6 +70,11 @@ if expect_started --port 2113 --require-token; then
   expect_record "require_token=true" "--port 2113 --require-token"
   expect_record "port=2113" "--port 2113 --require-token"
   expect_record "host=127.0.0.1" "--port 2113 --require-token"
+fi
+# --private-networks reaches the app as Fleet:PrivateNetworksOnly.
+run_fleet --port 2113 --private-networks || true
+if expect_started --port 2113 --private-networks; then
+  expect_record "private_networks=true" "--port 2113 --private-networks"
 fi
 run_fleet --require-token --host 127.0.0.1 || true
 if expect_started --require-token --host 127.0.0.1; then
@@ -125,6 +131,7 @@ for option in $NODE_HELP_OPTIONS; do
     --tailscale|--lan|--ssh-only|--yes) continue ;;  # up only; checked below
     --json) continue ;;  # pair only; checked below
     --port) run_fleet node "$option" 2113 ;;
+    --private-networks) run_fleet node "$option" ;;
     --host) run_fleet node "$option" 127.0.0.1 ;;
     --profile) run_fleet node "$option" test ;;
     --data-dir) run_fleet node "$option" "$WORK/data-dir" ;;
@@ -275,8 +282,24 @@ expect_calls "" "node up again"
 
 # A different choice changes the service.
 run_service linux node up --tailscale --port 5512 --data-dir node-data || fail "node up --tailscale failed: $(cat "$WORK/stdout")"
-grep -qF '"--host" "100.64.90.72"' "$UNIT" 2>/dev/null || fail "node up --tailscale didn't write the tailnet address: $(cat "$UNIT" 2>/dev/null)"
-expect_output "✓ Listening on 100.64.90.72:5512" "node up --tailscale"
+grep -qF '"--host" "0.0.0.0"' "$UNIT" 2>/dev/null || fail "node up --tailscale didn't write host 0.0.0.0: $(cat "$UNIT" 2>/dev/null)"
+grep -qF '"--private-networks"' "$UNIT" 2>/dev/null || fail "node up --tailscale didn't write --private-networks: $(cat "$UNIT" 2>/dev/null)"
+expect_output "✓ Listening on Tailscale (100.64.90.72) and your local network, port 5512" "node up --tailscale"
+expect_calls "systemctl --user daemon-reload
+systemctl --user enable fleet-node.service
+systemctl --user restart fleet-node.service" "node up --tailscale after --lan"
+run_service linux node up --tailscale --port 5512 --data-dir node-data || fail "node up --tailscale again failed: $(cat "$WORK/stdout")"
+expect_output "✓ Already running on 0.0.0.0:5512" "node up --tailscale again"
+expect_calls "" "node up --tailscale again"
+# An older install listens on the Tailscale address alone: it counts as Tailscale, and is rewritten to the new form.
+sed -i 's/"--host" "0.0.0.0"/"--host" "100.64.90.72"/; /"--private-networks"/d' "$UNIT"
+run_service linux node up --yes --port 5512 --data-dir node-data || fail "node up --yes on an old Tailscale install failed: $(cat "$WORK/stdout")"
+expect_output "✓ Listening on Tailscale (100.64.90.72) and your local network, port 5512" "node up --yes on an old Tailscale install"
+grep -qF '"--private-networks"' "$UNIT" 2>/dev/null || fail "node up --yes didn't rewrite the old Tailscale install: $(cat "$UNIT" 2>/dev/null)"
+# Back to the local network: no restriction.
+run_service linux node up --lan --port 5512 --data-dir node-data || fail "node up --lan after Tailscale failed: $(cat "$WORK/stdout")"
+grep -qF '"--private-networks"' "$UNIT" 2>/dev/null && fail "node up --lan kept --private-networks: $(cat "$UNIT")"
+expect_output "✓ Listening on 0.0.0.0:5512" "node up --lan after Tailscale"
 run_service linux node up --ssh-only --port 5512 --data-dir node-data || fail "node up --ssh-only failed: $(cat "$WORK/stdout")"
 grep -qF '"--host" "127.0.0.1"' "$UNIT" 2>/dev/null || fail "node up --ssh-only didn't write loopback: $(cat "$UNIT" 2>/dev/null)"
 expect_output "Over SSH" "node up --ssh-only"
@@ -287,7 +310,8 @@ run_service linux node up --yes --port 5512 --data-dir node-data || fail "node u
 expect_output "✓ Already running on 127.0.0.1:5512" "node up --yes on top of a service"
 rm -f "$UNIT"
 run_service linux node up --yes --port 5512 --data-dir node-data || fail "node up --yes failed: $(cat "$WORK/stdout")"
-expect_output "✓ Listening on 100.64.90.72:5512" "node up --yes"
+expect_output "✓ Listening on Tailscale (100.64.90.72) and your local network, port 5512" "node up --yes"
+grep -qF '"--private-networks"' "$UNIT" 2>/dev/null || fail "node up --yes didn't write --private-networks: $(cat "$UNIT" 2>/dev/null)"
 touch "$WORK/tailscale-down"
 (cd "$WORK" && env FLEET_TEST_TAILSCALE_DOWN="$WORK/tailscale-down" HOME="$WORK/home" PATH="$WORK/stubs:$PATH" WEAVE_FLEET_DATA_DIR="$WORK/data" \
   FLEET_TEST_OUT="$WORK/out" FLEET_TEST_CALLS="$WORK/calls" "$WORK/fleet/bin/fleet" node up --tailscale --port 5512 > "$WORK/stdout" 2>&1) && fail "node up --tailscale should fail when Tailscale is signed out"
@@ -335,7 +359,7 @@ run_fleet help || fail "fleet help failed"
 HELP_OPTIONS="$(grep -o -- '--[a-z][a-z-]*' "$WORK/stdout" | sort -u)"
 for option in $HELP_OPTIONS; do
   case "$option" in
-    --require-token) run_fleet "$option" ;;
+    --require-token|--private-networks) run_fleet "$option" ;;
     --port) run_fleet "$option" 2113 ;;
     --host) run_fleet "$option" 127.0.0.1 ;;
     --profile) run_fleet "$option" test ;;

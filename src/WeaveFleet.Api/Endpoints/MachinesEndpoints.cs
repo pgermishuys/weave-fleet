@@ -100,8 +100,17 @@ public static class MachinesEndpoints
         .Produces<SetupJobResponse>(200)
         .WithName("GetMachineSetup");
 
-        group.MapPut("/{id}", async (string id, UpdateRemoteMachineRequest request, RemoteMachineService machines, ISshTunnels tunnels, CancellationToken cancellationToken) =>
+        group.MapPut("/{id}", async (string id, UpdateRemoteMachineRequest request, RemoteMachineService machines, MachineRoutes routes, ISshTunnels tunnels, CancellationToken cancellationToken) =>
         {
+            // The owner's order goes first, on its own: the watcher may be moving the machine to another address meanwhile.
+            if (request.Addresses is { } order)
+            {
+                if (await machines.GetAsync(id) is null)
+                    return Results.NotFound(new ErrorResponse("No such machine."));
+                if (await routes.ReorderAsync(id, order) is null)
+                    return Results.BadRequest(new ErrorResponse("The machine's addresses changed while you were looking. Look again and move them once more."));
+            }
+
             var (machine, error) = await machines.UpdateAsync(id, request.BaseUrl, request.Token, request.Name, cancellationToken, request.AgentsAllowed);
             if (machine is null)
                 return error!.Message == "No such machine." ? Results.NotFound(new ErrorResponse(error.Message)) : Results.BadRequest(ToError(error));
@@ -181,6 +190,7 @@ public static class MachinesEndpoints
     private static MachineEntryResponse ToResponse(RemoteMachine machine, string? token, ISshTunnels tunnels, RemoteMachineService machines) =>
         new(machine.Id, machine.Name, machine.BaseUrl, machine.Os, machine.Status, machine.AddedAt, machine.LastSeenAt, token, machine.AgentsAllowed,
             machine.SshDestination, machine.SshDestination is null ? null : tunnels.IsUp(machine.Id),
-            machine.Status == RemoteMachineStatuses.Online ? null : machines.LastDiagnosisOf(machine.Id));
+            machine.Status == RemoteMachineStatuses.Online ? null : machines.LastDiagnosisOf(machine.Id),
+            machine.Addresses.Select(a => new MachineAddressEntry(a.Url, a.Kind, a.Learned, a.LastResult, a.LastTriedAt)).ToList());
 }
 #pragma warning restore IL2026

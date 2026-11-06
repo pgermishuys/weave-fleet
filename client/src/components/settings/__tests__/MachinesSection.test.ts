@@ -512,3 +512,107 @@ describe("Settings → Machines", () => {
   });
 });
 
+
+describe("Settings → Machines: addresses", () => {
+  const addresses = [
+    { url: "http://studio.tail4f2a.ts.net:2113", kind: "tailnet", learned: false, lastResult: "no-answer" },
+    { url: "http://100.88.14.3:2113", kind: "tailnet-ip", learned: true, lastResult: "no-answer" },
+    { url: "http://192.168.1.42:2113", kind: "lan", learned: true, lastResult: "ok" },
+    { url: "http://studio:2113", kind: "hostname", learned: true, lastResult: null },
+  ] as const;
+  const studio: MachineConnection = {
+    id: "cccccccccccccccccccccccccccccccc",
+    name: "studio",
+    baseUrl: addresses[2].url,
+    token: "studio-token-0123456789",
+    os: "linux",
+    addedAt: "2026-10-01T00:00:00.000Z",
+    addresses: addresses.map((address) => ({ ...address })),
+  };
+  let put: ReturnType<typeof vi.fn<(url: string, init: RequestInit) => Response>>;
+
+  beforeEach(() => {
+    localStorage.clear();
+    sessionStorage.clear();
+    setActiveMachine(null);
+    setActivePinia(createPinia());
+    saveMachines([studio]);
+    put = vi.fn<(url: string, init: RequestInit) => Response>(() => json({ error: "The list changed meanwhile." }, 409));
+    vi.stubGlobal("fetch", vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
+      const url = String(input).split("?")[0];
+      if (url === "/api/machine") return json(atlasInfo);
+      if (url === `${studio.baseUrl}/api/machine`) return json({ ...atlasInfo, id: studio.id, name: "studio" });
+      if (url === `${studio.baseUrl}/api/sessions`) return json([]);
+      if (init?.method === "PUT") return put(url, init);
+      return json({ error: "no route" }, 404);
+    }));
+  });
+
+  afterEach(() => {
+    setActiveMachine(null);
+    vi.unstubAllGlobals();
+  });
+
+  async function mountList(): Promise<VueWrapper> {
+    const wrapper = mount(MachinesSection);
+    await flushPromises();
+    return wrapper;
+  }
+
+  it("lists the addresses in order and marks the one in use", async () => {
+    const wrapper = await mountList();
+    const rows = wrapper.findAll("[data-testid='machine-address']");
+    expect(rows.map((row) => row.find(".route__kind").text())).toEqual(["Tailscale", "Tailscale IP", "Local network", "Host name"]);
+    expect(rows.map((row) => row.find("[data-testid='machine-address-status']").text())).toEqual(["No answer", "No answer", "In use", "Not tried"]);
+    expect(rows[2].attributes("data-in-use")).toBe("true");
+    expect(rows[0].text()).toContain("added");
+    expect(rows[1].text()).toContain("learned");
+  });
+
+  it("says Connected on your network for a local address, and why not Tailscale", async () => {
+    const wrapper = await mountList();
+    expect(wrapper.find("[data-testid='machine-route']").text()).toContain("Connected on your network");
+    expect(wrapper.find("[data-testid='machine-route-note']").text()).toContain("Tailscale isn't answering");
+  });
+
+  it("says Connected over Tailscale on its IP, without saying Tailscale isn't answering", async () => {
+    const onIp = { ...studio, baseUrl: addresses[1].url };
+    saveMachines([onIp]);
+    setActiveMachine(onIp);
+    vi.stubGlobal("fetch", vi.fn(async (input: RequestInfo | URL) => {
+      const url = String(input).split("?")[0];
+      if (url === "/api/machine") return json(atlasInfo);
+      if (url === `${onIp.baseUrl}/api/machine`) return json({ ...atlasInfo, id: studio.id, name: "studio" });
+      if (url === `${onIp.baseUrl}/api/sessions`) return json([]);
+      return json({ error: "no route" }, 404);
+    }));
+
+    const wrapper = await mountList();
+
+    expect(wrapper.find("[data-testid='machine-route']").text()).toContain("Connected over Tailscale");
+    expect(wrapper.find("[data-testid='machine-route-note']").exists()).toBe(false);
+  });
+
+  it("moves an address up with Alt+ArrowUp and saves the new order", async () => {
+    put.mockImplementation((_url: string, init: RequestInit) => json({ ...atlasInfo, id: studio.id, name: "studio", addresses: JSON.parse(String(init.body)).addresses.map((url: string) => addresses.find((a) => a.url === url)) }));
+    const wrapper = await mountList();
+    await wrapper.findAll("[data-testid='machine-address-handle']")[2].trigger("keydown", { key: "ArrowUp", altKey: true });
+    await flushPromises();
+
+    expect(JSON.parse(String(put.mock.calls[0][1].body))).toEqual({
+      addresses: [addresses[0].url, addresses[2].url, addresses[1].url, addresses[3].url],
+    });
+    expect(wrapper.find("[data-testid='machine-address-announcement']").text()).toBe("Local network moved to position 2 of 4");
+  });
+
+  it("puts the order back and shows the error when saving fails", async () => {
+    const wrapper = await mountList();
+    await wrapper.findAll("[data-testid='machine-address-handle']")[3].trigger("keydown", { key: "ArrowUp", altKey: true });
+    await flushPromises();
+
+    expect(put).toHaveBeenCalled();
+    expect(wrapper.findAll("[data-testid='machine-address'] .route__kind").map((kind) => kind.text()))
+      .toEqual(["Tailscale", "Tailscale IP", "Local network", "Host name"]);
+    expect(wrapper.find("[role='alert']").text()).toContain("changed meanwhile");
+  });
+});

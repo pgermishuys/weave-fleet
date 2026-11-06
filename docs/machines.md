@@ -172,7 +172,7 @@ It asks how other machines should reach this one:
 
 | Choice | Listens on | Good for |
 |---|---|---|
-| **Tailscale** (preselected when `tailscale` is installed and signed in) | this machine's tailnet address, `tailscale ip -4` | only your devices can reach it |
+| **Tailscale** (preselected when `tailscale` is installed and signed in) | Tailscale and the local network (`0.0.0.0`), never a public address | only your devices can reach it; on the same network it still answers when Tailscale is off |
 | **Local network** | `0.0.0.0` | anyone on the network can try a code |
 | **Only over SSH** | `127.0.0.1` | other machines connect from Settings → Machines → Add a machine → Set it up from here |
 
@@ -185,6 +185,32 @@ doesn't ask: it keeps what is set up, else uses Tailscale when it is up, else `-
 without one of these, `fleet node up` exits with an error. `--port`, `--data-dir` and `--profile` work as in
 `fleet node`; `--host` doesn't, because the choice sets it. On Linux and macOS it writes the service and on Windows the
 scheduled task, as `fleet node install-service` does, which stays the way to pass any other `--host`.
+
+With **Tailscale** the node also passes `--private-networks` (`Fleet__PrivateNetworksOnly=true`): it drops, without
+an answer, any request that arrives on one of its public addresses, and answers only on loopback, the private ranges
+(10/8, 172.16/12, 192.168/16), link-local, Tailscale's 100.64/10 and IPv6 unique-local. An older install that
+listened on the tailnet address alone is still shown as Tailscale and moves to this when you run `fleet node up` again.
+
+### One machine, several addresses
+
+A machine is reached at whichever of its addresses answers. Fleet keeps a list for each one: the address it was added
+with, and the ones the machine reports itself in `GET /api/machine` (`addresses`): its Tailscale name and IP, its
+local network addresses and its host name. They're learned each time Fleet connects and again every minute, so a new
+DHCP lease is picked up on its own and an address the machine no longer has drops away (one you added stays).
+
+The default order is Tailscale first (its name, then its IP), then the local network, then the host name. Tailscale
+goes first because it is encrypted; the local network is used when Tailscale doesn't answer. Drag the addresses into
+your own order under Settings → Machines; a new address goes in after the last one of its own or an earlier kind, and
+one that replaces an old address of the same kind takes its place.
+
+Fleet starts with the address that worked last. When that doesn't answer, it tries the others in order, about 3
+seconds each, starting the next before the last gives up. Before any token goes to an address it asks who answers there
+with `GET /api/machine/id`, which needs no token and answers `{ id, apiVersion }` for any origin. Only an address where
+the machine's own id answers is used, so a device that took over an old address never sees the token; the list shows
+it as "Another device". While on a lower address, Fleet looks for a better one every minute (the web app also when the
+network comes back or the tab is in front again) and moves only once a connection there is up, then closes the old one.
+The home Fleet and each browser tab pick on their own, because they may sit on different networks: `GET /api/machines`
+gives each machine's `addresses` with home's last result at each, and `baseUrl` is the one home uses.
 
 ### Keep a node running
 

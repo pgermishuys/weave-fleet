@@ -322,6 +322,8 @@ public static class DependencyInjection
         services.AddSingleton<WeaveFleet.Application.Machines.RemoteMachineService>();
         services.AddHttpClient(WeaveFleet.Application.Machines.RemoteMachineService.HttpClientName, client => client.Timeout = TimeSpan.FromSeconds(5))
             .ConfigurePrimaryHttpMessageHandler(() => new System.Net.Http.SocketsHttpHandler { AllowAutoRedirect = false });
+        // Which of a machine's addresses to use; the watcher moves between them.
+        services.AddSingleton<WeaveFleet.Application.Machines.MachineRoutes>();
         services.AddSingleton<WeaveFleet.Application.Machines.DeviceGrantService>();
         // Scoped: it counts the caller's own sessions.
         services.AddScoped<WeaveFleet.Application.Machines.MachineCapabilitiesReader>();

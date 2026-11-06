@@ -17,7 +17,8 @@ namespace WeaveFleet.Infrastructure.Machines;
 /// <c>session_notification</c>, and on the topic of each session there that this Fleet follows (a session here waits on
 /// it: agent hand-off) for that session's replies, failures and going idle. Reconnects with backoff (2 s, doubling to
 /// 60 s) while the machine is away, following the same sessions again; stops when the machine turns the token away,
-/// until the token changes. Reports what it sees through <c>onStatus</c>.
+/// until the token changes. Reports what it sees through <c>onStatus</c>. Each connect starts on the address
+/// <see cref="MachineRoutes"/> picks, and a connection on a lower address moves up once a better one holds.
 /// </summary>
 internal sealed partial class RemoteMachineConnection : IAsyncDisposable
 {
@@ -35,8 +36,16 @@ internal sealed partial class RemoteMachineConnection : IAsyncDisposable
     private readonly HttpMessageHandler? _handler;
     private readonly ILogger _logger;
     private readonly CancellationTokenSource _stop = new();
+    private readonly MachineRoutes? _routes;
+    private readonly TimeProvider _time;
     private Task? _run;
     private HubConnection? _live;
+
+    // The connection whose events count. While moving to a better address both are open for a moment; only one is heard.
+    private HubConnection? _receiving;
+
+    /// <summary>For tests: how often a connection looks for a better address.</summary>
+    internal TimeSpan RecheckEvery { get; init; } = MachineRoutes.RecheckEvery;
 
     public RemoteMachineConnection(
         RemoteMachine machine,
@@ -48,8 +57,12 @@ internal sealed partial class RemoteMachineConnection : IAsyncDisposable
         HttpMessageHandler? handler = null,
         Func<IReadOnlyCollection<string>>? followed = null,
         Func<string, DomainEvent, Task>? onSessionEvent = null,
-        Func<string, Task>? onFollowing = null)
+        Func<string, Task>? onFollowing = null,
+        MachineRoutes? routes = null,
+        TimeProvider? time = null)
     {
+        _routes = routes;
+        _time = time ?? TimeProvider.System;
         _machine = machine;
         _token = token;
         _onNotification = onNotification;
@@ -72,22 +85,27 @@ internal sealed partial class RemoteMachineConnection : IAsyncDisposable
         while (!stopping.IsCancellationRequested)
         {
             var closed = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
-            await using var hub = Build(closed);
+            var url = _machine.BaseUrl;
+            HubConnection? hub = null;
             try
             {
+                if (_routes is not null)
+                    url = await _routes.PickAsync(_machine.Id, stopping) is { Length: > 0 } picked ? picked : url;
+                hub = Build(closed, url);
+                _receiving = hub;
                 await hub.StartAsync(stopping);
                 await hub.InvokeAsync("SubscribeToSessionsTopicAsync", stopping);
                 await _onStatus(RemoteMachineStatuses.Online, true, null);
-                LogConnected(_logger, _machine.Name);
+                LogConnected(_logger, _machine.Name, url);
                 delay = FirstRetry;
                 await _onConnected();
                 _live = hub;
                 // Events missed while away are asked about once each session's events flow again.
                 foreach (var sessionId in _followed())
                     await SubscribeAsync(hub, sessionId, stopping);
-                await closed.Task.WaitAsync(stopping);
+                (hub, closed, url) = await StayAsync(hub, closed, url, stopping);
                 _live = null;
-                await _onStatus(RemoteMachineStatuses.Unreachable, false, MachineDiagnoses.ConnectionLost(_machine.BaseUrl, _machine.Name).Diagnosis);
+                await _onStatus(RemoteMachineStatuses.Unreachable, false, MachineDiagnoses.ConnectionLost(url, _machine.Name).Diagnosis);
             }
             catch (OperationCanceledException) when (stopping.IsCancellationRequested)
             {
@@ -96,15 +114,20 @@ internal sealed partial class RemoteMachineConnection : IAsyncDisposable
             catch (HttpRequestException ex) when (ex.StatusCode is HttpStatusCode.Unauthorized or HttpStatusCode.Forbidden)
             {
                 // Someone replaced the token there. Retrying won't help until the token here changes.
-                await _onStatus(RemoteMachineStatuses.Unauthorized, false, MachineDiagnoses.FromStatus(HttpStatusCode.Unauthorized, _machine.BaseUrl, _machine.Name).Diagnosis);
+                await _onStatus(RemoteMachineStatuses.Unauthorized, false, MachineDiagnoses.FromStatus(HttpStatusCode.Unauthorized, url, _machine.Name).Diagnosis);
                 LogUnauthorized(_logger, _machine.Name);
                 return;
             }
             catch (Exception ex)
             {
                 _live = null;
-                await _onStatus(RemoteMachineStatuses.Unreachable, false, MachineDiagnoses.FromException(ex, _machine.BaseUrl, _machine.Name).Diagnosis);
+                await _onStatus(RemoteMachineStatuses.Unreachable, false, MachineDiagnoses.FromException(ex, url, _machine.Name).Diagnosis);
                 LogUnreachable(_logger, _machine.Name, ex.Message);
+            }
+            finally
+            {
+                if (hub is not null)
+                    await hub.DisposeAsync();
             }
 
             try
@@ -117,6 +140,72 @@ internal sealed partial class RemoteMachineConnection : IAsyncDisposable
             }
 
             delay = TimeSpan.FromTicks(Math.Min(delay.Ticks * 2, LongestRetry.Ticks));
+        }
+    }
+
+    /// <summary>
+    /// Keeps the connection until it closes, and returns the one in use then. Meanwhile, every
+    /// <see cref="MachineRoutes.RecheckEvery"/>, it asks the machine for its addresses and, while on a lower one, looks
+    /// for a better one that answers again. It moves only once a connection there is up and following everything this
+    /// one follows; then the old one closes. A better address that answers but can't hold a connection is left alone.
+    /// </summary>
+    private async Task<(HubConnection Hub, TaskCompletionSource Closed, string Url)> StayAsync(
+        HubConnection hub, TaskCompletionSource closed, string url, CancellationToken stopping)
+    {
+        if (_routes is null)
+        {
+            await closed.Task.WaitAsync(stopping);
+            return (hub, closed, url);
+        }
+
+        await LearnAsync(url, stopping);
+        while (true)
+        {
+            var tick = Task.Delay(RecheckEvery, _time, stopping);
+            if (await Task.WhenAny(closed.Task, tick) == closed.Task)
+                return (hub, closed, url);
+            await tick;
+
+            await LearnAsync(url, stopping);
+            if (await _routes.IsBestAsync(_machine.Id, url) || await _routes.BetterAsync(_machine.Id, url, stopping) is not { } better)
+                continue;
+
+            var nextClosed = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+            var next = Build(nextClosed, better);
+            try
+            {
+                await next.StartAsync(stopping);
+                await next.InvokeAsync("SubscribeToSessionsTopicAsync", stopping);
+                foreach (var sessionId in _followed())
+                    await next.InvokeAsync<JsonElement>("SubscribeToSessionAsync", sessionId, stopping);
+            }
+            catch (Exception ex) when (ex is not OperationCanceledException || !stopping.IsCancellationRequested)
+            {
+                LogStayed(_logger, _machine.Name, better, url, ex.Message);
+                await next.DisposeAsync();
+                continue;
+            }
+
+            // From here the new connection's events count and the old one's don't, so none is missed or doubled.
+            _receiving = next;
+            _live = next;
+            var old = hub;
+            (hub, closed, url) = (next, nextClosed, better);
+            await _routes.UseAsync(_machine.Id, better);
+            LogMoved(_logger, _machine.Name, better);
+            await old.DisposeAsync();
+        }
+    }
+
+    private async Task LearnAsync(string url, CancellationToken stopping)
+    {
+        try
+        {
+            await _routes!.LearnAsync(_machine.Id, url, _token, stopping);
+        }
+        catch (Exception ex) when (ex is not OperationCanceledException)
+        {
+            // The list stays as it was until the next time.
         }
     }
 
@@ -164,10 +253,10 @@ internal sealed partial class RemoteMachineConnection : IAsyncDisposable
         await _onFollowing(sessionId);
     }
 
-    private HubConnection Build(TaskCompletionSource closed)
+    private HubConnection Build(TaskCompletionSource closed, string url)
     {
         var hub = new HubConnectionBuilder()
-            .WithUrl($"{_machine.BaseUrl}/hubs/session-events", options =>
+            .WithUrl($"{url}/hubs/session-events", options =>
             {
                 options.AccessTokenProvider = () => Task.FromResult<string?>(_token);
                 if (_handler is not null)
@@ -179,7 +268,8 @@ internal sealed partial class RemoteMachineConnection : IAsyncDisposable
             .AddJsonProtocol(options => options.PayloadSerializerOptions.TypeInfoResolverChain.Insert(0, RemoteHubJsonContext.Default))
             .Build();
 
-        hub.On("Event", [typeof(string), typeof(long), typeof(JsonElement)], args => OnEventAsync((string?)args[0], args[2] is JsonElement data ? data : default));
+        hub.On("Event", [typeof(string), typeof(long), typeof(JsonElement)], args =>
+            ReferenceEquals(_receiving, hub) ? OnEventAsync((string?)args[0], args[2] is JsonElement data ? data : default) : Task.CompletedTask);
         hub.Closed += _ =>
         {
             closed.TrySetResult();
@@ -273,8 +363,14 @@ internal sealed partial class RemoteMachineConnection : IAsyncDisposable
     [LoggerMessage(Level = LogLevel.Warning, Message = "Couldn't follow session {SessionId} on {Machine}: {Reason}.")]
     private static partial void LogFollowFailed(ILogger logger, string sessionId, string machine, string reason);
 
-    [LoggerMessage(Level = LogLevel.Information, Message = "Listening to {Machine} for notifications.")]
-    private static partial void LogConnected(ILogger logger, string machine);
+    [LoggerMessage(Level = LogLevel.Information, Message = "Listening to {Machine} for notifications at {Url}.")]
+    private static partial void LogConnected(ILogger logger, string machine, string url);
+
+    [LoggerMessage(Level = LogLevel.Information, Message = "Moved to {Machine}'s better address {Url}.")]
+    private static partial void LogMoved(ILogger logger, string machine, string url);
+
+    [LoggerMessage(Level = LogLevel.Information, Message = "{Machine} answered at {Better} but a connection there didn't hold ({Reason}); staying on {Url}.")]
+    private static partial void LogStayed(ILogger logger, string machine, string better, string url, string reason);
 
     [LoggerMessage(Level = LogLevel.Information, Message = "Can't reach {Machine}: {Reason}. Trying again shortly.")]
     private static partial void LogUnreachable(ILogger logger, string machine, string reason);

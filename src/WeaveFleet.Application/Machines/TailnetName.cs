@@ -12,6 +12,7 @@ public sealed class TailnetName(ITailscale tailscale, TimeProvider? clock = null
     private static readonly TimeSpan Keep = TimeSpan.FromMinutes(1);
     private readonly TimeProvider _clock = clock ?? TimeProvider.System;
     private (string? Name, DateTimeOffset ReadAt)? _read;
+    private int _refreshing;
 
     public async Task<string?> GetAsync(CancellationToken cancellationToken)
     {
@@ -22,6 +23,35 @@ public sealed class TailnetName(ITailscale tailscale, TimeProvider? clock = null
         var name = Parse(await tailscale.StatusJsonAsync(cancellationToken));
         _read = (name, _clock.GetUtcNow());
         return name;
+    }
+
+    /// <summary>
+    /// The name as last read, without waiting: <c>GET /api/machine</c> lists it, and asking Tailscale can take seconds
+    /// when it's down. Starts a fresh read when the last one is over a minute old, for the next caller.
+    /// </summary>
+    public string? Current()
+    {
+        var read = _read;
+        if ((read is null || _clock.GetUtcNow() - read.Value.ReadAt > Keep) && Interlocked.Exchange(ref _refreshing, 1) == 0)
+        {
+            _ = Task.Run(async () =>
+            {
+                try
+                {
+                    await GetAsync(CancellationToken.None);
+                }
+                catch (Exception)
+                {
+                    // Tailscale didn't say; the name stays as it was until the next read.
+                }
+                finally
+                {
+                    Volatile.Write(ref _refreshing, 0);
+                }
+            });
+        }
+
+        return read?.Name;
     }
 
     private static string? Parse(string? json)

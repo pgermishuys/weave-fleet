@@ -15,6 +15,13 @@ public sealed class FleetOptions
     public string Host { get; set; } = "127.0.0.1";
 
     /// <summary>
+    /// Answer only requests that arrive on a loopback, private, link-local or Tailscale address, and drop the rest, so a
+    /// Fleet bound to <c>0.0.0.0</c> never answers on a public one. <c>fleet node up</c> turns it on for Tailscale, which
+    /// listens on the local network too as a fallback (<c>--private-networks</c>). Default: false.
+    /// </summary>
+    public bool PrivateNetworksOnly { get; set; }
+
+    /// <summary>
     /// Serve the web app (<c>wwwroot</c>) next to the API. <c>fleet node</c> (<c>--node</c>) turns it off: the API, the
     /// hub and terminal sockets stay, <c>/</c> answers a short note, and other pages are 404. Default: true.
     /// </summary>

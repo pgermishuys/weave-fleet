@@ -35,14 +35,24 @@ public static class MachineEndpoints
     {
         var group = app.MapGroup("/api/machine").WithTags("Machine");
 
-        group.MapGet("", async (MachineIdentityStore store, LoopbackAuthPolicy policy, MachineCapabilitiesReader capabilities, UpdateStateHolder updates, UpdateDownloadService downloads, UpdateRestartService restart, UpdateRuleStore rules) =>
+        group.MapGet("", async (MachineIdentityStore store, LoopbackAuthPolicy policy, MachineCapabilitiesReader capabilities, UpdateStateHolder updates, UpdateDownloadService downloads, UpdateRestartService restart, UpdateRuleStore rules, TailnetName tailnet) =>
             Results.Ok(ToResponse(store.Get(), fleetOptions, policy) with
             {
                 Capabilities = await capabilities.ReadAsync(),
                 Update = ToUpdate(updates.State, downloads, restart, rules),
+                // Where it can be reached now, so a Fleet that has it in its list learns a new LAN address on its own.
+                // The tailnet name as last read: asking Tailscale can take seconds when it's down.
+                Addresses = policy.IsRemoteReachable ? ReachableAddresses(fleetOptions, tailnet.Current()) : null,
             }))
             .Produces<MachineResponse>(200)
             .WithName("GetMachine");
+
+        // Who answers at this address, for anyone: a Fleet trying a machine's other addresses checks the id here before
+        // it sends the token, so a device that took over an old address never sees it.
+        group.MapGet("/id", (MachineIdentityStore store) => Results.Ok(new MachineIdResponse(store.Get().Id, ApiVersion)))
+            .AllowAnonymous()
+            .Produces<MachineIdResponse>(200)
+            .WithName("GetMachineId");
 
         // Only local mode has an access token, and only there is whoever signs in the machine's owner. A Fleet with
         // sign-in identifies people, not devices, and its users shouldn't rename the server they share.
@@ -195,7 +205,8 @@ public static class MachineEndpoints
             foreach (var networkInterface in NetworkInterface.GetAllNetworkInterfaces())
             {
                 if (networkInterface.OperationalStatus != OperationalStatus.Up
-                    || networkInterface.NetworkInterfaceType == NetworkInterfaceType.Loopback)
+                    || networkInterface.NetworkInterfaceType == NetworkInterfaceType.Loopback
+                    || IsContainerBridge(networkInterface.Name))
                     continue;
 
                 foreach (var unicast in networkInterface.GetIPProperties().UnicastAddresses)
@@ -204,6 +215,9 @@ public static class MachineEndpoints
                     if (address.AddressFamily != AddressFamily.InterNetwork || IPAddress.IsLoopback(address))
                         continue;
                     if (IsLinkLocal(address))
+                        continue;
+                    // A Fleet that refuses public addresses doesn't list them either.
+                    if (options.PrivateNetworksOnly && !MachineAddresses.IsPrivate(address))
                         continue;
 
                     addresses.Add(new MachineAddress(UrlFor(address, options.Port), KindOf(address)));
@@ -223,6 +237,15 @@ public static class MachineEndpoints
             .ToList();
     }
 
+    /// <summary>Docker's and libvirt's bridges: only this machine reaches the addresses on them.</summary>
+    internal static bool IsContainerBridge(string interfaceName)
+        => interfaceName.StartsWith("docker", StringComparison.Ordinal)
+            || interfaceName.StartsWith("br-", StringComparison.Ordinal)
+            || interfaceName.StartsWith("veth", StringComparison.Ordinal)
+            || interfaceName.StartsWith("virbr", StringComparison.Ordinal)
+            || interfaceName.StartsWith("cni", StringComparison.Ordinal)
+            || interfaceName.StartsWith("podman", StringComparison.Ordinal);
+
     private static bool IsWildcard(IPAddress address)
         => address.Equals(IPAddress.Any) || address.Equals(IPAddress.IPv6Any);
 
@@ -233,17 +256,7 @@ public static class MachineEndpoints
     }
 
     /// <summary>Tailscale hands out addresses from the carrier-grade NAT range, 100.64.0.0/10.</summary>
-    private static string KindOf(IPAddress address)
-    {
-        if (address.AddressFamily == AddressFamily.InterNetwork)
-        {
-            var bytes = address.GetAddressBytes();
-            if (bytes[0] == 100 && bytes[1] is >= 64 and <= 127)
-                return "tailnet";
-        }
-
-        return "lan";
-    }
+    private static string KindOf(IPAddress address) => MachineAddresses.IsTailnet(address) ? "tailnet" : "lan";
 
     private static string UrlFor(IPAddress address, int port)
         => address.AddressFamily == AddressFamily.InterNetworkV6 ? $"http://[{address}]:{port}" : $"http://{address}:{port}";
@@ -274,6 +287,7 @@ public static class MachineEndpoints
 /// <param name="PublicUrl">The address phones should use for this machine, when someone set one; pairing puts it in the QR code.</param>
 /// <param name="Capabilities">What it can run and how busy it is; only <c>GET</c> and <c>PUT /api/machine</c> fill it in.</param>
 /// <param name="Update">Where it is with Fleet updates; only <c>GET /api/machine</c> fills it in. Absent from older Fleets.</param>
+/// <param name="Addresses">Where other devices can reach it now, best first, when it listens beyond loopback; only <c>GET /api/machine</c> fills it in. Absent from older Fleets.</param>
 public sealed record MachineResponse(
     string Id,
     string Name,
@@ -287,7 +301,13 @@ public sealed record MachineResponse(
     bool WebApp,
     string? PublicUrl = null,
     MachineCapabilities? Capabilities = null,
-    MachineUpdate? Update = null);
+    MachineUpdate? Update = null,
+    IReadOnlyList<MachineAddress>? Addresses = null);
+
+/// <summary>Who answers at an address, for anyone who asks: what a Fleet checks before it sends a machine's token there.</summary>
+/// <param name="Id">The machine's id; see <see cref="MachineResponse.Id"/>.</param>
+/// <param name="ApiVersion">The machine contract version.</param>
+public sealed record MachineIdResponse(string Id, int ApiVersion);
 
 /// <summary>Where a Fleet is with updating itself.</summary>
 /// <param name="Status">The same words as <c>GET /api/update/status</c>: <c>unknown</c>, <c>uptodate</c>, <c>available</c>, <c>downloading</c>, <c>staged</c>, <c>error</c> or <c>managed</c> (the desktop app updates it).</param>
