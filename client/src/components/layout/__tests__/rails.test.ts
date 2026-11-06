@@ -9,12 +9,13 @@ import { useSidebarStore } from "@/stores/sidebar";
 import githubPluginManifest from "@/plugins/builtin/github";
 import marketplacePluginManifest from "@/plugins/builtin/marketplace";
 
-const { navigate, pathname, boardOn, workflowsOn, missionOn } = vi.hoisted(() => ({
+const { navigate, pathname, boardOn, workflowsOn, missionOn, jobsOn } = vi.hoisted(() => ({
   navigate: vi.fn(),
   pathname: { value: "/" },
   boardOn: { value: false },
   workflowsOn: { value: false },
   missionOn: { value: false },
+  jobsOn: { value: false },
 }));
 
 vi.mock("@tanstack/vue-router", () => ({
@@ -26,6 +27,7 @@ vi.mock("@/api/client", () => ({
 }));
 vi.mock("@/composables/use-board-feature", () => ({ useBoardFeature: () => ({ isBoardFeatureEnabled: ref(boardOn.value) }) }));
 vi.mock("@/composables/use-mission-control-feature", () => ({ useMissionControlFeature: () => ({ isMissionControlEnabled: ref(missionOn.value) }) }));
+vi.mock("@/composables/use-jobs-feature", () => ({ useJobsFeature: () => ({ isJobsEnabled: ref(jobsOn.value) }) }));
 vi.mock("@/composables/use-workflows-feature", () => ({ useWorkflowsFeature: () => ({ isWorkflowsEnabled: ref(workflowsOn.value) }) }));
 vi.mock("@/stores/workflows", () => ({ useWorkflowsStore: () => ({ ensureLoaded: vi.fn() }) }));
 vi.mock("@/composables/use-whats-new", () => ({ useWhatsNew: () => ({ openWhatsNew: vi.fn() }) }));
@@ -39,6 +41,7 @@ vi.mock("@/components/sessions/SessionsPanel.vue", panel("sessions"));
 vi.mock("@/components/board/BoardControlsPanel.vue", panel("board"));
 vi.mock("@/components/analytics/AnalyticsNavPanel.vue", panel("analytics"));
 vi.mock("@/components/mission-control/FleetNavPanel.vue", panel("fleet"));
+vi.mock("@/components/jobs/JobsNavPanel.vue", panel("jobs"));
 vi.mock("@/components/settings/SettingsNavPanel.vue", panel("settings"));
 vi.mock("@/components/automations/AutomationsNavPanel.vue", panel("automations"));
 vi.mock("@/components/workflows/WorkflowsNavPanel.vue", panel("workflows"));
@@ -61,6 +64,7 @@ describe("the icon rail", () => {
     boardOn.value = false;
     workflowsOn.value = false;
     missionOn.value = false;
+    jobsOn.value = false;
     navigate.mockClear();
   });
 
@@ -155,6 +159,16 @@ describe("the icon rail", () => {
     }
   });
 
+  it("keeps Jobs active on a job's page, and lists Jobs only while it's on", () => {
+    expect(railLabels(mount(IconRail))).not.toContain("Jobs");
+    jobsOn.value = true;
+    expect(railLabels(mount(IconRail))).toContain("Jobs");
+
+    pathname.value = "/jobs/j1";
+    mount(IconRail);
+    expect(useSidebarStore().activeRail).toBe("jobs");
+  });
+
   it("keeps Settings active on its sub-pages", () => {
     pathname.value = "/settings/plugins/some-plugin";
     mount(IconRail);
@@ -213,6 +227,7 @@ describe("the context panel per rail", () => {
     ["sessions", "panel-sessions"],
     ["analytics", "panel-analytics"],
     ["automations", "panel-automations"],
+    ["jobs", "panel-jobs"],
     ["settings", "panel-settings"],
     ["github", "panel-github"],
   ])("shows %s as %s", (rail, expected) => {

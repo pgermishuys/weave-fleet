@@ -8,7 +8,7 @@ defineEmits<{ open: []; cancel: [] }>();
 
 <template>
   <aside
-    class="flex w-80 shrink-0 flex-col gap-4 overflow-y-auto border-l border-border p-5"
+    class="flex w-full max-w-2xl flex-col gap-4 p-5"
     data-testid="job-detail"
   >
     <div>

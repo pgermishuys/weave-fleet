@@ -1,11 +1,17 @@
 import { enableAutoUnmount, flushPromises, mount } from "@vue/test-utils";
+import { ref } from "vue";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { createPinia, setActivePinia } from "pinia";
 import JobsPage from "@/components/pages/JobsPage.vue";
 import { setActiveMachine } from "@/lib/machines";
 import type { Job, JobMachine } from "@/lib/jobs";
 
-vi.mock("@tanstack/vue-router", () => ({ useRouter: () => ({ navigate: vi.fn() }) }));
+const { navigate, pathname } = vi.hoisted(() => ({ navigate: vi.fn(), pathname: { value: "/jobs" } }));
+
+vi.mock("@tanstack/vue-router", () => ({
+  useRouter: () => ({ navigate }),
+  useLocation: () => ref(pathname.value),
+}));
 
 enableAutoUnmount(afterEach);
 
@@ -42,10 +48,13 @@ describe("Jobs screen", () => {
     setActivePinia(createPinia());
     jobs = [];
     requests = [];
+    pathname.value = "/jobs";
+    navigate.mockClear();
     vi.stubGlobal("fetch", vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
       const url = input instanceof Request ? input.url : String(input);
       requests.push(`${init?.method ?? "GET"} ${url}`);
       if (url.endsWith("/api/preferences")) return json({ Jobs: "true" });
+      if (init?.method === "DELETE") return json({});
       if (url.endsWith("/api/jobs")) return json({ jobs, machines: [atlas, mini, laptop] });
       return json({}, 404);
     }));
@@ -67,44 +76,37 @@ describe("Jobs screen", () => {
     expect(wrapper.findAll("[data-testid='jobs-seat-chip']").map((chip) => chip.text())).toEqual(["atlas 1/2", "mini 0/1"]);
   });
 
-  it("puts a job in its column, with its machine, and says why a waiting one waits", async () => {
-    jobs = [
-      { ...base, id: "j1", title: "Add rate limits", state: "running", machineId: "m1", machineName: "atlas", sessionId: "s1" },
-      { ...base, id: "j2", title: "Update the docs", whyWaiting: "No machine has a free seat." },
-      { ...base, id: "j3", title: "Fix rounding", state: "needs_you", machineId: "m1", machineName: "atlas", sessionId: "s2" },
-      { ...base, id: "j4", title: "Build the app", state: "done", machineId: "m2", machineName: "mini", sessionId: "s3" },
-    ];
+  it("asks for a job to be picked when some exist and none is open", async () => {
+    jobs = [{ ...base, id: "j1", title: "Add rate limits" }];
     const wrapper = mount(JobsPage);
     await flushPromises();
 
-    const titlesIn = (column: string) => wrapper.findAll(`[data-testid='jobs-column-${column}'] [data-testid='job-card']`).map((card) => card.text());
-    expect(titlesIn("running")[0]).toContain("Add rate limits");
-    expect(wrapper.find("[data-testid='jobs-column-running'] [data-testid='job-machine']").text()).toBe("atlas");
-    expect(titlesIn("waiting")[0]).toContain("No machine has a free seat.");
-    expect(titlesIn("needs_you")[0]).toContain("Fix rounding");
-    expect(titlesIn("done")[0]).toContain("Build the app");
+    expect(wrapper.find("[data-testid='jobs-pick']").exists()).toBe(true);
+    expect(wrapper.find("[data-testid='job-card']").exists()).toBe(false);
   });
 
-  it("opens a card's detail, and cancels only a waiting job", async () => {
+  it("shows the job the address names, and cancels only a waiting one", async () => {
     jobs = [
       { ...base, id: "j1", title: "Add rate limits", state: "running", machineId: "m1", machineName: "atlas", sessionId: "s1" },
       { ...base, id: "j2", title: "Update the docs", whyWaiting: "No machine has a free seat." },
     ];
-    const wrapper = mount(JobsPage);
+    pathname.value = "/jobs/j1";
+    let wrapper = mount(JobsPage);
     await flushPromises();
-    const cards = wrapper.findAll("[data-testid='job-card']");
-
-    await wrapper.find("[data-testid='jobs-column-running'] [data-testid='job-card']").trigger("click");
     expect(wrapper.find("[data-testid='job-open-session']").exists()).toBe(true);
     expect(wrapper.find("[data-testid='job-cancel']").exists()).toBe(false);
+    wrapper.unmount();
 
-    await cards.find((card) => card.text().includes("Update the docs"))!.trigger("click");
+    pathname.value = "/jobs/j2";
+    wrapper = mount(JobsPage);
+    await flushPromises();
     expect(wrapper.find("[data-testid='job-detail-why']").text()).toBe("No machine has a free seat.");
     expect(wrapper.find("[data-testid='job-open-session']").exists()).toBe(false);
 
     await wrapper.find("[data-testid='job-cancel']").trigger("click");
     await flushPromises();
     expect(requests).toContain("DELETE /api/jobs/j2");
+    expect(navigate).toHaveBeenLastCalledWith({ to: "/jobs" });
   });
 
   it("shows each machine's seats on the Agents tab", async () => {

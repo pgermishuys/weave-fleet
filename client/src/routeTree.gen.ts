@@ -16,12 +16,12 @@ import { Route as RepositoriesRouteImport } from './routes/repositories'
 import { Route as PhoneRouteImport } from './routes/phone'
 import { Route as PairRouteImport } from './routes/pair'
 import { Route as LoginRouteImport } from './routes/login'
-import { Route as JobsRouteImport } from './routes/jobs'
 import { Route as GithubRouteImport } from './routes/github'
 import { Route as BoardRouteImport } from './routes/board'
 import { Route as AutomationsRouteImport } from './routes/automations'
 import { Route as IndexRouteImport } from './routes/index'
 import { Route as PhoneIndexRouteImport } from './routes/phone.index'
+import { Route as JobsIndexRouteImport } from './routes/jobs.index'
 import { Route as GithubIndexRouteImport } from './routes/github.index'
 import { Route as FleetIndexRouteImport } from './routes/fleet.index'
 import { Route as AnalyticsIndexRouteImport } from './routes/analytics.index'
@@ -30,6 +30,7 @@ import { Route as SessionsIdRouteImport } from './routes/sessions.$id'
 import { Route as PhoneSetupRouteImport } from './routes/phone.setup'
 import { Route as PhoneNewRouteImport } from './routes/phone.new'
 import { Route as PhoneAnsweredRouteImport } from './routes/phone.answered'
+import { Route as JobsIdRouteImport } from './routes/jobs.$id'
 import { Route as AnalyticsSectionRouteImport } from './routes/analytics.$section'
 import { Route as SettingsPluginsIndexRouteImport } from './routes/settings_.plugins.index'
 import { Route as SettingsPluginsPluginIdRouteImport } from './routes/settings_.plugins.$pluginId'
@@ -75,11 +76,6 @@ const LoginRoute = LoginRouteImport.update({
   path: '/login',
   getParentRoute: () => rootRouteImport,
 } as any)
-const JobsRoute = JobsRouteImport.update({
-  id: '/jobs',
-  path: '/jobs',
-  getParentRoute: () => rootRouteImport,
-} as any)
 const GithubRoute = GithubRouteImport.update({
   id: '/github',
   path: '/github',
@@ -104,6 +100,11 @@ const PhoneIndexRoute = PhoneIndexRouteImport.update({
   id: '/',
   path: '/',
   getParentRoute: () => PhoneRoute,
+} as any)
+const JobsIndexRoute = JobsIndexRouteImport.update({
+  id: '/jobs/',
+  path: '/jobs/',
+  getParentRoute: () => rootRouteImport,
 } as any)
 const GithubIndexRoute = GithubIndexRouteImport.update({
   id: '/',
@@ -144,6 +145,11 @@ const PhoneAnsweredRoute = PhoneAnsweredRouteImport.update({
   id: '/answered',
   path: '/answered',
   getParentRoute: () => PhoneRoute,
+} as any)
+const JobsIdRoute = JobsIdRouteImport.update({
+  id: '/jobs/$id',
+  path: '/jobs/$id',
+  getParentRoute: () => rootRouteImport,
 } as any)
 const AnalyticsSectionRoute = AnalyticsSectionRouteImport.update({
   id: '/analytics/$section',
@@ -199,7 +205,6 @@ export interface FileRoutesByFullPath {
   '/automations': typeof AutomationsRoute
   '/board': typeof BoardRoute
   '/github': typeof GithubRouteWithChildren
-  '/jobs': typeof JobsRoute
   '/login': typeof LoginRoute
   '/pair': typeof PairRoute
   '/phone': typeof PhoneRouteWithChildren
@@ -208,6 +213,7 @@ export interface FileRoutesByFullPath {
   '/welcome': typeof WelcomeRoute
   '/workflows': typeof WorkflowsRoute
   '/analytics/$section': typeof AnalyticsSectionRoute
+  '/jobs/$id': typeof JobsIdRoute
   '/phone/answered': typeof PhoneAnsweredRoute
   '/phone/new': typeof PhoneNewRoute
   '/phone/setup': typeof PhoneSetupRoute
@@ -216,6 +222,7 @@ export interface FileRoutesByFullPath {
   '/analytics/': typeof AnalyticsIndexRoute
   '/fleet/': typeof FleetIndexRoute
   '/github/': typeof GithubIndexRoute
+  '/jobs/': typeof JobsIndexRoute
   '/phone/': typeof PhoneIndexRoute
   '/fleet/machines/$machineId': typeof FleetMachinesMachineIdRoute
   '/github/$owner/$repo': typeof GithubOwnerRepoRouteWithChildren
@@ -230,7 +237,6 @@ export interface FileRoutesByTo {
   '/': typeof IndexRoute
   '/automations': typeof AutomationsRoute
   '/board': typeof BoardRoute
-  '/jobs': typeof JobsRoute
   '/login': typeof LoginRoute
   '/pair': typeof PairRoute
   '/repositories': typeof RepositoriesRoute
@@ -238,6 +244,7 @@ export interface FileRoutesByTo {
   '/welcome': typeof WelcomeRoute
   '/workflows': typeof WorkflowsRoute
   '/analytics/$section': typeof AnalyticsSectionRoute
+  '/jobs/$id': typeof JobsIdRoute
   '/phone/answered': typeof PhoneAnsweredRoute
   '/phone/new': typeof PhoneNewRoute
   '/phone/setup': typeof PhoneSetupRoute
@@ -246,6 +253,7 @@ export interface FileRoutesByTo {
   '/analytics': typeof AnalyticsIndexRoute
   '/fleet': typeof FleetIndexRoute
   '/github': typeof GithubIndexRoute
+  '/jobs': typeof JobsIndexRoute
   '/phone': typeof PhoneIndexRoute
   '/fleet/machines/$machineId': typeof FleetMachinesMachineIdRoute
   '/settings/plugins/$pluginId': typeof SettingsPluginsPluginIdRoute
@@ -261,7 +269,6 @@ export interface FileRoutesById {
   '/automations': typeof AutomationsRoute
   '/board': typeof BoardRoute
   '/github': typeof GithubRouteWithChildren
-  '/jobs': typeof JobsRoute
   '/login': typeof LoginRoute
   '/pair': typeof PairRoute
   '/phone': typeof PhoneRouteWithChildren
@@ -270,6 +277,7 @@ export interface FileRoutesById {
   '/welcome': typeof WelcomeRoute
   '/workflows': typeof WorkflowsRoute
   '/analytics/$section': typeof AnalyticsSectionRoute
+  '/jobs/$id': typeof JobsIdRoute
   '/phone/answered': typeof PhoneAnsweredRoute
   '/phone/new': typeof PhoneNewRoute
   '/phone/setup': typeof PhoneSetupRoute
@@ -278,6 +286,7 @@ export interface FileRoutesById {
   '/analytics/': typeof AnalyticsIndexRoute
   '/fleet/': typeof FleetIndexRoute
   '/github/': typeof GithubIndexRoute
+  '/jobs/': typeof JobsIndexRoute
   '/phone/': typeof PhoneIndexRoute
   '/fleet/machines/$machineId': typeof FleetMachinesMachineIdRoute
   '/github/$owner/$repo': typeof GithubOwnerRepoRouteWithChildren
@@ -295,7 +304,6 @@ export interface FileRouteTypes {
     | '/automations'
     | '/board'
     | '/github'
-    | '/jobs'
     | '/login'
     | '/pair'
     | '/phone'
@@ -304,6 +312,7 @@ export interface FileRouteTypes {
     | '/welcome'
     | '/workflows'
     | '/analytics/$section'
+    | '/jobs/$id'
     | '/phone/answered'
     | '/phone/new'
     | '/phone/setup'
@@ -312,6 +321,7 @@ export interface FileRouteTypes {
     | '/analytics/'
     | '/fleet/'
     | '/github/'
+    | '/jobs/'
     | '/phone/'
     | '/fleet/machines/$machineId'
     | '/github/$owner/$repo'
@@ -326,7 +336,6 @@ export interface FileRouteTypes {
     | '/'
     | '/automations'
     | '/board'
-    | '/jobs'
     | '/login'
     | '/pair'
     | '/repositories'
@@ -334,6 +343,7 @@ export interface FileRouteTypes {
     | '/welcome'
     | '/workflows'
     | '/analytics/$section'
+    | '/jobs/$id'
     | '/phone/answered'
     | '/phone/new'
     | '/phone/setup'
@@ -342,6 +352,7 @@ export interface FileRouteTypes {
     | '/analytics'
     | '/fleet'
     | '/github'
+    | '/jobs'
     | '/phone'
     | '/fleet/machines/$machineId'
     | '/settings/plugins/$pluginId'
@@ -356,7 +367,6 @@ export interface FileRouteTypes {
     | '/automations'
     | '/board'
     | '/github'
-    | '/jobs'
     | '/login'
     | '/pair'
     | '/phone'
@@ -365,6 +375,7 @@ export interface FileRouteTypes {
     | '/welcome'
     | '/workflows'
     | '/analytics/$section'
+    | '/jobs/$id'
     | '/phone/answered'
     | '/phone/new'
     | '/phone/setup'
@@ -373,6 +384,7 @@ export interface FileRouteTypes {
     | '/analytics/'
     | '/fleet/'
     | '/github/'
+    | '/jobs/'
     | '/phone/'
     | '/fleet/machines/$machineId'
     | '/github/$owner/$repo'
@@ -389,7 +401,6 @@ export interface RootRouteChildren {
   AutomationsRoute: typeof AutomationsRoute
   BoardRoute: typeof BoardRoute
   GithubRoute: typeof GithubRouteWithChildren
-  JobsRoute: typeof JobsRoute
   LoginRoute: typeof LoginRoute
   PairRoute: typeof PairRoute
   PhoneRoute: typeof PhoneRouteWithChildren
@@ -398,10 +409,12 @@ export interface RootRouteChildren {
   WelcomeRoute: typeof WelcomeRoute
   WorkflowsRoute: typeof WorkflowsRoute
   AnalyticsSectionRoute: typeof AnalyticsSectionRoute
+  JobsIdRoute: typeof JobsIdRoute
   SessionsIdRoute: typeof SessionsIdRoute
   SessionsNewRoute: typeof SessionsNewRoute
   AnalyticsIndexRoute: typeof AnalyticsIndexRoute
   FleetIndexRoute: typeof FleetIndexRoute
+  JobsIndexRoute: typeof JobsIndexRoute
   FleetMachinesMachineIdRoute: typeof FleetMachinesMachineIdRoute
   SettingsPluginsPluginIdRoute: typeof SettingsPluginsPluginIdRoute
   SettingsPluginsIndexRoute: typeof SettingsPluginsIndexRoute
@@ -458,13 +471,6 @@ declare module '@tanstack/vue-router' {
       preLoaderRoute: typeof LoginRouteImport
       parentRoute: typeof rootRouteImport
     }
-    '/jobs': {
-      id: '/jobs'
-      path: '/jobs'
-      fullPath: '/jobs'
-      preLoaderRoute: typeof JobsRouteImport
-      parentRoute: typeof rootRouteImport
-    }
     '/github': {
       id: '/github'
       path: '/github'
@@ -499,6 +505,13 @@ declare module '@tanstack/vue-router' {
       fullPath: '/phone/'
       preLoaderRoute: typeof PhoneIndexRouteImport
       parentRoute: typeof PhoneRoute
+    }
+    '/jobs/': {
+      id: '/jobs/'
+      path: '/jobs'
+      fullPath: '/jobs/'
+      preLoaderRoute: typeof JobsIndexRouteImport
+      parentRoute: typeof rootRouteImport
     }
     '/github/': {
       id: '/github/'
@@ -555,6 +568,13 @@ declare module '@tanstack/vue-router' {
       fullPath: '/phone/answered'
       preLoaderRoute: typeof PhoneAnsweredRouteImport
       parentRoute: typeof PhoneRoute
+    }
+    '/jobs/$id': {
+      id: '/jobs/$id'
+      path: '/jobs/$id'
+      fullPath: '/jobs/$id'
+      preLoaderRoute: typeof JobsIdRouteImport
+      parentRoute: typeof rootRouteImport
     }
     '/analytics/$section': {
       id: '/analytics/$section'
@@ -674,7 +694,6 @@ const rootRouteChildren: RootRouteChildren = {
   AutomationsRoute: AutomationsRoute,
   BoardRoute: BoardRoute,
   GithubRoute: GithubRouteWithChildren,
-  JobsRoute: JobsRoute,
   LoginRoute: LoginRoute,
   PairRoute: PairRoute,
   PhoneRoute: PhoneRouteWithChildren,
@@ -683,10 +702,12 @@ const rootRouteChildren: RootRouteChildren = {
   WelcomeRoute: WelcomeRoute,
   WorkflowsRoute: WorkflowsRoute,
   AnalyticsSectionRoute: AnalyticsSectionRoute,
+  JobsIdRoute: JobsIdRoute,
   SessionsIdRoute: SessionsIdRoute,
   SessionsNewRoute: SessionsNewRoute,
   AnalyticsIndexRoute: AnalyticsIndexRoute,
   FleetIndexRoute: FleetIndexRoute,
+  JobsIndexRoute: JobsIndexRoute,
   FleetMachinesMachineIdRoute: FleetMachinesMachineIdRoute,
   SettingsPluginsPluginIdRoute: SettingsPluginsPluginIdRoute,
   SettingsPluginsIndexRoute: SettingsPluginsIndexRoute,

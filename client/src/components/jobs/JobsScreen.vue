@@ -3,12 +3,13 @@ import { computed, onMounted, onUnmounted, shallowRef } from "vue";
 import { useRouter } from "@tanstack/vue-router";
 import { Plus } from "lucide-vue-next";
 import { Button } from "@/components/ui/button";
-import JobCard from "@/components/jobs/JobCard.vue";
 import JobDetail from "@/components/jobs/JobDetail.vue";
+import JobsStrip from "@/components/jobs/JobsStrip.vue";
 import JobsAgents from "@/components/jobs/JobsAgents.vue";
 import NewJobDialog from "@/components/jobs/NewJobDialog.vue";
-import { jobColumns, type Job } from "@/lib/jobs";
+import { type Job } from "@/lib/jobs";
 import { HOME_MACHINE_KEY } from "@/lib/machines";
+import { useSelectedJobId } from "@/composables/use-jobs-menu";
 import { useJobsStore } from "@/stores/jobs";
 import { useMachinesStore } from "@/stores/machines";
 
@@ -18,11 +19,11 @@ const machinesStore = useMachinesStore();
 const router = useRouter();
 
 const tab = shallowRef<"queue" | "agents">("queue");
-const selectedId = shallowRef<string | null>(null);
+// The list is the context panel; which job is open is in the address, so a reload keeps it.
+const selectedId = useSelectedJobId();
 const isNewOpen = shallowRef(false);
 const actionError = shallowRef<string | null>(null);
 
-const columns = computed(() => jobColumns(store.jobs));
 const selected = computed(() => store.jobs.find((job) => job.id === selectedId.value) ?? null);
 // Seats are given to machines, so a machine with none is left out of the bar.
 const seated = computed(() => store.machines.filter((machine) => machine.seats > 0));
@@ -54,7 +55,7 @@ async function cancel(job: Job): Promise<void> {
   actionError.value = null;
   try {
     await store.cancel(job.id);
-    selectedId.value = null;
+    void router.navigate({ to: "/jobs" });
   } catch (error) {
     actionError.value = error instanceof Error ? error.message : "Couldn't cancel the job.";
   }
@@ -124,42 +125,32 @@ async function cancel(job: Job): Promise<void> {
     <div class="flex min-h-0 flex-1">
       <template v-if="tab === 'queue'">
         <div
-          class="grid min-w-0 flex-1 grid-cols-4 gap-4 overflow-x-auto p-5"
+          class="flex min-w-0 flex-1 flex-col overflow-y-auto"
           data-testid="jobs-queue"
         >
-          <section
-            v-for="column in columns"
-            :key="column.id"
-            class="flex min-w-48 flex-col gap-3"
-            :data-testid="`jobs-column-${column.id}`"
-          >
-            <h2 class="text-sm font-medium text-text">
-              {{ column.title }}
-              <span class="text-muted">{{ column.jobs.length }}</span>
-            </h2>
-            <JobCard
-              v-for="job in column.jobs"
-              :key="job.id"
-              :job="job"
-              :selected="job.id === selectedId"
-              @click="selectedId = job.id"
-            />
-          </section>
+          <JobsStrip />
+          <JobDetail
+            v-if="selected"
+            :job="selected"
+            :machine-name="machineName"
+            @open="openSession(selected)"
+            @cancel="cancel(selected)"
+          />
           <p
-            v-if="store.isLoaded && store.jobs.length === 0"
-            class="col-span-4 text-sm text-muted"
+            v-else-if="store.isLoaded && store.jobs.length === 0"
+            class="p-5 text-sm text-muted"
             data-testid="jobs-empty"
           >
             No jobs yet. Post one with New job, and Fleet starts it on a machine with a free seat.
           </p>
+          <p
+            v-else-if="store.isLoaded"
+            class="p-5 text-sm text-muted"
+            data-testid="jobs-pick"
+          >
+            Pick a job from the list.
+          </p>
         </div>
-        <JobDetail
-          v-if="selected"
-          :job="selected"
-          :machine-name="machineName"
-          @open="openSession(selected)"
-          @cancel="cancel(selected)"
-        />
       </template>
       <JobsAgents
         v-else

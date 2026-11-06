@@ -3,6 +3,7 @@ import { BarChart3, LayoutGrid, ListTodo, Radar, MessageSquare, Settings, Workfl
 import FleetNavPanel from "@/components/mission-control/FleetNavPanel.vue";
 import AnalyticsNavPanel from "@/components/analytics/AnalyticsNavPanel.vue";
 import BoardControlsPanel from "@/components/board/BoardControlsPanel.vue";
+import JobsNavPanel from "@/components/jobs/JobsNavPanel.vue";
 import SessionsPanel from "@/components/sessions/SessionsPanel.vue";
 import SettingsNavPanel from "@/components/settings/SettingsNavPanel.vue";
 import AutomationsNavPanel from "@/components/automations/AutomationsNavPanel.vue";
@@ -59,10 +60,9 @@ railPoint.contribute("core", [
   // notice fills the whole context area (noPanel), so no other view's panel sits beside it.
   { id: "board", label: "Board", icon: LayoutGrid, to: "/board", placement: "top", order: 10, panel: BoardControlsPanel, hidden: boardOff, noPanel: boardOff },
   { id: "workflows", label: "Workflows", icon: Workflow, to: "/workflows", placement: "top", order: 20, panel: WorkflowsNavPanel, off: workflowsOff, noPanel: workflowsOff },
-  // TODO(rail-owns-context): Jobs borrows the sessions list. It gets its own menu (jobs-list/jobs-detail) in a
-  // follow-up, copying Analytics: a nav panel here, a route per item, a ContextPanel test.
-  // Jobs leaves the rail while it's switched off, like Board.
-  { id: "jobs", label: "Jobs", icon: ListTodo, to: "/jobs", placement: "top", order: 25, panel: SessionsPanel, hidden: jobsOff },
+  // Jobs owns its context: the jobs-list (Running, Queued, Done) beside the selected job. It leaves the rail while it's
+  // switched off, like Board.
+  { id: "jobs", label: "Jobs", icon: ListTodo, to: "/jobs", placement: "top", order: 25, panel: JobsNavPanel, hidden: jobsOff },
   { id: "automations", label: "Automations", icon: Zap, to: "/automations", placement: "top", order: 30, panel: AutomationsContextPanel },
   // Analytics owns its context: the analytics-menu (sections, filters, export) beside the selected section.
   { id: "analytics", label: "Analytics", icon: BarChart3, to: "/analytics", placement: "secondary", order: 0, panel: AnalyticsNavPanel },
