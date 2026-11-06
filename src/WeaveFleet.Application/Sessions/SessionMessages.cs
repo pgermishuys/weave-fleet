@@ -56,6 +56,10 @@ public static class SessionMessages
     public static string WrapUpdate(string sessionId, string title, string outcome, string text, SessionMessageMachine? machine = null)
         => $"<{UpdateTag} session=\"{WebUtility.HtmlEncode(sessionId)}\" title=\"{WebUtility.HtmlEncode(title)}\" outcome=\"{outcome}\"{MachineAttributes(machine)}>\n{text}\n</{UpdateTag}>";
 
+    /// <summary>Whether a prompt is one Fleet wrote between sessions: a message from one, or an update about one.</summary>
+    public static bool IsFromSession(string text)
+        => text.StartsWith($"<{Tag} ", StringComparison.Ordinal) || text.StartsWith($"<{UpdateTag} ", StringComparison.Ordinal);
+
     private static string MachineAttributes(SessionMessageMachine? machine) => machine is null
         ? ""
         : $" machine=\"{WebUtility.HtmlEncode(machine.Id)}\" machine-name=\"{WebUtility.HtmlEncode(machine.Name)}\"";

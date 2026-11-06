@@ -158,6 +158,9 @@ public sealed partial class SessionPrompting(
 
         await activation.ApplyPermissionsAsync(sessionResult.Value, instanceResult.Value, ct).ConfigureAwait(false);
 
+        // Before the harness has it, and in the words it came in: the model may call fleet_message the moment it does.
+        updates?.Prompted(id, text);
+
         // The user's mods may reword the prompt or add notes for the model. The words they leave are what the
         // conversation shows and the harness gets; the notes go with the harness's other model-only notes.
         var modPrompt = modPrompts is null

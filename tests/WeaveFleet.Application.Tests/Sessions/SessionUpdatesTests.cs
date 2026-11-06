@@ -191,6 +191,33 @@ public sealed class SessionUpdatesTests
     }
 
     [Fact]
+    public async Task a_prompt_of_the_users_own_in_that_turn_ends_the_mark()
+    {
+        _sut.Watch(new SessionUpdateWatch(Asker, Target, UserId, MessageId));
+        await ReplyAsync(Target, parentId: MessageId);
+        await IdleAsync(Target);
+        _sut.IsStartedByUpdate(Asker).ShouldBeTrue();
+
+        // OpenCode 2 runs a prompt sent mid-turn in the turn it's on, with no idle in between.
+        _sut.Prompted(Asker, "And another one.");
+
+        _sut.IsStartedByUpdate(Asker).ShouldBeFalse();
+    }
+
+    [Fact]
+    public async Task a_message_or_update_from_another_session_keeps_the_mark()
+    {
+        _sut.Watch(new SessionUpdateWatch(Asker, Target, UserId, MessageId));
+        await ReplyAsync(Target, parentId: MessageId);
+        await IdleAsync(Target);
+
+        _sut.Prompted(Asker, SessionMessages.Wrap(Target, "Target", "Over to you."));
+        _sut.Prompted(Asker, SessionMessages.WrapUpdate(Target, "Target", SessionUpdates.Finished, "Done."));
+
+        _sut.IsStartedByUpdate(Asker).ShouldBeTrue();
+    }
+
+    [Fact]
     public async Task an_update_that_was_not_delivered_does_not_mark_the_turn()
     {
         _sender.Deliver = false;

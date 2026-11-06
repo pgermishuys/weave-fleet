@@ -153,6 +153,20 @@ public sealed partial class SessionUpdates(
             return _startedByUpdate.Contains(sessionId);
     }
 
+    /// <summary>
+    /// A prompt is on its way to <paramref name="sessionId"/>. One that isn't from another session (the user's, an
+    /// automation's) ends the mark of a turn an update started: a harness that takes a prompt mid-turn (OpenCode 2)
+    /// runs it in that same turn, with no idle in between, and the turn is no longer only the two sessions'.
+    /// </summary>
+    public void Prompted(string sessionId, string text)
+    {
+        if (SessionMessages.IsFromSession(text))
+            return;
+
+        lock (_gate)
+            _startedByUpdate.Remove(sessionId);
+    }
+
     /// <summary>Called for every event the relay translates, on its pump.</summary>
     public void Observe(string sessionId, DomainEvent? domainEvent)
     {
