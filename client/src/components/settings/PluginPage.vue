@@ -3,8 +3,9 @@ import { computed } from "vue";
 import { ChevronRight, Puzzle } from "lucide-vue-next";
 import SettingSwitch from "@/components/settings/SettingSwitch.vue";
 import { useSettingsNav } from "@/composables/use-settings-nav";
+import { setPluginEnabledEverywhere } from "@/plugins/use-plugin-switch";
 import { usePluginRuntime } from "@/plugins/composable";
-import { describeContributions, getConfigPage, isPluginEnabled, setPluginEnabled } from "@/plugins/slots";
+import { describeContributions, getConfigPage, isPluginEnabled } from "@/plugins/slots";
 
 const props = defineProps<{ pluginId: string }>();
 
@@ -82,7 +83,7 @@ const name = computed(() => descriptor.value?.displayName ?? props.pluginId);
           :checked="enabled"
           :aria-label="`${name} on or off`"
           data-testid="plugin-page-switch"
-          @click="setPluginEnabled(pluginId, !enabled)"
+          @click="void setPluginEnabledEverywhere(pluginId, !enabled)"
         />
       </header>
 
