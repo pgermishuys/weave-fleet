@@ -123,6 +123,7 @@ public sealed class RemoteMachineWatcherTests
             [new ImportedMachine("ghost-id", "ghost", "http://127.0.0.1:9", "ghost-token-0123456789", "linux", null)]);
 
         await WaitForAsync(async () => (await StatusAsync(hangar, "ghost-id")) == RemoteMachineStatuses.Unreachable);
+        hangar.Services.GetRequiredService<RemoteMachineService>().LastDiagnosisOf("ghost-id").ShouldNotBeNull().Code.ShouldBe("fleet-not-running");
     }
 
     [Fact]
@@ -136,6 +137,7 @@ public sealed class RemoteMachineWatcherTests
             [new ImportedMachine(falcon.MachineId, "falcon", "http://falcon.test", "an-old-token-0123456789", "linux", null)]);
 
         await WaitForAsync(async () => (await StatusAsync(hangar, falcon.MachineId)) == RemoteMachineStatuses.Unauthorized);
+        hangar.Services.GetRequiredService<RemoteMachineService>().LastDiagnosisOf(falcon.MachineId).ShouldNotBeNull().Code.ShouldBe("key-rejected");
     }
 
     private static async Task SubscribeAsync(FleetHost host) =>

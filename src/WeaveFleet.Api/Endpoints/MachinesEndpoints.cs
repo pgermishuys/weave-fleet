@@ -26,7 +26,7 @@ public static class MachinesEndpoints
         {
             var owner = FleetClaims.IsOwner(http.User);
             var list = await machines.ListAsync();
-            return Results.Ok(new MachineListResponse(list.Select(m => ToResponse(m, owner ? machines.TryTokenOf(m) : null, tunnels)).ToList()));
+            return Results.Ok(new MachineListResponse(list.Select(m => ToResponse(m, owner ? machines.TryTokenOf(m) : null, tunnels, machines)).ToList()));
         })
         .Produces<MachineListResponse>(200)
         .WithName("ListMachines");
@@ -36,7 +36,7 @@ public static class MachinesEndpoints
             var (machine, error) = await machines.AddAsync(request.BaseUrl ?? "", request.Token ?? "", cancellationToken);
             return machine is null
                 ? Results.BadRequest(ToError(error!))
-                : Results.Ok(ToResponse(machine, machines.TokenOf(machine), tunnels));
+                : Results.Ok(ToResponse(machine, machines.TokenOf(machine), tunnels, machines));
         })
         .RequireAuthorization(FleetClaims.MachineOwnerPolicy)
         .Produces<MachineEntryResponse>(200)
@@ -59,7 +59,7 @@ public static class MachinesEndpoints
             var (machine, error) = await machines.AddByCodeAsync(request.BaseUrl ?? "", request.Code ?? "", cancellationToken);
             return machine is null
                 ? Results.BadRequest(ToError(error!))
-                : Results.Ok(ToResponse(machine, machines.TokenOf(machine), tunnels));
+                : Results.Ok(ToResponse(machine, machines.TokenOf(machine), tunnels, machines));
         })
         .RequireAuthorization(FleetClaims.MachineOwnerPolicy)
         .Produces<MachineEntryResponse>(200)
@@ -105,7 +105,7 @@ public static class MachinesEndpoints
             var (machine, error) = await machines.UpdateAsync(id, request.BaseUrl, request.Token, request.Name, cancellationToken, request.AgentsAllowed);
             if (machine is null)
                 return error!.Message == "No such machine." ? Results.NotFound(new ErrorResponse(error.Message)) : Results.BadRequest(ToError(error));
-            return Results.Ok(ToResponse(machine, machines.TokenOf(machine), tunnels));
+            return Results.Ok(ToResponse(machine, machines.TokenOf(machine), tunnels, machines));
         })
         .RequireAuthorization(FleetClaims.MachineOwnerPolicy)
         .Produces<MachineEntryResponse>(200)
@@ -163,7 +163,7 @@ public static class MachinesEndpoints
                 .Where(m => m.Id is not null && m.BaseUrl is not null && m.Token is not null)
                 .Select(m => new ImportedMachine(m.Id!, m.Name, m.BaseUrl!, m.Token!, m.Os, m.AddedAt));
             var list = await machines.ImportAsync(imported);
-            return Results.Ok(new MachineListResponse(list.Select(m => ToResponse(m, machines.TryTokenOf(m), tunnels)).ToList()));
+            return Results.Ok(new MachineListResponse(list.Select(m => ToResponse(m, machines.TryTokenOf(m), tunnels, machines)).ToList()));
         })
         .RequireAuthorization(FleetClaims.MachineOwnerPolicy)
         .Produces<MachineListResponse>(200)
@@ -176,10 +176,11 @@ public static class MachinesEndpoints
 
     private static SetupJobResponse ToResponse(SshSetupJob job, RemoteMachineService machines, ISshTunnels tunnels) =>
         new(job.Id, job.Destination, job.Status, job.Progress.Steps,
-            job.Result?.Machine is { } machine ? ToResponse(machine, machines.TokenOf(machine), tunnels) : null, job.Result?.Error, job.Result?.Diagnosis);
+            job.Result?.Machine is { } machine ? ToResponse(machine, machines.TokenOf(machine), tunnels, machines) : null, job.Result?.Error, job.Result?.Diagnosis);
 
-    private static MachineEntryResponse ToResponse(RemoteMachine machine, string? token, ISshTunnels tunnels) =>
+    private static MachineEntryResponse ToResponse(RemoteMachine machine, string? token, ISshTunnels tunnels, RemoteMachineService machines) =>
         new(machine.Id, machine.Name, machine.BaseUrl, machine.Os, machine.Status, machine.AddedAt, machine.LastSeenAt, token, machine.AgentsAllowed,
-            machine.SshDestination, machine.SshDestination is null ? null : tunnels.IsUp(machine.Id));
+            machine.SshDestination, machine.SshDestination is null ? null : tunnels.IsUp(machine.Id),
+            machine.Status == RemoteMachineStatuses.Online ? null : machines.LastDiagnosisOf(machine.Id));
 }
 #pragma warning restore IL2026

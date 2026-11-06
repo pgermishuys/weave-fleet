@@ -91,7 +91,7 @@ function statusLine(candidate: MachineCandidate): string {
   const what = probe.state === "ready" ? `Fleet ${probe.version}`
     : probe.state === "noFleet" ? "SSH works · no Fleet yet"
       : probe.state === "unsupported" ? "Fleet sets machines up over SSH on Linux and macOS only"
-        : "can't log in over SSH";
+        : probe.diagnosis?.headline ?? "can't log in over SSH";
   return [os, what].filter(Boolean).join(" · ");
 }
 
@@ -124,12 +124,26 @@ function back(): void {
 function actionLabel(candidate: MachineCandidate): string | null {
   const probe = probeFor(candidate);
   if (!probe) return null;
+  if (probe.state === "cantLogIn" && probe.diagnosis) return "See why";
   return probe.state === "ready" ? "Add" : probe.state === "noFleet" ? "Set up" : "Use a link";
+}
+
+/** The set-up card as a login that failed looks: the first step broken, the rest not tried. */
+function showLoginFailure(candidate: MachineCandidate, probe: CandidateProbe): void {
+  settingUp.value = candidate;
+  steps.value = [
+    { key: "login", label: "Log in over SSH", state: "failed", detail: probe.diagnosis?.headline ?? null },
+    { key: "install", label: "Install Fleet", state: "pending", detail: null },
+    { key: "start", label: "Start it in the background", state: "pending", detail: null },
+    { key: "pair", label: "Pair and add the machine", state: "pending", detail: null },
+  ];
+  failure.value = { message: probe.error ?? "Can't log in over SSH.", diagnosis: probe.diagnosis };
 }
 
 function act(candidate: MachineCandidate): void {
   const probe = probeFor(candidate);
   if (probe?.state === "ready" || probe?.state === "noFleet") void setUp(candidate);
+  else if (probe?.state === "cantLogIn" && probe.diagnosis) showLoginFailure(candidate, probe);
   else emit("useLink", candidate.name);
 }
 </script>

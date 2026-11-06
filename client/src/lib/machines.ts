@@ -12,6 +12,8 @@
  * This module has no Vue in it on purpose: it is the transport rule every request path shares.
  */
 
+import type { MachineDiagnosis } from "@/lib/machine-diagnosis";
+
 /** A machine the client has been given: where it is and the token to present. The client owns this record. */
 export interface MachineConnection {
   /** The machine's own id, from `GET /api/machine`. Stable across restarts, port changes and renames. */
@@ -29,6 +31,8 @@ export interface MachineConnection {
   sshDestination?: string | null;
   /** Whether the SSH tunnel is up; null or missing when it isn't an SSH machine. */
   tunnelUp?: boolean | null;
+  /** Why home last couldn't reach it, while it can't; missing from an older home. */
+  diagnosis?: MachineDiagnosis | null;
 }
 
 const CATALOG_KEY = "weave:machines";

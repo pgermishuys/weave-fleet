@@ -151,7 +151,7 @@ public sealed partial class RemoteMachineWatcher(
         catch (Exception ex) when (ex is System.Security.Cryptography.CryptographicException or FormatException)
         {
             // Encrypted with keys this Fleet no longer has: the owner has to give the token again.
-            await machines.SetStatusAsync(machine.Id, RemoteMachineStatuses.Unauthorized, seen: false);
+            await machines.SetStatusAsync(machine.Id, RemoteMachineStatuses.Unauthorized, seen: false, MachineDiagnoses.KeyUnreadable(machine.BaseUrl, machine.Name).Diagnosis);
             return;
         }
 
@@ -162,7 +162,7 @@ public sealed partial class RemoteMachineWatcher(
                 machine,
                 token,
                 payload => ForwardAsync(machine, payload),
-                (status, seen) => machines.SetStatusAsync(machine.Id, status, seen),
+                (status, seen, diagnosis) => machines.SetStatusAsync(machine.Id, status, seen, diagnosis),
                 () => MachineConnected?.Invoke(machine.Id) ?? Task.CompletedTask,
                 loggerFactory.CreateLogger<RemoteMachineConnection>(),
                 Handler,

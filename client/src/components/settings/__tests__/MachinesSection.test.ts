@@ -472,6 +472,23 @@ describe("Settings → Machines", () => {
       expect(wrapper.find("[data-testid='machines-add-link-hint']").text()).toContain("heron");
     });
 
+    it("says why a machine it can't log in to, and shows the failed step", async () => {
+      const diagnosis = {
+        code: "ssh-host-key", headline: "SSH doesn't trust heron yet",
+        steps: [{ label: "SSH reaches it", state: "ok" }, { label: "SSH logs in", state: "failed", detail: "The host key isn't one you have accepted." }],
+        try: "Run ssh heron once and accept its key.",
+      };
+      probes.heron = { state: "cantLogIn", os: null, version: null, error: "SSH doesn't trust heron yet.", diagnosis };
+      const wrapper = await openForm();
+
+      expect(rowOf(wrapper, "heron").text()).toContain("SSH doesn't trust heron yet");
+      await rowOf(wrapper, "heron").find("[data-testid='machines-setup-action']").trigger("click");
+
+      expect(wrapper.find("[data-step='login']").attributes("data-state")).toBe("failed");
+      expect(wrapper.find("[data-testid='machines-setup-error']").text()).toContain("Run ssh heron once and accept its key.");
+      expect(wrapper.find("[data-testid='machines-setup-use-link']").exists()).toBe(true);
+    });
+
     it("offers a typed user@host as a row", async () => {
       const wrapper = await openForm();
       routes["/api/machines/candidates/probe"] = () => json(probes.orion);

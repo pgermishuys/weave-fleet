@@ -81,6 +81,20 @@ public sealed class RemoteMachineAddByCodeTests : IDisposable
     }
 
     [Fact]
+    public async Task A_Fleet_without_the_pairing_route_is_too_old_for_pairing_links()
+    {
+        _falcon.Answer = _ => (HttpStatusCode.NotFound, "<html>Not found</html>");
+
+        var (found, error) = await _falcon.Service.PreviewByCodeAsync("http://falcon.test:2113", "ABCD-EFGH", CancellationToken.None);
+
+        found.ShouldBeNull();
+        var diagnosis = error.ShouldNotBeNull().Diagnosis.ShouldNotBeNull();
+        diagnosis.Code.ShouldBe("no-pairing-links");
+        diagnosis.Headline.ShouldBe("Fleet on falcon.test is too old for pairing links");
+        diagnosis.Try.ShouldContain("master token under Advanced");
+    }
+
+    [Fact]
     public async Task This_machine_is_refused_before_the_code_is_used()
     {
         var self = new FakeMachine();

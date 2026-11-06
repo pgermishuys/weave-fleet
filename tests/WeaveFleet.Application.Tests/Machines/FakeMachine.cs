@@ -84,6 +84,6 @@ internal sealed class FakeMachine : HttpMessageHandler, IHttpClientFactory
             await before(line);
 
         var (status, json) = Answer(line) ?? (HttpStatusCode.NotFound, """{"error":"Not found."}""");
-        return new HttpResponseMessage(status) { Content = new StringContent(json, Encoding.UTF8, "application/json") };
+        return new HttpResponseMessage(status) { Content = new StringContent(json, Encoding.UTF8, json.StartsWith('<') ? "text/html" : "application/json") };
     }
 }

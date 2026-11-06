@@ -1,5 +1,6 @@
 import { flushPromises, mount } from "@vue/test-utils";
 import { beforeEach, describe, expect, it, vi } from "vitest";
+import MachineHeader from "@/components/sessions/MachineHeader.vue";
 import MachineSessionsGroup from "@/components/sessions/MachineSessionsGroup.vue";
 import { useMachinesStore, type MachineEntry, type MachineSessions } from "@/stores/machines";
 import { usePreferencesStore } from "@/stores/preferences";
@@ -53,6 +54,21 @@ function rowIds(view: ReturnType<typeof mountGroup>): string[] {
 describe("MachineSessionsGroup", () => {
   beforeEach(() => {
     localStorage.clear();
+  });
+
+  it("says why an unreachable machine isn't answering, from home's last look at it", () => {
+    const diagnosis = {
+      code: "not-answering",
+      headline: "macbook isn't answering",
+      steps: [],
+      try: "Check that macbook is on and on the same network or tailnet as this machine.",
+    };
+    const why = (props: Partial<InstanceType<typeof MachineSessionsGroup>["$props"]>) =>
+      mountGroup(props).findComponent(MachineHeader).props("why");
+
+    expect(why({ machine: { ...macbook, diagnosis }, state: { ...listed, error: "no answer" } })).toEqual(diagnosis);
+    expect(why({ machine: { ...macbook, diagnosis } })).toBeNull();
+    expect(why({ state: { ...listed, error: "no answer" } })).toBeNull();
   });
 
   it("shows the new-session draft that starts on this machine, in its project, and opens it", async () => {
