@@ -118,9 +118,9 @@ public sealed class MachineAccessEndpointTests :
         identity.GetProperty("authMode").GetString().ShouldBe("sign-in");
 
         (await client.PutAsJsonAsync("/api/machine", new { name = "mine now" })).IsSuccessStatusCode.ShouldBeFalse();
-        // No access endpoint, so no token: an unmatched path gets the app's page, as every unknown path does.
+        // No access endpoint, so no token: an unmatched API path is not found, as every unknown one is.
         var access = await client.GetAsync("/api/machine/access");
-        access.Content.Headers.ContentType?.MediaType.ShouldNotBe("application/json");
+        access.StatusCode.ShouldBe(HttpStatusCode.NotFound);
         (await access.Content.ReadAsStringAsync()).ShouldNotContain("\"token\"");
     }
 

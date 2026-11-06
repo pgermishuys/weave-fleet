@@ -1,4 +1,5 @@
 using System.Net;
+using System.Text.Json;
 using Microsoft.AspNetCore.Builder;
 using Microsoft.AspNetCore.Hosting;
 using Microsoft.AspNetCore.TestHost;
@@ -45,6 +46,10 @@ public sealed class WebAppEndpointsTests : IAsyncLifetime
     [InlineData("/index.html")]
     [InlineData("/settings")]
     [InlineData("/sessions/abc")]
+    [InlineData("/automations")]
+    [InlineData("/workflows")]
+    [InlineData("/phone/new")]
+    [InlineData("/apiary")]
     public async Task Index_html_is_always_revalidated(string path)
     {
         var response = await _http.GetAsync(path);
@@ -79,5 +84,37 @@ public sealed class WebAppEndpointsTests : IAsyncLifetime
     public async Task Api_routes_are_not_the_web_app()
     {
         (await _http.GetStringAsync("/api/ping")).ShouldBe("pong");
+    }
+
+    // A mistyped call, or a URL missing its id, got the web app with a 200: a client, another machine or an agent
+    // read HTML where it expected JSON, and a test's 404 check couldn't tell a missing route from a leak.
+    [Theory]
+    [InlineData("GET", "/api/nope")]
+    [InlineData("GET", "/api/sessions/x/screenshots/")]
+    [InlineData("HEAD", "/api/ping/extra")]
+    [InlineData("GET", "/hubs/nope")]
+    [InlineData("GET", "/pages/nope/deeper")]
+    [InlineData("GET", "/auth/nope")]
+    [InlineData("GET", "/openapi/nope")]
+    public async Task A_server_path_nothing_answers_is_not_found_not_the_web_app(string method, string path)
+    {
+        var response = await _http.SendAsync(new HttpRequestMessage(new HttpMethod(method), path));
+
+        response.StatusCode.ShouldBe(HttpStatusCode.NotFound);
+        response.Content.Headers.ContentType!.MediaType.ShouldBe("application/json");
+        if (method == "HEAD")
+            return;
+        using var body = JsonDocument.Parse(await response.Content.ReadAsStringAsync());
+        body.RootElement.GetProperty("error").GetString().ShouldNotBeNullOrWhiteSpace();
+    }
+
+    // Only GET and HEAD ever reached the web app; other methods keep routing's own answer, 405, as they do on a page.
+    [Theory]
+    [InlineData("/api/ping")]
+    [InlineData("/api/nope")]
+    [InlineData("/settings")]
+    public async Task Other_methods_keep_routing_s_answer(string path)
+    {
+        (await _http.PostAsync(path, content: null)).StatusCode.ShouldBe(HttpStatusCode.MethodNotAllowed);
     }
 }

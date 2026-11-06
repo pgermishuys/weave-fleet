@@ -768,6 +768,7 @@ else
 {
     // A node: no web app, so "/" says what this is and every other page is 404.
     app.MapNodeNote();
+    app.MapUnknownServerPaths();
 }
 
 await app.RunAsync();
