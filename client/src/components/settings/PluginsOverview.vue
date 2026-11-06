@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { computed } from "vue";
+import { computed, onMounted } from "vue";
 import { Puzzle } from "lucide-vue-next";
 import SettingSwitch from "@/components/settings/SettingSwitch.vue";
 import { useSettingsNav } from "@/composables/use-settings-nav";
@@ -10,6 +10,10 @@ import { describeContributions, getConfigPage, isPluginEnabled } from "@/plugins
 // Everything here is read from the plugin registry and each plugin's contribution points; no plugin is named.
 const pluginRuntime = usePluginRuntime();
 const { setActiveSection } = useSettingsNav();
+
+onMounted(() => {
+  for (const manifest of pluginRuntime.manifests.value) manifest.ownSwitch?.load?.();
+});
 
 const rows = computed(() =>
   pluginRuntime.manifests.value
@@ -24,6 +28,8 @@ const rows = computed(() =>
         description: manifest.descriptor.description ?? "",
         icon: manifest.contributions?.configPage?.icon ?? Puzzle,
         enabled,
+        switchless: manifest.descriptor.switchless === true,
+        own: manifest.ownSwitch,
         // The areas it adds to, once each, whether or not it is on: that is what turning it on would add.
         areas: [...new Set(describeContributions(manifest).map((added) => added.area))],
         // A plugin's page is open while it is on and has settings; a plugin that is off is still reachable to switch it on.
@@ -57,7 +63,7 @@ const rows = computed(() =>
       <article
         v-for="row in rows"
         :key="row.id"
-        class="flex items-start gap-3 border-b border-border p-4 last:border-b-0"
+        class="flex flex-wrap items-start gap-3 border-b border-border p-4 last:border-b-0"
         :data-plugin-row="row.id"
       >
         <span class="grid h-9 w-9 shrink-0 place-items-center rounded-btn border border-border bg-main-bg text-text">
@@ -103,11 +109,30 @@ const rows = computed(() =>
           </p>
         </div>
         <SettingSwitch
+          v-if="!row.switchless"
           :checked="row.enabled"
+          :saving="row.own?.saving?.()"
+          :pending="row.own?.pending?.()"
           :aria-label="`${row.name} on or off`"
           :data-testid="`plugin-switch-${row.id}`"
           @click="void setPluginEnabledEverywhere(row.id, !row.enabled)"
         />
+        <button
+          v-else-if="row.hasPage"
+          type="button"
+          class="shrink-0 rounded-btn border border-border px-2.5 py-1 text-xs text-text hover:bg-main-bg"
+          :data-testid="`plugin-open-${row.id}`"
+          @click="setActiveSection(`plugin:${row.id}`)"
+        >
+          Open
+        </button>
+        <div
+          v-if="row.own?.panel"
+          class="basis-full pl-12"
+          :data-testid="`plugin-panel-${row.id}`"
+        >
+          <component :is="row.own?.panel" />
+        </div>
       </article>
     </div>
   </section>

@@ -1,28 +1,23 @@
 <script setup lang="ts">
-import { computed, onMounted, shallowRef } from "vue";
 import { useRouter } from "@tanstack/vue-router";
+import { computed, shallowRef } from "vue";
 import SettingGroup from "@/components/settings/SettingGroup.vue";
 import SettingRow from "@/components/settings/SettingRow.vue";
 import SettingSwitch from "@/components/settings/SettingSwitch.vue";
-import ModsRuntimePanel from "@/components/settings/mods/ModsRuntimePanel.vue";
 import { usePreferenceSwitch } from "@/composables/use-preference-switch";
 import { useSettingsNav } from "@/composables/use-settings-nav";
 import { useWorkflowsFeature } from "@/composables/use-workflows-feature";
-import { apiFetch } from "@/lib/api-client";
 import { DREAMING_PREFERENCE_KEY } from "@/lib/dreaming";
 import { FLEET_UPDATES_PREFERENCE_KEY } from "@/lib/fleet-updates";
 import { JOBS_PREFERENCE_KEY } from "@/lib/jobs";
 import { AGENT_HANDOFF_PREFERENCE_KEY, LIVE_MACHINES_PREFERENCE_KEY } from "@/lib/machines";
 import { MISSION_CONTROL_PREFERENCE_KEY } from "@/lib/mission-control";
-import { MODS_PREFERENCE_KEY } from "@/lib/mods";
 import { PAGE_CHOICE_PREFERENCE_KEY } from "@/lib/page-choice";
 import { SESSION_MESSAGES_PREFERENCE_KEY } from "@/lib/session-messages";
 import { useMachinesStore } from "@/stores/machines";
-import { useModsRuntimeStore } from "@/stores/mods-runtime";
 import { usePreferencesStore } from "@/stores/preferences";
 
 const preferencesStore = usePreferencesStore();
-const modsRuntime = useModsRuntimeStore();
 const machines = useMachinesStore();
 const router = useRouter();
 const { setActiveSection } = useSettingsNav();
@@ -46,50 +41,6 @@ async function toggleWorkflows(): Promise<void> {
     await setWorkflowsEnabled(!isWorkflowsEnabled.value);
   } finally {
     isSavingWorkflows.value = false;
-  }
-}
-
-// What the server does when the user hasn't chosen: it falls back to Fleet's own option, so ask it.
-const serverModsOn = shallowRef(false);
-
-onMounted(async () => {
-  void modsRuntime.load();
-  try {
-    const response = await apiFetch("/api/features/mods");
-    if (!response.ok) return;
-    const body = (await response.json()) as { on?: boolean };
-    serverModsOn.value = body.on === true;
-  } catch {
-    // Keep showing off: the same as before the server answers.
-  }
-});
-
-const isModsEnabled = computed(() => {
-  const chosen = preferencesStore.get(MODS_PREFERENCE_KEY, "");
-  return chosen === "" ? serverModsOn.value : chosen === "true";
-});
-const isSavingMods = shallowRef(false);
-
-const isConfirmingMods = computed(() => modsRuntime.confirming);
-
-async function toggleMods(): Promise<void> {
-  // The switch stays off while Fleet says what it will install: the user answers there. Flipping it again cancels.
-  if (isConfirmingMods.value) {
-    modsRuntime.confirming = false;
-    return;
-  }
-  // Clicked before Fleet said whether Bun is there: ask now, rather than turn Mods on without it.
-  if (!isModsEnabled.value && !modsRuntime.view) await modsRuntime.load();
-  const runtime = modsRuntime.view;
-  if (!isModsEnabled.value && runtime && !runtime.bun && !runtime.configuredPath) {
-    modsRuntime.confirming = true;
-    return;
-  }
-  isSavingMods.value = true;
-  try {
-    await preferencesStore.set(MODS_PREFERENCE_KEY, isModsEnabled.value ? "false" : "true");
-  } finally {
-    isSavingMods.value = false;
   }
 }
 
@@ -300,32 +251,6 @@ function openRoute(path: string): void {
             aria-label="Enable choosing on a page"
             data-testid="page-choice-switch"
             @click="pageChoice.toggle"
-          />
-        </template>
-      </SettingRow>
-
-      <SettingRow
-        id="mods"
-        title="Mods"
-        summary="Agents write small add-ons for Fleet; you review each one."
-        :adds="addsWhenOn(isModsEnabled, 'A Mods tab in Skills & tools')"
-        @open="setActiveSection('skills', 'mods')"
-      >
-        <template #more>
-          Agents can write small add-ons for Fleet: what a tool row shows, buttons, panes you open from the + menu, and hooks on prompts, turns and permission asks. You review each one before it's kept.
-        </template>
-        <template #below>
-          <ModsRuntimePanel :enabled="isModsEnabled" />
-        </template>
-        <template #control>
-          <SettingSwitch
-            :checked="isModsEnabled"
-            :saving="isSavingMods"
-            :pending="isConfirmingMods"
-            :disabled="preferencesStore.isLoading || isSavingMods"
-            aria-label="Enable Mods"
-            data-testid="mods-switch"
-            @click="toggleMods"
           />
         </template>
       </SettingRow>

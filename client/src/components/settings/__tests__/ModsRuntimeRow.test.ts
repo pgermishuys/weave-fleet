@@ -1,7 +1,9 @@
 import { flushPromises, mount, type VueWrapper } from "@vue/test-utils";
 import { createPinia, setActivePinia } from "pinia";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import LabsSection from "@/components/settings/LabsSection.vue";
+import PluginsOverview from "@/components/settings/PluginsOverview.vue";
+import modsPluginManifest from "@/plugins/builtin/mods";
+import { clearPlugins, registerPlugin } from "@/plugins/registry";
 import type { ModsRuntimeJob, ModsRuntimeView } from "@/lib/mods-runtime";
 import { useSettingsNav } from "@/composables/use-settings-nav";
 
@@ -36,7 +38,9 @@ const json = (body: unknown) => new Response(JSON.stringify(body), { headers: { 
 async function mountRow(view: ModsRuntimeView, preference?: "true" | "false"): Promise<VueWrapper> {
   server.view = view;
   getMock.mockResolvedValue({ data: preference ? { Mods: preference } : {} });
-  const wrapper = mount(LabsSection, { attachTo: document.body });
+  clearPlugins();
+  registerPlugin(modsPluginManifest);
+  const wrapper = mount(PluginsOverview, { attachTo: document.body });
   await flushPromises();
   return wrapper;
 }
@@ -45,7 +49,7 @@ const panel = (wrapper: VueWrapper) => wrapper.find("[data-testid='mods-panel']"
 const stateOf = (wrapper: VueWrapper) => panel(wrapper).attributes("data-state");
 const buttons = (wrapper: Pick<VueWrapper, "findAll">) => wrapper.findAll("button").map((item) => item.text());
 const button = (wrapper: VueWrapper, label: string) => wrapper.findAll("button").find((item) => item.text() === label)!;
-const toggle = (wrapper: VueWrapper) => wrapper.get("[data-testid='mods-switch']");
+const toggle = (wrapper: VueWrapper) => wrapper.get("[data-testid='plugin-switch-mods']");
 const called = (action: string) => server.calls.filter((call) => call === `POST ${RUNTIME}/${action}`);
 const step = (wrapper: VueWrapper, id: string) => wrapper.get(`[data-testid='mods-step-${id}']`).attributes("data-status");
 

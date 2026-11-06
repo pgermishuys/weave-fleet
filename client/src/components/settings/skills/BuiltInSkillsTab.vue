@@ -14,6 +14,9 @@ import {
 } from "@/lib/skill-versions";
 import { useBuiltInSkillsStore } from "@/stores/built-in-skills";
 
+// Shown as a plugin page too, which hands it props it has no use for.
+defineOptions({ inheritAttrs: false });
+
 const { skills, isLoading, error, savingName, setEnabled } = useBuiltInSkills();
 const store = useBuiltInSkillsStore();
 

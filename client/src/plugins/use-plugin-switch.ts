@@ -4,6 +4,7 @@ import {
   DISABLED_PLUGINS_PREFERENCE_KEY,
   disabledPluginIds,
   hasCachedDisabledPlugins,
+  pluginManifests,
   parseDisabledPlugins,
   setDisabledPlugins,
   setPluginEnabled,
@@ -40,6 +41,11 @@ export function usePluginPreferenceSync(): void {
 
 /** Turns a plugin on or off for everyone using this server; the page changes at once, the save follows. */
 export async function setPluginEnabledEverywhere(pluginId: string, enabled: boolean): Promise<void> {
+  const own = pluginManifests.get(pluginId)?.ownSwitch;
+  if (own) {
+    await own.set(enabled);
+    return;
+  }
   setPluginEnabled(pluginId, enabled);
   await usePreferencesStore().set(DISABLED_PLUGINS_PREFERENCE_KEY, JSON.stringify([...disabledPluginIds()]));
 }

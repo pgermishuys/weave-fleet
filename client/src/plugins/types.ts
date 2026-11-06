@@ -14,6 +14,26 @@ export interface FleetPluginDescriptor {
   description?: string;
   /** The plugin has no switch and is left off the Plugins page: Fleet's own way of reaching the page. */
   alwaysOn?: boolean;
+  /** The plugin has no switch of its own: its page holds the switches (Built-in skills, one per skill). */
+  switchless?: boolean;
+}
+
+/**
+ * A plugin whose on/off state already lives somewhere else (a feature preference older than the Plugins page). The
+ * Plugins page reads and flips that one, so there is never a second switch that can disagree with it.
+ */
+export interface FleetPluginOwnSwitch {
+  /** Reactive: read inside a computed or a template. */
+  isOn: () => boolean;
+  /** Turns it on or off. May ask the user something first and leave it as it was. */
+  set: (on: boolean) => Promise<void>;
+  saving?: () => boolean;
+  /** True while the switch waits for an answer shown beside it (Mods asking to install Bun). */
+  pending?: () => boolean;
+  /** Called when a Plugins page showing this switch opens, to read what it needs. */
+  load?: () => void;
+  /** Drawn under the plugin's row and at the top of its page: what the switch needs and its progress. */
+  panel?: Component;
 }
 
 export type PluginConnectionStatus = "connected" | "disconnected" | "error";
@@ -120,5 +140,7 @@ export interface FleetPluginContributions {
 
 export interface FleetPluginManifest {
   descriptor: FleetPluginDescriptor;
+  /** Leave out for the usual switch (the server's list of plugins that are off). */
+  ownSwitch?: FleetPluginOwnSwitch;
   contributions?: FleetPluginContributions;
 }

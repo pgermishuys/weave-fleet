@@ -93,7 +93,7 @@ const pluginsItem = computed<SettingsNavItem>(() => ({
   label: "Plugins",
   icon: Puzzle,
   count: pluginRuntime.manifests.value.filter((m) => !m.descriptor.alwaysOn && isPluginEnabled(m.descriptor.id)).length,
-  children: getConfigPages().map((page): SettingsNavItem => ({
+  children: getConfigPages().filter((page) => isPluginEnabled(page.pluginId)).map((page): SettingsNavItem => ({
     id: `plugin:${page.pluginId}`,
     label: page.navLabel ?? page.title,
     icon: page.icon ?? Settings2,
