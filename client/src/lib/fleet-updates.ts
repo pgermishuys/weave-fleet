@@ -42,11 +42,11 @@ export const UPDATE_RULES: { value: UpdateRule; label: string; short: string; de
   { value: "ask", label: "Ask me first", short: "Ask me", detail: "Each Fleet waits here until you restart it." },
   {
     value: "idle",
-    label: "Update each machine when nothing is working on it",
-    short: "When nothing is working",
-    detail: "It waits for its turns to finish, restarts within a minute or two, and tells you after. Desktop apps still ask, because you're using them.",
+    label: "Update each machine when nothing is in use",
+    short: "When nothing is in use",
+    detail: "It waits until no turn has run, no question has waited and no prompt or answer has come from any device for 15 minutes, then restarts and tells you after. Clicking Restart is immediate. Desktop apps still ask, because you're using them.",
   },
-  { value: "overnight", label: "Only overnight, 02:00–05:00 on that machine's clock", short: "Overnight", detail: "For machines that run long jobs during the day." },
+  { value: "overnight", label: "Only overnight, 02:00–05:00 on that machine's clock", short: "Overnight", detail: "For machines that run long jobs during the day. It waits for 2 quiet minutes inside the window." },
 ];
 
 export function isUpdateRule(value: unknown): value is UpdateRule {

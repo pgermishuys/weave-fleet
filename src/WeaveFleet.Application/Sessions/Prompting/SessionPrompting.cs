@@ -18,6 +18,8 @@ using WeaveFleet.Domain.Harnesses;
 using WeaveFleet.Domain.Identity;
 using WeaveFleet.Domain.Repositories;
 
+using WeaveFleet.Application.Updates;
+
 namespace WeaveFleet.Application.Sessions.Prompting;
 
 /// <summary>
@@ -42,7 +44,8 @@ public sealed partial class SessionPrompting(
     AgentMemoryService? agentMemory = null,
     ModPromptHook? modPrompts = null,
     ModTurnHook? modTurns = null,
-    SessionUpdates? updates = null)
+    SessionUpdates? updates = null,
+    UserActivityClock? activity = null)
 {
     /// <summary>The error code of a prompt the harness refused because its turn is still running.</summary>
     public const string BusyErrorCode = "Session.Busy";
@@ -113,6 +116,8 @@ public sealed partial class SessionPrompting(
         bool rememberChoices,
         CancellationToken ct)
     {
+        // A prompt from any device counts as the machine being in use, before its turn starts (the automatic update waits on it).
+        activity?.Touch();
         using var promptActivity = FleetInstrumentation.ActivitySource.StartActivity(
             "fleet.prompt_session",
             ActivityKind.Internal);

@@ -9,7 +9,7 @@ using WeaveFleet.Infrastructure.Updates;
 
 namespace WeaveFleet.Infrastructure.Tests.Updates;
 
-/// <summary>A Fleet restarts itself into its update only when its rule says so, nothing has worked for a minute, and the update is new and hasn't failed.</summary>
+/// <summary>A Fleet restarts itself into its update only when its rule says so, nothing has been in use for 15 minutes, and the update is new and hasn't failed.</summary>
 public sealed class SelfUpdateServiceTests : IDisposable
 {
     private readonly string _root = Directory.CreateTempSubdirectory("fleet-self-update-").FullName;
@@ -27,9 +27,12 @@ public sealed class SelfUpdateServiceTests : IDisposable
         File.WriteAllText(Path.Combine(_root, "VERSION"), "0.59.0");
         _time.SetLocalTimeZone(TimeZoneInfo.Utc);
         _rules = new UpdateRuleStore(Path.Combine(_root, "fleet.update.json"));
+        _activity = new UserActivityClock(_time);
     }
 
     public void Dispose() => Directory.Delete(_root, recursive: true);
+
+    private readonly UserActivityClock _activity;
 
     private SelfUpdateService Service()
     {
@@ -38,12 +41,13 @@ public sealed class SelfUpdateServiceTests : IDisposable
             NullLogger<UpdateRestartService>.Instance, code => { _exits.Add(code); _exited.TrySetResult(); },
             name => _canRestart && name == UpdateRestartService.LauncherVariable ? "85" : null,
             () => _staged, () => Task.FromResult(new MachineSessionCounts(_working, _needsYou)), rules: _rules);
-        return new SelfUpdateService(_rules, restart, new ServiceCollection().BuildServiceProvider().GetRequiredService<IServiceScopeFactory>(), _time, NullLogger<SelfUpdateService>.Instance, () => Task.FromResult(new MachineSessionCounts(_working, _needsYou)));
+        return new SelfUpdateService(_rules, restart, new ServiceCollection().BuildServiceProvider().GetRequiredService<IServiceScopeFactory>(), _time, NullLogger<SelfUpdateService>.Instance, () => Task.FromResult(new MachineSessionCounts(_working, _needsYou)), _activity);
     }
 
     [Theory]
-    [InlineData("idle", 61, 12, true)]
-    [InlineData("idle", 59, 12, false)]
+    [InlineData("idle", 900, 12, true)]
+    [InlineData("idle", 899, 12, false)]
+    [InlineData("idle", 61, 12, false)]
     [InlineData("ask", 600, 3, false)]
     [InlineData(null, 600, 3, false)]
     [InlineData("overnight", 600, 12, false)]
@@ -51,6 +55,8 @@ public sealed class SelfUpdateServiceTests : IDisposable
     [InlineData("overnight", 600, 2, true)]
     [InlineData("overnight", 600, 4, true)]
     [InlineData("overnight", 600, 5, false)]
+    [InlineData("overnight", 120, 3, true)]
+    [InlineData("overnight", 119, 3, false)]
     [InlineData("overnight", 30, 3, false)]
     public void The_rule_the_quiet_time_and_the_clock_decide(string? rule, int quietSeconds, int hour, bool expected)
         => SelfUpdateService.MayRestart(rule, TimeSpan.FromSeconds(quietSeconds), TimeSpan.FromHours(hour)).ShouldBe(expected);
@@ -63,13 +69,13 @@ public sealed class SelfUpdateServiceTests : IDisposable
 
         _working = 1;
         (await service.TickAsync()).ShouldBeFalse();
-        _time.Advance(TimeSpan.FromSeconds(90));
+        _time.Advance(TimeSpan.FromMinutes(20));
         (await service.TickAsync()).ShouldBeFalse("a session is still working");
 
         _working = 0;
-        _time.Advance(TimeSpan.FromSeconds(30));
-        (await service.TickAsync()).ShouldBeFalse("it has been quiet for 30 seconds only");
-        _time.Advance(TimeSpan.FromSeconds(31));
+        _time.Advance(TimeSpan.FromMinutes(14));
+        (await service.TickAsync()).ShouldBeFalse("it has been quiet for 14 minutes only");
+        _time.Advance(TimeSpan.FromMinutes(1));
         (await service.TickAsync()).ShouldBeTrue();
         // The exit waits half a second for the reply to leave; advance until the delay has been set.
         while (!_exited.Task.IsCompleted)
@@ -87,6 +93,43 @@ public sealed class SelfUpdateServiceTests : IDisposable
     }
 
     [Fact]
+    public async Task A_prompt_or_answer_from_any_device_restarts_the_quiet_clock_even_before_its_turn_starts()
+    {
+        _rules.SetRule("idle");
+        var service = Service();
+        (await service.TickAsync()).ShouldBeFalse();
+        _time.Advance(TimeSpan.FromMinutes(14));
+        _activity.Touch();
+        _time.Advance(TimeSpan.FromMinutes(14));
+        (await service.TickAsync()).ShouldBeFalse("a prompt was sent 14 minutes ago");
+        _time.Advance(TimeSpan.FromMinutes(1));
+        (await service.TickAsync()).ShouldBeTrue();
+    }
+
+    [Fact]
+    public async Task Overnight_waits_two_quiet_minutes()
+    {
+        _rules.SetRule("overnight");
+        _time.Advance(TimeSpan.FromHours(15)); // 03:00
+        var service = Service();
+        (await service.TickAsync()).ShouldBeFalse();
+        _time.Advance(TimeSpan.FromSeconds(90));
+        _activity.Touch();
+        _time.Advance(TimeSpan.FromSeconds(90));
+        (await service.TickAsync()).ShouldBeFalse();
+        _time.Advance(TimeSpan.FromSeconds(30));
+        (await service.TickAsync()).ShouldBeTrue();
+    }
+
+    [Fact]
+    public void The_clock_remembers_the_latest_touch()
+    {
+        _activity.Last.ShouldBeNull();
+        _activity.Touch();
+        _activity.Last.ShouldBe(_time.GetUtcNow());
+    }
+
+    [Fact]
     public async Task A_session_waiting_on_an_answer_keeps_it_from_restarting_like_a_working_one()
     {
         _rules.SetRule("idle");
@@ -96,8 +139,8 @@ public sealed class SelfUpdateServiceTests : IDisposable
 
         (await service.TickAsync()).ShouldBeFalse("a question is open");
         _needsYou = 0;
-        _time.Advance(TimeSpan.FromSeconds(30));
-        (await service.TickAsync()).ShouldBeFalse("the quiet minute starts when it is answered");
+        _time.Advance(TimeSpan.FromMinutes(14));
+        (await service.TickAsync()).ShouldBeFalse("the quiet time starts when it is answered");
         _exits.ShouldBeEmpty();
     }
 

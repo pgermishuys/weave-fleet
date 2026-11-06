@@ -542,6 +542,7 @@ public static class DependencyInjection
 
         // Auto-update services
         services.AddSingleton<UpdateStateHolder>();
+        services.AddSingleton<WeaveFleet.Application.Updates.UserActivityClock>();
         services.AddSingleton<UpdateFiles>();
         services.AddSingleton<WeaveFleet.Application.Updates.UpdateRestartGate>();
         services.AddSingleton<UpdateRestartService>();
