@@ -74,7 +74,7 @@ const topItems = computed(() => visibleRails.value.filter((rail) => rail.placeme
 
 const secondaryItems = computed(() => visibleRails.value.filter((rail) => rail.placement === "secondary"));
 
-// Plugin rails sit above Fleet's own bottom rails (Plugins, Settings).
+// Plugin rails sit above Fleet's own bottom rails (Settings).
 const bottomItems = computed(() => [
   ...visibleRails.value.filter((rail) => rail.placement === "plugin"),
   ...visibleRails.value.filter((rail) => rail.placement === "bottom"),
@@ -110,7 +110,7 @@ const currentRouteRail = computed<string>(() => {
     return "fleet";
   }
 
-  // Settings and its sub-addresses (/settings/plugins...) are all the Settings rail, even the Plugins shortcut's.
+  // Settings and its sub-addresses (/settings/plugins...) are all the Settings rail.
   if (pathname.value === "/settings" || pathname.value.startsWith("/settings/")) {
     return "settings";
   }
