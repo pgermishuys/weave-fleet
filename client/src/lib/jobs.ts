@@ -70,6 +70,33 @@ export function jobColumns(jobs: readonly Job[]): JobColumn[] {
   ];
 }
 
+export interface JobGroup {
+  id: "running" | "queued" | "done";
+  label: string;
+  jobs: Job[];
+}
+
+/** The jobs-list groups: a job that needs you is still running; a failed one stays under Done, marked. */
+export function jobGroups(jobs: readonly Job[]): JobGroup[] {
+  const inGroup = (...states: JobState[]) => jobs.filter((job) => states.includes(job.state));
+  return [
+    { id: "running", label: "Running", jobs: inGroup("running", "needs_you") },
+    { id: "queued", label: "Queued", jobs: inGroup("waiting") },
+    { id: "done", label: "Done", jobs: inGroup("done", "failed") },
+  ];
+}
+
+/** The route of a job; the bare /jobs shows none selected. */
+export function jobPath(id: string): string {
+  return `/jobs/${encodeURIComponent(id)}`;
+}
+
+/** The job an address names, or null on /jobs. */
+export function jobIdFromPath(pathname: string): string | null {
+  const segment = pathname.replace(/\/+$/, "").split("/")[2];
+  return segment ? decodeURIComponent(segment) : null;
+}
+
 /** Labels typed as `mac, gpu`: trimmed, without blanks or repeats. */
 export function parseLabels(text: string): string[] {
   const seen = new Set<string>();

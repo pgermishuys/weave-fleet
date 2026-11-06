@@ -33,6 +33,7 @@ A route no rail owns (`/welcome`, `/repositories`) renders full width.
 | Settings     | `[settings-menu][settings-detail]`          |
 | Automations  | `[automations-list][automations-detail]`    |
 | Analytics    | `[analytics-menu][analytics-detail]`        |
+| Jobs         | `[jobs-list][jobs-detail]`                  |
 | Workflows    | `[workflows-list][workflows-detail]`        |
 
 ### Panel Definitions
@@ -51,6 +52,8 @@ A route no rail owns (`/welcome`, `/repositories`) renders full width.
 | `automations-detail`| Detail pane for the selected automation                                   |
 | `fleet-menu`      | Fleet (mission control, in Labs): Needs you first, then one entry per machine with its count; on a phone, a chip strip above the page |
 | `fleet-detail`    | The selected view: every ask waiting on you, or one machine's sessions; each has its own route (`/fleet`, `/fleet/machines/{id}`) |
+| `jobs-list`       | Jobs grouped Running, Queued, Done (Labs; a job that needs you stays Running). On a phone, a chip strip above the page |
+| `jobs-detail`     | The selected job, at its own route (`/jobs/$id`)                            |
 | `workflows-list`  | The workflow library: built into Fleet, then the repo's `.weave/workflows`   |
 | `workflows-detail`| The selected workflow's steps, recent runs and Run box                     |
 

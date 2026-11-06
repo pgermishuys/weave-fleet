@@ -102,7 +102,7 @@ const currentRouteRail = computed<string>(() => {
     return "workflows";
   }
 
-  if (pathname.value === "/jobs") {
+  if (pathname.value === "/jobs" || pathname.value.startsWith("/jobs/")) {
     return "jobs";
   }
 
