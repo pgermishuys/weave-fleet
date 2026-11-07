@@ -304,7 +304,7 @@ describe("An automation that runs on another machine", () => {
     wrapper = mount(
       defineComponent({ setup: () => () => h(MachineScope, { target: targetFor(atlas) }, () => h(AutomationDetailPanel)) }),
       { attachTo: document.body, global: { stubs: { teleport: false } } },
-    );
+    ) as unknown as VueWrapper;
     await flushPromises();
     useAutomationsNav().setActiveAutomation("a-night");
     await flushPromises();
