@@ -49,9 +49,16 @@ internal sealed partial class OpenCode2HttpClient(HttpClient http, HttpClient ev
     /// rule that matches, so the ask for everything goes first and the denies (<see cref="DenyBrowser"/>, the step
     /// tool's) last.
     /// </summary>
-    internal static IReadOnlyList<OpenCode2PermissionRule> RulesFor(string level, bool hideStepTool)
+    internal static IReadOnlyList<OpenCode2PermissionRule> RulesFor(string level, bool hideStepTool, bool readOnly = false)
     {
-        List<OpenCode2PermissionRule> rules = level == PermissionLevels.All
+        // A read-only run (Dreaming): the reading tools and fleet_session_read run; every other tool, Fleet's own included,
+        // asks, and Fleet refuses what the read-only policy doesn't allow (PermissionPolicy.DecideReadOnly).
+        List<OpenCode2PermissionRule> rules = readOnly
+            ? [new OpenCode2PermissionRule { Action = "*", Resource = "*", Effect = "ask" },
+               .. PermissionKinds.AllowedWithoutAsking.Where(action => action != "fleet_*").Select(Allow),
+               Allow(PermissionPolicy.ReadOnlyFleetTool),
+               DenyBrowser]
+            : level == PermissionLevels.All
             ? [.. AllowAll]
             : [new OpenCode2PermissionRule { Action = "*", Resource = "*", Effect = "ask" },
                .. PermissionKinds.AllowedWithoutAsking.Select(Allow),

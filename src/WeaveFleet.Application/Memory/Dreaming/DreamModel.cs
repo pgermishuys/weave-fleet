@@ -41,6 +41,12 @@ public static class DreamRules
     /// <summary>How many distinct sessions must have relied on a learned note before a dream may keep it for good.</summary>
     public const int KeepForGoodSessions = 3;
 
+    /// <summary>
+    /// The harnesses whose permission gate Fleet can make read-only for a dreaming session: they may read the repository
+    /// (<see cref="WeaveFleet.Domain.Harnesses.PermissionPolicy.ReadOnlyRun"/>). Any other dreams from the transcripts alone.
+    /// </summary>
+    public static readonly IReadOnlySet<string> ReadOnlyHarnesses = new HashSet<string>(StringComparer.Ordinal) { "opencode2", "claude-code" };
+
     public static class Statuses
     {
         public const string Reading = "reading";
@@ -57,6 +63,9 @@ public static class DreamRules
         public const string Retired = "retired";
         public const string Kept = "kept";
         public const string Left = "left";
+
+        /// <summary>A note of the user's that looks out of date: shown with its evidence, changed in no way.</summary>
+        public const string Flagged = "flagged";
         public const string Skipped = "skipped";
     }
 
@@ -119,6 +128,14 @@ public sealed class DreamChange
     public List<string> SessionIds { get; set; } = [];
     public string? Quote { get; set; }
     public string? Reason { get; set; }
+
+    /// <summary>What the dream read to check a note: the file or commit, with what it showed. Rewrite, retire and flag carry it.</summary>
+    public string? Evidence { get; set; }
+
+    /// <summary>For a flag: the hash of the note as flagged, so a later dream doesn't flag the same unchanged note again.</summary>
+    public string? NoteHash { get; set; }
+
+    /// <summary>Undone; for a flag, dismissed with Keep (there is nothing to put back).</summary>
     public bool Undone { get; set; }
 
     /// <summary>The hash of the note the dream wrote (added, rewritten, merged keep); Undo refuses when it no longer matches.</summary>
@@ -168,7 +185,8 @@ public sealed record DreamChangeView(
     int OfSessions,
     string? Quote,
     string? Reason,
-    bool Undone);
+    bool Undone,
+    string? Evidence = null);
 
 public sealed record DreamView(
     string Id,
@@ -212,7 +230,8 @@ public sealed record DreamView(
                 read.Count,
                 change.Quote,
                 change.Reason,
-                change.Undone))],
+                change.Undone,
+                change.Evidence))],
             dream.RunId,
             dream.Tokens,
             dream.Since);

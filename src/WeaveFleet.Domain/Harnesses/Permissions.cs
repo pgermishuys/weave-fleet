@@ -128,8 +128,33 @@ public static class PermissionReplies
 /// What a session may do without asking: its level, and whether an ask is refused rather than put to the user (a run
 /// nobody watches, with <see cref="UnattendedPermissions.Deny"/>).
 /// </summary>
-public sealed record PermissionPolicy(string Level, bool RejectAsks = false)
+public sealed record PermissionPolicy(string Level, bool RejectAsks = false, bool ReadOnly = false)
 {
+    /// <summary>
+    /// A run that may look at the repository and change nothing, with nobody to ask (Dreaming): reading tools, a few
+    /// reading commands (<see cref="ReadOnlyShell"/>) and <c>fleet_session_read</c> run; everything else is refused.
+    /// </summary>
+    public static PermissionPolicy ReadOnlyRun { get; } = new(PermissionLevels.Ask, RejectAsks: true, ReadOnly: true);
+
+    /// <summary>The only Fleet tool a <see cref="ReadOnly"/> run may call.</summary>
+    public const string ReadOnlyFleetTool = "fleet_session_read";
+
+    /// <summary>
+    /// What a <see cref="ReadOnly"/> run does with a call: <see cref="PermissionReplies.Once"/> for a reading tool,
+    /// <c>fleet_session_read</c> or a command <see cref="ReadOnlyShell"/> knows to be harmless; everything else is refused.
+    /// </summary>
+    public static string DecideReadOnly(string tool, IReadOnlyList<string> patterns)
+    {
+        if (tool.StartsWith("fleet_", StringComparison.Ordinal))
+            return string.Equals(tool, ReadOnlyFleetTool, StringComparison.Ordinal) ? PermissionReplies.Once : PermissionReplies.Reject;
+        var kind = PermissionKinds.Classify(tool);
+        if (kind == PermissionKinds.Read)
+            return PermissionReplies.Once;
+        if (kind == PermissionKinds.Shell && patterns.Count > 0 && patterns.All(ReadOnlyShell.IsHarmless))
+            return PermissionReplies.Once;
+        return PermissionReplies.Reject;
+    }
+
     /// <summary>Nothing asks: what every harness did before Fleet could ask.</summary>
     public static PermissionPolicy AllowAll { get; } = new(PermissionLevels.All);
 
@@ -209,4 +234,50 @@ public sealed record PermissionReplied
 
     /// <summary>The answer (<see cref="PermissionReplies"/>).</summary>
     public required string Reply { get; init; }
+}
+
+/// <summary>
+/// Tells commands that only read from the rest, for a run that may look and not touch. Conservative: one command (or
+/// a pipe of them) from a short list, with no redirects, substitutions, <c>&amp;</c> or <c>;</c>, and none of the flags that
+/// make a reading command write or run something.
+/// </summary>
+public static class ReadOnlyShell
+{
+    private static readonly HashSet<string> Commands = new(StringComparer.Ordinal)
+    {
+        "cat", "head", "tail", "ls", "wc", "grep", "egrep", "fgrep", "rg", "find", "file", "stat", "pwd", "echo",
+        "basename", "dirname", "which", "realpath", "readlink", "git",
+    };
+
+    private static readonly HashSet<string> GitReading = new(StringComparer.Ordinal)
+    {
+        "log", "show", "diff", "status", "blame", "ls-files", "ls-tree", "rev-parse", "cat-file", "shortlog", "describe", "grep",
+    };
+
+    private static readonly string[] ForbiddenFlags =
+    [
+        "--output", "--ext-diff", "--textconv", "--pre", "--open-files-in-pager", "-exec", "-execdir", "-ok", "-okdir",
+        "-delete", "-fprint", "-fprintf", "-fls",
+    ];
+
+    private static readonly System.Buffers.SearchValues<char> Forbidden = System.Buffers.SearchValues.Create( [';', '&', '<', '>', '`', '$', '\n', '\r', '(', ')', '{', '}', '\\']);
+
+    /// <summary>Whether <paramref name="command"/> only reads.</summary>
+    public static bool IsHarmless(string command)
+    {
+        if (string.IsNullOrWhiteSpace(command) || command.AsSpan().ContainsAny(Forbidden))
+            return false;
+        return command.Split('|').All(IsHarmlessSegment);
+    }
+
+    private static bool IsHarmlessSegment(string segment)
+    {
+        var words = segment.Split((char[]?)null, StringSplitOptions.RemoveEmptyEntries);
+        if (words.Length == 0 || !Commands.Contains(words[0]))
+            return false;
+        if (words[0] == "git" && (words.Length < 2 || !GitReading.Contains(words[1])))
+            return false;
+        return !words.Skip(1).Any(word => ForbiddenFlags.Any(flag => word == flag || word.StartsWith(flag + "=", StringComparison.Ordinal))
+            || (words[0] == "git" && word.StartsWith("-O", StringComparison.Ordinal)));
+    }
 }

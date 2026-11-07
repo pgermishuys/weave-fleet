@@ -52,4 +52,40 @@ public sealed class PermissionPolicyTests
     [Fact]
     public void What_is_allowed_without_asking_is_only_reading()
         => PermissionKinds.AllowedWithoutAsking.ShouldAllBe(tool => PermissionKinds.Classify(tool) == PermissionKinds.Read);
+
+    [Theory]
+    [InlineData("read", "src/app.ts", PermissionReplies.Once)]
+    [InlineData("grep", "TODO", PermissionReplies.Once)]
+    [InlineData("fleet_session_read", "abc", PermissionReplies.Once)]
+    [InlineData("fleet_memory_save", "x", PermissionReplies.Reject)]
+    [InlineData("fleet_session_start", "x", PermissionReplies.Reject)]
+    [InlineData("edit", "src/app.ts", PermissionReplies.Reject)]
+    [InlineData("write", "notes.md", PermissionReplies.Reject)]
+    [InlineData("webfetch", "https://example.com", PermissionReplies.Reject)]
+    [InlineData("external_directory", "/etc", PermissionReplies.Reject)]
+    [InlineData("bash", "git log --oneline -20", PermissionReplies.Once)]
+    [InlineData("bash", "cat src/app.ts | head -20", PermissionReplies.Once)]
+    [InlineData("bash", "git grep -n makeAll", PermissionReplies.Once)]
+    [InlineData("bash", "rm -rf build", PermissionReplies.Reject)]
+    [InlineData("bash", "git commit -am x", PermissionReplies.Reject)]
+    [InlineData("bash", "git log --output=/tmp/x", PermissionReplies.Reject)]
+    [InlineData("bash", "git -c core.pager=sh log", PermissionReplies.Reject)]
+    [InlineData("bash", "cat a > b", PermissionReplies.Reject)]
+    [InlineData("bash", "ls; rm x", PermissionReplies.Reject)]
+    [InlineData("bash", "ls && rm x", PermissionReplies.Reject)]
+    [InlineData("bash", "echo $(rm x)", PermissionReplies.Reject)]
+    [InlineData("bash", "cat x | sh", PermissionReplies.Reject)]
+    [InlineData("bash", "find . -name '*.cs' -delete", PermissionReplies.Reject)]
+    [InlineData("bash", "find . -exec rm {} +", PermissionReplies.Reject)]
+    [InlineData("bash", "rg --pre ./evil foo", PermissionReplies.Reject)]
+    public void A_read_only_run_reads_and_refuses_everything_else(string tool, string pattern, string expected)
+        => PermissionPolicy.DecideReadOnly(tool, [pattern]).ShouldBe(expected);
+
+    [Fact]
+    public void A_read_only_run_refuses_a_shell_call_with_no_command_to_check()
+        => PermissionPolicy.DecideReadOnly("bash", []).ShouldBe(PermissionReplies.Reject);
+
+    [Fact]
+    public void A_read_only_run_refuses_a_call_when_any_of_its_commands_writes()
+        => PermissionPolicy.DecideReadOnly("bash", ["git log", "touch x"]).ShouldBe(PermissionReplies.Reject);
 }

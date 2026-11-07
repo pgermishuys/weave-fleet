@@ -4,6 +4,7 @@ import { useNavigate } from "@tanstack/vue-router";
 import { ChevronRight, LoaderCircle, Moon } from "lucide-vue-next";
 import { useDreamingFeature } from "@/composables/use-dreaming-feature";
 import { useEnabledHarnesses } from "@/composables/use-enabled-harnesses";
+import { forgetMemoryNote, updateMemoryNote } from "@/lib/agent-memory";
 import {
   DREAM_POLL_MS,
   dreamKindLabel,
@@ -45,6 +46,8 @@ const harnessType = computed(() => {
 });
 const busy = computed(() => isDreamBusy(dream.value));
 const groups = computed(() => groupDreamChanges(dream.value?.changes ?? []));
+const flags = computed(() => groups.value.flagged.filter((change) => !change.undone));
+const editing = ref<{ id: string; text: string } | null>(null);
 const changedCount = computed(() => groups.value.applied.filter((change) => !change.undone).length);
 
 const when = new Intl.DateTimeFormat(undefined, { day: "numeric", month: "short", hour: "numeric", minute: "2-digit" });
@@ -98,6 +101,27 @@ async function undo(change: DreamChangeView): Promise<void> {
   } finally {
     undoing.value = null;
   }
+}
+
+/** Keep, Edit and Forget all settle a flag: Fleet marks it dealt with, so it doesn't show again. */
+async function settleFlag(change: DreamChangeView, act?: () => Promise<unknown>): Promise<void> {
+  if (!dream.value || undoing.value) return;
+  undoing.value = change.id;
+  error.value = null;
+  try {
+    await act?.();
+    dream.value = await undoDreamChange(dream.value.id, change.id);
+    editing.value = null;
+    if (act) emit("changed");
+  } catch (caught) {
+    error.value = caught instanceof Error ? caught.message : "Couldn't update the note.";
+  } finally {
+    undoing.value = null;
+  }
+}
+
+function startEditingFlag(change: DreamChangeView): void {
+  if (change.noteId) editing.value = { id: change.id, text: change.text ?? "" };
 }
 
 function toggleWhy(id: string): void {
@@ -240,6 +264,121 @@ function sessionLabel(session: DreamSessionRef): string {
           </p>
         </div>
 
+        <ul
+          v-if="flags.length > 0"
+          class="mt-3 flex flex-col gap-2"
+          data-testid="dream-flags"
+        >
+          <li
+            v-for="change in flags"
+            :key="change.id"
+            class="rounded-card border border-amber-500/40 bg-card-bg p-3"
+            data-testid="dream-flag"
+          >
+            <p class="flex items-center gap-2 text-[11px] font-semibold uppercase tracking-wide text-muted">
+              <span class="text-amber-300">{{ dreamKindLabel(change.kind) }}</span>
+              <template v-if="change.list">
+                · {{ dreamListLabel(change.list) }} · your note
+              </template>
+            </p>
+            <template v-if="editing?.id === change.id">
+              <textarea
+                v-model="editing.text"
+                rows="2"
+                maxlength="300"
+                aria-label="Edit the note"
+                class="mt-1 w-full rounded-btn border border-border bg-main-bg p-2 text-sm text-text outline-none focus:border-accent"
+                data-testid="dream-flag-edit-text"
+              />
+            </template>
+            <p
+              v-else
+              class="mt-1 text-sm text-text"
+            >
+              {{ change.text }}
+            </p>
+            <p class="mt-1 text-xs text-muted">
+              {{ change.why }}
+            </p>
+            <div
+              v-if="change.evidence || change.quote || change.sessions.length > 0"
+              class="mt-1 text-xs text-muted"
+              data-testid="dream-flag-evidence"
+            >
+              <p v-if="change.evidence">
+                {{ change.evidence }}
+              </p>
+              <pre
+                v-if="change.quote"
+                class="mt-1 whitespace-pre-wrap rounded-btn bg-main-bg p-2 font-mono text-[11px] text-text"
+              >{{ change.quote }}</pre>
+              <ul class="mt-1 flex flex-col gap-0.5">
+                <li
+                  v-for="session in change.sessions"
+                  :key="session.id"
+                >
+                  <button
+                    type="button"
+                    class="text-left text-accent hover:underline"
+                    @click="openSession(session.id)"
+                  >
+                    {{ sessionLabel(session) }}
+                  </button>
+                </li>
+              </ul>
+            </div>
+            <div class="mt-2 flex items-center justify-end gap-2">
+              <template v-if="editing?.id === change.id">
+                <button
+                  type="button"
+                  class="rounded-btn bg-accent px-2 py-0.5 text-xs font-medium text-white disabled:opacity-60"
+                  :disabled="undoing === change.id || !editing.text.trim()"
+                  data-testid="dream-flag-save"
+                  @click="settleFlag(change, () => updateMemoryNote(change.noteId!, editing!.text.trim()))"
+                >
+                  Save
+                </button>
+                <button
+                  type="button"
+                  class="rounded-btn border border-border px-2 py-0.5 text-xs text-text"
+                  @click="editing = null"
+                >
+                  Cancel
+                </button>
+              </template>
+              <template v-else>
+                <button
+                  type="button"
+                  class="rounded-btn border border-border px-2 py-0.5 text-xs text-text disabled:opacity-60"
+                  :disabled="undoing === change.id || !change.noteId"
+                  data-testid="dream-flag-edit"
+                  @click="startEditingFlag(change)"
+                >
+                  Edit
+                </button>
+                <button
+                  type="button"
+                  class="rounded-btn border border-border px-2 py-0.5 text-xs text-text disabled:opacity-60"
+                  :disabled="undoing === change.id || !change.noteId"
+                  data-testid="dream-flag-forget"
+                  @click="settleFlag(change, () => forgetMemoryNote(change.noteId!))"
+                >
+                  Forget
+                </button>
+                <button
+                  type="button"
+                  class="rounded-btn border border-border px-2 py-0.5 text-xs text-text disabled:opacity-60"
+                  :disabled="undoing === change.id"
+                  data-testid="dream-flag-keep"
+                  @click="settleFlag(change)"
+                >
+                  Keep
+                </button>
+              </template>
+            </div>
+          </li>
+        </ul>
+
         <ul class="mt-3 flex flex-col gap-2">
           <li
             v-for="change in [...groups.applied, ...groups.left]"
@@ -307,7 +446,7 @@ function sessionLabel(session: DreamSessionRef): string {
               <div class="mt-2 flex items-center justify-between gap-2">
                 <!-- A merge needs no sessions: two notes said the same thing. Without evidence there's no Why. -->
                 <button
-                  v-if="change.sessions.length > 0 || change.quote"
+                  v-if="change.sessions.length > 0 || change.quote || change.evidence"
                   type="button"
                   class="flex items-center gap-1 text-xs text-muted hover:text-text"
                   :aria-expanded="open.has(change.id)"
@@ -333,11 +472,16 @@ function sessionLabel(session: DreamSessionRef): string {
                 </button>
               </div>
               <div
-                v-if="open.has(change.id) && (change.sessions.length > 0 || change.quote)"
+                v-if="open.has(change.id) && (change.sessions.length > 0 || change.quote || change.evidence)"
                 class="mt-2 border-t border-border pt-2 text-xs text-muted"
                 data-testid="dream-evidence"
               >
-                <p>{{ change.sessions.length }} of {{ change.ofSessions }} sessions</p>
+                <p v-if="change.evidence">
+                  {{ change.evidence }}
+                </p>
+                <p v-if="change.sessions.length > 0">
+                  {{ change.sessions.length }} of {{ change.ofSessions }} sessions
+                </p>
                 <ul class="mt-1 flex flex-col gap-0.5">
                   <li
                     v-for="session in change.sessions"

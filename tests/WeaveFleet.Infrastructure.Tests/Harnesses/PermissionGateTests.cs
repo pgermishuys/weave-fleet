@@ -20,6 +20,19 @@ public sealed class PermissionGateTests
         => new PermissionGate().Decide("bash", ["rm -rf build"]).ShouldBe(PermissionReplies.Once);
 
     [Fact]
+    public async Task A_read_only_run_refuses_a_write_even_when_the_user_said_not_to_ask_again()
+    {
+        var gate = new PermissionGate { Policy = PermissionPolicy.ReadOnlyRun };
+        await gate.AllowFromNowOnAsync(Ask("edit", "*"), default);
+
+        gate.Decide("edit", ["notes.md"]).ShouldBe(PermissionReplies.Reject);
+        gate.Decide("bash", ["rm -rf ."]).ShouldBe(PermissionReplies.Reject);
+        gate.Decide("bash", ["git log --oneline"]).ShouldBe(PermissionReplies.Once);
+        gate.Decide("read", ["src/app.ts"]).ShouldBe(PermissionReplies.Once);
+        gate.Decide("fleet_memory_save", ["x"]).ShouldBe(PermissionReplies.Reject);
+    }
+
+    [Fact]
     public void What_the_level_doesnt_allow_goes_to_the_user()
     {
         var gate = new PermissionGate { Policy = new PermissionPolicy(PermissionLevels.Ask) };

@@ -16,17 +16,24 @@ public sealed class DreamApplier(IMemoryStore store, TimeProvider time)
     public const string AlreadyANoteReason = "It's already a note.";
     public const string AlreadyKeptReason = "It's already kept for good.";
     public static readonly string KeepSessionsReason = $"Relied on in fewer than {DreamRules.KeepForGoodSessions} sessions.";
+    public const string FlagLearnedReason = "A learned note is rewritten or retired, not flagged.";
+    public const string FlagNoEvidenceReason = "A flag needs the evidence: what was read, or what a session showed.";
+    public const string AlreadyFlaggedReason = "This note was flagged before and hasn't changed since.";
     public const string UndoRefused = "This note changed since dreaming changed it; edit it instead.";
 
-    public async Task<List<DreamChange>> ApplyAsync(string userId, Dream dream, IReadOnlyList<DreamProposal> proposals, CancellationToken ct = default)
+    /// <param name="flaggedBefore">The notes earlier dreams flagged, as (note id, hash of the note then): an unchanged one isn't flagged again.</param>
+    public async Task<List<DreamChange>> ApplyAsync(
+        string userId, Dream dream, IReadOnlyList<DreamProposal> proposals,
+        IReadOnlyCollection<(string NoteId, string Hash)>? flaggedBefore = null, CancellationToken ct = default)
     {
         var changes = new List<DreamChange>();
+        var flagged = new HashSet<(string, string)>(flaggedBefore ?? []);
         foreach (var proposal in proposals)
-            changes.Add(await ApplyOneAsync(userId, dream, proposal, ct).ConfigureAwait(false));
+            changes.Add(await ApplyOneAsync(userId, dream, proposal, flagged, ct).ConfigureAwait(false));
         return changes;
     }
 
-    private async Task<DreamChange> ApplyOneAsync(string userId, Dream dream, DreamProposal p, CancellationToken ct)
+    private async Task<DreamChange> ApplyOneAsync(string userId, Dream dream, DreamProposal p, HashSet<(string, string)> flaggedBefore, CancellationToken ct)
     {
         var cited = p.Sessions
             .Select(label => dream.ReadSessions.FirstOrDefault(s => string.Equals(s.Label, label.Trim(), StringComparison.OrdinalIgnoreCase)))
@@ -37,6 +44,7 @@ public sealed class DreamApplier(IMemoryStore store, TimeProvider time)
         {
             Why = p.Why?.Trim() ?? "",
             Quote = string.IsNullOrWhiteSpace(p.Quote) ? null : p.Quote.Trim(),
+            Evidence = string.IsNullOrWhiteSpace(p.Evidence) ? null : p.Evidence.Trim(),
             Text = string.IsNullOrWhiteSpace(p.Text) ? null : p.Text.Trim(),
             SessionIds = [.. cited.Select(s => s.Id)],
         };
@@ -48,6 +56,7 @@ public sealed class DreamApplier(IMemoryStore store, TimeProvider time)
             "add" => await AddAsync(userId, dream, p, change, cited, notes, ct).ConfigureAwait(false),
             "rewrite" => await RewriteAsync(userId, dream, p, change, cited, notes, ct).ConfigureAwait(false),
             "retire" => await RetireAsync(userId, dream, p, change, cited, notes, ct).ConfigureAwait(false),
+            "flag" => FlagAsync(dream, p, change, notes, flaggedBefore),
             "keep" => await KeepAsync(userId, dream, p, change, cited, notes, ct).ConfigureAwait(false),
             "merge" => await MergeAsync(userId, dream, p, change, notes, ct).ConfigureAwait(false),
             _ => Skip(change, $"Unknown action \"{p.Action}\"."),
@@ -99,7 +108,7 @@ public sealed class DreamApplier(IMemoryStore store, TimeProvider time)
         change.List = snapshot.List;
         if (TextProblem(change.Text) is { } problem)
             return Skip(change, problem);
-        if (!HasEvidence(p, cited))
+        if (!HasEvidence(p, cited) && change.Evidence is null)
             return Skip(change, OneSessionReason);
 
         var current = notes.FirstOrDefault(n => n.Id == snapshot.Id);
@@ -125,7 +134,7 @@ public sealed class DreamApplier(IMemoryStore store, TimeProvider time)
         change.NoteId = snapshot.Id;
         change.List = snapshot.List;
         change.Text = null;
-        if (!HasEvidence(p, cited))
+        if (!HasEvidence(p, cited) && change.Evidence is null)
             return Skip(change, OneSessionReason);
 
         var current = notes.FirstOrDefault(n => n.Id == snapshot.Id);
@@ -138,6 +147,36 @@ public sealed class DreamApplier(IMemoryStore store, TimeProvider time)
         await store.DeleteAsync(userId, [current.Id], ct).ConfigureAwait(false);
         change.Kind = DreamRules.ChangeKinds.Retired;
         change.Text = current.Text;
+        change.Replaced = replaced;
+        return change;
+    }
+
+    /// <summary>
+    /// Says a note of the user's (<c>from-you</c> or <c>added</c>) looks out of date and why. Changes no note: the user
+    /// edits, forgets or keeps it. A learned note is refused (those are rewritten or retired); a note already flagged
+    /// while it read the same is left unflagged, so Keep means something.
+    /// </summary>
+    private static DreamChange FlagAsync(Dream dream, DreamProposal p, DreamChange change, IReadOnlyList<MemoryNote> notes, HashSet<(string, string)> flaggedBefore)
+    {
+        if (dream.Notes.FirstOrDefault(n => n.Id == p.Note?.Trim()) is not { } snapshot)
+            return Skip(change, $"There's no note \"{p.Note}\".");
+
+        change.NoteId = snapshot.Id;
+        change.List = snapshot.List;
+        var current = notes.FirstOrDefault(n => n.Id == snapshot.Id);
+        var replaced = current is null ? [] : new List<MemoryNote> { current };
+        change.Text = current?.Text ?? snapshot.Text;
+        if (snapshot.Kind == MemoryKinds.Learned)
+            return Skip(change, FlagLearnedReason);
+        if (string.IsNullOrWhiteSpace(change.Why) || (change.Evidence is null && change.Quote is null))
+            return Skip(change, FlagNoEvidenceReason);
+        if (current is null || DreamRules.HashOf(current) != snapshot.Hash)
+            return Left(change, ChangedReason, replaced);
+        if (flaggedBefore.Contains((current.Id, snapshot.Hash)))
+            return Skip(change, AlreadyFlaggedReason);
+
+        change.Kind = DreamRules.ChangeKinds.Flagged;
+        change.NoteHash = snapshot.Hash;
         change.Replaced = replaced;
         return change;
     }
@@ -259,6 +298,13 @@ public sealed class DreamApplier(IMemoryStore store, TimeProvider time)
             return FleetError.NotFoundFor("Change", changeId);
         if (change.Undone)
             return FleetError.ValidationError("Dream.Undo", "This change was already undone.");
+        if (change.Kind == DreamRules.ChangeKinds.Flagged)
+        {
+            // Keep: there is nothing to put back, the flag is dismissed.
+            change.Undone = true;
+            return null;
+        }
+
         if (change.Kind is not (DreamRules.ChangeKinds.Added or DreamRules.ChangeKinds.Rewritten or DreamRules.ChangeKinds.Merged or DreamRules.ChangeKinds.Retired or DreamRules.ChangeKinds.Kept))
             return FleetError.ValidationError("Dream.Undo", "Only a change Fleet made can be undone.");
 

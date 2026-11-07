@@ -166,4 +166,40 @@ public sealed class DreamTranscriptTests
         prompt.ShouldContain("\"action\":\"keep\"");
         prompt.ShouldContain("[aa11] (learned, fades) Use bun.");
     }
+
+    [Fact]
+    public void A_prompt_for_a_read_only_session_asks_for_checks_and_names_the_sessions_ids()
+    {
+        var prompt = DreamPrompt.Build("/work/fleet", "## S1 · Fix it · opencode2\nYou: hi", 2,
+            [new DreamNote { Id = "aa11", List = "repository", Kind = "from-you", Text = "Build with make all." }],
+            ["session-aaa", "session-bbb"], readsRepository: true);
+
+        prompt.ShouldContain("CHECK the notes");
+        prompt.ShouldContain("git log");
+        prompt.ShouldContain("fleet_session_read");
+        prompt.ShouldContain("S1 = session-aaa, S2 = session-bbb");
+        prompt.ShouldContain("\"action\":\"flag\"");
+        prompt.ShouldContain("\"evidence\"");
+        prompt.ShouldNotContain("Don't run commands");
+    }
+
+    [Fact]
+    public void A_prompt_for_a_session_that_cannot_be_made_read_only_keeps_the_no_tools_instruction()
+    {
+        var prompt = DreamPrompt.Build("/work/fleet", "", 2, [], ["session-aaa", "session-bbb"], readsRepository: false);
+
+        prompt.ShouldContain("Don't run commands, don't edit files");
+        prompt.ShouldNotContain("fleet_session_read");
+        prompt.ShouldNotContain("session-aaa");
+    }
+
+    [Fact]
+    public void The_answer_reads_a_flag_with_its_evidence()
+    {
+        var flag = DreamAnswer.Parse("```json\n{\"changes\":[{\"action\":\"flag\",\"note\":\"aa11\",\"why\":\"w\",\"sessions\":[\"S2\"],\"quote\":\"q\",\"evidence\":\"Makefile deleted in 4f2a9c1\"}]}\n```")
+            .ShouldNotBeNull().Single();
+
+        flag.Action.ShouldBe("flag");
+        flag.Evidence.ShouldBe("Makefile deleted in 4f2a9c1");
+    }
 }

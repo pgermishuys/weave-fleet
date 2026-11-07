@@ -71,6 +71,21 @@ public sealed class SessionPermissionsTests
         (await ResolveAsync(child)).ShouldBe(PermissionPolicy.AllowAll);
     }
 
+    [Fact]
+    public async Task A_dreaming_session_and_its_subagents_are_read_only_whatever_the_level()
+    {
+        _preferences.Seed(SessionPermissions.LevelKey, PermissionLevels.All);
+        var dreaming = Session("opencode2");
+        dreaming.Tags = ["dreaming"];
+        await _sessions.InsertAsync(dreaming);
+        var child = Session("opencode2");
+        child.ParentSessionId = dreaming.Id;
+
+        (await ResolveAsync(dreaming)).ShouldBe(PermissionPolicy.ReadOnlyRun);
+        (await ResolveAsync(child)).ShouldBe(PermissionPolicy.ReadOnlyRun);
+        (await ResolveAsync(Session("opencode2"))).ShouldBe(PermissionPolicy.AllowAll);
+    }
+
     private Task<PermissionPolicy> ResolveAsync(Session session) => SessionPermissions.ResolveAsync(_preferences, _sessions, session);
 
     private static Session Session(string harness, string? source = null, string? workflowRunId = null, bool userFinishes = false) => new()

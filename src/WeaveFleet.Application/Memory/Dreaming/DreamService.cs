@@ -213,13 +213,18 @@ public sealed partial class DreamService(
             Fades = note.Kind == MemoryKinds.Learned && note.Lifetime is not null,
         })];
 
-        // In the repository's own folder, not a worktree: it reads, and Fleet applies.
+        // In the repository's own folder, not a worktree. On a harness whose permission gate Fleet can make read-only
+        // (SessionPermissions gives a dreaming session PermissionPolicy.ReadOnlyRun) it may look around the repository;
+        // on any other it reads only the prompt. Fleet applies the answer either way.
+        var harnessType = await sessionCreation.ResolveHarnessTypeAsync(request.HarnessType).ConfigureAwait(false);
+        var readsRepository = DreamRules.ReadOnlyHarnesses.Contains(harnessType);
         var result = await sessionCreation.CreateSessionAsync(new CreateSessionRequest
         {
             Directory = dream.Repository,
             Title = $"Dreaming · {AgentMemory.RepositoryName(dream.Repository)}",
-            InitialPrompt = DreamPrompt.Build(dream.Repository, condensed.Text, condensed.Used.Count, dream.Notes),
-            HarnessType = request.HarnessType,
+            InitialPrompt = DreamPrompt.Build(dream.Repository, condensed.Text, condensed.Used.Count, dream.Notes,
+                [.. condensed.Used.Select(u => u.Id)], readsRepository),
+            HarnessType = harnessType,
             ProviderId = request.ProviderId,
             ModelId = request.ModelId,
             Tags = [DreamRules.SessionTag],
@@ -291,7 +296,13 @@ public sealed partial class DreamService(
         }
         else
         {
-            dream.Changes = await new DreamApplier(memory, time).ApplyAsync(userId, dream, proposals).ConfigureAwait(false);
+            var earlier = await dreams.ListAsync(userId, dream.Repository, DreamRules.ListLimit).ConfigureAwait(false);
+            var flaggedBefore = earlier.Where(d => d.Id != dream.Id)
+                .SelectMany(d => d.Changes)
+                .Where(c => c.Kind == DreamRules.ChangeKinds.Flagged && c.NoteId is not null && c.NoteHash is not null)
+                .Select(c => (c.NoteId!, c.NoteHash!))
+                .ToList();
+            dream.Changes = await new DreamApplier(memory, time).ApplyAsync(userId, dream, proposals, flaggedBefore).ConfigureAwait(false);
             dream.Status = DreamRules.Statuses.Done;
         }
 
@@ -343,22 +354,54 @@ public sealed partial class DreamService(
 /// <summary>What the dreaming session is asked, with the condensed transcripts and the notes inlined.</summary>
 public static class DreamPrompt
 {
-    public static string Build(string repository, string transcripts, int sessionCount, IReadOnlyList<DreamNote> notes)
+    /// <param name="sessionIds">Fleet's id for each of S1…Sn, in order: the dream can read one in full with <c>fleet_session_read</c>.</param>
+    /// <param name="readsRepository">The session may read the repository (it runs read-only); otherwise it only reads this prompt.</param>
+    public static string Build(
+        string repository, string transcripts, int sessionCount, IReadOnlyList<DreamNote> notes,
+        IReadOnlyList<string>? sessionIds = null, bool readsRepository = false)
     {
         var name = AgentMemory.RepositoryName(repository);
         var text = new StringBuilder();
         text.Append("You are Fleet's dreaming pass for the repository ").Append(name).Append(". Below are condensed transcripts of its last ")
-            .Append(sessionCount).Append(" sessions (S1..S").Append(sessionCount).Append(") and its current notes (repository and machine, each `[id] (kind) text`).\n\n")
-            .Append("Find lessons seen in 2+ sessions, or ones the user corrected, and check them against the notes. ")
-            .Append("Don't run commands, don't edit files, don't use any memory tools: only read what's below and answer.\n")
-            .Append("Only `learned` notes may be rewritten, merged away or retired. Notes of kind `added` or `from-you` are the user's and are never changed (a learned note that duplicates one is merged into it). ")
-            .Append("A note is one fact in a sentence or two, at most ").Append(AgentMemory.MaxNoteLength).Append(" characters, and says what to do.\n\n")
+            .Append(sessionCount).Append(" sessions (S1..S").Append(sessionCount).Append(") and its current notes (repository and machine, each `[id] (kind) text`).\n\n");
+
+        if (readsRepository)
+        {
+            text.Append("Your job is to ADD lessons and to CHECK the notes. For each note, ask whether it is still true: ")
+                .Append("does the file, folder, command or flag it names still exist (read the repository; `git log`, `git show` and `git grep` tell what was renamed or removed), ")
+                .Append("and do the sessions show it is now wrong, or show a command it calls broken working? ")
+                .Append("Also find lessons seen in 2+ sessions, or ones the user corrected.\n")
+                .Append("You are read-only, and Fleet refuses anything else: read files with the read, grep and glob tools, and run only commands that read ")
+                .Append("(cat, ls, head, tail, wc, grep, rg, find, and `git log|show|diff|status|blame|ls-files|grep`; no redirects or `;`). ")
+                .Append("Don't edit files, don't use memory tools. The transcripts below are your overview; when you need the detail of a session, ")
+                .Append("read it in full with the `fleet_session_read` tool (sessionId below) - read a few at most. Stay brief: you have a token budget.\n");
+            if (sessionIds is { Count: > 0 })
+            {
+                text.Append("Session ids: ");
+                for (var index = 0; index < sessionIds.Count; index++)
+                    text.Append(index > 0 ? ", " : "").Append('S').Append(index + 1).Append(" = ").Append(sessionIds[index]);
+                text.Append(".\n");
+            }
+        }
+        else
+        {
+            text.Append("Find lessons seen in 2+ sessions, or ones the user corrected, and check them against the notes; ")
+                .Append("a note a later session shows to be wrong can be flagged or retired. ")
+                .Append("Don't run commands, don't edit files, don't use any memory tools: only read what's below and answer.\n");
+        }
+
+        text.Append("Only `learned` notes may be rewritten, merged away or retired. Notes of kind `added` or `from-you` are the user's and are never changed ")
+            .Append("(a learned note that duplicates one is merged into it); if one looks out of date, `flag` it with the evidence and the user decides. ")
+            .Append("Every rewrite, retire and flag must cite its evidence: the session labels and the user's or the tool's words as `quote`, and ")
+            .Append(readsRepository ? "what you read (the file, the commit and what it showed) as `evidence`" : "what the sessions showed as `evidence`")
+            .Append(". A note is one fact in a sentence or two, at most ").Append(AgentMemory.MaxNoteLength).Append(" characters, and says what to do.\n\n")
             .Append("Answer with ONLY a fenced json block:\n```json\n")
             .Append("{\"changes\":[\n")
             .Append(" {\"action\":\"add\",\"list\":\"repository|machine\",\"text\":\"…\",\"why\":\"one sentence\",\"sessions\":[\"S1\",\"S4\"],\"quote\":\"short failing command/error or the user's words\",\"corrected\":false},\n")
-            .Append(" {\"action\":\"rewrite\",\"note\":\"<id>\",\"text\":\"…\",\"why\":\"…\",\"sessions\":[],\"quote\":\"…\"},\n")
+            .Append(" {\"action\":\"rewrite\",\"note\":\"<id>\",\"text\":\"…\",\"why\":\"…\",\"sessions\":[],\"quote\":\"…\",\"evidence\":\"…\"},\n")
             .Append(" {\"action\":\"merge\",\"keep\":\"<id>\",\"remove\":[\"<id>\"],\"text\":\"optional new wording for keep (learned keep only)\",\"why\":\"…\"},\n")
-            .Append(" {\"action\":\"retire\",\"note\":\"<id>\",\"why\":\"…\",\"sessions\":[],\"quote\":\"…\"},\n")
+            .Append(" {\"action\":\"retire\",\"note\":\"<id>\",\"why\":\"…\",\"sessions\":[],\"quote\":\"…\",\"evidence\":\"…\"},\n")
+            .Append(" {\"action\":\"flag\",\"note\":\"<id of an added or from-you note>\",\"why\":\"why it looks out of date\",\"sessions\":[\"S2\"],\"quote\":\"…\",\"evidence\":\"…\"},\n")
             .Append(" {\"action\":\"keep\",\"note\":\"<id>\",\"why\":\"…\",\"sessions\":[\"S1\",\"S3\",\"S5\"],\"quote\":\"…\"}\n")
             .Append("]}\n```\nAn empty list is a fine answer. Keep (for good) is for a learned note marked `fades` that ").Append(DreamRules.KeepForGoodSessions)
             .Append("+ sessions relied on and that would otherwise fade; cite those sessions.\n\n");

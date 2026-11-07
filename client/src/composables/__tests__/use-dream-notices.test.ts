@@ -84,6 +84,23 @@ describe("useDreamNotices", () => {
     expect(useNoticesStore().notices).toHaveLength(0);
   });
 
+  it("tells of notes that look out of date when nothing else changed, and not once they're dealt with", async () => {
+    mocks.getNightlyDreaming.mockResolvedValue(
+      nightly([
+        dream({ id: "f1", changes: [change("flagged")] }),
+        dream({ id: "f2", changes: [change("flagged", true)] }),
+      ]),
+    );
+    mount(Host);
+    await flushPromises();
+
+    const notice = useNoticesStore().notices.find((item) => item.id === "dream-f1");
+    expect(notice?.title).toBe("Some of acme-widgets's notes look out of date");
+    expect(notice?.body).toBe("14 sessions read overnight · 1 looks out of date");
+    expect(notice?.actions?.[0]?.label).toBe("Review");
+    expect(useNoticesStore().has("dream-f2")).toBe(false);
+  });
+
   it("asks for nothing and shows nothing while the switch is off", async () => {
     mocks.on.value = false;
     mount(Host);

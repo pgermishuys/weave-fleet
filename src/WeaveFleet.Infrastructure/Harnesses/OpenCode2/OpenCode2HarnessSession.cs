@@ -1129,7 +1129,8 @@ internal sealed partial class OpenCode2HarnessSession : IHarnessSession, IOpenCo
     public async Task ApplyPermissionsAsync(PermissionPolicy policy, CancellationToken ct)
     {
         _permissions.Policy = policy;
-        if (_rulesLevel == policy.Level)
+        var rulesKey = policy.ReadOnly ? $"{policy.Level}+read-only" : policy.Level;
+        if (_rulesLevel == rulesKey)
             return;
 
         var server = await AttachedServerAsync(ct).ConfigureAwait(false);
@@ -1140,17 +1141,17 @@ internal sealed partial class OpenCode2HarnessSession : IHarnessSession, IOpenCo
         // A subagent's child session keeps the rules its agent gave it; Fleet answers its asks all the same.
         if (!string.IsNullOrEmpty(info.ParentID))
         {
-            _rulesLevel = policy.Level;
+            _rulesLevel = rulesKey;
             return;
         }
 
         var hidesStepTool = (info.Permissions ?? []).Contains(OpenCode2HttpClient.DenyStepTool);
         // Fleet's browser, when attached, keeps the session's browser tools shown.
         var rules = OpenCode2HttpClient.BrowserAllowed(info.Permissions)
-            ? OpenCode2HttpClient.WithBrowser(OpenCode2HttpClient.RulesFor(policy.Level, hidesStepTool), attached: true)
-            : OpenCode2HttpClient.RulesFor(policy.Level, hidesStepTool);
+            ? OpenCode2HttpClient.WithBrowser(OpenCode2HttpClient.RulesFor(policy.Level, hidesStepTool, policy.ReadOnly), attached: true)
+            : OpenCode2HttpClient.RulesFor(policy.Level, hidesStepTool, policy.ReadOnly);
         await server.Client.SetPermissionsAsync(ResumeToken, rules, ct).ConfigureAwait(false);
-        _rulesLevel = policy.Level;
+        _rulesLevel = rulesKey;
     }
 
     /// <inheritdoc />
