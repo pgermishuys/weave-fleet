@@ -1,6 +1,6 @@
 import { computed, onMounted, onUnmounted, shallowRef, toValue, type ComputedRef, type MaybeRefOrGetter, type ShallowRef } from "vue";
 import type { ModelAnalytics } from "@/api/client";
-import { api } from "@/api/client";
+import { useMachineTarget } from "@/lib/machine-target";
 
 export interface UseAnalyticsModelsParams {
   from?: MaybeRefOrGetter<string | undefined>;
@@ -22,6 +22,7 @@ export function useAnalyticsModels(
   params: UseAnalyticsModelsParams = {},
   pollIntervalMs: MaybeRefOrGetter<number> = DEFAULT_POLL_INTERVAL_MS,
 ): UseAnalyticsModelsResult {
+  const target = useMachineTarget();
   const models = shallowRef<ModelAnalytics[]>([]);
   const isLoading = shallowRef(true);
   const error = shallowRef<string | undefined>(undefined);
@@ -56,7 +57,7 @@ export function useAnalyticsModels(
     const currentRequestId = ++requestId;
 
     try {
-      const { data, error: apiError } = await api.GET("/api/analytics/models", {
+      const { data, error: apiError } = await target.api.GET("/api/analytics/models", {
         params: { query: Object.fromEntries(new URLSearchParams(queryString.value)) },
       });
       if (apiError) {

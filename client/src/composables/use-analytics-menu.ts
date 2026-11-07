@@ -4,6 +4,8 @@ import { useAnalyticsFilters } from "@/composables/use-analytics-filters";
 import { useAnalyticsModels } from "@/composables/use-analytics-models";
 import { useAnalyticsSection } from "@/composables/use-analytics-section";
 import { useAnalyticsSessions } from "@/composables/use-analytics-sessions";
+import { apiFetchOn } from "@/lib/api-client";
+import { useMachineTarget } from "@/lib/machine-target";
 import {
   ANALYTICS_SECTIONS,
   analyticsSectionPath,
@@ -19,6 +21,7 @@ export interface AnalyticsMenuItem extends AnalyticsSection {
 /** The analytics-menu: the sections with their counts, the one open, and the filters that scope all of them. */
 export function useAnalyticsMenu() {
   const router = useRouter();
+  const target = useMachineTarget();
   const active = useAnalyticsSection();
   const { filters, topProjects, setFrom, setTo, setProjectId, resetFilters, isDefault } = useAnalyticsFilters();
 
@@ -54,10 +57,27 @@ export function useAnalyticsMenu() {
     return `/api/analytics/export?${query.toString()}`;
   });
 
+  /**
+   * The download link works for the machine the page is served from. Another machine needs its key, which a link
+   * can't carry, so its export is fetched with the key and saved from here.
+   */
+  async function exportCsv(event: Event): Promise<void> {
+    if (target.isLive) return;
+    event.preventDefault();
+    const response = await apiFetchOn(target.connection, exportHref.value);
+    if (!response.ok) return;
+    const url = URL.createObjectURL(await response.blob());
+    const link = document.createElement("a");
+    link.href = url;
+    link.download = "analytics.csv";
+    link.click();
+    URL.revokeObjectURL(url);
+  }
+
   function select(id: AnalyticsSectionId): void {
     if (id === active.value) return;
     void router.navigate({ to: analyticsSectionPath(id) });
   }
 
-  return { items, active, select, filters, projects: topProjects, setFrom, setTo, setProjectId, resetFilters, isDefault, exportHref };
+  return { items, active, select, filters, projects: topProjects, setFrom, setTo, setProjectId, resetFilters, isDefault, exportHref, exportCsv };
 }

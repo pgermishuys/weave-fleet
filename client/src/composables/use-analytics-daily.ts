@@ -1,6 +1,6 @@
 import { computed, onMounted, onUnmounted, shallowRef, toValue, type ComputedRef, type MaybeRefOrGetter, type ShallowRef } from "vue";
 import type { DailyAnalytics } from "@/api/client";
-import { api } from "@/api/client";
+import { useMachineTarget } from "@/lib/machine-target";
 
 export interface UseAnalyticsDailyParams {
   from?: MaybeRefOrGetter<string | undefined>;
@@ -22,6 +22,7 @@ export function useAnalyticsDaily(
   params: UseAnalyticsDailyParams = {},
   pollIntervalMs: MaybeRefOrGetter<number> = DEFAULT_POLL_INTERVAL_MS,
 ): UseAnalyticsDailyResult {
+  const target = useMachineTarget();
   const daily = shallowRef<DailyAnalytics[]>([]);
   const isLoading = shallowRef(true);
   const error = shallowRef<string | undefined>(undefined);
@@ -57,7 +58,7 @@ export function useAnalyticsDaily(
     const currentRequestId = ++requestId;
 
     try {
-      const { data, error: apiError } = await api.GET("/api/analytics/daily", {
+      const { data, error: apiError } = await target.api.GET("/api/analytics/daily", {
         params: { query: Object.fromEntries(new URLSearchParams(queryString.value)) },
       });
       if (apiError) {

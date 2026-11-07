@@ -2,10 +2,13 @@
 import { computed } from "vue";
 import { Download } from "lucide-vue-next";
 import AnalyticsFilters from "@/components/analytics/AnalyticsFilters.vue";
+import MachineSwitch from "@/components/layout/MachineSwitch.vue";
+import { useAnalyticsMachine } from "@/composables/use-analytics-machine";
 import { useAnalyticsMenu } from "@/composables/use-analytics-menu";
 import { ANALYTICS_GROUPS } from "@/lib/analytics-sections";
 
 const menu = useAnalyticsMenu();
+const machine = useAnalyticsMachine();
 
 const groups = computed(() =>
   ANALYTICS_GROUPS.map((group) => ({
@@ -23,6 +26,16 @@ const groups = computed(() =>
     <p class="analytics-nav__header">
       Analytics
     </p>
+    <div
+      v-if="machine.enabled.value"
+      class="analytics-nav__machine"
+    >
+      <MachineSwitch
+        :choice="machine"
+        label="Analytics"
+        testid="analytics"
+      />
+    </div>
 
     <nav
       class="analytics-nav__sections"
@@ -77,6 +90,7 @@ const groups = computed(() =>
         class="analytics-nav__export"
         :href="menu.exportHref.value"
         download="analytics.csv"
+        @click="menu.exportCsv"
       >
         <Download
           :size="13"
@@ -89,6 +103,10 @@ const groups = computed(() =>
 </template>
 
 <style scoped>
+.analytics-nav__machine {
+  padding: 0 12px 6px;
+}
+
 .analytics-nav {
   display: flex;
   flex: 1;

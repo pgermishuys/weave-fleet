@@ -1,7 +1,7 @@
 import { defineComponent, h } from "vue";
 import { BarChart3, LayoutGrid, ListTodo, Radar, MessageSquare, Settings, Workflow, Zap } from "lucide-vue-next";
 import FleetNavPanel from "@/components/mission-control/FleetNavPanel.vue";
-import AnalyticsNavPanel from "@/components/analytics/AnalyticsNavPanel.vue";
+import AnalyticsMachinePanel from "@/components/analytics/AnalyticsMachinePanel.vue";
 import BoardControlsPanel from "@/components/board/BoardControlsPanel.vue";
 import JobsNavPanel from "@/components/jobs/JobsNavPanel.vue";
 import SessionsPanel from "@/components/sessions/SessionsPanel.vue";
@@ -69,6 +69,6 @@ railPoint.contribute("core", [
   { id: "jobs", label: "Jobs", icon: ListTodo, to: "/jobs", placement: "top", order: 25, panel: JobsNavPanel, hidden: jobsOff },
   { id: "automations", label: "Automations", icon: Zap, to: "/automations", placement: "top", order: 30, panel: AutomationsContextPanel },
   // Analytics owns its context: the analytics-menu (sections, filters, export) beside the selected section.
-  { id: "analytics", label: "Analytics", icon: BarChart3, to: "/analytics", placement: "secondary", order: 0, panel: AnalyticsNavPanel },
+  { id: "analytics", label: "Analytics", icon: BarChart3, to: "/analytics", placement: "secondary", order: 0, panel: AnalyticsMachinePanel },
   { id: "settings", label: "Settings", icon: Settings, to: "/settings", placement: "bottom", order: 40, panel: SettingsContextPanel },
 ]);
