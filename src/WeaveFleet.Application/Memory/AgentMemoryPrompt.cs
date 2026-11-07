@@ -40,16 +40,21 @@ public static class AgentMemoryPrompt
         if (canSave)
         {
             text.AppendLine();
-            text.AppendLine("Save a note with `fleet_memory_save` when:");
             text.AppendLine(
-                "- the user asks you to remember something (\"remember …\", \"note that …\", \"from now on …\", \"don't forget …\"). "
+                "Memory is for what a later session couldn't easily find out again and would act differently for knowing: how "
+                + "this repository and machine really behave, plans that span sessions, traps, and what the user wants. You decide "
+                + "what's worth a note. Read the notes below before you start, and test a note before you rely on it.");
+            text.AppendLine();
+            text.AppendLine("Save a note with `fleet_memory_save`:");
+            text.AppendLine(
+                "- when the user asks you to remember something (\"remember …\", \"note that …\", \"from now on …\", \"don't forget …\"). "
                 + "Always save it, with kind \"from-you\", and tell the user you did.");
-            text.AppendLine("- the user corrects you or states a preference that will matter again. Kind \"from-you\".");
+            text.AppendLine("- when the user corrects you or states a preference that will matter again. Kind \"from-you\".");
             text.AppendLine(
-                "- a command or tool failed, timed out or was slow, and you found what works. Kind \"learned\". Say what to do, "
-                + "not only what went wrong, so the next session gets it right the first time. A learned note lasts "
-                + $"{AgentMemory.LearnedLifetimeDays} days of use, so one whose cause is gone drops out. If its failure comes back "
-                + "after it has gone, save the lesson again: Fleet recognises it and keeps it longer.");
+                "- for what you found out yourself. Kind \"learned\". Say what to do, not only what went wrong, so the next "
+                + $"session gets it right the first time. A learned note lasts {AgentMemory.LearnedLifetimeDays} days of use, so one "
+                + "whose cause is gone drops out. If it comes back after it has gone, save the lesson again: Fleet recognises it "
+                + "and keeps it longer.");
             text.AppendLine(
                 "Don't save what the repository already records (code, docs, git history), details of the task at hand, or "
                 + "secrets.");

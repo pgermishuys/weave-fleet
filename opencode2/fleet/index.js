@@ -490,7 +490,7 @@ if (process.env.FLEET_MEMORY_DIR) {
       "fleet_memory_save",
       [
         "Save a note to Fleet memory, so later sessions start out knowing it. Follow the rules under \"Fleet memory\" in your instructions:",
-        "save when the user asks you to remember something, corrects you, or when you found what works after something failed, timed out or was slow.",
+        "save when the user asks you to remember something, corrects you, or when you found out something a later session couldn't easily find out again and would act differently for knowing.",
         "The user sees each note saved and can undo it.",
       ].join(" "),
       {
