@@ -1,5 +1,6 @@
 import { readonly, ref, shallowRef, type Ref, type ShallowRef } from "vue";
-import { api, type components } from "@/api/client";
+import type { components } from "@/api/client";
+import { useMachineTarget } from "@/lib/machine-target";
 import { extractApiError } from "@/lib/api-error";
 import { targetQuery, toInstallTarget, type InstallTarget } from "@/lib/install-target";
 
@@ -54,6 +55,8 @@ export interface UseToolsResult {
 }
 
 export function useTools(): UseToolsResult {
+  // The machine the page asks: the one Settings shows, else the live one.
+  const { api } = useMachineTarget();
   const tools = ref<InstalledTool[]>([]);
   const isLoading = shallowRef(true);
   const error = shallowRef<string | undefined>(undefined);

@@ -17,11 +17,14 @@ import {
   type MemoryNotes,
   type MemoryOverview,
 } from "@/lib/agent-memory";
+import { useMachineTarget } from "@/lib/machine-target";
 import { useSettingsNav } from "@/composables/use-settings-nav";
 import { useDreamingFeature } from "@/composables/use-dreaming-feature";
 import DreamNightly from "@/components/settings/memory/DreamNightly.vue";
 import DreamingPanel from "@/components/settings/memory/DreamingPanel.vue";
 
+// Memory belongs to a machine: the one Settings shows.
+const target = useMachineTarget();
 const { isDreamingEnabled } = useDreamingFeature();
 const overview = shallowRef<MemoryOverview | null>(null);
 const notes = shallowRef<MemoryNotes | null>(null);
@@ -75,14 +78,14 @@ async function run(action: () => Promise<void>): Promise<void> {
 }
 
 async function loadNotes(): Promise<void> {
-  notes.value = await listMemoryNotes(repository.value);
+  notes.value = await listMemoryNotes(repository.value, target);
 }
 
 async function load(): Promise<void> {
   isLoading.value = true;
   error.value = null;
   try {
-    overview.value = await getMemory();
+    overview.value = await getMemory(target);
     const wanted = memoryRepository.value;
     memoryRepository.value = null;
     if (wanted && overview.value.repositories.some((item) => item.path === wanted)) repository.value = wanted;
@@ -96,13 +99,13 @@ async function load(): Promise<void> {
 }
 
 async function refresh(): Promise<void> {
-  overview.value = await getMemory();
+  overview.value = await getMemory(target);
   await loadNotes();
 }
 
 function toggle(): Promise<void> {
   return run(async () => {
-    overview.value = await setMemoryEnabled(!enabled.value);
+    overview.value = await setMemoryEnabled(!enabled.value, target);
     confirmingClear.value = false;
   });
 }
@@ -116,7 +119,7 @@ function saveDraft(): Promise<void> {
   const list = adding.value;
   if (!list || !draft.value.trim()) return Promise.resolve();
   return run(async () => {
-    await addMemoryNote(list, list === "repository" ? repository.value : null, draft.value.trim());
+    await addMemoryNote(list, list === "repository" ? repository.value : null, draft.value.trim(), target);
     adding.value = null;
     await refresh();
   });
@@ -130,7 +133,7 @@ function startEditing(note: MemoryNote): void {
 function saveEdit(note: MemoryNote): Promise<void> {
   if (!editText.value.trim()) return Promise.resolve();
   return run(async () => {
-    await updateMemoryNote(note.id, editText.value.trim());
+    await updateMemoryNote(note.id, editText.value.trim(), target);
     editingId.value = null;
     await loadNotes();
   });
@@ -138,28 +141,28 @@ function saveEdit(note: MemoryNote): Promise<void> {
 
 function keep(note: MemoryNote): Promise<void> {
   return run(async () => {
-    await keepMemoryNote(note.id);
+    await keepMemoryNote(note.id, target);
     await loadNotes();
   });
 }
 
 function forget(note: MemoryNote): Promise<void> {
   return run(async () => {
-    await forgetMemoryNote(note.id);
+    await forgetMemoryNote(note.id, target);
     await refresh();
   });
 }
 
 function clearList(list: MemoryListName): Promise<void> {
   return run(async () => {
-    await clearMemory(list, list === "repository" ? repository.value : null);
+    await clearMemory(list, list === "repository" ? repository.value : null, target);
     await refresh();
   });
 }
 
 function clearAll(): Promise<void> {
   return run(async () => {
-    await clearMemory("all");
+    await clearMemory("all", null, target);
     confirmingClear.value = false;
     await refresh();
   });

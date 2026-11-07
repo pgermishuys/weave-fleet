@@ -5,11 +5,12 @@ import SkillsSection from "@/components/settings/SkillsSection.vue";
 import ToolsSection from "@/components/settings/ToolsSection.vue";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { useSettingsNav } from "@/composables/use-settings-nav";
+import { useMachineTarget } from "@/lib/machine-target";
 import { useModsStore } from "@/stores/mods";
 
 /** Skills & tools: Skills and Tools, plus Mods while the Mods switch (Labs) is on. */
 const { activeAnchor } = useSettingsNav();
-const mods = useModsStore();
+const mods = useModsStore(useMachineTarget());
 // The switch decides whether Mods has a tab; read it once here so the tab is right on first paint.
 onMounted(() => { void mods.loadSwitch(); });
 

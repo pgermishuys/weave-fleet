@@ -1,7 +1,8 @@
 <script setup lang="ts">
 import { computed, shallowRef } from "vue";
 import { LoaderCircle } from "lucide-vue-next";
-import { apiFetch } from "@/lib/api-client";
+import { apiFetchOn } from "@/lib/api-client";
+import { useMachineTarget } from "@/lib/machine-target";
 import type { KeptMod } from "@/lib/mods/kept";
 
 /**
@@ -53,6 +54,7 @@ const GROUPS: SampleGroup[] = [
   },
 ];
 
+const target = useMachineTarget();
 const adding = shallowRef<string | null>(null);
 const failed = shallowRef<{ name: string; text: string } | null>(null);
 
@@ -69,7 +71,7 @@ async function add(sample: Sample): Promise<void> {
   adding.value = sample.name;
   failed.value = null;
   try {
-    const response = await apiFetch(`/api/mods/samples/${sample.name}`, { method: "POST" });
+    const response = await apiFetchOn(target.connection, `/api/mods/samples/${sample.name}`, { method: "POST" });
     if (response.ok) return;
     const body = (await response.json().catch(() => ({}))) as { error?: string; message?: string };
     failed.value = { name: sample.name, text: body.error ?? body.message ?? `The sample couldn't be added (HTTP ${response.status}).` };

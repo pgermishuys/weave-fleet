@@ -1,7 +1,7 @@
-import { defineStore } from "pinia";
 import { computed, shallowRef } from "vue";
-import { apiFetch } from "@/lib/api-client";
+import { apiFetchOn } from "@/lib/api-client";
 import { extractApiError } from "@/lib/api-error";
+import { defineMachineStore } from "@/lib/machine-store";
 import type { BuiltInSkill, BuiltInSkillDetail } from "@/lib/skill-versions";
 
 const PATH = "/api/skills/built-in";
@@ -10,7 +10,7 @@ const PATH = "/api/skills/built-in";
  * Fleet's built-in skills, shared by Settings and the conversation: Settings turns them on and edits them, and a
  * skill row in the conversation offers Improve when the skill is one of these.
  */
-export const useBuiltInSkillsStore = defineStore("built-in-skills", () => {
+export const useBuiltInSkillsStore = defineMachineStore("built-in-skills", (target) => {
   const skills = shallowRef<BuiltInSkill[]>([]);
   const isLoading = shallowRef(false);
   const hasLoaded = shallowRef(false);
@@ -22,7 +22,7 @@ export const useBuiltInSkillsStore = defineStore("built-in-skills", () => {
     isLoading.value = true;
     error.value = null;
     try {
-      const response = await apiFetch(PATH);
+      const response = await apiFetchOn(target.connection, PATH);
       if (!response.ok) {
         let message = "Couldn't load Fleet's built-in skills.";
         try {

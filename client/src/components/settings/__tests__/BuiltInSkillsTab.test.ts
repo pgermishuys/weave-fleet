@@ -2,7 +2,7 @@ import { flushPromises, mount } from "@vue/test-utils";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
 const { apiFetchMock } = vi.hoisted(() => ({ apiFetchMock: vi.fn() }));
-vi.mock("@/lib/api-client", () => ({ apiFetch: apiFetchMock }));
+vi.mock("@/lib/api-client", () => ({ apiFetchOn: (_machine: unknown, ...rest: unknown[]) => apiFetchMock(...rest) }));
 
 import BuiltInSkillsTab from "@/components/settings/skills/BuiltInSkillsTab.vue";
 

@@ -21,7 +21,7 @@ const store = vi.hoisted(() => ({
 vi.mock("@/stores/mods", () => ({ useModsStore: () => store.state }));
 
 const { apiFetchMock } = vi.hoisted(() => ({ apiFetchMock: vi.fn() }));
-vi.mock("@/lib/api-client", async (importOriginal) => ({ ...(await importOriginal<object>()), apiFetch: apiFetchMock }));
+vi.mock("@/lib/api-client", async (importOriginal) => ({ ...(await importOriginal<object>()), apiFetchOn: (_machine: unknown, ...rest: unknown[]) => apiFetchMock(...rest) }));
 
 const { default: ModsSection } = await import("@/components/settings/ModsSection.vue");
 const { useSettingsNav } = await import("@/composables/use-settings-nav");

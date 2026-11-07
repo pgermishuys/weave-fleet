@@ -2,6 +2,7 @@
 import { computed, onBeforeUnmount, ref, shallowRef, watch } from "vue";
 import { useNavigate } from "@tanstack/vue-router";
 import { ChevronRight, LoaderCircle, Moon } from "lucide-vue-next";
+import { useMachineTarget } from "@/lib/machine-target";
 import { useDreamingFeature } from "@/composables/use-dreaming-feature";
 import { useEnabledHarnesses } from "@/composables/use-enabled-harnesses";
 import { forgetMemoryNote, updateMemoryNote } from "@/lib/agent-memory";
@@ -28,6 +29,7 @@ const emit = defineEmits<{ changed: [] }>();
 const { isDreamingEnabled } = useDreamingFeature();
 const { enabledHarnesses } = useEnabledHarnesses();
 const navigate = useNavigate();
+const target = useMachineTarget();
 
 const HARNESS_KEY = "weave:dreaming-harness";
 const dream = shallowRef<DreamView | null>(null);
@@ -74,7 +76,7 @@ async function load(): Promise<void> {
   }
   const repository = props.repository;
   try {
-    const dreams = await listDreams(repository);
+    const dreams = await listDreams(repository, target);
     if (repository === props.repository) dream.value = dreams[0] ?? null;
   } catch (caught) {
     error.value = caught instanceof Error ? caught.message : "Couldn't load the dreams.";
@@ -86,7 +88,7 @@ async function dreamNow(): Promise<void> {
   isStarting.value = true;
   error.value = null;
   try {
-    dream.value = await startDream(props.repository, harnessType.value ? { harnessType: harnessType.value } : {});
+    dream.value = await startDream(props.repository, harnessType.value ? { harnessType: harnessType.value } : {}, target);
   } catch (caught) {
     error.value = caught instanceof Error ? caught.message : "Couldn't start the dream.";
   } finally {
@@ -99,7 +101,7 @@ async function undo(change: DreamChangeView): Promise<void> {
   undoing.value = change.id;
   error.value = null;
   try {
-    dream.value = await undoDreamChange(dream.value.id, change.id);
+    dream.value = await undoDreamChange(dream.value.id, change.id, target);
     emit("changed");
   } catch (caught) {
     error.value = caught instanceof Error ? caught.message : "Couldn't undo the change.";
@@ -115,7 +117,7 @@ async function settleFlag(change: DreamChangeView, act?: () => Promise<unknown>)
   error.value = null;
   try {
     await act?.();
-    dream.value = await undoDreamChange(dream.value.id, change.id);
+    dream.value = await undoDreamChange(dream.value.id, change.id, target);
     editing.value = null;
     if (act) emit("changed");
   } catch (caught) {
@@ -339,7 +341,7 @@ function sessionLabel(session: DreamSessionRef): string {
                   class="rounded-btn bg-accent px-2 py-0.5 text-xs font-medium text-white disabled:opacity-60"
                   :disabled="undoing === change.id || !editing.text.trim()"
                   data-testid="dream-flag-save"
-                  @click="settleFlag(change, () => updateMemoryNote(change.noteId!, editing!.text.trim()))"
+                  @click="settleFlag(change, () => updateMemoryNote(change.noteId!, editing!.text.trim(), target))"
                 >
                   Save
                 </button>
@@ -366,7 +368,7 @@ function sessionLabel(session: DreamSessionRef): string {
                   class="rounded-btn border border-border px-2 py-0.5 text-xs text-text disabled:opacity-60"
                   :disabled="undoing === change.id || !change.noteId"
                   data-testid="dream-flag-forget"
-                  @click="settleFlag(change, () => forgetMemoryNote(change.noteId!))"
+                  @click="settleFlag(change, () => forgetMemoryNote(change.noteId!, target))"
                 >
                   Forget
                 </button>
