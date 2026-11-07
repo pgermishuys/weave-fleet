@@ -252,6 +252,12 @@ describe("MemorySection", () => {
       expect(wrapper.get("[data-testid=memory-pinned-aaaa0001]").text()).toContain("Pinned");
     });
 
+    it("counts in the top line what a request carries: the notes every session reads", async () => {
+      const wrapper = await mountSection();
+
+      expect(wrapper.get("[data-testid=memory-count]").text()).toBe("4 notes · 3 read by every session · about 120 tokens per request");
+    });
+
     it("moves a note to search, and pins a searched one to always read", async () => {
       api.moveMemoryNote.mockResolvedValue(note("x", "x"));
       const wrapper = await mountSection();
@@ -285,6 +291,7 @@ describe("MemorySection", () => {
       api.listMemoryNotes.mockResolvedValue(grouped);
       const wrapper = await mountSection();
 
+      expect(wrapper.get("[data-testid=memory-count]").text()).toBe("4 notes · about 120 tokens per request");
       expect(wrapper.find("[data-testid=memory-group-repository-always]").exists()).toBe(false);
       expect(wrapper.find("[data-testid=memory-to-search-aaaa0002]").exists()).toBe(false);
       expect(wrapper.get("[data-testid=memory-list-repository]").text()).toContain("scratch HOME");

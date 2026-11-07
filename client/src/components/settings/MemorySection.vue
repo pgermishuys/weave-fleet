@@ -48,6 +48,9 @@ const enabled = computed(() => overview.value?.enabled ?? false);
 const searchOn = computed(() => overview.value?.searchEnabled === true);
 const repositoryName = computed(() => overview.value?.repositories.find((item) => item.path === repository.value)?.name ?? "this repository");
 const noteCount = computed(() => (notes.value ? notes.value.repositoryNotes.length + notes.value.machineNotes.length : 0));
+/** With "Search older notes" on: how many notes (both lists) every session reads; the rest wait for search. */
+const readCount = computed(() =>
+  notes.value ? [...notes.value.repositoryNotes, ...notes.value.machineNotes].filter((note) => !note.inSearch).length : 0);
 
 function matches(note: MemoryNote): boolean {
   const query = search.value.trim().toLowerCase();
@@ -377,7 +380,7 @@ onMounted(load);
           <span
             class="text-xs text-muted"
             data-testid="memory-count"
-          >{{ noteCount }} {{ noteCount === 1 ? "note" : "notes" }} · about {{ notes.tokens.toLocaleString() }} tokens per request</span>
+          >{{ noteCount }} {{ noteCount === 1 ? "note" : "notes" }}{{ searchOn ? ` · ${readCount} read by every session` : "" }} · about {{ notes.tokens.toLocaleString() }} tokens per request</span>
         </div>
 
         <DreamNightly

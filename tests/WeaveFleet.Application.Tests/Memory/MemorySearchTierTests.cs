@@ -370,6 +370,9 @@ public sealed class MemorySearchTierTests : IDisposable
         on.RepositoryNotes.Count.ShouldBe(45);
         on.RepositoryNotes.Count(note => note.InSearch).ShouldBe(40);
         on.Tokens.ShouldBeLessThan(off.Tokens);
+        var read = (await _store.ListAsync("owner")).Where(MemoryTiers.IsAlways).ToList();
+        on.Tokens.ShouldBe((AgentMemoryPrompt.Render(_repository, read, [], true, 40, 0).Length + 3) / 4, "what a request carries: the rules, the short list and the search line");
+        off.Tokens.ShouldBe((AgentMemoryPrompt.Render(_repository, MemoryTiers.Choose((await _store.ListAsync("owner")).ToList(), MemoryList.Repository, searchOn: false).Read, [], true).Length + 3) / 4, "search off: today's notes, up to the old cap of 40");
         (await _memory.GetOverviewAsync()).SearchEnabled.ShouldBeFalse();
     }
 
