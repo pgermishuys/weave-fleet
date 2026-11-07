@@ -738,6 +738,10 @@ public sealed partial class SessionCreation(
         return builder.ToString();
     }
 
+    /// <summary>The harness a request without one gets: the user's default among the available ones.</summary>
+    public Task<string> ResolveHarnessTypeAsync(string? harnessType, CancellationToken ct = default)
+        => ResolveHarnessTypeAsync(new CreateSessionRequest { HarnessType = harnessType }, ct);
+
     private async Task<string> ResolveHarnessTypeAsync(CreateSessionRequest request, CancellationToken ct)
     {
         if (!string.IsNullOrWhiteSpace(request.HarnessType))

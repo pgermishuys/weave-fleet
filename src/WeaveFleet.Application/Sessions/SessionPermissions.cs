@@ -31,6 +31,10 @@ public static class SessionPermissions
         ISessionRepository sessions,
         Session session)
     {
+        // A dreaming session reads the repository and changes nothing, whatever the user's level: nobody is there to ask.
+        if (await WeaveFleet.Application.Memory.Dreaming.ReadOnlyRunGuard.IsDreamingAsync(sessions, session).ConfigureAwait(false))
+            return PermissionPolicy.ReadOnlyIn(session.Directory);
+
         var level = await preferences.GetAsync(HarnessLevelKey(session.HarnessType)).ConfigureAwait(false);
         if (!PermissionLevels.IsKnown(level))
             level = await preferences.GetAsync(LevelKey).ConfigureAwait(false);

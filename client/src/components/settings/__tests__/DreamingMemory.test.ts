@@ -10,6 +10,8 @@ const mocks = vi.hoisted(() => ({
   listDreams: vi.fn(),
   startDream: vi.fn(),
   undoDreamChange: vi.fn(),
+  forgetMemoryNote: vi.fn(),
+  updateMemoryNote: vi.fn(),
   setNightlyDreaming: vi.fn(),
   getNightlyDreaming: vi.fn(),
 }));
@@ -18,6 +20,8 @@ vi.mock("@/lib/agent-memory", async (importOriginal) => ({
   ...(await importOriginal<typeof import("@/lib/agent-memory")>()),
   getMemory: mocks.getMemory,
   listMemoryNotes: mocks.listMemoryNotes,
+  forgetMemoryNote: mocks.forgetMemoryNote,
+  updateMemoryNote: mocks.updateMemoryNote,
 }));
 vi.mock("@/lib/dreaming", async (importOriginal) => ({
   ...(await importOriginal<typeof import("@/lib/dreaming")>()),
@@ -158,6 +162,73 @@ describe("Dreaming in Settings → Memory", () => {
     expect(undo.text()).toBe("Undone");
     expect(undo.attributes("disabled")).toBeDefined();
     expect(mocks.listMemoryNotes.mock.calls.length).toBeGreaterThan(notesReads);
+  });
+
+  describe("a note flagged as out of date", () => {
+    const flag = () =>
+      change("flagged", {
+        id: "c-flag",
+        noteId: "n9",
+        text: "Run the build with make all.",
+        why: "The Makefile was removed.",
+        evidence: "git log --stat shows Makefile deleted in 4f2a9c1",
+        quote: null,
+      });
+
+    it("shows Looks out of date with the evidence, and counts no note as changed", async () => {
+      mocks.listDreams.mockResolvedValue([dreamView({ changes: [flag()] })]);
+      const wrapper = await mountSection();
+      const text = wrapper.get("[data-testid='dream-flag']").text();
+
+      expect(text).toContain("Looks out of date");
+      expect(text).toContain("Run the build with make all.");
+      expect(text).toContain("The Makefile was removed.");
+      expect(text).toContain("Makefile deleted in 4f2a9c1");
+      expect(wrapper.get("[data-testid='dreaming-panel']").text()).toContain("0 notes changed");
+      expect(wrapper.find("[data-testid='dream-undo']").exists()).toBe(false);
+    });
+
+    it("Keep dismisses the flag and changes no note", async () => {
+      mocks.listDreams.mockResolvedValue([dreamView({ changes: [flag()] })]);
+      mocks.undoDreamChange.mockResolvedValue(dreamView({ changes: [{ ...flag(), undone: true }] }));
+      const wrapper = await mountSection();
+
+      await wrapper.get("[data-testid='dream-flag-keep']").trigger("click");
+      await flushPromises();
+
+      expect(mocks.undoDreamChange).toHaveBeenCalledWith("d1", "c-flag");
+      expect(mocks.forgetMemoryNote).not.toHaveBeenCalled();
+      expect(mocks.updateMemoryNote).not.toHaveBeenCalled();
+      expect(wrapper.find("[data-testid='dream-flag']").exists()).toBe(false);
+    });
+
+    it("Forget removes the note, then dismisses the flag", async () => {
+      mocks.listDreams.mockResolvedValue([dreamView({ changes: [flag()] })]);
+      mocks.forgetMemoryNote.mockResolvedValue(undefined);
+      mocks.undoDreamChange.mockResolvedValue(dreamView({ changes: [{ ...flag(), undone: true }] }));
+      const wrapper = await mountSection();
+
+      await wrapper.get("[data-testid='dream-flag-forget']").trigger("click");
+      await flushPromises();
+
+      expect(mocks.forgetMemoryNote).toHaveBeenCalledWith("n9");
+      expect(mocks.undoDreamChange).toHaveBeenCalledWith("d1", "c-flag");
+    });
+
+    it("Edit saves the new wording, then dismisses the flag", async () => {
+      mocks.listDreams.mockResolvedValue([dreamView({ changes: [flag()] })]);
+      mocks.updateMemoryNote.mockResolvedValue({});
+      mocks.undoDreamChange.mockResolvedValue(dreamView({ changes: [{ ...flag(), undone: true }] }));
+      const wrapper = await mountSection();
+
+      await wrapper.get("[data-testid='dream-flag-edit']").trigger("click");
+      await wrapper.get("[data-testid='dream-flag-edit-text']").setValue("Run the build with bun run build.");
+      await wrapper.get("[data-testid='dream-flag-save']").trigger("click");
+      await flushPromises();
+
+      expect(mocks.updateMemoryNote).toHaveBeenCalledWith("n9", "Run the build with bun run build.");
+      expect(mocks.undoDreamChange).toHaveBeenCalledWith("d1", "c-flag");
+    });
   });
 
   it("shows no nightly row and asks nothing while the switch is off", async () => {

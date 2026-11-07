@@ -201,6 +201,18 @@ internal static class ClaudeCodePermissions
 {
     private const int DetailLinesShown = 80;
 
+    /// <summary>
+    /// The tools a read-only run (Dreaming) is denied outright. A deny beats every allow rule, so a <c>permissions.allow</c> in
+    /// the user's or the folder's <c>.claude/settings*.json</c> can't give them back.
+    /// </summary>
+    internal static readonly string[] ReadOnlyDisallowed = ["Edit", "Write", "MultiEdit", "NotebookEdit", "WebFetch", "WebSearch"];
+
+    /// <summary>
+    /// Settings for a read-only run (<c>--settings</c>): Bash asks, whatever <c>Bash(...)</c> the user's or the folder's rules
+    /// allow (an ask beats an allow), so every command reaches Fleet's gate, which allows only the harmless ones.
+    /// </summary>
+    internal const string ReadOnlySettings = """{"permissions":{"ask":["Bash","BashOutput","KillShell"]}}""";
+
     /// <summary>What the call touches, for matching "Don't ask again": the command, the file, the address.</summary>
     internal static IReadOnlyList<string> Patterns(string tool, JsonElement input)
         => Target(tool, input) is { } target ? [target] : [];

@@ -12,6 +12,9 @@ public sealed record DreamProposal
     public string? Why { get; set; }
     public List<string> Sessions { get; set; } = [];
     public string? Quote { get; set; }
+
+    /// <summary>The file, commit or command the model read to check a note, and what it showed.</summary>
+    public string? Evidence { get; set; }
     public bool Corrected { get; set; }
     public string? Note { get; set; }
     public string? Keep { get; set; }
@@ -68,6 +71,7 @@ public static partial class DreamAnswer
                     Why = Str(change, "why"),
                     Sessions = Strings(change, "sessions"),
                     Quote = Str(change, "quote"),
+                    Evidence = Str(change, "evidence"),
                     Corrected = change.TryGetProperty("corrected", out var corrected) && corrected.ValueKind == JsonValueKind.True,
                     Note = Str(change, "note"),
                     Keep = Str(change, "keep"),

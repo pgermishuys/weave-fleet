@@ -266,6 +266,7 @@ public static class DependencyInjection
         services.AddSingleton<WeaveFleet.Application.Memory.AgentMemorySessions>();
         services.AddScoped<WeaveFleet.Application.Memory.AgentMemoryService>();
         services.AddScoped<WeaveFleet.Application.Memory.AgentMemoryBridge>();
+        services.AddScoped<WeaveFleet.Application.Memory.Dreaming.ReadOnlyRunGuard>();
         services.AddSingleton<WeaveFleet.Application.Memory.Dreaming.IDreamStore, WeaveFleet.Infrastructure.Memory.FileDreamStore>();
         services.AddSingleton<WeaveFleet.Application.Memory.Dreaming.DreamSessions>();
         services.AddSingleton<WeaveFleet.Application.Memory.Dreaming.DreamFinisher>();

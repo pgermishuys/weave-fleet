@@ -4,7 +4,7 @@ import { Moon } from "lucide-vue-next";
 import { onDomainEvent } from "@/composables/on-domain-event";
 import { useDreamingFeature } from "@/composables/use-dreaming-feature";
 import { useSettingsNav } from "@/composables/use-settings-nav";
-import { appliedDreamChanges, describeDreamChanges, getNightlyDreaming, MEMORY_DREAMED, type DreamView } from "@/lib/dreaming";
+import { appliedDreamChanges, describeDreamChanges, getNightlyDreaming, MEMORY_DREAMED, openDreamFlags, type DreamView } from "@/lib/dreaming";
 import { liveTarget } from "@/lib/machine-target";
 import { useNoticesStore } from "@/stores/notices";
 
@@ -20,16 +20,18 @@ export function useDreamNotices(): void {
   let unsubscribe: (() => void) | null = null;
 
   function show(dream: DreamView): void {
-    if (!dream.runId || dream.status !== "done" || appliedDreamChanges(dream).length === 0) return;
+    const changed = appliedDreamChanges(dream).length;
+    const flagged = openDreamFlags(dream).length;
+    if (!dream.runId || dream.status !== "done" || changed + flagged === 0) return;
     const id = `dream-${dream.id}`;
     notices.post({
       id,
-      title: `Fleet updated ${dream.repositoryName}'s notes`,
+      title: changed > 0 ? `Fleet updated ${dream.repositoryName}'s notes` : `Some of ${dream.repositoryName}'s notes look out of date`,
       body: describeDreamChanges(dream),
       icon: Moon,
       actions: [
         {
-          label: "See what changed",
+          label: changed > 0 ? "See what changed" : "Review",
           tone: "primary",
           run: () => {
             openMemory(dream.repository);

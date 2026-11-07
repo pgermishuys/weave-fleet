@@ -12,7 +12,7 @@ export interface DreamSessionRef {
   harnessType: string | null;
 }
 
-export type DreamChangeKind = "added" | "rewritten" | "merged" | "retired" | "kept" | "left" | "skipped";
+export type DreamChangeKind = "added" | "rewritten" | "merged" | "retired" | "kept" | "left" | "skipped" | "flagged";
 
 export interface DreamChangeView {
   id: string;
@@ -26,7 +26,10 @@ export interface DreamChangeView {
   ofSessions: number;
   quote: string | null;
   reason: string | null;
+  /** Undone; for a flag, dismissed with Keep. */
   undone: boolean;
+  /** What the dream read to check the note: the file or commit, and what it showed. */
+  evidence?: string | null;
 }
 
 export type DreamStatus = "reading" | "running" | "done" | "failed";
@@ -89,14 +92,20 @@ export function formatTokens(tokens: number): string {
 export const appliedDreamChanges = (dream: DreamView): DreamChangeView[] =>
   groupDreamChanges(dream.changes).applied.filter((change) => !change.undone);
 
+/** The user's notes a dream flagged as out of date that nobody has dealt with yet. */
+export const openDreamFlags = (dream: DreamView): DreamChangeView[] =>
+  groupDreamChanges(dream.changes).flagged.filter((change) => !change.undone);
+
 export function describeDreamChanges(dream: DreamView): string {
   const counts = new Map<DreamChangeKind, number>();
   for (const change of appliedDreamChanges(dream)) counts.set(change.kind, (counts.get(change.kind) ?? 0) + 1);
   const words: Record<string, string> = { added: "added", rewritten: "rewritten", merged: "merged", retired: "retired", kept: "kept for good" };
   const parts = [...counts].map(([kind, count]) => `${count} ${words[kind]}`);
+  const flags = openDreamFlags(dream).length;
+  if (flags > 0) parts.push(`${flags} looks out of date`);
   const sessions = dream.readSessions.length;
   const read = `${sessions} ${sessions === 1 ? "session" : "sessions"} read overnight`;
-  return counts.size > 0 ? `${read} · ${parts.join(", ")}` : read;
+  return parts.length > 0 ? `${read} · ${parts.join(", ")}` : read;
 }
 
 export const isDreamBusy = (dream: DreamView | null | undefined): boolean => dream?.status === "reading" || dream?.status === "running";
@@ -109,6 +118,7 @@ const KIND_LABELS: Record<DreamChangeKind, string> = {
   kept: "Kept for good",
   left: "Left as is",
   skipped: "Not changed",
+  flagged: "Looks out of date",
 };
 
 export const dreamKindLabel = (kind: DreamChangeKind): string => KIND_LABELS[kind];
@@ -118,7 +128,8 @@ export const dreamListLabel = (list: string | null): string => (list === "machin
 /** Applied changes first, then what it left as is, then what it saw in one session only. */
 export function groupDreamChanges(changes: readonly DreamChangeView[]) {
   return {
-    applied: changes.filter((change) => change.kind !== "left" && change.kind !== "skipped"),
+    applied: changes.filter((change) => change.kind !== "left" && change.kind !== "skipped" && change.kind !== "flagged"),
+    flagged: changes.filter((change) => change.kind === "flagged"),
     left: changes.filter((change) => change.kind === "left"),
     skipped: changes.filter((change) => change.kind === "skipped"),
   };

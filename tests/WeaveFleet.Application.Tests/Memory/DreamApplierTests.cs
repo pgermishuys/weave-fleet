@@ -361,4 +361,115 @@ public sealed class DreamApplierTests
 
         (await _applier.UndoAsync(User, _dream, change.Id)).ShouldNotBeNull().Description.ShouldBe(DreamApplier.UndoRefused);
     }
+
+    private static DreamProposal Flag(string note, string? evidence = "git log --stat shows Makefile deleted in 4f2a9c1")
+        => new() { Action = "flag", Note = note, Why = "The Makefile is gone.", Sessions = ["S2"], Quote = "make: *** No rule to make target", Evidence = evidence };
+
+    [Fact]
+    public async Task A_flag_on_a_note_of_the_users_changes_no_note_and_carries_its_evidence()
+    {
+        var mine = Note("fy01", MemoryKinds.FromYou, "Build with make all.");
+        var added = Note("ad01", MemoryKinds.Added, "Deploy with make ship.");
+        var before = _store.Notes.ToList();
+
+        var changes = await ApplyAllAsync(Flag("fy01"), Flag("ad01"));
+
+        changes.ShouldAllBe(c => c.Kind == DreamRules.ChangeKinds.Flagged);
+        changes[0].Evidence.ShouldBe("git log --stat shows Makefile deleted in 4f2a9c1");
+        changes[0].Quote.ShouldBe("make: *** No rule to make target");
+        changes[0].SessionIds.ShouldBe(["b"]);
+        changes[0].Text.ShouldBe(mine.Text);
+        changes[0].NoteHash.ShouldBe(DreamRules.HashOf(mine));
+        added.Text.ShouldBe("Deploy with make ship.");
+        _store.Notes.ShouldBe(before);
+    }
+
+    [Fact]
+    public async Task A_flag_on_a_learned_note_is_refused()
+    {
+        Note("ln01", MemoryKinds.Learned, "Build with make all.");
+
+        var change = await ApplyAsync(Flag("ln01"));
+
+        change.Kind.ShouldBe(DreamRules.ChangeKinds.Skipped);
+        change.Reason.ShouldBe(DreamApplier.FlagLearnedReason);
+        _store.Notes.Single().Text.ShouldBe("Build with make all.");
+    }
+
+    [Fact]
+    public async Task A_flag_with_no_evidence_is_refused()
+    {
+        Note("fy01", MemoryKinds.FromYou, "Build with make all.");
+
+        var change = await ApplyAsync(new DreamProposal { Action = "flag", Note = "fy01", Why = "Looks old." });
+
+        change.Kind.ShouldBe(DreamRules.ChangeKinds.Skipped);
+        change.Reason.ShouldBe(DreamApplier.FlagNoEvidenceReason);
+    }
+
+    [Fact]
+    public async Task A_note_flagged_before_and_unchanged_is_not_flagged_again_but_an_edited_one_can_be()
+    {
+        var mine = Note("fy01", MemoryKinds.FromYou, "Build with make all.");
+        var flaggedBefore = new[] { ("fy01", DreamRules.HashOf(mine)) };
+
+        var again = (await _applier.ApplyAsync(User, _dream, [Flag("fy01")], flaggedBefore)).Single();
+        again.Kind.ShouldBe(DreamRules.ChangeKinds.Skipped);
+        again.Reason.ShouldBe(DreamApplier.AlreadyFlaggedReason);
+
+        var edited = new[] { ("fy01", DreamRules.HashOf(MemoryList.Repository, MemoryKinds.FromYou, "An older wording.")) };
+        (await _applier.ApplyAsync(User, _dream, [Flag("fy01")], edited)).Single().Kind.ShouldBe(DreamRules.ChangeKinds.Flagged);
+    }
+
+    [Fact]
+    public async Task A_flag_on_a_note_edited_while_the_dream_ran_is_left_as_is()
+    {
+        Note("fy01", MemoryKinds.FromYou, "Build with make all.");
+        _store.Notes[0] = _store.Notes[0] with { Text = "Build with bun run build." };
+
+        (await ApplyAsync(Flag("fy01"))).Kind.ShouldBe(DreamRules.ChangeKinds.Left);
+    }
+
+    [Fact]
+    public async Task Keep_on_a_flag_dismisses_it_and_changes_no_note_while_undo_of_other_changes_still_works()
+    {
+        var mine = Note("fy01", MemoryKinds.FromYou, "Build with make all.");
+        var changes = await ApplyAllAsync(Flag("fy01"), Add("Run tests with bun run test.", "S1", "S2"));
+
+        (await _applier.UndoAsync(User, _dream, changes[0].Id)).ShouldBeNull();
+        changes[0].Undone.ShouldBeTrue();
+        _store.Notes.ShouldContain(mine);
+        _store.Notes.Count.ShouldBe(2);
+
+        (await _applier.UndoAsync(User, _dream, changes[1].Id)).ShouldBeNull();
+        _store.Notes.Single().ShouldBe(mine);
+    }
+
+    [Fact]
+    public async Task A_learned_note_is_retired_on_what_was_read_in_the_repository_and_the_change_carries_it()
+    {
+        Note("ln01", MemoryKinds.Learned, "Build with make all.");
+
+        var change = await ApplyAsync(new DreamProposal
+        {
+            Action = "retire", Note = "ln01", Why = "The Makefile was removed.",
+            Evidence = "git log --stat: Makefile deleted in 4f2a9c1",
+        });
+
+        change.Kind.ShouldBe(DreamRules.ChangeKinds.Retired);
+        change.Evidence.ShouldBe("git log --stat: Makefile deleted in 4f2a9c1");
+        _store.Notes.ShouldBeEmpty();
+        (await _applier.UndoAsync(User, _dream, change.Id)).ShouldBeNull();
+        _store.Notes.Count.ShouldBe(1);
+    }
+
+    [Fact]
+    public async Task A_rewrite_with_no_evidence_at_all_is_still_skipped()
+    {
+        Note("ln01", MemoryKinds.Learned, "Build with make all.");
+
+        var change = await ApplyAsync(new DreamProposal { Action = "rewrite", Note = "ln01", Text = "Build with bun.", Why = "guess" });
+
+        change.Kind.ShouldBe(DreamRules.ChangeKinds.Skipped);
+    }
 }

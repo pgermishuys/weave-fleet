@@ -183,6 +183,26 @@ public sealed class OpenCode2PermissionTests
             .Any(rule => rule is { Action: "*", Effect: "ask" }).ShouldBe(asks);
 
     [Fact]
+    public void A_read_only_run_asks_for_everything_but_reading_and_fleet_session_read()
+    {
+        var rules = OpenCode2HttpClient.RulesFor(PermissionLevels.Ask, hideStepTool: false, readOnly: true);
+        var allowed = rules.Where(rule => rule.Effect == "allow").Select(rule => rule.Action).ToList();
+
+        rules[0].ShouldBe(new OpenCode2PermissionRule { Action = "*", Resource = "*", Effect = "ask" });
+        allowed.ShouldContain("read");
+        allowed.ShouldContain("grep");
+        allowed.ShouldContain("fleet_session_read");
+        allowed.ShouldNotContain("fleet_*");
+        // V2 never asks about a plugin tool, so Fleet's own tools are denied (hidden), then fleet_session_read allowed again.
+        var denyFleet = rules.ToList().FindIndex(rule => rule is { Action: "fleet_*", Effect: "deny" });
+        denyFleet.ShouldBeGreaterThan(0);
+        rules.ToList().FindIndex(rule => rule is { Action: "fleet_session_read", Effect: "allow" }).ShouldBeGreaterThan(denyFleet);
+        allowed.ShouldNotContain("edit");
+        allowed.ShouldNotContain("bash");
+        rules[^1].ShouldBe(OpenCode2HttpClient.DenyBrowser);
+    }
+
+    [Fact]
     public async Task A_resync_while_an_ask_waits_still_reads_needs_you_and_busy_once_it_is_answered()
     {
         // ResyncActivityStatusAsync trusts this read after a reconnect: a pending ask must not read as Working.

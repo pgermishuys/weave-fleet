@@ -1,4 +1,5 @@
 using System.Text.Json;
+using Shouldly;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging.Abstractions;
 using WeaveFleet.Application.Configuration;
@@ -25,6 +26,25 @@ public sealed class ClaudeCodePermissionTests : IDisposable
     private readonly string _directory = Directory.CreateTempSubdirectory("fleet-cc-permission-").FullName;
 
     public void Dispose() => Directory.Delete(_directory, recursive: true);
+
+    [Fact]
+    public void A_read_only_run_takes_the_writing_tools_away_and_makes_every_command_ask()
+    {
+        // A deny beats the user's and the folder's allow rules; an ask beats an allow. Fleet's gate then judges each command.
+        ClaudeCodePermissions.ReadOnlyDisallowed.ShouldBe(["Edit", "Write", "MultiEdit", "NotebookEdit", "WebFetch", "WebSearch"], ignoreOrder: true);
+        using var settings = JsonDocument.Parse(ClaudeCodePermissions.ReadOnlySettings);
+        settings.RootElement.GetProperty("permissions").GetProperty("ask").EnumerateArray().Select(e => e.GetString()).ShouldContain("Bash");
+    }
+
+    [Fact]
+    public void A_read_only_run_is_allowed_fleet_session_read_up_front_and_nothing_else_of_fleets()
+    {
+        var allowed = ClaudeCodeTools.ClaudeName(PermissionPolicy.ReadOnlyFleetTool);
+
+        allowed.ShouldBe("mcp__fleet__fleet_session_read");
+        PermissionPolicy.ReadOnlyIn("/work").DecideReadOnly(allowed, []).ShouldBe(PermissionReplies.Once);
+        PermissionPolicy.ReadOnlyIn("/work").DecideReadOnly("mcp__fleet__fleet_memory_save", []).ShouldBe(PermissionReplies.Reject);
+    }
 
     [Fact]
     public void A_recorded_ask_reads_as_a_shell_ask_with_claudes_suggested_rule()

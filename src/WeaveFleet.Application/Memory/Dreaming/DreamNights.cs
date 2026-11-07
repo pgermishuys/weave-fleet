@@ -189,18 +189,28 @@ public sealed partial class DreamingAutomation(
             ? budget
             : DreamRules.DefaultBudgetTokens;
 
-    /// <summary>"orchard: 2 notes changed", "orchard: 1 note added", "orchard: no changes", or why it failed.</summary>
+    /// <summary>
+    /// "orchard: 2 notes changed", "orchard: 1 note added", "orchard: no changes", or why it failed; a note flagged as out of
+    /// date changed nothing, so it's counted apart ("orchard: 1 note added, 2 look out of date").
+    /// </summary>
     internal static string Describe(string name, Dream dream)
     {
         if (dream.Status != DreamRules.Statuses.Done)
             return $"{name}: {(dream.Error ?? "failed").TrimEnd('.')}";
 
-        var applied = dream.Changes.Where(c => c.Kind is not (DreamRules.ChangeKinds.Left or DreamRules.ChangeKinds.Skipped)).ToList();
-        return applied.Count switch
+        var applied = dream.Changes.Where(c => c.Kind is not (DreamRules.ChangeKinds.Left or DreamRules.ChangeKinds.Skipped or DreamRules.ChangeKinds.Flagged)).ToList();
+        var flagged = dream.Changes.Count(c => c.Kind == DreamRules.ChangeKinds.Flagged);
+        var changed = applied.Count switch
         {
             0 => $"{name}: no changes",
             1 => $"{name}: 1 note {applied[0].Kind}",
             var count => $"{name}: {count} notes changed",
+        };
+        return flagged switch
+        {
+            0 => changed,
+            1 => $"{changed}, 1 looks out of date",
+            _ => $"{changed}, {flagged} look out of date",
         };
     }
 
