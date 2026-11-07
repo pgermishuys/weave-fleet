@@ -5,10 +5,12 @@ Replies word by word (so streaming shows), and on keywords in the last user text
   ask-me    -> calls the question tool with two choices
   show-page -> calls fleet_page_show on pages/paging.html (waitForChoice), then says "Going with **<pick>**, run N"
   slow-task -> calls the bash tool with a 45 s command, so the session stays working
-  long-reply -> a reply taller than the screen, ending "That's every step, run N.", slowly (about 100 s)
+  long-reply -> a reply taller than the screen, ending "That's every step, run N.". It stops after Step 20 and goes on
+                only once the walk posts to /release (or after 5 minutes), so the walk sees it streaming however slow
+                the device is
 Anything else gets a short Markdown reply.
 """
-import json, os, re, sys, time
+import json, os, re, sys, threading, time
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 
 PORT = int(sys.argv[1])
@@ -39,6 +41,12 @@ def last_user_text(msgs):
     return ""
 
 
+# Set by POST /release, cleared when a long reply starts: the reply holds at HOLD_AT until then.
+RELEASE = threading.Event()
+HOLD_AT = "\n21. "
+HOLD_MAX = 300
+
+
 def next_run(msgs, phrase):
     """The walk runs twice (light, dark) in one conversation; the number lets it wait for the new reply. It's counted
     from the conversation, not kept here, so a walk run again on a fresh session starts at run 1."""
@@ -66,6 +74,11 @@ class H(BaseHTTPRequestHandler):
         self.send_header("content-length", str(len(body))); self.end_headers(); self.wfile.write(body)
 
     def do_POST(self):
+        if self.path == "/release":
+            RELEASE.set()
+            LOG.write(f"{time.strftime('%H:%M:%S')} release\n"); LOG.flush()
+            self.send_response(204); self.end_headers()
+            return
         req = json.loads(self.rfile.read(int(self.headers["content-length"])))
         msgs = req.get("messages", [])
         last_role = msgs[-1]["role"] if msgs else "?"
@@ -74,7 +87,7 @@ class H(BaseHTTPRequestHandler):
         LOG.write(f"{time.strftime('%H:%M:%S')} last={last_role} text={text[:60]!r} tools={len(tools)} {tools}\n"); LOG.flush()
         page_tool = next((t for t in tools if t.endswith("fleet_page_show")), None)
 
-        call, reply, pace = None, None, 0.06
+        call, reply, pace, hold = None, None, 0.06, None
         slow = "slow-task" in text and "bash" in tools
         if last_role == "tool" and page_tool and "fleet_page_show" in str(msgs[-1].get("name", "")) + tool_call_name(msgs):
             m = re.search(r'"[Ss]ummary"\s*:\s*"([^"]*)"', str(msgs[-1].get("content", "")))
@@ -92,7 +105,11 @@ class H(BaseHTTPRequestHandler):
             call = ("bash", {"command": "ls -la && echo tests passed", "description": "Run the tests"})
         elif "long-reply" in text:
             reply = "Every step:\n\n" + "\n".join(f"{i}. Step {i}" for i in range(1, 41)) + f"\n\nThat's every step, run {next_run(msgs, 'every step, run ')}."
-            pace = 1.2  # about 100 s: each Maestro step on the emulator takes ~15 s, and the walk scrolls up mid-stream
+            # The walk scrolls up while this streams, then checks the turn hasn't finished. Maestro's steps take
+            # anywhere from 1 s to 40 s each (run 42364181801: the iOS walk's swipes took 33 s, and a 100 s reply
+            # had finished before the check), so no pace is slow enough: hold the rest until the walk says so.
+            pace, hold = 0.3, HOLD_AT
+            RELEASE.clear()
         elif "ask-me" in text and "question" in tools:
             call = ("question", {"questions": [{"header": "Database", "question": "Which database should the cache use?",
                                                 "options": [{"label": "SQLite", "description": "Local file"},
@@ -113,9 +130,17 @@ class H(BaseHTTPRequestHandler):
             chunk({}, "tool_calls")
         else:
             chunk({"role": "assistant", "content": ""})
-            for word in reply.split(" "):
-                chunk({"content": word + " "})
-                time.sleep(pace)
+            head, sep, tail = reply.partition(hold) if hold else (reply, "", "")
+            for n, part in enumerate([head, sep + tail] if sep else [head]):
+                if n:
+                    LOG.write(f"{time.strftime('%H:%M:%S')} hold\n"); LOG.flush()
+                    deadline = time.time() + HOLD_MAX
+                    # An SSE comment now and then, so nothing between here and the app takes the quiet for a dead stream.
+                    while not RELEASE.wait(2) and time.time() < deadline:
+                        self.wfile.write(b": hold\n\n"); self.wfile.flush()
+                for word in part.split(" "):
+                    chunk({"content": word + " "})
+                    time.sleep(pace)
             chunk({}, "stop")
         self.wfile.write(b"data: [DONE]\n\n"); self.wfile.flush()
 

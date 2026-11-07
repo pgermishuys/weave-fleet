@@ -103,8 +103,10 @@ appId: io.tryweave.fleet
       TEXT: "long-reply please"
 - tapOn:
     id: "send"
-# The reply takes about 100 s: scroll up as soon as the turn starts. The swipes stay in the top of the screen, on the
-# conversation above the keyboard (Maestro's hideKeyboard fails on iOS).
+# The scripted model streams the first 20 steps, then holds the rest until the walk releases it below, so the turn is
+# still going at the check however long the swipes take (run 42364181801: on a slow iOS runner each swipe took 33 s,
+# and a reply paced to last 100 s had finished first). Scroll up as soon as the turn starts. The swipes stay in the top
+# of the screen, on the conversation above the keyboard (Maestro's hideKeyboard fails on iOS).
 - extendedWaitUntil:
     notVisible: "Finished.*"
     timeout: 30000
@@ -123,8 +125,9 @@ appId: io.tryweave.fleet
           start: 50%, 15%
           end: 50%, 38%
 - assertVisible: "show-page please"
-# Still streaming, or the check below proves nothing.
+# Still streaming, or the check below proves nothing. Then the rest of the reply comes, while scrolled up.
 - assertNotVisible: "Finished.*"
+- evalScript: "${http.post(LLM_URL + '/release', { body: '' }).status}"
 - extendedWaitUntil:
     visible: "Finished.*"
     timeout: 150000
