@@ -196,6 +196,39 @@ public sealed record PermissionAsk
 
     /// <summary>When Fleet heard the ask.</summary>
     public DateTimeOffset AskedAt { get; init; } = DateTimeOffset.UtcNow;
+
+    /// <summary>
+    /// Set on an ask Fleet raises itself, not a harness: an agent wants to send work to another machine set to Ask. Once
+    /// starts it, Always and Reject save that machine's setting as well (Always or Never).
+    /// </summary>
+    public HandoffAskDetails? Handoff { get; init; }
+}
+
+/// <summary>What an agent wants to send to another machine, as Fleet's ask about it shows it.</summary>
+public sealed record HandoffAskDetails
+{
+    /// <summary>The machine's name.</summary>
+    public required string Machine { get; init; }
+
+    public string? Os { get; init; }
+
+    /// <summary>The folder there, for a new session.</summary>
+    public string? Folder { get; init; }
+
+    /// <summary>The branch of the new session's fresh worktree; null to work in the folder as it is.</summary>
+    public string? Branch { get; init; }
+
+    /// <summary>The harness the new session runs; null for the machine's default.</summary>
+    public string? Harness { get; init; }
+
+    /// <summary>The first line of the task, or of the message.</summary>
+    public string? Task { get; init; }
+
+    /// <summary>The title of the session there that the agent messages; null for a new session.</summary>
+    public string? Session { get; init; }
+
+    /// <summary>The permission level the work runs under there (<see cref="PermissionLevels"/>); null when that machine doesn't say.</summary>
+    public string? Level { get; init; }
 }
 
 /// <summary>The payload of a <c>permission.replied</c> event: the ask <see cref="Id"/> is answered and no longer waits.</summary>

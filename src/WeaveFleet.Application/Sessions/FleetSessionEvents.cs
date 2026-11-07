@@ -26,6 +26,25 @@ public sealed class FleetSessionEvents
                 new FleetStatusPayload(new FleetStatusKind(status)), FleetSessionEventsJsonContext.Default.FleetStatusPayload),
         });
 
+    /// <summary>Raises an ask Fleet puts to the user itself (<see cref="EventTypes.PermissionAsked"/>); false when nothing serves the session now.</summary>
+    public bool RaisePermissionAsked(PermissionAsk ask)
+        => Raise(ask.SessionId, EventTypes.PermissionAsked, JsonSerializer.SerializeToElement(ask, ApplicationJsonContext.Default.PermissionAsk));
+
+    /// <summary>Raises the end of an ask Fleet put to the user itself (<see cref="EventTypes.PermissionReplied"/>).</summary>
+    public bool RaisePermissionReplied(PermissionAsk ask, string reply)
+        => Raise(ask.SessionId, EventTypes.PermissionReplied, JsonSerializer.SerializeToElement(
+            new PermissionReplied { Id = ask.Id, SessionId = ask.SessionId, Reply = reply }, ApplicationJsonContext.Default.PermissionReplied));
+
+    private bool Raise(string fleetSessionId, string type, JsonElement payload)
+        => _streams.TryGetValue(fleetSessionId, out var stream) && stream.TryWrite(new HarnessEvent
+        {
+            Type = type,
+            SessionId = fleetSessionId,
+            FleetSessionId = fleetSessionId,
+            Timestamp = DateTimeOffset.UtcNow,
+            Payload = payload,
+        });
+
     /// <summary>The relay's side: what's raised for the session goes to <paramref name="stream"/> until the handle is disposed.</summary>
     public IDisposable Attach(string fleetSessionId, ChannelWriter<HarnessEvent> stream)
     {

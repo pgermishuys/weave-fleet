@@ -291,7 +291,7 @@ public sealed class MachinesEndpointTests : IClassFixture<MachinesEndpointTests.
             new { addresses = order, name = "renamed" },
             new { addresses = order, baseUrl = "http://192.168.1.99:2113" },
             new { addresses = order, token = "another-token-0123456789" },
-            new { addresses = order, agentsAllowed = true },
+            new { addresses = order, agentWork = "always" },
         })
         {
             var refused = await phone.PutAsJsonAsync($"/api/machines/{id}", body);
@@ -351,26 +351,39 @@ public sealed class MachinesEndpointTests : IClassFixture<MachinesEndpointTests.
     }
 
     [Fact]
-    public async Task Only_the_owner_lets_agents_hand_work_to_a_machine_and_adding_it_again_keeps_that()
+    public async Task Only_the_owner_decides_whether_agents_send_a_machine_work_and_adding_it_again_keeps_that()
     {
         var falcon = _falcon;
         var hangar = _hangar;
         using var owner = Client(hangar, Token(hangar));
         var id = Identity(falcon).Id;
         var added = await (await owner.PostAsJsonAsync("/api/machines", new { baseUrl = FalconUrl, token = Token(falcon) })).ReadSuccessAsync();
-        added.GetProperty("agentsAllowed").GetBoolean().ShouldBeFalse();
+        added.GetProperty("agentWork").GetString().ShouldBe("ask");
 
-        var allowed = await owner.PutAsJsonAsync($"/api/machines/{id}", new { agentsAllowed = true });
+        var always = await owner.PutAsJsonAsync($"/api/machines/{id}", new { agentWork = "always" });
+        var unknown = await owner.PutAsJsonAsync($"/api/machines/{id}", new { agentWork = "sometimes" });
         await (await owner.PostAsJsonAsync("/api/machines", new { baseUrl = FalconUrl, token = Token(falcon) })).ReadSuccessAsync();
         var (_, deviceToken) = await hangar.Services.GetRequiredService<DeviceTokenService>().IssueAsync("Pixel", "android");
         using var phone = Client(hangar, deviceToken);
-        var fromPhone = await phone.PutAsJsonAsync($"/api/machines/{id}", new { agentsAllowed = false });
+        var fromPhone = await phone.PutAsJsonAsync($"/api/machines/{id}", new { agentWork = "never" });
 
-        allowed.StatusCode.ShouldBe(HttpStatusCode.OK);
-        (await allowed.Content.ReadFromJsonAsync<JsonElement>()).GetProperty("agentsAllowed").GetBoolean().ShouldBeTrue();
+        always.StatusCode.ShouldBe(HttpStatusCode.OK);
+        (await always.Content.ReadFromJsonAsync<JsonElement>()).GetProperty("agentWork").GetString().ShouldBe("always");
+        unknown.StatusCode.ShouldBe(HttpStatusCode.BadRequest);
         fromPhone.StatusCode.ShouldBe(HttpStatusCode.Forbidden);
         var list = await owner.GetFromJsonAsync<JsonElement>("/api/machines");
-        list.GetProperty("machines")[0].GetProperty("agentsAllowed").GetBoolean().ShouldBeTrue();
+        list.GetProperty("machines")[0].GetProperty("agentWork").GetString().ShouldBe("always");
+    }
+
+    [Fact]
+    public async Task A_machine_says_the_permission_level_work_sent_to_it_runs_under()
+    {
+        using var owner = Client(_falcon, Token(_falcon));
+        (await owner.PutAsJsonAsync("/api/preferences/PermissionLevel", new { value = "edits" })).EnsureSuccessStatusCode();
+
+        var machine = await owner.GetFromJsonAsync<JsonElement>("/api/machine");
+
+        machine.GetProperty("capabilities").GetProperty("permissionLevel").GetString().ShouldBe("edits");
     }
 
     public sealed class Server : IDisposable

@@ -87,7 +87,7 @@ public sealed class RemoteMachineService(
             AddedAt = existing?.AddedAt ?? time.GetUtcNow(),
             LastSeenAt = time.GetUtcNow(),
             Status = RemoteMachineStatuses.Online,
-            AgentsAllowed = existing?.AgentsAllowed ?? false,
+            AgentWork = existing?.AgentWork ?? MachineAgentWork.Ask,
             SshDestination = sshDestination,
             // Over SSH the tunnel is the way in; otherwise the address given, and the ones the machine reports.
             Addresses = sshDestination is null ? MachineAddresses.Learn(existing?.Addresses ?? [], info.Addresses ?? [], normalized) : [],
@@ -207,8 +207,8 @@ public sealed class RemoteMachineService(
     }
 
     /// <summary>
-    /// Changes a machine's address, token, name, or whether agents may hand work to it. A new address or token is checked
-    /// against the machine first.
+    /// Changes a machine's address, token, name, or whether agents here can send it work (<see cref="MachineAgentWork"/>).
+    /// A new address or token is checked against the machine first.
     /// </summary>
     public async Task<(RemoteMachine? Machine, MachineProblem? Error)> UpdateAsync(
         string id,
@@ -216,11 +216,13 @@ public sealed class RemoteMachineService(
         string? token,
         string? name,
         CancellationToken cancellationToken,
-        bool? agentsAllowed = null)
+        string? agentWork = null)
     {
         var current = await machines.GetAsync(id);
         if (current is null)
             return (null, "No such machine.");
+        if (agentWork is not null && !MachineAgentWork.IsKnown(agentWork))
+            return (null, "Agents can send it work: ask, always or never.");
 
         var next = current;
         if (baseUrl is not null || token is not null)
@@ -261,8 +263,8 @@ public sealed class RemoteMachineService(
 
         if (!string.IsNullOrWhiteSpace(name))
             next = next with { Name = name.Trim() };
-        if (agentsAllowed is { } allowed)
-            next = next with { AgentsAllowed = allowed };
+        if (agentWork is not null)
+            next = next with { AgentWork = agentWork };
 
         await machines.UpsertAsync(next);
         Changed?.Invoke(id);
@@ -292,7 +294,7 @@ public sealed class RemoteMachineService(
                 Os = entry.Os,
                 AddedAt = existing?.AddedAt ?? entry.AddedAt ?? time.GetUtcNow(),
                 Status = existing?.Status ?? RemoteMachineStatuses.Unknown,
-                AgentsAllowed = existing?.AgentsAllowed ?? false,
+                AgentWork = existing?.AgentWork ?? MachineAgentWork.Ask,
                 SshDestination = existing?.SshDestination,
                 // A browser only knows one address; the ones the machine reported stay, with the browser's among them.
                 Addresses = existing is { SshDestination: null } ? MachineAddresses.Include(existing.Addresses, normalized) : [],

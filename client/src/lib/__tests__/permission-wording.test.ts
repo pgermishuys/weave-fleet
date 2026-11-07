@@ -98,3 +98,17 @@ describe("permission wording today", () => {
     ]);
   });
 });
+
+describe("Fleet's ask about another machine", () => {
+  const handoff = ask("other", "fleet_session_start", {
+    title: "Start a session on taron",
+    always: [],
+    handoff: { machine: "taron", task: "Run the installer tests." },
+  });
+
+  it("is headed by what the agent wants there, and Always is for that machine, on the phone too", () => {
+    expect(permissionHeading(handoff)).toBe("Start a session on taron");
+    expect(dontAskAgainWording(handoff)).toEqual({ lead: "Always for taron", code: null });
+    expect(preview(handoff)).toEqual({ lead: "Wants to send work to taron", detail: "Run the installer tests.", code: false });
+  });
+});

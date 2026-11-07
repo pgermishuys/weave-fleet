@@ -180,17 +180,18 @@ public sealed class SessionMessageBridge(
 
         using (userScope.Begin(caller.UserId))
         {
-            // Checked on every call: a process started while it was on keeps the tool until it's recycled.
-            if (!await feature.IsEnabledAsync().ConfigureAwait(false))
-                return CanvasResult.Fail<CanvasToolOutput>(CanvasErrorKind.Refused, TurnedOffMessage);
-
             if (string.IsNullOrWhiteSpace(toSessionId))
                 return Invalid("\"sessionId\" is required: the Fleet id of the session to message, from GET $FLEET_URL/api/sessions.");
             if (string.IsNullOrWhiteSpace(text))
                 return Invalid("\"text\" is required.");
-            // A session on another machine: this Fleet sends it there, as this session.
+            // A session on another machine: this Fleet sends it there, as this session, if that machine takes work from
+            // agents here. Messages between sessions here don't need to be on for it.
             if (!string.IsNullOrWhiteSpace(machine))
                 return await handoff.MessageAsync(caller, machine, toSessionId.Trim(), text, notifyWhenDone, ct).ConfigureAwait(false);
+
+            // Checked on every call: a process started while it was on keeps the tool until it's recycled.
+            if (!await feature.IsEnabledAsync().ConfigureAwait(false))
+                return CanvasResult.Fail<CanvasToolOutput>(CanvasErrorKind.Refused, TurnedOffMessage);
             if (string.Equals(toSessionId, caller.FleetSessionId, StringComparison.Ordinal))
                 return Invalid("That's this session. Give the id of another one.");
             if (notifyWhenDone && updates.IsStartedByUpdate(caller.FleetSessionId))

@@ -111,6 +111,7 @@ public sealed class HarnessEventRelay : BackgroundService
     private readonly IModPermissionHook? _modPermissions;
     private readonly FleetSessionEvents? _fleetEvents;
     private readonly PageChoices? _pageChoices;
+    private readonly WeaveFleet.Application.Machines.MachineHandoffAsks? _handoffAsks;
     private readonly SessionNowTracker? _now;
     private CancellationToken _stoppingToken;
 
@@ -147,9 +148,11 @@ public sealed class HarnessEventRelay : BackgroundService
         FleetSessionEvents? fleetEvents = null,
         PageChoices? pageChoices = null,
         TurnFlagger? turns = null,
-        SessionNowTracker? now = null)
+        SessionNowTracker? now = null,
+        WeaveFleet.Application.Machines.MachineHandoffAsks? handoffAsks = null)
     {
         _now = now;
+        _handoffAsks = handoffAsks;
         _turns = turns;
         _fleetEvents = fleetEvents;
         _pageChoices = pageChoices;
@@ -605,6 +608,7 @@ public sealed class HarnessEventRelay : BackgroundService
             // Its asks went with it: nothing can answer them now. Nor is any call left waiting for a pick on a page.
             await ForgetPermissionAsksAsync(fleetSessionId, sessionUserId).ConfigureAwait(false);
             _pageChoices?.Forget(fleetSessionId);
+            _handoffAsks?.EndAll(fleetSessionId);
             await _broadcaster.BroadcastAsync(
                 "sessions",
                 "activity_status",
@@ -631,7 +635,8 @@ public sealed class HarnessEventRelay : BackgroundService
         if (evt.Type == EventTypes.PermissionAsked && PermissionEvents.ReadAsk(evt) is { } ask)
         {
             // The user's mods may refuse an ask before anyone is shown it. Fleet waits for them for a moment, then asks as usual.
-            if (_modPermissions is not null && userId is not null
+            // Fleet's own asks (sending work to another machine) aren't the harness's to refuse.
+            if (_modPermissions is not null && userId is not null && ask.Handoff is null
                 && await _modPermissions.RefusalAsync(userId, shownOn, ask, ct).ConfigureAwait(false) is { } refusal)
             {
                 refusedAsks.Add(ask.Id);

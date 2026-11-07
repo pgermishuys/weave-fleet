@@ -499,11 +499,12 @@ This is what any client relies on. The web app is one client. A native app would
   "publicUrl": "https://hangar.tail9c2e.ts.net",
   "capabilities": {
     "harnesses": [
-      { "type": "opencode", "name": "OpenCode", "available": true, "enabled": true, "version": "1.18.32" },
-      { "type": "claude-code", "name": "Claude Code", "available": false, "enabled": false, "version": null }
+      { "type": "opencode", "name": "OpenCode", "available": true, "enabled": true, "version": "1.18.32", "permissionLevel": "edits" },
+      { "type": "claude-code", "name": "Claude Code", "available": false, "enabled": false, "version": null, "permissionLevel": "ask" }
     ],
     "sessions": { "working": 2, "needsYou": 1 },
-    "peerMessages": true
+    "peerMessages": true,
+    "permissionLevel": "edits"
   },
   "update": {
     "status": "staged",
@@ -541,6 +542,9 @@ This is what any client relies on. The web app is one client. A native app would
     check, so a harness installed since shows up after something on that machine asks for the harness list again.
   - `sessions`: how many of the caller's sessions there are `working` (in a turn) or `needsYou` (stopped on a
     question or a permission ask). Top-level sessions only, counted as the session list shows them.
+  - `permissionLevel`: what agents there may do without asking (Settings → Permissions: `ask`, `edits` or `all`),
+    for a harness with no level of its own; each harness's `permissionLevel` is its own, or this. Work another machine
+    sends there runs under it. Fleets before it leave both out.
   - `peerMessages`: whether the machine takes messages from sessions on other machines
     ([`/api/machine/peer`](#sessions-on-other-machines-apimachinepeer)). `true` in local mode. Fleets before it
     leave it out, and don't.
@@ -649,17 +653,18 @@ Secrets travel only in request bodies, never in a query string, and Fleet never 
 
 Each machine keeps the list of other machines its clients know.
 
-- `GET /api/machines`: `{ machines: [{ id, name, baseUrl, os, status, addedAt, lastSeenAt, token, agentsAllowed }] }`. `token` is the
+- `GET /api/machines`: `{ machines: [{ id, name, baseUrl, os, status, addedAt, lastSeenAt, token, agentWork }] }`. `token` is the
   other machine's token for the owner, `null` for a device. `status` is what this machine last saw: `unknown`,
   `online`, `unreachable` or `unauthorized` (it turned the token away).
 - `POST /api/machines` (owner) with `{ baseUrl, token }`: Fleet asks the machine who it is with that token (contract
   1, token auth, not this machine) and keeps it. These calls go out from Fleet: http(s) only, 5-second timeout, no
   redirects.
-- `PUT /api/machines/{id}` (owner) with any of `{ baseUrl, token, name, agentsAllowed }`; a new address or token is
+- `PUT /api/machines/{id}` (owner) with any of `{ baseUrl, token, name, agentWork }`; a new address or token is
   checked first. `{ addresses }` puts the machine's addresses in a new order (every one of them; a list that changed
   meanwhile is turned away with 400). A paired phone may send `{ addresses }` alone and nothing else (403), and its
-  answer carries no token. `agentsAllowed` lets agents here hand work to that machine (see below); it starts `false`, and adding
-  the machine again keeps it.
+  answer carries no token. `agentWork` says whether agents here can send that machine work (see below): `ask` (the
+  default), `always` or `never`; anything else is `400`. Adding the machine again keeps it. (It replaced the
+  `agentsAllowed` switch: a machine allowed before became `always`, the rest `ask`.)
 - `POST /api/machines/{id}/check` (owner): asks the saved machine who it is with its saved token and answers
   `{ reachable, error, diagnosis }`. It writes nothing. `diagnosis` is `null` when the machine answers.
 - `DELETE /api/machines/{id}` (owner). First removes the device tokens this machine got its phones there; if that
@@ -699,11 +704,29 @@ agent's process, never one the agent wrote.
 
 ### Agents hand work to another machine
 
-With **Hand work to other machines** on (Settings → Features, experimental; it needs Messages between sessions), an
-agent can start a session on a machine in this Fleet's list, give it a task, and message and read it there. Only
-machines the owner allowed (`agentsAllowed`) are visible to agents. The agent calls Fleet's tools
-(`fleet_machine_list`, `fleet_session_start`, and `fleet_message` / `fleet_session_read` with a `machine`). This Fleet
-works out which session is calling and makes every call to the other machine itself, with the token it keeps:
+An agent can start a session on a machine in this Fleet's list, give it a task, and message and read it there. Each
+machine has one setting, **Agents here can send it work** on its card in Settings → Machines (`agentWork`):
+
+- **Ask** (the default): the first time an agent sends that machine work, Fleet asks in the conversation, the way a
+  permission ask shows, and the tool call waits for the answer: *Allow once*, *Always for <machine>* (saves `always`)
+  or *Not <machine>* (saves `never`, and the agent is told the user said no). It asks on `fleet_session_start`, and on
+  `fleet_message` to a session there the agent didn't start or message before. In a run nobody watches (an automation,
+  a workflow step), Settings → Permissions' **Unattended runs** decides instead: `all` goes ahead, `same` asks and
+  waits, `deny` refuses.
+- **Always**: it goes ahead.
+- **Never**: agents don't see the machine.
+
+The work runs under that machine's own permission level (its `capabilities.permissionLevel`), which the ask and the
+machine's card show. The setting is read when the tool is called, so a change counts in the current turn. Sessions get
+the tools (`fleet_machine_list`, `fleet_session_start`, and `fleet_message` / `fleet_session_read` with a `machine`)
+whenever at least one machine isn't Never; with none, they get none of them. With Messages between sessions off, an
+agent still has `fleet_message`, but only for sessions on other machines.
+
+Fleet's ask is a `permission.asked` event like a harness's, with an id starting `fleet-handoff-` and a `handoff`
+object (`machine`, `os`, `folder`, `branch`, `harness`, `task`, `session`, `level`); it's answered with
+`POST /api/sessions/{id}/permissions/{askId}` (`once`, `always` or `reject`) like any other. The plugins hold each call
+for under a minute and make it again while the user decides. This Fleet works out which session is calling and makes
+every call to the other machine itself, with the token it keeps:
 
 - `fleet_machine_list`: `GET /api/machine` and `GET /api/repositories` there, when the tool is called.
 - `fleet_session_start`: `GET /api/machine` (it must say `peerMessages`, or the agent is told to update Fleet there),

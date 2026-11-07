@@ -4,6 +4,8 @@ using WeaveFleet.Application.Configuration;
 using WeaveFleet.Application.Sessions;
 using WeaveFleet.Application.Users;
 using WeaveFleet.Domain.Entities;
+using WeaveFleet.Domain.Harnesses;
+using WeaveFleet.Domain.Repositories;
 
 namespace WeaveFleet.Application.Machines;
 
@@ -11,23 +13,29 @@ namespace WeaveFleet.Application.Machines;
 /// The agent hand-off tools, for calls from a harness process: <c>fleet_machine_list</c>, <c>fleet_session_start</c>, and
 /// <c>fleet_message</c> / <c>fleet_session_read</c> naming a machine. The caller is the session the call resolves to through
 /// <see cref="IHarnessCanvasCallerResolver"/>, and the message's sender is that session on this machine; the agent names
-/// neither. Only machines the owner allowed, only with <see cref="AgentHandoffFeature"/> on, checked on every call.
+/// neither. Each machine's own setting decides, checked on every call (<see cref="RemoteMachine.AgentWork"/>): a machine set
+/// to Never isn't there for the agent, one set to Ask has Fleet ask the user in the conversation first
+/// (<see cref="MachineHandoffAsks"/>), and the call waits for the answer.
 /// </summary>
 public sealed class MachineHandoffBridge(
     IEnumerable<IHarnessCanvasCallerResolver> callers,
     IBackgroundUserScope userScope,
-    AgentHandoffFeature feature,
     SessionService sessions,
+    ISessionRepository sessionRepository,
+    IUserPreferenceRepository preferences,
+    MachineHandoffAsks asks,
     RemoteSessions remote,
     MachineIdentityStore identity,
     SessionUpdates updates,
     IRemoteSessionEvents events,
     RecentSessionStarts recentStarts)
 {
-    public const string TurnedOffMessage = "Handing work to other machines is turned off in Fleet's Settings.";
-
     public const string NoMachinesMessage =
-        "No machine takes work from agents here yet. The user allows it per machine in Settings › Machines.";
+        "No machine takes work from agents here. The user decides it per machine in Settings › Machines.";
+
+    /// <summary>What the model reads when it has to call again to keep waiting for the user (a harness that cuts a held call).</summary>
+    public const string StillWaitingMessage =
+        "Fleet asked the user and they haven't answered yet. Call this tool again with the same arguments to keep waiting for their answer.";
 
     /// <summary><c>fleet_machine_list</c>: the machines the agent may hand work to, and what each can run.</summary>
     public Task<CanvasResult<CanvasToolOutput>> ListAsync(string? bridgeToken, string? harnessSessionId, CancellationToken ct = default)
@@ -43,6 +51,8 @@ public sealed class MachineHandoffBridge(
                 output.Append('\n').Append(machine.Name);
                 if (machine.Os is { Length: > 0 } os)
                     output.Append(" · ").Append(os);
+                if (machine.AgentWork == MachineAgentWork.Ask)
+                    output.Append(" · Fleet asks the user before you send it work");
 
                 var token = await remote.FindAsync(machine.Id).ConfigureAwait(false);
                 if (token.Token is null)
@@ -122,6 +132,19 @@ public sealed class MachineHandoffBridge(
             // The tool call that timed out may still be running, and the agent calls again: the same start from the same
             // session within a few minutes is the one already made, not a second session.
             var key = string.Join('\u001f', caller.FleetSessionId, machine.Id, folder.Trim(), title.Trim(), task.Trim(), cleanBranch, cleanHarness, notifyWhenDone);
+            var details = new HandoffAskDetails
+            {
+                Machine = machine.Name,
+                Os = machine.Os,
+                Folder = folder.Trim(),
+                Branch = cleanBranch,
+                Harness = cleanHarness,
+                Task = FirstLine(task),
+                Level = view.LevelFor(cleanHarness),
+            };
+            if (await AskFirstAsync(caller, machine, "start" + '\u001f' + key, "fleet_session_start", $"Start a session on {machine.Name}", () => Task.FromResult(details), ct).ConfigureAwait(false) is { } unanswered)
+                return unanswered;
+
             return await recentStarts.OnceAsync(key, () => StartOnceAsync(caller, machine, token!, folder.Trim(), title.Trim(), task.Trim(), cleanBranch, cleanHarness, notifyWhenDone, sender, ct)).ConfigureAwait(false);
         });
 
@@ -150,6 +173,7 @@ public sealed class MachineHandoffBridge(
                     + $"Send it with fleet_message, machine {machine.Name}.");
             }
 
+            asks.Grant(caller.FleetSessionId, machine.Id, started.SessionId);
             var watching = notifyWhenDone && Watch(caller, machine, started.SessionId, started.Title, delivered.MessageId);
             var where = started.Branch is { } onBranch ? $" in a worktree on {onBranch}" : $" in {folder}";
             return CanvasResult.Ok(new CanvasToolOutput(
@@ -175,9 +199,24 @@ public sealed class MachineHandoffBridge(
             if (sender is null)
                 return UnknownCaller();
 
+            // A session the agent started or messaged there already needs no second ask.
+            if (!asks.IsGranted(caller.FleetSessionId, machine.Id, toSessionId))
+            {
+                var key = string.Join('\u001f', "message", caller.FleetSessionId, machine.Id, toSessionId, text.Trim());
+                var asked = await AskFirstAsync(caller, machine, key, "fleet_message", $"Message a session on {machine.Name}", async () =>
+                {
+                    var view = await remote.DescribeAsync(machine, token, ct).ConfigureAwait(false);
+                    return new HandoffAskDetails { Machine = machine.Name, Os = machine.Os, Session = toSessionId, Task = FirstLine(text), Level = view.LevelFor(null) };
+                }, ct).ConfigureAwait(false);
+                if (asked is not null)
+                    return asked;
+            }
+
             var (delivered, error) = await remote.MessageAsync(machine, token, toSessionId, sender, text.Trim(), ct).ConfigureAwait(false);
             if (delivered is null)
                 return Refused($"Fleet couldn't deliver it: {error}");
+
+            asks.Grant(caller.FleetSessionId, machine.Id, toSessionId);
 
             var watching = notifyWhenDone && Watch(caller, machine, toSessionId, delivered.Title, delivered.MessageId);
             return CanvasResult.Ok(new CanvasToolOutput(
@@ -215,12 +254,7 @@ public sealed class MachineHandoffBridge(
             return UnknownCaller();
 
         using (userScope.Begin(caller.UserId))
-        {
-            // Checked on every call: a process started while it was on keeps the tools until it's recycled.
-            if (!await feature.IsEnabledAsync().ConfigureAwait(false))
-                return Refused(TurnedOffMessage);
             return await run(caller).ConfigureAwait(false);
-        }
     }
 
     private async Task<CanvasResult<CanvasToolOutput>> WithMachineAsync(
@@ -230,14 +264,78 @@ public sealed class MachineHandoffBridge(
     {
         using (userScope.Begin(caller.UserId))
         {
-            if (!await feature.IsEnabledAsync().ConfigureAwait(false))
-                return Refused(TurnedOffMessage);
-
             var (machine, token, error) = await remote.FindAsync(machineName).ConfigureAwait(false);
             if (machine is null)
                 return CanvasResult.Fail<CanvasToolOutput>(CanvasErrorKind.NotFound, error!);
             return await run(machine, token!).ConfigureAwait(false);
         }
+    }
+
+    /// <summary>
+    /// Whether the call may go ahead on <paramref name="machine"/>: null when it may, otherwise what the agent reads. A
+    /// machine set to Ask has Fleet ask the user in the conversation and wait for the answer, a round at a time; in a run
+    /// nobody watches, what Settings › Permissions says for unattended runs decides instead.
+    /// </summary>
+    private async Task<CanvasResult<CanvasToolOutput>?> AskFirstAsync(
+        HarnessCanvasCaller caller,
+        RemoteMachine machine,
+        string key,
+        string tool,
+        string title,
+        Func<Task<HandoffAskDetails>> details,
+        CancellationToken ct)
+    {
+        if (machine.AgentWork == MachineAgentWork.Always)
+            return null;
+
+        if (!asks.IsWaiting(caller.FleetSessionId, key))
+        {
+            switch (await UnattendedAsync(caller).ConfigureAwait(false))
+            {
+                case UnattendedPermissions.All:
+                    return null;
+                case UnattendedPermissions.Deny:
+                    return Refused(
+                        $"Fleet asks the user before an agent sends work to {machine.Name}, and this run has nobody watching it: "
+                        + "its permission settings refuse anything that would need asking. Do it here, or stop and say what you needed.");
+            }
+
+            var ask = new PermissionAsk
+            {
+                Id = MachineHandoffAsks.IdPrefix + Guid.NewGuid().ToString("N"),
+                SessionId = caller.FleetSessionId,
+                Kind = PermissionKinds.Other,
+                Tool = tool,
+                Title = title,
+                Handoff = await details().ConfigureAwait(false),
+            };
+            if (!asks.Ask(key, machine.Id, ask))
+                return Refused($"Fleet couldn't ask the user about {machine.Name}: nothing serves this session right now.");
+        }
+
+        return await asks.NextAsync(caller.FleetSessionId, key, MachineHandoffAsks.Round, ct).ConfigureAwait(false) switch
+        {
+            null => CanvasResult.Ok(new CanvasToolOutput("Waiting for the user", StillWaitingMessage, Choice: PageChoiceOutput.StillWaiting)),
+            PermissionReplies.Once or PermissionReplies.Always => null,
+            PermissionReplies.Reject => Refused($"The user said no to sending work to {machine.Name}. Don't hand it work; do it here, or ask them what they'd like."),
+            _ => Refused($"The user didn't answer about {machine.Name}: the ask ended with the turn. Ask them in your reply."),
+        };
+    }
+
+    /// <summary>What Settings › Permissions says for runs nobody watches, when the caller is one; null when someone watches.</summary>
+    private async Task<string?> UnattendedAsync(HarnessCanvasCaller caller)
+    {
+        if (await sessionRepository.GetByIdAsync(caller.FleetSessionId).ConfigureAwait(false) is not { } session
+            || !await SessionPermissions.IsUnattendedAsync(sessionRepository, session).ConfigureAwait(false))
+            return null;
+        var value = await preferences.GetAsync(SessionPermissions.UnattendedKey).ConfigureAwait(false);
+        return UnattendedPermissions.IsKnown(value) ? value : UnattendedPermissions.All;
+    }
+
+    private static string FirstLine(string text)
+    {
+        var line = text.Trim().Split('\n', 2)[0].Trim();
+        return line.Length > 200 ? line[..200] + "…" : line;
     }
 
     /// <summary>The calling session on this machine, as the other machine records it.</summary>

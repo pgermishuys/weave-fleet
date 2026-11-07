@@ -22,8 +22,8 @@ public sealed class RemoteSessions(RemoteMachineService machines, IHttpClientFac
     /// </summary>
     public const string HttpClientName = "RemoteSessions";
 
-    /// <summary>The machines in the list that agents may hand work to.</summary>
-    public async Task<IReadOnlyList<RemoteMachine>> AllowedAsync() => [.. (await machines.ListAsync()).Where(machine => machine.AgentsAllowed)];
+    /// <summary>The machines in the list that agents may hand work to: every one not set to Never.</summary>
+    public async Task<IReadOnlyList<RemoteMachine>> AllowedAsync() => [.. (await machines.ListAsync()).Where(machine => machine.AgentWork != MachineAgentWork.Never)];
 
     /// <summary>
     /// The allowed machine called <paramref name="nameOrId"/> (its name, any case, or its id) and its token; otherwise
@@ -61,13 +61,22 @@ public sealed class RemoteSessions(RemoteMachineService machines, IHttpClientFac
             var peerMessages = capabilities.ValueKind == JsonValueKind.Object
                 && capabilities.TryGetProperty("peerMessages", out var peer) && peer.ValueKind == JsonValueKind.True;
             List<string> harnesses = [];
+            Dictionary<string, string> harnessLevels = [];
             if (capabilities.ValueKind == JsonValueKind.Object && capabilities.TryGetProperty("harnesses", out var list) && list.ValueKind == JsonValueKind.Array)
             {
                 harnesses.AddRange(list.EnumerateArray()
                     .Where(harness => IsTrue(harness, "available") && IsTrue(harness, "enabled"))
                     .Select(harness => Text(harness, "type"))
                     .OfType<string>());
+                foreach (var harness in list.EnumerateArray())
+                {
+                    if (Text(harness, "type") is { } type && Text(harness, "permissionLevel") is { } harnessLevel)
+                        harnessLevels[type] = harnessLevel;
+                }
             }
+
+            // An older Fleet doesn't say what it lets agents do.
+            var level = capabilities.ValueKind == JsonValueKind.Object ? Text(capabilities, "permissionLevel") : null;
 
             List<string> folders = [];
             var (repositories, _, _) = await GetAsync(machine, token, "/api/repositories", ct);
@@ -77,7 +86,7 @@ public sealed class RemoteSessions(RemoteMachineService machines, IHttpClientFac
                     folders.AddRange(repos.EnumerateArray().Select(repo => Text(repo, "path")).OfType<string>());
             }
 
-            return new RemoteMachineView(null, peerMessages, harnesses, folders);
+            return new RemoteMachineView(null, peerMessages, harnesses, folders, level, harnessLevels);
         }
     }
 
@@ -392,7 +401,20 @@ public sealed class RemoteSessions(RemoteMachineService machines, IHttpClientFac
 /// <param name="PeerMessages">It takes messages from sessions on other machines; a Fleet before that can't take hand-offs.</param>
 /// <param name="Harnesses">The harnesses a new session there can use (installed, working and on).</param>
 /// <param name="Folders">The repositories it found in its folders.</param>
-public sealed record RemoteMachineView(string? Away, bool PeerMessages, IReadOnlyList<string> Harnesses, IReadOnlyList<string> Folders);
+/// <param name="Level">Its permission level (<see cref="PermissionLevels"/>) for a harness with none of its own; null from an older Fleet.</param>
+/// <param name="HarnessLevels">The level each of its harnesses runs at, by type.</param>
+public sealed record RemoteMachineView(
+    string? Away,
+    bool PeerMessages,
+    IReadOnlyList<string> Harnesses,
+    IReadOnlyList<string> Folders,
+    string? Level = null,
+    IReadOnlyDictionary<string, string>? HarnessLevels = null)
+{
+    /// <summary>The level work there runs at in <paramref name="harness"/>, or its default harness's; null when it doesn't say.</summary>
+    public string? LevelFor(string? harness)
+        => harness is not null && HarnessLevels?.TryGetValue(harness, out var level) == true ? level : Level;
+}
 
 /// <summary>A session here, on this machine, that messages one on another machine.</summary>
 public sealed record RemotePeerSender(string MachineId, string MachineName, string SessionId, string Title);

@@ -104,7 +104,7 @@ public static class MachinesEndpoints
         {
             // A paired phone may put a machine's addresses in another order, and change nothing else: the order is how
             // the owner wants to reach it, the rest of the machine list is managing access.
-            if (!FleetClaims.IsOwner(http.User) && !(FleetClaims.IsDevice(http.User) && request is { Addresses: not null, BaseUrl: null, Token: null, Name: null, AgentsAllowed: null }))
+            if (!FleetClaims.IsOwner(http.User) && !(FleetClaims.IsDevice(http.User) && request is { Addresses: not null, BaseUrl: null, Token: null, Name: null, AgentWork: null }))
                 return Results.Json(new ErrorResponse("A phone can only change the order of a machine's addresses."), ApiJsonContext.Default.ErrorResponse, statusCode: StatusCodes.Status403Forbidden);
 
             // The owner's order goes first, on its own: the watcher may be moving the machine to another address meanwhile.
@@ -116,7 +116,7 @@ public static class MachinesEndpoints
                     return Results.BadRequest(new ErrorResponse("The machine's addresses changed while you were looking. Look again and move them once more."));
             }
 
-            var (machine, error) = await machines.UpdateAsync(id, request.BaseUrl, request.Token, request.Name, cancellationToken, request.AgentsAllowed);
+            var (machine, error) = await machines.UpdateAsync(id, request.BaseUrl, request.Token, request.Name, cancellationToken, request.AgentWork);
             if (machine is null)
                 return error!.Message == "No such machine." ? Results.NotFound(new ErrorResponse(error.Message)) : Results.BadRequest(ToError(error));
             return Results.Ok(ToResponse(machine, FleetClaims.IsOwner(http.User) ? machines.TokenOf(machine) : null, tunnels, machines));
@@ -194,7 +194,7 @@ public static class MachinesEndpoints
             job.Result?.Machine is { } machine ? ToResponse(machine, machines.TokenOf(machine), tunnels, machines) : null, job.Result?.Error, job.Result?.Diagnosis);
 
     private static MachineEntryResponse ToResponse(RemoteMachine machine, string? token, ISshTunnels tunnels, RemoteMachineService machines) =>
-        new(machine.Id, machine.Name, machine.BaseUrl, machine.Os, machine.Status, machine.AddedAt, machine.LastSeenAt, token, machine.AgentsAllowed,
+        new(machine.Id, machine.Name, machine.BaseUrl, machine.Os, machine.Status, machine.AddedAt, machine.LastSeenAt, token, machine.AgentWork,
             machine.SshDestination, machine.SshDestination is null ? null : tunnels.IsUp(machine.Id),
             machine.Status == RemoteMachineStatuses.Online ? null : machines.LastDiagnosisOf(machine.Id),
             machine.Addresses.Select(a => new MachineAddressEntry(a.Url, a.Kind, a.Learned, a.LastResult, a.LastTriedAt)).ToList());

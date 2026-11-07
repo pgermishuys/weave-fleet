@@ -75,7 +75,12 @@ export interface MachineCapabilities {
   /** Null until the machine has checked its harnesses once. */
   harnesses: MachineHarness[] | null;
   sessions: { working: number; needsYou: number };
+  /** What agents there may do without asking: work sent there runs under it. Missing from a Fleet too old to say. */
+  permissionLevel?: string | null;
 }
+
+/** Whether agents here can send a machine work: the user is asked in the conversation, always, or never. */
+export type MachineAgentWork = "ask" | "always" | "never";
 
 /** What `GET /api/machine/access` says: how other devices reach the home machine. */
 export interface MachineAccess {
@@ -134,8 +139,8 @@ interface ServerMachine {
   addedAt: string;
   lastSeenAt: string | null;
   token: string | null;
-  /** Agents here may hand work to it. Missing from a home too old to say, where it can't. */
-  agentsAllowed?: boolean;
+  /** Whether agents here can send it work. Missing from a home too old to say. */
+  agentWork?: MachineAgentWork;
   /** Missing from a home too old to reach machines over SSH. */
   sshDestination?: string | null;
   tunnelUp?: boolean | null;
@@ -330,8 +335,8 @@ export const useMachinesStore = defineStore("machines", () => {
   const others = ref<Record<string, MachineSessions>>(loadCachedSessions());
   /** What each machine besides home last said about itself (`GET /api/machine`), by id. */
   const identities = shallowRef<Record<string, MachineInfo>>({});
-  /** Which machines agents here may hand work to, by id, as home keeps it; only the owner's list says. */
-  const agentsAllowed = shallowRef<Record<string, boolean>>({});
+  /** Whether agents here can send each machine work, by id, as home keeps it; only the owner's list from a home new enough says. */
+  const agentWork = shallowRef<Record<string, MachineAgentWork>>({});
   const liveMachine = getActiveMachine();
   const liveKey = liveMachine?.id ?? HOME_MACHINE_KEY;
 
@@ -391,7 +396,7 @@ export const useMachinesStore = defineStore("machines", () => {
     markImported();
     source.value = "server";
     connections.value = listed.map(fromServer).filter((connection): connection is MachineConnection => connection !== null);
-    agentsAllowed.value = Object.fromEntries(listed.map((machine) => [machine.id, machine.agentsAllowed === true]));
+    agentWork.value = Object.fromEntries(listed.flatMap((machine) => machine.agentWork ? [[machine.id, machine.agentWork]] : []));
     persist();
     // A machine can fail before home's list is read, when there is no one to ask yet.
     for (const [key, state] of Object.entries(others.value))
@@ -675,15 +680,15 @@ export const useMachinesStore = defineStore("machines", () => {
     persist();
   }
 
-  async function setAgentsAllowed(id: string, allowed: boolean): Promise<void> {
+  async function setAgentWork(id: string, value: MachineAgentWork): Promise<void> {
     const response = await fetchOnMachine(null, `/api/machines/${encodeURIComponent(id)}`, {
       method: "PUT",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ agentsAllowed: allowed }),
+      body: JSON.stringify({ agentWork: value }),
     });
     if (!response.ok) throw new Error(await readError(response, "Couldn't change it."));
     const saved = await response.json() as ServerMachine;
-    agentsAllowed.value = { ...agentsAllowed.value, [id]: saved.agentsAllowed === true };
+    if (saved.agentWork) agentWork.value = { ...agentWork.value, [id]: saved.agentWork };
   }
 
   async function renameMachine(key: string, name: string): Promise<void> {
@@ -1094,8 +1099,8 @@ export const useMachinesStore = defineStore("machines", () => {
     rememberSessions,
     startPolling,
     keyOfMachine,
-    agentsAllowed,
-    setAgentsAllowed,
+    agentWork,
+    setAgentWork,
     reorderAddresses,
     opensInPlace,
     isAnswering,

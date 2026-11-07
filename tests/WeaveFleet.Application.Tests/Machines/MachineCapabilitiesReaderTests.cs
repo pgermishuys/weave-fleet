@@ -58,11 +58,25 @@ public sealed class MachineCapabilitiesReaderTests
 
         harnesses.ShouldBe(
         [
-            new MachineHarness("opencode", "OpenCode", Available: true, Enabled: true, "1.18.32"),
-            new MachineHarness("claude-code", "Claude Code", Available: true, Enabled: false, "2.1.0"),
-            new MachineHarness("pi", "Pi", Available: false, Enabled: true, null),
+            new MachineHarness("opencode", "OpenCode", Available: true, Enabled: true, "1.18.32", PermissionLevels.All),
+            new MachineHarness("claude-code", "Claude Code", Available: true, Enabled: false, "2.1.0", PermissionLevels.All),
+            new MachineHarness("pi", "Pi", Available: false, Enabled: true, null, PermissionLevels.All),
         ]);
         _registry.Checks.ShouldBe(1);
+    }
+
+    [Fact]
+    public async Task It_says_the_permission_level_work_sent_here_runs_under_each_harness_s_own_or_the_machine_s()
+    {
+        await _cache.GetAsync(fresh: false, CancellationToken.None);
+        _preferences.Seed(SessionPermissions.LevelKey, PermissionLevels.Edits);
+        _preferences.Seed(SessionPermissions.HarnessLevelKey("claude-code"), PermissionLevels.Ask);
+
+        var capabilities = await _reader.ReadAsync();
+
+        capabilities.PermissionLevel.ShouldBe(PermissionLevels.Edits);
+        capabilities.Harnesses!.Select(harness => (harness.Type, harness.PermissionLevel)).ShouldBe(
+            [("opencode", PermissionLevels.Edits), ("claude-code", PermissionLevels.Ask), ("pi", PermissionLevels.Edits)]);
     }
 
     [Fact]

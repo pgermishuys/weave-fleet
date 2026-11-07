@@ -203,12 +203,6 @@ export const HOME_MACHINE_KEY = "home";
 export const LIVE_MACHINES_PREFERENCE_KEY = "LiveMachines";
 
 /**
- * The user preference behind "Hand work to other machines" in Settings → Labs: agents may start, message and read
- * sessions on the machines allowed in Settings → Machines. Needs messages between sessions.
- */
-export const AGENT_HANDOFF_PREFERENCE_KEY = "AgentHandoff";
-
-/**
  * Whether "Keep every machine live" was on when this browser last read the preferences. Startup decides the live
  * machine before any request, so it goes by this; a browser that hasn't read them yet starts as with the switch off.
  */

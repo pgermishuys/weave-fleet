@@ -30,7 +30,7 @@ public sealed class RemoteSessionTurnsTests : IDisposable
     public RemoteSessionTurnsTests()
     {
         var machine = _atlas.Machines.GetAsync(FakeMachine.Id).GetAwaiter().GetResult()!;
-        _atlas.Machines.UpsertAsync(machine with { AgentsAllowed = true }).GetAwaiter().GetResult();
+        _atlas.Machines.UpsertAsync(machine with { AgentWork = WeaveFleet.Domain.Entities.MachineAgentWork.Always }).GetAwaiter().GetResult();
         _atlas.Answer = request => request switch
         {
             "GET /api/sessions/s-remote" => (HttpStatusCode.OK, $$"""{"id":"s-remote","activityStatus":"{{_status}}"}"""),

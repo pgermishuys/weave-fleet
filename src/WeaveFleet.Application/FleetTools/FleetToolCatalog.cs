@@ -77,12 +77,13 @@ public static class FleetToolCatalog
 
 /// <summary>
 /// Which of Fleet's switchable tools a session gets, as the OpenCode plugins decide it from the switches their process
-/// started with: <c>fleet_message</c> with messages between sessions on, the hand-off tools with agent hand-off on,
+/// started with: <c>fleet_message</c> with messages between sessions on or a machine to hand work to, the hand-off tools
+/// with a machine to hand work to,
 /// <c>fleet_memory_*</c> with memory on, the <c>fleet_mod_*</c> tools with Mods on,
 /// <c>fleet_step_done</c> in a workflow step's session, and the agent's browser tools with Settings → Permissions on.
 /// </summary>
 /// <param name="Walkthrough">The fleet-walkthrough skill is on: its page tool comes with it.</param>
-/// <param name="AgentHandoff">Agents may hand work to other machines (<c>AgentHandoffFeature</c>): its tools, and a machine on the message tools.</param>
+/// <param name="AgentHandoff">A machine takes work from agents here (<c>AgentHandoffFeature</c>): its tools, and a machine on the message tools.</param>
 /// <param name="Mods">Mods are switched on (<c>ModsFeature</c>): the agent's <c>fleet_mod_*</c> tools. Safe mode doesn't hide them.</param>
 /// <param name="PageChoice">
 /// Pages that wait for the user's pick (<c>PageChoiceFeature</c>): <c>waitForChoice</c> on <c>fleet_page_show</c>. Fleet's
@@ -102,8 +103,16 @@ public sealed record FleetToolSwitches(bool SessionMessages, bool Memory, bool W
     /// <summary>The built-in skill whose page tool is behind <see cref="WalkthroughSwitch"/>.</summary>
     public const string WalkthroughSkill = "fleet-walkthrough";
 
-    /// <summary>Whether a tool that needs <paramref name="requirement"/> is on; a switch Fleet doesn't know keeps its tool off.</summary>
-    public bool Allows(string? requirement) => requirement switch
+    /// <summary>
+    /// Whether a tool that needs <paramref name="requirement"/> is on; a switch Fleet doesn't know keeps its tool off.
+    /// <c>a|b</c> needs either: <c>fleet_message</c> comes with messages between sessions, or with a machine to hand work to.
+    /// </summary>
+    public bool Allows(string? requirement)
+        => requirement?.Contains('|', StringComparison.Ordinal) == true
+            ? requirement.Split('|').Any(Allows)
+            : AllowsOne(requirement);
+
+    private bool AllowsOne(string? requirement) => requirement switch
     {
         null => true,
         SessionMessagesSwitch => SessionMessages,

@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { useRouter } from "@tanstack/vue-router";
-import { computed, shallowRef } from "vue";
+import { shallowRef } from "vue";
 import SettingGroup from "@/components/settings/SettingGroup.vue";
 import SettingRow from "@/components/settings/SettingRow.vue";
 import SettingSwitch from "@/components/settings/SettingSwitch.vue";
@@ -10,7 +10,7 @@ import { useWorkflowsFeature } from "@/composables/use-workflows-feature";
 import { DREAMING_PREFERENCE_KEY } from "@/lib/dreaming";
 import { FLEET_UPDATES_PREFERENCE_KEY } from "@/lib/fleet-updates";
 import { JOBS_PREFERENCE_KEY } from "@/lib/jobs";
-import { AGENT_HANDOFF_PREFERENCE_KEY, LIVE_MACHINES_PREFERENCE_KEY } from "@/lib/machines";
+import { LIVE_MACHINES_PREFERENCE_KEY } from "@/lib/machines";
 import { MISSION_CONTROL_PREFERENCE_KEY } from "@/lib/mission-control";
 import { PAGE_CHOICE_PREFERENCE_KEY } from "@/lib/page-choice";
 import { SESSION_MESSAGES_PREFERENCE_KEY } from "@/lib/session-messages";
@@ -26,7 +26,6 @@ preferencesStore.ensureLoaded();
 const sessionMessages = usePreferenceSwitch(SESSION_MESSAGES_PREFERENCE_KEY);
 const liveMachines = usePreferenceSwitch(LIVE_MACHINES_PREFERENCE_KEY);
 const fleetUpdates = usePreferenceSwitch(FLEET_UPDATES_PREFERENCE_KEY);
-const agentHandoff = usePreferenceSwitch(AGENT_HANDOFF_PREFERENCE_KEY);
 const jobs = usePreferenceSwitch(JOBS_PREFERENCE_KEY);
 const missionControl = usePreferenceSwitch(MISSION_CONTROL_PREFERENCE_KEY);
 const dreaming = usePreferenceSwitch(DREAMING_PREFERENCE_KEY);
@@ -43,8 +42,6 @@ async function toggleWorkflows(): Promise<void> {
     isSavingWorkflows.value = false;
   }
 }
-
-const isHandoffOn = computed(() => agentHandoff.enabled.value && sessionMessages.enabled.value);
 
 /** What a switch adds while it is on, or nothing while it is off. */
 function addsWhenOn(on: boolean, text: string): string | null {
@@ -86,41 +83,6 @@ function openRoute(path: string): void {
             aria-label="Enable messages between sessions"
             data-testid="session-messages-switch"
             @click="sessionMessages.toggle"
-          />
-        </template>
-      </SettingRow>
-
-      <SettingRow
-        v-if="machines.hasMachines"
-        id="agent-handoff"
-        title="Hand work to other machines"
-        summary="An agent can start and talk to a session on a machine you allow."
-        :adds="addsWhenOn(isHandoffOn, 'A switch on each machine')"
-        @open="setActiveSection('machines')"
-      >
-        <template #more>
-          Let an agent start a session on another machine, give it a task, and message and read it there. Only on the
-          machines you allow in Settings → Machines. This Fleet makes every call there, so agents never see a
-          machine's token. OpenCode and Claude Code sessions get it; Pi sessions don't. Applies to sessions started
-          afterwards.
-        </template>
-        <template #below>
-          <p
-            v-if="!sessionMessages.enabled.value"
-            class="mt-1 text-xs text-muted"
-            data-testid="agent-handoff-needs-messages"
-          >
-            Turn on Messages between sessions first: the hand-off uses its tools.
-          </p>
-        </template>
-        <template #control>
-          <SettingSwitch
-            :checked="isHandoffOn"
-            :saving="agentHandoff.saving.value"
-            :disabled="preferencesStore.isLoading || agentHandoff.saving.value || !sessionMessages.enabled.value"
-            aria-label="Let agents hand work to other machines"
-            data-testid="agent-handoff-switch"
-            @click="agentHandoff.toggle"
           />
         </template>
       </SettingRow>

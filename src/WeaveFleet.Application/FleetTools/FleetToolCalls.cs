@@ -120,10 +120,10 @@ public sealed class FleetToolCalls(
                 Read: Boolean(args, "read"),
                 CallId: call.CallId), ct),
             "fleet_session_read" => sessionRead.ReadAsync(token, session, String(args, "sessionId"), NonEmpty(args, "before"), Limit(args), NonEmpty(args, "machine"), ct),
-            "fleet_message" => messages.SendAsync(
-                token, session, String(args, "sessionId"), String(args, "text"), Boolean(args, "notifyWhenDone"), NonEmpty(args, "machine"), ct),
+            "fleet_message" => UntilAnsweredAsync(call, () => messages.SendAsync(
+                token, session, String(args, "sessionId"), String(args, "text"), Boolean(args, "notifyWhenDone"), NonEmpty(args, "machine"), ct)),
             "fleet_machine_list" => handoff.ListAsync(token, session, ct),
-            "fleet_session_start" => handoff.StartAsync(
+            "fleet_session_start" => UntilAnsweredAsync(call, () => handoff.StartAsync(
                 token,
                 session,
                 String(args, "machine"),
@@ -133,7 +133,7 @@ public sealed class FleetToolCalls(
                 NonEmpty(args, "branch"),
                 NonEmpty(args, "harness"),
                 Boolean(args, "notifyWhenDone"),
-                ct),
+                ct)),
             "fleet_memory_save" => memory.SaveAsync(token, session, String(args, "list"), String(args, "text"), String(args, "kind"), String(args, "replaces"), ct),
             "fleet_memory_forget" => memory.ForgetAsync(token, session, String(args, "id"), ct),
             "fleet_step_done" => steps.DoneAsync(token, session, String(args, "outcome"), String(args, "summary"), ct),
@@ -163,6 +163,22 @@ public sealed class FleetToolCalls(
             round = await pages.WaitForChoiceAsync(token, call.HarnessSessionId, call.CallId, canvasId, ct).ConfigureAwait(false);
         return round.IsSuccess ? CanvasResult.Ok(round.Value with { Output = shown.Value.Output + "\n\n" + round.Value.Output }) : round;
     }
+
+    /// <summary>
+    /// A hand-off call that Fleet may first put to the user: made again, round after round, until they answer, as the
+    /// plugins do. A harness that cuts a held call gets "still waiting" before it would, and the model calls again.
+    /// </summary>
+    private static async Task<CanvasResult<CanvasToolOutput>> UntilAnsweredAsync(HarnessMcpCall call, Func<Task<CanvasResult<CanvasToolOutput>>> run)
+    {
+        var started = DateTimeOffset.UtcNow;
+        var round = await run().ConfigureAwait(false);
+        while (round.IsSuccess && round.Value.Choice is { Waiting: true } && (call.CantWait is null || DateTimeOffset.UtcNow - started < CutCallsAfter))
+            round = await run().ConfigureAwait(false);
+        return round;
+    }
+
+    /// <summary>How long a call may wait in a harness that cuts a held call (GitHub Copilot cuts one at three minutes).</summary>
+    private static readonly TimeSpan CutCallsAfter = TimeSpan.FromMinutes(1.5);
 
     private static FleetToolResult Failed(string message) => new(message, [], IsError: true);
 

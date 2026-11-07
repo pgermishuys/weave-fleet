@@ -64,7 +64,7 @@ public sealed partial class FleetToolCatalogPluginTests
             ("fleet_walkthrough_show", "walkthrough"),
             ("fleet_browser_read", "browser"),
             ("fleet_browser_act", "browser"),
-            ("fleet_message", "sessionMessages"),
+            ("fleet_message", "sessionMessages|agentHandoff"),
             ("fleet_machine_list", "agentHandoff"),
             ("fleet_session_start", "agentHandoff"),
             ("fleet_memory_save", "memory"),

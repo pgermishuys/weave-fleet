@@ -33,10 +33,10 @@ public sealed record RemoteMachine
     public string Status { get; init; } = RemoteMachineStatuses.Unknown;
 
     /// <summary>
-    /// Whether agents in sessions here may hand work to it (start, message and read sessions there), with "Hand work
-    /// to other machines" on. Off until the owner turns it on for this machine.
+    /// Whether agents in sessions here may send it work (start, message and read sessions there): one of
+    /// <see cref="MachineAgentWork"/>. A machine starts at <see cref="MachineAgentWork.Ask"/>.
     /// </summary>
-    public bool AgentsAllowed { get; init; }
+    public string AgentWork { get; init; } = MachineAgentWork.Ask;
 
     /// <summary>
     /// Set when the machine was added Over SSH: an <c>~/.ssh/config</c> alias or <c>user@host[:port]</c>. Fleet keeps a
@@ -60,6 +60,24 @@ public static class RemoteMachineAddressResults
 
     /// <summary>Something answered, but not this machine: another device has the address now. No token went there.</summary>
     public const string OtherMachine = "other-machine";
+}
+
+/// <summary>"Agents here can send it work", a machine's one setting for agents handing work to it.</summary>
+public static class MachineAgentWork
+{
+    /// <summary>The user is asked in the conversation the first time an agent sends it work; their answer can save Always or Never.</summary>
+    public const string Ask = "ask";
+
+    /// <summary>Agents send it work without asking.</summary>
+    public const string Always = "always";
+
+    /// <summary>Agents can't send it work, and don't see it.</summary>
+    public const string Never = "never";
+
+    public static bool IsKnown(string? value) => value is Ask or Always or Never;
+
+    /// <summary>A stored value, with anything Fleet doesn't know read as <see cref="Ask"/>.</summary>
+    public static string Read(string? value) => IsKnown(value) ? value! : Ask;
 }
 
 public static class RemoteMachineStatuses
