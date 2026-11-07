@@ -22,7 +22,7 @@
  * The tags are in the text itself, so they survive a reload from the harness's store.
  */
 
-/** The user preference behind the switch in Settings → Labs. */
+/** The user preference behind "Message other sessions" in Settings → What agents can do. Off until turned on. */
 export const SESSION_MESSAGES_PREFERENCE_KEY = "SessionMessages";
 
 export interface PeerSender {

@@ -1,98 +1,178 @@
 <script setup lang="ts">
-import { computed, onMounted } from "vue";
+import { computed, onMounted, onUnmounted, shallowRef } from "vue";
 import { Info } from "lucide-vue-next";
+import type { HarnessInfo } from "@/api/client";
 import BrowserSection from "@/components/settings/BrowserSection.vue";
-import SettingGroup from "@/components/settings/SettingGroup.vue";
-import SettingRow from "@/components/settings/SettingRow.vue";
+import SettingSegments from "@/components/settings/SettingSegments.vue";
 import StatusGlyph from "@/components/sessions/StatusGlyph.vue";
 import { useAgentBrowserSettings } from "@/composables/use-agent-browser-settings";
 import { useEnabledHarnesses } from "@/composables/use-enabled-harnesses";
 import { useHarnessPermissions } from "@/composables/use-harness-permissions";
+import { usePreferenceSwitch } from "@/composables/use-preference-switch";
 import { useSettingsNav } from "@/composables/use-settings-nav";
 import {
+  DEFAULT_PERMISSION_LEVEL,
+  DEFAULT_UNATTENDED_PERMISSION,
   PERMISSION_LEVEL_KEY,
-  PERMISSION_LEVEL_NAMES,
   PERMISSION_UNATTENDED_KEY,
+  levelWith,
+  reachOf,
   toUnattendedPermission,
-  type PermissionLevel,
+  type LevelReach,
+  type Reach,
   type UnattendedPermission,
 } from "@/lib/permissions";
+import { SESSION_MESSAGES_PREFERENCE_KEY } from "@/lib/session-messages";
+import { agentWorkLevelName, useMachinesStore, type MachineAgentWork } from "@/stores/machines";
 import { usePreferencesStore } from "@/stores/preferences";
+
+/**
+ * Settings → What agents can do: every "can agents…?" answer on one page. Each row has one setting, says which value is
+ * Fleet's default, and lists its exceptions under it: a harness at a level of its own, a machine set to Always or Never.
+ * Edit files and Run commands are two views of one level (ask · edits · all); the server hands every live session a
+ * changed level at once, so it holds from the session's next tool call.
+ */
 
 const preferencesStore = usePreferencesStore();
 preferencesStore.ensureLoaded();
 
-interface LevelOption {
-  id: PermissionLevel;
-  description: string;
-  /** What runs without asking, and what asks, in the order read · edit · shell · web. */
-  runs: [string, boolean][];
+type Row = keyof LevelReach;
+
+const REACH: readonly { value: Reach; label: string }[] = [
+  { value: "allowed", label: "Allowed" },
+  { value: "ask", label: "Ask" },
+];
+const REACH_NAMES: Record<Reach, string> = { allowed: "Allowed", ask: "Ask" };
+const FLEET_DEFAULT_REACH = reachOf(DEFAULT_PERMISSION_LEVEL);
+
+// The harnesses that can start a session here: installed and turned on.
+const { enabledHarnesses: harnesses } = useEnabledHarnesses();
+const { defaultLevel, effectiveLevel, supportsLevels, handedText, setHarnessLevel } = useHarnessPermissions();
+const { settings: browser, load: loadBrowser } = useAgentBrowserSettings();
+const { setActiveSection } = useSettingsNav();
+
+const defaultReach = computed(() => reachOf(defaultLevel.value));
+const leveled = computed(() => harnesses.value.filter((harness) => supportsLevels(harness)));
+/** Harnesses Fleet can't hand a level: they ask, or don't, as their own settings say. */
+const unleveled = computed(() => harnesses.value.filter((harness) => !supportsLevels(harness)));
+
+function harnessReach(harness: HarnessInfo, row: Row): Reach {
+  return reachOf(effectiveLevel(harness.type))[row];
 }
 
-const LEVELS: readonly LevelOption[] = [
-  {
-    id: "ask",
-    description: "Reading and searching run. Anything that changes files, runs commands or goes online asks first.",
-    runs: [["read", true], ["edit", false], ["shell", false], ["web", false]],
-  },
-  {
-    id: "edits",
-    description: "File edits run as well. Commands, web access and other tools ask first.",
-    runs: [["read", true], ["edit", true], ["shell", false], ["web", false]],
-  },
-  {
-    id: "all",
-    description: "Nothing asks. Use it in a sandbox or a throwaway worktree.",
-    runs: [["read", true], ["edit", true], ["shell", true], ["web", true]],
-  },
+/** The harnesses whose level differs from the default on this row: its exceptions. */
+function exceptionsOn(row: Row): HarnessInfo[] {
+  return leveled.value.filter((harness) => harnessReach(harness, row) !== defaultReach.value[row]);
+}
+
+/** The harnesses that could be made an exception on this row: those that follow the default on it. */
+function candidatesOn(row: Row): HarnessInfo[] {
+  return leveled.value.filter((harness) => harnessReach(harness, row) === defaultReach.value[row]);
+}
+
+function opposite(value: Reach): Reach {
+  return value === "allowed" ? "ask" : "allowed";
+}
+
+function setDefault(row: Row, value: Reach): void {
+  void preferencesStore.set(PERMISSION_LEVEL_KEY, levelWith(defaultLevel.value, row, value));
+}
+
+/** A harness's own level after one row changes; back at the default, it follows the default again. */
+function setHarness(type: string, row: Row, value: Reach): void {
+  const level = levelWith(effectiveLevel(type), row, value);
+  setHarnessLevel(type, level === defaultLevel.value ? "default" : level);
+}
+
+function addHarnessException(row: Row, event: Event): void {
+  const select = event.target as HTMLSelectElement;
+  const type = select.value;
+  select.value = "";
+  if (type) setHarness(type, row, opposite(defaultReach.value[row]));
+}
+
+function defaultTag(isDefault: boolean, label: string): string {
+  return isDefault ? "default" : `default: ${label}`;
+}
+
+// ── The browser, which Run commands covers ───────────────────────────────────
+const browserHarnesses = computed(() => harnesses.value.filter((harness) => harness.capabilities?.supportsAgentBrowser === true));
+const browserChip = computed(() => {
+  if (!browser.value.enabled) return "Off";
+  const without = harnesses.value.filter((harness) => !browserHarnesses.value.includes(harness));
+  return without.length > 0 && browserHarnesses.value.length > 0
+    ? `On, not in ${without.map((harness) => harness.displayName).join(", ")}`
+    : browserHarnesses.value.length > 0 ? "On" : "No harness here can use it";
+});
+
+// ── Messages between sessions ────────────────────────────────────────────────
+type MessagesChoice = "allowed" | "off";
+const MESSAGES: readonly { value: MessagesChoice; label: string }[] = [
+  { value: "allowed", label: "Allowed" },
+  { value: "off", label: "Off" },
 ];
+const sessionMessages = usePreferenceSwitch(SESSION_MESSAGES_PREFERENCE_KEY);
+const messagesChoice = computed<MessagesChoice>(() => (sessionMessages.enabled.value ? "allowed" : "off"));
 
-const { harnesses } = useEnabledHarnesses();
+function setMessages(value: MessagesChoice): void {
+  if (value !== messagesChoice.value) void sessionMessages.toggle();
+}
 
-const { defaultLevel, ownLevel, effectiveLevel, supportsLevels } = useHarnessPermissions();
-const { settings: browser, load: loadBrowser } = useAgentBrowserSettings();
-const { openHarness } = useSettingsNav();
+// ── Other machines ───────────────────────────────────────────────────────────
+const MACHINE_CHOICES: readonly { value: MachineAgentWork; label: string }[] = [
+  { value: "ask", label: "Ask" },
+  { value: "always", label: "Always" },
+  { value: "never", label: "Never" },
+];
+const machines = useMachinesStore();
+const machineExceptions = computed(() => machines.agentWorkEntries.filter((entry) => machines.agentWork[entry.key] !== "ask"));
+const machineCandidates = computed(() => machines.agentWorkEntries.filter((entry) => machines.agentWork[entry.key] === "ask"));
+const machineError = shallowRef<string | null>(null);
 
-onMounted(() => void loadBrowser());
+async function setMachine(key: string, value: MachineAgentWork): Promise<void> {
+  machineError.value = null;
+  try {
+    await machines.setAgentWork(key, value);
+  } catch (error) {
+    machineError.value = error instanceof Error ? error.message : String(error);
+  }
+}
 
-/** Every harness Fleet knows, with its permission level and whether its agents get the browser. Read-only: each harness's tab changes them. */
-const harnessRows = computed(() =>
-  harnesses.value.map((harness) => ({
-    type: harness.type,
-    name: harness.displayName,
-    permissions: supportsLevels(harness)
-      ? `${PERMISSION_LEVEL_NAMES[effectiveLevel(harness.type)]}${ownLevel(harness.type) ? "" : " (default)"}`
-      : "Not available",
-    browserOn: harness.capabilities?.supportsAgentBrowser === true && browser.value.enabled,
-  })),
-);
+function addMachineException(event: Event): void {
+  const select = event.target as HTMLSelectElement;
+  const [key, value] = select.value.split("|");
+  select.value = "";
+  if (key && value) void setMachine(key, value as MachineAgentWork);
+}
 
-const unattended = computed<UnattendedPermission>(
-  () => toUnattendedPermission(preferencesStore.preferences[PERMISSION_UNATTENDED_KEY]),
-);
-
+// ── When nobody is watching ──────────────────────────────────────────────────
+const UNATTENDED: readonly { value: UnattendedPermission; label: string }[] = [
+  { value: "all", label: "Allow" },
+  { value: "same", label: "Stop & wait" },
+  { value: "deny", label: "Refuse" },
+];
 const UNATTENDED_NOTES: Record<UnattendedPermission, string> = {
   all: "Nobody is there to answer, so these runs ask about nothing.",
   same: "A run stops at its first ask and shows Needs you until you answer.",
   deny: "Anything that would ask is refused, and the agent is told why.",
 };
+const unattended = computed<UnattendedPermission>(
+  () => toUnattendedPermission(preferencesStore.preferences[PERMISSION_UNATTENDED_KEY]),
+);
 
-function setDefault(level: PermissionLevel): void {
-  void preferencesStore.set(PERMISSION_LEVEL_KEY, level);
-}
-
-function setUnattended(value: string): void {
+function setUnattended(value: UnattendedPermission): void {
   void preferencesStore.set(PERMISSION_UNATTENDED_KEY, value);
 }
 
-function onLevelKeydown(event: KeyboardEvent, index: number): void {
-  const step = event.key === "ArrowRight" || event.key === "ArrowDown" ? 1 : event.key === "ArrowLeft" || event.key === "ArrowUp" ? -1 : 0;
-  if (step === 0) return;
-  event.preventDefault();
-  const next = LEVELS[(index + step + LEVELS.length) % LEVELS.length];
-  setDefault(next.id);
-  (event.currentTarget as HTMLElement).parentElement?.querySelectorAll<HTMLElement>("[role=radio]")[LEVELS.indexOf(next)]?.focus();
-}
+let stopPolling: (() => void) | null = null;
+onMounted(() => {
+  void loadBrowser();
+  void machines.loadHome();
+  // An answer in a conversation ("Always for …") may have changed a machine's setting since the list was read.
+  void machines.syncFromServer();
+  stopPolling = machines.startPolling();
+});
+onUnmounted(() => stopPolling?.());
 </script>
 
 <template>
@@ -100,135 +180,256 @@ function onLevelKeydown(event: KeyboardEvent, index: number): void {
     class="grid gap-6"
     data-testid="permissions-section"
   >
-    <div class="flex flex-col gap-1">
-      <p class="px-1 text-sm text-muted">
-        Choose what an agent can do without asking. When it needs your OK, the session shows
-        <span class="permissions-needs"><StatusGlyph status="waiting_input" /> Needs you</span>
-        and the ask waits in the conversation. Changes apply from each session's next message.
-      </p>
-    </div>
+    <p class="px-1 text-sm text-muted">
+      For every harness on this machine. When an agent needs your OK, the session shows
+      <span class="reach-needs"><StatusGlyph status="waiting_input" /> Needs you</span>
+      and the ask waits in the conversation. A change reaches running sessions on their next tool call.
+    </p>
 
-    <SettingGroup
-      id="default-level"
-      title="Default"
-      hint="Used by every harness unless you pick something else on its tab."
+    <div
+      class="reach-rows"
+      data-testid="reach-rows"
     >
-      <div class="px-4 py-3">
-        <div
-          class="permissions-levels"
-          role="radiogroup"
-          aria-label="Default permission level"
-        >
-          <button
-            v-for="(level, index) in LEVELS"
-            :key="level.id"
-            type="button"
-            role="radio"
-            class="permissions-level"
-            :aria-checked="defaultLevel === level.id"
-            :tabindex="defaultLevel === level.id ? 0 : -1"
-            :data-testid="`permission-level-${level.id}`"
-            @click="setDefault(level.id)"
-            @keydown="onLevelKeydown($event, index)"
-          >
-            <span class="permissions-level__name">
-              <span
-                class="permissions-level__radio"
-                aria-hidden="true"
-              />
-              {{ PERMISSION_LEVEL_NAMES[level.id] }}
-            </span>
-            <span class="permissions-level__desc">{{ level.description }}</span>
-            <span
-              class="permissions-level__runs"
-              aria-hidden="true"
-            >
-              <span
-                v-for="[name, runs] in level.runs"
-                :key="name"
-                :class="runs ? 'permissions-chip--runs' : 'permissions-chip--asks'"
-              >{{ name }}</span>
-            </span>
-          </button>
-        </div>
-      </div>
-    </SettingGroup>
-
-    <SettingGroup
-      id="unattended"
-      title="Runs nobody is watching"
-      hint="Automations and workflow steps Fleet finishes."
-    >
-      <SettingRow
-        id="unattended-runs"
-        title="Unattended runs"
-        :summary="UNATTENDED_NOTES[unattended]"
+      <!-- Edit files and Run commands: the level, a row each -->
+      <section
+        v-for="row in (['edits', 'commands'] as const)"
+        :key="row"
+        class="reach-row"
+        :data-setting-row="row === 'edits' ? 'edit-files' : 'run-commands'"
+        :data-testid="`reach-row-${row}`"
       >
-        <template #control>
-          <select
-            id="permission-unattended"
-            class="permissions-select"
-            aria-label="Unattended runs"
-            :value="unattended"
-            @change="setUnattended(($event.target as HTMLSelectElement).value)"
+        <div class="reach-row__head">
+          <div class="min-w-0">
+            <h3 class="reach-row__title">
+              {{ row === "edits" ? "Edit files" : "Run commands & go online" }}
+              <span class="reach-tag">{{ defaultTag(defaultReach[row] === FLEET_DEFAULT_REACH[row], REACH_NAMES[FLEET_DEFAULT_REACH[row]]) }}</span>
+            </h3>
+            <p class="reach-row__summary">
+              {{ row === "edits" ? "Change and create files in the session's folder or worktree." : "The shell, web fetch, the browser and other tools." }}
+            </p>
+          </div>
+          <SettingSegments
+            :options="REACH"
+            :value="defaultReach[row]"
+            :label="row === 'edits' ? 'Edit files' : 'Run commands and go online'"
+            :testid="`reach-${row}`"
+            @pick="setDefault(row, $event)"
+          />
+        </div>
+        <div class="reach-row__exceptions">
+          <label
+            v-for="harness in exceptionsOn(row)"
+            :key="harness.type"
+            class="reach-chip"
+            :title="handedText(harness)"
+            :data-testid="`reach-exception-${row}-${harness.type}`"
           >
-            <option value="all">
-              Allow everything
+            <span class="reach-chip__name">{{ harness.displayName }}</span>
+            <select
+              class="reach-chip__select"
+              :aria-label="`${harness.displayName}: ${row === 'edits' ? 'edit files' : 'run commands'}`"
+              :value="harnessReach(harness, row)"
+              @change="setHarness(harness.type, row, ($event.target as HTMLSelectElement).value as Reach)"
+            >
+              <option
+                v-for="option in REACH"
+                :key="option.value"
+                :value="option.value"
+              >{{ option.label }}{{ option.value === defaultReach[row] ? " (as the default)" : "" }}</option>
+            </select>
+          </label>
+          <span
+            v-for="harness in unleveled"
+            :key="harness.type"
+            class="reach-chip reach-chip--fixed"
+            :data-testid="`reach-unleveled-${row}-${harness.type}`"
+          ><span class="reach-chip__name">{{ harness.displayName }}</span> its own settings: Fleet can't set it</span>
+          <button
+            v-if="row === 'commands'"
+            type="button"
+            class="reach-chip"
+            data-testid="reach-browser-chip"
+            @click="setActiveSection('permissions', 'browser')"
+          ><span class="reach-chip__name">Browser</span> {{ browserChip }}</button>
+          <select
+            v-if="candidatesOn(row).length > 0"
+            class="reach-add"
+            :aria-label="`Add an exception to ${row === 'edits' ? 'Edit files' : 'Run commands'}`"
+            :data-testid="`reach-add-${row}`"
+            @change="addHarnessException(row, $event)"
+          >
+            <option value="">
+              + exception
             </option>
-            <option value="same">
-              Same as sessions (a run waits for you)
-            </option>
-            <option value="deny">
-              Deny anything that would ask
-            </option>
+            <option
+              v-for="harness in candidatesOn(row)"
+              :key="harness.type"
+              :value="harness.type"
+            >{{ harness.displayName }} · {{ REACH_NAMES[opposite(defaultReach[row])] }}</option>
           </select>
-        </template>
-      </SettingRow>
-    </SettingGroup>
+        </div>
+        <p
+          v-if="row === 'commands'"
+          class="reach-row__note"
+        >
+          A command can change files too, so these go together: Edit files Ask makes commands ask, and Run commands
+          Allowed allows edits.
+        </p>
+      </section>
+
+      <!-- Messages between sessions -->
+      <section
+        class="reach-row"
+        data-setting-row="session-messages"
+        data-testid="reach-row-messages"
+      >
+        <div class="reach-row__head">
+          <div class="min-w-0">
+            <h3 class="reach-row__title">
+              Message other sessions
+              <span class="reach-tag">{{ defaultTag(messagesChoice === "off", "Off") }}</span>
+            </h3>
+            <p class="reach-row__summary">
+              An agent asks or tells another session something with <code>fleet_message</code>. The message says which
+              session sent it, and the agent there treats it as a teammate's request, not yours.
+            </p>
+          </div>
+          <SettingSegments
+            :options="MESSAGES"
+            :value="messagesChoice"
+            label="Message other sessions"
+            testid="reach-messages"
+            :disabled="preferencesStore.isLoading || sessionMessages.saving.value"
+            @pick="setMessages"
+          />
+        </div>
+        <p class="reach-row__note">
+          Applies to sessions started afterwards.
+        </p>
+      </section>
+
+      <!-- Send work to other machines -->
+      <section
+        class="reach-row"
+        data-setting-row="other-machines"
+        data-testid="reach-row-machines"
+      >
+        <div class="reach-row__head">
+          <div class="min-w-0">
+            <h3 class="reach-row__title">
+              Send work to other machines
+              <span class="reach-tag">default</span>
+            </h3>
+            <p class="reach-row__summary">
+              Start a session on another machine and give it a task. The agent asks in the conversation first, and the
+              work runs under that machine's own level.
+            </p>
+          </div>
+          <span
+            class="reach-fixed"
+            title="Every machine starts at Ask. Set one to Always or Never below."
+          >Ask</span>
+        </div>
+        <div
+          v-if="machines.agentWorkEntries.length > 0"
+          class="reach-row__exceptions"
+        >
+          <label
+            v-for="entry in machineExceptions"
+            :key="entry.key"
+            class="reach-chip"
+            :data-testid="`reach-machine-${entry.key}`"
+          >
+            <span class="reach-chip__name">{{ entry.name }}</span>
+            <select
+              class="reach-chip__select"
+              :aria-label="`${entry.name}: agents here can send it work`"
+              :value="machines.agentWork[entry.key]"
+              @change="setMachine(entry.key, ($event.target as HTMLSelectElement).value as MachineAgentWork)"
+            >
+              <option
+                v-for="choice in MACHINE_CHOICES"
+                :key="choice.value"
+                :value="choice.value"
+              >{{ choice.label }}</option>
+            </select>
+            <span class="reach-chip__more">· runs at {{ agentWorkLevelName(entry) }}</span>
+          </label>
+          <select
+            v-if="machineCandidates.length > 0"
+            class="reach-add"
+            aria-label="Add an exception to Send work to other machines"
+            data-testid="reach-add-machines"
+            @change="addMachineException"
+          >
+            <option value="">
+              + exception
+            </option>
+            <template
+              v-for="entry in machineCandidates"
+              :key="entry.key"
+            >
+              <option :value="`${entry.key}|always`">
+                {{ entry.name }} · Always
+              </option>
+              <option :value="`${entry.key}|never`">
+                {{ entry.name }} · Never
+              </option>
+            </template>
+          </select>
+        </div>
+        <p
+          v-else
+          class="reach-row__note"
+        >
+          No other machines yet.
+          <button
+            type="button"
+            class="reach-link"
+            @click="setActiveSection('machines')"
+          >Add one in Machines</button>
+        </p>
+        <p
+          v-if="machineError"
+          class="reach-row__note text-error"
+          role="alert"
+        >
+          {{ machineError }}
+        </p>
+      </section>
+
+      <!-- When nobody is watching -->
+      <section
+        class="reach-row"
+        data-setting-row="unattended-runs"
+        data-testid="reach-row-unattended"
+      >
+        <div class="reach-row__head">
+          <div class="min-w-0">
+            <h3 class="reach-row__title">
+              When nobody is watching
+              <span class="reach-tag">{{ defaultTag(unattended === DEFAULT_UNATTENDED_PERMISSION, "Allow") }}</span>
+            </h3>
+            <p class="reach-row__summary">
+              Automations and workflow steps Fleet finishes can't answer an ask. {{ UNATTENDED_NOTES[unattended] }}
+            </p>
+          </div>
+          <SettingSegments
+            :options="UNATTENDED"
+            :value="unattended"
+            label="When nobody is watching"
+            testid="reach-unattended"
+            @pick="setUnattended"
+          />
+        </div>
+      </section>
+    </div>
 
     <div data-settings-anchor="browser">
       <BrowserSection />
     </div>
 
-    <SettingGroup
-      id="each-harness"
-      title="Each harness"
-      hint="Set on each harness's tab, under What it may do."
-    >
-      <div
-        class="permissions-rows px-4 py-3"
-        data-testid="permissions-each-harness"
-      >
-        <div class="permissions-row permissions-row--head">
-          <span>Harness</span>
-          <span>Permissions</span>
-          <span>Browser</span>
-        </div>
-        <div
-          v-for="harness in harnessRows"
-          :key="harness.type"
-          class="permissions-row"
-        >
-          <span class="permissions-row__name">{{ harness.name }}</span>
-          <span
-            class="permissions-row__handed permissions-row__handed--plain"
-            :data-testid="`permission-handed-${harness.type}`"
-          >{{ harness.permissions }}</span>
-          <span class="permissions-row__browser">
-            {{ harness.browserOn ? "On" : "Off" }} &middot;
-            <button
-              type="button"
-              class="permissions-link"
-              :aria-label="`Change ${harness.name}'s permissions and browser`"
-              :data-testid="`permission-change-${harness.type}`"
-              @click="openHarness(harness.type, 'may-do')"
-            >Change</button>
-          </span>
-        </div>
-      </div>
-    </SettingGroup>
-
-    <p class="permissions-fine">
+    <p class="reach-fine">
       <Info
         :size="13"
         aria-hidden="true"
@@ -242,7 +443,7 @@ function onLevelKeydown(event: KeyboardEvent, index: number): void {
 </template>
 
 <style scoped>
-.permissions-needs {
+.reach-needs {
   display: inline-flex;
   align-items: center;
   gap: 5px;
@@ -250,180 +451,161 @@ function onLevelKeydown(event: KeyboardEvent, index: number): void {
   font-weight: 600;
 }
 
-.permissions-levels {
-  display: grid;
-  grid-template-columns: repeat(3, minmax(0, 1fr));
-  gap: 8px;
-}
-
-.permissions-level {
-  display: grid;
-  align-content: start;
-  gap: 6px;
-  padding: 12px;
+.reach-rows {
+  overflow: hidden;
   border: 1px solid var(--border);
   border-radius: var(--radius-card);
-  background: var(--main-bg);
-  color: var(--text);
-  font: inherit;
-  text-align: left;
-  cursor: pointer;
-  transition: border-color var(--transition), background var(--transition);
+  background: var(--card-bg);
 }
 
-.permissions-level:hover {
-  border-color: color-mix(in srgb, var(--accent) 35%, var(--border));
-}
-
-.permissions-level[aria-checked="true"] {
-  border-color: var(--accent);
-  background: var(--accent-dim);
-}
-
-.permissions-level:focus-visible {
-  outline: 2px solid var(--accent);
-  outline-offset: 2px;
-}
-
-.permissions-level__name {
-  display: flex;
-  align-items: center;
+.reach-row {
+  display: grid;
   gap: 8px;
+  padding: 14px 16px;
+}
+
+.reach-row + .reach-row {
+  border-top: 1px solid var(--border);
+}
+
+.reach-row__head {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 16px;
+}
+
+.reach-row__title {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: 8px;
+  color: var(--text);
   font-size: 13.5px;
   font-weight: 600;
 }
 
-.permissions-level__radio {
-  display: grid;
-  place-items: center;
-  width: 14px;
-  height: 14px;
-  flex-shrink: 0;
-  border: 1.5px solid color-mix(in srgb, var(--text) 25%, transparent);
-  border-radius: 50%;
-}
-
-.permissions-level[aria-checked="true"] .permissions-level__radio {
-  border-color: var(--accent);
-}
-
-.permissions-level[aria-checked="true"] .permissions-level__radio::after {
-  width: 6px;
-  height: 6px;
-  border-radius: 50%;
-  background: var(--accent);
-  content: "";
-}
-
-.permissions-level__desc {
+.reach-row__summary {
+  margin-top: 2px;
   color: var(--muted);
   font-size: 12px;
   line-height: 1.45;
 }
 
-.permissions-level__runs {
+.reach-row__summary code {
+  padding: 0 4px;
+  border-radius: 4px;
+  background: var(--main-bg);
+  font-family: var(--font-mono-stack);
+  font-size: 11.5px;
+}
+
+.reach-tag {
+  color: var(--muted);
+  font-size: 11px;
+  font-weight: 400;
+}
+
+.reach-row__exceptions {
   display: flex;
   flex-wrap: wrap;
-  gap: 4px;
-  margin-top: 2px;
+  align-items: center;
+  gap: 6px;
 }
 
-.permissions-level__runs > span {
-  padding: 0 6px;
-  border-radius: 999px;
-  font-size: 11px;
-}
-
-.permissions-chip--runs {
-  background: color-mix(in srgb, var(--running) 12%, transparent);
-  color: var(--running);
-}
-
-.permissions-chip--asks {
-  background: color-mix(in srgb, var(--status-waiting) 14%, transparent);
-  color: var(--status-waiting);
-}
-
-.permissions-rows {
-  overflow: hidden;
+.reach-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 2px 4px 2px 10px;
   border: 1px solid var(--border);
-  border-radius: var(--radius-card);
-}
-
-.permissions-row {
-  display: grid;
-  grid-template-columns: 150px minmax(0, 1fr) auto;
-  align-items: center;
-  gap: 4px 14px;
-  padding: 11px 14px;
+  border-radius: 999px;
   background: var(--main-bg);
-}
-
-.permissions-row + .permissions-row {
-  border-top: 1px solid var(--border);
-}
-
-.permissions-row__name {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  color: var(--text);
-  font-size: 13px;
-  font-weight: 500;
-}
-
-.permissions-row--head {
-  grid-template-columns: 150px minmax(0, 1fr) 90px;
-  padding-block: 8px;
   color: var(--muted);
+  font: inherit;
   font-size: 12px;
 }
 
-.permissions-row__browser {
-  display: inline-flex;
-  min-width: 90px;
-  gap: 4px;
-  color: var(--text);
-  font-size: 12.5px;
+button.reach-chip {
+  padding-right: 10px;
+  cursor: pointer;
 }
 
-.permissions-link {
+button.reach-chip:hover {
+  border-color: color-mix(in srgb, var(--accent) 35%, var(--border));
+}
+
+.reach-chip--fixed {
+  padding-right: 10px;
+  border-style: dashed;
+}
+
+.reach-chip__name {
+  color: var(--text);
+  font-weight: 500;
+}
+
+.reach-chip__more {
+  padding-right: 6px;
+}
+
+.reach-chip__select,
+.reach-add {
+  field-sizing: content;
+  border-radius: 999px;
+  background: transparent;
+  color: var(--text);
+  font: inherit;
+  font-size: 12px;
+  cursor: pointer;
+}
+
+.reach-chip__select {
+  padding: 1px 2px;
+  font-weight: 600;
+}
+
+.reach-add {
+  padding: 2px 10px;
+  border: 1px dashed var(--border);
+  color: var(--muted);
+}
+
+.reach-add:hover,
+.reach-chip__select:hover {
+  color: var(--text);
+}
+
+.reach-chip__select:focus-visible,
+.reach-add:focus-visible,
+button.reach-chip:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 1px;
+}
+
+.reach-fixed {
+  padding: 4px 11px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-btn);
+  color: var(--text);
+  font-size: 12.5px;
+  font-weight: 600;
+}
+
+.reach-row__note {
+  color: var(--muted);
+  font-size: 11.5px;
+  line-height: 1.45;
+}
+
+.reach-link {
   color: var(--accent);
   font: inherit;
   text-decoration: underline;
   cursor: pointer;
 }
 
-.permissions-row__handed {
-  min-width: 0;
-  color: var(--muted);
-  font-family: var(--font-mono-stack);
-  font-size: 11.5px;
-}
-
-.permissions-row__handed--plain {
-  font-family: inherit;
-  font-size: 12px;
-}
-
-.permissions-select {
-  height: 30px;
-  padding: 0 10px;
-  border: 1px solid var(--border);
-  border-radius: var(--radius-btn);
-  background: var(--card-bg);
-  color: var(--text);
-  font: inherit;
-  font-size: 12.5px;
-  cursor: pointer;
-}
-
-.permissions-select:focus-visible {
-  outline: 2px solid var(--accent);
-  outline-offset: 1px;
-}
-
-.permissions-fine {
+.reach-fine {
   display: flex;
   gap: 8px;
   margin-bottom: 0;
@@ -432,29 +614,20 @@ function onLevelKeydown(event: KeyboardEvent, index: number): void {
   line-height: 1.5;
 }
 
-.permissions-fine > svg {
+.reach-fine > svg {
   flex-shrink: 0;
   margin-top: 3px;
   color: var(--accent);
 }
 
-.permissions-fine b {
+.reach-fine b {
   color: var(--text);
   font-weight: 600;
 }
 
-@media (max-width: 860px) {
-  .permissions-levels {
-    grid-template-columns: 1fr;
-  }
-
-  .permissions-row {
-    grid-template-columns: minmax(0, 1fr) auto;
-  }
-
-  .permissions-row__handed {
-    grid-column: 1 / -1;
-    grid-row: 2;
+@media (max-width: 640px) {
+  .reach-row__head {
+    flex-direction: column;
   }
 }
 </style>

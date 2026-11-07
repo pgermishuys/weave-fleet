@@ -327,7 +327,7 @@ When the user wants a command or edit refused outright ("never let the agent pus
   `<mod name>: <reason>` and can change course. `reason` is required, at most 500 characters.
 - Return `next(e)` to let the user answer as usual. Anything else (a throw, no reason, a slow hook) also lets the user
   answer. There is no `allow` yet.
-- It only sees asks that would reach the user, so the session's permission level (Settings → Permissions) must be `Ask`
+- It only sees asks that would reach the user, so the session's permission level (Settings → What agents can do) must be `Ask`
   or `Edits`; at `Allow everything` nothing asks and the hook never runs. Say so if the user's mod seems to do nothing.
 - A hook has 1.5 s and Fleet waits 2 s. Keep it quick; `$.session.branch()` is fine.
 

@@ -36,7 +36,7 @@ describe("SettingsNavPanel", () => {
     ]);
     expect(groups).toEqual([
       ["you", ["General", "Appearance"]],
-      ["agents", ["Harnesses", "Permissions", "Skills & tools", "Memory"]],
+      ["agents", ["Harnesses", "What agents can do", "Skills & tools", "Memory"]],
       ["work", ["Folders", "Machines"]],
       ["fleet", ["Labs", "Updates & about"]],
       ["plugins", ["Plugins0"]],

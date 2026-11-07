@@ -39,10 +39,10 @@ public sealed record AgentBrowserLimits(
     public string Refusal(Uri url) => Settings.Pages switch
     {
         AgentBrowserPages.Machine =>
-            $"Fleet's browser settings only let agents open pages on this machine, and {url} isn't one. Ask the user to allow any address in Settings → Permissions if you need it.",
+            $"Fleet's browser settings only let agents open pages on this machine, and {url} isn't one. Ask the user to allow any address in Settings → What agents can do if you need it.",
         _ =>
             $"Fleet's browser settings only let agents open this session's own pages: apps it started (fleet_app_start) and pages in its canvases. {url} isn't one of them. "
-            + "Start the app with fleet_app_start or show the page with fleet_browser_open first, or ask the user to allow more pages in Settings → Permissions.",
+            + "Start the app with fleet_app_start or show the page with fleet_browser_open first, or ask the user to allow more pages in Settings → What agents can do.",
     };
 }
 

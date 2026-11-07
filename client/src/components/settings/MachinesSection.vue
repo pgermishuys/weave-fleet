@@ -3,6 +3,7 @@ import { computed, onMounted, onUnmounted, reactive, shallowRef, watch } from "v
 import { storeToRefs } from "pinia";
 import { AlertCircle, Check, Copy, Eye, EyeOff, LoaderCircle, Plus, RefreshCw } from "lucide-vue-next";
 import {
+  agentWorkLevelName,
   useMachinesStore,
   type MachineAccess,
   type MachineAgentWork,
@@ -26,7 +27,6 @@ import { diagnosisOf, tunnelDownDiagnosis, type MachineDiagnosis } from "@/lib/m
 import { describeReach, parsePairingInput } from "@/lib/pairing-link";
 import { normalizeManualCode } from "@/lib/pairing";
 import { useSettingsNav } from "@/composables/use-settings-nav";
-import { PERMISSION_LEVEL_NAMES, toPermissionLevel } from "@/lib/permissions";
 
 /**
  * Settings → Machines: the machines this client knows, adding one by URL and token, and how other devices reach
@@ -40,7 +40,7 @@ const buttonDangerClass = "inline-flex items-center justify-center gap-2 rounded
 const inputClass = "w-full rounded-btn border border-border bg-main-bg px-3 py-2 text-sm text-text outline-none transition-colors placeholder:text-muted focus:border-accent";
 
 const machines = useMachinesStore();
-const { entries, others, home, liveReachable, source, candidates } = storeToRefs(machines);
+const { entries, others, home, liveReachable, candidates } = storeToRefs(machines);
 // Each card draws MachineJobSeats from a list that is empty with Jobs off, not under a v-if: a false v-if still leaves a
 // comment node, and with Jobs off the card must render exactly as it did.
 const { isJobsEnabled: jobsOn } = useJobsFeature();
@@ -224,14 +224,9 @@ const AGENT_WORK_CHOICES: { value: MachineAgentWork; label: string }[] = [
 ];
 
 function showsAgentWork(entry: MachineEntry): boolean {
-  return !entry.isHome && entry.key !== home.value?.id && source.value === "server" && machines.agentWork[entry.key] !== undefined;
+  return machines.agentWorkEntries.some((machine) => machine.key === entry.key);
 }
 
-/** The level work sent there runs under, as that machine says; "unknown" from a Fleet too old to say. */
-function agentWorkLevel(entry: MachineEntry): string {
-  const level = toPermissionLevel((entry.info?.capabilities ?? entry.capabilities)?.permissionLevel ?? undefined);
-  return level ? PERMISSION_LEVEL_NAMES[level] : "unknown";
-}
 
 async function setAgentWork(entry: MachineEntry, value: MachineAgentWork): Promise<void> {
   if (machines.agentWork[entry.key] === value) return;
@@ -807,7 +802,7 @@ onUnmounted(() => stopPolling?.());
               <span
                 class="machine-card__agents-level"
                 data-testid="machine-agent-work-level"
-              >Work there runs under {{ entry.name }}'s level: {{ agentWorkLevel(entry) }}.</span>
+              >Work there runs under {{ entry.name }}'s level: {{ agentWorkLevelName(entry) }}.</span>
             </div>
             <MachineJobSeats
               v-for="key in jobsOn ? [entry.key] : []"

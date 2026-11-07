@@ -628,40 +628,23 @@ describe("HarnessesSection", () => {
       expect(wrapper.find("[data-setting-group='weave']").exists()).toBe(false);
     });
 
-    it("sets a harness's own permission level, and back to the default clears it", async () => {
-      mockApiResponses({ PermissionLevel: "ask" }, () => [withPermissions("claude-code", "Claude Code", true)]);
+    it("has no permission controls: it says the level it runs at and links to What agents can do", async () => {
+      mockApiResponses({ PermissionLevel: "ask", "PermissionLevel.claude-code": "edits" }, () => [withPermissions("claude-code", "Claude Code", true)]);
       const wrapper = await mountHarnessesSection();
-      const select = wrapper.get<HTMLSelectElement>("#permission-harness-claude-code");
+      const line = wrapper.get("[data-testid='harness-may-do-claude-code']");
 
-      expect(wrapper.get("[data-testid='permission-handed-claude-code']").text()).toBe("Asks for most");
-      await select.setValue("edits");
-      expect(apiFetchMock).toHaveBeenCalledWith("/api/preferences/{key}", expect.objectContaining({
-        params: { path: { key: "PermissionLevel.claude-code" } }, body: { value: "edits" },
-      }));
-      expect(wrapper.get("[data-testid='permission-handed-claude-code']").text()).toBe("Asks for commands");
-
-      await select.setValue("default");
-      expect(apiFetchMock).toHaveBeenCalledWith("/api/preferences/{key}", expect.objectContaining({
-        params: { path: { key: "PermissionLevel.claude-code" } }, body: { value: "" },
-      }));
+      expect(line.text()).toContain("Runs at Allow edits.");
+      expect(wrapper.find("select[aria-label$='permissions']").exists()).toBe(false);
+      await wrapper.get("[data-testid='harness-may-do-link']").trigger("click");
+      expect(useSettingsNav().activeSection.value).toBe("permissions");
     });
 
-    it("says a harness that can't take a level has none to set, and that its browser is off", async () => {
+    it("says Fleet can't hand a harness without levels a level or the browser", async () => {
       mockApiResponses({}, () => [withPermissions("pi", "Pi", false)]);
 
       const wrapper = await mountHarnessesSection();
 
-      expect(wrapper.find("#permission-harness-pi").exists()).toBe(false);
-      expect(wrapper.get("[data-testid='permission-handed-pi']").text()).toContain("can't hand Pi a permission level");
-      expect(wrapper.get("[data-testid='browser-harness-pi']").text()).toContain("Off: Fleet can't add tools to Pi yet.");
-    });
-
-    it("shows the browser as on for a harness that gets it while agents may use one", async () => {
-      mockApiResponses({}, () => [withPermissions("opencode2", "OpenCode 2", true)]);
-
-      const wrapper = await mountHarnessesSection();
-
-      expect(wrapper.get("[data-testid='browser-harness-opencode2']").text()).toContain("On");
+      expect(wrapper.get("[data-testid='harness-may-do-pi']").text()).toContain("Fleet can't hand Pi a permission level or the browser");
     });
   });
 });

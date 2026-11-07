@@ -303,6 +303,28 @@ public sealed class ClaudeCodeLongLivedProcessTests : IAsyncDisposable
     }
 
     [Fact]
+    public async Task A_level_changed_while_the_process_runs_switches_it_at_once_not_at_the_next_prompt()
+    {
+        if (OperatingSystem.IsWindows())
+            return;
+
+        var session = Start();
+        await session.ApplyPermissionsAsync(new PermissionPolicy(PermissionLevels.Edits), CancellationToken.None);
+        await PromptAsync("one");
+        var before = StdinLines().Length;
+
+        // Settings → What agents can do changed: the running process asks again from its next tool call.
+        await session.ApplyPermissionsAsync(new PermissionPolicy(PermissionLevels.Ask), CancellationToken.None);
+        StdinLines().Skip(before).ShouldContain(line => line.Contains("\"set_permission_mode\"") && line.Contains("\"default\""));
+
+        // Into All it can't switch (bypassPermissions needs a new process): Fleet answers its asks itself until the next prompt.
+        var asked = StdinLines().Length;
+        await session.ApplyPermissionsAsync(new PermissionPolicy(PermissionLevels.All), CancellationToken.None);
+        StdinLines().Skip(asked).ShouldNotContain(line => line.Contains("\"set_permission_mode\""));
+        Starts().ShouldBe(1);
+    }
+
+    [Fact]
     public async Task After_Fleet_restarts_the_first_prompt_resumes_the_conversation()
     {
         if (OperatingSystem.IsWindows())

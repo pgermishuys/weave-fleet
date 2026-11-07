@@ -13,7 +13,6 @@ import { JOBS_PREFERENCE_KEY } from "@/lib/jobs";
 import { LIVE_MACHINES_PREFERENCE_KEY } from "@/lib/machines";
 import { MISSION_CONTROL_PREFERENCE_KEY } from "@/lib/mission-control";
 import { PAGE_CHOICE_PREFERENCE_KEY } from "@/lib/page-choice";
-import { SESSION_MESSAGES_PREFERENCE_KEY } from "@/lib/session-messages";
 import { useMachinesStore } from "@/stores/machines";
 import { usePreferencesStore } from "@/stores/preferences";
 
@@ -23,7 +22,6 @@ const router = useRouter();
 const { setActiveSection } = useSettingsNav();
 preferencesStore.ensureLoaded();
 
-const sessionMessages = usePreferenceSwitch(SESSION_MESSAGES_PREFERENCE_KEY);
 const liveMachines = usePreferenceSwitch(LIVE_MACHINES_PREFERENCE_KEY);
 const fleetUpdates = usePreferenceSwitch(FLEET_UPDATES_PREFERENCE_KEY);
 const jobs = usePreferenceSwitch(JOBS_PREFERENCE_KEY);
@@ -63,30 +61,6 @@ function openRoute(path: string): void {
       title="Experiments"
       hint="Each is off until you turn it on"
     >
-      <SettingRow
-        id="session-messages"
-        title="Messages between sessions"
-        summary="An agent can message another session with fleet_message."
-        :adds="addsWhenOn(sessionMessages.enabled.value, 'fleet_message tool')"
-        no-open
-      >
-        <template #more>
-          Let an agent send a message to another session with the <code>fleet_message</code> tool. The message
-          says which session sent it, and the agent treats it as a teammate's request, not yours. Agents can't
-          send prompts through Fleet's API while this is on. Applies to sessions started afterwards.
-        </template>
-        <template #control>
-          <SettingSwitch
-            :checked="sessionMessages.enabled.value"
-            :saving="sessionMessages.saving.value"
-            :disabled="preferencesStore.isLoading || sessionMessages.saving.value"
-            aria-label="Enable messages between sessions"
-            data-testid="session-messages-switch"
-            @click="sessionMessages.toggle"
-          />
-        </template>
-      </SettingRow>
-
       <SettingRow
         v-if="machines.hasMachines"
         id="live-machines"

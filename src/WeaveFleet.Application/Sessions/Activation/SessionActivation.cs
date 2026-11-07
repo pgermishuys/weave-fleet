@@ -273,9 +273,25 @@ public sealed partial class SessionActivation(
     }
 
     /// <summary>
-    /// Tells the session's harness what it may do without asking (Settings → Permissions). Called before every prompt, so
-    /// a changed setting applies from the next message. When the harness can't be told, the prompt still goes: it keeps
-    /// the level it had.
+    /// Settings → What agents can do changed for <paramref name="userId"/>: each of their live sessions is told at once,
+    /// so the change holds from its next tool call, not only from its next message.
+    /// </summary>
+    public async Task ReapplyPermissionsAsync(string userId, CancellationToken ct)
+    {
+        foreach (var (instanceId, instance) in instanceTracker.GetAll())
+        {
+            foreach (var session in await sessionRepository.GetNonTerminalForInstanceAsync(instanceId).ConfigureAwait(false))
+            {
+                if (string.Equals(session.UserId, userId, StringComparison.Ordinal))
+                    await ApplyPermissionsAsync(session, instance, ct).ConfigureAwait(false);
+            }
+        }
+    }
+
+    /// <summary>
+    /// Tells the session's harness what it may do without asking (Settings → What agents can do). Called before every
+    /// prompt, and for every live session when the setting changes. When the harness can't be told, the prompt still
+    /// goes: it keeps the level it had.
     /// </summary>
     public async Task ApplyPermissionsAsync(Session session, IHarnessSession instance, CancellationToken ct)
     {

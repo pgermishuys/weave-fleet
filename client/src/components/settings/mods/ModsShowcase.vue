@@ -41,7 +41,7 @@ const GROUPS: SampleGroup[] = [
     samples: [
       { name: "branch-context", description: "Tells the model which git branch the session is on when you ask about branches, PRs, pushes or merges", tryIt: "Ask about the branch, a PR or a push in any session." },
       { name: "tests-after-edits", description: "When a turn changed files, queues \"Run the tests\" as the next message", tryIt: "Have an agent change a file." },
-      { name: "push-guard", description: "Refuses the agent's git push while the session is on main, and tells it to push a branch instead", tryIt: "Set Settings → Permissions to ask, then have an agent push from main." },
+      { name: "push-guard", description: "Refuses the agent's git push while the session is on main, and tells it to push a branch instead", tryIt: "Set Settings → What agents can do to Ask, then have an agent push from main." },
     ],
   },
   {

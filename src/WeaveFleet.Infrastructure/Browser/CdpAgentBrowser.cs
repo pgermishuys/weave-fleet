@@ -97,7 +97,7 @@ public sealed partial class CdpAgentBrowser : IAgentBrowser, IAsyncDisposable
         if (!limits.Settings.Enabled)
         {
             return AgentBrowserResult.Fail(AgentBrowserFailures.Off,
-                "The browser is turned off in Fleet (Settings → Permissions), so agents can't use it. Don't retry; tell the user if you need it.");
+                "The browser is turned off in Fleet (Settings → What agents can do), so agents can't use it. Don't retry; tell the user if you need it.");
         }
 
         var session = _sessions.GetOrAdd(call.SessionId, id => new SessionTabs(id, call.UserId));
@@ -715,7 +715,7 @@ public sealed partial class CdpAgentBrowser : IAgentBrowser, IAsyncDisposable
         if (!limits.Settings.Scripts)
         {
             return AgentBrowserResult.Fail(AgentBrowserFailures.Denied,
-                "Running scripts in pages is off in Fleet (Settings → Permissions → Run scripts in pages). Use snapshot, find, console and network.list instead; don't retry.");
+                "Running scripts in pages is off in Fleet (Settings → What agents can do → Run scripts in pages). Use snapshot, find, console and network.list instead; don't retry.");
         }
 
         if (string.IsNullOrWhiteSpace(action.Script))
