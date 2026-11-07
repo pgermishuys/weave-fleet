@@ -44,7 +44,7 @@ const machineTarget = useMachineTarget();
 const store = useWorkflowsStore(machineTarget);
 const { choiceFor } = useModelRoles();
 const { defaultHarnessType } = useEnabledHarnesses();
-const { skills: builtInSkills } = useBuiltInSkills(machineTarget);
+const { skills: builtInSkills } = useBuiltInSkills();
 
 const editor = props.editor;
 const selected = shallowRef<number | null>(null);
