@@ -5,6 +5,7 @@ import { Check, UserRound, Workflow as WorkflowIcon } from "lucide-vue-next";
 import StatusGlyph from "@/components/sessions/StatusGlyph.vue";
 import WorkflowStartedBy from "@/components/workflows/WorkflowStartedBy.vue";
 import { checkWithMeNote, ordinal, type WorkflowRunStep } from "@/lib/workflows";
+import { useMachineTarget } from "@/lib/machine-target";
 import { useWorkflowsStore } from "@/stores/workflows";
 
 /**
@@ -15,7 +16,9 @@ import { useWorkflowsStore } from "@/stores/workflows";
 const props = defineProps<{ sessionId: string }>();
 
 const router = useRouter();
-const store = useWorkflowsStore();
+// The machine the view shows (MachineScope in WorkflowsPage), or the session's where a run card is.
+const machineTarget = useMachineTarget();
+const store = useWorkflowsStore(machineTarget);
 
 const run = computed(() => store.runForSession(props.sessionId));
 const mine = computed(() => run.value?.sessions.find((s) => s.sessionId === props.sessionId) ?? null);

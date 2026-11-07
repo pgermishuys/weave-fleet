@@ -25,6 +25,7 @@ import { useWorkflowsNav } from "@/composables/use-workflows-nav";
 import type { NewSessionFolder } from "@/lib/new-session-request";
 import { ROLE_NAMES, WORKFLOW_ROLES, skillsInUse, type Workflow, type WorkflowRole } from "@/lib/workflows";
 import { useAppShellStore } from "@/stores/app-shell";
+import { useMachineTarget } from "@/lib/machine-target";
 import { useWorkflowsStore } from "@/stores/workflows";
 
 /**
@@ -34,7 +35,9 @@ import { useWorkflowsStore } from "@/stores/workflows";
 const props = defineProps<{ workflow: Workflow }>();
 
 const router = useRouter();
-const store = useWorkflowsStore();
+// The machine the view shows (MachineScope in WorkflowsPage), or the session's where a run card is.
+const machineTarget = useMachineTarget();
+const store = useWorkflowsStore(machineTarget);
 const nav = useWorkflowsNav();
 const { config } = storeToRefs(useAppShellStore());
 const { repositories, scannedAt, error: repositoriesError, refresh: refreshRepositories } = useRepositories();

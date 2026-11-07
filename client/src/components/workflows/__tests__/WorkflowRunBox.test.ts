@@ -18,7 +18,10 @@ const { apiFetchMock, harnessList, setActiveSectionMock } = vi.hoisted(() => {
     harnessList: { all, harnesses: [all.opencode] as ReturnType<typeof harness>[], enabled: [all.opencode] as ReturnType<typeof harness>[], defaultType: "opencode" },
   };
 });
-vi.mock("@/lib/api-client", () => ({ apiFetch: apiFetchMock }));
+vi.mock("@/lib/api-client", () => ({
+  apiFetch: apiFetchMock,
+  apiFetchOn: (_machine: unknown, path: string, init?: RequestInit) => apiFetchMock(path, init),
+}));
 vi.mock("@tanstack/vue-router", () => ({ useRouter: () => ({ navigate: vi.fn() }) }));
 vi.mock("@/composables/use-signalr-socket", () => ({ onGlobalEvent: () => () => {} }));
 vi.mock("@/composables/use-built-in-skills", () => ({ useBuiltInSkills: () => ({ skills: ref([]) }) }));

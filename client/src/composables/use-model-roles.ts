@@ -8,6 +8,7 @@ import {
   type WorkflowModelChoice,
   type WorkflowRole,
 } from "@/lib/workflows";
+import { useMachineTarget } from "@/lib/machine-target";
 import { usePreferencesStore } from "@/stores/preferences";
 
 /** A model path (`provider/model`) as the model picker's selection key; empty for the default model. */
@@ -26,7 +27,8 @@ export function pathFromKey(key: string): string | null {
  * Fleet preference, not stored in the repo, so a workflow someone shares works on the reader's providers.
  */
 export function useModelRoles() {
-  const preferencesStore = usePreferencesStore();
+  // The machine the page asks: its harnesses and models are what the roles name.
+  const preferencesStore = usePreferencesStore(useMachineTarget());
   preferencesStore.ensureLoaded();
 
   const roles = computed<ModelRoles>(() => parseModelRoles(preferencesStore.get(MODEL_ROLES_PREFERENCE_KEY, "")));

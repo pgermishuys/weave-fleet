@@ -3,7 +3,10 @@ import { defineComponent, h, ref } from "vue";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 const { apiFetchMock } = vi.hoisted(() => ({ apiFetchMock: vi.fn() }));
-vi.mock("@/lib/api-client", () => ({ apiFetch: apiFetchMock }));
+vi.mock("@/lib/api-client", () => ({
+  apiFetch: apiFetchMock,
+  apiFetchOn: (_machine: unknown, path: string, init?: RequestInit) => apiFetchMock(path, init),
+}));
 vi.mock("@/composables/use-signalr-socket", () => ({ onGlobalEvent: () => () => {} }));
 vi.mock("@/composables/use-built-in-skills", () => ({ useBuiltInSkills: () => ({ skills: ref([{ name: "fleet-code-review", description: "", enabled: true }]) }) }));
 vi.mock("@/composables/use-model-roles", () => ({ useModelRoles: () => ({ choiceFor: () => ({ model: "github-copilot/claude-opus-5.5", effort: null }) }) }));

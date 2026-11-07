@@ -7,12 +7,13 @@ import SelectorDropdown from "@/components/session/SelectorDropdown.vue";
 import { useEnabledHarnesses } from "@/composables/use-enabled-harnesses";
 import { useHarnessCatalog } from "@/composables/use-harness-catalog";
 import { keyFromPath, pathFromKey, useModelRoles } from "@/composables/use-model-roles";
+import { useMachineTarget } from "@/lib/machine-target";
 import { useWorkflowsFeature } from "@/composables/use-workflows-feature";
 import { useWorkflowsNav } from "@/composables/use-workflows-nav";
 import { describeDefaults } from "@/lib/agent-model-choice";
 import { ROLE_DESCRIPTIONS, ROLE_NAMES, WORKFLOW_ROLES, type WorkflowRole } from "@/lib/workflows";
 
-const { isWorkflowsEnabled } = useWorkflowsFeature();
+const { isWorkflowsEnabled } = useWorkflowsFeature(useMachineTarget());
 const { harnesses: allHarnesses, enabledHarnesses, defaultHarnessType } = useEnabledHarnesses();
 const { choiceFor, setChoice } = useModelRoles();
 const nav = useWorkflowsNav();

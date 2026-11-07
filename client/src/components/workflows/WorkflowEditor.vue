@@ -19,6 +19,7 @@ import { useModelRoles } from "@/composables/use-model-roles";
 import type { WorkflowEditor } from "@/composables/use-workflow-editor";
 import { fileName, isRole, modelShortName, ROLE_NAMES } from "@/lib/workflows";
 import { draftCost, draftedFrom, insertStep, newAgentStep, newYouStep, removeStep, type WorkflowDraft } from "@/lib/workflow-draft";
+import { useMachineTarget } from "@/lib/machine-target";
 import { useWorkflowsStore } from "@/stores/workflows";
 
 /**
@@ -36,7 +37,11 @@ const emit = defineEmits<{
   tryIt: [];
 }>();
 
-const store = useWorkflowsStore();
+// The machine the view shows (MachineScope in WorkflowsPage), or the session's where a run card is.
+
+const machineTarget = useMachineTarget();
+
+const store = useWorkflowsStore(machineTarget);
 const { choiceFor } = useModelRoles();
 const { defaultHarnessType } = useEnabledHarnesses();
 const { skills: builtInSkills } = useBuiltInSkills();

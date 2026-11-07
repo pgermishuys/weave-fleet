@@ -22,11 +22,14 @@ import {
   type WorkflowRun,
 } from "@/lib/workflows";
 import type { WorkflowFile } from "@/lib/workflow-draft";
+import { useMachineTarget } from "@/lib/machine-target";
 import { useWorkflowsStore } from "@/stores/workflows";
 
 const router = useRouter();
 const nav = useWorkflowsNav();
-const store = useWorkflowsStore();
+// The machine the view shows (MachineScope in WorkflowsPage), or the session's where a run card is.
+const machineTarget = useMachineTarget();
+const store = useWorkflowsStore(machineTarget);
 const { choiceFor } = useModelRoles();
 const { defaultHarnessType } = useEnabledHarnesses();
 const { startCreateFromWorkflow } = useAutomationsNav();

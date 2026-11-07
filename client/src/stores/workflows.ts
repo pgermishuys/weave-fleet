@@ -1,8 +1,7 @@
-import { defineStore } from "pinia";
 import { computed, shallowRef } from "vue";
 import { onDomainEvent } from "@/composables/on-domain-event";
-import { liveTarget } from "@/lib/machine-target";
-import { apiFetch, apiFetchOn } from "@/lib/api-client";
+import { defineMachineStore } from "@/lib/machine-store";
+import { apiFetchOn } from "@/lib/api-client";
 import { extractApiError } from "@/lib/api-error";
 import type { MachineConnection } from "@/lib/machines";
 import type { DraftedWorkflow, WorkflowCheck, WorkflowDraft, WorkflowFile } from "@/lib/workflow-draft";
@@ -63,9 +62,10 @@ async function errorFrom(response: Response, fallback: string): Promise<string> 
 /**
  * Workflow runs, kept current by the `workflow_run` events on the sessions topic. The Sessions list groups a run's
  * step sessions under it, a step session's header shows the stepper, and the dashboard's Needs you counts the runs
- * waiting on you.
+ * waiting on you. One per machine: the Workflows view can show another machine's, and every request goes to the machine
+ * the store was made for.
  */
-export const useWorkflowsStore = defineStore("workflows", () => {
+export const useWorkflowsStore = defineMachineStore("workflows", (target) => {
   const runs = shallowRef<Record<string, WorkflowRun>>({});
   const isLoaded = shallowRef(false);
   let loading: Promise<void> | null = null;
@@ -102,7 +102,7 @@ export const useWorkflowsStore = defineStore("workflows", () => {
   }
 
   function listen(): void {
-    stopListening ??= onDomainEvent(liveTarget(), "sessions", WORKFLOW_RUN_EVENT, (event) => {
+    stopListening ??= onDomainEvent(target, "sessions", WORKFLOW_RUN_EVENT, (event) => {
       if (isWorkflowRun(event.payload)) upsert(event.payload);
     });
   }
@@ -112,7 +112,7 @@ export const useWorkflowsStore = defineStore("workflows", () => {
     listen();
     loading ??= (async () => {
       try {
-        const response = await apiFetch("/api/workflows/runs?limit=100");
+        const response = await apiFetchOn(target.connection, "/api/workflows/runs?limit=100");
         if (!response.ok) return;
         const body: unknown = await response.json();
         if (Array.isArray(body)) {
@@ -130,17 +130,17 @@ export const useWorkflowsStore = defineStore("workflows", () => {
     return loading;
   }
 
-  /** The Library for `directory`, on the live machine or on `machine` (an automation that runs there). */
+  /** The Library for `directory`, on the machine the store is for or on `machine` (an automation that runs there). */
   async function loadLibrary(directory: string | null, machine?: MachineConnection | null): Promise<WorkflowLibrary> {
     const query = directory ? `?directory=${encodeURIComponent(directory)}` : "";
     const path = `/api/workflows${query}`;
-    const response = await (machine === undefined ? apiFetch(path) : apiFetchOn(machine, path));
+    const response = await apiFetchOn(machine === undefined ? target.connection : machine, path);
     if (!response.ok) throw new Error(await errorFrom(response, "Couldn't load the workflows."));
     return (await response.json()) as WorkflowLibrary;
   }
 
   async function post(path: string, body: unknown, fallback: string, method = "POST"): Promise<WorkflowRun> {
-    const response = await apiFetch(path, {
+    const response = await apiFetchOn(target.connection, path, {
       method,
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify(body),
@@ -177,7 +177,7 @@ export const useWorkflowsStore = defineStore("workflows", () => {
   }
 
   async function send<T>(path: string, method: string, body: unknown, fallback: string, signal?: AbortSignal): Promise<T> {
-    const response = await apiFetch(path, {
+    const response = await apiFetchOn(target.connection, path, {
       method,
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify(body),

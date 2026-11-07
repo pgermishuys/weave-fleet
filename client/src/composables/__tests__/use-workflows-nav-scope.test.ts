@@ -3,7 +3,10 @@ import { describe, expect, it, vi } from "vitest";
 import { defineComponent, h } from "vue";
 
 const { apiFetchMock } = vi.hoisted(() => ({ apiFetchMock: vi.fn() }));
-vi.mock("@/lib/api-client", () => ({ apiFetch: apiFetchMock }));
+vi.mock("@/lib/api-client", () => ({
+  apiFetch: apiFetchMock,
+  apiFetchOn: (_machine: unknown, ...args: unknown[]) => apiFetchMock(...args),
+}));
 vi.mock("@/composables/use-signalr-socket", () => ({ onGlobalEvent: () => () => {} }));
 
 import { useWorkflowsNav } from "@/composables/use-workflows-nav";

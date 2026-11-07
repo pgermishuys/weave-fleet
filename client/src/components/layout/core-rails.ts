@@ -9,6 +9,7 @@ import SettingsNavPanel from "@/components/settings/SettingsNavPanel.vue";
 import { useAutomationsMachine } from "@/composables/use-automations-machine";
 import AutomationsNavPanel from "@/components/automations/AutomationsNavPanel.vue";
 import WorkflowsNavPanel from "@/components/workflows/WorkflowsNavPanel.vue";
+import { useWorkflowsMachine } from "@/composables/use-workflows-machine";
 import { useBoardFeature } from "@/composables/use-board-feature";
 import { useJobsFeature } from "@/composables/use-jobs-feature";
 import { useMissionControlFeature } from "@/composables/use-mission-control-feature";
@@ -47,6 +48,15 @@ const AutomationsContextPanel = defineComponent({
   },
 });
 
+const WorkflowsContextPanel = defineComponent({
+  name: "WorkflowsContextPanel",
+  setup() {
+    const workflowsMachine = useWorkflowsMachine();
+    // Rebuilt for the machine chosen in its switch, so the library is that machine's.
+    return () => h(WorkflowsNavPanel, { key: workflowsMachine.key.value });
+  },
+});
+
 // The icon rail reads these inside a computed, after its own setup has already asked for both features
 // (which starts loading the preferences), so asking again here only reads.
 const boardOff = () => !useBoardFeature().isBoardFeatureEnabled.value;
@@ -63,7 +73,7 @@ railPoint.contribute("core", [
   // Board leaves the rail while it's switched off. Workflows stays, dimmed; with either off, the page's "turn it on"
   // notice fills the whole context area (noPanel), so no other view's panel sits beside it.
   { id: "board", label: "Board", icon: LayoutGrid, to: "/board", placement: "top", order: 10, panel: BoardControlsPanel, hidden: boardOff, noPanel: boardOff },
-  { id: "workflows", label: "Workflows", icon: Workflow, to: "/workflows", placement: "top", order: 20, panel: WorkflowsNavPanel, off: workflowsOff, noPanel: workflowsOff },
+  { id: "workflows", label: "Workflows", icon: Workflow, to: "/workflows", placement: "top", order: 20, panel: WorkflowsContextPanel, off: workflowsOff, noPanel: workflowsOff },
   // Jobs owns its context: the jobs-list (Running, Queued, Done) beside the selected job. It leaves the rail while it's
   // switched off, like Board.
   { id: "jobs", label: "Jobs", icon: ListTodo, to: "/jobs", placement: "top", order: 25, panel: JobsNavPanel, hidden: jobsOff },
