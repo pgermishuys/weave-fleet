@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import { computed, nextTick, watch } from "vue";
 import MachineScope from "@/components/layout/MachineScope.vue";
+import { Button } from "@/components/ui/button";
 import AppearanceSection from "@/components/settings/AppearanceSection.vue";
 import CredentialsSection from "@/components/settings/CredentialsSection.vue";
 import GeneralSection from "@/components/settings/GeneralSection.vue";
@@ -123,13 +124,23 @@ watch(
         class="settings-machine-pane grid grid-cols-1 gap-6"
         data-testid="settings-machine-pane"
       >
-        <p
+        <div
           v-if="comesLater"
-          class="rounded-btn border border-border px-4 py-3 text-sm text-muted"
+          class="flex flex-wrap items-center gap-3 rounded-btn border border-border px-4 py-3 text-sm text-muted"
           data-testid="settings-machine-later"
         >
-          {{ header.title }} on <span class="font-mono font-semibold text-[var(--coral)]">{{ settingsMachine.entry.value.name }}</span> comes in a later step. Pick the machine you're working in to change it.
-        </p>
+          <span>
+            {{ header.title }} on <span class="font-mono font-semibold text-[var(--coral)]">{{ settingsMachine.entry.value.name }}</span> comes in a later step.
+          </span>
+          <Button
+            variant="outline"
+            size="sm"
+            data-testid="settings-machine-show-live"
+            @click="settingsMachine.pick(machines.liveKey)"
+          >
+            Show {{ machines.live.name }}'s {{ header.title }}
+          </Button>
+        </div>
 
       <GeneralSection v-else-if="activeSection === 'general'" />
 

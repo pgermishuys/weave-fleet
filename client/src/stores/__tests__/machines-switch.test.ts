@@ -1,3 +1,4 @@
+import { nextTick } from "vue";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { createPinia, setActivePinia } from "pinia";
 import {
@@ -11,6 +12,22 @@ import {
 } from "@/lib/machines";
 import { useMachinesStore } from "@/stores/machines";
 import { usePreferencesStore } from "@/stores/preferences";
+
+const { feedHubFor, hubs } = vi.hoisted(() => {
+  const hubs: { key: string; start: ReturnType<typeof vi.fn>; stop: ReturnType<typeof vi.fn> }[] = [];
+  return {
+    hubs,
+    feedHubFor: vi.fn((target: { key: string }) => {
+      const hub = { key: target.key, start: vi.fn(async () => {}), stop: vi.fn(async () => {}) };
+      hubs.push(hub);
+      return hub;
+    }),
+  };
+});
+vi.mock("@/composables/use-signalr-socket", async (original) => ({
+  ...await original<typeof import("@/composables/use-signalr-socket")>(),
+  feedHubFor,
+}));
 
 /**
  * "Switch machines without reloading" (Settings → Labs): another machine's session opens in place like with
@@ -93,5 +110,33 @@ describe("switching machines without reloading", () => {
     expect(store.targetOfKey(mini.id)).toMatchObject({ key: mini.id, isLive: false, connection: mini });
     expect(store.targetOfKey(HOME_MACHINE_KEY)).toMatchObject({ key: HOME_MACHINE_KEY, isLive: true });
     expect(store.targetOfKey("dddddddddddddddddddddddddddddddd")).toMatchObject({ isLive: true });
+  });
+
+  it("holds each other machine's event hub open and idle while it's on, and lets go when it's off", async () => {
+    hubs.length = 0;
+    feedHubFor.mockClear();
+    const store = useMachinesStore();
+    setPreferences({ [MACHINE_SWITCH_PREFERENCE_KEY]: "true" });
+    const stop = store.startPolling();
+    await nextTick();
+
+    expect(hubs.map((hub) => hub.key)).toEqual([mini.id]);
+    expect(hubs[0].start).toHaveBeenCalledTimes(1);
+
+    setPreferences({ [MACHINE_SWITCH_PREFERENCE_KEY]: "false" });
+    await nextTick();
+    expect(hubs[0].stop).toHaveBeenCalledTimes(1);
+    stop();
+  });
+
+  it("holds no hub of its own with live feeds on: the feeds hold them", async () => {
+    hubs.length = 0;
+    const store = useMachinesStore();
+    setPreferences({ [MACHINE_SWITCH_PREFERENCE_KEY]: "true", [LIVE_MACHINES_PREFERENCE_KEY]: "true" });
+    const stop = store.startPolling();
+    await nextTick();
+
+    expect(hubs).toHaveLength(0);
+    stop();
   });
 });

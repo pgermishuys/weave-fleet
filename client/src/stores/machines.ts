@@ -912,6 +912,34 @@ export const useMachinesStore = defineStore("machines", () => {
     return pollers > 0 && liveFeeds.value && !feedsAway;
   }
 
+  /**
+   * With "Switch machines without reloading" on and live feeds off, each listed machine's event hub is held open and
+   * idle (no feed reads, the list still polls), so opening one of its sessions finds the connection ready instead of
+   * negotiating it, and leaving the session doesn't close it. They follow the same away rule as the feeds.
+   */
+  const holds = new Map<string, { hub: ReturnType<typeof feedHubFor>; baseUrl: string; token: string | null }>();
+
+  function holdsWanted(): boolean {
+    return pollers > 0 && machineSwitch.value && !liveFeeds.value && !feedsAway;
+  }
+
+  function syncHolds(): void {
+    const wanted = holdsWanted() ? entries.value.filter((entry) => !entry.isLive) : [];
+    for (const [key, held] of holds) {
+      const entry = wanted.find((candidate) => candidate.key === key);
+      if (entry && entry.baseUrl === held.baseUrl && (entry.connection?.token ?? null) === held.token) continue;
+      holds.delete(key);
+      void held.hub.stop();
+    }
+    for (const entry of wanted) {
+      if (holds.has(entry.key)) continue;
+      const held = { hub: feedHubFor(targetFor(entry.connection)), baseUrl: entry.baseUrl, token: entry.connection?.token ?? null };
+      holds.set(entry.key, held);
+      // A machine that won't connect is polled as before; the next change of the list tries again.
+      held.hub.start().catch(() => { if (holds.get(entry.key) === held) holds.delete(entry.key); });
+    }
+  }
+
   function openFeed(entry: MachineEntry): void {
     const { key } = entry;
     const token = entry.connection?.token ?? null;
@@ -952,6 +980,7 @@ export const useMachinesStore = defineStore("machines", () => {
       void open.feed.stop();
     }
     for (const entry of wanted) if (!feeds.has(entry.key)) openFeed(entry);
+    syncHolds();
   }
 
   function onVisibility(): void {
@@ -989,7 +1018,7 @@ export const useMachinesStore = defineStore("machines", () => {
         if (!liveFeeds.value) void refreshOthers();
       }, POLL_INTERVAL_MS);
       // Feeds follow the switch and the machine list: added, forgotten, or a new address or token.
-      stopFeedWatch = watch([liveFeeds, entries], ([on], previous) => {
+      stopFeedWatch = watch([liveFeeds, machineSwitch, entries], ([on], previous) => {
         syncFeeds();
         if (previous?.[0] && !on) void refreshOthers();
       }, { immediate: true });
