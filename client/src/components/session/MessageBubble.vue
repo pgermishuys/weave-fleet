@@ -66,7 +66,13 @@ const now = useRelativeTime();
 const relativeTime = computed(() => props.createdAt ? formatRelativeTime(props.createdAt, now.value) : "");
 const absoluteTime = computed(() => formatAbsoluteTimestamp(props.createdAt));
 // Only the agent's replies say which model wrote them; yours are yours.
-const showModel = computed(() => props.role === "assistant" && Boolean(props.modelName));
+/** The pill hangs 20px below the message, but the messages of one cluster sit 6px apart: on an agent message that
+ *  another follows closely it would land on that message's first line, so only the one ending the group carries it. */
+const showMeta = computed(
+  () => props.role === "user" || props.clusterPosition === "single" || props.clusterPosition === "last",
+);
+
+const showModel =computed(() => props.role === "assistant" && Boolean(props.modelName));
 
 // ── Question answer handler (only created when there are question parts) ──
 const questionAnswer = props.sessionId ? useQuestionAnswer(props.sessionId) : null;
@@ -329,7 +335,7 @@ function handleExpandVisual(payload: VisualPayload): void {
         </div>
       </div>
 
-      <TooltipProvider v-if="createdAt">
+      <TooltipProvider v-if="createdAt && showMeta">
         <Tooltip>
           <TooltipTrigger as-child>
             <span class="msg-meta">
