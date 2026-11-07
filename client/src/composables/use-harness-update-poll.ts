@@ -1,6 +1,7 @@
 import { computed, onBeforeUnmount, watch, type Ref } from "vue";
 import type { HarnessInfo } from "@/api/client";
 import { refreshAllHarnesses } from "@/composables/use-harnesses";
+import { useMachineTarget } from "@/lib/machine-target";
 
 /** How often Fleet checks on a harness update that waits or runs. */
 export const HARNESS_UPDATE_POLL_MS = 2000;
@@ -10,13 +11,14 @@ export const HARNESS_UPDATE_POLL_MS = 2000;
  * Harnesses, its row on Updates & about) follows the update to its end.
  */
 export function useHarnessUpdatePoll(harnesses: Readonly<Ref<readonly HarnessInfo[]>>): void {
+  const target = useMachineTarget();
   let poll: ReturnType<typeof setInterval> | undefined;
   const isUpdating = computed(() =>
     harnesses.value.some((harness) => harness.update?.job?.phase === "waiting" || harness.update?.job?.phase === "running"));
 
   watch(isUpdating, (updating) => {
     if (updating && poll === undefined) {
-      poll = setInterval(refreshAllHarnesses, HARNESS_UPDATE_POLL_MS);
+      poll = setInterval(() => refreshAllHarnesses(target), HARNESS_UPDATE_POLL_MS);
     } else if (!updating && poll !== undefined) {
       clearInterval(poll);
       poll = undefined;

@@ -2,12 +2,13 @@
 import { computed, onMounted, reactive, shallowRef, watch } from "vue";
 import { storeToRefs } from "pinia";
 import { AlertCircle, Check, LoaderCircle } from "lucide-vue-next";
+import { useMachineTarget } from "@/lib/machine-target";
 import { useWorktreeNamingStore } from "@/stores/worktree-naming";
 import { resolveWorktreeName, type WorktreeNamingTemplates } from "@/lib/worktree-naming";
 
 const inputClass = "w-full rounded-btn border border-border bg-main-bg px-3 py-2 font-mono text-[12.5px] text-text outline-none transition-colors placeholder:text-muted focus:border-accent disabled:cursor-not-allowed disabled:opacity-60";
 
-const store = useWorktreeNamingStore();
+const store = useWorktreeNamingStore(useMachineTarget());
 const { user, defaults, isSaving, error } = storeToRefs(store);
 
 /** What the fields hold, which is the user's own layer — not the effective templates. */

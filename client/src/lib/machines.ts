@@ -203,7 +203,14 @@ export const HOME_MACHINE_KEY = "home";
 export const LIVE_MACHINES_PREFERENCE_KEY = "LiveMachines";
 
 /**
- * Whether "Keep every machine live" was on when this browser last read the preferences. Startup decides the live
+ * The user preference behind "Switch machines without reloading" in Settings → Labs: another machine's session opens
+ * in place, and Settings follows the machine you're on. Unlike "Keep every machine live" it opens no live feeds.
+ */
+export const MACHINE_SWITCH_PREFERENCE_KEY = "MachineSwitch";
+
+/**
+ * Whether another machine's session opened in place when this browser last read the preferences: "Keep every machine
+ * live" or "Switch machines without reloading" was on. Startup decides the live
  * machine before any request, so it goes by this; a browser that hasn't read them yet starts as with the switch off.
  */
 export function loadLiveMachinesHint(): boolean {

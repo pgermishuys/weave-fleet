@@ -4,7 +4,7 @@ import StorageSection from "@/components/settings/StorageSection.vue";
 import { forgetStorageSizes } from "@/lib/storage-size-cache";
 
 const { GET, POST } = vi.hoisted(() => ({ GET: vi.fn(), POST: vi.fn() }));
-vi.mock("@/lib/machine-target", () => ({ liveTarget: () => ({ key: "home", api: { GET, POST } }) }));
+vi.mock("@/lib/machine-target", () => ({ useMachineTarget: () => ({ key: "home", api: { GET, POST } }) }));
 
 const checkout = (id: string, repository: string, title: string, verdict: string, reason: string) => ({
   workspaceId: id, sessionId: `s-${id}`, title, repository, directory: `/w/${id}`, branch: `fleet/${id}`, verdict, reason, unpushedCommits: null, archivedAt: null,

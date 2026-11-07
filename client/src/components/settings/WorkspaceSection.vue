@@ -2,9 +2,12 @@
 import type { WorkspaceRootItem, WorkspaceRootsResponse } from "@/api/client";
 import { onMounted, ref, shallowRef } from "vue";
 import { AlertCircle, Folder, FolderGit2, LoaderCircle, Plus, RefreshCw, Trash2 } from "lucide-vue-next";
-import { api } from "@/api/client";
 import DirectoryPickerPopover from "@/components/ui/DirectoryPickerPopover.vue";
 import { useDirectoryBrowser } from "@/composables/use-directory-browser";
+import { useMachineTarget } from "@/lib/machine-target";
+
+// The machine Settings shows (Folders can be another machine's).
+const { api } = useMachineTarget();
 
 const buttonPrimaryClass = "inline-flex items-center justify-center gap-2 rounded-btn bg-primary px-3 py-1.5 text-sm font-medium text-white transition-opacity hover:opacity-90 disabled:cursor-not-allowed disabled:opacity-60";
 const buttonSecondaryClass = "inline-flex items-center justify-center gap-2 rounded-btn border border-border bg-main-bg px-3 py-1.5 text-sm font-medium text-text transition-colors hover:border-accent/50 disabled:cursor-not-allowed disabled:opacity-60";

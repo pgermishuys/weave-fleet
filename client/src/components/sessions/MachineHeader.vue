@@ -20,6 +20,8 @@ const props = withDefaults(defineProps<{
   name: string;
   /** The machine the app is working in. */
   live?: boolean;
+  /** Shows the Live badge: the machine you're on, which with "Switch machines without reloading" is the open session's. Defaults to `live`. */
+  current?: boolean;
   /** Can't be reached right now; its rows are the last ones it returned. */
   unreachable?: boolean;
   /** Short note on the right: "4s ago", "unreachable". */
@@ -31,10 +33,11 @@ const props = withDefaults(defineProps<{
   count?: number | null;
   /** Right-click offers New session (and Work here on a machine that isn't live). */
   menu?: boolean;
-}>(), { live: false, unreachable: false, note: null, why: null, expanded: null, count: null, menu: false });
+}>(), { live: false, current: undefined, unreachable: false, note: null, why: null, expanded: null, count: null, menu: false });
 
 const emit = defineEmits<{ toggle: []; newSession: []; workHere: [] }>();
 
+const showBadge = computed(() => props.current ?? props.live);
 const tag = computed(() => (props.expanded === null || props.expanded === undefined ? "div" : "button"));
 </script>
 
@@ -55,6 +58,7 @@ const tag = computed(() => (props.expanded === null || props.expanded === undefi
         :aria-expanded="tag === 'button' ? expanded : undefined"
         data-testid="machine-header"
         :data-machine-live="live ? 'true' : undefined"
+        :data-machine-current="showBadge ? 'true' : undefined"
         @click="tag === 'button' && emit('toggle')"
       >
         <ChevronDown
@@ -69,7 +73,7 @@ const tag = computed(() => (props.expanded === null || props.expanded === undefi
         />
         <span class="machine-header__name">{{ name }}</span>
         <span
-          v-if="live"
+          v-if="showBadge"
           class="machine-header__live"
           title="The machine you're working in"
         >Live</span>

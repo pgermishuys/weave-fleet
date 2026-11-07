@@ -104,6 +104,7 @@ const why = computed(() => (unreachable.value ? machines.diagnoses[props.machine
   >
     <MachineHeader
       :name="machine.name"
+      :current="machine.key === machines.currentKey"
       :unreachable="unreachable"
       :note="note"
       :why="why"

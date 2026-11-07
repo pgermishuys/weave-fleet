@@ -2,6 +2,8 @@
 import type { Component } from "vue";
 import { computed, onMounted, shallowRef } from "vue";
 import { Cable, ChevronDown, FlaskConical, FolderGit2, Lightbulb, Palette, Puzzle, RefreshCw, Server, ShieldCheck, SlidersHorizontal, Wrench, Settings2 } from "lucide-vue-next";
+import SettingsMachineSwitch from "@/components/settings/SettingsMachineSwitch.vue";
+import { useSettingsMachine } from "@/composables/use-settings-machine";
 import { useFleetUpdatesWatch } from "@/composables/use-fleet-updates";
 import type { SettingsSectionId } from "@/composables/use-settings-nav";
 import { useUpdateStatus } from "@/composables/use-update-status";
@@ -36,6 +38,7 @@ interface SettingsNavGroup {
 const props = defineProps<Props>();
 const emit = defineEmits<Emits>();
 
+const settingsMachine = useSettingsMachine();
 const { isUpdateAvailable, isUpdateStaged } = useUpdateStatus();
 
 const showUpdateDot = computed(() => isUpdateAvailable.value || isUpdateStaged.value);
@@ -128,6 +131,13 @@ function selectSection(sectionId: SettingsSectionId): void {
       <p class="panel-header">
         Settings
       </p>
+      <!-- With "Switch machines without reloading" on: which machine the pages on the right show. -->
+      <div
+        v-if="settingsMachine.enabled.value"
+        class="panel-machine"
+      >
+        <SettingsMachineSwitch />
+      </div>
     </div>
 
     <nav
@@ -236,6 +246,10 @@ function selectSection(sectionId: SettingsSectionId): void {
 
 .panel-header-row {
   padding-top: 4px;
+}
+
+.panel-machine {
+  padding: 0 12px 6px;
 }
 
 .panel-header {

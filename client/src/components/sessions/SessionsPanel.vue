@@ -686,6 +686,7 @@ function handleCompleteDropZoneDrop(event: DragEvent): void {
             v-if="showMachines"
             :name="machine.name"
             live
+            :current="machine.key === machines.currentKey"
             :unreachable="!machines.liveReachable"
             :note="machines.liveReachable ? null : 'unreachable'"
             :count="liveSessionCount"

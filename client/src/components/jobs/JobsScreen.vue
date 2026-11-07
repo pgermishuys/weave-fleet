@@ -43,7 +43,8 @@ function openSession(job: Job): void {
   if (!job.sessionId) return;
   const machine = store.machines.find((candidate) => candidate.id === job.machineId);
   const key = machine && !machine.isLocal ? machine.id : HOME_MACHINE_KEY;
-  if (key === machinesStore.liveKey) {
+  if (key === machinesStore.liveKey || machinesStore.opensInPlace) {
+    machinesStore.rememberSessions(key, [job.sessionId]);
     void router.navigate({ to: "/sessions/$id", params: { id: job.sessionId }, search: { instanceId: undefined, parentSessionId: undefined } });
     return;
   }

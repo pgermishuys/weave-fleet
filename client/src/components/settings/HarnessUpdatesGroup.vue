@@ -7,7 +7,8 @@ import SettingRow from "@/components/settings/SettingRow.vue";
 import SettingSwitch from "@/components/settings/SettingSwitch.vue";
 import { Button } from "@/components/ui/button";
 import { useHarnessUpdatePoll } from "@/composables/use-harness-update-poll";
-import { refreshAllHarnesses, useHarnesses } from "@/composables/use-harnesses";
+import { useHarnesses } from "@/composables/use-harnesses";
+import { useMachineTarget } from "@/lib/machine-target";
 import { usePreferencesStore } from "@/stores/preferences";
 import type { HarnessInfo } from "@/api/client";
 
@@ -15,7 +16,7 @@ import type { HarnessInfo } from "@/api/client";
  * Updates & about › Harnesses: the Check for updates switch and, for each harness Fleet found, its version with the
  * update it can run. Each harness's tab in Settings → Harnesses still shows its version in its header.
  */
-const prefsStore = usePreferencesStore();
+const prefsStore = usePreferencesStore(useMachineTarget());
 const { harnesses, isLoading, refresh } = useHarnesses();
 
 /** Off stops Fleet looking up harnesses' latest versions on npm (`HarnessEndpoints.UpdateChecksPreference`). */
@@ -24,7 +25,7 @@ const areUpdateChecksOn = computed(() => prefsStore.get(UPDATE_CHECKS_PREFERENCE
 
 async function toggleUpdateChecks(): Promise<void> {
   await prefsStore.set(UPDATE_CHECKS_PREFERENCE_KEY, areUpdateChecksOn.value ? "false" : "true");
-  refreshAllHarnesses();
+  void refresh();
 }
 
 function isEnabled(harness: HarnessInfo): boolean {

@@ -9,6 +9,7 @@ import { PERMISSION_LEVEL_NAMES, toPermissionLevel } from "@/lib/permissions";
 import {
   HOME_MACHINE_KEY,
   LIVE_MACHINES_PREFERENCE_KEY,
+  MACHINE_SWITCH_PREFERENCE_KEY,
   fetchOnMachine,
   getActiveMachine,
   loadLiveMachinesHint,
@@ -900,14 +901,16 @@ export const useMachinesStore = defineStore("machines", () => {
   const sessionsStore = useSessionsStore();
   /** Settings → Labs: every machine that isn't live keeps a live feed, instead of being polled. */
   const liveFeeds = computed(() => preferences.get(LIVE_MACHINES_PREFERENCE_KEY, "false") === "true");
+  /** Settings → Labs: another machine's session opens in place, without live feeds (the other machines keep their poll). */
+  const machineSwitch = computed(() => preferences.get(MACHINE_SWITCH_PREFERENCE_KEY, "false") === "true");
   /**
    * The same switch opens another machine's session in place, without a reload. Until the preferences load it's as
    * this page started (see `restoreActiveMachine`), so a link to such a session opens where startup put it.
    */
   const startedInPlace = loadLiveMachinesHint();
-  const opensInPlace = computed(() => (preferences.hasFetched ? liveFeeds.value : startedInPlace));
+  const opensInPlace = computed(() => (preferences.hasFetched ? liveFeeds.value || machineSwitch.value : startedInPlace));
   watch(
-    () => [preferences.hasFetched, liveFeeds.value] as const,
+    () => [preferences.hasFetched, liveFeeds.value || machineSwitch.value] as const,
     ([fetched, on]) => {
       if (fetched) saveLiveMachinesHint(on);
     },
@@ -921,6 +924,34 @@ export const useMachinesStore = defineStore("machines", () => {
 
   function feedsWanted(): boolean {
     return pollers > 0 && liveFeeds.value && !feedsAway;
+  }
+
+  /**
+   * With "Switch machines without reloading" on and live feeds off, each listed machine's event hub is held open and
+   * idle (no feed reads, the list still polls), so opening one of its sessions finds the connection ready instead of
+   * negotiating it, and leaving the session doesn't close it. They follow the same away rule as the feeds.
+   */
+  const holds = new Map<string, { hub: ReturnType<typeof feedHubFor>; baseUrl: string; token: string | null }>();
+
+  function holdsWanted(): boolean {
+    return pollers > 0 && machineSwitch.value && !liveFeeds.value && !feedsAway;
+  }
+
+  function syncHolds(): void {
+    const wanted = holdsWanted() ? entries.value.filter((entry) => !entry.isLive) : [];
+    for (const [key, held] of holds) {
+      const entry = wanted.find((candidate) => candidate.key === key);
+      if (entry && entry.baseUrl === held.baseUrl && (entry.connection?.token ?? null) === held.token) continue;
+      holds.delete(key);
+      void held.hub.stop();
+    }
+    for (const entry of wanted) {
+      if (holds.has(entry.key)) continue;
+      const held = { hub: feedHubFor(targetFor(entry.connection)), baseUrl: entry.baseUrl, token: entry.connection?.token ?? null };
+      holds.set(entry.key, held);
+      // A machine that won't connect is polled as before; the next change of the list tries again.
+      held.hub.start().catch(() => { if (holds.get(entry.key) === held) holds.delete(entry.key); });
+    }
   }
 
   function openFeed(entry: MachineEntry): void {
@@ -963,6 +994,7 @@ export const useMachinesStore = defineStore("machines", () => {
       void open.feed.stop();
     }
     for (const entry of wanted) if (!feeds.has(entry.key)) openFeed(entry);
+    syncHolds();
   }
 
   function onVisibility(): void {
@@ -1000,7 +1032,7 @@ export const useMachinesStore = defineStore("machines", () => {
         if (!liveFeeds.value) void refreshOthers();
       }, POLL_INTERVAL_MS);
       // Feeds follow the switch and the machine list: added, forgotten, or a new address or token.
-      stopFeedWatch = watch([liveFeeds, entries], ([on], previous) => {
+      stopFeedWatch = watch([liveFeeds, machineSwitch, entries], ([on], previous) => {
         syncFeeds();
         if (previous?.[0] && !on) void refreshOthers();
       }, { immediate: true });
@@ -1045,6 +1077,21 @@ export const useMachinesStore = defineStore("machines", () => {
   }
 
   /**
+   * The machine of the session open now, or of the last one that was: the machine you're on, and the one Settings
+   * opens on. Only moves with "Switch machines without reloading" (or live feeds) on; otherwise it's the live machine.
+   */
+  const currentOpened = shallowRef<string | null>(null);
+  const currentKey = computed(() => {
+    const key = currentOpened.value;
+    return opensInPlace.value && key && entries.value.some((entry) => entry.key === key) ? key : liveKey;
+  });
+  const current = computed(() => entries.value.find((entry) => entry.key === currentKey.value) ?? live.value);
+
+  function setCurrent(key: string): void {
+    currentOpened.value = key;
+  }
+
+  /**
    * The machine a session's views ask: with the switch on, the machine it's on, as far as this page knows (a session
    * opened or started here in place, or one any machine's list had); otherwise, and for a session on no machine
    * listed here, the live one.
@@ -1053,7 +1100,12 @@ export const useMachinesStore = defineStore("machines", () => {
     const key = sessionId && opensInPlace.value
       ? sessionsStore.elsewhere.get(sessionId)?.machineKey ?? sessionMachines.value[sessionId]
       : undefined;
-    if (!key || key === liveKey) return liveTarget();
+    return key ? targetOfKey(key) : liveTarget();
+  }
+
+  /** The machine listed under `key` as a target; the live one for a key that isn't listed here. */
+  function targetOfKey(key: string): MachineTarget {
+    if (key === liveKey) return liveTarget();
     const connection = connectionFor(key);
     return key === HOME_MACHINE_KEY || connection ? targetFor(connection) : liveTarget();
   }
@@ -1118,8 +1170,12 @@ export const useMachinesStore = defineStore("machines", () => {
     setAgentWork,
     reorderAddresses,
     opensInPlace,
+    currentKey,
+    current,
+    setCurrent,
     isAnswering,
     sessionTarget,
+    targetOfKey,
     openOn,
   };
 });

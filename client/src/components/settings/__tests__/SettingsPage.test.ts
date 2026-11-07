@@ -1,7 +1,11 @@
-import { flushPromises, mount } from "@vue/test-utils";
-import { createPinia, setActivePinia } from "pinia";
+import { config, flushPromises, mount } from "@vue/test-utils";
+import { createPinia, getActivePinia, setActivePinia } from "pinia";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { defineComponent, h } from "vue";
+import { MACHINE_SWITCH_PREFERENCE_KEY, saveMachines, setActiveMachine } from "@/lib/machines";
+import { resetSettingsMachine, useSettingsMachine } from "@/composables/use-settings-machine";
+import { useMachinesStore } from "@/stores/machines";
+import { usePreferencesStore } from "@/stores/preferences";
 import SettingsPage from "@/components/settings/SettingsPage.vue";
 import { useSettingsNav, type SettingsSectionId } from "@/composables/use-settings-nav";
 
@@ -67,6 +71,27 @@ describe("SettingsPage", () => {
 
     expect(scrollIntoView).not.toHaveBeenCalled();
     expect(useSettingsNav().activeAnchor.value).toBe("not-there-yet");
+    wrapper.unmount();
+  });
+
+  it("names the machine on a page that comes later and offers the live machine's page", async () => {
+    const falcon = { id: "ffffffffffffffffffffffffffffffff", name: "falcon", baseUrl: "http://falcon.example.test:2113", token: "falcon-token-0123456789", os: "linux", addedAt: "2026-11-07T00:00:00.000Z" };
+    config.global.plugins = [getActivePinia()!];
+    localStorage.clear();
+    setActiveMachine(null);
+    saveMachines([falcon]);
+    vi.stubGlobal("fetch", vi.fn(async () => Response.json([])));
+    const preferences = usePreferencesStore();
+    preferences.hasFetched = true;
+    preferences.preferences = { [MACHINE_SWITCH_PREFERENCE_KEY]: "true" };
+    useMachinesStore().setCurrent(falcon.id);
+    resetSettingsMachine();
+    const wrapper = await mountAt("general", null);
+
+    expect(wrapper.get("[data-testid='settings-machine-later']").text()).toContain("General on falcon comes in a later step.");
+    await wrapper.get("[data-testid='settings-machine-show-live']").trigger("click");
+    expect(useSettingsMachine().key.value).toBe("home");
+    expect(wrapper.find("[data-testid='settings-machine-later']").exists()).toBe(false);
     wrapper.unmount();
   });
 });

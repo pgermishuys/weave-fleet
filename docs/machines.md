@@ -257,6 +257,20 @@ systemctl --user enable --now fleet.service
 loginctl enable-linger "$USER"   # keep it running when you're logged out
 ```
 
+## Switching machines without a reload (Labs)
+
+Turn on **Switch machines without reloading** in Settings → Labs. Opening a session on another machine then keeps the
+page where it is: no blank window, the conversation shows in a fraction of a second, and the **Live** badge in the
+sessions list moves to that machine. The machine you're on is the machine of the session you have open.
+
+- **Settings opens on the machine you're on.** A machine switch at the top of the settings menu ("Settings for") lists
+  every machine with its session count; picking one changes only the pages on the right. Appearance and Machines are
+  marked **This browser**, because they belong to this browser, not to a machine.
+- **Folders and Harnesses ask the machine shown.** Every other page says it comes in a later step while another
+  machine is shown, rather than showing the live machine's settings as that machine's.
+- Other machines are still checked every 15 seconds; turn on **Keep every machine live** as well for live updates.
+- **Work here** and Settings → Machines › Open still reload the page onto that machine.
+
 ## Updating your machines
 
 Every Fleet downloads a new release by itself and switches to it when it restarts. With updates in Machines on,

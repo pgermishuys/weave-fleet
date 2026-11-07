@@ -6,6 +6,7 @@ import { Button } from "@/components/ui/button";
 import ProfileConfigEditor from "@/components/settings/ProfileConfigEditor.vue";
 import { splitCode } from "@/lib/harness-display";
 import { NEW_PROFILE_CONTENT, parseJsonc } from "@/lib/harness-profile";
+import { useMachineTarget } from "@/lib/machine-target";
 import { useHarnessProfilesStore } from "@/stores/harness-profiles";
 
 /** Edits one profile, or makes a new one when `profile` is null. Saving asks the harness to load it first. */
@@ -25,7 +26,7 @@ const emit = defineEmits<{
   duplicate: [seed: { name: string; content: string }];
 }>();
 
-const store = useHarnessProfilesStore();
+const store = useHarnessProfilesStore(useMachineTarget());
 const name = shallowRef(props.profile?.name ?? props.seed?.name ?? "");
 const content = shallowRef(props.profile?.content ?? props.seed?.content ?? NEW_PROFILE_CONTENT);
 const busy = shallowRef<"test" | "save" | "delete" | null>(null);

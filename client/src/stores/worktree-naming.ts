@@ -1,7 +1,6 @@
 import { computed, ref, shallowRef } from "vue";
-import { defineStore } from "pinia";
 import type { MachineTarget } from "@/lib/machine-target";
-import { api } from "@/api/client";
+import { defineMachineStore } from "@/lib/machine-store";
 import { extractApiError } from "@/lib/api-error";
 import {
   defaultWorktreeNaming,
@@ -22,7 +21,7 @@ export interface WorktreeNamingLayerTemplates {
  * The worktree naming templates in force, per repository. The server resolves them for real; this
  * is what Settings edits and what the composer previews with.
  */
-export const useWorktreeNamingStore = defineStore("worktree-naming", () => {
+export const useWorktreeNamingStore = defineMachineStore("worktree-naming", (storeTarget) => {
   const effective = ref<WorktreeNamingTemplates>({ ...defaultWorktreeNaming });
   const user = ref<WorktreeNamingLayerTemplates>({});
   const defaults = ref<WorktreeNamingTemplates>({ ...defaultWorktreeNaming });
@@ -68,7 +67,7 @@ export const useWorktreeNamingStore = defineStore("worktree-naming", () => {
     error.value = null;
 
     try {
-      const { data, error: apiError } = await (target?.api ?? api).GET("/api/worktrees/naming", {
+      const { data, error: apiError } = await (target?.api ?? storeTarget.api).GET("/api/worktrees/naming", {
         params: { query: directory ? { directory } : {} },
       });
 
@@ -95,7 +94,7 @@ export const useWorktreeNamingStore = defineStore("worktree-naming", () => {
     error.value = null;
 
     try {
-      const { data, error: apiError } = await api.PUT("/api/worktrees/naming", {
+      const { data, error: apiError } = await storeTarget.api.PUT("/api/worktrees/naming", {
         body: {
           branch: layer.branch ?? null,
           root: layer.root ?? null,

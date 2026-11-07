@@ -21,6 +21,7 @@ import { useHarnessPermissions } from "@/composables/use-harness-permissions";
 import { forgetHarnessCatalogs } from "@/composables/use-harness-catalog";
 import { useHarnessUpdatePoll } from "@/composables/use-harness-update-poll";
 import { refreshAllHarnesses, useHarnesses } from "@/composables/use-harnesses";
+import { useMachineTarget } from "@/lib/machine-target";
 import { useAppShellStore } from "@/stores/app-shell";
 import { useHarnessSetupStore } from "@/stores/harness-setup";
 import { usePreferencesStore } from "@/stores/preferences";
@@ -64,7 +65,8 @@ interface HarnessCard {
   supportsBrowser: boolean;
 }
 
-const prefsStore = usePreferencesStore();
+const target = useMachineTarget();
+const prefsStore = usePreferencesStore(target);
 const harnessSetup = useHarnessSetupStore();
 const { config } = storeToRefs(useAppShellStore());
 const { harnesses: registeredHarnesses, isLoading: isCheckingHarnesses, refresh: checkHarnessesAgain } = useHarnesses();
@@ -193,8 +195,8 @@ async function toggleSetting(setting: HarnessSetting): Promise<void> {
   try {
     await prefsStore.set(setting.key, isSettingOn(setting) ? "false" : "true");
     // GitHub Copilot's HydraFusion switch changes the models it offers: the composer asks again at once.
-    if (setting.key.startsWith("copilot.")) forgetHarnessCatalogs("copilot");
-    refreshAllHarnesses();
+    if (setting.key.startsWith("copilot.")) forgetHarnessCatalogs("copilot", target);
+    refreshAllHarnesses(target);
   } catch (error) {
     settingError.value = {
       key: setting.key,
@@ -291,7 +293,7 @@ function statusForHarness(harness: HarnessInfo, enabled: boolean): HarnessStatus
               </option>
             </select>
             <Button
-              v-if="!config.cloudMode"
+              v-if="!config.cloudMode && target.isLive"
               variant="outline"
               size="sm"
               data-testid="harnesses-set-up"
