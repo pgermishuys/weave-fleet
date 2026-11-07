@@ -12,6 +12,12 @@ export const MEMORY_SAVED = "memory.saved";
 /** How long the notice for a saved note offers Undo. */
 export const MEMORY_UNDO_MS = 6000;
 
+/** The server's preference for "Search older notes" (Settings → Labs). It needs Memory on too. */
+export const MEMORY_SEARCH_PREFERENCE_KEY = "MemorySearch";
+
+/** The server's preference for Memory itself. */
+export const MEMORY_PREFERENCE_KEY = "Memory";
+
 export type MemoryListName = "repository" | "machine";
 
 /** learned: the agent found it out. from-you: the user asked, corrected or stated a preference. added: written in Settings. */
@@ -37,6 +43,14 @@ export interface MemoryNote {
   relearned?: number;
   /** How the agent knew a learned note holds (what it ran or saw); none when it hadn't checked. */
   how?: string | null;
+  /** With "Search older notes" on: the note is kept for search instead of read by every session. */
+  inSearch?: boolean;
+  /** Pinned to "Always read": Fleet never moves it to search by itself. */
+  pinned?: boolean;
+  /** How many times a search returned the note. */
+  found?: number;
+  /** When a search last returned it. */
+  lastFound?: string | null;
 }
 
 export interface MemoryRepository {
@@ -51,6 +65,12 @@ export interface MemoryOverview {
   machineCount: number;
   maxRepositoryNotes: number;
   maxMachineNotes: number;
+  /** "Search older notes" is on: notes fall into a short list every session reads, and the rest, found by search. */
+  searchEnabled?: boolean;
+  maxAlwaysRepositoryNotes?: number;
+  maxAlwaysMachineNotes?: number;
+  maxSearchRepositoryNotes?: number;
+  maxSearchMachineNotes?: number;
 }
 
 export interface MemoryNotes {
@@ -115,6 +135,25 @@ export function updateMemoryNote(id: string, text: string): Promise<MemoryNote> 
 /** A learned note that should never expire, or an expired one brought back for good. */
 export function keepMemoryNote(id: string): Promise<MemoryNote> {
   return send(`${MEMORY_PATH}/notes/${encodeURIComponent(id)}/keep`, "Couldn't keep the note.", { method: "POST" });
+}
+
+/** With "Search older notes" on: moves a note to search, or pins it to "Always read" (Fleet then never moves it down itself). */
+export function moveMemoryNote(id: string, group: "search" | "always"): Promise<MemoryNote> {
+  return send(`${MEMORY_PATH}/notes/${encodeURIComponent(id)}/place`, "Couldn't move the note.", { method: "POST", body: JSON.stringify({ group }) });
+}
+
+/** Roughly what one note adds to each request: its text and id at four characters a token. */
+export function estimateNoteTokens(note: Pick<MemoryNote, "text">): number {
+  return Math.ceil((note.text.length + 30) / 4);
+}
+
+/** The "found" line of a note kept for search or read by every session, or null when search has never returned it. */
+export function memoryFoundLabel(note: Pick<MemoryNote, "found" | "lastFound">): string | null {
+  if (!note.found) return null;
+  const times = `found ${note.found} ${note.found === 1 ? "time" : "times"}`;
+  if (!note.lastFound) return times;
+  const date = new Date(note.lastFound).toLocaleDateString(undefined, { day: "numeric", month: "short", year: "numeric" });
+  return `${times} · last ${date}`;
 }
 
 export function forgetMemoryNote(id: string): Promise<void> {

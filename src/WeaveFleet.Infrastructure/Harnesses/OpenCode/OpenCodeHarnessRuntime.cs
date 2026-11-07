@@ -438,7 +438,12 @@ public sealed class OpenCodeHarnessRuntime : IHarnessRuntime, IDisposable, IAsyn
         // Memory adds its tools and the notes for each folder. The folder's path never changes, so turning memory on or
         // off is what gives new sessions a process with or without it.
         if (await GetMemoryFolderAsync(context.UserId).ConfigureAwait(false) is { } memoryFolder)
+        {
             envVars[AgentMemory.EnvironmentVariable] = memoryFolder;
+            // "Search older notes" adds fleet_memory_search; on and off never share a process.
+            if (await IsMemorySearchEnabledAsync(context.UserId).ConfigureAwait(false))
+                envVars[AgentMemory.SearchEnvironmentVariable] = "1";
+        }
 
         return new RuntimePreparation.Ready(new OpenCodeLaunchArtifacts(envVars, GetRuntimePreparationModelIds(context.ModelId)));
     }
@@ -453,6 +458,14 @@ public sealed class OpenCodeHarnessRuntime : IHarnessRuntime, IDisposable, IAsyn
                && await feature.IsEnabledAsync().ConfigureAwait(false)
             ? store.ContextFolder(userId)
             : null;
+    }
+
+    private async Task<bool> IsMemorySearchEnabledAsync(string userId)
+    {
+        using var userScope = BackgroundUserContext.BeginScope(userId);
+        using var scope = _scopeFactory.CreateScope();
+        return scope.ServiceProvider.GetService<AgentMemorySearchFeature>() is { } feature
+            && await feature.IsEnabledAsync().ConfigureAwait(false);
     }
 
     private async Task<bool> IsWorkflowsEnabledAsync(string userId)

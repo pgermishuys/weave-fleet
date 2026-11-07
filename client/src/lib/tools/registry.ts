@@ -240,6 +240,7 @@ const DESCRIPTORS: readonly ToolDescriptor[] = [
   { name: "fleet_machine_list", category: "fleet", permissionKind: "read", heading: "List machines", icon: Server, titledFromAnswer: true },
   { name: "fleet_session_start", category: "fleet", permissionKind: "read", heading: "Start session on a machine", icon: MonitorUp, titledFromAnswer: true },
   { name: "fleet_memory_save", category: "fleet", permissionKind: "read", heading: "Remember", icon: Lightbulb, label: (input) => { const note = text(input, "text"); return note ? truncate(note, 80) : "remember"; } },
+  { name: "fleet_memory_search", category: "fleet", permissionKind: "read", heading: "Search notes", icon: Search, label: (input) => { const query = text(input, "query"); return query ? truncate(query, 80) : "search notes"; } },
   { name: "fleet_memory_forget", category: "fleet", permissionKind: "read", heading: "Forget note", icon: LightbulbOff, label: (input) => text(input, "id") ?? "forget note" },
   { name: "fleet_mod_write", category: "fleet", permissionKind: "read", heading: "Write mod", icon: Pencil, label: (input) => text(input, "name") ?? "write mod" },
   { name: "fleet_mod_check", category: "fleet", permissionKind: "read", heading: "Check mod", icon: CircleCheck, label: (input) => text(input, "name") ?? "check mod" },

@@ -85,16 +85,18 @@ public static class FleetToolCatalog
 /// <param name="Walkthrough">The fleet-walkthrough skill is on: its page tool comes with it.</param>
 /// <param name="AgentHandoff">A machine takes work from agents here (<c>AgentHandoffFeature</c>): its tools, and a machine on the message tools.</param>
 /// <param name="Mods">Mods are switched on (<c>ModsFeature</c>): the agent's <c>fleet_mod_*</c> tools. Safe mode doesn't hide them.</param>
+/// <param name="MemorySearch">Memory and "Search older notes" are on (<c>AgentMemorySearchFeature</c>): <c>fleet_memory_search</c>.</param>
 /// <param name="PageChoice">
 /// Pages that wait for the user's pick (<c>PageChoiceFeature</c>): <c>waitForChoice</c> on <c>fleet_page_show</c>. Fleet's
 /// MCP server leaves it off for a harness that cuts a held call (<c>HarnessMcpCall.CantWait</c>).
 /// </param>
-public sealed record FleetToolSwitches(bool SessionMessages, bool Memory, bool WorkflowStep, bool Browser, bool Walkthrough = false, bool AgentHandoff = false, bool Mods = false, bool PageChoice = false)
+public sealed record FleetToolSwitches(bool SessionMessages, bool Memory, bool WorkflowStep, bool Browser, bool Walkthrough = false, bool AgentHandoff = false, bool Mods = false, bool PageChoice = false, bool MemorySearch = false)
 {
     public const string SessionMessagesSwitch = "sessionMessages";
     public const string AgentHandoffSwitch = "agentHandoff";
     public const string ModsSwitch = "mods";
     public const string MemorySwitch = "memory";
+    public const string MemorySearchSwitch = "memorySearch";
     public const string WorkflowStepSwitch = "workflowStep";
     public const string BrowserSwitch = "browser";
     public const string WalkthroughSwitch = "walkthrough";
@@ -117,6 +119,7 @@ public sealed record FleetToolSwitches(bool SessionMessages, bool Memory, bool W
         null => true,
         SessionMessagesSwitch => SessionMessages,
         MemorySwitch => Memory,
+        MemorySearchSwitch => MemorySearch,
         WorkflowStepSwitch => WorkflowStep,
         BrowserSwitch => Browser,
         WalkthroughSwitch => Walkthrough,

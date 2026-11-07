@@ -63,8 +63,69 @@ public sealed class AgentMemoryBridge(
             var output = saved.Value.Replaced is { } replaced && replaced != note.Id
                 ? $"{note.Text}\nSaved as note {note.Id} for {where}, in place of {replaced}. Other sessions get it with their next prompt."
                 : $"{note.Text}\nSaved as note {note.Id} for {where}. Other sessions get it with their next prompt.";
+            // The group every session reads was full: say which notes now wait in search instead.
+            if (saved.Value.MovedDown is { Count: > 0 } moved)
+            {
+                output += "\nThe notes every session reads were full, so " + string.Join("; ", moved.Select(other => $"note {other.Id} (\"{Shorten(other.Text)}\")"))
+                          + " moved to the notes found by search. They are still kept: `fleet_memory_search` finds them.";
+            }
             return CanvasResult.Ok(new CanvasToolOutput($"Remembered for {where}", output));
         }
+    }
+
+    /// <summary><c>fleet_memory_search</c>: notes of this repository and/or machine that match, from both groups.</summary>
+    public async Task<CanvasResult<CanvasToolOutput>> SearchAsync(
+        string? bridgeToken,
+        string? harnessSessionId,
+        string? query,
+        string? list,
+        CancellationToken ct = default)
+    {
+        if (await ResolveAsync(bridgeToken, harnessSessionId, ct).ConfigureAwait(false) is not { } caller)
+            return UnknownCaller();
+
+        using (userScope.Begin(caller.UserId))
+        {
+            if (!await memory.IsSearchOnAsync().ConfigureAwait(false))
+                return CanvasResult.Fail<CanvasToolOutput>(CanvasErrorKind.Refused, SearchTurnedOffMessage);
+
+            var session = await sessions.GetSessionAsync(caller.FleetSessionId).ConfigureAwait(false);
+            if (session.IsFailure)
+                return UnknownCaller();
+
+            var found = await memory.SearchFromAgentAsync(session.Value, query, list, ct).ConfigureAwait(false);
+            if (found.IsFailure)
+                return CanvasResult.Fail<CanvasToolOutput>(CanvasErrorKind.Invalid, found.Error.Description);
+
+            var notes = found.Value.Notes;
+            if (notes.Count == 0)
+            {
+                return CanvasResult.Ok(new CanvasToolOutput(
+                    "No notes found",
+                    $"No note matches \"{query!.Trim()}\" ({found.Value.Searched} searched). Try other words, or the other list."));
+            }
+
+            var lines = notes.Select(note =>
+            {
+                var status = note.Kind == MemoryKinds.Learned
+                    ? (AgentMemory.CleanHow(note.How) is { } how ? "tested: " + how + "; " : "untested; ")
+                    : "";
+                var group = MemoryTiers.IsAlways(note) ? "read by every session" : "found by search";
+                var where = note.List == MemoryList.Machine ? "machine" : "repository";
+                return $"- [{note.Id}] {Shorten(note.Text, int.MaxValue)} ({status}{where}, {group}, {note.Updated.UtcDateTime.ToString("d MMM yyyy", System.Globalization.CultureInfo.InvariantCulture)})";
+            });
+            return CanvasResult.Ok(new CanvasToolOutput(
+                notes.Count == 1 ? "Found 1 note" : $"Found {notes.Count} notes",
+                string.Join('\n', lines)));
+        }
+    }
+
+    public const string SearchTurnedOffMessage = "Searching older notes is turned off in Fleet's Settings → Labs, so there is nothing to search.";
+
+    private static string Shorten(string text, int max = 60)
+    {
+        var line = string.Join(' ', text.Split(['\r', '\n'], StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries));
+        return line.Length <= max ? line : line[..max].TrimEnd() + "…";
     }
 
     public async Task<CanvasResult<CanvasToolOutput>> ForgetAsync(

@@ -596,7 +596,7 @@ public sealed partial class OpenCode2HarnessRuntime : IHarnessRuntime, IAsyncDis
     private async Task<OpenCode2ServerSetup> GetSetupAsync(string ownerUserId, OpenCode2Profile? profile)
     {
         var fleetUrl = ResolveLocalFleetUrl();
-        var (builtInSkills, sessionMessages, workflows, memoryFolder, agentHandoff, mods, pageChoice) = await ReadOwnerSettingsAsync(ownerUserId).ConfigureAwait(false);
+        var (builtInSkills, sessionMessages, workflows, memoryFolder, agentHandoff, mods, pageChoice, memorySearch) = await ReadOwnerSettingsAsync(ownerUserId).ConfigureAwait(false);
 
         string? plugin = null;
         List<string> skills = [];
@@ -627,7 +627,8 @@ public sealed partial class OpenCode2HarnessRuntime : IHarnessRuntime, IAsyncDis
             Walkthrough: plugin is not null && builtInSkills.Names.Contains(FleetToolSwitches.WalkthroughSkill),
             AgentHandoff: agentHandoff && plugin is not null,
             Mods: mods && plugin is not null,
-            PageChoice: pageChoice && plugin is not null);
+            PageChoice: pageChoice && plugin is not null,
+            MemorySearch: memorySearch && plugin is not null);
     }
 
     /// <inheritdoc />
@@ -638,7 +639,7 @@ public sealed partial class OpenCode2HarnessRuntime : IHarnessRuntime, IAsyncDis
     /// </remarks>
     public async Task BuiltInSkillsChangedAsync(string ownerUserId, CancellationToken ct)
     {
-        var (builtInSkills, _, _, _, _, _, _) = await ReadOwnerSettingsAsync(ownerUserId).ConfigureAwait(false);
+        var (builtInSkills, _, _, _, _, _, _, _) = await ReadOwnerSettingsAsync(ownerUserId).ConfigureAwait(false);
         SyncBuiltInSkills(ownerUserId, builtInSkills);
     }
 
@@ -664,7 +665,7 @@ public sealed partial class OpenCode2HarnessRuntime : IHarnessRuntime, IAsyncDis
     /// The built-in skills the owner turned on that this Fleet ships, in name order, whether messages between sessions
     /// and workflows are on, and the folder with the owner's memory notes when memory is on.
     /// </summary>
-    private async Task<(OwnerSkills BuiltInSkills, bool SessionMessages, bool Workflows, string? MemoryFolder, bool AgentHandoff, bool Mods, bool PageChoice)> ReadOwnerSettingsAsync(string ownerUserId)
+    private async Task<(OwnerSkills BuiltInSkills, bool SessionMessages, bool Workflows, string? MemoryFolder, bool AgentHandoff, bool Mods, bool PageChoice, bool MemorySearch)> ReadOwnerSettingsAsync(string ownerUserId)
     {
         using var userScope = BackgroundUserContext.BeginScope(ownerUserId);
         using var scope = _scopeFactory.CreateScope();
@@ -687,7 +688,10 @@ public sealed partial class OpenCode2HarnessRuntime : IHarnessRuntime, IAsyncDis
             && await modsFeature.IsSwitchedOnAsync().ConfigureAwait(false);
         var pageChoice = scope.ServiceProvider.GetService<PageChoiceFeature>() is { } choiceFeature
             && await choiceFeature.IsEnabledAsync().ConfigureAwait(false);
-        return (builtInSkills, sessionMessages, workflows, memoryFolder, agentHandoff, mods, pageChoice);
+        var memorySearch = memoryFolder is not null
+            && scope.ServiceProvider.GetService<AgentMemorySearchFeature>() is { } searchFeature
+            && await searchFeature.IsEnabledAsync().ConfigureAwait(false);
+        return (builtInSkills, sessionMessages, workflows, memoryFolder, agentHandoff, mods, pageChoice, memorySearch);
     }
 
     /// <summary>
@@ -768,6 +772,8 @@ public sealed partial class OpenCode2HarnessRuntime : IHarnessRuntime, IAsyncDis
             environment[WeaveEnvironment.GlobalConfigDir] = weaveFolder;
         if (setup.MemoryFolder is { } memoryFolder)
             environment[AgentMemory.EnvironmentVariable] = memoryFolder;
+        if (setup.MemorySearch)
+            environment[AgentMemory.SearchEnvironmentVariable] = "1";
 
         // The agent's shell commands inherit the server's environment. Fleet's plugin takes out what's for the server
         // alone, in every shell V2 starts: an `opencode` the agent runs must not open this server's config and database,

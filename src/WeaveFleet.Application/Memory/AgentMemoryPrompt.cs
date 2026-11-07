@@ -13,21 +13,25 @@ public static class AgentMemoryPrompt
     /// <summary>
     /// The notes a session in a repository reads, whole: <see cref="RenderFolder"/> then <see cref="RenderMachine"/>.
     /// <paramref name="canSave"/> is whether the harness has the memory tools; without them the session only reads the
-    /// notes.
+    /// notes. <paramref name="repositorySearchable"/> and <paramref name="machineSearchable"/> are how many more notes
+    /// each list keeps for search (<see cref="MemoryTiers"/>); <see langword="null"/> when "Search older notes" is off.
     /// </summary>
     public static string Render(
         string repository,
         IEnumerable<MemoryNote> repositoryNotes,
         IEnumerable<MemoryNote> machineNotes,
-        bool canSave = true)
-        => (RenderFolder(repository, repositoryNotes, canSave) + RenderMachine(machineNotes)).TrimEnd() + "\n";
+        bool canSave = true,
+        int? repositorySearchable = null,
+        int? machineSearchable = null)
+        => (RenderFolder(repository, repositoryNotes, canSave, canSave ? repositorySearchable : repositorySearchable is null ? null : 0)
+            + RenderMachine(machineNotes, canSave ? machineSearchable : machineSearchable is null ? null : 0)).TrimEnd() + "\n";
 
     /// <summary>
     /// The part only a repository's sessions read: the rules, then the repository's notes. A session folder's file holds
     /// this; the machine's notes are in one file every folder shares (<see cref="RenderMachine"/>), so a machine note
     /// changes one file, not every folder's.
     /// </summary>
-    public static string RenderFolder(string repository, IEnumerable<MemoryNote> repositoryNotes, bool canSave = true)
+    public static string RenderFolder(string repository, IEnumerable<MemoryNote> repositoryNotes, bool canSave = true, int? searchable = null)
     {
         var text = new StringBuilder();
         text.AppendLine("# Fleet memory");
@@ -68,11 +72,12 @@ public static class AgentMemoryPrompt
             text.AppendLine(
                 "Keep the notes right. One fact per note, in a sentence or two, with dates written out. When a note below is "
                 + "wrong or out of date, save the corrected note with `replaces` set to its id, or remove it with "
-                + "`fleet_memory_forget`. Never save a note that repeats one below. When a list is full, forget or merge an old "
-                + "note first.");
+                + "`fleet_memory_forget`. Never save a note that repeats one below. When "
+                + (searchable is null ? "a list is full" : "the list kept for search is full")
+                + ", forget or merge an old note first.");
         }
 
-        AppendList(text, $"This repository ({AgentMemory.RepositoryName(repository)})", repositoryNotes);
+        AppendList(text, $"This repository ({AgentMemory.RepositoryName(repository)})", repositoryNotes, searchable, "repository");
         return text.ToString().TrimEnd() + "\n";
     }
 
@@ -80,10 +85,10 @@ public static class AgentMemoryPrompt
     /// The machine's notes, which every session reads after its folder's part. Starts with a blank line, so the two
     /// read as one text when put together.
     /// </summary>
-    public static string RenderMachine(IEnumerable<MemoryNote> machineNotes)
+    public static string RenderMachine(IEnumerable<MemoryNote> machineNotes, int? searchable = null)
     {
         var text = new StringBuilder();
-        AppendList(text, "This machine", machineNotes);
+        AppendList(text, "This machine", machineNotes, searchable, "machine");
         return text.ToString().TrimEnd() + "\n";
     }
 
@@ -108,7 +113,7 @@ public static class AgentMemoryPrompt
     public const string TurnedOff =
         "Fleet memory has been turned off. Don't rely on the notes under \"Fleet memory\" in your instructions, and don't save new ones.";
 
-    private static void AppendList(StringBuilder text, string heading, IEnumerable<MemoryNote> notes)
+    private static void AppendList(StringBuilder text, string heading, IEnumerable<MemoryNote> notes, int? searchable = null, string what = "")
     {
         text.AppendLine();
         text.AppendLine("## " + heading);
@@ -119,8 +124,15 @@ public static class AgentMemoryPrompt
             AppendNote(text, note);
         }
 
-        if (!any)
+        if (!any && searchable is not > 0)
             text.AppendLine("No notes yet.");
+
+        if (searchable is > 0 and var more)
+        {
+            text.AppendLine(
+                (more == 1 ? "1 more note about this " + what + " is" : more + " more notes about this " + what + " are")
+                + " kept for search: call `fleet_memory_search` when you start on an area you haven't worked on in this session, or before a risky step.");
+        }
     }
 
     private static void AppendNote(StringBuilder text, MemoryNote note)

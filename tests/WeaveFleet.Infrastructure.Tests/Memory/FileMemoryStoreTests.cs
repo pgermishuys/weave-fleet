@@ -57,6 +57,26 @@ public sealed class FileMemoryStoreTests : IDisposable
     }
 
     [Fact]
+    public async Task Where_a_note_is_kept_and_how_often_it_was_found_are_in_the_front_matter_and_old_notes_are_always_read()
+    {
+        var found = Saved.AddDays(2);
+        var note = new MemoryNote("1a2b3c4f", MemoryList.Repository, "Cut releases from main.", MemoryKinds.FromYou, "/home/p/source/weave-fleet", null, null, Saved, Saved,
+            InSearch: true, Pinned: true, Found: 3, LastFound: found);
+
+        await _store.SaveAsync("local-user", note);
+
+        var file = Directory.GetFiles(Path.Combine(_data, "memory"), "1a2b3c4f.md", SearchOption.AllDirectories).Single();
+        (await File.ReadAllTextAsync(file)).ShouldContain("\nplacement: search\npinned: true\nfound: 3\nlast-found: 2026-09-29T08:30:00.0000000+00:00\n---\n");
+        (await _store.ListAsync("local-user")).Single().ShouldBe(note);
+
+        var old = FileMemoryStore.Parse("aaaa0010", "---\nlist: machine\nkind: learned\ncreated: 2026-09-27T08:30:00.0000000+00:00\n---\nOld note.\n").ShouldNotBeNull();
+        (old.InSearch, old.Pinned, old.Found, old.LastFound).ShouldBe((false, false, 0, null));
+        var plain = Note("aaaa0011", "Plain.");
+        FileMemoryStore.Format(plain).ShouldNotContain("placement");
+        FileMemoryStore.Format(plain).ShouldNotContain("found");
+    }
+
+    [Fact]
     public async Task A_file_that_isnt_a_note_is_skipped_and_left_alone()
     {
         await _store.SaveAsync("local-user", Note("aaaa0001", "Kept."));

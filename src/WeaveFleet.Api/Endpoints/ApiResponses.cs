@@ -375,7 +375,8 @@ public sealed record MemoryBridgeRequest(
     string? Kind = null,
     string? Replaces = null,
     string? Id = null,
-    string? How = null);
+    string? How = null,
+    string? Query = null);
 
 /// <summary>
 /// What the <c>fleet_mod_*</c> tools post: the harness's id for the calling session and the tool's arguments. <c>Files</c>

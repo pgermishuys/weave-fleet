@@ -44,6 +44,15 @@ public static class MemoryEndpoints
             .WithName("KeepMemoryNote")
             .Produces<MemoryNoteView>();
 
+        // POST /api/memory/notes/{id}/place  { "group": "search" | "always" }: with "Search older notes" on, moves a note
+        // between the notes every session reads and the ones found by search. "always" pins it there.
+        group.MapPost("/notes/{id}/place", async (string id, MoveMemoryNoteRequest req, AgentMemoryService memory, CancellationToken ct)
+                => req.Group is "search" or "always"
+                    ? (await memory.MoveAsync(id, req.Group == "search", ct)).ToApiResult()
+                    : Results.BadRequest(new ErrorResponse("\"group\" is \"search\" or \"always\".")))
+            .WithName("MoveMemoryNote")
+            .Produces<MemoryNoteView>();
+
         group.MapDelete("/notes/{id}", async (string id, AgentMemoryService memory, CancellationToken ct)
                 => (await memory.ForgetAsync(id, ct)).ToApiResult())
             .WithName("ForgetMemoryNote");
@@ -69,6 +78,8 @@ internal sealed record SetMemoryEnabledRequest(bool Enabled);
 internal sealed record AddMemoryNoteRequest(string? List, string? Repository, string? Text);
 
 internal sealed record UpdateMemoryNoteRequest(string? Text);
+
+internal sealed record MoveMemoryNoteRequest(string? Group);
 
 internal sealed record ClearMemoryRequest(string? Scope, string? Repository);
 

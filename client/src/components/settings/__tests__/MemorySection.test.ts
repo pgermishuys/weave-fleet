@@ -11,6 +11,7 @@ const api = vi.hoisted(() => ({
   forgetMemoryNote: vi.fn(),
   keepMemoryNote: vi.fn(),
   clearMemory: vi.fn(),
+  moveMemoryNote: vi.fn(),
 }));
 
 vi.mock("@/lib/agent-memory", async (importOriginal) => ({
@@ -207,5 +208,86 @@ describe("MemorySection", () => {
     await flushPromises();
 
     expect(api.keepMemoryNote).toHaveBeenCalledWith("eeee0005");
+  });
+
+  describe("with Search older notes on", () => {
+    const repo = (id: string, text: string, overrides: Partial<MemoryNote> = {}) =>
+      note(id, text, { list: "repository", repository: "/src/weave-fleet", ...overrides });
+
+    const grouped: MemoryNotes = {
+      repository: "/src/weave-fleet",
+      repositoryNotes: [
+        repo("aaaa0001", "Every PR includes a screenshot.", { kind: "from-you", pinned: true }),
+        repo("aaaa0002", "Rebase onto origin/main; don't merge main.", { kind: "from-you", found: 14 }),
+        repo("ssss0003", "Run OpenCode 2 live tests under a scratch HOME.", { inSearch: true, found: 2, lastFound: "2026-10-24T08:00:00Z" }),
+      ],
+      machineNotes: [note("bbbb0002", "/tmp fills up here; use ~/.cache.")],
+      tokens: 120,
+    };
+
+    beforeEach(() => {
+      api.getMemory.mockResolvedValue({
+        ...overview(true),
+        searchEnabled: true,
+        maxAlwaysRepositoryNotes: 15,
+        maxAlwaysMachineNotes: 8,
+        maxSearchRepositoryNotes: 200,
+        maxSearchMachineNotes: 60,
+      });
+      api.listMemoryNotes.mockResolvedValue(grouped);
+    });
+
+    it("shows each list as the notes every session reads and the notes found by search, with counts", async () => {
+      const wrapper = await mountSection();
+
+      expect(wrapper.get("[data-testid=memory-group-repository-always]").text()).toMatch(/Every session reads\s*2\/15 · about \d+ tokens/);
+      expect(wrapper.get("[data-testid=memory-group-repository-search]").text()).toContain("Found by search");
+      expect(wrapper.get("[data-testid=memory-group-repository-search]").text()).toContain("1/200 · no tokens until found");
+      expect(wrapper.get("[data-testid=memory-group-machine-always]").text()).toContain("1/8");
+      expect(wrapper.get("[data-testid=memory-list-repository]").text()).toContain("Rebase onto origin/main");
+      expect(wrapper.get("[data-testid=memory-list-repository]").text()).not.toContain("scratch HOME");
+      expect(wrapper.get("[data-testid=memory-list-repository-search]").text()).toContain("scratch HOME");
+      expect(wrapper.get("[data-testid=memory-found-ssss0003]").text()).toMatch(/found 2 times · last/);
+      expect(wrapper.get("[data-testid=memory-found-aaaa0002]").text()).toBe("found 14 times");
+      expect(wrapper.get("[data-testid=memory-pinned-aaaa0001]").text()).toContain("Pinned");
+    });
+
+    it("moves a note to search, and pins a searched one to always read", async () => {
+      api.moveMemoryNote.mockResolvedValue(note("x", "x"));
+      const wrapper = await mountSection();
+
+      await wrapper.get("[data-testid=memory-to-search-aaaa0002]").trigger("click");
+      await flushPromises();
+      expect(api.moveMemoryNote).toHaveBeenLastCalledWith("aaaa0002", "search");
+
+      await wrapper.get("[data-testid=memory-to-always-ssss0003]").trigger("click");
+      await flushPromises();
+      expect(api.moveMemoryNote).toHaveBeenLastCalledWith("ssss0003", "always");
+
+      await wrapper.get("[data-testid=memory-pin-aaaa0002]").trigger("click");
+      await flushPromises();
+      expect(api.moveMemoryNote).toHaveBeenLastCalledWith("aaaa0002", "always");
+      expect(wrapper.find("[data-testid=memory-pin-aaaa0001]").exists()).toBe(false);
+      expect(wrapper.find("[data-testid=memory-to-always-aaaa0002]").exists()).toBe(false);
+    });
+
+    it("keeps filtering both groups with Search notes", async () => {
+      const wrapper = await mountSection();
+
+      await wrapper.get("input[type=search]").setValue("scratch");
+
+      expect(wrapper.get("[data-testid=memory-list-repository-search]").text()).toContain("scratch HOME");
+      expect(wrapper.find("[data-testid=memory-list-repository]").exists()).toBe(false);
+    });
+
+    it("looks the same as today when the switch is off", async () => {
+      api.getMemory.mockResolvedValue(overview(true));
+      api.listMemoryNotes.mockResolvedValue(grouped);
+      const wrapper = await mountSection();
+
+      expect(wrapper.find("[data-testid=memory-group-repository-always]").exists()).toBe(false);
+      expect(wrapper.find("[data-testid=memory-to-search-aaaa0002]").exists()).toBe(false);
+      expect(wrapper.get("[data-testid=memory-list-repository]").text()).toContain("scratch HOME");
+    });
   });
 });

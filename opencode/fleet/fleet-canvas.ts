@@ -655,6 +655,23 @@ export const FleetCanvasPlugin = async (input: { directory?: string }) => ({
             execute: (args: { text: string; list: string; kind: string; replaces: string; how?: string }, context: ToolContext) =>
               callFleet("save", context, { text: args.text, list: args.list, kind: args.kind, replaces: args.replaces, how: args.how ?? "" }, MEMORY_PATH + "save"),
           },
+          ...(process.env.FLEET_MEMORY_SEARCH === "1"
+            ? {
+                fleet_memory_search: {
+                  description: "Search the older notes Fleet memory keeps out of your instructions, for this repository and this machine. Use it when you start on an area you haven't worked on in this session, or before a risky step. Returns up to 8 matching notes with their ids; it also looks through the notes already in your instructions.",
+                  args: {
+                    query: { type: "string", description: "A few words about what you're looking for, such as a command, a tool or an area of the code." },
+                    list: {
+                      type: "string",
+                      enum: ["repository", "machine", "both"],
+                      description: "repository: this repository's notes. machine: this computer's notes. both: search the two.",
+                    },
+                  },
+                  execute: (args: { query: string; list: string }, context: ToolContext) =>
+                    callFleet("search", context, { query: args.query, list: args.list }, MEMORY_PATH + "search"),
+                },
+              }
+            : {}),
           fleet_memory_forget: {
             description: "Remove a note from Fleet memory that turned out wrong or out of date. Use its id from the list in your instructions.",
             args: {
