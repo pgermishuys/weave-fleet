@@ -3,8 +3,6 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 import MachineHeader from "@/components/sessions/MachineHeader.vue";
 import MachineSessionsGroup from "@/components/sessions/MachineSessionsGroup.vue";
 import { useMachinesStore, type MachineEntry, type MachineSessions } from "@/stores/machines";
-import { usePreferencesStore } from "@/stores/preferences";
-import { LIVE_MACHINES_PREFERENCE_KEY } from "@/lib/machines";
 import { projectGroupKey, useSidebarStore } from "@/stores/sidebar";
 import type { ProjectSummary } from "@/lib/session-project-groups";
 
@@ -181,44 +179,28 @@ describe("MachineSessionsGroup", () => {
   });
 });
 
-describe("MachineSessionsGroup with every machine live", () => {
+describe("MachineSessionsGroup on a machine that isn't answering", () => {
   beforeEach(() => {
     localStorage.clear();
   });
 
-  function setSwitch(on: boolean): void {
-    const preferences = usePreferencesStore();
-    preferences.hasFetched = true;
-    preferences.preferences = { ...preferences.preferences, [LIVE_MACHINES_PREFERENCE_KEY]: on ? "true" : "false" };
-  }
-
   const working = item("s-work", "Hero image sizes", { sessionStatus: "active", activityStatus: "busy", projectId: "p-garden" });
 
-  function quiet(on: boolean) {
-    setSwitch(on);
+  function quiet() {
     const state: MachineSessions = { ...listed, sessions: [working], error: "Can't reach macbook." };
     useMachinesStore().others = { [macbook.key]: state };
     return mountGroup({ state });
   }
 
   it("says a working session's machine isn't answering, instead of working on", () => {
-    const view = quiet(true);
+    const view = quiet();
 
     const row = view.get("[data-testid='machine-session-row']");
     expect(row.text()).toContain("Not answering");
     expect(row.find(".status-glyph--working").exists()).toBe(false);
   });
 
-  it("keeps the row as it was with the switch off", () => {
-    const view = quiet(false);
-
-    const row = view.get("[data-testid='machine-session-row']");
-    expect(row.text()).not.toContain("Not answering");
-    expect(row.find(".status-glyph--working").exists()).toBe(true);
-  });
-
   it("offers Copy path, not Open in, on another machine's row", async () => {
-    setSwitch(true);
     const writeText = vi.fn(async () => undefined);
     Object.defineProperty(navigator, "clipboard", { value: { writeText }, configurable: true });
     // The menu teleports to the body.

@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { computed, nextTick, onMounted, onUnmounted, shallowRef, useTemplateRef, watch } from "vue";
+import { computed, onMounted, onUnmounted, shallowRef, useTemplateRef, watch } from "vue";
 import { useLocation, useRouter } from "@tanstack/vue-router";
 import { Archive, ArchiveRestore, ArrowLeft, FolderPlus, LoaderCircle, Plus, Search, X } from "lucide-vue-next";
 import { storeToRefs } from "pinia";
@@ -23,7 +23,6 @@ import {
   sessionMatchesQuery,
   type ProjectTreeGroup,
 } from "@/lib/session-project-groups";
-import { saveSessionListScroll, takeSessionListScroll } from "@/lib/session-list-scroll";
 import { useSessionSelectionStore } from "@/stores/session-selection";
 import { useSessionsStore } from "@/stores/sessions";
 import { machineGroupKey, projectGroupKey, useSidebarStore } from "@/stores/sidebar";
@@ -170,41 +169,20 @@ watch(
 
 const sessionsList = useTemplateRef<HTMLElement>("sessionsList");
 
-/**
- * Opening another machine's session reloads the page on that machine. The list keeps its place across the reload, so
- * the row clicked stays under the pointer, and this machine's list is kept so it shows at once afterwards. With
- * "Keep every machine live" on it opens in place instead: its views ask its machine.
- */
+/** Opening another machine's session happens in place, without a reload: its views ask its machine. */
 function handleMachineSessionOpen(machine: MachineEntry, session: SessionListItem): void {
-  if (machines.opensInPlace) {
-    machines.rememberSessions(machine.key, [session.session.id]);
-    void router.navigate({
-      to: "/sessions/$id",
-      params: { id: session.session.id },
-      search: { instanceId: session.instanceId || undefined, parentSessionId: undefined },
-    });
-    return;
-  }
-  const search = session.instanceId ? `?instanceId=${encodeURIComponent(session.instanceId)}` : "";
-  if (sessionsList.value) saveSessionListScroll(sessionsList.value.scrollTop);
-  machines.openOn(machine.key, `/sessions/${encodeURIComponent(session.session.id)}${search}`, {
-    sessions: sessionsStore.sessions,
-    projects: projects.value,
+  machines.rememberSessions(machine.key, [session.session.id]);
+  void router.navigate({
+    to: "/sessions/$id",
+    params: { id: session.session.id },
+    search: { instanceId: session.instanceId || undefined, parentSessionId: undefined },
   });
 }
 
-/** Work here on another machine: the same switch as opening one of its sessions, landing on its first page. */
+/** Work here on another machine: the same as opening one of its sessions, landing on its first page. */
 function handleWorkHere(machine: MachineEntry): void {
-  if (machines.opensInPlace) {
-    machines.setCurrent(machine.key);
-    void router.navigate({ to: "/" });
-    return;
-  }
-  if (sessionsList.value) saveSessionListScroll(sessionsList.value.scrollTop);
-  machines.openOn(machine.key, "/", {
-    sessions: sessionsStore.sessions,
-    projects: projects.value,
-  });
+  machines.setCurrent(machine.key);
+  void router.navigate({ to: "/" });
 }
 
 const searchQuery = shallowRef("");
@@ -261,40 +239,6 @@ const errorMessage = computed(() => {
   return error;
 });
 const hasSessions = computed(() => sessions.value.length > 0);
-
-/**
- * Back from a switch to another machine: the list goes back to where it was scrolled once the live machine's sessions
- * and projects are in (the other machines show their kept lists at once), so the row clicked is where it was. Gives
- * up after a few seconds, and when the user has scrolled since.
- */
-const pendingScroll = takeSessionListScroll();
-if (pendingScroll !== null) {
-  let restored = false;
-  const giveUp = setTimeout(() => restore(), 3_000);
-  const restore = (): void => {
-    if (restored) return;
-    restored = true;
-    clearTimeout(giveUp);
-    void nextTick(() => scrollListTo(pendingScroll));
-  };
-  watch(
-    () => (hasSessions.value || Boolean(errorMessage.value)) && !isLoading.value && projects.value.length > 0,
-    (ready) => {
-      if (ready) restore();
-    },
-    { immediate: true },
-  );
-  onUnmounted(() => clearTimeout(giveUp));
-}
-
-/** Scrolls the list to `top`, a frame at a time while it isn't tall enough yet; not once the user has scrolled it. */
-function scrollListTo(top: number, framesLeft = 10, reached = 0): void {
-  const list = sessionsList.value;
-  if (!list || Math.abs(list.scrollTop - reached) >= 1) return;
-  list.scrollTop = top;
-  const now = list.scrollTop;
-  if (now < top - 1 && framesLeft > 0) requestAnimationFrame(() => scrollListTo(top, framesLeft - 1, now));
-}
 
 const projectGroups = computed<ProjectTreeGroup[]>(() => buildProjectGroups(pinnedSplit.value.rest, projects.value, draftGroupKey.value));
 

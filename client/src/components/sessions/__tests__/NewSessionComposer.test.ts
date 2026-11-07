@@ -2028,67 +2028,29 @@ describe("NewSessionComposer", () => {
         expect(view.get("[data-testid='new-session-plan-machine']").text()).toBe("On macbook:");
       });
 
-      it("starts the session there, then opens it on that machine", async () => {
+      it("starts the session there and opens it in place, its row kept out of the live machine's list", async () => {
         addMachines(macbook);
         localStorage.setItem(newSessionDefaultsKey("m-mac"), JSON.stringify({ lastFolder: { kind: "repository", path: comet.path } }));
         const view = await mountOn(macbook);
-        const openOn = vi.spyOn(useMachinesStore(), "openOn").mockImplementation(() => {});
 
         await type(view, "Fix the sign-in loop");
         await pressEnter(view);
 
-        expect(lastCreateCall()[0]).toBe(comet.path);
-        expect(openOn).toHaveBeenCalledWith("m-mac", "/sessions/session-1?instanceId=instance-1");
-        expect(mocks.navigate).not.toHaveBeenCalled();
         expect(loadSessionMachines()["session-1"]).toBe("m-mac");
-        expect(useWorkspaceUiStore().newSessionDraft).toBeNull();
-      });
-
-      it("with every machine live, opens it in place, its row kept out of the live machine's list", async () => {
-        addMachines(macbook);
-        localStorage.setItem(newSessionDefaultsKey("m-mac"), JSON.stringify({ lastFolder: { kind: "repository", path: comet.path } }));
-        const view = await mountOn(macbook);
-        const preferences = usePreferencesStore();
-        preferences.hasFetched = true;
-        preferences.preferences = { ...preferences.preferences, LiveMachines: "true" };
-        const openOn = vi.spyOn(useMachinesStore(), "openOn").mockImplementation(() => {});
-
-        await type(view, "Fix the sign-in loop");
-        await pressEnter(view);
-
-        expect(openOn).not.toHaveBeenCalled();
         expect(mocks.navigate).toHaveBeenCalledWith(expect.objectContaining({ to: "/sessions/$id", params: { id: "session-1" } }));
         expect(useSessionsStore().sessions.map((item) => item.session.id)).not.toContain("session-1");
         expect(useSessionsStore().sessionById("session-1")).not.toBeNull();
         expect(useMachinesStore().sessionTarget("session-1")).toMatchObject({ key: "m-mac", isLive: false });
       });
 
-      it("sends a harness that isn't set up there to that machine's Settings", async () => {
+      it("sends a harness that isn't set up there to that machine's Harnesses, in place", async () => {
         addMachines(macbook);
         noHarnessReason.value = "OpenCode isn't installed.";
-        const view = await mountOn(macbook);
-        const openOn = vi.spyOn(useMachinesStore(), "openOn").mockImplementation(() => {});
-
-        const fix = view.get("[data-testid='new-session-no-harness'] button");
-        expect(fix.text()).toBe("Open macbook's Settings");
-        await fix.trigger("click");
-
-        expect(openOn).toHaveBeenCalledWith("m-mac", "/settings");
-      });
-
-      it("with the switch on, opens that machine's Harnesses in place", async () => {
-        addMachines(macbook);
-        noHarnessReason.value = "OpenCode isn't installed.";
-        const preferences = usePreferencesStore();
-        preferences.hasFetched = true;
-        preferences.preferences = { MachineSwitch: "true" };
         const view = await mountOn(macbook);
         const machines = useMachinesStore();
-        const openOn = vi.spyOn(machines, "openOn").mockImplementation(() => {});
 
         await view.get("[data-testid='new-session-no-harness'] button").trigger("click");
 
-        expect(openOn).not.toHaveBeenCalled();
         expect(machines.currentKey).toBe("m-mac");
         expect(useSettingsNav().activeSection.value).toBe("harnesses");
         expect(mocks.navigate).toHaveBeenCalledWith({ to: "/settings" });

@@ -48,7 +48,7 @@ function rowMeta(workflow: Workflow): { label: string; tone: string } {
       <p class="panel-header">
         Workflows
       </p>
-      <!-- With "Switch machines without reloading" on: which machine's workflows the list and the pane show. -->
+      <!-- which machine's workflows the list and the pane show. -->
       <div
         v-if="nav.machine.enabled.value"
         class="panel-machine"

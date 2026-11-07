@@ -56,7 +56,6 @@ import { dispatchSessionRemoved } from "@/lib/session-sync";
 import { isSessionLive, sessionRowDim, sessionRowStatus } from "@/lib/session-row-status";
 import { useRelativeTime } from "@/composables/use-relative-time";
 import { useSessionsStore } from "@/stores/sessions";
-import { useMachinesStore } from "@/stores/machines";
 import { useArchiveQueueStore } from "@/stores/archive-queue";
 import { useLineageMovesStore } from "@/stores/lineage-moves";
 import { useSessionPinsStore } from "@/stores/session-pins";
@@ -196,10 +195,7 @@ const prBadge = computed(() => {
 });
 const isArchivedSession = computed(() => props.session.retentionStatus === "archived");
 const readOnly = computed(() => Boolean(props.openOnMachine));
-// Another machine's row has a menu of what doesn't need that machine (its folder is there, not here) once its sessions
-// open in place.
-const machines = useMachinesStore();
-const hasMenu = computed(() => !readOnly.value || machines.opensInPlace);
+// Another machine's row has a menu of what doesn't need that machine (its folder is there, not here).
 const fallbackCanArchive = computed(() => !isArchivedSession.value);
 // The retention state wins over capabilities, which only refresh with the list.
 const canArchive = computed(() => !readOnly.value
@@ -622,10 +618,7 @@ function removeSessionFromStore(): void {
     :open="isContextMenuOpen"
     @update:open="handleContextMenuOpenChange"
   >
-    <ContextMenuTrigger
-      as-child
-      :disabled="!hasMenu"
-    >
+    <ContextMenuTrigger as-child>
       <div
         class="session-item-shell"
         :class="{ 'session-item-shell--dragging': isDragging }"

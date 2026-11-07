@@ -683,14 +683,10 @@ function removeGitHubPreset(): void {
  */
 function fixNoHarness(): void {
   if (!target.isLive) {
-    if (machines.opensInPlace) {
-      // Settings opens on the machine you're on: make it that one, on Harnesses.
-      machines.setCurrent(target.key);
-      setActiveSection("harnesses");
-      void navigate({ to: "/settings" });
-      return;
-    }
-    machines.openOn(target.key, "/settings");
+    // Settings opens on the machine you're on: make it that one, on Harnesses.
+    machines.setCurrent(target.key);
+    setActiveSection("harnesses");
+    void navigate({ to: "/settings" });
     return;
   }
   if (!config.value.cloudMode) {
@@ -772,20 +768,11 @@ async function submit(withoutMessage: boolean): Promise<void> {
       modelPicker.recordRecent(modelPickerKey(chosenAgentAndModel.harnessType, sentModel.providerID, sentModel.modelID));
     }
 
-    // Started on another machine: the app moves there to show it, as opening one of its sessions from the sidebar
-    // does. That's a reload, unless "Keep every machine live" opens it in place; the machine keeps the first message,
-    // so the session page shows it.
+    // Started on another machine: it opens in place, as opening one of its sessions from the sidebar does.
     if (!target.isLive) machines.rememberSessions(target.key, [sessionId]);
     forgetSessionReferences(draftKey);
     forgetFileReferences(draftKey);
     clearImages();
-    if (!target.isLive && !machines.opensInPlace) {
-      workspaceUiStore.handOffNewSessionDraft(sessionId);
-      const instance = response.instanceId ? `?instanceId=${encodeURIComponent(response.instanceId)}` : "";
-      machines.openOn(target.key, `/sessions/${encodeURIComponent(sessionId)}${instance}`);
-      return;
-    }
-
     // All in one tick: the session page has the message before its history loads, and the
     // session's row replaces the draft row where it stands.
     if (firstMessage) {

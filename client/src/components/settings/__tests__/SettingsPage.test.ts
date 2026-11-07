@@ -2,10 +2,9 @@ import { config, flushPromises, mount } from "@vue/test-utils";
 import { createPinia, getActivePinia, setActivePinia } from "pinia";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { defineComponent, h } from "vue";
-import { MACHINE_SWITCH_PREFERENCE_KEY, saveMachines, setActiveMachine } from "@/lib/machines";
+import { saveMachines, setActiveMachine } from "@/lib/machines";
 import { resetSettingsMachine, useSettingsMachine } from "@/composables/use-settings-machine";
 import { useMachinesStore } from "@/stores/machines";
-import { usePreferencesStore } from "@/stores/preferences";
 import SettingsPage from "@/components/settings/SettingsPage.vue";
 import { useSettingsNav, type SettingsSectionId } from "@/composables/use-settings-nav";
 
@@ -81,9 +80,6 @@ describe("SettingsPage", () => {
     setActiveMachine(null);
     saveMachines([falcon]);
     vi.stubGlobal("fetch", vi.fn(async () => Response.json([])));
-    const preferences = usePreferencesStore();
-    preferences.hasFetched = true;
-    preferences.preferences = { [MACHINE_SWITCH_PREFERENCE_KEY]: "true" };
     useMachinesStore().setCurrent(falcon.id);
     resetSettingsMachine();
     const wrapper = await mountAt("general", null);

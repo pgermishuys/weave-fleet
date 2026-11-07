@@ -20,7 +20,7 @@ const props = withDefaults(defineProps<{
   name: string;
   /** The machine the app is working in. */
   live?: boolean;
-  /** Shows the Live badge: the machine you're on, which with "Switch machines without reloading" is the open session's. Defaults to `live`. */
+  /** Shows the Live badge: the machine you're on, the open session's. Defaults to `live`. */
   current?: boolean;
   /** Can't be reached right now; its rows are the last ones it returned. */
   unreachable?: boolean;

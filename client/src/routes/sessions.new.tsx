@@ -1,7 +1,7 @@
 import { createFileRoute } from "@tanstack/vue-router";
 import { computed, defineComponent } from "vue";
 import NewSessionComposer from "@/components/sessions/NewSessionComposer.vue";
-import { liveTarget, provideMachineTarget, targetFor } from "@/lib/machine-target";
+import { provideMachineTarget, targetFor } from "@/lib/machine-target";
 import { useMachinesStore } from "@/stores/machines";
 import { useSessionsStore } from "@/stores/sessions";
 import { useWorkspaceUiStore } from "@/stores/workspace-ui";
@@ -19,8 +19,8 @@ const NewSessionPage = defineComponent({
     const target = computed(() => {
       const picked = machines.entries.find((entry) => entry.key === workspaceUi.newSessionMachine);
       if (picked) return targetFor(picked.connection);
-      // Nothing picked: the machine you're on (the live one unless "Switch machines without reloading" is on).
-      return machines.opensInPlace ? machines.targetOfKey(machines.currentKey) : liveTarget();
+      // Nothing picked: the machine you're on.
+      return machines.targetOfKey(machines.currentKey);
     });
     provideMachineTarget(() => target.value);
 

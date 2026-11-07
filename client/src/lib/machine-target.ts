@@ -8,8 +8,7 @@
  *
  * The open session's machine is provided around the session view, the right panel and Go to file (`MachineScope` in
  * AppShell, from `useMachinesStore().sessionTarget`), and around the phone's session page (PhoneStack, from its
- * address). It's the live machine unless "Keep every machine live" or "Switch machines without reloading" opened
- * another machine's session in place. Settings' detail pane is provided the machine its menu shows (`SettingsPage`):
+ * address). It's the machine the session is on, as far as this page knows, else the live machine. Settings' detail pane is provided the machine its menu shows (`SettingsPage`):
  * the pages that ask it use `useMachineTarget()`, and the stores they read are per machine (`defineMachineStore`).
  */
 

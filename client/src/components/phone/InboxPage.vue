@@ -18,7 +18,6 @@ import { usePullToRefresh } from "@/composables/phone/use-pull-to-refresh";
 import { usePushSubscription } from "@/composables/phone/use-push-subscription";
 import { readCredentialsSync } from "@/lib/device-credentials";
 import { rememberPhoneMachine } from "@/lib/machines";
-import { useMachinesStore } from "@/stores/machines";
 import { haptic } from "@/lib/phone/haptics";
 import { holdKeyboard } from "@/lib/phone/keyboard";
 import { buildInbox, machinesStatus, restartRow, sectionRows, type InboxItem } from "@/lib/phone/inbox";
@@ -38,7 +37,6 @@ const router = useRouter();
 const nav = usePhoneNav();
 // PhoneStack keeps the inbox, so a session pushed over this page reads the same feeds.
 const { inbox, machines, loading, now, answerPermission, answerQuestion, setArchived, refreshAll, targetFor } = inject(INBOX, null) ?? useInbox();
-const machineList = useMachinesStore();
 const { noHarnessReason } = useEnabledHarnesses();
 
 // Browsers rotate and drop push subscriptions: check on open and whenever the app comes back on screen. A dropped one
@@ -165,16 +163,11 @@ async function open(item: InboxItem): Promise<void> {
     return;
   }
 
-  // Another machine, with the phone's own key for it: in place with "Keep every machine live", else the page reloads to
-  // work there.
+  // Another machine, with the phone's own key for it: it opens in place.
   const target = targetFor(item.machineId);
   if (!target?.token) return;
   rememberPhoneMachine({ id: item.machineId, name: item.machineName, baseUrl: target.baseUrl, token: target.token, addedAt: new Date().toISOString() });
-  if (machineList.opensInPlace) {
-    await nav.openSession(item.machineId, item.sessionId);
-    return;
-  }
-  window.location.assign(`/phone/s/${encodeURIComponent(item.machineId)}/${encodeURIComponent(item.sessionId)}`);
+  await nav.openSession(item.machineId, item.sessionId);
 }
 
 async function onPermission(item: InboxItem, reply: PermissionReply, message: string | undefined, done: (outcome: AnswerOutcome) => void): Promise<void> {

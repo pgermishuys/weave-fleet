@@ -38,18 +38,13 @@ function machineName(id: string | null): string | null {
   return store.machines.find((machine) => machine.id === id)?.name ?? null;
 }
 
-/** The session is on the machine that took the job: this one, or another that goes live to show it. */
+/** The session is on the machine that took the job: this one, or another, opened in place. */
 function openSession(job: Job): void {
   if (!job.sessionId) return;
   const machine = store.machines.find((candidate) => candidate.id === job.machineId);
   const key = machine && !machine.isLocal ? machine.id : HOME_MACHINE_KEY;
-  if (key === machinesStore.liveKey || machinesStore.opensInPlace) {
-    machinesStore.rememberSessions(key, [job.sessionId]);
-    void router.navigate({ to: "/sessions/$id", params: { id: job.sessionId }, search: { instanceId: undefined, parentSessionId: undefined } });
-    return;
-  }
-
-  machinesStore.openOn(key, `/sessions/${encodeURIComponent(job.sessionId)}`);
+  machinesStore.rememberSessions(key, [job.sessionId]);
+  void router.navigate({ to: "/sessions/$id", params: { id: job.sessionId }, search: { instanceId: undefined, parentSessionId: undefined } });
 }
 
 async function cancel(job: Job): Promise<void> {

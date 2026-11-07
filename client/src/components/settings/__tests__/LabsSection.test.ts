@@ -7,7 +7,7 @@ import { saveMachines } from "@/lib/machines";
 
 const { getMock, putMock } = vi.hoisted(() => ({ getMock: vi.fn(), putMock: vi.fn() }));
 
-vi.mock("@/api/client", () => ({ api: { GET: getMock, PUT: putMock } }));
+vi.mock("@/api/client", async (importOriginal) => ({ ...(await importOriginal<typeof import("@/api/client")>()), api: { GET: getMock, PUT: putMock } }));
 vi.mock("@tanstack/vue-router", () => ({ useRouter: () => ({ navigate: vi.fn() }) }));
 
 async function mountSection() {

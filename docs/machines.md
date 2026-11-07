@@ -257,16 +257,17 @@ systemctl --user enable --now fleet.service
 loginctl enable-linger "$USER"   # keep it running when you're logged out
 ```
 
-## Switching machines without a reload (Labs)
+## Switching machines
 
-Turn on **Switch machines without reloading** in Settings → Labs. Nothing in Fleet reloads to change machine then: no
-blank window, a session on another machine shows in a fraction of a second, and the **Live** badge in the sessions
-list moves to the machine you're on. The machine you're on is the machine of the session you have open, or the one you
-last chose with **Work here**.
+Nothing in Fleet reloads to change machine: no blank window, a session on another machine shows in a fraction of a
+second, and the **Live** badge in the sessions list moves to the machine you're on. The machine you're on is the
+machine of the session you have open; with none open, the one you last chose with **Work here** in this tab, else the
+machine that served the page. A link to a session on another machine opens it in place on that page.
 
-- **Sessions, Settings, Automations and Analytics follow the machine you're on** (Workflows too, once it lands). Each
-  of Settings, Automations and Analytics has its own machine switch at the top of its menu; picking a machine there
-  changes only that view, and each opens on the machine you're on again the next time you visit it.
+- **Sessions, Settings, Automations, Workflows and Analytics follow the machine you're on.** Each of Settings,
+  Automations, Workflows and Analytics has its own machine switch at the top of its menu; picking a machine there
+  changes only that view, and each opens on the machine you're on again the next time you visit it. The dashboard and
+  the new-session page follow it too.
 - **Settings:** Appearance and Machines are marked **This browser**, because they belong to this browser, not to a
   machine. Folders, Harnesses, What agents can do, Skills & tools, Memory, Updates & about and API keys ask the machine
   shown. General and Labs say they come in a later step while another machine is shown, rather than showing the live
@@ -276,10 +277,11 @@ last chose with **Work here**.
   Settings → Machines make that machine the one you're on and go to its first page, in place. The composer's "fix the
   harness" link for another machine opens Settings on that machine's Harnesses page, in place. Jobs, Fleet, automation
   runs, the composer and message links open another machine's sessions in place too.
-- Other machines are still checked every 15 seconds; turn on **Keep every machine live** as well for live updates.
+- Other machines are checked every 15 seconds, and their event connections are held open, so a click doesn't wait to
+  connect. Turn on **Keep every machine live** in Settings → Labs for live updates instead of the check.
 - **Still reloads:** forgetting the machine the page is connected to, and the way back to this computer when that
-  machine can't be reached. The page's own connection is still to one machine, its live one; changing that without a
-  reload isn't done yet. With the switch off, every one of these reloads as it always did.
+  machine can't be reached. The page's own connection is to the machine that served it; the other machines are
+  reached from it.
 
 ## Updating your machines
 
@@ -482,19 +484,16 @@ The list lives on the machine that served the page (`/api/machines`, below), so 
 phones, see the same machines. A browser that kept its own list before copies it there once.
 
 The sidebar lists every machine's sessions, grouped by machine. The machine you're working in is live: its
-conversations stream, and diffs, files, terminals, Settings, Automations and Workflows all belong to it. Clicking
-a session on another machine makes that machine live. The page reloads so nothing from one machine carries over
-into another. Other machines' rows refresh every 15 seconds. A machine that stops answering keeps its last rows,
-dimmed and marked unreachable. If it's the one you're working in, its header turns red, and a reload offers the way
-back to this machine.
+conversations stream, and diffs, files, terminals, Settings, Automations, Workflows and Analytics belong to it.
+Clicking a session on another machine opens it where you are, without a reload, and makes that machine the one you're
+on. Its conversation, Changes, Files and terminals come from its own machine, over that machine's connection with its
+token. Other machines' rows refresh every 15 seconds. A machine that stops answering keeps its last rows, dimmed and
+marked unreachable, and shows "not answering" on its sessions (row, header and conversation) rather than a Working that
+never ends. If it's the one you're working in, its header turns red, and a reload offers the way back to this machine.
 
-With **Keep every machine live** on (Settings → Features, Experimental), every machine's rows update as they change,
-and clicking a session on another machine opens it where you are, without a reload. Its conversation, Changes, Files
-and terminals come from its own machine, over that machine's connection with its token. Settings, Automations,
-Workflows and the session list stay the live machine's. **Work here** (right-click a machine's heading) still makes
-it live. Another machine's rows offer **Copy path**, not Open in: the folder is on that machine. A machine that stops
-answering shows "not answering" on its sessions (row, header and conversation) until it's back, rather than a
-Working that never ends.
+With **Keep every machine live** on (Settings → Labs), every machine's rows update as they change instead. **Work
+here** (right-click a machine's heading) makes a machine the one you're on. Another machine's rows offer **Copy
+path**, not Open in: the folder is on that machine.
 
 An automation can run on another machine in the list: pick it with the Machine chip under the automation's box. The
 automation, its schedule and its runs stay on the machine that holds it. Each run starts its session (or workflow run)

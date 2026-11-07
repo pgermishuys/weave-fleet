@@ -44,7 +44,7 @@ export interface MachineConnection {
 const CATALOG_KEY = "weave:machines";
 const ACTIVE_KEY = "weave:active-machine";
 const SESSION_MACHINES_KEY = "weave:session-machines";
-const LIVE_MACHINES_KEY = "weave:live-machines";
+const CURRENT_KEY = "weave:current-machine";
 
 /** The machine requests go to; null is the home machine, the Fleet that served the page. */
 let activeMachine: MachineConnection | null = null;
@@ -202,62 +202,27 @@ export const HOME_MACHINE_KEY = "home";
 /** The user preference behind "Keep every machine live" in Settings → Labs: a live feed per machine, not a poll. */
 export const LIVE_MACHINES_PREFERENCE_KEY = "LiveMachines";
 
-/**
- * The user preference behind "Switch machines without reloading" in Settings → Labs: another machine's session opens
- * in place, and Settings follows the machine you're on. Unlike "Keep every machine live" it opens no live feeds.
- */
-export const MACHINE_SWITCH_PREFERENCE_KEY = "MachineSwitch";
-
-/**
- * Whether another machine's session opened in place when this browser last read the preferences: "Keep every machine
- * live" or "Switch machines without reloading" was on. Startup decides the live
- * machine before any request, so it goes by this; a browser that hasn't read them yet starts as with the switch off.
- */
-export function loadLiveMachinesHint(): boolean {
-  return readJson<unknown>(local(), LIVE_MACHINES_KEY, false) === true;
+/** Which machine this tab was last on, so a reload comes back to it. Per tab; an unlisted key is ignored by the store. */
+export function loadCurrentMachineKey(): string | null {
+  const key = readJson<unknown>(perTab(), CURRENT_KEY, null);
+  return typeof key === "string" ? key : null;
 }
 
-export function saveLiveMachinesHint(on: boolean): void {
-  writeJson(local(), LIVE_MACHINES_KEY, on);
+export function saveCurrentMachineKey(key: string): void {
+  writeJson(perTab(), CURRENT_KEY, key);
 }
 
 // ─── Startup and switching ────────────────────────────────────────────────────
 
 /**
- * Decides which machine this page works in, before anything makes a request: the machine that owns the session
- * in the URL when the client knows it, otherwise the one this tab last worked in, otherwise home. With "Keep every
- * machine live" on, a session's machine doesn't become live: the page stays where it was (the phone's on home) and
- * the session's views ask its machine (`provideMachineTarget`).
+ * Decides which machine this page works in, before anything makes a request: always home, the Fleet that served the
+ * page. Another machine's sessions open in place (`provideMachineTarget`), so the live machine only changes when
+ * the live one is forgotten (`switchToMachine`). A machine an older version stored as this tab's active one is dropped.
  */
-export function restoreActiveMachine(pathname: string = typeof window === "undefined" ? "/" : window.location.pathname): MachineConnection | null {
-  const machines = loadMachines();
-
-  // The phone pages say their machine in the path: a session on another machine at /phone/s/<machine>/<session>,
-  // everything else (the inbox, setup) on home. With every machine live, all of them on home.
-  if (pathname === "/phone" || pathname.startsWith("/phone/")) {
-    const machineId = loadLiveMachinesHint() ? undefined : /^\/phone\/s\/([^/]+)\//.exec(pathname)?.[1];
-    const phoneMachine = machineId ? machines.find((candidate) => candidate.id === decodeURIComponent(machineId)) ?? null : null;
-    saveActiveMachineId(phoneMachine?.id ?? null);
-    setActiveMachine(phoneMachine);
-    return phoneMachine;
-  }
-
-  const sessionId = /^\/sessions\/([^/]+)$/.exec(pathname)?.[1];
-  const owner = sessionId && sessionId !== "new" && !loadLiveMachinesHint() ? loadSessionMachines()[decodeURIComponent(sessionId)] : undefined;
-
-  let machine: MachineConnection | null;
-  if (owner === HOME_MACHINE_KEY) {
-    machine = null;
-  } else if (owner) {
-    machine = machines.find((candidate) => candidate.id === owner) ?? null;
-  } else {
-    const activeId = loadActiveMachineId();
-    machine = activeId ? machines.find((candidate) => candidate.id === activeId) ?? null : null;
-  }
-
-  saveActiveMachineId(machine?.id ?? null);
-  setActiveMachine(machine);
-  return machine;
+export function restoreActiveMachine(): null {
+  saveActiveMachineId(null);
+  setActiveMachine(null);
+  return null;
 }
 
 /**

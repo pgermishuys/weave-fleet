@@ -3,10 +3,9 @@ import { flushPromises, mount } from "@vue/test-utils";
 import { shallowRef } from "vue";
 import type { AccumulatedMessage } from "@/lib/client-types";
 import type { RunningWorkItem } from "@/lib/running-work";
-import { LIVE_MACHINES_PREFERENCE_KEY, saveMachines, setActiveMachine, type MachineConnection } from "@/lib/machines";
+import { saveMachines, setActiveMachine, type MachineConnection } from "@/lib/machines";
 import { MACHINE_TARGET, targetFor } from "@/lib/machine-target";
 import { useMachinesStore } from "@/stores/machines";
-import { usePreferencesStore } from "@/stores/preferences";
 
 /**
  * The "From … · mini" chip on a message another session sent opens the sender as the sidebar opens a session: in place
@@ -82,12 +81,6 @@ function fromPeer(machine?: MachineConnection): AccumulatedMessage {
   };
 }
 
-function setSwitch(on: boolean): void {
-  const preferences = usePreferencesStore();
-  preferences.hasFetched = true;
-  preferences.preferences = { ...preferences.preferences, [LIVE_MACHINES_PREFERENCE_KEY]: on ? "true" : "false" };
-}
-
 async function open(provided?: MachineConnection) {
   const { default: ActivityStream } = await import("@/components/session/ActivityStream.vue");
   const wrapper = mount(ActivityStream, {
@@ -120,42 +113,23 @@ describe("the chip naming the session a message came from", () => {
     vi.unstubAllGlobals();
   });
 
-  it("opens a sender on another machine in place with every machine live", async () => {
-    setSwitch(true);
+  it("opens a sender on another machine in place", async () => {
     stream.messages = shallowRef([fromPeer(mini)]);
-    const openOn = vi.spyOn(useMachinesStore(), "openOn").mockImplementation(() => {});
     const wrapper = await open();
 
     await wrapper.get("[data-testid='peer-from']").trigger("click", { button: 0 });
 
-    expect(openOn).not.toHaveBeenCalled();
     expect(navigate).toHaveBeenCalledWith(expect.objectContaining({ to: "/sessions/$id", params: { id: "sender-1" } }));
     expect(useMachinesStore().sessionTarget("sender-1")).toMatchObject({ key: mini.id, isLive: false });
     wrapper.unmount();
   });
 
-  it("switches to the sender's machine with the switch off, as before", async () => {
-    setSwitch(false);
-    stream.messages = shallowRef([fromPeer(mini)]);
-    const openOn = vi.spyOn(useMachinesStore(), "openOn").mockImplementation(() => {});
-    const wrapper = await open();
-
-    await wrapper.get("[data-testid='peer-from']").trigger("click", { button: 0 });
-
-    expect(openOn).toHaveBeenCalledWith(mini.id, "/sessions/sender-1");
-    expect(navigate).not.toHaveBeenCalled();
-    wrapper.unmount();
-  });
-
   it("finds a sender with no machine of its own on this session's machine, opened in place", async () => {
-    setSwitch(true);
     stream.messages = shallowRef([fromPeer()]);
-    const openOn = vi.spyOn(useMachinesStore(), "openOn").mockImplementation(() => {});
     const wrapper = await open(mini);
 
     await wrapper.get("[data-testid='peer-from']").trigger("click", { button: 0 });
 
-    expect(openOn).not.toHaveBeenCalled();
     expect(navigate).toHaveBeenCalledWith(expect.objectContaining({ params: { id: "sender-1" } }));
     expect(useMachinesStore().sessionTarget("sender-1").key).toBe(mini.id);
     wrapper.unmount();

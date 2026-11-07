@@ -4,8 +4,6 @@ import { createPinia, setActivePinia } from "pinia";
 import {
   HOME_MACHINE_KEY,
   LIVE_MACHINES_PREFERENCE_KEY,
-  MACHINE_SWITCH_PREFERENCE_KEY,
-  loadLiveMachinesHint,
   saveMachines,
   setActiveMachine,
   type MachineConnection,
@@ -30,8 +28,8 @@ vi.mock("@/composables/use-signalr-socket", async (original) => ({
 }));
 
 /**
- * "Switch machines without reloading" (Settings → Labs): another machine's session opens in place like with
- * "Keep every machine live", but opens no live feeds, and the machine you're on follows the open session.
+ * Another machine's session opens in place whenever machines are listed (no switch), the machine you're on follows
+ * the open session, and each other machine's event hub is held idle unless live feeds hold it.
  */
 
 const mini: MachineConnection = {
@@ -49,7 +47,7 @@ function setPreferences(values: Record<string, string>): void {
   preferences.preferences = values;
 }
 
-describe("switching machines without reloading", () => {
+describe("switching machines in place", () => {
   beforeEach(() => {
     localStorage.clear();
     sessionStorage.clear();
@@ -64,26 +62,24 @@ describe("switching machines without reloading", () => {
     vi.unstubAllGlobals();
   });
 
-  it("opens in place with its own switch on and live feeds off, and not with both off", () => {
-    const store = useMachinesStore();
-    setPreferences({ [MACHINE_SWITCH_PREFERENCE_KEY]: "true", [LIVE_MACHINES_PREFERENCE_KEY]: "false" });
-    expect(store.opensInPlace).toBe(true);
-
-    setPreferences({ [MACHINE_SWITCH_PREFERENCE_KEY]: "false", [LIVE_MACHINES_PREFERENCE_KEY]: "false" });
-    expect(store.opensInPlace).toBe(false);
+  it("opens in place whenever machines are listed, with no preference set", () => {
+    expect(useMachinesStore().opensInPlace).toBe(true);
+    saveMachines([]);
+    setActivePinia(createPinia());
+    expect(useMachinesStore().opensInPlace).toBe(false);
   });
 
-  it("remembers that it opens in place for the next startup, so a reload of another machine's session stays in place", () => {
-    const store = useMachinesStore();
-    setPreferences({ [MACHINE_SWITCH_PREFERENCE_KEY]: "true" });
-    expect(store.opensInPlace).toBe(true);
+  it("starts on the machine this tab was last on, else the live one, and ignores one that's gone", () => {
+    sessionStorage.setItem("weave:current-machine", JSON.stringify(mini.id));
+    expect(useMachinesStore().currentKey).toBe(mini.id);
 
-    return Promise.resolve().then(() => expect(loadLiveMachinesHint()).toBe(true));
+    sessionStorage.setItem("weave:current-machine", JSON.stringify("cccccccccccccccccccccccccccccccc"));
+    setActivePinia(createPinia());
+    expect(useMachinesStore().currentKey).toBe(HOME_MACHINE_KEY);
   });
 
   it("is on the live machine until a session on another machine is open, and stays on it afterwards", () => {
     const store = useMachinesStore();
-    setPreferences({ [MACHINE_SWITCH_PREFERENCE_KEY]: "true" });
     expect(store.currentKey).toBe(HOME_MACHINE_KEY);
 
     store.setCurrent(mini.id);
@@ -94,13 +90,8 @@ describe("switching machines without reloading", () => {
     expect(store.currentKey).toBe(HOME_MACHINE_KEY);
   });
 
-  it("is the live machine whatever was opened while the switch is off, or for a machine that's gone", () => {
+  it("is the live machine for a machine that's gone", () => {
     const store = useMachinesStore();
-    setPreferences({ [MACHINE_SWITCH_PREFERENCE_KEY]: "false" });
-    store.setCurrent(mini.id);
-    expect(store.currentKey).toBe(HOME_MACHINE_KEY);
-
-    setPreferences({ [MACHINE_SWITCH_PREFERENCE_KEY]: "true" });
     store.setCurrent("cccccccccccccccccccccccccccccccc");
     expect(store.currentKey).toBe(HOME_MACHINE_KEY);
   });
@@ -112,18 +103,17 @@ describe("switching machines without reloading", () => {
     expect(store.targetOfKey("dddddddddddddddddddddddddddddddd")).toMatchObject({ isLive: true });
   });
 
-  it("holds each other machine's event hub open and idle while it's on, and lets go when it's off", async () => {
+  it("holds each other machine's event hub open and idle unless live feeds are on, and lets go when they come on", async () => {
     hubs.length = 0;
     feedHubFor.mockClear();
     const store = useMachinesStore();
-    setPreferences({ [MACHINE_SWITCH_PREFERENCE_KEY]: "true" });
     const stop = store.startPolling();
     await nextTick();
 
     expect(hubs.map((hub) => hub.key)).toEqual([mini.id]);
     expect(hubs[0].start).toHaveBeenCalledTimes(1);
 
-    setPreferences({ [MACHINE_SWITCH_PREFERENCE_KEY]: "false" });
+    setPreferences({ [LIVE_MACHINES_PREFERENCE_KEY]: "true" });
     await nextTick();
     expect(hubs[0].stop).toHaveBeenCalledTimes(1);
     stop();
@@ -131,8 +121,8 @@ describe("switching machines without reloading", () => {
 
   it("holds no hub of its own with live feeds on: the feeds hold them", async () => {
     hubs.length = 0;
+    setPreferences({ [LIVE_MACHINES_PREFERENCE_KEY]: "true" });
     const store = useMachinesStore();
-    setPreferences({ [MACHINE_SWITCH_PREFERENCE_KEY]: "true", [LIVE_MACHINES_PREFERENCE_KEY]: "true" });
     const stop = store.startPolling();
     await nextTick();
 
@@ -143,7 +133,6 @@ describe("switching machines without reloading", () => {
   it("keeps the hubs held with nothing polling, as when Settings replaces the sidebar", async () => {
     hubs.length = 0;
     const store = useMachinesStore();
-    setPreferences({ [MACHINE_SWITCH_PREFERENCE_KEY]: "true" });
     const stopSidebar = store.startPolling();
     await nextTick();
     stopSidebar();
@@ -157,21 +146,22 @@ describe("switching machines without reloading", () => {
     stopSettings();
   });
 
-  it("holds them before anything polls, and lets go when the switch goes off with nothing polling", async () => {
+  it("holds them before anything polls, and lets go when live feeds come on with nothing polling", async () => {
     hubs.length = 0;
     const store = useMachinesStore();
-    setPreferences({ [MACHINE_SWITCH_PREFERENCE_KEY]: "true" });
     await nextTick();
     expect(hubs.map((hub) => hub.key)).toEqual([mini.id]);
     expect(store.currentKey).toBe(HOME_MACHINE_KEY);
 
-    setPreferences({ [MACHINE_SWITCH_PREFERENCE_KEY]: "false" });
+    setPreferences({ [LIVE_MACHINES_PREFERENCE_KEY]: "true" });
     await nextTick();
     expect(hubs[0].stop).toHaveBeenCalledTimes(1);
   });
 
-  it("holds nothing with the switch off", async () => {
+  it("holds nothing with no machines listed", async () => {
     hubs.length = 0;
+    saveMachines([]);
+    setActivePinia(createPinia());
     useMachinesStore().startPolling()();
     await nextTick();
     expect(hubs).toHaveLength(0);

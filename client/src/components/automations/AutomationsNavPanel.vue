@@ -24,7 +24,7 @@ interface Emits {
 defineProps<Props>();
 const emit = defineEmits<Emits>();
 
-// With "Switch machines without reloading" on, the list is the chosen machine's (the panel is rebuilt when it changes).
+// The list is the chosen machine's (the panel is rebuilt when it changes).
 const automationsMachine = useAutomationsMachine();
 const { automations, isLoading } = useAutomations(automationsMachine.target.value);
 const { viewMode, draft } = useAutomationsNav();
@@ -73,7 +73,7 @@ function handleCreate(): void {
       <p class="panel-header">
         Automations
       </p>
-      <!-- With "Switch machines without reloading" on: which machine's automations the list and the pane show. -->
+      <!-- which machine's automations the list and the pane show. -->
       <div
         v-if="automationsMachine.enabled.value"
         class="panel-machine"

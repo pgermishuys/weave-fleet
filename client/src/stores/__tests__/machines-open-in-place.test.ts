@@ -4,8 +4,6 @@ import type { SessionListItem } from "@/api/client";
 import {
   HOME_MACHINE_KEY,
   LIVE_MACHINES_PREFERENCE_KEY,
-  loadLiveMachinesHint,
-  saveLiveMachinesHint,
   saveMachines,
   setActiveMachine,
   type MachineConnection,
@@ -18,16 +16,15 @@ import { useArchiveQueueStore } from "@/stores/archive-queue";
 import { useAbortSession } from "@/composables/use-session-actions";
 
 /**
- * With "Keep every machine live" on, another machine's session opens in place: its views ask the machine it's on
- * (`sessionTarget`), and each machine's live feed shares its event hub with them. Off, everything asks the live
- * machine, as before.
+ * Another machine's session opens in place: its views ask the machine it's on (`sessionTarget`), and with "Keep every
+ * machine live" on, each machine's live feed shares its event hub with them.
  */
 
 vi.mock("@/lib/machines", async (original) => ({ ...await original<typeof import("@/lib/machines")>(), switchToMachine: vi.fn() }));
 
 const { feeds, feedHubFor, retryConnection } = vi.hoisted(() => ({
   feeds: [] as { options: MachineFeedOptions<object> }[],
-  feedHubFor: vi.fn((machine: { key: string }) => ({ sharedHubOf: machine.key })),
+  feedHubFor: vi.fn((machine: { key: string }) => ({ sharedHubOf: machine.key, start: async () => {}, stop: async () => {} })),
   retryConnection: vi.fn(),
 }));
 
@@ -87,18 +84,8 @@ describe("opening another machine's session in place", () => {
     vi.unstubAllGlobals();
   });
 
-  it("asks the live machine for every session while the switch is off", () => {
+  it("asks the machine a session is on; the live machine for its own and unknown ones", () => {
     const store = useMachinesStore();
-    setSwitch(false);
-    store.rememberSessions(mini.id, ["mini-1"]);
-
-    expect(store.opensInPlace).toBe(false);
-    expect(store.sessionTarget("mini-1")).toMatchObject({ key: HOME_MACHINE_KEY, isLive: true });
-  });
-
-  it("asks the machine a session is on with the switch on; the live machine for its own and unknown ones", () => {
-    const store = useMachinesStore();
-    setSwitch(true);
     store.rememberSessions(mini.id, ["mini-1"]);
     store.rememberSessions(HOME_MACHINE_KEY, ["home-1"]);
 
@@ -111,7 +98,6 @@ describe("opening another machine's session in place", () => {
   it("asks home for home's sessions while another machine is live", () => {
     setActiveMachine(mini);
     const store = useMachinesStore();
-    setSwitch(true);
     store.rememberSessions(HOME_MACHINE_KEY, ["home-1"]);
 
     expect(store.sessionTarget("home-1")).toMatchObject({ key: HOME_MACHINE_KEY, isLive: false, connection: null });
@@ -119,7 +105,6 @@ describe("opening another machine's session in place", () => {
 
   it("knows the machine of a session started or forked there in place before any list has it", () => {
     const store = useMachinesStore();
-    setSwitch(true);
     store.rememberSessions(mini.id, ["moved"]);
 
     useSessionsStore().upsertElsewhere(lab.id, row("moved", "Dark mode contrast pass"));
@@ -129,7 +114,6 @@ describe("opening another machine's session in place", () => {
 
   it("asks the live machine again for the sessions of a machine that's forgotten, and drops their rows", () => {
     const store = useMachinesStore();
-    setSwitch(true);
     store.rememberSessions(mini.id, ["mini-1"]);
     useSessionsStore().upsertElsewhere(mini.id, row("mini-1", "Hero image sizes"));
 
@@ -139,30 +123,10 @@ describe("opening another machine's session in place", () => {
     expect(useSessionsStore().sessionById("mini-1")).toBeNull();
   });
 
-  it("goes by how the page started until the preferences load, then remembers the switch for the next start", async () => {
-    saveLiveMachinesHint(true);
-    const store = useMachinesStore();
-
-    expect(store.opensInPlace).toBe(true);
-
-    setSwitch(false);
-    await Promise.resolve();
-    expect(store.opensInPlace).toBe(false);
-    expect(loadLiveMachinesHint()).toBe(false);
-
-    setSwitch(true);
-    await Promise.resolve();
-    expect(loadLiveMachinesHint()).toBe(true);
-  });
-
-  it("says a machine its feed can't read isn't answering, with the switch on only", () => {
+  it("says a machine its feed can't read isn't answering", () => {
     const store = useMachinesStore();
     store.others = { [mini.id]: { sessions: [], projects: [], error: "Can't reach mini.", loadedAt: 1, loading: false } };
 
-    setSwitch(false);
-    expect(store.isAnswering(mini.id)).toBe(true);
-
-    setSwitch(true);
     expect(store.isAnswering(mini.id)).toBe(false);
     expect(store.isAnswering(lab.id)).toBe(true);
     expect(store.isAnswering(HOME_MACHINE_KEY)).toBe(true);
@@ -178,7 +142,6 @@ describe("opening another machine's session in place", () => {
       return Response.json({});
     }));
     const store = useMachinesStore();
-    setSwitch(true);
     store.rememberSessions(mini.id, ["mini-1"]);
 
     const queue = useArchiveQueueStore();
@@ -195,8 +158,8 @@ describe("opening another machine's session in place", () => {
 
   it("has a machine's sessions connect again at once when its feed hears from it after it stopped answering", () => {
     retryConnection.mockClear();
-    const store = useMachinesStore();
     setSwitch(true);
+    const store = useMachinesStore();
     const stop = store.startPolling();
     const miniFeed = feeds.find((feed) => feed.options.target.machineId === mini.id)!;
     const read = (lastHeardAt: number) => ({ sessions: [], projects: null, identity: null, status: "live", lastHeardAt, error: null });
@@ -214,13 +177,13 @@ describe("opening another machine's session in place", () => {
   });
 
   it("gives each machine's live feed that machine's event hub, shared with its open sessions", () => {
-    const store = useMachinesStore();
     setSwitch(true);
+    const store = useMachinesStore();
     const stop = store.startPolling();
 
     const hubs = feeds.map((feed) => feed.options.createHub?.(`${feed.options.target.baseUrl}/hubs/session-events`, feed.options.target.token));
 
-    expect(hubs).toEqual([{ sharedHubOf: mini.id }, { sharedHubOf: lab.id }]);
+    expect(hubs).toEqual([expect.objectContaining({ sharedHubOf: mini.id }), expect.objectContaining({ sharedHubOf: lab.id })]);
     expect(feedHubFor.mock.calls.map(([machine]) => machine)).toEqual([
       expect.objectContaining({ key: mini.id, connection: mini }),
       expect.objectContaining({ key: lab.id, connection: lab }),
