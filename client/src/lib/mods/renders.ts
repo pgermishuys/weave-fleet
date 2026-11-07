@@ -254,6 +254,8 @@ function sync(machine: MachineTarget, row: ModToolRow): void {
 
 /** Starts listening for the session's mod events and loads its hooks and declared panes once. */
 export function watchModSession(machine: MachineTarget, sessionId: string): void {
+  // The right panel passes "" while no session is open (e.g. on the way between two sessions): nothing to watch.
+  if (!sessionId) return;
   listen(machine, sessionId);
   if (!(sessionId in hooks)) {
     hooks[sessionId] = null;
