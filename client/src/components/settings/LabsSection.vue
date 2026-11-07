@@ -10,7 +10,7 @@ import { useWorkflowsFeature } from "@/composables/use-workflows-feature";
 import { DREAMING_PREFERENCE_KEY } from "@/lib/dreaming";
 import { FLEET_UPDATES_PREFERENCE_KEY } from "@/lib/fleet-updates";
 import { JOBS_PREFERENCE_KEY } from "@/lib/jobs";
-import { LIVE_MACHINES_PREFERENCE_KEY } from "@/lib/machines";
+import { LIVE_MACHINES_PREFERENCE_KEY, MACHINE_SWITCH_PREFERENCE_KEY } from "@/lib/machines";
 import { MISSION_CONTROL_PREFERENCE_KEY } from "@/lib/mission-control";
 import { PAGE_CHOICE_PREFERENCE_KEY } from "@/lib/page-choice";
 import { SESSION_MESSAGES_PREFERENCE_KEY } from "@/lib/session-messages";
@@ -25,6 +25,7 @@ preferencesStore.ensureLoaded();
 
 const sessionMessages = usePreferenceSwitch(SESSION_MESSAGES_PREFERENCE_KEY);
 const liveMachines = usePreferenceSwitch(LIVE_MACHINES_PREFERENCE_KEY);
+const machineSwitch = usePreferenceSwitch(MACHINE_SWITCH_PREFERENCE_KEY);
 const fleetUpdates = usePreferenceSwitch(FLEET_UPDATES_PREFERENCE_KEY);
 const jobs = usePreferenceSwitch(JOBS_PREFERENCE_KEY);
 const missionControl = usePreferenceSwitch(MISSION_CONTROL_PREFERENCE_KEY);
@@ -104,6 +105,30 @@ function openRoute(path: string): void {
             aria-label="Keep every machine live"
             data-testid="live-machines-switch"
             @click="liveMachines.toggle"
+          />
+        </template>
+      </SettingRow>
+
+      <SettingRow
+        v-if="machines.hasMachines"
+        id="machine-switch"
+        title="Switch machines without reloading"
+        summary="Another machine's session opens in place, and Settings follows the machine you're on."
+      >
+        <template #more>
+          Opening a session on another machine no longer reloads Fleet. The machine you're on is the open session's:
+          the Live badge moves to it, and Settings opens on it with a machine switch at the top of its menu. Folders and
+          Harnesses ask that machine; the other Settings pages say they come in a later step. Other machines are still
+          checked every 15 seconds (turn on Keep every machine live for live updates).
+        </template>
+        <template #control>
+          <SettingSwitch
+            :checked="machineSwitch.enabled.value"
+            :saving="machineSwitch.saving.value"
+            :disabled="preferencesStore.isLoading || machineSwitch.saving.value"
+            aria-label="Switch machines without reloading"
+            data-testid="machine-switch-switch"
+            @click="machineSwitch.toggle"
           />
         </template>
       </SettingRow>

@@ -4,11 +4,14 @@ import { AlertCircle, LoaderCircle } from "lucide-vue-next";
 import type { components } from "@/api/generated/schema";
 import { extractApiError } from "@/lib/api-error";
 import { formatBytes } from "@/lib/format-utils";
-import { liveTarget } from "@/lib/machine-target";
+import { useMachineTarget } from "@/lib/machine-target";
 import { recentStorageSizes, rememberStorageSize } from "@/lib/storage-size-cache";
 
 type Checkout = components["schemas"]["WorktreeCheckout"];
 type Report = components["schemas"]["WorktreeCleanupReport"];
+
+// The machine Settings shows; read once, as the page is rebuilt when it changes.
+const target = useMachineTarget();
 
 /** How many folder sizes Fleet asks for at once; each is a walk of the folder. */
 const SIZE_CONCURRENCY = 3;
@@ -73,7 +76,7 @@ async function loadSizes(list: Checkout[], run: number, machine: string): Promis
   const worker = async (): Promise<void> => {
     for (let next = queue.shift(); next && run === generation; next = queue.shift()) {
       try {
-        const { data } = await liveTarget().api.GET("/api/storage/worktrees/{workspaceId}/size", {
+        const { data } = await target.api.GET("/api/storage/worktrees/{workspaceId}/size", {
           params: { path: { workspaceId: next.workspaceId } },
         });
         if (data) rememberStorageSize(machine, next.workspaceId, data);
@@ -98,7 +101,7 @@ async function load(): Promise<void> {
   isLoading.value = checkouts.value.length === 0;
   error.value = null;
   try {
-    const { data, error: apiError } = await liveTarget().api.GET("/api/storage/worktrees");
+    const { data, error: apiError } = await target.api.GET("/api/storage/worktrees");
     if (run !== generation) return;
     if (apiError || !data) {
       error.value = extractApiError(apiError, "Couldn't load the worktree checkouts.");
@@ -109,7 +112,7 @@ async function load(): Promise<void> {
     isLoading.value = false;
     // Counts first; sizes fill in as they arrive, removable folders first since they matter most.
     // Folders measured a few minutes ago keep that size.
-    const machine = liveTarget().key;
+    const machine = target.key;
     const recentSizes = recentStorageSizes(machine);
     sizes.value = { ...sizes.value, ...recentSizes };
     const order = [...data.checkouts]
@@ -129,7 +132,7 @@ async function clean(): Promise<void> {
   isCleaning.value = true;
   error.value = null;
   try {
-    const { data, error: apiError } = await liveTarget().api.POST("/api/storage/worktrees/clean", {
+    const { data, error: apiError } = await target.api.POST("/api/storage/worktrees/clean", {
       body: { workspaceIds: ids },
     });
     if (apiError || !data) {

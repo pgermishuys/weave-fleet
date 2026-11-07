@@ -4,6 +4,7 @@ import { KeyRound, LoaderCircle, RefreshCw, Search } from "lucide-vue-next";
 import type { HarnessSignInConnection, HarnessSignInProvider } from "@/api/client";
 import HarnessSignInFlow from "@/components/settings/HarnessSignInFlow.vue";
 import { signInSummary } from "@/lib/harness-sign-in";
+import { useMachineTarget } from "@/lib/machine-target";
 import { useHarnessSignInStore } from "@/stores/harness-sign-in";
 
 /**
@@ -21,7 +22,7 @@ const props = defineProps<{
   autoLoad: boolean;
 }>();
 
-const store = useHarnessSignInStore();
+const store = useHarnessSignInStore(useMachineTarget());
 
 const requested = shallowRef(false);
 const loading = shallowRef(false);

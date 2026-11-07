@@ -2,6 +2,7 @@
 import { computed, shallowRef, watch } from "vue";
 import { LoaderCircle } from "lucide-vue-next";
 import { refreshAllHarnesses } from "@/composables/use-harnesses";
+import { useMachineTarget } from "@/lib/machine-target";
 import { usePreferencesStore } from "@/stores/preferences";
 import type { HarnessInfo } from "@/api/client";
 
@@ -16,7 +17,8 @@ const props = defineProps<{
   emptyMeaning?: string;
 }>();
 
-const prefs = usePreferencesStore();
+const target = useMachineTarget();
+const prefs = usePreferencesStore(target);
 const saved = computed(() => prefs.get(props.preferenceKey, ""));
 const draft = shallowRef(saved.value);
 const checking = shallowRef(false);
@@ -33,7 +35,7 @@ async function check(): Promise<void> {
   try {
     const path = draft.value.trim();
     if (path !== saved.value) await prefs.set(props.preferenceKey, path);
-    refreshAllHarnesses();
+    refreshAllHarnesses(target);
   } catch (e) {
     error.value = e instanceof Error ? e.message : `Fleet couldn't save the path to ${props.program}.`;
   } finally {

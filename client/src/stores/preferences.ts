@@ -1,8 +1,8 @@
-import { defineStore } from "pinia";
 import { ref, shallowRef } from "vue";
-import { api } from "@/api/client";
+import { defineMachineStore } from "@/lib/machine-store";
 
-export const usePreferencesStore = defineStore("preferences", () => {
+/** The preferences of a machine (the live one unless asked for another); see `defineMachineStore`. */
+export const usePreferencesStore = defineMachineStore("preferences", (target) => {
   const preferences = ref<Record<string, string>>({});
   const isLoading = shallowRef(false);
   const hasFetched = shallowRef(false);
@@ -11,7 +11,7 @@ export const usePreferencesStore = defineStore("preferences", () => {
     isLoading.value = true;
 
     try {
-      const { data, error: apiError } = await api.GET("/api/preferences");
+      const { data, error: apiError } = await target.api.GET("/api/preferences");
       if (apiError) {
         return;
       }
@@ -38,7 +38,7 @@ export const usePreferencesStore = defineStore("preferences", () => {
     preferences.value = { ...preferences.value, [key]: value };
 
     try {
-      const { error: apiError } = await api.PUT("/api/preferences/{key}", {
+      const { error: apiError } = await target.api.PUT("/api/preferences/{key}", {
         params: { path: { key } },
         body: { value } as never,
       });

@@ -8,7 +8,7 @@ import {
   onCatalogChange,
   type HarnessCatalogChange,
 } from "@/lib/harness-catalog-changes";
-import { liveTarget, useMachineTarget } from "@/lib/machine-target";
+import { liveTarget, useMachineTarget, type MachineTarget } from "@/lib/machine-target";
 import { forgetSaved, readSaved, writeSaved } from "@/lib/saved-per-machine";
 
 /** How long a folder's catalog is shown without asking again; the harness is asked anyway once it's older. */
@@ -78,11 +78,11 @@ function forgetChanged(change: HarnessCatalogChange): void {
 }
 
 /**
- * Forgets `harnessType`'s catalogs in every folder of the live machine, so the next composer asks again: signing in to
+ * Forgets `harnessType`'s catalogs in every folder of `target`'s machine (the live one unless given), so the next composer asks again: signing in to
  * a provider or out of one changes the models the harness offers everywhere.
  */
-export function forgetHarnessCatalogs(harnessType: string): void {
-  const machineKey = liveTarget().key;
+export function forgetHarnessCatalogs(harnessType: string, target: MachineTarget = liveTarget()): void {
+  const machineKey = target.key;
   const cache = cacheFor(machineKey);
   for (const key of [...cache.keys()]) {
     if (key.startsWith(`${harnessType}\n`)) cache.delete(key);

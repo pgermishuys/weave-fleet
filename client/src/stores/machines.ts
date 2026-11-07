@@ -8,6 +8,7 @@ import { baseUrlOf, onAddressChange, type MachineAddress } from "@/lib/machine-r
 import {
   HOME_MACHINE_KEY,
   LIVE_MACHINES_PREFERENCE_KEY,
+  MACHINE_SWITCH_PREFERENCE_KEY,
   fetchOnMachine,
   getActiveMachine,
   loadLiveMachinesHint,
@@ -886,14 +887,16 @@ export const useMachinesStore = defineStore("machines", () => {
   const sessionsStore = useSessionsStore();
   /** Settings → Labs: every machine that isn't live keeps a live feed, instead of being polled. */
   const liveFeeds = computed(() => preferences.get(LIVE_MACHINES_PREFERENCE_KEY, "false") === "true");
+  /** Settings → Labs: another machine's session opens in place, without live feeds (the other machines keep their poll). */
+  const machineSwitch = computed(() => preferences.get(MACHINE_SWITCH_PREFERENCE_KEY, "false") === "true");
   /**
    * The same switch opens another machine's session in place, without a reload. Until the preferences load it's as
    * this page started (see `restoreActiveMachine`), so a link to such a session opens where startup put it.
    */
   const startedInPlace = loadLiveMachinesHint();
-  const opensInPlace = computed(() => (preferences.hasFetched ? liveFeeds.value : startedInPlace));
+  const opensInPlace = computed(() => (preferences.hasFetched ? liveFeeds.value || machineSwitch.value : startedInPlace));
   watch(
-    () => [preferences.hasFetched, liveFeeds.value] as const,
+    () => [preferences.hasFetched, liveFeeds.value || machineSwitch.value] as const,
     ([fetched, on]) => {
       if (fetched) saveLiveMachinesHint(on);
     },
@@ -1031,6 +1034,21 @@ export const useMachinesStore = defineStore("machines", () => {
   }
 
   /**
+   * The machine of the session open now, or of the last one that was: the machine you're on, and the one Settings
+   * opens on. Only moves with "Switch machines without reloading" (or live feeds) on; otherwise it's the live machine.
+   */
+  const currentOpened = shallowRef<string | null>(null);
+  const currentKey = computed(() => {
+    const key = currentOpened.value;
+    return opensInPlace.value && key && entries.value.some((entry) => entry.key === key) ? key : liveKey;
+  });
+  const current = computed(() => entries.value.find((entry) => entry.key === currentKey.value) ?? live.value);
+
+  function setCurrent(key: string): void {
+    currentOpened.value = key;
+  }
+
+  /**
    * The machine a session's views ask: with the switch on, the machine it's on, as far as this page knows (a session
    * opened or started here in place, or one any machine's list had); otherwise, and for a session on no machine
    * listed here, the live one.
@@ -1039,7 +1057,12 @@ export const useMachinesStore = defineStore("machines", () => {
     const key = sessionId && opensInPlace.value
       ? sessionsStore.elsewhere.get(sessionId)?.machineKey ?? sessionMachines.value[sessionId]
       : undefined;
-    if (!key || key === liveKey) return liveTarget();
+    return key ? targetOfKey(key) : liveTarget();
+  }
+
+  /** The machine listed under `key` as a target; the live one for a key that isn't listed here. */
+  function targetOfKey(key: string): MachineTarget {
+    if (key === liveKey) return liveTarget();
     const connection = connectionFor(key);
     return key === HOME_MACHINE_KEY || connection ? targetFor(connection) : liveTarget();
   }
@@ -1103,8 +1126,12 @@ export const useMachinesStore = defineStore("machines", () => {
     setAgentWork,
     reorderAddresses,
     opensInPlace,
+    currentKey,
+    current,
+    setCurrent,
     isAnswering,
     sessionTarget,
+    targetOfKey,
     openOn,
   };
 });

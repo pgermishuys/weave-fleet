@@ -1,13 +1,13 @@
-import { defineStore } from "pinia";
 import { shallowRef } from "vue";
-import { api, type HarnessProfile, type HarnessProfileCheck } from "@/api/client";
+import type { HarnessProfile, HarnessProfileCheck } from "@/api/client";
+import { defineMachineStore } from "@/lib/machine-store";
 import type { MachineTarget } from "@/lib/machine-target";
 
 /**
  * The user's harness profiles, by harness. Settings edits them and the new-session box picks from them, so both
  * read this one store: a profile made in Settings shows up in the picker straight away.
  */
-export const useHarnessProfilesStore = defineStore("harness-profiles", () => {
+export const useHarnessProfilesStore = defineMachineStore("harness-profiles", (storeTarget) => {
   const byHarness = shallowRef<Readonly<Record<string, readonly HarnessProfile[]>>>({});
   /** Other machines' profiles, by machine key and harness: the new-session box can start a session on another machine. */
   const onOtherMachines = shallowRef<Readonly<Record<string, readonly HarnessProfile[]>>>({});
@@ -35,7 +35,7 @@ export const useHarnessProfilesStore = defineStore("harness-profiles", () => {
     if (pending) return pending;
 
     const request = (async () => {
-      const { data, response } = await (isOther(target) ? target.api : api).GET("/api/harnesses/{harnessType}/profiles", {
+      const { data, response } = await (isOther(target) ? target.api : storeTarget.api).GET("/api/harnesses/{harnessType}/profiles", {
         params: { path: { harnessType } },
       });
       if (response.ok && Array.isArray(data)) {
@@ -53,7 +53,7 @@ export const useHarnessProfilesStore = defineStore("harness-profiles", () => {
 
   /** Saves a new profile. The server tries it with the harness first and refuses it with the harness's reason. */
   async function create(harnessType: string, name: string, content: string): Promise<HarnessProfile> {
-    const { data, error, response } = await api.POST("/api/harnesses/{harnessType}/profiles", {
+    const { data, error, response } = await storeTarget.api.POST("/api/harnesses/{harnessType}/profiles", {
       params: { path: { harnessType } },
       body: { name, content },
     });
@@ -64,7 +64,7 @@ export const useHarnessProfilesStore = defineStore("harness-profiles", () => {
   }
 
   async function update(harnessType: string, id: string, name: string, content: string): Promise<HarnessProfile> {
-    const { data, error, response } = await api.PUT("/api/harnesses/{harnessType}/profiles/{id}", {
+    const { data, error, response } = await storeTarget.api.PUT("/api/harnesses/{harnessType}/profiles/{id}", {
       params: { path: { harnessType, id } },
       body: { name, content },
     });
@@ -75,7 +75,7 @@ export const useHarnessProfilesStore = defineStore("harness-profiles", () => {
   }
 
   async function remove(harnessType: string, id: string): Promise<void> {
-    const { error, response } = await api.DELETE("/api/harnesses/{harnessType}/profiles/{id}", {
+    const { error, response } = await storeTarget.api.DELETE("/api/harnesses/{harnessType}/profiles/{id}", {
       params: { path: { harnessType, id } },
     });
     if (!response.ok) throw new Error(errorMessage(error, response));
@@ -84,7 +84,7 @@ export const useHarnessProfilesStore = defineStore("harness-profiles", () => {
 
   /** Makes a profile the default for new sessions, or clears the default with null. */
   async function setDefault(harnessType: string, id: string | null): Promise<void> {
-    const { error, response } = await api.PUT("/api/harnesses/{harnessType}/profiles/default", {
+    const { error, response } = await storeTarget.api.PUT("/api/harnesses/{harnessType}/profiles/default", {
       params: { path: { harnessType } },
       body: { profileId: id },
     });
@@ -94,7 +94,7 @@ export const useHarnessProfilesStore = defineStore("harness-profiles", () => {
 
   /** Asks the harness to try content without saving it. */
   async function check(harnessType: string, content: string): Promise<HarnessProfileCheck> {
-    const { data, error, response } = await api.POST("/api/harnesses/{harnessType}/profiles/check", {
+    const { data, error, response } = await storeTarget.api.POST("/api/harnesses/{harnessType}/profiles/check", {
       params: { path: { harnessType } },
       body: { content },
     });

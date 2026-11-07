@@ -1,6 +1,5 @@
 import { computed, onBeforeUnmount, readonly, shallowRef } from "vue";
 import {
-  api,
   type WeaveConfigView,
   type WeaveFlavor,
   type WeaveHarnessCheck,
@@ -8,6 +7,7 @@ import {
   type WeavePluginChange,
   type WeaveSaveResult,
 } from "@/api/client";
+import { useMachineTarget } from "@/lib/machine-target";
 
 /** How often Settings re-reads the config while a save is still waiting for busy folders. */
 export const APPLY_POLL_MS = 3000;
@@ -51,6 +51,8 @@ export function forgetWeaveConfig(): void {
  * While a save waits for busy folders, it re-reads until they've all reloaded.
  */
 export function useWeaveConfig() {
+  // The machine the page around it shows (Settings can show another one).
+  const target = useMachineTarget();
   const view = shallowRef<WeaveConfigView | null>(lastView);
   const loading = shallowRef(false);
   const error = shallowRef<string | null>(null);
@@ -76,7 +78,7 @@ export function useWeaveConfig() {
   async function load(redetect = false): Promise<void> {
     loading.value = true;
     try {
-      const { data, error: apiError, response } = await api.GET("/api/weave", {
+      const { data, error: apiError, response } = await target.api.GET("/api/weave", {
         params: { query: { redetect: redetect || undefined } },
       });
       if (!response.ok) throw new Error(errorMessage(apiError, response));
@@ -96,14 +98,14 @@ export function useWeaveConfig() {
   }
 
   async function check(flavor: WeaveFlavor, files: Record<string, string>): Promise<WeaveHarnessCheck[]> {
-    const { data, error: apiError, response } = await api.POST("/api/weave/check", { body: { flavor, files } });
+    const { data, error: apiError, response } = await target.api.POST("/api/weave/check", { body: { flavor, files } });
     if (!response.ok) throw new Error(errorMessage(apiError, response));
     return data as unknown as WeaveHarnessCheck[];
   }
 
   /** Saves; with source "fleet" the harnesses try it first, and nothing is saved when one of them fails. */
   async function save(source: "own" | "fleet", files: Record<string, string>): Promise<WeaveSaveResult> {
-    const { data, error: apiError, response } = await api.PUT("/api/weave", { body: { source, files } });
+    const { data, error: apiError, response } = await target.api.PUT("/api/weave", { body: { source, files } });
     if (!response.ok) throw new Error(errorMessage(apiError, response));
     const result = data as unknown as WeaveSaveResult;
     if (result.saved && result.config) {
@@ -123,8 +125,8 @@ export function useWeaveConfig() {
     try {
       const options = { params: { path: { harnessType } } };
       const { data, error: apiError, response } = add
-        ? await api.POST("/api/weave/harnesses/{harnessType}/plugin", options)
-        : await api.DELETE("/api/weave/harnesses/{harnessType}/plugin", options);
+        ? await target.api.POST("/api/weave/harnesses/{harnessType}/plugin", options)
+        : await target.api.DELETE("/api/weave/harnesses/{harnessType}/plugin", options);
       if (!response.ok) throw new Error(errorMessage(apiError, response));
       const result = data as unknown as WeavePluginChange;
       show(result.config);
@@ -144,7 +146,7 @@ export function useWeaveConfig() {
   }
 
   async function readOwn(flavor: WeaveFlavor): Promise<WeaveOwnConfig> {
-    const { data, error: apiError, response } = await api.GET("/api/weave/own", { params: { query: { flavor } } });
+    const { data, error: apiError, response } = await target.api.GET("/api/weave/own", { params: { query: { flavor } } });
     if (!response.ok) throw new Error(errorMessage(apiError, response));
     return data as unknown as WeaveOwnConfig;
   }

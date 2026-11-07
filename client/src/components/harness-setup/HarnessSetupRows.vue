@@ -147,7 +147,7 @@ async function start(harness: HarnessInfo, action: SetupAction): Promise<void> {
   failure.value = null;
 
   // Setting up a harness here means wanting to use it: turn it on (Claude Code starts off).
-  if (!harness.userEnabled) void preferences.set(`${harness.type}.enabled`, "true").then(refreshAllHarnesses);
+  if (!harness.userEnabled) void preferences.set(`${harness.type}.enabled`, "true").then(() => refreshAllHarnesses());
 
   if (!config.value.terminalEnabled) {
     failure.value = { harnessType: harness.type, message: "Terminals are turned off in this Fleet.", command };
@@ -197,7 +197,7 @@ async function startNext(harness: HarnessInfo): Promise<void> {
 
 function startChecking(): void {
   stopChecking();
-  checkTimer = setInterval(refreshAllHarnesses, CHECK_EVERY_MS);
+  checkTimer = setInterval(() => refreshAllHarnesses(), CHECK_EVERY_MS);
 }
 
 function stopChecking(): void {

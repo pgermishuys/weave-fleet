@@ -106,10 +106,10 @@ function load(list: HarnessList, fresh: boolean): Promise<void> {
 
 /**
  * Tells every list on screen to check again, e.g. after installing a harness: the machine checks every harness, and
- * every `useHarnesses` gets the answer. Harnesses are set up on the live machine.
+ * every `useHarnesses` gets the answer. Harnesses are set up on `target`'s machine (the live one unless given).
  */
-export function refreshAllHarnesses(): void {
-  void load(listFor(liveTarget()), true);
+export function refreshAllHarnesses(target: MachineTarget = liveTarget()): void {
+  void load(listFor(target), true);
 }
 
 /** For tests: forget every machine's list, on the page and saved. */

@@ -13,6 +13,7 @@ import {
   visibleFields,
   type SignInAnswers,
 } from "@/lib/harness-sign-in";
+import { useMachineTarget } from "@/lib/machine-target";
 import { useHarnessSignInStore } from "@/stores/harness-sign-in";
 
 /**
@@ -38,7 +39,7 @@ const emit = defineEmits<{
 /** How often a browser sign-in's status is checked. */
 const POLL_MS = 2000;
 
-const store = useHarnessSignInStore();
+const store = useHarnessSignInStore(useMachineTarget());
 
 const methods = computed(() => methodsToOffer(props.provider));
 const selectedKey = shallowRef(methods.value[0] ? methodKey(methods.value[0]) : "");

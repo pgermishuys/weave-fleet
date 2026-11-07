@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import { computed, watch } from "vue";
+import { resetSettingsMachine } from "@/composables/use-settings-machine";
 import { useLocation, useRouter } from "@tanstack/vue-router";
 import SettingsPage from "@/components/settings/SettingsPage.vue";
 import { useSettingsNav, type SettingsSectionId } from "@/composables/use-settings-nav";
@@ -8,6 +9,9 @@ const PLUGINS_PATH = "/settings/plugins";
 
 // Settings is one page whose menu picks the section. Plugins and each plugin also have their own address
 // (/settings/plugins, /settings/plugins/<id>): the address picks the section, and picking one moves the address.
+// Settings opens on the machine you're on, whatever was picked on an earlier visit.
+resetSettingsMachine();
+
 const router = useRouter();
 const { activeSection, setActiveSection } = useSettingsNav();
 const pathname = useLocation({ select: (location) => location.pathname });

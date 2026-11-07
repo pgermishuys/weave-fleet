@@ -8,6 +8,7 @@ import {
   toPermissionLevel,
   type PermissionLevel,
 } from "@/lib/permissions";
+import { useMachineTarget } from "@/lib/machine-target";
 import { usePreferencesStore } from "@/stores/preferences";
 
 export const PERMISSION_LEVELS: readonly PermissionLevel[] = ["ask", "edits", "all"];
@@ -17,7 +18,7 @@ export const PERMISSION_LEVELS: readonly PermissionLevel[] = ["ask", "edits", "a
  * harness's own tab can set its own). Shared by that tab's "What it may do" group and the Permissions page's table.
  */
 export function useHarnessPermissions() {
-  const preferencesStore = usePreferencesStore();
+  const preferencesStore = usePreferencesStore(useMachineTarget());
   preferencesStore.ensureLoaded();
 
   const defaultLevel = computed<PermissionLevel>(

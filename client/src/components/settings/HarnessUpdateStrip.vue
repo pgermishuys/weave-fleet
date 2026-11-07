@@ -3,7 +3,8 @@ import { computed, shallowRef } from "vue";
 import { ArrowUpCircle, Check, Copy, LoaderCircle } from "lucide-vue-next";
 import type { HarnessInfo } from "@/api/client";
 import { refreshAllHarnesses } from "@/composables/use-harnesses";
-import { apiFetch } from "@/lib/api-client";
+import { useMachineTarget } from "@/lib/machine-target";
+import { apiFetchOn } from "@/lib/api-client";
 import { harnessState } from "@/lib/harness-display";
 
 /**
@@ -16,6 +17,7 @@ const props = defineProps<{
   harness: HarnessInfo;
 }>();
 
+const target = useMachineTarget();
 const update = computed(() => props.harness.update ?? null);
 const job = computed(() => update.value?.job ?? null);
 const name = computed(() => props.harness.displayName);
@@ -35,7 +37,7 @@ async function send(method: "POST" | "DELETE"): Promise<void> {
   busy.value = true;
   error.value = null;
   try {
-    const response = await apiFetch(updatePath(), { method });
+    const response = await apiFetchOn(target.connection, updatePath(), { method });
     if (!response.ok) {
       const body = (await response.json().catch(() => ({}))) as { error?: string };
       error.value = body.error ?? `The request failed (HTTP ${response.status}).`;
@@ -44,7 +46,7 @@ async function send(method: "POST" | "DELETE"): Promise<void> {
     error.value = requestError instanceof Error ? requestError.message : "The request failed.";
   } finally {
     busy.value = false;
-    refreshAllHarnesses();
+    refreshAllHarnesses(target);
   }
 }
 

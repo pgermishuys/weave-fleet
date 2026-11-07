@@ -2,6 +2,7 @@
 import { computed, shallowRef } from "vue";
 import { Check, Copy, Download, ExternalLink } from "lucide-vue-next";
 import type { HarnessInfo } from "@/api/client";
+import { useMachineTarget } from "@/lib/machine-target";
 import { harnessState } from "@/lib/harness-display";
 import { useHarnessSetupStore } from "@/stores/harness-setup";
 
@@ -19,6 +20,8 @@ const props = defineProps<{
 }>();
 
 const harnessSetup = useHarnessSetupStore();
+// The setup wizard installs on the machine the app works in, so another machine's page only shows the commands.
+const canSetUp = useMachineTarget().isLive;
 
 const setup = computed(() => props.harness.setup ?? null);
 const installed = computed(() => Boolean(props.harness.executablePath));
@@ -186,7 +189,7 @@ async function copy(command: string): Promise<void> {
     </div>
 
     <button
-      v-if="needsInstall && (installCommand || hasChoices)"
+      v-if="canSetUp && needsInstall && (installCommand || hasChoices)"
       type="button"
       class="harness-install__btn harness-install__set-up"
       data-testid="harness-install-set-up"

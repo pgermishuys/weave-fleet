@@ -5,6 +5,7 @@ import type { HarnessProfile } from "@/api/client";
 import { Button } from "@/components/ui/button";
 import HarnessProfileEditor from "@/components/settings/HarnessProfileEditor.vue";
 import { profileSummary } from "@/lib/harness-profile";
+import { useMachineTarget } from "@/lib/machine-target";
 import { useHarnessProfilesStore } from "@/stores/harness-profiles";
 
 /** A harness's profiles in Settings: list, default, and an editor that opens in place. */
@@ -21,7 +22,7 @@ interface Editing {
   seed?: { name: string; content: string };
 }
 
-const store = useHarnessProfilesStore();
+const store = useHarnessProfilesStore(useMachineTarget());
 const profiles = computed(() => store.profilesFor(props.harnessType));
 const hasDefault = computed(() => profiles.value.some((profile) => profile.isDefault));
 const editing = shallowRef<Editing | null>(null);
