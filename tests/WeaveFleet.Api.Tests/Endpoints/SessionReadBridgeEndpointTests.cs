@@ -70,6 +70,31 @@ public sealed class SessionReadBridgeEndpointTests : IClassFixture<SessionReadBr
     }
 
     [Fact]
+    public async Task Quotes_a_long_message_whole()
+    {
+        var output = await ReadOutputAsync();
+
+        output.ShouldContain("Long start. ");
+        output.ShouldContain(" THE END");
+        output.ShouldNotContain("more characters");
+    }
+
+    [Fact]
+    public async Task Shows_every_text_part_in_order_with_the_tool_rows_between()
+    {
+        var output = await ReadOutputAsync();
+
+        output.ShouldContain("(2/4) Timings\n· CronList (completed)\n(3/4) Failures\n· CronDelete (completed)\n");
+    }
+
+    private async Task<string> ReadOutputAsync()
+    {
+        var response = await ReadAsync(Referenced, before: null, limit: null);
+        var body = await response.Content.ReadFromJsonAsync<JsonElement>();
+        return body.GetProperty("output").GetString()!;
+    }
+
+    [Fact]
     public async Task Pages_back_to_the_start_of_the_session()
     {
         var response = await ReadAsync(Referenced, before: "m06", limit: 10);
@@ -168,6 +193,18 @@ public sealed class SessionReadBridgeEndpointTests : IClassFixture<SessionReadBr
             var reads = Reads;
             // 45 messages, m01 oldest; a page is the newest `limit` before the cursor, oldest first.
             var all = Enumerable.Range(1, 45).Select(i => Message($"m{i:00}", i % 2 == 1 ? "user" : "assistant", $"Message {i}")).ToList();
+            // m42 is a long reply; m44 has text on both sides of a tool call (Claude Code writes them like this).
+            all[41] = all[41] with { Parts = [new TextPart("Long start. " + new string('x', 4980) + " THE END")] };
+            all[43] = all[43] with
+            {
+                Parts =
+                [
+                    new TextPart("(2/4) Timings"),
+                    new ToolUsePart("t1", "CronList", JsonDocument.Parse("{}").RootElement, ToolUseState.Completed),
+                    new TextPart("(3/4) Failures"),
+                    new ToolUsePart("t2", "CronDelete", JsonDocument.Parse("{}").RootElement, ToolUseState.Completed),
+                ],
+            };
             messages.GetMessagesBehavior = (sessionId, limit, before, _) =>
             {
                 reads.Add((sessionId, limit, before));
