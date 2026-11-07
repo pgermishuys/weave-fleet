@@ -1,4 +1,5 @@
 import { send } from "@/lib/agent-memory";
+import { liveTarget, type MachineTarget } from "@/lib/machine-target";
 
 /** The server's preference for Dreaming (Settings → Labs): off, Memory shows nothing new and no request is made. */
 export const DREAMING_PREFERENCE_KEY = "Dreaming";
@@ -143,29 +144,30 @@ export function groupDreamChanges(changes: readonly DreamChangeView[]) {
 
 const DREAMS_PATH = "/api/memory/dreams";
 
-export async function listDreams(repository: string): Promise<DreamView[]> {
-  const body = await send<{ dreams: DreamView[] }>(`${DREAMS_PATH}?repository=${encodeURIComponent(repository)}`, "Couldn't load the dreams.");
+export async function listDreams(repository: string, target: MachineTarget = liveTarget()): Promise<DreamView[]> {
+  const body = await send<{ dreams: DreamView[] }>(`${DREAMS_PATH}?repository=${encodeURIComponent(repository)}`, "Couldn't load the dreams.", undefined, target);
   return body.dreams;
 }
 
-export function startDream(repository: string, choice: { harnessType?: string; providerId?: string; modelId?: string } = {}): Promise<DreamView> {
-  return send(DREAMS_PATH, "Couldn't start the dream.", { method: "POST", body: JSON.stringify({ repository, ...choice }) });
+export function startDream(repository: string, choice: { harnessType?: string; providerId?: string; modelId?: string } = {}, target: MachineTarget = liveTarget()): Promise<DreamView> {
+  return send(DREAMS_PATH, "Couldn't start the dream.", { method: "POST", body: JSON.stringify({ repository, ...choice }) }, target);
 }
 
-export function undoDreamChange(dreamId: string, changeId: string): Promise<DreamView> {
+export function undoDreamChange(dreamId: string, changeId: string, target: MachineTarget = liveTarget()): Promise<DreamView> {
   return send(
     `${DREAMS_PATH}/${encodeURIComponent(dreamId)}/changes/${encodeURIComponent(changeId)}/undo`,
     "Couldn't undo the change.",
     { method: "POST" },
+    target,
   );
 }
 
 const NIGHTLY_PATH = "/api/memory/dreaming/nightly";
 
-export const getNightlyDreaming = (): Promise<NightlyDreamingView> => send(NIGHTLY_PATH, "Couldn't load nightly dreaming.");
+export const getNightlyDreaming = (target: MachineTarget = liveTarget()): Promise<NightlyDreamingView> => send(NIGHTLY_PATH, "Couldn't load nightly dreaming.", undefined, target);
 
 /** A `model` of null goes back to the harness's default: the server reads an empty model that way, and a missing one as unchanged. */
-export function setNightlyDreaming(change: NightlyDreamingChange): Promise<NightlyDreamingView> {
+export function setNightlyDreaming(change: NightlyDreamingChange, target: MachineTarget = liveTarget()): Promise<NightlyDreamingView> {
   const body = change.model === null ? { ...change, model: "" } : change;
-  return send(NIGHTLY_PATH, "Couldn't save nightly dreaming.", { method: "PUT", body: JSON.stringify(body) });
+  return send(NIGHTLY_PATH, "Couldn't save nightly dreaming.", { method: "PUT", body: JSON.stringify(body) }, target);
 }

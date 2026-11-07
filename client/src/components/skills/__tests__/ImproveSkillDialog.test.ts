@@ -3,7 +3,7 @@ import { defineComponent, h } from "vue";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
 const { apiFetchMock } = vi.hoisted(() => ({ apiFetchMock: vi.fn() }));
-vi.mock("@/lib/api-client", () => ({ apiFetch: apiFetchMock }));
+vi.mock("@/lib/api-client", () => ({ apiFetchOn: (_machine: unknown, ...rest: unknown[]) => apiFetchMock(...rest) }));
 vi.mock("@/components/ui/dialog", () => {
   const pass = (name: string) => defineComponent({ name, setup: (_p, { slots }) => () => h("div", slots.default?.()) });
   return {

@@ -14,6 +14,7 @@ import { Input } from "@/components/ui/input";
 import ProfileConfigEditor from "@/components/settings/ProfileConfigEditor.vue";
 import SkillDiff from "@/components/skills/SkillDiff.vue";
 import { getSkill, saveSkillVersion, type BuiltInSkillDetail } from "@/lib/skill-versions";
+import { useMachineTarget } from "@/lib/machine-target";
 import { useBuiltInSkillsStore } from "@/stores/built-in-skills";
 
 /**
@@ -35,7 +36,8 @@ const emit = defineEmits<{
 
 const open = defineModel<boolean>("open", { required: true });
 
-const store = useBuiltInSkillsStore();
+const target = useMachineTarget();
+const store = useBuiltInSkillsStore(target);
 const detail = shallowRef<BuiltInSkillDetail | null>(null);
 const draft = shallowRef("");
 const note = shallowRef("");
@@ -56,7 +58,7 @@ watch(open, async (isOpen) => {
   note.value = props.initialNote ?? "";
   isLoading.value = true;
   try {
-    detail.value = await getSkill(props.name);
+    detail.value = await getSkill(props.name, target);
     draft.value = props.initialContent ?? current.value;
   } catch (caught) {
     error.value = caught instanceof Error ? caught.message : `Couldn't load ${props.name}.`;
@@ -74,7 +76,7 @@ async function save(): Promise<void> {
   isSaving.value = true;
   error.value = null;
   try {
-    const saved = await saveSkillVersion(props.name, draft.value, note.value.trim() || null, props.sessionId ?? null);
+    const saved = await saveSkillVersion(props.name, draft.value, note.value.trim() || null, props.sessionId ?? null, target);
     store.update(saved);
     emit("saved", saved);
     open.value = false;

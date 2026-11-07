@@ -1,7 +1,7 @@
-import { defineStore } from "pinia";
 import { computed, shallowRef } from "vue";
 import { onDomainEvent } from "@/composables/on-domain-event";
-import { liveTarget, type MachineTarget } from "@/lib/machine-target";
+import { defineMachineStore } from "@/lib/machine-store";
+import type { MachineTarget } from "@/lib/machine-target";
 import type { KeptMod, ModDraft, ModsSwitch, ModsView } from "@/lib/mods/kept";
 import * as modsApi from "@/lib/mods/kept-api";
 import { ModsRequestError } from "@/lib/mods/kept-api";
@@ -17,7 +17,7 @@ const KEPT_REASONS = new Set(["kept", "version", "undone", "on", "off", "strikes
  * tracked session's drafts, so components read it and call its actions. A session's drafts belong to the machine the
  * session is on.
  */
-export const useModsStore = defineStore("mods", () => {
+export const useModsStore = defineMachineStore("mods", (home) => {
   const modsSwitch = shallowRef<ModsSwitch | null>(null);
   const kept = shallowRef<ModsView | null>(null);
   const drafts = shallowRef<Record<string, ModDraft[]>>({});
@@ -25,7 +25,7 @@ export const useModsStore = defineStore("mods", () => {
   const inflight = new Map<string, Promise<void>>();
 
   const safeMode = computed(() => kept.value?.safeMode ?? modsSwitch.value?.safeMode ?? false);
-  const preferences = usePreferencesStore();
+  const preferences = usePreferencesStore(home);
   // The user's choice in Features wins as soon as it's made (no event says the switch moved); until they choose, the
   // server's answer, which falls back to Fleet's own option.
   const isSwitchedOn = computed(() => {
@@ -55,8 +55,8 @@ export const useModsStore = defineStore("mods", () => {
     stops.set(key, onDomainEvent(target, "sessions", "mods.changed", ({ payload }) => {
       const sessionId = payload.sessionId;
       if (sessionId && sessionId in drafts.value) void loadDrafts(sessionId);
-      // The switch, kept mods and safe mode are the live machine's; another machine's stream only speaks for its drafts.
-      if (key !== liveTarget().key) return;
+      // The switch, kept mods and safe mode are this store's machine's; another machine's stream only speaks for its drafts.
+      if (key !== home.key) return;
       if (payload.reason === "switch") {
         void loadSwitch();
       } else if (payload.reason === "safe-mode") {
@@ -69,7 +69,7 @@ export const useModsStore = defineStore("mods", () => {
   }
 
   function loadSwitch(): Promise<void> {
-    const target = liveTarget();
+    const target = home;
     listen(target);
     return once("switch", async () => {
       modsSwitch.value = await modsApi.fetchModsSwitch(target.connection);
@@ -78,7 +78,7 @@ export const useModsStore = defineStore("mods", () => {
 
   /** Rejects with the server's message when the list can't load (Settings shows it with Retry); a 404 is Mods off. */
   function loadKept(): Promise<void> {
-    const target = liveTarget();
+    const target = home;
     listen(target);
     return once("kept", async () => {
       try {
@@ -141,19 +141,19 @@ export const useModsStore = defineStore("mods", () => {
   }
 
   async function undo(name: string): Promise<KeptMod> {
-    const mod = await modsApi.undoMod(name, liveTarget().connection);
+    const mod = await modsApi.undoMod(name, home.connection);
     replaceMod(mod);
     return mod;
   }
 
   async function setOn(name: string, on: boolean): Promise<KeptMod> {
-    const mod = await modsApi.setModOn(name, on, liveTarget().connection);
+    const mod = await modsApi.setModOn(name, on, home.connection);
     replaceMod(mod);
     return mod;
   }
 
   async function setSafeMode(on: boolean): Promise<ModsView> {
-    const view = await modsApi.setSafeMode(on, liveTarget().connection);
+    const view = await modsApi.setSafeMode(on, home.connection);
     kept.value = view;
     if (modsSwitch.value) modsSwitch.value = { ...modsSwitch.value, safeMode: view.safeMode };
     return view;

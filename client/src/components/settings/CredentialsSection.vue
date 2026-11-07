@@ -1,8 +1,11 @@
 <script setup lang="ts">
 import { computed, onMounted, reactive, ref, shallowRef } from "vue";
 import { AlertCircle, Check, KeyRound, LoaderCircle, Pencil, Plus, Trash2, X } from "lucide-vue-next";
-import { api } from "@/api/client";
 import type { CredentialSummary, StoreCredentialRequest } from "@/api/client";
+import { useMachineTarget } from "@/lib/machine-target";
+
+// API keys belong to a machine: the one Settings shows.
+const { api } = useMachineTarget();
 
 interface ProviderPreset {
   label: string;

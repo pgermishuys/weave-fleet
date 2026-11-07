@@ -4,10 +4,11 @@ import { LoaderCircle } from "lucide-vue-next";
 import ModRow from "@/components/settings/mods/ModRow.vue";
 import ModsShowcase from "@/components/settings/mods/ModsShowcase.vue";
 import { useSettingsNav } from "@/composables/use-settings-nav";
+import { useMachineTarget } from "@/lib/machine-target";
 import { useModsStore } from "@/stores/mods";
 
 /** Settings → Skills & tools → Mods: the mods the user kept, with on/off and Undo, and Fleet's sample mods to add. */
-const store = useModsStore();
+const store = useModsStore(useMachineTarget());
 const { setActiveSection } = useSettingsNav();
 
 const isLoading = ref(true);

@@ -181,7 +181,7 @@ describe("Dreaming in Settings → Memory", () => {
     await wrapper.findAll("[data-testid='dream-undo']")[0]!.trigger("click");
     await flushPromises();
 
-    expect(mocks.undoDreamChange).toHaveBeenCalledWith("d1", "c-added");
+    expect(mocks.undoDreamChange).toHaveBeenCalledWith("d1", "c-added", expect.anything());
     const undo = wrapper.get("[data-testid='dream-undo']");
     expect(undo.text()).toBe("Undone");
     expect(undo.attributes("disabled")).toBeDefined();
@@ -220,7 +220,7 @@ describe("Dreaming in Settings → Memory", () => {
       await wrapper.get("[data-testid='dream-flag-keep']").trigger("click");
       await flushPromises();
 
-      expect(mocks.undoDreamChange).toHaveBeenCalledWith("d1", "c-flag");
+      expect(mocks.undoDreamChange).toHaveBeenCalledWith("d1", "c-flag", expect.anything());
       expect(mocks.forgetMemoryNote).not.toHaveBeenCalled();
       expect(mocks.updateMemoryNote).not.toHaveBeenCalled();
       expect(wrapper.find("[data-testid='dream-flag']").exists()).toBe(false);
@@ -235,8 +235,8 @@ describe("Dreaming in Settings → Memory", () => {
       await wrapper.get("[data-testid='dream-flag-forget']").trigger("click");
       await flushPromises();
 
-      expect(mocks.forgetMemoryNote).toHaveBeenCalledWith("n9");
-      expect(mocks.undoDreamChange).toHaveBeenCalledWith("d1", "c-flag");
+      expect(mocks.forgetMemoryNote).toHaveBeenCalledWith("n9", expect.anything());
+      expect(mocks.undoDreamChange).toHaveBeenCalledWith("d1", "c-flag", expect.anything());
     });
 
     it("Edit saves the new wording, then dismisses the flag", async () => {
@@ -250,8 +250,8 @@ describe("Dreaming in Settings → Memory", () => {
       await wrapper.get("[data-testid='dream-flag-save']").trigger("click");
       await flushPromises();
 
-      expect(mocks.updateMemoryNote).toHaveBeenCalledWith("n9", "Run the build with bun run build.");
-      expect(mocks.undoDreamChange).toHaveBeenCalledWith("d1", "c-flag");
+      expect(mocks.updateMemoryNote).toHaveBeenCalledWith("n9", "Run the build with bun run build.", expect.anything());
+      expect(mocks.undoDreamChange).toHaveBeenCalledWith("d1", "c-flag", expect.anything());
     });
   });
 
@@ -270,16 +270,16 @@ describe("Dreaming in Settings → Memory", () => {
     expect(wrapper.find("[data-testid='dream-time']").exists()).toBe(false);
     await wrapper.get("[data-testid='dream-nightly-switch']").trigger("click");
     await flushPromises();
-    expect(mocks.setNightlyDreaming).toHaveBeenLastCalledWith({ enabled: true, timeZone: Intl.DateTimeFormat().resolvedOptions().timeZone });
+    expect(mocks.setNightlyDreaming).toHaveBeenLastCalledWith({ enabled: true, timeZone: Intl.DateTimeFormat().resolvedOptions().timeZone }, expect.anything());
     expect(wrapper.get("[data-testid='dream-nightly']").text()).toContain("Up to 300k tokens a night");
 
     await wrapper.get("[data-testid='dream-time']").setValue("04:30");
     await flushPromises();
-    expect(mocks.setNightlyDreaming).toHaveBeenLastCalledWith({ time: "04:30", timeZone: Intl.DateTimeFormat().resolvedOptions().timeZone });
+    expect(mocks.setNightlyDreaming).toHaveBeenLastCalledWith({ time: "04:30", timeZone: Intl.DateTimeFormat().resolvedOptions().timeZone }, expect.anything());
 
     await wrapper.get("[data-testid='dream-budget']").setValue("1000000");
     await flushPromises();
-    expect(mocks.setNightlyDreaming).toHaveBeenLastCalledWith({ budgetTokens: 1000000 });
+    expect(mocks.setNightlyDreaming).toHaveBeenLastCalledWith({ budgetTokens: 1000000 }, expect.anything());
   });
 
   it("says when the automation is paused, and links to it", async () => {
@@ -311,7 +311,7 @@ describe("Dreaming in Settings → Memory", () => {
     await wrapper.get("[data-testid='dream-now']").trigger("click");
     await flushPromises();
 
-    expect(mocks.startDream).toHaveBeenCalledWith("/src/acme-widgets", { harnessType: "opencode" });
+    expect(mocks.startDream).toHaveBeenCalledWith("/src/acme-widgets", { harnessType: "opencode" }, expect.anything());
     expect(wrapper.get("[data-testid='dream-running']").text()).toContain("reading 2 sessions");
   });
 });

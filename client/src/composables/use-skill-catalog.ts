@@ -1,5 +1,6 @@
 import { readonly, ref, shallowRef, type Ref, type ShallowRef } from "vue";
-import { api, type components } from "@/api/client";
+import type { components } from "@/api/client";
+import { useMachineTarget } from "@/lib/machine-target";
 import { extractApiError } from "@/lib/api-error";
 
 export type SkillCatalogResponse = components["schemas"]["SkillCatalogResponse"];
@@ -52,6 +53,8 @@ export interface UseSkillCatalogResult {
 }
 
 export function useSkillCatalog(): UseSkillCatalogResult {
+  // The machine the page asks: the one Settings shows, else the live one.
+  const { api } = useMachineTarget();
   const catalog = ref<CatalogEntry[]>([]);
   const isStale = ref(false);
   const cachedAt = ref<string | null>(null);

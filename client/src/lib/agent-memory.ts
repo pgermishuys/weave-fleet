@@ -1,4 +1,5 @@
-import { apiFetch } from "@/lib/api-client";
+import { apiFetchOn } from "@/lib/api-client";
+import { liveTarget, type MachineTarget } from "@/lib/machine-target";
 import { extractApiError } from "@/lib/api-error";
 
 /**
@@ -92,8 +93,9 @@ export interface MemorySavedPayload {
 
 const MEMORY_PATH = "/api/memory";
 
-export async function send<T>(path: string, fallback: string, init?: RequestInit): Promise<T> {
-  const response = await apiFetch(path, init && {
+/** A request to a machine's Fleet: the one Settings shows, else the live one. */
+export async function send<T>(path: string, fallback: string, init?: RequestInit, target: MachineTarget = liveTarget()): Promise<T> {
+  const response = await apiFetchOn(target.connection, path, init && {
     ...init,
     headers: { "Content-Type": "application/json", ...init.headers },
   });
@@ -111,35 +113,35 @@ export async function send<T>(path: string, fallback: string, init?: RequestInit
   return (text ? JSON.parse(text) : undefined) as T;
 }
 
-export function getMemory(): Promise<MemoryOverview> {
-  return send(MEMORY_PATH, "Couldn't load memory.");
+export function getMemory(target: MachineTarget = liveTarget()): Promise<MemoryOverview> {
+  return send(MEMORY_PATH, "Couldn't load memory.", undefined, target);
 }
 
-export function setMemoryEnabled(enabled: boolean): Promise<MemoryOverview> {
-  return send(MEMORY_PATH, `Couldn't turn memory ${enabled ? "on" : "off"}.`, { method: "PUT", body: JSON.stringify({ enabled }) });
+export function setMemoryEnabled(enabled: boolean, target: MachineTarget = liveTarget()): Promise<MemoryOverview> {
+  return send(MEMORY_PATH, `Couldn't turn memory ${enabled ? "on" : "off"}.`, { method: "PUT", body: JSON.stringify({ enabled }) }, target);
 }
 
-export function listMemoryNotes(repository: string | null): Promise<MemoryNotes> {
+export function listMemoryNotes(repository: string | null, target: MachineTarget = liveTarget()): Promise<MemoryNotes> {
   const query = repository ? `?repository=${encodeURIComponent(repository)}` : "";
-  return send(`${MEMORY_PATH}/notes${query}`, "Couldn't load the notes.");
+  return send(`${MEMORY_PATH}/notes${query}`, "Couldn't load the notes.", undefined, target);
 }
 
-export function addMemoryNote(list: MemoryListName, repository: string | null, text: string): Promise<MemoryNote> {
-  return send(`${MEMORY_PATH}/notes`, "Couldn't add the note.", { method: "POST", body: JSON.stringify({ list, repository, text }) });
+export function addMemoryNote(list: MemoryListName, repository: string | null, text: string, target: MachineTarget = liveTarget()): Promise<MemoryNote> {
+  return send(`${MEMORY_PATH}/notes`, "Couldn't add the note.", { method: "POST", body: JSON.stringify({ list, repository, text }) }, target);
 }
 
-export function updateMemoryNote(id: string, text: string): Promise<MemoryNote> {
-  return send(`${MEMORY_PATH}/notes/${encodeURIComponent(id)}`, "Couldn't save the note.", { method: "PUT", body: JSON.stringify({ text }) });
+export function updateMemoryNote(id: string, text: string, target: MachineTarget = liveTarget()): Promise<MemoryNote> {
+  return send(`${MEMORY_PATH}/notes/${encodeURIComponent(id)}`, "Couldn't save the note.", { method: "PUT", body: JSON.stringify({ text }) }, target);
 }
 
 /** A learned note that should never expire, or an expired one brought back for good. */
-export function keepMemoryNote(id: string): Promise<MemoryNote> {
-  return send(`${MEMORY_PATH}/notes/${encodeURIComponent(id)}/keep`, "Couldn't keep the note.", { method: "POST" });
+export function keepMemoryNote(id: string, target: MachineTarget = liveTarget()): Promise<MemoryNote> {
+  return send(`${MEMORY_PATH}/notes/${encodeURIComponent(id)}/keep`, "Couldn't keep the note.", { method: "POST" }, target);
 }
 
 /** With "Search older notes" on: moves a note to search, or pins it to "Always read" (Fleet then never moves it down itself). */
-export function moveMemoryNote(id: string, group: "search" | "always"): Promise<MemoryNote> {
-  return send(`${MEMORY_PATH}/notes/${encodeURIComponent(id)}/place`, "Couldn't move the note.", { method: "POST", body: JSON.stringify({ group }) });
+export function moveMemoryNote(id: string, group: "search" | "always", target: MachineTarget = liveTarget()): Promise<MemoryNote> {
+  return send(`${MEMORY_PATH}/notes/${encodeURIComponent(id)}/place`, "Couldn't move the note.", { method: "POST", body: JSON.stringify({ group }) }, target);
 }
 
 /** Roughly what one note adds to each request: its text and id at four characters a token. */
@@ -156,12 +158,12 @@ export function memoryFoundLabel(note: Pick<MemoryNote, "found" | "lastFound">):
   return `${times} · last ${date}`;
 }
 
-export function forgetMemoryNote(id: string): Promise<void> {
-  return send(`${MEMORY_PATH}/notes/${encodeURIComponent(id)}`, "Couldn't forget the note.", { method: "DELETE" });
+export function forgetMemoryNote(id: string, target: MachineTarget = liveTarget()): Promise<void> {
+  return send(`${MEMORY_PATH}/notes/${encodeURIComponent(id)}`, "Couldn't forget the note.", { method: "DELETE" }, target);
 }
 
-export function clearMemory(scope: "all" | "machine" | "repository", repository: string | null = null): Promise<{ deleted: number }> {
-  return send(`${MEMORY_PATH}/clear`, "Couldn't clear the notes.", { method: "POST", body: JSON.stringify({ scope, repository }) });
+export function clearMemory(scope: "all" | "machine" | "repository", repository: string | null = null, target: MachineTarget = liveTarget()): Promise<{ deleted: number }> {
+  return send(`${MEMORY_PATH}/clear`, "Couldn't clear the notes.", { method: "POST", body: JSON.stringify({ scope, repository }) }, target);
 }
 
 /** Where a note is kept, as the notice and the conversation say it. */

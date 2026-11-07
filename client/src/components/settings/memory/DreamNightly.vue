@@ -3,6 +3,7 @@ import { computed, ref, shallowRef, watch } from "vue";
 import { useNavigate } from "@tanstack/vue-router";
 import { LoaderCircle } from "lucide-vue-next";
 import ModelSelector from "@/components/session/ModelSelector.vue";
+import { useMachineTarget } from "@/lib/machine-target";
 import { useDreamingFeature } from "@/composables/use-dreaming-feature";
 import { useEnabledHarnesses } from "@/composables/use-enabled-harnesses";
 import { useHarnessCatalog } from "@/composables/use-harness-catalog";
@@ -24,6 +25,7 @@ const emit = defineEmits<{ harness: [type: string | null] }>();
 const { isDreamingEnabled } = useDreamingFeature();
 const { enabledHarnesses } = useEnabledHarnesses();
 const navigate = useNavigate();
+const target = useMachineTarget();
 const { setActiveAutomation } = useAutomationsNav();
 
 const nightly = shallowRef<NightlyDreamingView | null>(null);
@@ -48,7 +50,7 @@ async function load(): Promise<void> {
     return;
   }
   try {
-    nightly.value = await getNightlyDreaming();
+    nightly.value = await getNightlyDreaming(target);
   } catch (caught) {
     error.value = caught instanceof Error ? caught.message : "Couldn't load nightly dreaming.";
   }
@@ -59,7 +61,7 @@ async function save(change: NightlyDreamingChange): Promise<void> {
   isSaving.value = true;
   error.value = null;
   try {
-    nightly.value = await setNightlyDreaming(change);
+    nightly.value = await setNightlyDreaming(change, target);
   } catch (caught) {
     error.value = caught instanceof Error ? caught.message : "Couldn't save nightly dreaming.";
   } finally {
@@ -150,8 +152,9 @@ watch(() => nightly.value?.enabled && harnessType.value, (type) => emit("harness
             Up to {{ formatTokens(budget) }} tokens a night
           </option>
         </select>
+        <!-- Automations are the live machine's: another machine's automation has no page to open here. -->
         <button
-          v-if="nightly.automationId"
+          v-if="nightly.automationId && target.isLive"
           type="button"
           class="text-xs text-accent hover:underline"
           data-testid="dream-automation"

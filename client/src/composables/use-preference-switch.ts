@@ -1,4 +1,5 @@
 import { computed, shallowRef } from "vue";
+import { useMachineTarget } from "@/lib/machine-target";
 import { usePreferencesStore } from "@/stores/preferences";
 
 /**
@@ -6,7 +7,8 @@ import { usePreferencesStore } from "@/stores/preferences";
  * `defaultOn` is what the preference means until the user chooses: on unless it is "false", or off unless it is "true".
  */
 export function usePreferenceSwitch(key: string, options: { defaultOn?: boolean; afterSave?: () => void } = {}) {
-  const preferencesStore = usePreferencesStore();
+  // The preference of the machine the page asks: the live one unless Settings shows another.
+  const preferencesStore = usePreferencesStore(useMachineTarget());
   const enabled = computed(() => {
     const value = preferencesStore.get(key, options.defaultOn ? "true" : "false");
     return options.defaultOn ? value !== "false" : value === "true";

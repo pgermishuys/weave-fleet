@@ -266,8 +266,11 @@ sessions list moves to that machine. The machine you're on is the machine of the
 - **Settings opens on the machine you're on.** A machine switch at the top of the settings menu ("Settings for") lists
   every machine with its session count; picking one changes only the pages on the right. Appearance and Machines are
   marked **This browser**, because they belong to this browser, not to a machine.
-- **Folders and Harnesses ask the machine shown.** Every other page says it comes in a later step while another
-  machine is shown, rather than showing the live machine's settings as that machine's.
+- **Folders, Harnesses, What agents can do, Skills & tools, Memory, Updates & about and API keys ask the machine
+  shown.** General and Labs say they come in a later step while another machine is shown, rather than showing the
+  live machine's settings as that machine's. On What agents can do, the list of machines this machine may send work
+  to isn't shown for another machine yet, and Dream each night doesn't offer to open its automation (automations are
+  the live machine's).
 - Other machines are still checked every 15 seconds; turn on **Keep every machine live** as well for live updates.
 - **Work here** and Settings → Machines › Open still reload the page onto that machine.
 

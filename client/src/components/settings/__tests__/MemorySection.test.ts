@@ -82,14 +82,14 @@ describe("MemorySection", () => {
     await wrapper.get("[data-testid=memory-switch]").trigger("click");
     await flushPromises();
 
-    expect(api.setMemoryEnabled).toHaveBeenCalledWith(true);
+    expect(api.setMemoryEnabled).toHaveBeenCalledWith(true, expect.anything());
     expect(wrapper.get("[data-testid=memory-switch]").attributes("aria-checked")).toBe("true");
   });
 
   it("lists the repository's notes and the machine's, with where each came from", async () => {
     const wrapper = await mountSection();
 
-    expect(api.listMemoryNotes).toHaveBeenCalledWith("/src/weave-fleet");
+    expect(api.listMemoryNotes).toHaveBeenCalledWith("/src/weave-fleet", expect.anything());
     expect(wrapper.get("[data-testid=memory-count]").text()).toBe("3 notes · about 640 tokens per request");
     const repository = wrapper.get("[data-testid=memory-list-repository]").text();
     expect(repository).toContain("Rebase onto origin/main");
@@ -118,7 +118,7 @@ describe("MemorySection", () => {
     await wrapper.get("[data-testid=memory-draft-machine]").trigger("keydown", { key: "Enter" });
     await flushPromises();
 
-    expect(api.addMemoryNote).toHaveBeenCalledWith("machine", null, "Use gh for GitHub.");
+    expect(api.addMemoryNote).toHaveBeenCalledWith("machine", null, "Use gh for GitHub.", expect.anything());
   });
 
   it("forgets a note", async () => {
@@ -128,7 +128,7 @@ describe("MemorySection", () => {
     await wrapper.get("[aria-label='Forget note: /tmp fills up here; use ~/.cache.']").trigger("click");
     await flushPromises();
 
-    expect(api.forgetMemoryNote).toHaveBeenCalledWith("bbbb0002");
+    expect(api.forgetMemoryNote).toHaveBeenCalledWith("bbbb0002", expect.anything());
   });
 
   it("asks before clearing all memory", async () => {
@@ -142,7 +142,7 @@ describe("MemorySection", () => {
     await wrapper.get("[data-testid=memory-clear-all-confirm]").trigger("click");
     await flushPromises();
 
-    expect(api.clearMemory).toHaveBeenCalledWith("all");
+    expect(api.clearMemory).toHaveBeenCalledWith("all", null, expect.anything());
   });
 
   it("says how long a learned note has left and keeps it for good on request", async () => {
@@ -159,7 +159,7 @@ describe("MemorySection", () => {
     await wrapper.get("[data-testid=memory-keep-bbbb0002]").trigger("click");
     await flushPromises();
 
-    expect(api.keepMemoryNote).toHaveBeenCalledWith("bbbb0002");
+    expect(api.keepMemoryNote).toHaveBeenCalledWith("bbbb0002", expect.anything());
   });
 
   it("says how a learned note is known: tested with how, or untested; notes from you say nothing", async () => {
@@ -207,7 +207,7 @@ describe("MemorySection", () => {
     await wrapper.get("[data-testid=memory-keep-eeee0005]").trigger("click");
     await flushPromises();
 
-    expect(api.keepMemoryNote).toHaveBeenCalledWith("eeee0005");
+    expect(api.keepMemoryNote).toHaveBeenCalledWith("eeee0005", expect.anything());
   });
 
   describe("with Search older notes on", () => {
@@ -264,15 +264,15 @@ describe("MemorySection", () => {
 
       await wrapper.get("[data-testid=memory-to-search-aaaa0002]").trigger("click");
       await flushPromises();
-      expect(api.moveMemoryNote).toHaveBeenLastCalledWith("aaaa0002", "search");
+      expect(api.moveMemoryNote).toHaveBeenLastCalledWith("aaaa0002", "search", expect.anything());
 
       await wrapper.get("[data-testid=memory-to-always-ssss0003]").trigger("click");
       await flushPromises();
-      expect(api.moveMemoryNote).toHaveBeenLastCalledWith("ssss0003", "always");
+      expect(api.moveMemoryNote).toHaveBeenLastCalledWith("ssss0003", "always", expect.anything());
 
       await wrapper.get("[data-testid=memory-pin-aaaa0002]").trigger("click");
       await flushPromises();
-      expect(api.moveMemoryNote).toHaveBeenLastCalledWith("aaaa0002", "always");
+      expect(api.moveMemoryNote).toHaveBeenLastCalledWith("aaaa0002", "always", expect.anything());
       expect(wrapper.find("[data-testid=memory-pin-aaaa0001]").exists()).toBe(false);
       expect(wrapper.find("[data-testid=memory-to-always-aaaa0002]").exists()).toBe(false);
     });

@@ -12,13 +12,15 @@ import {
   versionLabel,
   type BuiltInSkillDetail,
 } from "@/lib/skill-versions";
+import { useMachineTarget } from "@/lib/machine-target";
 import { useBuiltInSkillsStore } from "@/stores/built-in-skills";
 
 // Shown as a plugin page too, which hands it props it has no use for.
 defineOptions({ inheritAttrs: false });
 
 const { skills, isLoading, error, savingName, setEnabled } = useBuiltInSkills();
-const store = useBuiltInSkillsStore();
+const target = useMachineTarget();
+const store = useBuiltInSkillsStore(target);
 
 const editing = shallowRef<string | null>(null);
 const showingHistory = shallowRef<string | null>(null);
@@ -49,7 +51,7 @@ async function toggleFleetChange(name: string): Promise<void> {
   }
   actionError.value = null;
   try {
-    fleetChange.value = await getSkill(name);
+    fleetChange.value = await getSkill(name, target);
   } catch (caught) {
     actionError.value = caught instanceof Error ? caught.message : `Couldn't load ${name}.`;
   }
@@ -162,14 +164,14 @@ async function toggleFleetChange(name: string): Promise<void> {
               type="button"
               :disabled="busyName !== null"
               data-testid="built-in-skill-keep-mine"
-              @click="run(skill.name, () => keepMySkillVersion(skill.name))"
+              @click="run(skill.name, () => keepMySkillVersion(skill.name, target))"
             >
               Keep mine
             </button>
             <button
               type="button"
               :disabled="busyName !== null"
-              @click="run(skill.name, () => switchSkillVersion(skill.name, null))"
+              @click="run(skill.name, () => switchSkillVersion(skill.name, null, target))"
             >
               Use Fleet's
             </button>
@@ -202,7 +204,7 @@ async function toggleFleetChange(name: string): Promise<void> {
             v-if="skill.version && !skill.fleetChanged"
             type="button"
             :disabled="busyName !== null"
-            @click="run(skill.name, () => switchSkillVersion(skill.name, null))"
+            @click="run(skill.name, () => switchSkillVersion(skill.name, null, target))"
           >
             Use Fleet's
           </button>
