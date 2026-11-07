@@ -74,6 +74,33 @@ public sealed class RemoteSessionFollowTests
         sender.Read.ShouldHaveSingleItem().MessageId.ShouldBe("msg-1");
     }
 
+    [Fact]
+    public async Task A_reply_that_names_no_message_is_found_when_the_session_goes_idle()
+    {
+        // A harness there that doesn't say which prompt a reply answers (Claude Code on an older Fleet, Pi,
+        // GitHub Copilot): only going idle says the turn ended, and falcon is asked how it went.
+        var broadcaster = new InMemoryEventBroadcaster();
+        var messages = new Messages(replied: false);
+        await using var falcon = Falcon(broadcaster, messages.Proxy);
+        var sender = new CapturingSender();
+        await using var hangar = Hangar(falcon, sender);
+        await SeedAsync(falcon);
+        var falconId = await AddAsync(hangar, falcon);
+
+        Wait(hangar, falconId);
+        await WaitForAsync(() => messages.Reads > 0, "hangar following the session on falcon");
+
+        messages.Reply();
+        await broadcaster.BroadcastAsync($"session:{Session}", "message.updated", Json("""
+            {"info":{"id":"reply-1","role":"assistant","sessionID":"sess-falcon","time":{"created":0}}}
+            """), eventId: 1, domainEvent: null, userId: null, ct: CancellationToken.None);
+        await broadcaster.BroadcastAsync($"session:{Session}", "session.idled", Json("""{"sessionId":"sess-falcon"}"""),
+            eventId: 2, domainEvent: null, userId: null, ct: CancellationToken.None);
+
+        await WaitForAsync(() => sender.Read.Count > 0, "the update");
+        sender.Read.ShouldHaveSingleItem().MessageId.ShouldBe("msg-1");
+    }
+
     /// <summary>A session on hangar asks to hear when falcon's session answers msg-1, as the hand-off bridge does.</summary>
     private static void Wait(ApiWebApplicationFactory hangar, string falconId)
     {
@@ -125,20 +152,26 @@ public sealed class RemoteSessionFollowTests
     {
         private int _reads;
 
+        private volatile bool _replied;
+
         public Messages(bool replied)
         {
-            List<HarnessMessage> messages = [Message("msg-1", "user", "<fleet-session-message …>")];
-            if (replied)
-                messages.Add(Message("reply-1", "assistant", "2 failed."));
+            _replied = replied;
             Proxy = new FakeSessionMessageProxy
             {
                 GetMessagesBehavior = (_, _, _, _) =>
                 {
                     Interlocked.Increment(ref _reads);
+                    List<HarnessMessage> messages = [Message("msg-1", "user", "<fleet-session-message …>")];
+                    if (_replied)
+                        messages.Add(Message("reply-1", "assistant", "2 failed."));
                     return Task.FromResult(new MessagePage(messages, HasMore: false));
                 },
             };
         }
+
+        /// <summary>From now on the session has answered.</summary>
+        public void Reply() => _replied = true;
 
         public FakeSessionMessageProxy Proxy { get; }
 

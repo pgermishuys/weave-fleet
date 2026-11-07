@@ -96,8 +96,20 @@ public sealed partial class RemoteMachineWatcher(
 
     private Task OnSessionEventAsync(string machineId, string sessionId, DomainEvent domainEvent)
     {
-        if (turns is not null && _followed.ContainsKey((machineId, sessionId)) && turns.Observe(sessionId, domainEvent))
+        if (turns is null || !_followed.ContainsKey((machineId, sessionId)))
+            return Task.CompletedTask;
+
+        if (turns.Observe(sessionId, domainEvent))
+        {
             Unfollow(machineId, sessionId);
+        }
+        else if (domainEvent is SessionIdled)
+        {
+            // Idle with the message still awaited: no reply there named it, as with a harness that doesn't say which
+            // prompt a reply answers. The machine is asked how that turn went, off the hub's handler.
+            _ = Run(() => OnFollowingAsync(machineId, sessionId), machineId);
+        }
+
         return Task.CompletedTask;
     }
 

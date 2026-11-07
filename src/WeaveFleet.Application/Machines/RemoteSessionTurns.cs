@@ -28,9 +28,10 @@ public sealed class RemoteSessionTurns(SessionUpdates updates, RemoteSessions re
     }
 
     /// <summary>
-    /// Asks the machine about each awaited message once its events are flowing again (subscribed, or back after a gap).
-    /// A turn there that already ended counts as if its events had come: its reply, its failure, and idle. True once
-    /// nobody waits on the session any more.
+    /// Asks the machine about each awaited message once its events are flowing again (subscribed, or back after a gap),
+    /// and when the session goes idle with the message still awaited (no reply named it: a harness that doesn't say
+    /// which prompt a reply answers). A turn there that already ended counts as if its events had come: its reply, its
+    /// failure, and idle. True once nobody waits on the session any more.
     /// </summary>
     public async Task<bool> CatchUpAsync(string machineId, string sessionId, CancellationToken ct = default)
     {

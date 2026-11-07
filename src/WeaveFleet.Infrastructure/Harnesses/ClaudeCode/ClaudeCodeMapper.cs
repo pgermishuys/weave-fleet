@@ -61,9 +61,10 @@ internal static class ClaudeCodeMapper
 
     /// <summary>
     /// Creates a <c>message.updated</c> event with the payload structure the frontend expects:
-    /// <c>{ info: { id, role, sessionID, time: { created } } }</c>.
+    /// <c>{ info: { id, role, sessionID, parentID?, time: { created } } }</c>. <paramref name="parentId"/> is the prompt a
+    /// reply answers, when Fleet sent it.
     /// </summary>
-    internal static HarnessEvent CreateMessageUpdatedEvent(HarnessMessage msg, string sessionId)
+    internal static HarnessEvent CreateMessageUpdatedEvent(HarnessMessage msg, string sessionId, string? parentId = null)
     {
         var payload = JsonSerializer.SerializeToElement(
             new ClaudeCodeMessageUpdatedPayload
@@ -74,6 +75,7 @@ internal static class ClaudeCodeMapper
                     Role = msg.Role,
                     SessionID = sessionId,
                     ModelID = msg.ModelId,
+                    ParentID = parentId,
                     Time = new ClaudeCodeMapperInfoTime { Created = msg.Timestamp.ToUnixTimeMilliseconds() },
                 }
             },
