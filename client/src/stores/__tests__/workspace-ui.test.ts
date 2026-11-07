@@ -1,6 +1,8 @@
-import { beforeEach, describe, expect, it } from "vitest";
+import { beforeEach, describe, expect, it, vi } from "vitest";
 import { createPinia, setActivePinia } from "pinia";
 import { createGitHubSessionSourcePreset } from "@/lib/github-session-source";
+import { useMachinesStore } from "@/stores/machines";
+import { usePreferencesStore } from "@/stores/preferences";
 import { useWorkspaceUiStore } from "@/stores/workspace-ui";
 
 describe("useWorkspaceUiStore", () => {
@@ -202,6 +204,22 @@ describe("useWorkspaceUiStore", () => {
         store.openNewSessionDraft(blank);
         store.handOffNewSessionDraft("s1");
         expect(store.newSessionMachine).toBeNull();
+      });
+
+      it("with the switch on, the machine you're on is the default, so the live machine is a pick", () => {
+        const preferences = usePreferencesStore();
+        preferences.hasFetched = true;
+        preferences.preferences = { MachineSwitch: "true" };
+        const machines = useMachinesStore();
+        vi.spyOn(machines, "currentKey", "get").mockReturnValue("m-mac");
+        const store = useWorkspaceUiStore();
+        store.openNewSessionDraft(blank);
+
+        store.setNewSessionMachine("m-mac");
+        expect(store.newSessionMachine).toBeNull();
+
+        store.setNewSessionMachine("home");
+        expect(store.newSessionMachine).toBe("home");
       });
 
       it("picking the live machine is the same as not picking one", () => {

@@ -245,10 +245,11 @@ const isNewSessionOpen = computed(() => pathname.value === "/sessions/new");
  * The group the draft's session will land in: its project, or Scratch (where the server puts a
  * session without one), keyed the way the grouping below keys it.
  */
+const draftMachineKey = computed(() => newSessionMachine.value ?? machines.currentKey);
 const draftGroupKey = computed<string | null>(() => {
   const draft = newSessionDraftRow.value;
   // A draft for another machine shows in that machine's group.
-  if (!draft || newSessionMachine.value !== null) {
+  if (!draft || draftMachineKey.value !== machines.liveKey) {
     return null;
   }
   return draftGroupKeyFor(draft.projectId, projects.value);
@@ -365,8 +366,8 @@ watch(draftGroupId, (groupId) => {
 });
 
 // Likewise the group of the other machine a draft starts on.
-watch(newSessionMachine, (machineKey) => {
-  if (machineKey && newSessionDraftRow.value) {
+watch(draftMachineKey, (machineKey) => {
+  if (machineKey && machineKey !== machines.liveKey && newSessionDraftRow.value) {
     sidebarStore.setGroupCollapsed(machineGroupKey(machineKey), false);
   }
 });
@@ -824,7 +825,7 @@ function handleCompleteDropZoneDrop(event: DragEvent): void {
           :machine="machine"
           :state="machineSessions[machine.key]"
           :query="normalizedQuery"
-          :draft="machine.key === newSessionMachine ? newSessionDraftRow : null"
+          :draft="machine.key === draftMachineKey ? newSessionDraftRow : null"
           :draft-active="isNewSessionOpen"
           @open="handleMachineSessionOpen(machine, $event)"
           @open-draft="handleOpenDraft"

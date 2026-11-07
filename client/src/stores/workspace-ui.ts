@@ -1,7 +1,7 @@
 import { defineStore } from "pinia";
 import { computed, reactive, shallowRef } from "vue";
 import type { GitHubSessionSourcePreset } from "@/lib/github-session-source";
-import { liveMachineKey } from "@/lib/saved-per-machine";
+import { useMachinesStore } from "@/stores/machines";
 import { titleFromMessage, type NewSessionFolder, type NewSessionWorkspace } from "@/lib/new-session-request";
 
 /** What's on the New Session page, kept while you look at something else. */
@@ -132,7 +132,8 @@ export const useWorkspaceUiStore = defineStore("workspace-ui", () => {
    * The page is rebuilt for the new machine.
    */
   function setNewSessionMachine(picked: string | null): void {
-    const machineKey = picked === liveMachineKey() ? null : picked;
+    // null is the machine you're on: the live one, or with the switch on the one Work here or the open session made current.
+    const machineKey = picked === useMachinesStore().currentKey ? null : picked;
     if (machineKey === newSessionMachine.value) {
       return;
     }

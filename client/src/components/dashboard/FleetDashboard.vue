@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { computed, shallowRef } from "vue";
+import { computed, onMounted, onUnmounted, shallowRef, watch } from "vue";
 import { storeToRefs } from "pinia";
 import { useRouter } from "@tanstack/vue-router";
 import { Download, LoaderCircle, Plus } from "lucide-vue-next";
@@ -8,8 +8,10 @@ import { useEnabledHarnesses } from "@/composables/use-enabled-harnesses";
 import { useRelativeTime } from "@/composables/use-relative-time";
 import { useSessions } from "@/composables/use-sessions";
 import type { SessionListItem } from "@/api/client";
+import { useMachineTarget } from "@/lib/machine-target";
 import { sessionBucket, sessionUpdatedAt } from "@/lib/needs-you";
 import { useAppShellStore } from "@/stores/app-shell";
+import { useMachinesStore } from "@/stores/machines";
 import { useHarnessSetupStore } from "@/stores/harness-setup";
 import { useSessionsStore } from "@/stores/sessions";
 import { useWorkflowsStore } from "@/stores/workflows";
@@ -28,17 +30,61 @@ const { config } = storeToRefs(useAppShellStore());
 const harnessSetup = useHarnessSetupStore();
 const { noHarnessReason } = useEnabledHarnesses();
 /** Until a harness is ready, say so here and offer setup (not in cloud mode, where it can't be set up from Fleet). */
-const showHarnessBanner = computed(() => noHarnessReason.value !== null && !config.value.cloudMode);
 
-const {
-  isLoading,
-  error,
-  refetch,
-} = useSessions({ retentionStatus });
+// The dashboard shows the machine you're on (the route provides it). The live machine's sessions are the store's;
+// another machine's are read from it here, and nothing on its rows may ask the live machine.
+const machines = useMachinesStore();
+const target = useMachineTarget();
+const isOther = computed(() => !target.isLive);
+const showHarnessBanner = computed(() => !isOther.value && noHarnessReason.value !== null && !config.value.cloudMode);
+const otherSessions = shallowRef<SessionListItem[]>([]);
+const otherLoading = shallowRef(false);
+const otherError = shallowRef<string | undefined>(undefined);
+let otherTimer: ReturnType<typeof setInterval> | undefined;
+let otherRequest = 0;
+
+async function loadOther(): Promise<void> {
+  const id = ++otherRequest;
+  if (otherSessions.value.length === 0) otherLoading.value = true;
+  try {
+    const { data, error: apiError } = await target.api.GET("/api/sessions", {
+      params: { query: { limit: 100, ...(retentionStatus.value !== "active" ? { retentionStatus: retentionStatus.value } : {}) } },
+    });
+    if (id !== otherRequest) return;
+    if (apiError || !data) throw new Error("Couldn't read that machine's sessions");
+    otherSessions.value = data as SessionListItem[];
+    machines.rememberSessions(target.key, otherSessions.value.map((item) => item.session.id));
+    otherError.value = undefined;
+  } catch (failure) {
+    if (id === otherRequest) otherError.value = failure instanceof Error ? failure.message : String(failure);
+  } finally {
+    if (id === otherRequest) otherLoading.value = false;
+  }
+}
+
+onMounted(() => {
+  if (!isOther.value) return;
+  void loadOther();
+  otherTimer = setInterval(() => void loadOther(), 15_000);
+});
+onUnmounted(() => {
+  otherRequest++;
+  if (otherTimer) clearInterval(otherTimer);
+});
+watch(retentionStatus, () => { if (isOther.value) void loadOther(); });
+
+// Nothing is open on the dashboard, so no sidebar row should look selected (with the switch off the page reloads here).
+if (machines.opensInPlace) sessionsStore.setActiveSessionId(null);
+
+const live = useSessions({ retentionStatus, enabled: () => !isOther.value });
+const isLoading = computed(() => (isOther.value ? otherLoading.value : live.isLoading.value));
+const error = computed(() => (isOther.value ? otherError.value : live.error.value));
+const refetch = (): Promise<void> => (isOther.value ? loadOther() : live.refetch());
+const storeSessionsShown = computed(() => (isOther.value ? otherSessions.value : storeSessions.value));
 
 // Top-level sessions only; subagents show under their parent in the session itself.
 const sessions = computed(() =>
-  storeSessions.value.filter((session) => {
+  storeSessionsShown.value.filter((session) => {
     if (session.parentSessionId || session.isHidden) return false;
     return retentionStatus.value === "all" || session.retentionStatus === retentionStatus.value;
   }));
@@ -90,6 +136,7 @@ const statusLine = computed(() => {
 });
 
 function handleSessionSelect(session: SessionListItem): void {
+  if (isOther.value) machines.rememberSessions(target.key, [session.session.id]);
   void router.navigate({
     to: "/sessions/$id",
     params: { id: session.session.id },
@@ -226,6 +273,7 @@ function handleNewSession(): void {
             :key="session.session.id"
             :session="session"
             :now="now"
+            :read-only="isOther"
             @select="handleSessionSelect"
             @changed="handleSessionChanged"
           />
@@ -249,6 +297,7 @@ function handleNewSession(): void {
             :key="session.session.id"
             :session="session"
             :now="now"
+            :read-only="isOther"
             @select="handleSessionSelect"
             @changed="handleSessionChanged"
           />
@@ -277,6 +326,7 @@ function handleNewSession(): void {
             :key="session.session.id"
             :session="session"
             :now="now"
+            :read-only="isOther"
             @select="handleSessionSelect"
             @changed="handleSessionChanged"
           />

@@ -16,6 +16,8 @@ import { useWorkflowsStore } from "@/stores/workflows";
 const props = defineProps<{
   session: SessionListItem;
   now: number;
+  /** Another machine's session: opens, but its archive and delete would ask the live machine, so they're not offered. */
+  readOnly?: boolean;
 }>();
 
 const emit = defineEmits<{
@@ -43,8 +45,8 @@ const status = computed(() => {
 });
 const isArchived = computed(() => props.session.retentionStatus === "archived");
 const canArchive = computed(() =>
-  props.session.capabilities?.canArchive ?? (!isArchived.value && props.session.lifecycleStatus !== "running"));
-const canDelete = computed(() => props.session.capabilities?.canDelete ?? true);
+  !props.readOnly && (props.session.capabilities?.canArchive ?? (!isArchived.value && props.session.lifecycleStatus !== "running")));
+const canDelete = computed(() => !props.readOnly && (props.session.capabilities?.canDelete ?? true));
 const isPending = computed(() => isArchiving.value || isDeleting.value);
 
 const place = computed(() => {

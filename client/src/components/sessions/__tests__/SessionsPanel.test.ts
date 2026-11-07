@@ -221,4 +221,23 @@ describe("SessionsPanel across machines", () => {
     }));
     view.unmount();
   });
+
+  it("with the switch on, Work here makes that machine the one you're on and goes to its first page in place", async () => {
+    navigate.mockClear();
+    const preferences = usePreferencesStore();
+    preferences.hasFetched = true;
+    preferences.preferences = { MachineSwitch: "true" };
+    const machines = useMachinesStore();
+    const openOn = vi.spyOn(machines, "openOn").mockImplementation(() => {});
+    const view = mountPanel();
+    await flushPromises();
+
+    const group = view.findAllComponents(MachineSessionsGroup).find((candidate) => candidate.props("machine").key === hangar.id)!;
+    group.vm.$emit("workHere");
+
+    expect(openOn).not.toHaveBeenCalled();
+    expect(machines.currentKey).toBe(hangar.id);
+    expect(navigate).toHaveBeenCalledWith({ to: "/" });
+    view.unmount();
+  });
 });

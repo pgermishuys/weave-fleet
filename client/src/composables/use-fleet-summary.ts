@@ -9,7 +9,7 @@ import {
   type ShallowRef,
 } from "vue";
 import type { FleetSummaryResponse } from "@/api/client";
-import { api } from "@/api/client";
+import { useMachineTarget } from "@/lib/machine-target";
 import { extractApiError } from "@/lib/api-error";
 
 export interface UseFleetSummaryOptions {
@@ -27,6 +27,7 @@ export interface UseFleetSummaryResult {
 const DEFAULT_POLL_INTERVAL_MS = 30_000;
 
 export function useFleetSummary(options: UseFleetSummaryOptions = {}): UseFleetSummaryResult {
+  const target = useMachineTarget();
   const summary = shallowRef<FleetSummaryResponse | null>(null);
   const isLoading = shallowRef(false);
   const error = shallowRef<string | undefined>(undefined);
@@ -70,7 +71,7 @@ export function useFleetSummary(options: UseFleetSummaryOptions = {}): UseFleetS
     }
 
     try {
-      const { data, error: apiError } = await api.GET("/api/fleet/summary");
+      const { data, error: apiError } = await target.api.GET("/api/fleet/summary");
       if (disposed || currentRequestId !== requestId) {
         return;
       }

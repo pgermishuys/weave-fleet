@@ -3,10 +3,12 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { createPinia, setActivePinia } from "pinia";
 import { HOME_MACHINE_KEY, saveMachines, setActiveMachine, type MachineConnection } from "@/lib/machines";
 import { useMachinesStore, type MachineCapabilities, type MachineInfo } from "@/stores/machines";
+import { usePreferencesStore } from "@/stores/preferences";
 import { useSettingsNav } from "@/composables/use-settings-nav";
 import MachinesSection from "@/components/settings/MachinesSection.vue";
 
-vi.mock("@tanstack/vue-router", () => ({ useRouter: () => ({ navigate: vi.fn() }) }));
+const routerNavigate = vi.hoisted(() => vi.fn());
+vi.mock("@tanstack/vue-router", () => ({ useRouter: () => ({ navigate: routerNavigate }) }));
 
 enableAutoUnmount(afterEach);
 
@@ -489,6 +491,43 @@ describe("Settings → Machines", () => {
       expect(wrapper.get("[data-testid='machine-tunnel-down']").text()).toBe("The SSH tunnel to osprey is down");
     });
   });
+  });
+  describe("Work here", () => {
+    async function mountMini(): Promise<VueWrapper> {
+      routes["http://100.64.12.40:2113/api/machine"] = () => json(miniInfo);
+      routes["http://100.64.12.40:2113/api/sessions"] = () => json([]);
+      const wrapper = mount(MachinesSection);
+      await flushPromises();
+      return wrapper;
+    }
+
+    it("with the switch on makes the machine the one you're on and goes to its first page in place", async () => {
+      routerNavigate.mockClear();
+      const wrapper = await mountMini();
+      const preferences = usePreferencesStore();
+      preferences.hasFetched = true;
+      preferences.preferences = { MachineSwitch: "true" };
+      const machines = useMachinesStore();
+      const openOn = vi.spyOn(machines, "openOn").mockImplementation(() => {});
+
+      await wrapper.get(`[data-machine='${mini.id}'] [data-testid='machine-open']`).trigger("click");
+
+      expect(openOn).not.toHaveBeenCalled();
+      expect(machines.currentKey).toBe(mini.id);
+      expect(routerNavigate).toHaveBeenCalledWith({ to: "/" });
+    });
+
+    it("with the switch off reloads onto the machine", async () => {
+      routerNavigate.mockClear();
+      const wrapper = await mountMini();
+      const machines = useMachinesStore();
+      const openOn = vi.spyOn(machines, "openOn").mockImplementation(() => {});
+
+      await wrapper.get(`[data-machine='${mini.id}'] [data-testid='machine-open']`).trigger("click");
+
+      expect(openOn).toHaveBeenCalledWith(mini.id, "/");
+      expect(routerNavigate).not.toHaveBeenCalled();
+    });
   });
 });
 
