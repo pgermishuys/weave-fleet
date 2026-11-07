@@ -1,6 +1,7 @@
-import { defineStore } from "pinia";
 import { shallowRef } from "vue";
-import { apiFetch } from "@/lib/api-client";
+import { apiFetchOn } from "@/lib/api-client";
+import type { MachineTarget } from "@/lib/machine-target";
+import { defineMachineStore } from "@/lib/machine-store";
 
 export interface Automation {
   id: string;
@@ -111,8 +112,8 @@ async function readError(response: Response): Promise<Error> {
   return new Error(data.error ?? `HTTP ${response.status}`);
 }
 
-async function send(url: string, init: RequestInit): Promise<Response> {
-  const response = await apiFetch(url, init);
+async function send(target: MachineTarget, url: string, init: RequestInit): Promise<Response> {
+  const response = await apiFetchOn(target.connection, url, init);
   if (!response.ok) {
     throw await readError(response);
   }
@@ -125,9 +126,10 @@ function jsonInit(method: string, body: unknown): RequestInit {
 
 /**
  * The automations list, shared by the sidebar and the automation page so a change made on one shows on the
- * other. Every change reloads the list from the server.
+ * other. Every change reloads the list from the server. One per machine: the Automations view can show another
+ * machine's, and every request goes to the machine the store was made for.
  */
-export const useAutomationsStore = defineStore("automations", () => {
+export const useAutomationsStore = defineMachineStore("automations", (target) => {
   const automations = shallowRef<Automation[]>([]);
   /** True until the first load finishes; later reloads keep showing the list they're replacing. */
   const isLoading = shallowRef(true);
@@ -137,7 +139,7 @@ export const useAutomationsStore = defineStore("automations", () => {
   async function fetchAll(): Promise<void> {
     error.value = undefined;
     try {
-      const response = await send(base, {});
+      const response = await send(target, base, {});
       const result = (await response.json()) as { automations: Automation[] };
       automations.value = result.automations;
     } catch (fetchError) {
@@ -156,35 +158,35 @@ export const useAutomationsStore = defineStore("automations", () => {
   }
 
   async function createAutomation(request: CreateAutomationRequest): Promise<Automation> {
-    const response = await send(base, jsonInit("POST", request));
+    const response = await send(target, base, jsonInit("POST", request));
     const automation = (await response.json()) as Automation;
     await refresh();
     return automation;
   }
 
   async function updateAutomation(id: string, request: UpdateAutomationRequest): Promise<void> {
-    await send(itemPath(id), jsonInit("PUT", request));
+    await send(target, itemPath(id), jsonInit("PUT", request));
     await refresh();
   }
 
   async function deleteAutomation(id: string): Promise<void> {
-    await send(itemPath(id), { method: "DELETE" });
+    await send(target, itemPath(id), { method: "DELETE" });
     await refresh();
   }
 
   async function enableAutomation(id: string): Promise<void> {
-    await send(itemPath(id, "/enable"), { method: "POST" });
+    await send(target, itemPath(id, "/enable"), { method: "POST" });
     await refresh();
   }
 
   async function disableAutomation(id: string): Promise<void> {
-    await send(itemPath(id, "/disable"), { method: "POST" });
+    await send(target, itemPath(id, "/disable"), { method: "POST" });
     await refresh();
   }
 
   /** Starts a run now; the answer is the run, still starting, and the list reloads to show it. */
   async function runAutomation(id: string): Promise<AutomationRun> {
-    const response = await send(itemPath(id, "/run"), { method: "POST" });
+    const response = await send(target, itemPath(id, "/run"), { method: "POST" });
     const run = (await response.json()) as AutomationRun;
     await refresh();
     return run;
@@ -192,17 +194,17 @@ export const useAutomationsStore = defineStore("automations", () => {
 
   /** An automation's runs, newest first. */
   async function fetchRuns(id: string): Promise<AutomationRun[]> {
-    const response = await send(itemPath(id, "/runs"), {});
+    const response = await send(target, itemPath(id, "/runs"), {});
     return ((await response.json()) as { runs: AutomationRun[] }).runs;
   }
 
   async function fetchDraftFromSession(sessionId: string): Promise<AutomationDraft> {
-    const response = await send(`${base}/draft-from-session/${encodeURIComponent(sessionId)}`, {});
+    const response = await send(target, `${base}/draft-from-session/${encodeURIComponent(sessionId)}`, {});
     return (await response.json()) as AutomationDraft;
   }
 
   async function fetchEventCatalog(): Promise<string[]> {
-    const response = await send(`${base}/event-catalog`, {});
+    const response = await send(target, `${base}/event-catalog`, {});
     return (await response.json()) as string[];
   }
 

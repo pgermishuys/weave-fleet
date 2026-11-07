@@ -50,6 +50,13 @@ const props = defineProps<{
   /** The automation being changed; null while making a new one. */
   automation: Automation | null;
   busy?: boolean;
+  /**
+   * The view shows another machine than the live one, whose list of machines isn't the one the Runs on chip offers: the
+   * runs go to that machine, and no chip is shown.
+   */
+  runsOnFixed?: boolean;
+  /** For `runsOnFixed`: the other machine an existing automation runs on, shown by name. */
+  runsOnName?: string | null;
 }>();
 
 /** What's being edited: the new automation's draft, or the open automation's changes. Edited in place. */
@@ -80,7 +87,7 @@ const machines = useMachinesStore();
 const target = useMachineTarget();
 const navigate = useNavigate();
 const { openAddMachine } = useSettingsNav();
-const showMachineChip = computed(() => machines.hasMachines && machines.live.isHome);
+const showMachineChip = computed(() => machines.hasMachines && machines.live.isHome && !props.runsOnFixed);
 const targetName = computed(() => machines.entries.find((entry) => entry.key === target.key)?.name ?? machines.live.name);
 
 /** Runs go to another machine: what was picked on this one (folder, harness, agent, model, workflow) goes. */
@@ -526,6 +533,16 @@ defineExpose({ focusMessage });
     </ComposerFrame>
 
     <div class="automation-composer__strip">
+      <template v-if="runsOnFixed && runsOnName">
+        <span
+          class="automation-composer__runs-on"
+          data-testid="automation-runs-on"
+        >Runs on <b>{{ runsOnName }}</b></span>
+        <span
+          class="automation-composer__separator"
+          aria-hidden="true"
+        />
+      </template>
       <template v-if="showMachineChip">
         <MachinePicker
           :machines="machines.entries"
@@ -795,6 +812,17 @@ defineExpose({ focusMessage });
   align-items: center;
   gap: 2px;
   padding: 6px 4px 0;
+}
+
+.automation-composer__runs-on {
+  padding: 0 6px;
+  font-size: 0.78571rem;
+  color: var(--muted);
+}
+
+.automation-composer__runs-on b {
+  font-weight: 500;
+  color: var(--coral);
 }
 
 .automation-composer__separator {

@@ -3,7 +3,11 @@ import { createPinia, setActivePinia } from "pinia";
 import type { Automation } from "@/stores/automations";
 
 const { apiFetchMock } = vi.hoisted(() => ({ apiFetchMock: vi.fn() }));
-vi.mock("@/lib/api-client", () => ({ apiFetch: apiFetchMock }));
+const { onMock } = vi.hoisted(() => ({ onMock: vi.fn() }));
+vi.mock("@/lib/api-client", () => ({
+  apiFetch: apiFetchMock,
+  apiFetchOn: (machine: unknown, path: string, init?: RequestInit) => (machine ? onMock(machine, path, init) : apiFetchMock(path, init)),
+}));
 
 import { useAutomationsStore } from "@/stores/automations";
 
@@ -119,5 +123,28 @@ describe("useAutomationsStore", () => {
 
     expect(store.isLoading).toBe(false);
     await reload;
+  });
+});
+
+describe("an automations store of another machine", () => {
+  it("asks that machine for everything, and keeps its own list", async () => {
+    setActivePinia(createPinia());
+    apiFetchMock.mockReset();
+    onMock.mockReset();
+    const falcon = { key: "m-falcon", connection: { id: "m-falcon" }, isLive: false, api: {} } as never;
+    onMock.mockImplementation(async (_machine: unknown, path: string, init?: RequestInit) =>
+      (init?.method ?? "GET") === "GET" ? json({ automations: [automation("on-falcon")] }) : json({}));
+    apiFetchMock.mockImplementation(async () => json({ automations: [automation("on-kestrel")] }));
+
+    const store = useAutomationsStore(falcon);
+    await store.refresh();
+    await store.enableAutomation("on-falcon");
+    await store.runAutomation("on-falcon");
+
+    expect(store.automations.map((a) => a.id)).toEqual(["on-falcon"]);
+    expect(onMock.mock.calls.every(([machine]) => (machine as { id: string }).id === "m-falcon")).toBe(true);
+    expect(onMock.mock.calls.map(([, path]) => path)).toContain("/api/automations/on-falcon/run");
+    expect(apiFetchMock).not.toHaveBeenCalled();
+    expect(useAutomationsStore().automations).toEqual([]);
   });
 });
