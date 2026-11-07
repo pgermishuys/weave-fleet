@@ -223,6 +223,33 @@ public sealed class McpEndpointTests : IClassFixture<McpEndpointTests.Server>, I
     // ── tools/call ─────────────────────────────────────────────────────────────
 
     [Fact]
+    public async Task Memory_search_is_offered_only_with_memory_and_Search_older_notes_on_and_finds_a_note_by_its_words()
+    {
+        await SetPreferencesAsync((AgentMemory.PreferenceKey, "true"));
+        (await ToolsAsync()).Select(tool => tool.GetProperty("name").GetString()).ShouldNotContain("fleet_memory_search");
+
+        await SetPreferencesAsync((AgentMemory.PreferenceKey, "true"), (AgentMemory.SearchPreferenceKey, "true"));
+        (await ToolsAsync()).Select(tool => tool.GetProperty("name").GetString()).ShouldContain("fleet_memory_search");
+
+        await CallAsync("fleet_memory_save", new { text = "Cut a release by tagging main.", list = "machine", kind = "learned", replaces = "", how = "ran the workflow" });
+        await CallAsync("fleet_memory_save", new { text = "Disk fills at /tmp.", list = "machine", kind = "learned", replaces = "" });
+
+        var found = await CallAsync("fleet_memory_search", new { query = "release", list = "machine" });
+
+        found.GetProperty("isError").GetBoolean().ShouldBeFalse();
+        var text = found.GetProperty("content").EnumerateArray().Single().GetProperty("text").GetString()!;
+        text.ShouldContain("Cut a release by tagging main.");
+        text.ShouldContain("tested: ran the workflow");
+        text.ShouldNotContain("Disk fills");
+        var notes = await _factory!.Services.GetRequiredService<IMemoryStore>().ListAsync("owner-user");
+        notes.Single(note => note.Text.StartsWith("Cut a release", StringComparison.Ordinal)).Found.ShouldBe(1);
+
+        await SetPreferencesAsync((AgentMemory.PreferenceKey, "true"), (AgentMemory.SearchPreferenceKey, "false"));
+        (await ErrorAsync(9, "tools/call", new { name = "fleet_memory_search", arguments = new { query = "release", list = "machine" } }))
+            .GetProperty("code").GetInt32().ShouldBe(-32602);
+    }
+
+    [Fact]
     public async Task A_memory_save_keeps_how_the_note_is_known_and_still_saves_without_it()
     {
         await SetPreferencesAsync((AgentMemory.PreferenceKey, "true"));

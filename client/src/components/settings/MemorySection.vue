@@ -6,10 +6,13 @@ import {
   clearMemory,
   forgetMemoryNote,
   getMemory,
+  estimateNoteTokens,
   keepMemoryNote,
   listMemoryNotes,
+  memoryFoundLabel,
   memoryKindLabel,
   memoryLifeLabel,
+  moveMemoryNote,
   setMemoryEnabled,
   updateMemoryNote,
   type MemoryListName,
@@ -41,8 +44,13 @@ const confirmingClear = ref(false);
 const showExpired = ref(false);
 
 const enabled = computed(() => overview.value?.enabled ?? false);
+/** "Search older notes" is on: each list is two groups, the notes every session reads and the ones found by search. */
+const searchOn = computed(() => overview.value?.searchEnabled === true);
 const repositoryName = computed(() => overview.value?.repositories.find((item) => item.path === repository.value)?.name ?? "this repository");
 const noteCount = computed(() => (notes.value ? notes.value.repositoryNotes.length + notes.value.machineNotes.length : 0));
+/** With "Search older notes" on: how many notes (both lists) every session reads; the rest wait for search. */
+const readCount = computed(() =>
+  notes.value ? [...notes.value.repositoryNotes, ...notes.value.machineNotes].filter((note) => !note.inSearch).length : 0);
 
 function matches(note: MemoryNote): boolean {
   const query = search.value.trim().toLowerCase();
@@ -52,6 +60,48 @@ function matches(note: MemoryNote): boolean {
 const repositoryNotes = computed(() => (notes.value?.repositoryNotes ?? []).filter(matches));
 const machineNotes = computed(() => (notes.value?.machineNotes ?? []).filter(matches));
 const expiredNotes = computed(() => (notes.value?.expiredNotes ?? []).filter(matches));
+
+interface NoteSection {
+  key: "all" | "always" | "search";
+  title: string | null;
+  meta: string | null;
+  items: MemoryNote[];
+  empty: string;
+}
+
+/** A list's notes as sections: one without a heading, or with "Search older notes" on, the two groups. */
+function sectionsOf(list: MemoryListName, items: MemoryNote[], emptyText: string): NoteSection[] {
+  if (!searchOn.value || !overview.value) return [{ key: "all", title: null, meta: null, items, empty: emptyText }];
+  const everything = (list === "machine" ? notes.value?.machineNotes : notes.value?.repositoryNotes) ?? [];
+  const always = everything.filter((note) => !note.inSearch);
+  const found = everything.filter((note) => note.inSearch);
+  const alwaysMax = list === "machine" ? overview.value.maxAlwaysMachineNotes : overview.value.maxAlwaysRepositoryNotes;
+  const searchMax = list === "machine" ? overview.value.maxSearchMachineNotes : overview.value.maxSearchRepositoryNotes;
+  const tokens = always.reduce((sum, note) => sum + estimateNoteTokens(note), 0);
+  return [
+    {
+      key: "always",
+      title: "Every session reads",
+      meta: `${always.length}/${alwaysMax} · about ${tokens.toLocaleString()} tokens`,
+      items: items.filter((note) => !note.inSearch),
+      empty: "Nothing is read by every session. A new note goes here first.",
+    },
+    {
+      key: "search",
+      title: "Found by search",
+      meta: `${found.length}/${searchMax} · no tokens until found`,
+      items: items.filter((note) => note.inSearch),
+      empty: "Nothing here yet. When the notes every session reads are full, the least used one moves here.",
+    },
+  ];
+}
+
+function move(note: MemoryNote, group: "search" | "always"): Promise<void> {
+  return run(async () => {
+    await moveMemoryNote(note.id, group);
+    await refresh();
+  });
+}
 
 const savedDate = new Intl.DateTimeFormat(undefined, { day: "numeric", month: "short" });
 
@@ -330,7 +380,7 @@ onMounted(load);
           <span
             class="text-xs text-muted"
             data-testid="memory-count"
-          >{{ noteCount }} {{ noteCount === 1 ? "note" : "notes" }} · about {{ notes.tokens.toLocaleString() }} tokens per request</span>
+          >{{ noteCount }} {{ noteCount === 1 ? "note" : "notes" }}{{ searchOn ? ` · ${readCount} read by every session` : "" }} · about {{ notes.tokens.toLocaleString() }} tokens per request</span>
         </div>
 
         <DreamNightly
@@ -346,8 +396,8 @@ onMounted(load);
 
         <template
           v-for="group in ([
-            { list: 'repository', title: `Repository · ${repositoryName}`, items: repositoryNotes, total: notes.repositoryNotes.length, max: overview.maxRepositoryNotes },
-            { list: 'machine', title: 'This machine · every repository', items: machineNotes, total: notes.machineNotes.length, max: overview.maxMachineNotes },
+            { list: 'repository', title: `Repository · ${repositoryName}`, items: repositoryNotes, total: notes.repositoryNotes.length, max: overview.maxRepositoryNotes, empty: `No notes for ${repositoryName} yet. Say “remember …” in a session, or add one here.` },
+            { list: 'machine', title: 'This machine · every repository', items: machineNotes, total: notes.machineNotes.length, max: overview.maxMachineNotes, empty: 'No notes about this machine yet. Agents save what a later session here would want to know.' },
           ] as const)"
           :key="group.list"
         >
@@ -359,7 +409,7 @@ onMounted(load);
                 aria-hidden="true"
               />
               {{ group.title }}
-              <span class="font-normal normal-case tracking-normal">{{ group.total }}/{{ group.max }}</span>
+              <span class="font-normal normal-case tracking-normal">{{ searchOn ? `${group.total} ${group.total === 1 ? "note" : "notes"}` : `${group.total}/${group.max}` }}</span>
             </p>
             <div class="flex items-center gap-1">
               <button
@@ -420,133 +470,204 @@ onMounted(load);
             </div>
           </div>
 
-          <ul
-            v-if="group.items.length"
-            class="mt-2 flex flex-col overflow-hidden rounded-card border border-border bg-main-bg"
-            :data-testid="`memory-list-${group.list}`"
+          <template
+            v-for="section in sectionsOf(group.list, group.items, group.empty)"
+            :key="section.key"
           >
-            <li
-              v-for="note in group.items"
-              :key="note.id"
-              class="flex items-start justify-between gap-3 border-t border-border p-3 first:border-t-0"
+            <div
+              v-if="section.title"
+              class="memory-grouphead"
+              :data-testid="`memory-group-${group.list}-${section.key}`"
             >
-              <div class="min-w-0 flex-1">
-                <textarea
-                  v-if="editingId === note.id"
-                  v-model="editText"
-                  rows="2"
-                  maxlength="400"
-                  class="w-full resize-none rounded-md border border-border bg-card-bg p-2 text-sm text-text outline-none focus:border-accent"
-                  aria-label="Edit note"
-                  @keydown.enter.exact.prevent="saveEdit(note)"
-                  @keydown.esc="editingId = null"
-                />
-                <div
-                  v-if="editingId === note.id"
-                  class="mt-1 flex gap-2"
-                >
-                  <button
-                    type="button"
-                    class="rounded-md bg-accent px-3 py-1 text-xs font-medium text-white disabled:opacity-60"
-                    :disabled="isSaving || !editText.trim()"
-                    @click="saveEdit(note)"
+              <span>{{ section.title }}</span>
+              <span>{{ section.meta }}</span>
+            </div>
+            <ul
+              v-if="section.items.length"
+              class="mt-2 flex flex-col overflow-hidden rounded-card border border-border bg-main-bg"
+              :data-testid="section.key === 'search' ? `memory-list-${group.list}-search` : `memory-list-${group.list}`"
+            >
+              <li
+                v-for="note in section.items"
+                :key="note.id"
+                class="flex items-start justify-between gap-3 border-t border-border p-3 first:border-t-0"
+              >
+                <div class="min-w-0 flex-1">
+                  <textarea
+                    v-if="editingId === note.id"
+                    v-model="editText"
+                    rows="2"
+                    maxlength="400"
+                    class="w-full resize-none rounded-md border border-border bg-card-bg p-2 text-sm text-text outline-none focus:border-accent"
+                    aria-label="Edit note"
+                    @keydown.enter.exact.prevent="saveEdit(note)"
+                    @keydown.esc="editingId = null"
+                  />
+                  <div
+                    v-if="editingId === note.id"
+                    class="mt-1 flex gap-2"
                   >
-                    Save
-                  </button>
+                    <button
+                      type="button"
+                      class="rounded-md bg-accent px-3 py-1 text-xs font-medium text-white disabled:opacity-60"
+                      :disabled="isSaving || !editText.trim()"
+                      @click="saveEdit(note)"
+                    >
+                      Save
+                    </button>
+                    <button
+                      type="button"
+                      class="memory-link"
+                      @click="editingId = null"
+                    >
+                      Cancel
+                    </button>
+                  </div>
+                  <p
+                    v-else
+                    class="text-sm text-text [overflow-wrap:anywhere]"
+                  >
+                    {{ note.text }}
+                  </p>
+                  <p class="mt-1 flex flex-wrap items-center gap-x-2 gap-y-1 text-[11px] text-muted">
+                    <span
+                      class="memory-kind"
+                      :class="`memory-kind--${note.kind}`"
+                    >{{ memoryKindLabel(note.kind) }}</span>
+                    {{ origin(note) }}
+                    <span
+                      v-if="note.kind === 'learned' && note.how"
+                      class="memory-tested"
+                      :title="note.how"
+                      :data-testid="`memory-how-${note.id}`"
+                    >Tested · {{ note.how }}</span>
+                    <span
+                      v-else-if="note.kind === 'learned'"
+                      class="memory-untested"
+                      :data-testid="`memory-how-${note.id}`"
+                    >Untested</span>
+                    <span
+                      v-if="searchOn && note.pinned"
+                      class="memory-life"
+                      :data-testid="`memory-pinned-${note.id}`"
+                    >
+                      <Pin
+                        :size="11"
+                        aria-hidden="true"
+                      />
+                      Pinned
+                    </span>
+                    <span
+                      v-if="searchOn && memoryFoundLabel(note)"
+                      :data-testid="`memory-found-${note.id}`"
+                    >{{ memoryFoundLabel(note) }}</span>
+                    <span
+                      v-if="memoryLifeLabel(note)"
+                      class="memory-life"
+                      :data-testid="`memory-life-${note.id}`"
+                    >
+                      <Hourglass
+                        :size="11"
+                        aria-hidden="true"
+                      />
+                      {{ memoryLifeLabel(note) }}
+                    </span>
+                  </p>
+                </div>
+                <div class="flex shrink-0 items-center gap-1">
                   <button
+                    v-if="searchOn && !note.inSearch && !note.pinned"
                     type="button"
                     class="memory-link"
-                    @click="editingId = null"
+                    :disabled="isSaving"
+                    :aria-label="`Move to search: ${note.text}`"
+                    :data-testid="`memory-to-search-${note.id}`"
+                    @click="move(note, 'search')"
                   >
-                    Cancel
+                    Move to search
                   </button>
-                </div>
-                <p
-                  v-else
-                  class="text-sm text-text [overflow-wrap:anywhere]"
-                >
-                  {{ note.text }}
-                </p>
-                <p class="mt-1 flex flex-wrap items-center gap-x-2 gap-y-1 text-[11px] text-muted">
-                  <span
-                    class="memory-kind"
-                    :class="`memory-kind--${note.kind}`"
-                  >{{ memoryKindLabel(note.kind) }}</span>
-                  {{ origin(note) }}
-                  <span
-                    v-if="note.kind === 'learned' && note.how"
-                    class="memory-tested"
-                    :title="note.how"
-                    :data-testid="`memory-how-${note.id}`"
-                  >Tested · {{ note.how }}</span>
-                  <span
-                    v-else-if="note.kind === 'learned'"
-                    class="memory-untested"
-                    :data-testid="`memory-how-${note.id}`"
-                  >Untested</span>
-                  <span
-                    v-if="memoryLifeLabel(note)"
-                    class="memory-life"
-                    :data-testid="`memory-life-${note.id}`"
+                  <button
+                    v-else-if="searchOn && note.pinned"
+                    type="button"
+                    class="memory-link"
+                    :disabled="isSaving"
+                    :aria-label="`Move to search: ${note.text}`"
+                    :data-testid="`memory-to-search-${note.id}`"
+                    @click="move(note, 'search')"
                   >
-                    <Hourglass
-                      :size="11"
+                    Unpin and move to search
+                  </button>
+                  <button
+                    v-if="searchOn && note.inSearch"
+                    type="button"
+                    class="memory-link"
+                    :disabled="isSaving"
+                    :aria-label="`Always read: ${note.text}`"
+                    :data-testid="`memory-to-always-${note.id}`"
+                    @click="move(note, 'always')"
+                  >
+                    Always read
+                  </button>
+                  <button
+                    v-if="searchOn && !note.inSearch && !note.pinned"
+                    type="button"
+                    class="memory-link"
+                    :disabled="isSaving"
+                    :aria-label="`Pin to always read: ${note.text}`"
+                    title="Pin: Fleet never moves it to search by itself"
+                    :data-testid="`memory-pin-${note.id}`"
+                    @click="move(note, 'always')"
+                  >
+                    Pin
+                  </button>
+                  <button
+                    v-if="note.lifetime != null"
+                    type="button"
+                    class="memory-icon-btn"
+                    :aria-label="`Keep note for good: ${note.text}`"
+                    title="Keep for good: it won't expire"
+                    :disabled="isSaving"
+                    :data-testid="`memory-keep-${note.id}`"
+                    @click="keep(note)"
+                  >
+                    <Pin
+                      :size="14"
                       aria-hidden="true"
                     />
-                    {{ memoryLifeLabel(note) }}
-                  </span>
-                </p>
-              </div>
-              <div class="flex shrink-0 items-center gap-1">
-                <button
-                  v-if="note.lifetime != null"
-                  type="button"
-                  class="memory-icon-btn"
-                  :aria-label="`Keep note for good: ${note.text}`"
-                  title="Keep for good: it won't expire"
-                  :disabled="isSaving"
-                  :data-testid="`memory-keep-${note.id}`"
-                  @click="keep(note)"
-                >
-                  <Pin
-                    :size="14"
-                    aria-hidden="true"
-                  />
-                </button>
-                <button
-                  type="button"
-                  class="memory-icon-btn"
-                  :aria-label="`Edit note: ${note.text}`"
-                  @click="startEditing(note)"
-                >
-                  <Pencil
-                    :size="14"
-                    aria-hidden="true"
-                  />
-                </button>
-                <button
-                  type="button"
-                  class="memory-icon-btn"
-                  :aria-label="`Forget note: ${note.text}`"
-                  :disabled="isSaving"
-                  @click="forget(note)"
-                >
-                  <X
-                    :size="14"
-                    aria-hidden="true"
-                  />
-                </button>
-              </div>
-            </li>
-          </ul>
-          <p
-            v-else-if="adding !== group.list"
-            class="mt-2 rounded-card border border-dashed border-border p-3 text-xs text-muted"
-          >
-            {{ search ? "No notes match." : group.list === 'machine'
-              ? "No notes about this machine yet. Agents save what a later session here would want to know."
-              : `No notes for ${repositoryName} yet. Say “remember …” in a session, or add one here.` }}
-          </p>
+                  </button>
+                  <button
+                    type="button"
+                    class="memory-icon-btn"
+                    :aria-label="`Edit note: ${note.text}`"
+                    @click="startEditing(note)"
+                  >
+                    <Pencil
+                      :size="14"
+                      aria-hidden="true"
+                    />
+                  </button>
+                  <button
+                    type="button"
+                    class="memory-icon-btn"
+                    :aria-label="`Forget note: ${note.text}`"
+                    :disabled="isSaving"
+                    @click="forget(note)"
+                  >
+                    <X
+                      :size="14"
+                      aria-hidden="true"
+                    />
+                  </button>
+                </div>
+              </li>
+            </ul>
+            <p
+              v-else-if="adding !== group.list || section.key === 'search'"
+              class="mt-2 rounded-card border border-dashed border-border p-3 text-xs text-muted"
+            >
+              {{ search ? "No notes match." : section.key === 'all' ? group.empty : section.empty }}
+            </p>
+          </template>
         </template>
 
         <div
@@ -739,6 +860,22 @@ onMounted(load);
 .memory-fact b {
   color: var(--text);
   font-weight: 600;
+}
+
+.memory-grouphead {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 12px;
+  margin-top: 12px;
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--text);
+}
+
+.memory-grouphead > span:last-child {
+  font-weight: 400;
+  color: var(--muted);
 }
 
 .memory-field {

@@ -145,6 +145,7 @@ public sealed class FleetToolCalls(
                 Boolean(args, "notifyWhenDone"),
                 ct)),
             "fleet_memory_save" => memory.SaveAsync(token, session, String(args, "list"), String(args, "text"), String(args, "kind"), String(args, "replaces"), String(args, "how"), ct),
+            "fleet_memory_search" => memory.SearchAsync(token, session, String(args, "query"), String(args, "list"), ct),
             "fleet_memory_forget" => memory.ForgetAsync(token, session, String(args, "id"), ct),
             "fleet_step_done" => steps.DoneAsync(token, session, String(args, "outcome"), String(args, "summary"), ct),
             "fleet_mod_write" => mods.WriteAsync(token, session, String(args, "name"), ModBridge.ReadFiles(Element(args, "files")), ct),

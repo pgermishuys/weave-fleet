@@ -18,7 +18,12 @@ public sealed record MemoryOverview(
     IReadOnlyList<MemoryRepositoryView> Repositories,
     int MachineCount,
     int MaxRepositoryNotes,
-    int MaxMachineNotes);
+    int MaxMachineNotes,
+    bool SearchEnabled = false,
+    int MaxAlwaysRepositoryNotes = AgentMemory.MaxAlwaysRepositoryNotes,
+    int MaxAlwaysMachineNotes = AgentMemory.MaxAlwaysMachineNotes,
+    int MaxSearchRepositoryNotes = AgentMemory.MaxSearchRepositoryNotes,
+    int MaxSearchMachineNotes = AgentMemory.MaxSearchMachineNotes);
 
 /// <summary>
 /// A note as the API shows it. <see cref="List"/> is <c>repository</c> or <c>machine</c>. <see cref="Lifetime"/> is how
@@ -39,7 +44,11 @@ public sealed record MemoryNoteView(
     int? DaysLeft = null,
     bool Expired = false,
     int Relearned = 0,
-    string? How = null);
+    string? How = null,
+    bool InSearch = false,
+    bool Pinned = false,
+    int Found = 0,
+    DateTimeOffset? LastFound = null);
 
 /// <summary>
 /// What a session in <see cref="Repository"/> reads, and roughly what that costs per request. <see cref="ExpiredNotes"/>
@@ -62,7 +71,10 @@ public sealed record MemorySavedPayload(MemoryNoteView Note, string? RepositoryN
 /// The note an agent saved, and the one it replaced. <see cref="Relearned"/>: it brought back an expired note that said
 /// much the same, which now lasts longer.
 /// </summary>
-public sealed record MemorySaveOutcome(MemoryNote Note, string? Replaced, bool AlreadyKnown, bool Relearned = false);
+public sealed record MemorySaveOutcome(MemoryNote Note, string? Replaced, bool AlreadyKnown, bool Relearned = false, IReadOnlyList<MemoryNote>? MovedDown = null);
+
+/// <summary>What a search found: the notes (best first) and how many notes it looked through.</summary>
+public sealed record MemorySearchOutcome(IReadOnlyList<MemoryNote> Notes, int Searched);
 
 /// <summary>
 /// The user's notes: Settings reads and edits them, agents save and forget them (<see cref="AgentMemoryBridge"/>), and
@@ -91,6 +103,9 @@ public sealed partial class AgentMemoryService(
     private readonly TimeProvider _time = time ?? TimeProvider.System;
 
     public Task<bool> IsEnabledAsync() => new AgentMemoryFeature(preferences).IsEnabledAsync();
+
+    /// <summary>Whether memory and "Search older notes" are both on: notes fall into a short list every session reads, and the rest.</summary>
+    public Task<bool> IsSearchOnAsync() => new AgentMemorySearchFeature(preferences).IsEnabledAsync();
 
     public async Task<MemoryOverview> GetOverviewAsync(CancellationToken ct = default)
     {
@@ -121,7 +136,8 @@ public sealed partial class AgentMemoryService(
             repositories,
             notes.Count(note => note.List == MemoryList.Machine),
             AgentMemory.MaxRepositoryNotes,
-            AgentMemory.MaxMachineNotes);
+            AgentMemory.MaxMachineNotes,
+            await IsSearchOnAsync().ConfigureAwait(false));
     }
 
     /// <summary>
@@ -149,9 +165,25 @@ public sealed partial class AgentMemoryService(
         var expired = all.Where(note => IsExpired(note, days)).ToList();
         var repositoryNotes = all.Except(expired).Where(note => note.List == MemoryList.Repository).ToList();
         var machineNotes = all.Except(expired).Where(note => note.List == MemoryList.Machine).ToList();
-        var tokens = repository is null
-            ? 0
-            : EstimateTokens(AgentMemoryPrompt.Render(repository, repositoryNotes, machineNotes));
+
+        // Turning "Search older notes" on leaves lists longer than the short one; they're sorted out when first looked at.
+        var searchOn = await IsSearchOnAsync().ConfigureAwait(false);
+        if (searchOn && repository is not null)
+        {
+            var fitRepository = await FitAsync(user.UserId, repositoryNotes, MemoryList.Repository, 0, ct).ConfigureAwait(false);
+            var fitMachine = await FitAsync(user.UserId, machineNotes, MemoryList.Machine, 0, ct).ConfigureAwait(false);
+            if (fitRepository.Moved.Count + fitMachine.Moved.Count > 0)
+                await RefreshContextAsync(user.UserId, Touched.MachineList.And(new Touched(Machine: false, repository)), ct).ConfigureAwait(false);
+        }
+
+        var tokens = 0;
+        if (repository is not null)
+        {
+            var (repositoryRead, repositoryMore) = MemoryTiers.Choose(repositoryNotes, MemoryList.Repository, searchOn);
+            var (machineRead, machineMore) = MemoryTiers.Choose(machineNotes, MemoryList.Machine, searchOn);
+            tokens = EstimateTokens(AgentMemoryPrompt.Render(
+                repository, repositoryRead, machineRead, true, searchOn ? repositoryMore : null, searchOn ? machineMore : null));
+        }
 
         return new MemoryNotesView(
             repository,
@@ -174,8 +206,16 @@ public sealed partial class AgentMemoryService(
         var repository = parsed == MemoryList.Repository ? AgentMemory.RepositoryOf(directory!) : null;
         var notes = await store.ListForAsync(user.UserId, repository, ct).ConfigureAwait(false);
         var days = await store.ListDaysUsedAsync(user.UserId, repository, ct).ConfigureAwait(false);
-        if (IsFull(Active(notes, days), parsed, repository))
+        var activeNotes = Active(notes, days);
+        if (await IsSearchOnAsync().ConfigureAwait(false))
+        {
+            if ((await FitAsync(user.UserId, [.. activeNotes.Where(note => note.List == parsed)], parsed, 1, ct).ConfigureAwait(false)).Error is { } noRoom)
+                return noRoom;
+        }
+        else if (IsFull(activeNotes, parsed, repository))
+        {
             return FleetError.ValidationError("Memory.Full", FullMessage(parsed));
+        }
 
         var now = _time.GetUtcNow();
         var note = new MemoryNote(NewId(), parsed, text!.Trim(), MemoryKinds.Added, repository, null, null, now, now);
@@ -206,6 +246,42 @@ public sealed partial class AgentMemoryService(
         await store.DeleteAsync(user.UserId, [id], ct).ConfigureAwait(false);
         await RefreshContextAsync(user.UserId, Touched.Of(note), ct).ConfigureAwait(false);
         return Unit.Value;
+    }
+
+    /// <summary>
+    /// Moves a note between the group every session reads and the group kept for search, from Settings. Pinning a note
+    /// to "always read" (<paramref name="toSearch"/> false) pins it: Fleet never moves it down by itself; when that group
+    /// is full the least used unpinned note makes room. Moving a note to search unpins it.
+    /// </summary>
+    public async Task<Result<MemoryNoteView>> MoveAsync(string id, bool toSearch, CancellationToken ct = default)
+    {
+        if (await store.FindAsync(user.UserId, id, ct).ConfigureAwait(false) is not { } existing)
+            return FleetError.NotFoundFor("MemoryNote", id);
+
+        var note = existing with { InSearch = toSearch, Pinned = !toSearch };
+        if (toSearch)
+        {
+            var peers = await ActivePeersAsync(existing, ct).ConfigureAwait(false);
+            if (peers.Count(peer => !MemoryTiers.IsAlways(peer) && peer.Id != existing.Id) >= MemoryTiers.SearchCap(existing.List))
+                return FleetError.ValidationError("Memory.Full", TieredFullMessage(existing.List));
+        }
+        else if (!MemoryTiers.IsAlways(existing))
+        {
+            var peers = await ActivePeersAsync(existing, ct).ConfigureAwait(false);
+            if ((await FitAsync(user.UserId, [.. peers.Where(peer => peer.Id != existing.Id)], existing.List, 1, ct).ConfigureAwait(false)).Error is { } noRoom)
+                return noRoom;
+        }
+
+        await store.SaveAsync(user.UserId, note, ct).ConfigureAwait(false);
+        await RefreshContextAsync(user.UserId, Touched.Of(note), ct).ConfigureAwait(false);
+        return ToView(note);
+    }
+
+    private async Task<List<MemoryNote>> ActivePeersAsync(MemoryNote note, CancellationToken ct)
+    {
+        var notes = await store.ListForAsync(user.UserId, note.Repository, ct).ConfigureAwait(false);
+        var days = await store.ListDaysUsedAsync(user.UserId, note.Repository, ct).ConfigureAwait(false);
+        return [.. Active(notes.Where(other => other.List == note.List), days)];
     }
 
     /// <summary>
@@ -322,10 +398,25 @@ public sealed partial class AgentMemoryService(
                 .FirstOrDefault()
             : null;
 
-        if (replaced is null && IsFull(active, parsed, noteRepository))
+        IReadOnlyList<MemoryNote> movedDown = [];
+        if (await IsSearchOnAsync().ConfigureAwait(false))
+        {
+            // A note that takes no one's place goes in the group every session reads; when that's full, the least used moves to search.
+            if (replaced is null || replaced.List != parsed)
+            {
+                var fit = await FitAsync(userId, [.. active.Where(other => other.List == parsed && other.Id != relearned?.Id)], parsed, 1, ct).ConfigureAwait(false);
+                if (fit.Error is { } noRoom)
+                    return noRoom;
+                movedDown = fit.Moved;
+            }
+        }
+        else if (replaced is null && IsFull(active, parsed, noteRepository))
+        {
             return FleetError.ValidationError("Memory.Full", FullMessage(parsed));
+        }
 
         var previous = replaced ?? relearned;
+        var place = replaced?.List == parsed ? replaced : null;
         var note = new MemoryNote(
             previous?.List == parsed ? previous.Id : NewId(),
             parsed,
@@ -338,7 +429,11 @@ public sealed partial class AgentMemoryService(
             now,
             Lifetime(noteKind, replaced, relearned),
             (previous?.Relearned ?? 0) + (relearned is null ? 0 : 1),
-            noteHow);
+            noteHow,
+            place?.InSearch ?? false,
+            place?.Pinned ?? false,
+            previous?.List == parsed ? previous.Found : 0,
+            previous?.List == parsed ? previous.LastFound : null);
 
         if (replaced is not null && replaced.Id != note.Id)
             await store.DeleteAsync(userId, [replaced.Id], ct).ConfigureAwait(false);
@@ -348,9 +443,10 @@ public sealed partial class AgentMemoryService(
         told?.Saved(session.Id, note, replaced?.Id);
         // A note moved between lists changes both.
         var touched = replaced is null ? Touched.Of(note) : Touched.Of(note).And(Touched.Of(replaced));
+        // A note moved down is still in the same list: the refresh below covers it.
         await RefreshContextAsync(userId, touched, ct).ConfigureAwait(false);
         await BroadcastSavedAsync(userId, note, replaced, ct).ConfigureAwait(false);
-        return new MemorySaveOutcome(note, replaced?.Id, AlreadyKnown: false, Relearned: relearned is not null);
+        return new MemorySaveOutcome(note, replaced?.Id, AlreadyKnown: false, Relearned: relearned is not null, MovedDown: movedDown);
     }
 
     /// <summary>
@@ -383,6 +479,38 @@ public sealed partial class AgentMemoryService(
             .ToList();
         if (doomed.Count > 0)
             await store.DeleteAsync(userId, doomed, ct).ConfigureAwait(false);
+    }
+
+    /// <summary>
+    /// <c>fleet_memory_search</c>: the notes of this repository and/or this machine that match <paramref name="query"/>,
+    /// from both groups, best first (<see cref="MemoryTiers.Search"/>). Each note returned counts one more find, which is
+    /// what moves a note down last and up first. Expired notes aren't searched.
+    /// </summary>
+    public async Task<Result<MemorySearchOutcome>> SearchFromAgentAsync(Session session, string? query, string? list, CancellationToken ct = default)
+    {
+        if (string.IsNullOrWhiteSpace(query))
+            return FleetError.ValidationError("Memory.Query", "\"query\" is required: a few words about what you're looking for.");
+        var which = list?.Trim().ToLowerInvariant();
+        if (which is not ("repository" or "machine" or "both"))
+            return FleetError.ValidationError("Memory.List", "\"list\" is \"repository\", \"machine\" or \"both\".");
+
+        var repository = AgentMemory.RepositoryOf(session.Directory);
+        var notes = await store.ListForAsync(session.UserId, repository, ct).ConfigureAwait(false);
+        var days = await store.ListDaysUsedAsync(session.UserId, repository, ct).ConfigureAwait(false);
+        var searched = Active(RepositoryNotes(notes, repository).Concat(MachineNotes(notes)), days)
+            .Where(note => which == "both" || note.List == (which == "machine" ? MemoryList.Machine : MemoryList.Repository))
+            .ToList();
+
+        var now = _time.GetUtcNow();
+        List<MemoryNote> found = [];
+        foreach (var hit in MemoryTiers.Search(searched, query, AgentMemory.MaxSearchResults))
+        {
+            var counted = hit with { Found = hit.Found + 1, LastFound = now };
+            await store.SaveAsync(session.UserId, counted, ct).ConfigureAwait(false);
+            found.Add(counted);
+        }
+
+        return new MemorySearchOutcome(found, searched.Count);
     }
 
     /// <summary>Forgets a note an agent in <paramref name="session"/> asked to: the machine's or this repository's.</summary>
@@ -419,10 +547,19 @@ public sealed partial class AgentMemoryService(
             var days = await store.ListDaysUsedAsync(userId, repository, ct).ConfigureAwait(false);
             var repositoryNotes = Active(RepositoryNotes(notes, repository), days);
             var machineNotes = Active(MachineNotes(notes), days);
-            await store.WriteContextAsync(userId, directory, repository, AgentMemoryPrompt.RenderFolder(repository, repositoryNotes), ct)
+            var searchOn = await IsSearchOnAsync().ConfigureAwait(false);
+            if (searchOn)
+            {
+                await FitAsync(userId, repositoryNotes, MemoryList.Repository, 0, ct).ConfigureAwait(false);
+                await FitAsync(userId, machineNotes, MemoryList.Machine, 0, ct).ConfigureAwait(false);
+            }
+
+            var (repositoryRead, repositoryMore) = MemoryTiers.Choose(repositoryNotes, MemoryList.Repository, searchOn);
+            var (machineRead, machineMore) = MemoryTiers.Choose(machineNotes, MemoryList.Machine, searchOn);
+            await store.WriteContextAsync(userId, directory, repository, AgentMemoryPrompt.RenderFolder(repository, repositoryRead, searchable: searchOn ? repositoryMore : null), ct)
                 .ConfigureAwait(false);
-            await store.WriteMachineContextAsync(userId, AgentMemoryPrompt.RenderMachine(machineNotes), ct).ConfigureAwait(false);
-            return AgentMemoryPrompt.Render(repository, repositoryNotes, machineNotes, canSave);
+            await store.WriteMachineContextAsync(userId, AgentMemoryPrompt.RenderMachine(machineRead, searchOn ? machineMore : null), ct).ConfigureAwait(false);
+            return AgentMemoryPrompt.Render(repository, repositoryRead, machineRead, canSave, searchOn ? repositoryMore : null, searchOn ? machineMore : null);
         }
         catch (Exception ex) when (ex is IOException or UnauthorizedAccessException or JsonException)
         {
@@ -453,8 +590,15 @@ public sealed partial class AgentMemoryService(
             var days = await store.ListDaysUsedAsync(session.UserId, repository, ct).ConfigureAwait(false);
             var reachable = RepositoryNotes(notes, repository).Concat(MachineNotes(notes)).ToList();
             // A note that expired isn't wrong, only unconfirmed: the session keeps it rather than hear it's no longer true.
-            var expired = reachable.Where(note => IsExpired(note, days)).Select(note => note.Id).ToHashSet(StringComparer.Ordinal);
-            return told.Tell(session.Id, [.. reachable.Where(note => !expired.Contains(note.Id))], expired) is { } changes
+            // A note not read (moved to search, or past the cap) is dropped the same way: it needs no message.
+            var searchOn = await IsSearchOnAsync().ConfigureAwait(false);
+            var active = reachable.Where(note => !IsExpired(note, days)).ToList();
+            var read = MemoryTiers.Choose([.. active.Where(note => note.List == MemoryList.Repository)], MemoryList.Repository, searchOn).Read
+                .Concat(MemoryTiers.Choose([.. active.Where(note => note.List == MemoryList.Machine)], MemoryList.Machine, searchOn).Read)
+                .ToList();
+            var readIds = read.Select(note => note.Id).ToHashSet(StringComparer.Ordinal);
+            var unread = reachable.Where(note => !readIds.Contains(note.Id)).Select(note => note.Id).ToHashSet(StringComparer.Ordinal);
+            return told.Tell(session.Id, read, unread) is { } changes
                 ? AgentMemoryPrompt.RenderChanges(changes)
                 : null;
         }
@@ -477,11 +621,13 @@ public sealed partial class AgentMemoryService(
         if (!await IsEnabledAsync().ConfigureAwait(false))
             return;
 
+        var searchOn = await IsSearchOnAsync().ConfigureAwait(false);
         if (touched.Machine)
         {
             var days = await store.ListDaysUsedAsync(userId, null, ct).ConfigureAwait(false);
             var machine = Active(MachineNotes(await store.ListForAsync(userId, null, ct).ConfigureAwait(false)), days);
-            await store.WriteMachineContextAsync(userId, AgentMemoryPrompt.RenderMachine(machine), ct).ConfigureAwait(false);
+            var (machineRead, machineMore) = MemoryTiers.Choose(machine, MemoryList.Machine, searchOn);
+            await store.WriteMachineContextAsync(userId, AgentMemoryPrompt.RenderMachine(machineRead, searchOn ? machineMore : null), ct).ConfigureAwait(false);
         }
 
         // Checking the folders is a lookup each, no writes, so it happens on every change.
@@ -500,7 +646,8 @@ public sealed partial class AgentMemoryService(
         {
             var notes = await store.ListForAsync(userId, group.Key, ct).ConfigureAwait(false);
             var days = await store.ListDaysUsedAsync(userId, group.Key, ct).ConfigureAwait(false);
-            var content = AgentMemoryPrompt.RenderFolder(group.Key, Active(RepositoryNotes(notes, group.Key), days));
+            var (read, more) = MemoryTiers.Choose(Active(RepositoryNotes(notes, group.Key), days), MemoryList.Repository, searchOn);
+            var content = AgentMemoryPrompt.RenderFolder(group.Key, read, searchable: searchOn ? more : null);
             foreach (var folder in group)
                 await store.WriteContextAsync(userId, folder.Directory, folder.Repository, content, ct).ConfigureAwait(false);
         }
@@ -555,8 +702,41 @@ public sealed partial class AgentMemoryService(
     /// <summary>The notes sessions read: the ones that haven't expired.</summary>
     private List<MemoryNote> Active(IEnumerable<MemoryNote> notes, MemoryDaysUsed days) => [.. notes.Where(note => !IsExpired(note, days))];
 
+    /// <summary>
+    /// With search on: moves the always-read notes of one list that don't fit (more than the cap, less <paramref name="reserve"/>
+    /// seats kept for a note about to be added) to search, in the order of <see cref="MemoryTiers.PickToMoveDown"/>, updating
+    /// <paramref name="active"/> as it goes. The error says why it couldn't make room: every note pinned, or the search group full.
+    /// </summary>
+    private async Task<(List<MemoryNote> Moved, FleetError? Error)> FitAsync(string userId, List<MemoryNote> active, MemoryList list, int reserve, CancellationToken ct)
+    {
+        List<MemoryNote> moved = [];
+        while (active.Count(MemoryTiers.IsAlways) + reserve > MemoryTiers.AlwaysCap(list))
+        {
+            if (active.Count(note => !MemoryTiers.IsAlways(note)) >= MemoryTiers.SearchCap(list))
+                return (moved, reserve == 0 ? null : FleetError.ValidationError("Memory.Full", TieredFullMessage(list)));
+            if (MemoryTiers.PickToMoveDown(active.Where(MemoryTiers.IsAlways)) is not { } victim)
+            {
+                return (moved, reserve == 0 ? null : FleetError.ValidationError(
+                    "Memory.Pinned", $"Every note the {ListName(list)} list has in the group every session reads is pinned, so there's no room. Unpin a note in Settings → Memory, or forget one."));
+            }
+
+            var down = victim with { InSearch = true };
+            await store.SaveAsync(userId, down, ct).ConfigureAwait(false);
+            active[active.FindIndex(note => note.Id == victim.Id)] = down;
+            moved.Add(down);
+        }
+
+        return (moved, null);
+    }
+
+    private static string ListName(MemoryList list) => list == MemoryList.Machine ? "machine" : "repository";
+
     private static bool IsFull(IReadOnlyList<MemoryNote> notes, MemoryList list, string? repository)
         => (list == MemoryList.Machine ? MachineNotes(notes).Count : RepositoryNotes(notes, repository!).Count) >= AgentMemory.MaxNotes(list);
+
+    private static string TieredFullMessage(MemoryList list)
+        => $"The {ListName(list)} list is full ({MemoryTiers.AlwaysCap(list)} notes every session reads and {MemoryTiers.SearchCap(list)} kept for search). "
+           + "Forget a note that's out of date, or save a merged note with \"replaces\" set to one it covers.";
 
     private static string FullMessage(MemoryList list)
         => $"The {(list == MemoryList.Machine ? "machine" : "repository")} list is full ({AgentMemory.MaxNotes(list)} notes). "
@@ -601,7 +781,11 @@ public sealed partial class AgentMemoryService(
             note.Lifetime is { } lifetime ? Math.Max(lifetime - used, 0) : null,
             note.Lifetime is { } limit && used > limit,
             note.Relearned,
-            note.How);
+            note.How,
+            note.InSearch && !note.Pinned,
+            note.Pinned,
+            note.Found,
+            note.LastFound);
     }
 
     private static readonly StringComparer PathComparer =

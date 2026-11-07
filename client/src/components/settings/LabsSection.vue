@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { useRouter } from "@tanstack/vue-router";
-import { shallowRef } from "vue";
+import { computed, shallowRef } from "vue";
 import SettingGroup from "@/components/settings/SettingGroup.vue";
 import SettingRow from "@/components/settings/SettingRow.vue";
 import SettingSwitch from "@/components/settings/SettingSwitch.vue";
@@ -10,6 +10,7 @@ import { useWorkflowsFeature } from "@/composables/use-workflows-feature";
 import { DREAMING_PREFERENCE_KEY } from "@/lib/dreaming";
 import { FLEET_UPDATES_PREFERENCE_KEY } from "@/lib/fleet-updates";
 import { JOBS_PREFERENCE_KEY } from "@/lib/jobs";
+import { MEMORY_PREFERENCE_KEY, MEMORY_SEARCH_PREFERENCE_KEY } from "@/lib/agent-memory";
 import { LIVE_MACHINES_PREFERENCE_KEY, MACHINE_SWITCH_PREFERENCE_KEY } from "@/lib/machines";
 import { MISSION_CONTROL_PREFERENCE_KEY } from "@/lib/mission-control";
 import { PAGE_CHOICE_PREFERENCE_KEY } from "@/lib/page-choice";
@@ -29,6 +30,8 @@ const jobs = usePreferenceSwitch(JOBS_PREFERENCE_KEY);
 const missionControl = usePreferenceSwitch(MISSION_CONTROL_PREFERENCE_KEY);
 const dreaming = usePreferenceSwitch(DREAMING_PREFERENCE_KEY);
 const pageChoice = usePreferenceSwitch(PAGE_CHOICE_PREFERENCE_KEY);
+const memorySearch = usePreferenceSwitch(MEMORY_SEARCH_PREFERENCE_KEY);
+const memoryOn = computed(() => preferencesStore.get(MEMORY_PREFERENCE_KEY, "false") === "true");
 
 const { isWorkflowsEnabled, setWorkflowsEnabled } = useWorkflowsFeature();
 const isSavingWorkflows = shallowRef(false);
@@ -192,6 +195,28 @@ function openRoute(path: string): void {
             aria-label="Enable Dreaming"
             data-testid="dreaming-switch"
             @click="dreaming.toggle"
+          />
+        </template>
+      </SettingRow>
+
+      <SettingRow
+        id="memory-search"
+        title="Search older notes"
+        :summary="memoryOn ? 'Sessions read a short list of notes and search the rest.' : 'Needs Memory on. Sessions read a short list of notes and search the rest.'"
+        :adds="addsWhenOn(memorySearch.enabled.value && memoryOn, 'Two groups in Memory')"
+        @open="setActiveSection('memory')"
+      >
+        <template #more>
+          Every session reads 15 notes about its repository and 8 about the machine, and finds the rest with a search tool when it starts on a new area. A new note goes in the short list and the least used one moves down to search. Nothing is deleted, and turning this off puts every note back in the prompt. A weaker model may never search, so this stays here until it has been checked on every harness. Needs Memory on.
+        </template>
+        <template #control>
+          <SettingSwitch
+            :checked="memorySearch.enabled.value"
+            :saving="memorySearch.saving.value"
+            :disabled="preferencesStore.isLoading || memorySearch.saving.value || (!memoryOn && !memorySearch.enabled.value)"
+            aria-label="Enable searching older notes"
+            data-testid="memory-search-switch"
+            @click="memorySearch.toggle"
           />
         </template>
       </SettingRow>

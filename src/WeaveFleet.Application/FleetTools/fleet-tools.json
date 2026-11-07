@@ -432,6 +432,33 @@
       }
     },
     {
+      "name": "fleet_memory_search",
+      "description": "Search the older notes Fleet memory keeps out of your instructions, for this repository and this machine. Use it when you start on an area you haven't worked on in this session, or before a risky step. Returns up to 8 matching notes with their ids; it also looks through the notes already in your instructions.",
+      "requires": "memorySearch",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "query": {
+            "type": "string",
+            "description": "A few words about what you're looking for, such as a command, a tool or an area of the code."
+          },
+          "list": {
+            "type": "string",
+            "enum": [
+              "repository",
+              "machine",
+              "both"
+            ],
+            "description": "repository: this repository's notes. machine: this computer's notes. both: search the two."
+          }
+        },
+        "required": [
+          "query",
+          "list"
+        ]
+      }
+    },
+    {
       "name": "fleet_memory_forget",
       "description": "Remove a note from Fleet memory that turned out wrong or out of date. Use its id from the list in your instructions.",
       "requires": "memory",

@@ -536,6 +536,24 @@ if (process.env.FLEET_MEMORY_DIR) {
       (input, tool) => callFleet("forget", tool, { id: input.id }, MEMORY_PATH + "forget"),
     ),
   )
+  // With "Search older notes" on too: the notes kept out of the instructions are found by search.
+  if (process.env.FLEET_MEMORY_SEARCH === "1") {
+    tools.push(
+      fleetTool(
+        "fleet_memory_search",
+        "Search the older notes Fleet memory keeps out of your instructions, for this repository and this machine. Use it when you start on an area you haven't worked on in this session, or before a risky step. Returns up to 8 matching notes with their ids; it also looks through the notes already in your instructions.",
+        {
+          query: { type: "string", description: "A few words about what you're looking for, such as a command, a tool or an area of the code." },
+          list: {
+            type: "string",
+            enum: ["repository", "machine", "both"],
+            description: "repository: this repository's notes. machine: this computer's notes. both: search the two.",
+          },
+        },
+        (input, tool) => callFleet("search", tool, { query: input.query, list: input.list }, MEMORY_PATH + "search"),
+      ),
+    )
+  }
 }
 
 // Only in servers started with Mods on. A draft is the agent's own mod for this session; Fleet runs the checks.

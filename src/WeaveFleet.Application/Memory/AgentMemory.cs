@@ -21,6 +21,15 @@ public static class AgentMemory
     /// </summary>
     public const string EnvironmentVariable = "FLEET_MEMORY_DIR";
 
+    /// <summary>
+    /// The user preference (Settings → Labs, "Search older notes") that splits notes into a short list every session reads
+    /// and the rest, found by search (<see cref="MemoryTiers"/>). Unset means off; it needs <see cref="PreferenceKey"/> on too.
+    /// </summary>
+    public const string SearchPreferenceKey = "MemorySearch";
+
+    /// <summary>Set to <c>1</c> in a harness process's environment when memory and the search switch are on: Fleet's plugin then adds <c>fleet_memory_search</c>.</summary>
+    public const string SearchEnvironmentVariable = "FLEET_MEMORY_SEARCH";
+
     /// <summary>The event on the <c>sessions</c> topic when an agent saves a note, so Fleet can show it with Undo.</summary>
     public const string SavedEventType = "memory.saved";
 
@@ -40,6 +49,21 @@ public static class AgentMemory
     /// (<see cref="RelearnedLifetime"/>).
     /// </summary>
     public const int LearnedLifetimeDays = 7;
+
+    /// <summary>With search on: how many notes of a repository every session reads.</summary>
+    public const int MaxAlwaysRepositoryNotes = 15;
+
+    /// <summary>With search on: how many notes of the machine every session reads.</summary>
+    public const int MaxAlwaysMachineNotes = 8;
+
+    /// <summary>With search on: how many notes of a repository are kept for search.</summary>
+    public const int MaxSearchRepositoryNotes = 200;
+
+    /// <summary>With search on: how many notes of the machine are kept for search.</summary>
+    public const int MaxSearchMachineNotes = 60;
+
+    /// <summary>The most notes one search returns.</summary>
+    public const int MaxSearchResults = 8;
 
     /// <summary>The longest a note's "how we know" is kept, in characters.</summary>
     public const int MaxHowLength = 160;
@@ -131,6 +155,13 @@ public static class MemoryKinds
 /// How the agent knew the note holds (what it ran or saw), in a few words; none when it hadn't checked, and for notes
 /// saved before this was recorded. Only learned notes carry it.
 /// </param>
+/// <param name="InSearch">
+/// The note is kept for search (<c>placement: search</c>) instead of being read by every session. A note without it is
+/// always read, so notes from before search keep working. Only counts with <see cref="AgentMemory.SearchPreferenceKey"/> on.
+/// </param>
+/// <param name="Pinned">The user pinned the note to "always read": Fleet never moves it to search by itself.</param>
+/// <param name="Found">How many times a search returned the note.</param>
+/// <param name="LastFound">When a search last returned it.</param>
 public sealed record MemoryNote(
     string Id,
     MemoryList List,
@@ -143,11 +174,23 @@ public sealed record MemoryNote(
     DateTimeOffset Updated,
     int? Lifetime = null,
     int Relearned = 0,
-    string? How = null);
+    string? How = null,
+    bool InSearch = false,
+    bool Pinned = false,
+    int Found = 0,
+    DateTimeOffset? LastFound = null);
 
 /// <summary>Whether memory is on for the current user.</summary>
 public sealed class AgentMemoryFeature(IUserPreferenceRepository preferences)
 {
     public async Task<bool> IsEnabledAsync()
         => string.Equals(await preferences.GetAsync(AgentMemory.PreferenceKey).ConfigureAwait(false), "true", StringComparison.OrdinalIgnoreCase);
+}
+
+/// <summary>Whether memory and its search switch are both on for the current user.</summary>
+public sealed class AgentMemorySearchFeature(IUserPreferenceRepository preferences)
+{
+    public async Task<bool> IsEnabledAsync()
+        => await new AgentMemoryFeature(preferences).IsEnabledAsync().ConfigureAwait(false)
+           && string.Equals(await preferences.GetAsync(AgentMemory.SearchPreferenceKey).ConfigureAwait(false), "true", StringComparison.OrdinalIgnoreCase);
 }

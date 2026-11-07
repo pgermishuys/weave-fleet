@@ -68,6 +68,7 @@ public sealed partial class FleetToolCatalogPluginTests
             ("fleet_machine_list", "agentHandoff"),
             ("fleet_session_start", "agentHandoff"),
             ("fleet_memory_save", "memory"),
+            ("fleet_memory_search", "memorySearch"),
             ("fleet_memory_forget", "memory"),
             ("fleet_step_done", "workflowStep"),
             ("fleet_mod_write", "mods"),

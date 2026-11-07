@@ -115,4 +115,29 @@ describe("LabsSection: what a switch adds", () => {
     await flushPromises();
     expect(putMock).toHaveBeenCalledWith("/api/preferences/{key}", { params: { path: { key: "Workflows" } }, body: { value: "true" } });
   });
+
+  it("won't turn on Search older notes while Memory is off", async () => {
+    getMock.mockResolvedValue({ data: { Memory: "false" } });
+    putMock.mockResolvedValue({});
+    const wrapper = mount(LabsSection);
+    await flushPromises();
+
+    expect(wrapper.get("[data-testid='memory-search-switch']").attributes("disabled")).toBeDefined();
+    expect(wrapper.get("[data-setting-row='memory-search']").text()).toContain("Needs Memory on");
+  });
+
+  it("saves the Search older notes choice once Memory is on", async () => {
+    getMock.mockResolvedValue({ data: { Memory: "true" } });
+    putMock.mockResolvedValue({});
+    const wrapper = mount(LabsSection);
+    await flushPromises();
+    const toggle = wrapper.get("[data-testid='memory-search-switch']");
+    expect(toggle.attributes("aria-checked")).toBe("false");
+
+    await toggle.trigger("click");
+    await flushPromises();
+
+    expect(putMock).toHaveBeenCalledWith("/api/preferences/{key}", { params: { path: { key: "MemorySearch" } }, body: { value: "true" } });
+    expect(toggle.attributes("aria-checked")).toBe("true");
+  });
 });

@@ -560,6 +560,7 @@ internal sealed record ErrorResponse(string Error);
 [JsonSerializable(typeof(WeaveFleet.Api.Endpoints.SetMemoryEnabledRequest))]
 [JsonSerializable(typeof(WeaveFleet.Api.Endpoints.AddMemoryNoteRequest))]
 [JsonSerializable(typeof(WeaveFleet.Api.Endpoints.UpdateMemoryNoteRequest))]
+[JsonSerializable(typeof(WeaveFleet.Api.Endpoints.MoveMemoryNoteRequest))]
 [JsonSerializable(typeof(WeaveFleet.Api.Endpoints.ClearMemoryRequest))]
 [JsonSerializable(typeof(WeaveFleet.Api.Endpoints.ClearMemoryResponse))]
 // Plugins

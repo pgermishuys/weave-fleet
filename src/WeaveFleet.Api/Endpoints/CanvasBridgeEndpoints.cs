@@ -135,6 +135,10 @@ public static class CanvasBridgeEndpoints
             => ToResult(await bridge.SaveAsync(BridgeToken(http), request.HarnessSessionId, request.List, request.Text, request.Kind, request.Replaces, request.How, ct)))
             .WithName("MemoryBridgeSave");
 
+        memory.MapPost("/search", async (MemoryBridgeRequest request, HttpContext http, AgentMemoryBridge bridge, CancellationToken ct)
+            => ToResult(await bridge.SearchAsync(BridgeToken(http), request.HarnessSessionId, request.Query, request.List, ct)))
+            .WithName("MemoryBridgeSearch");
+
         memory.MapPost("/forget", async (MemoryBridgeRequest request, HttpContext http, AgentMemoryBridge bridge, CancellationToken ct)
             => ToResult(await bridge.ForgetAsync(BridgeToken(http), request.HarnessSessionId, request.Id, ct)))
             .WithName("MemoryBridgeForget");

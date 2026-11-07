@@ -248,6 +248,14 @@ internal sealed partial class FileMemoryStore(FleetOptions options, ILogger<File
             text.Append("relearned: ").Append(note.Relearned.ToString(CultureInfo.InvariantCulture)).Append('\n');
         if (AgentMemory.CleanHow(note.How) is { } how)
             text.Append("how: ").Append(how).Append('\n');
+        if (note.InSearch)
+            text.Append("placement: search\n");
+        if (note.Pinned)
+            text.Append("pinned: true\n");
+        if (note.Found > 0)
+            text.Append("found: ").Append(note.Found.ToString(CultureInfo.InvariantCulture)).Append('\n');
+        if (note.LastFound is { } lastFound)
+            text.Append("last-found: ").Append(lastFound.ToString("O", CultureInfo.InvariantCulture)).Append('\n');
         text.Append("---\n");
         text.Append(note.Text.Trim()).Append('\n');
         return text.ToString();
@@ -299,7 +307,11 @@ internal sealed partial class FileMemoryStore(FleetOptions options, ILogger<File
             ParseTime(fields.GetValueOrDefault("updated")) ?? created,
             ParseLifetime(fields.GetValueOrDefault("lifetime"), kind),
             int.TryParse(fields.GetValueOrDefault("relearned"), NumberStyles.None, CultureInfo.InvariantCulture, out var relearned) ? relearned : 0,
-            AgentMemory.CleanHow(fields.GetValueOrDefault("how")));
+            AgentMemory.CleanHow(fields.GetValueOrDefault("how")),
+            string.Equals(fields.GetValueOrDefault("placement"), "search", StringComparison.OrdinalIgnoreCase),
+            string.Equals(fields.GetValueOrDefault("pinned"), "true", StringComparison.OrdinalIgnoreCase),
+            int.TryParse(fields.GetValueOrDefault("found"), NumberStyles.None, CultureInfo.InvariantCulture, out var found) ? found : 0,
+            ParseTime(fields.GetValueOrDefault("last-found")));
     }
 
     /// <summary>

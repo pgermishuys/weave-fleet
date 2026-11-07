@@ -840,6 +840,7 @@ public sealed class ClaudeCodeLongLivedProcessTests : IAsyncDisposable
         services.AddSingleton<IRemoteMachineRepository>(new InMemoryRemoteMachineRepository());
         services.AddSingleton<WeaveFleet.Application.Machines.AgentHandoffFeature>();
         services.AddSingleton<AgentMemoryFeature>();
+        services.AddSingleton<AgentMemorySearchFeature>();
         services.AddSingleton<WorkflowsFeature>();
         services.AddSingleton<WeaveFleet.Application.Mods.ModsSafeMode>();
         services.AddSingleton<IUserContext>(new TestUserContext(TestUserContext.DefaultUserId));

@@ -263,6 +263,7 @@ public static class DependencyInjection
         services.AddScoped<SessionMessagesFeature>();
         services.AddSingleton<WeaveFleet.Application.Memory.IMemoryStore, WeaveFleet.Infrastructure.Memory.FileMemoryStore>();
         services.AddScoped<WeaveFleet.Application.Memory.AgentMemoryFeature>();
+        services.AddScoped<WeaveFleet.Application.Memory.AgentMemorySearchFeature>();
         services.AddSingleton<WeaveFleet.Application.Memory.AgentMemorySessions>();
         services.AddScoped<WeaveFleet.Application.Memory.AgentMemoryService>();
         services.AddScoped<WeaveFleet.Application.Memory.AgentMemoryBridge>();
