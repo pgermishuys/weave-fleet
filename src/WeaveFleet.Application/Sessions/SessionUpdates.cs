@@ -27,7 +27,7 @@ public sealed record SessionUpdateWatch(
     string? TargetTitle = null);
 
 /// <summary>An update ready for the session that asked, built when the target's turn ended.</summary>
-public sealed record SessionUpdate(string AskerId, string TargetId, string UserId, string Text, string Outcome);
+public sealed record SessionUpdate(string AskerId, string TargetId, string UserId, string Text, string Outcome, bool FromOtherMachine = false);
 
 /// <summary>Reads how a watched turn went and hands the update to the session that asked.</summary>
 public interface ISessionUpdateSender
@@ -418,7 +418,7 @@ public sealed class SessionUpdateSender(
         }
         else
         {
-            var (found, token, error) = await remote.FindAsync(machine.Id).ConfigureAwait(false);
+            var (found, token, error) = await remote.FindAsync(machine.Id, includeNever: true).ConfigureAwait(false);
             var (reply, readError) = found is null
                 ? (null, error)
                 : await remote.LastReplyAsync(found, token!, watch.TargetId, watch.MessageId, ct).ConfigureAwait(false);
@@ -433,13 +433,16 @@ public sealed class SessionUpdateSender(
             watch.TargetId,
             watch.UserId,
             SessionMessages.WrapUpdate(watch.TargetId, watch.TargetTitle ?? watch.TargetId, outcome, Shorten(body), machine),
-            outcome);
+            outcome,
+            FromOtherMachine: true);
     }
 
     public async Task<bool> SendAsync(SessionUpdate update, CancellationToken ct)
     {
         // Checked when it's sent, not when it was asked for: turning the switch off stops the ones still waiting.
-        if (!await feature.IsEnabledAsync().ConfigureAwait(false))
+        // Not for an update about a session on another machine: that one was asked for through the hand-off tools, which
+        // have their own switch (a machine that takes work from agents), not this one.
+        if (!update.FromOtherMachine && !await feature.IsEnabledAsync().ConfigureAwait(false))
             return false;
 
         var sent = await prompting.PromptSessionWithReceiptAsync(

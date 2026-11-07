@@ -62,6 +62,14 @@ public sealed class MachineHandoffAsks
     /// <summary>Remembers that session <paramref name="caller"/> started or messaged <paramref name="sessionId"/> on the machine.</summary>
     public void Grant(string caller, string machineId, string sessionId) => _granted.TryAdd((caller, machineId, sessionId), 0);
 
+    /// <summary>Remembers that session <paramref name="fromSessionId"/> on machine <paramref name="machineId"/> messaged <paramref name="receiver"/> here.</summary>
+    public void Messaged(string receiver, string machineId, string fromSessionId) => _messagedBy.TryAdd((receiver, machineId, fromSessionId), 0);
+
+    /// <summary>Whether session <paramref name="fromSessionId"/> on the machine messaged <paramref name="receiver"/> here: answering it is a reply, not new work.</summary>
+    public bool HasMessaged(string receiver, string machineId, string fromSessionId) => _messagedBy.ContainsKey((receiver, machineId, fromSessionId));
+
+    private readonly System.Collections.Concurrent.ConcurrentDictionary<(string, string, string), byte> _messagedBy = new();
+
     /// <summary>Whether session <paramref name="caller"/> started or messaged <paramref name="sessionId"/> on the machine.</summary>
     public bool IsGranted(string caller, string machineId, string sessionId) => _granted.ContainsKey((caller, machineId, sessionId));
 

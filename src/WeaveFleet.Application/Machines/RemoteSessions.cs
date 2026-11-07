@@ -29,10 +29,16 @@ public sealed class RemoteSessions(RemoteMachineService machines, IHttpClientFac
     /// The allowed machine called <paramref name="nameOrId"/> (its name, any case, or its id) and its token; otherwise
     /// what to tell the agent.
     /// </summary>
-    public async Task<(RemoteMachine? Machine, string? Token, string? Error)> FindAsync(string nameOrId)
+    public Task<(RemoteMachine? Machine, string? Token, string? Error)> FindAsync(string nameOrId) => FindAsync(nameOrId, includeNever: false);
+
+    /// <summary>
+    /// As <see cref="FindAsync(string)"/>; with <paramref name="includeNever"/> a machine set to Never is found too. For
+    /// answering a session that messaged this one from there: a reply isn't new work, so the setting for work doesn't apply.
+    /// </summary>
+    public async Task<(RemoteMachine? Machine, string? Token, string? Error)> FindAsync(string nameOrId, bool includeNever)
     {
         var wanted = nameOrId.Trim();
-        var allowed = await AllowedAsync();
+        var allowed = includeNever ? [.. await machines.ListAsync()] : await AllowedAsync();
         var byId = allowed.FirstOrDefault(machine => machine.Id == wanted);
         var byName = allowed.Where(machine => string.Equals(machine.Name, wanted, StringComparison.OrdinalIgnoreCase)).ToList();
         if (byId is null && byName.Count > 1)
