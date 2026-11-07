@@ -236,6 +236,9 @@ public sealed class DreamingAutomationTests : IDisposable
         DreamingAutomation.Describe("orchard", Done("left", "skipped")).ShouldBe("orchard: no changes");
         DreamingAutomation.Describe("orchard", Done("added")).ShouldBe("orchard: 1 note added");
         DreamingAutomation.Describe("orchard", Done("added", "merged", "left")).ShouldBe("orchard: 2 notes changed");
+        DreamingAutomation.Describe("orchard", Done("confirmed")).ShouldBe("orchard: 1 confirmed");
+        DreamingAutomation.Describe("orchard", Done("retired", "confirmed")).ShouldBe("orchard: 1 note retired, 1 confirmed");
+        DreamingAutomation.Describe("orchard", Done("added", "merged", "confirmed", "confirmed")).ShouldBe("orchard: 2 notes changed, 2 confirmed");
         DreamingAutomation.Describe("orchard", Done("flagged")).ShouldBe("orchard: no changes, 1 looks out of date");
         DreamingAutomation.Describe("orchard", Done("retired", "flagged", "flagged")).ShouldBe("orchard: 1 note retired, 2 look out of date");
         DreamingAutomation.Describe("orchard", new Dream { Status = "failed", Error = "Ran out of time." }).ShouldBe("orchard: Ran out of time");

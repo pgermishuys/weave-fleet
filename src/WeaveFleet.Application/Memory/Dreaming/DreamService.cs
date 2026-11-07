@@ -211,6 +211,7 @@ public sealed partial class DreamService(
             Text = note.Text,
             Hash = DreamRules.HashOf(note),
             Fades = note.Kind == MemoryKinds.Learned && note.Lifetime is not null,
+            How = AgentMemory.CleanHow(note.How),
         })];
 
         // In the repository's own folder, not a worktree. On a harness whose permission gate Fleet can make read-only
@@ -363,11 +364,12 @@ public static class DreamPrompt
         var name = AgentMemory.RepositoryName(repository);
         var text = new StringBuilder();
         text.Append("You are Fleet's dreaming pass for the repository ").Append(name).Append(". Below are condensed transcripts of its last ")
-            .Append(sessionCount).Append(" sessions (S1..S").Append(sessionCount).Append(") and its current notes (repository and machine, each `[id] (kind) text`).\n\n");
+            .Append(sessionCount).Append(" sessions (S1..S").Append(sessionCount).Append(") and its current notes (repository and machine, each `[id] (kind, tested or untested) text`).\n\n");
 
         if (readsRepository)
         {
-            text.Append("Your job is to ADD lessons and to CHECK the notes. For each note, ask whether it is still true: ")
+            text.Append("Your job is to ADD lessons and to CHECK the notes. Check the untested learned notes first, before the others: ")
+                .Append("nobody has verified them, so they're the likeliest to be wrong. For each note, ask whether it is still true: ")
                 .Append("does the file, folder, command or flag it names still exist (read the repository; `git log`, `git show` and `git grep` tell what was renamed or removed), ")
                 .Append("and do the sessions show it is now wrong, or show a command it calls broken working? ")
                 .Append("Also find lessons seen in 2+ sessions, or ones the user corrected.\n")
@@ -385,7 +387,7 @@ public static class DreamPrompt
         }
         else
         {
-            text.Append("Find lessons seen in 2+ sessions, or ones the user corrected, and check them against the notes; ")
+            text.Append("Find lessons seen in 2+ sessions, or ones the user corrected, and check them against the notes, the untested learned notes first; ")
                 .Append("a note a later session shows to be wrong can be flagged or retired. ")
                 .Append("Don't run commands, don't edit files, don't use any memory tools: only read what's below and answer.\n");
         }
@@ -394,12 +396,15 @@ public static class DreamPrompt
             .Append("(a learned note that duplicates one is merged into it); if one looks out of date, `flag` it with the evidence and the user decides. ")
             .Append("Every rewrite, retire and flag must cite its evidence: the session labels and the user's or the tool's words as `quote`, and ")
             .Append(readsRepository ? "what you read (the file, the commit and what it showed) as `evidence`" : "what the sessions showed as `evidence`")
-            .Append(". A note is one fact in a sentence or two, at most ").Append(AgentMemory.MaxNoteLength).Append(" characters, and says what to do.\n\n")
+            .Append(". A note is one fact in a sentence or two, at most ").Append(AgentMemory.MaxNoteLength).Append(" characters, and says what to do. ")
+            .Append("An add, rewrite or merge may carry `how`: the evidence that it holds, in a few words (at most ").Append(AgentMemory.MaxHowLength)
+            .Append(" characters), e.g. \"seen in S1 and S4: exit 7 without LEDGER_REGION\" or \"checked: scripts/check.sh exists (git log 3 Nov 2026)\". ")
+            .Append("When you confirm an untested learned note holds, answer with a `rewrite` that keeps its text and adds the `how`.\n\n")
             .Append("Answer with ONLY a fenced json block:\n```json\n")
             .Append("{\"changes\":[\n")
-            .Append(" {\"action\":\"add\",\"list\":\"repository|machine\",\"text\":\"…\",\"why\":\"one sentence\",\"sessions\":[\"S1\",\"S4\"],\"quote\":\"short failing command/error or the user's words\",\"corrected\":false},\n")
-            .Append(" {\"action\":\"rewrite\",\"note\":\"<id>\",\"text\":\"…\",\"why\":\"…\",\"sessions\":[],\"quote\":\"…\",\"evidence\":\"…\"},\n")
-            .Append(" {\"action\":\"merge\",\"keep\":\"<id>\",\"remove\":[\"<id>\"],\"text\":\"optional new wording for keep (learned keep only)\",\"why\":\"…\"},\n")
+            .Append(" {\"action\":\"add\",\"list\":\"repository|machine\",\"text\":\"…\",\"how\":\"…\",\"why\":\"one sentence\",\"sessions\":[\"S1\",\"S4\"],\"quote\":\"short failing command/error or the user's words\",\"corrected\":false},\n")
+            .Append(" {\"action\":\"rewrite\",\"note\":\"<id>\",\"text\":\"…\",\"how\":\"…\",\"why\":\"…\",\"sessions\":[],\"quote\":\"…\",\"evidence\":\"…\"},\n")
+            .Append(" {\"action\":\"merge\",\"keep\":\"<id>\",\"remove\":[\"<id>\"],\"text\":\"optional new wording for keep (learned keep only)\",\"how\":\"…\",\"why\":\"…\"},\n")
             .Append(" {\"action\":\"retire\",\"note\":\"<id>\",\"why\":\"…\",\"sessions\":[],\"quote\":\"…\",\"evidence\":\"…\"},\n")
             .Append(" {\"action\":\"flag\",\"note\":\"<id of an added or from-you note>\",\"why\":\"why it looks out of date\",\"sessions\":[\"S2\"],\"quote\":\"…\",\"evidence\":\"…\"},\n")
             .Append(" {\"action\":\"keep\",\"note\":\"<id>\",\"why\":\"…\",\"sessions\":[\"S1\",\"S3\",\"S5\"],\"quote\":\"…\"}\n")
@@ -418,7 +423,10 @@ public static class DreamPrompt
         foreach (var note in notes)
         {
             any = true;
-            text.Append('[').Append(note.Id).Append("] (").Append(note.Kind).Append(note.Fades ? ", fades) " : ") ").Append(note.Text).Append('\n');
+            text.Append('[').Append(note.Id).Append("] (").Append(note.Kind).Append(note.Fades ? ", fades" : "");
+            if (note.Kind == MemoryKinds.Learned)
+                text.Append(note.How is { Length: > 0 } how ? ", tested: " + how : ", untested");
+            text.Append(") ").Append(note.Text).Append('\n');
         }
 
         text.Append(any ? "\n" : "(none)\n\n");

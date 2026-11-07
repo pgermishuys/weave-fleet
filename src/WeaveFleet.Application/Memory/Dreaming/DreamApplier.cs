@@ -13,6 +13,7 @@ public sealed class DreamApplier(IMemoryStore store, TimeProvider time)
     public const string UserNoteReason = "You wrote this note; dreaming never changes your notes.";
     public const string ChangedReason = "This note changed while Fleet was dreaming, so Fleet left it as is.";
     public const string OneSessionReason = "Seen in one session only.";
+    public const string NothingChangesReason = "The rewrite changes nothing.";
     public const string AlreadyANoteReason = "It's already a note.";
     public const string AlreadyKeptReason = "It's already kept for good.";
     public static readonly string KeepSessionsReason = $"Relied on in fewer than {DreamRules.KeepForGoodSessions} sessions.";
@@ -91,7 +92,7 @@ public sealed class DreamApplier(IMemoryStore store, TimeProvider time)
         var note = new MemoryNote(
             DreamRules.NewId(), list, change.Text!, MemoryKinds.Learned,
             list == MemoryList.Repository ? dream.Repository : null,
-            dream.SessionId, "Dreaming", now, now, AgentMemory.LearnedLifetimeDays);
+            dream.SessionId, "Dreaming", now, now, AgentMemory.LearnedLifetimeDays, How: AgentMemory.CleanHow(p.How));
         await store.SaveAsync(userId, note, ct).ConfigureAwait(false);
         change.Kind = DreamRules.ChangeKinds.Added;
         change.NoteId = note.Id;
@@ -118,9 +119,21 @@ public sealed class DreamApplier(IMemoryStore store, TimeProvider time)
         if (current is null || DreamRules.HashOf(current) != snapshot.Hash)
             return Left(change, ChangedReason, replaced);
 
-        var written = current with { Text = change.Text!, Updated = time.GetUtcNow() };
+        // Same text and nothing new to say about how it's known changes nothing.
+        var how = AgentMemory.CleanHow(p.How) ?? current.How;
+        if (change.Text == current.Text && how == current.How)
+            return Skip(change, NothingChangesReason);
+
+        var written = current with { Text = change.Text!, How = how, Updated = time.GetUtcNow() };
         await store.SaveAsync(userId, written, ct).ConfigureAwait(false);
-        change.Kind = DreamRules.ChangeKinds.Rewritten;
+        // Same text, new how: the dream checked the note and it holds, which isn't a rewrite.
+        if (change.Text == current.Text)
+        {
+            change.Kind = DreamRules.ChangeKinds.Confirmed;
+            change.How = how;
+        }
+        else
+            change.Kind = DreamRules.ChangeKinds.Rewritten;
         change.Replaced = replaced;
         change.WroteHash = DreamRules.HashOf(written);
         return change;
@@ -244,7 +257,7 @@ public sealed class DreamApplier(IMemoryStore store, TimeProvider time)
         change.Replaced = removed;
         if (keep.Kind == MemoryKinds.Learned && newText is not null && newText != keepCurrent.Text)
         {
-            var written = keepCurrent with { Text = newText, Updated = time.GetUtcNow() };
+            var written = keepCurrent with { Text = newText, How = AgentMemory.CleanHow(p.How) ?? keepCurrent.How, Updated = time.GetUtcNow() };
             await store.SaveAsync(userId, written, ct).ConfigureAwait(false);
             change.Replaced = [keepCurrent, .. removed];
             change.Text = newText;
@@ -305,7 +318,7 @@ public sealed class DreamApplier(IMemoryStore store, TimeProvider time)
             return null;
         }
 
-        if (change.Kind is not (DreamRules.ChangeKinds.Added or DreamRules.ChangeKinds.Rewritten or DreamRules.ChangeKinds.Merged or DreamRules.ChangeKinds.Retired or DreamRules.ChangeKinds.Kept))
+        if (change.Kind is not (DreamRules.ChangeKinds.Added or DreamRules.ChangeKinds.Rewritten or DreamRules.ChangeKinds.Confirmed or DreamRules.ChangeKinds.Merged or DreamRules.ChangeKinds.Retired or DreamRules.ChangeKinds.Kept))
             return FleetError.ValidationError("Dream.Undo", "Only a change Fleet made can be undone.");
 
         var refused = FleetError.ValidationError("Dream.Undo", UndoRefused);
@@ -318,6 +331,7 @@ public sealed class DreamApplier(IMemoryStore store, TimeProvider time)
                 await store.DeleteAsync(userId, [id], ct).ConfigureAwait(false);
                 break;
             case DreamRules.ChangeKinds.Rewritten:
+            case DreamRules.ChangeKinds.Confirmed:
                 if (!await UnchangedAsync(userId, id, change.WroteHash, ct).ConfigureAwait(false) || change.Replaced.Count == 0)
                     return refused;
                 await store.SaveAsync(userId, change.Replaced[0], ct).ConfigureAwait(false);

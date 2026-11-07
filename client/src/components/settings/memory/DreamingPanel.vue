@@ -48,7 +48,12 @@ const busy = computed(() => isDreamBusy(dream.value));
 const groups = computed(() => groupDreamChanges(dream.value?.changes ?? []));
 const flags = computed(() => groups.value.flagged.filter((change) => !change.undone));
 const editing = ref<{ id: string; text: string } | null>(null);
-const changedCount = computed(() => groups.value.applied.filter((change) => !change.undone).length);
+const inPlace = computed(() => groups.value.applied.filter((change) => !change.undone));
+const confirmedCount = computed(() => inPlace.value.filter((change) => change.kind === "confirmed").length);
+const changedCount = computed(() => inPlace.value.length - confirmedCount.value);
+const changedSummary = computed(
+  () => `${changedCount.value} ${changedCount.value === 1 ? "note" : "notes"} changed${confirmedCount.value > 0 ? `, ${confirmedCount.value} confirmed` : ""}`,
+);
 
 const when = new Intl.DateTimeFormat(undefined, { day: "numeric", month: "short", hour: "numeric", minute: "2-digit" });
 const harnessLabel = (type: string | null) => enabledHarnesses.value.find((harness) => harness.type === type)?.displayName ?? type ?? "";
@@ -241,7 +246,7 @@ function sessionLabel(session: DreamSessionRef): string {
           class="mt-3"
         >
           <p class="text-sm font-medium text-text">
-            {{ dream.runId ? "Last night" : "Last dream" }} · {{ dream.repositoryName }} · {{ changedCount }} {{ changedCount === 1 ? "note" : "notes" }} changed
+            {{ dream.runId ? "Last night" : "Last dream" }} · {{ dream.repositoryName }} · {{ changedSummary }}
           </p>
           <p class="mt-0.5 text-xs text-muted">
             Read {{ dream.readSessions.length }} {{ dream.readSessions.length === 1 ? "session" : "sessions" }}
@@ -441,6 +446,14 @@ function sessionLabel(session: DreamSessionRef): string {
                 class="mt-1 text-sm text-text"
               >
                 {{ change.text }}
+              </p>
+              <p
+                v-if="change.kind === 'confirmed' && change.how"
+                class="mt-1 text-xs"
+                style="color: var(--running)"
+                data-testid="dream-how"
+              >
+                Tested · {{ change.how }}
               </p>
 
               <div class="mt-2 flex items-center justify-between gap-2">
