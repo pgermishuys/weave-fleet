@@ -51,11 +51,13 @@ internal sealed partial class OpenCode2HttpClient(HttpClient http, HttpClient ev
     /// </summary>
     internal static IReadOnlyList<OpenCode2PermissionRule> RulesFor(string level, bool hideStepTool, bool readOnly = false)
     {
-        // A read-only run (Dreaming): the reading tools and fleet_session_read run; every other tool, Fleet's own included,
-        // asks, and Fleet refuses what the read-only policy doesn't allow (PermissionPolicy.DecideReadOnly).
+        // A read-only run (Dreaming): the reading tools run, every other tool asks and Fleet refuses what the read-only policy
+        // doesn't allow (PermissionPolicy.DecideReadOnly). Fleet's own tools are plugin tools V2 never asks about, so they
+        // are denied (V2 drops a denied tool from what the model is offered), except fleet_session_read, which goes after.
         List<OpenCode2PermissionRule> rules = readOnly
             ? [new OpenCode2PermissionRule { Action = "*", Resource = "*", Effect = "ask" },
                .. PermissionKinds.AllowedWithoutAsking.Where(action => action != "fleet_*").Select(Allow),
+               new OpenCode2PermissionRule { Action = "fleet_*", Resource = "*", Effect = "deny" },
                Allow(PermissionPolicy.ReadOnlyFleetTool),
                DenyBrowser]
             : level == PermissionLevels.All

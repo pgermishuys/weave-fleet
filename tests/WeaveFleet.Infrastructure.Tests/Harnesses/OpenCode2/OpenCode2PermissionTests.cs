@@ -193,6 +193,10 @@ public sealed class OpenCode2PermissionTests
         allowed.ShouldContain("grep");
         allowed.ShouldContain("fleet_session_read");
         allowed.ShouldNotContain("fleet_*");
+        // V2 never asks about a plugin tool, so Fleet's own tools are denied (hidden), then fleet_session_read allowed again.
+        var denyFleet = rules.ToList().FindIndex(rule => rule is { Action: "fleet_*", Effect: "deny" });
+        denyFleet.ShouldBeGreaterThan(0);
+        rules.ToList().FindIndex(rule => rule is { Action: "fleet_session_read", Effect: "allow" }).ShouldBeGreaterThan(denyFleet);
         allowed.ShouldNotContain("edit");
         allowed.ShouldNotContain("bash");
         rules[^1].ShouldBe(OpenCode2HttpClient.DenyBrowser);
