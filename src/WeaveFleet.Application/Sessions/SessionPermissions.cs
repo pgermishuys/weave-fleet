@@ -32,8 +32,8 @@ public static class SessionPermissions
         Session session)
     {
         // A dreaming session reads the repository and changes nothing, whatever the user's level: nobody is there to ask.
-        if (await IsDreamingAsync(sessions, session).ConfigureAwait(false))
-            return PermissionPolicy.ReadOnlyRun;
+        if (await WeaveFleet.Application.Memory.Dreaming.ReadOnlyRunGuard.IsDreamingAsync(sessions, session).ConfigureAwait(false))
+            return PermissionPolicy.ReadOnlyIn(session.Directory);
 
         var level = await preferences.GetAsync(HarnessLevelKey(session.HarnessType)).ConfigureAwait(false);
         if (!PermissionLevels.IsKnown(level))
@@ -50,22 +50,6 @@ public static class SessionPermissions
             UnattendedPermissions.Deny => new PermissionPolicy(level!, RejectAsks: true),
             _ => PermissionPolicy.AllowAll,
         };
-    }
-
-    /// <summary>Whether <paramref name="session"/>, or the session it's a subagent of, is a dreaming session.</summary>
-    private static async Task<bool> IsDreamingAsync(ISessionRepository sessions, Session session)
-    {
-        var current = session;
-        for (var walked = 0; walked < MaxParentsWalked; walked++)
-        {
-            if (current.Tags.Contains(WeaveFleet.Application.Memory.Dreaming.DreamRules.SessionTag))
-                return true;
-            if (current.ParentSessionId is not { } parentId || await sessions.GetByIdAsync(parentId).ConfigureAwait(false) is not { } parent)
-                return false;
-            current = parent;
-        }
-
-        return false;
     }
 
     /// <summary>Whether nobody watches the session's run: it, or the session it's a subagent of, was started by Fleet.</summary>

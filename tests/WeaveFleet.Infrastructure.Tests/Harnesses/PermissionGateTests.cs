@@ -22,7 +22,7 @@ public sealed class PermissionGateTests
     [Fact]
     public async Task A_read_only_run_refuses_a_write_even_when_the_user_said_not_to_ask_again()
     {
-        var gate = new PermissionGate { Policy = PermissionPolicy.ReadOnlyRun };
+        var gate = new PermissionGate { Policy = PermissionPolicy.ReadOnlyIn("/work/orchard") };
         await gate.AllowFromNowOnAsync(Ask("edit", "*"), default);
 
         gate.Decide("edit", ["notes.md"]).ShouldBe(PermissionReplies.Reject);
@@ -30,6 +30,15 @@ public sealed class PermissionGateTests
         gate.Decide("bash", ["git log --oneline"]).ShouldBe(PermissionReplies.Once);
         gate.Decide("read", ["src/app.ts"]).ShouldBe(PermissionReplies.Once);
         gate.Decide("fleet_memory_save", ["x"]).ShouldBe(PermissionReplies.Reject);
+        gate.Decide("mcp__fleet__fleet_memory_save", ["x"]).ShouldBe(PermissionReplies.Reject);
+        gate.Decide("mcp__fleet__fleet_session_read", []).ShouldBe(PermissionReplies.Once);
+        // Reads outside the repository are refused, whichever harness's tool asks.
+        gate.Decide("read", ["/home/user/.bashrc"]).ShouldBe(PermissionReplies.Reject);
+        gate.Decide("Read", ["/home/user/.bashrc"]).ShouldBe(PermissionReplies.Reject);
+        gate.Decide("Grep", ["../other"]).ShouldBe(PermissionReplies.Reject);
+        gate.Decide("glob", ["~/*"]).ShouldBe(PermissionReplies.Reject);
+        gate.Decide("external_directory", ["/home/user"]).ShouldBe(PermissionReplies.Reject);
+        gate.Decide("Read", ["/work/orchard/src/app.ts"]).ShouldBe(PermissionReplies.Once);
     }
 
     [Fact]

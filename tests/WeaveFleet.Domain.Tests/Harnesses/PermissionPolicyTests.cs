@@ -53,19 +53,34 @@ public sealed class PermissionPolicyTests
     public void What_is_allowed_without_asking_is_only_reading()
         => PermissionKinds.AllowedWithoutAsking.ShouldAllBe(tool => PermissionKinds.Classify(tool) == PermissionKinds.Read);
 
+    private static readonly PermissionPolicy Repo = PermissionPolicy.ReadOnlyIn("/work/orchard");
+
     [Theory]
     [InlineData("read", "src/app.ts", PermissionReplies.Once)]
+    [InlineData("Read", "/work/orchard/src/app.ts", PermissionReplies.Once)]
+    [InlineData("read", "/home/user/.bashrc", PermissionReplies.Reject)]
+    [InlineData("Read", "/work/orchard-other/x.md", PermissionReplies.Reject)]
+    [InlineData("Read", "/work/orchard/../secrets", PermissionReplies.Reject)]
+    [InlineData("Glob", "~/.ssh/*", PermissionReplies.Reject)]
     [InlineData("grep", "TODO", PermissionReplies.Once)]
-    [InlineData("fleet_session_read", "abc", PermissionReplies.Once)]
-    [InlineData("fleet_memory_save", "x", PermissionReplies.Reject)]
-    [InlineData("fleet_session_start", "x", PermissionReplies.Reject)]
-    [InlineData("edit", "src/app.ts", PermissionReplies.Reject)]
-    [InlineData("write", "notes.md", PermissionReplies.Reject)]
-    [InlineData("webfetch", "https://example.com", PermissionReplies.Reject)]
     [InlineData("external_directory", "/etc", PermissionReplies.Reject)]
+    [InlineData("fleet_session_read", "abc", PermissionReplies.Once)]
+    [InlineData("mcp__fleet__fleet_session_read", "abc", PermissionReplies.Once)]
+    [InlineData("fleet_memory_save", "x", PermissionReplies.Reject)]
+    [InlineData("mcp__fleet__fleet_memory_save", "x", PermissionReplies.Reject)]
+    [InlineData("mcp__fleet__fleet_message", "x", PermissionReplies.Reject)]
+    [InlineData("mcp__fleet__fleet_session_start", "x", PermissionReplies.Reject)]
+    [InlineData("mcp__fleet__fleet_browser_act", "x", PermissionReplies.Reject)]
+    [InlineData("mcp__other__thing", "x", PermissionReplies.Reject)]
+    [InlineData("edit", "src/app.ts", PermissionReplies.Reject)]
+    [InlineData("Write", "notes.md", PermissionReplies.Reject)]
+    [InlineData("webfetch", "https://example.com", PermissionReplies.Reject)]
     [InlineData("bash", "git log --oneline -20", PermissionReplies.Once)]
-    [InlineData("bash", "cat src/app.ts | head -20", PermissionReplies.Once)]
+    [InlineData("Bash", "cat src/app.ts | head -20", PermissionReplies.Once)]
     [InlineData("bash", "git grep -n makeAll", PermissionReplies.Once)]
+    [InlineData("bash", "tail -n 20 build.log", PermissionReplies.Once)]
+    [InlineData("bash", "grep -rn \"a/b\" src", PermissionReplies.Once)]
+    [InlineData("bash", "find . -name '*.cs'", PermissionReplies.Once)]
     [InlineData("bash", "rm -rf build", PermissionReplies.Reject)]
     [InlineData("bash", "git commit -am x", PermissionReplies.Reject)]
     [InlineData("bash", "git log --output=/tmp/x", PermissionReplies.Reject)]
@@ -77,15 +92,53 @@ public sealed class PermissionPolicyTests
     [InlineData("bash", "cat x | sh", PermissionReplies.Reject)]
     [InlineData("bash", "find . -name '*.cs' -delete", PermissionReplies.Reject)]
     [InlineData("bash", "find . -exec rm {} +", PermissionReplies.Reject)]
+    // find writes a file with any -fprint variant
+    [InlineData("bash", "find . -fprint out.txt", PermissionReplies.Reject)]
+    [InlineData("bash", "find . -fprint0 out.txt", PermissionReplies.Reject)]
+    [InlineData("bash", "find . -fprintf out.txt %p", PermissionReplies.Reject)]
+    [InlineData("bash", "find . -fls out.txt", PermissionReplies.Reject)]
+    // git grep -O runs a program, also bundled into a short-flag group
+    [InlineData("bash", "git grep -Oless foo", PermissionReplies.Reject)]
+    [InlineData("bash", "git grep -nOless foo", PermissionReplies.Reject)]
+    [InlineData("bash", "git grep --open-files-in-pager=less foo", PermissionReplies.Reject)]
+    // rg runs a program
     [InlineData("bash", "rg --pre ./evil foo", PermissionReplies.Reject)]
+    [InlineData("bash", "rg --hostname-bin=./evil foo", PermissionReplies.Reject)]
+    [InlineData("bash", "rg --hostname-bin ./evil foo", PermissionReplies.Reject)]
+    // tail that never ends hangs an unattended run
+    [InlineData("bash", "tail -f build.log", PermissionReplies.Reject)]
+    [InlineData("bash", "tail -fn 5 build.log", PermissionReplies.Reject)]
+    [InlineData("bash", "tail -F build.log", PermissionReplies.Reject)]
+    [InlineData("bash", "tail --follow build.log", PermissionReplies.Reject)]
+    [InlineData("bash", "tail --retry build.log", PermissionReplies.Reject)]
+    // nothing outside the repository (a planted instruction could have it read a secrets file into a note)
+    [InlineData("bash", "cat ~/.bashrc", PermissionReplies.Reject)]
+    [InlineData("bash", "cat /etc/passwd", PermissionReplies.Reject)]
+    [InlineData("bash", "cat ../other/secret.env", PermissionReplies.Reject)]
+    [InlineData("bash", "ls .. ", PermissionReplies.Reject)]
+    [InlineData("bash", "cat 'a/../../b'", PermissionReplies.Reject)]
+    [InlineData("bash", "cat \"/etc/passwd\"", PermissionReplies.Reject)]
+    [InlineData("bash", "grep -rn token --include=*.env -f=/etc/hosts", PermissionReplies.Reject)]
+    [InlineData("bash", "git log -p -- /etc/passwd", PermissionReplies.Reject)]
+    [InlineData("bash", "git diff --no-index a ~/b", PermissionReplies.Reject)]
+    [InlineData("bash", "ls C:\\Users", PermissionReplies.Reject)]
     public void A_read_only_run_reads_and_refuses_everything_else(string tool, string pattern, string expected)
-        => PermissionPolicy.DecideReadOnly(tool, [pattern]).ShouldBe(expected);
+        => Repo.DecideReadOnly(tool, [pattern]).ShouldBe(expected);
 
     [Fact]
     public void A_read_only_run_refuses_a_shell_call_with_no_command_to_check()
-        => PermissionPolicy.DecideReadOnly("bash", []).ShouldBe(PermissionReplies.Reject);
+        => Repo.DecideReadOnly("bash", []).ShouldBe(PermissionReplies.Reject);
 
     [Fact]
     public void A_read_only_run_refuses_a_call_when_any_of_its_commands_writes()
-        => PermissionPolicy.DecideReadOnly("bash", ["git log", "touch x"]).ShouldBe(PermissionReplies.Reject);
+        => Repo.DecideReadOnly("bash", ["git log", "touch x"]).ShouldBe(PermissionReplies.Reject);
+
+    [Fact]
+    public void With_no_folder_a_read_only_run_reads_nothing_by_absolute_path()
+    {
+        var policy = PermissionPolicy.ReadOnlyIn(null);
+
+        policy.DecideReadOnly("Read", ["/work/orchard/src/app.ts"]).ShouldBe(PermissionReplies.Reject);
+        policy.DecideReadOnly("Read", ["src/app.ts"]).ShouldBe(PermissionReplies.Once);
+    }
 }

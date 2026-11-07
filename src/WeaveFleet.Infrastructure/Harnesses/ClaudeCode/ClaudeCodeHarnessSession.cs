@@ -468,6 +468,7 @@ internal sealed class ClaudeCodeHarnessSession : IHarnessSession
 
         var wanted = new ProcessSettings(
             PermissionMode: PermissionModeFor(policy),
+            ReadOnly: policy.ReadOnly,
             Model: options?.ModelId ?? _config.DefaultModel,
             Effort: options?.Effort,
             FleetTools: await ReadFleetToolsAsync(current?.FleetTools).ConfigureAwait(false),
@@ -479,6 +480,13 @@ internal sealed class ClaudeCodeHarnessSession : IHarnessSession
             // (memory, messages between sessions, Settings → Permissions, a built-in skill) takes a new process, which resumes
             // the conversation. Not while work it left running would end with it: until that's done, the process keeps
             // the tools and skills it has.
+            // A process started without the read-only rules can't switch to them (they're arguments), nor back.
+            if (current.ReadOnly != wanted.ReadOnly)
+            {
+                await StopProcessAsync(process, "its read-only rules changed").ConfigureAwait(false);
+                return await StartProcessAsync(wanted, ct).ConfigureAwait(false);
+            }
+
             if (current.FleetTools != wanted.FleetTools || current.Skills != wanted.Skills)
             {
                 bool working;
@@ -537,6 +545,7 @@ internal sealed class ClaudeCodeHarnessSession : IHarnessSession
 
     private async Task<ClaudeCodeProcessManager> StartProcessAsync(ProcessSettings settings, CancellationToken ct)
     {
+        var readOnly = settings.ReadOnly;
         var processManager = new ClaudeCodeProcessManager(
             _loggerFactory.CreateLogger<ClaudeCodeProcessManager>());
 
@@ -564,7 +573,7 @@ internal sealed class ClaudeCodeHarnessSession : IHarnessSession
             // Always: at "Allow everything" Fleet answers every ask at once, but without it Claude Code takes
             // AskUserQuestion away from the agent, since nothing could answer it.
             AsksForPermission = true,
-            AllowedTools = _config.AllowedTools,
+            AllowedTools = readOnly ? [] : _config.AllowedTools,
             MaxTurns = _config.MaxTurns,
             MaxBudgetUsd = _config.MaxBudgetUsd,
             AppendSystemPrompt = _memoryNotes,
@@ -573,14 +582,25 @@ internal sealed class ClaudeCodeHarnessSession : IHarnessSession
             ProcessGroup = _processGroup ??= ProcessGroupHelper.CreateProcessGroup(_logger),
         };
 
+        // A read-only run (Dreaming) can't have its asks skipped by Claude Code's own rules: the user's and the folder's
+        // `permissions.allow` (Bash(*), Write...) never reach Fleet's gate. A deny beats an allow, so the tools that change
+        // things are taken away; an ask beats an allow, so every command asks Fleet, which allows only the harmless ones.
+        if (readOnly)
+        {
+            procOptions = procOptions with { DisallowedTools = ClaudeCodePermissions.ReadOnlyDisallowed, SettingsJson = ClaudeCodePermissions.ReadOnlySettings };
+        }
+
         // Fleet's own tools, from Fleet's MCP server under the process's FLEET_URL. Each is allowed up front (Fleet allows
-        // them at every level), except fleet_app_start, which asks as a shell command does.
+        // them at every level), except fleet_app_start, which asks as a shell command does. A read-only run is allowed
+        // fleet_session_read up front and asks about the rest, which Fleet refuses.
         if (settings.FleetTools is { } fleetTools && environment.ContainsKey("FLEET_URL"))
         {
             procOptions = procOptions with
             {
                 McpConfig = ClaudeCodeFleetTools.McpConfig,
-                AllowedTools = [.. procOptions.AllowedTools, .. ClaudeCodeFleetTools.AllowedWithoutAsking(fleetTools)],
+                AllowedTools = readOnly
+                    ? [ClaudeCodeTools.ClaudeName(WeaveFleet.Domain.Harnesses.PermissionPolicy.ReadOnlyFleetTool)]
+                    : [.. procOptions.AllowedTools, .. ClaudeCodeFleetTools.AllowedWithoutAsking(fleetTools)],
             };
         }
 
@@ -832,6 +852,23 @@ internal sealed class ClaudeCodeHarnessSession : IHarnessSession
         // Fleet's own tools under their names, which every level allows (fleet_app_start under the shell's).
         var tool = ClaudeCodeTools.PermissionName(request.ToolName ?? "tool");
         var input = request.Input.ValueKind == System.Text.Json.JsonValueKind.Undefined ? default : request.Input.Clone();
+
+        // A read-only run (Dreaming) calls fleet_session_read and no other Fleet tool, not even fleet_app_start, which would
+        // otherwise be judged as the shell command it carries.
+        if (_permissions.Policy.ReadOnly)
+        {
+            var asked = ClaudeCodeTools.FleetTool(request.ToolName) is { } fleetName ? fleetName : tool;
+            var readOnlyPatterns = ClaudeCodePermissions.Patterns(tool, input).ToList();
+            if (tool == "Glob" && PermissionEvents.String(input, "pattern") is { } glob)
+                readOnlyPatterns.Add(glob);
+            var answer = _permissions.Policy.DecideReadOnly(asked, readOnlyPatterns);
+            await process.WriteLineAsync(
+                answer == PermissionReplies.Reject
+                    ? ClaudeCodeInput.Deny(requestId, PermissionPolicy.UnattendedRejection)
+                    : ClaudeCodeInput.Allow(requestId, input),
+                CancellationToken.None).ConfigureAwait(false);
+            return;
+        }
 
         // A question is the user's to answer, at any permission level: its call shows as Fleet's question card.
         if (ClaudeCodeTools.IsQuestion(tool) && request.ToolUseId is { } questionCall)
@@ -2506,7 +2543,7 @@ internal sealed class ClaudeCodeHarnessSession : IHarnessSession
     /// <param name="FleetTools">Which of Fleet's tools it has; null for none (Fleet can't be reached from it).</param>
     /// <param name="Skills">The folder of built-in skills it loads; null for none.</param>
     private sealed record ProcessSettings(
-        string PermissionMode, string? Model, string? Effort, FleetToolSwitches? FleetTools = null, ClaudeCodeSkillsFolder? Skills = null);
+        string PermissionMode, string? Model, string? Effort, FleetToolSwitches? FleetTools = null, ClaudeCodeSkillsFolder? Skills = null, bool ReadOnly = false);
 
     /// <summary>The built-in skills the session's next process loads: none for a subagent's child session, which never runs one.</summary>
     private Task<ClaudeCodeSkillsFolder?> ReadSkillsAsync()

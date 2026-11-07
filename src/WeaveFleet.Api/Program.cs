@@ -653,6 +653,7 @@ using (var scope = app.Services.CreateScope())
 app.UsePrivateNetworksOnly(fleetOptions);
 
 app.UseAgentRequests();
+app.UseReadOnlyRunBridge();
 app.UseRouting();
 
 app.UseCors();

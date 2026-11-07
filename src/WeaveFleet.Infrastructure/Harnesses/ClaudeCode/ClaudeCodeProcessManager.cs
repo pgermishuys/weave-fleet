@@ -27,6 +27,12 @@ internal sealed record ClaudeCodeProcessOptions
     /// </summary>
     public bool AsksForPermission { get; init; }
     public string[] AllowedTools { get; init; } = [];
+
+    /// <summary>Tools taken away from the agent (<c>--disallowedTools</c>): a deny beats every allow rule, the user's and the folder's included.</summary>
+    public string[] DisallowedTools { get; init; } = [];
+
+    /// <summary>Settings added on top of the user's (<c>--settings</c>, as JSON); null = none.</summary>
+    public string? SettingsJson { get; init; }
     public int? MaxTurns { get; init; }
     public decimal? MaxBudgetUsd { get; init; }
 
@@ -210,6 +216,18 @@ internal sealed class ClaudeCodeProcessManager : IAsyncDisposable
         {
             psi.ArgumentList.Add("--allowedTools");
             psi.ArgumentList.Add(string.Join(",", options.AllowedTools));
+        }
+
+        if (options.DisallowedTools.Length > 0)
+        {
+            psi.ArgumentList.Add("--disallowedTools");
+            psi.ArgumentList.Add(string.Join(",", options.DisallowedTools));
+        }
+
+        if (options.SettingsJson is not null)
+        {
+            psi.ArgumentList.Add("--settings");
+            psi.ArgumentList.Add(options.SettingsJson);
         }
 
         // Without --strict-mcp-config, so the user's own MCP servers and the folder's .mcp.json still load.

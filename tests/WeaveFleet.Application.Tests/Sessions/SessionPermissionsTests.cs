@@ -77,12 +77,13 @@ public sealed class SessionPermissionsTests
         _preferences.Seed(SessionPermissions.LevelKey, PermissionLevels.All);
         var dreaming = Session("opencode2");
         dreaming.Tags = ["dreaming"];
+        dreaming.Directory = "/work/orchard";
         await _sessions.InsertAsync(dreaming);
         var child = Session("opencode2");
         child.ParentSessionId = dreaming.Id;
 
-        (await ResolveAsync(dreaming)).ShouldBe(PermissionPolicy.ReadOnlyRun);
-        (await ResolveAsync(child)).ShouldBe(PermissionPolicy.ReadOnlyRun);
+        (await ResolveAsync(dreaming)).ShouldBe(PermissionPolicy.ReadOnlyIn("/work/orchard"));
+        (await ResolveAsync(child)).ShouldBe(PermissionPolicy.ReadOnlyIn(child.Directory));
         (await ResolveAsync(Session("opencode2"))).ShouldBe(PermissionPolicy.AllowAll);
     }
 

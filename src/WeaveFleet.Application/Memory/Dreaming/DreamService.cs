@@ -214,7 +214,7 @@ public sealed partial class DreamService(
         })];
 
         // In the repository's own folder, not a worktree. On a harness whose permission gate Fleet can make read-only
-        // (SessionPermissions gives a dreaming session PermissionPolicy.ReadOnlyRun) it may look around the repository;
+        // (SessionPermissions gives a dreaming session PermissionPolicy.ReadOnlyIn the repository) it may look around the repository;
         // on any other it reads only the prompt. Fleet applies the answer either way.
         var harnessType = await sessionCreation.ResolveHarnessTypeAsync(request.HarnessType).ConfigureAwait(false);
         var readsRepository = DreamRules.ReadOnlyHarnesses.Contains(harnessType);

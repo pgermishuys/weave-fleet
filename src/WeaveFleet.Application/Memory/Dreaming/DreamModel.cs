@@ -43,7 +43,7 @@ public static class DreamRules
 
     /// <summary>
     /// The harnesses whose permission gate Fleet can make read-only for a dreaming session: they may read the repository
-    /// (<see cref="WeaveFleet.Domain.Harnesses.PermissionPolicy.ReadOnlyRun"/>). Any other dreams from the transcripts alone.
+    /// (<see cref="WeaveFleet.Domain.Harnesses.PermissionPolicy.ReadOnlyIn"/>). Any other dreams from the transcripts alone.
     /// </summary>
     public static readonly IReadOnlySet<string> ReadOnlyHarnesses = new HashSet<string>(StringComparer.Ordinal) { "opencode2", "claude-code" };
 

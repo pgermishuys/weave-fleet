@@ -6,6 +6,8 @@ using WeaveFleet.Application.Browser;
 using WeaveFleet.Application.Canvases;
 using WeaveFleet.Application.Machines;
 using WeaveFleet.Application.Memory;
+using WeaveFleet.Application.Memory.Dreaming;
+using WeaveFleet.Domain.Harnesses;
 using WeaveFleet.Application.Mods;
 using WeaveFleet.Application.Pages;
 using WeaveFleet.Application.Sessions;
@@ -38,7 +40,8 @@ public sealed class FleetToolCalls(
     MachineHandoffBridge handoff,
     AgentMemoryBridge memory,
     WorkflowStepBridge steps,
-    ModBridge mods)
+    ModBridge mods,
+    ReadOnlyRunGuard readOnlyGuard)
 {
     /// <summary>The tools the process with <paramref name="bridgeToken"/> has; null when Fleet can't place it.</summary>
     public async Task<IReadOnlyList<FleetToolDefinition>?> ListAsync(string bridgeToken, JsonElement meta = default, CancellationToken ct = default)
@@ -50,7 +53,11 @@ public sealed class FleetToolCalls(
 
         // A harness that cuts a held call isn't offered a page that waits for a pick.
         var switches = await settings.ForSessionAsync(caller.UserId, caller.FleetSessionId).ConfigureAwait(false);
-        return FleetToolCatalog.For(call!.CantWait is null ? switches : switches with { PageChoice = false });
+        var offered = FleetToolCatalog.For(call!.CantWait is null ? switches : switches with { PageChoice = false });
+        // A dreaming session is offered fleet_session_read alone.
+        return await readOnlyGuard.RefusesAsync(bridgeToken, call.HarnessSessionId, "", ct).ConfigureAwait(false)
+            ? [.. offered.Where(t => t.Name == PermissionPolicy.ReadOnlyFleetTool)]
+            : offered;
     }
 
     /// <summary>
@@ -69,6 +76,9 @@ public sealed class FleetToolCalls(
             return Failed(CanvasBridge.UnknownCallerMessage);
         if (!(await settings.ForSessionAsync(caller.UserId, caller.FleetSessionId).ConfigureAwait(false)).Allows(tool.Requires))
             return null;
+
+        if (await readOnlyGuard.RefusesAsync(bridgeToken, call.HarnessSessionId, tool.Name, ct).ConfigureAwait(false))
+            return Failed(ReadOnlyRunGuard.Refusal);
 
         var args = arguments.ValueKind == JsonValueKind.Object ? arguments : default;
         var result = await RunAsync(tool.Name, bridgeToken, call, args, ct).ConfigureAwait(false);

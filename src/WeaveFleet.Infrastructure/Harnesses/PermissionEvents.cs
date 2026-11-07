@@ -157,7 +157,7 @@ internal sealed class PermissionGate
     public string? Decide(string tool, IReadOnlyList<string> patterns)
     {
         if (Policy.ReadOnly)
-            return PermissionPolicy.DecideReadOnly(tool, patterns);
+            return Policy.DecideReadOnly(tool, patterns);
         var decision = Policy.Decide(PermissionKinds.Classify(tool));
         if (decision != PermissionReplies.Reject && decision is not null)
             return decision;
