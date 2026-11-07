@@ -139,6 +139,7 @@ const eslintConfig = defineConfig([
       "src/composables/use-automations.ts",
       "src/stores/automations.ts",
       "src/components/pages/WorkflowsPage.vue",
+      "src/components/workflows/WorkflowsPane.vue",
       "src/components/workflows/WorkflowCreateDialog.vue",
       "src/components/workflows/WorkflowDetailPanel.vue",
       "src/components/workflows/WorkflowEditor.vue",
