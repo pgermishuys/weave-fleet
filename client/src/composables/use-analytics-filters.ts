@@ -1,5 +1,6 @@
 import { computed, watch, type ComputedRef } from "vue";
 import { useAnalyticsSummary } from "@/composables/use-analytics-summary";
+import { useMachineTarget } from "@/lib/machine-target";
 import { usePersistedState } from "@/composables/use-persisted-state";
 
 export interface AnalyticsFilters {
@@ -62,7 +63,12 @@ function endingToday(filters: AnalyticsFilters): AnalyticsFilters {
 }
 
 export function useAnalyticsFilters(): UseAnalyticsFiltersResult {
-  const [filters, setFilters] = usePersistedState<AnalyticsFilters>(STORAGE_KEY, getDefaultFilters());
+  // The live machine keeps the key it always had; another machine's range and project are its own (its projects differ).
+  const target = useMachineTarget();
+  const [filters, setFilters] = usePersistedState<AnalyticsFilters>(
+    target.isLive ? STORAGE_KEY : `${STORAGE_KEY}:${target.key}`,
+    getDefaultFilters(),
+  );
   // Set the state as well as saving it, so the first fetch already asks for the range ending today.
   const opened = endingToday(filters.value);
   if (opened !== filters.value) {

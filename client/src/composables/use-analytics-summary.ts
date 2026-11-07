@@ -1,6 +1,6 @@
 import { computed, onMounted, onUnmounted, shallowRef, toValue, type ComputedRef, type MaybeRefOrGetter, type ShallowRef } from "vue";
 import type { AnalyticsSummary } from "@/api/client";
-import { api } from "@/api/client";
+import { useMachineTarget } from "@/lib/machine-target";
 
 export interface UseAnalyticsSummaryParams {
   from?: MaybeRefOrGetter<string | undefined>;
@@ -22,6 +22,7 @@ export function useAnalyticsSummary(
   params: UseAnalyticsSummaryParams = {},
   pollIntervalMs: MaybeRefOrGetter<number> = DEFAULT_POLL_INTERVAL_MS,
 ): UseAnalyticsSummaryResult {
+  const target = useMachineTarget();
   const summary = shallowRef<AnalyticsSummary | null>(null);
   const isLoading = shallowRef(true);
   const error = shallowRef<string | undefined>(undefined);
@@ -56,7 +57,7 @@ export function useAnalyticsSummary(
     const currentRequestId = ++requestId;
 
     try {
-      const { data, error: apiError } = await api.GET("/api/analytics/summary", {
+      const { data, error: apiError } = await target.api.GET("/api/analytics/summary", {
         params: { query: Object.fromEntries(new URLSearchParams(queryString.value)) },
       });
       if (apiError) {

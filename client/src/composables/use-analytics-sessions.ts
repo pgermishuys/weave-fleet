@@ -1,6 +1,6 @@
 import { computed, onMounted, onUnmounted, shallowRef, toValue, type ComputedRef, type MaybeRefOrGetter, type ShallowRef } from "vue";
 import type { SessionAnalytics } from "@/api/client";
-import { api } from "@/api/client";
+import { useMachineTarget } from "@/lib/machine-target";
 
 export type AnalyticsSessionsSortBy = string;
 export type AnalyticsSessionsSortDir = "asc" | "desc";
@@ -28,6 +28,7 @@ export function useAnalyticsSessions(
   params: UseAnalyticsSessionsParams = {},
   pollIntervalMs: MaybeRefOrGetter<number> = DEFAULT_POLL_INTERVAL_MS,
 ): UseAnalyticsSessionsResult {
+  const target = useMachineTarget();
   const sessions = shallowRef<SessionAnalytics[]>([]);
   const isLoading = shallowRef(true);
   const error = shallowRef<string | undefined>(undefined);
@@ -74,7 +75,7 @@ export function useAnalyticsSessions(
     const currentRequestId = ++requestId;
 
     try {
-      const { data, error: apiError } = await api.GET("/api/analytics/sessions", {
+      const { data, error: apiError } = await target.api.GET("/api/analytics/sessions", {
         params: { query: Object.fromEntries(new URLSearchParams(queryString.value)) },
       });
       if (apiError) {

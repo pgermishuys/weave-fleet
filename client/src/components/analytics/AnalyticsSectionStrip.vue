@@ -2,15 +2,24 @@
 import { shallowRef } from "vue";
 import { SlidersHorizontal } from "lucide-vue-next";
 import AnalyticsFilters from "@/components/analytics/AnalyticsFilters.vue";
+import MachineSwitch from "@/components/layout/MachineSwitch.vue";
+import { useAnalyticsMachine } from "@/composables/use-analytics-machine";
 import { useAnalyticsMenu } from "@/composables/use-analytics-menu";
 
 // The analytics-menu on a phone, where the context panel is a drawer: the sections as chips, the filters behind one.
 const menu = useAnalyticsMenu();
+const machine = useAnalyticsMachine();
 const filtersOpen = shallowRef(false);
 </script>
 
 <template>
   <div class="analytics-strip">
+    <MachineSwitch
+      v-if="machine.enabled.value"
+      :choice="machine"
+      label="Analytics"
+      testid="analytics-strip"
+    />
     <nav
       class="analytics-strip__chips"
       aria-label="Analytics sections"
