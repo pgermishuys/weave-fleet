@@ -4,12 +4,13 @@ import { useRouter } from "@tanstack/vue-router";
 import { LoaderCircle, Undo2 } from "lucide-vue-next";
 import { formatAbsoluteTimestamp, formatRelativeTime } from "@/lib/format-utils";
 import type { KeptMod } from "@/lib/mods/kept";
+import { useMachineTarget } from "@/lib/machine-target";
 import { useModsStore } from "@/stores/mods";
 
 /** One kept mod: its switch, Undo and why it is off. */
 const props = defineProps<{ mod: KeptMod }>();
 
-const store = useModsStore();
+const store = useModsStore(useMachineTarget());
 const router = useRouter();
 const busy = ref<string | null>(null);
 const error = ref<string | null>(null);

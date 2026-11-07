@@ -16,6 +16,7 @@ import {
   switchSkillVersion,
   type BuiltInSkillDetail,
 } from "@/lib/skill-versions";
+import { useMachineTarget } from "@/lib/machine-target";
 import { useBuiltInSkillsStore } from "@/stores/built-in-skills";
 
 /**
@@ -28,7 +29,8 @@ const props = defineProps<{
 
 const open = defineModel<boolean>("open", { required: true });
 
-const store = useBuiltInSkillsStore();
+const target = useMachineTarget();
+const store = useBuiltInSkillsStore(target);
 const detail = shallowRef<BuiltInSkillDetail | null>(null);
 const comparing = shallowRef<{ number: number; content: string } | null>(null);
 const busy = shallowRef<number | "fleet" | null>(null);
@@ -40,7 +42,7 @@ watch(open, async (isOpen) => {
   comparing.value = null;
   error.value = null;
   try {
-    detail.value = await getSkill(props.name);
+    detail.value = await getSkill(props.name, target);
   } catch (caught) {
     error.value = caught instanceof Error ? caught.message : `Couldn't load ${props.name}.`;
   }
@@ -51,7 +53,7 @@ async function use(version: number | null): Promise<void> {
   busy.value = version ?? "fleet";
   error.value = null;
   try {
-    detail.value = await switchSkillVersion(props.name, version);
+    detail.value = await switchSkillVersion(props.name, version, target);
     store.update(detail.value);
   } catch (caught) {
     error.value = caught instanceof Error ? caught.message : `Couldn't switch ${props.name}.`;
@@ -67,7 +69,7 @@ async function compare(version: number): Promise<void> {
   }
   error.value = null;
   try {
-    comparing.value = { number: version, content: await readSkillVersion(props.name, version) };
+    comparing.value = { number: version, content: await readSkillVersion(props.name, version, target) };
   } catch (caught) {
     error.value = caught instanceof Error ? caught.message : `Couldn't load version ${version}.`;
   }

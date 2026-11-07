@@ -25,6 +25,7 @@ import {
   type ImproveTurn,
   type SkillProposal,
 } from "@/lib/skill-versions";
+import { useMachineTarget } from "@/lib/machine-target";
 import { useBuiltInSkillsStore } from "@/stores/built-in-skills";
 import { useNoticesStore } from "@/stores/notices";
 
@@ -44,7 +45,8 @@ const open = defineModel<boolean>("open", { required: true });
 /** What the question adds around the parts: the rules and the tags. */
 const QUESTION_OVERHEAD_TOKENS = 250;
 
-const store = useBuiltInSkillsStore();
+const target = useMachineTarget();
+const store = useBuiltInSkillsStore(target);
 const notices = useNoticesStore();
 
 const detail = shallowRef<BuiltInSkillDetail | null>(null);
@@ -84,7 +86,7 @@ watch(open, async (isOpen) => {
   detail.value = null;
   includeExchange.value = props.turn.exchange.length > 0;
   try {
-    detail.value = await getSkill(props.name);
+    detail.value = await getSkill(props.name, target);
   } catch (caught) {
     error.value = caught instanceof Error ? caught.message : `Couldn't load ${props.name}.`;
   }
@@ -100,7 +102,7 @@ async function ask(): Promise<void> {
       note: note.value.trim(),
       context: wholeConversation.value ? undefined : context.value || undefined,
       wholeConversation: wholeConversation.value,
-    });
+    }, target);
     draft.value = proposal.value.content;
     editing.value = false;
     stage.value = "proposal";
@@ -116,7 +118,7 @@ async function keep(): Promise<void> {
   isSaving.value = true;
   error.value = null;
   try {
-    const saved = await saveSkillVersion(props.name, draft.value, note.value.trim(), props.sessionId);
+    const saved = await saveSkillVersion(props.name, draft.value, note.value.trim(), props.sessionId, target);
     store.update(saved);
     open.value = false;
     announce(saved, base);
@@ -141,7 +143,7 @@ function announce(saved: BuiltInSkillDetail, previous: number | null): void {
         label: "Undo",
         run: async () => {
           try {
-            store.update(await switchSkillVersion(saved.name, previous));
+            store.update(await switchSkillVersion(saved.name, previous, target));
             notices.remove(id);
           } catch (caught) {
             notices.update(id, {

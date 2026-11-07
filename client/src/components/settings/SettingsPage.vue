@@ -50,7 +50,7 @@ const settingsMachine = useSettingsMachine();
  * Pages that ask the machine Settings shows. The rest ask the live machine, so for another machine they say so rather
  * than show the live machine's settings as its own. Appearance and Machines belong to this browser, not a machine.
  */
-const MACHINE_PAGES: readonly string[] = ["harnesses", "folders"];
+const MACHINE_PAGES: readonly string[] = ["harnesses", "folders", "permissions", "skills", "memory", "updates", "credentials"];
 const BROWSER_PAGES: readonly string[] = ["appearance", "machines"];
 const isBrowserPage = computed(() => BROWSER_PAGES.includes(activeSection.value) || activeSection.value === "plugins" || pluginId.value !== null);
 const comesLater = computed(() =>

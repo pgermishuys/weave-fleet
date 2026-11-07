@@ -22,6 +22,7 @@ import {
   type Reach,
   type UnattendedPermission,
 } from "@/lib/permissions";
+import { useMachineTarget } from "@/lib/machine-target";
 import { SESSION_MESSAGES_PREFERENCE_KEY } from "@/lib/session-messages";
 import { agentWorkLevelName, useMachinesStore, type MachineAgentWork } from "@/stores/machines";
 import { usePreferencesStore } from "@/stores/preferences";
@@ -33,7 +34,9 @@ import { usePreferencesStore } from "@/stores/preferences";
  * changed level at once, so it holds from the session's next tool call.
  */
 
-const preferencesStore = usePreferencesStore();
+// These are the settings of the machine Settings shows.
+const target = useMachineTarget();
+const preferencesStore = usePreferencesStore(target);
 preferencesStore.ensureLoaded();
 
 type Row = keyof LevelReach;
@@ -127,6 +130,8 @@ const MACHINE_CHOICES: readonly { value: MachineAgentWork; label: string }[] = [
 const machines = useMachinesStore();
 const machineExceptions = computed(() => machines.agentWorkEntries.filter((entry) => machines.agentWork[entry.key] !== "ask"));
 const machineCandidates = computed(() => machines.agentWorkEntries.filter((entry) => machines.agentWork[entry.key] === "ask"));
+// The machine Settings shows, by name (the machine list is the live machine's: its own entries only exist there).
+const shownName = computed(() => machines.entries.find((entry) => entry.key === target.key)?.name ?? "this machine");
 const machineError = shallowRef<string | null>(null);
 
 async function setMachine(key: string, value: MachineAgentWork): Promise<void> {
@@ -167,6 +172,8 @@ function setUnattended(value: UnattendedPermission): void {
 let stopPolling: (() => void) | null = null;
 onMounted(() => {
   void loadBrowser();
+  // The list of machines agents may send work to is the live machine's: another machine's page doesn't ask for it.
+  if (!target.isLive) return;
   void machines.loadHome();
   // An answer in a conversation ("Always for …") may have changed a machine's setting since the list was read.
   void machines.syncFromServer();
@@ -330,8 +337,15 @@ onUnmounted(() => stopPolling?.());
             title="Every machine starts at Ask. Set one to Always or Never below."
           >Ask</span>
         </div>
+        <p
+          v-if="!target.isLive"
+          class="reach-row__note"
+          data-testid="reach-machines-live-only"
+        >
+          Which machines {{ shownName }} may send work to isn't shown here yet. {{ machines.live.name }}'s list is on its own page.
+        </p>
         <div
-          v-if="machines.agentWorkEntries.length > 0"
+          v-else-if="machines.agentWorkEntries.length > 0"
           class="reach-row__exceptions"
         >
           <label
