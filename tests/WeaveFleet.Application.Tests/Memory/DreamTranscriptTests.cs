@@ -164,7 +164,7 @@ public sealed class DreamTranscriptTests
         var prompt = DreamPrompt.Build("/work/fleet", "", 3,
             [new DreamNote { Id = "aa11", List = "repository", Kind = "learned", Text = "Use bun.", Fades = true }]);
         prompt.ShouldContain("\"action\":\"keep\"");
-        prompt.ShouldContain("[aa11] (learned, fades) Use bun.");
+        prompt.ShouldContain("[aa11] (learned, fades, untested) Use bun.");
     }
 
     [Fact]
@@ -201,5 +201,32 @@ public sealed class DreamTranscriptTests
 
         flag.Action.ShouldBe("flag");
         flag.Evidence.ShouldBe("Makefile deleted in 4f2a9c1");
+    }
+
+    [Fact]
+    public void The_prompt_shows_how_each_learned_note_is_known_and_checks_the_untested_first()
+    {
+        var prompt = DreamPrompt.Build("/work/fleet", "", 3,
+        [
+            new DreamNote { Id = "aa11", List = "repository", Kind = "learned", Text = "Use bun.", Fades = true, How = "ran bun run test: ok" },
+            new DreamNote { Id = "bb22", List = "repository", Kind = "learned", Text = "Build with make." },
+            new DreamNote { Id = "cc33", List = "repository", Kind = "from-you", Text = "Never npm." },
+        ], readsRepository: true);
+
+        prompt.ShouldContain("[aa11] (learned, fades, tested: ran bun run test: ok) Use bun.");
+        prompt.ShouldContain("[bb22] (learned, untested) Build with make.");
+        prompt.ShouldContain("[cc33] (from-you) Never npm.");
+        prompt.ShouldContain("Check the untested learned notes first");
+        prompt.ShouldContain("\"how\"");
+    }
+
+    [Fact]
+    public void The_answer_reads_how_and_tolerates_it_missing()
+    {
+        var proposals = DreamAnswer.Parse("```json\n{\"changes\":[{\"action\":\"rewrite\",\"note\":\"a\",\"text\":\"t\",\"how\":\"checked: x exists\"},{\"action\":\"add\",\"text\":\"t\"}]}\n```");
+
+        proposals.ShouldNotBeNull().Count.ShouldBe(2);
+        proposals[0].How.ShouldBe("checked: x exists");
+        proposals[1].How.ShouldBeNull();
     }
 }

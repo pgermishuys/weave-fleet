@@ -472,4 +472,56 @@ public sealed class DreamApplierTests
 
         change.Kind.ShouldBe(DreamRules.ChangeKinds.Skipped);
     }
+
+    [Fact]
+    public async Task An_add_carries_its_cleaned_how()
+    {
+        await ApplyAsync(Add("Run tests with bun run test.", "S1", "S2") with { How = "  seen in S1 and S2\nexit 7  " });
+
+        _store.Notes.Single().How.ShouldBe("seen in S1 and S2 exit 7");
+    }
+
+    [Fact]
+    public async Task A_rewrite_with_the_same_text_confirms_an_untested_note_and_undo_puts_the_old_how_back()
+    {
+        Note("ln01", MemoryKinds.Learned, "Build with bun.");
+
+        var change = await ApplyAsync(new DreamProposal
+        {
+            Action = "rewrite", Note = "ln01", Text = "Build with bun.", Why = "still true",
+            Evidence = "package.json has bun scripts", How = "checked: package.json has bun scripts",
+        });
+
+        change.Kind.ShouldBe(DreamRules.ChangeKinds.Rewritten);
+        _store.Notes.Single().How.ShouldBe("checked: package.json has bun scripts");
+        (await _applier.UndoAsync(User, _dream, change.Id)).ShouldBeNull();
+        _store.Notes.Single().How.ShouldBeNull();
+    }
+
+    [Fact]
+    public async Task A_rewrite_that_changes_neither_text_nor_how_is_skipped()
+    {
+        Note("ln01", MemoryKinds.Learned, "Build with bun.");
+
+        var change = await ApplyAsync(new DreamProposal { Action = "rewrite", Note = "ln01", Text = "Build with bun.", Why = "w", Evidence = "e" });
+
+        change.Kind.ShouldBe(DreamRules.ChangeKinds.Skipped);
+        change.Reason.ShouldBe(DreamApplier.NothingChangesReason);
+    }
+
+    [Fact]
+    public async Task A_rewrite_without_how_keeps_the_notes_how_and_a_users_note_is_never_given_one()
+    {
+        var tested = Note("ln01", MemoryKinds.Learned, "Build with bun.");
+        _store.Notes[0] = tested with { How = "ran it" };
+        Note("us01", MemoryKinds.FromYou, "Never npm.");
+
+        var rewritten = await ApplyAsync(new DreamProposal { Action = "rewrite", Note = "ln01", Text = "Build with bun run build.", Why = "w", Evidence = "e" });
+        var user = await ApplyAsync(new DreamProposal { Action = "rewrite", Note = "us01", Text = "Never npm!", Why = "w", Evidence = "e", How = "x" });
+
+        rewritten.Kind.ShouldBe(DreamRules.ChangeKinds.Rewritten);
+        _store.Notes.Single(n => n.Id == "ln01").How.ShouldBe("ran it");
+        user.Kind.ShouldBe(DreamRules.ChangeKinds.Left);
+        _store.Notes.Single(n => n.Id == "us01").How.ShouldBeNull();
+    }
 }

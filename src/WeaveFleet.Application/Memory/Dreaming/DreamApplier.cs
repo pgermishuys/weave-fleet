@@ -13,6 +13,7 @@ public sealed class DreamApplier(IMemoryStore store, TimeProvider time)
     public const string UserNoteReason = "You wrote this note; dreaming never changes your notes.";
     public const string ChangedReason = "This note changed while Fleet was dreaming, so Fleet left it as is.";
     public const string OneSessionReason = "Seen in one session only.";
+    public const string NothingChangesReason = "The rewrite changes nothing.";
     public const string AlreadyANoteReason = "It's already a note.";
     public const string AlreadyKeptReason = "It's already kept for good.";
     public static readonly string KeepSessionsReason = $"Relied on in fewer than {DreamRules.KeepForGoodSessions} sessions.";
@@ -91,7 +92,7 @@ public sealed class DreamApplier(IMemoryStore store, TimeProvider time)
         var note = new MemoryNote(
             DreamRules.NewId(), list, change.Text!, MemoryKinds.Learned,
             list == MemoryList.Repository ? dream.Repository : null,
-            dream.SessionId, "Dreaming", now, now, AgentMemory.LearnedLifetimeDays);
+            dream.SessionId, "Dreaming", now, now, AgentMemory.LearnedLifetimeDays, How: AgentMemory.CleanHow(p.How));
         await store.SaveAsync(userId, note, ct).ConfigureAwait(false);
         change.Kind = DreamRules.ChangeKinds.Added;
         change.NoteId = note.Id;
@@ -118,7 +119,12 @@ public sealed class DreamApplier(IMemoryStore store, TimeProvider time)
         if (current is null || DreamRules.HashOf(current) != snapshot.Hash)
             return Left(change, ChangedReason, replaced);
 
-        var written = current with { Text = change.Text!, Updated = time.GetUtcNow() };
+        // Same text and nothing new to say about how it's known changes nothing.
+        var how = AgentMemory.CleanHow(p.How) ?? current.How;
+        if (change.Text == current.Text && how == current.How)
+            return Skip(change, NothingChangesReason);
+
+        var written = current with { Text = change.Text!, How = how, Updated = time.GetUtcNow() };
         await store.SaveAsync(userId, written, ct).ConfigureAwait(false);
         change.Kind = DreamRules.ChangeKinds.Rewritten;
         change.Replaced = replaced;
@@ -244,7 +250,7 @@ public sealed class DreamApplier(IMemoryStore store, TimeProvider time)
         change.Replaced = removed;
         if (keep.Kind == MemoryKinds.Learned && newText is not null && newText != keepCurrent.Text)
         {
-            var written = keepCurrent with { Text = newText, Updated = time.GetUtcNow() };
+            var written = keepCurrent with { Text = newText, How = AgentMemory.CleanHow(p.How) ?? keepCurrent.How, Updated = time.GetUtcNow() };
             await store.SaveAsync(userId, written, ct).ConfigureAwait(false);
             change.Replaced = [keepCurrent, .. removed];
             change.Text = newText;

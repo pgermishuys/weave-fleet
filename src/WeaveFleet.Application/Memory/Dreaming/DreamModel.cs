@@ -110,6 +110,9 @@ public sealed class DreamNote
 
     /// <summary>A learned note that will expire if unused: the only kind a dream may keep for good.</summary>
     public bool Fades { get; set; }
+
+    /// <summary>How the note's author knew it holds, as kept on the note (null for a learned note nobody tested).</summary>
+    public string? How { get; set; }
 }
 
 /// <summary>What a dream did with one proposal, with what Undo needs to put it back.</summary>

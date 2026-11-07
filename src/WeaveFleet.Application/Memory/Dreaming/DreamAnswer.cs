@@ -10,6 +10,9 @@ public sealed record DreamProposal
     public string? List { get; set; }
     public string? Text { get; set; }
     public string? Why { get; set; }
+
+    /// <summary>Short evidence that the note holds (for add, rewrite and merge); kept on the note as its <c>how</c>.</summary>
+    public string? How { get; set; }
     public List<string> Sessions { get; set; } = [];
     public string? Quote { get; set; }
 
@@ -69,6 +72,7 @@ public static partial class DreamAnswer
                     List = Str(change, "list"),
                     Text = Str(change, "text"),
                     Why = Str(change, "why"),
+                    How = Str(change, "how"),
                     Sessions = Strings(change, "sessions"),
                     Quote = Str(change, "quote"),
                     Evidence = Str(change, "evidence"),
