@@ -28,8 +28,8 @@ public sealed class SessionReadBridge(
     public const int DefaultLimit = 20;
     public const int MaxLimit = 50;
 
-    /// <summary>The most of one message's text the page quotes; the rest is cut with a note saying how much.</summary>
-    public const int MaxMessageLength = 2000;
+    /// <summary>The most of one message's text the page quotes; the rest is cut with a note saying how much; text parts share it.</summary>
+    public const int MaxMessageLength = 20000;
 
     public async Task<CanvasResult<CanvasToolOutput>> ReadAsync(
         string? bridgeToken,
@@ -114,24 +114,34 @@ public sealed class SessionReadBridge(
             .Append(message.Timestamp.UtcDateTime.ToString("yyyy-MM-dd HH:mm", CultureInfo.InvariantCulture))
             .Append(' ').Append(message.Id).Append("]\n");
 
-        var text = message.TextContent.Trim();
-        if (text.Length > MaxMessageLength)
+        // Every part in the order the message has it: Claude Code writes text, a tool call, more text.
+        var budget = MaxMessageLength;
+        foreach (var part in message.Parts)
         {
-            output.Append(text.AsSpan(0, MaxMessageLength))
-                .Append("… (").Append(text.Length - MaxMessageLength).Append(" more characters)\n");
-        }
-        else if (text.Length > 0)
-        {
-            output.Append(text).Append('\n');
-        }
-
-        // Tool calls as one line each: what was called and how it went. Their output stays in that session.
-        foreach (var tool in message.Parts.OfType<ToolUsePart>())
-        {
-            output.Append("· ").Append(tool.ToolName);
-            if (Describe(tool) is { } what)
-                output.Append(": ").Append(what);
-            output.Append(" (").Append(tool.State.ToString().ToLowerInvariant()).Append(")\n");
+            if (part is TextPart { Text: var raw } && raw.Trim() is { Length: > 0 } text)
+            {
+                if (text.Length > budget)
+                {
+                    output.Append(text.AsSpan(0, Math.Max(budget, 0)))
+                        .Append("… (").Append(text.Length - Math.Max(budget, 0))
+                        .Append(" more characters, past the ").Append(MaxMessageLength)
+                        .Append(" a message is quoted to; ask the user or the session for the rest)\n");
+                    budget = 0;
+                }
+                else
+                {
+                    output.Append(text).Append('\n');
+                    budget -= text.Length;
+                }
+            }
+            else if (part is ToolUsePart tool)
+            {
+                // Tool calls as one line each: what was called and how it went. Their output stays in that session.
+                output.Append("· ").Append(tool.ToolName);
+                if (Describe(tool) is { } what)
+                    output.Append(": ").Append(what);
+                output.Append(" (").Append(tool.State.ToString().ToLowerInvariant()).Append(")\n");
+            }
         }
     }
 
