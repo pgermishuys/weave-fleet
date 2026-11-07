@@ -48,6 +48,7 @@ public static class MachinePeerEndpoints
             MachineIdentityStore identity,
             SessionService sessions,
             SessionMessageDelivery delivery,
+            WeaveFleet.Application.Machines.MachineHandoffAsks handoffAsks,
             IUserContext user,
             CancellationToken ct) =>
         {
@@ -68,6 +69,8 @@ public static class MachinePeerEndpoints
                 request.Text!,
                 user.UserId,
                 ct);
+            if (sent.IsSuccess)
+                handoffAsks.Messaged(id, request.FromMachineId!.Trim(), request.FromSessionId!.Trim());
             return sent.Match(
                 receipt => Results.Ok(new PeerSessionMessageResponse(id, to.Value.Title, receipt.MessageId)),
                 error => error.ToSessionApiResult());
