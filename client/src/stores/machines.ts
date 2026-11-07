@@ -929,12 +929,13 @@ export const useMachinesStore = defineStore("machines", () => {
   /**
    * With "Switch machines without reloading" on and live feeds off, each listed machine's event hub is held open and
    * idle (no feed reads, the list still polls), so opening one of its sessions finds the connection ready instead of
-   * negotiating it, and leaving the session doesn't close it. They follow the same away rule as the feeds.
+   * negotiating it, and leaving the session doesn't close it. They follow the same away rule as the feeds, and
+   * are held in every view, not only while something polls (the sidebar unmounts in Settings).
    */
   const holds = new Map<string, { hub: ReturnType<typeof feedHubFor>; baseUrl: string; token: string | null }>();
 
   function holdsWanted(): boolean {
-    return pollers > 0 && machineSwitch.value && !liveFeeds.value && !feedsAway;
+    return machineSwitch.value && !liveFeeds.value && !feedsAway;
   }
 
   function syncHolds(): void {
@@ -1015,6 +1016,10 @@ export const useMachinesStore = defineStore("machines", () => {
     }
   }
 
+  // The holds don't wait for a poller: they follow the switch, the machine list and whether the page is away.
+  watch([machineSwitch, liveFeeds, entries], syncHolds, { immediate: true });
+  if (typeof document !== "undefined") document.addEventListener("visibilitychange", onVisibility);
+
   /**
    * Starts following machines that aren't live, by polling or (with the switch on) a live feed each; returns the
    * stop. Several callers share one timer and one set of feeds.
@@ -1036,7 +1041,6 @@ export const useMachinesStore = defineStore("machines", () => {
         syncFeeds();
         if (previous?.[0] && !on) void refreshOthers();
       }, { immediate: true });
-      if (typeof document !== "undefined") document.addEventListener("visibilitychange", onVisibility);
       if (liveMachine) {
         void checkLive();
         liveTimer = setInterval(() => void checkLive(), LIVE_CHECK_INTERVAL_MS);
@@ -1057,10 +1061,6 @@ export const useMachinesStore = defineStore("machines", () => {
         stopHubWatch = [];
         stopFeedWatch?.();
         stopFeedWatch = undefined;
-        if (typeof document !== "undefined") document.removeEventListener("visibilitychange", onVisibility);
-        clearTimeout(awayTimer);
-        awayTimer = undefined;
-        feedsAway = false;
         syncFeeds();
       }
     };
