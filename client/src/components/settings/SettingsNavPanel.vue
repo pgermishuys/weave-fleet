@@ -131,7 +131,7 @@ function selectSection(sectionId: SettingsSectionId): void {
       <p class="panel-header">
         Settings
       </p>
-      <!-- With "Switch machines without reloading" on: which machine the pages on the right show. -->
+      <!-- which machine the pages on the right show. -->
       <div
         v-if="settingsMachine.enabled.value"
         class="panel-machine"

@@ -9,15 +9,14 @@ import { PERMISSION_LEVEL_NAMES, toPermissionLevel } from "@/lib/permissions";
 import {
   HOME_MACHINE_KEY,
   LIVE_MACHINES_PREFERENCE_KEY,
-  MACHINE_SWITCH_PREFERENCE_KEY,
   fetchOnMachine,
   getActiveMachine,
-  loadLiveMachinesHint,
+  loadCurrentMachineKey,
   loadMachines,
   loadSessionMachines,
   normalizeBaseUrl,
   rememberSessionMachines,
-  saveLiveMachinesHint,
+  saveCurrentMachineKey,
   saveMachines,
   switchToMachine,
   type MachineConnection,
@@ -901,20 +900,8 @@ export const useMachinesStore = defineStore("machines", () => {
   const sessionsStore = useSessionsStore();
   /** Settings → Labs: every machine that isn't live keeps a live feed, instead of being polled. */
   const liveFeeds = computed(() => preferences.get(LIVE_MACHINES_PREFERENCE_KEY, "false") === "true");
-  /** Settings → Labs: another machine's session opens in place, without live feeds (the other machines keep their poll). */
-  const machineSwitch = computed(() => preferences.get(MACHINE_SWITCH_PREFERENCE_KEY, "false") === "true");
-  /**
-   * The same switch opens another machine's session in place, without a reload. Until the preferences load it's as
-   * this page started (see `restoreActiveMachine`), so a link to such a session opens where startup put it.
-   */
-  const startedInPlace = loadLiveMachinesHint();
-  const opensInPlace = computed(() => (preferences.hasFetched ? liveFeeds.value || machineSwitch.value : startedInPlace));
-  watch(
-    () => [preferences.hasFetched, liveFeeds.value || machineSwitch.value] as const,
-    ([fetched, on]) => {
-      if (fetched) saveLiveMachinesHint(on);
-    },
-  );
+  /** Another machine's session opens in place, without a reload, whenever machines are listed. */
+  const opensInPlace = computed(() => hasMachines.value);
   /** The open feeds, by machine key, with the address and token each was opened with. */
   const feeds = new Map<string, { feed: MachineFeed<MachineRead>; baseUrl: string; token: string | null }>();
   /** The page has been off screen long enough that the feeds closed; they open again when it's back. */
@@ -927,7 +914,7 @@ export const useMachinesStore = defineStore("machines", () => {
   }
 
   /**
-   * With "Switch machines without reloading" on and live feeds off, each listed machine's event hub is held open and
+   * With live feeds off, each listed machine's event hub is held open and
    * idle (no feed reads, the list still polls), so opening one of its sessions finds the connection ready instead of
    * negotiating it, and leaving the session doesn't close it. They follow the same away rule as the feeds, and
    * are held in every view, not only while something polls (the sidebar unmounts in Settings).
@@ -935,7 +922,7 @@ export const useMachinesStore = defineStore("machines", () => {
   const holds = new Map<string, { hub: ReturnType<typeof feedHubFor>; baseUrl: string; token: string | null }>();
 
   function holdsWanted(): boolean {
-    return machineSwitch.value && !liveFeeds.value && !feedsAway;
+    return !liveFeeds.value && !feedsAway;
   }
 
   function syncHolds(): void {
@@ -1017,7 +1004,7 @@ export const useMachinesStore = defineStore("machines", () => {
   }
 
   // The holds don't wait for a poller: they follow the switch, the machine list and whether the page is away.
-  watch([machineSwitch, liveFeeds, entries], syncHolds, { immediate: true });
+  watch([liveFeeds, entries], syncHolds, { immediate: true });
   if (typeof document !== "undefined") document.addEventListener("visibilitychange", onVisibility);
 
   /**
@@ -1037,7 +1024,7 @@ export const useMachinesStore = defineStore("machines", () => {
         if (!liveFeeds.value) void refreshOthers();
       }, POLL_INTERVAL_MS);
       // Feeds follow the switch and the machine list: added, forgotten, or a new address or token.
-      stopFeedWatch = watch([liveFeeds, machineSwitch, entries], ([on], previous) => {
+      stopFeedWatch = watch([liveFeeds, entries], ([on], previous) => {
         syncFeeds();
         if (previous?.[0] && !on) void refreshOthers();
       }, { immediate: true });
@@ -1067,37 +1054,37 @@ export const useMachinesStore = defineStore("machines", () => {
   }
 
   /**
-   * Whether `key`'s machine answers, with "Keep every machine live" on: one whose live feed can't read it isn't, until
-   * a read gets through again. A turn it was running when it went quiet would otherwise read "Working" for good. The
-   * live machine counts as answering (`liveReachable` covers it), and so does every machine with the switch off.
+   * Whether `key`'s machine answers: one whose list (or live feed) can't read it isn't, until a read gets through
+   * again. A turn it was running when it went quiet would otherwise read "Working" for good. The live machine counts
+   * as answering (`liveReachable` covers it).
    */
   function isAnswering(key: string): boolean {
-    if (!opensInPlace.value || key === liveKey) return true;
+    if (key === liveKey) return true;
     return !others.value[key]?.error;
   }
 
   /**
    * The machine of the session open now, or of the last one that was: the machine you're on, and the one Settings
-   * opens on. Only moves with "Switch machines without reloading" (or live feeds) on; otherwise it's the live machine.
+   * opens on. It starts as this tab's last one (the open session's machine takes over at once), else the live machine.
    */
-  const currentOpened = shallowRef<string | null>(null);
+  const currentOpened = shallowRef<string | null>(loadCurrentMachineKey());
   const currentKey = computed(() => {
     const key = currentOpened.value;
-    return opensInPlace.value && key && entries.value.some((entry) => entry.key === key) ? key : liveKey;
+    return key && entries.value.some((entry) => entry.key === key) ? key : liveKey;
   });
   const current = computed(() => entries.value.find((entry) => entry.key === currentKey.value) ?? live.value);
 
   function setCurrent(key: string): void {
     currentOpened.value = key;
+    saveCurrentMachineKey(key);
   }
 
   /**
-   * The machine a session's views ask: with the switch on, the machine it's on, as far as this page knows (a session
-   * opened or started here in place, or one any machine's list had); otherwise, and for a session on no machine
-   * listed here, the live one.
+   * The machine a session's views ask: the machine it's on, as far as this page knows (a session
+   * opened or started here in place, or one any machine's list had); for a session on no machine listed here, the live one.
    */
   function sessionTarget(sessionId: string | null | undefined): MachineTarget {
-    const key = sessionId && opensInPlace.value
+    const key = sessionId
       ? sessionsStore.elsewhere.get(sessionId)?.machineKey ?? sessionMachines.value[sessionId]
       : undefined;
     return key ? targetOfKey(key) : liveTarget();
@@ -1108,25 +1095,6 @@ export const useMachinesStore = defineStore("machines", () => {
     if (key === liveKey) return liveTarget();
     const connection = connectionFor(key);
     return key === HOME_MACHINE_KEY || connection ? targetFor(connection) : liveTarget();
-  }
-
-  /**
-   * Makes `key`'s machine live and opens `path` there. The live machine's own list (`liveList`) is kept as its last
-   * list first, so after the reload it shows at once, as it did, rather than empty until it's polled.
-   */
-  function openOn(
-    key: string,
-    path: string,
-    liveList?: { sessions: readonly SessionListItem[]; projects: readonly ProjectSummary[] },
-  ): void {
-    if (key === liveKey) return;
-    if (liveList) {
-      saveCachedSessions({
-        ...others.value,
-        [liveKey]: { sessions: [...liveList.sessions], projects: [...liveList.projects], error: null, loadedAt: Date.now(), loading: false },
-      });
-    }
-    switchToMachine(key === HOME_MACHINE_KEY ? null : key, path);
   }
 
   return {
@@ -1176,6 +1144,5 @@ export const useMachinesStore = defineStore("machines", () => {
     isAnswering,
     sessionTarget,
     targetOfKey,
-    openOn,
   };
 });

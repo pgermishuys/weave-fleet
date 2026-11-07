@@ -8,7 +8,6 @@ import { provideMachineTarget, targetFor } from "@/lib/machine-target";
 import { rememberPhoneMachine } from "@/lib/machines";
 import { fetchMachineList, type ListedMachine } from "@/lib/phone/grants";
 import { phoneMachines, type PhoneMachine } from "@/lib/phone/new-session";
-import { useMachinesStore } from "@/stores/machines";
 
 /**
  * New session (`/phone/new`): a sheet over the inbox that brings the keyboard up, to start a session on home or any
@@ -18,7 +17,6 @@ import { useMachinesStore } from "@/stores/machines";
 const props = defineProps<{ open: boolean; machineId?: string }>();
 const emit = defineEmits<{ (event: "close"): void }>();
 const nav = usePhoneNav();
-const machineList = useMachinesStore();
 
 const credentials = readCredentialsSync();
 const listed = shallowRef<ListedMachine[]>([]);
@@ -66,14 +64,9 @@ function started(sessionId: string): void {
     void nav.openSession(machine?.id ?? "", sessionId, { replace: true });
     return;
   }
-  // Another machine: as opening one from the inbox does, in place with "Keep every machine live", else the page reloads
-  // to work there.
+  // Another machine: as opening one from the inbox does, in place.
   rememberPhoneMachine(machine.connection);
-  if (machineList.opensInPlace) {
-    void nav.openSession(machine.id, sessionId, { replace: true });
-    return;
-  }
-  window.location.assign(`/phone/s/${encodeURIComponent(machine.id)}/${encodeURIComponent(sessionId)}`);
+  void nav.openSession(machine.id, sessionId, { replace: true });
 }
 </script>
 

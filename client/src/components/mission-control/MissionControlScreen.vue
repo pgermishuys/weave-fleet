@@ -31,11 +31,8 @@ const GROUPINGS: { value: Grouping; label: string }[] = [
 ];
 
 function open(tile: Tile): void {
-  const path = `/sessions/${encodeURIComponent(tile.sessionId)}`;
-  if (tile.machineId === machines.liveKey || machines.opensInPlace) {
-    machines.rememberSessions(tile.machineId, [tile.sessionId]);
-    void router.navigate({ to: "/sessions/$id", params: { id: tile.sessionId }, search: { instanceId: undefined, parentSessionId: undefined } });
-  } else machines.openOn(tile.machineId, path);
+  machines.rememberSessions(tile.machineId, [tile.sessionId]);
+  void router.navigate({ to: "/sessions/$id", params: { id: tile.sessionId }, search: { instanceId: undefined, parentSessionId: undefined } });
 }
 
 function answerQuestion(tile: Tile, requestId: string, answers: string[][], done: (outcome: AnswerOutcome) => void): void {

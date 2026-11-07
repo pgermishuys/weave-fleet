@@ -73,8 +73,8 @@ onUnmounted(() => {
 });
 watch(retentionStatus, () => { if (isOther.value) void loadOther(); });
 
-// Nothing is open on the dashboard, so no sidebar row should look selected (with the switch off the page reloads here).
-if (machines.opensInPlace) sessionsStore.setActiveSessionId(null);
+// Nothing is open on the dashboard, so no sidebar row should look selected.
+sessionsStore.setActiveSessionId(null);
 
 const live = useSessions({ retentionStatus, enabled: () => !isOther.value });
 const isLoading = computed(() => (isOther.value ? otherLoading.value : live.isLoading.value));

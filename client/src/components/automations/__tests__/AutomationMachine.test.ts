@@ -17,6 +17,7 @@ vi.mock("@/composables/use-signalr-socket", () => ({
   onGlobalEvent: () => () => {},
   onDisconnect: () => () => {},
   onReconnect: () => () => {},
+  feedHubFor: () => ({ start: async () => {}, stop: async () => {} }),
 }));
 vi.mock("@/lib/automations", async (importOriginal) => ({
   ...(await importOriginal<typeof import("@/lib/automations")>()),
@@ -256,12 +257,11 @@ describe("An automation that runs on another machine", () => {
     expect(sent[0]!.body.targetMachineId).toBeNull();
   });
 
-  it("shows the machine in the list and on its runs, and opens a run's session on that machine", async () => {
+  it("shows the machine in the list and on its runs, and opens a run's session on that machine, in place", async () => {
     localStorage.setItem("weave:machines", JSON.stringify([atlas]));
     list = [nightly, { ...nightly, id: "a-here", name: "Weekly digest", targetMachineId: null, workspaceId: pocketNotes.path }];
     runs = [onAtlas];
     await mountScreen();
-    const openOn = vi.spyOn(useMachinesStore(), "openOn").mockImplementation(() => {});
 
     const rows = wrapper.findAll("[data-testid='automation-row']");
     expect(rows[0]!.get("[data-testid='automation-row-machine']").text()).toBe("atlas");
@@ -278,8 +278,8 @@ describe("An automation that runs on another machine", () => {
 
     await run.trigger("click");
 
-    expect(openOn).toHaveBeenCalledWith("m-atlas", "/sessions/atlas-session?instanceId=atlas-inst");
-    expect(navigate).not.toHaveBeenCalled();
+    expect(navigate).toHaveBeenCalledWith(expect.objectContaining({ to: "/sessions/$id", params: { id: "atlas-session" } }));
+    expect(useMachinesStore().sessionTarget("atlas-session")).toMatchObject({ key: "m-atlas", isLive: false });
   });
 
   it("says when a run's machine didn't answer, rather than Done", async () => {

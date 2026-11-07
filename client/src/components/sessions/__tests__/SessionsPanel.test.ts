@@ -5,10 +5,8 @@ import MachineSessionsGroup from "@/components/sessions/MachineSessionsGroup.vue
 import SessionsPanel from "@/components/sessions/SessionsPanel.vue";
 import type { ProjectResponse, SessionListItem } from "@/api/client";
 import { HOME_MACHINE_KEY, saveMachines, setActiveMachine, type MachineConnection } from "@/lib/machines";
-import { saveSessionListScroll } from "@/lib/session-list-scroll";
 import { useSettingsNav } from "@/composables/use-settings-nav";
 import { useMachinesStore } from "@/stores/machines";
-import { usePreferencesStore } from "@/stores/preferences";
 import { useSessionsStore } from "@/stores/sessions";
 import { useWorkspaceUiStore } from "@/stores/workspace-ui";
 
@@ -125,50 +123,19 @@ describe("SessionsPanel across machines", () => {
     expect(groups).toEqual([HOME_MACHINE_KEY, hangar.id]);
   });
 
-  it("keeps the list's place across the switch to another machine", async () => {
-    const machines = useMachinesStore();
-    machines.others = {
-      ...machines.others,
-      [aurora.id]: { sessions: [item("aurora-1", "Paint the fence", "p-lighthouse")], projects: [project("p-lighthouse", "Lighthouse", 1)], error: null, loadedAt: 1, loading: false },
-    };
-    const openOn = vi.spyOn(machines, "openOn").mockImplementation(() => {});
-    useSessionsStore().setSessions([item("home-1", "Local work", "p-fleet")]);
-    const view = mountPanel();
-    await flushPromises();
-
-    const list = view.get(".sessions-list").element as HTMLElement;
-    list.scrollTop = 420;
-    await view.get("[data-machine='aurora-id'] [data-testid='machine-session-row']").trigger("click");
-
-    expect(openOn).toHaveBeenCalledWith(aurora.id, "/sessions/aurora-1?instanceId=inst-aurora-1", expect.objectContaining({
-      sessions: [expect.objectContaining({ session: expect.objectContaining({ id: "home-1" }) })],
-    }));
-    view.unmount();
-
-    // After the reload the list comes back to the same place once the lists are in.
-    const reloaded = mountPanel();
-    await flushPromises();
-    expect((reloaded.get(".sessions-list").element as HTMLElement).scrollTop).toBe(420);
-  });
-
-  it("opens another machine's session in place, without a reload, with every machine live", async () => {
+  it("opens another machine's session in place, without a reload", async () => {
     navigate.mockClear();
-    const preferences = usePreferencesStore();
-    preferences.hasFetched = true;
-    preferences.preferences = { LiveMachines: "true" };
     const machines = useMachinesStore();
     machines.others = {
       ...machines.others,
       [hangar.id]: { sessions: [item("hangar-1", "Index for slow search", "p-lumen")], projects: [project("p-lumen", "lumen-site", 1)], error: null, loadedAt: 1, loading: false },
     };
-    const openOn = vi.spyOn(machines, "openOn").mockImplementation(() => {});
     useSessionsStore().setSessions([item("home-1", "Local work", "p-fleet")]);
     const view = mountPanel();
     await flushPromises();
 
     await view.get("[data-machine='hangar-id'] [data-testid='machine-session-row']").trigger("click");
 
-    expect(openOn).not.toHaveBeenCalled();
     expect(navigate).toHaveBeenCalledWith({
       to: "/sessions/$id",
       params: { id: "hangar-1" },
@@ -178,22 +145,7 @@ describe("SessionsPanel across machines", () => {
     view.unmount();
   });
 
-  it("doesn't move a list the user already scrolled after the reload", async () => {
-    saveSessionListScroll(420);
-    useSessionsStore().setSessions([]);
-    const view = mountPanel();
-    const list = view.get(".sessions-list").element as HTMLElement;
-    list.scrollTop = 30;
-
-    useSessionsStore().setSessions([item("home-1", "Local work", "p-fleet")]);
-    await flushPromises();
-
-    expect(list.scrollTop).toBe(30);
-  });
-
   it("starts a new session on another machine from its heading, without switching to it", async () => {
-    const machines = useMachinesStore();
-    const openOn = vi.spyOn(machines, "openOn").mockImplementation(() => {});
     useSessionsStore().setSessions([item("home-1", "Local work", "p-fleet")]);
     const view = mountPanel();
     await flushPromises();
@@ -202,40 +154,18 @@ describe("SessionsPanel across machines", () => {
     group.vm.$emit("newSession");
 
     expect(useWorkspaceUiStore().newSessionMachine).toBe(hangar.id);
-    expect(openOn).not.toHaveBeenCalled();
     view.unmount();
   });
 
-  it("works on another machine from its heading, keeping the live list for the way back", async () => {
-    const machines = useMachinesStore();
-    const openOn = vi.spyOn(machines, "openOn").mockImplementation(() => {});
-    useSessionsStore().setSessions([item("home-1", "Local work", "p-fleet")]);
-    const view = mountPanel();
-    await flushPromises();
-
-    const group = view.findAllComponents(MachineSessionsGroup).find((candidate) => candidate.props("machine").key === hangar.id)!;
-    group.vm.$emit("workHere");
-
-    expect(openOn).toHaveBeenCalledWith(hangar.id, "/", expect.objectContaining({
-      sessions: [expect.objectContaining({ session: expect.objectContaining({ id: "home-1" }) })],
-    }));
-    view.unmount();
-  });
-
-  it("with the switch on, Work here makes that machine the one you're on and goes to its first page in place", async () => {
+  it("Work here makes that machine the one you're on and goes to its first page in place", async () => {
     navigate.mockClear();
-    const preferences = usePreferencesStore();
-    preferences.hasFetched = true;
-    preferences.preferences = { MachineSwitch: "true" };
     const machines = useMachinesStore();
-    const openOn = vi.spyOn(machines, "openOn").mockImplementation(() => {});
     const view = mountPanel();
     await flushPromises();
 
     const group = view.findAllComponents(MachineSessionsGroup).find((candidate) => candidate.props("machine").key === hangar.id)!;
     group.vm.$emit("workHere");
 
-    expect(openOn).not.toHaveBeenCalled();
     expect(machines.currentKey).toBe(hangar.id);
     expect(navigate).toHaveBeenCalledWith({ to: "/" });
     view.unmount();

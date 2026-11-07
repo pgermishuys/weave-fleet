@@ -91,12 +91,8 @@ const justAdded = shallowRef<string | null>(null);
 const { addMachineRequested } = useSettingsNav();
 const router = useRouter();
 
-/** Makes that machine the one you're on and goes to its first page: in place with the switch on, else a reload there. */
+/** Makes that machine the one you're on and goes to its first page, in place. */
 function workHere(key: string): void {
-  if (!machines.opensInPlace) {
-    machines.openOn(key, "/");
-    return;
-  }
   machines.setCurrent(key);
   void router.navigate({ to: "/" });
 }

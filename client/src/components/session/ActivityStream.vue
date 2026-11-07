@@ -408,11 +408,7 @@ function handlePeerLinkClick(event: MouseEvent, peer: PeerSender): void {
   event.preventDefault();
   const key = peerMachineKey(peer);
   if (key === null) return;
-  // Another machine's sender opens as the sidebar opens its sessions: in place with every machine live, else there.
-  if (key !== machines.liveKey && !machines.opensInPlace) {
-    machines.openOn(key, `/sessions/${encodeURIComponent(peer.sessionId)}`);
-    return;
-  }
+  // Another machine's sender opens as the sidebar opens its sessions: in place.
   if (key !== machines.liveKey) machines.rememberSessions(key, [peer.sessionId]);
   void router.navigate({ to: "/sessions/$id", params: { id: peer.sessionId }, search: { instanceId: undefined, parentSessionId: undefined } });
 }

@@ -1,6 +1,6 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { createPinia, setActivePinia } from "pinia";
-import { HOME_MACHINE_KEY, loadMachines, loadSessionMachines, saveMachines, setActiveMachine, switchToMachine, type MachineConnection } from "@/lib/machines";
+import { HOME_MACHINE_KEY, loadMachines, loadSessionMachines, saveMachines, setActiveMachine, type MachineConnection } from "@/lib/machines";
 import { useMachinesStore, type MachineCapabilities, type MachineInfo } from "@/stores/machines";
 
 // Switching machines reloads the page; here it only records where it went.
@@ -445,23 +445,6 @@ describe("machines store", () => {
       expect(store.others[falcon.id].sessions).toHaveLength(1);
       expect(store.others[falcon.id].projects).toEqual([]);
       expect(store.others[falcon.id].error).toBeNull();
-    });
-
-    it("keeps the live machine's list when switching away, so it shows at once after the reload", () => {
-      const store = useMachinesStore();
-
-      store.openOn(falcon.id, "/sessions/remote-1", {
-        sessions: [{ ...session("home-1", "Local work"), projectId: "p-1", projectName: "weave-fleet" }] as never,
-        projects: [{ id: "p-1", name: "weave-fleet", type: "user", position: 1 }],
-      });
-
-      expect(switchToMachine).toHaveBeenCalledWith(falcon.id, "/sessions/remote-1");
-      setActiveMachine(falcon);
-      setActivePinia(createPinia());
-      const reloaded = useMachinesStore();
-      expect(reloaded.liveKey).toBe(falcon.id);
-      expect(reloaded.others[HOME_MACHINE_KEY].sessions[0]).toMatchObject({ projectId: "p-1", session: { title: "Local work" } });
-      expect(reloaded.others[HOME_MACHINE_KEY].projects.map((project) => project.name)).toEqual(["weave-fleet"]);
     });
 
     it("keeps what each machine says it can run, and nothing for a Fleet too old to say", async () => {

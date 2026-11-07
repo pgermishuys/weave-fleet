@@ -69,12 +69,10 @@ const machineForNew = computed(() => {
   return typeof asked === "string" && asked ? asked : undefined;
 });
 
-// A session opened on another machine works in that machine with a page load; home's inbox doesn't go under it. With
-// "Keep every machine live" it opens in place instead: the page stays on home, so the inbox is under it.
+// Another machine's session opens in place: the page stays on home, so the inbox is under it.
 const showInbox = !getActiveMachine();
 // The inbox is kept here, for the inbox page and for a session on another machine pushed over it (its row).
 if (showInbox) provide(INBOX, useInbox());
-// "Keep every machine live" decides how another machine's session opens (`useMachinesStore().opensInPlace`).
 usePreferencesStore().ensureLoaded();
 
 // Which way the stack moved: by the router's history index, else by what came and went.

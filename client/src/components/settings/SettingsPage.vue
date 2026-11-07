@@ -41,9 +41,8 @@ const PAGES: Readonly<Record<string, { title: string; line: string }>> = {
 };
 
 const { activeSection, activeAnchor } = useSettingsNav();
-// Settings belong to a machine: when another one is live, these are its settings.
 const machines = useMachinesStore();
-// With "Switch machines without reloading" on, Settings shows the machine you're on, or the one picked in the menu.
+// Settings shows the machine you're on, or the one picked in the menu.
 const settingsMachine = useSettingsMachine();
 
 /**
@@ -106,13 +105,6 @@ watch(
       </h1>
       <p class="mt-1 text-sm text-muted">
         {{ header.line }}
-      </p>
-      <p
-        v-if="!settingsMachine.enabled.value && !machines.live.isHome && activeSection !== 'machines'"
-        class="mt-2 text-sm text-muted"
-        data-testid="settings-machine-note"
-      >
-        These are the settings of <span class="font-mono font-semibold text-[var(--coral)]">{{ machines.live.name }}</span>, the machine you're working in.
       </p>
     </div>
 

@@ -3,9 +3,8 @@ import type { MachineTarget } from "@/lib/machine-target";
 import { useMachinesStore } from "@/stores/machines";
 
 /**
- * The machine a view with its own machine switch shows (Settings, Automations). With "Switch machines without
- * reloading" on it's the machine you're on (the open session's) until you pick another in the view's switch;
- * otherwise, and for a machine that's gone, the live one. `reset` forgets a pick, so the view opens on the machine
+ * The machine a view with its own machine switch shows (Settings, Automations). It's the machine you're on (the
+ * open session's) until you pick another in the view's switch; for a machine that's gone, the live one. `reset` forgets a pick, so the view opens on the machine
  * you're on. Each view makes its own choice, so a pick in one doesn't move the other.
  */
 export function createMachineChoice() {
@@ -15,7 +14,7 @@ export function createMachineChoice() {
   function useChoice() {
     const machines = useMachinesStore();
 
-    const enabled = computed(() => machines.opensInPlace && machines.hasMachines);
+    const enabled = computed(() => machines.hasMachines);
     const key = computed(() => {
       if (!enabled.value) return machines.liveKey;
       const wanted = picked.value;

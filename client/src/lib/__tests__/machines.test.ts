@@ -9,7 +9,9 @@ import {
   normalizeBaseUrl,
   rememberSessionMachines,
   restoreActiveMachine,
-  saveLiveMachinesHint,
+  loadCurrentMachineKey,
+  saveCurrentMachineKey,
+  getActiveMachine,
   saveActiveMachineId,
   saveMachines,
   setActiveMachine,
@@ -197,51 +199,35 @@ describe("machines", () => {
     });
 
     it("starts at home in a fresh tab", () => {
-      expect(restoreActiveMachine("/")).toBeNull();
+      expect(restoreActiveMachine()).toBeNull();
     });
 
-    it("stays on the machine this tab was working in", () => {
+    it("always makes home live, even when an older version left another machine as this tab's active one", () => {
       saveActiveMachineId(falcon.id);
 
-      expect(restoreActiveMachine("/settings")?.id).toBe(falcon.id);
+      expect(restoreActiveMachine()).toBeNull();
+      expect(loadActiveMachineId()).toBeNull();
+      expect(getActiveMachine()).toBeNull();
     });
 
-    it("opens a session on the machine it lives on, whichever machine the tab was on", () => {
+    it("keeps home live for a session on another machine: its views ask its machine", () => {
       rememberSessionMachines(falcon.id, ["remote-session"]);
-      rememberSessionMachines(null, ["home-session"]);
 
-      saveActiveMachineId(null);
-      expect(restoreActiveMachine("/sessions/remote-session")?.id).toBe(falcon.id);
-      expect(loadActiveMachineId()).toBe(falcon.id);
-
-      expect(restoreActiveMachine("/sessions/home-session")).toBeNull();
+      expect(restoreActiveMachine()).toBeNull();
       expect(loadActiveMachineId()).toBeNull();
     });
 
-    it("with every machine live, opens a session where the tab was: its views ask its machine", () => {
-      rememberSessionMachines(falcon.id, ["remote-session"]);
-      saveLiveMachinesHint(true);
-
-      saveActiveMachineId(null);
-      expect(restoreActiveMachine("/sessions/remote-session")).toBeNull();
-      expect(loadActiveMachineId()).toBeNull();
-
-      saveLiveMachinesHint(false);
-      expect(restoreActiveMachine("/sessions/remote-session")?.id).toBe(falcon.id);
-    });
-
-    it("keeps the phone on home for another machine's session with every machine live", () => {
-      saveLiveMachinesHint(true);
-      expect(restoreActiveMachine(`/phone/s/${falcon.id}/remote-session`)).toBeNull();
-
-      saveLiveMachinesHint(false);
-      expect(restoreActiveMachine(`/phone/s/${falcon.id}/remote-session`)?.id).toBe(falcon.id);
+    it("remembers the machine you were on per tab, and nothing of the kind across tabs", () => {
+      expect(loadCurrentMachineKey()).toBeNull();
+      saveCurrentMachineKey(falcon.id);
+      expect(loadCurrentMachineKey()).toBe(falcon.id);
+      expect(localStorage.getItem("weave:current-machine")).toBeNull();
     });
 
     it("goes home when the machine the tab was on has been forgotten", () => {
       saveActiveMachineId("gone");
 
-      expect(restoreActiveMachine("/")).toBeNull();
+      expect(restoreActiveMachine()).toBeNull();
       expect(loadActiveMachineId()).toBeNull();
     });
 
@@ -259,15 +245,13 @@ describe("machines", () => {
 describe("phone pages", () => {
   const falcon = { id: "falcon", name: "falcon", baseUrl: "https://falcon.ts.net", token: "fdt_f.1", addedAt: "" };
 
-  it("opens a phone session on the machine its path names, and other phone pages on home", async () => {
+  it("keeps the phone on home, whatever machine its path names: that machine opens in place", async () => {
     const { restoreActiveMachine, saveMachines, saveActiveMachineId, getActiveMachine } = await import("../machines");
     saveMachines([falcon]);
     saveActiveMachineId("falcon");
 
-    expect(restoreActiveMachine("/phone")).toBeNull();
+    expect(restoreActiveMachine()).toBeNull();
     expect(getActiveMachine()).toBeNull();
-    expect(restoreActiveMachine("/phone/s/falcon/s1")?.id).toBe("falcon");
-    expect(restoreActiveMachine("/phone/s/hangar-id/s1")).toBeNull();
   });
 
   it("remembers a machine the phone has a key for without duplicating it", async () => {

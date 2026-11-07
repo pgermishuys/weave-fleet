@@ -3,7 +3,6 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { createPinia, setActivePinia } from "pinia";
 import { HOME_MACHINE_KEY, saveMachines, setActiveMachine, type MachineConnection } from "@/lib/machines";
 import { useMachinesStore, type MachineCapabilities, type MachineInfo } from "@/stores/machines";
-import { usePreferencesStore } from "@/stores/preferences";
 import { useSettingsNav } from "@/composables/use-settings-nav";
 import MachinesSection from "@/components/settings/MachinesSection.vue";
 
@@ -501,32 +500,15 @@ describe("Settings → Machines", () => {
       return wrapper;
     }
 
-    it("with the switch on makes the machine the one you're on and goes to its first page in place", async () => {
+    it("makes the machine the one you're on and goes to its first page in place", async () => {
       routerNavigate.mockClear();
       const wrapper = await mountMini();
-      const preferences = usePreferencesStore();
-      preferences.hasFetched = true;
-      preferences.preferences = { MachineSwitch: "true" };
       const machines = useMachinesStore();
-      const openOn = vi.spyOn(machines, "openOn").mockImplementation(() => {});
 
       await wrapper.get(`[data-machine='${mini.id}'] [data-testid='machine-open']`).trigger("click");
 
-      expect(openOn).not.toHaveBeenCalled();
       expect(machines.currentKey).toBe(mini.id);
       expect(routerNavigate).toHaveBeenCalledWith({ to: "/" });
-    });
-
-    it("with the switch off reloads onto the machine", async () => {
-      routerNavigate.mockClear();
-      const wrapper = await mountMini();
-      const machines = useMachinesStore();
-      const openOn = vi.spyOn(machines, "openOn").mockImplementation(() => {});
-
-      await wrapper.get(`[data-machine='${mini.id}'] [data-testid='machine-open']`).trigger("click");
-
-      expect(openOn).toHaveBeenCalledWith(mini.id, "/");
-      expect(routerNavigate).not.toHaveBeenCalled();
     });
   });
 });

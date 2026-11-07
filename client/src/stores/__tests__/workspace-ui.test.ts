@@ -2,7 +2,6 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 import { createPinia, setActivePinia } from "pinia";
 import { createGitHubSessionSourcePreset } from "@/lib/github-session-source";
 import { useMachinesStore } from "@/stores/machines";
-import { usePreferencesStore } from "@/stores/preferences";
 import { useWorkspaceUiStore } from "@/stores/workspace-ui";
 
 describe("useWorkspaceUiStore", () => {
@@ -206,10 +205,7 @@ describe("useWorkspaceUiStore", () => {
         expect(store.newSessionMachine).toBeNull();
       });
 
-      it("with the switch on, the machine you're on is the default, so the live machine is a pick", () => {
-        const preferences = usePreferencesStore();
-        preferences.hasFetched = true;
-        preferences.preferences = { MachineSwitch: "true" };
+      it("the machine you're on is the default, so the live machine is a pick", () => {
         const machines = useMachinesStore();
         vi.spyOn(machines, "currentKey", "get").mockReturnValue("m-mac");
         const store = useWorkspaceUiStore();

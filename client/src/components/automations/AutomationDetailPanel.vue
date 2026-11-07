@@ -309,14 +309,8 @@ function sessionOf(run: AutomationRun): string | null {
 function openRun(run: AutomationRun): void {
   const sessionId = sessionOf(run);
   if (!sessionId) return;
-  // Its session is on the machine it went to: the app moves there, as opening that machine's session from the sidebar
-  // does (in place, with "Switch machines without reloading" or live feeds on).
-  if (run.machineId && machines.opensInPlace) machines.rememberSessions(run.machineId, [sessionId]);
-  if (run.machineId && !machines.opensInPlace) {
-    const instance = !run.workflowRunId && run.instanceId ? `?instanceId=${encodeURIComponent(run.instanceId)}` : "";
-    machines.openOn(run.machineId, `/sessions/${encodeURIComponent(sessionId)}${instance}`);
-    return;
-  }
+  // Its session is on the machine it went to: it opens in place, as opening that machine's session from the sidebar does.
+  if (run.machineId) machines.rememberSessions(run.machineId, [sessionId]);
   void navigate({
     to: "/sessions/$id",
     params: { id: sessionId },
