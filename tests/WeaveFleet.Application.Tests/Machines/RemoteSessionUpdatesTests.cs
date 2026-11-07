@@ -36,7 +36,7 @@ public sealed class RemoteSessionUpdatesTests : IDisposable
             new RemoteSessions(_atlas.Service, _atlas));
 
         var machine = _atlas.Machines.GetAsync(FakeMachine.Id).GetAwaiter().GetResult()!;
-        _atlas.Machines.UpsertAsync(machine with { AgentsAllowed = true }).GetAwaiter().GetResult();
+        _atlas.Machines.UpsertAsync(machine with { AgentWork = WeaveFleet.Domain.Entities.MachineAgentWork.Always }).GetAwaiter().GetResult();
         _atlas.Answer = request => request == "GET /api/sessions/s-remote/messages"
             ? (HttpStatusCode.OK, """
                 {"messages":[

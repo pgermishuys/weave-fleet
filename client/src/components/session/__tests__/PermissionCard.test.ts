@@ -26,6 +26,53 @@ function mountCard(value: PermissionAsk, onAnswer = vi.fn(async () => {})) {
 }
 
 describe("PermissionCard", () => {
+  describe("Fleet's ask about another machine", () => {
+    const handoff = (): PermissionAsk => ask({
+      id: "fleet-handoff-1",
+      kind: "other",
+      tool: "fleet_session_start",
+      title: "Start a session on taron",
+      always: [],
+      handoff: {
+        machine: "taron",
+        os: "windows",
+        folder: "c:\\source\\dungeon-crawler",
+        branch: "fleet/windows-installer-test",
+        harness: "claude-code",
+        task: "Run the installer test suite and report failures.",
+        level: "edits",
+      },
+    });
+
+    it("says what goes there and under whose permission level, with Always and Not for that machine", () => {
+      const { wrapper } = mountCard(handoff());
+      const card = wrapper.get("[data-testid='permission-card']");
+
+      expect(card.text()).toContain("Start a session on taron");
+      expect(wrapper.get("[data-testid='permission-handoff']").text()).toContain("taron · Windows");
+      expect(wrapper.get("[data-testid='permission-handoff']").text()).toContain("fleet/windows-installer-test");
+      expect(wrapper.get("[data-testid='permission-handoff-level']").text()).toBe("It runs under taron's permission level: Allow edits.");
+      expect(wrapper.get("[data-testid='permission-allow-always']").text()).toContain("Always for taron");
+      expect(wrapper.get("[data-testid='permission-allow-always']").text()).toContain("sets taron to Always");
+      expect(wrapper.get("[data-testid='permission-handoff-never']").text()).toContain("Not taron");
+      expect(wrapper.find("[data-testid='permission-deny-input']").exists()).toBe(false);
+      wrapper.unmount();
+    });
+
+    it("answers 1, 2 and 3 as once, always and reject, and Esc doesn't answer", async () => {
+      const { wrapper, onAnswer } = mountCard(handoff());
+      const card = wrapper.get("[data-testid='permission-card']");
+
+      await card.trigger("keydown", { key: "Escape" });
+      expect(onAnswer).not.toHaveBeenCalled();
+      await card.trigger("keydown", { key: "3" });
+      expect(onAnswer).toHaveBeenLastCalledWith("reject", undefined);
+      await card.trigger("keydown", { key: "2" });
+      expect(onAnswer).toHaveBeenLastCalledWith("always", undefined);
+      wrapper.unmount();
+    });
+  });
+
   it("takes keyboard focus on its first choice and moves it with the arrow keys", async () => {
     const { wrapper } = mountCard(ask());
     const once = wrapper.get("[data-testid='permission-allow-once']").element;

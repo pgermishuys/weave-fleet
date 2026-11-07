@@ -3,7 +3,6 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { createPinia, setActivePinia } from "pinia";
 import { HOME_MACHINE_KEY, saveMachines, setActiveMachine, type MachineConnection } from "@/lib/machines";
 import { useMachinesStore, type MachineCapabilities, type MachineInfo } from "@/stores/machines";
-import { usePreferencesStore } from "@/stores/preferences";
 import { useSettingsNav } from "@/composables/use-settings-nav";
 import MachinesSection from "@/components/settings/MachinesSection.vue";
 
@@ -226,25 +225,6 @@ describe("Settings → Machines", () => {
       expect(sent).toEqual({ baseUrl: "http://100.64.90.72:2113", code: "ABCD-EFGH" });
       expect(wrapper.text()).toContain("Added falcon");
       expect(wrapper.find("[data-testid='machines-add-form']").exists()).toBe(false);
-    });
-
-    it("offers to let agents hand work to the machine when that switch is on, and sets it at add time", async () => {
-      const wrapper = await openAddForm();
-      usePreferencesStore().preferences = { AgentHandoff: "true", SessionMessages: "true" };
-      let allowed: unknown = null;
-      routes["/api/machines/pair/preview"] = () => json(falconPreview);
-      routes["/api/machines/pair"] = () => json(falconMachine);
-      routes[`/api/machines/${falconMachine.id}`] = (_, init) => {
-        allowed = JSON.parse(String(init?.body));
-        return json({ ...falconMachine, agentsAllowed: true });
-      };
-      await paste(wrapper, link);
-
-      await wrapper.find("[data-testid='machines-add-allow-agents']").setValue(true);
-      await wrapper.find("[data-testid='machines-add-form']").trigger("submit");
-      await flushPromises();
-
-      expect(allowed).toEqual({ agentsAllowed: true });
     });
 
     it("takes a bare address, asks for the code, then looks", async () => {
@@ -512,6 +492,81 @@ describe("Settings → Machines", () => {
   });
 });
 
+
+describe("Settings → Machines: agents sending work", () => {
+  let sent: unknown[];
+
+  beforeEach(() => {
+    localStorage.clear();
+    sessionStorage.clear();
+    setActiveMachine(null);
+    setActivePinia(createPinia());
+    sent = [];
+    vi.stubGlobal("fetch", vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
+      const url = String(input).split("?")[0];
+      if (url === "/api/machine") return json({ ...atlasInfo, capabilities: { ...atlasCapabilities, permissionLevel: "all" } });
+      if (url === "/api/machines") return json({ machines: [{ ...mini, status: "online", lastSeenAt: null, agentWork: "ask" }] });
+      if (url === `${mini.baseUrl}/api/machine`) return json({ ...miniInfo, capabilities: { ...atlasCapabilities, permissionLevel: "edits" } });
+      if (url === `${mini.baseUrl}/api/sessions`) return json([]);
+      if (url === `/api/machines/${mini.id}` && init?.method === "PUT") {
+        const body = JSON.parse(String(init.body)) as { agentWork: string };
+        sent.push(body);
+        return json({ ...mini, status: "online", lastSeenAt: null, agentWork: body.agentWork });
+      }
+      return json({ error: "no route" }, 404);
+    }));
+  });
+
+  afterEach(() => {
+    setActiveMachine(null);
+    vi.unstubAllGlobals();
+  });
+
+  function control(wrapper: VueWrapper, key: string) {
+    return wrapper.find(`[data-testid='machine-card'][data-machine='${key}'] [data-testid='machine-agent-work']`);
+  }
+
+  it("asks by default on each other machine's card, says its level, and saves Always or Never", async () => {
+    const wrapper = mount(MachinesSection);
+    await flushPromises();
+    await useMachinesStore().refreshMachine(mini.id);
+    await flushPromises();
+
+    // This machine is where agents send work from: no setting on its card.
+    expect(control(wrapper, HOME_MACHINE_KEY).exists()).toBe(false);
+    const mine = control(wrapper, mini.id);
+    expect(mine.text()).toContain("Agents here can send it work");
+    expect(mine.find("[data-testid='machine-agent-work-ask']").attributes("aria-checked")).toBe("true");
+    expect(mine.find("[data-testid='machine-agent-work-level']").text()).toBe("Work there runs under mini's level: Allow edits.");
+
+    await mine.find("[data-testid='machine-agent-work-always']").trigger("click");
+    await flushPromises();
+    expect(sent).toEqual([{ agentWork: "always" }]);
+    expect(control(wrapper, mini.id).find("[data-testid='machine-agent-work-always']").attributes("aria-checked")).toBe("true");
+
+    await control(wrapper, mini.id).find("[data-testid='machine-agent-work-never']").trigger("click");
+    await flushPromises();
+    expect(sent).toEqual([{ agentWork: "always" }, { agentWork: "never" }]);
+  });
+
+  it("says the level is unknown for a machine on a Fleet too old to say", async () => {
+    vi.mocked(fetch).mockImplementation(async (input: RequestInfo | URL) => {
+      const url = String(input).split("?")[0];
+      if (url === "/api/machine") return json(atlasInfo);
+      if (url === "/api/machines") return json({ machines: [{ ...mini, status: "online", lastSeenAt: null, agentWork: "always" }] });
+      if (url === `${mini.baseUrl}/api/machine`) return json({ ...miniInfo, capabilities: atlasCapabilities });
+      if (url === `${mini.baseUrl}/api/sessions`) return json([]);
+      return json({ error: "no route" }, 404);
+    });
+
+    const wrapper = mount(MachinesSection);
+    await flushPromises();
+    await useMachinesStore().refreshMachine(mini.id);
+    await flushPromises();
+
+    expect(control(wrapper, mini.id).find("[data-testid='machine-agent-work-level']").text()).toBe("Work there runs under mini's level: unknown.");
+  });
+});
 
 describe("Settings → Machines: addresses", () => {
   const addresses = [

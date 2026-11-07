@@ -10,7 +10,7 @@ namespace WeaveFleet.Infrastructure.Data.Repositories;
 /// <summary>The <c>machines</c> and <c>device_grants</c> tables (migration 053; addresses in 071).</summary>
 public sealed class RemoteMachineRepository(IDbConnectionFactory connectionFactory) : IRemoteMachineRepository
 {
-    private const string MachineColumns = "id, name, base_url, encrypted_token, os, added_at, last_seen_at, status, agents_allowed, ssh_destination, addresses";
+    private const string MachineColumns = "id, name, base_url, encrypted_token, os, added_at, last_seen_at, status, agent_work, ssh_destination, addresses";
     private const string GrantColumns = "device_id, machine_id, remote_device_id, created_at, revoked_at";
 
     public async Task<IReadOnlyList<RemoteMachine>> ListAsync()
@@ -30,8 +30,8 @@ public sealed class RemoteMachineRepository(IDbConnectionFactory connectionFacto
         using var conn = connectionFactory.CreateConnection();
         await conn.ExecuteNonQueryAsync(
             """
-            INSERT INTO machines (id, name, base_url, encrypted_token, os, added_at, last_seen_at, status, agents_allowed, ssh_destination, addresses)
-            VALUES (@Id, @Name, @BaseUrl, @Token, @Os, @AddedAt, @LastSeenAt, @Status, @AgentsAllowed, @SshDestination, @Addresses)
+            INSERT INTO machines (id, name, base_url, encrypted_token, os, added_at, last_seen_at, status, agent_work, ssh_destination, addresses)
+            VALUES (@Id, @Name, @BaseUrl, @Token, @Os, @AddedAt, @LastSeenAt, @Status, @AgentWork, @SshDestination, @Addresses)
             ON CONFLICT (id) DO UPDATE SET
               name = excluded.name,
               base_url = excluded.base_url,
@@ -39,7 +39,7 @@ public sealed class RemoteMachineRepository(IDbConnectionFactory connectionFacto
               os = excluded.os,
               last_seen_at = COALESCE(excluded.last_seen_at, machines.last_seen_at),
               status = excluded.status,
-              agents_allowed = excluded.agents_allowed,
+              agent_work = excluded.agent_work,
               ssh_destination = excluded.ssh_destination,
               addresses = excluded.addresses
             """,
@@ -53,7 +53,7 @@ public sealed class RemoteMachineRepository(IDbConnectionFactory connectionFacto
                 cmd.AddParameter("AddedAt", Format(machine.AddedAt));
                 cmd.AddParameter("LastSeenAt", machine.LastSeenAt is { } seen ? Format(seen) : null);
                 cmd.AddParameter("Status", machine.Status);
-                cmd.AddParameter("AgentsAllowed", machine.AgentsAllowed ? 1 : 0);
+                cmd.AddParameter("AgentWork", machine.AgentWork);
                 cmd.AddParameter("SshDestination", machine.SshDestination);
                 cmd.AddParameter("Addresses", WriteAddresses(machine.Addresses));
             });
@@ -190,7 +190,7 @@ public sealed class RemoteMachineRepository(IDbConnectionFactory connectionFacto
         AddedAt = Parse(r.GetString(r.GetOrdinal("added_at"))),
         LastSeenAt = r.GetNullableString(r.GetOrdinal("last_seen_at")) is { } seen ? Parse(seen) : null,
         Status = r.GetString(r.GetOrdinal("status")),
-        AgentsAllowed = r.GetInt64(r.GetOrdinal("agents_allowed")) != 0,
+        AgentWork = MachineAgentWork.Read(r.GetString(r.GetOrdinal("agent_work"))),
         SshDestination = r.GetNullableString(r.GetOrdinal("ssh_destination")),
         Addresses = ReadAddresses(r.GetNullableString(r.GetOrdinal("addresses"))),
     };

@@ -141,7 +141,7 @@ public sealed class RemoteSessionFollowTests
         owner.DefaultRequestHeaders.Authorization = new AuthenticationHeaderValue("Bearer", Token(hangar));
         var added = await (await owner.PostAsJsonAsync("/api/machines", new { baseUrl = FalconUrl, token = Token(falcon) })).ReadSuccessAsync();
         var id = added.GetProperty("id").GetString()!;
-        (await owner.PutAsJsonAsync($"/api/machines/{id}", new { agentsAllowed = true })).EnsureSuccessStatusCode();
+        (await owner.PutAsJsonAsync($"/api/machines/{id}", new { agentWork = "always" })).EnsureSuccessStatusCode();
         return id;
     }
 

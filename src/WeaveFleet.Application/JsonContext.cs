@@ -116,6 +116,8 @@ internal sealed record QuickChatSourceInput;
     DefaultIgnoreCondition = JsonIgnoreCondition.WhenWritingNull)]
 [JsonSerializable(typeof(MessagePart[]))]
 [JsonSerializable(typeof(List<MessagePart>))]
+[JsonSerializable(typeof(WeaveFleet.Domain.Harnesses.PermissionAsk))]
+[JsonSerializable(typeof(WeaveFleet.Domain.Harnesses.PermissionReplied))]
 [JsonSerializable(typeof(DelegationEventDto))]
 [JsonSerializable(typeof(WeaveFleet.Domain.Events.RunningWorkItem))]
 [JsonSerializable(typeof(WeaveFleet.Domain.Events.SessionContextUsage))]

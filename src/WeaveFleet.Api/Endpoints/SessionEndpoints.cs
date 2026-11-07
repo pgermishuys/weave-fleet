@@ -6,6 +6,7 @@ using WeaveFleet.Application.Browser;
 using WeaveFleet.Application.Canvases;
 using WeaveFleet.Application.DTOs;
 using WeaveFleet.Application.Git;
+using WeaveFleet.Application.Machines;
 using WeaveFleet.Application.Mods;
 using WeaveFleet.Application.Progress;
 using WeaveFleet.Application.Pages;
@@ -540,10 +541,11 @@ public static class SessionEndpoints
         .WithName("DismissSessionInterruption");
 
         // POST /api/sessions/{id}/abort
-        group.MapPost("/{id}/abort", async (string id, SessionPrompting sessionPrompting, PageChoices pageChoices) =>
+        group.MapPost("/{id}/abort", async (string id, SessionPrompting sessionPrompting, PageChoices pageChoices, MachineHandoffAsks handoffAsks) =>
         {
             // A plugin that can't see the stop (OpenCode 1) would otherwise ask again for a pick nobody waits for.
             pageChoices.EndAll(id, PageChoiceAnswer.NotAnswered(PageChoiceReasons.Stopped));
+            handoffAsks.EndAll(id);
             var result = await sessionPrompting.AbortSessionAsync(id);
             return result.Match(_ => Results.Ok(), err => err.ToSessionApiResult());
         })
@@ -585,12 +587,26 @@ public static class SessionEndpoints
             string requestId,
             PermissionReplyApiRequest request,
             SessionAsks sessionAsks,
+            MachineHandoffAsks handoffAsks,
+            RemoteMachineService machines,
             HttpContext http,
             CancellationToken ct) =>
         {
             // The user answers a permission ask, never the agent that raised it.
             if (http.RefuseAgent("a permission ask") is { } refused)
                 return refused;
+
+            // Fleet's own ask about sending work to another machine: Always and Reject save that machine's setting.
+            if (MachineHandoffAsks.Owns(requestId))
+            {
+                if (!PermissionReplies.IsAnswer(request.Reply))
+                    return Results.BadRequest(new ErrorResponse("Answer once, always or reject."));
+                if (handoffAsks.Answer(id, requestId, request.Reply) is not { } machine)
+                    return Results.NotFound(new ErrorResponse("That ask doesn't wait any more."));
+                if (MachineHandoffAsks.SettingFor(request.Reply) is { } setting)
+                    await machines.UpdateAsync(machine.MachineId, null, null, null, ct, setting);
+                return Results.NoContent();
+            }
 
             var result = await sessionAsks.ReplyToPermissionAsync(id, requestId, request.Reply, request.Message, ct);
             return result.Match(_ => Results.NoContent(), err => err.ToSessionApiResult());

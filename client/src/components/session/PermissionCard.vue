@@ -7,6 +7,7 @@ import { focusBlockingCard, moveChoiceFocus } from "@/lib/focus-blocking-card";
 import { useSettingsNav } from "@/composables/use-settings-nav";
 import type { PermissionAsk, PermissionReply } from "@/composables/use-session-permissions";
 import { dontAskAgainWording, permissionHeading } from "@/lib/tools";
+import { PERMISSION_LEVEL_NAMES, toPermissionLevel } from "@/lib/permissions";
 
 const props = defineProps<{
   ask: PermissionAsk;
@@ -46,6 +47,33 @@ const changes = computed(() => added.value + removed.value > 0);
 /** What "Don't ask again" covers, in words: the harness's pattern, or the whole kind of thing. */
 const alwaysLabel = computed(() => dontAskAgainWording(props.ask));
 
+// ── Fleet's own ask: an agent sends work to another machine ───────────────────
+
+const handoff = computed(() => props.ask.handoff ?? null);
+
+/** The rows of what goes there, as the ask has them. */
+const handoffRows = computed(() => {
+  const ask = handoff.value;
+  if (!ask) return [];
+  const rows: { label: string; value: string }[] = [{ label: "Machine", value: ask.os ? `${ask.machine} · ${osName(ask.os)}` : ask.machine }];
+  if (ask.session) rows.push({ label: "Session", value: ask.session });
+  if (ask.folder) rows.push({ label: "Folder", value: ask.folder });
+  if (ask.folder) rows.push({ label: "Branch", value: ask.branch ?? "the folder as it is" });
+  if (ask.folder) rows.push({ label: "Harness", value: ask.harness ?? "its default" });
+  if (ask.task) rows.push({ label: ask.session ? "Message" : "Task", value: ask.task });
+  return rows;
+});
+
+/** The level the work runs under there, in Settings → Permissions' words. */
+const handoffLevel = computed(() => {
+  const level = toPermissionLevel(handoff.value?.level ?? undefined);
+  return level ? PERMISSION_LEVEL_NAMES[level] : "unknown (that Fleet doesn't say)";
+});
+
+function osName(os: string): string {
+  return ({ linux: "Linux", macos: "macOS", windows: "Windows" } as Record<string, string>)[os.toLowerCase()] ?? os;
+}
+
 // ── Answering ─────────────────────────────────────────────────────────────────
 
 const denyText = ref("");
@@ -61,7 +89,7 @@ async function answer(reply: PermissionReply): Promise<void> {
   loading.value = true;
   error.value = null;
   try {
-    await props.onAnswer(reply, reply === "reject" ? denyText.value : undefined);
+    await props.onAnswer(reply, reply === "reject" && !handoff.value ? denyText.value : undefined);
   } catch (e) {
     error.value = e instanceof Error ? e.message : "The answer didn't reach the agent.";
   } finally {
@@ -73,6 +101,14 @@ function handleCardKeydown(event: KeyboardEvent): void {
   if (moveChoiceFocus(event, cardRef.value, "button.pcard__choice")) return;
   if (event.metaKey || event.ctrlKey || event.altKey) return;
   const typing = event.target instanceof HTMLInputElement;
+  if (handoff.value) {
+    const reply = ({ "1": "once", "2": "always", "3": "reject" } as Record<string, PermissionReply>)[event.key];
+    if (reply) {
+      event.preventDefault();
+      void answer(reply);
+    }
+    return;
+  }
   if (event.key === "Escape") {
     event.preventDefault();
     void answer("reject");
@@ -102,7 +138,7 @@ function focusDeny(): void {
 }
 
 function openSettings(): void {
-  setActiveSection("permissions");
+  setActiveSection(handoff.value ? "machines" : "permissions");
   void navigate({ to: "/settings" });
 }
 </script>
@@ -132,9 +168,31 @@ function openSettings(): void {
       </span>
     </header>
 
+    <!-- Work for another machine: what goes there, and under whose permission level -->
+    <template v-if="handoff">
+      <dl
+        class="pcard__handoff"
+        data-testid="permission-handoff"
+      >
+        <template
+          v-for="row in handoffRows"
+          :key="row.label"
+        >
+          <dt>{{ row.label }}</dt>
+          <dd>{{ row.value }}</dd>
+        </template>
+      </dl>
+      <p
+        class="pcard__note"
+        data-testid="permission-handoff-level"
+      >
+        It runs under {{ handoff.machine }}'s permission level: <strong>{{ handoffLevel }}</strong>.
+      </p>
+    </template>
+
     <!-- A command -->
     <pre
-      v-if="ask.kind === 'shell' && ask.title"
+      v-else-if="ask.kind === 'shell' && ask.title"
       class="pcard__cmd"
     ><span
       v-if="ask.directory"
@@ -180,6 +238,56 @@ function openSettings(): void {
     >{{ ask.title }}</pre>
 
     <div
+      v-if="handoff"
+      class="pcard__choices"
+      role="group"
+      aria-label="Answer"
+    >
+      <button
+        type="button"
+        class="pcard__choice"
+        data-testid="permission-allow-once"
+        :disabled="loading"
+        @click="answer('once')"
+      >
+        <span
+          class="pcard__key"
+          aria-hidden="true"
+        >1</span>
+        <span class="pcard__name">Allow once</span>
+      </button>
+      <button
+        type="button"
+        class="pcard__choice"
+        data-testid="permission-allow-always"
+        :disabled="loading"
+        @click="answer('always')"
+      >
+        <span
+          class="pcard__key"
+          aria-hidden="true"
+        >2</span>
+        <span class="pcard__name">Always for {{ handoff.machine }}</span>
+        <span class="pcard__scope">sets {{ handoff.machine }} to Always</span>
+      </button>
+      <button
+        type="button"
+        class="pcard__choice"
+        data-testid="permission-handoff-never"
+        :disabled="loading"
+        @click="answer('reject')"
+      >
+        <span
+          class="pcard__key"
+          aria-hidden="true"
+        >3</span>
+        <span class="pcard__name">Not {{ handoff.machine }}</span>
+        <span class="pcard__scope">sets {{ handoff.machine }} to Never</span>
+      </button>
+    </div>
+
+    <div
+      v-else
       class="pcard__choices"
       role="group"
       aria-label="Answer"
@@ -252,7 +360,24 @@ function openSettings(): void {
       {{ error }}
     </p>
 
-    <footer class="pcard__foot">
+    <footer
+      v-if="handoff"
+      class="pcard__foot"
+    >
+      <span aria-hidden="true">1, 2 or 3 answers</span>
+      <span>You can change it on {{ handoff.machine }}'s card.</span>
+      <button
+        type="button"
+        class="pcard__settings"
+        @click="openSettings"
+      >
+        Machine settings
+      </button>
+    </footer>
+    <footer
+      v-else
+      class="pcard__foot"
+    >
       <span aria-hidden="true">1 or 2 answers · 3 then Enter denies · Esc denies</span>
       <span data-testid="permission-undo-hint">You can undo option 2 from Allowed in the composer.</span>
       <button
@@ -425,6 +550,43 @@ function openSettings(): void {
 .pcard__choices {
   display: grid;
   gap: 4px;
+}
+
+.pcard__handoff {
+  display: grid;
+  grid-template-columns: max-content minmax(0, 1fr);
+  gap: 4px 14px;
+  margin: 0;
+  padding: 9px 12px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-btn);
+  background: var(--panel-bg);
+  font-size: 12.5px;
+}
+
+.pcard__handoff dt {
+  color: var(--muted);
+}
+
+.pcard__handoff dd {
+  min-width: 0;
+  margin: 0;
+  overflow: hidden;
+  color: var(--text);
+  font-family: var(--font-mono-stack);
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.pcard__note {
+  margin: 0;
+  color: var(--muted);
+  font-size: 12.5px;
+}
+
+.pcard__note strong {
+  color: var(--text);
+  font-weight: 600;
 }
 
 .pcard__choice {

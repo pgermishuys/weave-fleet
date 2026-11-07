@@ -14,10 +14,13 @@ interface Ask {
   tool: string;
   always?: readonly string[];
   title?: string | null;
+  /** Set on Fleet's own ask about sending work to another machine. */
+  handoff?: { machine: string; task?: string | null } | null;
 }
 
 /** "Run a command", "Edit a file", …: what the agent wants, as the ask's heading. */
-export function permissionHeading(ask: Pick<Ask, "kind" | "tool">): string {
+export function permissionHeading(ask: Pick<Ask, "kind" | "tool"> & Partial<Pick<Ask, "title" | "handoff">>): string {
+  if (ask.handoff) return ask.title ?? `Send work to ${ask.handoff.machine}`;
   switch (ask.kind) {
     case "shell": return "Run a command";
     case "edit": return "Edit a file";
@@ -29,7 +32,9 @@ export function permissionHeading(ask: Pick<Ask, "kind" | "tool">): string {
 }
 
 /** What "Don't ask again" covers: the harness's patterns, or the whole kind of thing when there are none. */
-export function dontAskAgainWording(ask: Pick<Ask, "kind" | "tool" | "always">): { lead: string; code: string | null } {
+export function dontAskAgainWording(ask: Pick<Ask, "kind" | "tool" | "always"> & Partial<Pick<Ask, "handoff">>): { lead: string; code: string | null } {
+  // Fleet's ask about another machine: "always" saves that machine's setting.
+  if (ask.handoff) return { lead: `Always for ${ask.handoff.machine}`, code: null };
   const patterns = (ask.always ?? []).filter((pattern) => pattern !== "*");
   if (patterns.length > 0) return { lead: "Don't ask again for", code: patterns.join(", ") };
   switch (ask.kind) {
@@ -41,7 +46,8 @@ export function dontAskAgainWording(ask: Pick<Ask, "kind" | "tool" | "always">):
 }
 
 /** The one-line preview of a pending ask: "Wants to run `git push`". */
-export function askPreviewWording(ask: Pick<Ask, "kind" | "tool" | "title">): { lead: string; detail: string | null; code: boolean } {
+export function askPreviewWording(ask: Pick<Ask, "kind" | "tool" | "title"> & Partial<Pick<Ask, "handoff">>): { lead: string; detail: string | null; code: boolean } {
+  if (ask.handoff) return { lead: `Wants to send work to ${ask.handoff.machine}`, detail: ask.handoff.task ?? null, code: false };
   const what = ask.title || ask.tool;
   switch (ask.kind) {
     case "shell": return { lead: "Wants to run", detail: what, code: true };

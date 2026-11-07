@@ -18,18 +18,53 @@ public sealed class RemoteMachineRepositoryTests
     };
 
     [Fact]
-    public async Task agents_may_hand_work_to_a_machine_only_once_the_owner_allows_it()
+    public async Task a_machine_asks_before_agents_send_it_work_until_the_owner_says_always_or_never()
     {
         var (keeper, factory) = await TestDbHelper.CreateSharedDbAsync();
         using var _ = keeper;
         var repo = new RemoteMachineRepository(factory);
 
         await repo.UpsertAsync(Mini());
-        (await repo.GetAsync("machine-mini"))!.AgentsAllowed.ShouldBeFalse();
+        (await repo.GetAsync("machine-mini"))!.AgentWork.ShouldBe(MachineAgentWork.Ask);
 
-        await repo.UpsertAsync(Mini() with { AgentsAllowed = true });
-        (await repo.GetAsync("machine-mini"))!.AgentsAllowed.ShouldBeTrue();
-        (await repo.ListAsync()).ShouldHaveSingleItem().AgentsAllowed.ShouldBeTrue();
+        await repo.UpsertAsync(Mini() with { AgentWork = MachineAgentWork.Always });
+        (await repo.GetAsync("machine-mini"))!.AgentWork.ShouldBe(MachineAgentWork.Always);
+        await repo.UpsertAsync(Mini() with { AgentWork = MachineAgentWork.Never });
+        (await repo.ListAsync()).ShouldHaveSingleItem().AgentWork.ShouldBe(MachineAgentWork.Never);
+    }
+
+    [Fact]
+    public async Task a_machine_agents_were_allowed_on_before_is_always_and_the_rest_ask()
+    {
+        var (keeper, factory) = await TestDbHelper.CreateSharedDbAsync();
+        using var _ = keeper;
+        var repo = new RemoteMachineRepository(factory);
+        await repo.UpsertAsync(Mini());
+        await repo.UpsertAsync(Mini() with { Id = "machine-other", Name = "other" });
+
+        // As migration 072 found them: one allowed with the old box, one not.
+        using (var connection = factory.CreateConnection())
+        {
+            foreach (var sql in (string[])["UPDATE machines SET agents_allowed = 1, agent_work = 'ask' WHERE id = 'machine-mini'",
+                         MigrationSql("072_machine_agent_work.sql").Split('\n').Last(line => line.StartsWith("UPDATE", StringComparison.Ordinal))])
+            {
+                if (connection.State != System.Data.ConnectionState.Open)
+                    connection.Open();
+                using var command = connection.CreateCommand();
+                command.CommandText = sql;
+                command.ExecuteNonQuery();
+            }
+        }
+
+        (await repo.GetAsync("machine-mini"))!.AgentWork.ShouldBe(MachineAgentWork.Always);
+        (await repo.GetAsync("machine-other"))!.AgentWork.ShouldBe(MachineAgentWork.Ask);
+    }
+
+    private static string MigrationSql(string name)
+    {
+        var assembly = typeof(RemoteMachineRepository).Assembly;
+        using var stream = assembly.GetManifestResourceStream(assembly.GetManifestResourceNames().Single(resource => resource.EndsWith(name, StringComparison.Ordinal)))!;
+        return new StreamReader(stream).ReadToEnd();
     }
 
     [Fact]

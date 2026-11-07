@@ -25,8 +25,8 @@ const MACHINE_LIST_PATH = "/api/bridge/session/machines"
 const STEP_DONE_PATH = "/api/bridge/workflow/step-done"
 const MODS_PATH = "/api/bridge/mods/"
 
-// Agent hand-off: set only on servers started with it on (and so with messages between sessions on). It adds the
-// hand-off tools and a machine on fleet_message and fleet_session_read; without it they're as they always were.
+// Agent hand-off: set only on servers started while a machine in Fleet's list takes work from agents. It adds the
+// hand-off tools, fleet_message, and a machine on fleet_message and fleet_session_read; without it they're as they always were.
 const HANDOFF = process.env.FLEET_AGENT_HANDOFF === "1"
 
 // Pages that wait for the user's pick: set only on servers started with it on. It adds waitForChoice to
@@ -121,6 +121,17 @@ async function waitForPick(shown, call) {
   if (round === shown) return shown
   const [said, ...files] = shown.content
   return { ...round, content: [{ type: "text", text: said.text + "\n\n" + round.content[0].text }, ...files] }
+}
+
+/**
+ * A hand-off call that Fleet may first put to the user, in the conversation. Fleet holds each request for under a
+ * minute while the user decides, since OpenCode 2 cuts one held for about five, so this makes the same call again
+ * until it has the answer.
+ */
+async function untilAnswered(call) {
+  let round = await call()
+  while (round.metadata.choice?.waiting) round = await call()
+  return round
 }
 
 /**
@@ -348,9 +359,10 @@ if (process.env.FLEET_WALKTHROUGH === "1") {
   )
 }
 
-// Only on servers started with messages between sessions on. Fleet then refuses prompts from agents through its API,
-// so this is the one way to message a session, and the message says which session sent it.
-if (process.env.FLEET_SESSION_MESSAGES === "1") {
+// Only on servers started with messages between sessions on, or with a machine to hand work to (then only for sessions
+// there). Fleet refuses prompts from agents through its API, so this is the one way to message a session, and the
+// message says which session sent it.
+if (process.env.FLEET_SESSION_MESSAGES === "1" || HANDOFF) {
   tools.push(
     fleetTool(
       "fleet_message",
@@ -379,19 +391,21 @@ if (process.env.FLEET_SESSION_MESSAGES === "1") {
         ...(HANDOFF ? { machine } : {}),
       },
       (input, tool) =>
-        callFleet(
-          "message",
-          tool,
-          { sessionId: input.sessionId, text: input.text, notifyWhenDone: input.notifyWhenDone === true, machine: input.machine || null },
-          MESSAGE_PATH,
+        untilAnswered(() =>
+          callFleet(
+            "message",
+            tool,
+            { sessionId: input.sessionId, text: input.text, notifyWhenDone: input.notifyWhenDone === true, machine: input.machine || null },
+            MESSAGE_PATH,
+          ),
         ),
       { optional: ["notifyWhenDone", "machine"] },
     ),
   )
 }
 
-// Only on servers started with agent hand-off on. This Fleet makes every call to the other machine, with the token it
-// keeps for it, and only to machines the user allowed; the agent never sees a token.
+// Only on servers started while a machine takes work from agents. This Fleet makes every call to the other machine, with
+// the token it keeps for it, and asks the user first when that machine is set to Ask; the agent never sees a token.
 if (HANDOFF) {
   tools.push(
     fleetTool(
@@ -410,6 +424,7 @@ if (HANDOFF) {
         "It's a normal session there, which the user can open and step into; the task arrives marked as coming from this session, as a teammate's request, not the user's.",
         "The work moves by branch: push yours and name it, and the new session works in a fresh worktree of it.",
         "Its reply stays there unless you set notifyWhenDone: read it with fleet_session_read and message it with fleet_message, naming the machine.",
+        "Fleet may ask the user first; the call waits for their answer.",
       ].join(" "),
       {
         machine: { type: "string", description: "The machine's name, from fleet_machine_list." },
@@ -428,19 +443,21 @@ if (HANDOFF) {
         },
       },
       (input, tool) =>
-        callFleet(
-          "start",
-          tool,
-          {
-            machine: input.machine,
-            folder: input.folder,
-            title: input.title,
-            task: input.task,
-            branch: input.branch || null,
-            harness: input.harness || null,
-            notifyWhenDone: input.notifyWhenDone === true,
-          },
-          SESSION_START_PATH,
+        untilAnswered(() =>
+          callFleet(
+            "start",
+            tool,
+            {
+              machine: input.machine,
+              folder: input.folder,
+              title: input.title,
+              task: input.task,
+              branch: input.branch || null,
+              harness: input.harness || null,
+              notifyWhenDone: input.notifyWhenDone === true,
+            },
+            SESSION_START_PATH,
+          ),
         ),
       { optional: ["branch", "harness", "notifyWhenDone"] },
     ),

@@ -27,8 +27,8 @@ const MACHINE_LIST_PATH = "/api/bridge/session/machines"
 const STEP_DONE_PATH = "/api/bridge/workflow/step-done"
 const MODS_PATH = "/api/bridge/mods/"
 
-// Agent hand-off: set only in processes started with it on (and so with messages between sessions on). It adds the
-// hand-off tools and a machine on fleet_message and fleet_session_read; without it they're as they always were.
+// Agent hand-off: set only in processes started while a machine in Fleet's list takes work from agents. It adds the
+// hand-off tools, fleet_message, and a machine on fleet_message and fleet_session_read; without it they're as they always were.
 const HANDOFF = process.env.FLEET_AGENT_HANDOFF === "1"
 
 // Pages that wait for the user's pick: set only in processes started with it on. It adds waitForChoice to
@@ -125,6 +125,16 @@ async function waitForPick(shown: ToolResult, context: ToolContext): Promise<Too
     round = await callFleet("page-choice", context, { callId: context.callID ?? null, canvasId: canvas })
   }
   return round === shown ? shown : { ...round, output: shown.output + "\n\n" + round.output }
+}
+
+/**
+ * A hand-off call that Fleet may first put to the user, in the conversation. Fleet holds each request for under a
+ * minute while the user decides, so this makes the same call again until it has the answer.
+ */
+async function untilAnswered(call: () => Promise<ToolResult>): Promise<ToolResult> {
+  let round = await call()
+  while ((round.metadata.choice as { waiting?: boolean } | undefined)?.waiting) round = await call()
+  return round
 }
 
 type Config = { skills?: { paths?: string[] } }
@@ -478,9 +488,10 @@ export const FleetCanvasPlugin = async (input: { directory?: string }) => ({
         ),
     },
 
-    // Only in processes started with messages between sessions on. Fleet then refuses prompts from agents through
-    // its API, so this is the one way to message a session, and the message says which session sent it.
-    ...(process.env.FLEET_SESSION_MESSAGES === "1"
+    // Only in processes started with messages between sessions on, or with a machine to hand work to (then only for
+    // sessions there). Fleet refuses prompts from agents through its API, so this is the one way to message a session,
+    // and the message says which session sent it.
+    ...(process.env.FLEET_SESSION_MESSAGES === "1" || HANDOFF
       ? {
           fleet_message: {
             description: [
@@ -515,24 +526,27 @@ export const FleetCanvasPlugin = async (input: { directory?: string }) => ({
                 : {}),
             },
             execute: (args: { sessionId: string; text: string; notifyWhenDone: boolean | string; machine?: string }, context: ToolContext) =>
-              callFleet(
-                "message",
-                context,
-                // OpenCode doesn't check args against the schema, and models sometimes send a boolean as a string.
-                {
-                  sessionId: args.sessionId,
-                  text: args.text,
-                  notifyWhenDone: args.notifyWhenDone === true || args.notifyWhenDone === "true",
-                  machine: args.machine || null,
-                },
-                MESSAGE_PATH,
+              untilAnswered(() =>
+                callFleet(
+                  "message",
+                  context,
+                  // OpenCode doesn't check args against the schema, and models sometimes send a boolean as a string.
+                  {
+                    sessionId: args.sessionId,
+                    text: args.text,
+                    notifyWhenDone: args.notifyWhenDone === true || args.notifyWhenDone === "true",
+                    machine: args.machine || null,
+                  },
+                  MESSAGE_PATH,
+                ),
               ),
           },
         }
       : {}),
 
-    // Only in processes started with agent hand-off on. This Fleet makes every call to the other machine, with the
-    // token it keeps for it, and only to machines the user allowed; the agent never sees a token.
+    // Only in processes started while a machine takes work from agents. This Fleet makes every call to the other
+    // machine, with the token it keeps for it, and asks the user first when that machine is set to Ask; the agent never
+    // sees a token.
     ...(HANDOFF
       ? {
           fleet_machine_list: {
@@ -549,6 +563,7 @@ export const FleetCanvasPlugin = async (input: { directory?: string }) => ({
               "It's a normal session there, which the user can open and step into; the task arrives marked as coming from this session, as a teammate's request, not the user's.",
               "The work moves by branch: push yours and name it, and the new session works in a fresh worktree of it.",
               "Its reply stays there unless you set notifyWhenDone: read it with fleet_session_read and message it with fleet_message, naming the machine.",
+              "Fleet may ask the user first; the call waits for their answer.",
             ].join(" "),
             args: {
               machine: { type: "string", description: "The machine's name, from fleet_machine_list." },
@@ -587,19 +602,21 @@ export const FleetCanvasPlugin = async (input: { directory?: string }) => ({
               },
               context: ToolContext,
             ) =>
-              callFleet(
-                "start",
-                context,
-                {
-                  machine: args.machine,
-                  folder: args.folder,
-                  title: args.title,
-                  task: args.task,
-                  branch: args.branch || null,
-                  harness: args.harness || null,
-                  notifyWhenDone: args.notifyWhenDone === true || args.notifyWhenDone === "true",
-                },
-                SESSION_START_PATH,
+              untilAnswered(() =>
+                callFleet(
+                  "start",
+                  context,
+                  {
+                    machine: args.machine,
+                    folder: args.folder,
+                    title: args.title,
+                    task: args.task,
+                    branch: args.branch || null,
+                    harness: args.harness || null,
+                    notifyWhenDone: args.notifyWhenDone === true || args.notifyWhenDone === "true",
+                  },
+                  SESSION_START_PATH,
+                ),
               ),
           },
         }

@@ -27,6 +27,39 @@ export interface PermissionAsk {
   /** Set when a subagent asked rather than the session's own agent. */
   subagent?: string | null;
   askedAt: string;
+  /** Set on Fleet's own ask: an agent wants to send work to another machine set to Ask. */
+  handoff?: HandoffAsk | null;
+}
+
+/** What an agent wants to send to another machine (Fleet's `HandoffAskDetails`). */
+export interface HandoffAsk {
+  machine: string;
+  os?: string | null;
+  folder?: string | null;
+  branch?: string | null;
+  harness?: string | null;
+  /** The first line of the task, or of the message. */
+  task?: string | null;
+  /** The session there it messages; none for a new session. */
+  session?: string | null;
+  /** The permission level the work runs under there; none from a Fleet too old to say. */
+  level?: string | null;
+}
+
+function toHandoffAsk(value: unknown): HandoffAsk | null {
+  if (!value || typeof value !== "object") return null;
+  const raw = value as Record<string, unknown>;
+  if (typeof raw.machine !== "string") return null;
+  return {
+    machine: raw.machine,
+    os: optionalString(raw.os),
+    folder: optionalString(raw.folder),
+    branch: optionalString(raw.branch),
+    harness: optionalString(raw.harness),
+    task: optionalString(raw.task),
+    session: optionalString(raw.session),
+    level: optionalString(raw.level),
+  };
 }
 
 const ASKED_EVENT = "permission.asked" as const;
@@ -61,6 +94,7 @@ export function toPermissionAsk(value: unknown): PermissionAsk | null {
     callId: optionalString(raw.callId),
     subagent: optionalString(raw.subagent),
     askedAt: typeof raw.askedAt === "string" ? raw.askedAt : new Date().toISOString(),
+    handoff: toHandoffAsk(raw.handoff),
   };
 }
 

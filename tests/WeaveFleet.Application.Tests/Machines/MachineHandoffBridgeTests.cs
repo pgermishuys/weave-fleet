@@ -1,5 +1,7 @@
 using System.Net;
 using System.Text.Json;
+using System.Threading.Channels;
+using Microsoft.Extensions.Time.Testing;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging.Abstractions;
 using Shouldly;
@@ -19,7 +21,8 @@ namespace WeaveFleet.Application.Tests.Machines;
 
 /// <summary>
 /// An agent hands work to another machine: this Fleet starts, messages and reads sessions there with the token it keeps,
-/// naming the calling session as the sender. Only machines the owner allowed, only with the switch on.
+/// naming the calling session as the sender. Each machine's setting decides: Always goes ahead, Ask has Fleet ask the user
+/// in the conversation and wait for the answer, Never keeps the machine out of reach.
 /// </summary>
 public sealed class MachineHandoffBridgeTests : IDisposable
 {
@@ -34,18 +37,23 @@ public sealed class MachineHandoffBridgeTests : IDisposable
     private readonly CapturingSender _updates = new();
     private readonly FollowedSessions _followed = new();
     private readonly SessionUpdates _watches;
+    private readonly FakeTimeProvider _time = new();
+    private readonly FleetSessionEvents _events = new();
+    private readonly Channel<HarnessEvent> _raised = Channel.CreateUnbounded<HarnessEvent>();
+    private readonly MachineHandoffAsks _asks;
+    private readonly SessionOrchestratorBuilder _builder;
     private readonly MachineHandoffBridge _bridge;
 
     public MachineHandoffBridgeTests()
     {
-        _preferences.Seed(SessionMessages.PreferenceKey, "true");
-        _preferences.Seed(AgentHandoff.PreferenceKey, "true");
-        Allow(true);
+        Set(MachineAgentWork.Always);
+        _events.Attach(Sender, _raised.Writer);
+        _asks = new MachineHandoffAsks(_events, new SessionActivityTracker(), _time);
 
         _identity = new MachineIdentityStore(_identityPath);
         _identity.Update(identity => identity with { Name = "kestrel" });
 
-        var builder = new SessionOrchestratorBuilder().WithUserContext(new TestUserContext(UserId));
+        var builder = _builder = new SessionOrchestratorBuilder().WithUserContext(new TestUserContext(UserId));
         builder.SessionRepository.Seed(new Session
         {
             Id = Sender, Title = "Fix login flake", Status = "active", Directory = "/tmp", CreatedAt = "2026-10-08",
@@ -53,7 +61,6 @@ public sealed class MachineHandoffBridgeTests : IDisposable
         });
         builder.Build();
         var sessions = new SessionService(builder.SessionRepository, builder.ProjectRepository, builder.Retention, builder.ActivityTracker);
-        var options = new FleetOptions();
         _watches = new SessionUpdates(
             new SessionActivityTracker(),
             TestServiceScopeFactory.Create(services =>
@@ -65,8 +72,10 @@ public sealed class MachineHandoffBridgeTests : IDisposable
         _bridge = new MachineHandoffBridge(
             [_resolver],
             new NoUserScope(),
-            new AgentHandoffFeature(options, _preferences, new SessionMessagesFeature(options, _preferences)),
             sessions,
+            builder.SessionRepository,
+            _preferences,
+            _asks,
             new RemoteSessions(_atlas.Service, _atlas),
             _identity,
             _watches,
@@ -166,9 +175,9 @@ public sealed class MachineHandoffBridgeTests : IDisposable
     }
 
     [Fact]
-    public async Task A_machine_the_owner_didnt_allow_is_out_of_reach()
+    public async Task A_machine_set_to_Never_is_out_of_reach()
     {
-        Allow(false);
+        Set(MachineAgentWork.Never);
 
         var start = await _bridge.StartAsync("token", "oc-1", "atlas", "/srv/harbor-api", "Run the tests", "Run them.", null, null);
         var list = await _bridge.ListAsync("token", "oc-1");
@@ -177,29 +186,6 @@ public sealed class MachineHandoffBridgeTests : IDisposable
         start.Error.Message.ShouldBe("You can't hand work to a machine called atlas. See the machines you can with fleet_machine_list.");
         list.Value!.Output.ShouldBe(MachineHandoffBridge.NoMachinesMessage);
         _atlas.Requests.ShouldBeEmpty();
-    }
-
-    [Fact]
-    public async Task Nothing_goes_out_while_the_switch_is_off()
-    {
-        _preferences.Seed(AgentHandoff.PreferenceKey, "false");
-
-        var result = await _bridge.StartAsync("token", "oc-1", "atlas", "/srv/harbor-api", "Run the tests", "Run them.", null, null);
-        var read = await _bridge.ReadAsync(new HarnessCanvasCaller(Sender, UserId), "atlas", "s-remote", null, null);
-
-        result.Error!.Message.ShouldBe(MachineHandoffBridge.TurnedOffMessage);
-        read.Error!.Message.ShouldBe(MachineHandoffBridge.TurnedOffMessage);
-        _atlas.Requests.ShouldBeEmpty();
-    }
-
-    [Fact]
-    public async Task It_needs_messages_between_sessions_too()
-    {
-        _preferences.Seed(SessionMessages.PreferenceKey, "false");
-
-        var result = await _bridge.ListAsync("token", "oc-1");
-
-        result.Error!.Message.ShouldBe(MachineHandoffBridge.TurnedOffMessage);
     }
 
     [Fact]
@@ -275,6 +261,123 @@ public sealed class MachineHandoffBridgeTests : IDisposable
         _followed.Sessions.ShouldBeEmpty();
     }
 
+    [Fact]
+    public async Task On_a_machine_set_to_Ask_the_user_is_asked_in_the_conversation_and_the_start_waits_for_them()
+    {
+        Set(MachineAgentWork.Ask);
+        _atlas.Answer = WithLevels(_atlas.Answer!);
+
+        var start = StartTestsAsync();
+        var ask = await AskedAsync();
+
+        start.IsCompleted.ShouldBeFalse();
+        _atlas.Requests.ShouldNotContain(request => request.Request == "POST /api/sessions");
+        ask.Id.ShouldStartWith(MachineHandoffAsks.IdPrefix);
+        ask.SessionId.ShouldBe(Sender);
+        ask.Title.ShouldBe("Start a session on atlas");
+        ask.Handoff.ShouldBe(new HandoffAskDetails
+        {
+            Machine = "atlas", Folder = "/srv/harbor-api", Branch = "fix/login-flake", Harness = "opencode",
+            Task = "Run them on Windows.", Level = PermissionLevels.Edits,
+        });
+
+        _asks.Answer(Sender, ask.Id, PermissionReplies.Once).ShouldBe((FakeMachine.Id, "atlas"));
+        var result = await start;
+
+        result.IsSuccess.ShouldBeTrue(result.Error?.Message);
+        _atlas.Requests.Count(request => request.Request == "POST /api/sessions").ShouldBe(1);
+    }
+
+    [Fact]
+    public async Task Not_the_machine_tells_the_agent_the_user_said_no()
+    {
+        Set(MachineAgentWork.Ask);
+
+        var start = StartTestsAsync();
+        var ask = await AskedAsync();
+        _asks.Answer(Sender, ask.Id, PermissionReplies.Reject);
+        var result = await start;
+
+        result.Error!.Kind.ShouldBe(CanvasErrorKind.Refused);
+        result.Error.Message.ShouldStartWith("The user said no to sending work to atlas.");
+        _atlas.Requests.ShouldNotContain(request => request.Request == "POST /api/sessions");
+        MachineHandoffAsks.SettingFor(PermissionReplies.Reject).ShouldBe(MachineAgentWork.Never);
+        MachineHandoffAsks.SettingFor(PermissionReplies.Always).ShouldBe(MachineAgentWork.Always);
+        MachineHandoffAsks.SettingFor(PermissionReplies.Once).ShouldBeNull();
+    }
+
+    [Fact]
+    public async Task A_round_without_an_answer_says_to_call_again_and_the_call_again_finds_the_same_ask()
+    {
+        Set(MachineAgentWork.Ask);
+
+        var first = StartTestsAsync();
+        var ask = await AskedAsync();
+        await Task.Run(() => _time.Advance(MachineHandoffAsks.Round));
+        var waiting = await first;
+
+        waiting.Value!.Choice.ShouldBe(PageChoiceOutput.StillWaiting);
+        waiting.Value.Output.ShouldBe(MachineHandoffBridge.StillWaitingMessage);
+
+        var again = StartTestsAsync();
+        _asks.Answer(Sender, ask.Id, PermissionReplies.Always).ShouldNotBeNull();
+        (await again).IsSuccess.ShouldBeTrue();
+        var after = new List<string>();
+        while (_raised.Reader.TryRead(out var next))
+            after.Add(next.Type);
+        after.ShouldBe([EventTypes.SessionStatus, EventTypes.PermissionReplied], "waiting on the user, then the card goes; one ask, not two");
+    }
+
+    [Fact]
+    public async Task A_run_nobody_watches_follows_the_unattended_setting()
+    {
+        Set(MachineAgentWork.Ask);
+        (await _builder.SessionRepository.GetByIdAsync(Sender))!.SourceReference = "automation:nightly";
+
+        (await StartTestsAsync()).IsSuccess.ShouldBeTrue("Unset, nothing asks in an unattended run.");
+
+        _preferences.Seed(SessionPermissions.UnattendedKey, UnattendedPermissions.Deny);
+        var refused = await _bridge.StartAsync("token", "oc-1", "atlas", "/srv/harbor-api", "Run the tests", "Another one.", null, null);
+        refused.Error!.Message.ShouldContain("this run has nobody watching it");
+        _raised.Reader.TryRead(out _).ShouldBeFalse();
+    }
+
+    [Fact]
+    public async Task Messaging_a_session_the_agent_started_there_doesnt_ask_but_another_one_does()
+    {
+        Set(MachineAgentWork.Ask);
+        var caller = new HarnessCanvasCaller(Sender, UserId);
+        var start = StartTestsAsync();
+        _asks.Answer(Sender, (await AskedAsync()).Id, PermissionReplies.Once);
+        await start;
+
+        (await _bridge.MessageAsync(caller, "atlas", "s-remote", "Also the Windows path.", notifyWhenDone: false)).IsSuccess.ShouldBeTrue();
+
+        var other = _bridge.MessageAsync(caller, "atlas", "s-other", "Stop the build.", notifyWhenDone: false);
+        var ask = await AskedAsync();
+        ask.Title.ShouldBe("Message a session on atlas");
+        ask.Handoff!.Session.ShouldBe("s-other");
+        ask.Handoff.Task.ShouldBe("Stop the build.");
+        _asks.EndAll(Sender);
+        (await other).Error!.Message.ShouldStartWith("The user didn't answer about atlas");
+    }
+
+    [Fact]
+    public async Task The_list_says_which_machines_ask_first()
+    {
+        Set(MachineAgentWork.Ask);
+
+        var result = await _bridge.ListAsync("token", "oc-1");
+
+        result.Value!.Output.ShouldContain("atlas · Fleet asks the user before you send it work · answering");
+    }
+
+    /// <summary>The machine reports its permission levels: Edits for OpenCode, as a newer Fleet does.</summary>
+    private static Func<string, (HttpStatusCode, string)?> WithLevels(Func<string, (HttpStatusCode, string)?> answer)
+        => request => request == "GET /api/machine"
+            ? (HttpStatusCode.OK, """{"id":"machine-atlas","capabilities":{"harnesses":[{"type":"opencode","available":true,"enabled":true,"permissionLevel":"edits"}],"sessions":{"working":0,"needsYou":0},"peerMessages":true,"permissionLevel":"ask"}}""")
+            : answer(request);
+
     /// <summary>The session there replies to <paramref name="answering"/> and goes idle, as its events say.</summary>
     private async Task TurnEndsAsync(string sessionId, string answering)
     {
@@ -289,11 +392,27 @@ public sealed class MachineHandoffBridgeTests : IDisposable
         await _watches.Pending;
     }
 
-    private void Allow(bool allowed)
+    private void Set(string agentWork)
     {
         var machine = _atlas.Machines.GetAsync(FakeMachine.Id).GetAwaiter().GetResult()!;
-        _atlas.Machines.UpsertAsync(machine with { AgentsAllowed = allowed }).GetAwaiter().GetResult();
+        _atlas.Machines.UpsertAsync(machine with { AgentWork = agentWork }).GetAwaiter().GetResult();
     }
+
+    private static readonly JsonSerializerOptions WebJson = new(JsonSerializerDefaults.Web);
+
+    /// <summary>The next ask Fleet raised in the calling session's conversation.</summary>
+    private async Task<PermissionAsk> AskedAsync()
+    {
+        while (true)
+        {
+            var raised = await _raised.Reader.ReadAsync().AsTask().WaitAsync(TimeSpan.FromSeconds(10));
+            if (raised.Type == EventTypes.PermissionAsked)
+                return raised.Payload!.Value.Deserialize<PermissionAsk>(WebJson)!;
+        }
+    }
+
+    private Task<WeaveFleet.Application.Canvases.CanvasResult<CanvasToolOutput>> StartTestsAsync()
+        => _bridge.StartAsync("token", "oc-1", "atlas", "/srv/harbor-api", "Run the tests", "Run them on Windows.\nThen report.", "fix/login-flake", "opencode");
 
     private JsonElement Body(string request)
     {

@@ -2,7 +2,14 @@
 import { computed, onMounted, onUnmounted, reactive, shallowRef, watch } from "vue";
 import { storeToRefs } from "pinia";
 import { AlertCircle, Check, Copy, Eye, EyeOff, LoaderCircle, Plus, RefreshCw } from "lucide-vue-next";
-import { useMachinesStore, type MachineAccess, type MachineEntry, type MachineHarness, type PairingPreview } from "@/stores/machines";
+import {
+  useMachinesStore,
+  type MachineAccess,
+  type MachineAgentWork,
+  type MachineEntry,
+  type MachineHarness,
+  type PairingPreview,
+} from "@/stores/machines";
 import SettingGroup from "@/components/settings/SettingGroup.vue";
 import SettingRow from "@/components/settings/SettingRow.vue";
 import AddPhonePanel from "@/components/settings/AddPhonePanel.vue";
@@ -16,12 +23,10 @@ import { useJobsFeature } from "@/composables/use-jobs-feature";
 import DevicesList from "@/components/settings/DevicesList.vue";
 import { listDevices, type PairedDevice } from "@/lib/devices-api";
 import { diagnosisOf, tunnelDownDiagnosis, type MachineDiagnosis } from "@/lib/machine-diagnosis";
-import { AGENT_HANDOFF_PREFERENCE_KEY } from "@/lib/machines";
 import { describeReach, parsePairingInput } from "@/lib/pairing-link";
 import { normalizeManualCode } from "@/lib/pairing";
-import { SESSION_MESSAGES_PREFERENCE_KEY } from "@/lib/session-messages";
 import { useSettingsNav } from "@/composables/use-settings-nav";
-import { usePreferencesStore } from "@/stores/preferences";
+import { PERMISSION_LEVEL_NAMES, toPermissionLevel } from "@/lib/permissions";
 
 /**
  * Settings → Machines: the machines this client knows, adding one by URL and token, and how other devices reach
@@ -36,8 +41,6 @@ const inputClass = "w-full rounded-btn border border-border bg-main-bg px-3 py-2
 
 const machines = useMachinesStore();
 const { entries, others, home, liveReachable, source, candidates } = storeToRefs(machines);
-const preferencesStore = usePreferencesStore();
-preferencesStore.ensureLoaded();
 // Each card draws MachineJobSeats from a list that is empty with Jobs off, not under a v-if: a false v-if still leaves a
 // comment node, and with Jobs off the card must render exactly as it did.
 const { isJobsEnabled: jobsOn } = useJobsFeature();
@@ -107,7 +110,6 @@ const found = shallowRef<PairingPreview | null>(null);
 const previewError = shallowRef<string | null>(null);
 const previewDiagnosis = shallowRef<MachineDiagnosis | null>(null);
 const isLooking = shallowRef(false);
-const allowAgents = shallowRef(false);
 let lookToken = 0;
 
 watch(pairTarget, async (target) => {
@@ -115,7 +117,6 @@ watch(pairTarget, async (target) => {
   found.value = null;
   previewError.value = null;
   previewDiagnosis.value = null;
-  allowAgents.value = false;
   isLooking.value = target !== null;
   if (!target) return;
   try {
@@ -131,7 +132,6 @@ watch(pairTarget, async (target) => {
   }
 }, { immediate: true });
 
-const showsAllowAgents = computed(() => found.value !== null && isAgentHandoffOn.value && source.value === "server");
 const foundLine = computed(() => found.value
   ? [found.value.name, found.value.os ? osLabel(found.value.os) : null, found.value.version ? `Fleet ${found.value.version}` : null].filter(Boolean).join(" · ")
   : "");
@@ -159,10 +159,6 @@ async function addMachine(): Promise<void> {
     const machine = usesToken.value && input?.kind === "address"
       ? await machines.addMachine(input.baseUrl, addForm.token)
       : await machines.pairMachine(target!.baseUrl, target!.code);
-    if (allowAgents.value && showsAllowAgents.value)
-      await machines.setAgentsAllowed(machine.id, true).catch(() => {
-        // The machine is added; the switch stays off and can be set on its card.
-      });
     justAdded.value = machine.name;
     clearAddForm();
     showAddForm.value = false;
@@ -218,21 +214,31 @@ async function saveToken(entry: MachineEntry): Promise<void> {
   }
 }
 
-// ── Agent hand-off ───────────────────────────────────────────────────────────
-// Shown with "Hand work to other machines" on, for the machines in home's own list (only its owner sees that list).
-const isAgentHandoffOn = computed(() =>
-  preferencesStore.get(AGENT_HANDOFF_PREFERENCE_KEY, "false") === "true"
-  && preferencesStore.get(SESSION_MESSAGES_PREFERENCE_KEY, "false") === "true");
+// ── Agents sending work ──────────────────────────────────────────────────────
+// "Agents here can send it work", on each other machine in home's own list (only its owner sees that list). This
+// machine's own card has none: it's where agents send work from.
+const AGENT_WORK_CHOICES: { value: MachineAgentWork; label: string }[] = [
+  { value: "ask", label: "Ask" },
+  { value: "always", label: "Always" },
+  { value: "never", label: "Never" },
+];
 
-function showsAgentsAllowed(entry: MachineEntry): boolean {
-  return isAgentHandoffOn.value && !entry.isHome && source.value === "server";
+function showsAgentWork(entry: MachineEntry): boolean {
+  return !entry.isHome && entry.key !== home.value?.id && source.value === "server" && machines.agentWork[entry.key] !== undefined;
 }
 
-async function toggleAgentsAllowed(entry: MachineEntry): Promise<void> {
+/** The level work sent there runs under, as that machine says; "unknown" from a Fleet too old to say. */
+function agentWorkLevel(entry: MachineEntry): string {
+  const level = toPermissionLevel((entry.info?.capabilities ?? entry.capabilities)?.permissionLevel ?? undefined);
+  return level ? PERMISSION_LEVEL_NAMES[level] : "unknown";
+}
+
+async function setAgentWork(entry: MachineEntry, value: MachineAgentWork): Promise<void> {
+  if (machines.agentWork[entry.key] === value) return;
   busyKey.value = entry.key;
   rowError[entry.key] = null;
   try {
-    await machines.setAgentsAllowed(entry.key, machines.agentsAllowed[entry.key] !== true);
+    await machines.setAgentWork(entry.key, value);
   } catch (error) {
     rowError[entry.key] = error instanceof Error ? error.message : String(error);
   } finally {
@@ -394,6 +400,8 @@ async function replaceToken(): Promise<void> {
 let stopPolling: (() => void) | null = null;
 onMounted(() => {
   void machines.loadHome();
+  // An answer in a conversation ("Always for …") may have changed a machine's setting since the list was read.
+  void machines.syncFromServer();
   void loadAccess();
   stopPolling = machines.startPolling();
 });
@@ -605,18 +613,6 @@ onUnmounted(() => stopPolling?.());
               </p>
             </div>
             <MachineAddNote :name="found.name" />
-            <label
-              v-if="showsAllowAgents"
-              class="flex items-center gap-2 text-sm text-text"
-            >
-              <input
-                v-model="allowAgents"
-                type="checkbox"
-                :disabled="isAdding"
-                data-testid="machines-add-allow-agents"
-              >
-              Agents can hand work to {{ found.name }}
-            </label>
           </div>
         </template>
         <div
@@ -782,19 +778,37 @@ onUnmounted(() => stopPolling?.());
               :title="harnessVersions(entry)"
               data-testid="machine-capabilities"
             >{{ capabilityLine(entry) }}</span>
-            <label
-              v-if="showsAgentsAllowed(entry)"
+            <div
+              v-if="showsAgentWork(entry)"
               class="machine-card__agents"
-              data-testid="machine-agents-allowed"
+              data-testid="machine-agent-work"
             >
-              <input
-                type="checkbox"
-                :checked="machines.agentsAllowed[entry.key] === true"
-                :disabled="busyKey === entry.key"
-                @change="toggleAgentsAllowed(entry)"
-              >
-              Agents can hand work here
-            </label>
+              <span class="machine-card__agents-row">
+                <span :id="`agent-work-${entry.key}`">Agents here can send it work</span>
+                <span
+                  class="machine-card__segments"
+                  role="radiogroup"
+                  :aria-labelledby="`agent-work-${entry.key}`"
+                >
+                  <button
+                    v-for="choice in AGENT_WORK_CHOICES"
+                    :key="choice.value"
+                    type="button"
+                    role="radio"
+                    class="machine-card__segment"
+                    :class="{ 'machine-card__segment--on': machines.agentWork[entry.key] === choice.value }"
+                    :aria-checked="machines.agentWork[entry.key] === choice.value"
+                    :disabled="busyKey === entry.key"
+                    :data-testid="`machine-agent-work-${choice.value}`"
+                    @click="setAgentWork(entry, choice.value)"
+                  >{{ choice.label }}</button>
+                </span>
+              </span>
+              <span
+                class="machine-card__agents-level"
+                data-testid="machine-agent-work-level"
+              >Work there runs under {{ entry.name }}'s level: {{ agentWorkLevel(entry) }}.</span>
+            </div>
             <MachineJobSeats
               v-for="key in jobsOn ? [entry.key] : []"
               :key="key"
@@ -1156,13 +1170,55 @@ onUnmounted(() => stopPolling?.());
 }
 
 .machine-card__agents {
-  display: inline-flex;
-  align-items: center;
-  gap: 6px;
-  margin-top: 4px;
+  display: grid;
+  gap: 4px;
+  margin-top: 6px;
   font-size: 12.5px;
   color: var(--text);
-  cursor: pointer;
+}
+
+.machine-card__agents-row {
+  display: inline-flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 10px;
+}
+
+.machine-card__segments {
+  display: inline-flex;
+  overflow: hidden;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-btn);
+}
+
+.machine-card__segment {
+  padding: 2px 10px;
+  color: var(--muted);
+  font-size: 12.5px;
+  transition: background-color 120ms ease, color 120ms ease;
+}
+
+.machine-card__segment + .machine-card__segment {
+  border-left: 1px solid var(--border);
+}
+
+.machine-card__segment:hover:not(:disabled) {
+  color: var(--text);
+}
+
+.machine-card__segment--on {
+  background: color-mix(in srgb, var(--accent) 18%, transparent);
+  color: var(--text);
+  font-weight: 600;
+}
+
+.machine-card__segment:disabled {
+  cursor: progress;
+}
+
+.machine-card__agents-level {
+  color: var(--muted);
+  font-size: 12px;
 }
 
 .machine-card__state--ok {

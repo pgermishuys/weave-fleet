@@ -53,7 +53,7 @@ public static class SessionPermissions
     }
 
     /// <summary>Whether nobody watches the session's run: it, or the session it's a subagent of, was started by Fleet.</summary>
-    private static async Task<bool> IsUnattendedAsync(ISessionRepository sessions, Session session)
+    public static async Task<bool> IsUnattendedAsync(ISessionRepository sessions, Session session)
     {
         var current = session;
         for (var walked = 0; walked < MaxParentsWalked; walked++)

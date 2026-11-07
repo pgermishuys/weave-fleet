@@ -1,5 +1,5 @@
 {
-  "$comment": "Fleet's own tools as its MCP server offers them (FleetToolCatalog), for harnesses that take tools over MCP (Claude Code). Names, descriptions and inputs are the OpenCode plugin's (opencode/fleet/fleet-canvas.ts), so the model sees the same tools on every harness; FleetToolCatalogTests fails when the two drift apart. \"requires\" names the switch a tool needs: sessionMessages, memory, workflowStep or browser.",
+  "$comment": "Fleet's own tools as its MCP server offers them (FleetToolCatalog), for harnesses that take tools over MCP (Claude Code). Names, descriptions and inputs are the OpenCode plugin's (opencode/fleet/fleet-canvas.ts), so the model sees the same tools on every harness; FleetToolCatalogTests fails when the two drift apart. \"requires\" names the switch a tool needs (sessionMessages, agentHandoff, memory, workflowStep, browser, …); \"a|b\" needs either.",
   "tools": [
     {
       "name": "fleet_canvas_list",
@@ -297,7 +297,7 @@
     {
       "name": "fleet_message",
       "description": "Send a message to another Fleet session. It arrives there marked as coming from this session, as a teammate's request, not the user's, and wakes the session if it's idle. Its reply stays in that session unless you set notifyWhenDone. Get the session's id from the Fleet API skill (GET $FLEET_URL/api/sessions). This is the only way to message a session: Fleet refuses prompts from agents through its API.",
-      "requires": "sessionMessages",
+      "requires": "sessionMessages|agentHandoff",
       "inputSchema": {
         "type": "object",
         "properties": {
@@ -341,7 +341,7 @@
     },
     {
       "name": "fleet_session_start",
-      "description": "Start a session on another machine and give it a task. It's a normal session there, which the user can open and step into; the task arrives marked as coming from this session, as a teammate's request, not the user's. The work moves by branch: push yours and name it, and the new session works in a fresh worktree of it. Its reply stays there unless you set notifyWhenDone: read it with fleet_session_read and message it with fleet_message, naming the machine.",
+      "description": "Start a session on another machine and give it a task. It's a normal session there, which the user can open and step into; the task arrives marked as coming from this session, as a teammate's request, not the user's. The work moves by branch: push yours and name it, and the new session works in a fresh worktree of it. Its reply stays there unless you set notifyWhenDone: read it with fleet_session_read and message it with fleet_message, naming the machine. Fleet may ask the user first; the call waits for their answer.",
       "requires": "agentHandoff",
       "inputSchema": {
         "type": "object",

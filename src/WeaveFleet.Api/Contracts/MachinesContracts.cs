@@ -7,7 +7,7 @@ namespace WeaveFleet.Api.Contracts;
 /// for a machine through a device grant instead.
 /// </summary>
 /// <param name="Status"><c>unknown</c>, <c>online</c>, <c>unreachable</c> or <c>unauthorized</c>, as this Fleet last saw it.</param>
-/// <param name="AgentsAllowed">Whether agents here may hand work to it, with "Hand work to other machines" on.</param>
+/// <param name="AgentWork">Whether agents here can send it work: <c>ask</c> (the user is asked in the conversation), <c>always</c> or <c>never</c>.</param>
 /// <param name="Diagnosis">Why this Fleet last couldn't reach it, while it can't; older clients ignore it.</param>
 /// <param name="Addresses">Every address it can be reached at, in the order this Fleet tries them; <c>BaseUrl</c> is the one in use. Empty before it has reported any.</param>
 public sealed record MachineEntryResponse(
@@ -19,7 +19,7 @@ public sealed record MachineEntryResponse(
     DateTimeOffset AddedAt,
     DateTimeOffset? LastSeenAt,
     string? Token,
-    bool AgentsAllowed,
+    string AgentWork,
     string? SshDestination = null,
     bool? TunnelUp = null,
     MachineDiagnosis? Diagnosis = null,
@@ -37,9 +37,9 @@ public sealed record MachineListResponse(IReadOnlyList<MachineEntryResponse> Mac
 
 public sealed record AddMachineRequest(string? BaseUrl, string? Token);
 
-/// <param name="AgentsAllowed">Whether agents here may hand work to it; left out, it stays as it is.</param>
+/// <param name="AgentWork">Whether agents here can send it work: <c>ask</c>, <c>always</c> or <c>never</c>; left out, it stays as it is.</param>
 /// <param name="Addresses">Every one of the machine's addresses, in the order to try them. Turned away when the list changed since it was read.</param>
-public sealed record UpdateRemoteMachineRequest(string? BaseUrl, string? Token, string? Name, bool? AgentsAllowed = null, IReadOnlyList<string>? Addresses = null);
+public sealed record UpdateRemoteMachineRequest(string? BaseUrl, string? Token, string? Name, string? AgentWork = null, IReadOnlyList<string>? Addresses = null);
 
 /// <summary>One machine from a browser's own list (<c>localStorage["weave:machines"]</c>).</summary>
 public sealed record ImportMachineEntry(string? Id, string? Name, string? BaseUrl, string? Token, string? Os, DateTimeOffset? AddedAt);
