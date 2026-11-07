@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # Pairs once, then walks every screen in light and in dark. Usage: walk-all.sh <android|ios> <out-dir> [ios-udid]
-# Needs FLEET_URL, PAIR_CODE, FLEET_TOKEN, SESSION_ID and SCRATCH_HOME (start-fleet.sh) and a running emulator or
+# Needs FLEET_URL, PAIR_CODE, FLEET_TOKEN, SESSION_ID and SCRATCH_HOME, and takes LLM_URL (start-fleet.sh) and a running emulator or
 # simulator with the app installed.
 # Screenshots land in <out-dir>/<platform>-light and <platform>-dark. Both walks run even if the first fails.
 set -uo pipefail
@@ -21,7 +21,7 @@ appearance() {
 maestro_run() {
   local args=(); [ "$PLATFORM" = ios ] && args=(--device "$UDID")
   local code=0
-  maestro "${args[@]}" test -e FLEET_URL="$FLEET_URL" -e PAIR_CODE="$PAIR_CODE" "${@}" || code=$?
+  maestro "${args[@]}" test -e FLEET_URL="$FLEET_URL" -e PAIR_CODE="$PAIR_CODE" -e LLM_URL="${LLM_URL:-http://127.0.0.1:5031}" "${@}" || code=$?
   if [ "$code" -ne 0 ] && [ "$(uname)" = Linux ]; then
     echo "maestro exited with $code"
     free -m

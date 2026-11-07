@@ -3,7 +3,8 @@
 # 127.0.0.1:5431 asking for a key, one session with a reply, and "Ask before changes" on so commands wait for you.
 # OpenCode is the version ci.yml pins (installed by the workflow). Everything Fleet and OpenCode write goes under a
 # fresh scratch HOME made here, never the caller's: Fleet deletes and rewrites ~/.weave/fleet.db.
-# Writes FLEET_URL, PAIR_CODE and SCRATCH_HOME, SESSION_ID and FLEET_E2E_DIR to $GITHUB_ENV when set, else prints them.
+# Writes FLEET_URL, LLM_URL (the scripted model, which walk.yaml releases), PAIR_CODE, SCRATCH_HOME, SESSION_ID and
+# FLEET_E2E_DIR to $GITHUB_ENV when set, else prints them.
 set -euo pipefail
 ROOT=$(cd "$(dirname "$0")/../.." && pwd)
 WORK=${FLEET_E2E_DIR:-$(mktemp -d)}
@@ -90,5 +91,5 @@ api -X PUT $BASE/api/preferences/PermissionLevel -d '{"value":"ask"}' > /dev/nul
 CODE=$(api -X POST $BASE/api/machine/pairing -d "{\"baseUrl\":\"$BASE\"}" | python3 -c "import json,sys;print(json.load(sys.stdin)['manualCode'])")
 
 out=${GITHUB_ENV:-/dev/stdout}
-{ echo "FLEET_URL=$BASE"; echo "PAIR_CODE=$CODE"; echo "SCRATCH_HOME=$HOME"; echo "SESSION_ID=$SESSION"; echo "FLEET_TOKEN=$TOKEN"; echo "FLEET_E2E_DIR=$WORK"; } >> "$out"
+{ echo "FLEET_URL=$BASE"; echo "LLM_URL=http://127.0.0.1:$LLM_PORT"; echo "PAIR_CODE=$CODE"; echo "SCRATCH_HOME=$HOME"; echo "SESSION_ID=$SESSION"; echo "FLEET_TOKEN=$TOKEN"; echo "FLEET_E2E_DIR=$WORK"; } >> "$out"
 echo "Fleet ready: session $SESSION, code $CODE"
