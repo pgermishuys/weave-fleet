@@ -38,7 +38,8 @@ public sealed record MemoryNoteView(
     int? Lifetime = null,
     int? DaysLeft = null,
     bool Expired = false,
-    int Relearned = 0);
+    int Relearned = 0,
+    string? How = null);
 
 /// <summary>
 /// What a session in <see cref="Repository"/> reads, and roughly what that costs per request. <see cref="ExpiredNotes"/>
@@ -259,7 +260,7 @@ public sealed partial class AgentMemoryService(
     /// <summary>
     /// Saves a note an agent in <paramref name="session"/> asked for, as its owner. A note that repeats one in the same
     /// list confirms that one instead of adding another. <paramref name="replaces"/> swaps a wrong note for this one;
-    /// it must be the machine's or this repository's. A full list refuses until the agent forgets or merges a note.
+    /// it must be the machine's or this repository's. <paramref name="how"/> says how the agent knows a learned note holds. A full list refuses until the agent forgets or merges a note.
     /// </summary>
     public async Task<Result<MemorySaveOutcome>> SaveFromAgentAsync(
         Session session,
@@ -267,6 +268,7 @@ public sealed partial class AgentMemoryService(
         string? text,
         string? kind,
         string? replaces,
+        string? how = null,
         CancellationToken ct = default)
     {
         if (ParseList(list) is not { } parsed)
@@ -283,6 +285,8 @@ public sealed partial class AgentMemoryService(
         var trimmed = text!.Trim();
         var noteKind = MemoryKinds.IsAgentKind(kind) ? kind! : MemoryKinds.Learned;
         var now = _time.GetUtcNow();
+        // Only a learned note says how it's known: what the user said needs no test.
+        var noteHow = noteKind == MemoryKinds.Learned ? AgentMemory.CleanHow(how) : null;
 
         MemoryNote? replaced = null;
         if (!string.IsNullOrWhiteSpace(replaces))
@@ -300,7 +304,7 @@ public sealed partial class AgentMemoryService(
         if (same is not null && replaced is null)
         {
             // Saying it again confirms it: it stays, dated today, and its days start again.
-            var confirmed = same with { Updated = now };
+            var confirmed = same with { Updated = now, How = noteHow ?? same.How };
             await store.SaveAsync(userId, confirmed, ct).ConfigureAwait(false);
             await RefreshContextAsync(userId, Touched.Of(confirmed), ct).ConfigureAwait(false);
             return new MemorySaveOutcome(confirmed, null, AlreadyKnown: true);
@@ -333,7 +337,8 @@ public sealed partial class AgentMemoryService(
             previous?.List == parsed ? previous.Created : now,
             now,
             Lifetime(noteKind, replaced, relearned),
-            (previous?.Relearned ?? 0) + (relearned is null ? 0 : 1));
+            (previous?.Relearned ?? 0) + (relearned is null ? 0 : 1),
+            noteHow);
 
         if (replaced is not null && replaced.Id != note.Id)
             await store.DeleteAsync(userId, [replaced.Id], ct).ConfigureAwait(false);
@@ -595,7 +600,8 @@ public sealed partial class AgentMemoryService(
             note.Lifetime,
             note.Lifetime is { } lifetime ? Math.Max(lifetime - used, 0) : null,
             note.Lifetime is { } limit && used > limit,
-            note.Relearned);
+            note.Relearned,
+            note.How);
     }
 
     private static readonly StringComparer PathComparer =

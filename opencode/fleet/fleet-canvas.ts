@@ -647,9 +647,13 @@ export const FleetCanvasPlugin = async (input: { directory?: string }) => ({
                 type: "string",
                 description: "The id of a note this one corrects or merges (from the list in your instructions), or an empty string for a new note.",
               },
+              how: {
+                type: "string",
+                description: "How you know it holds: what you ran or saw, in a few words. An empty string if you haven't checked.",
+              },
             },
-            execute: (args: { text: string; list: string; kind: string; replaces: string }, context: ToolContext) =>
-              callFleet("save", context, { text: args.text, list: args.list, kind: args.kind, replaces: args.replaces }, MEMORY_PATH + "save"),
+            execute: (args: { text: string; list: string; kind: string; replaces: string; how?: string }, context: ToolContext) =>
+              callFleet("save", context, { text: args.text, list: args.list, kind: args.kind, replaces: args.replaces, how: args.how ?? "" }, MEMORY_PATH + "save"),
           },
           fleet_memory_forget: {
             description: "Remove a note from Fleet memory that turned out wrong or out of date. Use its id from the list in your instructions.",

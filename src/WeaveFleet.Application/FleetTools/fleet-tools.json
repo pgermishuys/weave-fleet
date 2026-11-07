@@ -416,13 +416,18 @@
           "replaces": {
             "type": "string",
             "description": "The id of a note this one corrects or merges (from the list in your instructions), or an empty string for a new note."
+          },
+          "how": {
+            "type": "string",
+            "description": "How you know it holds: what you ran or saw, in a few words. An empty string if you haven't checked."
           }
         },
         "required": [
           "text",
           "list",
           "kind",
-          "replaces"
+          "replaces",
+          "how"
         ]
       }
     },

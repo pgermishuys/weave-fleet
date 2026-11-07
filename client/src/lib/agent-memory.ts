@@ -35,6 +35,8 @@ export interface MemoryNote {
   expired?: boolean;
   /** How many times an agent learned it again after it expired. */
   relearned?: number;
+  /** How the agent knew a learned note holds (what it ran or saw); none when it hadn't checked. */
+  how?: string | null;
 }
 
 export interface MemoryRepository {

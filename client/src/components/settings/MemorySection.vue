@@ -474,6 +474,17 @@ onMounted(load);
                   >{{ memoryKindLabel(note.kind) }}</span>
                   {{ origin(note) }}
                   <span
+                    v-if="note.kind === 'learned' && note.how"
+                    class="memory-tested"
+                    :title="note.how"
+                    :data-testid="`memory-how-${note.id}`"
+                  >Tested · {{ note.how }}</span>
+                  <span
+                    v-else-if="note.kind === 'learned'"
+                    class="memory-untested"
+                    :data-testid="`memory-how-${note.id}`"
+                  >Untested</span>
+                  <span
                     v-if="memoryLifeLabel(note)"
                     class="memory-life"
                     :data-testid="`memory-life-${note.id}`"
@@ -533,7 +544,7 @@ onMounted(load);
             class="mt-2 rounded-card border border-dashed border-border p-3 text-xs text-muted"
           >
             {{ search ? "No notes match." : group.list === 'machine'
-              ? "No notes about this machine yet. Agents save one when something fails and they find what works."
+              ? "No notes about this machine yet. Agents save what a later session here would want to know."
               : `No notes for ${repositoryName} yet. Say “remember …” in a session, or add one here.` }}
           </p>
         </template>
@@ -791,6 +802,20 @@ onMounted(load);
   display: inline-flex;
   align-items: center;
   gap: 3px;
+}
+
+.memory-tested {
+  color: var(--running);
+  /* One line: a long "how" is cut with an ellipsis (the full text is the tooltip). */
+  min-width: 0;
+  max-width: 28rem;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.memory-untested {
+  color: var(--idle);
 }
 
 .memory-kind--from-you {

@@ -132,7 +132,7 @@ public static class CanvasBridgeEndpoints
                     : UnknownCaller());
 
         memory.MapPost("/save", async (MemoryBridgeRequest request, HttpContext http, AgentMemoryBridge bridge, CancellationToken ct)
-            => ToResult(await bridge.SaveAsync(BridgeToken(http), request.HarnessSessionId, request.List, request.Text, request.Kind, request.Replaces, ct)))
+            => ToResult(await bridge.SaveAsync(BridgeToken(http), request.HarnessSessionId, request.List, request.Text, request.Kind, request.Replaces, request.How, ct)))
             .WithName("MemoryBridgeSave");
 
         memory.MapPost("/forget", async (MemoryBridgeRequest request, HttpContext http, AgentMemoryBridge bridge, CancellationToken ct)

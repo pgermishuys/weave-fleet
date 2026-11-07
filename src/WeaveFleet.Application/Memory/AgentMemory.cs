@@ -41,6 +41,21 @@ public static class AgentMemory
     /// </summary>
     public const int LearnedLifetimeDays = 7;
 
+    /// <summary>The longest a note's "how we know" is kept, in characters.</summary>
+    public const int MaxHowLength = 160;
+
+    /// <summary>
+    /// A "how we know" as it's kept: on one line, trimmed, cut to <see cref="MaxHowLength"/>; <see langword="null"/>
+    /// when there's nothing (the agent hadn't checked).
+    /// </summary>
+    public static string? CleanHow(string? how)
+    {
+        if (string.IsNullOrWhiteSpace(how))
+            return null;
+        var line = string.Join(' ', how.Split(['\r', '\n'], StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries));
+        return line.Length <= MaxHowLength ? line : line[..MaxHowLength].TrimEnd();
+    }
+
     /// <summary>The longest a learned note lasts however often it was learned again, in days of use.</summary>
     public const int MaxLifetimeDays = 56;
 
@@ -112,6 +127,10 @@ public static class MemoryKinds
 /// <see langword="null"/> when it never expires: notes from the user, and learned notes the user chose to keep.
 /// </param>
 /// <param name="Relearned">How many times an agent learned this note again after it expired.</param>
+/// <param name="How">
+/// How the agent knew the note holds (what it ran or saw), in a few words; none when it hadn't checked, and for notes
+/// saved before this was recorded. Only learned notes carry it.
+/// </param>
 public sealed record MemoryNote(
     string Id,
     MemoryList List,
@@ -123,7 +142,8 @@ public sealed record MemoryNote(
     DateTimeOffset Created,
     DateTimeOffset Updated,
     int? Lifetime = null,
-    int Relearned = 0);
+    int Relearned = 0,
+    string? How = null);
 
 /// <summary>Whether memory is on for the current user.</summary>
 public sealed class AgentMemoryFeature(IUserPreferenceRepository preferences)

@@ -223,6 +223,21 @@ public sealed class McpEndpointTests : IClassFixture<McpEndpointTests.Server>, I
     // ── tools/call ─────────────────────────────────────────────────────────────
 
     [Fact]
+    public async Task A_memory_save_keeps_how_the_note_is_known_and_still_saves_without_it()
+    {
+        await SetPreferencesAsync((AgentMemory.PreferenceKey, "true"));
+
+        var tested = await CallAsync("fleet_memory_save", new { text = "Use gh for GitHub.", list = "machine", kind = "learned", replaces = "", how = "ran gh pr list" });
+        var older = await CallAsync("fleet_memory_save", new { text = "Disk fills at /tmp.", list = "machine", kind = "learned", replaces = "" });
+
+        tested.GetProperty("isError").GetBoolean().ShouldBeFalse();
+        older.GetProperty("isError").GetBoolean().ShouldBeFalse();
+        var notes = await _factory!.Services.GetRequiredService<IMemoryStore>().ListAsync("owner-user");
+        notes.Single(note => note.Text == "Use gh for GitHub.").How.ShouldBe("ran gh pr list");
+        notes.Single(note => note.Text == "Disk fills at /tmp.").How.ShouldBeNull();
+    }
+
+    [Fact]
     public async Task A_call_runs_the_tool_for_the_callers_session_and_keeps_its_card_for_the_harness()
     {
         var result = await CallAsync("fleet_browser_open", new { url = "http://localhost:5173/", title = "Flow" }, callId: "toolu_open");

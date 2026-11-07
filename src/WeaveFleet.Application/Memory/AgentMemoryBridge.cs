@@ -24,6 +24,7 @@ public sealed class AgentMemoryBridge(
         string? text,
         string? kind,
         string? replaces,
+        string? how = null,
         CancellationToken ct = default)
     {
         if (await ResolveAsync(bridgeToken, harnessSessionId, ct).ConfigureAwait(false) is not { } caller)
@@ -39,7 +40,7 @@ public sealed class AgentMemoryBridge(
             if (session.IsFailure)
                 return UnknownCaller();
 
-            var saved = await memory.SaveFromAgentAsync(session.Value, list, text, kind, replaces, ct).ConfigureAwait(false);
+            var saved = await memory.SaveFromAgentAsync(session.Value, list, text, kind, replaces, how, ct).ConfigureAwait(false);
             if (saved.IsFailure)
                 return CanvasResult.Fail<CanvasToolOutput>(CanvasErrorKind.Invalid, saved.Error.Description);
 

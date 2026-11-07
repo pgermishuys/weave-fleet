@@ -161,6 +161,22 @@ describe("MemorySection", () => {
     expect(api.keepMemoryNote).toHaveBeenCalledWith("bbbb0002");
   });
 
+  it("says how a learned note is known: tested with how, or untested; notes from you say nothing", async () => {
+    api.listMemoryNotes.mockResolvedValue({
+      ...notes,
+      machineNotes: [
+        note("bbbb0002", "Use gh for GitHub.", { how: "ran gh pr list" }),
+        note("cccc0003", "Disk fills at /tmp."),
+        note("dddd0004", "Prefer short answers.", { kind: "from-you" }),
+      ],
+    });
+    const wrapper = await mountSection();
+
+    expect(wrapper.get("[data-testid=memory-how-bbbb0002]").text()).toBe("Tested · ran gh pr list");
+    expect(wrapper.get("[data-testid=memory-how-cccc0003]").text()).toBe("Untested");
+    expect(wrapper.find("[data-testid=memory-how-dddd0004]").exists()).toBe(false);
+  });
+
   it("says a learned note was kept, and offers no Keep for it", async () => {
     api.listMemoryNotes.mockResolvedValue({
       ...notes,
