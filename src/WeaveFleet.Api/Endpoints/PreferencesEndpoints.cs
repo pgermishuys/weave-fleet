@@ -1,6 +1,8 @@
 using WeaveFleet.Application.Harnesses;
 using WeaveFleet.Application.Mods;
 using WeaveFleet.Application.Mods.Host;
+using WeaveFleet.Application.Sessions;
+using WeaveFleet.Application.Sessions.Activation;
 using WeaveFleet.Application.Skills;
 using WeaveFleet.Application.Users;
 using WeaveFleet.Domain.Repositories;
@@ -41,6 +43,14 @@ public static class PreferencesEndpoints
             // GitHub Copilot's settings (its path, HydraFusion) change what the harness offers: the next read checks again.
             if (key.StartsWith("copilot.", StringComparison.Ordinal))
                 harnessChecks.Forget();
+
+            // What agents can do without asking: every live session takes it now, so it holds from its next tool call.
+            if (key == SessionPermissions.LevelKey || key.StartsWith(SessionPermissions.LevelKey + ".", StringComparison.Ordinal)
+                || key == SessionPermissions.UnattendedKey)
+            {
+                var userId = http.RequestServices.GetRequiredService<IUserContext>().UserId;
+                await http.RequestServices.GetRequiredService<SessionActivation>().ReapplyPermissionsAsync(userId, http.RequestAborted);
+            }
 
             if (mods is not null && !modsWasOn && await mods.IsSwitchedOnAsync())
                 await http.RequestServices.GetRequiredService<ModService>().SwitchedOnAsync(http.RequestAborted);

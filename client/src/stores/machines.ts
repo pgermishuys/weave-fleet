@@ -5,6 +5,7 @@ import type { ProjectSummary } from "@/lib/session-project-groups";
 import { feedHubFor, onDisconnect, onReconnect, retryConnection } from "@/composables/use-signalr-socket";
 import { liveTarget, targetFor, type MachineTarget } from "@/lib/machine-target";
 import { baseUrlOf, onAddressChange, type MachineAddress } from "@/lib/machine-routes";
+import { PERMISSION_LEVEL_NAMES, toPermissionLevel } from "@/lib/permissions";
 import {
   HOME_MACHINE_KEY,
   LIVE_MACHINES_PREFERENCE_KEY,
@@ -113,6 +114,12 @@ export interface MachineEntry {
   tunnelUp?: boolean | null;
   /** Why this Fleet last couldn't reach it, while it can't. Missing from an older home. */
   diagnosis?: MachineDiagnosis | null;
+}
+
+/** The level work sent to a machine runs under, as that machine says; "unknown" from a Fleet too old to say. */
+export function agentWorkLevelName(entry: MachineEntry): string {
+  const level = toPermissionLevel((entry.info?.capabilities ?? entry.capabilities)?.permissionLevel ?? undefined);
+  return level ? PERMISSION_LEVEL_NAMES[level] : "unknown";
 }
 
 /** A machine that isn't live, as its sidebar group shows it: the last session and project lists it returned. */
@@ -489,6 +496,13 @@ export const useMachinesStore = defineStore("machines", () => {
   ]);
 
   const live = computed(() => entries.value.find((entry) => entry.isLive) ?? entries.value[0]);
+
+  /**
+   * The machines agents here can send work to, each with its "Agents here can send it work": the others in home's own
+   * list (only its owner sees that list), never this machine, which is where agents send work from.
+   */
+  const agentWorkEntries = computed(() => entries.value.filter((entry) =>
+    !entry.isHome && entry.key !== home.value?.id && source.value === "server" && agentWork.value[entry.key] !== undefined));
 
   function persist(): void {
     saveMachines(connections.value);
@@ -1100,6 +1114,7 @@ export const useMachinesStore = defineStore("machines", () => {
     startPolling,
     keyOfMachine,
     agentWork,
+    agentWorkEntries,
     setAgentWork,
     reorderAddresses,
     opensInPlace,

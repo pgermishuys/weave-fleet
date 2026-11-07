@@ -30,3 +30,29 @@ export const PERMISSION_LEVEL_NAMES: Record<PermissionLevel, string> = {
   edits: "Allow edits",
   all: "Allow everything",
 };
+
+/** Whether something runs without asking, as Settings → What agents can do shows a level. */
+export type Reach = "allowed" | "ask";
+
+/** A level as its two rows on What agents can do: file edits, and commands (the shell, the web and the browser). */
+export interface LevelReach {
+  edits: Reach;
+  commands: Reach;
+}
+
+export function reachOf(level: PermissionLevel): LevelReach {
+  if (level === "ask") return { edits: "ask", commands: "ask" };
+  if (level === "edits") return { edits: "allowed", commands: "ask" };
+  return { edits: "allowed", commands: "allowed" };
+}
+
+/**
+ * The level after one row changes. No level lets commands run unasked while edits ask (a command can edit files), so
+ * the other row follows: Edit files Ask makes commands ask too, and Run commands Allowed allows edits too.
+ */
+export function levelWith(level: PermissionLevel, row: keyof LevelReach, value: Reach): PermissionLevel {
+  const reach = { ...reachOf(level), [row]: value };
+  if (row === "edits" && value === "ask") return "ask";
+  if (reach.commands === "allowed") return "all";
+  return reach.edits === "allowed" ? "edits" : "ask";
+}

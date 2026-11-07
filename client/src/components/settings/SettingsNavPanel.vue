@@ -61,7 +61,7 @@ const coreGroups: readonly SettingsNavGroup[] = [
     label: "Agents",
     items: [
       { id: "harnesses", label: "Harnesses", icon: Cable },
-      { id: "permissions", label: "Permissions", icon: ShieldCheck },
+      { id: "permissions", label: "What agents can do", icon: ShieldCheck },
       { id: "skills", label: "Skills & tools", icon: Wrench },
       { id: "memory", label: "Memory", icon: Lightbulb },
     ],

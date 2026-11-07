@@ -787,14 +787,38 @@ internal sealed class ClaudeCodeHarnessSession : IHarnessSession
 
     /// <inheritdoc />
     /// <remarks>
-    /// Applies from the next prompt: Fleet switches the running process's permission mode then, or starts another
-    /// (resuming the conversation) when Claude Code can't switch, e.g. into <c>bypassPermissions</c>, or when Fleet's
-    /// permission prompts are needed and the process was started without them.
+    /// Holds from the next tool call: Fleet answers Claude Code's asks by the new policy at once, and a running process
+    /// switches its permission mode now, mid-turn too, so a level that asks more makes it ask Fleet again. It can't switch
+    /// into <c>bypassPermissions</c> unless it started in it; then Fleet allows each ask itself until the next prompt
+    /// starts another process (resuming the conversation).
     /// </remarks>
-    public Task ApplyPermissionsAsync(PermissionPolicy policy, CancellationToken ct)
+    public async Task ApplyPermissionsAsync(PermissionPolicy policy, CancellationToken ct)
     {
         _permissions.Policy = policy;
-        return Task.CompletedTask;
+
+        ClaudeCodeProcessManager? process;
+        ProcessSettings? current;
+        lock (_gate)
+        {
+            process = _process;
+            current = _processSettings;
+        }
+
+        var mode = PermissionModeFor(policy);
+        if (process is not { IsRunning: true } || current is null || current.ReadOnly != policy.ReadOnly
+            || mode == current.PermissionMode || mode == _config.PermissionMode)
+        {
+            return;
+        }
+
+        if (!await SwitchAsync(process, current.PermissionMode, mode, id => ClaudeCodeInput.SetPermissionMode(id, mode), ct).ConfigureAwait(false))
+            return;
+
+        lock (_gate)
+        {
+            if (ReferenceEquals(_process, process) && _processSettings is { } now)
+                _processSettings = now with { PermissionMode = mode };
+        }
     }
 
     /// <inheritdoc />

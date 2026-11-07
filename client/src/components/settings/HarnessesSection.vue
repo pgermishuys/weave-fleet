@@ -17,7 +17,7 @@ import { useAgentBrowserSettings } from "@/composables/use-agent-browser-setting
 import { useSettingsNav } from "@/composables/use-settings-nav";
 import { useWeaveConfig } from "@/composables/use-weave-config";
 import { PERMISSION_LEVEL_NAMES } from "@/lib/permissions";
-import { PERMISSION_LEVELS, useHarnessPermissions } from "@/composables/use-harness-permissions";
+import { useHarnessPermissions } from "@/composables/use-harness-permissions";
 import { forgetHarnessCatalogs } from "@/composables/use-harness-catalog";
 import { useHarnessUpdatePoll } from "@/composables/use-harness-update-poll";
 import { refreshAllHarnesses, useHarnesses } from "@/composables/use-harnesses";
@@ -447,74 +447,26 @@ function statusForHarness(harness: HarnessInfo, enabled: boolean): HarnessStatus
         />
       </section>
 
-      <SettingGroup
-        id="may-do"
-        title="What it may do"
+      <!-- What it may do is set on What agents can do; the tab only says what Fleet hands this harness, and links there. -->
+      <section
+        data-setting-group="may-do"
+        class="scroll-mt-4 rounded-card border border-border bg-card-bg px-4 py-3 text-xs text-muted"
+        :data-testid="`harness-may-do-${selected.id}`"
       >
-        <SettingRow
-          v-if="selected.supportsPermissionLevels"
-          id="harness-permissions"
-          title="Permissions"
-          summary="Applies from each session's next message."
-        >
-          <template #below>
-            <p
-              class="mt-1 font-mono text-[11.5px] text-muted"
-              :data-testid="`permission-handed-${selected.id}`"
-            >
-              {{ permissions.handedText(selected.info) }}
-            </p>
-          </template>
-          <template #control>
-            <select
-              :id="`permission-harness-${selected.id}`"
-              class="h-8 rounded-btn border border-border bg-main-bg px-2 text-xs text-text"
-              :aria-label="`${selected.name} permissions`"
-              :value="permissions.ownLevel(selected.id) ?? 'default'"
-              @change="permissions.setHarnessLevel(selected.id, ($event.target as HTMLSelectElement).value)"
-            >
-              <option value="default">
-                Default ({{ PERMISSION_LEVEL_NAMES[permissions.defaultLevel.value] }})
-              </option>
-              <option
-                v-for="level in PERMISSION_LEVELS"
-                :key="level"
-                :value="level"
-              >
-                {{ PERMISSION_LEVEL_NAMES[level] }}
-              </option>
-            </select>
-          </template>
-        </SettingRow>
-        <SettingRow
-          v-else
-          id="harness-permissions"
-          title="Permissions"
-          :summary="`Fleet can't hand ${selected.name} a permission level yet.`"
-        >
-          <template #below>
-            <span
-              class="sr-only"
-              :data-testid="`permission-handed-${selected.id}`"
-            >Fleet can't hand {{ selected.name }} a permission level yet.</span>
-          </template>
-          <template #control>
-            <span class="text-xs text-muted">Not available</span>
-          </template>
-        </SettingRow>
-        <SettingRow
-          id="harness-browser"
-          title="Browser"
-          :data-testid="`browser-harness-${selected.id}`"
-          :summary="selected.supportsBrowser
-            ? `${browserSettings.enabled ? 'On' : 'Off'} · ${selected.info.presentation?.agentBrowser ?? 'Fleet\'s browser tools.'}`
-            : `Off: Fleet can't add tools to ${selected.name} yet.`"
-        >
-          <template #control>
-            <span class="text-xs text-muted">{{ selected.supportsBrowser && browserSettings.enabled ? "On" : "Off" }}</span>
-          </template>
-        </SettingRow>
-      </SettingGroup>
+        <template v-if="selected.supportsPermissionLevels">
+          Runs at {{ PERMISSION_LEVEL_NAMES[permissions.effectiveLevel(selected.id)] }}<template v-if="!selected.supportsBrowser || !browserSettings.enabled">, without the browser</template>.
+        </template>
+        <template v-else>
+          Fleet can't hand {{ selected.name }} a permission level or the browser: it asks as its own settings say.
+        </template>
+        Edits, commands, the browser and messages are set in
+        <button
+          type="button"
+          class="text-accent underline focus-visible:outline focus-visible:outline-2 focus-visible:outline-accent"
+          data-testid="harness-may-do-link"
+          @click="setActiveSection('permissions')"
+        >What agents can do</button>.
+      </section>
 
       <HarnessWeaveGroup
         :harness-type="selected.id"

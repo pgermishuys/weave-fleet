@@ -13,8 +13,8 @@ import { usePreferencesStore } from "@/stores/preferences";
 export const PERMISSION_LEVELS: readonly PermissionLevel[] = ["ask", "edits", "all"];
 
 /**
- * What each harness may do without asking, from Fleet's preferences (Settings → Permissions sets the default, a
- * harness's own tab can set its own). Shared by that tab's "What it may do" group and the Permissions page's table.
+ * What each harness may do without asking, from Fleet's preferences: Settings → What agents can do sets the default,
+ * and each harness's own level as an exception under it.
  */
 export function useHarnessPermissions() {
   const preferencesStore = usePreferencesStore();

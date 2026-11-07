@@ -26,7 +26,7 @@ const PAGES: Readonly<Record<string, { title: string; line: string }>> = {
   general: { title: "General", line: "Everyday behaviour." },
   appearance: { title: "Appearance", line: "How Fleet looks." },
   harnesses: { title: "Harnesses", line: "The runtimes Fleet drives sessions with. Everything about one harness is on its tab." },
-  permissions: { title: "Permissions", line: "What agents may do without asking, and whether they can use a browser." },
+  permissions: { title: "What agents can do", line: "Edits, commands, messages and other machines: one setting each, with its exceptions." },
   skills: { title: "Skills & tools", line: "What agents can use: skills, tools and, with Mods on, mods." },
   memory: { title: "Memory", line: "What Fleet remembers about each repository." },
   folders: { title: "Folders", line: "Where your repositories are, how worktrees are named, and the disk they take." },
@@ -57,7 +57,7 @@ const header = computed(() => {
 // These pages read the anchor themselves (Harnesses picks a tab, Skills & tools picks tools or mods), so they keep it.
 const OWN_ANCHOR_PAGES: readonly string[] = ["harnesses", "skills"];
 
-// Landing on a group (Folders › Storage, Permissions › Browser) scrolls it into view, once: the anchor is spent after.
+// Landing on a group (Folders › Storage, What agents can do › Browser) scrolls it into view, once: the anchor is spent after.
 watch(
   [activeSection, activeAnchor],
   async () => {

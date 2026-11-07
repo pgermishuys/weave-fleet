@@ -160,6 +160,40 @@ public sealed class SessionOrchestratorActivationTests : IAsyncDisposable
     }
 
     [Fact]
+    public async Task a_changed_level_reaches_the_owners_live_sessions_at_once_not_at_their_next_prompt()
+    {
+        SeedLive("sess-mine", "inst-mine", "user-1");
+        SeedLive("sess-theirs", "inst-theirs", "user-2");
+        var mine = new FakeHarnessSession("inst-mine");
+        var theirs = new FakeHarnessSession("inst-theirs");
+        _builder.InstanceTracker.Register("inst-mine", mine);
+        _builder.InstanceTracker.Register("inst-theirs", theirs);
+        _builder.Build();
+
+        _builder.UserPreferenceRepository.Seed(SessionPermissions.LevelKey, PermissionLevels.Ask);
+        await _builder.Activation.ReapplyPermissionsAsync("user-1", CancellationToken.None);
+
+        mine.AppliedPermissions.ShouldHaveSingleItem().ShouldBe(new PermissionPolicy(PermissionLevels.Ask));
+        mine.SendPromptCalls.ShouldBeEmpty();
+        theirs.AppliedPermissions.ShouldBeEmpty();
+    }
+
+    private void SeedLive(string id, string instanceId, string userId) => _builder.SessionRepository.Seed(new Session
+    {
+        Id = id,
+        WorkspaceId = "ws-wake",
+        InstanceId = instanceId,
+        Title = "Rate limit headers",
+        Status = "active",
+        Directory = "/tmp/fleet-wake",
+        CreatedAt = "2026-01-01",
+        RetentionStatus = "active",
+        HarnessType = "opencode",
+        RuntimeMode = "manual",
+        UserId = userId,
+    });
+
+    [Fact]
     public async Task a_session_whose_checkout_was_removed_gets_it_back_at_the_same_path_before_its_harness_starts()
     {
         using var repository = new RealGitRepository();

@@ -7,8 +7,8 @@ Read these before you offer a feature. Never write to them: tell the user where 
 | Memory | `GET /api/memory` → `enabled` | notes aren't read or saved | Settings → Memory |
 | Workflows | `GET /api/workflows` → 404 "turned off" | no workflow can run | Settings → Labs |
 | Mods | `GET /api/features/mods` → `on` | no mods | Settings → Labs (a Mods tab appears in Settings → Skills & tools once it's on) |
-| Agent browser | `GET /api/agent-browser/settings` → `enabled` | no browser tools | Settings → Permissions → Browser |
-| Messages between sessions | the `fleet_message` tool exists | the tool isn't there | Settings → Labs |
+| Agent browser | `GET /api/agent-browser/settings` → `enabled` | no browser tools | Settings → What agents can do → Browser |
+| Messages between sessions | the `fleet_message` tool exists | the tool isn't there | Settings → What agents can do |
 
 Everything else Fleet stores as a preference: `GET /api/preferences` returns one object of key → value strings (for
 example `Memory`, `Workflows`, `SessionMessages`). A key that isn't there is at its default. `GET /api/config` is
