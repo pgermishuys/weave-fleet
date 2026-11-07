@@ -195,6 +195,11 @@ function handleMachineSessionOpen(machine: MachineEntry, session: SessionListIte
 
 /** Work here on another machine: the same switch as opening one of its sessions, landing on its first page. */
 function handleWorkHere(machine: MachineEntry): void {
+  if (machines.opensInPlace) {
+    machines.setCurrent(machine.key);
+    void router.navigate({ to: "/" });
+    return;
+  }
   if (sessionsList.value) saveSessionListScroll(sessionsList.value.scrollTop);
   machines.openOn(machine.key, "/", {
     sessions: sessionsStore.sessions,

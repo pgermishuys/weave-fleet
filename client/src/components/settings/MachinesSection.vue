@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import { computed, onMounted, onUnmounted, reactive, shallowRef, watch } from "vue";
 import { storeToRefs } from "pinia";
+import { useRouter } from "@tanstack/vue-router";
 import { AlertCircle, Check, Copy, Eye, EyeOff, LoaderCircle, Plus, RefreshCw } from "lucide-vue-next";
 import {
   agentWorkLevelName,
@@ -88,6 +89,17 @@ const justAdded = shallowRef<string | null>(null);
 
 // Sent here by the composer chip, the sessions list or the command palette: open the form once, as if clicked.
 const { addMachineRequested } = useSettingsNav();
+const router = useRouter();
+
+/** Makes that machine the one you're on and goes to its first page: in place with the switch on, else a reload there. */
+function workHere(key: string): void {
+  if (!machines.opensInPlace) {
+    machines.openOn(key, "/");
+    return;
+  }
+  machines.setCurrent(key);
+  void router.navigate({ to: "/" });
+}
 watch(addMachineRequested, (requested) => {
   if (!requested) return;
   addMachineRequested.value = false;
@@ -871,7 +883,7 @@ onUnmounted(() => stopPolling?.());
               type="button"
               :class="buttonSecondaryClass"
               data-testid="machine-open"
-              @click="machines.openOn(entry.key, '/')"
+              @click="workHere(entry.key)"
             >
               Work here
             </button>
