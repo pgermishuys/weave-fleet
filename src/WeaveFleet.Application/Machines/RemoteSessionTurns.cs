@@ -39,7 +39,7 @@ public sealed class RemoteSessionTurns(SessionUpdates updates, RemoteSessions re
         if (awaited.Count == 0)
             return true;
 
-        var (machine, token, _) = await remote.FindAsync(machineId).ConfigureAwait(false);
+        var (machine, token, _) = await remote.FindAsync(machineId, includeNever: true).ConfigureAwait(false);
         if (machine is null)
             return false;
 

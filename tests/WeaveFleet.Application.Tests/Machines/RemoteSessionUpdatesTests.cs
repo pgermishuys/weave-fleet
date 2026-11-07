@@ -21,14 +21,32 @@ public sealed class RemoteSessionUpdatesTests : IDisposable
 
     private readonly FakeMachine _atlas = new();
     private readonly SessionUpdateSender _sender;
+    private int _switchReads;
+
+    private sealed class CountingPreferences(InMemoryUserPreferenceRepository inner, Action read) : WeaveFleet.Domain.Repositories.IUserPreferenceRepository
+    {
+        public Task<string?> GetAsync(string key)
+        {
+            read();
+            return inner.GetAsync(key);
+        }
+
+        public Task<IReadOnlyDictionary<string, string>> GetAllAsync() => inner.GetAllAsync();
+        public Task SetAsync(string key, string value) => inner.SetAsync(key, value);
+    }
 
     public RemoteSessionUpdatesTests()
     {
         var builder = new SessionOrchestratorBuilder().WithUserContext(new TestUserContext("user-1"));
         var preferences = new InMemoryUserPreferenceRepository();
+        builder.SessionRepository.Seed(new WeaveFleet.Domain.Entities.Session
+        {
+            Id = "s-asker", Title = "Asker", Status = "active", Directory = "/tmp", CreatedAt = "2026-10-08",
+            RetentionStatus = "active", HarnessType = "opencode",
+        });
         builder.Build();
         _sender = new SessionUpdateSender(
-            new SessionMessagesFeature(new FleetOptions(), preferences),
+            new SessionMessagesFeature(new FleetOptions(), new CountingPreferences(preferences, () => _switchReads++)),
             builder.SessionRepository,
             new FakeSessionMessageProxy(),
             builder.Prompting,
@@ -49,6 +67,20 @@ public sealed class RemoteSessionUpdatesTests : IDisposable
     }
 
     public void Dispose() => _atlas.Dispose();
+
+    [Fact]
+    public async Task An_update_from_another_machine_is_sent_with_the_session_messages_switch_off()
+    {
+        // Session messages are off by default; hand-off to a machine has its own switch and asked for this update.
+        var remote = new SessionUpdate("s-asker", "s-remote", "user-1", "text", SessionUpdates.Finished, FromOtherMachine: true);
+        var local = remote with { FromOtherMachine = false };
+
+        await _sender.SendAsync(local, CancellationToken.None);
+        _switchReads.ShouldBe(1);
+
+        await _sender.SendAsync(remote, CancellationToken.None);
+        _switchReads.ShouldBe(1);
+    }
 
     [Fact]
     public async Task The_reply_after_the_message_is_read_there_and_names_the_machine()

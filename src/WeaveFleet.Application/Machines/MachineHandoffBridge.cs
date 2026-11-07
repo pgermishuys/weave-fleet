@@ -190,10 +190,14 @@ public sealed class MachineHandoffBridge(
         string text,
         bool notifyWhenDone,
         CancellationToken ct = default)
-        => WithMachineAsync(caller, machineName, async (machine, token) =>
+        => WithMachineAsync(caller, machineName, replyTo: toSessionId, async (machine, token) =>
         {
             if (notifyWhenDone && updates.IsStartedByUpdate(caller.FleetSessionId))
                 return Refused(SessionMessageBridge.NoNotifyFromUpdateMessage);
+
+            // An answer to a session there that messaged this one: not new work, so no ask either.
+            if (asks.HasMessaged(caller.FleetSessionId, machine.Id, toSessionId))
+                asks.Grant(caller.FleetSessionId, machine.Id, toSessionId);
 
             var sender = await SenderAsync(caller).ConfigureAwait(false);
             if (sender is null)
@@ -257,14 +261,29 @@ public sealed class MachineHandoffBridge(
             return await run(caller).ConfigureAwait(false);
     }
 
+    private Task<CanvasResult<CanvasToolOutput>> WithMachineAsync(
+        HarnessCanvasCaller caller,
+        string machineName,
+        Func<RemoteMachine, string, Task<CanvasResult<CanvasToolOutput>>> run)
+        => WithMachineAsync(caller, machineName, replyTo: null, run);
+
     private async Task<CanvasResult<CanvasToolOutput>> WithMachineAsync(
         HarnessCanvasCaller caller,
         string machineName,
+        string? replyTo,
         Func<RemoteMachine, string, Task<CanvasResult<CanvasToolOutput>>> run)
     {
         using (userScope.Begin(caller.UserId))
         {
             var (machine, token, error) = await remote.FindAsync(machineName).ConfigureAwait(false);
+            // A machine set to Never can still be answered by a session there that messaged this one.
+            if (machine is null && replyTo is not null)
+            {
+                var any = await remote.FindAsync(machineName, includeNever: true).ConfigureAwait(false);
+                if (any.Machine is not null && asks.HasMessaged(caller.FleetSessionId, any.Machine.Id, replyTo))
+                    (machine, token, error) = any;
+            }
+
             if (machine is null)
                 return CanvasResult.Fail<CanvasToolOutput>(CanvasErrorKind.NotFound, error!);
             return await run(machine, token!).ConfigureAwait(false);

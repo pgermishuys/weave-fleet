@@ -175,6 +175,21 @@ public sealed class MachineHandoffBridgeTests : IDisposable
     }
 
     [Fact]
+    public async Task A_session_that_messaged_this_one_can_be_answered_even_when_its_machine_is_set_to_Never()
+    {
+        Set(MachineAgentWork.Never);
+        var caller = new HarnessCanvasCaller(Sender, UserId);
+
+        var before = await _bridge.MessageAsync(caller, "atlas", "s-remote", "Done.", notifyWhenDone: false);
+        _asks.Messaged(Sender, "machine-atlas", "s-remote");
+        var reply = await _bridge.MessageAsync(caller, "atlas", "s-remote", "Done.", notifyWhenDone: false);
+
+        before.IsSuccess.ShouldBeFalse();
+        reply.IsSuccess.ShouldBeTrue(reply.Error?.Message);
+        _atlas.Requests.Count(request => request.Request == "POST /api/machine/peer/sessions/s-remote/message").ShouldBe(1);
+    }
+
+    [Fact]
     public async Task A_machine_set_to_Never_is_out_of_reach()
     {
         Set(MachineAgentWork.Never);
