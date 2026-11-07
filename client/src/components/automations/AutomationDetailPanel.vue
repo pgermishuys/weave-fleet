@@ -30,9 +30,12 @@ import { describeDate, fromTrigger, nextRun } from "@/lib/automation-schedule";
 import { describeEventType, eventTypeOf } from "@/lib/automations";
 import type { NewSessionFolder } from "@/lib/new-session-request";
 import { useAutomationsStore, type Automation, type AutomationRun, type CreateAutomationRequest } from "@/stores/automations";
+import { useMachineTarget } from "@/lib/machine-target";
 import { useMachinesStore } from "@/stores/machines";
 import { useWorkflowsStore } from "@/stores/workflows";
 
+// The machine the view shows (MachineScope in AutomationsPage): the list, runs and every change are its.
+const target = useMachineTarget();
 const navigate = useNavigate();
 const { viewMode, activeAutomationId, draft, seedSessionId, setActiveAutomation, resetDraft, clearSelection, startCreate } = useAutomationsNav();
 const {
@@ -45,8 +48,8 @@ const {
   runAutomation,
   fetchRuns,
   refresh,
-} = useAutomations();
-const store = useAutomationsStore();
+} = useAutomations(target);
+const store = useAutomationsStore(target);
 const { repositories } = useRepositories();
 const workflowRuns = useWorkflowsStore();
 const { isWorkflowsEnabled } = useWorkflowsFeature();
@@ -69,6 +72,16 @@ let noticeTimer: ReturnType<typeof setTimeout> | undefined;
 let pollTimer: ReturnType<typeof setTimeout> | undefined;
 
 const currentAutomation = computed(() => automations.value.find((a) => a.id === activeAutomationId.value) ?? null);
+
+/**
+ * Another machine than the live one is shown: its list isn't this machine's, so the machines an automation can run on
+ * can't be offered. The one an existing automation runs on is named read-only (the run that went there knows its name).
+ */
+const runsOnName = computed(() => {
+  const automation = currentAutomation.value;
+  if (target.isLive || !automation?.targetMachineId) return null;
+  return automation.lastRun?.machineName ?? "another machine";
+});
 
 function messageOf(error: unknown, fallback: string): string {
   return error instanceof Error && error.message ? error.message : fallback;
@@ -364,11 +377,15 @@ const firstRunHint = computed(() => {
         />
         {{ formError }}
       </div>
-      <AutomationMachineScope :machine-id="draft.machineId">
+      <AutomationMachineScope
+        :machine-id="draft.machineId"
+        :fixed="!target.isLive"
+      >
         <AutomationComposer
           ref="composer"
           v-model:state="draft"
           :automation="null"
+          :runs-on-fixed="!target.isLive"
           :busy="isSubmitting"
           @submit="handleCreate"
         />
@@ -515,11 +532,16 @@ const firstRunHint = computed(() => {
         />
         {{ formError }}
       </div>
-      <AutomationMachineScope :machine-id="editState.machineId">
+      <AutomationMachineScope
+        :machine-id="editState.machineId"
+        :fixed="!target.isLive"
+      >
         <AutomationComposer
           ref="composer"
           v-model:state="editState"
           :automation="currentAutomation"
+          :runs-on-fixed="!target.isLive"
+          :runs-on-name="runsOnName"
           :busy="isSubmitting"
           @submit="handleSave"
         />

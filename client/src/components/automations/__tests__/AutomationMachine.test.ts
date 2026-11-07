@@ -10,6 +10,7 @@ const { apiFetchMock, navigate } = vi.hoisted(() => ({ apiFetchMock: vi.fn(), na
 vi.mock("@/lib/api-client", async (importOriginal) => ({
   ...(await importOriginal<typeof import("@/lib/api-client")>()),
   apiFetch: apiFetchMock,
+  apiFetchOn: (_machine: unknown, path: string, init?: RequestInit) => apiFetchMock(path, init),
 }));
 vi.mock("@tanstack/vue-router", () => ({ useNavigate: () => navigate, useRouter: () => ({ navigate }) }));
 vi.mock("@/composables/use-signalr-socket", () => ({
@@ -72,6 +73,8 @@ import AutomationsNavPanel from "../AutomationsNavPanel.vue";
 import { useAutomationsNav } from "@/composables/use-automations-nav";
 import { NEW_SESSION_DEFAULTS_KEY, newSessionDefaultsKey } from "@/composables/use-new-session-defaults";
 import { useMachinesStore } from "@/stores/machines";
+import MachineScope from "@/components/layout/MachineScope.vue";
+import { targetFor } from "@/lib/machine-target";
 
 const json = (body: unknown, status = 200) =>
   new Response(JSON.stringify(body), { status, headers: { "Content-Type": "application/json" } });
@@ -291,5 +294,22 @@ describe("An automation that runs on another machine", () => {
     const run = wrapper.get("[data-testid='automation-run']");
     expect(run.text()).toContain("atlas didn't answer");
     expect(run.text()).not.toContain("Done");
+  });
+
+  it("shown for another machine than the live one: no Runs on chip, the machine an automation runs on is named", async () => {
+    localStorage.setItem("weave:machines", JSON.stringify([atlas]));
+    list = [{ ...nightly, targetMachineId: "m-elsewhere", lastRun: { ...onAtlas, machineId: "m-elsewhere", machineName: "relay" } }];
+    runs = [];
+    // The view shows atlas (not the live machine): its list is atlas's, whose machines this machine's list doesn't know.
+    wrapper = mount(
+      defineComponent({ setup: () => () => h(MachineScope, { target: targetFor(atlas) }, () => h(AutomationDetailPanel)) }),
+      { attachTo: document.body, global: { stubs: { teleport: false } } },
+    );
+    await flushPromises();
+    useAutomationsNav().setActiveAutomation("a-night");
+    await flushPromises();
+
+    expect(wrapper.find("[data-testid='new-session-machine']").exists()).toBe(false);
+    expect(wrapper.get("[data-testid='automation-runs-on']").text()).toBe("Runs on relay");
   });
 });

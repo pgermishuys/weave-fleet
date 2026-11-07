@@ -1,5 +1,6 @@
 import { storeToRefs } from "pinia";
 import type { Ref, ShallowRef } from "vue";
+import type { MachineTarget } from "@/lib/machine-target";
 import {
   useAutomationsStore,
   type Automation,
@@ -25,9 +26,12 @@ export interface UseAutomationsResult {
   fetchEventCatalog: () => Promise<string[]>;
 }
 
-/** The shared automations list (see stores/automations.ts), reloaded whenever a view that shows it mounts. */
-export function useAutomations(): UseAutomationsResult {
-  const store = useAutomationsStore();
+/**
+ * The shared automations list of `target`'s machine (see stores/automations.ts), reloaded whenever a view that shows
+ * it mounts.
+ */
+export function useAutomations(target: MachineTarget): UseAutomationsResult {
+  const store = useAutomationsStore(target);
   const { automations, isLoading, error } = storeToRefs(store);
   void store.refresh();
 
