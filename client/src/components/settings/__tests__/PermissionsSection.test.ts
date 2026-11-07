@@ -16,7 +16,11 @@ const { getMock, putMock, apiFetchMock, machinesStore } = vi.hoisted(() => ({
 }));
 
 vi.mock("@/api/client", () => ({ api: { GET: getMock, PUT: putMock } }));
-vi.mock("@/lib/api-client", () => ({ apiFetch: apiFetchMock }));
+// The browser settings ask the machine Settings shows (`apiFetchOn`); the rest of the section asks the live one.
+vi.mock("@/lib/api-client", () => ({
+  apiFetch: apiFetchMock,
+  apiFetchOn: (_machine: unknown, path: string, init?: RequestInit) => apiFetchMock(path, init),
+}));
 vi.mock("@/stores/machines", async (original) => ({
   ...(await original<typeof import("@/stores/machines")>()),
   useMachinesStore: () => machinesStore.current,
