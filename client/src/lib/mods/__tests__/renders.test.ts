@@ -6,7 +6,7 @@ import ToolCard from "@/components/session/ToolCard.vue";
 import type { AccumulatedMessage, AccumulatedToolPart } from "@/lib/client-types";
 import { foldMessages } from "@/lib/phone/fold-steps";
 import { toolRowViews } from "@/lib/mods/points";
-import { MAX_INPUT_BYTES, MAX_OUTPUT_CHARS, resetModRenders } from "@/lib/mods/renders";
+import { MAX_INPUT_BYTES, MAX_OUTPUT_CHARS, resetModRenders, watchModSession } from "@/lib/mods/renders";
 import type { ModWireElement } from "@/lib/mods/types";
 
 const { fetchMock, listeners } = vi.hoisted(() => ({
@@ -274,5 +274,14 @@ describe("controls in a mod's tree", () => {
     toolRowViews.get("ToolUse:s1:c1")!.onAction!({ handle: "h1", kind: "press" }, "desktop");
     await flushPromises();
     expect(renders()).toHaveLength(4);
+  });
+});
+
+describe("watchModSession", () => {
+  it("does not ask for the sites of an empty session id", async () => {
+    fetchMock.mockClear();
+    watchModSession({ connection: {} } as never, "");
+    await flushPromises();
+    expect(fetchMock).not.toHaveBeenCalled();
   });
 });
