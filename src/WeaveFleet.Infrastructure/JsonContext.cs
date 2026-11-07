@@ -63,6 +63,11 @@ internal sealed record ClaudeCodeMapperInfo
     [JsonPropertyName("role")] public required string Role { get; init; }
     [JsonPropertyName("sessionID")] public required string SessionID { get; init; }
     [JsonPropertyName("modelID")] public string? ModelID { get; init; }
+
+    [JsonPropertyName("parentID")]
+    [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+    public string? ParentID { get; init; }
+
     [JsonPropertyName("time")] public required ClaudeCodeMapperInfoTime Time { get; init; }
 }
 

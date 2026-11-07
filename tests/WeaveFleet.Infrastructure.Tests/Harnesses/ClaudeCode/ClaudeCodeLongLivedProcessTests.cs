@@ -35,6 +35,7 @@ public sealed class ClaudeCodeLongLivedProcessTests : IAsyncDisposable
     private readonly ConcurrentQueue<HarnessEvent> _events = new();
     private readonly InMemoryUserPreferenceRepository _preferences = new();
     private readonly InMemorySessionRepository _sessions = new();
+    private readonly InMemoryOutboxRepository _outbox = new();
     private ClaudeCodeHarnessSession? _session;
     private Task _reader = Task.CompletedTask;
 
@@ -741,7 +742,50 @@ public sealed class ClaudeCodeLongLivedProcessTests : IAsyncDisposable
         content[1].GetProperty("text").GetString().ShouldBe("what is this?");
     }
 
+    [Fact]
+    public async Task Its_replies_name_the_prompt_they_answer_so_a_session_waiting_on_it_hears_when_its_done()
+    {
+        if (OperatingSystem.IsWindows())
+            return;
+
+        Start();
+        await PromptAsync("stream me", new PromptOptions { MessageId = "msg_asked" });
+
+        // While it writes (the relay: Fleet's watches here) and once it's saved (the hub: a machine following it).
+        ParentsOf(_events.Where(e => e.Type == EventTypes.MessageUpdated).Select(e => e.Payload!.Value)).ShouldBe(["msg_asked"]);
+        ParentsOf(SavedUpdates()).ShouldBe(["msg_asked"]);
+        AssistantText().ShouldBe(["Streamed 1"]);
+    }
+
+    [Fact]
+    public async Task A_turn_Claude_starts_by_itself_names_no_prompt()
+    {
+        if (OperatingSystem.IsWindows())
+            return;
+
+        Start();
+        await PromptAsync("start background", new PromptOptions { MessageId = "msg_asked" });
+        await WaitForAsync(() => Count(EventTypes.SessionIdle) == 2);
+
+        var wake = Conversation().Single(m => m.Parts.OfType<TextPart>().Any(t => t.Text.StartsWith("The background command finished", StringComparison.Ordinal)));
+        var wakeUpdates = SavedUpdates().Where(info => info.GetProperty("info").GetProperty("id").GetString() == wake.Id).ToList();
+        wakeUpdates.ShouldNotBeEmpty();
+        ParentsOf(wakeUpdates).ShouldBeEmpty();
+        ParentsOf(SavedUpdates().Except(wakeUpdates)).ShouldBe(["msg_asked"]);
+    }
+
     // -----------------------------------------------------------------------
+
+    /// <summary>The <c>message.updated</c> payloads saved for the hub.</summary>
+    private List<JsonElement> SavedUpdates()
+        => [.. _outbox.All.Where(m => m.Type == EventTypes.MessageUpdated).Select(m => JsonDocument.Parse(m.Payload).RootElement)];
+
+    /// <summary>The prompts these <c>message.updated</c> payloads name as their parent, once each.</summary>
+    private static List<string> ParentsOf(IEnumerable<JsonElement> updates)
+        => [.. updates
+            .Select(u => u.GetProperty("info").TryGetProperty("parentID", out var parent) ? parent.GetString() : null)
+            .OfType<string>()
+            .Distinct()];
 
     private Dictionary<string, string> Environment(int start)
         => File.ReadAllLines(Path.Combine(_directory, $"env-{start}.txt"))
@@ -764,7 +808,7 @@ public sealed class ClaudeCodeLongLivedProcessTests : IAsyncDisposable
         services.AddSingleton<ISessionRepository>(sessions);
         services.AddSingleton<IDbConnectionFactory>(connections);
         services.AddSingleton(new SessionActivityWriteService(
-            connections, _messages, delegations, sessions, new InMemorySmartLinkRepository(), new InMemoryOutboxRepository(), new FakeOutboxDispatcher()));
+            connections, _messages, delegations, sessions, new InMemorySmartLinkRepository(), _outbox, new FakeOutboxDispatcher()));
 
         // Which of Fleet's tools a process gets, from the owner's settings.
         services.AddSingleton(new FleetOptions());
@@ -909,7 +953,7 @@ public sealed class ClaudeCodeLongLivedProcessTests : IAsyncDisposable
     /// A stand-in for <c>claude</c> that runs prompts until its stdin closes. Each start appends to <c>starts.txt</c> and
     /// writes its arguments to <c>args-N.txt</c>; every stdin line goes to <c>stdin.txt</c>. Prompts: "start background"
     /// starts a task that finishes a second after the turn, and Claude then goes on by itself; "start slow background"
-    /// does the same, with a turn of its own that takes a while; "start lasting background" starts one that doesn't finish; "hang" starts a tool call that
+    /// does the same, with a turn of its own that takes a while; "start lasting background" starts one that doesn't finish; "stream me" streams its reply as it writes it; "hang" starts a tool call that
     /// only an interrupt ends; "ask me" asks a question and "ask me slowly" and "push slowly" ask long ones, then stop reading
     /// until the test writes <c>go</c>; anything else gets "Reply N".
     /// </summary>
@@ -1023,6 +1067,14 @@ public sealed class ClaudeCodeLongLivedProcessTests : IAsyncDisposable
                     *'ask me'*)
                       echo '{"type":"assistant","message":{"id":"msg_'$n'","role":"assistant","content":[{"type":"tool_use","id":"toolu_ask","name":"AskUserQuestion","input":{"questions":[{"question":"Which colour?","header":"Colour","options":[{"label":"Red","description":"r"},{"label":"Blue","description":"b"}],"multiSelect":false}]}}]},"parent_tool_use_id":null}'
                       echo '{"type":"control_request","request_id":"req_ask","request":{"subtype":"can_use_tool","tool_name":"AskUserQuestion","input":{"questions":[{"question":"Which colour?","header":"Colour","options":[{"label":"Red","description":"r"},{"label":"Blue","description":"b"}],"multiSelect":false}]},"tool_use_id":"toolu_ask"}}'
+                      ;;
+                    *'stream me'*)
+                      echo '{"type":"stream_event","event":{"type":"message_start","message":{"model":"claude-test","id":"msg_'$n'","type":"message","role":"assistant","content":[]}},"parent_tool_use_id":null}'
+                      echo '{"type":"stream_event","event":{"type":"content_block_start","index":0,"content_block":{"type":"text","text":""}},"parent_tool_use_id":null}'
+                      echo '{"type":"stream_event","event":{"type":"content_block_delta","index":0,"delta":{"type":"text_delta","text":"Streamed '$n'"}},"parent_tool_use_id":null}'
+                      echo '{"type":"assistant","message":{"id":"msg_'$n'","role":"assistant","content":[{"type":"text","text":"Streamed '$n'"}]},"parent_tool_use_id":null}'
+                      echo '{"type":"stream_event","event":{"type":"content_block_stop","index":0},"parent_tool_use_id":null}'
+                      echo '{"type":"result","subtype":"success","is_error":false,"result":"Streamed '$n'","session_id":"cc-1"}'
                       ;;
                     *'"hang"'*)
                       echo '{"type":"assistant","message":{"id":"msg_'$n'","role":"assistant","content":[{"type":"tool_use","id":"toolu_hang","name":"Bash","input":{"command":"sleep 600"}}]},"parent_tool_use_id":null}'

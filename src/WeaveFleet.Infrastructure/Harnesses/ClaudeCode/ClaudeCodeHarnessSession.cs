@@ -308,12 +308,13 @@ internal sealed class ClaudeCodeHarnessSession : IHarnessSession
 
             // 1. One turn at a time: a prompt sent mid-turn (Fleet's, or one Claude Code started by itself) waits for
             //    that turn to end, unless the caller can't wait.
-            var turn = await BeginPromptedTurnAsync(failIfBusy, ct).ConfigureAwait(false);
+            var promptId = options?.MessageId ?? AscendingMessageId.New();
+            var turn = await BeginPromptedTurnAsync(promptId, failIfBusy, ct).ConfigureAwait(false);
             try
             {
                 // The conversation is read back from Fleet's database, so the prompt is saved there, under
                 // the id Fleet already showed it with.
-                await PersistUserPromptAsync(text, options, steered: false).ConfigureAwait(false);
+                await PersistUserPromptAsync(text, options, promptId, steered: false).ConfigureAwait(false);
 
                 // 2. Emit session busy status
                 var busyEvent = ClaudeCodeMapper.CreateSessionStatusEvent(_fleetSessionId, "busy");
@@ -385,7 +386,7 @@ internal sealed class ClaudeCodeHarnessSession : IHarnessSession
             return false;
 
         // Had the turn just ended, Claude Code starts one with it by itself, which Fleet follows like any other.
-        await PersistUserPromptAsync(text, options, steered: true).ConfigureAwait(false);
+        await PersistUserPromptAsync(text, options, options.MessageId ?? AscendingMessageId.New(), steered: true).ConfigureAwait(false);
         return true;
     }
 
@@ -405,8 +406,11 @@ internal sealed class ClaudeCodeHarnessSession : IHarnessSession
 
     private const string BusyMessage = "Claude Code is working on a turn.";
 
-    /// <summary>Waits for a running turn to end, then starts Fleet's; with <paramref name="failIfBusy"/> it throws instead.</summary>
-    private async Task<Turn> BeginPromptedTurnAsync(bool failIfBusy, CancellationToken ct)
+    /// <summary>
+    /// Waits for a running turn to end, then starts Fleet's, whose replies name <paramref name="promptId"/>; with
+    /// <paramref name="failIfBusy"/> it throws instead.
+    /// </summary>
+    private async Task<Turn> BeginPromptedTurnAsync(string promptId, bool failIfBusy, CancellationToken ct)
     {
         while (true)
         {
@@ -416,7 +420,11 @@ internal sealed class ClaudeCodeHarnessSession : IHarnessSession
                 if (_status is HarnessSessionStatus.Stopping or HarnessSessionStatus.Stopped)
                     throw new ObjectDisposedException(nameof(ClaudeCodeHarnessSession), "The session has stopped.");
                 if (_turn is null)
-                    return BeginTurn(process: null);
+                {
+                    var turn = BeginTurn(process: null);
+                    _root.PromptId = promptId;
+                    return turn;
+                }
                 if (failIfBusy)
                     throw new HarnessBusyException(BusyMessage);
                 running = _turn.Done.Task;
@@ -1962,7 +1970,7 @@ internal sealed class ClaudeCodeHarnessSession : IHarnessSession
                 {
                     block.Shown = true;
                     MessagePart empty = block.Kind == "text" ? new TextPart(string.Empty) { PartId = block.PartId } : new ReasoningPart(string.Empty) { PartId = block.PartId };
-                    _eventChannel.Writer.TryWrite(ForSession(ClaudeCodeMapper.CreateMessageUpdatedEvent(streaming, conversation.FleetSessionId), conversation.FleetSessionId));
+                    _eventChannel.Writer.TryWrite(ForSession(ClaudeCodeMapper.CreateMessageUpdatedEvent(streaming, conversation.FleetSessionId, conversation.PromptId), conversation.FleetSessionId));
                     if (ClaudeCodeMapper.CreatePartUpdatedEvent(streaming.Id, conversation.FleetSessionId, empty, streaming.Parts.Count) is { } started)
                         _eventChannel.Writer.TryWrite(ForSession(started, conversation.FleetSessionId));
                 }
@@ -2340,7 +2348,9 @@ internal sealed class ClaudeCodeHarnessSession : IHarnessSession
             var outboxMessages = new List<OutboxMessage>();
             var createdAt = DateTimeOffset.UtcNow.ToString("O");
 
-            var messageUpdatedEvent = ClaudeCodeMapper.CreateMessageUpdatedEvent(message, sessionId);
+            // A reply in the session's own conversation names the prompt it answers; a subagent's, in its child session, doesn't.
+            var parentId = message.Role == "assistant" && sessionId == _root.FleetSessionId ? _root.PromptId : null;
+            var messageUpdatedEvent = ClaudeCodeMapper.CreateMessageUpdatedEvent(message, sessionId, parentId);
             outboxMessages.Add(CreateOutboxMessage(sessionId, messageUpdatedEvent, createdAt));
 
             foreach (var partEvent in partEvents)
@@ -2364,7 +2374,7 @@ internal sealed class ClaudeCodeHarnessSession : IHarnessSession
         }
     }
 
-    private async Task PersistUserPromptAsync(string text, PromptOptions? options, bool steered)
+    private async Task PersistUserPromptAsync(string text, PromptOptions? options, string messageId, bool steered)
     {
         try
         {
@@ -2375,7 +2385,7 @@ internal sealed class ClaudeCodeHarnessSession : IHarnessSession
                 text,
                 DateTimeOffset.UtcNow,
                 options?.Agent,
-                options?.MessageId ?? AscendingMessageId.New(),
+                messageId,
                 options?.Attachments) with { Steered = steered };
             await repo.UpsertAsync(MessagePersistenceService.ToPersistedMessage(_fleetSessionId, message)).ConfigureAwait(false);
         }
@@ -2443,6 +2453,13 @@ internal sealed class ClaudeCodeHarnessSession : IHarnessSession
         /// <summary>A subagent's child session reads as working.</summary>
         public bool Busy { get; set; }
 
+        /// <summary>
+        /// The session's own conversation: the Fleet prompt the running turn answers, which its replies name as their
+        /// parent, so a session waiting on that prompt (<c>notifyWhenDone</c>) knows which turn is its. Null for a
+        /// turn Claude Code started by itself.
+        /// </summary>
+        public string? PromptId { get; set; }
+
         /// <summary>What each message's model call used, by Claude's message id.</summary>
         public Dictionary<string, MessageUsage> Usage { get; } = new(StringComparer.Ordinal);
 
@@ -2456,6 +2473,7 @@ internal sealed class ClaudeCodeHarnessSession : IHarnessSession
         {
             Usage.Clear();
             Stepped.Clear();
+            PromptId = null;
             PendingStep = null;
             Messages.Clear();
             ToolCallMessageIds.Clear();
