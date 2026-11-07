@@ -18,7 +18,9 @@ const NewSessionPage = defineComponent({
     const machines = useMachinesStore();
     const target = computed(() => {
       const picked = machines.entries.find((entry) => entry.key === workspaceUi.newSessionMachine);
-      return picked ? targetFor(picked.connection) : liveTarget();
+      if (picked) return targetFor(picked.connection);
+      // Nothing picked: the machine you're on (the live one unless "Switch machines without reloading" is on).
+      return machines.opensInPlace ? machines.targetOfKey(machines.currentKey) : liveTarget();
     });
     provideMachineTarget(() => target.value);
 

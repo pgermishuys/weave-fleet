@@ -683,6 +683,13 @@ function removeGitHubPreset(): void {
  */
 function fixNoHarness(): void {
   if (!target.isLive) {
+    if (machines.opensInPlace) {
+      // Settings opens on the machine you're on: make it that one, on Harnesses.
+      machines.setCurrent(target.key);
+      setActiveSection("harnesses");
+      void navigate({ to: "/settings" });
+      return;
+    }
     machines.openOn(target.key, "/settings");
     return;
   }

@@ -2075,6 +2075,24 @@ describe("NewSessionComposer", () => {
 
         expect(openOn).toHaveBeenCalledWith("m-mac", "/settings");
       });
+
+      it("with the switch on, opens that machine's Harnesses in place", async () => {
+        addMachines(macbook);
+        noHarnessReason.value = "OpenCode isn't installed.";
+        const preferences = usePreferencesStore();
+        preferences.hasFetched = true;
+        preferences.preferences = { MachineSwitch: "true" };
+        const view = await mountOn(macbook);
+        const machines = useMachinesStore();
+        const openOn = vi.spyOn(machines, "openOn").mockImplementation(() => {});
+
+        await view.get("[data-testid='new-session-no-harness'] button").trigger("click");
+
+        expect(openOn).not.toHaveBeenCalled();
+        expect(machines.currentKey).toBe("m-mac");
+        expect(useSettingsNav().activeSection.value).toBe("harnesses");
+        expect(mocks.navigate).toHaveBeenCalledWith({ to: "/settings" });
+      });
     });
   });
 });

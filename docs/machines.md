@@ -259,20 +259,27 @@ loginctl enable-linger "$USER"   # keep it running when you're logged out
 
 ## Switching machines without a reload (Labs)
 
-Turn on **Switch machines without reloading** in Settings → Labs. Opening a session on another machine then keeps the
-page where it is: no blank window, the conversation shows in a fraction of a second, and the **Live** badge in the
-sessions list moves to that machine. The machine you're on is the machine of the session you have open.
+Turn on **Switch machines without reloading** in Settings → Labs. Nothing in Fleet reloads to change machine then: no
+blank window, a session on another machine shows in a fraction of a second, and the **Live** badge in the sessions
+list moves to the machine you're on. The machine you're on is the machine of the session you have open, or the one you
+last chose with **Work here**.
 
-- **Settings opens on the machine you're on.** A machine switch at the top of the settings menu ("Settings for") lists
-  every machine with its session count; picking one changes only the pages on the right. Appearance and Machines are
-  marked **This browser**, because they belong to this browser, not to a machine.
-- **Folders, Harnesses, What agents can do, Skills & tools, Memory, Updates & about and API keys ask the machine
-  shown.** General and Labs say they come in a later step while another machine is shown, rather than showing the
-  live machine's settings as that machine's. On What agents can do, the list of machines this machine may send work
-  to isn't shown for another machine yet, and Dream each night doesn't offer to open its automation (automations are
-  the live machine's).
+- **Sessions, Settings, Automations and Analytics follow the machine you're on** (Workflows too, once it lands). Each
+  of Settings, Automations and Analytics has its own machine switch at the top of its menu; picking a machine there
+  changes only that view, and each opens on the machine you're on again the next time you visit it.
+- **Settings:** Appearance and Machines are marked **This browser**, because they belong to this browser, not to a
+  machine. Folders, Harnesses, What agents can do, Skills & tools, Memory, Updates & about and API keys ask the machine
+  shown. General and Labs say they come in a later step while another machine is shown, rather than showing the live
+  machine's settings as that machine's. On What agents can do, the list of machines this machine may send work to isn't
+  shown for another machine yet, and Dream each night doesn't offer to open its automation.
+- **Work here** (right-click a machine's heading in the sessions list) and **Work here** on a machine's card in
+  Settings → Machines make that machine the one you're on and go to its first page, in place. The composer's "fix the
+  harness" link for another machine opens Settings on that machine's Harnesses page, in place. Jobs, Fleet, automation
+  runs, the composer and message links open another machine's sessions in place too.
 - Other machines are still checked every 15 seconds; turn on **Keep every machine live** as well for live updates.
-- **Work here** and Settings → Machines › Open still reload the page onto that machine.
+- **Still reloads:** forgetting the machine the page is connected to, and the way back to this computer when that
+  machine can't be reached. The page's own connection is still to one machine, its live one; changing that without a
+  reload isn't done yet. With the switch off, every one of these reloads as it always did.
 
 ## Updating your machines
 

@@ -1,6 +1,8 @@
 import { defineComponent, onMounted, watch } from "vue";
 import { createFileRoute, useRouter } from "@tanstack/vue-router";
 import FleetDashboard from "@/components/dashboard/FleetDashboard.vue";
+import MachineScope from "@/components/layout/MachineScope.vue";
+import { useMachinesStore } from "@/stores/machines";
 import { useMissionControlFeature } from "@/composables/use-mission-control-feature";
 import { usePreferencesStore } from "@/stores/preferences";
 
@@ -42,7 +44,16 @@ export const HomePage = defineComponent({
     onMounted(() => {
       if (phone) void router.navigate({ to: "/phone", replace: true });
     });
-    return () => <FleetDashboard />;
+    // The dashboard shows the machine you're on: the live one, or with the switch on the one Work here chose.
+    const machines = useMachinesStore();
+    return () => {
+      const target = machines.targetOfKey(machines.currentKey);
+      return (
+        <MachineScope key={target.key} target={target}>
+          <FleetDashboard />
+        </MachineScope>
+      );
+    };
   },
 });
 
