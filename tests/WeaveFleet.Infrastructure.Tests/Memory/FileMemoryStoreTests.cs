@@ -42,6 +42,21 @@ public sealed class FileMemoryStoreTests : IDisposable
     }
 
     [Fact]
+    public async Task How_a_note_is_known_is_kept_in_the_front_matter_and_a_note_without_one_loads_with_none()
+    {
+        var note = new MemoryNote("1a2b3c4e", MemoryList.Machine, "Use gh.", MemoryKinds.Learned, null, null, null, Saved, Saved, Lifetime: 7, How: "ran gh pr list");
+
+        await _store.SaveAsync("local-user", note);
+
+        var file = Directory.GetFiles(Path.Combine(_data, "memory"), "1a2b3c4e.md", SearchOption.AllDirectories).Single();
+        (await File.ReadAllTextAsync(file)).ShouldContain("\nhow: ran gh pr list\n---\n");
+        (await _store.ListAsync("local-user")).Single().How.ShouldBe("ran gh pr list");
+
+        var old = FileMemoryStore.Parse("aaaa0009", "---\nlist: machine\nkind: learned\ncreated: 2026-09-27T08:30:00.0000000+00:00\n---\nOld note.\n");
+        old.ShouldNotBeNull().How.ShouldBeNull();
+    }
+
+    [Fact]
     public async Task A_file_that_isnt_a_note_is_skipped_and_left_alone()
     {
         await _store.SaveAsync("local-user", Note("aaaa0001", "Kept."));

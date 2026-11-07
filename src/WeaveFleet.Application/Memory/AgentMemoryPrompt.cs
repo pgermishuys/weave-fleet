@@ -43,7 +43,8 @@ public static class AgentMemoryPrompt
             text.AppendLine(
                 "Memory is for what a later session couldn't easily find out again and would act differently for knowing: how "
                 + "this repository and machine really behave, plans that span sessions, traps, and what the user wants. You decide "
-                + "what's worth a note. Read the notes below before you start, and test a note before you rely on it.");
+                + "what's worth a note. Read the notes below before you start, and test a note before you rely on it. Say in `how` how you know a note "
+                + "holds; when you test an untested note and it holds, save it again with `replaces` and a `how`.");
             text.AppendLine();
             text.AppendLine("Save a note with `fleet_memory_save`:");
             text.AppendLine(
@@ -125,7 +126,11 @@ public static class AgentMemoryPrompt
     private static void AppendNote(StringBuilder text, MemoryNote note)
     {
         var date = note.Updated.UtcDateTime.ToString("d MMM yyyy", CultureInfo.InvariantCulture);
-        text.Append("- [").Append(note.Id).Append("] ").Append(OneLine(note.Text)).Append(" (").Append(date).AppendLine(")");
+        // A learned note says whether anyone checked it; what the user said needs no test.
+        var status = note.Kind == MemoryKinds.Learned
+            ? (AgentMemory.CleanHow(note.How) is { } how ? "tested: " + how + "; " : "untested; ")
+            : "";
+        text.Append("- [").Append(note.Id).Append("] ").Append(OneLine(note.Text)).Append(" (").Append(status).Append(date).AppendLine(")");
     }
 
     private static string OneLine(string text)

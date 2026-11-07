@@ -246,6 +246,8 @@ internal sealed partial class FileMemoryStore(FleetOptions options, ILogger<File
             text.Append("lifetime: ").Append(Never).Append('\n');
         if (note.Relearned > 0)
             text.Append("relearned: ").Append(note.Relearned.ToString(CultureInfo.InvariantCulture)).Append('\n');
+        if (AgentMemory.CleanHow(note.How) is { } how)
+            text.Append("how: ").Append(how).Append('\n');
         text.Append("---\n");
         text.Append(note.Text.Trim()).Append('\n');
         return text.ToString();
@@ -296,7 +298,8 @@ internal sealed partial class FileMemoryStore(FleetOptions options, ILogger<File
             created,
             ParseTime(fields.GetValueOrDefault("updated")) ?? created,
             ParseLifetime(fields.GetValueOrDefault("lifetime"), kind),
-            int.TryParse(fields.GetValueOrDefault("relearned"), NumberStyles.None, CultureInfo.InvariantCulture, out var relearned) ? relearned : 0);
+            int.TryParse(fields.GetValueOrDefault("relearned"), NumberStyles.None, CultureInfo.InvariantCulture, out var relearned) ? relearned : 0,
+            AgentMemory.CleanHow(fields.GetValueOrDefault("how")));
     }
 
     /// <summary>

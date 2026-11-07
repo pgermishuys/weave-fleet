@@ -474,6 +474,16 @@ onMounted(load);
                   >{{ memoryKindLabel(note.kind) }}</span>
                   {{ origin(note) }}
                   <span
+                    v-if="note.kind === 'learned' && note.how"
+                    class="memory-tested"
+                    :data-testid="`memory-how-${note.id}`"
+                  >Tested · {{ note.how }}</span>
+                  <span
+                    v-else-if="note.kind === 'learned'"
+                    class="memory-untested"
+                    :data-testid="`memory-how-${note.id}`"
+                  >Untested</span>
+                  <span
                     v-if="memoryLifeLabel(note)"
                     class="memory-life"
                     :data-testid="`memory-life-${note.id}`"
@@ -791,6 +801,14 @@ onMounted(load);
   display: inline-flex;
   align-items: center;
   gap: 3px;
+}
+
+.memory-tested {
+  color: var(--running);
+}
+
+.memory-untested {
+  color: var(--idle);
 }
 
 .memory-kind--from-you {

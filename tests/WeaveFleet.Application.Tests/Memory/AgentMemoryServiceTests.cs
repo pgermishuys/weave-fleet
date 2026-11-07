@@ -75,7 +75,7 @@ public sealed class AgentMemoryServiceTests : IDisposable
         var saved = await _memory.SaveFromAgentAsync(Session(_repository), "machine", "WebFetch can't read github.com; use gh.", "learned", replaces: null);
 
         saved.IsSuccess.ShouldBeTrue();
-        _store.Machine.ShouldNotBeNull().ShouldContain($"[{saved.Value.Note.Id}] WebFetch can't read github.com; use gh. (27 Sep 2026)",
+        _store.Machine.ShouldNotBeNull().ShouldContain($"[{saved.Value.Note.Id}] WebFetch can't read github.com; use gh. (untested; 27 Sep 2026)",
             customMessage: "machine notes are in the one file every folder reads");
         _store.Context[_repository].ShouldNotContain("WebFetch");
         var broadcast = _broadcaster.Broadcasts.Single();
@@ -114,6 +114,56 @@ public sealed class AgentMemoryServiceTests : IDisposable
         again.Value.Note.Updated.ShouldBe(_time.GetUtcNow());
         _store.Notes.Count.ShouldBe(1);
         _broadcaster.Broadcasts.Count.ShouldBe(1, "confirming a note isn't news for the user");
+    }
+
+    [Fact]
+    public async Task A_learned_note_keeps_how_it_is_known_and_the_prompt_says_tested_or_untested()
+    {
+        await _memory.SetEnabledAsync(true);
+        var tested = await _memory.SaveFromAgentAsync(Session(_repository), "machine", "Use gh for GitHub.", "learned", null, "ran gh pr list and it worked\non this box");
+        await _memory.SaveFromAgentAsync(Session(_repository), "machine", "Disk fills at /tmp.", "learned", null, "  ");
+        await _memory.SaveFromAgentAsync(Session(_repository), "machine", "Prefer short answers.", "from-you", null, "the user said so");
+
+        tested.Value.Note.How.ShouldBe("ran gh pr list and it worked on this box");
+        _store.Machine.ShouldNotBeNull().ShouldContain($"[{tested.Value.Note.Id}] Use gh for GitHub. (tested: ran gh pr list and it worked on this box; 27 Sep 2026)");
+        _store.Machine.ShouldContain("Disk fills at /tmp. (untested; 27 Sep 2026)");
+        _store.Machine.ShouldContain("Prefer short answers. (27 Sep 2026)");
+        _store.Notes.Single(note => note.Kind == "from-you").How.ShouldBeNull();
+    }
+
+    [Fact]
+    public async Task How_is_cut_to_its_cap()
+    {
+        await _memory.SetEnabledAsync(true);
+        var saved = await _memory.SaveFromAgentAsync(Session(_repository), "machine", "A fact.", "learned", null, new string('x', 400));
+
+        saved.Value.Note.How.ShouldNotBeNull().Length.ShouldBe(AgentMemory.MaxHowLength);
+    }
+
+    [Fact]
+    public async Task Saying_a_note_again_with_how_updates_it_and_without_how_keeps_it()
+    {
+        await _memory.SetEnabledAsync(true);
+        await _memory.SaveFromAgentAsync(Session(_repository), "machine", "Use gh for GitHub.", "learned", null);
+
+        var tested = await _memory.SaveFromAgentAsync(Session(_repository), "machine", "Use gh for GitHub.", "learned", null, "ran it");
+        var again = await _memory.SaveFromAgentAsync(Session(_repository), "machine", "Use gh for GitHub.", "learned", null);
+
+        tested.Value.AlreadyKnown.ShouldBeTrue();
+        again.Value.Note.How.ShouldBe("ran it");
+        _store.Notes.Single().How.ShouldBe("ran it");
+    }
+
+    [Fact]
+    public async Task Replacing_a_note_with_a_new_how_tests_it_and_an_empty_how_forgets_the_old_test()
+    {
+        await _memory.SetEnabledAsync(true);
+        var first = await _memory.SaveFromAgentAsync(Session(_repository), "machine", "Use gh for GitHub.", "learned", null, "ran it");
+        var tested = await _memory.SaveFromAgentAsync(Session(_repository), "machine", "Use gh for GitHub and its API.", "learned", first.Value.Note.Id, "ran gh api");
+        var untested = await _memory.SaveFromAgentAsync(Session(_repository), "machine", "Use gh for everything.", "learned", first.Value.Note.Id, "");
+
+        tested.Value.Note.How.ShouldBe("ran gh api");
+        untested.Value.Note.How.ShouldBeNull();
     }
 
     [Fact]

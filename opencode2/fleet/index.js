@@ -523,10 +523,11 @@ if (process.env.FLEET_MEMORY_DIR) {
           description: "from-you: the user asked for it, corrected you, or stated a preference. learned: you found it out.",
         },
         replaces: { type: "string", description: "The id of a note this one corrects or merges, from the list in your instructions. Leave it out for a new note." },
+        how: { type: "string", description: "How you know it holds: what you ran or saw, in a few words. An empty string if you haven't checked." },
       },
       (input, tool) =>
-        callFleet("save", tool, { text: input.text, list: input.list, kind: input.kind, replaces: input.replaces ?? "" }, MEMORY_PATH + "save"),
-      { optional: ["replaces"] },
+        callFleet("save", tool, { text: input.text, list: input.list, kind: input.kind, replaces: input.replaces ?? "", how: input.how ?? "" }, MEMORY_PATH + "save"),
+      { optional: ["replaces", "how"] },
     ),
     fleetTool(
       "fleet_memory_forget",
