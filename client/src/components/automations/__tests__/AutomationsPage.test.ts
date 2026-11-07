@@ -6,7 +6,10 @@ import type { HarnessCatalog, ScannedRepository } from "@/api/client";
 import type { Automation, AutomationRun } from "@/stores/automations";
 
 const { apiFetchMock, navigate } = vi.hoisted(() => ({ apiFetchMock: vi.fn(), navigate: vi.fn() }));
-vi.mock("@/lib/api-client", () => ({ apiFetch: apiFetchMock }));
+vi.mock("@/lib/api-client", () => ({
+  apiFetch: apiFetchMock,
+  apiFetchOn: (_machine: unknown, path: string, init?: RequestInit) => apiFetchMock(path, init),
+}));
 vi.mock("@tanstack/vue-router", () => ({ useNavigate: () => navigate, useRouter: () => ({ navigate }) }));
 vi.mock("@/lib/automations", async (importOriginal) => ({
   ...(await importOriginal<typeof import("@/lib/automations")>()),
