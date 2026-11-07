@@ -12,7 +12,7 @@ export interface DreamSessionRef {
   harnessType: string | null;
 }
 
-export type DreamChangeKind = "added" | "rewritten" | "merged" | "retired" | "kept" | "left" | "skipped" | "flagged";
+export type DreamChangeKind = "added" | "rewritten" | "confirmed" | "merged" | "retired" | "kept" | "left" | "skipped" | "flagged";
 
 export interface DreamChangeView {
   id: string;
@@ -30,6 +30,8 @@ export interface DreamChangeView {
   undone: boolean;
   /** What the dream read to check the note: the file or commit, and what it showed. */
   evidence?: string | null;
+  /** For a confirmed note: how it's now known to hold. */
+  how?: string | null;
 }
 
 export type DreamStatus = "reading" | "running" | "done" | "failed";
@@ -92,6 +94,9 @@ export function formatTokens(tokens: number): string {
 export const appliedDreamChanges = (dream: DreamView): DreamChangeView[] =>
   groupDreamChanges(dream.changes).applied.filter((change) => !change.undone);
 
+/** Applied changes that altered a note: a confirmed note holds as it was, so it isn't counted here. */
+export const changedDreamNotes = (dream: DreamView): DreamChangeView[] => appliedDreamChanges(dream).filter((change) => change.kind !== "confirmed");
+
 /** The user's notes a dream flagged as out of date that nobody has dealt with yet. */
 export const openDreamFlags = (dream: DreamView): DreamChangeView[] =>
   groupDreamChanges(dream.changes).flagged.filter((change) => !change.undone);
@@ -99,7 +104,7 @@ export const openDreamFlags = (dream: DreamView): DreamChangeView[] =>
 export function describeDreamChanges(dream: DreamView): string {
   const counts = new Map<DreamChangeKind, number>();
   for (const change of appliedDreamChanges(dream)) counts.set(change.kind, (counts.get(change.kind) ?? 0) + 1);
-  const words: Record<string, string> = { added: "added", rewritten: "rewritten", merged: "merged", retired: "retired", kept: "kept for good" };
+  const words: Record<string, string> = { added: "added", rewritten: "rewritten", confirmed: "confirmed", merged: "merged", retired: "retired", kept: "kept for good" };
   const parts = [...counts].map(([kind, count]) => `${count} ${words[kind]}`);
   const flags = openDreamFlags(dream).length;
   if (flags > 0) parts.push(`${flags} looks out of date`);
@@ -113,6 +118,7 @@ export const isDreamBusy = (dream: DreamView | null | undefined): boolean => dre
 const KIND_LABELS: Record<DreamChangeKind, string> = {
   added: "Added",
   rewritten: "Rewritten",
+  confirmed: "Confirmed",
   merged: "Merged",
   retired: "Retired",
   kept: "Kept for good",

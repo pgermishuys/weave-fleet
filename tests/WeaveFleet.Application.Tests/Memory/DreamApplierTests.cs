@@ -492,7 +492,8 @@ public sealed class DreamApplierTests
             Evidence = "package.json has bun scripts", How = "checked: package.json has bun scripts",
         });
 
-        change.Kind.ShouldBe(DreamRules.ChangeKinds.Rewritten);
+        change.Kind.ShouldBe(DreamRules.ChangeKinds.Confirmed);
+        change.How.ShouldBe("checked: package.json has bun scripts");
         _store.Notes.Single().How.ShouldBe("checked: package.json has bun scripts");
         (await _applier.UndoAsync(User, _dream, change.Id)).ShouldBeNull();
         _store.Notes.Single().How.ShouldBeNull();

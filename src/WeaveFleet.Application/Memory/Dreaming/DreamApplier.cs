@@ -126,7 +126,14 @@ public sealed class DreamApplier(IMemoryStore store, TimeProvider time)
 
         var written = current with { Text = change.Text!, How = how, Updated = time.GetUtcNow() };
         await store.SaveAsync(userId, written, ct).ConfigureAwait(false);
-        change.Kind = DreamRules.ChangeKinds.Rewritten;
+        // Same text, new how: the dream checked the note and it holds, which isn't a rewrite.
+        if (change.Text == current.Text)
+        {
+            change.Kind = DreamRules.ChangeKinds.Confirmed;
+            change.How = how;
+        }
+        else
+            change.Kind = DreamRules.ChangeKinds.Rewritten;
         change.Replaced = replaced;
         change.WroteHash = DreamRules.HashOf(written);
         return change;
@@ -311,7 +318,7 @@ public sealed class DreamApplier(IMemoryStore store, TimeProvider time)
             return null;
         }
 
-        if (change.Kind is not (DreamRules.ChangeKinds.Added or DreamRules.ChangeKinds.Rewritten or DreamRules.ChangeKinds.Merged or DreamRules.ChangeKinds.Retired or DreamRules.ChangeKinds.Kept))
+        if (change.Kind is not (DreamRules.ChangeKinds.Added or DreamRules.ChangeKinds.Rewritten or DreamRules.ChangeKinds.Confirmed or DreamRules.ChangeKinds.Merged or DreamRules.ChangeKinds.Retired or DreamRules.ChangeKinds.Kept))
             return FleetError.ValidationError("Dream.Undo", "Only a change Fleet made can be undone.");
 
         var refused = FleetError.ValidationError("Dream.Undo", UndoRefused);
@@ -324,6 +331,7 @@ public sealed class DreamApplier(IMemoryStore store, TimeProvider time)
                 await store.DeleteAsync(userId, [id], ct).ConfigureAwait(false);
                 break;
             case DreamRules.ChangeKinds.Rewritten:
+            case DreamRules.ChangeKinds.Confirmed:
                 if (!await UnchangedAsync(userId, id, change.WroteHash, ct).ConfigureAwait(false) || change.Replaced.Count == 0)
                     return refused;
                 await store.SaveAsync(userId, change.Replaced[0], ct).ConfigureAwait(false);

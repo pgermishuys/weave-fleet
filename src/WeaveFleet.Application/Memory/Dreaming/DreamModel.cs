@@ -59,6 +59,9 @@ public static class DreamRules
     {
         public const string Added = "added";
         public const string Rewritten = "rewritten";
+
+        /// <summary>An untested learned note the dream checked and found true: the text stays, only its <c>how</c> is new.</summary>
+        public const string Confirmed = "confirmed";
         public const string Merged = "merged";
         public const string Retired = "retired";
         public const string Kept = "kept";
@@ -135,6 +138,9 @@ public sealed class DreamChange
     /// <summary>What the dream read to check a note: the file or commit, with what it showed. Rewrite, retire and flag carry it.</summary>
     public string? Evidence { get; set; }
 
+    /// <summary>For a confirmed note: how it's now known to hold, as written on the note.</summary>
+    public string? How { get; set; }
+
     /// <summary>For a flag: the hash of the note as flagged, so a later dream doesn't flag the same unchanged note again.</summary>
     public string? NoteHash { get; set; }
 
@@ -189,7 +195,8 @@ public sealed record DreamChangeView(
     string? Quote,
     string? Reason,
     bool Undone,
-    string? Evidence = null);
+    string? Evidence = null,
+    string? How = null);
 
 public sealed record DreamView(
     string Id,
@@ -234,7 +241,8 @@ public sealed record DreamView(
                 change.Quote,
                 change.Reason,
                 change.Undone,
-                change.Evidence))],
+                change.Evidence,
+                change.How))],
             dream.RunId,
             dream.Tokens,
             dream.Since);

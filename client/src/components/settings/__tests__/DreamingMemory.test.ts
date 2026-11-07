@@ -130,6 +130,30 @@ describe("Dreaming in Settings → Memory", () => {
     expect(mocks.listDreams).not.toHaveBeenCalled();
   });
 
+  it("shows a confirmed note once, as Tested, and counts it apart from the notes changed", async () => {
+    mocks.listDreams.mockResolvedValue([
+      dreamView({
+        changes: [
+          change("retired", { text: null, replaced: [{ id: "o1", text: "ship with ship.sh", kind: "learned", list: "repository" }] }),
+          change("confirmed", {
+            id: "c-confirmed",
+            text: "Build with build-all.sh.",
+            how: "checked: scripts/build-all.sh exists",
+            replaced: [{ id: "n1", text: "Build with build-all.sh.", kind: "learned", list: "repository" }],
+          }),
+        ],
+      }),
+    ]);
+    const wrapper = await mountSection();
+    const text = wrapper.get("[data-testid='dreaming-panel']").text();
+
+    expect(text).toContain("Last dream · acme-widgets · 1 note changed, 1 confirmed");
+    expect(text).toContain("Confirmed");
+    expect(wrapper.get("[data-testid='dream-how']").text()).toBe("Tested · checked: scripts/build-all.sh exists");
+    expect(text.split("Build with build-all.sh.").length - 1).toBe(1);
+    expect(text).not.toContain("now reads");
+  });
+
   it("shows the latest dream's cards, evidence and the skipped group", async () => {
     const wrapper = await mountSection();
     const text = wrapper.get("[data-testid='dreaming-panel']").text();
