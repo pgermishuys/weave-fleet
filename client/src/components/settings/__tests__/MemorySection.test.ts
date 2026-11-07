@@ -264,15 +264,15 @@ describe("MemorySection", () => {
 
       await wrapper.get("[data-testid=memory-to-search-aaaa0002]").trigger("click");
       await flushPromises();
-      expect(api.moveMemoryNote).toHaveBeenLastCalledWith("aaaa0002", "search");
+      expect(api.moveMemoryNote).toHaveBeenLastCalledWith("aaaa0002", "search", expect.anything());
 
       await wrapper.get("[data-testid=memory-to-always-ssss0003]").trigger("click");
       await flushPromises();
-      expect(api.moveMemoryNote).toHaveBeenLastCalledWith("ssss0003", "always");
+      expect(api.moveMemoryNote).toHaveBeenLastCalledWith("ssss0003", "always", expect.anything());
 
       await wrapper.get("[data-testid=memory-pin-aaaa0002]").trigger("click");
       await flushPromises();
-      expect(api.moveMemoryNote).toHaveBeenLastCalledWith("aaaa0002", "always");
+      expect(api.moveMemoryNote).toHaveBeenLastCalledWith("aaaa0002", "always", expect.anything());
       expect(wrapper.find("[data-testid=memory-pin-aaaa0001]").exists()).toBe(false);
       expect(wrapper.find("[data-testid=memory-to-always-aaaa0002]").exists()).toBe(false);
     });
