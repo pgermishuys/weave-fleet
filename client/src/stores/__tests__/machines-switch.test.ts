@@ -139,4 +139,41 @@ describe("switching machines without reloading", () => {
     expect(hubs).toHaveLength(0);
     stop();
   });
+
+  it("keeps the hubs held with nothing polling, as when Settings replaces the sidebar", async () => {
+    hubs.length = 0;
+    const store = useMachinesStore();
+    setPreferences({ [MACHINE_SWITCH_PREFERENCE_KEY]: "true" });
+    const stopSidebar = store.startPolling();
+    await nextTick();
+    stopSidebar();
+    await nextTick();
+
+    expect(hubs.map((hub) => hub.key)).toEqual([mini.id]);
+    expect(hubs[0].stop).not.toHaveBeenCalled();
+    const stopSettings = store.startPolling();
+    await nextTick();
+    expect(hubs).toHaveLength(1);
+    stopSettings();
+  });
+
+  it("holds them before anything polls, and lets go when the switch goes off with nothing polling", async () => {
+    hubs.length = 0;
+    const store = useMachinesStore();
+    setPreferences({ [MACHINE_SWITCH_PREFERENCE_KEY]: "true" });
+    await nextTick();
+    expect(hubs.map((hub) => hub.key)).toEqual([mini.id]);
+    expect(store.currentKey).toBe(HOME_MACHINE_KEY);
+
+    setPreferences({ [MACHINE_SWITCH_PREFERENCE_KEY]: "false" });
+    await nextTick();
+    expect(hubs[0].stop).toHaveBeenCalledTimes(1);
+  });
+
+  it("holds nothing with the switch off", async () => {
+    hubs.length = 0;
+    useMachinesStore().startPolling()();
+    await nextTick();
+    expect(hubs).toHaveLength(0);
+  });
 });
