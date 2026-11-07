@@ -127,7 +127,7 @@ appId: io.tryweave.fleet
 - assertVisible: "show-page please"
 # Still streaming, or the check below proves nothing. Then the rest of the reply comes, while scrolled up.
 - assertNotVisible: "Finished.*"
-- evalScript: ${http.post(LLM_URL + '/release', { body: '' }).status}
+- evalScript: "${http.post(LLM_URL + '/release', { body: '' }).status}"
 - extendedWaitUntil:
     visible: "Finished.*"
     timeout: 150000
