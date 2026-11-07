@@ -4,6 +4,7 @@ import { ArrowRight, Check, CornerUpLeft, FileText, LoaderCircle, UserRound } fr
 import { Button } from "@/components/ui/button";
 import StatusGlyph from "@/components/sessions/StatusGlyph.vue";
 import { moveBlockedReason, moveLabel, type WorkflowRunMove } from "@/lib/workflows";
+import { useMachineTarget } from "@/lib/machine-target";
 import { useWorkflowsStore } from "@/stores/workflows";
 
 /**
@@ -13,7 +14,11 @@ import { useWorkflowsStore } from "@/stores/workflows";
  */
 const props = defineProps<{ sessionId: string }>();
 
-const store = useWorkflowsStore();
+// The machine the view shows (MachineScope in WorkflowsPage), or the session's where a run card is.
+
+const machineTarget = useMachineTarget();
+
+const store = useWorkflowsStore(machineTarget);
 
 const run = computed(() => store.runForSession(props.sessionId));
 const withYou = computed(() => (run.value?.status === "running" && run.value.withYou?.sessionId === props.sessionId ? run.value.withYou : null));

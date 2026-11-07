@@ -16,6 +16,7 @@ import { useEnabledHarnesses } from "@/composables/use-enabled-harnesses";
 import { useModelRoles } from "@/composables/use-model-roles";
 import { DRAFT_COST_NOTE, slugOf, type WorkflowFile } from "@/lib/workflow-draft";
 import { modelShortName } from "@/lib/workflows";
+import { useMachineTarget } from "@/lib/machine-target";
 import { useWorkflowsStore } from "@/stores/workflows";
 
 /**
@@ -39,7 +40,11 @@ const emit = defineEmits<{
 
 const open = defineModel<boolean>("open", { default: false });
 
-const store = useWorkflowsStore();
+// The machine the view shows (MachineScope in WorkflowsPage), or the session's where a run card is.
+
+const machineTarget = useMachineTarget();
+
+const store = useWorkflowsStore(machineTarget);
 const name = shallowRef("");
 const error = shallowRef<string | null>(null);
 const isCreating = shallowRef(false);

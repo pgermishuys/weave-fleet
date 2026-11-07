@@ -2,6 +2,8 @@ import { computed, effectScope, ref, shallowRef, watch } from "vue";
 import type { NewSessionFolder } from "@/lib/new-session-request";
 import type { DraftedWorkflow } from "@/lib/workflow-draft";
 import type { Workflow, WorkflowLibrary } from "@/lib/workflows";
+import type { MachineChoice } from "@/composables/use-machine-choice";
+import { useWorkflowsMachine } from "@/composables/use-workflows-machine";
 import { useWorkflowsStore } from "@/stores/workflows";
 
 const BUILD_A_FEATURE = "builtin:build-a-feature";
@@ -31,6 +33,8 @@ let draftController: AbortController | null = null;
 /** Asked before another workflow opens, so unsaved edits aren't dropped without a word. */
 let leaveGuard: (() => boolean) | null = null;
 let watching = false;
+/** Which machine the view shows; made once, with the watchers below, so the state follows it. */
+let machine: MachineChoice | null = null;
 /** Module-level, like the state it reads: made in a component's setup, it would stop when that component unmounts. */
 const repositoryPath = computed(() => (folder.value?.kind === "repository" ? folder.value.path : null));
 let generation = 0;
@@ -40,7 +44,16 @@ let generation = 0;
  * which workflow is open.
  */
 export function useWorkflowsNav() {
-  const store = useWorkflowsStore();
+  // The store of the machine the view shows (the library, runs and every change are that machine's).
+  const currentStore = () => useWorkflowsStore(machine!.target.value);
+  const store = {
+    loadLibrary: (directory: string | null) => currentStore().loadLibrary(directory),
+    draftFromSession: (sessionId: string, signal?: AbortSignal) => currentStore().draftFromSession(sessionId, signal),
+    draftFromDescription: (request: { directory: string; description: string; harnessType: string | null }, signal?: AbortSignal) =>
+      currentStore().draftFromDescription(request, signal),
+  };
+  // In a scope of its own, as the watchers below: the first caller can be a session row.
+  if (!machine) effectScope(true).run(() => { machine = useWorkflowsMachine(); });
 
 
   async function reload(): Promise<void> {
@@ -63,7 +76,25 @@ export function useWorkflowsNav() {
   if (!watching) {
     watching = true;
     // In a scope of its own: made in whichever component asks first (a session row can), it has to outlive it.
-    effectScope(true).run(() => watch(repositoryPath, () => void reload()));
+    effectScope(true).run(() => {
+      watch(repositoryPath, () => void reload());
+      // Another machine: nothing of the last one's library, folder or open workflow carries over.
+      watch(() => machine!.key.value, () => {
+        const hadLibrary = library.value !== null;
+        generation++;
+        forgetDraft();
+        library.value = null;
+        libraryError.value = null;
+        isLoadingLibrary.value = false;
+        folder.value = null;
+        hasChosenFolder.value = false;
+        activeWorkflowId.value = BUILD_A_FEATURE;
+        showingRuns.value = false;
+        creating.value = null;
+        unsavedWorkflowId.value = null;
+        if (hadLibrary) void reload();
+      });
+    });
   }
 
   const builtIns = computed<Workflow[]>(() => library.value?.workflows.filter((w) => w.builtIn) ?? []);
@@ -158,6 +189,7 @@ export function useWorkflowsNav() {
   }
 
   return {
+    machine: machine!,
     activeWorkflowId,
     activeWorkflow,
     builtIns,

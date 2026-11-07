@@ -12,6 +12,7 @@ import { useSettingsNav } from "@/composables/use-settings-nav";
 import { fileName, listFiles, MOVE_ON_ANYWAY, WITHOUT_SKILL, type WorkflowRunChoice, type WorkflowRunSession } from "@/lib/workflows";
 import { useCanvasesStore } from "@/stores/canvases";
 import { useSidebarStore } from "@/stores/sidebar";
+import { useMachineTarget } from "@/lib/machine-target";
 import { useWorkflowsStore } from "@/stores/workflows";
 
 /**
@@ -24,7 +25,9 @@ import { useWorkflowsStore } from "@/stores/workflows";
 const props = defineProps<{ sessionId: string }>();
 
 const router = useRouter();
-const store = useWorkflowsStore();
+// The machine the view shows (MachineScope in WorkflowsPage), or the session's where a run card is.
+const machineTarget = useMachineTarget();
+const store = useWorkflowsStore(machineTarget);
 const canvases = useCanvasesStore();
 const sidebar = useSidebarStore();
 const { setActiveSection } = useSettingsNav();

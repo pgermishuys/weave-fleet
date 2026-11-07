@@ -1,13 +1,14 @@
 <script setup lang="ts">
 import { computed, onMounted } from "vue";
 import { AlertTriangle, GitPullRequest, Loader2, MessageSquareText, Plus, SlidersHorizontal, Sparkles } from "lucide-vue-next";
+import MachineSwitch from "@/components/layout/MachineSwitch.vue";
 import StatusGlyph from "@/components/sessions/StatusGlyph.vue";
 import { DRAFT_ID, useWorkflowsNav } from "@/composables/use-workflows-nav";
 import type { Workflow } from "@/lib/workflows";
 import { useWorkflowsStore } from "@/stores/workflows";
 
 const nav = useWorkflowsNav();
-const store = useWorkflowsStore();
+const store = useWorkflowsStore(nav.machine.target.value);
 
 onMounted(() => {
   if (!nav.library.value) void nav.reload();
@@ -47,6 +48,17 @@ function rowMeta(workflow: Workflow): { label: string; tone: string } {
       <p class="panel-header">
         Workflows
       </p>
+      <!-- With "Switch machines without reloading" on: which machine's workflows the list and the pane show. -->
+      <div
+        v-if="nav.machine.enabled.value"
+        class="panel-machine"
+      >
+        <MachineSwitch
+          :choice="nav.machine"
+          label="Workflows"
+          testid="workflows"
+        />
+      </div>
     </div>
     <button
       type="button"
@@ -177,6 +189,10 @@ function rowMeta(workflow: Workflow): { label: string; tone: string } {
 </template>
 
 <style scoped>
+.panel-machine {
+  padding: 0 12px 6px;
+}
+
 .workflows-nav-panel {
   display: flex;
   flex: 1;

@@ -9,6 +9,7 @@ import {
   type WorkflowDraft,
   type WorkflowFile,
 } from "@/lib/workflow-draft";
+import { useMachineTarget } from "@/lib/machine-target";
 import { useWorkflowsStore, WorkflowFileChangedError } from "@/stores/workflows";
 
 export type WorkflowEditorView = "designer" | "file";
@@ -24,7 +25,9 @@ export const DESIGNER_BLOCKED_MESSAGE = "The designer can't show this file as it
  * Fleet's layout, which removes comments, so the first such save asks first.
  */
 export function useWorkflowEditor() {
-  const store = useWorkflowsStore();
+  // The machine the view shows (MachineScope in WorkflowsPage), or the session's where a run card is.
+  const machineTarget = useMachineTarget();
+  const store = useWorkflowsStore(machineTarget);
 
   const directory = shallowRef<string | null>(null);
   const file = shallowRef<WorkflowFile | null>(null);

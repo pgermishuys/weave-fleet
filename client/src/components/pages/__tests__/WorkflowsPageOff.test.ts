@@ -5,7 +5,7 @@ import WorkflowsPage from "@/components/pages/WorkflowsPage.vue";
 
 const { enabled, preferences, setWorkflowsEnabled, reload, ensureLoaded } = vi.hoisted(() => ({
   enabled: { value: false },
-  preferences: { hasFetched: true },
+  preferences: { hasFetched: true, get: (_key: string, fallback: string) => fallback, ensureLoaded: () => undefined },
   setWorkflowsEnabled: vi.fn(),
   reload: vi.fn(),
   ensureLoaded: vi.fn(),
