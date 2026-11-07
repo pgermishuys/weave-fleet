@@ -72,7 +72,7 @@ const showMeta = computed(
   () => props.role === "user" || props.clusterPosition === "single" || props.clusterPosition === "last",
 );
 
-const showModel =computed(() => props.role === "assistant" && Boolean(props.modelName));
+const showModel = computed(() => props.role === "assistant" && Boolean(props.modelName));
 
 // ── Question answer handler (only created when there are question parts) ──
 const questionAnswer = props.sessionId ? useQuestionAnswer(props.sessionId) : null;
