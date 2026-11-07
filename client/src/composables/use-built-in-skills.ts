@@ -1,7 +1,8 @@
 import { computed, readonly, shallowRef } from "vue";
 import { storeToRefs } from "pinia";
-import { apiFetch } from "@/lib/api-client";
+import { apiFetchOn } from "@/lib/api-client";
 import { extractApiError } from "@/lib/api-error";
+import { useMachineTarget } from "@/lib/machine-target";
 import type { BuiltInSkill } from "@/lib/skill-versions";
 import { useBuiltInSkillsStore } from "@/stores/built-in-skills";
 
@@ -23,7 +24,8 @@ async function errorFrom(response: Response, fallback: string): Promise<string> 
  * One change at a time: the server keeps the choice as one preference, so two at once could lose one.
  */
 export function useBuiltInSkills() {
-  const store = useBuiltInSkillsStore();
+  const target = useMachineTarget();
+  const store = useBuiltInSkillsStore(target);
   const { skills, isLoading, error: loadError } = storeToRefs(store);
   const saveError = shallowRef<string | null>(null);
   const savingName = shallowRef<string | null>(null);
@@ -34,7 +36,7 @@ export function useBuiltInSkills() {
     savingName.value = name;
     saveError.value = null;
     try {
-      const response = await apiFetch(`${BUILT_IN_SKILLS_PATH}/${encodeURIComponent(name)}`, {
+      const response = await apiFetchOn(target.connection, `${BUILT_IN_SKILLS_PATH}/${encodeURIComponent(name)}`, {
         method: "PUT",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ enabled }),

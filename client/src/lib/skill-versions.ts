@@ -1,4 +1,5 @@
-import { apiFetch } from "@/lib/api-client";
+import { apiFetchOn } from "@/lib/api-client";
+import { liveTarget, type MachineTarget } from "@/lib/machine-target";
 import { extractApiError } from "@/lib/api-error";
 
 /**
@@ -67,8 +68,8 @@ export interface ImproveRequest {
 
 const PATH = "/api/skills/built-in";
 
-async function send<T>(path: string, fallback: string, init?: RequestInit): Promise<T> {
-  const response = await apiFetch(path, init && {
+async function send<T>(target: MachineTarget, path: string, fallback: string, init?: RequestInit): Promise<T> {
+  const response = await apiFetchOn(target.connection, path, init && {
     ...init,
     headers: { "Content-Type": "application/json", ...init.headers },
   });
@@ -87,8 +88,8 @@ async function send<T>(path: string, fallback: string, init?: RequestInit): Prom
 
 const at = (name: string) => `${PATH}/${encodeURIComponent(name)}`;
 
-export function getSkill(name: string): Promise<BuiltInSkillDetail> {
-  return send(at(name), `Couldn't load ${name}.`);
+export function getSkill(name: string, target: MachineTarget = liveTarget()): Promise<BuiltInSkillDetail> {
+  return send(target, at(name), `Couldn't load ${name}.`);
 }
 
 export function saveSkillVersion(
@@ -96,32 +97,33 @@ export function saveSkillVersion(
   content: string,
   note: string | null,
   sessionId: string | null = null,
+  target: MachineTarget = liveTarget(),
 ): Promise<BuiltInSkillDetail> {
-  return send(`${at(name)}/versions`, `Couldn't save your version of ${name}.`, {
+  return send(target, `${at(name)}/versions`, `Couldn't save your version of ${name}.`, {
     method: "POST",
     body: JSON.stringify({ content, note, sessionId }),
   });
 }
 
-export async function readSkillVersion(name: string, version: number): Promise<string> {
-  const body = await send<{ content: string }>(`${at(name)}/versions/${version}`, `Couldn't load version ${version} of ${name}.`);
+export async function readSkillVersion(name: string, version: number, target: MachineTarget = liveTarget()): Promise<string> {
+  const body = await send<{ content: string }>(target, `${at(name)}/versions/${version}`, `Couldn't load version ${version} of ${name}.`);
   return body.content;
 }
 
 /** Makes one of the user's versions the one sessions get, or Fleet's when version is null. */
-export function switchSkillVersion(name: string, version: number | null): Promise<BuiltInSkillDetail> {
-  return send(`${at(name)}/active`, `Couldn't switch ${name}.`, {
+export function switchSkillVersion(name: string, version: number | null, target: MachineTarget = liveTarget()): Promise<BuiltInSkillDetail> {
+  return send(target, `${at(name)}/active`, `Couldn't switch ${name}.`, {
     method: "PUT",
     body: JSON.stringify({ version }),
   });
 }
 
-export function keepMySkillVersion(name: string): Promise<BuiltInSkillDetail> {
-  return send(`${at(name)}/keep-mine`, `Couldn't keep your version of ${name}.`, { method: "POST" });
+export function keepMySkillVersion(name: string, target: MachineTarget = liveTarget()): Promise<BuiltInSkillDetail> {
+  return send(target, `${at(name)}/keep-mine`, `Couldn't keep your version of ${name}.`, { method: "POST" });
 }
 
-export function improveSkill(name: string, request: ImproveRequest): Promise<SkillProposal> {
-  return send(`${at(name)}/improve`, `Couldn't ask for a better ${name}.`, {
+export function improveSkill(name: string, request: ImproveRequest, target: MachineTarget = liveTarget()): Promise<SkillProposal> {
+  return send(target, `${at(name)}/improve`, `Couldn't ask for a better ${name}.`, {
     method: "POST",
     body: JSON.stringify(request),
   });
