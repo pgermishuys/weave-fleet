@@ -255,7 +255,7 @@ onMounted(load);
             :size="15"
             aria-hidden="true"
           />
-          <span><b>Costs tokens.</b> Every request a session sends carries its notes: about 400 tokens of rules plus
+          <span><b>Costs tokens.</b> Every request a session sends carries its notes: about 500 tokens of rules plus
             30–50 per note, up to {{ overview.maxRepositoryNotes }} repository and {{ overview.maxMachineNotes }} machine notes.</span>
         </p>
         <p class="memory-fact">

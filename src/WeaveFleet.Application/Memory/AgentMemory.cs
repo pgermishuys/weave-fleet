@@ -90,7 +90,7 @@ public enum MemoryList
 /// <summary>Where a note came from, as Settings shows it.</summary>
 public static class MemoryKinds
 {
-    /// <summary>The agent learned it: something failed, timed out or was slow, and it found what works.</summary>
+    /// <summary>The agent learned it: it found out something a later session would act differently for knowing.</summary>
     public const string Learned = "learned";
 
     /// <summary>The agent saved it because the user said so: "remember …", a correction, a preference.</summary>
