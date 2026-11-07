@@ -69,11 +69,11 @@ public sealed class PiTranscriptReplayTests
         var events = ReplayFixture("tool-validation.jsonl");
 
         // After wrapping tool-result events, the count increased by 1
-        events.Count.ShouldBe(97);
+        events.Count.ShouldBe(96);
         AssertTypeCounts(events, new Dictionary<string, int>
         {
             [EventTypes.SessionUpdated] = 2,
-            [EventTypes.SessionStatus] = 6,
+            [EventTypes.SessionStatus] = 5,
             [EventTypes.MessageCreated] = 4,
             [EventTypes.MessageUpdated] = 10,
             [EventTypes.MessagePartUpdated] = 50,
@@ -88,10 +88,12 @@ public sealed class PiTranscriptReplayTests
             ("tool running", evt => IsTool(evt, "running") && ToolName(evt) == "bash" && HasObjectToolInput(evt) && ToolInput(evt).GetProperty("command").GetString() == "ls -la"),
             ("tool completed", evt => IsTool(evt, "completed") && ToolOutput(evt).GetString()!.Contains("resume-validation.jsonl", StringComparison.Ordinal)),
             ("tool result created", evt => evt.Type == EventTypes.MessageCreated && MessageAgent(evt) == "tool:bash"),
-            ("first turn idle", evt => IsStatus(evt, "idle") && StatusReason(evt) == "toolUse"),
             ("summary text delta", evt => evt.Type == EventTypes.MessagePartDelta && Delta(evt).Contains("Summary", StringComparison.Ordinal)),
             ("summary final text", evt => IsPart(evt, "text") && PartText(evt).Contains("resume-validation.jsonl", StringComparison.Ordinal)),
-            ("second turn idle", evt => IsStatus(evt, "idle") && StatusReason(evt) == "stop"));
+            ("turn idle once Pi answered", evt => IsStatus(evt, "idle") && StatusReason(evt) == "stop"));
+
+        // The turn that called the tool isn't the run's last: the session stays busy while Pi runs it and goes on.
+        events.ShouldNotContain(evt => IsStatus(evt, "idle") && StatusReason(evt) == "toolUse");
     }
 
     [Fact]

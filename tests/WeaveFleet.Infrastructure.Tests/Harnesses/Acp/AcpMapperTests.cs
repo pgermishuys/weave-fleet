@@ -317,6 +317,41 @@ public sealed class AcpMapperTests
         changed.GetProperty("event").GetString().ShouldBe("change");
     }
 
+    [Fact]
+    public void a_turns_replies_name_the_prompt_fleet_sent_so_a_session_waiting_on_it_hears_when_its_done()
+    {
+        var mapper = new AcpMapper("s1");
+        var events = new List<HarnessEvent>();
+
+        events.AddRange(mapper.UserPrompt("check the tests", messageId: "msg_asked"));
+        events.AddRange(mapper.Update(Chunk("agent_message_chunk", "Looking.")));
+        // A steer joins the turn under way: its replies still answer the prompt that started it.
+        events.AddRange(mapper.UserPrompt("only the unit ones", messageId: "msg_steer", steer: true));
+        events.AddRange(mapper.Update(Chunk("agent_message_chunk", "2 failed.")));
+        events.AddRange(mapper.EndTurn("end_turn"));
+
+        var replies = Infos(events).Where(info => info.GetProperty("role").GetString() == "assistant").ToList();
+        replies.Count.ShouldBeGreaterThan(0);
+        replies.ShouldAllBe(info => ParentOf(info) == "msg_asked");
+
+        // A turn Copilot goes on with by itself, once the prompted one is over, answers no prompt of Fleet's.
+        var own = mapper.Update(Chunk("agent_message_chunk", "Background work finished."));
+        ParentOf(Infos(own).ShouldHaveSingleItem()).ShouldBeNull();
+        mapper.EndTurn("end_turn");
+
+        // A steer that lands just after its turn ended doesn't pass its id on to the next prompt's turn.
+        mapper.UserPrompt("too late", messageId: "msg_late", steer: true);
+        mapper.UserPrompt("next one", messageId: "msg_next");
+        ParentOf(Infos(mapper.Update(Chunk("agent_message_chunk", "On it."))).ShouldHaveSingleItem()).ShouldBe("msg_next");
+    }
+
+    private static IEnumerable<JsonElement> Infos(IEnumerable<HarnessEvent> events)
+        => events.Where(e => e.Type is EventTypes.MessageCreated or EventTypes.MessageUpdated)
+            .Select(e => e.Payload!.Value.GetProperty("info"));
+
+    private static string? ParentOf(JsonElement info)
+        => info.TryGetProperty("parentID", out var parent) && parent.ValueKind == JsonValueKind.String ? parent.GetString() : null;
+
     private static string State(HarnessEvent evt)
         => evt.Payload!.Value.GetProperty("part").GetProperty("state").GetProperty("status").GetString()!;
 

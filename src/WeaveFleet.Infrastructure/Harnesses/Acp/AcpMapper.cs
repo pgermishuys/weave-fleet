@@ -56,6 +56,9 @@ internal sealed class AcpMapper(string sessionId, Func<string, JsonElement, Flee
     private string? _assistantId;
     private DateTimeOffset _assistantAt;
     private string? _assistantModel;     // the session's model when the answer began (Copilot names none per message)
+    // The Fleet prompt the running turn answers, which its replies name as their parent, so a session waiting on that
+    // prompt (notifyWhenDone) knows which turn is its. Null for a turn Copilot goes on with by itself.
+    private string? _promptId;
     private bool _userOpen;
     private int _partCount;
     private int _stepCount;
@@ -103,13 +106,14 @@ internal sealed class AcpMapper(string sessionId, Func<string, JsonElement, Flee
     internal IReadOnlyList<HarnessMessage> Messages() { lock (_lock) return [.. MessagesCore()]; }
 
     /// <summary>
-    /// The user's prompt, which starts a turn, under the id Fleet gave it (<paramref name="messageId"/>). Mid-turn (a
-    /// steer) it closes the message in progress: that message is completed and its calls still running are settled, so
-    /// none of them reads as running forever.
+    /// The user's prompt, which starts a turn, under the id Fleet gave it (<paramref name="messageId"/>); the turn's
+    /// replies name it as their parent. Mid-turn (a <paramref name="steer"/>) it closes the message in progress: that
+    /// message is completed and its calls still running are settled, so none of them reads as running forever. A steer
+    /// joins the turn under way, whose replies still answer the prompt that started it.
     /// </summary>
-    internal IReadOnlyList<HarnessEvent> UserPrompt(string text, IReadOnlyList<HarnessAttachment>? images = null, string? messageId = null)
+    internal IReadOnlyList<HarnessEvent> UserPrompt(string text, IReadOnlyList<HarnessAttachment>? images = null, string? messageId = null, bool steer = false)
     {
-        lock (_lock) return UserPromptCore(text, images, messageId);
+        lock (_lock) return UserPromptCore(text, images, messageId, steer);
     }
 
     /// <summary>Maps one <c>session/update</c> body (<c>params.update</c>).</summary>
@@ -137,12 +141,14 @@ internal sealed class AcpMapper(string sessionId, Func<string, JsonElement, Flee
     /// <summary>The conversation so far, oldest first, with the turn still running as its last message.</summary>
     private List<HarnessMessage> MessagesCore() => _assistantId is null ? _history : [.. _history, Assistant(), .. _dividers];
 
-    private List<HarnessEvent> UserPromptCore(string text, IReadOnlyList<HarnessAttachment>? images, string? messageId)
+    private List<HarnessEvent> UserPromptCore(string text, IReadOnlyList<HarnessAttachment>? images, string? messageId, bool steer)
     {
         var events = new List<HarnessEvent>();
         // A call still running goes on running after a steer (Copilot moves a shell command to the background).
         CloseStep(events);
         _turnRow = false;
+        if (!steer)
+            _promptId = messageId;
         AddUser(text, images, messageId);
         _userOpen = false;
         return events;
@@ -409,6 +415,7 @@ internal sealed class AcpMapper(string sessionId, Func<string, JsonElement, Flee
 
         _closedCalls.Clear();
         _turnRow = false;
+        _promptId = null;
         events.Add(Status(ActivityStatuses.Idle));
         return events;
     }
@@ -429,6 +436,7 @@ internal sealed class AcpMapper(string sessionId, Func<string, JsonElement, Flee
         }
 
         _turnRow = false;
+        _promptId = null;
         events.Add(Status(ActivityStatuses.Idle));
         return events;
     }
@@ -724,9 +732,9 @@ internal sealed class AcpMapper(string sessionId, Func<string, JsonElement, Flee
     }
 
     private JsonElement Lifecycle(string messageId, bool completed)
-        => Lifecycle(messageId, "assistant", _assistantAt.ToUnixTimeMilliseconds(), completed, EventParts(messageId, _parts));
+        => Lifecycle(messageId, "assistant", _assistantAt.ToUnixTimeMilliseconds(), completed, EventParts(messageId, _parts), _promptId);
 
-    private JsonElement Lifecycle(string messageId, string role, long created, bool completed, List<MessageEventPart> parts) => JsonSerializer.SerializeToElement(
+    private JsonElement Lifecycle(string messageId, string role, long created, bool completed, List<MessageEventPart> parts, string? parentId = null) => JsonSerializer.SerializeToElement(
         new MessageLifecyclePayload
         {
             Info = new MessageEventInfo
@@ -735,6 +743,7 @@ internal sealed class AcpMapper(string sessionId, Func<string, JsonElement, Flee
                 Role = role,
                 SessionId = sessionId,
                 ModelId = _assistantModel,
+                ParentId = parentId,
                 Time = new MessageEventTime
                 {
                     Created = created,

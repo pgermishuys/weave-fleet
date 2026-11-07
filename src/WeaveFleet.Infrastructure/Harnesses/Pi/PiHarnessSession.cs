@@ -170,8 +170,12 @@ internal sealed class PiHarnessSession : IHarnessSession
         await SwitchModelAsync(options?.ProviderId, options?.ModelId, ct).ConfigureAwait(false);
 
         LogSendPrompt(_logger, InstanceId, null);
+        // Before it goes: Pi can start the run before it answers the request.
+        _mapper.Prompting(options?.MessageId);
         var response = await _client.SendRequestAsync(new PiPromptCommand { Id = NewRequestId(), Message = text }, ct)
             .ConfigureAwait(false);
+        if (!response.Success)
+            _mapper.Prompting(null);
         EnsureSuccess(response);
         _status = HarnessSessionStatus.Running;
     }
@@ -477,6 +481,9 @@ internal sealed class PiHarnessSession : IHarnessSession
         {
             case PiAgentStartEvent or PiTurnStartEvent or PiCompactionStartEvent or PiAutoRetryStartEvent:
                 SetRunningIfActive();
+                break;
+            case PiTurnEndEvent turnEnd when PiMapper.CallsTools(turnEnd.Message):
+                // Pi runs the calls and goes on with the next turn.
                 break;
             case PiIdleEvent or PiAgentEndEvent or PiTurnEndEvent or PiCompactionEndEvent:
                 SetIdleIfActive();
