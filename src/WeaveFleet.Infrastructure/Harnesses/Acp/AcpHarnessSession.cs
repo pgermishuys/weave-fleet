@@ -314,7 +314,7 @@ internal sealed partial class AcpHarnessSession : IHarnessSession
                 throw new HarnessBusyException("The turn had just ended, so the message can't steer it.");
             }
 
-            Emit(_mapper.UserPrompt(text, messageId: options.MessageId));
+            Emit(_mapper.UserPrompt(text, messageId: options.MessageId, steer: true));
             return;
         }
 

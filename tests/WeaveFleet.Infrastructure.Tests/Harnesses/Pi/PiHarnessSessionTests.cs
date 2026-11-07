@@ -356,6 +356,25 @@ public sealed class PiHarnessSessionTests
         failed.Error.ShouldBe("Nothing to compact (session too small)");
     }
 
+    [Fact]
+    public async Task its_replies_name_the_prompt_fleet_sent_so_a_session_waiting_on_it_hears_when_its_done()
+    {
+        await using var harness = CreateHarness();
+        await using var session = harness.CreateSession();
+        using var cts = new CancellationTokenSource(TimeSpan.FromSeconds(5));
+
+        var promptTask = session.SendPromptAsync("hello pi", new PromptOptions { MessageId = "msg_asked" }, cts.Token);
+        var prompt = await harness.ReadCommandAsync(cts.Token);
+        await harness.WriteResponseAsync(prompt.GetProperty("id").GetString(), "prompt", true, null, cts.Token);
+        await promptTask;
+
+        await harness.WriteEventAsync(new PiAgentStartEvent(), cts.Token);
+        await harness.WriteEventAsync(new PiMessageStartEvent { Message = AssistantMessage(1000, new PiTextContent { Text = "ok" }) }, cts.Token);
+
+        var reply = await ReadUntilAsync(session, EventTypes.MessageCreated, cts.Token);
+        Payload(reply).GetProperty("info").GetProperty("parentID").GetString().ShouldBe("msg_asked");
+    }
+
     private static async Task<HarnessEvent> ReadUntilAsync(PiHarnessSession session, string type, CancellationToken ct)
     {
         await foreach (var evt in session.SubscribeAsync(ct).WithCancellation(ct))

@@ -356,6 +356,57 @@ public sealed class PiMapperTests
         StatusMessageId(idle.Single()).ShouldBe("pi-session-1-assistant-1");
     }
 
+    [Fact]
+    public void a_runs_replies_name_the_prompt_it_answers_through_every_turn_until_it_ends()
+    {
+        var mapper = new PiMapper(SessionId);
+        var calling = AssistantMessage("toolUse", "", 1000, new PiToolCallContent { Id = "call-1", Name = "bash", Arguments = Json("{}") });
+        var answer = AssistantMessage(2000, new PiTextContent { Text = "done" });
+
+        mapper.Prompting("msg_asked");
+        var events = new List<HarnessEvent>();
+        events.AddRange(mapper.Map(new PiAgentStartEvent()));
+        events.AddRange(mapper.Map(new PiMessageStartEvent { Message = new PiMessage { Role = "user", Content = [new PiTextContent { Text = "hi" }], Timestamp = 999 } }));
+        events.AddRange(mapper.Map(new PiMessageStartEvent { Message = calling }));
+        events.AddRange(mapper.Map(new PiMessageEndEvent { Message = calling }));
+        events.AddRange(mapper.Map(new PiTurnEndEvent { Message = calling }));
+        events.AddRange(mapper.Map(new PiTurnStartEvent()));
+        events.AddRange(mapper.Map(new PiMessageStartEvent { Message = answer }));
+        events.AddRange(mapper.Map(new PiMessageEndEvent { Message = answer }));
+        events.AddRange(mapper.Map(new PiTurnEndEvent { Message = answer }));
+        events.AddRange(mapper.Map(new PiAgentEndEvent { Messages = [calling, answer] }));
+
+        var replies = Lifecycles(events).Where(info => info.GetProperty("role").GetString() == "assistant").ToList();
+        replies.ShouldNotBeEmpty();
+        replies.ShouldAllBe(info => ParentOf(info) == "msg_asked");
+        Lifecycles(events).Where(info => info.GetProperty("role").GetString() == "user").ShouldAllBe(info => ParentOf(info) == null);
+
+        // A run Pi starts by itself answers no prompt of Fleet's.
+        var own = new List<HarnessEvent>();
+        own.AddRange(mapper.Map(new PiAgentStartEvent()));
+        own.AddRange(mapper.Map(new PiMessageStartEvent { Message = AssistantMessage(3000, new PiTextContent { Text = "" }) }));
+        ParentOf(Lifecycles(own).ShouldHaveSingleItem()).ShouldBeNull();
+    }
+
+    [Fact]
+    public void a_turn_that_calls_tools_does_not_end_the_run_so_the_session_stays_busy_until_pi_answers()
+    {
+        var mapper = new PiMapper(SessionId);
+        var calling = AssistantMessage("toolUse", "", 1000, new PiToolCallContent { Id = "call-1", Name = "bash", Arguments = Json("{}") });
+
+        mapper.Map(new PiAgentStartEvent());
+        var turnEnd = mapper.Map(new PiTurnEndEvent { Message = calling });
+
+        turnEnd.Where(e => e.Type == EventTypes.SessionStatus).Select(StatusType).ShouldNotContain("idle");
+    }
+
+    private static IEnumerable<JsonElement> Lifecycles(IEnumerable<HarnessEvent> events)
+        => events.Where(e => e.Type is EventTypes.MessageCreated or EventTypes.MessageUpdated)
+            .Select(e => Payload(e).GetProperty("info"));
+
+    private static string? ParentOf(JsonElement info)
+        => info.TryGetProperty("parentID", out var parent) && parent.ValueKind == JsonValueKind.String ? parent.GetString() : null;
+
     private static PiMessage AssistantMessage(long timestamp, params PiContentBlock[] content)
         => new()
         {

@@ -29,6 +29,10 @@ internal sealed class PiMapper
     private string? _activeMessageId;
     private string? _activeAssistantMessageId;
     private string? _lastAssistantMessageId;
+    // The prompt Fleet is sending (set off the pump), then the one the running run answers: null for a run Pi
+    // started by itself.
+    private string? _nextPromptId;
+    private string? _promptId;
 
     /// <summary>Creates a mapper for a Fleet session.</summary>
     internal PiMapper(string sessionId)
@@ -51,12 +55,19 @@ internal sealed class PiMapper
     /// <summary>The subagents running now (<see cref="PiSubagentWork"/>).</summary>
     internal IReadOnlyList<WorkReport> RunningWork() => _subagents.Running();
 
+    /// <summary>
+    /// Fleet is sending Pi the prompt <paramref name="promptId"/>: the run Pi starts next answers it, and its replies
+    /// name it as their parent, so a session waiting on that prompt (<c>notifyWhenDone</c>) knows which run is its.
+    /// Called before the prompt goes, from the session's thread; null takes back one Pi refused.
+    /// </summary>
+    internal void Prompting(string? promptId) => Volatile.Write(ref _nextPromptId, promptId);
+
     /// <summary>Maps one Pi event into zero or more Fleet harness events.</summary>
     internal IReadOnlyList<HarnessEvent> Map(PiEvent evt)
     {
         return evt switch
         {
-            PiAgentStartEvent => [CreateStatusEvent("busy")],
+            PiAgentStartEvent => MapAgentStart(),
             PiAgentEndEvent agentEnd => MapAgentEnd(agentEnd),
             PiTurnStartEvent => [CreateStatusEvent("busy")],
             PiTurnEndEvent turnEnd => MapTurnEnd(turnEnd),
@@ -89,6 +100,12 @@ internal sealed class PiMapper
         };
     }
 
+    private List<HarnessEvent> MapAgentStart()
+    {
+        _promptId = Interlocked.Exchange(ref _nextPromptId, null);
+        return [CreateStatusEvent("busy")];
+    }
+
     private List<HarnessEvent> MapAgentEnd(PiAgentEndEvent evt)
     {
         var events = new List<HarnessEvent>(evt.Messages.Count + 1);
@@ -102,6 +119,7 @@ internal sealed class PiMapper
 
         events.AddRange(_subagents.AgentEnded());
         events.Add(CreateStatusEvent("idle"));
+        _promptId = null;
         return events;
     }
 
@@ -115,9 +133,16 @@ internal sealed class PiMapper
                 events.Add(CreateStepFinishEvent(evt.Message));
         }
 
-        events.Add(CreateStatusEvent("idle", evt.Message));
+        // A turn whose answer called tools isn't the run's last: Pi runs them and starts the next turn, so the
+        // session is still working. Idle there would end the turn Fleet follows half way through its answer.
+        if (!CallsTools(evt.Message))
+            events.Add(CreateStatusEvent("idle", evt.Message));
         return events;
     }
+
+    /// <summary>Whether a turn's answer called tools, so Pi goes on with another turn in the same run.</summary>
+    internal static bool CallsTools(PiMessage? message)
+        => message is not null && IsAssistant(message) && message.StopReason?.Equals("toolUse", StringComparison.OrdinalIgnoreCase) == true;
 
     private IReadOnlyList<HarnessEvent> MapMessageStart(PiMessageStartEvent evt)
     {
@@ -290,7 +315,7 @@ internal sealed class PiMapper
                 SessionId = _sessionId,
                 Agent = AgentForMessage(message),
                 ModelId = message.ResponseModel ?? message.Model,
-                ParentId = null,
+                ParentId = message.Role.Equals(UserRole, StringComparison.OrdinalIgnoreCase) ? null : _promptId,
                 Time = new MessageEventTime
                 {
                     Created = created,
