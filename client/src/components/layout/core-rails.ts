@@ -6,6 +6,7 @@ import BoardControlsPanel from "@/components/board/BoardControlsPanel.vue";
 import JobsNavPanel from "@/components/jobs/JobsNavPanel.vue";
 import SessionsPanel from "@/components/sessions/SessionsPanel.vue";
 import SettingsNavPanel from "@/components/settings/SettingsNavPanel.vue";
+import { useAutomationsMachine } from "@/composables/use-automations-machine";
 import AutomationsNavPanel from "@/components/automations/AutomationsNavPanel.vue";
 import WorkflowsNavPanel from "@/components/workflows/WorkflowsNavPanel.vue";
 import { useBoardFeature } from "@/composables/use-board-feature";
@@ -33,9 +34,12 @@ const AutomationsContextPanel = defineComponent({
   name: "AutomationsContextPanel",
   setup() {
     const { activeAutomationId, setActiveAutomation, startCreate } = useAutomationsNav();
+    const automationsMachine = useAutomationsMachine();
 
     return () =>
       h(AutomationsNavPanel, {
+        // Rebuilt for the machine chosen in its switch, so the list is that machine's.
+        key: automationsMachine.key.value,
         modelValue: activeAutomationId.value,
         "onUpdate:modelValue": setActiveAutomation,
         onCreate: startCreate,

@@ -6,7 +6,8 @@ import AutomationRunsList from "@/components/automations/AutomationRunsList.vue"
 import { Button } from "@/components/ui/button";
 import { useAutomations } from "@/composables/use-automations";
 import { useSettingsNav } from "@/composables/use-settings-nav";
-import { apiFetch } from "@/lib/api-client";
+import { apiFetchOn } from "@/lib/api-client";
+import { useMachineTarget } from "@/lib/machine-target";
 import { describeDate } from "@/lib/automation-schedule";
 import { browserTimeZone } from "@/lib/automations";
 import type { Automation, AutomationRun } from "@/stores/automations";
@@ -14,9 +15,10 @@ import type { Automation, AutomationRun } from "@/stores/automations";
 /** A built-in automation Fleet keeps (Dreaming): its time, Run now and Pause are yours; deleting and editing aren't. */
 const props = defineProps<{ automation: Automation }>();
 
+const target = useMachineTarget();
 const navigate = useNavigate();
 const { setActiveSection } = useSettingsNav();
-const { enableAutomation, disableAutomation, runAutomation, fetchRuns, refresh } = useAutomations();
+const { enableAutomation, disableAutomation, runAutomation, fetchRuns, refresh } = useAutomations(target);
 
 const runs = shallowRef<AutomationRun[]>([]);
 const hasLoadedRuns = shallowRef(false);
@@ -107,7 +109,7 @@ function startEditingTime(): void {
 }
 
 const saveTime = () => act(async () => {
-  const response = await apiFetch("/api/memory/dreaming/nightly", {
+  const response = await apiFetchOn(target.connection, "/api/memory/dreaming/nightly", {
     method: "PUT",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify({ time: time.value, timeZone: browserTimeZone() ?? "UTC" }),

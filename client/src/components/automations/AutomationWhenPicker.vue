@@ -2,6 +2,7 @@
 import { computed, onMounted, shallowRef, useId, watch } from "vue";
 import { CalendarClock, Check, ChevronDown, Clock, MessageSquareText, Repeat, Zap } from "lucide-vue-next";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
+import { useMachineTarget } from "@/lib/machine-target";
 import { useAutomationsStore } from "@/stores/automations";
 import { describeEventType, EVENT_TYPES } from "@/lib/automations";
 import { cronOf, dayName, hm, localDate, nextRun, whenChip, withTime, type Hm, type When } from "@/lib/automation-schedule";
@@ -25,7 +26,7 @@ const emit = defineEmits<{
 }>();
 
 const open = defineModel<boolean>("open", { default: false });
-const store = useAutomationsStore();
+const store = useAutomationsStore(useMachineTarget());
 const timeId = useId();
 const dateId = useId();
 const cronId = useId();

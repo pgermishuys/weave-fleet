@@ -2,7 +2,9 @@
 import { computed } from "vue";
 import { Loader2, Pencil, Plus } from "lucide-vue-next";
 import StatusGlyph from "@/components/sessions/StatusGlyph.vue";
+import MachineSwitch from "@/components/layout/MachineSwitch.vue";
 import { useAutomations } from "@/composables/use-automations";
+import { useAutomationsMachine } from "@/composables/use-automations-machine";
 import { useAutomationsNav } from "@/composables/use-automations-nav";
 import { useRelativeTime } from "@/composables/use-relative-time";
 import { autoName, parseSchedule, promptFrom } from "@/lib/automation-schedule";
@@ -22,7 +24,9 @@ interface Emits {
 defineProps<Props>();
 const emit = defineEmits<Emits>();
 
-const { automations, isLoading } = useAutomations();
+// With "Switch machines without reloading" on, the list is the chosen machine's (the panel is rebuilt when it changes).
+const automationsMachine = useAutomationsMachine();
+const { automations, isLoading } = useAutomations(automationsMachine.target.value);
 const { viewMode, draft } = useAutomationsNav();
 const now = useRelativeTime();
 
@@ -39,6 +43,8 @@ const machines = useMachinesStore();
 function machineOf(automation: Automation): string | null {
   const id = automation.targetMachineId;
   if (!id) return null;
+  // The id is in the list of the machine that keeps it; this machine's list names only its own.
+  if (automationsMachine.isOther.value) return automation.lastRun?.machineName ?? "another machine";
   return machines.entries.find((entry) => entry.key === id)?.name ?? automation.lastRun?.machineName ?? "another machine";
 }
 
@@ -67,6 +73,17 @@ function handleCreate(): void {
       <p class="panel-header">
         Automations
       </p>
+      <!-- With "Switch machines without reloading" on: which machine's automations the list and the pane show. -->
+      <div
+        v-if="automationsMachine.enabled.value"
+        class="panel-machine"
+      >
+        <MachineSwitch
+          :choice="automationsMachine"
+          label="Automations"
+          testid="automations"
+        />
+      </div>
     </div>
 
     <div class="automations-nav-actions">
@@ -185,6 +202,10 @@ function handleCreate(): void {
 
 .panel-header-row {
   padding-top: 4px;
+}
+
+.panel-machine {
+  padding: 0 12px 6px;
 }
 
 .panel-header {
