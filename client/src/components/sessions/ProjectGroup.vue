@@ -65,8 +65,8 @@ interface Props {
   /** Whether the session being dragged is pinned: dropping it on its own project unpins it. */
   activeDragPinned?: boolean;
   /**
-   * On a machine that isn't live: the machine's name. Its rows only open their session there; the project has no menu
-   * and nothing drags, so nothing acts on the wrong machine.
+   * On a machine that isn't live: the machine's name. Its rows open their session there and nothing drags. The project
+   * keeps its + and its menu, which act on that machine (the group asks the machine its parent provides).
    */
   openOnMachine?: string;
   /** That machine isn't answering (see SessionItem). */
@@ -194,7 +194,7 @@ const {
   isDeleting,
 } = useDeleteProject();
 
-const canShowContextMenu = computed(() => !props.openOnMachine && !props.project.isUngrouped && props.project.projectId !== null);
+const canShowContextMenu = computed(() => !props.project.isUngrouped && props.project.projectId !== null);
 const isAnyActionPending = computed(() => isUpdating.value || isReordering.value || isDeleting.value);
 
 // Drag-and-drop drop target state

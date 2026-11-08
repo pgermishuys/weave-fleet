@@ -493,7 +493,8 @@ never ends. If it's the one you're working in, its header turns red, and a reloa
 
 With **Keep every machine live** on (Settings → Labs), every machine's rows update as they change instead. **Work
 here** (right-click a machine's heading) makes a machine the one you're on. Another machine's rows offer **Copy
-path**, not Open in: the folder is on that machine.
+path**, not Open in: the folder is on that machine. Its projects work as this machine's do: the **+** on a project
+starts a session on that machine in that project, and right-clicking a project renames, moves or deletes it there.
 
 An automation can run on another machine in the list: pick it with the Machine chip under the automation's box. The
 automation, its schedule and its runs stay on the machine that holds it. Each run starts its session (or workflow run)

@@ -157,6 +157,83 @@ describe("SessionsPanel across machines", () => {
     view.unmount();
   });
 
+  // Regression (0.69.0): once machines switched in place, nothing made another machine live, and its projects lost
+  // their + and menu for good.
+  it("gives another machine's projects their + and menu, and the + starts a session there, in that project", async () => {
+    navigate.mockClear();
+    const machines = useMachinesStore();
+    machines.others = {
+      ...machines.others,
+      [hangar.id]: { sessions: [item("hangar-1", "Index for slow search", "p-lumen")], projects: [project("p-lumen", "lumen-site", 1)], error: null, loadedAt: 1, loading: false },
+    };
+    useSessionsStore().setSessions([item("home-1", "Local work", "p-fleet")]);
+    const view = mountPanel();
+    await flushPromises();
+
+    // Open hangar's session in place: hangar is the machine you're on, home stays live.
+    await view.get("[data-machine='hangar-id'] [data-testid='machine-session-row']").trigger("click");
+    machines.setCurrent(hangar.id);
+    navigate.mockClear();
+
+    // The right-click menu is on the project, as on home's (its trigger carries the menu's state).
+    expect(view.get("[data-machine='hangar-id'] .project-shell").attributes("data-state")).toBe("closed");
+
+    await view.get("[data-machine='hangar-id'] [data-testid='project-new-session']").trigger("click");
+
+    expect(useWorkspaceUiStore().newSessionMachine).toBeNull(); // null is the machine you're on: hangar
+    expect(machines.currentKey).toBe(hangar.id);
+    expect(navigate).toHaveBeenCalledWith({ to: "/sessions/new", search: { projectId: "p-lumen", source: undefined } });
+    view.unmount();
+  });
+
+  it("starts a session in another machine's project from its +, on that machine, while you're on home", async () => {
+    navigate.mockClear();
+    const machines = useMachinesStore();
+    machines.others = {
+      ...machines.others,
+      [hangar.id]: { sessions: [], projects: [project("p-lumen", "lumen-site", 1)], error: null, loadedAt: 1, loading: false },
+    };
+    const view = mountPanel();
+    await flushPromises();
+
+    await view.get("[data-machine='hangar-id'] [data-testid='project-new-session']").trigger("click");
+
+    expect(useWorkspaceUiStore().newSessionMachine).toBe(hangar.id);
+    expect(navigate).toHaveBeenCalledWith({ to: "/sessions/new", search: { projectId: "p-lumen", source: undefined } });
+    view.unmount();
+  });
+
+  it("renames another machine's project on that machine, and lists that machine again", async () => {
+    const fetchMock = vi.fn(async (input: RequestInfo | URL) => {
+      const url = input instanceof Request ? input.url : String(input);
+      return url.includes("/api/projects/p-lumen")
+        ? new Response(JSON.stringify(project("p-lumen", "lumen-docs", 1)), { status: 200, headers: { "Content-Type": "application/json" } })
+        : new Response("{}", { status: 404 });
+    });
+    vi.stubGlobal("fetch", fetchMock);
+    const machines = useMachinesStore();
+    machines.others = {
+      ...machines.others,
+      [hangar.id]: { sessions: [], projects: [project("p-lumen", "lumen-site", 1)], error: null, loadedAt: 1, loading: false },
+    };
+    const refresh = vi.spyOn(machines, "refreshMachine").mockResolvedValue();
+    const view = mountPanel();
+    await flushPromises();
+
+    await view.get("[data-machine='hangar-id'] .project-header").trigger("keydown", { key: "F2" });
+    const input = view.get("[data-machine='hangar-id'] input");
+    await input.setValue("lumen-docs");
+    await input.trigger("keydown", { key: "Enter" });
+    await flushPromises();
+
+    const renames = fetchMock.mock.calls
+      .map(([input]) => (input instanceof Request ? input : null))
+      .filter((request): request is Request => request !== null && request.url.includes("/api/projects/p-lumen"));
+    expect(renames.map((request) => `${request.method} ${request.url}`)).toEqual(["PATCH http://hangar.test:2113/api/projects/p-lumen"]);
+    expect(refresh).toHaveBeenCalledWith(hangar.id);
+    view.unmount();
+  });
+
   it("Work here makes that machine the one you're on and goes to its first page in place", async () => {
     navigate.mockClear();
     const machines = useMachinesStore();
