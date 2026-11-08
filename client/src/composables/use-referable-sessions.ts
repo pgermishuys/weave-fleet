@@ -231,7 +231,7 @@ export function useReferableMachines(
 
   return computed(() => {
     const machines = store();
-    const ownName = ownEntry()?.name ?? "This machine";
+    const ownName = ownEntry()?.name ?? target.connection?.name ?? "This machine";
     const list = others().map((entry): ReferableMachine => {
       const id = entry.isHome ? machines.home?.id ?? null : entry.key;
       // What the page already holds for it wins: its status is live.

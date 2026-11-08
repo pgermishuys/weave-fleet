@@ -32,15 +32,7 @@ export interface SessionReference {
   machine?: string;
 }
 
-/** A reference as a request carries it: the machine's id only for a session on another machine. */
-export function requestSessionReference(reference: Pick<SessionReference, "token" | "sessionId" | "machineId">): {
-  token: string;
-  sessionId: string;
-  machineId?: string;
-} {
-  const { token, sessionId, machineId } = reference;
-  return machineId ? { token, sessionId, machineId } : { token, sessionId };
-}
+export { requestSessionReference } from "@/lib/session-reference-request";
 
 /** The most references one composer remembers; the oldest go first. */
 const MAX_REMEMBERED = 50;

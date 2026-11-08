@@ -17,14 +17,17 @@ function sessionItem(id: string, title: string, machine?: AutocompleteMachine): 
 }
 
 function render(items: AutocompleteItem[]) {
-  return mount(defineComponent(() => () => h(AutocompletePopup, {
-    open: true,
-    items,
-    isLoading: false,
-    selectedValue: items[0]?.value ?? null,
-    onSelect: () => {},
-    ownMachineHint: "this session's machine",
-  })));
+  const Popup = defineComponent({
+    setup: () => () => h(AutocompletePopup, {
+      open: true,
+      items,
+      isLoading: false,
+      selectedValue: items[0]?.value ?? null,
+      onSelect: () => {},
+      ownMachineHint: "this session's machine",
+    }),
+  });
+  return mount(Popup);
 }
 
 describe("AutocompletePopup with sessions on other machines", () => {

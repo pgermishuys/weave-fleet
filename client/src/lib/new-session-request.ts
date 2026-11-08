@@ -1,7 +1,7 @@
 import type { CreateSessionResponse, ModelReference, SessionListItem, SessionSourceSelection } from "@/api/client";
 import type { CreateSessionOptions } from "@/composables/use-session-actions";
 import type { ImageAttachment } from "@/lib/client-types";
-import { requestSessionReference } from "@/lib/session-references";
+import { requestSessionReference } from "@/lib/session-reference-request";
 import {
   buildGitHubSessionSourceSelection,
   type GitHubSessionSourcePreset,

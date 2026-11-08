@@ -126,6 +126,10 @@ function offeredSessions(): string[] {
     .filter((text) => text.includes("Falcon") || text.includes("Home"));
 }
 
+function machineHeadings(): string[] {
+  return [...document.querySelectorAll("[data-testid='autocomplete-machine']")].map((heading) => heading.textContent ?? "");
+}
+
 function press(element: Element, key: string): void {
   element.dispatchEvent(new KeyboardEvent("keydown", { key, bubbles: true, cancelable: true }));
 }
@@ -161,10 +165,26 @@ describe("Composer @ sessions on another machine", () => {
     await typeMention(wrapper, "carry on from @Falcon");
 
     expect(sessionListCalls(falconApi)).not.toHaveLength(0);
-    expect(sessionListCalls(liveApi)).toHaveLength(0);
     const offered = offeredSessions();
     expect(offered.some((text) => text.includes("Falcon cache warmup"))).toBe(true);
     expect(offered.some((text) => text.includes("Home"))).toBe(false);
+    // The session's own machine's group, first and under its name.
+    expect(machineHeadings()[0]).toContain("falcon");
+  });
+
+  it("offers the live machine's sessions under its own name, after the session's machine's", async () => {
+    useDraftState("ses-falcon-open", { agentId: "", modelId: "" }).resetText();
+    const wrapper = mountComposer("ses-falcon-open", falcon);
+    await flushPromises();
+
+    await typeMention(wrapper, "carry on from @");
+
+    const headings = machineHeadings();
+    expect(headings[0]).toContain("falcon");
+    expect(headings).toHaveLength(2);
+    const options = offeredSessions();
+    expect(options.findIndex((text) => text.includes("Falcon cache warmup")))
+      .toBeLessThan(options.findIndex((text) => text.includes("Home")));
   });
 
   it("sends a picked session's id to the session's machine", async () => {
