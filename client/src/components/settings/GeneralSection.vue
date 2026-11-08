@@ -3,6 +3,8 @@ import { computed, shallowRef } from "vue";
 import SettingGroup from "@/components/settings/SettingGroup.vue";
 import SettingRow from "@/components/settings/SettingRow.vue";
 import SettingSwitch from "@/components/settings/SettingSwitch.vue";
+import MachineSettingsUnread from "@/components/settings/MachineSettingsUnread.vue";
+import ThisAppBadge from "@/components/settings/ThisAppBadge.vue";
 import { useBoardFeature } from "@/composables/use-board-feature";
 import { usePreferenceSwitch } from "@/composables/use-preference-switch";
 import { SESSION_RECAP_PREFERENCE_KEY } from "@/composables/use-session-recap";
@@ -16,17 +18,20 @@ import {
   notificationPermission,
   requestNotificationPermission,
 } from "@/composables/use-session-notifications";
-import { usePreferencesStore } from "@/stores/preferences";
+import { useSettingsPreferences } from "@/composables/use-settings-preferences";
+import { liveTarget } from "@/lib/machine-target";
 
-const preferencesStore = usePreferencesStore();
-preferencesStore.ensureLoaded();
+// Rows the machine Settings shows reads follow it; the rest are this app's (marked This app with another machine picked).
+const { machine: machinePreferences, app: appPreferences, unreadable } = useSettingsPreferences();
+const app = { target: liveTarget() };
 const { isBoardFeatureEnabled, setBoardFeatureEnabled } = useBoardFeature();
 
 const isSavingBoardFeature = shallowRef(false);
 const boardFeatureError = shallowRef<string | null>(null);
 
 // On unless turned off: the new-session page offers a few sentences to start from.
-const starters = usePreferenceSwitch(STARTERS_PREFERENCE_KEY, { defaultOn: true });
+const starters = usePreferenceSwitch(STARTERS_PREFERENCE_KEY, { defaultOn: true, ...app });
+// The machine's own server reads these three.
 // Off unless turned on.
 const recap = usePreferenceSwitch(SESSION_RECAP_PREFERENCE_KEY);
 // On unless turned off: a turn a model provider's limit stopped carries on by itself.
@@ -34,16 +39,18 @@ const retryAfterLimits = usePreferenceSwitch(RETRY_AFTER_LIMITS_PREFERENCE_KEY, 
 // Off unless turned on: it sends a message the user didn't type.
 const restartContinue = usePreferenceSwitch(RESTART_CONTINUE_AUTO_PREFERENCE_KEY);
 // On unless turned off.
-const usageChip = usePreferenceSwitch(USAGE_LIMITS_CHIP_PREFERENCE_KEY, { defaultOn: true });
+const usageChip = usePreferenceSwitch(USAGE_LIMITS_CHIP_PREFERENCE_KEY, { defaultOn: true, ...app });
 
-const largePastes = computed(() => preferencesStore.get(LARGE_PASTES_PREFERENCE_KEY, "ask"));
+const machineLocked = computed(() => machinePreferences.isLoading || unreadable.value);
+
+const largePastes = computed(() => appPreferences.get(LARGE_PASTES_PREFERENCE_KEY, "ask"));
 
 async function setLargePastes(event: Event): Promise<void> {
-  await preferencesStore.set(LARGE_PASTES_PREFERENCE_KEY, (event.target as HTMLSelectElement).value);
+  await appPreferences.set(LARGE_PASTES_PREFERENCE_KEY, (event.target as HTMLSelectElement).value);
 }
 
 const isNotificationsEnabled = computed(
-  () => preferencesStore.get(DESKTOP_NOTIFICATIONS_PREFERENCE_KEY, "false") === "true",
+  () => appPreferences.get(DESKTOP_NOTIFICATIONS_PREFERENCE_KEY, "false") === "true",
 );
 const isSavingNotifications = shallowRef(false);
 const notificationsError = shallowRef<string | null>(null);
@@ -67,7 +74,7 @@ async function toggleNotifications(): Promise<void> {
       }
     }
 
-    await preferencesStore.set(DESKTOP_NOTIFICATIONS_PREFERENCE_KEY, turningOn ? "true" : "false");
+    await appPreferences.set(DESKTOP_NOTIFICATIONS_PREFERENCE_KEY, turningOn ? "true" : "false");
   } finally {
     isSavingNotifications.value = false;
   }
@@ -96,6 +103,11 @@ async function toggleBoardFeature(): Promise<void> {
     class="flex flex-col gap-6"
     data-testid="general-section"
   >
+    <MachineSettingsUnread
+      v-if="unreadable"
+      @retry="machinePreferences.refresh"
+    />
+
     <SettingGroup
       id="new-sessions"
       title="New sessions"
@@ -105,6 +117,9 @@ async function toggleBoardFeature(): Promise<void> {
         title="Show starters"
         summary="A few sentences to start from on the new-session page."
       >
+        <template #badge>
+          <ThisAppBadge />
+        </template>
         <template #more>
           On the new-session page, offer a few sentences to start from, such as "Explore the code". A starter
           fills the box; nothing is sent until you press Enter.
@@ -113,7 +128,7 @@ async function toggleBoardFeature(): Promise<void> {
           <SettingSwitch
             :checked="starters.enabled.value"
             :saving="starters.saving.value"
-            :disabled="preferencesStore.isLoading || starters.saving.value"
+            :disabled="appPreferences.isLoading || starters.saving.value"
             aria-label="Show starters"
             data-testid="starters-switch"
             @click="starters.toggle"
@@ -125,6 +140,9 @@ async function toggleBoardFeature(): Promise<void> {
         title="Large pastes"
         summary="When you paste 2,000 characters or 25 lines or more."
       >
+        <template #badge>
+          <ThisAppBadge />
+        </template>
         <template #control>
           <select
             :value="largePastes"
@@ -156,6 +174,9 @@ async function toggleBoardFeature(): Promise<void> {
         title="Desktop notifications"
         summary="When a session needs you or finishes, unless it's the one in front of you."
       >
+        <template #badge>
+          <ThisAppBadge />
+        </template>
         <template #more>
           Tell me when a session needs an answer, or finishes, while I'm looking at something else. Nothing
           is sent about the session in front of you.
@@ -180,7 +201,7 @@ async function toggleBoardFeature(): Promise<void> {
           <SettingSwitch
             :checked="isNotificationsEnabled"
             :saving="isSavingNotifications"
-            :disabled="preferencesStore.isLoading || isSavingNotifications"
+            :disabled="appPreferences.isLoading || isSavingNotifications"
             aria-label="Enable desktop notifications"
             @click="toggleNotifications"
           />
@@ -199,7 +220,7 @@ async function toggleBoardFeature(): Promise<void> {
           <SettingSwitch
             :checked="recap.enabled.value"
             :saving="recap.saving.value"
-            :disabled="preferencesStore.isLoading || recap.saving.value"
+            :disabled="machineLocked || recap.saving.value"
             aria-label="Enable session recap"
             @click="recap.toggle"
           />
@@ -219,7 +240,7 @@ async function toggleBoardFeature(): Promise<void> {
           <SettingSwitch
             :checked="restartContinue.enabled.value"
             :saving="restartContinue.saving.value"
-            :disabled="preferencesStore.isLoading || restartContinue.saving.value"
+            :disabled="machineLocked || restartContinue.saving.value"
             aria-label="Continue cut-off sessions by itself"
             data-testid="restart-continue-switch"
             @click="restartContinue.toggle"
@@ -239,7 +260,7 @@ async function toggleBoardFeature(): Promise<void> {
           <SettingSwitch
             :checked="retryAfterLimits.enabled.value"
             :saving="retryAfterLimits.saving.value"
-            :disabled="preferencesStore.isLoading || retryAfterLimits.saving.value"
+            :disabled="machineLocked || retryAfterLimits.saving.value"
             aria-label="Try again when a limit resets"
             data-testid="retry-after-limits-switch"
             @click="retryAfterLimits.toggle"
@@ -257,13 +278,16 @@ async function toggleBoardFeature(): Promise<void> {
         title="Show usage in the status bar"
         summary="The tightest provider limit, grey until 80%."
       >
+        <template #badge>
+          <ThisAppBadge />
+        </template>
         <template #more>
           Fleet asks the providers you've signed in to how much you've used, read-only: Claude automatically, the others after you press Allow. The chip shows the tightest limit, grey until 80%. Turn it off to hide it; nothing else changes.
         </template>
         <template #control>
           <SettingSwitch
             :checked="usageChip.enabled.value"
-            :disabled="preferencesStore.isLoading || usageChip.saving.value"
+            :disabled="appPreferences.isLoading || usageChip.saving.value"
             aria-label="Show usage in the status bar"
             data-testid="usage-limits-chip-switch"
             @click="usageChip.toggle"
@@ -275,6 +299,9 @@ async function toggleBoardFeature(): Promise<void> {
         title="Board"
         summary="The Board entry in the rail, with its panels."
       >
+        <template #badge>
+          <ThisAppBadge />
+        </template>
         <template #more>
           Show the Board entry in the left rail and enable the board workspace panels.
         </template>
@@ -291,7 +318,7 @@ async function toggleBoardFeature(): Promise<void> {
           <SettingSwitch
             :checked="isBoardFeatureEnabled"
             :saving="isSavingBoardFeature"
-            :disabled="preferencesStore.isLoading || isSavingBoardFeature"
+            :disabled="appPreferences.isLoading || isSavingBoardFeature"
             aria-label="Enable Board feature"
             @click="toggleBoardFeature"
           />

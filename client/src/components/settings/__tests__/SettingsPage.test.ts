@@ -3,7 +3,7 @@ import { createPinia, getActivePinia, setActivePinia } from "pinia";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { defineComponent, h } from "vue";
 import { saveMachines, setActiveMachine } from "@/lib/machines";
-import { resetSettingsMachine, useSettingsMachine } from "@/composables/use-settings-machine";
+import { resetSettingsMachine } from "@/composables/use-settings-machine";
 import { useMachinesStore } from "@/stores/machines";
 import SettingsPage from "@/components/settings/SettingsPage.vue";
 import { useSettingsNav, type SettingsSectionId } from "@/composables/use-settings-nav";
@@ -73,7 +73,7 @@ describe("SettingsPage", () => {
     wrapper.unmount();
   });
 
-  it("names the machine on a page that comes later and offers the live machine's page", async () => {
+  it("names the picked machine on General and Labs, and This browser on Appearance", async () => {
     const falcon = { id: "ffffffffffffffffffffffffffffffff", name: "falcon", baseUrl: "http://falcon.example.test:2113", token: "falcon-token-0123456789", os: "linux", addedAt: "2026-11-07T00:00:00.000Z" };
     config.global.plugins = [getActivePinia()!];
     localStorage.clear();
@@ -84,10 +84,15 @@ describe("SettingsPage", () => {
     resetSettingsMachine();
     const wrapper = await mountAt("general", null);
 
-    expect(wrapper.get("[data-testid='settings-machine-later']").text()).toContain("General on falcon comes in a later step.");
-    await wrapper.get("[data-testid='settings-machine-show-live']").trigger("click");
-    expect(useSettingsMachine().key.value).toBe("home");
-    expect(wrapper.find("[data-testid='settings-machine-later']").exists()).toBe(false);
+    expect(wrapper.get("[data-testid='settings-machine-chip']").text()).toBe("falcon");
+    expect(wrapper.find("[data-testid='general-section']").exists()).toBe(true);
+    useSettingsNav().setActiveSection("labs");
+    await flushPromises();
+    expect(wrapper.get("[data-testid='settings-machine-chip']").text()).toBe("falcon");
+    expect(wrapper.find("[data-testid='labs-section']").exists()).toBe(true);
+    useSettingsNav().setActiveSection("appearance");
+    await flushPromises();
+    expect(wrapper.get("[data-testid='settings-machine-chip']").text()).toBe("This browser");
     wrapper.unmount();
   });
 });

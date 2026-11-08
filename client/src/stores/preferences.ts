@@ -6,23 +6,24 @@ export const usePreferencesStore = defineMachineStore("preferences", (target) =>
   const preferences = ref<Record<string, string>>({});
   const isLoading = shallowRef(false);
   const hasFetched = shallowRef(false);
+  /** The last read didn't get an answer: what's shown are the defaults, not the machine's own values. */
+  const loadFailed = shallowRef(false);
 
   async function fetchPreferences(): Promise<void> {
     isLoading.value = true;
 
     try {
       const { data, error: apiError } = await target.api.GET("/api/preferences");
-      if (apiError) {
-        return;
-      }
-
-      if (!data) {
+      if (apiError || !data) {
+        loadFailed.value = true;
         return;
       }
 
       preferences.value = data as Record<string, string>;
+      loadFailed.value = false;
     } catch {
-      // Silently fail — will use fallbacks
+      // Unreachable: the fallbacks are used, and `loadFailed` says so.
+      loadFailed.value = true;
     } finally {
       isLoading.value = false;
       hasFetched.value = true;
@@ -67,6 +68,7 @@ export const usePreferencesStore = defineMachineStore("preferences", (target) =>
     preferences,
     isLoading,
     hasFetched,
+    loadFailed,
     get,
     set,
     refresh: fetchPreferences,

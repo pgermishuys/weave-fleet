@@ -1,7 +1,6 @@
 <script setup lang="ts">
 import { computed, nextTick, watch } from "vue";
 import MachineScope from "@/components/layout/MachineScope.vue";
-import { Button } from "@/components/ui/button";
 import AppearanceSection from "@/components/settings/AppearanceSection.vue";
 import CredentialsSection from "@/components/settings/CredentialsSection.vue";
 import GeneralSection from "@/components/settings/GeneralSection.vue";
@@ -17,7 +16,6 @@ import WorkspaceSection from "@/components/settings/WorkspaceSection.vue";
 import WorktreeNamingSection from "@/components/settings/WorktreeNamingSection.vue";
 import { useSettingsMachine } from "@/composables/use-settings-machine";
 import { useSettingsNav } from "@/composables/use-settings-nav";
-import { useMachinesStore } from "@/stores/machines";
 import PluginPage from "@/components/settings/PluginPage.vue";
 import PluginsOverview from "@/components/settings/PluginsOverview.vue";
 import { pluginManifests } from "@/plugins/registry";
@@ -41,19 +39,15 @@ const PAGES: Readonly<Record<string, { title: string; line: string }>> = {
 };
 
 const { activeSection, activeAnchor } = useSettingsNav();
-const machines = useMachinesStore();
 // Settings shows the machine you're on, or the one picked in the menu.
 const settingsMachine = useSettingsMachine();
 
 /**
- * Pages that ask the machine Settings shows. The rest ask the live machine, so for another machine they say so rather
- * than show the live machine's settings as its own. Appearance and Machines belong to this browser, not a machine.
+ * Every page but these asks the machine Settings shows: Appearance, Machines and plugin pages belong to this browser.
+ * General and Labs mix both kinds: each of their rows says when it is this app's, not the machine's (`ThisAppBadge`).
  */
-const MACHINE_PAGES: readonly string[] = ["harnesses", "folders", "permissions", "skills", "memory", "updates", "credentials"];
 const BROWSER_PAGES: readonly string[] = ["appearance", "machines"];
 const isBrowserPage = computed(() => BROWSER_PAGES.includes(activeSection.value) || activeSection.value === "plugins" || pluginId.value !== null);
-const comesLater = computed(() =>
-  settingsMachine.enabled.value && settingsMachine.isOther.value && !isBrowserPage.value && !MACHINE_PAGES.includes(activeSection.value));
 
 // A plugin's page is drawn from the plugin registry; core never imports the plugin.
 const pluginId = computed(() =>
@@ -116,25 +110,7 @@ watch(
         class="settings-machine-pane grid grid-cols-1 gap-6"
         data-testid="settings-machine-pane"
       >
-        <div
-          v-if="comesLater"
-          class="flex flex-wrap items-center gap-3 rounded-btn border border-border px-4 py-3 text-sm text-muted"
-          data-testid="settings-machine-later"
-        >
-          <span>
-            {{ header.title }} on <span class="font-mono font-semibold text-[var(--coral)]">{{ settingsMachine.entry.value.name }}</span> comes in a later step.
-          </span>
-          <Button
-            variant="outline"
-            size="sm"
-            data-testid="settings-machine-show-live"
-            @click="settingsMachine.pick(machines.liveKey)"
-          >
-            Show {{ machines.live.name }}'s {{ header.title }}
-          </Button>
-        </div>
-
-      <GeneralSection v-else-if="activeSection === 'general'" />
+      <GeneralSection v-if="activeSection === 'general'" />
 
       <AppearanceSection v-else-if="activeSection === 'appearance'" />
 
