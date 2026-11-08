@@ -270,9 +270,14 @@ the machine that served the page. A link to a session on another machine opens i
   changes only that view, and each opens on the machine you're on again the next time you visit it. The dashboard and
   the new-session page follow it too.
 - **Settings:** Appearance and Machines are marked **This browser**, because they belong to this browser, not to a
-  machine. Folders, Harnesses, What agents can do, Skills & tools, Memory, Updates & about and API keys ask the machine
-  shown. General and Labs say they come in a later step while another machine is shown, rather than showing the live
-  machine's settings as that machine's. On What agents can do, the list of machines this machine may send work to isn't
+  machine. Every other page asks the machine shown. General and Labs hold both kinds of setting, sorted by who reads
+  it. The machine's own server reads Session recap, Continue cut-off sessions by itself, Try again when a limit resets,
+  Dreaming, Search older notes, Choose on a page and Workflows, so these show and change the shown machine's value,
+  and that machine acts on it. This app reads Show starters, Large pastes, Desktop notifications, Show usage in the
+  status bar and Board, and the Fleet that holds the machine list and the job queue reads Keep every machine live,
+  Updates in Machines, Jobs and Mission control: with another machine shown these keep this app's value and say
+  **This app · not falcon's**. When the shown machine's settings can't be read, General and Labs say so and its own
+  rows can't be changed until it answers (Try again); the This app rows still can. On What agents can do, the list of machines this machine may send work to isn't
   shown for another machine yet, and Dream each night doesn't offer to open its automation.
 - **Work here** (right-click a machine's heading in the sessions list) and **Work here** on a machine's card in
   Settings → Machines make that machine the one you're on and go to its first page, in place. The composer's "fix the
