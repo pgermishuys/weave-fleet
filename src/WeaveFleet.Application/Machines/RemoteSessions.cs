@@ -308,7 +308,7 @@ public sealed class RemoteSessions(RemoteMachineService machines, IHttpClientFac
     /// (<c>GET /api/sessions/{id}/messages</c>); the last reply at all when the message isn't in the page. Null with no
     /// error when it wrote none.
     /// </summary>
-    public async Task<(string? Reply, string? Error)> LastReplyAsync(
+    public async Task<(string? Reply, string? Error, bool Superseded)> LastReplyAsync(
         RemoteMachine machine,
         string token,
         string sessionId,
@@ -317,26 +317,23 @@ public sealed class RemoteSessions(RemoteMachineService machines, IHttpClientFac
     {
         var (answer, away, refused) = await GetAsync(machine, token, $"/api/sessions/{Uri.EscapeDataString(sessionId)}/messages?limit=30", ct);
         if (answer is null)
-            return (null, away ?? refused);
+            return (null, away ?? refused, false);
 
         using (answer)
         {
             if (!answer.RootElement.TryGetProperty("messages", out var list) || list.ValueKind != JsonValueKind.Array)
-                return (null, $"{machine.Name} sent something that isn't Fleet's answer.");
+                return (null, $"{machine.Name} sent something that isn't Fleet's answer.", false);
 
-            var messages = list.EnumerateArray().ToList();
-            var start = messages.FindLastIndex(message => Text(message, "id") == afterMessageId) + 1;
-            for (var i = messages.Count - 1; i >= start; i--)
-            {
-                if (Text(messages[i], "role") != "assistant" || !messages[i].TryGetProperty("parts", out var parts) || parts.ValueKind != JsonValueKind.Array)
-                    continue;
-
-                var text = string.Concat(parts.EnumerateArray().Where(part => Text(part, "type") == "text").Select(part => Text(part, "text"))).Trim();
-                if (text.Length > 0)
-                    return (text, null);
-            }
-
-            return (null, null);
+            var page = list.EnumerateArray()
+                .Select(message => (
+                    Id: Text(message, "id") ?? "",
+                    Role: Text(message, "role") ?? "",
+                    Text: message.TryGetProperty("parts", out var parts) && parts.ValueKind == JsonValueKind.Array
+                        ? string.Concat(parts.EnumerateArray().Where(part => Text(part, "type") == "text").Select(part => Text(part, "text"))).Trim()
+                        : ""))
+                .ToList();
+            var (reply, superseded) = SessionUpdateSender.ReplyTo(page, afterMessageId);
+            return (reply, null, superseded);
         }
     }
 
@@ -369,9 +366,13 @@ public sealed class RemoteSessions(RemoteMachineService machines, IHttpClientFac
 
             var messages = list.EnumerateArray().ToList();
             var asked = messages.FindLastIndex(message => Text(message, "id") == messageId);
-            var reply = asked < 0 ? default : messages.Skip(asked + 1).LastOrDefault(message => Text(message, "role") == "assistant");
+            // Only the turn between the message and the next user message is its own: later replies answer other messages.
+            var after = asked < 0 ? [] : messages.Skip(asked + 1).ToList();
+            var next = after.FindIndex(message => Text(message, "role") == "user");
+            var own = next < 0 ? after : after[..next];
+            var reply = own.LastOrDefault(message => Text(message, "role") == "assistant");
             if (reply.ValueKind != JsonValueKind.Object)
-                return new RemoteTurn(Ended: false, null, null);
+                return next >= 0 ? new RemoteTurn(Ended: true, null, null) : new RemoteTurn(Ended: false, null, null);
 
             TurnError? failure = null;
             if (reply.TryGetProperty("error", out var error) && error.ValueKind == JsonValueKind.Object)
