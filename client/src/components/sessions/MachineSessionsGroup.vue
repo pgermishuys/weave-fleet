@@ -32,6 +32,8 @@ const props = defineProps<{
   /** The new-session draft, when it starts on this machine. */
   draft?: NewSessionDraftRow | null;
   draftActive?: boolean;
+  /** The open session, when it's on this machine: its row is marked open. */
+  activeSessionId?: string | null;
 }>();
 
 const emit = defineEmits<{
@@ -120,7 +122,6 @@ const why = computed(() => (unreachable.value ? machines.diagnoses[props.machine
   >
     <MachineHeader
       :name="machine.name"
-      :current="machine.key === machines.currentKey"
       :unreachable="unreachable"
       :note="note"
       :why="why"
@@ -146,7 +147,7 @@ const why = computed(() => (unreachable.value ? machines.diagnoses[props.machine
         :project="pinnedGroup"
         pinned
         :expanded="isProjectExpanded(PINNED_GROUP_ID)"
-        :active-session-id="null"
+        :active-session-id="activeSessionId ?? null"
         :active-drag-session-id="null"
         :active-drag-project-id="null"
         :running-counts="runningCounts"
@@ -161,7 +162,7 @@ const why = computed(() => (unreachable.value ? machines.diagnoses[props.machine
         :key="project.id"
         :project="project"
         :expanded="isProjectExpanded(project.id)"
-        :active-session-id="null"
+        :active-session-id="activeSessionId ?? null"
         :active-drag-session-id="null"
         :active-drag-project-id="null"
         :draft="project.id === draftGroupId ? draft : null"

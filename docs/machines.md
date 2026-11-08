@@ -260,9 +260,10 @@ loginctl enable-linger "$USER"   # keep it running when you're logged out
 ## Switching machines
 
 Nothing in Fleet reloads to change machine: no blank window, a session on another machine shows in a fraction of a
-second, and the **Live** badge in the sessions list moves to the machine you're on. The machine you're on is the
-machine of the session you have open; with none open, the one you last chose with **Work here** in this tab, else the
-machine that served the page. A link to a session on another machine opens it in place on that page.
+second, and its row in the sessions list is the one marked open, under its machine's heading. Every machine's heading
+looks the same; the session header's machine chip says which machine the open session is on. The machine you're on is
+the machine of the session you have open; with none open, the one you last chose with **Work here** in this tab, else
+the machine that served the page. A link to a session on another machine opens it in place on that page.
 
 - **Sessions, Settings, Automations, Workflows and Analytics follow the machine you're on.** Each of Settings,
   Automations, Workflows and Analytics has its own machine switch at the top of its menu; picking a machine there

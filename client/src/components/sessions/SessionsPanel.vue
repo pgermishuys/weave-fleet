@@ -134,7 +134,7 @@ const runningCounts = computed(() => new Map(runningWorkGroups.value.map((group)
 const runningSubagents = computed(() => runningSubagentsBySession(runningWork.value));
 
 // Other machines: every machine is listed, in a fixed order (home, then the others as they were added), so switching
-// machines only moves the Live tag. The live one is listed in full, the rest as their last polled list.
+// machines moves no heading: only the open row changes. The live one is listed in full, the rest as their last polled list.
 const machines = useMachinesStore();
 const { openAddMachine } = useSettingsNav();
 const { entries: machineEntries, hasMachines, others: machineSessions } = storeToRefs(machines);
@@ -211,6 +211,20 @@ watch(
   },
   { immediate: true },
 );
+
+/**
+ * The session open now (`/sessions/$id`) and the machine it's on, the one AppShell asks for it. Its row is the one
+ * marked open, on whichever machine's list it's in.
+ */
+const openSessionId = computed(() => {
+  const path = pathname.value;
+  if (!path.startsWith("/sessions/") || path === "/sessions/new") return null;
+  return decodeURIComponent(path.slice("/sessions/".length));
+});
+const openSessionMachineKey = computed(() => (openSessionId.value ? machines.sessionTarget(openSessionId.value).key : null));
+/** This machine's open row: none while a session on another machine is open, so only one row is ever marked. */
+const liveActiveSessionId = computed(() =>
+  openSessionMachineKey.value && openSessionMachineKey.value !== machines.liveKey ? null : activeSessionId.value);
 
 const normalizedQuery = computed(() => searchQuery.value.trim().toLowerCase());
 const projectsById = computed(() => {
@@ -642,7 +656,6 @@ function handleCompleteDropZoneDrop(event: DragEvent): void {
             v-if="showMachines"
             :name="machine.name"
             live
-            :current="machine.key === machines.currentKey"
             :unreachable="!machines.liveReachable"
             :note="machines.liveReachable ? null : 'unreachable'"
             :count="liveSessionCount"
@@ -714,7 +727,7 @@ function handleCompleteDropZoneDrop(event: DragEvent): void {
                 :project="pinnedGroup"
                 pinned
                 :expanded="isProjectExpanded(PINNED_GROUP_ID)"
-                :active-session-id="activeSessionId"
+                :active-session-id="liveActiveSessionId"
                 :active-drag-session-id="activeSessionDrag?.sessionId ?? null"
                 :active-drag-project-id="activeSessionDrag?.projectId ?? null"
                 :row-keys="sessionRowKeys"
@@ -733,7 +746,7 @@ function handleCompleteDropZoneDrop(event: DragEvent): void {
                 :key="project.id"
                 :project="project"
                 :expanded="isProjectExpanded(project.id)"
-                :active-session-id="activeSessionId"
+                :active-session-id="liveActiveSessionId"
                 :active-drag-session-id="activeSessionDrag?.sessionId ?? null"
                 :active-drag-project-id="activeSessionDrag?.projectId ?? null"
                 :draft="project.id === draftGroupId ? newSessionDraftRow : null"
@@ -777,6 +790,7 @@ function handleCompleteDropZoneDrop(event: DragEvent): void {
           :query="normalizedQuery"
           :draft="machine.key === draftMachineKey ? newSessionDraftRow : null"
           :draft-active="isNewSessionOpen"
+          :active-session-id="openSessionMachineKey === machine.key ? openSessionId : null"
           @open="handleMachineSessionOpen(machine, $event)"
           @open-draft="handleOpenDraft"
           @new-session="handleNewSessionOn(machine.key)"
