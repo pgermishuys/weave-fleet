@@ -542,9 +542,10 @@ defineExpose({
 
 const cursorPosition = shallowRef(0);
 const hasValidSessionId = computed(() => Boolean(props.sessionId?.trim()));
-// The @ list's sessions: archived ones are fetched the first time it opens.
+// The @ list's sessions: archived ones are fetched the first time it opens. They're the session's own machine's,
+// since that's the machine that looks a picked one up when the prompt is sent.
 const mentionOpen = shallowRef(false);
-const referableSessions = useReferableSessions(mentionOpen);
+const referableSessions = useReferableSessions(mentionOpen, machine);
 const autocomplete = useAutocomplete({
   // A shell command is sent as typed: no @ references or / commands in it.
   value: computed(() => isShellMode.value ? "" : draft.text),

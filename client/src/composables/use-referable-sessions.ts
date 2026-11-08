@@ -19,7 +19,8 @@ export function resetReferableSessions(): void {
 /**
  * The sessions the composer's `@` list can offer: the ones the session list holds, and, fetched when the list first
  * opens, the archived ones it doesn't. What the session list holds wins, since its status is live. Another machine's
- * (the New Session page's Machine chip) are all fetched from it, since the session list holds only the live machine's.
+ * (the New Session page's Machine chip, or an open session on another machine) are all fetched from it, since the
+ * session list holds only the live machine's. `target` is the machine that looks a picked session up on send.
  */
 export function useReferableSessions(
   active: MaybeRefOrGetter<boolean>,
