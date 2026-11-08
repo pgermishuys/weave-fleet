@@ -1376,6 +1376,8 @@ public sealed class OpenCodeSessionMessageProxyTests
         fallbackSnapshotBuilder.BuildAsyncCalls.Count.ShouldBe(1);
     }
 
+    // A session with no running harness and no resume token never gave its harness a conversation (never prompted, or
+    // the test harness after a restart), so Fleet's copy is the whole history: no "Showing cached data" banner.
     [Fact]
     public async Task GetSnapshotAsync_skips_resume_when_no_resume_token()
     {
@@ -1437,7 +1439,7 @@ public sealed class OpenCodeSessionMessageProxyTests
 
         // Assert
         snapshot.ShouldNotBeNull();
-        snapshot.IsPartial.ShouldBeTrue();
+        snapshot.IsPartial.ShouldBeFalse();
 
         // Verify activator was NOT called (no resume token)
         sessionActivator.ActivateAsyncCalls.ShouldBeEmpty();
