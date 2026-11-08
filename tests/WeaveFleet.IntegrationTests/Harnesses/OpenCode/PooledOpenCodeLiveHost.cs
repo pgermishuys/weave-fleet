@@ -37,6 +37,8 @@ internal static class PooledOpenCodeLiveHost
     /// </summary>
     public static Dictionary<string, string> WriteScratchOpenCodeHome(string root, Uri llmBaseUrl, string pluginPath, int? contextLimit = null, bool seedPluginDependencies = true)
     {
+        RequireRipgrepWhereRequired();
+
         var dirs = new Dictionary<string, string>
         {
             ["HOME"] = Path.Combine(root, "home"),
@@ -78,6 +80,30 @@ internal static class PooledOpenCodeLiveHost
             """);
 
         return dirs;
+    }
+
+    /// <summary>
+    /// OpenCode's skill, grep and glob tools run ripgrep: the <c>rg</c> on PATH, else a copy OpenCode downloads from
+    /// GitHub into its data folder. Each scratch home's data folder starts empty, so without <c>rg</c> on PATH every
+    /// test that loads a skill downloads ripgrep again, and when GitHub is slow the skill comes back as "ripgrep
+    /// execution failed" instead of its text. With <c>FLEET_REQUIRE_OPENCODE=1</c> (as in CI) that's an error up front;
+    /// elsewhere OpenCode downloads it as before.
+    /// </summary>
+    private static void RequireRipgrepWhereRequired()
+    {
+        if (Environment.GetEnvironmentVariable("FLEET_REQUIRE_OPENCODE") != "1" || IsRipgrepOnPath())
+            return;
+        throw new InvalidOperationException(
+            "The OpenCode live tests need ripgrep on PATH: without it OpenCode downloads ripgrep from GitHub for every " +
+            "test, and a skill fails with \"ripgrep execution failed\" when the download does. Install ripgrep (CI does, in ci.yml).");
+    }
+
+    private static bool IsRipgrepOnPath()
+    {
+        var name = OperatingSystem.IsWindows() ? "rg.exe" : "rg";
+        return (Environment.GetEnvironmentVariable("PATH") ?? "")
+            .Split(Path.PathSeparator, StringSplitOptions.RemoveEmptyEntries)
+            .Any(folder => File.Exists(Path.Combine(folder, name)));
     }
 
     /// <summary>Fleet on a real Kestrel port, so the pooled process can call the bridge.</summary>
