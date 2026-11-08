@@ -24,19 +24,23 @@ function isLooking(): boolean {
  * that: Fleet writes a recap a few minutes after a turn ends while no tab is
  * looking at the session, and it sends a desktop notification when a session you
  * left needs you. So this tells the server when this tab is visible and focused
- * on the session, as long as one of the two is on in Settings.
+ * on the session's machine, as long as Session recap is on for that machine or desktop notifications are on here.
  */
 export function useSessionRecap(
   sessionId: MaybeRefOrGetter<string | null | undefined>,
 ): Readonly<Ref<SessionRecapPayload | null>> {
-  const preferences = usePreferencesStore();
-  preferences.ensureLoaded();
   const machine = useMachineTarget();
+  // Recaps are written on the session's machine, from its Session recap switch. Desktop notifications are this
+  // app's own setting, kept on the live machine (that's what Settings → General and the notifier read).
+  const sessionPreferences = usePreferencesStore(machine);
+  const livePreferences = usePreferencesStore();
+  sessionPreferences.ensureLoaded();
+  livePreferences.ensureLoaded();
   const { subscribeV2 } = useWeaveSocket(machine);
   const recap = shallowRef<SessionRecapPayload | null>(null);
   const enabled = computed(() =>
-    preferences.get(SESSION_RECAP_PREFERENCE_KEY, "false") === "true"
-    || preferences.get(DESKTOP_NOTIFICATIONS_PREFERENCE_KEY, "false") === "true");
+    sessionPreferences.get(SESSION_RECAP_PREFERENCE_KEY, "false") === "true"
+    || livePreferences.get(DESKTOP_NOTIFICATIONS_PREFERENCE_KEY, "false") === "true");
 
   // The session the server has a subscription for, and what it was last told.
   let subscribedId: string | null = null;
