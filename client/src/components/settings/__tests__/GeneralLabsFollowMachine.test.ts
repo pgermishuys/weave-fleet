@@ -1,4 +1,4 @@
-import { flushPromises, mount } from "@vue/test-utils";
+import { flushPromises, mount, type DOMWrapper } from "@vue/test-utils";
 import { createPinia, setActivePinia } from "pinia";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { MACHINE_TARGET, type MachineTarget } from "@/lib/machine-target";
@@ -43,7 +43,7 @@ async function mountOn(component: object, target: MachineTarget) {
 const saved = (key: string, value: string) => ["/api/preferences/{key}", { params: { path: { key } }, body: { value } }];
 
 /** The ids of the rows marked as this app's, not the machine's. */
-function appRows(wrapper: ReturnType<typeof mount>): string[] {
+function appRows(wrapper: { findAll: (selector: string) => DOMWrapper<Element>[] }): string[] {
   return wrapper.findAll("[data-setting-row]")
     .filter((row) => row.find("[data-testid='this-app-badge']").exists())
     .map((row) => row.attributes("data-setting-row")!);
