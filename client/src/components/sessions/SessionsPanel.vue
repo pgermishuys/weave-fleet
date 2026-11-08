@@ -362,6 +362,12 @@ function handleProjectSessionCreate(projectId: string): void {
   openNewSessionPage(projectId);
 }
 
+/** The + on another machine's project: the new-session page on that machine, in that project. */
+function handleProjectSessionCreateOn(machineKey: string, projectId: string): void {
+  workspaceUiStore.setNewSessionMachine(machineKey);
+  openNewSessionPage(projectId);
+}
+
 function handleNewProject(): void {
   sidebarStore.setActiveRail("sessions");
   isNewProjectDialogOpen.value = true;
@@ -774,6 +780,7 @@ function handleCompleteDropZoneDrop(event: DragEvent): void {
           @open="handleMachineSessionOpen(machine, $event)"
           @open-draft="handleOpenDraft"
           @new-session="handleNewSessionOn(machine.key)"
+          @new-session-in="handleProjectSessionCreateOn(machine.key, $event)"
           @work-here="handleWorkHere(machine)"
         />
       </template>

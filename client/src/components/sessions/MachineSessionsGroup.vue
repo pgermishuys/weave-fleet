@@ -13,15 +13,16 @@ import {
   pinnedProjectGroup,
   sessionMatchesQuery,
 } from "@/lib/session-project-groups";
+import { provideMachineTarget } from "@/lib/machine-target";
 import { useMachinesStore, type MachineEntry, type MachineSessions } from "@/stores/machines";
 import type { NewSessionDraftRow } from "@/stores/workspace-ui";
 import { machineGroupKey, projectGroupKey, useSidebarStore } from "@/stores/sidebar";
 
 /**
- * A machine the app isn't working in: its sessions as it last listed them, refreshed on a timer, in the same tree the
- * live machine shows (Pinned, its projects in their order, what each session started under it). Its rows only open
- * the session, which makes this machine live; archiving, moving and renaming happen once it's live, so nothing here
- * can act on the wrong machine.
+ * A machine that didn't serve the page: its sessions as it last listed them, refreshed on a timer, in the same tree the
+ * live machine shows (Pinned, its projects in their order, what each session started under it). Its rows open the
+ * session in place. Its projects have the live machine's + and menu (new session, rename, move, delete); everything in
+ * the group asks this machine, so nothing acts on the wrong one.
  */
 const props = defineProps<{
   machine: MachineEntry;
@@ -33,7 +34,14 @@ const props = defineProps<{
   draftActive?: boolean;
 }>();
 
-const emit = defineEmits<{ open: [session: SessionListItem]; openDraft: []; newSession: []; workHere: [] }>();
+const emit = defineEmits<{
+  open: [session: SessionListItem];
+  openDraft: [];
+  newSession: [];
+  /** The + (or New session in the menu) on one of its projects: a new session on this machine, in that project. */
+  newSessionIn: [projectId: string];
+  workHere: [];
+}>();
 
 const sidebar = useSidebarStore();
 const expanded = computed(() => !sidebar.isGroupCollapsed(machineGroupKey(props.machine.key)));
@@ -82,6 +90,14 @@ watch(draftGroupId, (groupId) => {
 });
 
 const machines = useMachinesStore();
+// The projects' menus (rename, move, delete) ask this machine. SessionsPanel keys the group by machine.
+provideMachineTarget(() => machines.targetOfKey(props.machine.key));
+
+/** A project was renamed, moved or deleted on this machine: its list comes back at once, not on the next poll. */
+function refreshList(): void {
+  void machines.refreshMachine(props.machine.key);
+}
+
 const unreachable = computed(() => Boolean(props.state?.error));
 
 const note = computed(() => {
@@ -156,6 +172,8 @@ const why = computed(() => (unreachable.value ? machines.diagnoses[props.machine
         @toggle="toggleProject"
         @select-session="emit('open', $event)"
         @open-draft="emit('openDraft')"
+        @new-session="emit('newSessionIn', $event)"
+        @project-changed="refreshList"
       />
       <p
         v-if="!state?.error && state?.loadedAt && projectGroups.length === 0 && pinnedGroup.sessionCount === 0"
