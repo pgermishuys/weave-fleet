@@ -6,7 +6,9 @@ import SessionsPanel from "@/components/sessions/SessionsPanel.vue";
 import type { ProjectResponse, SessionListItem } from "@/api/client";
 import { HOME_MACHINE_KEY, saveMachines, setActiveMachine, type MachineConnection } from "@/lib/machines";
 import { useSettingsNav } from "@/composables/use-settings-nav";
+import { useArchiveQueueStore } from "@/stores/archive-queue";
 import { useMachinesStore } from "@/stores/machines";
+import { useSessionSelectionStore } from "@/stores/session-selection";
 import { useSessionsStore } from "@/stores/sessions";
 import { useWorkspaceUiStore } from "@/stores/workspace-ui";
 
@@ -53,10 +55,11 @@ function item(id: string, title: string, projectId: string): SessionListItem {
   };
 }
 
-function mountPanel() {
+/** `menus`: the right-click menus really open (they teleport to the body); unmount such a panel before the body is cleared. */
+function mountPanel({ menus = false } = {}) {
   return mount(SessionsPanel, {
     attachTo: document.body,
-    global: { stubs: { NewProjectDialog: true } },
+    global: { stubs: { NewProjectDialog: true, ...(menus ? { teleport: false } : {}) } },
   });
 }
 
@@ -74,6 +77,50 @@ function openRows(view: ReturnType<typeof mountPanel>): string[] {
     const machine = row.element.closest("[data-testid='machine-group']")?.getAttribute("data-machine") ?? "live";
     return `${machine}/${row.element.closest("[data-session-id]")?.getAttribute("data-session-id")}`;
   });
+}
+
+/** hangar's last list: two sessions in one project, and another project to move them to. */
+function hangarListed() {
+  return {
+    sessions: [item("hangar-1", "Index for slow search", "p-lumen"), item("hangar-2", "Tidy the footer", "p-lumen"), item("hangar-3", "Draft the guide", "p-docs")],
+    projects: [project("p-lumen", "lumen-site", 1), project("p-docs", "lumen-docs", 2)],
+    error: null,
+    loadedAt: 1,
+    loading: false,
+  };
+}
+
+/** Opens the right-click menu of the first match for `selector`, reads its rows, and closes it. */
+async function menuOf(view: ReturnType<typeof mountPanel>, selector: string): Promise<string[]> {
+  await view.get(selector).trigger("contextmenu", { clientX: 40, clientY: 40 });
+  await flushPromises();
+  const labels = [...document.querySelectorAll("[role='menuitem']")].map((row) => row.textContent!.replace(/\s+/g, " ").trim());
+  document.dispatchEvent(new KeyboardEvent("keydown", { key: "Escape", bubbles: true }));
+  await flushPromises();
+  return labels;
+}
+
+/** The hover buttons on a row: pin, archive. */
+function rowButtons(view: ReturnType<typeof mountPanel>, selector: string): string[] {
+  return view.get(selector).findAll(".session-row-action").map((button) => button.attributes("data-testid")!);
+}
+
+/** Keeps the requests that change something, and answers them; reads get a 404, as in the other tests. */
+function recordRequests(): Request[] {
+  const requests: Request[] = [];
+  vi.stubGlobal("fetch", vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
+    const request = input instanceof Request ? input : new Request(String(input), init);
+    // Reads, and calls that aren't about a session (usage events), aren't kept.
+    if (request.method === "GET" || !new URL(request.url).pathname.startsWith("/api/sessions/")) return new Response("{}", { status: 404 });
+    requests.push(request);
+    const body = request.method === "PUT" && request.url.endsWith("/pin") ? { pinOrder: 1 } : {};
+    return new Response(JSON.stringify(body), { status: 200, headers: { "Content-Type": "application/json" } });
+  }));
+  return requests;
+}
+
+function fakeDataTransfer(): DataTransfer {
+  return { effectAllowed: "none", dropEffect: "none", setData: () => undefined, types: [] } as unknown as DataTransfer;
 }
 
 /** jsdom has no layout: scrollTop keeps whatever it's set to. */
@@ -247,6 +294,139 @@ describe("SessionsPanel across machines", () => {
     view.unmount();
   });
 
+  // Regression: once sessions on other machines opened in place, their rows were still drawn links-only.
+  it("offers every row and project action this machine's tree offers on another machine's tree", async () => {
+    const machines = useMachinesStore();
+    machines.others = { ...machines.others, [hangar.id]: hangarListed() };
+    // Its list stays as given, and it answers: its feed and reads can't get through in a test.
+    vi.spyOn(machines, "refreshMachine").mockResolvedValue();
+    vi.spyOn(machines, "isAnswering").mockReturnValue(true);
+    // Two projects here too, as on hangar: a project's menu offers moving it among them.
+    liveProjects.value = [project("p-fleet", "weave-fleet", 1), project("p-kestrel", "kestrel-app", 2)];
+    useSessionsStore().setSessions([item("home-1", "Local work", "p-fleet"), item("home-2", "Fix the build", "p-kestrel")]);
+
+    let view = mountPanel({ menus: true });
+    await flushPromises();
+    const liveRow = await menuOf(view, "[data-testid='session-row']");
+    // This machine is listed first: the first project is its own.
+    const liveProject = await menuOf(view, ".project-shell");
+    const liveButtons = rowButtons(view, "[data-session-id='home-1']");
+    view.unmount();
+    document.body.innerHTML = "";
+
+    view = mountPanel({ menus: true });
+    await flushPromises();
+    const otherRow = await menuOf(view, "[data-machine='hangar-id'] [data-session-id='hangar-1'] [data-testid='machine-session-row']");
+    const otherProject = await menuOf(view, "[data-machine='hangar-id'] .project-shell");
+    const otherButtons = rowButtons(view, "[data-machine='hangar-id'] [data-session-id='hangar-1']");
+
+    // The same, except what needs this machine: its folder opens here ("Open in", so Copy path instead), and
+    // Automations is this machine's page.
+    expect(otherRow).toEqual(liveRow
+      .filter((label) => !label.startsWith("Repeat on a schedule"))
+      .map((label) => (label.startsWith("Open in") ? "Copy path" : label)));
+    expect(otherProject).toEqual(liveProject);
+    expect(otherButtons).toEqual(liveButtons);
+    expect(view.get("[data-machine='hangar-id'] [data-session-id='hangar-1']").attributes("draggable")).toBe("true");
+    view.unmount();
+  });
+
+  it("sends another machine's row actions to that machine, and lists that machine again", async () => {
+    const requests = recordRequests();
+    const machines = useMachinesStore();
+    machines.others = { ...machines.others, [hangar.id]: hangarListed() };
+    machines.rememberSessions(hangar.id, ["hangar-1", "hangar-2"]);
+    const refresh = vi.spyOn(machines, "refreshMachine").mockResolvedValue();
+    vi.spyOn(machines, "isAnswering").mockReturnValue(true);
+    useSessionsStore().setSessions([item("home-1", "Local work", "p-fleet")]);
+    const view = mountPanel();
+    await flushPromises();
+    const row = () => view.get("[data-machine='hangar-id'] [data-session-id='hangar-1']");
+
+    // Rename (F2, as on this machine's rows).
+    await row().get("[data-testid='machine-session-row']").trigger("keydown", { key: "F2" });
+    const input = row().get("input[aria-label='Session name']");
+    await input.setValue("Index for faster search");
+    await input.trigger("keydown", { key: "Enter" });
+    await flushPromises();
+    expect(machines.others[hangar.id].sessions[0].session.title).toBe("Index for faster search");
+
+    // Pin, then unpin: it moves to hangar's Pinned and back.
+    await row().get("[data-testid='session-row-pin']").trigger("click");
+    await flushPromises();
+    expect(view.find("[data-machine='hangar-id'] [data-testid='pinned-group'] [data-session-id='hangar-1']").exists()).toBe(true);
+    await row().get("[data-testid='session-row-pin']").trigger("click");
+    await flushPromises();
+    expect(view.find("[data-machine='hangar-id'] [data-testid='pinned-group']").exists()).toBe(false);
+
+    // Drag it onto hangar's other project.
+    await row().trigger("dragstart", { dataTransfer: fakeDataTransfer() });
+    await view.get("[data-machine='hangar-id'] [data-project-id='p-docs']").trigger("drop");
+    await flushPromises();
+    expect(machines.others[hangar.id].sessions[0].projectId).toBe("p-docs");
+
+    // Archive: gone from hangar's tree at once, archived there when Undo runs out.
+    await row().get("[data-testid='session-row-archive']").trigger("click");
+    expect(view.find("[data-machine='hangar-id'] [data-session-id='hangar-1']").exists()).toBe(false);
+    await useArchiveQueueStore().flush();
+    await flushPromises();
+
+    expect(requests.map((request) => `${request.method} ${request.url}`)).toEqual([
+      "PATCH http://hangar.test:2113/api/sessions/hangar-1",
+      "PUT http://hangar.test:2113/api/sessions/hangar-1/pin",
+      "DELETE http://hangar.test:2113/api/sessions/hangar-1/pin",
+      "PATCH http://hangar.test:2113/api/sessions/hangar-1/project",
+      "PATCH http://hangar.test:2113/api/sessions/hangar-1/retention",
+    ]);
+    expect(refresh).toHaveBeenCalledWith(hangar.id);
+    expect(refresh.mock.calls.every(([key]) => key === hangar.id)).toBe(true);
+    view.unmount();
+  });
+
+  it("keeps a pick on one machine, and a bulk archive goes to that machine only", async () => {
+    const requests = recordRequests();
+    const machines = useMachinesStore();
+    machines.others = { ...machines.others, [hangar.id]: hangarListed() };
+    vi.spyOn(machines, "refreshMachine").mockResolvedValue();
+    vi.spyOn(machines, "isAnswering").mockReturnValue(true);
+    useSessionsStore().setSessions([item("home-1", "Local work", "p-fleet")]);
+    const view = mountPanel();
+    await flushPromises();
+    const selection = useSessionSelectionStore();
+
+    await view.get("[data-session-id='home-1'] [data-testid='session-row']").trigger("click", { ctrlKey: true });
+    expect([...selection.selectedIds]).toEqual(["home-1"]);
+
+    // Picking on hangar starts again there: this machine's row is let go.
+    await view.get("[data-session-id='hangar-1'] [data-testid='machine-session-row']").trigger("click", { ctrlKey: true });
+    await view.get("[data-session-id='hangar-2'] [data-testid='machine-session-row']").trigger("click", { shiftKey: true });
+    expect([...selection.selectedIds].sort()).toEqual(["hangar-1", "hangar-2"]);
+    expect(view.find("[data-session-id='home-1'] .session-check").exists()).toBe(false);
+
+    await view.get("[data-testid='session-selection-archive']").trigger("click");
+    await useArchiveQueueStore().flush();
+    await flushPromises();
+
+    expect(requests.map((request) => `${request.method} ${request.url}`).sort()).toEqual([
+      "PATCH http://hangar.test:2113/api/sessions/hangar-1/retention",
+      "PATCH http://hangar.test:2113/api/sessions/hangar-2/retention",
+    ]);
+    view.unmount();
+  });
+
+  it("offers no actions on a machine that isn't answering", async () => {
+    const machines = useMachinesStore();
+    machines.others = { ...machines.others, [hangar.id]: { ...hangarListed(), error: "Can't reach hangar." } };
+    const view = mountPanel();
+    await flushPromises();
+
+    const row = view.get("[data-machine='hangar-id'] [data-session-id='hangar-1']");
+    expect(row.attributes("draggable")).toBe("false");
+    expect(row.find("[data-testid='session-row-pin']").exists()).toBe(false);
+    expect(row.find("[data-testid='session-row-archive']").exists()).toBe(false);
+    view.unmount();
+  });
+
   it("Work here makes that machine the one you're on and goes to its first page in place", async () => {
     navigate.mockClear();
     const machines = useMachinesStore();
@@ -334,6 +514,56 @@ describe("SessionsPanel with no other machines", () => {
     route.path.value = "/sessions/home-1";
     await flushPromises();
     expect(openRows(view)).toEqual(["live/home-1"]);
+    view.unmount();
+  });
+});
+
+// The desktop app alone, a browser on one Fleet: no other machines listed, and the list is what it always was.
+describe("SessionsPanel with no other machines", () => {
+  beforeEach(() => {
+    localStorage.clear();
+    sessionStorage.clear();
+    setActiveMachine(null);
+    saveMachines([]);
+    liveProjects.value = [project("p-fleet", "weave-fleet", 1), project("p-kestrel", "kestrel-app", 2)];
+  });
+
+  afterEach(() => {
+    vi.unstubAllGlobals();
+    document.body.innerHTML = "";
+  });
+
+  it("shows no machine headings, and its rows act on this machine as before", async () => {
+    const requests = recordRequests();
+    useSessionsStore().setSessions([item("home-1", "Local work", "p-fleet"), item("home-2", "Fix the build", "p-fleet")]);
+    const view = mountPanel({ menus: true });
+    await flushPromises();
+
+    expect(view.findAll("[data-testid='machine-header']")).toHaveLength(0);
+    expect(view.findAll("[data-testid='machine-group']")).toHaveLength(0);
+    expect(view.findAll("[data-testid='machine-session-row']")).toHaveLength(0);
+    expect(rowButtons(view, "[data-session-id='home-1']")).toEqual(["session-row-pin", "session-row-archive"]);
+
+    const menu = await menuOf(view, "[data-session-id='home-1'] [data-testid='session-row']");
+    expect(menu).toContain("Open in");
+    expect(menu).not.toContain("Copy path");
+
+    await view.get("[data-session-id='home-1'] [data-testid='session-row-pin']").trigger("click");
+    await flushPromises();
+    expect(view.find("[data-testid='pinned-group'] [data-session-id='home-1']").exists()).toBe(true);
+
+    const selection = useSessionSelectionStore();
+    await view.get("[data-session-id='home-2'] [data-testid='session-row']").trigger("click", { ctrlKey: true });
+    expect(selection.isSelectingOn(null)).toBe(true);
+    await view.get("[data-testid='session-selection-archive']").trigger("click");
+    await useArchiveQueueStore().flush();
+    await flushPromises();
+
+    const origin = window.location.origin;
+    expect(requests.map((request) => `${request.method} ${request.url.replace(origin, "")}`)).toEqual([
+      "PUT /api/sessions/home-1/pin",
+      "PATCH /api/sessions/home-2/retention",
+    ]);
     view.unmount();
   });
 });

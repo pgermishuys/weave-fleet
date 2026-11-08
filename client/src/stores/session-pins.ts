@@ -2,63 +2,65 @@ import { defineStore } from "pinia";
 import { shallowRef } from "vue";
 import { api, type SessionListItem } from "@/api/client";
 import { pinSession, unpinSession } from "@/composables/use-session-actions";
-import { liveTarget } from "@/lib/machine-target";
+import { liveTarget, type MachineTarget } from "@/lib/machine-target";
 import { pinOrderFor, pinnedNeighbourFor } from "@/lib/session-pins";
+import { useSessionListOn } from "@/stores/session-list-on";
 import { useSessionsStore } from "@/stores/sessions";
 
 /**
  * Pinning sessions in the Pinned group above the projects, and putting them in order. The list changes at once and the
  * server is told right away; when the server refuses, the list goes back and the error shows in the archive toast.
- * The session list is the live machine's, so pins go there.
+ * Each call takes the machine the session is on (the live one when left out), and changes that machine's list.
  */
 export const useSessionPinsStore = defineStore("session-pins", () => {
   const sessionsStore = useSessionsStore();
+  const listOn = useSessionListOn();
 
   const error = shallowRef<string | null>(null);
 
-  function find(sessionId: string): SessionListItem | undefined {
-    return sessionsStore.sessions.find((item) => item.session.id === sessionId);
-  }
-
   /** Pins the session just before `beforeId`, or at the end of the Pinned group; moves it there when it's pinned already. */
-  async function pin(sessionId: string, beforeId: string | null = null): Promise<void> {
-    const item = find(sessionId);
+  async function pin(sessionId: string, beforeId: string | null = null, machine: MachineTarget = liveTarget()): Promise<void> {
+    const list = listOn(machine);
+    const item = list.find(sessionId);
     if (!item || beforeId === sessionId) return;
     error.value = null;
     const previous = item.pinOrder ?? null;
-    const expected = pinOrderFor(sessionsStore.sessions, sessionId, beforeId);
-    sessionsStore.patchSession(sessionId, { pinOrder: expected });
+    const expected = pinOrderFor(list.sessions, sessionId, beforeId);
+    list.patch(sessionId, { pinOrder: expected });
     try {
-      const order = await pinSession(liveTarget(), sessionId, beforeId);
-      sessionsStore.patchSession(sessionId, { pinOrder: order });
+      const order = await pinSession(machine, sessionId, beforeId);
+      list.patch(sessionId, { pinOrder: order });
       // The server numbered every pin again (the gap got too small): read the new numbers.
-      if (order !== expected) await refreshPinOrders();
+      if (order !== expected && machine.isLive) await refreshPinOrders();
+      list.settled();
     } catch (pinError) {
-      sessionsStore.patchSession(sessionId, { pinOrder: previous });
+      list.patch(sessionId, { pinOrder: previous });
       error.value = pinError instanceof Error ? pinError.message : "Couldn't pin the session.";
     }
   }
 
   /** Unpins the session: it goes back to its project, newest first. */
-  async function unpin(sessionId: string): Promise<void> {
-    const item = find(sessionId);
+  async function unpin(sessionId: string, machine: MachineTarget = liveTarget()): Promise<void> {
+    const list = listOn(machine);
+    const item = list.find(sessionId);
     if (!item) return;
     error.value = null;
     const previous = item.pinOrder ?? null;
-    sessionsStore.patchSession(sessionId, { pinOrder: null });
+    list.patch(sessionId, { pinOrder: null });
     try {
-      await unpinSession(liveTarget(), sessionId);
+      await unpinSession(machine, sessionId);
+      list.settled();
     } catch (unpinError) {
-      sessionsStore.patchSession(sessionId, { pinOrder: previous });
+      list.patch(sessionId, { pinOrder: previous });
       error.value = unpinError instanceof Error ? unpinError.message : "Couldn't unpin the session.";
     }
   }
 
   /** Moves a pinned session one place up (-1) or down (+1) in the Pinned group. */
-  async function move(sessionId: string, delta: -1 | 1): Promise<void> {
-    const before = pinnedNeighbourFor(sessionsStore.sessions, sessionId, delta);
+  async function move(sessionId: string, delta: -1 | 1, machine: MachineTarget = liveTarget()): Promise<void> {
+    const before = pinnedNeighbourFor(listOn(machine).sessions, sessionId, delta);
     if (before === undefined) return;
-    await pin(sessionId, before);
+    await pin(sessionId, before, machine);
   }
 
   async function refreshPinOrders(): Promise<void> {

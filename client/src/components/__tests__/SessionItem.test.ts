@@ -483,7 +483,7 @@ describe("SessionItem", () => {
         expect(item.text()).toBe('Move out of "Capture subagents"');
         await item.trigger("click");
 
-        expect(moveOut).toHaveBeenCalledWith("session-1");
+        expect(moveOut).toHaveBeenCalledWith("session-1", expect.objectContaining({ isLive: true }));
         expect(wrapper.find("[data-testid='session-context-move-back']").exists()).toBe(false);
       });
 
@@ -502,7 +502,7 @@ describe("SessionItem", () => {
         expect(wrapper.find("[data-testid='session-context-move-out']").exists()).toBe(false);
         await wrapper.get("[data-testid='session-context-move-back']").trigger("click");
 
-        expect(moveBack).toHaveBeenCalledWith("session-1");
+        expect(moveBack).toHaveBeenCalledWith("session-1", expect.objectContaining({ isLive: true }));
       });
     });
 
@@ -556,7 +556,7 @@ describe("SessionItem", () => {
       expect(button.attributes("aria-label")).toBe("Pin Fix auth bug");
       expect(button.classes()).toContain("session-row-action--second");
       await button.trigger("click");
-      expect(pin).toHaveBeenCalledWith("session-1");
+      expect(pin).toHaveBeenCalledWith("session-1", null, expect.objectContaining({ isLive: true }));
       expect(wrapper.emitted("select")).toBeUndefined();
 
       const item = wrapper.get("[data-testid='session-context-pin']");
@@ -575,10 +575,10 @@ describe("SessionItem", () => {
       expect(wrapper.get("[data-testid='session-row-pin']").attributes("aria-label")).toBe("Unpin a");
       expect(wrapper.get("[data-testid='session-context-pin-up']").attributes("disabled")).toBeDefined();
       await wrapper.get("[data-testid='session-context-pin-down']").trigger("click");
-      expect(move).toHaveBeenCalledWith("a", 1);
+      expect(move).toHaveBeenCalledWith("a", 1, expect.objectContaining({ isLive: true }));
 
       await wrapper.get("[data-testid='session-context-pin']").trigger("click");
-      expect(unpin).toHaveBeenCalledWith("a");
+      expect(unpin).toHaveBeenCalledWith("a", expect.objectContaining({ isLive: true }));
     });
 
     it("moves a pinned row with Alt+Up and Alt+Down, and leaves the arrows alone on other rows", async () => {
@@ -587,7 +587,7 @@ describe("SessionItem", () => {
       const pinnedRow = mountSessionItem(pinnedSession("b", 2)).get("[data-testid='session-row']");
       await pinnedRow.trigger("keydown", { key: "ArrowUp", altKey: true });
       await pinnedRow.trigger("keydown", { key: "ArrowDown", altKey: true });
-      expect(move.mock.calls).toEqual([["b", -1], ["b", 1]]);
+      expect(move.mock.calls.map(([id, delta]) => [id, delta])).toEqual([["b", -1], ["b", 1]]);
 
       await mountSessionItem(createSession()).get("[data-testid='session-row']").trigger("keydown", { key: "ArrowUp", altKey: true });
       expect(move).toHaveBeenCalledTimes(2);

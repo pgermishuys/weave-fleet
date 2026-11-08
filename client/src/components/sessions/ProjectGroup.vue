@@ -65,8 +65,8 @@ interface Props {
   /** Whether the session being dragged is pinned: dropping it on its own project unpins it. */
   activeDragPinned?: boolean;
   /**
-   * On a machine that isn't live: the machine's name. Its rows open their session there and nothing drags. The project
-   * keeps its + and its menu, which act on that machine (the group asks the machine its parent provides).
+   * On a machine that isn't live: the machine's name. Its rows, its + and its menu act on that machine (the group asks
+   * the machine its parent provides), and its sessions drag within that machine's tree only.
    */
   openOnMachine?: string;
   /** That machine isn't answering (see SessionItem). */

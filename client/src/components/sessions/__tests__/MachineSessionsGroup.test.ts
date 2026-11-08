@@ -3,6 +3,8 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 import MachineHeader from "@/components/sessions/MachineHeader.vue";
 import MachineSessionsGroup from "@/components/sessions/MachineSessionsGroup.vue";
 import { useMachinesStore, type MachineEntry, type MachineSessions } from "@/stores/machines";
+import { saveMachines } from "@/lib/machines";
+import { useSessionSelectionStore } from "@/stores/session-selection";
 import { projectGroupKey, useSidebarStore } from "@/stores/sidebar";
 import type { ProjectSummary } from "@/lib/session-project-groups";
 
@@ -160,22 +162,28 @@ describe("MachineSessionsGroup", () => {
     expect(sidebar.isGroupCollapsed(projectGroupKey(macbook.key, "p-lighthouse"))).toBe(false);
   });
 
-  it("only opens a session: no pin, archive, drag, rename or project menu", async () => {
+  it("gives its rows what the live machine's rows have: pin, archive, drag, rename and picking", async () => {
     const state = { ...listed, sessions: [item("lh-1", "Paint the fence", { projectId: "p-lighthouse" })] };
+    // A machine this page can reach, so its rows ask it.
+    saveMachines([{ id: macbook.key, name: macbook.name, baseUrl: macbook.baseUrl!, token: "mac-token-0123456789", addedAt: "2026-10-01T00:00:00.000Z" }]);
+    useMachinesStore().others = { [macbook.key]: state };
     const view = mountGroup({ state });
 
     const row = view.get("[data-testid='machine-session-row']");
-    expect(row.attributes("title")).toBe("Open on macbook");
-    expect(view.find("[data-testid='session-row-pin']").exists()).toBe(false);
-    expect(view.find("[data-testid='session-row-archive']").exists()).toBe(false);
-    expect(view.get("[data-session-id='lh-1']").attributes("draggable")).toBe("false");
-
-    await row.trigger("dblclick");
-    expect(view.find("input[aria-label='Session name']").exists()).toBe(false);
+    expect(row.attributes("title")).toBe("Double-click to rename");
+    expect(view.find("[data-testid='session-row-pin']").exists()).toBe(true);
+    expect(view.find("[data-testid='session-row-archive']").exists()).toBe(true);
+    expect(view.get("[data-session-id='lh-1']").attributes("draggable")).toBe("true");
 
     await row.trigger("click", { ctrlKey: true });
-    const opened = view.emitted<[MachineSessions["sessions"][number]]>("open") ?? [];
-    expect(opened.map(([session]) => session.session.id)).toEqual(["lh-1"]);
+    expect(view.emitted("open")).toBeUndefined();
+    expect(useSessionSelectionStore().isSelectingOn(macbook.key)).toBe(true);
+    // The live machine's tree isn't picking: a pick stays on one machine.
+    expect(useSessionSelectionStore().isSelectingOn(null)).toBe(false);
+    useSessionSelectionStore().clear();
+
+    await view.get("[data-testid='machine-session-row']").trigger("dblclick");
+    expect(view.find("input[aria-label='Session name']").exists()).toBe(true);
   });
 });
 
@@ -198,6 +206,24 @@ describe("MachineSessionsGroup on a machine that isn't answering", () => {
     const row = view.get("[data-testid='machine-session-row']");
     expect(row.text()).toContain("Not answering");
     expect(row.find(".status-glyph--working").exists()).toBe(false);
+  });
+
+  it("only opens a session: no pin, archive, drag, rename or picking", async () => {
+    const view = quiet();
+
+    const row = view.get("[data-testid='machine-session-row']");
+    expect(row.attributes("title")).toBe("Open on macbook");
+    expect(view.find("[data-testid='session-row-pin']").exists()).toBe(false);
+    expect(view.find("[data-testid='session-row-archive']").exists()).toBe(false);
+    expect(view.get("[data-session-id='s-work']").attributes("draggable")).toBe("false");
+
+    await row.trigger("dblclick");
+    expect(view.find("input[aria-label='Session name']").exists()).toBe(false);
+
+    await row.trigger("click", { ctrlKey: true });
+    const opened = view.emitted<[MachineSessions["sessions"][number]]>("open") ?? [];
+    expect(opened.map(([session]) => session.session.id)).toEqual(["s-work"]);
+    expect(useSessionSelectionStore().isSelecting).toBe(false);
   });
 
   it("offers Copy path, not Open in, on another machine's row", async () => {
