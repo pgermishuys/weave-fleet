@@ -210,7 +210,7 @@ public sealed partial class FleetCanvasPluginLiveTests
 
             // The skill's own text reached the model, then the API's answer about this session, fetched with no token.
             var requests = await WaitForAsync(() => llm.Queue.Requests.ToList(), list => list.Count(r => OfferedToolNames([r]).Count > 0) >= 3, ct);
-            requests.ShouldContain(request => request.Contains("Look it up, don't guess"));
+            requests.ShouldContain(request => request.Contains("Look it up, don't guess"), ToolResults(requests));
             requests.ShouldContain(request => request.Contains("workspaceDirectory") && request.Contains("activityStatus"));
         }
         finally
@@ -285,7 +285,7 @@ public sealed partial class FleetCanvasPluginLiveTests
             first.ShouldNotContain("fleet-simplify");
             first.ShouldNotContain("fleet-code-review");
             first.ShouldNotContain("fleet-mockups");
-            requests.ShouldContain(request => request.Contains("Tests show the code does what the tests say."));
+            requests.ShouldContain(request => request.Contains("Tests show the code does what the tests say."), ToolResults(requests));
         }
         finally
         {
@@ -535,6 +535,19 @@ public sealed partial class FleetCanvasPluginLiveTests
                 throw new TimeoutException();
             }
         }
+    }
+
+    /// <summary>What each tool call returned to the model, for a failure message.</summary>
+    private static string ToolResults(IEnumerable<string> requests)
+    {
+        using var last = JsonDocument.Parse(requests.Last());
+        if (!last.RootElement.TryGetProperty("messages", out var messages) || messages.ValueKind != JsonValueKind.Array)
+            return "The last request has no messages.";
+        var results = messages.EnumerateArray()
+            .Where(message => message.TryGetProperty("role", out var role) && role.GetString() == "tool")
+            .Select(message => message.TryGetProperty("content", out var content) ? content.ToString() : "(no content)")
+            .ToList();
+        return results.Count == 0 ? "No tool results reached the model." : "Tool results: " + string.Join("\n---\n", results);
     }
 
     private static HashSet<string> OfferedToolNames(IEnumerable<string> requests)

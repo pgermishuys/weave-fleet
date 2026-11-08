@@ -93,6 +93,8 @@ jobs:
       # The live tests' pinned harness versions (see the install steps). Bump here and check the live tests pass.
       OPENCODE_VERSION: '1.18.31'
       OPENCODE2_VERSION: '2.2.5'
+      # The ripgrep OpenCode 1.18.31 downloads when there's none on PATH (see the ripgrep steps).
+      RIPGREP_VERSION: '15.1.0'
 
     steps:
       - name: Checkout
@@ -134,6 +136,32 @@ jobs:
         run: |
           echo "$HOME/.opencode/bin" >> "$GITHUB_PATH"
           "$HOME/.opencode/bin/opencode" --version
+
+      # OpenCode's skill, grep and glob tools run ripgrep: the `rg` on PATH, else a copy OpenCode downloads from GitHub
+      # into its data folder. Every live test starts from an empty data folder, so without `rg` on PATH each skill call
+      # downloaded ripgrep again, and when GitHub was slow the skill came back as "ripgrep execution failed" (8 November
+      # 2026). One cached copy of the version OpenCode pins, on PATH; the live tests refuse to run without it.
+      - name: Cache ripgrep
+        id: ripgrep-cache
+        uses: actions/cache@v4
+        with:
+          path: ~/.ripgrep
+          key: ripgrep-${{ runner.os }}-${{ env.RIPGREP_VERSION }}
+
+      - name: Install ripgrep
+        if: steps.ripgrep-cache.outputs.cache-hit != 'true'
+        run: |
+          name="ripgrep-$RIPGREP_VERSION-x86_64-unknown-linux-musl"
+          curl -fsSL --retry 5 --retry-all-errors -o "$RUNNER_TEMP/ripgrep.tar.gz" \
+            "https://github.com/BurntSushi/ripgrep/releases/download/$RIPGREP_VERSION/$name.tar.gz"
+          tar -xzf "$RUNNER_TEMP/ripgrep.tar.gz" -C "$RUNNER_TEMP"
+          mkdir -p "$HOME/.ripgrep/bin"
+          cp "$RUNNER_TEMP/$name/rg" "$HOME/.ripgrep/bin/rg"
+
+      - name: Add ripgrep to PATH
+        run: |
+          echo "$HOME/.ripgrep/bin" >> "$GITHUB_PATH"
+          "$HOME/.ripgrep/bin/rg" --version
 
       # The [OpenCode2Fact] live tests and the OpenCode 2 conformance tests run a real OpenCode 2. Pinned the same
       # way: bump the version here and check both pass. With OpenCode 1 installed, Fleet sets V2 up in separate mode
