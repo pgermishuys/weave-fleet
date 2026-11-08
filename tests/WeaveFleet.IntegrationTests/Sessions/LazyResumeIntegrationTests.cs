@@ -177,11 +177,11 @@ public sealed class LazyResumeIntegrationTests : IAsyncLifetime, IDisposable
             $"Snapshot missing 'messages'. Actual: {snapshot.GetRawText()}");
         messages.ValueKind.ShouldBe(JsonValueKind.Array);
 
-        // The snapshot should be marked as partial since we couldn't fetch from live harness
-        if (snapshot.TryGetProperty("isPartial", out var isPartial))
-        {
-            isPartial.GetBoolean().ShouldBeTrue("Expected snapshot to be marked as partial");
-        }
+        // Not partial: with no harness running and no resume token there's no conversation in a harness that Fleet
+        // failed to read, so the page mustn't say "Connection to live session is temporarily unavailable".
+        snapshot.TryGetProperty("isPartial", out var isPartial).ShouldBeTrue(
+            $"Snapshot missing 'isPartial'. Actual: {snapshot.GetRawText()}");
+        isPartial.GetBoolean().ShouldBeFalse("Expected the snapshot to be complete when the harness never held a conversation");
     }
 
     [Fact]

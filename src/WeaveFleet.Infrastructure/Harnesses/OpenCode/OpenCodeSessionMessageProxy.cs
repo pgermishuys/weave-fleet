@@ -117,12 +117,18 @@ public sealed class OpenCodeSessionMessageProxy(
         if (session is null)
             throw new InvalidOperationException($"Session '{fleetSessionId}' was not found.");
 
+        // Whether the harness holds a conversation Fleet couldn't read: a running harness that didn't answer, or one a
+        // resume token points at. A session with neither never gave its harness a conversation to keep (never
+        // prompted, or the test harness after a restart), so Fleet's copy is all there is.
+        var harnessHistoryUnread = !string.IsNullOrWhiteSpace(session.HarnessResumeToken);
+
         // Read the harness's own history when it keeps one and the session is running
         if (HistoryLivesInHarness(session) && !string.IsNullOrWhiteSpace(session.InstanceId))
         {
             var harnessSession = instanceTracker.Get(session.InstanceId);
             if (harnessSession is not null)
             {
+                harnessHistoryUnread = true;
                 try
                 {
                     LogFetchingFromHarness(logger, fleetSessionId, null);
@@ -177,7 +183,7 @@ public sealed class OpenCodeSessionMessageProxy(
 
         // Mark the snapshot partial when the history lives in the harness and we couldn't read it. Other
         // harnesses (Claude Code) keep their history in Fleet's database, so theirs is complete.
-        return HistoryLivesInHarness(session)
+        return HistoryLivesInHarness(session) && harnessHistoryUnread
             ? fallbackSnapshot with { IsPartial = true }
             : fallbackSnapshot;
     }
