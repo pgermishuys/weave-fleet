@@ -428,9 +428,10 @@ export function useRenameSession(): UseRenameSessionResult {
   };
 }
 
-export function useMoveSession(): UseMoveSessionResult {
+/** Moves sessions on the machine the page asks, or on `machine`: a component that provides a machine can't inject it itself. */
+export function useMoveSession(machine?: MachineTarget): UseMoveSessionResult {
   const state = createMutationState();
-  const { api } = useMachineTarget();
+  const { api } = machine ?? useMachineTarget();
 
   async function moveSession(sessionId: string, projectId: string | null): Promise<void> {
     await state.execute(async () => {

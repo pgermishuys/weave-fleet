@@ -781,6 +781,19 @@ export const useMachinesStore = defineStore("machines", () => {
     rememberSessions(entry.key, read.sessions.map((item) => item.session.id));
   }
 
+  /**
+   * Changes one of another machine's listed sessions here at once (a pin, a move, an archive), before its next list
+   * says so. A session it doesn't list is left alone.
+   */
+  function patchSession(key: string, sessionId: string, patch: Partial<SessionListItem>): void {
+    const state = others.value[key];
+    if (!state?.sessions.some((item) => item.session.id === sessionId)) return;
+    others.value = {
+      ...others.value,
+      [key]: { ...state, sessions: state.sessions.map((item) => (item.session.id === sessionId ? { ...item, ...patch } : item)) },
+    };
+  }
+
   /** Keeps the last list: an unreachable machine's sessions stay, marked as such. */
   function markUnreachable(key: string, error: string): void {
     others.value = { ...others.value, [key]: { ...sessionsOf(key), error, loading: false } };
@@ -1127,6 +1140,7 @@ export const useMachinesStore = defineStore("machines", () => {
     loadHomeAccess,
     replaceHomeToken,
     refreshMachine,
+    patchSession,
     refreshOthers,
     refreshUpdates,
     rememberLiveSessions,

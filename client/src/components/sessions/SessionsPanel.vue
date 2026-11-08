@@ -295,17 +295,23 @@ watch(
   { immediate: true },
 );
 
+/** The machine the picked rows are on (they're all on one): another machine's, or the live one's when left out. */
+function selectedMachine() {
+  return selection.machineKey === null ? undefined : machines.targetOfKey(selection.machineKey);
+}
+
 function archiveSelected(): void {
-  archiveQueue.archive([...selection.selectedIds]);
+  archiveQueue.archive([...selection.selectedIds], selectedMachine());
   selection.clear();
 }
 
 async function restoreSelected(): Promise<void> {
   const ids = [...selection.selectedIds];
+  const machine = selectedMachine();
   selection.clear();
   for (const sessionId of ids) {
     try {
-      await archiveQueue.restore(sessionId);
+      await archiveQueue.restore(sessionId, machine);
     } catch {
       // The archive queue shows the error; the rest still get restored.
     }

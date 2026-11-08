@@ -71,6 +71,8 @@ import ConfirmDeleteSessionDialog from "./ConfirmDeleteSessionDialog.vue";
 import ConfirmClearAttachmentsDialog from "./ConfirmClearAttachmentsDialog.vue";
 import { clearSessionAttachments } from "@/api/session-attachments";
 import { useMachineTarget } from "@/lib/machine-target";
+import { useMachinesStore } from "@/stores/machines";
+import { useSessionListOn } from "@/stores/session-list-on";
 
 interface Props {
   session: SessionListItem;
@@ -89,11 +91,12 @@ interface Props {
   hasChildren?: boolean;
   childrenExpanded?: boolean;
   /**
-   * On a machine that isn't live: the machine's name. The row only opens the session there; renaming, pinning,
-   * archiving, dragging and the menu wait until that machine is live, so nothing acts on the wrong machine.
+   * On a machine that isn't live: the machine's name. The row opens the session there in place, and renaming, pinning,
+   * archiving, moving, dragging and picking it act on that machine (the one its group provides). "Open in" isn't
+   * offered: its folder is on that machine, not here.
    */
   openOnMachine?: string;
-  /** That machine isn't answering: a working row says so instead of working on for good. */
+  /** That machine isn't answering: a working row says so instead of working on for good, and offers no actions. */
   machineNotAnswering?: boolean;
 }
 
@@ -121,6 +124,7 @@ const isInlineEditing = shallowRef(false);
 const isContextMenuOpen = shallowRef(false);
 const isDeleteDialogOpen = shallowRef(false);
 const machine = useMachineTarget();
+const machines = useMachinesStore();
 const isClearDialogOpen = shallowRef(false);
 const isClearing = shallowRef(false);
 const clearError = shallowRef<string | null>(null);
@@ -194,16 +198,23 @@ const prBadge = computed(() => {
   return { number, state: prState(facts), checks: facts.checks, description: `Pull request #${number} · ${prWords(facts)}` };
 });
 const isArchivedSession = computed(() => props.session.retentionStatus === "archived");
-const readOnly = computed(() => Boolean(props.openOnMachine));
-// Another machine's row has a menu of what doesn't need that machine (its folder is there, not here).
+/** On another machine: its row acts there, and the list it's in is that machine's. */
+const onOtherMachine = computed(() => Boolean(props.openOnMachine));
+const list = useSessionListOn()(machine);
+/** The tree the row is picked in: null for the live machine's, else its machine's key. */
+const selectionMachine = computed(() => (onOtherMachine.value ? machine.key : null));
+// A machine that isn't answering can't be asked: its rows only open, with a menu of what doesn't need it.
+const readOnly = computed(() => onOtherMachine.value && Boolean(props.machineNotAnswering));
 const fallbackCanArchive = computed(() => !isArchivedSession.value);
 // The retention state wins over capabilities, which only refresh with the list.
 const canArchive = computed(() => !readOnly.value
   && !isArchivedSession.value && (props.session.capabilities?.canArchive ?? fallbackCanArchive.value));
 const canRestore = computed(() => !readOnly.value && isArchivedSession.value);
 const isSelected = computed(() => selection.isSelected(sessionId.value));
-/** Whether rows are being picked: never on another machine's rows, which can't be archived from here. */
-const isSelecting = computed(() => !readOnly.value && selection.isSelecting);
+/** Whether the row can be picked: not while its machine isn't answering. */
+const canSelect = computed(() => !readOnly.value);
+/** Whether rows are being picked in the row's own machine's tree: a pick never spans machines. */
+const isSelecting = computed(() => canSelect.value && selection.isSelectingOn(selectionMachine.value));
 const canFork = computed(() => props.session.capabilities?.canFork ?? true);
 /** Fork shows on every session that isn't archived; on a harness that can't copy a conversation it's off, with why. */
 const showFork = computed(() => !isArchivedSession.value);
@@ -217,7 +228,7 @@ const canDelete = computed(() => props.session.capabilities?.canDelete ?? true);
  * be the row it sits under (the list shows everything one indent under the top-level session).
  */
 function parentTitle(parentId: string): string | null {
-  return sessionsStore.sessions.find((item) => item.session.id === parentId)?.session.title?.trim() || null;
+  return list.find(parentId)?.session.title?.trim() || null;
 }
 const moveOutLabel = computed(() => {
   const link = isArchivedSession.value ? null : movableOutOf(props.session);
@@ -238,6 +249,7 @@ const isStartingInFolder = computed(() => startingFromSessionId.value === sessio
  * it. Decided by the capability, not the harness's name.
  */
 const canSaveAsWorkflow = computed(() => isWorkflowsEnabled.value
+  && !onOtherMachine.value
   && !isArchivedSession.value
   && harnesses.value.find((harness) => harness.type === props.session.harnessType)?.capabilities.supportsOffTheRecordPrompt === true);
 const isAnyActionPending = computed(() =>
@@ -308,19 +320,19 @@ function handleSelect(event: MouseEvent): void {
     return;
   }
 
-  if (readOnly.value) {
+  if (!canSelect.value) {
     emit("select", props.session);
     return;
   }
 
   // ⌘/Ctrl-click and Shift-click pick rows; while any are picked, a plain click adds or removes one.
   if (event.shiftKey) {
-    selection.extendTo(sessionId.value, sessionsStore.activeSessionId);
+    selection.extendTo(sessionId.value, onOtherMachine.value ? null : sessionsStore.activeSessionId, selectionMachine.value);
     return;
   }
 
-  if (event.metaKey || event.ctrlKey || selection.isSelecting) {
-    selection.toggle(sessionId.value);
+  if (event.metaKey || event.ctrlKey || isSelecting.value) {
+    selection.toggle(sessionId.value, selectionMachine.value);
     return;
   }
 
@@ -334,7 +346,7 @@ function handleRowKeydown(event: KeyboardEvent): void {
     return;
   }
   // Alt+↑/↓ moves a pinned session up or down in the Pinned group.
-  if (event.altKey && pinned.value && (event.key === "ArrowUp" || event.key === "ArrowDown")) {
+  if (event.altKey && pinned.value && !readOnly.value && (event.key === "ArrowUp" || event.key === "ArrowDown")) {
     event.preventDefault();
     void handleMovePin(event.key === "ArrowUp" ? -1 : 1);
     return;
@@ -355,23 +367,23 @@ const runningChipLabel = computed(() => {
 
 function handleArchive(): void {
   isContextMenuOpen.value = false;
-  archiveQueue.archive([sessionId.value]);
+  archiveQueue.archive([sessionId.value], machine);
 }
 
 const pinned = computed(() => isPinned(props.session));
 /** Any session in the list can be pinned, except an archived one. */
 const canPin = computed(() => !readOnly.value && !isArchivedSession.value);
-const canMovePinUp = computed(() => pinned.value && pinnedNeighbourFor(sessionsStore.sessions, sessionId.value, -1) !== undefined);
-const canMovePinDown = computed(() => pinned.value && pinnedNeighbourFor(sessionsStore.sessions, sessionId.value, 1) !== undefined);
+const canMovePinUp = computed(() => pinned.value && pinnedNeighbourFor(list.sessions, sessionId.value, -1) !== undefined);
+const canMovePinDown = computed(() => pinned.value && pinnedNeighbourFor(list.sessions, sessionId.value, 1) !== undefined);
 
 function handleTogglePin(): void {
   isContextMenuOpen.value = false;
-  void (pinned.value ? pins.unpin(sessionId.value) : pins.pin(sessionId.value));
+  void (pinned.value ? pins.unpin(sessionId.value, machine) : pins.pin(sessionId.value, null, machine));
 }
 
 async function handleMovePin(delta: -1 | 1): Promise<void> {
   isContextMenuOpen.value = false;
-  await pins.move(sessionId.value, delta);
+  await pins.move(sessionId.value, delta, machine);
   // The row moved in the list: keep the keyboard on it.
   await nextTick();
   [...document.querySelectorAll<HTMLElement>(".session-item-shell[data-session-id]")]
@@ -382,19 +394,19 @@ async function handleMovePin(delta: -1 | 1): Promise<void> {
 
 function handleMoveOut(): void {
   isContextMenuOpen.value = false;
-  void lineageMoves.moveOut(sessionId.value);
+  void lineageMoves.moveOut(sessionId.value, machine);
 }
 
 function handleMoveBack(): void {
   isContextMenuOpen.value = false;
-  void lineageMoves.moveBack(sessionId.value);
+  void lineageMoves.moveBack(sessionId.value, machine);
 }
 
 async function handleRestore(): Promise<void> {
   isContextMenuOpen.value = false;
   isRestoring.value = true;
   try {
-    await archiveQueue.restore(sessionId.value);
+    await archiveQueue.restore(sessionId.value, machine);
   } catch {
     // The archive queue shows the error.
   } finally {
@@ -482,6 +494,11 @@ async function handleRename(nextTitle: string): Promise<void> {
 
   try {
     await renameSession(sessionId.value, trimmedTitle);
+    // The sessions store holds the live machine's list; another machine's row is in its own.
+    if (onOtherMachine.value) {
+      list.patch(sessionId.value, { session: { ...props.session.session, title: trimmedTitle } });
+      list.settled();
+    }
   } catch {
     // Errors are handled by the mutation composable state.
   }
@@ -494,6 +511,7 @@ async function handleFork(): Promise<void> {
 
   try {
     const response = await forkSession(sessionId.value);
+    opensOnRowMachine(response.session.id);
     await router.navigate({
       to: "/sessions/$id",
       params: { id: response.session.id },
@@ -507,10 +525,21 @@ async function handleFork(): Promise<void> {
   }
 }
 
+/**
+ * A session the row's machine just started (a fork, a new one in its folder) opens there in place, and shows in its
+ * list at once.
+ */
+function opensOnRowMachine(newSessionId: string): void {
+  if (!onOtherMachine.value) return;
+  machines.rememberSessions(machine.key, [newSessionId]);
+  list.settled();
+}
+
 /** A new, empty session in this session's folder, on its harness and profile: what Fork did before it copied. */
 async function handleNewSessionInFolder(): Promise<void> {
   try {
     const response = await startSessionInFolderOf(sessionId.value);
+    opensOnRowMachine(response.session.id);
     await router.navigate({
       to: "/sessions/$id",
       params: { id: response.session.id },
@@ -543,7 +572,8 @@ async function handleMove(projectId: string | null): Promise<void> {
   try {
     await moveSession(sessionId.value, projectId);
     const projectName = projectId === null ? null : (projects.value.find((project) => project.id === projectId)?.name ?? null);
-    sessionsStore.patchSessionProject(sessionId.value, projectId, projectName);
+    list.patchProject(sessionId.value, projectId, projectName);
+    list.settled();
   } catch {
     // Errors are handled by the mutation composable state.
   }
@@ -610,6 +640,7 @@ function removeSessionFromStore(): void {
   sessionCache.delete(sessionId.value, instanceId.value);
   dispatchSessionRemoved(sessionId.value);
   sessionsStore.removeSession(sessionId.value);
+  list.settled();
 }
 </script>
 
@@ -644,7 +675,7 @@ function removeSessionFromStore(): void {
             :aria-current="active ? 'true' : undefined"
             :aria-pressed="isSelecting ? isSelected : undefined"
             :aria-expanded="hasChildren ? Boolean(childrenExpanded) : undefined"
-            :title="openOnMachine ? `Open on ${openOnMachine}` : 'Double-click to rename'"
+            :title="readOnly ? `Open on ${openOnMachine}` : 'Double-click to rename'"
             :data-testid="openOnMachine ? 'machine-session-row' : 'session-row'"
             @click="handleSelect"
             @dblclick="startRename"
@@ -957,10 +988,11 @@ function removeSessionFromStore(): void {
           </ContextMenuItem>
         </template>
 
-        <!-- Reuse it -->
-        <ContextMenuSeparator />
+        <!-- Reuse it: Automations and Workflows are the live machine's pages, so another machine's row leaves them out. -->
+        <ContextMenuSeparator v-if="!onOtherMachine" />
 
         <ContextMenuItem
+          v-if="!onOtherMachine"
           :disabled="isAnyActionPending"
           hint="Opens Automations with this session's first message and folder filled in."
           data-testid="session-repeat-on-schedule"
@@ -984,7 +1016,19 @@ function removeSessionFromStore(): void {
         <!-- Take it elsewhere -->
         <ContextMenuSeparator />
 
-        <OpenToolContextSubmenu :directory="session.workspaceDirectory" />
+        <ContextMenuItem
+          v-if="onOtherMachine"
+          :hint="`Copies ${session.workspaceDirectory}. It's a folder on ${openOnMachine}, so it doesn't open here.`"
+          data-testid="session-context-copy-path"
+          @select="handleCopyPath"
+        >
+          <Copy class="size-3.5" />
+          Copy path
+        </ContextMenuItem>
+        <OpenToolContextSubmenu
+          v-else
+          :directory="session.workspaceDirectory"
+        />
 
         <ContextMenuSub>
           <ContextMenuSubTrigger
