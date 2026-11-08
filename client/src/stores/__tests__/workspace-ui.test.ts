@@ -186,6 +186,25 @@ describe("useWorkspaceUiStore", () => {
         expect(store.newSessionMachine).toBe("m-mac");
       });
 
+      it("keeps an empty draft and the open page when the new box opens before the old one leaves, as Vue rebuilds it", () => {
+        const store = useWorkspaceUiStore();
+        const { draft } = store.openNewSessionDraft(blank);
+
+        store.setNewSessionMachine("m-mac");
+        store.openNewSessionDraft(blank);
+        store.leaveNewSessionDraft();
+
+        expect(store.newSessionDraft).toBe(draft);
+        expect(store.newSessionMachine).toBe("m-mac");
+        expect(store.isNewSessionPageOpen).toBe(true);
+
+        // Leaving the page for good still drops the empty draft and its machine.
+        store.leaveNewSessionDraft();
+        expect(store.isNewSessionPageOpen).toBe(false);
+        expect(store.newSessionDraft).toBeNull();
+        expect(store.newSessionMachine).toBeNull();
+      });
+
       it("goes back to the live machine when the draft is dropped or becomes a session", () => {
         const store = useWorkspaceUiStore();
         store.openNewSessionDraft(blank);

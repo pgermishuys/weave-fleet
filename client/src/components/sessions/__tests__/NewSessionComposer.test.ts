@@ -1,5 +1,5 @@
 import { DOMWrapper, flushPromises, mount, type VueWrapper } from "@vue/test-utils";
-import { computed, defineComponent, h, ref, shallowRef, watchEffect, type Ref } from "vue";
+import { computed, defineComponent, h, ref, shallowRef, watchEffect, type Component, type Ref } from "vue";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { api, NO_PROFILE } from "@/api/client";
 import type { BranchInfo, HarnessCatalog, HarnessInfo, HarnessProfile, RepositoryDetail, ScannedRepository, SessionListItem, WorktreeInfo } from "@/api/client";
@@ -17,6 +17,7 @@ import { usePreferencesStore } from "@/stores/preferences";
 import { useSessionsStore } from "@/stores/sessions";
 import { useWorkspaceUiStore } from "@/stores/workspace-ui";
 import { useSettingsNav } from "@/composables/use-settings-nav";
+import { Route as NewSessionRoute } from "@/routes/sessions.new";
 import { useAppShellStore } from "@/stores/app-shell";
 import { useHarnessSetupStore } from "@/stores/harness-setup";
 import githubPluginManifest from "@/plugins/builtin/github";
@@ -47,6 +48,7 @@ const isCreating = shallowRef(false);
 vi.mock("@tanstack/vue-router", () => ({
   useNavigate: () => mocks.navigate,
   useSearch: () => mocks.search,
+  createFileRoute: () => (options: unknown) => ({ options }),
 }));
 
 vi.mock("@/composables/use-repositories", () => ({
@@ -2002,6 +2004,82 @@ describe("NewSessionComposer", () => {
       expect(useSettingsNav().activeSection.value).toBe("machines");
       expect(useSettingsNav().addMachineRequested.value).toBe(true);
       expect(mocks.navigate).toHaveBeenCalledWith({ to: "/settings" });
+    });
+
+    describe("on the New session page", () => {
+      // The page rebuilds the box for the machine picked, as the app does.
+      async function mountPage(): Promise<VueWrapper> {
+        const Route = (NewSessionRoute as unknown as { options: { component: Component } }).options.component;
+        const Page = defineComponent({ render: () => h(Route) });
+        wrapper = mount(Page, { attachTo: document.body, global: { stubs: { teleport: false } } });
+        await flushPromises();
+        return wrapper;
+      }
+
+      async function pick(view: VueWrapper, key: string): Promise<void> {
+        await openMachineMenu(view);
+        await inDocument().get(`[data-testid='new-session-machine-${key}']`).trigger("click");
+        await flushPromises();
+      }
+
+      function chip(view: VueWrapper): string {
+        return view.get("[data-testid='new-session-machine'] .ns-machine-chip__name").text();
+      }
+
+      it.each([
+        ["the live machine", null, "m-mac", "macbook"],
+        ["another machine", "m-falcon", "m-mac", "macbook"],
+        ["another machine, back to the live one", "m-falcon", "home", "andromeda"],
+      ])("switches the empty box from %s to the machine picked", async (_name, current, picked, name) => {
+        addMachines(macbook, { ...falcon, baseUrl: "http://falcon-up.test:2113" });
+        if (current) useMachinesStore().setCurrent(current);
+        const view = await mountPage();
+
+        await pick(view, picked);
+
+        expect(chip(view)).toBe(name);
+        expect(useWorkspaceUiStore().isNewSessionPageOpen).toBe(true);
+        expect(useWorkspaceUiStore().newSessionDraft).not.toBeNull();
+      });
+
+      it("keeps the message when the box moves to another machine", async () => {
+        addMachines(macbook);
+        const view = await mountPage();
+        await type(view, "Fix the sign-in loop");
+
+        await pick(view, "m-mac");
+
+        expect(chip(view)).toBe("macbook");
+        expect(textarea(view).element.value).toBe("Fix the sign-in loop");
+      });
+
+      it("starts the session on the machine picked and opens it", async () => {
+        addMachines(macbook);
+        localStorage.setItem(newSessionDefaultsKey("m-mac"), JSON.stringify({ lastFolder: { kind: "repository", path: comet.path } }));
+        const view = await mountPage();
+        await type(view, "Fix the sign-in loop");
+
+        await pick(view, "m-mac");
+        await pressEnter(view);
+
+        expect(loadSessionMachines()["session-1"]).toBe("m-mac");
+        expect(mocks.navigate).toHaveBeenCalledWith(expect.objectContaining({ to: "/sessions/$id", params: { id: "session-1" } }));
+      });
+
+      it("keeps the live machine on the chip with no other machines listed", async () => {
+        const view = await mountPage();
+        const live = chip(view);
+        await openMachineMenu(view);
+        expect(inDocument().findAll("[data-testid^='new-session-machine-']").map((item) => item.attributes("data-testid")))
+          .toEqual(["new-session-machine-home", "new-session-machine-add"]);
+
+        await inDocument().get("[data-testid='new-session-machine-home']").trigger("click");
+        await flushPromises();
+
+        expect(chip(view)).toBe(live);
+        expect(useWorkspaceUiStore().newSessionMachine).toBeNull();
+        expect(useWorkspaceUiStore().isNewSessionPageOpen).toBe(true);
+      });
     });
 
     describe("on another machine", () => {

@@ -66,6 +66,9 @@ export const useWorkspaceUiStore = defineStore("workspace-ui", () => {
   const newSessionMachine = shallowRef<string | null>(null);
   // Set while the page is rebuilt for another machine, so leaving it doesn't drop the draft.
   let switchingMachine = false;
+  // Boxes on the page now. A rebuilt box sets up before the one it replaces unmounts (Vue runs unmount hooks after),
+  // so for a moment there are two, and the old one leaving must not close the page.
+  let openBoxes = 0;
 
   const newSessionDraftRow = computed<NewSessionDraftRow | null>(() => {
     const draft = newSessionDraft.value;
@@ -98,6 +101,7 @@ export const useWorkspaceUiStore = defineStore("workspace-ui", () => {
    * Returned reactive, so the page's edits show in the sidebar row as they're made.
    */
   function openNewSessionDraft(initial: Omit<NewSessionDraft, "rowKey" | "isStarting">): { draft: NewSessionDraft; restored: boolean } {
+    openBoxes += 1;
     isNewSessionPageOpen.value = true;
     switchingMachine = false;
     const existing = newSessionDraft.value;
@@ -113,6 +117,11 @@ export const useWorkspaceUiStore = defineStore("workspace-ui", () => {
 
   /** Leaving the page: a draft with nothing in it goes; one with a message stays, with its row. */
   function leaveNewSessionDraft(): void {
+    openBoxes = Math.max(0, openBoxes - 1);
+    // The box that replaced this one is already open (a rebuild for another machine): the page stays, with its draft.
+    if (openBoxes > 0) {
+      return;
+    }
     isNewSessionPageOpen.value = false;
     if (switchingMachine) {
       return;
