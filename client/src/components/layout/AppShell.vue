@@ -124,7 +124,7 @@ const showRightPanel = computed(() => showSessionsV2Panel.value || showBoardPane
 const machines = useMachinesStore();
 const openSessionId = useParams({ strict: false, select: (params) => (params as { id?: string }).id ?? null });
 const sessionTarget = computed(() => machines.sessionTarget(openSessionId.value));
-// The machine you're on is the machine of the session you have open; Settings and the sidebar's Live badge follow it.
+// The machine you're on is the machine of the session you have open; Settings and the new-session page follow it.
 watch(
   () => (openSessionId.value ? sessionTarget.value.key : null),
   (key) => { if (key) machines.setCurrent(key); },

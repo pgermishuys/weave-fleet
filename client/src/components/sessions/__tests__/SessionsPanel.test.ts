@@ -1,6 +1,6 @@
-import { flushPromises, mount } from "@vue/test-utils";
+import { enableAutoUnmount, flushPromises, mount } from "@vue/test-utils";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { ref, shallowRef } from "vue";
+import { ref, shallowRef, type Ref } from "vue";
 import MachineSessionsGroup from "@/components/sessions/MachineSessionsGroup.vue";
 import SessionsPanel from "@/components/sessions/SessionsPanel.vue";
 import type { ProjectResponse, SessionListItem } from "@/api/client";
@@ -10,12 +10,13 @@ import { useMachinesStore } from "@/stores/machines";
 import { useSessionsStore } from "@/stores/sessions";
 import { useWorkspaceUiStore } from "@/stores/workspace-ui";
 
-const { navigate } = vi.hoisted(() => ({ navigate: vi.fn() }));
+const { navigate, route } = vi.hoisted(() => ({ navigate: vi.fn(), route: { path: undefined as unknown as Ref<string> } }));
 
-vi.mock("@tanstack/vue-router", () => ({
-  useRouter: () => ({ navigate }),
-  useLocation: () => ref("/"),
-}));
+vi.mock("@tanstack/vue-router", async () => {
+  const vue = await import("vue");
+  route.path = vue.ref("/");
+  return { useRouter: () => ({ navigate }), useLocation: () => route.path };
+});
 
 const { liveProjects } = vi.hoisted(() => ({ liveProjects: { value: [] as ProjectResponse[] } }));
 
@@ -64,6 +65,17 @@ function headers(view: ReturnType<typeof mountPanel>): string[] {
     `${header.get(".machine-header__name").text()}${header.attributes("data-machine-live") ? " (live)" : ""}`);
 }
 
+// A panel left mounted keeps running, and its stores make its own Pinia the active one for the next test.
+enableAutoUnmount(afterEach);
+
+/** The rows marked open, as `machine/session`: `live/` for the live machine's tree. */
+function openRows(view: ReturnType<typeof mountPanel>): string[] {
+  return view.findAll("[aria-current='true']").map((row) => {
+    const machine = row.element.closest("[data-testid='machine-group']")?.getAttribute("data-machine") ?? "live";
+    return `${machine}/${row.element.closest("[data-session-id]")?.getAttribute("data-session-id")}`;
+  });
+}
+
 /** jsdom has no layout: scrollTop keeps whatever it's set to. */
 const scrollTops = new WeakMap<Element, number>();
 
@@ -84,6 +96,7 @@ describe("SessionsPanel across machines", () => {
       },
     });
     liveProjects.value = [project("p-fleet", "weave-fleet", 1)];
+    route.path.value = "/";
   });
 
   afterEach(() => {
@@ -111,7 +124,7 @@ describe("SessionsPanel across machines", () => {
     useSettingsNav().addMachineRequested.value = false;
   });
 
-  it("keeps that order when another machine is live: only the Live tag moves", async () => {
+  it("keeps that order when another machine is live: only the live tree moves", async () => {
     setActiveMachine(aurora);
     useSessionsStore().setSessions([item("aurora-1", "Paint the fence", "p-fleet")]);
     const view = mountPanel();
@@ -245,6 +258,82 @@ describe("SessionsPanel across machines", () => {
 
     expect(machines.currentKey).toBe(hangar.id);
     expect(navigate).toHaveBeenCalledWith({ to: "/" });
+    view.unmount();
+  });
+
+  it("marks the open session's row on the machine it's on, and only that row, with no Live badge on any heading", async () => {
+    const machines = useMachinesStore();
+    machines.others = {
+      ...machines.others,
+      [hangar.id]: { sessions: [item("hangar-1", "Index for slow search", "p-lumen")], projects: [project("p-lumen", "lumen-site", 1)], error: null, loadedAt: 1, loading: false },
+    };
+    useSessionsStore().setSessions([item("home-1", "Local work", "p-fleet"), item("home-2", "Tidy the docs", "p-fleet")]);
+    route.path.value = "/sessions/home-1";
+    const view = mountPanel();
+    await flushPromises();
+    expect(openRows(view)).toEqual(["live/home-1"]);
+
+    // Open hangar's session in place: its row is marked, and home's isn't left marked.
+    await view.get("[data-machine='hangar-id'] [data-testid='machine-session-row']").trigger("click");
+    route.path.value = "/sessions/hangar-1";
+    await flushPromises();
+    expect(openRows(view)).toEqual(["hangar-id/hangar-1"]);
+    expect(view.find(".machine-header__live").exists()).toBe(false);
+    expect(view.findAll("[data-testid='machine-header']").every((header) => !header.text().includes("Live"))).toBe(true);
+
+    // And back to one of home's.
+    route.path.value = "/sessions/home-2";
+    await flushPromises();
+    expect(openRows(view)).toEqual(["live/home-2"]);
+    view.unmount();
+  });
+
+  it("marks another machine's session open after a reload with it open", async () => {
+    useMachinesStore().rememberSessions(hangar.id, ["hangar-1"]);
+    const machines = useMachinesStore();
+    machines.others = {
+      ...machines.others,
+      [hangar.id]: { sessions: [item("hangar-1", "Index for slow search", "p-lumen")], projects: [project("p-lumen", "lumen-site", 1)], error: null, loadedAt: 1, loading: false },
+    };
+    useSessionsStore().setSessions([item("home-1", "Local work", "p-fleet")]);
+    route.path.value = "/sessions/hangar-1";
+    const view = mountPanel();
+    await flushPromises();
+
+    expect(openRows(view)).toEqual(["hangar-id/hangar-1"]);
+    view.unmount();
+  });
+});
+
+describe("SessionsPanel with no other machines", () => {
+  beforeEach(() => {
+    localStorage.clear();
+    sessionStorage.clear();
+    setActiveMachine(null);
+    saveMachines([]);
+    vi.stubGlobal("fetch", vi.fn(async () => new Response("{}", { status: 404 })));
+    liveProjects.value = [project("p-fleet", "weave-fleet", 1)];
+    route.path.value = "/";
+  });
+
+  afterEach(() => {
+    vi.unstubAllGlobals();
+    document.body.innerHTML = "";
+  });
+
+  it("shows no machine headings and marks the open session's row, as it always has", async () => {
+    useSessionsStore().setSessions([item("home-1", "Local work", "p-fleet"), item("home-2", "Tidy the docs", "p-fleet")]);
+    route.path.value = "/sessions/home-2";
+    const view = mountPanel();
+    await flushPromises();
+
+    expect(view.findAll("[data-testid='machine-header']")).toHaveLength(0);
+    expect(view.findAll("[data-testid='machine-group']")).toHaveLength(0);
+    expect(openRows(view)).toEqual(["live/home-2"]);
+
+    route.path.value = "/sessions/home-1";
+    await flushPromises();
+    expect(openRows(view)).toEqual(["live/home-1"]);
     view.unmount();
   });
 });

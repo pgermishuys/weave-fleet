@@ -20,8 +20,6 @@ const props = withDefaults(defineProps<{
   name: string;
   /** The machine the app is working in. */
   live?: boolean;
-  /** Shows the Live badge: the machine you're on, the open session's. Defaults to `live`. */
-  current?: boolean;
   /** Can't be reached right now; its rows are the last ones it returned. */
   unreachable?: boolean;
   /** Short note on the right: "4s ago", "unreachable". */
@@ -33,11 +31,10 @@ const props = withDefaults(defineProps<{
   count?: number | null;
   /** Right-click offers New session (and Work here on a machine that isn't live). */
   menu?: boolean;
-}>(), { live: false, current: undefined, unreachable: false, note: null, why: null, expanded: null, count: null, menu: false });
+}>(), { live: false, unreachable: false, note: null, why: null, expanded: null, count: null, menu: false });
 
 const emit = defineEmits<{ toggle: []; newSession: []; workHere: [] }>();
 
-const showBadge = computed(() => props.current ?? props.live);
 const tag = computed(() => (props.expanded === null || props.expanded === undefined ? "div" : "button"));
 </script>
 
@@ -58,7 +55,6 @@ const tag = computed(() => (props.expanded === null || props.expanded === undefi
         :aria-expanded="tag === 'button' ? expanded : undefined"
         data-testid="machine-header"
         :data-machine-live="live ? 'true' : undefined"
-        :data-machine-current="showBadge ? 'true' : undefined"
         @click="tag === 'button' && emit('toggle')"
       >
         <ChevronDown
@@ -72,11 +68,6 @@ const tag = computed(() => (props.expanded === null || props.expanded === undefi
           aria-hidden="true"
         />
         <span class="machine-header__name">{{ name }}</span>
-        <span
-          v-if="showBadge"
-          class="machine-header__live"
-          title="The machine you're working in"
-        >Live</span>
         <TooltipProvider
           v-if="note && why"
           :delay-duration="150"
@@ -236,19 +227,6 @@ const tag = computed(() => (props.expanded === null || props.expanded === undefi
   font-weight: 600;
   letter-spacing: 0.02em;
   transition: color var(--transition);
-}
-
-.machine-header__live {
-  flex-shrink: 0;
-  padding: 1px 5px;
-  border-radius: 4px;
-  background: color-mix(in srgb, var(--coral) 14%, transparent);
-  color: var(--coral);
-  font-family: var(--font-mono, ui-monospace, monospace);
-  font-size: 0.67857rem;
-  font-weight: 700;
-  letter-spacing: 0.09em;
-  text-transform: uppercase;
 }
 
 .machine-header__note {
