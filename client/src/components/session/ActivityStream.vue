@@ -382,7 +382,16 @@ const {
 });
 
 /** A session chip in a message of yours: opens the session it names. */
-function openReferencedSession(sessionId: string): void {
+/**
+ * A session chip opens the session, as the sidebar opens it: in place on its machine. One without a machine is on this
+ * session's machine; another machine's is found by the name Fleet gave it, and stays shut when this page doesn't list it.
+ */
+function openReferencedSession(sessionId: string, machineName?: string): void {
+  const key = machineName === undefined
+    ? machine.key
+    : machines.entries.find((entry) => entry.name === machineName)?.key ?? null;
+  if (key === null) return;
+  if (key !== machines.liveKey) machines.rememberSessions(key, [sessionId]);
   void router.navigate({ to: "/sessions/$id", params: { id: sessionId }, search: { instanceId: undefined, parentSessionId: undefined } });
 }
 

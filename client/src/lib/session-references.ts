@@ -23,6 +23,23 @@ export interface SessionReference {
   token: string;
   sessionId: string;
   title: string;
+  /**
+   * The id of the machine the session is on, for a session on another machine than the one the message goes to. Left
+   * out for a session on the same machine, so the request is as it always was.
+   */
+  machineId?: string;
+  /** That machine's name: the chip shows it. */
+  machine?: string;
+}
+
+/** A reference as a request carries it: the machine's id only for a session on another machine. */
+export function requestSessionReference(reference: Pick<SessionReference, "token" | "sessionId" | "machineId">): {
+  token: string;
+  sessionId: string;
+  machineId?: string;
+} {
+  const { token, sessionId, machineId } = reference;
+  return machineId ? { token, sessionId, machineId } : { token, sessionId };
 }
 
 /** The most references one composer remembers; the oldest go first. */
@@ -71,8 +88,9 @@ const storageKey = (draftSessionId: string) => `session-refs.${draftSessionId}`;
 
 function isReference(value: unknown): value is SessionReference {
   if (!value || typeof value !== "object") return false;
-  const { token, sessionId, title } = value as Record<string, unknown>;
-  return typeof token === "string" && typeof sessionId === "string" && typeof title === "string";
+  const { token, sessionId, title, machineId, machine } = value as Record<string, unknown>;
+  return typeof token === "string" && typeof sessionId === "string" && typeof title === "string"
+    && (machineId === undefined || typeof machineId === "string") && (machine === undefined || typeof machine === "string");
 }
 
 function picksFor(draftSessionId: string): SessionReference[] {
@@ -107,7 +125,12 @@ export function sessionReferenceToken(draftSessionId: string, session: { id: str
 /** Remembers that `reference.token` in this composer names `reference.sessionId`. */
 export function rememberSessionReference(draftSessionId: string, reference: SessionReference): void {
   const picks = picksFor(draftSessionId).filter((pick) => pick.token !== reference.token);
-  picks.push({ token: reference.token, sessionId: reference.sessionId, title: reference.title });
+  picks.push({
+    token: reference.token,
+    sessionId: reference.sessionId,
+    title: reference.title,
+    ...(reference.machineId ? { machineId: reference.machineId, machine: reference.machine ?? "" } : {}),
+  });
   remembered[draftSessionId] = picks.slice(-MAX_REMEMBERED);
   writeStoredDraft(storageKey(draftSessionId), JSON.stringify(remembered[draftSessionId]));
 }
@@ -138,7 +161,7 @@ export function resetSessionReferences(): void {
 // ── The block in a sent message ───────────────────────────────────────────
 
 const BLOCK = /\s*<fleet-session-references>\n[\s\S]*?<\/fleet-session-references>\s*$/;
-const ENTRY = /<session ref="([^"]*)" id="([^"]*)" title="([^"]*)"/g;
+const ENTRY = /<session ref="([^"]*)" id="([^"]*)" title="([^"]*)"(?: machine="([^"]*)")?/g;
 
 // Fleet HTML-encodes the attributes.
 const ENTITIES: Record<string, string> = { "&amp;": "&", "&quot;": "\"", "&#39;": "'", "&lt;": "<", "&gt;": ">" };
@@ -152,10 +175,12 @@ export function parseSessionReferences(body: string): { text: string; references
   const block = BLOCK.exec(body);
   if (!block) return { text: body, references: [] };
 
-  const references = [...block[0].matchAll(ENTRY)].map((entry) => ({
+  const references = [...block[0].matchAll(ENTRY)].map((entry): SessionReference => ({
     token: decode(entry[1]),
     sessionId: decode(entry[2]),
     title: decode(entry[3]),
+    // Another machine's session: Fleet names its machine.
+    ...(entry[4] !== undefined ? { machine: decode(entry[4]) } : {}),
   }));
   return { text: body.slice(0, block.index), references };
 }
@@ -180,6 +205,13 @@ function escapeHtml(value: string): string {
 function chip(reference: SessionReference): string {
   const id = escapeHtml(reference.sessionId);
   const title = escapeHtml(reference.title);
+  if (reference.machine) {
+    // Another machine's session: the chip names the machine.
+    const machine = escapeHtml(reference.machine);
+    return `<a class="session-ref-chip" href="/sessions/${encodeURIComponent(reference.sessionId)}" data-session-ref="${id}" `
+      + `data-session-machine="${machine}" title="Open ${title} on ${machine}">${CHIP_ICON}`
+      + `<span class="session-ref-chip__title">${title}</span><span class="session-ref-chip__machine">${machine}</span></a>`;
+  }
   return `<a class="session-ref-chip" href="/sessions/${encodeURIComponent(reference.sessionId)}" data-session-ref="${id}" `
     + `title="Open ${title}">${CHIP_ICON}<span class="session-ref-chip__title">${title}</span></a>`;
 }

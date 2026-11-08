@@ -54,7 +54,8 @@ const emit = defineEmits<{
   /** Improve on a row that loaded one of Fleet's built-in skills. */
   "improve-skill": [skill: string, toolId: string];
   /** A session chip was clicked. */
-  "open-session": [sessionId: string];
+  /** A session chip: the session, and its machine's name when it's another machine's. */
+  "open-session": [sessionId: string, machine?: string];
   /** A file the message names was clicked: its path from the session's folder, its line, and whether to keep the tab. */
   "open-file": [path: string, line: number | undefined, keep: boolean];
 }>();
@@ -138,7 +139,9 @@ function handleBodyClick(event: MouseEvent): void {
   const chip = (event.target as Element | null)?.closest?.("[data-session-ref]");
   if (!chip || event.metaKey || event.ctrlKey || event.shiftKey || event.button !== 0) return;
   event.preventDefault();
-  emit("open-session", chip.getAttribute("data-session-ref") ?? "");
+  const machine = chip.getAttribute("data-session-machine");
+  if (machine === null) emit("open-session", chip.getAttribute("data-session-ref") ?? "");
+  else emit("open-session", chip.getAttribute("data-session-ref") ?? "", machine);
 }
 
 function handleBodyKeydown(event: KeyboardEvent): void {
@@ -585,6 +588,15 @@ function handleExpandVisual(payload: VisualPayload): void {
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
+}
+
+/* Another machine's session: the chip names its machine after the title. */
+.msg-body__content :deep(.session-ref-chip__machine) {
+  flex-shrink: 0;
+  color: var(--accent);
+  font-family: var(--font-mono-stack, ui-monospace, monospace);
+  font-size: 11px;
+  font-weight: 500;
 }
 
 /* A file the message names: a click opens it in a tab, at the line. */

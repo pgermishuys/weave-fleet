@@ -366,6 +366,7 @@ internal sealed record ErrorResponse(string Error);
 [JsonSerializable(typeof(WeaveFleet.Api.Contracts.PeerSessionMessageRequest))]
 [JsonSerializable(typeof(WeaveFleet.Api.Contracts.PeerSessionMessageResponse))]
 [JsonSerializable(typeof(WeaveFleet.Api.Contracts.PeerSessionPageResponse))]
+[JsonSerializable(typeof(WeaveFleet.Api.Contracts.PeerSessionRecapResponse))]
 // Machines (server-side list)
 [JsonSerializable(typeof(WeaveFleet.Api.Contracts.MachineEntryResponse))]
 [JsonSerializable(typeof(WeaveFleet.Api.Contracts.MachineAddressEntry))]

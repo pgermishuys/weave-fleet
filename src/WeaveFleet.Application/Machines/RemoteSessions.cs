@@ -304,6 +304,43 @@ public sealed class RemoteSessions(RemoteMachineService machines, IHttpClientFac
     }
 
     /// <summary>
+    /// The title of a session on the machine (<c>GET /api/sessions/{id}</c>, which every Fleet has), for an <c>@</c>
+    /// reference to it. <c>Missing</c> when the machine says it has no such session; otherwise the error says why it
+    /// couldn't be asked.
+    /// </summary>
+    public async Task<(string? Title, bool Missing, string? Error)> SessionTitleAsync(RemoteMachine machine, string token, string sessionId, CancellationToken ct)
+    {
+        var missing = false;
+        var (session, away, refused) = await RemoteMachineRequests.SendAsync<object>(
+            httpClients, RemoteMachineService.HttpClientName, machine, token, HttpMethod.Get,
+            $"/api/sessions/{Uri.EscapeDataString(sessionId)}", null, null, ct, code => missing = code == HttpStatusCode.NotFound);
+        if (session is null)
+            return (null, missing, away ?? refused);
+
+        using (session)
+        {
+            var title = Text(session.RootElement, "title");
+            return title is null
+                ? (null, false, $"{machine.Name} sent something that isn't Fleet's answer.")
+                : (title, false, null);
+        }
+    }
+
+    /// <summary>
+    /// A session's recap from the machine (its peer endpoint), for an <c>@</c> reference from a harness without Fleet's
+    /// tools. Null when it sends none: a Fleet older than the endpoint, or one that didn't answer.
+    /// </summary>
+    public async Task<string?> RecapAsync(RemoteMachine machine, string token, string sessionId, CancellationToken ct)
+    {
+        var (answer, _, _) = await GetAsync(machine, token, $"/api/machine/peer/sessions/{Uri.EscapeDataString(sessionId)}/recap", ct);
+        if (answer is null)
+            return null;
+
+        using (answer)
+            return Text(answer.RootElement, "recap") is { Length: > 0 } recap ? recap : null;
+    }
+
+    /// <summary>
     /// The text of the session's last reply after <paramref name="afterMessageId"/>, read from its machine
     /// (<c>GET /api/sessions/{id}/messages</c>); the last reply at all when the message isn't in the page. Null with no
     /// error when it wrote none.

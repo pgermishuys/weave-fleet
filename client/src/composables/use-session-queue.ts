@@ -1,7 +1,7 @@
 import { computed, onBeforeUnmount, reactive, readonly, shallowRef } from "vue";
 import type { ModelReference } from "@/api/client";
 import { onReconnect, useWeaveSocket } from "@/composables/use-weave-socket";
-import { stripSessionReferences, type SessionReference } from "@/lib/session-references";
+import { requestSessionReference, stripSessionReferences, type SessionReference } from "@/lib/session-references";
 import { useMachineTarget } from "@/lib/machine-target";
 import { modelPickerKey, useModelPickerStore } from "@/stores/model-picker";
 import { useSessionsStore } from "@/stores/sessions";
@@ -122,7 +122,7 @@ export function useSessionQueue(sessionId: string) {
           model: options.model ?? null,
           effort: options.effort ?? null,
           ...(options.sessionReferences?.length
-            ? { sessionReferences: options.sessionReferences.map(({ token, sessionId }) => ({ token, sessionId })) }
+            ? { sessionReferences: options.sessionReferences.map(requestSessionReference) }
             : {}),
           ...(options.skills?.length
             ? { skills: [...options.skills] }

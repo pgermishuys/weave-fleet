@@ -17,6 +17,8 @@ namespace WeaveFleet.Api.Endpoints;
 /// <c>fleet_message</c> delivers one, with the sending machine in the tag. Never as the user's own prompt.</item>
 /// <item><c>GET /api/machine/peer/sessions/{id}/page</c>: a page of the conversation, as <c>fleet_session_read</c>
 /// shows it.</item>
+/// <item><c>GET /api/machine/peer/sessions/{id}/recap</c>: its recap, for an <c>@</c> reference to it from a session there
+/// whose harness has no Fleet tools.</item>
 /// </list>
 /// Only the machine token may call them: not a paired device, not a browser, not an agent on this machine. So a
 /// sender from another machine is only ever named by a Fleet that holds this machine's token, and this machine trusts
@@ -90,6 +92,18 @@ public static class MachinePeerEndpoints
         })
         .Produces<PeerSessionPageResponse>(200)
         .WithName("ReadPeerSessionPage");
+
+        peer.MapGet("/{id}/recap", async (string id, SessionService sessions, SessionReferenceExpander references, CancellationToken ct) =>
+        {
+            var session = await sessions.GetSessionAsync(id);
+            if (session.IsFailure)
+                return Results.NotFound(new ErrorResponse($"No session {id} here."));
+
+            var recap = await references.RecapTextAsync(session.Value.Id, ct);
+            return Results.Ok(new PeerSessionRecapResponse(session.Value.Title, recap));
+        })
+        .Produces<PeerSessionRecapResponse>(200)
+        .WithName("ReadPeerSessionRecap");
 
         return app;
     }

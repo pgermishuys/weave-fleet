@@ -1,6 +1,7 @@
 import type { CreateSessionResponse, ModelReference, SessionListItem, SessionSourceSelection } from "@/api/client";
 import type { CreateSessionOptions } from "@/composables/use-session-actions";
 import type { ImageAttachment } from "@/lib/client-types";
+import { requestSessionReference } from "@/lib/session-references";
 import {
   buildGitHubSessionSourceSelection,
   type GitHubSessionSourcePreset,
@@ -41,7 +42,7 @@ export interface NewSessionState {
   /** The model to start with; null or absent for the agent's default. */
   model?: ModelReference | null;
   /** Sessions picked from the `@` list whose tokens are in the message. */
-  sessionReferences?: readonly { token: string; sessionId: string }[];
+  sessionReferences?: readonly { token: string; sessionId: string; machineId?: string }[];
   /** Images that go with the message; left out when there's no message. */
   attachments?: readonly ImageAttachment[];
 }
@@ -251,7 +252,7 @@ export function buildCreateSessionRequest(state: NewSessionState): BuildNewSessi
       ...(state.model ? { model: state.model } : {}),
       ...(message && state.attachments?.length ? { attachments: [...state.attachments] } : {}),
       ...(message && state.sessionReferences?.length
-        ? { sessionReferences: state.sessionReferences.map(({ token, sessionId }) => ({ token, sessionId })) }
+        ? { sessionReferences: state.sessionReferences.map(requestSessionReference) }
         : {}),
     },
   };

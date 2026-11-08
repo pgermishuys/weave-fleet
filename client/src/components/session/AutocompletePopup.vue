@@ -2,7 +2,13 @@
 import { computed, ref, watch, nextTick } from "vue";
 import { AlertCircle, Bot, ChevronRight, FileText, Folder, LoaderCircle, ScrollText, Terminal } from "lucide-vue-next";
 import StatusGlyph from "@/components/sessions/StatusGlyph.vue";
-import { AUTOCOMPLETE_LISTBOX_ID, autocompleteOptionId, type AutocompleteItem } from "@/composables/use-autocomplete";
+import {
+  AUTOCOMPLETE_LISTBOX_ID,
+  autocompleteOptionId,
+  isUnpickable,
+  type AutocompleteItem,
+  type AutocompleteMachine,
+} from "@/composables/use-autocomplete";
 import { useRelativeTime } from "@/composables/use-relative-time";
 import { formatCompactAge } from "@/lib/session-row-status";
 
@@ -29,7 +35,15 @@ interface AutocompletePopupProps {
   emptyText?: string;
   /** Said on the right of the files' heading: where they are ("in harbor-api"). */
   fileHint?: string;
+  /** Said beside the session's own machine's name, when sessions are grouped by machine. */
+  ownMachineHint?: string;
 }
+
+/** A line in a group: an item, or, among sessions grouped by machine, a machine's name or the note under its rows. */
+type GroupRow =
+  | { kind: "item"; key: string; item: AutocompleteItem }
+  | { kind: "machine"; key: string; machine: AutocompleteMachine }
+  | { kind: "note"; key: string; machine: AutocompleteMachine };
 
 interface ItemGroup {
   key: AutocompleteItem["group"];
@@ -37,6 +51,7 @@ interface ItemGroup {
   /** Said on the right of the group's heading. */
   hint?: string;
   items: AutocompleteItem[];
+  rows: GroupRow[];
 }
 
 /** Statuses that get a glyph on a session's row, as in the session list. */
@@ -63,16 +78,44 @@ const groupDefinitions: ReadonlyArray<{ key: AutocompleteItem["group"]; label: s
   { key: "agent", label: "Agents" },
 ];
 
+/** The group's lines: its items, with each machine's name before its sessions when they're grouped by machine. */
+function rowsOf(items: AutocompleteItem[]): GroupRow[] {
+  const rows: GroupRow[] = [];
+  let machine: AutocompleteMachine | undefined;
+  const closeMachine = () => {
+    if (machine?.unreachable) rows.push({ kind: "note", key: `note:${machine.key}`, machine });
+  };
+  for (const item of items) {
+    if (item.machine && item.machine.key !== machine?.key) {
+      closeMachine();
+      machine = item.machine;
+      rows.push({ kind: "machine", key: `machine:${machine.key}`, machine });
+    }
+    rows.push({ kind: "item", key: item.id, item });
+  }
+  closeMachine();
+  return rows;
+}
+
 const groupedItems = computed<ItemGroup[]>(() => {
   return groupDefinitions
-    .map((groupDefinition) => ({
-      key: groupDefinition.key,
-      label: groupDefinition.label,
-      hint: groupDefinition.key === "file" ? props.fileHint : groupDefinition.hint,
-      items: props.items.filter((item) => item.group === groupDefinition.key),
-    }))
+    .map((groupDefinition) => {
+      const items = props.items.filter((item) => item.group === groupDefinition.key);
+      return {
+        key: groupDefinition.key,
+        label: groupDefinition.label,
+        hint: groupDefinition.key === "file" ? props.fileHint : groupDefinition.hint,
+        items,
+        rows: rowsOf(items),
+      };
+    })
     .filter((group) => group.items.length > 0);
 });
+
+function openFix(event: MouseEvent, machine: AutocompleteMachine): void {
+  event.preventDefault();
+  machine.fix?.open();
+}
 
 const now = useRelativeTime();
 
@@ -129,110 +172,141 @@ function handleSelect(value: string): void {
           >{{ group.hint }}</span>
         </div>
 
-        <div
-          v-for="item in group.items"
-          :key="item.id"
-          class="autocomplete-popup__row"
-          role="presentation"
-          :class="{ 'autocomplete-popup__row--selected': isSelected(item), 'autocomplete-popup__row--disabled': item.disabledReason }"
+        <template
+          v-for="row in group.rows"
+          :key="row.key"
         >
-          <button
-            :id="autocompleteOptionId(items.indexOf(item))"
-            :data-value="item.value"
-            type="button"
-            role="option"
-            class="autocomplete-popup__item"
-            :aria-selected="isSelected(item)"
-            :disabled="Boolean(item.disabledReason)"
-            @mousedown="handleItemMouseDown"
-            @click="handleSelect(item.value)"
+          <div
+            v-if="row.kind === 'machine'"
+            class="autocomplete-popup__machine"
+            role="presentation"
+            data-testid="autocomplete-machine"
           >
-            <span class="autocomplete-popup__icon-wrap">
-              <Terminal
-                v-if="item.group === 'command'"
-                class="autocomplete-popup__icon"
-                aria-hidden="true"
-              />
-
-              <ScrollText
-                v-else-if="item.group === 'skill'"
-                class="autocomplete-popup__icon autocomplete-popup__icon--skill"
-                aria-hidden="true"
-              />
-
-              <template v-else-if="item.session">
-                <StatusGlyph
-                  v-if="LIVE_STATUSES.has(item.session.status)"
-                  :status="item.session.status"
-                  :activity="item.session.activity"
-                />
-              </template>
-
-              <span
-                v-else-if="item.group === 'agent'"
-                class="autocomplete-popup__agent-icon-wrap"
-              >
-                <Bot
+            <span class="autocomplete-popup__machine-name">{{ row.machine.name }}</span>
+            <span
+              v-if="row.machine.own && ownMachineHint"
+              class="autocomplete-popup__machine-hint"
+            >{{ ownMachineHint }}</span>
+          </div>
+          <div
+            v-else-if="row.kind === 'note'"
+            class="autocomplete-popup__machine-note"
+            role="presentation"
+            data-testid="autocomplete-machine-note"
+          >
+            {{ row.machine.unreachable }}
+            <a
+              v-if="row.machine.fix"
+              href="#"
+              class="autocomplete-popup__machine-fix"
+              @mousedown="handleItemMouseDown"
+              @click="openFix($event, row.machine)"
+            >{{ row.machine.fix.label }}</a>
+          </div>
+          <div
+            v-else
+            class="autocomplete-popup__row"
+            role="presentation"
+            :class="{ 'autocomplete-popup__row--selected': isSelected(row.item), 'autocomplete-popup__row--disabled': isUnpickable(row.item) }"
+          >
+            <button
+              :id="autocompleteOptionId(items.indexOf(row.item))"
+              :data-value="row.item.value"
+              type="button"
+              role="option"
+              class="autocomplete-popup__item"
+              :aria-selected="isSelected(row.item)"
+              :disabled="isUnpickable(row.item)"
+              @mousedown="handleItemMouseDown"
+              @click="handleSelect(row.item.value)"
+            >
+              <span class="autocomplete-popup__icon-wrap">
+                <Terminal
+                  v-if="row.item.group === 'command'"
                   class="autocomplete-popup__icon"
                   aria-hidden="true"
                 />
+
+                <ScrollText
+                  v-else-if="row.item.group === 'skill'"
+                  class="autocomplete-popup__icon autocomplete-popup__icon--skill"
+                  aria-hidden="true"
+                />
+
+                <template v-else-if="row.item.session">
+                  <StatusGlyph
+                    v-if="LIVE_STATUSES.has(row.item.session.status)"
+                    :status="row.item.session.status"
+                    :activity="row.item.session.activity"
+                  />
+                </template>
+
                 <span
-                  v-if="item.meta"
-                  class="autocomplete-popup__agent-dot"
-                  :style="{ backgroundColor: item.meta }"
+                  v-else-if="row.item.group === 'agent'"
+                  class="autocomplete-popup__agent-icon-wrap"
+                >
+                  <Bot
+                    class="autocomplete-popup__icon"
+                    aria-hidden="true"
+                  />
+                  <span
+                    v-if="row.item.meta"
+                    class="autocomplete-popup__agent-dot"
+                    :style="{ backgroundColor: row.item.meta }"
+                    aria-hidden="true"
+                  />
+                </span>
+
+                <Folder
+                  v-else-if="row.item.meta === 'dir'"
+                  class="autocomplete-popup__icon autocomplete-popup__icon--folder"
+                  aria-hidden="true"
+                />
+
+                <FileText
+                  v-else
+                  class="autocomplete-popup__icon"
                   aria-hidden="true"
                 />
               </span>
 
-              <Folder
-                v-else-if="item.meta === 'dir'"
-                class="autocomplete-popup__icon autocomplete-popup__icon--folder"
+              <span class="autocomplete-popup__content">
+                <span
+                  v-if="row.item.session || row.item.group === 'skill'"
+                  class="autocomplete-popup__label"
+                  data-testid="autocomplete-session-title"
+                >{{ titleParts(row.item.label).before }}<mark>{{ titleParts(row.item.label).match }}</mark>{{ titleParts(row.item.label).after }}</span>
+                <span
+                  v-else
+                  class="autocomplete-popup__label"
+                >{{ row.item.label }}</span>
+                <span
+                  v-if="row.item.disabledReason || row.item.description"
+                  class="autocomplete-popup__description"
+                >{{ row.item.disabledReason ?? row.item.description }}</span>
+              </span>
+              <span
+                v-if="row.item.session"
+                class="autocomplete-popup__age"
+              >{{ formatCompactAge(row.item.session.updatedAt, now) }}</span>
+            </button>
+
+            <button
+              v-if="isFolder(row.item) && onOpenFolder"
+              type="button"
+              class="autocomplete-popup__open"
+              :aria-label="`Open ${row.item.label}`"
+              title="Open folder (Tab)"
+              @mousedown="handleItemMouseDown"
+              @click="onOpenFolder(row.item.value)"
+            >
+              <ChevronRight
+                class="autocomplete-popup__open-icon"
                 aria-hidden="true"
               />
-
-              <FileText
-                v-else
-                class="autocomplete-popup__icon"
-                aria-hidden="true"
-              />
-            </span>
-
-            <span class="autocomplete-popup__content">
-              <span
-                v-if="item.session || item.group === 'skill'"
-                class="autocomplete-popup__label"
-                data-testid="autocomplete-session-title"
-              >{{ titleParts(item.label).before }}<mark>{{ titleParts(item.label).match }}</mark>{{ titleParts(item.label).after }}</span>
-              <span
-                v-else
-                class="autocomplete-popup__label"
-              >{{ item.label }}</span>
-              <span
-                v-if="item.disabledReason || item.description"
-                class="autocomplete-popup__description"
-              >{{ item.disabledReason ?? item.description }}</span>
-            </span>
-            <span
-              v-if="item.session"
-              class="autocomplete-popup__age"
-            >{{ formatCompactAge(item.session.updatedAt, now) }}</span>
-          </button>
-
-          <button
-            v-if="isFolder(item) && onOpenFolder"
-            type="button"
-            class="autocomplete-popup__open"
-            :aria-label="`Open ${item.label}`"
-            title="Open folder (Tab)"
-            @mousedown="handleItemMouseDown"
-            @click="onOpenFolder(item.value)"
-          >
-            <ChevronRight
-              class="autocomplete-popup__open-icon"
-              aria-hidden="true"
-            />
-          </button>
-        </div>
+            </button>
+          </div>
+        </template>
       </section>
     </div>
 
@@ -344,6 +418,36 @@ function handleSelect(value: string): void {
   font-weight: 400;
   letter-spacing: 0;
   text-transform: none;
+}
+
+/* Among sessions grouped by machine: the machine's name, as the group headings but not upper case. */
+.autocomplete-popup__machine {
+  display: flex;
+  align-items: baseline;
+  gap: 8px;
+  padding: 6px 8px 2px;
+  color: var(--accent);
+  font-family: var(--font-mono-stack, ui-monospace, monospace);
+  font-size: 12px;
+}
+
+.autocomplete-popup__machine-hint {
+  color: var(--muted);
+  font-family: var(--font-sans-stack, inherit);
+  font-size: 11px;
+}
+
+.autocomplete-popup__machine-note {
+  padding: 2px 8px 6px 33px;
+  color: var(--muted);
+  font-size: 12px;
+  line-height: 1.4;
+}
+
+.autocomplete-popup__machine-fix {
+  margin-left: 4px;
+  color: var(--accent);
+  white-space: nowrap;
 }
 
 .autocomplete-popup__row {

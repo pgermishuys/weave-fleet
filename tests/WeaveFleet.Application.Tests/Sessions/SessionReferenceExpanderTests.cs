@@ -27,6 +27,8 @@ public sealed class SessionReferenceExpanderTests : IAsyncDisposable
     private readonly SessionActivityTracker _activity = new();
     private readonly FakeSessionMessageProxy _messages = new();
     private readonly FakeHarnessSession _referencedHarness = new("inst-ref");
+    private readonly FakeRemoteReferences _remote = new();
+    private readonly SessionRecapService _recaps;
     private readonly SessionReferenceExpander _sut;
 
     public SessionReferenceExpanderTests()
@@ -47,7 +49,8 @@ public sealed class SessionReferenceExpanderTests : IAsyncDisposable
             TestServiceScopeFactory.Create(services => services.AddSingleton<ISessionRepository>(_sessions)),
             new FakeTimeProvider(),
             NullLogger<SessionRecapService>.Instance);
-        _sut = new SessionReferenceExpander(_sessions, _harnesses, recaps, _messages);
+        _recaps = recaps;
+        _sut = new SessionReferenceExpander(_sessions, _harnesses, recaps, _messages, _remote);
     }
 
     public ValueTask DisposeAsync() => _referencedHarness.DisposeAsync();
@@ -158,6 +161,74 @@ public sealed class SessionReferenceExpanderTests : IAsyncDisposable
         result.Error.Code.ShouldBe("Validation.SessionReferences");
     }
 
+    // ── Sessions on other machines ──────────────────────────────────────────
+
+    [Fact]
+    public async Task a_reference_naming_this_machine_reads_exactly_as_one_naming_none()
+    {
+        var plain = await _sut.ExpandAsync("ses-oc", Text, [Reference]);
+        var here = await _sut.ExpandAsync("ses-oc", Text, [Reference with { MachineId = FakeRemoteReferences.Here }]);
+        var withoutRemote = await new SessionReferenceExpander(_sessions, _harnesses, _recaps, _messages).ExpandAsync("ses-oc", Text, [Reference]);
+
+        here.Value.ShouldBe(plain.Value);
+        withoutRemote.Value.ShouldBe(plain.Value);
+        plain.Value.ShouldContain(SessionReferences.LinkNote);
+        plain.Value.ShouldNotContain("machine=");
+        _remote.Asked.ShouldBeEmpty();
+    }
+
+    [Fact]
+    public async Task another_machines_session_names_its_machine_and_says_to_read_it_there()
+    {
+        const string text = "Use @t3code-notes and the backoff from @tide-chart-caching";
+        var result = await _sut.ExpandAsync("ses-oc", text, [Reference, new SessionReference("@tide-chart-caching", "ses-far", "machine-kestrel")]);
+
+        result.Value.ShouldBe(
+            text + "\n\n<fleet-session-references>\n" + SessionReferences.LinkNoteWithMachines + "\n"
+            + "<session ref=\"@t3code-notes\" id=\"ses-ref\" title=\"t3code: &quot;what&quot; &amp; &lt;how&gt;?\" />\n"
+            + "<session ref=\"@tide-chart-caching\" id=\"ses-far\" title=\"Tide chart caching\" machine=\"kestrel\" />\n"
+            + "</fleet-session-references>");
+        _remote.Asked.ShouldBe([("machine-kestrel", "ses-far", false)]);
+    }
+
+    [Fact]
+    public async Task a_harness_without_fleet_tools_gets_the_recap_its_machine_sends_or_a_link_without_one()
+    {
+        const string text = "See @tide-chart-caching";
+        var withRecap = await _sut.ExpandAsync("ses-cc", text, [new SessionReference("@tide-chart-caching", "ses-far", "machine-kestrel")]);
+        _remote.Recap = null;
+        var withoutRecap = await _sut.ExpandAsync("ses-cc", text, [new SessionReference("@tide-chart-caching", "ses-far", "machine-kestrel")]);
+
+        withRecap.Value.ShouldContain(
+            "<session ref=\"@tide-chart-caching\" id=\"ses-far\" title=\"Tide chart caching\" machine=\"kestrel\">\n"
+            + "It cached charts per harbour.\n</session>");
+        withoutRecap.Value.ShouldContain("<session ref=\"@tide-chart-caching\" id=\"ses-far\" title=\"Tide chart caching\" machine=\"kestrel\" />");
+        _remote.Asked.ShouldAllBe(asked => asked.WithRecap);
+    }
+
+    [Fact]
+    public async Task a_session_its_machine_cannot_vouch_for_refuses_the_message_with_why()
+    {
+        _remote.Error = "is a session on hangar, which agents on falcon can't use.";
+
+        var result = await _sut.ExpandAsync("ses-oc", "See @runway", [new SessionReference("@runway", "ses-far", "machine-hangar")]);
+
+        result.IsFailure.ShouldBeTrue();
+        result.Error.Code.ShouldBe("Validation.SessionReferences");
+        result.Error.Description.ShouldBe("@runway is a session on hangar, which agents on falcon can't use.");
+    }
+
+    [Fact]
+    public async Task without_a_way_to_other_machines_a_reference_to_one_is_refused()
+    {
+        var sut = new SessionReferenceExpander(_sessions, _harnesses, _recaps, _messages);
+
+        var result = await sut.ExpandAsync("ses-oc", "See @runway", [new SessionReference("@runway", "ses-far", "machine-hangar")]);
+
+        result.IsFailure.ShouldBeTrue();
+        result.Error.Code.ShouldBe("Validation.SessionReferences");
+    }
+
     private void Insert(string id, string harnessType, string title, string instanceId = "inst-x")
         => _sessions.InsertAsync(new Session { Id = id, HarnessType = harnessType, Title = title, InstanceId = instanceId, UserId = "u1" })
             .GetAwaiter().GetResult();
@@ -169,6 +240,25 @@ public sealed class SessionReferenceExpanderTests : IAsyncDisposable
         Parts = [new TextPart(text)],
         Timestamp = DateTimeOffset.UnixEpoch,
     };
+
+    private sealed class FakeRemoteReferences : IRemoteSessionReferences
+    {
+        public const string Here = "machine-falcon";
+
+        public string? Recap { get; set; } = "It cached charts per harbour.";
+        public string? Error { get; set; }
+        public List<(string MachineId, string SessionId, bool WithRecap)> Asked { get; } = [];
+
+        public string LocalMachineId => Here;
+
+        public Task<RemoteSessionReference> FindAsync(string machineId, string sessionId, bool withRecap, CancellationToken ct = default)
+        {
+            Asked.Add((machineId, sessionId, withRecap));
+            return Task.FromResult(Error is not null
+                ? RemoteSessionReference.Failed(Error)
+                : new RemoteSessionReference("kestrel", "Tide chart caching", withRecap ? Recap : null, null));
+        }
+    }
 
     private sealed class RecapsOff : IRecapPreference
     {

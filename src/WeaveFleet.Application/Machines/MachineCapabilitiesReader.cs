@@ -17,7 +17,11 @@ namespace WeaveFleet.Application.Machines;
 /// What agents here may do without asking (<see cref="PermissionLevels"/>), for a harness with no level of its own: work
 /// another machine sends here runs under it. Absent from older Fleets.
 /// </param>
-public sealed record MachineCapabilities(IReadOnlyList<MachineHarness>? Harnesses, MachineSessionCounts Sessions, bool PeerMessages, string? PermissionLevel = null);
+/// <param name="MachineReferences">
+/// Whether a message here can <c>@</c>-reference a session on another machine in its list (a reference with a
+/// <c>machineId</c>). Absent from older Fleets, which look every reference up here.
+/// </param>
+public sealed record MachineCapabilities(IReadOnlyList<MachineHarness>? Harnesses, MachineSessionCounts Sessions, bool PeerMessages, string? PermissionLevel = null, bool MachineReferences = false);
 
 /// <param name="Type">The harness type, e.g. <c>opencode</c>.</param>
 /// <param name="Name">What to call it, e.g. <c>OpenCode</c>.</param>
@@ -86,7 +90,8 @@ public sealed class MachineCapabilitiesReader(
 
         // The same condition the peer endpoints are mapped on: only local mode has a machine token.
         var peerMessages = !options.Auth.Enabled && options.Auth.TokenAuthEnabled;
-        return new MachineCapabilities(harnessList, new MachineSessionCounts(working, needsYou), peerMessages, level);
+        // A reference to another machine is looked up there with its token, as the peer endpoints are called.
+        return new MachineCapabilities(harnessList, new MachineSessionCounts(working, needsYou), peerMessages, level, MachineReferences: peerMessages);
     }
 
     private static string? Level(IReadOnlyDictionary<string, string> preferences, string key)

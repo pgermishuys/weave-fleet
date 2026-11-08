@@ -161,6 +161,22 @@ public sealed class SessionReadBridgeEndpointTests : IClassFixture<SessionReadBr
         (await ErrorAsync(response)).ShouldBe("@their-notes names a session Fleet can't find. Pick it again from the @ list.");
     }
 
+    [Fact]
+    public async Task A_prompt_referencing_a_session_on_a_machine_this_fleet_does_not_list_is_refused_saying_so()
+    {
+        var response = await _client!.PostAsJsonAsync($"/api/sessions/{Reader}/prompt", new
+        {
+            text = "Use @runway-lights",
+            sessionReferences = new[] { new { token = "@runway-lights", sessionId = "ses-far", machineId = "machine-hangar" } },
+        });
+
+        response.StatusCode.ShouldBe(HttpStatusCode.BadRequest);
+        var error = await ErrorAsync(response);
+        error.ShouldNotBeNull();
+        error.ShouldStartWith("@runway-lights is a session on a machine ");
+        error.ShouldContain("doesn't list");
+    }
+
     private async Task<HttpResponseMessage> ReadAsync(string sessionId, string? before, int? limit, string token = Token)
     {
         using var request = new HttpRequestMessage(HttpMethod.Post, "/api/bridge/session/read")

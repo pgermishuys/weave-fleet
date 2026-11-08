@@ -1500,7 +1500,7 @@ public static class SessionEndpoints
             : response;
 
     private static List<SessionReference>? ToSessionReferences(SessionReferenceDto[]? references)
-        => references?.Select(reference => new SessionReference(reference?.Token ?? "", reference?.SessionId ?? "")).ToList();
+        => references?.Select(reference => new SessionReference(reference?.Token ?? "", reference?.SessionId ?? "", reference?.MachineId)).ToList();
 
     /// <summary>A prompt the user sends says how it goes in: a request that leaves it out is queued, as before.</summary>
     internal static bool TryReadDelivery(string? value, out PromptDelivery delivery)
@@ -1589,8 +1589,12 @@ internal sealed record SendPromptApiRequest(
     // Skills named with $ in the text, without the $, in the order they appear.
     string[]? Skills = null);
 
-/// <summary>A session picked from the composer's <c>@</c> list: the token it left in the text (<c>@t3code-notes</c>), and its id.</summary>
-internal sealed record SessionReferenceDto(string Token, string SessionId);
+/// <summary>
+/// A session picked from the composer's <c>@</c> list: the token it left in the text (<c>@t3code-notes</c>), and its id.
+/// <c>MachineId</c> is the id of the machine it's on, sent only when that isn't the machine the message goes to; left
+/// out, it's a session here, as before.
+/// </summary>
+internal sealed record SessionReferenceDto(string Token, string SessionId, string? MachineId = null);
 
 internal sealed record SendPromptApiResponse(long? EventId, string CorrelationId);
 

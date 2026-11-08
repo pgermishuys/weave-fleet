@@ -4282,6 +4282,7 @@ export interface components {
         SessionReferenceDto: {
             token: string;
             sessionId: string;
+            machineId?: null | string;
         };
         HarnessUsage: {
             harnessType: string;

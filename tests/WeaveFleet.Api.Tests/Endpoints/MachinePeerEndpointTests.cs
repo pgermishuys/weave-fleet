@@ -156,6 +156,25 @@ public sealed class MachinePeerEndpointTests : IClassFixture<MachinePeerEndpoint
         var body = await machine.GetFromJsonAsync<JsonElement>("/api/machine");
 
         body.GetProperty("capabilities").GetProperty("peerMessages").GetBoolean().ShouldBeTrue();
+        body.GetProperty("capabilities").GetProperty("machineReferences").GetBoolean().ShouldBeTrue();
+    }
+
+    [Fact]
+    public async Task The_machine_token_reads_a_recap_for_a_reference_from_another_machine()
+    {
+        using var machine = Client(MachineToken());
+        using var local = _factory!.CreateClient();
+
+        var response = await machine.GetAsync($"/api/machine/peer/sessions/{Session}/recap");
+        var missing = await machine.GetAsync("/api/machine/peer/sessions/sess-missing/recap");
+        var withoutToken = await local.GetAsync($"/api/machine/peer/sessions/{Session}/recap");
+
+        response.StatusCode.ShouldBe(HttpStatusCode.OK, await response.Content.ReadAsStringAsync());
+        var body = await response.Content.ReadFromJsonAsync<JsonElement>();
+        body.GetProperty("title").GetString().ShouldBe("Check the Windows installer");
+        body.GetProperty("recap").GetString().ShouldNotBeNullOrWhiteSpace();
+        missing.StatusCode.ShouldBe(HttpStatusCode.NotFound);
+        withoutToken.StatusCode.ShouldBe(HttpStatusCode.Forbidden);
     }
 
     private static PeerMessage Message() => new("m-atlas", "atlas", "s-sender", "Fix login flake", "Check the Windows installer on this branch.");

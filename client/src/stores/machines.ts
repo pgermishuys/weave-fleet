@@ -78,6 +78,8 @@ export interface MachineCapabilities {
   sessions: { working: number; needsYou: number };
   /** What agents there may do without asking: work sent there runs under it. Missing from a Fleet too old to say. */
   permissionLevel?: string | null;
+  /** A message there can `@`-reference a session on another machine in its list. Missing from an older Fleet. */
+  machineReferences?: boolean;
 }
 
 /** Whether agents here can send a machine work: the user is asked in the conversation, always, or never. */
