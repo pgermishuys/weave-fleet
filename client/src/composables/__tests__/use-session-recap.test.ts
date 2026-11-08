@@ -3,6 +3,8 @@ import { createPinia, setActivePinia } from "pinia";
 import { shallowRef } from "vue";
 import type { DomainEvent } from "@/lib/domain-events";
 import type { SessionSnapshot } from "@/lib/session-snapshot";
+import { MACHINE_TARGET, type MachineTarget } from "@/lib/machine-target";
+import type { ApiClient } from "@/api/client";
 import { flushAll, mountComposable } from "./test-utils";
 
 const { subscribeV2Mock, setSessionFocusMock, getPreferencesMock } = vi.hoisted(() => ({
@@ -142,6 +144,47 @@ describe("useSessionRecap", () => {
     vi.advanceTimersByTime(250);
 
     expect(setSessionFocusMock).toHaveBeenCalledOnce();
+    wrapper.unmount();
+  });
+
+  it("reports focus to another machine's session when Session recap is on there, though off here", async () => {
+    // The live machine has Session recap off; the node the session is on has it on. The recap runs on the node.
+    getPreferencesMock.mockResolvedValue({ data: {} });
+    const nodePreferences = vi.fn().mockResolvedValue({ data: { SessionRecap: "true" } });
+    const node: MachineTarget = {
+      key: "kestrel-id",
+      connection: null,
+      isLive: false,
+      api: { GET: nodePreferences, PUT: vi.fn() } as unknown as ApiClient,
+    };
+    const { useSessionRecap } = await import("@/composables/use-session-recap");
+    const { wrapper } = await mountComposable(() => useSessionRecap(shallowRef("s1")), {
+      provide: { [MACHINE_TARGET]: () => node },
+    });
+
+    listeners.get("session:s1")!.onSnapshot(snapshot());
+
+    expect(nodePreferences).toHaveBeenCalledWith("/api/preferences");
+    expect(setSessionFocusMock).toHaveBeenCalledExactlyOnceWith(node, "s1", true);
+    wrapper.unmount();
+  });
+
+  it("still reports focus to another machine's session when desktop notifications are on here", async () => {
+    getPreferencesMock.mockResolvedValue({ data: { DesktopNotifications: "true" } });
+    const node: MachineTarget = {
+      key: "kestrel-id",
+      connection: null,
+      isLive: false,
+      api: { GET: vi.fn().mockResolvedValue({ data: {} }), PUT: vi.fn() } as unknown as ApiClient,
+    };
+    const { useSessionRecap } = await import("@/composables/use-session-recap");
+    const { wrapper } = await mountComposable(() => useSessionRecap(shallowRef("s1")), {
+      provide: { [MACHINE_TARGET]: () => node },
+    });
+
+    listeners.get("session:s1")!.onSnapshot(snapshot());
+
+    expect(setSessionFocusMock).toHaveBeenCalledExactlyOnceWith(node, "s1", true);
     wrapper.unmount();
   });
 
