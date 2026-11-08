@@ -2009,7 +2009,8 @@ describe("NewSessionComposer", () => {
     describe("on the New session page", () => {
       // The page rebuilds the box for the machine picked, as the app does.
       async function mountPage(): Promise<VueWrapper> {
-        const Page = (NewSessionRoute as unknown as { options: { component: Component } }).options.component;
+        const Route = (NewSessionRoute as unknown as { options: { component: Component } }).options.component;
+        const Page = defineComponent({ render: () => h(Route) });
         wrapper = mount(Page, { attachTo: document.body, global: { stubs: { teleport: false } } });
         await flushPromises();
         return wrapper;
