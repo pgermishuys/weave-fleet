@@ -393,6 +393,9 @@ public sealed class SessionUpdateSender(
         else
         {
             var page = await messages.GetMessagesAsync(watch.TargetId, limit: 30, ct: ct).ConfigureAwait(false);
+            // Answered by a later turn, which tells the asker itself: nothing to say for this one.
+            if (IsSuperseded(page.Messages, watch.MessageId))
+                return null;
             var reply = LastReply(page.Messages, watch.MessageId);
             body = failure is null
                 ? reply ?? "It finished without writing a reply."
@@ -404,7 +407,7 @@ public sealed class SessionUpdateSender(
             watch.AskerId,
             watch.TargetId,
             watch.UserId,
-            SessionMessages.WrapUpdate(watch.TargetId, target.Title, outcome, Shorten(body)),
+            SessionMessages.WrapUpdate(watch.TargetId, target.Title, outcome, Shorten(body, watch.TargetId)),
             outcome);
     }
 
@@ -419,9 +422,11 @@ public sealed class SessionUpdateSender(
         else
         {
             var (found, token, error) = await remote.FindAsync(machine.Id, includeNever: true).ConfigureAwait(false);
-            var (reply, readError) = found is null
-                ? (null, error)
+            var (reply, readError, superseded) = found is null
+                ? (null, error, false)
                 : await remote.LastReplyAsync(found, token!, watch.TargetId, watch.MessageId, ct).ConfigureAwait(false);
+            if (superseded)
+                return null;
             body = reply ?? (readError is null ? "It finished without writing a reply." : $"It finished, but Fleet couldn't read its reply: {readError}");
             if (failure is not null)
                 body = $"{failure.Message}\n{body}";
@@ -432,7 +437,7 @@ public sealed class SessionUpdateSender(
             watch.AskerId,
             watch.TargetId,
             watch.UserId,
-            SessionMessages.WrapUpdate(watch.TargetId, watch.TargetTitle ?? watch.TargetId, outcome, Shorten(body), machine),
+            SessionMessages.WrapUpdate(watch.TargetId, watch.TargetTitle ?? watch.TargetId, outcome, Shorten(body, watch.TargetId, machine.Name), machine),
             outcome,
             FromOtherMachine: true);
     }
@@ -479,6 +484,18 @@ public sealed class SessionUpdateSender(
     /// (a harness that keeps its own ids).
     /// </summary>
     internal static string? LastReply(IReadOnlyList<HarnessMessage> page, string messageId)
+        => ReplyTo([.. page.Select(m => (m.Id, m.Role, m.TextContent))], messageId).Reply;
+
+    /// <summary>Whether a later message in the page came before any reply to <paramref name="messageId"/>: that turn answered both.</summary>
+    internal static bool IsSuperseded(IReadOnlyList<HarnessMessage> page, string messageId)
+        => ReplyTo([.. page.Select(m => (m.Id, m.Role, m.TextContent))], messageId).Superseded;
+
+    /// <summary>
+    /// The last reply between the message and the next user message (the turns after that are answers to other
+    /// messages), or the last reply at all when the message isn't in the page. Superseded: a user message follows it
+    /// with no reply in between, so a later turn handled both and tells the asker itself.
+    /// </summary>
+    internal static (string? Reply, bool Superseded) ReplyTo(IReadOnlyList<(string Id, string Role, string Text)> page, string messageId)
     {
         var start = 0;
         for (var i = 0; i < page.Count; i++)
@@ -487,23 +504,37 @@ public sealed class SessionUpdateSender(
                 start = i + 1;
         }
 
-        for (var i = page.Count - 1; i >= start; i--)
+        var found = start > 0;
+        var end = page.Count;
+        for (var i = start; found && i < page.Count; i++)
         {
-            if (page[i].Role == "assistant" && !string.IsNullOrWhiteSpace(page[i].TextContent))
-                return page[i].TextContent.Trim();
+            if (page[i].Role == "user")
+            {
+                end = i;
+                break;
+            }
         }
 
-        return null;
+        for (var i = end - 1; i >= start; i--)
+        {
+            if (page[i].Role == "assistant" && !string.IsNullOrWhiteSpace(page[i].Text))
+                return (page[i].Text.Trim(), false);
+        }
+
+        return (null, found && end < page.Count);
     }
 
     /// <summary>Cuts a long reply at a word, with an ellipsis, so the asker's prompt stays short.</summary>
-    internal static string Shorten(string text)
+    internal static string Shorten(string text, string? sessionId = null, string? machine = null)
     {
         text = text.Trim();
         if (text.Length <= MaxReplyLength)
             return text;
 
         var cut = text.LastIndexOf(' ', MaxReplyLength);
-        return text[..(cut > MaxReplyLength / 2 ? cut : MaxReplyLength)].TrimEnd() + "…";
+        var shortened = text[..(cut > MaxReplyLength / 2 ? cut : MaxReplyLength)].TrimEnd() + "…";
+        return sessionId is null
+            ? shortened
+            : $"{shortened}\n(Cut short. Read the rest with fleet_session_read, sessionId {sessionId}{(machine is null ? "" : $", machine {machine}")}.)";
     }
 }

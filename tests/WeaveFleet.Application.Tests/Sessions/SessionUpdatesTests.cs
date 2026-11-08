@@ -257,6 +257,36 @@ public sealed class SessionUpdatesTests
     }
 
     [Fact]
+    public void a_message_is_answered_by_its_own_turn_not_a_later_one()
+    {
+        HarnessMessage[] page =
+        [
+            Message(MessageId, "user", "First."),
+            Message("m2", "assistant", "Answer to first."),
+            Message("m3", "user", "Second."),
+            Message("m4", "assistant", "Answer to second."),
+        ];
+
+        SessionUpdateSender.LastReply(page, MessageId).ShouldBe("Answer to first.");
+        SessionUpdateSender.LastReply(page, "m3").ShouldBe("Answer to second.");
+    }
+
+    [Fact]
+    public void a_message_answered_only_by_a_later_turn_has_no_reply_of_its_own()
+    {
+        HarnessMessage[] page =
+        [
+            Message(MessageId, "user", "First."),
+            Message("m3", "user", "Second."),
+            Message("m4", "assistant", "Answer to both."),
+        ];
+
+        SessionUpdateSender.LastReply(page, MessageId).ShouldBeNull();
+        SessionUpdateSender.IsSuperseded(page, MessageId).ShouldBeTrue();
+        SessionUpdateSender.IsSuperseded(page, "m3").ShouldBeFalse();
+    }
+
+    [Fact]
     public void a_long_reply_is_cut_at_a_word()
     {
         var reply = string.Join(' ', Enumerable.Repeat("word", 400));

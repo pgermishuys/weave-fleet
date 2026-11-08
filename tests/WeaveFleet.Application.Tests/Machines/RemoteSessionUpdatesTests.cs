@@ -95,6 +95,44 @@ public sealed class RemoteSessionUpdatesTests : IDisposable
     }
 
     [Fact]
+    public async Task Each_message_gets_the_reply_of_its_own_turn_and_a_superseded_one_gets_none()
+    {
+        _atlas.Answer = request => request == "GET /api/sessions/s-remote/messages"
+            ? (HttpStatusCode.OK, """
+                {"messages":[
+                  {"id":"msg-1","role":"user","parts":[{"type":"text","text":"one"}]},
+                  {"id":"msg-2","role":"assistant","parts":[{"type":"text","text":"Reply to one."}]},
+                  {"id":"msg-3","role":"user","parts":[{"type":"text","text":"two"}]},
+                  {"id":"msg-4","role":"user","parts":[{"type":"text","text":"three"}]},
+                  {"id":"msg-5","role":"assistant","parts":[{"type":"text","text":"Reply to two and three."}]}
+                ],"pagination":{"hasMore":false}}
+                """)
+            : null;
+
+        (await _sender.ReadAsync(Watch, null, CancellationToken.None))!.Text.ShouldContain("Reply to one.");
+        (await _sender.ReadAsync(Watch with { MessageId = "msg-3" }, null, CancellationToken.None)).ShouldBeNull();
+        (await _sender.ReadAsync(Watch with { MessageId = "msg-4" }, null, CancellationToken.None))!.Text.ShouldContain("Reply to two and three.");
+    }
+
+    [Fact]
+    public async Task A_reply_cut_short_says_where_to_read_the_rest()
+    {
+        var text = string.Join(' ', Enumerable.Repeat("word", 400));
+        _atlas.Answer = request => request == "GET /api/sessions/s-remote/messages"
+            ? (HttpStatusCode.OK, $$$"""
+                {"messages":[
+                  {"id":"msg-1","role":"user","parts":[{"type":"text","text":"one"}]},
+                  {"id":"msg-2","role":"assistant","parts":[{"type":"text","text":"{{{text}}}"}]}
+                ],"pagination":{"hasMore":false}}
+                """)
+            : null;
+
+        var update = await _sender.ReadAsync(Watch, null, CancellationToken.None);
+
+        update!.Text.ShouldContain("fleet_session_read");
+    }
+
+    [Fact]
     public async Task A_failed_turn_says_why_without_asking_the_machine()
     {
         var update = await _sender.ReadAsync(Watch, new TurnError { Name = "RateLimit", Message = "Rate limited." }, CancellationToken.None);
