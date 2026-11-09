@@ -289,6 +289,56 @@ public sealed class GitDiffServiceTests
     }
 
     [Fact]
+    public async Task baseline_content_keeps_a_utf8_byte_order_mark()
+    {
+        var tempRoot = CreateTempDirectory();
+        var service = new GitDiffService();
+
+        try
+        {
+            await RunGitAsync(tempRoot, "init", "-b", "main");
+            await File.WriteAllBytesAsync(Path.Combine(tempRoot, "bom.txt"), [0xEF, 0xBB, 0xBF, .. "one\r\ntwo"u8.ToArray()]);
+            await CommitAllAsync(tempRoot, "initial");
+
+            var content = await service.GetFileContentAsync(tempRoot, "HEAD", "bom.txt", CancellationToken.None);
+
+            content.ShouldBe("\uFEFFone\r\ntwo");
+        }
+        finally
+        {
+            DeleteRepo(tempRoot);
+        }
+    }
+
+    [Fact]
+    public async Task restoring_a_path_in_the_index_undoes_a_staged_rename_in_both_names()
+    {
+        var tempRoot = CreateTempDirectory();
+        var service = new GitDiffService();
+
+        try
+        {
+            await InitRepoOnMainAsync(tempRoot);
+            var baseline = await service.CaptureBaselineAsync(tempRoot, "staged-rename", CancellationToken.None);
+            baseline.ShouldNotBeNull();
+            await RunGitAsync(tempRoot, "mv", "readme.txt", "guide.txt");
+
+            // The session's revert puts the old file back and removes the new one; the index must follow.
+            File.Delete(Path.Combine(tempRoot, "guide.txt"));
+            await File.WriteAllTextAsync(Path.Combine(tempRoot, "readme.txt"), "readme\n");
+            await service.RestoreIndexPathAsync(tempRoot, baseline.RefName, "guide.txt", CancellationToken.None);
+            await service.RestoreIndexPathAsync(tempRoot, baseline.RefName, "readme.txt", CancellationToken.None);
+
+            (await GitOutputAsync(tempRoot, "status", "--porcelain")).ShouldBeEmpty();
+            (await service.ComputeDiffsAsync(tempRoot, baseline.RefName, string.Empty, CancellationToken.None)).ShouldBeEmpty();
+        }
+        finally
+        {
+            DeleteRepo(tempRoot);
+        }
+    }
+
+    [Fact]
     public async Task branch_rebased_onto_a_newer_main_lists_only_the_branchs_own_changes()
     {
         var tempRoot = CreateTempDirectory();

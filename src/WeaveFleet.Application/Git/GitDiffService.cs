@@ -291,6 +291,16 @@ public sealed partial class GitDiffService
         return ToTextContent(result.StandardOutput);
     }
 
+    /// <summary>
+    /// Puts one path's entry in the index back as <paramref name="baselineRef"/> has it (the entry goes if the baseline
+    /// has no such path), so a revert of a staged change, a <c>git mv</c> say, leaves neither name staged. The working
+    /// tree is not touched. A path that is in neither is left alone.
+    /// </summary>
+    public async Task RestoreIndexPathAsync(string repoRoot, string baselineRef, string repoPath, CancellationToken ct)
+    {
+        await RunGitAsync(repoRoot, ["restore", "--staged", $"--source={baselineRef}", "--", $":(literal){repoPath}"], ct).ConfigureAwait(false);
+    }
+
     /// <param name="baselineRef">What the folder is compared with; or a range (<c>a...b</c>) between two commits, with
     /// <paramref name="includeUntracked"/> off, since the folder isn't part of it.</param>
     public async Task<GitDiffComputationResult> ComputeDiffsWithAvailabilityAsync(

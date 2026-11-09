@@ -1,3 +1,4 @@
+using System.Text;
 using System.Diagnostics;
 using System.Globalization;
 
@@ -51,7 +52,9 @@ internal static class GitCommand
         process.StandardInput.Close();
 
         // Both streams are read as git writes them: git blocks once a pipe nobody reads is full.
-        var stdoutTask = process.StandardOutput.ReadToEndAsync(CancellationToken.None);
+        // Stdout is read as bytes and decoded here: a text reader would swallow a UTF-8 byte order mark at the start of
+        // a file `git show` prints, and a revert would then write the file back without it.
+        var stdoutTask = ReadStdoutAsync(process);
         var stderrTask = process.StandardError.ReadToEndAsync(CancellationToken.None);
 
         using var limit = CancellationTokenSource.CreateLinkedTokenSource(ct);
@@ -77,6 +80,13 @@ internal static class GitCommand
         {
             throw new GitCommandException(string.Join(' ', args), "exited, but something it started kept its output open");
         }
+    }
+
+    private static async Task<string> ReadStdoutAsync(Process process)
+    {
+        using var buffer = new MemoryStream();
+        await process.StandardOutput.BaseStream.CopyToAsync(buffer, CancellationToken.None).ConfigureAwait(false);
+        return new UTF8Encoding(encoderShouldEmitUTF8Identifier: false).GetString(buffer.GetBuffer(), 0, (int)buffer.Length);
     }
 
     private static readonly string[] ParsedOutputConfig =

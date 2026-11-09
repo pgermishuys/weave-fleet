@@ -247,6 +247,24 @@ describe("ChangesReview", () => {
       expect(restoreSessionFileMock.mock.calls[0]!.slice(2)).toEqual(["new.txt", null, "h9"]);
     });
 
+    it("a file reverted clean is not asked for again once it has left the diff", async () => {
+      show({ file: "new.txt", status: "added", additions: 1, deletions: 0, before: "", after: "hi\n" } as FileDiffItem);
+      readSessionFileMock.mockResolvedValue({ path: "new.txt", content: "hi\n", hash: "h9" });
+      restoreSessionFileMock.mockResolvedValue({ saved: true, hash: "h9" });
+      sharedDiffs.fetchDiffs.mockImplementation(async () => { sharedDiffs.diffs.value = []; });
+      const askedFor = () => fetchMock.mock.calls.filter(([, url]) => String(url).includes("new.txt")).length;
+      const wrapper = mountReview();
+      await flushPromises();
+      const before = askedFor();
+      expect(before).toBeGreaterThan(0);
+      await sectionOf(wrapper, "new.txt").get("[data-testid='review-revert-file']").trigger("click");
+      await flushPromises();
+      await confirm(wrapper);
+      await flushPromises();
+      expect(restoreSessionFileMock).toHaveBeenCalled();
+      expect(askedFor()).toBe(before);
+    });
+
     it("a new file that changed since is kept and the reader is told", async () => {
       show({ file: "new.txt", status: "added", additions: 1, deletions: 0, before: "", after: "hi\n" } as FileDiffItem);
       readSessionFileMock.mockResolvedValue({ path: "new.txt", content: "hi there\n", hash: "h9" });

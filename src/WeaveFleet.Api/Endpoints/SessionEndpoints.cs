@@ -1276,9 +1276,24 @@ public static class SessionEndpoints
 
         // POST /api/sessions/{id}/files/restore — put a file back as the session found it: create one that's gone
         // (content) or delete one the session added (no content, with the hash of what's on disk). 409 when refused.
-        group.MapPost("/{id}/files/restore", async (string id, WriteSessionFileRequest req, SessionFiles sessionFiles, CancellationToken ct) =>
+        group.MapPost("/{id}/files/restore", async (
+            string id,
+            WriteSessionFileRequest req,
+            SessionFiles sessionFiles,
+            SessionService sessionService,
+            GitDiffService gitDiffService,
+            CancellationToken ct) =>
         {
             var result = await sessionFiles.RestoreSessionFileAsync(id, req.Path, req.Content, req.BaseHash, ct);
+            if (result.IsSuccess && result.Value.Saved && !string.IsNullOrWhiteSpace(req.Path))
+            {
+                // A staged change (git mv, git add) keeps the path in the index after the file is put back or removed,
+                // and git would go on listing it: take the path's index entry back to the session's baseline too.
+                var session = await sessionService.GetSessionAsync(id);
+                if (session.IsSuccess && await SessionDiffScope.ResolveAsync(session.Value, gitDiffService, ct) is { } scope)
+                    await gitDiffService.RestoreIndexPathAsync(scope.RepoRoot, scope.Base.Ref, scope.ToRepoPath(req.Path), ct);
+            }
+
             return result.Match(
                 write => write.Saved
                     ? Results.Ok(new WriteSessionFileResponse(write.Hash))
