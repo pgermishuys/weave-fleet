@@ -148,9 +148,18 @@ public sealed class JobService(
         job.MachineId,
         job.MachineName,
         job.SessionId,
-        job.State != JobStates.Waiting ? null : seen is null ? "Fleet is still looking at the machines." : JobMatching.WhyWaiting(job, seen, used),
+        WhyWaiting(job, seen, used),
         job.Error,
         job.CreatedAt);
+
+    /// <summary>Why a waiting job hasn't started. A failed start says why it failed first, then what the queue does about it.</summary>
+    private static string? WhyWaiting(Job job, IReadOnlyList<JobMachine>? seen, IReadOnlyDictionary<string, int> used)
+    {
+        if (job.State != JobStates.Waiting)
+            return null;
+        var why = seen is null ? "Fleet is still looking at the machines." : JobMatching.WhyWaiting(job, seen, used);
+        return string.IsNullOrEmpty(job.Error) ? why : $"{job.Error} {why}";
+    }
 
     private static List<string> CleanLabels(IReadOnlyList<string>? labels) =>
         [.. (labels ?? []).Select(label => label.Trim()).Where(label => label.Length > 0).Distinct(StringComparer.OrdinalIgnoreCase)];

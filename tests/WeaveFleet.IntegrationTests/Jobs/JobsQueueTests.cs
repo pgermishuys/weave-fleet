@@ -83,6 +83,7 @@ public sealed class JobsQueueTests
         var job = (await host.ListAsync()).Job(id);
         job.State.ShouldBe(JobStates.Waiting);
         job.Error.ShouldBe("Couldn't start: no disk space.");
+        job.WhyWaiting.ShouldBe("Couldn't start: no disk space. It starts on the next check.");
         (await host.ListAsync()).Machine(host.MachineId).Used.ShouldBe(0);
     }
 
