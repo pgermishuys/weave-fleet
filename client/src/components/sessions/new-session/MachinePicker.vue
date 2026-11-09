@@ -7,7 +7,7 @@ import { formatRelativeTime } from "@/lib/format-utils";
 import type { MachineEntry, MachineSessions } from "@/stores/machines";
 
 /**
- * Which machine the session starts on. Machines get coral, as in the sidebar. One that can't be reached is listed but
+ * Which machine a session starts on (or an automation runs on, or a project is created on). Machines get coral, as in the sidebar. One that can't be reached is listed but
  * can't be picked.
  */
 const props = defineProps<{
@@ -19,8 +19,10 @@ const props = defineProps<{
   /** Whether the live machine answers. */
   liveReachable: boolean;
   disabled?: boolean;
-  /** The menu's heading: "Start on" for a session, "Runs on" for an automation. */
+  /** The menu's heading: "Start on" for a session, "Runs on" for an automation, "Create on" for a project. */
   heading?: string;
+  /** Where the menu opens: above the chip in a composer at the bottom of the page, below it in a dialog. */
+  side?: "top" | "bottom";
 }>();
 
 const emit = defineEmits<{
@@ -91,7 +93,7 @@ const selectedName = computed(() =>
 
     <DropdownMenuContent
       class="ns-pop ns-machine"
-      side="top"
+      :side="side ?? 'top'"
       align="start"
       :side-offset="6"
       :collision-padding="8"

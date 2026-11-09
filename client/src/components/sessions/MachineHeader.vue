@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { computed } from "vue";
-import { ChevronDown, Monitor, Plus } from "lucide-vue-next";
+import { ChevronDown, FolderPlus, Monitor, Plus } from "lucide-vue-next";
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
 import type { MachineDiagnosis } from "@/lib/machine-diagnosis";
 import {
@@ -13,8 +13,8 @@ import {
 
 /**
  * A machine's heading in the sessions list. Machines get coral, a colour of their own, so where a session runs
- * never competes with its status colours. With `menu`, right-clicking it offers a new session there and, for a machine
- * that isn't live, Work here.
+ * never competes with its status colours. With `menu`, right-clicking it offers a new session and a new project there
+ * and, for a machine that isn't live, Work here.
  */
 const props = withDefaults(defineProps<{
   name: string;
@@ -29,11 +29,11 @@ const props = withDefaults(defineProps<{
   /** Collapsible groups show a chevron and report their state. */
   expanded?: boolean | null;
   count?: number | null;
-  /** Right-click offers New session (and Work here on a machine that isn't live). */
+  /** Right-click offers New session and New project (and Work here on a machine that isn't live). */
   menu?: boolean;
 }>(), { live: false, unreachable: false, note: null, why: null, expanded: null, count: null, menu: false });
 
-const emit = defineEmits<{ toggle: []; newSession: []; workHere: [] }>();
+const emit = defineEmits<{ toggle: []; newSession: []; newProject: []; workHere: [] }>();
 
 const tag = computed(() => (props.expanded === null || props.expanded === undefined ? "div" : "button"));
 </script>
@@ -121,6 +121,20 @@ const tag = computed(() => (props.expanded === null || props.expanded === undefi
           v-else
           class="machine-header__menu-label"
         >New session on <span class="machine-header__menu-name">{{ name }}</span></span>
+      </ContextMenuItem>
+      <ContextMenuItem
+        :disabled="unreachable && !live"
+        data-testid="machine-menu-new-project"
+        @select="emit('newProject')"
+      >
+        <FolderPlus class="size-3.5" />
+        <template v-if="live">
+          New project
+        </template>
+        <span
+          v-else
+          class="machine-header__menu-label"
+        >New project on <span class="machine-header__menu-name">{{ name }}</span></span>
       </ContextMenuItem>
 
       <template v-if="!live">

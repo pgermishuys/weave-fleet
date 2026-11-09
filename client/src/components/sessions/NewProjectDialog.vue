@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import "@/components/sessions/new-session/new-session.css";
 import { computed, nextTick, shallowRef, watch } from "vue";
 import { AlertCircle, LoaderCircle } from "lucide-vue-next";
 import { Button } from "@/components/ui/button";
@@ -12,14 +13,35 @@ import {
 } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
+import MachinePicker from "@/components/sessions/new-session/MachinePicker.vue";
 import { useCreateProject } from "@/composables/use-session-actions";
+import { useSettingsNav } from "@/composables/use-settings-nav";
+import { useMachinesStore } from "@/stores/machines";
+import { useNavigate } from "@tanstack/vue-router";
 import type { ProjectResponse } from "@/api/client";
+
+/**
+ * New Project. With more than one machine it asks which machine the project goes on ("Create on"), starting on
+ * `machineKey` (a machine heading's New project on …) or else the machine you're on; with one machine it doesn't ask.
+ */
+const props = defineProps<{
+  /** The machine picked when the dialog opens; the machine you're on when left out. */
+  machineKey?: string | null;
+}>();
 
 const open = defineModel<boolean>("open", { default: false });
 
 const emit = defineEmits<{
-  created: [project: ProjectResponse];
+  /** The project, and the key of the machine it was created on. */
+  created: [project: ProjectResponse, machineKey: string];
 }>();
+
+const machines = useMachinesStore();
+const { openAddMachine } = useSettingsNav();
+const navigate = useNavigate();
+/** The machine the project is created on. */
+const pickedKey = shallowRef(machines.currentKey);
+const pickedEntry = computed(() => machines.entries.find((entry) => entry.key === pickedKey.value) ?? machines.live);
 
 const name = shallowRef("");
 const description = shallowRef("");
@@ -50,17 +72,32 @@ async function handleSubmit(): Promise<void> {
 
   errorMessage.value = null;
 
+  const machine = pickedEntry.value;
   try {
     const project = await createProject({
       name: trimmedName.value,
       description: description.value.trim() || undefined,
-    });
+    }, machines.targetOfKey(machine.key));
 
     open.value = false;
-    emit("created", project);
+    emit("created", project, machine.key);
   } catch (error) {
-    errorMessage.value = error instanceof Error ? error.message : "Failed to create project";
+    // The fetch itself failed (not an answer from the machine): say which machine, not "Failed to fetch".
+    errorMessage.value = error instanceof TypeError && machines.hasMachines
+      ? `Can't reach ${machine.name}. The project wasn't created.`
+      : error instanceof Error ? error.message : "Failed to create project";
   }
+}
+
+function pickMachine(machineKey: string): void {
+  pickedKey.value = machineKey;
+  errorMessage.value = null;
+}
+
+function addMachine(): void {
+  open.value = false;
+  openAddMachine();
+  void navigate({ to: "/settings" });
 }
 
 watch(name, () => {
@@ -78,6 +115,7 @@ watch(description, () => {
 watch(open, async (isOpen) => {
   if (isOpen) {
     errorMessage.value = null;
+    pickedKey.value = props.machineKey ?? machines.currentKey;
     await nextTick();
     document.getElementById("new-project-name")?.focus();
     return;
@@ -116,6 +154,36 @@ watch(open, async (isOpen) => {
             placeholder="Project name"
             :disabled="isCreating"
           />
+        </div>
+
+        <div
+          v-if="machines.hasMachines"
+          class="space-y-2"
+        >
+          <span
+            id="new-project-machine-label"
+            class="block text-sm font-medium text-foreground"
+          >Create on</span>
+          <div
+            class="new-project-machine"
+            role="group"
+            aria-labelledby="new-project-machine-label"
+          >
+            <MachinePicker
+              :machines="machines.entries"
+              :selected="pickedEntry.key"
+              :others="machines.others"
+              :live-reachable="machines.liveReachable"
+              :disabled="isCreating"
+              heading="Create on"
+              side="bottom"
+              @update:selected="pickMachine"
+              @add-machine="addMachine"
+            />
+          </div>
+          <p class="text-xs text-muted">
+            The project and its sessions live on this machine.
+          </p>
         </div>
 
         <div class="space-y-2">
@@ -165,3 +233,12 @@ watch(open, async (isOpen) => {
     </DialogContent>
   </Dialog>
 </template>
+
+<style scoped>
+/* The new-session chip, framed like the dialog's fields so it reads as one. */
+.new-project-machine :deep(.ns-chip) {
+  height: 32px;
+  padding: 0 10px;
+  border-color: var(--border);
+}
+</style>

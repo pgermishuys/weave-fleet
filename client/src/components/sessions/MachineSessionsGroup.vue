@@ -47,6 +47,8 @@ const emit = defineEmits<{
   open: [session: SessionListItem];
   openDraft: [];
   newSession: [];
+  /** New project on this machine, from its heading's menu. */
+  newProject: [];
   /** The + (or New session in the menu) on one of its projects: a new session on this machine, in that project. */
   newSessionIn: [projectId: string];
   workHere: [];
@@ -224,6 +226,7 @@ const why = computed(() => (unreachable.value ? machines.diagnoses[props.machine
       menu
       @toggle="sidebar.toggleGroupCollapsed(machineGroupKey(machine.key))"
       @new-session="emit('newSession')"
+      @new-project="emit('newProject')"
       @work-here="emit('workHere')"
     />
 
