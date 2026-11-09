@@ -41,13 +41,15 @@ export function useEffortMemory(options: Options) {
 
   watch(
     () => [store.hasFetched, key(), options.variants().join(",")] as const,
-    ([fetched, current]) => {
+    ([fetched, current, levels]) => {
       if (!fetched || !options.modelKey()) return;
       const pickedChanged = (options.picked?.() ?? "") !== lastPicked;
       lastPicked = options.picked?.() ?? "";
       const first = appliedFor === undefined;
       const changed = appliedFor !== current;
-      appliedFor = current;
+      // A session on a named model knows its key before the catalog brings the model's levels. Until they're here
+      // nothing is settled, so the levels arriving count as the draft opening and the remembered level is read then.
+      appliedFor = levels ? current : undefined;
       // A draft that already holds a level (opened again within the page) keeps it; a model switch always re-reads.
       if (first && options.draft.effort) return;
       if (!changed) return;
