@@ -55,18 +55,11 @@ describe("LabsSection", () => {
     expect(wrapper.find("[data-setting-row='copilot']").exists()).toBe(false);
   });
 
-  it("keeps Updates in Machines off until it's turned on, and saves the choice", async () => {
+  it("has no Updates in Machines switch: machine updates are always in Updates & about", async () => {
     const wrapper = await mountSection();
-    const toggle = wrapper.get("[data-testid='fleet-updates-switch']");
-    expect(toggle.attributes("aria-checked")).toBe("false");
-    expect(toggle.attributes("aria-label")).toBe("Show updates in Machines");
-    expect(wrapper.text()).toContain("Updates in Machines");
 
-    await toggle.trigger("click");
-    await flushPromises();
-
-    expect(putMock).toHaveBeenCalledWith("/api/preferences/{key}", { params: { path: { key: "FleetUpdates" } }, body: { value: "true" } });
-    expect(toggle.attributes("aria-checked")).toBe("true");
+    expect(wrapper.find("[data-testid='fleet-updates-switch']").exists()).toBe(false);
+    expect(wrapper.find("[data-setting-row='fleet-updates']").exists()).toBe(false);
   });
 
   it("has no Mods switch: Mods is a plugin, switched in Settings › Plugins", async () => {

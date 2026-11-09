@@ -12,7 +12,7 @@ using WeaveFleet.Testing.Fakes.Repositories;
 
 namespace WeaveFleet.Infrastructure.Tests.Updates;
 
-/// <summary>The home Fleet gives each machine the rule it should follow, only while the Updates switch is on, and again when a machine reports another.</summary>
+/// <summary>The home Fleet gives each machine the rule it should follow, and again when a machine reports another.</summary>
 public sealed class UpdateRulePushServiceTests : IDisposable
 {
     private readonly string _root = Directory.CreateTempSubdirectory("fleet-rule-push-").FullName;
@@ -52,17 +52,8 @@ public sealed class UpdateRulePushServiceTests : IDisposable
         => UpdateRulePushService.Effective(overridden, chosen, webApp).ShouldBe(expected);
 
     [Fact]
-    public async Task Nothing_is_given_out_while_the_switch_is_off()
+    public async Task With_no_preference_set_nodes_get_idle_unless_overridden_and_a_machine_reporting_another_rule_is_given_it_again()
     {
-        (await _service.SyncAsync(default)).ShouldBe(0);
-        _pushes.ShouldBeEmpty();
-        _ownRules.Rule.ShouldBeNull();
-    }
-
-    [Fact]
-    public async Task With_the_switch_on_nodes_get_idle_unless_overridden_and_a_machine_reporting_another_rule_is_given_it_again()
-    {
-        _preferences[UpdateRulePushService.SwitchKey] = "true";
         _preferences[UpdateRulePushService.OverridesKey] = """{"id-heron":"ask"}""";
 
         (await _service.SyncAsync(default)).ShouldBe(3, "this Fleet, falcon and heron");

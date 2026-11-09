@@ -4,10 +4,9 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { defineComponent, nextTick, shallowRef } from "vue";
 import type { MachineEntry } from "@/stores/machines";
 
-const { entries, enabled, waiting, rollout, openWhatsNew } = vi.hoisted(() => ({
+const { entries, waiting, rollout, openWhatsNew } = vi.hoisted(() => ({
   rollout: { value: null as unknown },
   entries: { value: null as unknown },
-  enabled: { value: null as unknown },
   waiting: { value: null as unknown },
   openWhatsNew: vi.fn(),
 }));
@@ -16,11 +15,19 @@ vi.mock("@tanstack/vue-router", () => ({ useRouter: () => ({ navigate: vi.fn() }
 vi.mock("@/composables/use-whats-new", () => ({ useWhatsNew: () => ({ openWhatsNew }) }));
 vi.mock("@/composables/use-fleet-updates", async () => {
   const { shallowRef: ref } = await import("vue");
-  enabled.value = ref(true);
   waiting.value = ref(0);
   rollout.value = ref(null);
-  return { useFleetUpdatesWatch: () => ({ enabled: enabled.value, waiting: waiting.value, rollout: rollout.value }) };
+  return { useFleetUpdatesWatch: () => ({ waiting: waiting.value, rollout: rollout.value }) };
 });
+const prefs = vi.hoisted(() => ({ values: {} as Record<string, string>, fetched: true, set: vi.fn() }));
+vi.mock("@/stores/preferences", () => ({
+  usePreferencesStore: () => ({
+    ensureLoaded: vi.fn(),
+    get hasFetched() { return prefs.fetched; },
+    get: (key: string, fallback: string) => prefs.values[key] ?? fallback,
+    set: prefs.set.mockImplementation(async (key: string, value: string) => { prefs.values[key] = value; }),
+  }),
+}));
 vi.mock("@/stores/machines", async () => {
   const { shallowRef: ref } = await import("vue");
   entries.value = ref<MachineEntry[]>([]);
@@ -54,8 +61,10 @@ describe("useFleetUpdateNotices", () => {
     entriesRef().value = [];
     waitingRef().value = 0;
     rolloutRef().value = null;
-    (enabled.value as ReturnType<typeof shallowRef<boolean>>).value = true;
     openWhatsNew.mockClear();
+    prefs.values = {};
+    prefs.fetched = true;
+    prefs.set.mockClear();
     vi.useFakeTimers({ now: new Date("2026-10-20T12:00:00Z") });
   });
   afterEach(() => vi.useRealTimers());
@@ -82,7 +91,7 @@ describe("useFleetUpdateNotices", () => {
     expect(afterReload.open).toBeNull();
   });
 
-  it("keeps a chip that counts the Fleets that can update, and takes it away at zero or with the switch off", async () => {
+  it("keeps a chip that counts the Fleets that can update, and takes it away at zero", async () => {
     mountIt();
     const notices = useNoticesStore();
     expect(notices.chips).toHaveLength(0);
@@ -95,7 +104,7 @@ describe("useFleetUpdateNotices", () => {
     await nextTick();
     expect(notices.chips.map((chip) => chip.chip)).toEqual(["↑ 1 machine can update"]);
 
-    (enabled.value as ReturnType<typeof shallowRef<boolean>>).value = false;
+    waitingRef().value = 0;
     await nextTick();
     expect(notices.chips).toHaveLength(0);
   });
@@ -112,5 +121,44 @@ describe("useFleetUpdateNotices", () => {
     notices.chips[0]!.onChipClick?.();
     expect(useSettingsNav().activeSection.value).toBe("updates");
     expect(useSettingsNav().activeAnchor.value).toBe("machines");
+  });
+
+  describe("a machine that restarted itself under a rule nobody picked", () => {
+    const update = { from: "0.59.0", to: "0.59.1", at: "2026-10-20T03:12:00Z", trigger: "idle" };
+    const updated = () => useNoticesStore().notices.find((notice) => notice.id.startsWith("fleet-updated:"));
+
+    it("tells the user once, with a way to change the rule, and never again", async () => {
+      entriesRef().value = [falcon("0.59.1", update)];
+      mountIt();
+      expect(updated()?.body).toContain("Nobody chose an update rule");
+      expect(updated()?.actions?.map((action) => action.label)).toEqual(["What's new", "Change the rule", "Dismiss"]);
+      expect(prefs.set).toHaveBeenCalledWith("FleetUpdateRuleNotice", "true");
+
+      // The next self-update, on another machine or version, is not announced that way.
+      useNoticesStore().remove(updated()!.id);
+      entriesRef().value = [falcon("0.59.2", { ...update, from: "0.59.1", to: "0.59.2" })];
+      await nextTick();
+      expect(updated()?.body).not.toContain("Nobody chose");
+    });
+
+    it("says nothing about the rule when the user chose one, or the update was theirs, or preferences haven't loaded", async () => {
+      prefs.values = { FleetUpdateRules: JSON.stringify({ "falcon-id": "idle" }) };
+      entriesRef().value = [falcon("0.59.1", update)];
+      mountIt();
+      expect(updated()?.body).not.toContain("Nobody chose");
+      expect(prefs.set).not.toHaveBeenCalled();
+
+      setActivePinia(createPinia());
+      prefs.values = {};
+      entriesRef().value = [falcon("0.59.2", { ...update, to: "0.59.2", trigger: "manual" })];
+      mountIt();
+      expect(prefs.set).not.toHaveBeenCalled();
+
+      setActivePinia(createPinia());
+      prefs.fetched = false;
+      entriesRef().value = [falcon("0.59.3", { ...update, to: "0.59.3" })];
+      mountIt();
+      expect(prefs.set).not.toHaveBeenCalled();
+    });
   });
 });

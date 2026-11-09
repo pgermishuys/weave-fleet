@@ -4,14 +4,13 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { defineComponent, nextTick, shallowRef } from "vue";
 import type { MachineEntry } from "@/stores/machines";
 
-const { entries, loadHome, updatesOn } = vi.hoisted(() => ({ entries: { value: null as unknown }, loadHome: vi.fn(), updatesOn: { value: null as unknown } }));
+const { entries, loadHome } = vi.hoisted(() => ({ entries: { value: null as unknown }, loadHome: vi.fn() }));
 
 vi.mock("@tanstack/vue-router", () => ({ useRouter: () => ({ navigate: vi.fn() }) }));
 vi.mock("@/composables/use-whats-new", () => ({ useWhatsNew: () => ({ openWhatsNew: vi.fn() }) }));
 vi.mock("@/composables/use-fleet-updates", async () => {
   const { shallowRef: ref } = await import("vue");
-  updatesOn.value = ref(false);
-  return { useFleetUpdatesWatch: () => ({ enabled: updatesOn.value, waiting: ref(0), rollout: ref(null) }) };
+  return { useFleetUpdatesWatch: () => ({ waiting: ref(0), rollout: ref(null) }) };
 });
 vi.mock("@/stores/machines", async () => {
   const { shallowRef: ref } = await import("vue");
@@ -72,8 +71,7 @@ describe("useStaleWindowNotice", () => {
     vi.useRealTimers();
   });
 
-  it("with the Updates switch on, says it once: the updated notice carries Reload and this posts none", async () => {
-    (updatesOn.value as ReturnType<typeof shallowRef<boolean>>).value = true;
+  it("says it once: the updated notice carries Reload and this posts none", async () => {
     const withUpdate = (version: string) => [{
       key: "home", name: "falcon", isHome: true,
       info: { version, update: { status: "uptodate", latestVersion: version, stagedVersion: null, checkedAt: null, lastUpdate: { from: "0.52.0", to: version, at: new Date().toISOString(), trigger: "idle" } } },
@@ -87,6 +85,5 @@ describe("useStaleWindowNotice", () => {
     const about = notices.notices.filter((notice) => notice.id.startsWith("fleet-updated:") || notice.id.startsWith("fleet-window-stale:"));
     expect(about.map((notice) => notice.title)).toEqual(["falcon updated to 0.53.0"]);
     expect(about[0]!.actions?.map((action) => action.label)).toEqual(["Reload", "What's new", "Dismiss"]);
-    (updatesOn.value as ReturnType<typeof shallowRef<boolean>>).value = false;
   });
 });

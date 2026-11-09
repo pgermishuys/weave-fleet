@@ -5,9 +5,9 @@ import { reactive, ref } from "vue";
 const store = vi.hoisted(() => ({ state: null as unknown as { isSwitchedOn: boolean; loadSwitch: ReturnType<typeof vi.fn> } }));
 vi.mock("@/stores/mods", () => ({ useModsStore: () => store.state }));
 
-const updates = vi.hoisted(() => ({ enabled: { value: false }, waiting: { value: 0 } }));
+const updates = vi.hoisted(() => ({ waiting: { value: 0 } }));
 vi.mock("@/composables/use-fleet-updates", () => ({
-  useFleetUpdatesWatch: () => ({ enabled: ref(updates.enabled.value), waiting: ref(updates.waiting.value) }),
+  useFleetUpdatesWatch: () => ({ waiting: ref(updates.waiting.value) }),
 }));
 
 const update = vi.hoisted(() => ({ available: { value: false } }));

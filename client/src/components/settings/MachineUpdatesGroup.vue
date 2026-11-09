@@ -10,7 +10,7 @@ import type { FleetUpdateRow } from "@/lib/fleet-updates";
 import { useMachinesStore } from "@/stores/machines";
 
 /**
- * Updates & about › Machines (with Updates in Machines on in Labs): the release line and the rule every machine
+ * Updates & about › Machines: the release line and the rule every machine
  * follows, then each machine's version, where it is with updating, its own rule and Restart.
  */
 const machines = useMachinesStore();

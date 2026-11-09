@@ -7,17 +7,15 @@ import SettingGroup from "@/components/settings/SettingGroup.vue";
 import SettingRow from "@/components/settings/SettingRow.vue";
 import { getDesktopBridge } from "@/lib/desktop";
 import { useWhatsNew } from "@/composables/use-whats-new";
-import { useFleetUpdatesEnabled } from "@/composables/use-fleet-updates";
 import { useSettingsNav } from "@/composables/use-settings-nav";
 
 const { updateStatus, isLoading, checkForUpdate, downloadUpdate } = useUpdateStatus();
 const { openWhatsNew } = useWhatsNew();
 const { setActiveSection } = useSettingsNav();
-// With Updates in Machines on, this Fleet's own update is one of the machines' updates: this line points there.
-const machinesShowUpdates = useFleetUpdatesEnabled();
+// This Fleet's own update is one of the machines' updates: this line points there.
 const updateWaiting = computed(() => {
   const status = updateStatus.value?.status;
-  return machinesShowUpdates.value && (status === "available" || status === "downloading" || status === "staged");
+  return (status === "available" || status === "downloading" || status === "staged");
 });
 const inApp = getDesktopBridge() !== null;
 // In the app's window, a Fleet the app started is updated with the app, so its row says so instead of the server's.

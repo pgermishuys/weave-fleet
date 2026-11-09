@@ -4,7 +4,7 @@ import { LoaderCircle } from "lucide-vue-next";
 import { describeVersionLine, effectiveRule, isUpdateRule, UPDATE_RULES, type FleetUpdateRow, type Rollout, type UpdateRule } from "@/lib/fleet-updates";
 
 /**
- * The line along the bottom of a machine card in Settings → Updates & about › Machines (with Updates in Machines on): the version it
+ * The line along the bottom of a machine card in Settings → Updates & about › Machines: the version it
  * runs, where it is with updating, and the rule it follows.
  */
 const props = defineProps<{

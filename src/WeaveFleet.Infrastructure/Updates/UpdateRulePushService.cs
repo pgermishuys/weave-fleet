@@ -11,7 +11,7 @@ using WeaveFleet.Infrastructure.Users;
 namespace WeaveFleet.Infrastructure.Updates;
 
 /// <summary>
-/// On the home Fleet, while the Updates switch is on: works out the rule each machine should follow (its own override,
+/// On the home Fleet: works out the rule each machine should follow (its own override,
 /// else the default the user chose, else its kind's: a node updates when idle, a Fleet asks) and gives it to the ones
 /// that follow another. Looks again every half minute and when a machine is added, so a machine that reports a
 /// different rule (it was reinstalled, or someone changed it there) gets the right one back. A node keeps its rule on
@@ -27,9 +27,6 @@ public sealed partial class UpdateRulePushService(
     TimeProvider time,
     ILogger<UpdateRulePushService> logger) : BackgroundService
 {
-    /// <summary>Settings → Labs: the switch for the whole feature.</summary>
-    public const string SwitchKey = "FleetUpdates";
-
     /// <summary>The rule the user chose for every machine, unless one has its own.</summary>
     public const string DefaultKey = "FleetUpdateRule";
 
@@ -79,9 +76,7 @@ public sealed partial class UpdateRulePushService(
         await _once.WaitAsync(ct);
         try
         {
-            var (on, chosenDefault, overrides) = await ReadSettingsAsync();
-            if (!on)
-                return 0;
+            var (chosenDefault, overrides) = await ReadSettingsAsync();
 
             var pushed = 0;
             var own = Effective(overrides.GetValueOrDefault(HomeKey), chosenDefault, options.ServeUi);
@@ -123,7 +118,7 @@ public sealed partial class UpdateRulePushService(
         }
     }
 
-    private async Task<(bool On, string? Default, Dictionary<string, string> Overrides)> ReadSettingsAsync()
+    private async Task<(string? Default, Dictionary<string, string> Overrides)> ReadSettingsAsync()
     {
         using var background = BackgroundUserContext.BeginScope("local-user");
         using var scope = scopes.CreateScope();
@@ -141,7 +136,7 @@ public sealed partial class UpdateRulePushService(
             }
         }
 
-        return (preferences.GetValueOrDefault(SwitchKey) == "true", preferences.GetValueOrDefault(DefaultKey), overrides);
+        return (preferences.GetValueOrDefault(DefaultKey), overrides);
     }
 
     [LoggerMessage(Level = LogLevel.Information, Message = "Gave {Machine} the rule {Rule} for its updates.")]
