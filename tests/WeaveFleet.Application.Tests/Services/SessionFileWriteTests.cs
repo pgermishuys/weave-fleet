@@ -92,6 +92,54 @@ public sealed class SessionFileWriteTests : IDisposable
     }
 
     [Fact]
+    public async Task restore_creates_a_file_that_is_gone_byte_for_byte_including_folders()
+    {
+        var text = "\uFEFFa\r\nb\nc";
+        var result = await _sut.RestoreSessionFileAsync(SessionId, "src/old/a.txt", text, null);
+
+        result.IsSuccess.ShouldBeTrue();
+        result.Value.Saved.ShouldBeTrue();
+        (await File.ReadAllBytesAsync(Path.Combine(_directory, "src/old/a.txt"))).ShouldBe(Encoding.UTF8.GetBytes(text));
+    }
+
+    [Fact]
+    public async Task restore_will_not_overwrite_a_file_that_exists_again()
+    {
+        var path = WriteFile("src/a.txt", "the agent wrote this\n");
+
+        var result = await _sut.RestoreSessionFileAsync(SessionId, "src/a.txt", "old\n", null);
+
+        result.Value.Saved.ShouldBeFalse();
+        result.Value.CurrentContent.ShouldBe("the agent wrote this\n");
+        (await File.ReadAllTextAsync(path)).ShouldBe("the agent wrote this\n");
+    }
+
+    [Fact]
+    public async Task restore_without_content_deletes_a_file_with_the_matching_hash_only()
+    {
+        var path = WriteFile("src/new.txt", "x\n");
+        var hash = await ReadHashAsync("src/new.txt");
+
+        var stale = await _sut.RestoreSessionFileAsync(SessionId, "src/new.txt", null, "0000");
+        stale.Value.Saved.ShouldBeFalse();
+        File.Exists(path).ShouldBeTrue();
+
+        var missingHash = await _sut.RestoreSessionFileAsync(SessionId, "src/new.txt", null, null);
+        missingHash.IsFailure.ShouldBeTrue();
+
+        var ok = await _sut.RestoreSessionFileAsync(SessionId, "src/new.txt", null, hash);
+        ok.Value.Saved.ShouldBeTrue();
+        File.Exists(path).ShouldBeFalse();
+    }
+
+    [Fact]
+    public async Task restore_refuses_paths_outside_the_folder_and_inside_git()
+    {
+        (await _sut.RestoreSessionFileAsync(SessionId, "../x.txt", "x", null)).IsFailure.ShouldBeTrue();
+        (await _sut.RestoreSessionFileAsync(SessionId, ".git/hooks/x", "x", null)).IsFailure.ShouldBeTrue();
+    }
+
+    [Fact]
     public async Task a_stale_hash_is_a_conflict_with_the_current_content_and_nothing_is_written()
     {
         var path = WriteFile("src/app.ts", "const one = 1;\n");

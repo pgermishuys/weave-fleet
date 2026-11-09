@@ -552,6 +552,14 @@ public sealed class SessionOrchestrator(
         CancellationToken ct = default)
         => _files.WriteSessionFileAsync(sessionId, path, content, baseHash, ct);
 
+    public Task<Result<WriteFileResult>> RestoreSessionFileAsync(
+        string sessionId,
+        string? path,
+        string? content,
+        string? baseHash,
+        CancellationToken ct = default)
+        => _files.RestoreSessionFileAsync(sessionId, path, content, baseHash, ct);
+
     /// <inheritdoc cref="SessionFiles.HashFileBytes"/>
     public static string HashFileBytes(ReadOnlySpan<byte> bytes) => SessionFiles.HashFileBytes(bytes);
 

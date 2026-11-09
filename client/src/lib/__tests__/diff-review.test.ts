@@ -76,4 +76,41 @@ describe("textWithRangeReverted", () => {
   it("reverting every hunk gives back the base", () => {
     expect(textWithRangeReverted(diff, { from: 0, to: diff.length }, true)).toBe(before);
   });
+
+  describe("keeps the file's bytes outside the reverted lines", () => {
+    function revertFirst(before: string, after: string): string {
+      const d = parseDiffLines(before, after);
+      const h = buildReview(d).filter((i): i is ReviewHunk => i.kind === "hunk");
+      return textWithRangeReverted(d, h[0]!, after.endsWith("\n"), { before, after });
+    }
+    const body = (eol: string, mid: string) => ["a", mid, "c", "d", "e", "f", "g", "h", "i", "j"].join(eol);
+
+    it("CRLF stays CRLF", () => {
+      const before = body("\r\n", "b") + "\r\n";
+      const after = body("\r\n", "B") + "\r\n";
+      expect(revertFirst(before, after)).toBe(before);
+    });
+
+    it("no final newline stays without one", () => {
+      expect(revertFirst(body("\n", "b"), body("\n", "B"))).toBe(body("\n", "b"));
+    });
+
+    it("a BOM stays", () => {
+      const before = "\uFEFF" + body("\r\n", "b") + "\r\n";
+      const after = "\uFEFF" + body("\r\n", "B") + "\r\n";
+      expect(revertFirst(before, after)).toBe(before);
+    });
+
+    it("mixed endings stay as they were, line by line", () => {
+      const before = "a\r\nb\nc\r\nd\ne\nf\ng\nh\ni\nj\r\n";
+      const after = "a\r\nB\nc\r\nd\ne\nf\ng\nh\ni\nj\r\n";
+      expect(revertFirst(before, after)).toBe(before);
+    });
+
+    it("keeps other hunks' lines untouched and a reverted hunk takes its own old ending", () => {
+      const before = "a\r\nb\r\nc\r\nd\r\ne\r\nf\r\ng\r\nh\r\ni\r\nj\r\nk\r\nl\r\n";
+      const after = "a\r\nB\r\nc\r\nd\r\ne\r\nf\r\ng\r\nh\r\ni\r\nj\r\nk\r\nL\r\n";
+      expect(revertFirst(before, after)).toBe(after.replace("B", "b"));
+    });
+  });
 });

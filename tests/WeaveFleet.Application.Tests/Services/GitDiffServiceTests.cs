@@ -140,8 +140,8 @@ public sealed class GitDiffServiceTests
 
         var result = await service.ComputeDiffsWithAvailabilityAsync("/repo/root", "refs/fleet/baselines/session-123", "/src/", CancellationToken.None);
 
-        runner.Calls[0].Arguments.ShouldBe(["diff", "--numstat", "refs/fleet/baselines/session-123", "--", "src"]);
-        runner.Calls[1].Arguments.ShouldBe(["diff", "--name-status", "refs/fleet/baselines/session-123", "--", "src"]);
+        runner.Calls[0].Arguments.ShouldBe(["diff", "--numstat", "--no-renames", "refs/fleet/baselines/session-123", "--", "src"]);
+        runner.Calls[1].Arguments.ShouldBe(["diff", "--name-status", "--no-renames", "refs/fleet/baselines/session-123", "--", "src"]);
         runner.Calls[2].Arguments.ShouldBe(["ls-files", "--others", "--exclude-standard", "--", "src"]);
         result.Available.ShouldBeTrue();
         result.Diffs.Count.ShouldBe(3);

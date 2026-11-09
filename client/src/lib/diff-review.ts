@@ -6,6 +6,7 @@
 import type { DiffLine } from "@/lib/diff-parser";
 
 const CONTEXT = 3;
+const MAX_MARKED_HUNK = 600;
 
 /** A changed line may carry the character ranges that actually differ from its partner line. */
 export interface ReviewLine extends DiffLine {
@@ -127,7 +128,8 @@ export function buildReview(diffLines: readonly DiffLine[], context = CONTEXT): 
       items.push({ kind: "fold", id: `fold-${cursor}`, hidden: hidden.length, lines: hidden });
     }
     const lines = all.slice(from, to + 1);
-    markWords(lines);
+    // Marking words pairs every removed line with an added one; a hunk this long is a rewrite, where marks only add noise.
+    if (lines.length <= MAX_MARKED_HUNK) markWords(lines);
     const head = lines.find((line) => line.type !== "remove") ?? lines[0]!;
     items.push({
       kind: "hunk",
@@ -190,15 +192,41 @@ export function markedSegments(
   return out;
 }
 
+interface RawLine {
+  text: string;
+  /** What ended the line in the file: "\r\n", "\n", "\r", or "" for a last line with no final newline. */
+  eol: string;
+}
+
+/** Splits text into lines the way the diff does (CRLF, LF and lone CR all end a line), keeping each line's ending. */
+function rawLines(text: string): RawLine[] {
+  if (text === "") return [];
+  const out: RawLine[] = [];
+  const ending = /\r\n|\r|\n/g;
+  let at = 0;
+  for (let match = ending.exec(text); match; match = ending.exec(text)) {
+    out.push({ text: text.slice(at, match.index), eol: match[0] });
+    at = match.index + match[0].length;
+  }
+  if (at < text.length) out.push({ text: text.slice(at), eol: "" });
+  return out;
+}
+
 /**
  * The file's text with one range of its diff undone: added lines inside [from, to] are dropped and removed lines
  * come back. Everything outside the range stays as the file has it now.
+ *
+ * With `raw` (the base and current text as read) every line keeps the ending it had in the file it came from, so a
+ * CRLF, LF or mixed file is changed only in the reverted lines, and the final newline (or its absence) and a BOM
+ * stay as they are. Without it lines are joined with "\n".
  */
 export function textWithRangeReverted(
   diffLines: readonly DiffLine[],
   range: { from: number; to: number },
   trailingNewline: boolean,
+  raw?: { before: string; after: string },
 ): string {
+  if (raw) return rawTextWithRangeReverted(diffLines, range, raw);
   const out: string[] = [];
   diffLines.forEach((line, index) => {
     const inside = index >= range.from && index <= range.to;
@@ -209,4 +237,39 @@ export function textWithRangeReverted(
   });
   const text = out.join("\n");
   return trailingNewline && out.length > 0 ? `${text}\n` : text;
+}
+
+function rawTextWithRangeReverted(
+  diffLines: readonly DiffLine[],
+  range: { from: number; to: number },
+  raw: { before: string; after: string },
+): string {
+  const before = rawLines(raw.before);
+  const after = rawLines(raw.after);
+  const kept: RawLine[] = [];
+  diffLines.forEach((line, index) => {
+    const inside = index >= range.from && index <= range.to;
+    if (line.type === "remove") {
+      if (inside) kept.push(before[(line.oldLineNumber ?? 1) - 1] ?? { text: line.content, eol: "" });
+    } else if (line.type === "add" && inside) {
+      // dropped
+    } else {
+      kept.push(after[(line.newLineNumber ?? 1) - 1] ?? { text: line.content, eol: "" });
+    }
+  });
+  if (kept.length === 0) return "";
+
+  // A line that lost its ending (it was the old last line) takes the file's usual one; the last line ends the way the
+  // file ends now.
+  const counts = new Map<string, number>();
+  for (const line of [...after, ...before]) if (line.eol) counts.set(line.eol, (counts.get(line.eol) ?? 0) + 1);
+  const usual = [...counts.entries()].sort((a, b) => b[1] - a[1])[0]?.[0] ?? "\n";
+  const endsWithNewline = after.length === 0 || after[after.length - 1]!.eol !== "";
+  const last = kept.length - 1;
+  return kept
+    .map((line, i) => {
+      if (i < last) return line.text + (line.eol || usual);
+      return line.text + (endsWithNewline ? line.eol || usual : "");
+    })
+    .join("");
 }

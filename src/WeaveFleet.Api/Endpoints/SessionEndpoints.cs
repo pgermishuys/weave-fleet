@@ -1274,6 +1274,23 @@ public static class SessionEndpoints
         .Produces(400)
         .WithName("WriteSessionFile");
 
+        // POST /api/sessions/{id}/files/restore — put a file back as the session found it: create one that's gone
+        // (content) or delete one the session added (no content, with the hash of what's on disk). 409 when refused.
+        group.MapPost("/{id}/files/restore", async (string id, WriteSessionFileRequest req, SessionFiles sessionFiles, CancellationToken ct) =>
+        {
+            var result = await sessionFiles.RestoreSessionFileAsync(id, req.Path, req.Content, req.BaseHash, ct);
+            return result.Match(
+                write => write.Saved
+                    ? Results.Ok(new WriteSessionFileResponse(write.Hash))
+                    : Results.Conflict(new WriteSessionFileConflictResponse(write.CurrentContent, write.Hash)),
+                err => err.ToSessionApiResult());
+        })
+        .Produces<WriteSessionFileResponse>(200)
+        .Produces<WriteSessionFileConflictResponse>(409)
+        .Produces(404)
+        .Produces(400)
+        .WithName("RestoreSessionFile");
+
         return app;
     }
 

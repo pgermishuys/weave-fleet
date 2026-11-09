@@ -304,12 +304,12 @@ public sealed partial class GitDiffService
             return GitDiffComputationResult.Unavailable;
 
         var prefix = NormalizeWorkspacePrefix(workspacePrefix);
-        var diffArgs = BuildPathspecArguments(["diff", "--numstat", baselineRef, "--"], prefix);
+        var diffArgs = BuildPathspecArguments(["diff", "--numstat", "--no-renames", baselineRef, "--"], prefix);
         var diffResult = await RunGitAsync(repoRoot, diffArgs, ct).ConfigureAwait(false);
         if (!diffResult.IsSuccess)
             return GitDiffComputationResult.Unavailable;
 
-        var statusArgs = BuildPathspecArguments(["diff", "--name-status", baselineRef, "--"], prefix);
+        var statusArgs = BuildPathspecArguments(["diff", "--name-status", "--no-renames", baselineRef, "--"], prefix);
         var statusResult = await RunGitAsync(repoRoot, statusArgs, ct).ConfigureAwait(false);
         if (!statusResult.IsSuccess)
             return GitDiffComputationResult.Unavailable;

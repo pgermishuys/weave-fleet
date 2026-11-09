@@ -8,52 +8,171 @@ export interface DiffLine {
 export function parseDiffLines(before: string, after: string): DiffLine[] {
   const beforeLines = splitContentLines(before);
   const afterLines = splitContentLines(after);
-  const lcsLengths = buildLcsLengths(beforeLines, afterLines);
   const diffLines: DiffLine[] = [];
 
   let beforeIndex = 0;
   let afterIndex = 0;
+  const context = (): void => {
+    diffLines.push({
+      type: "context",
+      content: beforeLines[beforeIndex]!,
+      oldLineNumber: beforeIndex + 1,
+      newLineNumber: afterIndex + 1,
+    });
+    beforeIndex += 1;
+    afterIndex += 1;
+  };
+  const remove = (): void => {
+    diffLines.push({ type: "remove", content: beforeLines[beforeIndex]!, oldLineNumber: beforeIndex + 1 });
+    beforeIndex += 1;
+  };
+  const add = (): void => {
+    diffLines.push({ type: "add", content: afterLines[afterIndex]!, newLineNumber: afterIndex + 1 });
+    afterIndex += 1;
+  };
 
-  while (beforeIndex < beforeLines.length || afterIndex < afterLines.length) {
-    const beforeLine = beforeLines[beforeIndex];
-    const afterLine = afterLines[afterIndex];
+  for (const step of diffScript(beforeLines, afterLines)) {
+    if (step === 0) context();
+    else if (step === -1) remove();
+    else add();
+  }
+  return diffLines;
+}
 
-    if (beforeLine !== undefined && afterLine !== undefined && beforeLine === afterLine) {
-      diffLines.push({
-        type: "context",
-        content: beforeLine,
-        oldLineNumber: beforeIndex + 1,
-        newLineNumber: afterIndex + 1,
-      });
-      beforeIndex += 1;
-      afterIndex += 1;
-      continue;
-    }
+/**
+ * The edit script between two line lists: 0 keeps a line, -1 removes one from `a`, 1 adds one from `b`. Lines the two
+ * share at the start and end are taken first, then Myers' O(ND) walk finds the shortest script for the middle, so a
+ * big file with a few changes costs time and memory in proportion to the changes, not to its size squared.
+ */
+function diffScript(a: string[], b: string[]): Array<-1 | 0 | 1> {
+  let head = 0;
+  while (head < a.length && head < b.length && a[head] === b[head]) head += 1;
+  let tail = 0;
+  while (tail < a.length - head && tail < b.length - head && a[a.length - 1 - tail] === b[b.length - 1 - tail]) tail += 1;
 
-    if (
-      beforeLine !== undefined &&
-      (afterLine === undefined || lcsLengths[beforeIndex + 1]![afterIndex]! >= lcsLengths[beforeIndex]![afterIndex + 1]!)
-    ) {
-      diffLines.push({
-        type: "remove",
-        content: beforeLine,
-        oldLineNumber: beforeIndex + 1,
-      });
-      beforeIndex += 1;
-      continue;
-    }
+  const script: Array<-1 | 0 | 1> = new Array<0>(head).fill(0);
+  // Lines become numbers so the walk compares integers, not strings.
+  const ids = new Map<string, number>();
+  const idOf = (line: string): number => {
+    let id = ids.get(line);
+    if (id === undefined) ids.set(line, (id = ids.size));
+    return id;
+  };
+  const midA = a.slice(head, a.length - tail).map(idOf);
+  const midB = b.slice(head, b.length - tail).map(idOf);
 
-    if (afterLine !== undefined) {
-      diffLines.push({
-        type: "add",
-        content: afterLine,
-        newLineNumber: afterIndex + 1,
-      });
-      afterIndex += 1;
+  // A line only one side has can only be a removal or an addition, so the walk skips it: a lockfile whose changed
+  // lines are all new text shrinks to the lines both sides share.
+  const inB = new Set(midB);
+  const inA = new Set(midA);
+  const keptA: number[] = [];
+  const keptB: number[] = [];
+  midA.forEach((id, index) => {
+    if (inB.has(id)) keptA.push(index);
+  });
+  midB.forEach((id, index) => {
+    if (inA.has(id)) keptB.push(index);
+  });
+  const steps = myers(
+    keptA.map((index) => midA[index]!),
+    keptB.map((index) => midB[index]!),
+  );
+
+  let pa = 0;
+  let pb = 0;
+  let i = 0;
+  let j = 0;
+  const removesUpTo = (end: number): void => {
+    for (; pa < end; pa += 1) script.push(-1);
+  };
+  const addsUpTo = (end: number): void => {
+    for (; pb < end; pb += 1) script.push(1);
+  };
+  for (const step of steps) {
+    if (step === 0) {
+      removesUpTo(keptA[i]!);
+      addsUpTo(keptB[j]!);
+      script.push(0);
+      pa += 1;
+      pb += 1;
+      i += 1;
+      j += 1;
+    } else if (step === -1) {
+      removesUpTo(keptA[i]! + 1);
+      i += 1;
+    } else {
+      removesUpTo(i < keptA.length ? keptA[i]! : midA.length);
+      addsUpTo(keptB[j]! + 1);
+      j += 1;
     }
   }
+  removesUpTo(midA.length);
+  addsUpTo(midB.length);
+  for (let i = 0; i < tail; i += 1) script.push(0);
+  return script;
+}
 
-  return diffLines;
+/** Past this many changed lines the middle is shown as all removed then all added rather than searched for. */
+const MAX_EDIT_DISTANCE = 6000;
+
+function myers(a: number[], b: number[]): Array<-1 | 0 | 1> {
+  const n = a.length;
+  const m = b.length;
+  if (n === 0) return new Array<1>(m).fill(1);
+  if (m === 0) return new Array<-1>(n).fill(-1);
+
+  const max = Math.min(n + m, MAX_EDIT_DISTANCE);
+  const offset = max + 1;
+  const v = new Int32Array(2 * max + 3);
+  // trace[d] holds the furthest x on diagonals -d..d (index k + d) after round d.
+  const trace: Int32Array[] = [];
+  let found = -1;
+  for (let d = 0; d <= max && found < 0; d += 1) {
+    for (let k = -d; k <= d; k += 2) {
+      let x: number;
+      if (k === -d || (k !== d && v[offset + k - 1]! < v[offset + k + 1]!)) x = v[offset + k + 1]!;
+      else x = v[offset + k - 1]! + 1;
+      let y = x - k;
+      while (x < n && y < m && a[x] === b[y]) {
+        x += 1;
+        y += 1;
+      }
+      v[offset + k] = x;
+      if (x >= n && y >= m) {
+        found = d;
+        break;
+      }
+    }
+    trace.push(v.slice(offset - d, offset + d + 1));
+  }
+  if (found < 0) return [...new Array<-1>(n).fill(-1), ...new Array<1>(m).fill(1)];
+
+  const reversed: Array<-1 | 0 | 1> = [];
+  let x = n;
+  let y = m;
+  for (let d = found; d > 0; d -= 1) {
+    const prev = trace[d - 1]!; // diagonals -(d-1)..(d-1), index k + d - 1
+    const k = x - y;
+    const at = (diag: number): number => prev[diag + d - 1]!;
+    const down = k === -d || (k !== d && at(k - 1) < at(k + 1));
+    const prevK = down ? k + 1 : k - 1;
+    const prevX = at(prevK);
+    const prevY = prevX - prevK;
+    while (x > (down ? prevX : prevX + 1) && y > (down ? prevY + 1 : prevY)) {
+      reversed.push(0);
+      x -= 1;
+      y -= 1;
+    }
+    reversed.push(down ? 1 : -1);
+    if (down) y -= 1;
+    else x -= 1;
+  }
+  while (x > 0 && y > 0) {
+    reversed.push(0);
+    x -= 1;
+    y -= 1;
+  }
+  return reversed.reverse();
 }
 
 function splitContentLines(content: string): string[] {
@@ -68,22 +187,6 @@ function splitContentLines(content: string): string[] {
   }
 
   return lines;
-}
-
-function buildLcsLengths(beforeLines: string[], afterLines: string[]): number[][] {
-  const lcsLengths = Array.from({ length: beforeLines.length + 1 }, () =>
-    Array.from({ length: afterLines.length + 1 }, () => 0),
-  );
-
-  for (let beforeIndex = beforeLines.length - 1; beforeIndex >= 0; beforeIndex -= 1) {
-    for (let afterIndex = afterLines.length - 1; afterIndex >= 0; afterIndex -= 1) {
-      lcsLengths[beforeIndex]![afterIndex] = beforeLines[beforeIndex] === afterLines[afterIndex]
-        ? lcsLengths[beforeIndex + 1]![afterIndex + 1]! + 1
-        : Math.max(lcsLengths[beforeIndex + 1]![afterIndex]!, lcsLengths[beforeIndex]![afterIndex + 1]!);
-    }
-  }
-
-  return lcsLengths;
 }
 
 /**

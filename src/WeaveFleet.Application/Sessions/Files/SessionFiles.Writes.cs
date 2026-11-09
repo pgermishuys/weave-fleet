@@ -118,6 +118,95 @@ public sealed partial class SessionFiles
         }
     }
 
+    /// <summary>
+    /// Puts a file back the way the session found it: with <paramref name="content"/>, creates a file that is gone
+    /// (a deleted or moved file); with null, deletes a file the session added. Creating refuses to touch a file that
+    /// exists again, and deleting needs <paramref name="baseHash"/> of what is on disk, so neither can destroy work
+    /// the agent did in between. When refused, the result carries what is on disk now.
+    /// </summary>
+    public async Task<Result<WriteFileResult>> RestoreSessionFileAsync(
+        string sessionId,
+        string? path,
+        string? content,
+        string? baseHash,
+        CancellationToken ct = default)
+    {
+        using var _ = logger.BeginSessionScope(sessionId);
+        if (string.IsNullOrWhiteSpace(path))
+            return FleetError.ValidationError("Session.File", "Path parameter is required.");
+        if (content is null && string.IsNullOrWhiteSpace(baseHash))
+            return FleetError.ValidationError("Session.File", "The hash of the file as it was read is required.");
+
+        var sessionResult = await sessionRepository.GetSessionAsync(sessionId);
+        if (sessionResult.IsFailure)
+            return sessionResult.Error;
+
+        var session = sessionResult.Value;
+        if (!Directory.Exists(session.Directory))
+            return FleetError.ValidationError("Session.Directory", "Session directory does not exist.");
+
+        var normalizedPath = path.Replace('\\', Path.DirectorySeparatorChar).Replace('/', Path.DirectorySeparatorChar);
+        var sessionDirectory = Path.GetFullPath(session.Directory);
+        var targetPath = Path.GetFullPath(Path.Combine(sessionDirectory, normalizedPath));
+        if (!IsSameOrChildPath(targetPath, sessionDirectory) || PathsEqual(targetPath, sessionDirectory))
+            return FleetError.ValidationError("Session.File", "Path traversal is not allowed.");
+
+        var realSessionDirectory = ResolveRealPath(sessionDirectory);
+        var realTargetPath = ResolveRealPath(targetPath);
+        if (!IsSameOrChildPath(realTargetPath, realSessionDirectory))
+            return FleetError.ValidationError("Session.File", "The file links outside the session directory.");
+
+        if (IsInsideGitDirectory(Path.GetRelativePath(sessionDirectory, targetPath))
+            || IsInsideGitDirectory(Path.GetRelativePath(realSessionDirectory, realTargetPath)))
+            return FleetError.ValidationError("Session.File", "Files under .git can't be edited.");
+
+        byte[]? newBytes = null;
+        if (content is not null)
+        {
+            newBytes = StrictUtf8.GetBytes(content);
+            if (newBytes.Length > MaxEditableFileBytes)
+                return FleetError.ValidationError("Session.File", "The file would be too large to restore here (over 512 KB).");
+        }
+
+        var gate = FileWriteLocks.GetOrAdd(realTargetPath, static _ => new SemaphoreSlim(1, 1));
+        await gate.WaitAsync(ct).ConfigureAwait(false);
+        try
+        {
+            var relativePath = Path.GetRelativePath(sessionDirectory, targetPath).Replace(Path.DirectorySeparatorChar, '/');
+            if (newBytes is not null)
+            {
+                if (File.Exists(realTargetPath))
+                {
+                    var existing = await File.ReadAllBytesAsync(realTargetPath, ct).ConfigureAwait(false);
+                    return new WriteFileResult(Saved: false, HashFileBytes(existing), DecodeText(existing));
+                }
+
+                Directory.CreateDirectory(Path.GetDirectoryName(realTargetPath)!);
+                await File.WriteAllBytesAsync(realTargetPath, newBytes, ct).ConfigureAwait(false);
+                LogFileSaved(logger, sessionId, relativePath, session.UserId, newBytes.Length);
+                await BroadcastFileSavedAsync(sessionId, session.UserId, relativePath, ct).ConfigureAwait(false);
+                return new WriteFileResult(Saved: true, HashFileBytes(newBytes), CurrentContent: null);
+            }
+
+            if (!File.Exists(realTargetPath))
+                return FleetError.NotFoundFor("File", path);
+
+            var currentBytes = await File.ReadAllBytesAsync(realTargetPath, ct).ConfigureAwait(false);
+            var currentHash = HashFileBytes(currentBytes);
+            if (!string.Equals(currentHash, baseHash, StringComparison.OrdinalIgnoreCase))
+                return new WriteFileResult(Saved: false, currentHash, DecodeText(currentBytes));
+
+            File.Delete(realTargetPath);
+            LogFileSaved(logger, sessionId, relativePath, session.UserId, 0);
+            await BroadcastFileSavedAsync(sessionId, session.UserId, relativePath, ct).ConfigureAwait(false);
+            return new WriteFileResult(Saved: true, currentHash, CurrentContent: null);
+        }
+        finally
+        {
+            gate.Release();
+        }
+    }
+
     /// <summary>The text of a file, or null when it's binary or not valid UTF-8 (the read endpoint's rule).</summary>
     private static string? DecodeText(byte[] bytes)
     {
