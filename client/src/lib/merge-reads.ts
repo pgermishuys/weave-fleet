@@ -5,9 +5,9 @@
  */
 import type { ActivityMessage } from "@/composables/use-activity-messages";
 import type { ToolCardItem } from "@/components/session/activity-stream-tool-card";
-import { isReadCall } from "@/lib/tool-row";
+import { isGroupableRead } from "@/lib/tool-row";
 
-const isDoneRead = (tool: ToolCardItem): boolean => !tool.delegation && isReadCall(tool.kind) && tool.status === "Completed";
+const isDoneRead = (tool: ToolCardItem): boolean => isGroupableRead(tool);
 
 /** The message shows nothing above its calls: no text, thinking, image, or anything else drawn before them. */
 function startsWithCalls(message: ActivityMessage): boolean {

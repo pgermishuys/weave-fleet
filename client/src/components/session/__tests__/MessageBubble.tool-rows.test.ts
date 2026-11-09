@@ -225,6 +225,18 @@ describe("MessageBubble tool rows: pages", () => {
     expect(bubble(many).findAllComponents(ToolCard)).toHaveLength(25);
   });
 
+  it("collapses reads that are still streaming too, with a spinner on the row, even before their path arrives", () => {
+    const reads = [
+      tool({ id: "r0", kind: "read", title: "read", status: "Completed" }),
+      tool({ id: "r1", kind: "read", title: "read", status: "Running" }),
+      tool({ id: "r2", kind: "read", title: "read", status: "Pending" }),
+    ];
+    const w = bubble(reads);
+    expect(w.findAllComponents(ToolCard)).toHaveLength(0);
+    expect(w.get("[data-testid='tool-reads-toggle']").text()).toContain("Read 3 files");
+    expect(w.find("[data-testid='tool-reads-running']").exists()).toBe(true);
+  });
+
   it("collapses completed reads in a row into one Read N files row that opens to the list", async () => {
     const reads = Array.from({ length: 4 }, (_, i) => tool({ id: `r${i}`, kind: "read", title: `f${i}.ts`, status: "Completed" }));
     const w = bubble(reads);

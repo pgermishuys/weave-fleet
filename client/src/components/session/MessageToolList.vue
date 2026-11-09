@@ -9,6 +9,7 @@ import AgentTaskRow from "@/components/session/AgentTaskRow.vue";
 import type { ToolCardItem } from "@/components/session/activity-stream-tool-card";
 import { getTool } from "@/lib/tools";
 import { groupReads } from "@/lib/tool-row";
+import StatusGlyph from "@/components/sessions/StatusGlyph.vue";
 import type { VisualPayload } from "@/lib/visual-payload";
 
 /** A message's tool calls: a row per call in one box, then the pages the calls showed, outside it. */
@@ -71,6 +72,12 @@ function handleExpandVisual(payload: VisualPayload): void {
             aria-hidden="true"
           />
           <span class="msg-reads__label">Read {{ entry.tools.length }} files</span>
+          <StatusGlyph
+            v-if="entry.tools.some((tool) => tool.status === 'Running' || tool.status === 'Pending')"
+            class="msg-reads__running"
+            status="running"
+            data-testid="tool-reads-running"
+          />
           <ChevronRight
             class="msg-reads__chevron"
             aria-hidden="true"
@@ -190,6 +197,11 @@ function handleExpandVisual(payload: VisualPayload): void {
   height: 14px;
   flex-shrink: 0;
   color: color-mix(in srgb, var(--muted) 75%, transparent);
+}
+
+.msg-reads__running {
+  margin-left: auto;
+  color: var(--running);
 }
 
 .msg-reads__chevron {
