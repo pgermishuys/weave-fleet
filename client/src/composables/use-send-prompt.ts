@@ -364,7 +364,7 @@ export function seedSentPrompt(
     agentName: "",
     modelId: "",
     modelName: "",
-    effort: "medium",
+    effort: "",
     images: [...images],
     ...(sessionReferences.length > 0 ? { sessionReferences: [...sessionReferences] } : {}),
   });
@@ -393,7 +393,7 @@ export function showSentPrompt(sessionId: string, prompt: { id: string; correlat
     agentName: "",
     modelId: "",
     modelName: "",
-    effort: "medium",
+    effort: "",
     images: [],
   });
 }
@@ -639,7 +639,7 @@ export function useSendPrompt(sessionId: string) {
       request.attachments = attachments;
     }
 
-    if (draft.effort !== "medium") {
+    if (draft.effort) {
       request.effort = draft.effort;
     }
 
