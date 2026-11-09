@@ -426,10 +426,6 @@ public sealed class OpenCodeHarnessRuntime : IHarnessRuntime, IDisposable, IAsyn
         if (await IsModsSwitchedOnAsync(context.UserId).ConfigureAwait(false))
             envVars[ModsFeature.EnvironmentVariable] = "1";
 
-        // Pages that wait for a pick add an input to fleet_page_show; on and off never share a process.
-        if (await IsPageChoiceEnabledAsync(context.UserId).ConfigureAwait(false))
-            envVars[PageChoiceFeature.EnvironmentVariable] = "1";
-
         // Workflows add the step tool to the process, and every session on it that isn't a step has it denied. Like
         // messages, sessions with it on and off never share a process.
         if (await IsWorkflowsEnabledAsync(context.UserId).ConfigureAwait(false))
@@ -503,14 +499,6 @@ public sealed class OpenCodeHarnessRuntime : IHarnessRuntime, IDisposable, IAsyn
         using var scope = _scopeFactory.CreateScope();
         return scope.ServiceProvider.GetService<ModsFeature>() is { } feature
             && await feature.IsSwitchedOnAsync().ConfigureAwait(false);
-    }
-
-    private async Task<bool> IsPageChoiceEnabledAsync(string userId)
-    {
-        using var userScope = BackgroundUserContext.BeginScope(userId);
-        using var scope = _scopeFactory.CreateScope();
-        return scope.ServiceProvider.GetService<PageChoiceFeature>() is { } feature
-            && await feature.IsEnabledAsync().ConfigureAwait(false);
     }
 
     private async Task<bool> IsAgentHandoffEnabledAsync(string userId)

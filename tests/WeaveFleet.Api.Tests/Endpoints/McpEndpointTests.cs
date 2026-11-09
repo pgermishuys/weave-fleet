@@ -198,7 +198,7 @@ public sealed class McpEndpointTests : IClassFixture<McpEndpointTests.Server>, I
         ]);
         var page = tools.Single(tool => tool.GetProperty("name").GetString() == "fleet_page_show");
         page.GetProperty("description").GetString().ShouldBe(FleetToolCatalog.Find("fleet_page_show")!.Description);
-        page.GetProperty("inputSchema").GetProperty("required").EnumerateArray().Select(name => name.GetString()).ShouldBe(["path", "placement", "title"]);
+        page.GetProperty("inputSchema").GetProperty("required").EnumerateArray().Select(name => name.GetString()).ShouldBe(["path", "placement", "title", "waitForChoice"]);
     }
 
     [Fact]
@@ -359,9 +359,8 @@ public sealed class McpEndpointTests : IClassFixture<McpEndpointTests.Server>, I
     }
 
     [Fact]
-    public async Task A_page_that_waits_holds_the_call_until_the_user_sends_their_pick()
+    public async Task With_no_preference_set_a_page_that_waits_holds_the_call_until_the_user_sends_their_pick()
     {
-        await SetPreferencesAsync((PageChoiceFeature.PreferenceKey, "true"));
         var page = (await ToolsAsync()).Single(tool => tool.GetProperty("name").GetString() == "fleet_page_show");
         page.GetProperty("inputSchema").GetProperty("properties").TryGetProperty("waitForChoice", out _).ShouldBeTrue();
         var folder = Directory.CreateTempSubdirectory("fleet-mcp-pick-");
@@ -397,7 +396,6 @@ public sealed class McpEndpointTests : IClassFixture<McpEndpointTests.Server>, I
     [Fact]
     public async Task A_harness_that_cuts_held_calls_is_not_offered_the_wait_and_is_told_why()
     {
-        await SetPreferencesAsync((PageChoiceFeature.PreferenceKey, "true"));
         var folder = Directory.CreateTempSubdirectory("fleet-mcp-nowait-");
         try
         {

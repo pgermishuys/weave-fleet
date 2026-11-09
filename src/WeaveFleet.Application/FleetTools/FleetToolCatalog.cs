@@ -87,10 +87,10 @@ public static class FleetToolCatalog
 /// <param name="Mods">Mods are switched on (<c>ModsFeature</c>): the agent's <c>fleet_mod_*</c> tools. Safe mode doesn't hide them.</param>
 /// <param name="MemorySearch">Memory and "Search older notes" are on (<c>AgentMemorySearchFeature</c>): <c>fleet_memory_search</c>.</param>
 /// <param name="PageChoice">
-/// Pages that wait for the user's pick (<c>PageChoiceFeature</c>): <c>waitForChoice</c> on <c>fleet_page_show</c>. Fleet's
+/// Pages that wait for the user's pick: <c>waitForChoice</c> on <c>fleet_page_show</c>, always offered. Fleet's
 /// MCP server leaves it off for a harness that cuts a held call (<c>HarnessMcpCall.CantWait</c>).
 /// </param>
-public sealed record FleetToolSwitches(bool SessionMessages, bool Memory, bool WorkflowStep, bool Browser, bool Walkthrough = false, bool AgentHandoff = false, bool Mods = false, bool PageChoice = false, bool MemorySearch = false)
+public sealed record FleetToolSwitches(bool SessionMessages, bool Memory, bool WorkflowStep, bool Browser, bool Walkthrough = false, bool AgentHandoff = false, bool Mods = false, bool PageChoice = true, bool MemorySearch = false)
 {
     public const string SessionMessagesSwitch = "sessionMessages";
     public const string AgentHandoffSwitch = "agentHandoff";

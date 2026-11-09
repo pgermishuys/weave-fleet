@@ -29,10 +29,6 @@ const MODS_PATH = "/api/bridge/mods/"
 // hand-off tools, fleet_message, and a machine on fleet_message and fleet_session_read; without it they're as they always were.
 const HANDOFF = process.env.FLEET_AGENT_HANDOFF === "1"
 
-// Pages that wait for the user's pick: set only on servers started with it on. It adds waitForChoice to
-// fleet_page_show; without it the tool is as it always was.
-const PAGE_CHOICE = process.env.FLEET_PAGE_CHOICE === "1"
-
 const machine = {
   type: "string",
   description: "The machine the session is on, from fleet_machine_list. Leave it out for a session on this machine.",
@@ -205,7 +201,7 @@ const tools = [
         type: "string",
         description: "Short title for the page, e.g. \"Settings options\".",
       },
-      ...(PAGE_CHOICE ? { waitForChoice } : {}),
+      waitForChoice,
     },
     async (input, tool) => {
       const waits = input.waitForChoice === true

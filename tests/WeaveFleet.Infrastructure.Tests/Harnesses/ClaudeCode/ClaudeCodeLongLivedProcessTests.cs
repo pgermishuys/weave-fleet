@@ -892,7 +892,6 @@ public sealed class ClaudeCodeLongLivedProcessTests : IAsyncDisposable
         services.AddSingleton<WeaveFleet.Application.Mods.ModsSafeMode>();
         services.AddSingleton<IUserContext>(new TestUserContext(TestUserContext.DefaultUserId));
         services.AddSingleton<WeaveFleet.Application.Mods.ModsFeature>();
-        services.AddSingleton<WeaveFleet.Application.Pages.PageChoiceFeature>();
         services.AddSingleton<FleetToolSettings>();
 
         _session = new ClaudeCodeHarnessSession(

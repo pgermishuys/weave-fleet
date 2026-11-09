@@ -26,7 +26,6 @@ public sealed class PageChoiceTests : IDisposable
 
     private readonly DirectoryInfo _mockups = Directory.CreateTempSubdirectory("fleet-page-choice-");
     private readonly InMemoryCanvasRepository _canvasRepository = new();
-    private readonly InMemoryUserPreferenceRepository _preferences = new();
     private readonly FakeTimeProvider _time = new();
     private readonly SessionActivityTracker _activity = new();
     private readonly FleetSessionEvents _events = new();
@@ -46,8 +45,7 @@ public sealed class PageChoiceTests : IDisposable
         _choices = new PageChoices(_events, _activity, _time);
         _bridge = new PageBridge(
             [callers], user, new CanvasService(_canvasRepository, new FakeEventBroadcaster(), user), new FakePageStore(), sessions,
-            choices: _choices, choiceFeature: new PageChoiceFeature(_preferences));
-        _preferences.SetAsync(PageChoiceFeature.PreferenceKey, "true").GetAwaiter().GetResult();
+            choices: _choices);
     }
 
     public void Dispose() => _mockups.Delete(recursive: true);
@@ -70,7 +68,7 @@ public sealed class PageChoiceTests : IDisposable
         var checker = new HeldPageChecker();
         var bridge = new PageBridge(
             [NewCallers()], new ScopedUser(), new CanvasService(_canvasRepository, new FakeEventBroadcaster(), new ScopedUser()),
-            new FakePageStore(), new InMemorySessionRepository(), checker, new FixedFleetUrl(), _choices, new PageChoiceFeature(_preferences));
+            new FakePageStore(), new InMemorySessionRepository(), checker, new FixedFleetUrl(), _choices);
 
         var shown = bridge.ShowAsync(Token, OpenCodeSessionId, Mockup(), "Layouts", waitForChoice: true, callId: CallId);
         await checker.Started.Task.WaitAsync(TimeSpan.FromSeconds(10));
@@ -160,7 +158,7 @@ public sealed class PageChoiceTests : IDisposable
         var choices = new PageChoices(_events, _activity, _time, lifetime);
         var bridge = new PageBridge(
             [NewCallers()], new ScopedUser(), new CanvasService(_canvasRepository, new FakeEventBroadcaster(), new ScopedUser()),
-            new FakePageStore(), new InMemorySessionRepository(), choices: choices, choiceFeature: new PageChoiceFeature(_preferences));
+            new FakePageStore(), new InMemorySessionRepository(), choices: choices);
         var shown = await bridge.ShowAsync(Token, OpenCodeSessionId, Mockup(), "Layouts", waitForChoice: true, callId: CallId);
         var round = bridge.WaitForChoiceAsync(Token, OpenCodeSessionId, CallId, shown.Value!.CanvasId);
 
@@ -180,19 +178,6 @@ public sealed class PageChoiceTests : IDisposable
         var round = await _bridge.WaitForChoiceAsync(Token, OpenCodeSessionId, CallId, shown.Value!.CanvasId);
 
         round.Value!.Choice!.Answer!.Reason.ShouldBe(PageChoiceReasons.TimedOut);
-    }
-
-    [Fact]
-    public async Task With_the_switch_off_the_page_is_shown_and_the_call_says_it_did_not_wait()
-    {
-        await _preferences.SetAsync(PageChoiceFeature.PreferenceKey, "false");
-
-        var shown = await ShowAsync();
-
-        shown.Value!.Choice.ShouldBeNull();
-        shown.Value!.Output.ShouldEndWith(PageBridge.CantWait);
-        (await PageAsync()).Choice.ShouldBeNull();
-        Statuses().ShouldBeEmpty();
     }
 
     [Fact]

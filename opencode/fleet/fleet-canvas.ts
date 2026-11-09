@@ -31,10 +31,6 @@ const MODS_PATH = "/api/bridge/mods/"
 // hand-off tools, fleet_message, and a machine on fleet_message and fleet_session_read; without it they're as they always were.
 const HANDOFF = process.env.FLEET_AGENT_HANDOFF === "1"
 
-// Pages that wait for the user's pick: set only in processes started with it on. It adds waitForChoice to
-// fleet_page_show; without it the tool is as it always was.
-const PAGE_CHOICE = process.env.FLEET_PAGE_CHOICE === "1"
-
 type PermissionRequest = { permission: string; patterns: string[]; always: string[]; metadata: Record<string, unknown> }
 type ToolContext = { sessionID: string; callID?: string; ask?: (request: PermissionRequest) => Promise<void> }
 type Attachment = { type: "file"; mime: string; url: string; filename: string }
@@ -257,7 +253,7 @@ export const FleetCanvasPlugin = async (input: { directory?: string }) => ({
           type: "string",
           description: "Short title for the page, e.g. \"Settings options\".",
         },
-        ...(PAGE_CHOICE ? { waitForChoice } : {}),
+        waitForChoice,
       },
       execute: async (args: { path: string; placement: string; title: string; waitForChoice?: boolean | string }, context: ToolContext) => {
         // OpenCode doesn't check args against the schema, and models sometimes send a boolean as a string.

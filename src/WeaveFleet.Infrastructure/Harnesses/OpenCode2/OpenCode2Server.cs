@@ -42,7 +42,6 @@ internal sealed record OpenCode2ServerSetup(
     bool Walkthrough = false,
     bool AgentHandoff = false,
     bool Mods = false,
-    bool PageChoice = false,
     bool MemorySearch = false)
 {
     public static readonly OpenCode2ServerSetup None = new(null, null, false);

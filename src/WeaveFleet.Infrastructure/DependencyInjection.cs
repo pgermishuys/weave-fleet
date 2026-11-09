@@ -487,7 +487,6 @@ public static class DependencyInjection
         services.AddScoped<PageBridge>();
         services.AddSingleton<FleetSessionEvents>();
         services.AddSingleton<PageChoices>();
-        services.AddScoped<PageChoiceFeature>();
         services.AddScoped<WeaveFleet.Application.Walkthroughs.WalkthroughBridge>();
         services.AddHostedService<SideConversationSweeper>();
         services.AddHostedService<ArchivedAttachmentsCleanupService>();
