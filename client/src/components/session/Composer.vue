@@ -1289,12 +1289,14 @@ function handleKeydown(event: KeyboardEvent): void {
           </Button>
           <AgentSelector
             v-model="selectedAgentId"
+            class="composer-chip composer-chip--agent"
             :agents="agents"
             :default-label="defaultLabels.agentLabel"
             :default-description="defaultLabels.agentDescription"
           />
           <ModelSelector
             v-model="selectedModelId"
+            class="composer-chip composer-chip--model"
             :models="models"
             :harness-type="selectedSession?.harnessType"
             :default-label="defaultLabels.modelLabel"
@@ -1316,6 +1318,7 @@ function handleKeydown(event: KeyboardEvent): void {
         <Button
           variant="toolbar-icon-danger"
           size="toolbar"
+          class="composer-interrupt"
           title="Interrupt"
           :disabled="!canInterrupt"
           @click="handleInterrupt"
@@ -1382,6 +1385,28 @@ function handleKeydown(event: KeyboardEvent): void {
   flex-shrink: 0;
   padding: 4px 24px 18px;
   background: transparent;
+}
+
+/* A phone: the box takes the width (12px gutters, a hairline above it), and its row holds the chips whole. */
+@media (max-width: 716px), (max-height: 500px) and (pointer: coarse) {
+  .composer {
+    padding: 8px 12px max(10px, env(safe-area-inset-bottom));
+    border-top: 1px solid var(--border);
+  }
+
+  .composer-chip--agent {
+    flex-shrink: 0;
+  }
+
+  .composer-chip--model {
+    flex: 0 1 auto;
+    min-width: 0;
+  }
+
+  /* Idle, the Interrupt button is only a greyed-out icon taking room from the chips. */
+  .composer-interrupt:disabled {
+    display: none;
+  }
 }
 
 .composer-error {

@@ -6,6 +6,7 @@ import SessionAnalyticsPopover from "@/components/session/SessionAnalyticsPopove
 import StatusGlyph from "@/components/sessions/StatusGlyph.vue";
 import { Badge } from "@/components/ui/badge";
 import type { SessionOrigin } from "@/api/client";
+import { useIsMobileNav } from "@/composables/use-media-query";
 import { useHarnesses } from "@/composables/use-harnesses";
 import { useModels } from "@/composables/use-models";
 import { modelDisplayName } from "@/lib/agent-model-choice";
@@ -20,6 +21,8 @@ import { useSessionTitle } from "@/composables/use-session-lineage";
 import { lineageLinkLabel, type LineageKind } from "@/lib/session-lineage";
 import { useRouter } from "@tanstack/vue-router";
 import { ArchiveRestore, Check, Copy, CornerLeftUp, GitBranch, Layers, Loader2, X, Plus } from "lucide-vue-next";
+
+const phone = useIsMobileNav();
 
 interface Props {
   id: string;
@@ -688,6 +691,7 @@ onUnmounted(() => {
       <div class="session-detail-header__actions">
         <slot name="actions" />
         <SessionAnalyticsPopover
+          v-if="!phone"
           :total-tokens="props.totalTokens"
           :total-cost="props.totalCost"
         />
@@ -1224,10 +1228,54 @@ onUnmounted(() => {
   display: none;
 }
 
-/* Clear the fixed menu button that replaces the sidebar on narrow screens. */
-@media (max-width: 716px) {
-  .session-detail-header {
-    padding-left: 44px;
+/*
+ * A phone: a 56px header with the menu button on the left, the title on one line, one meta line ("OpenCode 2 ·
+ * DeepSeek V4.1 Flash") that is cut only at its end, and two buttons on the right (the right panel and ⋯).
+ * Everything else moves into the ⋯ menu or the right panel.
+ */
+@media (max-width: 716px), (max-height: 500px) and (pointer: coarse) {
+  /* One level more specific than the wide-container rule below, which would put the padding back. */
+  .session-detail-chrome .session-detail-header {
+    padding: 0 12px 0 52px;
+  }
+
+  .session-detail-header__main {
+    justify-content: center;
+  }
+
+  .session-detail-header__title {
+    font-size: 15px;
+  }
+
+  .session-detail-header__context,
+  .session-detail-header__machine,
+  .session-detail-header__project,
+  .session-detail-header__profile,
+  .session-detail-header__branch,
+  .session-detail-header__directory,
+  .session-detail-header__tags-row,
+  .session-detail-header__separator {
+    display: none;
+  }
+
+  .session-detail-header__meta-row {
+    display: flex;
+    overflow: hidden;
+  }
+
+  .session-detail-header__harness {
+    flex-shrink: 0;
+  }
+
+  .session-detail-header__model {
+    min-width: 0;
+    overflow: hidden;
+    text-overflow: ellipsis;
+  }
+
+  .session-detail-header__model::before {
+    content: "·";
+    margin-right: 6px;
   }
 
   /* A phone has no room for both: the title keeps it, and the pill is its icon (its label names the parent). */
@@ -1245,6 +1293,15 @@ onUnmounted(() => {
 @container session-detail-header (min-width: 48rem) {
   .session-detail-header {
     padding-inline: 1.25rem;
+  }
+}
+</style>
+
+<style>
+/* The terminal button is in a phone's ⋯ menu instead. */
+@media (max-width: 716px), (max-height: 500px) and (pointer: coarse) {
+  .session-detail-header__desktop-only {
+    display: none;
   }
 }
 </style>

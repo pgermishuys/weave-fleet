@@ -87,8 +87,14 @@ export function useIsMobile(): Readonly<ShallowRef<boolean>> {
   return useMediaQuery("(max-width: 767px)");
 }
 
+/**
+ * A phone: narrow, or a touch screen turned on its side (short and wide). Phones get one layout in both
+ * orientations: the drawer for navigation, no status bar, the header's actions in its ⋯ menu.
+ */
+export const PHONE_QUERY = "(max-width: 716px), (max-height: 500px) and (pointer: coarse)";
+
 export function useIsMobileNav(): Readonly<ShallowRef<boolean>> {
-  return useMediaQuery("(max-width: 716px)");
+  return useMediaQuery(PHONE_QUERY);
 }
 
 export function useIsTablet(): Readonly<ShallowRef<boolean>> {

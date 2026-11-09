@@ -2,6 +2,7 @@
 import { computed, nextTick, ref, shallowRef, useId, useTemplateRef, watch } from "vue";
 import { onClickOutside } from "@vueuse/core";
 import { ChevronDown, Star } from "lucide-vue-next";
+import { useIsMobileNav } from "@/composables/use-media-query";
 
 interface SelectorItem {
   id: string;
@@ -54,6 +55,11 @@ const props = withDefaults(
 const emit = defineEmits<{ (event: "toggle-star", id: string): void }>();
 
 const selectedId = defineModel<string>({ required: true });
+
+// On a phone a chip has no room for "Default (DeepSeek V4.1 Flash)": it shows the name inside, whole, and gives way only at its end.
+const phone = useIsMobileNav();
+const fullLabel = computed(() => selectedItem.value?.label ?? props.placeholder);
+const chipLabel = computed(() => (phone.value ? fullLabel.value.replace(/^Default \((.*)\)$/, "$1") : fullLabel.value));
 
 const isOpen = shallowRef(false);
 const opensDown = shallowRef(false);
@@ -208,7 +214,10 @@ function selectItem(itemId: string): void {
       :data-testid="testId"
       @click="toggleOpen"
     >
-      <span class="selector-btn__label">{{ selectedItem?.label ?? placeholder }}</span>
+      <span
+        class="selector-btn__label"
+        :title="chipLabel !== fullLabel ? fullLabel : undefined"
+      >{{ chipLabel }}</span>
       <ChevronDown
         class="selector-btn__icon"
         :class="{ 'selector-btn__icon--open': isOpen }"
@@ -416,6 +425,18 @@ function selectItem(itemId: string): void {
 .selector-btn:focus-visible {
   outline: 2px solid var(--accent);
   outline-offset: 2px;
+}
+
+/* A phone's composer row is tight: the chips give up their chevron and some padding, so names stay whole. */
+@media (max-width: 716px), (max-height: 500px) and (pointer: coarse) {
+  .selector-dropdown-root > .selector-btn {
+    padding: 0 8px;
+    background: color-mix(in srgb, var(--text) 6%, transparent);
+  }
+
+  .selector-dropdown-root > .selector-btn > .selector-btn__icon {
+    display: none;
+  }
 }
 
 .selector-btn__label {
