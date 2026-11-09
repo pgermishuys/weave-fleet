@@ -13,6 +13,7 @@ import { duration, short } from "@fleet/lib/phone/time";
 import { dontAskAgainWording, permissionHeading } from "@fleet/lib/tools/permission-wording";
 import { manager, useFleet, useSessionActivity, useSessionInterruption, useSessionPages, useSessionStream } from "~/fleet/hooks";
 import { conversationPages, waitingPage, type SessionPage } from "~/fleet/pages";
+import { drafts } from "~/fleet/drafts";
 import { pagesSeen, usePagesSeen } from "~/fleet/pages-seen";
 import type { PermissionAsk } from "~/fleet/api";
 import {
@@ -35,7 +36,23 @@ export default function Session() {
   const api = manager.apiFor(machine);
   const list = useRef<FlatList<PhoneItem>>(null);
   const [permissions, setPermissions] = useState<PermissionAsk[]>([]);
-  const [draft, setDraft] = useState("");
+  const [draft, setDraftText] = useState("");
+  // What was typed before the app was killed or reloaded comes back (kept per machine and session, cleared on send).
+  const draftLoaded = useRef(false);
+  useEffect(() => {
+    draftLoaded.current = false;
+    let current = true;
+    void drafts.read(machine, id).then((kept) => {
+      if (!current) return;
+      draftLoaded.current = true;
+      if (kept) setDraftText((typed) => typed || kept);
+    });
+    return () => { current = false; };
+  }, [machine, id]);
+  const setDraft = useCallback((text: string) => {
+    setDraftText(text);
+    if (draftLoaded.current) void drafts.write(machine, id, text);
+  }, [machine, id]);
   const [sending, setSending] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [panel, setPanel] = useState(false);
