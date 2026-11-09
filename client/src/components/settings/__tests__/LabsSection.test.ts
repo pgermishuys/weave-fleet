@@ -2,7 +2,6 @@ import { flushPromises, mount } from "@vue/test-utils";
 import { createPinia, setActivePinia } from "pinia";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import LabsSection from "@/components/settings/LabsSection.vue";
-import { useSettingsNav } from "@/composables/use-settings-nav";
 import { saveMachines } from "@/lib/machines";
 
 const { getMock, putMock } = vi.hoisted(() => ({ getMock: vi.fn(), putMock: vi.fn() }));
