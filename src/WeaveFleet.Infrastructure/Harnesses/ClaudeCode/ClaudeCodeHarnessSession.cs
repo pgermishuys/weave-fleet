@@ -470,6 +470,7 @@ internal sealed class ClaudeCodeHarnessSession : IHarnessSession
             PermissionMode: PermissionModeFor(policy),
             ReadOnly: policy.ReadOnly,
             Model: options?.ModelId ?? _config.DefaultModel,
+            // The reserved "model default" is kept as asked, so a running process is reset; a new one starts without --effort.
             Effort: options?.Effort,
             FleetTools: await ReadFleetToolsAsync(current?.FleetTools).ConfigureAwait(false),
             Skills: await ReadSkillsAsync().ConfigureAwait(false));
@@ -503,13 +504,14 @@ internal sealed class ClaudeCodeHarnessSession : IHarnessSession
 
             // A prompt that names no model or effort keeps what the process runs.
             var model = wanted.Model ?? current.Model;
-            var effort = wanted.Effort ?? current.Effort;
+            var effort = PromptEffort.IsModelDefault(wanted.Effort) ? null : wanted.Effort ?? current.Effort;
             if (await SwitchAsync(process, current.PermissionMode, wanted.PermissionMode,
                     id => ClaudeCodeInput.SetPermissionMode(id, wanted.PermissionMode), ct).ConfigureAwait(false)
                 && await SwitchAsync(process, current.Model, model,
                     id => ClaudeCodeInput.SetModel(id, model!), ct).ConfigureAwait(false)
                 && await SwitchAsync(process, current.Effort, effort,
-                    id => ClaudeCodeInput.SetEffort(id, effort), ct).ConfigureAwait(false))
+                    id => ClaudeCodeInput.SetEffort(id, effort), ct,
+                    clearing: PromptEffort.IsModelDefault(wanted.Effort)).ConfigureAwait(false))
             {
                 lock (_gate)
                     _processSettings = wanted with { Model = model, Effort = effort };
@@ -528,9 +530,11 @@ internal sealed class ClaudeCodeHarnessSession : IHarnessSession
 
     /// <summary>Asks the running process to change a setting; true when it's already that, or it did.</summary>
     private async Task<bool> SwitchAsync(
-        ClaudeCodeProcessManager process, string? from, string? to, Func<string, string> request, CancellationToken ct)
+        ClaudeCodeProcessManager process, string? from, string? to, Func<string, string> request, CancellationToken ct,
+        bool clearing = false)
     {
-        if (to is null || string.Equals(from, to, StringComparison.Ordinal))
+        // A null target means "name nothing, keep it", unless the prompt asked to clear the setting.
+        if ((to is null && !clearing) || string.Equals(from, to, StringComparison.Ordinal))
             return true;
 
         var requestId = $"fleet-{Guid.NewGuid():N}";
@@ -568,7 +572,7 @@ internal sealed class ClaudeCodeHarnessSession : IHarnessSession
             WorkingDirectory = _workingDirectory,
             SessionId = _claudeSessionId,  // null for the session's first process
             Model = settings.Model,
-            Effort = settings.Effort,
+            Effort = PromptEffort.Named(settings.Effort),
             PermissionMode = settings.PermissionMode,
             // Always: at "Allow everything" Fleet answers every ask at once, but without it Claude Code takes
             // AskUserQuestion away from the agent, since nothing could answer it.
@@ -619,7 +623,7 @@ internal sealed class ClaudeCodeHarnessSession : IHarnessSession
         lock (_gate)
         {
             _process = processManager;
-            _processSettings = settings;
+            _processSettings = settings with { Effort = PromptEffort.Named(settings.Effort) };
             _processCost = 0;
             // Background pump — reads every turn this process runs, until it exits.
             _pump = Task.Run(() => PumpStdoutAsync(stdout, processManager), CancellationToken.None);

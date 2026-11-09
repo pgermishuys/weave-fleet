@@ -11,6 +11,7 @@ import AgentSelector from "@/components/session/AgentSelector.vue";
 import ModelSelector from "@/components/session/ModelSelector.vue";
 import EffortToggle from "@/components/session/EffortToggle.vue";
 import { useEffortMemory } from "@/composables/use-effort-memory";
+import { effortToSend } from "@/lib/effort-memory";
 import AllowedChip from "@/components/session/AllowedChip.vue";
 import QueuedMessages from "@/components/session/QueuedMessages.vue";
 import BackgroundStrip from "@/components/session/BackgroundStrip.vue";
@@ -478,7 +479,7 @@ function queueChoices(): Pick<QueueOptions, "agent" | "model" | "effort"> {
   return {
     agent: draft.agentId || undefined,
     model: modelFromKey(draft.modelId) ?? undefined,
-    effort: draft.effort || undefined,
+    effort: effortToSend(draft.effort, selectedModelVariants.value),
   };
 }
 

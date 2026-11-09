@@ -306,7 +306,7 @@ internal sealed partial class OpenCodeHarnessSession : IHarnessSession
             Agent = options?.Agent,
             Model = modelRef,
             MessageId = options?.MessageId,
-            Variant = options?.Effort,
+            Variant = PromptEffort.Named(options?.Effort),
             Tools = HideStepTool ? StepToolOff : null,
         };
 

@@ -632,6 +632,37 @@ public sealed class ClaudeCodeLongLivedProcessTests : IAsyncDisposable
     }
 
     [Fact]
+    public async Task Picking_the_model_default_resets_a_running_process_and_naming_nothing_does_not()
+    {
+        if (OperatingSystem.IsWindows())
+            return;
+
+        Start();
+        await PromptAsync("one", new PromptOptions { ModelId = "sonnet", Effort = "high" });
+
+        await PromptAsync("two", new PromptOptions { Effort = PromptEffort.ModelDefault });
+        Starts().ShouldBe(1);
+        var reset = JsonDocument.Parse(StdinLines().Single(line => line.Contains("apply_flag_settings"))).RootElement;
+        reset.GetProperty("request").GetProperty("settings").GetProperty("effortLevel").ValueKind.ShouldBe(JsonValueKind.Null);
+
+        // Asking again changes nothing, and a prompt that names nothing leaves it alone.
+        await PromptAsync("three", new PromptOptions { Effort = PromptEffort.ModelDefault });
+        await PromptAsync("four");
+        StdinLines().Count(line => line.Contains("apply_flag_settings")).ShouldBe(1);
+    }
+
+    [Fact]
+    public async Task A_new_process_asked_for_the_model_default_starts_without_effort()
+    {
+        if (OperatingSystem.IsWindows())
+            return;
+
+        Start();
+        await PromptAsync("one", new PromptOptions { ModelId = "sonnet", Effort = PromptEffort.ModelDefault });
+        Arguments(0).ShouldNotContain("--effort");
+    }
+
+    [Fact]
     public async Task Each_process_calls_Fleet_with_a_token_of_its_own_that_ends_with_it()
     {
         if (OperatingSystem.IsWindows())

@@ -559,6 +559,20 @@ public sealed record HealthCheckResult(bool Healthy, string? Message);
 /// <summary>A file or image attached to a prompt.</summary>
 public sealed record HarnessAttachment(string Mime, string Filename, string Data);
 
+/// <summary>
+/// The reserved effort a user-picked "Default" is sent as. A prompt that names no effort (an automation, an agent) leaves
+/// a harness's level alone; this one asks it to go back to the model's own. Only the composer sends it.
+/// </summary>
+public static class PromptEffort
+{
+    public const string ModelDefault = "fleet:default";
+
+    public static bool IsModelDefault(string? effort) => effort == ModelDefault;
+
+    /// <summary>The level to give a harness: null for "none named" and for "the model's default", else the named level.</summary>
+    public static string? Named(string? effort) => IsModelDefault(effort) ? null : effort;
+}
+
 /// <summary>Options for sending a prompt to an agent.</summary>
 public sealed record PromptOptions
 {

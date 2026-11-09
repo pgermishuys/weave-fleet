@@ -19,3 +19,14 @@ describe("effort memory", () => {
     expect(effortLabel("xhigh")).toBe("Xhigh");
   });
 });
+
+import { effortToSend, MODEL_DEFAULT_EFFORT } from "../effort-memory"
+
+describe("effortToSend", () => {
+  it("sends the explicit model default for Default on a model with levels, nothing on one without, the pick otherwise", () => {
+    expect(effortToSend("", ["low", "high"])).toBe(MODEL_DEFAULT_EFFORT)
+    expect(effortToSend("", [])).toBeUndefined()
+    expect(effortToSend("", undefined)).toBeUndefined()
+    expect(effortToSend("high", ["low", "high"])).toBe("high")
+  })
+})

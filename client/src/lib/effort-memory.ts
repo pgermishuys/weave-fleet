@@ -26,3 +26,15 @@ export function rememberedEffort(stored: string | undefined, variants: readonly 
 export function effortLabel(level: string): string {
   return level ? level.charAt(0).toUpperCase() + level.slice(1) : "Default";
 }
+
+/** What the server reads as "go back to the model's own level" (`PromptEffort.ModelDefault`); only the composer sends it. */
+export const MODEL_DEFAULT_EFFORT = "fleet:default";
+
+/**
+ * The effort a prompt carries: the level picked, or, for Default on a model that has levels, the explicit reset, so a
+ * harness whose process still runs at an earlier pick goes back to the default. Models without levels send nothing.
+ */
+export function effortToSend(picked: string, variants: readonly string[] | undefined): string | undefined {
+  if (picked) return picked;
+  return variants && variants.length > 0 ? MODEL_DEFAULT_EFFORT : undefined;
+}
