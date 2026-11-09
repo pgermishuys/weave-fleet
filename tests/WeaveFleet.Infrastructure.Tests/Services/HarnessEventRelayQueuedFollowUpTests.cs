@@ -80,19 +80,37 @@ public sealed class HarnessEventRelayQueuedFollowUpTests
 
         public int Finished => Broadcaster.Broadcasts.Count(b => b.Type == SessionNotifier.EventType);
 
-        public async Task StatusAsync(string status)
+        public static async Task UntilAsync(Func<bool> condition, string what)
         {
-            var seen = Shown.Count;
-            Harness.Emit(new HarnessEvent
+            var deadline = DateTime.UtcNow + TimeSpan.FromSeconds(15);
+            while (!condition())
             {
-                Type = status == ActivityStatuses.Idle ? EventTypes.SessionIdle : EventTypes.SessionStatus,
-                SessionId = "oc-s1",
-                Timestamp = DateTimeOffset.UtcNow,
-                Payload = JsonSerializer.SerializeToElement(new { status = new { type = status } }),
-            });
-            await Task.Delay(300);
-            _ = seen;
+                if (DateTime.UtcNow > deadline) throw new TimeoutException($"Timed out waiting for {what}");
+                await Task.Delay(10);
+            }
         }
+
+        private void EmitStatus(string status) => Harness.Emit(new HarnessEvent
+        {
+            Type = status == ActivityStatuses.Idle ? EventTypes.SessionIdle : EventTypes.SessionStatus,
+            SessionId = "oc-s1",
+            Timestamp = DateTimeOffset.UtcNow,
+            Payload = JsonSerializer.SerializeToElement(new { status = new { type = status } }),
+        });
+
+        /// <summary>The relay subscribes in the background: re-send busy until it has been shown, so no fixed wait is needed.</summary>
+        public async Task BusyAsync()
+        {
+            var deadline = DateTime.UtcNow + TimeSpan.FromSeconds(15);
+            while (!Shown.Contains(ActivityStatuses.Busy))
+            {
+                if (DateTime.UtcNow > deadline) throw new TimeoutException("Timed out waiting for the busy status to be shown");
+                EmitStatus(ActivityStatuses.Busy);
+                await Task.Delay(25);
+            }
+        }
+
+        public void Idle() => EmitStatus(ActivityStatuses.Idle);
 
         public ValueTask DisposeAsync() => Harness.DisposeAsync();
     }
@@ -103,12 +121,13 @@ public sealed class HarnessEventRelayQueuedFollowUpTests
         await using var rig = new Rig();
         using var cts = new CancellationTokenSource(TimeSpan.FromSeconds(20));
         await rig.Relay.StartAsync(cts.Token);
-        await Task.Delay(200);
-        await rig.StatusAsync(ActivityStatuses.Busy);
+        await rig.BusyAsync();
         await rig.Service.EnqueueAsync("s1", new QueuePromptRequest("next", QueuedPromptKinds.Prompt));
         var before = rig.Shown.Count;
 
-        await rig.StatusAsync(ActivityStatuses.Idle);
+        rig.Idle();
+        await Rig.UntilAsync(() => rig.Harness.SendPromptCalls.Count > 0, "the queued message to be sent");
+        await Task.Delay(300); // a negative check below: a late idle or notice would be caught here, a slow runner can't fail it
 
         rig.Harness.SendPromptCalls.Select(c => c.Text).ShouldBe(["next"]);
         rig.Shown.Skip(before).ShouldNotContain(ActivityStatuses.Idle);
@@ -124,11 +143,11 @@ public sealed class HarnessEventRelayQueuedFollowUpTests
         await using var rig = new Rig(retention: "archived");
         using var cts = new CancellationTokenSource(TimeSpan.FromSeconds(20));
         await rig.Relay.StartAsync(cts.Token);
-        await Task.Delay(200);
-        await rig.StatusAsync(ActivityStatuses.Busy);
+        await rig.BusyAsync();
         await rig.Queue.AddAsync(new QueuedPrompt { Id = "q1", SessionId = "s1", Kind = QueuedPromptKinds.Prompt, Text = "next", CreatedAt = DateTimeOffset.UtcNow });
 
-        await rig.StatusAsync(ActivityStatuses.Idle);
+        rig.Idle();
+        await Rig.UntilAsync(() => rig.Shown[^1] == ActivityStatuses.Idle, "the idle to be shown");
 
         rig.Harness.SendPromptCalls.ShouldBeEmpty();
         // (The notifier says nothing about an archived session, so the idle is the signal here.)
@@ -144,10 +163,10 @@ public sealed class HarnessEventRelayQueuedFollowUpTests
         await using var rig = new Rig();
         using var cts = new CancellationTokenSource(TimeSpan.FromSeconds(20));
         await rig.Relay.StartAsync(cts.Token);
-        await Task.Delay(200);
-        await rig.StatusAsync(ActivityStatuses.Busy);
+        await rig.BusyAsync();
 
-        await rig.StatusAsync(ActivityStatuses.Idle);
+        rig.Idle();
+        await Rig.UntilAsync(() => rig.Finished == 1 && rig.Shown[^1] == ActivityStatuses.Idle, "the idle and the finish notice");
 
         rig.Shown[^1].ShouldBe(ActivityStatuses.Idle);
         rig.Finished.ShouldBe(1);
