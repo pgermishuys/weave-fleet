@@ -1146,6 +1146,10 @@ function handleImproveSkill(skill: string, toolId: string): void {
   margin-bottom: 0;
 }
 
+.activity-message--rows :deep(.message) {
+  padding: 0;
+}
+
 .activity-message--rows + .activity-message:not(.activity-message--rows) {
   margin-top: 10px;
 }

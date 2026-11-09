@@ -149,6 +149,7 @@ const gistHtml = computed(() => markdownRenderer.renderInline(reasoningGist(prop
 
 /* Folded: one line per block, opened on click. */
 .reasoning-row--folded {
+  min-height: 30px;
   padding-top: 0;
   padding-bottom: 0;
 }
