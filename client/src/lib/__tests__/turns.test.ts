@@ -204,7 +204,7 @@ describe("what a round wrote", () => {
     expect(file!.deletions).toBe(1);
   });
 
-  it("marks a written file new, and counts its content as additions", () => {
+  it("marks a written file new, and counts what the session diff says it changed", () => {
     const [turn] = deriveTurns([
       user("u1", "Add the composable"),
       assistant("a1", [
@@ -213,7 +213,7 @@ describe("what a round wrote", () => {
           input: { filePath: "client/src/composables/use-turns.ts", content: "export function useTurns() {}\n" },
         }),
       ]),
-    ]);
+    ], [], { fileStats: new Map([["client/src/composables/use-turns.ts", { additions: 1, deletions: 0 }]]) });
 
     const [file] = turn!.files;
     expect(file!.created).toBe(true);
@@ -464,3 +464,31 @@ describe("whole-file writes", () => {
     expect(edit!.wholeFile).toBeUndefined();
   });
 });
+
+describe("whole-file writes in a turn", () => {
+  const rounds = () => [
+    user("u1", "Rewrite it", 1_000),
+    assistant("a1", [tool("write", { status: "completed", input: { filePath: "/w/src/a.ts", content: "1\n2\n3\n4\n5\n" } })], { createdAt: 1_100 }),
+  ];
+
+  it("takes the file's counts from the session diff, not every line written", () => {
+    const [turn] = deriveTurns(rounds(), [], { fileStats: new Map([["src/a.ts", { additions: 1, deletions: 1 }]]), directory: "/w" });
+    expect([turn!.additions, turn!.deletions]).toEqual([1, 1]);
+    expect([turn!.files[0]!.additions, turn!.files[0]!.deletions]).toEqual([1, 1]);
+  });
+
+  it("counts nothing until the session diff is known, rather than every line", () => {
+    const [turn] = deriveTurns(rounds(), [], { fileStats: null, directory: "/w" });
+    expect([turn!.additions, turn!.deletions]).toEqual([0, 0]);
+    expect(turn!.files).toHaveLength(1);
+  });
+
+  it("leaves an edit's own counts alone", () => {
+    const [turn] = deriveTurns([
+      user("u1", "x", 1_000),
+      assistant("a1", [tool("edit", { status: "completed", input: { filePath: "/w/src/a.ts", oldString: "a", newString: "b" } })]),
+    ], [], { fileStats: new Map(), directory: "/w" });
+    expect([turn!.additions, turn!.deletions]).toEqual([1, 1]);
+  });
+});
+

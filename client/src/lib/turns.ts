@@ -19,6 +19,7 @@ import { HunkTracker, parseDiffLines, parseUnifiedDiff, type DiffLine } from "@/
 
 export { parseUnifiedDiff };
 import { formatSlashCommand } from "@/lib/slash-command-utils";
+import { relativePath, type FileStats } from "@/lib/turn-fold";
 
 /** A file a turn wrote, with the lines that turn wrote to it. */
 export interface TurnFile {
@@ -33,6 +34,8 @@ export interface TurnFile {
   created: boolean;
   /** The lines this turn wrote, in call order; empty when the harness sent no diff to derive them from. */
   diff: readonly DiffLine[];
+  /** Written whole by a call that sent only the new contents (see TurnFileEdit), so its counts come from the session diff. */
+  wholeFile?: boolean;
 }
 
 /** A subagent started during the turn. */
@@ -299,12 +302,17 @@ function firstLine(text: string, maxLength = 160): string {
 export function deriveTurns(
   messages: readonly AccumulatedMessage[],
   delegations: readonly DelegationDto[] = [],
+  /**
+   * The session diff's counts per file, for files a call wrote whole: a call that sent only the new contents can't say
+   * what changed, so its file takes the diff's counts (0 while they're not known, which draws none).
+   */
+  options: { fileStats?: FileStats | null; directory?: string } = {},
 ): SessionTurn[] {
   const rounds = toRounds(messages);
   const turns: SessionTurn[] = [];
 
   for (const [index, round] of rounds.entries()) {
-    turns.push(toTurn(round, index + 1));
+    turns.push(toTurn(round, index + 1, options));
   }
 
   attachDelegations(turns, rounds, delegations);
@@ -312,7 +320,7 @@ export function deriveTurns(
   return turns.reverse();
 }
 
-function toTurn(round: Round, number: number): SessionTurn {
+function toTurn(round: Round, number: number, options: { fileStats?: FileStats | null; directory?: string }): SessionTurn {
   const first = round.messages[0]!;
   const promptText = round.hasPrompt ? promptOf(first) : "";
 
@@ -358,7 +366,11 @@ function toTurn(round: Round, number: number): SessionTurn {
     }
   }
 
-  const files = [...filesByPath.values()];
+  const files = [...filesByPath.values()].map((file) => {
+    if (!file.wholeFile) return file;
+    const found = options.fileStats ? (options.fileStats.get(relativePath(file.path, options.directory)) ?? { additions: 0, deletions: 0 }) : { additions: 0, deletions: 0 };
+    return { ...file, additions: found.additions, deletions: found.deletions };
+  });
   const additions = files.reduce((total, file) => total + file.additions, 0);
   const deletions = files.reduce((total, file) => total + file.deletions, 0);
   const startedAt = first.createdAt;
@@ -410,6 +422,7 @@ function mergeFileEdit(files: Map<string, TurnFile>, edit: TurnFileEdit): void {
       deletions: edit.deletions,
       created: edit.created,
       diff: edit.diff,
+      ...(edit.wholeFile ? { wholeFile: true } : {}),
     });
     return;
   }
@@ -421,6 +434,7 @@ function mergeFileEdit(files: Map<string, TurnFile>, edit: TurnFileEdit): void {
     // A file this turn created and then edited again is still new this turn.
     created: existing.created || edit.created,
     diff: [...existing.diff, ...edit.diff],
+    ...(existing.wholeFile || edit.wholeFile ? { wholeFile: true } : {}),
   });
 }
 
