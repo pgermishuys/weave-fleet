@@ -226,7 +226,9 @@ function handleExpandVisual(): void {
       <component :is="toolIcon" class="tool-header__icon" />
       <span class="tool-header__label">{{ displayLabel }}</span>
       <span v-if="isPatternTool" class="tool-header__pattern">{{ title }}</span>
-      <span v-else class="tool-header__detail">{{ title }}</span>
+      <!-- A call with no path yet is titled with its own name, which the verb already says. -->
+      <span v-else-if="title.toLowerCase() !== kind.toLowerCase()" class="tool-header__detail">{{ title }}</span>
+      <span v-else class="tool-header__detail" />
       <span
         v-if="retired && status === 'Completed'"
         class="tool-header__retired"

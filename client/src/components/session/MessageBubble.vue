@@ -185,6 +185,7 @@ function handleExpandVisual(payload: VisualPayload): void {
     :data-role="role"
   >
     <button
+      v-if="body.trim()"
       type="button"
       class="msg-copy-btn"
       :title="copied ? 'Copied' : 'Copy message'"

@@ -155,7 +155,7 @@ function handleExpandVisual(payload: VisualPayload): void {
 .msg-tools {
   display: flex;
   flex-direction: column;
-  margin: 8px 0 4px;
+  margin: 2px 0;
 }
 
 .msg-reads__head {
