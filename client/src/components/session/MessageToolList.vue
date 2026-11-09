@@ -121,6 +121,7 @@ function handleExpandVisual(payload: VisualPayload): void {
           :summary="entry.tool.summary"
           :output="entry.tool.output"
           :diff-lines="entry.tool.diffLines"
+          :diff-stat="entry.tool.diffFromContent ? (entry.tool.diffStat ?? null) : undefined"
           :initially-collapsed="entry.tool.initiallyCollapsed"
           :preview="entry.tool.preview"
           :is-pattern-tool="entry.tool.isPatternTool"

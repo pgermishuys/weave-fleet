@@ -37,6 +37,8 @@ const props = withDefaults(
     summary?: string;
     output?: string;
     diffLines?: DiffLine[];
+    /** A whole-file write's real change (the session's diff): the row shows this instead of counting its lines; null hides the counts. */
+    diffStat?: { additions: number; deletions: number } | null;
     initiallyCollapsed?: boolean;
     preview?: string;
     isPatternTool?: boolean;
@@ -60,6 +62,7 @@ const props = withDefaults(
     summary: "",
     output: "",
     diffLines: () => [],
+    diffStat: undefined,
     initiallyCollapsed: false,
     preview: "",
     isPatternTool: false,
@@ -150,6 +153,11 @@ const statusColor = computed(() => (props.waiting ? "var(--status-waiting)" : ST
 
 // Line counts shown on the right of the row for tools that changed a file.
 const diffStats = computed(() => {
+  if (props.diffStat !== undefined) {
+    return props.diffStat && props.diffStat.additions + props.diffStat.deletions > 0
+      ? { adds: props.diffStat.additions, removes: props.diffStat.deletions }
+      : null;
+  }
   if (props.diffLines.length === 0) return null;
   let adds = 0;
   let removes = 0;

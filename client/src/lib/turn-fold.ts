@@ -18,6 +18,8 @@ export interface FoldedFile {
   dir: string;
   additions: number;
   deletions: number;
+  /** The file was written whole and its real change isn't known yet: the counts are 0 and shouldn't be drawn. */
+  unknownCounts?: boolean;
 }
 
 export interface TurnSummary {
@@ -37,6 +39,8 @@ export interface FoldedTurn {
   files: FoldedFile[];
   additions: number;
   deletions: number;
+  /** False when no file's counts are known (every one was written whole and the session's diff isn't loaded). */
+  countsKnown: boolean;
 }
 
 /** What a message view gets from folding. */
@@ -74,7 +78,14 @@ function relativePath(path: string, directory: string | undefined): string {
   return path.startsWith(`${base}/`) || path.startsWith(`${base}\\`) ? path.slice(base.length + 1) : path;
 }
 
-function countDiff(tool: ToolCardItem): { additions: number; deletions: number } {
+/**
+ * A call that wrote the whole file has no change of its own to count: its lines are all additions. The change is the
+ * file's session diff (see {@link withFileStats}); until that's known the call has no counts.
+ */
+function countDiff(tool: ToolCardItem): { additions: number; deletions: number; unknown?: boolean } {
+  if (tool.diffFromContent) {
+    return tool.diffStat ? { ...tool.diffStat } : { additions: 0, deletions: 0, unknown: true };
+  }
   let additions = 0;
   let deletions = 0;
   for (const line of tool.diffLines ?? []) {
@@ -120,6 +131,36 @@ function turnRanges(messages: readonly ActivityMessage[]): TurnRange[] {
     }
   });
   return ranges;
+}
+
+/** The file's change as the session's diff counts it, by path as the session's folder knows it. */
+export type FileStats = ReadonlyMap<string, { additions: number; deletions: number }>;
+
+const statted = new WeakMap<readonly ToolCardItem[], { stats: FileStats | null; tools: ToolCardItem[] }>();
+
+/**
+ * Gives every call that wrote a whole file the file's real change from the session's diff (the same numbers as the
+ * Changes panel), or null while that isn't known. A file the diff doesn't list has no net change. Messages that carry
+ * no such call are returned as they are.
+ */
+export function withFileStats(
+  messages: readonly ActivityMessage[],
+  stats: FileStats | null,
+  directory: string | undefined,
+): ActivityMessage[] {
+  return messages.map((message) => {
+    const tools = message.tools;
+    if (!tools?.some((tool) => tool.diffFromContent)) return message;
+    const cached = statted.get(tools);
+    if (cached && cached.stats === stats) return { ...message, tools: cached.tools };
+    const next = tools.map((tool) => {
+      if (!tool.diffFromContent || !tool.filePath) return tool;
+      const found = stats ? (stats.get(relativePath(tool.filePath, directory)) ?? { additions: 0, deletions: 0 }) : null;
+      return { ...tool, diffStat: found };
+    });
+    statted.set(tools, { stats, tools: next });
+    return { ...message, tools: next };
+  });
 }
 
 export interface FoldOptions {
@@ -168,13 +209,20 @@ export function foldTurns(messages: readonly ActivityMessage[], options: FoldOpt
         else if (isShellRow(tool.kind)) summary.commands += 1;
         else if (isWriteCall(tool.kind)) {
           const filePath = tool.filePath;
-          const { additions, deletions } = countDiff(tool);
+          const { additions, deletions, unknown } = countDiff(tool);
           if (filePath) {
             const path = relativePath(filePath, options.directory);
             const existing = files.get(path);
             if (existing) {
-              existing.additions += additions;
-              existing.deletions += deletions;
+              // A whole-file write's stat is the file's whole session change: the latest one stands, it isn't summed.
+              if (tool.diffFromContent && !unknown) {
+                existing.additions = additions;
+                existing.deletions = deletions;
+                existing.unknownCounts = undefined;
+              } else if (!existing.unknownCounts) {
+                existing.additions += additions;
+                existing.deletions += deletions;
+              }
             } else {
               const slash = path.lastIndexOf("/");
               files.set(path, {
@@ -183,6 +231,7 @@ export function foldTurns(messages: readonly ActivityMessage[], options: FoldOpt
                 dir: slash >= 0 ? path.slice(0, slash) : "",
                 additions,
                 deletions,
+                ...(unknown ? { unknownCounts: true } : {}),
               });
             }
           }
@@ -201,6 +250,7 @@ export function foldTurns(messages: readonly ActivityMessage[], options: FoldOpt
       files: fileList,
       additions: fileList.reduce((total, file) => total + file.additions, 0),
       deletions: fileList.reduce((total, file) => total + file.deletions, 0),
+      countsKnown: fileList.some((file) => !file.unknownCounts),
     };
 
     const folds = (foldable > 0 || hasThinking);

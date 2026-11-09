@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { computed, nextTick, onMounted, onUnmounted, ref, watch } from "vue";
+import { computed, nextTick, onMounted, onUnmounted, ref, shallowRef, watch } from "vue";
 import { ArrowUpRight, Bot, Bug, CornerDownRight, Puzzle, RotateCw, TerminalSquare, TriangleAlert, Workflow } from "lucide-vue-next";
 import { useMachineTarget } from "@/lib/machine-target";
 import { useRouter } from "@tanstack/vue-router";
@@ -10,7 +10,7 @@ import ShellCommandBlock from "@/components/session/ShellCommandBlock.vue";
 import { mergeReadRuns } from "@/lib/merge-reads";
 import TurnFoldRow from "@/components/session/TurnFoldRow.vue";
 import ChangedFilesCard from "@/components/session/ChangedFilesCard.vue";
-import { foldTurns } from "@/lib/turn-fold";
+import { foldTurns, withFileStats, type FileStats } from "@/lib/turn-fold";
 import CompactionDivider from "@/components/session/CompactionDivider.vue";
 import { sessionRetry } from "@/lib/session-row-status";
 import WorkingIndicator from "@/components/session/WorkingIndicator.vue";
@@ -366,7 +366,38 @@ function toggleTurn(turnId: string): void {
   if (!next.delete(turnId)) next.add(turnId);
   openTurns.value = next;
 }
-const foldedMessages = computed(() => foldTurns(mergedMessages.value, {
+// A call that wrote a whole file knows only the new contents; the file's real change is the session's diff, the same
+// numbers the Changes panel shows.
+// Read once a call has written a whole file, and again as each turn ends (the session's changes have moved on).
+const hasWholeFileWrite = computed(() => mergedMessages.value.some((message) => message.tools?.some((tool) => tool.diffFromContent)));
+const fileStats = shallowRef<FileStats | null>(null);
+let statsRequest = 0;
+async function loadFileStats(): Promise<void> {
+  const id = props.sessionId;
+  const request = ++statsRequest;
+  try {
+    const { data, response } = await machine.api.GET("/api/sessions/{id}/diffs", { params: { path: { id } } });
+    if (request !== statsRequest || !response.ok) return;
+    const body = data as unknown as { diffs?: { file: string; additions: number; deletions: number }[]; available?: boolean } | undefined;
+    fileStats.value = body?.available === false || !Array.isArray(body?.diffs)
+      ? null
+      : new Map(body.diffs.map((diff) => [diff.file, { additions: diff.additions, deletions: diff.deletions }]));
+  } catch {
+    // The counts stay unknown (not drawn) rather than wrong.
+  }
+}
+watch(
+  [() => props.sessionId, hasWholeFileWrite, isStreaming],
+  ([, wanted, streaming]) => {
+    if (wanted && !streaming) void loadFileStats();
+  },
+  { immediate: true },
+);
+watch(() => props.sessionId, () => {
+  statsRequest += 1;
+  fileStats.value = null;
+});
+const foldedMessages = computed(() => foldTurns(withFileStats(mergedMessages.value, fileStats.value, selectedSession.value?.workspaceDirectory), {
   running: isStreaming.value,
   directory: selectedSession.value?.workspaceDirectory,
   open: openTurns.value,
