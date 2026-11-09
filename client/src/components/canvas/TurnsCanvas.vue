@@ -2,12 +2,14 @@
 import { computed, ref } from "vue";
 import { ChevronRight } from "lucide-vue-next";
 import DiffView from "@/components/session/DiffView.vue";
+import { useFileStats } from "@/composables/use-file-stats";
+import { useSessionsStore } from "@/stores/sessions";
 import { useModels } from "@/composables/use-models";
 import { useSessionStream } from "@/composables/use-session-stream";
 import { useSidebarMobile } from "@/composables/use-sidebar-mobile";
 import { runSessionCommand } from "@/lib/session-commands";
 import { formatCost, formatDuration, formatTokens } from "@/lib/format-utils";
-import { deriveTurns, modelDisplayName, turnTotals, type SessionTurn, type TurnFile } from "@/lib/turns";
+import { deriveTurns, fileEditsOf, modelDisplayName, turnTotals, type SessionTurn, type TurnFile } from "@/lib/turns";
 
 /**
  * The Turns tab: the rounds of this session, newest first — your prompt and everything the agent did
@@ -22,7 +24,19 @@ const { messages, delegations, hasMore, isLoadingOlder, loadOlder } = useSession
 const { models } = useModels();
 const { hideRightPanel } = useSidebarMobile();
 
-const turns = computed(() => deriveTurns(messages.value, delegations.value));
+// A call that wrote a whole file can't say what it changed: that file's counts come from the session's diff.
+const sessionsStore = useSessionsStore();
+const wholeFileWrites = computed(() => messages.value.reduce((total, message) => total
+  + message.parts.filter((part) => part.type === "tool" && fileEditsOf(part).some((edit) => edit.wholeFile)).length, 0));
+const fileStats = useFileStats({
+  sessionId: () => props.sessionId,
+  wanted: () => wholeFileWrites.value > 0,
+  refreshOn: () => wholeFileWrites.value,
+});
+const turns = computed(() => deriveTurns(messages.value, delegations.value, {
+  fileStats: fileStats.value,
+  directory: sessionsStore.sessionById(props.sessionId)?.workspaceDirectory,
+}));
 const totals = computed(() => turnTotals(turns.value));
 
 const changedOnly = ref(false);

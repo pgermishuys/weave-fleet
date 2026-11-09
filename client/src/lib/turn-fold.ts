@@ -72,7 +72,7 @@ function visibleTools(tools: readonly ToolCardItem[]): ToolCardItem[] {
   return kept;
 }
 
-function relativePath(path: string, directory: string | undefined): string {
+export function relativePath(path: string, directory: string | undefined): string {
   if (!directory) return path;
   const base = directory.replace(/[\\/]+$/, "");
   return path.startsWith(`${base}/`) || path.startsWith(`${base}\\`) ? path.slice(base.length + 1) : path;
