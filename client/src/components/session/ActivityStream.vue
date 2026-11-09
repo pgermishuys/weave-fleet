@@ -394,16 +394,6 @@ function openChangedFile(path: string): void {
   showRightPanel();
 }
 
-// The latest turn's files are what Changes' "This turn" scope shows.
-const lastTurnFiles = computed(() => {
-  for (let i = foldedMessages.value.length - 1; i >= 0; i -= 1) {
-    const card = foldedMessages.value[i]?.card;
-    if (card) return card.files.map((file) => file.path);
-  }
-  return [];
-});
-watch(lastTurnFiles, (paths) => canvasesStore.setTurnFiles(props.sessionId, paths), { immediate: true });
-
 const { mounted: mountedMessages, unmountedOlder, mountAll: mountAllMessages } = useIncrementalMount(
   foldedMessages,
   () => props.sessionId,

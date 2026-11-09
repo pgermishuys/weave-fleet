@@ -27,6 +27,7 @@ import type { CanvasTabBadge } from "@/lib/canvas-registry";
 import { needsAttention } from "@/lib/smart-links";
 import { formatAnnotationPrompt } from "@/lib/format-annotation-prompt";
 import { extractAnchorText } from "@/lib/annotation-types";
+import { panelHasContent } from "@/lib/panel-content";
 import type { AnnotationAnchor } from "@/lib/annotation-types";
 
 interface Props {
@@ -149,19 +150,13 @@ watch(
 
 // A session with nothing to show (no changes, open files, todo list, links or running agents) keeps the panel collapsed
 // until the agent first gives it something; then it opens on its own.
-// Any tab beyond the always-there Changes and Files (a page or browser the agent shows, an open file, a mod pane,
-// a visual) is content the user should see.
-const hasFileTabs = computed(() =>
-  activeSessionId.value
-    ? canvasesStore
-        .sessionCanvases(activeSessionId.value)
-        .canvases.some((canvas) => canvas.kind !== "changes" && canvas.kind !== "files")
-    : false,
-);
+const sessionTabs = computed(() => (activeSessionId.value ? canvasesStore.sessionCanvases(activeSessionId.value).canvases : []));
 watch(
-  [activeSessionId, () => sharedDiffs.hasLoaded.value, () => sharedDiffs.diffs.value.length, hasFileTabs, hasProgress, hasContext, hasAgents],
-  ([sessionId, loaded, changed, files, progress, context, agents]) => {
-    if (sessionId && loaded) sidebarStore.noteSessionContent(sessionId, changed > 0 || files || progress || context || agents);
+  [activeSessionId, () => sharedDiffs.hasLoaded.value, () => sharedDiffs.diffs.value.length, sessionTabs, hasProgress, hasContext, hasAgents],
+  ([sessionId, loaded, changedFiles, canvases, progress, context, agents]) => {
+    if (sessionId && loaded) {
+      sidebarStore.noteSessionContent(sessionId, panelHasContent({ changedFiles, canvases, progress, context, agents }));
+    }
   },
   { immediate: true },
 );
