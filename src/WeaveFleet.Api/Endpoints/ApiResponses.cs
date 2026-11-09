@@ -289,6 +289,14 @@ public sealed record GetSessionDiffsResponse(IReadOnlyList<FileDiffSummary> Diff
 /// </summary>
 public sealed record SessionDiffBase(string Kind, string? Branch, string? Commit);
 
+/// <summary>The session's changed files as each of its turns ended, oldest first (GET /api/sessions/{id}/turn-stats).</summary>
+public sealed record GetSessionTurnStatsResponse(IReadOnlyList<TurnFileStatsSnapshot> Snapshots);
+
+/// <summary>The session's changed files as one turn ended, at <see cref="EndedAt"/> (ISO 8601, UTC).</summary>
+public sealed record TurnFileStatsSnapshot(string EndedAt, IReadOnlyList<TurnFileStatResponse> Files);
+
+public sealed record TurnFileStatResponse(string File, int Additions, int Deletions);
+
 public sealed record FileDiffSummary(
     string File,
     string Status,

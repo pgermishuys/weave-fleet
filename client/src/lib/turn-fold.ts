@@ -166,68 +166,85 @@ function turnRanges(messages: readonly ActivityMessage[]): TurnRange[] {
 /** The file's change as the session's diff counts it, by path as the session's folder knows it. */
 export type FileStats = ReadonlyMap<string, { additions: number; deletions: number; status?: "added" | "deleted" | "modified" }>;
 
-/** The change a whole-file write made, kept when its turn ended (call id → counts). */
-export type CapturedStats = ReadonlyMap<string, { additions: number; deletions: number }>;
+/** The session's files as one turn ended, kept by the server: `endedAt` in ms, files by the path the session's diff uses. */
+export interface TurnStatsSnapshot {
+  endedAt: number;
+  files: FileStats;
+}
 
-const statted = new WeakMap<readonly ToolCardItem[], { stats: FileStats | null; captured: CapturedStats | undefined; last: boolean; tools: ToolCardItem[] }>();
+const statted = new WeakMap<readonly ToolCardItem[], { stats: FileStats | null; snapshots: readonly TurnStatsSnapshot[] | undefined; last: boolean; tools: ToolCardItem[] }>();
+
+/** A turn's own end: the last of its agent messages, leaving out a notice that arrived later (background work). */
+function turnEnd(messages: readonly ActivityMessage[], from: number, to: number): number | undefined {
+  let end: number | undefined;
+  for (let i = from; i < to; i += 1) {
+    const message = messages[i]!;
+    if (message.role !== "assistant" || message.background) continue;
+    const at = message.completedAt ?? message.createdAt;
+    if (at !== undefined && (end === undefined || at > end)) end = at;
+  }
+  return end;
+}
+
+/** The snapshot the server took as the turn ended: the first one after the turn's last message and before the next prompt. */
+function snapshotFor(snapshots: readonly TurnStatsSnapshot[], end: number | undefined, nextStart: number | undefined): TurnStatsSnapshot | undefined {
+  if (end === undefined) return undefined;
+  return snapshots.find((snapshot) => snapshot.endedAt >= end - 2000 && (nextStart === undefined || snapshot.endedAt < nextStart));
+}
 
 /**
- * Gives every call that wrote a whole file the change it made: the counts kept when its turn ended, or (for the latest
- * turn, whose change is today's) the file's session diff, the same numbers as the Changes panel. A call whose change
- * isn't known gets null and draws no counts: an earlier turn's call is never recounted from today's diff, and a file
+ * Gives every call that wrote a whole file the change it made: the file's change as the server saw it when the turn
+ * ended (`snapshots`, kept on the server so every browser, phone and machine agrees), or, for the latest turn before
+ * its snapshot arrives, the file's session diff, the same numbers as the Changes panel. A call whose change isn't
+ * known gets null and draws no counts: an earlier turn's call is never recounted from today's diff, and a file
  * outside the session's folder isn't in that diff. Messages that carry no such call are returned as they are.
  */
 export function withFileStats(
   messages: readonly ActivityMessage[],
   stats: FileStats | null,
   directory: string | undefined,
-  captured?: CapturedStats,
+  snapshots?: readonly TurnStatsSnapshot[],
 ): ActivityMessage[] {
-  let lastUser = -1;
+  const users: number[] = [];
   messages.forEach((message, index) => {
-    if (message.role === "user") lastUser = index;
+    if (message.role === "user") users.push(index);
   });
+  const lastUser = users.length > 0 ? users[users.length - 1]! : -1;
   return messages.map((message, index) => {
     const tools = message.tools;
     if (!tools?.some((tool) => tool.diffFromContent)) return message;
     const inLast = index > lastUser;
     const cached = statted.get(tools);
-    if (cached && cached.stats === stats && cached.captured === captured && cached.last === inLast) return { ...message, tools: cached.tools };
+    if (cached && cached.stats === stats && cached.snapshots === snapshots && cached.last === inLast) return { ...message, tools: cached.tools };
+
+    let snapshot: TurnStatsSnapshot | undefined;
+    if (snapshots && snapshots.length > 0) {
+      let start = 0;
+      let nextUser = messages.length;
+      for (const user of users) {
+        if (user < index) start = user + 1;
+        else {
+          nextUser = user;
+          break;
+        }
+      }
+      const nextStart = nextUser < messages.length ? messages[nextUser]!.createdAt : undefined;
+      snapshot = snapshotFor(snapshots, turnEnd(messages, start, nextUser), nextStart);
+    }
+
     const next = tools.map((tool) => {
       if (!tool.diffFromContent || !tool.filePath) return tool;
-      const kept = captured?.get(tool.id);
       let found: { additions: number; deletions: number } | null = null;
-      if (kept) found = kept;
-      else if (inLast && stats && !isOutside(tool.filePath, directory)) {
+      if (!isOutside(tool.filePath, directory)) {
         // A file the diff doesn't list has no net change.
-        found = stats.get(relativePath(tool.filePath, directory)) ?? { additions: 0, deletions: 0 };
+        if (snapshot) found = snapshot.files.get(relativePath(tool.filePath, directory)) ?? { additions: 0, deletions: 0 };
+        else if (inLast && stats) found = stats.get(relativePath(tool.filePath, directory)) ?? { additions: 0, deletions: 0 };
       }
       return { ...tool, diffStat: found };
     });
-    statted.set(tools, { stats, captured, last: inLast, tools: next });
+    statted.set(tools, { stats, snapshots, last: inLast, tools: next });
     return { ...message, tools: next };
   });
-}
-
-/** The whole-file writes of the latest turn with the counts the session diff gives them: what to keep as the turn ends. */
-export function capturableStats(
-  messages: readonly ActivityMessage[],
-  stats: FileStats,
-  directory: string | undefined,
-): [string, { additions: number; deletions: number }][] {
-  let lastUser = -1;
-  messages.forEach((message, index) => {
-    if (message.role === "user") lastUser = index;
-  });
-  const out: [string, { additions: number; deletions: number }][] = [];
-  for (const message of messages.slice(lastUser + 1)) {
-    for (const tool of message.tools ?? []) {
-      if (!tool.diffFromContent || !tool.filePath || tool.status !== "Completed" || isOutside(tool.filePath, directory)) continue;
-      const found = stats.get(relativePath(tool.filePath, directory)) ?? { additions: 0, deletions: 0 };
-      out.push([tool.id, { additions: found.additions, deletions: found.deletions }]);
-    }
-  }
-  return out;
 }
 
 export interface FoldOptions {

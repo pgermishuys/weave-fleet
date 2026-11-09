@@ -1,6 +1,6 @@
 import { shallowRef, watch, type ShallowRef } from "vue";
 import { useMachineTarget } from "@/lib/machine-target";
-import type { CapturedStats, FileStats } from "@/lib/turn-fold";
+import type { FileStats, TurnStatsSnapshot } from "@/lib/turn-fold";
 
 /**
  * The files the session changed and how much, from its diff (the numbers the Changes panel shows), for calls that
@@ -45,38 +45,46 @@ export function useFileStats(options: {
   return stats;
 }
 
-const KEY = "fleet.turn-stats.";
-const MAX_KEPT = 500;
-
-function readKept(sessionId: string): Map<string, { additions: number; deletions: number }> {
-  try {
-    const raw = localStorage.getItem(KEY + sessionId);
-    return new Map(raw ? (JSON.parse(raw) as [string, { additions: number; deletions: number }][]) : []);
-  } catch {
-    return new Map();
-  }
-}
-
 /**
- * The change each whole-file write made, kept as its turn ended (call id → counts), and kept across reloads. A past
- * turn's card reads from here; what was never kept is unknown and draws no counts, never today's diff.
+ * What the session's files were as each turn ended, from the server (it takes the snapshot as the turn ends, so every
+ * browser, phone and machine reads the same). Read when `wanted` turns true and again whenever `refreshOn` changes
+ * while wanted; empty until known.
  */
-export function useCapturedStats(sessionId: () => string): { captured: ShallowRef<CapturedStats>; keep: (entries: [string, { additions: number; deletions: number }][]) => void } {
-  const captured = shallowRef<CapturedStats>(readKept(sessionId()));
-  watch(sessionId, (id) => {
-    captured.value = readKept(id);
-  });
-  function keep(entries: [string, { additions: number; deletions: number }][]): void {
-    const fresh = entries.filter(([id]) => !captured.value.has(id));
-    if (fresh.length === 0) return;
-    const next = new Map([...captured.value, ...fresh]);
-    while (next.size > MAX_KEPT) next.delete(next.keys().next().value as string);
-    captured.value = next;
+export function useTurnStats(options: {
+  sessionId: () => string;
+  wanted: () => boolean;
+  refreshOn?: () => unknown;
+}): ShallowRef<readonly TurnStatsSnapshot[]> {
+  const machine = useMachineTarget();
+  const snapshots = shallowRef<readonly TurnStatsSnapshot[]>([]);
+  let request = 0;
+
+  async function load(): Promise<void> {
+    const id = options.sessionId();
+    const mine = ++request;
     try {
-      localStorage.setItem(KEY + sessionId(), JSON.stringify([...next]));
+      const { data, response } = await machine.api.GET("/api/sessions/{id}/turn-stats", { params: { path: { id } } });
+      if (mine !== request || !response.ok) return;
+      const body = data as unknown as { snapshots?: { endedAt: string; files: { file: string; additions: number; deletions: number }[] }[] } | undefined;
+      snapshots.value = (body?.snapshots ?? []).map((snapshot) => ({
+        endedAt: Date.parse(snapshot.endedAt),
+        files: new Map(snapshot.files.map((file) => [file.file, { additions: file.additions, deletions: file.deletions }])),
+      }));
     } catch {
-      // Not kept across a reload; it still holds for this page.
+      // The counts stay unknown (not drawn) rather than wrong.
     }
   }
-  return { captured, keep };
+
+  watch(options.sessionId, () => {
+    request += 1;
+    snapshots.value = [];
+  });
+  watch(
+    [options.sessionId, options.wanted, () => options.refreshOn?.()],
+    ([, wanted]) => {
+      if (wanted) void load();
+    },
+    { immediate: true },
+  );
+  return snapshots;
 }

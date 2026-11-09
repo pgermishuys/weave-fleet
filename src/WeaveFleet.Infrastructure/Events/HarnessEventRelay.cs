@@ -100,6 +100,7 @@ public sealed class HarnessEventRelay : BackgroundService
     private readonly PromptQueueDispatcher? _queue;
     private readonly TurnFlagger? _turns;
     private readonly TurnFailureRecorder? _failures;
+    private readonly TurnFileStatsRecorder? _turnStats;
     private readonly TurnRetryScheduler? _retries;
     private readonly PendingPermissionStore? _permissions;
     private readonly AgentBrowserCalls? _browserCalls;
@@ -149,8 +150,10 @@ public sealed class HarnessEventRelay : BackgroundService
         PageChoices? pageChoices = null,
         TurnFlagger? turns = null,
         SessionNowTracker? now = null,
-        WeaveFleet.Application.Machines.MachineHandoffAsks? handoffAsks = null)
+        WeaveFleet.Application.Machines.MachineHandoffAsks? handoffAsks = null,
+        TurnFileStatsRecorder? turnStats = null)
     {
+        _turnStats = turnStats;
         _now = now;
         _handoffAsks = handoffAsks;
         _turns = turns;
@@ -489,6 +492,7 @@ public sealed class HarnessEventRelay : BackgroundService
                 _turns?.Observe(targetFleetSessionId, sessionUserId, domainEvent, StatusTypeOf(evt));
                 _callbacks?.Observe(targetFleetSessionId, sessionUserId, domainEvent);
                 _failures?.Observe(targetFleetSessionId, sessionUserId, domainEvent);
+                _turnStats?.Observe(targetFleetSessionId, sessionUserId, domainEvent);
                 _context?.Observe(targetFleetSessionId, sessionUserId, domainEvent);
                 if (domainEvent is TurnFailed turnFailed)
                     _notifier?.OnSessionFailed(targetFleetSessionId, turnFailed.Payload.Error.Message);
