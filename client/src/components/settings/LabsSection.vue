@@ -7,7 +7,6 @@ import SettingSwitch from "@/components/settings/SettingSwitch.vue";
 import { usePreferenceSwitch } from "@/composables/use-preference-switch";
 import { useSettingsNav } from "@/composables/use-settings-nav";
 import { useWorkflowsFeature } from "@/composables/use-workflows-feature";
-import { DREAMING_PREFERENCE_KEY } from "@/lib/dreaming";
 import { FLEET_UPDATES_PREFERENCE_KEY } from "@/lib/fleet-updates";
 import { JOBS_PREFERENCE_KEY } from "@/lib/jobs";
 import { MEMORY_PREFERENCE_KEY, MEMORY_SEARCH_PREFERENCE_KEY } from "@/lib/agent-memory";
@@ -27,7 +26,6 @@ const liveMachines = usePreferenceSwitch(LIVE_MACHINES_PREFERENCE_KEY);
 const fleetUpdates = usePreferenceSwitch(FLEET_UPDATES_PREFERENCE_KEY);
 const jobs = usePreferenceSwitch(JOBS_PREFERENCE_KEY);
 const missionControl = usePreferenceSwitch(MISSION_CONTROL_PREFERENCE_KEY);
-const dreaming = usePreferenceSwitch(DREAMING_PREFERENCE_KEY);
 const pageChoice = usePreferenceSwitch(PAGE_CHOICE_PREFERENCE_KEY);
 const memorySearch = usePreferenceSwitch(MEMORY_SEARCH_PREFERENCE_KEY);
 const memoryOn = computed(() => preferencesStore.get(MEMORY_PREFERENCE_KEY, "false") === "true");
@@ -148,28 +146,6 @@ function openRoute(path: string): void {
             aria-label="Enable Mission control"
             data-testid="mission-control-switch"
             @click="missionControl.toggle"
-          />
-        </template>
-      </SettingRow>
-
-      <SettingRow
-        id="dreaming"
-        title="Dreaming"
-        summary="Fleet reads recent sessions and updates memory notes overnight."
-        :adds="addsWhenOn(dreaming.enabled.value, 'Nightly run in Memory')"
-        @open="setActiveSection('memory')"
-      >
-        <template #more>
-          Fleet reads a repository's recent sessions and updates its memory notes. Every change says why, and you can undo it. Notes you wrote are never changed.
-        </template>
-        <template #control>
-          <SettingSwitch
-            :checked="dreaming.enabled.value"
-            :saving="dreaming.saving.value"
-            :disabled="preferencesStore.isLoading || dreaming.saving.value"
-            aria-label="Enable Dreaming"
-            data-testid="dreaming-switch"
-            @click="dreaming.toggle"
           />
         </template>
       </SettingRow>

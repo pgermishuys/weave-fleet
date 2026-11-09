@@ -3,6 +3,7 @@ using Microsoft.Extensions.Logging.Abstractions;
 using Microsoft.Extensions.Time.Testing;
 using Shouldly;
 using WeaveFleet.Application.Automations;
+using WeaveFleet.Application.Memory;
 using WeaveFleet.Application.Memory.Dreaming;
 using WeaveFleet.Application.Users;
 using WeaveFleet.Domain.Common;
@@ -27,7 +28,7 @@ public sealed class DreamingAutomationTests : IDisposable
 
     public DreamingAutomationTests()
     {
-        _preferences.Seed(DreamRules.PreferenceKey, "true");
+        _preferences.Seed(AgentMemory.PreferenceKey, "true");
         _starter = new FakeStarter(_store, _sessions, _time);
         var services = new ServiceCollection();
         services.AddSingleton<IBackgroundUserScope, NoUserScope>();
@@ -206,16 +207,16 @@ public sealed class DreamingAutomationTests : IDisposable
     }
 
     [Fact]
-    public async Task A_run_is_skipped_while_dreaming_is_off()
+    public async Task A_run_is_skipped_while_memory_is_off()
     {
-        _preferences.Seed(DreamRules.PreferenceKey, "false");
+        _preferences.Seed(AgentMemory.PreferenceKey, "false");
         Session("s1", Folder("alpha"), TimeSpan.FromHours(1));
 
         (await _sut.IsOnAsync(_automation)).ShouldBeFalse();
         var outcome = await _sut.RunAsync(_automation, await BeginRunAsync());
 
         outcome.Skipped.ShouldBeTrue();
-        outcome.Error!.ShouldContain("Dreaming is off");
+        outcome.Error!.ShouldContain("Memory is off");
         _starter.Requests.ShouldBeEmpty();
     }
 

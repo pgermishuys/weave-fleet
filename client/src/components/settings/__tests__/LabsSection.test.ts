@@ -89,19 +89,12 @@ describe("LabsSection: what a switch adds", () => {
 
   afterEach(() => vi.unstubAllGlobals());
 
-  it("shows what Dreaming adds, with Open, only while it is on", async () => {
+  it("has no Dreaming row: Dreaming lives in Memory", async () => {
     getMock.mockResolvedValue({ data: {} });
-    putMock.mockResolvedValue({});
     const wrapper = mount(LabsSection);
     await flushPromises();
+    expect(wrapper.find("[data-testid='dreaming-switch']").exists()).toBe(false);
     expect(wrapper.find("[data-testid='setting-adds-dreaming']").exists()).toBe(false);
-
-    await wrapper.get("[data-testid='dreaming-switch']").trigger("click");
-    await flushPromises();
-
-    expect(wrapper.get("[data-testid='setting-adds-dreaming']").text()).toContain("Adds: Nightly run in Memory");
-    await wrapper.get("[data-testid='setting-open-dreaming']").trigger("click");
-    expect(useSettingsNav().activeSection.value).toBe("memory");
   });
 
   it("holds the Workflows switch, which saves the Workflows preference", async () => {

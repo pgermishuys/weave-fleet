@@ -6,13 +6,11 @@ namespace WeaveFleet.Application.Memory.Dreaming;
 
 /// <summary>
 /// Dreaming: a pass that reads a repository's recent sessions, finds lessons that keep coming up and changes its memory
-/// notes itself, with safety rules enforced in code (<see cref="DreamApplier"/>). Off unless the user turned it on.
+/// notes itself, with safety rules enforced in code (<see cref="DreamApplier"/>). Part of Memory: available whenever Memory is on, with no switch of its own; the nightly run stays opt-in.
 /// </summary>
 public static class DreamRules
 {
-    public const string PreferenceKey = "Dreaming";
-
-    public const string TurnedOffMessage = "Dreaming is off. Turn it on in Settings → Labs.";
+    public const string TurnedOffMessage = "Memory is off, so Fleet can't dream. Turn on Memory in Settings → Memory.";
 
     /// <summary>The event on the <c>sessions</c> topic when a dream ends, with the <see cref="DreamView"/>.</summary>
     public const string DreamedEventType = "memory.dreamed";
@@ -83,11 +81,10 @@ public static class DreamRules
     public static string NewId() => Convert.ToHexStringLower(RandomNumberGenerator.GetBytes(4));
 }
 
-/// <summary>Whether dreaming is on for the current user.</summary>
+/// <summary>Whether dreaming is available for the current user: whenever Memory is on.</summary>
 public sealed class DreamingFeature(IUserPreferenceRepository preferences)
 {
-    public async Task<bool> IsEnabledAsync()
-        => string.Equals(await preferences.GetAsync(DreamRules.PreferenceKey).ConfigureAwait(false), "true", StringComparison.OrdinalIgnoreCase);
+    public Task<bool> IsEnabledAsync() => new AgentMemoryFeature(preferences).IsEnabledAsync();
 }
 
 /// <summary>A session a dream read, under the label (<c>S1</c>…) the model knew it by.</summary>
