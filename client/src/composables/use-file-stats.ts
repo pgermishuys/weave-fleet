@@ -22,10 +22,10 @@ export function useFileStats(options: {
     try {
       const { data, response } = await machine.api.GET("/api/sessions/{id}/diffs", { params: { path: { id } } });
       if (mine !== request || !response.ok) return;
-      const body = data as unknown as { diffs?: { file: string; additions: number; deletions: number }[]; available?: boolean } | undefined;
+      const body = data as unknown as { diffs?: { file: string; additions: number; deletions: number; status?: "added" | "deleted" | "modified" }[]; available?: boolean } | undefined;
       stats.value = body?.available === false || !Array.isArray(body?.diffs)
         ? null
-        : new Map(body.diffs.map((diff) => [diff.file, { additions: diff.additions, deletions: diff.deletions }]));
+        : new Map(body.diffs.map((diff) => [diff.file, { additions: diff.additions, deletions: diff.deletions, status: diff.status }]));
     } catch {
       // The counts stay unknown (not drawn) rather than wrong.
     }

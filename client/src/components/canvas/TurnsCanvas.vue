@@ -223,6 +223,10 @@ function showInChat(turn: SessionTurn): void {
                   v-if="file.created"
                   class="file-row__badge"
                 >new</span>
+                <span
+                  v-else-if="file.wholeFile"
+                  class="file-row__badge"
+                >changed</span>
                 <span class="file-row__stats">
                   <span
                     v-if="file.additions > 0"
