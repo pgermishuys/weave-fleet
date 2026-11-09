@@ -38,11 +38,19 @@ export function isShellRow(kind: string | undefined): boolean {
   return tool.category === "shell" && tool.name !== "execute";
 }
 
+/**
+ * A read that collapses into a "Read N files" row: done, or still on its way (its path may not have arrived yet, so
+ * alone it would read as a bare "Read"). A failed or stopped read keeps its own row: a failure is never folded away.
+ */
+export function isGroupableRead(tool: { kind?: string; status?: string; delegation?: unknown }): boolean {
+  return !tool.delegation && isReadCall(tool.kind) && (tool.status === "Completed" || tool.status === "Running" || tool.status === "Pending");
+}
+
 export type ToolRowEntry<T> = { type: "tool"; tool: T } | { type: "reads"; tools: T[]; id: string };
 
 /**
- * The rows a message draws: two or more completed reads in a row become one "Read N files" entry. A read that is still
- * running, or failed, keeps its own row (a failure is never folded away).
+ * The rows a message draws: two or more reads in a row (done or still streaming) become one "Read N files" entry. A
+ * failed read keeps its own row.
  */
 export function groupReads<T extends { id: string; kind?: string; status?: string; delegation?: unknown }>(tools: readonly T[]): ToolRowEntry<T>[] {
   const entries: ToolRowEntry<T>[] = [];
@@ -53,7 +61,7 @@ export function groupReads<T extends { id: string; kind?: string; status?: strin
     run = [];
   };
   for (const tool of tools) {
-    if (!tool.delegation && isReadCall(tool.kind) && tool.status === "Completed") {
+    if (isGroupableRead(tool)) {
       run.push(tool);
       continue;
     }

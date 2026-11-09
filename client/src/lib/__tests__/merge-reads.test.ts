@@ -25,7 +25,8 @@ describe("mergeReadRuns", () => {
     expect(out.map((m) => m.tools!.map((t) => t.id))).toEqual([["1", "2"], ["3"]]);
   });
 
-  it("does not join a read that is running or failed", () => {
+  it("joins a read that is still running, but not one that failed", () => {
+    expect(mergeReadRuns([msg("a", [tool("1")]), msg("b", [tool("2", "read", "Running")])])).toHaveLength(1);
     expect(mergeReadRuns([msg("a", [tool("1")]), msg("b", [tool("2", "read", "Error")])])).toHaveLength(2);
   });
 

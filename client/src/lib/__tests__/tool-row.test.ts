@@ -33,9 +33,13 @@ describe("groupReads", () => {
     expect(entries.map((entry) => entry.type)).toEqual(["reads", "tool"]);
     expect(entries[0]).toMatchObject({ type: "reads", tools: [{ id: "a" }, { id: "b" }, { id: "c" }] });
   });
-  it("leaves a single read, a running read and a failed read as their own rows", () => {
+  it("takes reads still streaming into the row, whether or not their path has arrived", () => {
+    const entries = groupReads([read("a"), read("b", "Running"), read("c", "Pending")]);
+    expect(entries.map((entry) => entry.type)).toEqual(["reads"]);
+    expect(entries[0]).toMatchObject({ tools: [{ id: "a" }, { id: "b" }, { id: "c" }] });
+  });
+  it("leaves a single read and a failed read as their own rows", () => {
     expect(groupReads([read("a")]).map((entry) => entry.type)).toEqual(["tool"]);
-    expect(groupReads([read("a"), read("b", "Running")]).map((entry) => entry.type)).toEqual(["tool", "tool"]);
     expect(groupReads([read("a"), read("b", "Error"), read("c")]).map((entry) => entry.type)).toEqual(["tool", "tool", "tool"]);
   });
   it("works for any harness's read tool name", () => {
