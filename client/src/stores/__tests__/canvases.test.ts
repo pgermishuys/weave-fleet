@@ -464,13 +464,4 @@ describe("useCanvasesStore file tabs", () => {
     store.activate("s1", "changes");
     expect(store.sessionCanvases("s1").review).toBe(true);
   });
-
-  it("remembers the files the latest turn changed, per session", () => {
-    const store = useCanvasesStore();
-
-    store.setTurnFiles("s1", ["a.ts"]);
-    store.setTurnFiles("s2", ["b.ts"]);
-
-    expect(store.turnFiles).toEqual({ s1: ["a.ts"], s2: ["b.ts"] });
-  });
 });

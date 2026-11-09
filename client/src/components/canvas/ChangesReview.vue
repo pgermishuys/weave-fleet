@@ -22,12 +22,6 @@ import {
   AlertDialogHeader,
   AlertDialogTitle,
 } from "@/components/ui/alert-dialog";
-import {
-  DropdownMenu,
-  DropdownMenuContent,
-  DropdownMenuItem,
-  DropdownMenuTrigger,
-} from "@/components/ui/dropdown-menu";
 import { readSessionFile, writeSessionFile } from "@/api/session-files";
 import type { FileDiffItem } from "@/api/client";
 import type { UseDiffsResult } from "@/composables/use-diffs";
@@ -99,25 +93,17 @@ function toggleWrap(): void {
   writePref(WRAP_KEY, wrap.value ? "on" : "off");
 }
 
-const turnPaths = computed(() => canvases.turnFiles[props.sessionId] ?? []);
-const scopePref = shallowRef<"turn" | "session" | null>(null);
-const scope = computed<"turn" | "session">(() =>
-  turnPaths.value.length === 0 ? "session" : (scopePref.value ?? "session"),
-);
 const baseDetail = computed(() => {
   const label = diffBaseLabel(sharedDiffs?.base.value ?? null);
   return label ? `${label.text}${label.commit ? ` ${label.commit}` : ""}` : "Which changes to show";
 });
-const scopeLabel = computed(() => (scope.value === "turn" ? "This turn" : "Whole session"));
 
 const allFiles = computed(() =>
   [...(sharedDiffs?.diffs.value ?? [])].sort((a, b) => a.file.localeCompare(b.file)),
 );
-const files = computed(() => {
-  if (scope.value === "session") return allFiles.value;
-  const wanted = new Set(turnPaths.value);
-  return allFiles.value.filter((file) => wanted.has(file.file));
-});
+// The whole session, always: a "This turn" scope waits for a per-turn git baseline (tool-written files alone miss
+// shell deletes, renames and binaries).
+const files = allFiles;
 const totals = computed(() => ({
   additions: files.value.reduce((sum, file) => sum + file.additions, 0),
   deletions: files.value.reduce((sum, file) => sum + file.deletions, 0),
@@ -339,7 +325,6 @@ watch(
     if (!request || request.seq === handledSeq) return;
     if (!allFiles.value.some((file) => file.file === request.path)) return;
     handledSeq = request.seq;
-    if (!files.value.some((file) => file.file === request.path)) scopePref.value = "session";
     if (!isOpen(request.path)) toggleFile(request.path);
     await nextTick();
     const sections = body.value?.querySelectorAll<HTMLElement>("[data-review-file]") ?? [];
@@ -373,34 +358,11 @@ function nameOf(path: string): string {
       <h2 class="review__title">
         Changes
       </h2>
-      <DropdownMenu>
-        <DropdownMenuTrigger as-child>
-          <button
-            type="button"
-            class="review__scope"
-            data-testid="review-scope"
-            aria-label="Which changes to show"
-            :title="baseDetail"
-          >
-            {{ scopeLabel }}
-            <ChevronDown
-              :size="13"
-              aria-hidden="true"
-            />
-          </button>
-        </DropdownMenuTrigger>
-        <DropdownMenuContent align="start">
-          <DropdownMenuItem
-            :disabled="turnPaths.length === 0"
-            @select="scopePref = 'turn'"
-          >
-            This turn
-          </DropdownMenuItem>
-          <DropdownMenuItem @select="scopePref = 'session'">
-            Whole session
-          </DropdownMenuItem>
-        </DropdownMenuContent>
-      </DropdownMenu>
+      <span
+        class="review__scope"
+        data-testid="review-scope"
+        :title="baseDetail"
+      >Whole session</span>
       <span
         class="review__totals"
         data-testid="review-totals"
@@ -849,16 +811,8 @@ function nameOf(path: string): string {
   height: 28px;
   padding: 0 8px 0 10px;
   white-space: nowrap;
-  border: 1px solid var(--border);
-  border-radius: 7px;
-  background: transparent;
-  color: var(--text);
+  color: var(--text-muted, var(--text));
   font: inherit;
-  cursor: pointer;
-}
-
-.review__scope:hover {
-  background: color-mix(in srgb, var(--text) 5%, transparent);
 }
 
 .review__totals,

@@ -143,12 +143,12 @@ describe("ChangesReview", () => {
     expect(wrapper.get(".review").classes()).toContain("review--wrap");
   });
 
-  it("defaults to the whole session even when the latest turn wrote files", async () => {
-    useCanvasesStore().setTurnFiles("s1", ["README.md"]);
+  it("always shows the whole session, with no scope to pick", async () => {
     const wrapper = mountReview();
     await flushPromises();
 
     expect(wrapper.get("[data-testid='review-scope']").text()).toBe("Whole session");
+    expect(wrapper.text()).not.toContain("This turn");
     expect(wrapper.findAll("[data-testid='review-file']").length).toBeGreaterThan(1);
   });
 

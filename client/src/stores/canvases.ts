@@ -247,15 +247,6 @@ export const useCanvasesStore = defineStore("canvases", () => {
     }));
   }
 
-  /** Files the latest turn changed, for Changes' "This turn" scope. */
-  const turnFiles = shallowRef<Record<string, readonly string[]>>({});
-
-  function setTurnFiles(sessionId: string, paths: readonly string[]): void {
-    const current = turnFiles.value[sessionId];
-    if (current && current.length === paths.length && current.every((path, i) => path === paths[i])) return;
-    turnFiles.value = { ...turnFiles.value, [sessionId]: paths };
-  }
-
   /** Open (or focus) one of the built-in singleton canvases. */
   function open(sessionId: string, kind: BuiltInCanvasKind): void {
     update(sessionId, (current) => {
@@ -547,8 +538,6 @@ export const useCanvasesStore = defineStore("canvases", () => {
     activate,
     open,
     openChanges,
-    turnFiles,
-    setTurnFiles,
     introduce,
     openVisual,
     openModPane,
