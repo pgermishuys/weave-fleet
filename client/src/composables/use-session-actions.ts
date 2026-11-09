@@ -482,7 +482,7 @@ export async function pinSession(machine: MachineTarget, sessionId: string, befo
   if (error || !response.ok || !data) {
     throw new Error(await readErrorMessage(response, error));
   }
-  return data.pinOrder;
+  return Number(data.pinOrder);
 }
 
 /** Unpins a session: it goes back to its project. */
