@@ -103,4 +103,10 @@ describe("selector dropdown price chip", () => {
     expect(wrapper.find(".selector-dropdown__item-meta").text()).toBe("200K");
     expect(wrapper.text()).not.toContain("P");
   });
+
+  it("with plainDefault the chip says the name but the list keeps the Default row whole", async () => {
+    const wrapper = await open({ defaultLabel: "Default (Claude Haiku)", plainDefault: true });
+    expect(wrapper.get(".selector-btn__label").text()).toBe("Claude Haiku");
+    expect(wrapper.findAll(".selector-dropdown__item-label")[0]!.text()).toBe("Default (Claude Haiku)");
+  });
 });

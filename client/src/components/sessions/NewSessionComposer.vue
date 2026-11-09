@@ -946,7 +946,7 @@ onUnmounted(() => {
     class="new-session"
     data-testid="new-session-form"
   >
-    <header class="new-session__header">
+    <header class="new-session__header phone-menu-lane">
       <h2 class="new-session__title">
         New session
       </h2>
@@ -1670,12 +1670,7 @@ onUnmounted(() => {
   outline-offset: 2px;
 }
 
-/* Clear the fixed menu button that replaces the sidebar on narrow screens. */
-@media (max-width: 716px) {
-  .new-session__header {
-    padding-left: 44px;
-  }
-}
+/* The header clears the menu button with the shared phone-menu-lane class (AppShell). */
 
 @media (max-width: 560px) {
   .new-session__stage,

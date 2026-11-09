@@ -465,6 +465,15 @@ function onGutterPointerDown(e: PointerEvent): void {
   padding: 0;
 }
 
+/*
+ * The menu button floats over the page's top-left corner. A page's heading takes this class to start clear of it
+ * (button: 6px in, about 40px wide) at every phone size, portrait or landscape.
+ */
+:global(.app--phone .phone-menu-lane) {
+  /* Wins over a heading's own scoped padding shorthand. */
+  padding-left: 52px !important;
+}
+
 /* Centred in the 56px header the session page draws under it. */
 .app--phone .mobile-menu-btn {
   top: 14px;

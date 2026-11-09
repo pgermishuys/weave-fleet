@@ -263,7 +263,7 @@ function formatFetchMessage(error: string | undefined, fallback: string): string
     class="analytics-page"
     aria-label="Analytics dashboard"
   >
-    <header class="analytics-page__header">
+    <header class="analytics-page__header phone-menu-lane">
       <h1 class="analytics-page__title">
         Analytics
       </h1>
