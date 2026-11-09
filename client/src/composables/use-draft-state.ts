@@ -1,6 +1,7 @@
 import { reactive } from "vue";
 import { readStoredDraft, sessionDraftKey, writeStoredDraft } from "@/lib/draft-storage";
 
+/** A level the model offers, or "" for Default: nothing is sent and the harness's own level runs. */
 export type EffortLevel = string;
 
 export interface DraftState {
@@ -37,7 +38,7 @@ function ensureDraft(sessionId: string, defaults: DraftDefaults): DraftState {
     text: readStoredDraft(sessionDraftKey(sessionId)) ?? "",
     agentId: defaults.agentId,
     modelId: defaults.modelId,
-    effort: defaults.effort ?? "medium",
+    effort: defaults.effort ?? "",
   };
 
   draftRegistry[sessionId] = draftState;

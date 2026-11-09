@@ -161,7 +161,7 @@ export function useComposerActions(sessionId: string) {
     return {
       agent: draft.agentId || undefined,
       model: modelFromKey(draft.modelId) ?? undefined,
-      effort: draft.effort !== "medium" ? draft.effort : undefined,
+      effort: draft.effort || undefined,
     };
   }
 

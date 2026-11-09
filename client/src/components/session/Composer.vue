@@ -10,6 +10,7 @@ import ImageAttachmentChips from "@/components/session/ImageAttachmentChips.vue"
 import AgentSelector from "@/components/session/AgentSelector.vue";
 import ModelSelector from "@/components/session/ModelSelector.vue";
 import EffortToggle from "@/components/session/EffortToggle.vue";
+import { useEffortMemory } from "@/composables/use-effort-memory";
 import AllowedChip from "@/components/session/AllowedChip.vue";
 import QueuedMessages from "@/components/session/QueuedMessages.vue";
 import BackgroundStrip from "@/components/session/BackgroundStrip.vue";
@@ -51,7 +52,7 @@ import {
 import { useMachineTarget } from "@/lib/machine-target";
 import { usePreferencesStore } from "@/stores/preferences";
 import { addDraftTerminalContext, useDraftTerminalContext } from "@/composables/use-draft-terminal-context";
-import { describeSessionDefaults, modelFromKey } from "@/lib/agent-model-choice";
+import { describeSessionDefaults, modelFromKey, sessionDefaultModelKey } from "@/lib/agent-model-choice";
 import { formatTerminalContext, terminalLineRange, type TerminalContextDraft } from "@/lib/format-terminal-context";
 import { sessionReferencesIn } from "@/lib/session-references";
 import { sessionSkillNames, skillDeliveries, skillListHint, skillNamesIn } from "@/lib/skill-mentions";
@@ -477,7 +478,7 @@ function queueChoices(): Pick<QueueOptions, "agent" | "model" | "effort"> {
   return {
     agent: draft.agentId || undefined,
     model: modelFromKey(draft.modelId) ?? undefined,
-    effort: draft.effort !== "medium" ? draft.effort : undefined,
+    effort: draft.effort || undefined,
   };
 }
 
@@ -607,17 +608,35 @@ const defaultLabels = computed(() => {
   });
 });
 
+// The model the next prompt runs on: the picked one, else what "Default (…)" resolves to for this session.
+const effortModelKey = computed(() => {
+  if (selectedModelId.value) return selectedModelId.value;
+  const session = sessionsStore.sessionById(props.sessionId);
+  return sessionDefaultModelKey({
+    sessionModel: session?.selectedModel,
+    agentModel: agents.value.find((candidate) => candidate.id === (draft.agentId || defaultAgentId.value))?.model,
+    lastModelId: session?.lastAssistantModelId,
+    models: models.value,
+  }) || defaultModelKey.value || "";
+});
+
+const selectedModelVariants = computed(() => modelsByKey.value[effortModelKey.value]?.variants ?? []);
+
+// The level remembered for this model on this machine: the draft takes it when the model is picked or the draft opens.
+const effortMemory = useEffortMemory({
+  draft,
+  setEffort,
+  harnessType: () => selectedSession.value?.harnessType,
+  picked: () => selectedModelId.value,
+  modelKey: () => effortModelKey.value,
+  modelName: () => modelsByKey.value[effortModelKey.value]?.name ?? "This model",
+  variants: () => selectedModelVariants.value,
+});
 const selectedEffort = computed({
   get: () => draft.effort,
   set: (value) => {
-    setEffort(value);
+    effortMemory.pick(value);
   },
-});
-
-const selectedModelVariants = computed(() => {
-  const modelId = selectedModelId.value || defaultModelKey.value || "";
-  const model = modelsByKey.value[modelId];
-  return model?.variants ?? [];
 });
 
 const supportsReasoning = computed(() => {
@@ -763,7 +782,7 @@ function sideQuestionChoice(): SideQuestionChoice {
   return {
     agent: draft.agentId || undefined,
     model: model ?? undefined,
-    effort: draft.effort !== "medium" ? draft.effort : undefined,
+    effort: draft.effort || undefined,
   };
 }
 
@@ -1284,6 +1303,8 @@ function handleKeydown(event: KeyboardEvent): void {
             v-if="supportsReasoning"
             v-model="selectedEffort"
             :variants="selectedModelVariants"
+            :remembered-for="modelsByKey[effortModelKey]?.name"
+            :note="effortMemory.note.value"
           />
           <AllowedChip
             v-if="!isSideMode"

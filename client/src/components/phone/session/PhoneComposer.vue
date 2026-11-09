@@ -17,6 +17,8 @@ import type { ImageAttachment } from "@/lib/client-types";
 import { ALLOWED_IMAGE_MIMES, MAX_IMAGE_BYTES } from "@/lib/image-validation";
 import { autogrow } from "@/lib/phone/keyboard";
 import { flushHeld, heldFor, hold, removeHeld, type HeldMessage } from "@/lib/phone/outbox";
+import { useEffortMemory } from "@/composables/use-effort-memory";
+import { effortLabel } from "@/lib/effort-memory";
 
 /**
  * The phone's composer, the desktop's ComposerFrame: a raised card with the text on top and a toolbar under it — +
@@ -33,7 +35,7 @@ const MAX_PHOTOS = 5;
 
 const actions = useComposerActions(props.sessionId);
 const { draft, setText } = actions;
-const { setAgentId, setModelId, setEffort } = useDraftState(props.sessionId, { agentId: "", modelId: "" });
+const { setAgentId, setModelId, setEffort: setDraftEffort } = useDraftState(props.sessionId, { agentId: "", modelId: "" });
 const { agents, defaultAgentId } = useAgents(props.sessionId);
 const { models, defaultModelKey, modelsByKey } = useModels(props.sessionId);
 // Stars are per harness; on another machine the row isn't in this store, so that sheet has none.
@@ -85,14 +87,27 @@ const defaultLabels = computed(() => {
 });
 const modelKey = computed(() => draft.modelId || sessionDefaultKey.value || defaultModelKey.value || "");
 const agentOptions = computed<ChipOption[]>(() => agents.value.map((agent) => ({ id: agent.id, label: agent.name, detail: agent.description })));
-const effortVariants = computed(() => modelsByKey.value[modelKey.value]?.variants ?? ["low", "medium", "high"]);
-const effortOptions = computed<ChipOption[]>(() => effortVariants.value.map((variant) => ({ id: variant, label: variant.charAt(0).toUpperCase() + variant.slice(1) })));
+const effortVariants = computed(() => modelsByKey.value[modelKey.value]?.variants ?? []);
+// "Model default" is nothing picked: nothing is sent and the harness's own level runs.
+const effortOptions = computed<ChipOption[]>(() => [
+  { id: "", label: "Model default", detail: "The harness's own level" },
+  ...effortVariants.value.map((variant) => ({ id: variant, label: effortLabel(variant) })),
+]);
+const effortMemory = useEffortMemory({
+  draft,
+  setEffort: setDraftEffort,
+  harnessType: () => harnessType.value,
+  picked: () => draft.modelId,
+  modelKey: () => modelKey.value,
+  modelName: () => modelsByKey.value[modelKey.value]?.name ?? "This model",
+  variants: () => effortVariants.value,
+});
 const agentLabel = computed(() => agents.value.find((agent) => agent.id === agentId.value)?.name ?? "Agent");
 // A picked model shows its name; otherwise the chip reads like desktop's "Default (…)".
 const modelLabel = computed(() => draft.modelId
   ? models.value.find((model) => model.selectionKey === draft.modelId)?.name ?? "Model"
   : defaultLabels.value.modelLabel);
-const effortLabel = computed(() => (draft.effort || "medium").replace(/^./, (c) => c.toUpperCase()));
+const effortChipLabel = computed(() => (draft.effort ? effortLabel(draft.effort) : "Default"));
 /** Effort only where the model has levels of it. */
 const hasEffort = computed(() => (modelsByKey.value[modelKey.value]?.variants?.length ?? 0) > 0);
 
@@ -214,7 +229,7 @@ function editHeld(item: HeldMessage): void {
 
 function pick(id: string): void {
   if (chip.value === "agent") setAgentId(id);
-  else if (chip.value === "effort") setEffort(id);
+  else if (chip.value === "effort") effortMemory.pick(id);
 }
 
 onMounted(() => {
@@ -383,7 +398,7 @@ defineExpose({ insert, flush, focus: () => textareaRef.value?.focus() });
           @mousedown.prevent
           @click="chip = 'effort'"
         >
-          <span>{{ effortLabel }}</span><ChevronDown aria-hidden="true" />
+          <span>{{ effortChipLabel }}</span><ChevronDown aria-hidden="true" />
         </button>
         <button
           v-if="allowedRules.length"
@@ -491,7 +506,7 @@ defineExpose({ insert, flush, focus: () => textareaRef.value?.focus() });
       :open="chip === 'agent' || chip === 'effort'"
       :title="chip === 'agent' ? 'Agent' : 'Effort'"
       :options="chip === 'agent' ? agentOptions : effortOptions"
-      :selected="chip === 'agent' ? agentId : draft.effort || 'medium'"
+      :selected="chip === 'agent' ? agentId : draft.effort"
       @pick="pick"
       @close="chip = null"
     />
