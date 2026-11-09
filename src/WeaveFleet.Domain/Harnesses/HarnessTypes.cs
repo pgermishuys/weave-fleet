@@ -765,6 +765,9 @@ public sealed record ModelInfo
 
     /// <summary>The class of model, such as <c>lightweight</c>, <c>versatile</c> or <c>powerful</c>; null when the harness doesn't say.</summary>
     public string? Capability { get; init; }
+
+    /// <summary>The model's context window in tokens, when the harness says; null when it doesn't (never a guess).</summary>
+    public int? ContextWindow { get; init; }
 }
 
 /// <summary>

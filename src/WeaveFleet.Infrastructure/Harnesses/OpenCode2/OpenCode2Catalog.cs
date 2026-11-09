@@ -190,6 +190,7 @@ internal static class OpenCode2Catalog
                         Id = model.Id!,
                         Name = model.Name,
                         Variants = model.Variants?.Select(v => v.Id).OfType<string>().ToList() is { Count: > 0 } variants ? variants : null,
+                        ContextWindow = model.Limit is { Context: > 0 } limit ? limit.Context : null,
                     })
                     .ToList(),
             })
