@@ -156,6 +156,21 @@ public sealed class SessionUpdatesTests
     }
 
     [Fact]
+    public async Task an_asker_whose_idle_was_seen_but_not_yet_tracked_is_told_at_once()
+    {
+        _sut.Watch(new SessionUpdateWatch(Asker, Target, UserId, MessageId));
+        _activity.Update(Asker, ActivityStatuses.Busy, UserId);
+        await Task.Delay(20);
+
+        // The relay tells SessionUpdates of the asker's idle before the tracker hears of it.
+        await IdleAsync(Asker);
+        await ReplyAsync(Target, parentId: MessageId);
+        await IdleAsync(Target);
+
+        _sender.Sent.ShouldHaveSingleItem();
+    }
+
+    [Fact]
     public async Task one_update_per_turn_of_the_asker()
     {
         const string other = "s-other";

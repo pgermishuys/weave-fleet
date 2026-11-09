@@ -86,6 +86,9 @@ public sealed partial class SessionUpdates(
     private readonly HashSet<string> _startedByUpdate = new(StringComparer.Ordinal);
     private readonly List<Task> _inFlight = [];
 
+    /// <summary>When each session's idle was last observed here. The activity tracker hears of it later, so see <see cref="AskerInTurn"/>.</summary>
+    private readonly Dictionary<string, DateTimeOffset> _idledAt = new(StringComparer.Ordinal);
+
     /// <summary>Per session, the messages its replies have named since its last idle, and the ones whose turn has ended (newest last).</summary>
     private readonly Dictionary<string, HashSet<string>> _answering = new(StringComparer.Ordinal);
     private readonly Dictionary<string, Queue<string>> _answered = new(StringComparer.Ordinal);
@@ -241,6 +244,7 @@ public sealed partial class SessionUpdates(
 
             // The turn an update started is over; the next one is someone else's.
             _startedByUpdate.Remove(sessionId);
+            _idledAt[sessionId] = DateTimeOffset.UtcNow;
         }
 
         // Off the relay's pump: reading the reply and prompting both go to the harness.
@@ -283,13 +287,28 @@ public sealed partial class SessionUpdates(
             }
 
             // Mid-turn, it hears when that turn ends; OnIdle sends it then.
-            if (!SessionActivityTracker.IsInTurn(activity.Get(watch.AskerId)?.ActivityStatus))
+            if (!AskerInTurn(watch.AskerId))
                 await SendHeldAsync(watch.AskerId).ConfigureAwait(false);
         }
         catch (Exception ex)
         {
             LogReportFailed(ex, watch.TargetId, watch.AskerId);
         }
+    }
+
+    /// <summary>
+    /// Whether the asker is in a turn that hasn't ended. The relay tells this class about an idle before the activity
+    /// tracker hears of it, so a tracker still reading busy from before an idle seen here is stale: going by it, an
+    /// update held just after that idle would wait for an idle that already came, and never be sent.
+    /// </summary>
+    private bool AskerInTurn(string askerId)
+    {
+        var snapshot = activity.Get(askerId);
+        if (!SessionActivityTracker.IsInTurn(snapshot?.ActivityStatus))
+            return false;
+
+        lock (_gate)
+            return !_idledAt.TryGetValue(askerId, out var idledAt) || snapshot!.UpdatedAt > idledAt;
     }
 
     /// <summary>Sends the oldest update held for a session. One per turn: the rest wait for it to end.</summary>
