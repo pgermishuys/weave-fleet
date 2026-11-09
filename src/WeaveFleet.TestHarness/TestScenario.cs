@@ -44,6 +44,9 @@ public sealed record ScenarioEvent
 
     /// <summary>Optional delay before emitting this event (simulates streaming latency).</summary>
     public TimeSpan Delay { get; init; } = TimeSpan.Zero;
+
+    /// <summary>Optional gate: the event is held back until this task completes (deterministic "turn stays busy until the test says so").</summary>
+    public Task? Gate { get; init; }
 }
 
 internal static class TestHarnessPromptTokens
@@ -339,12 +342,13 @@ public sealed class PromptResponseBuilder
 {
     private readonly List<ScenarioEvent> _events = [];
 
-    public PromptResponseBuilder AddEvent(HarnessEvent evt, TimeSpan? delay = null)
+    public PromptResponseBuilder AddEvent(HarnessEvent evt, TimeSpan? delay = null, Task? gate = null)
     {
         _events.Add(new ScenarioEvent
         {
             Event = evt,
-            Delay = delay ?? TimeSpan.Zero
+            Delay = delay ?? TimeSpan.Zero,
+            Gate = gate
         });
         return this;
     }

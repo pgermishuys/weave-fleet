@@ -24,8 +24,10 @@ public sealed class QueuedFollowUpTests : E2ETestBase,
     {
         await WithFailureCapture(async () =>
         {
+            // The first turn stays busy until the follow-up is queued, so the queue can never land after the turn ended.
+            var followUpQueued = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
             ConfigureScenario(builder => builder
-                .WithPromptResponse(response => Turn(response, 1_500))
+                .WithPromptResponse(response => Turn(response, 1_500, followUpQueued.Task))
                 .WithPromptResponse(response => Turn(response, 1_500)));
 
             var frames = new List<string>();
@@ -46,7 +48,6 @@ public sealed class QueuedFollowUpTests : E2ETestBase,
             var sessionId = new Uri(Page.Url).AbsolutePath.Split('/', StringSplitOptions.RemoveEmptyEntries).Last();
 
             await detail.SendPromptAsync("First request", 30_000);
-            await Task.Delay(500);
 
             var queued = await Page.APIRequest.PostAsync($"/api/sessions/{sessionId}/queue", new()
             {
@@ -54,9 +55,17 @@ public sealed class QueuedFollowUpTests : E2ETestBase,
                 Headers = new Dictionary<string, string> { ["Content-Type"] = "application/json" },
             });
             Assert.True(queued.Ok, await queued.TextAsync());
+            followUpQueued.SetResult();
 
-            // Both turns take about 1.7 s each; wait for the second to end.
-            await Task.Delay(6_000);
+            // Wait on what we're asserting: the finish notice for the session (it comes after the queued turn).
+            var deadline = DateTime.UtcNow.AddSeconds(30);
+            while (DateTime.UtcNow < deadline)
+            {
+                lock (frames)
+                    if (frames.Any(f => f.Contains(sessionId, StringComparison.Ordinal) && f.Contains("\"session_notification\"", StringComparison.Ordinal) && f.Contains("\"finished\"", StringComparison.Ordinal)))
+                        break;
+                await Task.Delay(100);
+            }
             await Page.ScreenshotAsync(new() { Path = Environment.GetEnvironmentVariable("QUEUED_SHOT") ?? Path.Combine(Path.GetTempPath(), "queued-follow-up.png") });
 
             string[] seen;
@@ -81,10 +90,10 @@ public sealed class QueuedFollowUpTests : E2ETestBase,
         });
     }
 
-    private static PromptResponseBuilder Turn(PromptResponseBuilder response, int millis)
+    private static PromptResponseBuilder Turn(PromptResponseBuilder response, int millis, Task? gate = null)
         => response
             .AddEvent(Make(EventTypes.SessionStatus, new { sessionId = "_placeholder_", status = new { type = "busy" } }))
-            .AddEvent(Make(EventTypes.SessionStatus, new { sessionId = "_placeholder_", status = new { type = "idle" } }), TimeSpan.FromMilliseconds(millis))
+            .AddEvent(Make(EventTypes.SessionStatus, new { sessionId = "_placeholder_", status = new { type = "idle" } }), TimeSpan.FromMilliseconds(millis), gate)
             .AddEvent(Make(EventTypes.SessionIdle, new { sessionId = "_placeholder_" }), TimeSpan.FromMilliseconds(50));
 
     private static HarnessEvent Make(string type, object payload)
