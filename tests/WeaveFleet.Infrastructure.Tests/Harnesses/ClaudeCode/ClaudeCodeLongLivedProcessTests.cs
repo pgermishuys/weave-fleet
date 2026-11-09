@@ -337,6 +337,22 @@ public sealed class ClaudeCodeLongLivedProcessTests : IAsyncDisposable
     }
 
     [Fact]
+    public async Task Opening_an_old_session_only_to_read_it_starts_no_process()
+    {
+        if (OperatingSystem.IsWindows())
+            return;
+
+        var session = Start(claudeSessionId: "cc-old");
+        await Task.Delay(300);
+        _time.Advance(TimeSpan.FromHours(2));
+        await Task.Delay(100);
+
+        // Nothing spawned: reading history needs no `claude`, so there is nothing to collect either.
+        Starts().ShouldBe(0);
+        session.ProcessId.ShouldBeNull();
+    }
+
+    [Fact]
     public async Task A_process_that_dies_between_turns_is_replaced_by_the_next_prompt()
     {
         if (OperatingSystem.IsWindows())
