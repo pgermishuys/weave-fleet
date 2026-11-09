@@ -331,6 +331,9 @@ public sealed class TestHarnessSession : IHarnessSession
                 if (scenarioEvent.Delay > TimeSpan.Zero)
                     await Task.Delay(scenarioEvent.Delay, ct).ConfigureAwait(false);
 
+                if (scenarioEvent.Gate is { } gate)
+                    await gate.WaitAsync(ct).ConfigureAwait(false);
+
                 // Persist durable events for assistant messages so tool parts are
                 // available via REST. Skip user message echoes — those are already
                 // persisted by PersistUserPromptAsync.
@@ -400,6 +403,7 @@ public sealed class TestHarnessSession : IHarnessSession
             {
                 Event = scenarioEvent.Event with { Payload = rewrittenPayload },
                 Delay = scenarioEvent.Delay,
+                Gate = scenarioEvent.Gate,
             });
         }
 
