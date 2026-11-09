@@ -6,7 +6,6 @@ import {
   describeRolloutOutcome,
   describeRolloutStep,
   busySessions,
-  FLEET_UPDATES_PREFERENCE_KEY,
   hasUpdateWaiting,
   readLastSeenVersions,
   writeLastSeenVersions,
@@ -42,13 +41,6 @@ const COME_BACK_LIMIT_MS = 3 * 60_000;
 
 const DESKTOP_PLATFORMS: Record<string, string> = { darwin: "macos", win32: "windows", linux: "linux" };
 
-/** Settings → Labs: whether Settings → Updates & about shows each machine's version, update rule and Restart. */
-export function useFleetUpdatesEnabled() {
-  const preferences = usePreferencesStore();
-  preferences.ensureLoaded();
-  return computed(() => preferences.get(FLEET_UPDATES_PREFERENCE_KEY, "false") === "true");
-}
-
 /**
  * Every Fleet the user runs, with its version and update state: the desktop app when this page runs in it, then home
  * and each machine in Settings → Machines. Machines come from the machine store, so this adds no polling of its own:
@@ -65,7 +57,6 @@ export function useFleetUpdates() {
     return isUpdateRule(value) ? value : null;
   });
   const ruleOverrides = computed(() => parseRuleOverrides(preferences.get(UPDATE_RULE_OVERRIDES_KEY, "{}")));
-  const enabled = useFleetUpdatesEnabled();
   const isChecking = shallowRef(false);
   /** The rollout the home Fleet is running, or its last; the Fleet pushes each change. */
   const rollout = shallowRef<Rollout | null>(null);
@@ -179,9 +170,9 @@ export function useFleetUpdates() {
     unsubscribeRollout = null;
   }
 
-  /** Reads the rollout and follows it, but only with the switch on: with it off this asks the Fleet for nothing. */
+  /** Reads the rollout and follows it. */
   function followRollout(): void {
-    if (rolloutTimer || !enabled.value) return;
+    if (rolloutTimer) return;
     void loadRollout();
     unsubscribeRollout = onDomainEvent(liveTarget(), "sessions", "update.rollout", (event) => {
       rollout.value = event.payload;
@@ -270,9 +261,8 @@ export function useFleetUpdates() {
   }
 
   onMounted(followRollout);
-  watch(enabled, (on) => (on ? followRollout() : stopFollowingRollout()));
   watch(
-    () => (enabled.value ? machines.entries.map((entry) => [entry.key, entry.info?.version] as const) : []),
+    () => machines.entries.map((entry) => [entry.key, entry.info?.version] as const),
     (reported) => {
       const next = { ...lastSeen.value };
       for (const [key, version] of reported) if (version) next[key] = version;
@@ -286,7 +276,6 @@ export function useFleetUpdates() {
   onUnmounted(stopFollowingRollout);
 
   return {
-    enabled,
     rows,
     machineRows,
     summary,
@@ -313,25 +302,17 @@ export function useFleetUpdates() {
 
 /**
  * Follows the machines while Settings or the status bar chip needs them, and says how many machines have an update
- * waiting (the desktop app's own row isn't one). Only does anything while the switch is on.
+ * waiting (the desktop app's own row isn't one).
  */
 export function useFleetUpdatesWatch() {
-  const enabled = useFleetUpdatesEnabled();
   const machines = useMachinesStore();
   const { rows, rollout } = useFleetUpdates();
-  const waiting = computed(() => (enabled.value ? rows.value.filter((row) => row.kind !== "app" && hasUpdateWaiting(row.state)).length : 0));
+  const waiting = computed(() => rows.value.filter((row) => row.kind !== "app" && hasUpdateWaiting(row.state)).length);
   let stop: (() => void) | null = null;
 
-  function sync(): void {
-    if (enabled.value && !stop) stop = machines.startPolling();
-    else if (!enabled.value && stop) {
-      stop();
-      stop = null;
-    }
-  }
-
-  onMounted(sync);
-  watch(enabled, sync);
+  onMounted(() => {
+    stop = machines.startPolling();
+  });
   onUnmounted(() => stop?.());
-  return { enabled, waiting, rows, rollout };
+  return { waiting, rows, rollout };
 }

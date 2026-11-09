@@ -4,7 +4,6 @@ import { api } from "@/api/client";
 import { useReleaseNotes } from "@/composables/use-release-notes";
 import { useUpdateStatus, type UpdateStatus } from "@/composables/use-update-status";
 import { useWhatsNew } from "@/composables/use-whats-new";
-import { useFleetUpdatesEnabled } from "@/composables/use-fleet-updates";
 import { getDesktopBridge, releaseNotesUrl, type DesktopUpdateState } from "@/lib/desktop";
 import { changeSummary, compareVersions, parseReleaseNotes, whatsNewSummary, type WhatsNewSummary } from "@/lib/release-notes";
 import { useNoticesStore, type Notice } from "@/stores/notices";
@@ -105,9 +104,6 @@ export function useUpdateNotices(): void {
   const notices = useNoticesStore();
   const bridge = getDesktopBridge();
   const { updateStatus } = useUpdateStatus();
-  // With Updates in Machines on, one status bar chip counts every machine (this Fleet included), so this Fleet's own
-  // "ready" notice stays away. The desktop app's own updater is a different thing and keeps its notice.
-  const machinesCoverServer = useFleetUpdatesEnabled();
   let stopListening: (() => void) | undefined;
   let stopShowUpdate: (() => void) | undefined;
   let appNoticeId: string | null = null;
@@ -231,27 +227,8 @@ export function useUpdateNotices(): void {
   // ── The server's updates (the `fleet` CLI) ─────────────────────────────
   function syncServer(status: UpdateStatus | null): void {
     if (!status || status.status === "managed") return;
-    if (machinesCoverServer.value) {
-      notices.removeWhere(SERVER);
-      return;
-    }
-    if (status.status === "staged" && status.latestVersion) {
-      const version = status.latestVersion;
-      const id = `${SERVER}${version}`;
-      notices.removeWhere(SERVER, id);
-      if (notices.has(id)) return;
-      notices.post({
-        id,
-        title: `Fleet ${version} is ready`,
-        body: "It installs the next time you start Fleet.",
-        link: whatsNew(version),
-        chip: `Fleet ${version} ready`,
-        actions: [{ label: "Got it", run: () => notices.settle(id) }],
-      });
-      void addCount(id, version);
-    } else if (status.status === "uptodate") {
-      notices.removeWhere(SERVER);
-    }
+    // One status bar chip counts every machine (this Fleet included), so this Fleet's own "ready" notice stays away.
+    notices.removeWhere(SERVER);
   }
 
   // ── What's new after a restart into a new version ──────────────────────
@@ -305,7 +282,7 @@ export function useUpdateNotices(): void {
   }
 
   watch(
-    [updateStatus, machinesCoverServer],
+    [updateStatus],
     ([status]) => {
       syncServer(status);
       // A Fleet the app runs has the app's version, which the app's own source reports.

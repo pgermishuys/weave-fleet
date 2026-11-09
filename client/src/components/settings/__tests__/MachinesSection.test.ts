@@ -151,8 +151,8 @@ describe("Settings → Machines", () => {
     expect(state.text()).toBe("reachable · 1 session");
   });
 
-  it("shows no version, update rule or Restart even with Updates in Machines on: they are in Updates & about", async () => {
-    routes["/api/preferences"] = () => json({ FleetUpdates: "true" });
+  it("shows no version, update rule or Restart even though they exist: they are in Updates & about", async () => {
+    routes["/api/preferences"] = () => json({});
     routes["/api/machine"] = () => json({ ...atlasInfo, version: "0.59.0", capabilities: atlasCapabilities, update: { status: "staged", latestVersion: "0.59.1", stagedVersion: "0.59.1", checkedAt: null, canRestart: true, rule: "idle" } });
     const wrapper = mount(MachinesSection);
     await flushPromises();

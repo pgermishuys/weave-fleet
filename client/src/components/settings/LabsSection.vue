@@ -7,7 +7,6 @@ import SettingSwitch from "@/components/settings/SettingSwitch.vue";
 import { usePreferenceSwitch } from "@/composables/use-preference-switch";
 import { useSettingsNav } from "@/composables/use-settings-nav";
 import { useWorkflowsFeature } from "@/composables/use-workflows-feature";
-import { FLEET_UPDATES_PREFERENCE_KEY } from "@/lib/fleet-updates";
 import { JOBS_PREFERENCE_KEY } from "@/lib/jobs";
 import { MEMORY_PREFERENCE_KEY, MEMORY_SEARCH_PREFERENCE_KEY } from "@/lib/agent-memory";
 import { LIVE_MACHINES_PREFERENCE_KEY } from "@/lib/machines";
@@ -22,7 +21,6 @@ const { setActiveSection } = useSettingsNav();
 preferencesStore.ensureLoaded();
 
 const liveMachines = usePreferenceSwitch(LIVE_MACHINES_PREFERENCE_KEY);
-const fleetUpdates = usePreferenceSwitch(FLEET_UPDATES_PREFERENCE_KEY);
 const jobs = usePreferenceSwitch(JOBS_PREFERENCE_KEY);
 const missionControl = usePreferenceSwitch(MISSION_CONTROL_PREFERENCE_KEY);
 const memorySearch = usePreferenceSwitch(MEMORY_SEARCH_PREFERENCE_KEY);
@@ -77,29 +75,6 @@ function openRoute(path: string): void {
             aria-label="Keep every machine live"
             data-testid="live-machines-switch"
             @click="liveMachines.toggle"
-          />
-        </template>
-      </SettingRow>
-
-      <SettingRow
-        id="fleet-updates"
-        title="Updates in Machines"
-        summary="Each machine's version, update rule and Restart."
-        :adds="addsWhenOn(fleetUpdates.enabled.value, 'Machine versions and update rules in Updates & about')"
-        @open="setActiveSection('updates', 'machines')"
-      >
-        <template #more>
-          Shows each machine's version, update rule and Restart in Settings → Updates & about, plus Update machines now,
-          which restarts every machine that has an update downloaded, one at a time.
-        </template>
-        <template #control>
-          <SettingSwitch
-            :checked="fleetUpdates.enabled.value"
-            :saving="fleetUpdates.saving.value"
-            :disabled="preferencesStore.isLoading || fleetUpdates.saving.value"
-            aria-label="Show updates in Machines"
-            data-testid="fleet-updates-switch"
-            @click="fleetUpdates.toggle"
           />
         </template>
       </SettingRow>

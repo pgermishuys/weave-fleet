@@ -24,13 +24,13 @@ export function reloadAction(): { label: string; tone: "primary"; run: () => voi
  * A window keeps the JavaScript it loaded when its Fleet updates itself, and only the window that pressed Restart
  * reloads. So this reads the Fleet the window loaded from now and then (a minute apart while the window is showing,
  * and when it comes back to the front): when it reports another version than the first this window saw, it offers
- * a reload. With the Updates switch on, Fleet's own "updated to" notice carries that Reload (useFleetUpdateNotices), so
+ * a reload. Fleet's own "updated to" notice carries that Reload (useFleetUpdateNotices), so
  * this posts none of its own when that one is coming.
  */
 export function useStaleWindowNotice(): void {
   const machines = useMachinesStore();
   const notices = useNoticesStore();
-  const { enabled: updatesOn } = useFleetUpdatesWatch();
+  useFleetUpdatesWatch();
   loadedAgainst.value = null;
   let timer: ReturnType<typeof setInterval> | null = null;
 
@@ -59,7 +59,7 @@ export function useStaleWindowNotice(): void {
       if (version === loadedAgainst.value) return;
 
       const home = machines.entries.find((entry) => entry.key === HOME_MACHINE_KEY);
-      if (updatesOn.value && home && describeUpdatedNotice(home.key, home.name, version, home.info?.update?.lastUpdate, new Date())) return;
+      if (home && describeUpdatedNotice(home.key, home.name, version, home.info?.update?.lastUpdate, new Date())) return;
 
       const id = `fleet-window-stale:${version}`;
       if (notices.has(id)) return;

@@ -6,9 +6,10 @@ import type { DesktopUpdateState } from "@/lib/desktop";
 import { formatRelativeTime } from "@/lib/format-utils";
 
 /** Settings → Labs: shows each machine's version, update rule and Restart in Settings → Updates & about. Off until turned on. */
-export const FLEET_UPDATES_PREFERENCE_KEY = "FleetUpdates";
 
 /** Settings → Updates & about › Machines: the rule the user chose for every machine, unless one has its own. */
+/** Set once the user has been told that a machine updated itself under a rule they never picked. */
+export const UPDATE_RULE_NOTICE_KEY = "FleetUpdateRuleNotice";
 export const UPDATE_RULE_DEFAULT_KEY = "FleetUpdateRule";
 
 /** A JSON object: machine key (`home` for this one) to the rule that machine follows. */
@@ -360,7 +361,7 @@ export function describeUpdatedNotice(
   runningVersion: string | null,
   last: LastUpdate | null | undefined,
   now: Date,
-): { id: string; title: string; body: string; version: string } | null {
+): { id: string; title: string; body: string; version: string; trigger: LastUpdate["trigger"] } | null {
   if (!last || !runningVersion || last.to.replace(/^v/, "") !== runningVersion.replace(/^v/, "")) return null;
   const at = new Date(last.at);
   if (Number.isNaN(at.getTime()) || now.getTime() - at.getTime() > UPDATED_NOTICE_DAYS * 86_400_000) return null;
@@ -370,6 +371,7 @@ export function describeUpdatedNotice(
     title: `${name} updated to ${last.to}`,
     body: `At ${clock}, ${UPDATED_BY[last.trigger] ?? "by itself"}.`,
     version: last.to,
+    trigger: last.trigger,
   };
 }
 

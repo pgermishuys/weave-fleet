@@ -78,8 +78,8 @@ describe("Updates & about", () => {
     const current = { status: "uptodate", latestVersion: "0.59.1", stagedVersion: null, checkedAt: new Date(Date.now() - 2 * 3600_000).toISOString(), canRestart: true, rule: "idle" };
     let fetched: string[];
 
-    function setUp(options: { switchOn: boolean; home?: object; mini?: object }): void {
-      routes["/api/preferences"] = () => json(options.switchOn ? { FleetUpdates: "true" } : {});
+    function setUp(options: { home?: object; mini?: object }): void {
+      routes["/api/preferences"] = () => json({});
       routes["/api/machine"] = () => json({ ...atlasInfo, webApp: false, version: "0.59.0", capabilities: atlasCapabilities, update: options.home ?? downloaded });
       routes[`${MINI_URL}/api/machine`] = () => json({ ...miniInfo, version: "0.59.0", update: options.mini ?? current });
       routes["/api/update/rollout"] = () => json({}, 404);
@@ -106,18 +106,8 @@ describe("Updates & about", () => {
       fetched = [];
     });
 
-    it("has no Machines group with the switch off, and asks nothing about updates", async () => {
-      setUp({ switchOn: false });
-      const wrapper = mount(UpdatesSection, { global: { stubs: { SystemSection: true, WhatsNewSection: true, HarnessUpdatesGroup: true } } });
-      await flushPromises();
-
-      expect(wrapper.find("[data-setting-group='machines']").exists()).toBe(false);
-      expect(wrapper.find("[data-testid='machine-version']").exists()).toBe(false);
-      expect(fetched.filter((url) => url.includes("/api/update/"))).toEqual([]);
-    });
-
-    it("has the Machines group between the harnesses and What's new with the switch on", async () => {
-      setUp({ switchOn: true });
+    it("has the Machines group between the harnesses and What's new, with no preference set", async () => {
+      setUp({});
       const wrapper = mount(UpdatesSection, { global: { stubs: { SystemSection: true, WhatsNewSection: true, HarnessUpdatesGroup: true } } });
       await flushPromises();
 
@@ -125,7 +115,7 @@ describe("Updates & about", () => {
     });
 
     it("shows a version line on each card, and Restart only on the machine with an update downloaded", async () => {
-      setUp({ switchOn: true });
+      setUp({});
       const wrapper = await mountIt();
 
       const home = card(wrapper, HOME_MACHINE_KEY);
@@ -143,7 +133,7 @@ describe("Updates & about", () => {
     });
 
     it("says a machine can't be reached with the version last seen, and offers it no rule menu", async () => {
-      setUp({ switchOn: true });
+      setUp({});
       const wrapper = await mountIt();
       routes[`${MINI_URL}/api/sessions`] = () => {
         throw new TypeError("Failed to fetch");
@@ -157,14 +147,14 @@ describe("Updates & about", () => {
     });
 
     it("remembers each machine's version on this device", async () => {
-      setUp({ switchOn: true });
+      setUp({});
       await mountIt();
       expect(JSON.parse(localStorage.getItem("fleet.machineVersions") ?? "{}")).toMatchObject({ [HOME_MACHINE_KEY]: "0.59.0", [mini.id]: "0.59.0" });
     });
 
     it("says what a machine was last seen on when it hasn't answered since the page opened", async () => {
       localStorage.setItem("fleet.machineVersions", JSON.stringify({ [mini.id]: "0.58.2" }));
-      setUp({ switchOn: true });
+      setUp({});
       routes[`${MINI_URL}/api/machine`] = () => {
         throw new TypeError("Failed to fetch");
       };
@@ -181,7 +171,7 @@ describe("Updates & about", () => {
     });
 
     it("shows the release line with Update machines now when something can update", async () => {
-      setUp({ switchOn: true, mini: downloaded });
+      setUp({ mini: downloaded });
       const wrapper = await mountIt();
 
       const strip = wrapper.get("[data-testid='machines-updates-strip']");
@@ -193,7 +183,7 @@ describe("Updates & about", () => {
     });
 
     it("says every machine is up to date in one line, and when it last checked", async () => {
-      setUp({ switchOn: true, home: current });
+      setUp({ home: current });
       const wrapper = await mountIt();
 
       const strip = wrapper.get("[data-testid='machines-updates-strip']");
@@ -205,7 +195,7 @@ describe("Updates & about", () => {
     });
 
     it("tells where a rollout is, with a Stop after the machine being handled", async () => {
-      setUp({ switchOn: true, mini: downloaded });
+      setUp({ mini: downloaded });
       routes["/api/update/rollout"] = () => json({
         id: "r1",
         status: "running",
@@ -227,7 +217,7 @@ describe("Updates & about", () => {
     });
 
     it("says a machine in the rollout's queue that can't be reached will be skipped, not that it's next", async () => {
-      setUp({ switchOn: true, mini: downloaded });
+      setUp({ mini: downloaded });
       routes[`${MINI_URL}/api/machine`] = () => {
         throw new TypeError("Failed to fetch");
       };
@@ -249,7 +239,7 @@ describe("Updates & about", () => {
     });
 
     it("says no release was found when no machine knows of one", async () => {
-      setUp({ switchOn: true, home: { ...current, latestVersion: null, status: "unknown" }, mini: { ...current, latestVersion: null, status: "unknown" } });
+      setUp({ home: { ...current, latestVersion: null, status: "unknown" }, mini: { ...current, latestVersion: null, status: "unknown" } });
       const wrapper = await mountIt();
       expect(wrapper.get("[data-testid='machines-updates-strip']").text()).toContain("Fleet hasn't found a release yet.");
     });
