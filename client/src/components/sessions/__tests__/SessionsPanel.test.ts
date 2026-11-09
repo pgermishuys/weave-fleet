@@ -2,6 +2,7 @@ import { enableAutoUnmount, flushPromises, mount } from "@vue/test-utils";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { ref, shallowRef, type Ref } from "vue";
 import MachineSessionsGroup from "@/components/sessions/MachineSessionsGroup.vue";
+import NewProjectDialog from "@/components/sessions/NewProjectDialog.vue";
 import SessionsPanel from "@/components/sessions/SessionsPanel.vue";
 import type { ProjectResponse, SessionListItem } from "@/api/client";
 import { HOME_MACHINE_KEY, saveMachines, setActiveMachine, type MachineConnection } from "@/lib/machines";
@@ -10,6 +11,7 @@ import { useArchiveQueueStore } from "@/stores/archive-queue";
 import { useMachinesStore } from "@/stores/machines";
 import { useSessionSelectionStore } from "@/stores/session-selection";
 import { useSessionsStore } from "@/stores/sessions";
+import { machineGroupKey, useSidebarStore } from "@/stores/sidebar";
 import { useWorkspaceUiStore } from "@/stores/workspace-ui";
 
 const { navigate, route } = vi.hoisted(() => ({ navigate: vi.fn(), route: { path: undefined as unknown as Ref<string> } }));
@@ -214,6 +216,34 @@ describe("SessionsPanel across machines", () => {
     group.vm.$emit("newSession");
 
     expect(useWorkspaceUiStore().newSessionMachine).toBe(hangar.id);
+    view.unmount();
+  });
+
+  it("opens New Project on another machine from its heading, and shows the new project there at once", async () => {
+    useSessionsStore().setSessions([item("home-1", "Local work", "p-fleet")]);
+    const machines = useMachinesStore();
+    const refresh = vi.spyOn(machines, "refreshMachine").mockResolvedValue();
+    const sidebar = useSidebarStore();
+    sidebar.setGroupCollapsed(machineGroupKey(hangar.id), true);
+    const view = mountPanel();
+    await flushPromises();
+
+    const group = view.findAllComponents(MachineSessionsGroup).find((candidate) => candidate.props("machine").key === hangar.id)!;
+    group.vm.$emit("newProject");
+    await flushPromises();
+
+    const dialog = view.findComponent(NewProjectDialog);
+    expect(dialog.props("open")).toBe(true);
+    expect(dialog.props("machineKey")).toBe(hangar.id);
+
+    dialog.vm.$emit("created", project("p-new", "Release pipeline", 3), hangar.id);
+    await flushPromises();
+    expect(refresh).toHaveBeenCalledWith(hangar.id);
+    expect(sidebar.isGroupCollapsed(machineGroupKey(hangar.id))).toBe(false);
+
+    // The panel's own New Project button starts on the machine you're on again.
+    await view.get("[aria-label='New Project']").trigger("click");
+    expect(view.findComponent(NewProjectDialog).props("machineKey")).toBeNull();
     view.unmount();
   });
 

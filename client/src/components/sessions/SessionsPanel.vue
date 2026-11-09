@@ -3,7 +3,7 @@ import { computed, onMounted, onUnmounted, shallowRef, useTemplateRef, watch } f
 import { useLocation, useRouter } from "@tanstack/vue-router";
 import { Archive, ArchiveRestore, ArrowLeft, FolderPlus, LoaderCircle, Plus, Search, X } from "lucide-vue-next";
 import { storeToRefs } from "pinia";
-import type { SessionListItem } from "@/api/client";
+import type { ProjectResponse, SessionListItem } from "@/api/client";
 import { useProjects } from "@/composables/use-projects";
 import { useSessions } from "@/composables/use-sessions";
 import { useRunningWorkAcrossSessions } from "@/composables/use-running-work";
@@ -192,6 +192,8 @@ function isProjectExpanded(projectId: string): boolean {
 }
 
 const isNewProjectDialogOpen = shallowRef(false);
+/** The machine the New Project dialog opens on: a heading's New project on …, else (null) the machine you're on. */
+const newProjectMachine = shallowRef<string | null>(null);
 
 
 watch(
@@ -390,6 +392,14 @@ function handleProjectSessionCreateOn(machineKey: string, projectId: string): vo
 
 function handleNewProject(): void {
   sidebarStore.setActiveRail("sessions");
+  newProjectMachine.value = null;
+  isNewProjectDialogOpen.value = true;
+}
+
+/** New project on … from a machine's heading: the dialog, with that machine picked. */
+function handleNewProjectOn(machineKey: string): void {
+  sidebarStore.setActiveRail("sessions");
+  newProjectMachine.value = machineKey;
   isNewProjectDialogOpen.value = true;
 }
 
@@ -397,7 +407,13 @@ async function handleRetry(): Promise<void> {
   await Promise.all([refetchSessions(), refetchProjects()]);
 }
 
-async function handleProjectCreated(): Promise<void> {
+/** The new project shows under its machine at once: that machine's list is read again and its heading unfolds. */
+async function handleProjectCreated(_project: ProjectResponse, machineKey: string): Promise<void> {
+  sidebarStore.setGroupCollapsed(machineGroupKey(machineKey), false);
+  if (machineKey !== machines.liveKey) {
+    await machines.refreshMachine(machineKey);
+    return;
+  }
   await refetchProjects();
   await refetchSessions();
 }
@@ -581,6 +597,7 @@ function handleCompleteDropZoneDrop(event: DragEvent): void {
 <template>
   <NewProjectDialog
     v-model:open="isNewProjectDialogOpen"
+    :machine-key="newProjectMachine"
     @created="handleProjectCreated"
   />
 
@@ -669,6 +686,7 @@ function handleCompleteDropZoneDrop(event: DragEvent): void {
             menu
             @toggle="handleToggleLiveMachine"
             @new-session="handleNewSessionOn(machine.key)"
+            @new-project="handleNewProjectOn(machine.key)"
           />
 
           <template v-if="liveMachineExpanded">
@@ -800,6 +818,7 @@ function handleCompleteDropZoneDrop(event: DragEvent): void {
           @open="handleMachineSessionOpen(machine, $event)"
           @open-draft="handleOpenDraft"
           @new-session="handleNewSessionOn(machine.key)"
+          @new-project="handleNewProjectOn(machine.key)"
           @new-session-in="handleProjectSessionCreateOn(machine.key, $event)"
           @work-here="handleWorkHere(machine)"
         />

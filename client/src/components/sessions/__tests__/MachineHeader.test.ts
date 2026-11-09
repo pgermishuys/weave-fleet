@@ -25,6 +25,29 @@ describe("MachineHeader menu", () => {
     document.body.innerHTML = "";
   });
 
+
+  it("offers a new project there, named for a machine that isn't live", async () => {
+    const view = mountHeader({ menu: true });
+    await openMenu(view);
+
+    expect(menuItem("machine-menu-new-project")?.textContent).toMatch(/New project on\s*hangar/);
+    menuItem("machine-menu-new-project")!.click();
+    await flushPromises();
+    expect(view.emitted("newProject")).toHaveLength(1);
+    expect(view.emitted("toggle")).toBeUndefined();
+  });
+
+  it("says just New project on the live machine, and can't be picked on one that's unreachable", async () => {
+    const live = mountHeader({ menu: true, live: true });
+    await openMenu(live);
+    expect(menuItem("machine-menu-new-project")?.textContent?.trim()).toBe("New project");
+    live.unmount();
+    document.body.innerHTML = "";
+
+    const down = mountHeader({ menu: true, unreachable: true });
+    await openMenu(down);
+    expect(menuItem("machine-menu-new-project")?.hasAttribute("data-disabled")).toBe(true);
+  });
   it("offers a new session there and Work here on a machine that isn't live", async () => {
     const view = mountHeader({ menu: true });
     await openMenu(view);

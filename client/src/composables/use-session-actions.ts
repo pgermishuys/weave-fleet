@@ -48,7 +48,8 @@ export interface UseCreateSessionResult {
 }
 
 export interface UseCreateProjectResult {
-  createProject: (request: CreateProjectRequest) => Promise<ProjectResponse>;
+  /** Creates the project on `target`'s machine; on the machine this part of the page asks when left out. */
+  createProject: (request: CreateProjectRequest, target?: MachineTarget) => Promise<ProjectResponse>;
   isCreating: Readonly<ShallowRef<boolean>>;
   error: Readonly<ShallowRef<string | undefined>>;
 }
@@ -283,9 +284,9 @@ export function useCreateProject(): UseCreateProjectResult {
   const state = createMutationState();
   const { api } = useMachineTarget();
 
-  async function createProject(request: CreateProjectRequest): Promise<ProjectResponse> {
+  async function createProject(request: CreateProjectRequest, target?: MachineTarget): Promise<ProjectResponse> {
     return state.execute(async () => {
-      const { data, error, response } = await api.POST("/api/projects", {
+      const { data, error, response } = await (target?.api ?? api).POST("/api/projects", {
         body: request as components["schemas"]["CreateProjectRequest"],
       });
 

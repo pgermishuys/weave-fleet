@@ -1,0 +1,300 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>New project on any machine — proposal</title>
+<style>
+:root {
+  --rail-bg: #0d0d10; --panel-bg: #141418; --card-bg: #1b1b20; --main-bg: #0d0d10;
+  --border: rgba(255,255,255,0.075); --text: #e8e8ec; --muted: #8e8e9a;
+  --coral: #D95A3A; --accent: #6366f1; --accent-dim: rgba(99,102,241,0.15);
+  --error: #ef4444; --running: #22c55e;
+  --radius-card: 10px; --radius-btn: 8px; --radius-panel: 12px;
+  --menu-shadow: 0 16px 40px -12px rgba(0,0,0,0.55), 0 2px 6px rgba(0,0,0,0.25);
+  --font: "Inter Variable","Inter",system-ui,-apple-system,sans-serif;
+  --mono: "JetBrains Mono Variable","JetBrains Mono",ui-monospace,monospace;
+}
+@media (prefers-color-scheme: light) {
+  :root {
+    --rail-bg: #F3F2EF; --panel-bg: #FFFFFF; --card-bg: #FFFFFF; --main-bg: #F3F2EF;
+    --border: rgba(26,25,24,0.09); --text: #1A1918; --muted: #6E6A65;
+    --accent: #5B6EC7; --accent-dim: rgba(91,110,199,0.12);
+    --menu-shadow: 0 16px 40px -12px rgba(0,0,0,0.18), 0 2px 6px rgba(0,0,0,0.08);
+  }
+}
+* { box-sizing: border-box; }
+body { margin: 0; background: var(--main-bg); color: var(--text); font: 13px/1.45 var(--font); }
+.wrap { max-width: 1120px; margin: 0 auto; padding: 28px 16px 60px; }
+h1 { font-size: 20px; margin: 0 0 6px; letter-spacing: -0.01em; }
+h2 { font-size: 15px; margin: 34px 0 8px; }
+p { margin: 0 0 10px; color: var(--muted); max-width: 72ch; }
+p strong, li strong { color: var(--text); font-weight: 600; }
+code { font-family: var(--mono); font-size: 12px; background: var(--card-bg); padding: 1px 5px; border-radius: 4px; border: 1px solid var(--border); }
+ul { color: var(--muted); padding-left: 18px; margin: 0 0 10px; max-width: 76ch; }
+li { margin: 3px 0; }
+
+.tabs { display: flex; flex-wrap: wrap; gap: 6px; margin: 18px 0 14px; }
+.tabs button { font: inherit; color: var(--muted); background: transparent; border: 1px solid var(--border); border-radius: 999px; padding: 5px 12px; cursor: pointer; }
+.tabs button[aria-pressed="true"] { color: var(--text); background: var(--accent-dim); border-color: color-mix(in srgb, var(--accent) 45%, var(--border)); }
+.tabs button:focus-visible, .btn:focus-visible, .chip:focus-visible { outline: 2px solid var(--accent); outline-offset: 1px; }
+.caption { min-height: 40px; }
+
+/* App frame */
+.app { display: grid; grid-template-columns: 44px 270px 1fr; height: 520px; border: 1px solid var(--border); border-radius: var(--radius-panel); overflow: hidden; background: var(--main-bg); position: relative; }
+.rail { background: var(--rail-bg); border-right: 1px solid var(--border); display: flex; flex-direction: column; align-items: center; gap: 10px; padding-top: 12px; }
+.rail i { width: 18px; height: 18px; border-radius: 5px; background: color-mix(in srgb, var(--text) 14%, transparent); display: block; }
+.rail i.on { background: var(--accent); }
+.panel { background: var(--panel-bg); border-right: 1px solid var(--border); display: flex; flex-direction: column; min-width: 0; }
+.panel-head { display: flex; align-items: center; gap: 4px; padding: 10px 10px 6px; }
+.pbtn { display: inline-flex; align-items: center; gap: 6px; height: 28px; padding: 0 8px; border-radius: var(--radius-btn); border: 0; background: transparent; color: var(--text); font: inherit; cursor: pointer; }
+.pbtn:hover { background: color-mix(in srgb, var(--text) 6%, transparent); }
+.pbtn svg { width: 15px; height: 15px; }
+.pbtn.icon { margin-left: auto; padding: 0 6px; }
+.pbtn.ring { box-shadow: 0 0 0 2px var(--accent); }
+.search { margin: 2px 10px 8px; height: 28px; border-radius: var(--radius-btn); background: color-mix(in srgb, var(--text) 5%, transparent); color: var(--muted); display: flex; align-items: center; padding: 0 9px; font-size: 12px; }
+.tree { overflow: auto; padding: 0 6px 10px; }
+.mh { display: flex; align-items: center; gap: 7px; padding: 7px 6px 5px; font-size: 11px; text-transform: uppercase; letter-spacing: .06em; color: var(--muted); border-radius: 6px; }
+.mh .dot { width: 7px; height: 7px; border-radius: 50%; background: var(--coral); }
+.mh .dot.down { background: transparent; border: 1.5px solid var(--muted); }
+.mh .n { margin-left: auto; font-variant-numeric: tabular-nums; }
+.mh.hot { background: color-mix(in srgb, var(--text) 6%, transparent); color: var(--text); }
+.pg { display: flex; align-items: center; gap: 6px; padding: 5px 6px 3px 14px; font-size: 12px; color: var(--muted); font-weight: 500; }
+.pg .n { margin-left: auto; font-size: 11px; }
+.pg.new { color: var(--text); background: var(--accent-dim); border-radius: 6px; animation: flash 1.6s ease-out; }
+@keyframes flash { from { background: color-mix(in srgb, var(--accent) 40%, transparent); } }
+.row { padding: 5px 8px 5px 22px; border-radius: 6px; font-size: 12.5px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.row.empty { color: var(--muted); font-style: italic; font-size: 12px; }
+.main { display: grid; place-items: center; color: var(--muted); font-size: 12px; background: var(--main-bg); }
+
+/* Context menu */
+.menu { position: absolute; z-index: 5; width: 256px; background: var(--card-bg); border: 1px solid var(--border); border-radius: var(--radius-card); box-shadow: var(--menu-shadow); padding: 4px; }
+.mi { display: flex; align-items: center; gap: 8px; padding: 6px 8px; border-radius: 6px; font-size: 12.5px; }
+.mi svg { width: 14px; height: 14px; color: var(--muted); flex-shrink: 0; }
+.mi.hot { background: color-mix(in srgb, var(--text) 7%, transparent); }
+.mi .nm { font-weight: 600; }
+.mi .tag { margin-left: auto; font-size: 10px; text-transform: uppercase; letter-spacing: .06em; color: var(--accent); }
+.sep { height: 1px; background: var(--border); margin: 4px 2px; }
+
+/* Dialog */
+.scrim { position: absolute; inset: 0; background: rgba(0,0,0,0.45); display: grid; place-items: center; z-index: 4; padding: 16px; }
+.dialog { width: 100%; max-width: 460px; background: var(--card-bg); border: 1px solid var(--border); border-radius: var(--radius-panel); padding: 20px; box-shadow: var(--menu-shadow); position: relative; }
+.dialog h3 { margin: 0 0 4px; font-size: 16px; }
+.dialog .desc { margin: 0 0 16px; font-size: 13px; }
+.field { margin-bottom: 14px; }
+.field label { display: block; font-size: 13px; font-weight: 500; margin-bottom: 6px; }
+.input { height: 34px; border: 1px solid var(--border); border-radius: var(--radius-btn); background: var(--panel-bg); padding: 0 10px; display: flex; align-items: center; font-size: 13px; }
+.input.focus { border-color: var(--accent); box-shadow: 0 0 0 3px var(--accent-dim); }
+.input.ph { color: var(--muted); }
+.textarea { height: 64px; align-items: flex-start; padding-top: 8px; color: var(--muted); }
+.chip { display: inline-flex; align-items: center; gap: 7px; height: 30px; padding: 0 10px; border-radius: var(--radius-btn); border: 1px solid var(--border); background: var(--panel-bg); color: var(--text); font: inherit; font-size: 13px; cursor: pointer; }
+.chip .dot { width: 7px; height: 7px; border-radius: 50%; background: var(--coral); }
+.chip .os { color: var(--muted); font-size: 12px; }
+.chip svg { width: 13px; height: 13px; color: var(--muted); }
+.chip.open { background: color-mix(in srgb, var(--text) 6%, transparent); }
+.hint { font-size: 12px; color: var(--muted); margin-top: 6px; }
+.alert { display: flex; gap: 10px; border: 1px solid color-mix(in srgb, var(--error) 35%, transparent); background: color-mix(in srgb, var(--error) 10%, transparent); color: var(--error); padding: 10px 12px; font-size: 13px; border-radius: 8px; margin-bottom: 14px; }
+.foot { display: flex; justify-content: flex-end; gap: 8px; margin-top: 18px; }
+.btn { height: 32px; padding: 0 14px; border-radius: var(--radius-btn); font: inherit; font-weight: 500; cursor: pointer; border: 1px solid var(--border); background: transparent; color: var(--text); }
+.btn.primary { background: var(--accent); border-color: var(--accent); color: #fff; }
+.btn.primary[disabled] { opacity: .55; }
+
+.mmenu { position: absolute; left: 20px; width: 290px; background: var(--card-bg); border: 1px solid var(--border); border-radius: var(--radius-card); box-shadow: var(--menu-shadow); padding: 4px; z-index: 6; }
+.mmenu .hd { font-size: 11px; color: var(--muted); padding: 6px 8px 4px; text-transform: uppercase; letter-spacing: .06em; }
+.mrow { display: grid; grid-template-columns: 12px 1fr 16px; gap: 8px; align-items: center; padding: 6px 8px; border-radius: 6px; }
+.mrow .dot { width: 7px; height: 7px; border-radius: 50%; background: var(--coral); }
+.mrow .dot.down { background: transparent; border: 1.5px solid var(--muted); }
+.mrow .t { font-size: 13px; }
+.mrow .d { font-size: 11.5px; color: var(--muted); }
+.mrow.sel { background: var(--accent-dim); }
+.mrow.off { opacity: .5; }
+.mrow svg { width: 14px; height: 14px; color: var(--accent); }
+
+.decide { margin-top: 30px; padding: 16px 18px; border: 1px solid color-mix(in srgb, var(--accent) 40%, var(--border)); border-radius: var(--radius-card); background: var(--accent-dim); }
+.decide p { color: var(--text); margin-bottom: 6px; }
+.decide ol { margin: 0; padding-left: 18px; }
+.decide li { margin: 5px 0; color: var(--text); }
+.decide li span { color: var(--muted); }
+
+@media (max-width: 760px) {
+  .app { grid-template-columns: 1fr; height: 560px; }
+  .rail, .main { display: none; }
+  .menu { left: 16px !important; right: 16px; width: auto; }
+  .mmenu { left: 16px; right: 16px; width: auto; }
+}
+</style>
+</head>
+<body>
+<div class="wrap">
+  <h1>Pick the machine a new project goes on</h1>
+  <p>Today the sidebar's <strong>New Project</strong> button (folder +) always creates the project on the machine you're working in: the desktop app's own machine, unless you used <em>Work here</em> on another one. Other machines' projects show in the sidebar, and you can already start a session on another machine, but you can't add a project there.</p>
+  <p>This proposal adds the same Machine chip the new-session box has to the New Project dialog, plus a <strong>New project on …</strong> item in each machine heading's menu. A project is still just a group of sessions on one machine. Nothing changes about folders.</p>
+
+  <div class="tabs" role="group" aria-label="States">
+    <button data-s="dialog" aria-pressed="true">1 · Dialog</button>
+    <button data-s="picker" aria-pressed="false">2 · Machine menu open</button>
+    <button data-s="heading" aria-pressed="false">3 · From a machine heading</button>
+    <button data-s="done" aria-pressed="false">4 · Created</button>
+    <button data-s="error" aria-pressed="false">5 · Machine stopped answering</button>
+    <button data-s="single" aria-pressed="false">6 · Only one machine</button>
+  </div>
+  <p class="caption" id="caption"></p>
+
+  <div class="app" id="app">
+    <div class="rail"><i></i><i class="on"></i><i></i><i></i></div>
+    <div class="panel">
+      <div class="panel-head">
+        <button class="pbtn"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 5v14M5 12h14"/></svg>New session</button>
+        <button class="pbtn icon" id="fp" aria-label="New Project"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M4 20h16a2 2 0 0 0 2-2V8a2 2 0 0 0-2-2h-7.9a2 2 0 0 1-1.7-.9l-.8-1.2A2 2 0 0 0 7.9 3H4a2 2 0 0 0-2 2v13c0 1.1.9 2 2 2Z"/><path d="M12 10v6M9 13h6"/></svg></button>
+      </div>
+      <div class="search">Search sessions</div>
+      <div class="tree" id="tree"></div>
+    </div>
+    <div class="main">Pick a session</div>
+    <div id="overlay"></div>
+  </div>
+
+  <h2>How it behaves</h2>
+  <ul>
+    <li><strong>Machine chip</strong> (“Create on”) shows only when Fleet knows more than one machine. With one machine the dialog looks exactly as it does today.</li>
+    <li><strong>The folder + button</strong> starts on the machine you're working in. <strong>New project on build-box</strong> from a heading's right-click menu starts on that machine. You can change either in the chip.</li>
+    <li><strong>Unreachable machines</strong> are listed but can't be picked, as in the new-session box.</li>
+    <li><strong>After Create</strong> Fleet asks that machine for its list again, so the new (empty) project shows at once under its heading, and the heading unfolds. It doesn't wait for the next poll.</li>
+    <li>If the machine stops answering mid-create, the dialog stays open with the name kept and says which machine it couldn't reach, not “Failed to fetch”.</li>
+    <li>Phone: the same dialog. The chip opens its menu full width.</li>
+  </ul>
+  <p>Under the hood: <code>useCreateProject</code> already takes its machine from <code>useMachineTarget()</code>. The dialog gives it the picked machine (<code>targetFor</code>) and then calls <code>machines.refreshMachine(key)</code>. No server change and no migration.</p>
+
+  <div class="decide">
+    <p><strong>What I need from you</strong></p>
+    <ol>
+      <li>Both pieces (chip in the dialog <em>and</em> “New project on …” in the heading menu), or just the chip? <span>I recommend both. The heading menu already has “New session on …”.</span></li>
+      <li>Should the projects' own menu (rename, move, delete) on another machine also get “Move to another machine”? <span>I'd put that on the Later list. Moving would mean moving sessions between machines, which is a much bigger change.</span></li>
+    </ol>
+  </div>
+</div>
+
+<script>
+const ICON = {
+  plus: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 5v14M5 12h14"/></svg>',
+  folder: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M4 20h16a2 2 0 0 0 2-2V8a2 2 0 0 0-2-2h-7.9a2 2 0 0 1-1.7-.9l-.8-1.2A2 2 0 0 0 7.9 3H4a2 2 0 0 0-2 2v13c0 1.1.9 2 2 2Z"/><path d="M12 10v6M9 13h6"/></svg>',
+  monitor: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="2" y="3" width="20" height="14" rx="2"/><path d="M8 21h8M12 17v4"/></svg>',
+  chev: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="m6 9 6 6 6-6"/></svg>',
+  check: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M20 6 9 17l-5-5"/></svg>',
+  alert: '<svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><path d="M12 8v4M12 16h.01"/></svg>',
+};
+
+function tree(opts) {
+  const single = opts.single;
+  const newOnBuild = opts.newOnBuild;
+  let h = '';
+  if (!single) h += `<div class="mh${opts.hotHeading === 'falcon' ? ' hot' : ''}"><span class="dot"></span>falcon · this machine<span class="n">5</span></div>`;
+  h += `<div class="pg">Checkout redesign<span class="n">3</span></div>
+    <div class="row">Split the payment step into two pages</div>
+    <div class="row">Fix coupon field losing focus on Safari</div>
+    <div class="row">Card form validation copy</div>
+    <div class="pg">Docs site<span class="n">2</span></div>
+    <div class="row">Migrate guides to the new sidebar</div>
+    <div class="row">Search results show stale versions</div>`;
+  if (single) return h;
+  h += `<div class="mh${opts.hotHeading === 'build-box' ? ' hot' : ''}" id="bb"><span class="dot"></span>build-box<span class="n">${newOnBuild ? 3 : 3}</span></div>`;
+  if (newOnBuild) h += `<div class="pg new">Release pipeline<span class="n">0</span></div><div class="row empty">No sessions yet</div>`;
+  h += `<div class="pg">Nightly benchmarks<span class="n">2</span></div>
+    <div class="row">Profile the ingest worker under load</div>
+    <div class="row">Compare allocator settings on arm64</div>
+    <div class="pg">Scratch<span class="n">1</span></div>
+    <div class="row">Rotate the staging certificates</div>
+    <div class="mh"><span class="dot down"></span>studio-mac<span class="n">—</span></div>
+    <div class="row empty">Can't reach studio-mac · last seen 2 h ago</div>`;
+  return h;
+}
+
+function machineChip(name, os, open) {
+  return `<button class="chip${open ? ' open' : ''}" aria-label="Machine"><span class="dot"></span>${name}<span class="os">${os}</span>${ICON.chev}</button>`;
+}
+
+function dialog({ machine = 'falcon', os = 'Linux · this machine', name = '', open = false, error = null, single = false }) {
+  const nameBox = name ? `<div class="input focus">${name}</div>` : `<div class="input focus ph">Project name</div>`;
+  const chipField = single ? '' : `
+    <div class="field" style="position:relative">
+      <label>Create on</label>
+      ${machineChip(machine, os, open)}
+      <div class="hint">The project and its sessions live on this machine.</div>
+      ${open ? machineMenu(machine) : ''}
+    </div>`;
+  return `<div class="scrim"><div class="dialog" role="dialog" aria-label="New Project">
+    <h3>New Project</h3>
+    <p class="desc">Create a project to organize related sessions.</p>
+    <div class="field"><label>Name</label>${nameBox}</div>
+    ${chipField}
+    <div class="field"><label>Description</label><div class="input textarea">Optional description</div></div>
+    ${error ? `<div class="alert" role="alert">${ICON.alert}<span>${error}</span></div>` : ''}
+    <div class="foot"><button class="btn">Cancel</button><button class="btn primary"${name ? '' : ' disabled'}>Create Project</button></div>
+  </div></div>`;
+}
+
+function machineMenu(sel) {
+  const rows = [
+    ['falcon', 'Working here · Linux', true],
+    ['build-box', 'Linux · reached just now', true],
+    ['studio-mac', 'Unreachable · last seen 2 h ago', false],
+  ];
+  return `<div class="mmenu" style="top:58px;left:0"><div class="hd">Create on</div>${rows.map(([n, d, ok]) =>
+    `<div class="mrow${n === sel ? ' sel' : ''}${ok ? '' : ' off'}"><span class="dot${ok ? '' : ' down'}"></span><div><div class="t">${n}</div><div class="d">${d}</div></div>${n === sel ? ICON.check : '<span></span>'}</div>`).join('')}</div>`;
+}
+
+function headingMenu() {
+  const bb = document.getElementById('bb');
+  const app = document.getElementById('app').getBoundingClientRect();
+  const r = bb.getBoundingClientRect();
+  const top = r.bottom - app.top + 2;
+  const left = r.left - app.left + 40;
+  return `<div class="menu" style="top:${top}px;left:${left}px">
+    <div class="mi">${ICON.plus}<span>New session on <span class="nm">build-box</span></span></div>
+    <div class="mi hot">${ICON.folder}<span>New project on <span class="nm">build-box</span></span><span class="tag">new</span></div>
+    <div class="sep"></div>
+    <div class="mi">${ICON.monitor}<span>Work here</span></div>
+  </div>`;
+}
+
+const STATES = {
+  dialog: {
+    caption: 'The folder + button opens the dialog with the machine you’re working in picked. One new row: <strong>Create on</strong>.',
+    render: () => ({ tree: tree({}), overlay: dialog({ name: 'Release pipeline' }), ring: true }),
+  },
+  picker: {
+    caption: 'The chip opens the same machine list as the new-session box. studio-mac is listed but can’t be picked.',
+    render: () => ({ tree: tree({}), overlay: dialog({ name: 'Release pipeline', machine: 'build-box', os: 'Linux', open: true }) }),
+  },
+  heading: {
+    caption: 'Right-click a machine heading: <strong>New project on build-box</strong> sits under New session on build-box and opens the dialog with build-box picked.',
+    render: () => ({ tree: tree({ hotHeading: 'build-box' }), overlay: 'MENU' }),
+  },
+  done: {
+    caption: 'After Create, Fleet asks build-box for its list again, so “Release pipeline” appears under its heading at once, empty and ready for a session.',
+    render: () => ({ tree: tree({ newOnBuild: true }), overlay: '' }),
+  },
+  error: {
+    caption: 'If the machine stops answering, the dialog stays open with the name kept and says which machine it couldn’t reach.',
+    render: () => ({ tree: tree({}), overlay: dialog({ name: 'Release pipeline', machine: 'build-box', os: 'Linux', error: 'Can’t reach build-box. The project wasn’t created. Try again, or pick another machine.' }) }),
+  },
+  single: {
+    caption: 'With only one machine there’s no chip: the dialog and sidebar look exactly as they do today.',
+    render: () => ({ tree: tree({ single: true }), overlay: dialog({ name: 'Release pipeline', single: true }) }),
+  },
+};
+
+function show(key) {
+  document.querySelectorAll('.tabs button').forEach(b => b.setAttribute('aria-pressed', String(b.dataset.s === key)));
+  const s = STATES[key];
+  const out = s.render();
+  document.getElementById('caption').innerHTML = s.caption;
+  document.getElementById('tree').innerHTML = out.tree;
+  document.getElementById('fp').classList.toggle('ring', !!out.ring);
+  document.getElementById('overlay').innerHTML = out.overlay === 'MENU' ? headingMenu() : out.overlay;
+}
+document.querySelectorAll('.tabs button').forEach(b => b.addEventListener('click', () => show(b.dataset.s)));
+show('dialog');
+</script>
+</body>
+</html>
