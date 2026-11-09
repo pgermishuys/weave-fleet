@@ -14,6 +14,8 @@ interface SelectorItem {
   priceNote?: string;
   /** Defined: the row has a star to favourite it with. */
   starred?: boolean;
+  /** The model's context window, e.g. "200K", at the right of its row. */
+  contextSize?: string;
 }
 
 /** A provider heading's quota: a small bar, and the rows below dim (still pickable) when it's nearly used up. */
@@ -65,6 +67,8 @@ const isOpen = shallowRef(false);
 const opensDown = shallowRef(false);
 /** Set only by "auto": the room on the chosen side, so the menu stays inside its dialog. */
 const menuMaxHeight = shallowRef<string | undefined>(undefined);
+/** The menu is wider than some panes (380px): it slides left, as far as it must, to stay inside its pane. */
+const shiftLeft = shallowRef(0);
 const rootRef = useTemplateRef<HTMLElement>("root");
 const filterInputRef = useTemplateRef<HTMLInputElement>("filterInput");
 const filterText = ref("");
@@ -115,6 +119,8 @@ const view = computed(() => {
     title: section.title,
     level: section.level ?? "group",
     usage: section.usage ?? null,
+    // The provider is the group header, or the same on every row: not worth repeating on each.
+    hideMeta: section.level === "provider" || new Set(section.items.map((item) => item.meta).filter(Boolean)).size <= 1,
     rows: section.items.map((item) => ({ item, key: `${sectionIndex}:${item.id}`, index: index++ })),
   }));
 });
@@ -131,6 +137,28 @@ watch(activeIndex, async () => {
   listRef.value?.querySelector<HTMLElement>("[data-active='true']")?.scrollIntoView?.({ block: "nearest" });
 });
 
+/** How many rows sit below the menu's visible part; the "N more" cue at its bottom edge. */
+const moreBelow = shallowRef(0);
+function measureMore(): void {
+  const box = listRef.value;
+  if (!box) {
+    moreBelow.value = 0;
+    return;
+  }
+  const bottom = box.scrollTop + box.clientHeight;
+  let hidden = 0;
+  for (const row of box.querySelectorAll<HTMLElement>(".selector-dropdown__row")) {
+    if (row.offsetTop + row.offsetHeight / 2 > bottom) hidden++;
+  }
+  moreBelow.value = hidden;
+}
+watch([isOpen, view, filterText], async () => {
+  await nextTick();
+  measureMore();
+});
+
+const MENU_WIDTH = 380;
+
 /** The tallest the menu gets, matching `.selector-dropdown`'s `min(320px, 60vh)`. */
 function menuHeight(): number {
   return Math.min(320, window.innerHeight * 0.6);
@@ -140,7 +168,19 @@ function menuHeight(): number {
 function place(): void {
   opensDown.value = false;
   menuMaxHeight.value = undefined;
+  shiftLeft.value = 0;
   const root = rootRef.value;
+  if (root) {
+    const left = root.getBoundingClientRect().left;
+    let clip = window.innerWidth;
+    for (let node = root.parentElement; node; node = node.parentElement) {
+      if (getComputedStyle(node).overflowX !== "visible") {
+        clip = node.getBoundingClientRect().right;
+        break;
+      }
+    }
+    shiftLeft.value = Math.max(0, Math.min(left + MENU_WIDTH - (clip - 8), left - 8));
+  }
   if (props.placement !== "auto" || !root) return;
 
   const rect = root.getBoundingClientRect();
@@ -229,7 +269,8 @@ function selectItem(itemId: string): void {
       ref="list"
       class="selector-dropdown"
       :class="{ 'selector-dropdown--down': opensDown }"
-      :style="menuMaxHeight ? { maxHeight: menuMaxHeight } : undefined"
+      :style="{ ...(menuMaxHeight ? { maxHeight: menuMaxHeight } : {}), ...(shiftLeft ? { left: `${-shiftLeft}px` } : {}) }"
+      @scroll.passive="measureMore"
     >
       <div class="selector-dropdown__filter-wrap">
         <input
@@ -312,10 +353,15 @@ function selectItem(itemId: string): void {
               >{{ item.description }}</span>
             </span>
             <span
-              v-if="item.meta || item.price"
+              v-if="(item.meta && !section.hideMeta) || item.price || item.contextSize"
               class="selector-dropdown__item-meta"
             >
-              <span v-if="item.meta">{{ item.meta }}</span>
+              <span v-if="item.meta && !section.hideMeta">{{ item.meta }}</span>
+              <span
+                v-if="item.contextSize"
+                class="selector-dropdown__context"
+                data-testid="model-context-size"
+              >{{ item.contextSize }}</span>
               <span
                 v-if="item.price"
                 class="selector-dropdown__price"
@@ -337,6 +383,15 @@ function selectItem(itemId: string): void {
           </button>
         </div>
       </template>
+      </div>
+
+      <div
+        v-if="moreBelow > 0"
+        class="selector-dropdown__more"
+        aria-hidden="true"
+        data-testid="selector-more"
+      >
+        {{ moreBelow }} more
       </div>
 
       <div
@@ -467,7 +522,8 @@ function selectItem(itemId: string): void {
   position: absolute;
   bottom: calc(100% + 6px);
   left: 0;
-  min-width: 280px;
+  width: 380px;
+  max-width: calc(100vw - 16px);
   max-height: min(320px, 60vh);
   overflow-y: auto;
   overscroll-behavior: contain;
@@ -608,6 +664,9 @@ function selectItem(itemId: string): void {
 }
 
 .selector-dropdown__item-label {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
   color: var(--text);
   font-size: 13px;
   font-weight: 500;
@@ -631,6 +690,24 @@ function selectItem(itemId: string): void {
   color: var(--muted);
   font-size: 12px;
   white-space: nowrap;
+}
+
+.selector-dropdown__context {
+  font-size: 11px;
+  font-variant-numeric: tabular-nums;
+}
+
+/* A fade over the last visible row, with how many more are below. */
+.selector-dropdown__more {
+  position: sticky;
+  bottom: -4px;
+  margin: 0 -4px -4px;
+  padding: 18px 12px 6px;
+  background: linear-gradient(to bottom, transparent, var(--card-bg) 70%);
+  color: var(--muted);
+  font-size: 11px;
+  text-align: center;
+  pointer-events: none;
 }
 
 .selector-dropdown__empty {

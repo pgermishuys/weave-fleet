@@ -76,8 +76,9 @@ describe("ContextRing", () => {
 
     const ring = wrapper.get('[data-testid="context-ring"]');
     expect(ring.attributes("data-tone")).toBe("ok");
-    expect(ring.text()).toBe("");
-    expect(ring.attributes("title")).toBe("38% of the context window used · details");
+    expect(ring.text()).toBe("38%");
+    expect(ring.classes()).not.toContain("context-ring--amber");
+    expect(ring.attributes("title")).toBe("Context: 38% of 200K tokens");
     wrapper.unmount();
   });
 
@@ -89,6 +90,7 @@ describe("ContextRing", () => {
     const ring = wrapper.get('[data-testid="context-ring"]');
     expect(ring.attributes("data-tone")).toBe("danger");
     expect(ring.text()).toBe("91%");
+    expect(ring.classes()).toContain("context-ring--amber");
     wrapper.unmount();
   });
 

@@ -59,6 +59,8 @@ const rows = computed<Row[]>(() => props.machines.map((entry) => {
   };
 }));
 
+const selectedDown = computed(() => rows.value.find((row) => row.entry.key === props.selected)?.reachable === false);
+
 const selectedName = computed(() =>
   props.machines.find((entry) => entry.key === props.selected)?.name ?? props.machines[0]?.name ?? "");
 </script>
@@ -69,12 +71,14 @@ const selectedName = computed(() =>
       <button
         type="button"
         class="ns-chip ns-machine-chip"
+        :class="{ 'ns-machine-chip--down': selectedDown }"
         data-testid="new-session-machine"
         aria-label="Machine"
         :disabled="disabled"
       >
         <span
           class="ns-machine__dot"
+          :class="{ 'ns-machine__dot--down': selectedDown }"
           aria-hidden="true"
         />
         <span class="ns-chip__label ns-machine-chip__name">{{ selectedName }}</span>
@@ -143,14 +147,20 @@ const selectedName = computed(() =>
   width: 300px;
 }
 
-.ns-machine-chip .ns-machine-chip__name,
 .ns-machine__name {
   font-family: var(--font-mono-stack);
   font-size: 12px;
 }
 
+/* A plain label: normal text colour in the UI font, not an error colour. */
 .ns-machine-chip .ns-machine-chip__name {
-  color: var(--coral);
+  color: var(--text);
+  font-family: inherit;
+  font-size: 13px;
+}
+
+.ns-machine-chip--down .ns-machine-chip__name {
+  color: var(--error);
 }
 
 .ns-machine__dot {
