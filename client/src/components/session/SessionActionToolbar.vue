@@ -204,7 +204,8 @@ async function copyDirectory(): Promise<void> {
         >
           <Pencil class="size-3.5" />
           Rename
-          <DropdownMenuShortcut class="tracking-normal">
+          <!-- A double-click is a pointer's gesture; on touch the hint means nothing. -->
+          <DropdownMenuShortcut class="tracking-normal [@media(pointer:coarse)]:hidden">
             Double-click title
           </DropdownMenuShortcut>
         </DropdownMenuItem>
