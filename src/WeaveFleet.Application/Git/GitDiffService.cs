@@ -1,23 +1,27 @@
 using System.Globalization;
 using System.Text;
+using Microsoft.Extensions.Logging;
+using Microsoft.Extensions.Logging.Abstractions;
 
 namespace WeaveFleet.Application.Git;
 
-public sealed class GitDiffService
+public sealed partial class GitDiffService
 {
     private const int MaxFileContentBytes = 512 * 1024;
     private const int MaxConcurrentContentFetches = 8;
 
     private readonly IGitDiffCommandRunner _commandRunner;
+    private readonly ILogger<GitDiffService> _logger;
 
-    public GitDiffService()
-        : this(new GitDiffProcessCommandRunner())
+    public GitDiffService(ILogger<GitDiffService>? logger = null)
+        : this(new GitDiffProcessCommandRunner(), logger)
     {
     }
 
-    public GitDiffService(IGitDiffCommandRunner commandRunner)
+    public GitDiffService(IGitDiffCommandRunner commandRunner, ILogger<GitDiffService>? logger = null)
     {
         _commandRunner = commandRunner;
+        _logger = logger ?? NullLogger<GitDiffService>.Instance;
     }
 
     public Task<GitBaselineCapture?> CaptureBaselineAsync(string workDir, CancellationToken ct)
@@ -35,16 +39,21 @@ public sealed class GitDiffService
         if (repoRoot is null)
             return null;
 
+        // `git stash create` fails, silently, when the index has stale file times but nothing really changed (a
+        // copied folder, a file saved unchanged). Refreshing the index first clears that. It exits 1 when files
+        // really changed, which is fine: the stash takes them.
+        await RunGitAsync(repoRoot, ["update-index", "-q", "--refresh"], ct).ConfigureAwait(false);
+
         var stashResult = await RunGitAsync(repoRoot, ["stash", "create", $"fleet baseline {baselineId}"], ct).ConfigureAwait(false);
         if (!stashResult.IsSuccess)
-            return null;
+            return BaselineFailed(repoRoot, "stash create", stashResult);
 
         var baselineObject = stashResult.StandardOutput.Trim();
         if (string.IsNullOrWhiteSpace(baselineObject))
         {
             var headResult = await RunGitAsync(repoRoot, ["rev-parse", "HEAD"], ct).ConfigureAwait(false);
             if (!headResult.IsSuccess)
-                return null;
+                return BaselineFailed(repoRoot, "rev-parse HEAD", headResult);
 
             baselineObject = headResult.StandardOutput.Trim();
             if (string.IsNullOrWhiteSpace(baselineObject))
@@ -54,10 +63,20 @@ public sealed class GitDiffService
         var refName = $"refs/fleet/baselines/{ToRefComponent(baselineId)}";
         var updateResult = await RunGitAsync(repoRoot, ["update-ref", refName, baselineObject], ct).ConfigureAwait(false);
         if (!updateResult.IsSuccess)
-            return null;
+            return BaselineFailed(repoRoot, "update-ref", updateResult);
 
         return new GitBaselineCapture(refName, repoRoot);
     }
+
+    private GitBaselineCapture? BaselineFailed(string repoRoot, string step, GitCommandResult result)
+    {
+        LogBaselineFailed(repoRoot, step, result.ExitCode, result.StandardError.Trim());
+        return null;
+    }
+
+    [LoggerMessage(Level = LogLevel.Warning,
+        Message = "No change baseline for the session in {RepoRoot}: git {Step} exited {ExitCode}. {Error}")]
+    private partial void LogBaselineFailed(string repoRoot, string step, int exitCode, string error);
 
     /// <summary>The root of the git repository <paramref name="directory"/> is in, or null when it isn't in one.</summary>
     public async Task<string?> FindRepoRootAsync(string directory, CancellationToken ct)

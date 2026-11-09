@@ -35,6 +35,7 @@ public sealed class GitDiffServiceTests
     {
         var runner = new RecordingGitRunner(
             new GitCommandResult(0, "/repo/root\n", string.Empty),
+            new GitCommandResult(0, string.Empty, string.Empty),
             new GitCommandResult(0, "abc123\n", string.Empty),
             new GitCommandResult(0, string.Empty, string.Empty));
         var service = new GitDiffService(runner);
@@ -46,8 +47,10 @@ public sealed class GitDiffServiceTests
         result.RepoRoot.ShouldBe("/repo/root");
         runner.Calls[0].Arguments.ShouldBe(["rev-parse", "--show-toplevel"]);
         runner.Calls[1].WorkingDirectory.ShouldBe("/repo/root");
-        runner.Calls[1].Arguments.ShouldBe(["stash", "create", "fleet baseline session/123"]);
-        runner.Calls[2].Arguments.ShouldBe(["update-ref", "refs/fleet/baselines/session-123", "abc123"]);
+        runner.Calls[1].Arguments.ShouldBe(["update-index", "-q", "--refresh"]);
+        runner.Calls[2].WorkingDirectory.ShouldBe("/repo/root");
+        runner.Calls[2].Arguments.ShouldBe(["stash", "create", "fleet baseline session/123"]);
+        runner.Calls[3].Arguments.ShouldBe(["update-ref", "refs/fleet/baselines/session-123", "abc123"]);
     }
 
     [Fact]
@@ -55,6 +58,7 @@ public sealed class GitDiffServiceTests
     {
         var runner = new RecordingGitRunner(
             new GitCommandResult(0, "/repo/root\n", string.Empty),
+            new GitCommandResult(0, string.Empty, string.Empty),
             new GitCommandResult(0, string.Empty, string.Empty),
             new GitCommandResult(0, "head123\n", string.Empty),
             new GitCommandResult(0, string.Empty, string.Empty));
@@ -64,8 +68,8 @@ public sealed class GitDiffServiceTests
 
         result.ShouldNotBeNull();
         result.RefName.ShouldBe("refs/fleet/baselines/session-123");
-        runner.Calls[2].Arguments.ShouldBe(["rev-parse", "HEAD"]);
-        runner.Calls[3].Arguments.ShouldBe(["update-ref", "refs/fleet/baselines/session-123", "head123"]);
+        runner.Calls[3].Arguments.ShouldBe(["rev-parse", "HEAD"]);
+        runner.Calls[4].Arguments.ShouldBe(["update-ref", "refs/fleet/baselines/session-123", "head123"]);
     }
 
     [Fact]
@@ -220,6 +224,38 @@ public sealed class GitDiffServiceTests
                 new FileDiffSummary("tracked.txt", 2, 1, IsBinary: false, IsUntracked: false) { Status = "modified" }
             ]);
             result.Diffs.ShouldNotContain(summary => summary.Path == "ignored.log");
+        }
+        finally
+        {
+            Directory.Delete(tempRoot, recursive: true);
+        }
+    }
+
+    [Fact]
+    public async Task capture_baseline_succeeds_when_a_file_was_touched_but_not_changed()
+    {
+        // A copied folder, or a file an editor saved unchanged, leaves the index's file times stale with nothing
+        // really changed. `git stash create` fails on that (exit 1, nothing printed) until the index is refreshed,
+        // so the first session in such a folder got no baseline and its Changes stayed empty.
+        var tempRoot = CreateTempDirectory();
+        var service = new GitDiffService();
+
+        try
+        {
+            await RunGitAsync(tempRoot, "init");
+            var tracked = Path.Combine(tempRoot, "notes.md");
+            await File.WriteAllTextAsync(tracked, "first line\n");
+            await RunGitAsync(tempRoot, "add", "notes.md");
+            await RunGitAsync(tempRoot, "-c", "user.name=Weave Test", "-c", "user.email=weave@example.invalid", "commit", "-m", "initial");
+            File.SetLastWriteTimeUtc(tracked, DateTime.UtcNow.AddMinutes(5));
+
+            var baseline = await service.CaptureBaselineAsync(tempRoot, "touched", CancellationToken.None);
+
+            baseline.ShouldNotBeNull();
+            await File.WriteAllTextAsync(tracked, "first line\nsecond line\n");
+            var result = await service.ComputeDiffsWithAvailabilityAsync(baseline.RepoRoot, baseline.RefName, string.Empty, CancellationToken.None);
+            result.Available.ShouldBeTrue();
+            result.Diffs.ShouldBe([new FileDiffSummary("notes.md", 1, 0, IsBinary: false, IsUntracked: false) { Status = "modified" }]);
         }
         finally
         {

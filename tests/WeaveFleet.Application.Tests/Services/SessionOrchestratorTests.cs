@@ -314,6 +314,7 @@ public sealed class SessionOrchestratorTests : IAsyncDisposable
     {
         var runner = new RecordingGitRunner(
             new GitCommandResult(0, "/repo/root\n", string.Empty),
+            new GitCommandResult(0, string.Empty, string.Empty),
             new GitCommandResult(0, "abc123\n", string.Empty),
             new GitCommandResult(0, string.Empty, string.Empty));
         var builder = CreateBuilderWithGitDiffService(new GitDiffService(runner));
@@ -338,7 +339,7 @@ public sealed class SessionOrchestratorTests : IAsyncDisposable
         result.Value.Session.GitRepoRoot.ShouldBe("/repo/root");
         builder.SessionRepository.InsertedSessions.Single().GitBaselineRef.ShouldBe(result.Value.Session.GitBaselineRef);
         builder.SessionRepository.InsertedSessions.Single().GitRepoRoot.ShouldBe("/repo/root");
-        runner.Calls[1].Arguments.ShouldBe(["stash", "create", $"fleet baseline {result.Value.Session.Id}"]);
+        runner.Calls[2].Arguments.ShouldBe(["stash", "create", $"fleet baseline {result.Value.Session.Id}"]);
     }
 
     [Fact]
