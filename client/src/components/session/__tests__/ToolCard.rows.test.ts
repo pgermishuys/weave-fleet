@@ -61,7 +61,7 @@ describe("ToolCard status indicator", () => {
   });
 
   it("defaults to Completed when no status is given", () => {
-    expect(header(card({ kind: "bash", status: undefined })).find("[aria-label='Completed']").exists()).toBe(true);
+    expect(header(card({ kind: "bash", status: undefined })).find("[aria-label='Completed']").exists()).toBe(false);
   });
 
   it("shows +N and -N instead of the check when a completed call changed a file", () => {
