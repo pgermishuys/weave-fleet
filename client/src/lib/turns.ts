@@ -311,8 +311,12 @@ export function deriveTurns(
   const rounds = toRounds(messages);
   const turns: SessionTurn[] = [];
 
+  // Files an earlier turn wrote: a later whole-file write to one of them rewrites it, it doesn't create it.
+  const written = new Set<string>();
   for (const [index, round] of rounds.entries()) {
-    turns.push(toTurn(round, index + 1, options));
+    const turn = toTurn(round, index + 1, options, written);
+    for (const file of turn.files) written.add(file.path);
+    turns.push(turn);
   }
 
   attachDelegations(turns, rounds, delegations);
@@ -320,7 +324,7 @@ export function deriveTurns(
   return turns.reverse();
 }
 
-function toTurn(round: Round, number: number, options: { fileStats?: FileStats | null; directory?: string }): SessionTurn {
+function toTurn(round: Round, number: number, options: { fileStats?: FileStats | null; directory?: string }, written: ReadonlySet<string>): SessionTurn {
   const first = round.messages[0]!;
   const promptText = round.hasPrompt ? promptOf(first) : "";
 
@@ -368,8 +372,10 @@ function toTurn(round: Round, number: number, options: { fileStats?: FileStats |
 
   const files = [...filesByPath.values()].map((file) => {
     if (!file.wholeFile) return file;
-    const found = options.fileStats ? (options.fileStats.get(relativePath(file.path, options.directory)) ?? { additions: 0, deletions: 0 }) : { additions: 0, deletions: 0 };
-    return { ...file, additions: found.additions, deletions: found.deletions };
+    const known = options.fileStats?.get(relativePath(file.path, options.directory));
+    const found = known ?? { additions: 0, deletions: 0 };
+    // A Write is a create or a rewrite; only the session diff says which (added vs modified). Unknown isn't "new".
+    return { ...file, additions: found.additions, deletions: found.deletions, created: known?.status === "added" && !written.has(file.path) };
   });
   const additions = files.reduce((total, file) => total + file.additions, 0);
   const deletions = files.reduce((total, file) => total + file.deletions, 0);

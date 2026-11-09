@@ -134,7 +134,7 @@ function turnRanges(messages: readonly ActivityMessage[]): TurnRange[] {
 }
 
 /** The file's change as the session's diff counts it, by path as the session's folder knows it. */
-export type FileStats = ReadonlyMap<string, { additions: number; deletions: number }>;
+export type FileStats = ReadonlyMap<string, { additions: number; deletions: number; status?: "added" | "deleted" | "modified" }>;
 
 const statted = new WeakMap<readonly ToolCardItem[], { stats: FileStats | null; tools: ToolCardItem[] }>();
 

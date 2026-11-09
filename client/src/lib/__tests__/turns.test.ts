@@ -213,7 +213,7 @@ describe("what a round wrote", () => {
           input: { filePath: "client/src/composables/use-turns.ts", content: "export function useTurns() {}\n" },
         }),
       ]),
-    ], [], { fileStats: new Map([["client/src/composables/use-turns.ts", { additions: 1, deletions: 0 }]]) });
+    ], [], { fileStats: new Map([["client/src/composables/use-turns.ts", { additions: 1, deletions: 0, status: "added" }]]) });
 
     const [file] = turn!.files;
     expect(file!.created).toBe(true);
@@ -489,6 +489,31 @@ describe("whole-file writes in a turn", () => {
       assistant("a1", [tool("edit", { status: "completed", input: { filePath: "/w/src/a.ts", oldString: "a", newString: "b" } })]),
     ], [], { fileStats: new Map(), directory: "/w" });
     expect([turn!.additions, turn!.deletions]).toEqual([1, 1]);
+  });
+
+  it("calls a rewritten existing file changed, not new: a Write is not always a create", () => {
+    const [turn] = deriveTurns(rounds(), [], { fileStats: new Map([["src/a.ts", { additions: 1, deletions: 1, status: "modified" }]]), directory: "/w" });
+    expect(turn!.files[0]!.created).toBe(false);
+  });
+
+  it("calls a file new only when the session diff says it was added", () => {
+    const [turn] = deriveTurns(rounds(), [], { fileStats: new Map([["src/a.ts", { additions: 5, deletions: 0, status: "added" }]]), directory: "/w" });
+    expect(turn!.files[0]!.created).toBe(true);
+  });
+
+  it("does not call a file new before the session diff is known", () => {
+    const [turn] = deriveTurns(rounds(), [], { fileStats: null, directory: "/w" });
+    expect(turn!.files[0]!.created).toBe(false);
+  });
+
+  it("calls a file new in the turn that added it, not in a later turn that rewrites it", () => {
+    const write = (content: string) => tool("write", { status: "completed", input: { filePath: "/w/src/a.ts", content } });
+    const turns = deriveTurns([
+      user("u1", "Add it", 1_000), assistant("a1", [write("1\n")], { createdAt: 1_100 }),
+      user("u2", "Rewrite it", 2_000), assistant("a2", [write("2\n")], { createdAt: 2_100 }),
+    ], [], { fileStats: new Map([["src/a.ts", { additions: 1, deletions: 0, status: "added" }]]), directory: "/w" });
+    // Newest first.
+    expect(turns.map((turn) => turn.files[0]!.created)).toEqual([false, true]);
   });
 });
 
