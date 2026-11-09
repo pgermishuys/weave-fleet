@@ -99,7 +99,8 @@ public sealed partial class MachineRoutes(
         await _gate.WaitAsync();
         try
         {
-            if (await machines.GetAsync(machineId) is not { } machine)
+            // An address the machine stopped reporting while it was being tried is gone: it must not come back as the one in use.
+            if (await machines.GetAsync(machineId) is not { } machine || !machine.Addresses.Any(address => SameUrl(address.Url, url)))
                 return;
             var addresses = MachineAddresses.Record(machine.Addresses, url, RemoteMachineAddressResults.Ok, time.GetUtcNow());
             await machines.UpdateAddressesAsync(machineId, url, addresses);
