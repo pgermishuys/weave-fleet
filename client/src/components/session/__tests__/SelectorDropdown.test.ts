@@ -95,4 +95,12 @@ describe("selector dropdown price chip", () => {
     const closed = mount(ModelSelector, { props: { models: priced, modelValue: priced[0]!.selectionKey, harnessType: "opencode" } });
     expect(closed.get("button").text()).toBe("one");
   });
+
+  it("shows each model's context size at the right, and doesn't repeat the provider when it is the same on every row", async () => {
+    const sized = models.map((model, index) => ({ ...model, contextWindow: index === 0 ? 200_000 : undefined }));
+    const wrapper = await open({ models: sized });
+    expect(wrapper.findAll("[data-testid='model-context-size']").map((node) => node.text())).toEqual(["200K"]);
+    expect(wrapper.find(".selector-dropdown__item-meta").text()).toBe("200K");
+    expect(wrapper.text()).not.toContain("P");
+  });
 });

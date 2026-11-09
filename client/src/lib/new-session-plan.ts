@@ -54,7 +54,7 @@ export function describeNewSession(input: NewSessionPlanInput): PlanPart[] {
   const { folder, workspace } = input;
 
   if (folder === null) {
-    return [{ text: "Choose where it runs." }];
+    return [{ text: "Machine and folder" }];
   }
 
   if (folder.kind === "none") {

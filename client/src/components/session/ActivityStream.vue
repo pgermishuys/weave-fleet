@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { computed, nextTick, onMounted, onUnmounted, ref, watch } from "vue";
-import { ArrowUpRight, Bot, Bug, CornerDownRight, Puzzle, RotateCw, TerminalSquare, TriangleAlert, Workflow } from "lucide-vue-next";
+import { ArrowDown, ArrowUpRight, Bot, Bug, CornerDownRight, Puzzle, RotateCw, TerminalSquare, TriangleAlert, Workflow } from "lucide-vue-next";
 import { useMachineTarget } from "@/lib/machine-target";
 import { useRouter } from "@tanstack/vue-router";
 import type { PeerSender } from "@/lib/session-messages";
@@ -573,14 +573,6 @@ function handleImproveSkill(skill: string, toolId: string): void {
 
 <template>
   <div class="activity-stream-shell">
-    <button
-      v-if="showJumpToLatest"
-      type="button"
-      class="jump-to-latest"
-      @click="handleJumpToLatest"
-    >
-      Jump to latest
-    </button>
     <section
       ref="streamRef"
       class="activity-stream"
@@ -876,6 +868,23 @@ function handleImproveSkill(skill: string, toolId: string): void {
         />
       </div>
     </section>
+    <!-- Its own lane above the composer, so no text is ever under it. -->
+    <div
+      v-if="showJumpToLatest"
+      class="jump-to-latest-lane"
+    >
+      <button
+        type="button"
+        class="jump-to-latest"
+        @click="handleJumpToLatest"
+      >
+        <ArrowDown
+          :size="12"
+          aria-hidden="true"
+        />
+        Jump to latest
+      </button>
+    </div>
 
     <ImproveSkillDialog
       v-if="improving"
@@ -924,25 +933,30 @@ function handleImproveSkill(skill: string, toolId: string): void {
   scrollbar-color: var(--muted) transparent;
 }
 
+.jump-to-latest-lane {
+  display: flex;
+  flex: none;
+  justify-content: center;
+  padding: 6px 0 4px;
+}
+
 .jump-to-latest {
-  position: absolute;
-  right: 24px;
-  bottom: 20px;
-  z-index: 2;
   display: inline-flex;
-  padding: 8px 12px;
+  align-items: center;
+  gap: 5px;
+  padding: 5px 10px;
   border: 1px solid var(--border);
   border-radius: 999px;
   background: var(--card-bg);
-  color: var(--text);
-  font-size: 13px;
+  color: var(--muted);
+  font-size: 12px;
   line-height: 1;
-  box-shadow: 0 8px 24px -8px rgba(0, 0, 0, 0.35);
   cursor: pointer;
-  transition: border-color var(--transition);
+  transition: border-color var(--transition), color var(--transition);
 }
 
 .jump-to-latest:hover {
+  color: var(--text);
   border-color: color-mix(in srgb, var(--accent) 55%, var(--border));
 }
 

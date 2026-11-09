@@ -4,7 +4,6 @@ import { LoaderCircle } from "lucide-vue-next";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { useSessionContext } from "@/composables/use-session-context";
 import {
-  CONTEXT_WARN_PERCENT,
   contextPercent,
   contextTone,
   formatTokens,
@@ -47,7 +46,15 @@ const hoveredTurn = shallowRef<number | null>(null);
 
 const percent = computed(() => contextPercent(context.value));
 const tone = computed(() => contextTone(percent.value));
-const showPercent = computed(() => percent.value !== null && percent.value >= CONTEXT_WARN_PERCENT);
+const showPercent = computed(() => percent.value !== null);
+/** Amber from above 80%; the red of "nearly full" still wins at 90%. */
+const amber = computed(() => percent.value !== null && percent.value > 80);
+/** The hover text: "Context: 6% of 200K tokens". */
+const ringTitle = computed(() => {
+  const value = context.value;
+  if (!value || percent.value === null || value.limit === null) return `${summary.value} · details`;
+  return `Context: ${percent.value}% of ${formatTokens(value.limit).toUpperCase()} tokens`;
+});
 const compacting = computed(() => context.value?.compacting === true || isRequesting.value);
 
 /** The ring's arc, 0–1. An unknown size (right after a compaction) draws an empty ring. */
@@ -165,11 +172,11 @@ const error = computed(() => requestError.value ?? context.value?.compactionErro
       <button
         type="button"
         class="context-ring"
-        :class="{ 'context-ring--with-percent': showPercent, 'context-ring--compacting': compacting }"
+        :class="{ 'context-ring--with-percent': showPercent, 'context-ring--amber': amber }"
         :data-tone="tone"
         data-testid="context-ring"
         :aria-label="`${summary}. Details`"
-        :title="open ? undefined : `${summary} · details`"
+        :title="open ? undefined : ringTitle"
       >
         <svg
           class="context-ring__svg"
@@ -407,8 +414,8 @@ const error = computed(() => requestError.value ?? context.value?.compactionErro
 }
 
 .context-ring__svg {
-  width: 16px;
-  height: 16px;
+  width: 18px;
+  height: 18px;
   flex: none;
   transform: rotate(-90deg);
   fill: none;
@@ -425,20 +432,16 @@ const error = computed(() => requestError.value ?? context.value?.compactionErro
   transition: stroke-dasharray 300ms ease-out, stroke 300ms;
 }
 
-.context-ring[data-tone="warn"] .context-ring__fill,
-.context-ring[data-tone="warn"] .context-ring__percent {
-  stroke: var(--idle);
-  color: var(--idle);
-}
-
 .context-ring[data-tone="danger"] .context-ring__fill,
 .context-ring[data-tone="danger"] .context-ring__percent {
   stroke: var(--error);
   color: var(--error);
 }
 
-.context-ring--compacting .context-ring__svg {
-  animation: context-ring-spin 1.2s linear infinite;
+.context-ring--amber:not([data-tone="danger"]) .context-ring__fill,
+.context-ring--amber:not([data-tone="danger"]) .context-ring__percent {
+  stroke: var(--idle);
+  color: var(--idle);
 }
 
 .context-card {

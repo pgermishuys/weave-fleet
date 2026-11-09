@@ -267,6 +267,8 @@ export interface AvailableModel {
   priceTier?: string | null;
   /** The class of model, such as powerful; shown as the price chip's tooltip. */
   capability?: string | null;
+  /** The model's context window in tokens, when the catalog has it. */
+  contextWindow?: number | null;
 }
 
 export interface AvailableProvider {

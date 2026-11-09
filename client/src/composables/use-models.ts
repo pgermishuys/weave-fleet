@@ -17,6 +17,8 @@ export interface ModelOption {
   /** low, medium, high or very_high, when the harness says what the model costs. */
   priceTier?: string;
   capability?: string;
+  /** The context window in tokens, when the catalog says. */
+  contextWindow?: number;
 }
 
 export function createModelSelectionKey(providerId: string, modelId: string): string {
@@ -35,6 +37,7 @@ export function toModelOptions(providers: readonly AvailableProvider[]): ModelOp
       variants: model.variants,
       priceTier: model.priceTier ?? undefined,
       capability: model.capability ?? undefined,
+      contextWindow: model.contextWindow ?? undefined,
     }));
   });
 }

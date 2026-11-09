@@ -33,7 +33,7 @@ describe("worktreeFolderLabel", () => {
 
 describe("describeNewSession", () => {
   it("asks for a folder when none is chosen", () => {
-    expect(sentence({ folder: null })).toBe("Choose where it runs.");
+    expect(sentence({ folder: null })).toBe("Machine and folder");
   });
 
   it("chat only", () => {
