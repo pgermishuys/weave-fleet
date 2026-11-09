@@ -47,6 +47,36 @@ describe("archive queue", () => {
     expect(sessions.sessionStateOverrides.a?.retentionStatus).toBe("archived");
   });
 
+  it("keeps the row hidden while the archive request is on its way", async () => {
+    const queue = useArchiveQueueStore();
+    let finish: () => void = () => {};
+    archiveSession.mockReturnValue(new Promise<void>((resolve) => { finish = resolve; }));
+
+    queue.archive(["a"]);
+    await vi.advanceTimersByTimeAsync(ARCHIVE_UNDO_MS);
+
+    // The undo window has closed but the server hasn't answered: the row must not come back in the list meanwhile
+    // (a refresh of the list now would still say active).
+    expect(queue.pendingIds.has("a")).toBe(true);
+
+    finish();
+    await vi.advanceTimersByTimeAsync(0);
+
+    expect(queue.pendingIds.has("a")).toBe(false);
+    expect(useSessionsStore().sessions.find((item) => item.session.id === "a")?.retentionStatus).toBe("archived");
+  });
+
+  it("shows the row again when the archive request fails", async () => {
+    const queue = useArchiveQueueStore();
+    archiveSession.mockRejectedValue(new Error("offline"));
+
+    queue.archive(["a"]);
+    await vi.advanceTimersByTimeAsync(ARCHIVE_UNDO_MS);
+
+    expect(queue.pendingIds.has("a")).toBe(false);
+    expect(queue.error).toBe('Couldn\'t archive "Alpha".');
+  });
+
   it("never reaches the server when undone", async () => {
     const queue = useArchiveQueueStore();
 

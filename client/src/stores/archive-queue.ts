@@ -31,7 +31,9 @@ export const useArchiveQueueStore = defineStore("archive-queue", () => {
 
   const pending = shallowRef<PendingArchive | null>(null);
   const error = shallowRef<string | null>(null);
-  const pendingIds = computed(() => new Set(pending.value?.ids ?? []));
+  // Sessions whose archive request is on its way: still hidden, because the list says active until the server has answered.
+  const sending = shallowRef<ReadonlySet<string>>(new Set());
+  const pendingIds = computed(() => new Set([...(pending.value?.ids ?? []), ...sending.value]));
 
   // Another machine's row is in that machine's list, which is read again once it has been told.
   const listOn = useSessionListOn();
@@ -96,6 +98,7 @@ export const useArchiveQueueStore = defineStore("archive-queue", () => {
 
     clearTimeout(current.timer);
     pending.value = null;
+    sending.value = new Set([...sending.value, ...current.ids]);
     const failed: string[] = [];
     await Promise.all(current.ids.map(async (sessionId) => {
       try {
@@ -103,6 +106,10 @@ export const useArchiveQueueStore = defineStore("archive-queue", () => {
         setRetention(sessionId, "archived");
       } catch {
         failed.push(sessionId);
+      } finally {
+        const rest = new Set(sending.value);
+        rest.delete(sessionId);
+        sending.value = rest;
       }
     }));
 
