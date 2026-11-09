@@ -143,14 +143,26 @@ describe("ChangesReview", () => {
     expect(wrapper.get(".review").classes()).toContain("review--wrap");
   });
 
-  it("limits 'This turn' to the files the latest turn changed", async () => {
+  it("defaults to the whole session even when the latest turn wrote files", async () => {
     useCanvasesStore().setTurnFiles("s1", ["README.md"]);
     const wrapper = mountReview();
     await flushPromises();
 
-    expect(wrapper.findAll("[data-testid='review-file']")).toHaveLength(1);
-    expect(wrapper.get("[data-testid='review-scope']").text()).toBe("This turn");
-    expect(wrapper.get("[data-testid='review-totals']").text()).toBe("+1−0");
+    expect(wrapper.get("[data-testid='review-scope']").text()).toBe("Whole session");
+    expect(wrapper.findAll("[data-testid='review-file']").length).toBeGreaterThan(1);
+  });
+
+  it("opens a changed file in a file tab on Diff from its header", async () => {
+    const wrapper = mountReview();
+    await flushPromises();
+
+    await notesSection(wrapper).get("[data-testid='review-open-file']").trigger("click");
+
+    const state = useCanvasesStore().sessionCanvases("s1");
+    const tab = state.canvases.find((canvas) => canvas.kind === "file");
+    expect(tab?.file?.path).toBe("src/notes.ts");
+    expect(tab?.file?.view).toBe("diff");
+    expect(state.activeId).toBe(tab?.id);
   });
 
   it("offers Rendered for a markdown file only", async () => {

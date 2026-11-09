@@ -149,9 +149,13 @@ watch(
 
 // A session with nothing to show (no changes, open files, todo list, links or running agents) keeps the panel collapsed
 // until the agent first gives it something; then it opens on its own.
+// Any tab beyond the always-there Changes and Files (a page or browser the agent shows, an open file, a mod pane,
+// a visual) is content the user should see.
 const hasFileTabs = computed(() =>
   activeSessionId.value
-    ? canvasesStore.sessionCanvases(activeSessionId.value).canvases.some((canvas) => canvas.kind === "file")
+    ? canvasesStore
+        .sessionCanvases(activeSessionId.value)
+        .canvases.some((canvas) => canvas.kind !== "changes" && canvas.kind !== "files")
     : false,
 );
 watch(
