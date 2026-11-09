@@ -22,7 +22,7 @@ import {
   AlertDialogHeader,
   AlertDialogTitle,
 } from "@/components/ui/alert-dialog";
-import { readSessionFile, writeSessionFile } from "@/api/session-files";
+import { readSessionFile, restoreSessionFile, writeSessionFile } from "@/api/session-files";
 import type { FileDiffItem } from "@/api/client";
 import type { UseDiffsResult } from "@/composables/use-diffs";
 import { useFileDiffContents } from "@/composables/use-file-diff-contents";
@@ -35,6 +35,7 @@ import {
   splitRows,
   textWithRangeReverted,
   type ReviewHunk,
+  type ReviewItem,
   type ReviewLine,
 } from "@/lib/diff-review";
 import { getVisualRenderer } from "@/lib/visual-renderer-registry";
@@ -112,6 +113,12 @@ const totals = computed(() => ({
 // ─── Files: collapse, contents ───────────────────────────────────────────────
 
 const AUTO_OPEN = 8;
+const BIG_DIFF_LINES = 1500;
+const GENERATED_FILE =
+  /(^|\/)(package-lock\.json|npm-shrinkwrap\.json|yarn\.lock|pnpm-lock\.yaml|bun\.lockb?|Cargo\.lock|Gemfile\.lock|poetry\.lock|uv\.lock|composer\.lock|go\.sum|packages\.lock\.json|Pipfile\.lock|flake\.lock)$|\.(min\.js|min\.css|lock|map)$/i;
+function startsCollapsed(file: FileDiffItem): boolean {
+  return GENERATED_FILE.test(file.file) || file.additions + file.deletions > BIG_DIFF_LINES;
+}
 const collapsed = shallowRef<ReadonlySet<string>>(new Set());
 const expandedAtStart = shallowRef(false);
 watch(
@@ -119,8 +126,10 @@ watch(
   (list) => {
     if (expandedAtStart.value || list.length === 0) return;
     expandedAtStart.value = true;
-    // A long list opens its first few files; the rest are one click away.
-    collapsed.value = new Set(list.slice(AUTO_OPEN).map((file) => file.file));
+    // A long list opens its first few files; the rest are one click away. Lockfiles and other generated or very large
+    // diffs start shut whatever their place: nobody reads them, and drawing thousands of lines freezes the panel.
+    const shut = list.filter((file, index) => index >= AUTO_OPEN || startsCollapsed(file));
+    collapsed.value = new Set(shut.map((file) => file.file));
   },
   { immediate: true },
 );
@@ -161,10 +170,17 @@ interface FileView {
   trailingNewline: boolean;
 }
 
+// A file's lines are worked out once per loaded entry: another file loading doesn't redo them.
+const viewCache = new Map<string, { entry: unknown; version: string; view: FileView }>();
 const views = computed<Record<string, FileView>>(() => {
   const out: Record<string, FileView> = {};
   for (const file of files.value) {
     const entry = entries.value[file.file];
+    const cached = viewCache.get(file.file);
+    if (cached && cached.entry === entry && cached.version === versionOf(file)) {
+      out[file.file] = cached.view;
+      continue;
+    }
     let placeholder: string | null = null;
     let diffLines: DiffLine[] = [];
     let trailingNewline = true;
@@ -177,7 +193,7 @@ const views = computed<Record<string, FileView>>(() => {
         trailingNewline = (item.after ?? "").endsWith("\n") || (item.after ?? "") === "";
       }
     }
-    out[file.file] = {
+    const view: FileView = {
       item: file,
       entry,
       placeholder,
@@ -185,9 +201,39 @@ const views = computed<Record<string, FileView>>(() => {
       items: buildReview(diffLines),
       trailingNewline,
     };
+    viewCache.set(file.file, { entry, version: versionOf(file), view });
+    out[file.file] = view;
   }
   return out;
 });
+
+// A diff with thousands of changed lines draws its first hunks; the rest is one click away, so the panel stays usable.
+const MAX_DRAWN_LINES = 600;
+const drawnAll = shallowRef<ReadonlySet<string>>(new Set());
+function showAll(path: string): void {
+  drawnAll.value = new Set([...drawnAll.value, path]);
+}
+function visibleItems(path: string): ReviewItem[] {
+  const items = views.value[path]?.items ?? [];
+  if (drawnAll.value.has(path)) return items;
+  let drawn = 0;
+  const out: ReviewItem[] = [];
+  for (const item of items) {
+    if (drawn >= MAX_DRAWN_LINES) break;
+    if (item.kind === "hunk") {
+      // One hunk can be the whole file (a change every few lines): cut it too.
+      out.push(item.lines.length > MAX_DRAWN_LINES - drawn ? { ...item, lines: item.lines.slice(0, MAX_DRAWN_LINES - drawn) } : item);
+      drawn += item.lines.length;
+    } else out.push(item);
+  }
+  return out;
+}
+function hiddenChanges(path: string): number {
+  if (drawnAll.value.has(path)) return 0;
+  const total = (views.value[path]?.items ?? []).reduce((sum, item) => (item.kind === "hunk" ? sum + item.lines.length : sum), 0);
+  const drawn = visibleItems(path).reduce((sum, item) => (item.kind === "hunk" ? sum + item.lines.length : sum), 0);
+  return total - drawn;
+}
 
 // Unchanged runs the reader opened, by file and run id.
 const openFolds = shallowRef<ReadonlySet<string>>(new Set());
@@ -247,12 +293,17 @@ const confirmOpen = computed({
 const notice = shallowRef<string | null>(null);
 const reverting = shallowRef(false);
 
-function askRevertFile(path: string): void {
+function askRevertFile(path: string, status: FileDiffItem["status"]): void {
   pending.value = {
     path,
     hunk: null,
     title: "Revert this file?",
-    detail: "Puts the file back as it was before the agent changed it. The agent's edits to it are lost.",
+    detail:
+      status === "added"
+        ? "Deletes the file: the session created it. Its contents are lost."
+        : status === "deleted"
+          ? "Puts the deleted file back as it was."
+          : "Puts the file back as it was before the agent changed it. The agent's edits to it are lost.",
   };
 }
 function askRevertHunk(path: string, hunk: ReviewHunk): void {
@@ -274,8 +325,22 @@ async function confirmRevert(): Promise<void> {
   reverting.value = true;
   notice.value = null;
   try {
-    let baseHash = "";
-    if (item.status !== "deleted") {
+    if (item.status === "deleted" && !request.hunk) {
+      // Gone from disk: put it back as the session found it. Refused if something new sits at that path.
+      const result = await restoreSessionFile(machine, props.sessionId, request.path, item.before ?? "", null);
+      if (!result.saved) notice.value = `${request.path} exists again, so nothing was reverted.`;
+    } else if (item.status === "added" && !request.hunk) {
+      // The session created it: reverting removes it, if it is still what the diff showed.
+      const current = await readSessionFile(machine, props.sessionId, request.path);
+      if ((current.content ?? "") !== (item.after ?? "")) {
+        reload(request.path, versionOf(view.item));
+        void sharedDiffs?.fetchDiffs();
+        notice.value = `${request.path} changed while you were reviewing it. Its diff is refreshed; revert again if you still want to.`;
+        return;
+      }
+      const result = await restoreSessionFile(machine, props.sessionId, request.path, null, current.hash ?? "");
+      if (!result.saved) notice.value = `${request.path} changed on disk, so nothing was removed.`;
+    } else {
       const current = await readSessionFile(machine, props.sessionId, request.path);
       // The file moved on since the diff was drawn: reverting from a stale picture would lose the newer edit.
       if ((current.content ?? "") !== (item.after ?? "")) {
@@ -284,14 +349,14 @@ async function confirmRevert(): Promise<void> {
         notice.value = `${request.path} changed while you were reviewing it. Its diff is refreshed; revert again if you still want to.`;
         return;
       }
-      baseHash = current.hash ?? "";
-    }
-    const text = request.hunk
-      ? textWithRangeReverted(view.diffLines, request.hunk, view.trailingNewline)
-      : (item.before ?? "");
-    const result = await writeSessionFile(machine, props.sessionId, request.path, text, baseHash);
-    if (!result.saved) {
-      notice.value = `${request.path} changed on disk, so nothing was reverted.`;
+      const text = request.hunk
+        ? textWithRangeReverted(view.diffLines, request.hunk, view.trailingNewline, {
+            before: item.before ?? "",
+            after: item.after ?? "",
+          })
+        : (item.before ?? "");
+      const result = await writeSessionFile(machine, props.sessionId, request.path, text, current.hash ?? "");
+      if (!result.saved) notice.value = `${request.path} changed on disk, so nothing was reverted.`;
     }
     reload(request.path, versionOf(view.item));
     await sharedDiffs?.fetchDiffs();
@@ -302,9 +367,14 @@ async function confirmRevert(): Promise<void> {
   }
 }
 
+/** Why a file can't be reverted as a whole, or null when it can. */
+function revertFileBlocker(file: FileDiffItem): string | null {
+  if (file.isBinary || file.binary) return "A binary file can't be reverted from here";
+  if (file.isTruncated || file.truncated) return "A file this large can't be reverted from here";
+  return null;
+}
 function canRevertFile(file: FileDiffItem): boolean {
-  // The server has no delete: reverting a file the session added would mean deleting it.
-  return file.status !== "added";
+  return revertFileBlocker(file) === null;
 }
 
 async function copyPath(path: string): Promise<void> {
@@ -514,9 +584,9 @@ function nameOf(path: string): string {
               type="button"
               class="rfile__act"
               :disabled="!canRevertFile(file) || reverting"
-              :title="canRevertFile(file) ? 'Revert file' : 'A new file can\'t be reverted from here'"
+              :title="revertFileBlocker(file) ?? (file.status === 'added' ? 'Revert file: delete this new file' : 'Revert file')"
               data-testid="review-revert-file"
-              @click="askRevertFile(file.file)"
+              @click="askRevertFile(file.file, file.status)"
             >
               <Undo2
                 :size="14"
@@ -589,7 +659,7 @@ function nameOf(path: string): string {
           </p>
           <template v-else>
             <template
-              v-for="item in views[file.file]!.items"
+              v-for="item in visibleItems(file.file)"
               :key="item.id"
             >
               <!-- A run of unchanged lines: folded until opened -->
@@ -657,8 +727,8 @@ function nameOf(path: string): string {
                   <button
                     type="button"
                     class="rhunk__revert"
-                    :disabled="reverting || file.status === 'added'"
-                    :title="file.status === 'added' ? 'A new file can\'t be reverted from here' : 'Revert hunk'"
+                    :disabled="reverting || file.status !== 'modified'"
+                    :title="file.status === 'modified' ? 'Revert hunk' : 'Revert the whole file instead'"
                     data-testid="review-revert-hunk"
                     @click="askRevertHunk(file.file, item)"
                   >
@@ -738,6 +808,15 @@ function nameOf(path: string): string {
                 </div>
               </template>
             </template>
+            <button
+              v-if="hiddenChanges(file.file) > 0"
+              type="button"
+              class="rfold"
+              data-testid="review-show-all"
+              @click="showAll(file.file)"
+            >
+              Show {{ hiddenChanges(file.file) }} more lines
+            </button>
           </template>
         </div>
       </section>

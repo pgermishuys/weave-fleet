@@ -151,3 +151,34 @@ describe("parseUnifiedDiff paths", () => {
     expect(paths).toEqual(["w/f.ts"]);
   });
 });
+
+describe("parseDiffLines on big and random inputs", () => {
+  function rebuild(lines: ReturnType<typeof parseDiffLines>) {
+    return {
+      before: lines.filter((l) => l.type !== "add").map((l) => l.content),
+      after: lines.filter((l) => l.type !== "remove").map((l) => l.content),
+    };
+  }
+
+  it("always rebuilds both sides from the lines, for random edits", () => {
+    let seed = 7;
+    const rnd = () => (seed = (seed * 1103515245 + 12345) & 0x7fffffff) / 0x7fffffff;
+    for (let round = 0; round < 200; round += 1) {
+      const before = Array.from({ length: Math.floor(rnd() * 30) }, () => `l${Math.floor(rnd() * 8)}`);
+      const after = before.filter(() => rnd() > 0.3);
+      for (let i = 0; i < rnd() * 6; i += 1) after.splice(Math.floor(rnd() * (after.length + 1)), 0, `n${Math.floor(rnd() * 5)}`);
+      const lines = parseDiffLines(before.join("\n"), after.join("\n"));
+      expect(rebuild(lines)).toEqual({ before, after });
+    }
+  });
+
+  it("diffs an 8,000-line file with over a thousand changed lines quickly", () => {
+    const before = Array.from({ length: 8000 }, (_, i) => `    "pkg-${i}": { "version": "1.0.${i}" },`);
+    const after = before.map((line, i) => (i % 7 === 0 ? line.replace("1.0.", "2.1.") : line));
+    const started = performance.now();
+    const lines = parseDiffLines(before.join("\n"), after.join("\n"));
+    expect(performance.now() - started).toBeLessThan(500);
+    expect(lines.filter((l) => l.type === "add")).toHaveLength(1143);
+    expect(rebuild(lines)).toEqual({ before, after });
+  });
+});

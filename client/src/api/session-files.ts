@@ -94,6 +94,38 @@ export async function writeSessionFile(
 }
 
 /**
+ * Put a file back as the session found it. With `content`, creates a file that is gone (a deleted file, or the old
+ * path of a moved one); with null, deletes a file the session added, which needs the hash of what is on disk. If the
+ * file changed since it was read nothing is done and the result carries what is on disk now.
+ *
+ * @throws Error with the server's reason when refused.
+ */
+export async function restoreSessionFile(
+  machine: MachineTarget,
+  sessionId: string,
+  path: string,
+  content: string | null,
+  baseHash: string | null,
+): Promise<WriteSessionFileResult> {
+  const { data, error, response } = await machine.api.POST("/api/sessions/{id}/files/restore", {
+    params: { path: { id: sessionId } },
+    body: { path, content, baseHash },
+  });
+
+  if (response.status === 409 && error) {
+    const conflict = error as { content?: string | null; hash?: string };
+    return { saved: false, content: conflict.content ?? null, hash: conflict.hash ?? "" };
+  }
+
+  if (error || !data) {
+    const reason = (error as { error?: string } | undefined)?.error;
+    throw new Error(reason ?? `Failed to restore file: ${response.status} ${response.statusText}`);
+  }
+
+  return { saved: true, hash: data.hash };
+}
+
+/**
  * Which of `paths` are files in the session's folder, as paths from the folder. Paths that are missing, outside the
  * folder or not files are left out.
  *
