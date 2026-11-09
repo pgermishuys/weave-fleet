@@ -11,7 +11,7 @@ const props = defineProps<{
 
 const MIN_WIDTH = 200;
 const MAX_WIDTH = 500;
-const panelWidth = shallowRef(280);
+const panelWidth = shallowRef(306);
 const isResizing = shallowRef(false);
 
 function resizeBy(delta: number): void {

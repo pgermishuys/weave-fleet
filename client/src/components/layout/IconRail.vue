@@ -206,8 +206,7 @@ function handleSelect(item: RailItem): void {
 
 <template>
   <aside
-    class="rail"
-    :class="{ 'icon-only': isMobileNav }"
+    class="rail icon-only"
     aria-label="Primary navigation"
   >
     <div
@@ -230,7 +229,7 @@ function handleSelect(item: RailItem): void {
         :key="item.id"
         :item="item"
         :active="activeRail === item.id"
-        :icon-only="isMobileNav"
+        :icon-only="true"
         @select="handleSelect"
       />
 
@@ -241,7 +240,7 @@ function handleSelect(item: RailItem): void {
         :key="item.id"
         :item="item"
         :active="activeRail === item.id"
-        :icon-only="isMobileNav"
+        :icon-only="true"
         @select="handleSelect"
       />
 
@@ -253,7 +252,7 @@ function handleSelect(item: RailItem): void {
           :key="item.id"
           :item="item"
           :active="activeRail === item.id"
-          :icon-only="isMobileNav"
+          :icon-only="true"
           @select="handleSelect"
         />
 
@@ -276,9 +275,8 @@ function handleSelect(item: RailItem): void {
           <DropdownMenuTrigger as-child>
             <button
               type="button"
-              class="rail-item"
-              :class="{ 'icon-only': isMobileNav }"
-              :data-tooltip="isMobileNav ? 'Help' : undefined"
+              class="rail-item icon-only"
+              data-tooltip="Help"
               aria-label="Help"
               data-testid="rail-help"
             >
@@ -286,10 +284,6 @@ function handleSelect(item: RailItem): void {
                 :size="18"
                 aria-hidden="true"
               />
-              <span
-                v-if="!isMobileNav"
-                class="rail-label"
-              >Help</span>
             </button>
           </DropdownMenuTrigger>
           <DropdownMenuContent
@@ -321,19 +315,13 @@ function handleSelect(item: RailItem): void {
 
 <style scoped>
 .rail {
-  width: 74px;
-  min-width: 74px;
+  width: 48px;
+  min-width: 48px;
   background: transparent;
   display: flex;
   flex-direction: column;
   align-items: center;
   padding: 8px 0;
-}
-
-/* The phone drawer keeps the narrow icon-only rail so the sessions column keeps its room. */
-.rail.icon-only {
-  width: 48px;
-  min-width: 48px;
 }
 
 .rail-nav {
@@ -403,7 +391,8 @@ function handleSelect(item: RailItem): void {
   height: 40px;
 }
 
-.rail-item:hover {
+.rail-item:hover,
+.rail-item:focus-visible {
   background: color-mix(in srgb, var(--text) 5%, transparent);
   color: var(--text);
 }
@@ -477,7 +466,8 @@ function handleSelect(item: RailItem): void {
   z-index: 100;
 }
 
-.rail-item[data-tooltip]:hover::after {
+.rail-item[data-tooltip]:hover::after,
+.rail-item[data-tooltip]:focus-visible::after {
   opacity: 1;
   transform: translate(4px, -50%);
 }
