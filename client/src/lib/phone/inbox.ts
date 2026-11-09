@@ -4,7 +4,7 @@
  */
 import type { SessionListItem } from "@/api/client";
 import type { PermissionAsk } from "@/composables/use-session-permissions";
-import { isTopLevel, sessionBucket, sessionUpdatedAt } from "@/lib/needs-you";
+import { isHiddenWhileArchiving, isTopLevel, sessionBucket, sessionUpdatedAt } from "@/lib/needs-you";
 import type { FeedStatus } from "@/lib/machine-feed";
 import type { MachineDiagnosis } from "@/lib/machine-diagnosis";
 import type { QuestionInfo } from "@/lib/question-types";
@@ -100,14 +100,14 @@ function item(machine: InboxMachineState, session: SessionListItem): InboxItem {
 const newestFirst = (a: InboxItem, b: InboxItem) => b.updatedAt - a.updatedAt;
 
 /** Groups every machine's sessions into the inbox's three sections, newest first. */
-export function buildInbox(machines: readonly InboxMachineState[], now: number, finishedFor = FINISHED_FOR_MS): Inbox {
+export function buildInbox(machines: readonly InboxMachineState[], now: number, finishedFor = FINISHED_FOR_MS, archiving?: ReadonlySet<string>): Inbox {
   const needsYou: InboxItem[] = [];
   const working: InboxItem[] = [];
   const finished: InboxItem[] = [];
 
   for (const machine of machines) {
     for (const session of machine.sessions) {
-      if (!isTopLevel(session) || session.retentionStatus === "archived") continue;
+      if (!isTopLevel(session) || session.retentionStatus === "archived" || isHiddenWhileArchiving(session.session.id, archiving)) continue;
       const entry = item(machine, session);
       switch (sessionBucket(session)) {
         case "needs-you":

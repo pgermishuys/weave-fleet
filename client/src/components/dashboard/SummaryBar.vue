@@ -1,9 +1,13 @@
 <script setup lang="ts">
-import { computed, onMounted } from "vue";
+import { computed, onMounted, watch } from "vue";
+import { storeToRefs } from "pinia";
 import { ChevronRight } from "lucide-vue-next";
 import { useRouter } from "@tanstack/vue-router";
 import { useAnalyticsDaily } from "@/composables/use-analytics-daily";
 import { useFleetSummary } from "@/composables/use-fleet-summary";
+import { countsWithoutArchiving } from "@/lib/needs-you";
+import { useArchiveQueueStore } from "@/stores/archive-queue";
+import { useSessionsStore } from "@/stores/sessions";
 
 interface SummaryMetric {
   testId: string;
@@ -14,7 +18,18 @@ interface SummaryMetric {
 const SPARK_DAYS = 14;
 
 const router = useRouter();
-const { summary } = useFleetSummary();
+const { summary, refetch: refetchSummary } = useFleetSummary();
+const { pendingIds } = storeToRefs(useArchiveQueueStore());
+const { sessions: storeSessions } = storeToRefs(useSessionsStore());
+// The server's counts still include a session archived a moment ago; drop it now, and ask again once it has answered.
+const counts = computed(() => countsWithoutArchiving(
+  { active: summary.value?.activeSessions ?? 0, idle: summary.value?.idleSessions ?? 0 },
+  storeSessions.value,
+  pendingIds.value,
+));
+watch(pendingIds, (now, before) => {
+  if (before.size > 0 && now.size === 0) void refetchSummary();
+});
 
 const integerFormatter = new Intl.NumberFormat("en-US");
 const compactFormatter = new Intl.NumberFormat("en-US", { notation: "compact", maximumFractionDigits: 1 });
@@ -29,8 +44,8 @@ const dayFormatter = new Intl.DateTimeFormat("en-US", { month: "short", day: "nu
 const metrics = computed<SummaryMetric[]>(() => {
   const current = summary.value;
   return [
-    { testId: "summary-active-count", label: "Working", value: integerFormatter.format(current?.activeSessions ?? 0) },
-    { testId: "summary-idle-count", label: "Idle", value: integerFormatter.format(current?.idleSessions ?? 0) },
+    { testId: "summary-active-count", label: "Working", value: integerFormatter.format(counts.value.active) },
+    { testId: "summary-idle-count", label: "Idle", value: integerFormatter.format(counts.value.idle) },
     { testId: "summary-queued-count", label: "Queued", value: integerFormatter.format(current?.queuedTasks ?? 0) },
     { testId: "summary-tokens-count", label: "Total tokens", value: compactFormatter.format(current?.totalTokens ?? 0) },
     { testId: "summary-cost-count", label: "Total spend", value: currencyFormatter.format(current?.totalCost ?? 0) },

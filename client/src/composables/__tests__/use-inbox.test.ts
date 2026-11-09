@@ -31,6 +31,9 @@ vi.mock("@/composables/use-signalr-socket", () => ({
   feedHubFor: (machine: { key: string; connection: { token: string } | null }) => ({ sharedHubOf: machine.key, token: machine.connection?.token ?? null }),
 }));
 
+// Nothing is waiting on Undo here; the real store would pull the machines store (and its hubs) into the test.
+vi.mock("@/stores/archive-queue", () => ({ useArchiveQueueStore: () => ({ pendingIds: new Set<string>() }) }));
+
 import { inboxSession, useInbox } from "../phone/use-inbox";
 
 describe("useInbox", () => {

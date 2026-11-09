@@ -24,6 +24,32 @@ export function sessionUpdatedAt(item: SessionListItem): number {
   return typeof value === "number" ? value : Date.parse(value) || 0;
 }
 
+/**
+ * The one rule for a session archived a moment ago: the list says active until the server has answered, but the user
+ * has already archived it (waiting on Undo, or the request is on its way), so every list leaves it out.
+ */
+export function isHiddenWhileArchiving(sessionId: string, pending?: ReadonlySet<string>): boolean {
+  return pending?.has(sessionId) ?? false;
+}
+
+/**
+ * What a fleet-wide count (the server's, polled) should drop for sessions archived a moment ago: each leaves the
+ * Working count when it is in a turn (the server's rule: working or stopped on a question), else the Idle count.
+ */
+export function countsWithoutArchiving(
+  counts: { active: number; idle: number },
+  sessions: readonly SessionListItem[],
+  pending: ReadonlySet<string>,
+): { active: number; idle: number } {
+  let { active, idle } = counts;
+  for (const item of sessions) {
+    if (!isTopLevel(item) || item.retentionStatus === "archived" || !isHiddenWhileArchiving(item.session.id, pending)) continue;
+    if (item.sessionStatus === "active" || item.sessionStatus === "waiting_input") active = Math.max(0, active - 1);
+    else idle = Math.max(0, idle - 1);
+  }
+  return { active, idle };
+}
+
 /** Top-level sessions the user would see: no subagents, nothing hidden. */
 export function isTopLevel(item: SessionListItem): boolean {
   return !item.parentSessionId && !(item as SessionListItem & { isHidden?: boolean }).isHidden;
