@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import { computed, nextTick, onMounted, onUnmounted, shallowRef, ref, useTemplateRef, watch } from "vue";
+import { useElementSize } from "@vueuse/core";
 import { storeToRefs } from "pinia";
 import { ArrowUp, CornerDownRight, ListEnd, Paperclip, SquareTerminal, X, CircleX, MessageCircleQuestionMark, LoaderCircle } from "lucide-vue-next";
 import AutocompletePopup from "@/components/session/AutocompletePopup.vue";
@@ -53,7 +54,7 @@ import {
 import { useMachineTarget } from "@/lib/machine-target";
 import { usePreferencesStore } from "@/stores/preferences";
 import { addDraftTerminalContext, useDraftTerminalContext } from "@/composables/use-draft-terminal-context";
-import { describeSessionDefaults, modelFromKey, sessionDefaultModelKey } from "@/lib/agent-model-choice";
+import { describeSessionDefaults, modelFromKey, plainDefaultLabel, sessionDefaultModelKey } from "@/lib/agent-model-choice";
 import { formatTerminalContext, terminalLineRange, type TerminalContextDraft } from "@/lib/format-terminal-context";
 import { sessionReferencesIn } from "@/lib/session-references";
 import { sessionSkillNames, skillDeliveries, skillListHint, skillNamesIn } from "@/lib/skill-mentions";
@@ -595,6 +596,14 @@ const selectedModelId = computed({
   },
 });
 
+const composerRef = useTemplateRef<HTMLElement>("composer");
+const { width: composerWidth } = useElementSize(composerRef);
+/** Under this the chips don't fit whole ("Default (DeepSeek V4.1 …"): they say the plain name, as the phone's do. */
+const NARROW_COMPOSER_PX = 640;
+const narrow = computed(() => composerWidth.value > 0 && composerWidth.value < NARROW_COMPOSER_PX);
+
+const plainLabel = (label: string): string => (narrow.value ? plainDefaultLabel(label) : label);
+
 /** "Default" is the session's own agent and model, which prompts that name none get; the chips say which. */
 const defaultLabels = computed(() => {
   const session = sessionsStore.sessionById(props.sessionId);
@@ -1047,6 +1056,7 @@ function handleKeydown(event: KeyboardEvent): void {
 
 <template>
   <section
+    ref="composer"
     class="composer"
     aria-label="Message composer"
   >
@@ -1291,7 +1301,7 @@ function handleKeydown(event: KeyboardEvent): void {
             v-model="selectedAgentId"
             class="composer-chip composer-chip--agent"
             :agents="agents"
-            :default-label="defaultLabels.agentLabel"
+            :default-label="plainLabel(defaultLabels.agentLabel)"
             :default-description="defaultLabels.agentDescription"
           />
           <ModelSelector
@@ -1299,7 +1309,7 @@ function handleKeydown(event: KeyboardEvent): void {
             class="composer-chip composer-chip--model"
             :models="models"
             :harness-type="selectedSession?.harnessType"
-            :default-label="defaultLabels.modelLabel"
+            :default-label="plainLabel(defaultLabels.modelLabel)"
             :default-description="defaultLabels.modelDescription"
           />
           <EffortToggle

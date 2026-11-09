@@ -174,3 +174,8 @@ export function sessionDefaultModelKey(input: {
   }
   return null;
 }
+
+/** "Default (build)" as just "build", for a chip with no room for the wrapper; any other label stays as it is. */
+export function plainDefaultLabel(label: string): string {
+  return /^Default \((.+)\)$/.exec(label)?.[1] ?? label;
+}

@@ -8,6 +8,7 @@ import {
   modelFromKey,
   modelFromPath,
   modelToPath,
+  plainDefaultLabel,
   sessionDefaultModelKey,
 } from "@/lib/agent-model-choice";
 
@@ -155,5 +156,14 @@ describe("agent-model-choice", () => {
     it("is null when only the harness knows", () => {
       expect(sessionDefaultModelKey({ sessionModel: null, models })).toBeNull();
     });
+  });
+});
+
+describe("plainDefaultLabel", () => {
+  it("drops the Default wrapper and keeps everything else", () => {
+    expect(plainDefaultLabel("Default (DeepSeek V4.1 Flash Free)")).toBe("DeepSeek V4.1 Flash Free");
+    expect(plainDefaultLabel("Default (build)")).toBe("build");
+    expect(plainDefaultLabel("Default")).toBe("Default");
+    expect(plainDefaultLabel("Opus 5.5")).toBe("Opus 5.5");
   });
 });
