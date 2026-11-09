@@ -510,9 +510,12 @@ const SessionDetailPage = defineComponent({
             {{
               actions: () => (
                 <>
-                <TerminalToggleButton sessionId={params.value.id} />
+                <TerminalToggleButton sessionId={params.value.id} class="session-detail-header__desktop-only" />
                 <RightPanelSheetButton />
                 <SessionActionToolbar
+                  sessionId={params.value.id}
+                  totalTokens={selectedSession.value?.totalTokens ?? remoteSession.value?.totalTokens ?? null}
+                  totalCost={selectedSession.value?.totalCost ?? remoteSession.value?.totalCost ?? null}
                   canAbort={canAbort.value}
                   canArchive={canArchive.value}
                   canRestore={canRestore.value}

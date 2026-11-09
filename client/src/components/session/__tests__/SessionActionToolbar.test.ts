@@ -1,5 +1,6 @@
 import { mount } from "@vue/test-utils";
 import { describe, expect, it, vi } from "vitest";
+import { shallowRef } from "vue";
 import SessionActionToolbar from "@/components/session/SessionActionToolbar.vue";
 
 // The ⋯ menu's items render in a portal once it opens; the stubs render them inline.
@@ -15,6 +16,9 @@ const menuStubs = {
   DropdownMenuSeparator: { template: "<hr>" },
   DropdownMenuShortcut: { template: "<span><slot /></span>" },
 };
+
+const phone = shallowRef(false);
+vi.mock("@/composables/use-media-query", () => ({ useIsMobileNav: () => phone }));
 
 function mountToolbar(props: Record<string, unknown>) {
   return mount(SessionActionToolbar, {
@@ -121,5 +125,27 @@ describe("SessionActionToolbar", () => {
 
     expect(wrapper.text()).toContain("Export as Markdown…");
     expect(wrapper.emitted("export")).toHaveLength(1);
+  });
+
+  it("keeps_fork_and_the_token_count_in_the_more_menu_on_a_phone", () => {
+    phone.value = true;
+    try {
+      const wrapper = mountToolbar({ canAbort: true, canFork: true, totalTokens: 52180, totalCost: 0.5 });
+
+      // The header has room for two buttons only; abort and the fork button are gone from it.
+      expect(wrapper.find("[data-testid='abort-button']").exists()).toBe(false);
+      expect(wrapper.find("[data-testid='session-archived-fork-button']").exists()).toBe(false);
+      expect(wrapper.find("[data-testid='session-fork-action']").exists()).toBe(true);
+      expect(wrapper.find("[data-testid='session-usage-item']").text()).toContain("52,180 tokens");
+    } finally {
+      phone.value = false;
+    }
+  });
+
+  it("has_no_phone_rows_on_a_desktop", () => {
+    const wrapper = mountToolbar({ canFork: true, totalTokens: 52180 });
+
+    expect(wrapper.find("[data-testid='session-fork-action']").exists()).toBe(false);
+    expect(wrapper.find("[data-testid='session-usage-item']").exists()).toBe(false);
   });
 });

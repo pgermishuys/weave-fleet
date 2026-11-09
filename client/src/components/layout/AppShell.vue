@@ -285,6 +285,7 @@ function onGutterPointerDown(e: PointerEvent): void {
 <template>
   <div
     class="app"
+    :class="{ 'app--phone': isMobileNav }"
     @touchstart.passive="onTouchStart"
     @touchend.passive="onTouchEnd"
   >
@@ -410,7 +411,8 @@ function onGutterPointerDown(e: PointerEvent): void {
       </div>
     </div>
 
-    <StatusBar />
+    <!-- A phone has no room for it; what it showed lives in the session's ⋯ menu. -->
+    <StatusBar v-if="!isMobileNav" />
 
     <CommandPalette />
     <MachineScope
@@ -439,6 +441,24 @@ function onGutterPointerDown(e: PointerEvent): void {
   gap: 8px;
   padding: 8px;
   background: var(--main-bg);
+}
+
+/* A phone: edge to edge, with no inset card, outer margin or shadow. */
+.app--phone .main {
+  gap: 0;
+  padding: 0;
+}
+
+/* Centred in the 56px header the session page draws under it. */
+.app--phone .mobile-menu-btn {
+  top: 14px;
+  left: 6px;
+}
+
+.app--phone .workspace-sheet {
+  border: 0;
+  border-radius: 0;
+  box-shadow: none;
 }
 
 .workspace-sheet {

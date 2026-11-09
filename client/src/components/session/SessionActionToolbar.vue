@@ -1,5 +1,9 @@
 <script setup lang="ts">
-import { Archive, ArchiveRestore, Copy, Ellipsis, FileDown, GitFork, Loader2, OctagonX, Pencil, Trash2 } from "lucide-vue-next";
+import { computed } from "vue";
+import { Archive, ArchiveRestore, ChartNoAxesColumn, Copy, Ellipsis, FileDown, GitFork, Loader2, OctagonX, Pencil, SquareTerminal, Trash2 } from "lucide-vue-next";
+import { useIsMobileNav } from "@/composables/use-media-query";
+import { useAppShellStore } from "@/stores/app-shell";
+import { useTerminalsStore } from "@/stores/terminals";
 import { Button } from "@/components/ui/button";
 import {
   DropdownMenu,
@@ -29,10 +33,17 @@ const props = withDefaults(defineProps<{
   /** The session's working folder (the worktree in a worktree session): Copy folder path copies it. */
   directory?: string | null;
   errors?: readonly string[];
+  /** For a phone's ⋯ menu, which holds the actions and the usage the header has no room for. */
+  sessionId?: string | null;
+  totalTokens?: number | null;
+  totalCost?: number | null;
 }>(), {
   canFork: true,
   forkDisabledReason: null,
   directory: null,
+  sessionId: null,
+  totalTokens: null,
+  totalCost: null,
   canDelete: true,
   canRename: true,
 });
@@ -46,6 +57,19 @@ const emit = defineEmits<{
   restore: [];
   export: [];
 }>();
+
+// On a phone the header keeps two buttons (the right panel and this menu), so the rest moves in here.
+const phone = useIsMobileNav();
+const appShell = useAppShellStore();
+const terminals = useTerminalsStore();
+const showTerminalItem = computed(() => phone.value && Boolean(props.sessionId) && appShell.config.terminalEnabled);
+const terminalOpen = computed(() => Boolean(props.sessionId) && terminals.isOpen(props.sessionId as string));
+const usage = computed(() => {
+  const parts: string[] = [];
+  if (props.totalTokens != null) parts.push(`${props.totalTokens.toLocaleString()} tokens`);
+  if (props.totalCost != null) parts.push(new Intl.NumberFormat("en-US", { style: "currency", currency: "USD" }).format(props.totalCost));
+  return parts.join(" · ");
+});
 
 async function copyDirectory(): Promise<void> {
   if (!props.directory) return;
@@ -63,7 +87,7 @@ async function copyDirectory(): Promise<void> {
     aria-label="Session actions"
   >
     <Button
-      v-if="props.canAbort"
+      v-if="props.canAbort && !phone"
       variant="toolbar-icon-danger"
       size="toolbar"
       data-testid="abort-button"
@@ -82,11 +106,14 @@ async function copyDirectory(): Promise<void> {
       />
     </Button>
 
-    <span class="session-action-toolbar__divider" />
+    <span
+      v-if="!phone"
+      class="session-action-toolbar__divider"
+    />
 
     <!-- A disabled button shows no tooltip, so its reason sits on a wrapper. -->
     <span
-      v-if="props.canFork || props.forkDisabledReason"
+      v-if="!phone && (props.canFork || props.forkDisabledReason)"
       class="session-action-toolbar__fork"
       :title="props.canFork ? 'Fork: a new session with a copy of this conversation' : props.forkDisabledReason ?? undefined"
       data-testid="session-fork-button-wrapper"
@@ -129,6 +156,36 @@ async function copyDirectory(): Promise<void> {
         align="end"
         class="w-56"
       >
+        <template v-if="phone">
+          <DropdownMenuItem
+            v-if="usage"
+            disabled
+            data-testid="session-usage-item"
+            class="opacity-100 text-muted-foreground"
+          >
+            <ChartNoAxesColumn class="size-3.5" />
+            {{ usage }}
+          </DropdownMenuItem>
+          <DropdownMenuItem
+            v-if="showTerminalItem"
+            data-testid="session-terminal-action"
+            @select="terminals.toggleOpen(props.sessionId as string)"
+          >
+            <SquareTerminal class="size-3.5" />
+            {{ terminalOpen ? "Hide terminal" : "Show terminal" }}
+          </DropdownMenuItem>
+          <DropdownMenuItem
+            v-if="props.canFork || props.forkDisabledReason"
+            data-testid="session-fork-action"
+            :disabled="props.isPending || !props.hasSession || !props.canFork"
+            :title="props.canFork ? undefined : props.forkDisabledReason ?? undefined"
+            @select="emit('fork')"
+          >
+            <GitFork class="size-3.5" />
+            Fork
+          </DropdownMenuItem>
+          <DropdownMenuSeparator />
+        </template>
         <!-- First, for windows too narrow for the header to show the path. -->
         <DropdownMenuItem
           v-if="props.directory"

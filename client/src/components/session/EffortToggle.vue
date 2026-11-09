@@ -80,6 +80,18 @@ function cycleEffort(): void {
   transition: background var(--transition);
 }
 
+/* A phone's composer row is tight: the dots say the level, its name is in the tooltip. */
+@media (max-width: 716px), (max-height: 500px) and (pointer: coarse) {
+  .effort-toggle {
+    flex-shrink: 0;
+    padding: 0 6px;
+  }
+
+  .effort-toggle__label {
+    display: none;
+  }
+}
+
 .effort-toggle:hover {
   background: color-mix(in srgb, var(--text) 6%, transparent);
 }
