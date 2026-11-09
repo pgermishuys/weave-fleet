@@ -1254,14 +1254,26 @@ mark {
   background: var(--del-word);
 }
 
-.rsplit__row {
+.rsplit {
+  /* One grid per hunk: both panes share the same columns, so a long line widens
+     them together and a single horizontal scroll moves old and new as one. */
   display: grid;
+  grid-template-columns: repeat(2, minmax(max-content, 1fr));
+  overflow-x: auto;
+  scrollbar-width: thin;
+}
+
+.review--wrap .rsplit {
   grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+  overflow-x: hidden;
+}
+
+.rsplit__row {
+  display: contents;
 }
 
 .rsplit__row > .rline {
   min-width: 0;
-  overflow: hidden;
 }
 
 .rsplit__row > .rline + .rline {
