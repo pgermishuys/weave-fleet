@@ -1234,6 +1234,17 @@ onUnmounted(() => {
  * Everything else moves into the ⋯ menu or the right panel.
  */
 @media (max-width: 716px), (max-height: 500px) and (pointer: coarse) {
+  /* Banners run the full width under the header, with a hairline under them instead of a box. */
+  .session-detail-banners {
+    gap: 0;
+    padding: 0;
+  }
+
+  .session-detail-banners > [data-testid="session-stopped-banner"] {
+    border-width: 0 0 1px;
+    padding-inline: 16px;
+  }
+
   /* One level more specific than the wide-container rule below, which would put the padding back. */
   .session-detail-chrome .session-detail-header {
     padding: 0 12px 0 52px;
