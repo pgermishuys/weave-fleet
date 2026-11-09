@@ -112,8 +112,10 @@ describe("ActivityStream and thinking", () => {
   });
 
   it("isn't live once the turn has ended, or once something follows the thinking", async () => {
+    // Once the turn has ended it folds into one line: the thinking is behind it, not live.
     let wrapper = await open();
-    expect(wrapper.getComponent({ name: "ReasoningBlock" }).props("live")).toBe(false);
+    expect(wrapper.find("[data-testid='turn-fold']").exists()).toBe(true);
+    expect(wrapper.findComponent({ name: "ReasoningBlock" }).exists()).toBe(false);
     wrapper.unmount();
 
     stream.status = "busy";
