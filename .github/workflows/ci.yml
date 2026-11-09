@@ -92,7 +92,7 @@ jobs:
     env:
       # The live tests' pinned harness versions (see the install steps). Bump here and check the live tests pass.
       OPENCODE_VERSION: '1.18.31'
-      OPENCODE2_VERSION: '2.2.5'
+      OPENCODE2_VERSION: '2.2.6'
       # The ripgrep OpenCode 1.18.31 downloads when there's none on PATH (see the ripgrep steps).
       RIPGREP_VERSION: '15.1.0'
 
