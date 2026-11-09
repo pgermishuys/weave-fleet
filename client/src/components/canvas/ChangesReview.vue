@@ -7,6 +7,7 @@ import {
   ChevronsUpDown,
   Copy,
   Ellipsis,
+  ExternalLink,
   FileText,
   Undo2,
   WrapText,
@@ -89,6 +90,10 @@ function setLayout(next: "unified" | "split"): void {
 }
 
 const wrap = shallowRef(readPref(WRAP_KEY, ["on", "off"] as const) === "on");
+// Opens the file in a file tab (Diff for a changed file, Edit for a deleted-in-diff one isn't openable).
+function openInEditor(file: { file: string }): void {
+  canvases.openFile(props.sessionId, file.file, { keep: true, view: "diff" });
+}
 function toggleWrap(): void {
   wrap.value = !wrap.value;
   writePref(WRAP_KEY, wrap.value ? "on" : "off");
@@ -97,7 +102,7 @@ function toggleWrap(): void {
 const turnPaths = computed(() => canvases.turnFiles[props.sessionId] ?? []);
 const scopePref = shallowRef<"turn" | "session" | null>(null);
 const scope = computed<"turn" | "session">(() =>
-  turnPaths.value.length === 0 ? "session" : (scopePref.value ?? "turn"),
+  turnPaths.value.length === 0 ? "session" : (scopePref.value ?? "session"),
 );
 const baseDetail = computed(() => {
   const label = diffBaseLabel(sharedDiffs?.base.value ?? null);
@@ -556,6 +561,19 @@ function nameOf(path: string): string {
                 aria-hidden="true"
               />
               Revert file
+            </button>
+            <button
+              type="button"
+              class="rfile__act"
+              title="Open file"
+              aria-label="Open file"
+              data-testid="review-open-file"
+              @click="openInEditor(file)"
+            >
+              <ExternalLink
+                :size="14"
+                aria-hidden="true"
+              />
             </button>
             <button
               type="button"
