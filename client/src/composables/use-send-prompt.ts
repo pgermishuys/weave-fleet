@@ -8,7 +8,7 @@ import type { AccumulatedMessage, ImageAttachment } from "@/lib/client-types";
 import { effortToSend } from "@/lib/effort-memory";
 import { modelFromKey } from "@/lib/agent-model-choice";
 import { diagLog } from "@/lib/message-diagnostics";
-import { sessionReferencesIn, stripSessionReferences, type SessionReference } from "@/lib/session-references";
+import { requestSessionReference, sessionReferencesIn, stripSessionReferences, type SessionReference } from "@/lib/session-references";
 import { sessionSkillNames, skillNamesIn } from "@/lib/skill-mentions";
 import { modelPickerKey, useModelPickerStore } from "@/stores/model-picker";
 import { useSessionsStore } from "@/stores/sessions";
@@ -423,7 +423,7 @@ interface BackendSendPromptRequest {
   /** "steer": into the running turn, at the agent's next step. Left out, the prompt is a turn of its own. */
   delivery?: "steer";
   /** Sessions picked from the `@` list, by the token each left in the text. */
-  sessionReferences?: { token: string; sessionId: string }[];
+  sessionReferences?: { token: string; sessionId: string; machineId?: string }[];
   /** The skills the text's `$` tokens name, in order; the harness decides how each reaches the agent. */
   skills?: string[];
 }
@@ -650,7 +650,7 @@ export function useSendPrompt(sessionId: string) {
     }
 
     if (sessionReferences.length > 0) {
-      request.sessionReferences = sessionReferences.map(({ token, sessionId: referencedId }) => ({ token, sessionId: referencedId }));
+      request.sessionReferences = sessionReferences.map(requestSessionReference);
     }
 
     if (skills.length > 0) {

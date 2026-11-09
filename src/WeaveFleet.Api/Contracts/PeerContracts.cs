@@ -19,3 +19,6 @@ public sealed record PeerSessionMessageResponse(string SessionId, string Title, 
 
 /// <summary>One page of a session's conversation, as <c>fleet_session_read</c> shows it to an agent.</summary>
 public sealed record PeerSessionPageResponse(string Title, string Text);
+
+/// <summary>A session's recap, for an <c>@</c> reference to it from a Claude Code or Pi session on another machine.</summary>
+public sealed record PeerSessionRecapResponse(string Title, string Recap);

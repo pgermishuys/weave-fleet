@@ -5,6 +5,7 @@ import {
   parseSessionReferences,
   rememberedSessionTokens,
   rememberSessionReference,
+  requestSessionReference,
   resetSessionReferences,
   sessionReferenceSlug,
   sessionReferencesIn,
@@ -110,6 +111,18 @@ describe("the block in a sent message", () => {
     expect(stripSessionReferences(sent)).toBe("Use the mapping from @t3code-what-can-we-learn");
   });
 
+  it("names another machine's session's machine; a session on the same machine has none", () => {
+    const elsewhere = sent.replace(
+      "<session ref=\"@notes\" id=\"ses-2\" title=\"Notes\">",
+      "<session ref=\"@notes\" id=\"ses-2\" title=\"Notes\" machine=\"kestrel &amp; co\">",
+    );
+
+    expect(parseSessionReferences(elsewhere).references).toEqual([
+      { token: "@t3code-what-can-we-learn", sessionId: "ses-1", title: "t3code: what & how?" },
+      { token: "@notes", sessionId: "ses-2", title: "Notes", machine: "kestrel & co" },
+    ]);
+  });
+
   it("leaves a message without a block as it is", () => {
     expect(parseSessionReferences("Hello <fleet-session-references> in prose")).toEqual({
       text: "Hello <fleet-session-references> in prose",
@@ -127,6 +140,13 @@ describe("chips in a rendered message", () => {
     expect(html).toContain("<a class=\"session-ref-chip\" href=\"/sessions/ses-1\" data-session-ref=\"ses-1\"");
     expect(html).toContain("<span class=\"session-ref-chip__title\">Notes &lt;draft&gt;</span></a>, then go.");
     expect(html).not.toContain("@notes");
+  });
+
+  it("a chip for another machine's session names the machine", () => {
+    const html = withSessionReferenceChips("<p>Read @notes.</p>", [{ ...references[0], machine: "kestrel" }]);
+
+    expect(html).toContain("data-session-machine=\"kestrel\" title=\"Open Notes &lt;draft&gt; on kestrel\"");
+    expect(html).toContain("<span class=\"session-ref-chip__title\">Notes &lt;draft&gt;</span><span class=\"session-ref-chip__machine\">kestrel</span></a>");
   });
 
   it("leaves tokens in code alone", () => {
@@ -176,5 +196,27 @@ describe("the sessions the @ list offers", () => {
     const offered = matchReferableSessions(items, "fleet", { limit: 5, harnessName: () => undefined });
 
     expect(offered[0].description).toBe("weave-fleet · opencode2");
+  });
+});
+
+describe("references as a request carries them", () => {
+  beforeEach(() => {
+    localStorage.clear();
+    resetSessionReferences();
+  });
+
+  it("a session on the same machine goes as it always has: its token and id", () => {
+    expect(requestSessionReference({ token: "@notes", sessionId: "ses-1" })).toEqual({ token: "@notes", sessionId: "ses-1" });
+    rememberSessionReference("draft-1", { token: "@notes", sessionId: "ses-1", title: "Notes" });
+    expect(sessionReferencesIn("draft-1", "see @notes")).toEqual([{ token: "@notes", sessionId: "ses-1", title: "Notes" }]);
+  });
+
+  it("another machine's session carries that machine's id, kept with the draft", () => {
+    rememberSessionReference("draft-1", { token: "@tide", sessionId: "far-1", title: "Tide", machineId: "m-kestrel", machine: "kestrel" });
+    resetSessionReferences();
+
+    const [picked] = sessionReferencesIn("draft-1", "see @tide");
+    expect(picked).toEqual({ token: "@tide", sessionId: "far-1", title: "Tide", machineId: "m-kestrel", machine: "kestrel" });
+    expect(requestSessionReference(picked)).toEqual({ token: "@tide", sessionId: "far-1", machineId: "m-kestrel" });
   });
 });

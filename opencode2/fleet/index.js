@@ -35,7 +35,7 @@ const PAGE_CHOICE = process.env.FLEET_PAGE_CHOICE === "1"
 
 const machine = {
   type: "string",
-  description: "The machine the session is on, from fleet_machine_list. Leave it out for a session on this machine.",
+  description: "The machine the session is on: from fleet_machine_list, or the machine attribute of its entry in a <fleet-session-references> block. Leave it out for a session on this machine.",
 }
 
 /**

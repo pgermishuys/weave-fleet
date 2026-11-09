@@ -2,6 +2,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { shallowRef, type Ref } from "vue";
 import type { SessionListItem } from "@/api/client";
 import { useAutocomplete } from "@/composables/use-autocomplete";
+import type { ReferableMachines } from "@/composables/use-referable-sessions";
 import { resetSessionReferences, sessionReferencesIn } from "@/lib/session-references";
 import { pickedFileTokens, resetFileReferences } from "@/lib/composer-references";
 import { flushAll, mountComposable } from "./test-utils";
@@ -145,6 +146,7 @@ async function mountAutocomplete(
   sessionId: Ref<string> | string = "instance-1",
   sessions: SessionListItem[] = [],
   harnessType?: string,
+  machines?: ReferableMachines,
 ) {
   const value = shallowRef(initialValue);
   const cursorPosition = shallowRef(cursor);
@@ -162,6 +164,7 @@ async function mountAutocomplete(
     inputRef,
     cursorPosition,
     sessions,
+    machines,
     // As the composer does, from the harnesses the server lists.
     harnessName: (type) => ({ "claude-code": "Claude Code" })[type],
     harnessType,
@@ -510,6 +513,99 @@ describe("useAutocomplete", () => {
       expect(sessionReferencesIn("instance-1", value.value)).toEqual([
         { token: "@t3code-what-can-we-learn", sessionId: "ses-a", title: "t3code: what can we learn?" },
       ]);
+    });
+
+    describe("with other machines", () => {
+      const farSessions = [
+        session("far-1", "Tide chart caching", 10),
+        session("far-2", "Berth booking form", 11),
+      ];
+      const hangarSessions = [session("hangar-1", "Runway lights audit", 12)];
+
+      function machines(others: ReferableMachines["others"]): ReferableMachines {
+        return { own: { key: "home", name: "falcon" }, others };
+      }
+
+      async function sessionItems(text: string, list?: ReferableMachines) {
+        const { result } = await mountAutocomplete(text, text.length, "instance-1", sessions, undefined, list);
+        await vi.advanceTimersByTimeAsync(300);
+        await flushAll();
+        return result;
+      }
+
+      it("with no other machine listed, offers exactly what it always did", async () => {
+        vi.useFakeTimers();
+
+        const plain = await sessionItems("look at @");
+        const alone = await sessionItems("look at @", machines([]));
+
+        expect(alone.items.value).toEqual(plain.items.value);
+        expect(alone.items.value.some((item) => item.machine)).toBe(false);
+      });
+
+      it("lists the session's own machine first, then each other machine, newest first in each", async () => {
+        vi.useFakeTimers();
+        const fix = { label: "Let falcon reach hangar", open: vi.fn() };
+
+        const result = await sessionItems("look at @", machines([
+          { key: "m-kestrel", id: "m-kestrel", name: "kestrel", sessions: farSessions, unreachable: null, fix: null },
+          { key: "m-hangar", id: "m-hangar", name: "hangar", sessions: hangarSessions, unreachable: "falcon can't reach hangar.", fix },
+        ]));
+
+        const rows = result.items.value.filter((item) => item.group === "session");
+        expect(rows.map((item) => [item.machine?.name, item.label])).toEqual([
+          ["falcon", "t3code: what can we learn?"],
+          ["falcon", "Survey t3code features"],
+          ["falcon", "Fleet MCP server spike"],
+          ["kestrel", "Tide chart caching"],
+          ["kestrel", "Berth booking form"],
+          ["hangar", "Runway lights audit"],
+        ]);
+        expect(rows[0].machine?.own).toBe(true);
+        expect(rows[5].machine?.unreachable).toBe("falcon can't reach hangar.");
+      });
+
+      it("filters every machine's sessions by what's typed", async () => {
+        vi.useFakeTimers();
+
+        const result = await sessionItems("see @berth", machines([
+          { key: "m-kestrel", id: "m-kestrel", name: "kestrel", sessions: farSessions, unreachable: null, fix: null },
+        ]));
+
+        expect(result.items.value.filter((item) => item.group === "session").map((item) => item.label)).toEqual(["Berth booking form"]);
+      });
+
+      it("a pick from another machine carries its machine; one from the session's own machine doesn't", async () => {
+        vi.useFakeTimers();
+        const list = machines([{ key: "m-kestrel", id: "m-kestrel", name: "kestrel", sessions: farSessions, unreachable: null, fix: null }]);
+
+        const far = await sessionItems("Use @tide", list);
+        far.onSelect(far.items.value.find((item) => item.label === "Tide chart caching")!.value);
+        const near = await sessionItems("and @t3c", list);
+        near.onSelect(near.items.value.find((item) => item.label === "t3code: what can we learn?")!.value);
+        await vi.advanceTimersByTimeAsync(0);
+
+        expect(sessionReferencesIn("instance-1", "Use @tide-chart-caching and @t3code-what-can-we-learn")).toEqual([
+          { token: "@tide-chart-caching", sessionId: "far-1", title: "Tide chart caching", machineId: "m-kestrel", machine: "kestrel" },
+          { token: "@t3code-what-can-we-learn", sessionId: "ses-a", title: "t3code: what can we learn?" },
+        ]);
+      });
+
+      it("a session on a machine the session's can't reach can't be picked", async () => {
+        vi.useFakeTimers();
+
+        const result = await sessionItems("Use @runway", machines([
+          { key: "m-hangar", id: "m-hangar", name: "hangar", sessions: hangarSessions, unreachable: "falcon can't reach hangar.", fix: null },
+        ]));
+        const tab = createKeyboardEvent("Tab");
+        result.onKeyDown(tab);
+        result.onSelect(result.items.value[0].value);
+        await vi.advanceTimersByTimeAsync(0);
+
+        expect(result.items.value[0].label).toBe("Runway lights audit");
+        expect(tab.defaultPrevented).toBe(true);
+        expect(sessionReferencesIn("instance-1", "Use @runway-lights-audit")).toEqual([]);
+      });
     });
 
     describe("before the session exists", () => {

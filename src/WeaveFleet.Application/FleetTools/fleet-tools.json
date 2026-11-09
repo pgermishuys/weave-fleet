@@ -289,7 +289,7 @@
         "agentHandoff": {
           "machine": {
             "type": "string",
-            "description": "The machine the session is on, from fleet_machine_list, for a session you started or messaged there. An empty string for a session on this machine."
+            "description": "The machine the session is on, from fleet_machine_list, for a session you started or messaged there, or the machine attribute of its entry in a <fleet-session-references> block. An empty string for a session on this machine."
           }
         }
       }

@@ -12,6 +12,7 @@ import {
   type ReferableSession,
 } from "@/lib/session-references";
 import { useMachineTarget } from "@/lib/machine-target";
+import type { ReferableMachines } from "@/composables/use-referable-sessions";
 import { rememberSessionSkills, sessionSkillNames, sessionSkills, skillNamesIn, skillTrigger } from "@/lib/skill-mentions";
 
 /** The popup's listbox, which the composer's textarea names in `aria-controls` while it's open. */
@@ -33,6 +34,29 @@ export interface AutocompleteItem {
   disabledReason?: string;
   /** For a skill: a warning to show while it's selected (it goes as a note, not with the message). */
   warning?: string;
+  /**
+   * For a session when other machines are listed: the machine it's on. Sessions are grouped by it, the session's own
+   * machine first. Missing with no other machine, and the list is as it always was.
+   */
+  machine?: AutocompleteMachine;
+}
+
+/** A machine heading in the `@` list's sessions. */
+export interface AutocompleteMachine {
+  key: string;
+  /** Its own id: a reference to another machine's session carries it. Null for the session's own machine. */
+  id: string | null;
+  name: string;
+  /** The session's own machine. */
+  own: boolean;
+  /** Why the session's machine can't reach it: its rows are dimmed and can't be picked. */
+  unreachable?: string | null;
+  fix?: { label: string; open: () => void } | null;
+}
+
+/** Whether the item can't be picked: greyed out with a reason, or a session on a machine the session's can't reach. */
+export function isUnpickable(item: AutocompleteItem): boolean {
+  return Boolean(item.disabledReason || item.machine?.unreachable);
 }
 
 /** How many sessions the `@` list offers: a few for a bare `@`, which is mostly for files, more once you type. */
@@ -57,6 +81,11 @@ export interface UseAutocompleteParams {
   fleetCommands?: MaybeRefOrGetter<readonly AutocompleteCommand[]>;
   /** Sessions the `@` list can offer (see `useReferableSessions`); the session written to is left out. */
   sessions?: MaybeRefOrGetter<readonly SessionListItem[]>;
+  /**
+   * Other machines' sessions (see `useReferableMachines`), offered after `sessions` under each machine's name. With
+   * none, the list is as it always was.
+   */
+  machines?: MaybeRefOrGetter<ReferableMachines | null | undefined>;
   /** A harness's name for the sessions' rows. */
   harnessName?: (type: string) => string | undefined;
   /** The session's harness, which decides how a `$` skill is sent (see `skillDeliveries`). */
@@ -213,6 +242,7 @@ export function useAutocomplete({
   cursorPosition,
   fleetCommands = [],
   sessions = [],
+  machines,
   harnessName,
   harnessType,
 }: UseAutocompleteParams): UseAutocompleteResult {
@@ -337,18 +367,49 @@ export function useAutocomplete({
       };
     });
 
-    const sessionItems: AutocompleteItem[] = matchReferableSessions(toValue(sessions), filterText.value, {
+    const sessionOptions = {
       excludeId: toValue(sessionId),
       limit: filter === "" ? SESSIONS_FOR_BARE_MENTION : SESSIONS_FOR_QUERY,
       harnessName,
-    }).map((session) => ({
+    };
+    const elsewhere = toValue(machines);
+    const grouped = Boolean(elsewhere && elsewhere.others.length > 0);
+    const own: AutocompleteMachine | undefined = grouped && elsewhere
+      ? { key: elsewhere.own.key, id: null, name: elsewhere.own.name, own: true }
+      : undefined;
+    const sessionItems: AutocompleteItem[] = matchReferableSessions(toValue(sessions), filterText.value, sessionOptions).map((session) => ({
       id: `session:${session.id}`,
       label: session.title,
       description: session.description,
       group: "session",
       value: `${SESSION_VALUE_PREFIX}${session.id}`,
       session,
+      ...(own ? { machine: own } : {}),
     }));
+    // Each other machine's after the session's own, newest first within each; what's typed filters them all.
+    if (grouped && elsewhere) {
+      for (const other of elsewhere.others) {
+        const machine: AutocompleteMachine = {
+          key: other.key,
+          id: other.id,
+          name: other.name,
+          own: false,
+          unreachable: other.unreachable,
+          fix: other.fix,
+        };
+        for (const session of matchReferableSessions(other.sessions, filterText.value, sessionOptions)) {
+          sessionItems.push({
+            id: `session:${other.key}/${session.id}`,
+            label: session.title,
+            description: session.description,
+            group: "session",
+            value: `${SESSION_VALUE_PREFIX}${other.key}/${session.id}`,
+            session,
+            machine,
+          });
+        }
+      }
+    }
 
     // Sessions, then files and folders: a session is the rarer pick, so the few that match go on top.
     return [...sessionItems, ...fileItems, ...agentItems];
@@ -402,13 +463,18 @@ export function useAutocomplete({
     let itemValue = selected;
     if (selected.startsWith(SESSION_VALUE_PREFIX)) {
       // A session goes in as a token made from its title; the composer remembers which session the token names.
-      const session = items.value.find((item) => item.value === selected)?.session;
+      const picked = items.value.find((item) => item.value === selected);
+      const session = picked?.session;
       const draftSessionId = toValue(draftKey);
-      if (!session || !draftSessionId) {
+      if (!session || !draftSessionId || !picked || isUnpickable(picked)) {
         return;
       }
       const token = sessionReferenceToken(draftSessionId, session);
-      rememberSessionReference(draftSessionId, { token, sessionId: session.id, title: session.title });
+      // Another machine's session carries its machine; the session's own machine's goes as it always has.
+      const machine = picked.machine && !picked.machine.own && picked.machine.id
+        ? { machineId: picked.machine.id, machine: picked.machine.name }
+        : {};
+      rememberSessionReference(draftSessionId, { token, sessionId: session.id, title: session.title, ...machine });
       itemValue = `${token} `;
     } else {
       // A file or folder picked (not a folder opened to look inside): the composer edits it as one piece.
@@ -473,7 +539,7 @@ export function useAutocomplete({
       case "Enter":
       case "Tab": {
         const item = items.value[clampedIndex.value];
-        if (item?.disabledReason) {
+        if (item && isUnpickable(item)) {
           event.preventDefault();
         } else if (item) {
           event.preventDefault();
@@ -499,7 +565,7 @@ export function useAutocomplete({
   }
 
   function pick(item: AutocompleteItem, key: string): void {
-    if (item.disabledReason) {
+    if (isUnpickable(item)) {
       return;
     }
     if (key === "Tab" && item.meta === "dir") {

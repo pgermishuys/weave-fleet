@@ -48,6 +48,9 @@ internal sealed class FakeMachine : HttpMessageHandler, IHttpClientFactory
     /// <summary>The id of the Fleet that owns this list.</summary>
     public string SelfId => _identity.Get().Id;
 
+    /// <summary>Who the Fleet that owns this list is.</summary>
+    public MachineIdentityStore Identity => _identity;
+
     public FakeTimeProvider Time { get; }
     public InMemoryRemoteMachineRepository Machines { get; } = new();
     public RemoteMachineService Service { get; }

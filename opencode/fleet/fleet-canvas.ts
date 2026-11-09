@@ -471,7 +471,8 @@ export const FleetCanvasPlugin = async (input: { directory?: string }) => ({
               machine: {
                 type: "string",
                 description: [
-                  "The machine the session is on, from fleet_machine_list, for a session you started or messaged there.",
+                  "The machine the session is on, from fleet_machine_list, for a session you started or messaged there,",
+                  "or the machine attribute of its entry in a <fleet-session-references> block.",
                   "An empty string for a session on this machine.",
                 ].join(" "),
               },

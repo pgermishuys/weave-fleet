@@ -36,7 +36,7 @@ export interface CreateSessionOptions {
   /** The model to start with; left out for the agent's or the harness's default. */
   model?: ModelReference;
   /** Sessions the first message `@`-references: Fleet adds the block naming them for the agent. */
-  sessionReferences?: { token: string; sessionId: string }[];
+  sessionReferences?: { token: string; sessionId: string; machineId?: string }[];
   /** Images that go with the first message; the harness must take images. */
   attachments?: ImageAttachment[];
 }

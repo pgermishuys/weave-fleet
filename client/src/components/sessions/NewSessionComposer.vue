@@ -30,7 +30,7 @@ import { useSettingsNav } from "@/composables/use-settings-nav";
 import { useIsMobile } from "@/composables/use-media-query";
 import { useNewSessionDefaults } from "@/composables/use-new-session-defaults";
 import { useProjects } from "@/composables/use-projects";
-import { useReferableSessions } from "@/composables/use-referable-sessions";
+import { useReferableMachines, useReferableSessions } from "@/composables/use-referable-sessions";
 import { useRepositories } from "@/composables/use-repositories";
 import { useRepositoryDetail } from "@/composables/use-repository-detail";
 import { seedSentPrompt } from "@/composables/use-send-prompt";
@@ -495,6 +495,8 @@ const filesDirectory = computed(() => (folder.value && folder.value.kind !== "no
 const mentionOpen = shallowRef(false);
 // On the machine the Machine chip names, which is where the session starts.
 const referableSessions = useReferableSessions(mentionOpen, target);
+// Then other machines', listed under their names, dimmed where the session's machine can't reach them.
+const referableMachines = useReferableMachines(mentionOpen, target);
 const autocomplete = useAutocomplete({
   value: computed(() => (isStarting.value ? "" : message.value)),
   setValue: (value) => {
@@ -508,6 +510,7 @@ const autocomplete = useAutocomplete({
   inputRef: textareaRef,
   cursorPosition,
   sessions: referableSessions,
+  machines: referableMachines,
   harnessName: (type) => harnesses.value.find((harness) => harness.type === type)?.displayName,
 });
 watch(() => autocomplete.isMentionOpen.value, (open) => {
@@ -1053,6 +1056,7 @@ onUnmounted(() => {
             :on-open-folder="autocomplete.onOpenFolder"
             :query="autocomplete.query.value"
             :file-hint="folderLabel ? `in ${folderLabel}` : undefined"
+            own-machine-hint="where it starts"
             :session-note="sessionNote"
           />
 

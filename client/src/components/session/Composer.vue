@@ -23,7 +23,7 @@ import { useAbortSession } from "@/composables/use-session-actions";
 import { composerStatus, harnessCapabilities } from "@/composables/use-composer-actions";
 import { AUTOCOMPLETE_LISTBOX_ID, useAutocomplete } from "@/composables/use-autocomplete";
 import { useDraftReferences } from "@/composables/use-draft-references";
-import { useReferableSessions } from "@/composables/use-referable-sessions";
+import { useReferableMachines, useReferableSessions } from "@/composables/use-referable-sessions";
 import { useDraftState } from "@/composables/use-draft-state";
 import { useInputHistory } from "@/composables/use-input-history";
 import { useSessionQueue, type QueuedMessage, type QueueOptions } from "@/composables/use-session-queue";
@@ -546,9 +546,10 @@ defineExpose({
 const cursorPosition = shallowRef(0);
 const hasValidSessionId = computed(() => Boolean(props.sessionId?.trim()));
 // The @ list's sessions: archived ones are fetched the first time it opens. They're the session's own machine's,
-// since that's the machine that looks a picked one up when the prompt is sent.
+// since that's the machine that looks a picked one up when the prompt is sent; then other machines', under their names.
 const mentionOpen = shallowRef(false);
 const referableSessions = useReferableSessions(mentionOpen, machine);
+const referableMachines = useReferableMachines(mentionOpen, machine);
 const autocomplete = useAutocomplete({
   // A shell command is sent as typed: no @ references or / commands in it.
   value: computed(() => isShellMode.value ? "" : draft.text),
@@ -558,6 +559,7 @@ const autocomplete = useAutocomplete({
   cursorPosition,
   fleetCommands: computed(() => supportsSideConversations.value ? [SIDE_QUESTION_COMMAND] : []),
   sessions: referableSessions,
+  machines: referableMachines,
   harnessName: (type) => harnesses.value.find((harness) => harness.type === type)?.displayName,
   harnessType: () => selectedSession.value?.harnessType,
 });
@@ -1132,6 +1134,7 @@ function handleKeydown(event: KeyboardEvent): void {
         :query="autocomplete.query.value"
         :skill-hint="skillHint"
         :empty-text="autocomplete.isSkillOpen.value ? `No skill named “${autocomplete.query.value}”. It stays as text.` : undefined"
+        own-machine-hint="this session's machine"
         :session-note="supportsFleetTools
           ? 'The agent gets a link to the session, not a copy, and reads what it needs.'
           : 'The agent gets the session\'s title and a recap of where it stands, not a copy.'"
