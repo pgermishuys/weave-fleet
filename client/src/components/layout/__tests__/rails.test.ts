@@ -66,14 +66,16 @@ describe("the icon rail", () => {
     navigate.mockClear();
   });
 
-  it("lists every rail with its name under the icon, Workflows included while it's off", () => {
+  it("lists every rail icon-only, Workflows included while it's off", () => {
     const wrapper = mount(IconRail);
 
     expect(railLabels(wrapper)).toEqual([
       "Sessions", "Workflows", "Automations", "Analytics", "GitHub", "Settings", "Help",
     ]);
-    expect(wrapper.findAll("nav.rail-nav .rail-label").map((label) => label.text())).toEqual(railLabels(wrapper));
-    expect(wrapper.find("[data-tooltip]").exists()).toBe(false);
+    expect(wrapper.find("nav.rail-nav .rail-label").exists()).toBe(false);
+    expect(wrapper.findAll("nav.rail-nav [data-tooltip]").map((b) => b.attributes("data-tooltip"))).toEqual([
+      "Sessions", "Workflows · switched off", "Automations", "Analytics", "GitHub", "Settings", "Help",
+    ]);
   });
 
   it("puts Fleet first once Mission control is on, and opens it", async () => {

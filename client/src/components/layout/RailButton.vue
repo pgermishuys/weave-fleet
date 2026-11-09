@@ -24,7 +24,7 @@ defineEmits<{ select: [item: never] }>();
     type="button"
     class="rail-item"
     :class="{ active, off: item.isOff, 'icon-only': iconOnly }"
-    :data-tooltip="iconOnly ? item.label : undefined"
+    :data-tooltip="iconOnly ? (item.isOff ? `${item.label} · switched off` : item.label) : undefined"
     :aria-label="item.label"
     :data-off="item.isOff ? 'true' : undefined"
     @click="$emit('select', item as never)"
