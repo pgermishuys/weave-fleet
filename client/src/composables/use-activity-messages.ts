@@ -60,6 +60,8 @@ export interface ActivityMessage {
   senderKey: string;
   role: AccumulatedMessage["role"];
   createdAt?: number;
+  /** When the harness finished writing this message; the turn's "Worked for" ends at the last one. */
+  completedAt?: number;
   body: string;
   images: ImageAttachmentDisplay[];
   tools?: ToolCardItem[];
@@ -272,6 +274,7 @@ export function useActivityMessages(options: ActivityMessagesOptions) {
       senderKey: getSenderKey(message.role, message.agent),
       role: message.role,
       createdAt: message.createdAt,
+      completedAt: message.completedAt,
       body: background ? background.text : fromPeer ? fromPeer.text : referenced ? referenced.text : rawBody,
       sessionReferences: referenced?.references.length ? referenced.references : undefined,
       peer: fromPeer?.peer,

@@ -8,6 +8,9 @@ import MessageBubble from "@/components/session/MessageBubble.vue";
 import ReasoningBlock from "@/components/session/ReasoningBlock.vue";
 import ShellCommandBlock from "@/components/session/ShellCommandBlock.vue";
 import { mergeReadRuns } from "@/lib/merge-reads";
+import TurnFoldRow from "@/components/session/TurnFoldRow.vue";
+import ChangedFilesCard from "@/components/session/ChangedFilesCard.vue";
+import { foldTurns } from "@/lib/turn-fold";
 import CompactionDivider from "@/components/session/CompactionDivider.vue";
 import { sessionRetry } from "@/lib/session-row-status";
 import WorkingIndicator from "@/components/session/WorkingIndicator.vue";
@@ -356,8 +359,33 @@ const turnStartedAt = computed(() => {
 // Reads the agent made in separate steps, with nothing between them, are one row.
 const mergedMessages = computed(() => mergeReadRuns(messages.value));
 
+// Every finished turn folds into one line (the running one stays open); the turns you opened show their rows again.
+const openTurns = ref<ReadonlySet<string>>(new Set());
+function toggleTurn(turnId: string): void {
+  const next = new Set(openTurns.value);
+  if (!next.delete(turnId)) next.add(turnId);
+  openTurns.value = next;
+}
+const foldedMessages = computed(() => foldTurns(mergedMessages.value, {
+  running: isStreaming.value,
+  directory: selectedSession.value?.workspaceDirectory,
+  open: openTurns.value,
+}));
+
+/** Open diff on a turn's changed-files card: the session's Changes, beside the conversation. */
+function openChanges(): void {
+  canvasesStore.open(props.sessionId, "changes");
+  showRightPanel();
+}
+
+/** A file row on the card: that file's diff in its own tab. */
+function openChangedFile(path: string): void {
+  canvasesStore.openFile(props.sessionId, path, { keep: false, view: "diff" });
+  showRightPanel();
+}
+
 const { mounted: mountedMessages, unmountedOlder, mountAll: mountAllMessages } = useIncrementalMount(
-  mergedMessages,
+  foldedMessages,
   () => props.sessionId,
 );
 
@@ -583,6 +611,12 @@ function handleImproveSkill(skill: string, toolId: string): void {
           { 'activity-message--shown': highlightedMessageId === message.id, 'activity-message--rows': isRowsOnly(message) },
         ]"
       >
+        <TurnFoldRow
+          v-if="message.fold"
+          :turn="message.fold"
+          :open="openTurns.has(message.fold.id)"
+          @toggle="toggleTurn(message.fold.id)"
+        />
         <ReasoningBlock
           v-for="reasoning in message.reasoningParts ?? []"
           :key="reasoning.partId"
@@ -684,7 +718,7 @@ function handleImproveSkill(skill: string, toolId: string): void {
           :compaction="message.compaction"
         />
         <MessageBubble
-          v-else
+          v-else-if="!message.foldOnly"
           :author="message.author"
           :model-name="message.modelName"
           :role="message.role === 'user' ? 'user' : 'assistant'"
@@ -704,6 +738,12 @@ function handleImproveSkill(skill: string, toolId: string): void {
           @expand-visual="handleExpandVisual"
           @show-canvas="handleShowCanvas"
           @improve-skill="handleImproveSkill"
+        />
+        <ChangedFilesCard
+          v-if="message.card"
+          :turn="message.card"
+          @open-diff="openChanges"
+          @open-file="openChangedFile"
         />
         <div
           v-if="message.turnError"

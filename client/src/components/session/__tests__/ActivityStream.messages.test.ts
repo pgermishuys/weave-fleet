@@ -33,7 +33,8 @@ vi.mock("@/composables/use-session-stream", async () => {
       messages: computed(() => stream.messages.value),
       delegations: computed(() => stream.delegations.value),
       runningWork: computed(() => stream.runningWork.value),
-      sessionStatus: computed(() => "idle"),
+      // Busy: these are about a message's view, and a finished turn folds its rows away (TurnFold tests cover that).
+      sessionStatus: computed(() => "busy"),
       isLoading: ref(false),
       hasMore: ref(false),
       isLoadingOlder: ref(false),
