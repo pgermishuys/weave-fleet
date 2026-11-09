@@ -80,7 +80,8 @@ public sealed partial class UpdateRulePushService(
 
             var pushed = 0;
             var own = Effective(overrides.GetValueOrDefault(HomeKey), chosenDefault, options.ServeUi);
-            if (rules.Rule != own)
+            // No stored rule already means ask: a Fleet nobody chose a rule for stays "default".
+            if ((rules.Rule ?? UpdateRules.Ask) != own)
             {
                 rules.SetRule(own);
                 pushed++;

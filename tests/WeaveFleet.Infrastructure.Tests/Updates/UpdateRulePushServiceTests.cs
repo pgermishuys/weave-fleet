@@ -56,9 +56,9 @@ public sealed class UpdateRulePushServiceTests : IDisposable
     {
         _preferences[UpdateRulePushService.OverridesKey] = """{"id-heron":"ask"}""";
 
-        (await _service.SyncAsync(default)).ShouldBe(3, "this Fleet, falcon and heron");
+        (await _service.SyncAsync(default)).ShouldBe(2, "falcon and heron: this Fleet already asks");
         _pushes.OrderBy(p => p).ShouldBe(["id-falcon:idle", "id-heron:ask"]);
-        _ownRules.Rule.ShouldBe("ask", "a full Fleet asks");
+        _ownRules.Rule.ShouldBeNull("a full Fleet nobody chose a rule for stays on its default");
 
         _pushes.Clear();
         (await _service.SyncAsync(default)).ShouldBe(0, "they report what they were given");
