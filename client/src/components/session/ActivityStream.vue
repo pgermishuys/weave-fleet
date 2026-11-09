@@ -405,15 +405,25 @@ const foldedMessages = computed(() => foldTurns(withFileStats(mergedMessages.val
 
 /** Open diff on a turn's changed-files card: the session's Changes, beside the conversation. */
 function openChanges(): void {
-  canvasesStore.open(props.sessionId, "changes");
+  canvasesStore.openChanges(props.sessionId);
   showRightPanel();
 }
 
-/** A file row on the card: that file's diff in its own tab. */
+/** A file row on the card: Changes, scrolled to that file. */
 function openChangedFile(path: string): void {
-  canvasesStore.openFile(props.sessionId, path, { keep: false, view: "diff" });
+  canvasesStore.openChanges(props.sessionId, path);
   showRightPanel();
 }
+
+// The latest turn's files are what Changes' "This turn" scope shows.
+const lastTurnFiles = computed(() => {
+  for (let i = foldedMessages.value.length - 1; i >= 0; i -= 1) {
+    const card = foldedMessages.value[i]?.card;
+    if (card) return card.files.map((file) => file.path);
+  }
+  return [];
+});
+watch(lastTurnFiles, (paths) => canvasesStore.setTurnFiles(props.sessionId, paths), { immediate: true });
 
 const { mounted: mountedMessages, unmountedOlder, mountAll: mountAllMessages } = useIncrementalMount(
   foldedMessages,

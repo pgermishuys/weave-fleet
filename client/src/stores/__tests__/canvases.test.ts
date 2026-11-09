@@ -439,4 +439,38 @@ describe("useCanvasesStore file tabs", () => {
     expect(files()).toEqual([]);
     expect(useFileBuffersStore().record("s1", "a.ts")).toBeUndefined();
   });
+
+  it("openChanges makes Changes active for review and can ask for a file", () => {
+    const store = useCanvasesStore();
+
+    store.openChanges("s1", "src/a.ts");
+
+    const state = store.sessionCanvases("s1");
+    expect(state.activeId).toBe("changes");
+    expect(state.review).toBe(true);
+    expect(state.reviewFocus).toEqual({ path: "src/a.ts", seq: 1 });
+
+    store.openChanges("s1", "src/a.ts");
+    expect(store.sessionCanvases("s1").reviewFocus?.seq).toBe(2);
+  });
+
+  it("leaving Changes ends the review; clicking its tab again starts it", () => {
+    const store = useCanvasesStore();
+    store.openChanges("s1");
+
+    store.activate("s1", "files");
+    expect(store.sessionCanvases("s1").review).toBe(false);
+
+    store.activate("s1", "changes");
+    expect(store.sessionCanvases("s1").review).toBe(true);
+  });
+
+  it("remembers the files the latest turn changed, per session", () => {
+    const store = useCanvasesStore();
+
+    store.setTurnFiles("s1", ["a.ts"]);
+    store.setTurnFiles("s2", ["b.ts"]);
+
+    expect(store.turnFiles).toEqual({ s1: ["a.ts"], s2: ["b.ts"] });
+  });
 });

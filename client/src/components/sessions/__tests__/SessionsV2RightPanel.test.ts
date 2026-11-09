@@ -10,7 +10,7 @@ const { useDiffsMock, subscribed } = vi.hoisted(() => ({ useDiffsMock: vi.fn(), 
 
 function fakeDiffs(): UseDiffsResult {
   return {
-    diffs: ref([]), byFile: ref(new Map()), available: ref(true), base: ref(null), isLoading: ref(false),
+    diffs: ref([]), byFile: ref(new Map()), available: ref(true), base: ref(null), isLoading: ref(false), hasLoaded: ref(false),
     isStale: ref(false), error: ref(undefined), fetchDiffs: vi.fn(async () => {}), markStale: vi.fn(),
   } as unknown as UseDiffsResult;
 }

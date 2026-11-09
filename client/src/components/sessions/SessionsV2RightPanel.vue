@@ -147,6 +147,21 @@ watch(
   { immediate: true },
 );
 
+// A session with nothing to show (no changes, open files, todo list, links or running agents) keeps the panel collapsed
+// until the agent first gives it something; then it opens on its own.
+const hasFileTabs = computed(() =>
+  activeSessionId.value
+    ? canvasesStore.sessionCanvases(activeSessionId.value).canvases.some((canvas) => canvas.kind === "file")
+    : false,
+);
+watch(
+  [activeSessionId, () => sharedDiffs.hasLoaded.value, () => sharedDiffs.diffs.value.length, hasFileTabs, hasProgress, hasContext, hasAgents],
+  ([sessionId, loaded, changed, files, progress, context, agents]) => {
+    if (sessionId && loaded) sidebarStore.noteSessionContent(sessionId, changed > 0 || files || progress || context || agents);
+  },
+  { immediate: true },
+);
+
 const tabBadges = computed<Record<string, CanvasTabBadge>>(() => {
   const attention = contextLinks.value.some(needsAttention);
   const count = contextLinks.value.length;
