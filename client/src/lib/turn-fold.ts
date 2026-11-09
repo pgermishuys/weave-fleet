@@ -4,12 +4,14 @@
  * and for every harness: the tool registry's categories decide what a call is, not one harness's shapes).
  *
  * A turn is one message of yours and every agent message until the next one. It folds when it isn't the turn still
- * running. Folding hides the turn's thinking and its completed tool rows; failed, stopped and background rows, sub-agent
- * rows, pages and screenshots stay (they're part of the answer, or a failure is never folded away).
+ * running. Folding hides the turn's thinking and its completed tool rows, nothing else: the agent's text is never
+ * hidden, and failed, stopped and background rows, sub-agent rows, pages and screenshots stay (they're part of the
+ * answer, or a failure is never folded away).
  */
 import type { ActivityMessage } from "@/composables/use-activity-messages";
 import type { ToolCardItem } from "@/components/session/activity-stream-tool-card";
 import { isReadCall, isShellRow, isWriteCall } from "@/lib/tool-row";
+import { getTool } from "@/lib/tools";
 
 export interface FoldedFile {
   /** The path as the session's folder knows it (relative when the call named an absolute path inside it). */
@@ -30,6 +32,8 @@ export interface TurnSummary {
   other: number;
   /** Calls left visible because they failed or didn't finish. */
   failed: number;
+  /** How the turn ended: the fold line draws a ✓ only for "done". */
+  outcome: "done" | "failed" | "stopped";
 }
 
 export interface FoldedTurn {
@@ -55,9 +59,19 @@ export interface FoldMark {
 
 export type FoldedMessage = ActivityMessage & FoldMark;
 
+/** The call showed a page: output the user needs, so it stays out of the fold and isn't counted as "other". */
+function isPageShow(tool: ToolCardItem): boolean {
+  return Boolean(tool.page) || getTool(tool.kind).name === "fleet_page_show";
+}
+
+/** Claude Code's ExitPlanMode hands over the plan: it reads nothing and changes no file. */
+function isPlanExit(tool: ToolCardItem): boolean {
+  return getTool(tool.kind).name === "exitplanmode";
+}
+
 /** A call the fold keeps on screen. */
 function staysVisible(tool: ToolCardItem): boolean {
-  return Boolean(tool.delegation || tool.page || tool.screenshot) || tool.status !== "Completed";
+  return Boolean(tool.delegation || tool.screenshot) || isPageShow(tool) || tool.status !== "Completed";
 }
 
 const NO_REASONING: never[] = [];
@@ -72,10 +86,26 @@ function visibleTools(tools: readonly ToolCardItem[]): ToolCardItem[] {
   return kept;
 }
 
+const WINDOWS_PATH = /^(?:[a-zA-Z]:|\\\\)/;
+
+/** The path as the folder knows it: relative, with "/" between names, when it's inside the folder. */
 export function relativePath(path: string, directory: string | undefined): string {
   if (!directory) return path;
-  const base = directory.replace(/[\\/]+$/, "");
-  return path.startsWith(`${base}/`) || path.startsWith(`${base}\\`) ? path.slice(base.length + 1) : path;
+  if (!WINDOWS_PATH.test(directory)) {
+    const base = directory.replace(/\/+$/, "");
+    return path.startsWith(`${base}/`) ? path.slice(base.length + 1) : path;
+  }
+  // Windows: either slash, and a drive letter's case doesn't tell folders apart.
+  const base = directory.replace(/\\/g, "/").replace(/\/+$/, "");
+  const slashed = path.replace(/\\/g, "/");
+  return slashed.slice(0, base.length + 1).toLowerCase() === `${base}/`.toLowerCase() ? slashed.slice(base.length + 1) : path;
+}
+
+/** The path is absolute and lies outside the folder: the session's diff can't list it. */
+function isOutside(path: string, directory: string | undefined): boolean {
+  if (!directory) return false;
+  const absolute = path.startsWith("/") || WINDOWS_PATH.test(path);
+  return absolute && relativePath(path, directory) === path;
 }
 
 /**
@@ -136,31 +166,68 @@ function turnRanges(messages: readonly ActivityMessage[]): TurnRange[] {
 /** The file's change as the session's diff counts it, by path as the session's folder knows it. */
 export type FileStats = ReadonlyMap<string, { additions: number; deletions: number; status?: "added" | "deleted" | "modified" }>;
 
-const statted = new WeakMap<readonly ToolCardItem[], { stats: FileStats | null; tools: ToolCardItem[] }>();
+/** The change a whole-file write made, kept when its turn ended (call id → counts). */
+export type CapturedStats = ReadonlyMap<string, { additions: number; deletions: number }>;
+
+const statted = new WeakMap<readonly ToolCardItem[], { stats: FileStats | null; captured: CapturedStats | undefined; last: boolean; tools: ToolCardItem[] }>();
 
 /**
- * Gives every call that wrote a whole file the file's real change from the session's diff (the same numbers as the
- * Changes panel), or null while that isn't known. A file the diff doesn't list has no net change. Messages that carry
- * no such call are returned as they are.
+ * Gives every call that wrote a whole file the change it made: the counts kept when its turn ended, or (for the latest
+ * turn, whose change is today's) the file's session diff, the same numbers as the Changes panel. A call whose change
+ * isn't known gets null and draws no counts: an earlier turn's call is never recounted from today's diff, and a file
+ * outside the session's folder isn't in that diff. Messages that carry no such call are returned as they are.
  */
 export function withFileStats(
   messages: readonly ActivityMessage[],
   stats: FileStats | null,
   directory: string | undefined,
+  captured?: CapturedStats,
 ): ActivityMessage[] {
-  return messages.map((message) => {
+  let lastUser = -1;
+  messages.forEach((message, index) => {
+    if (message.role === "user") lastUser = index;
+  });
+  return messages.map((message, index) => {
     const tools = message.tools;
     if (!tools?.some((tool) => tool.diffFromContent)) return message;
+    const inLast = index > lastUser;
     const cached = statted.get(tools);
-    if (cached && cached.stats === stats) return { ...message, tools: cached.tools };
+    if (cached && cached.stats === stats && cached.captured === captured && cached.last === inLast) return { ...message, tools: cached.tools };
     const next = tools.map((tool) => {
       if (!tool.diffFromContent || !tool.filePath) return tool;
-      const found = stats ? (stats.get(relativePath(tool.filePath, directory)) ?? { additions: 0, deletions: 0 }) : null;
+      const kept = captured?.get(tool.id);
+      let found: { additions: number; deletions: number } | null = null;
+      if (kept) found = kept;
+      else if (inLast && stats && !isOutside(tool.filePath, directory)) {
+        // A file the diff doesn't list has no net change.
+        found = stats.get(relativePath(tool.filePath, directory)) ?? { additions: 0, deletions: 0 };
+      }
       return { ...tool, diffStat: found };
     });
-    statted.set(tools, { stats, tools: next });
+    statted.set(tools, { stats, captured, last: inLast, tools: next });
     return { ...message, tools: next };
   });
+}
+
+/** The whole-file writes of the latest turn with the counts the session diff gives them: what to keep as the turn ends. */
+export function capturableStats(
+  messages: readonly ActivityMessage[],
+  stats: FileStats,
+  directory: string | undefined,
+): [string, { additions: number; deletions: number }][] {
+  let lastUser = -1;
+  messages.forEach((message, index) => {
+    if (message.role === "user") lastUser = index;
+  });
+  const out: [string, { additions: number; deletions: number }][] = [];
+  for (const message of messages.slice(lastUser + 1)) {
+    for (const tool of message.tools ?? []) {
+      if (!tool.diffFromContent || !tool.filePath || tool.status !== "Completed" || isOutside(tool.filePath, directory)) continue;
+      const found = stats.get(relativePath(tool.filePath, directory)) ?? { additions: 0, deletions: 0 };
+      out.push([tool.id, { additions: found.additions, deletions: found.deletions }]);
+    }
+  }
+  return out;
 }
 
 export interface FoldOptions {
@@ -188,24 +255,36 @@ export function foldTurns(messages: readonly ActivityMessage[], options: FoldOpt
     const agentMessages = range.agent.map((index) => messages[index]!);
     const turnId = (range.user ?? agentMessages[0]!).id;
 
-    const summary: TurnSummary = { reads: 0, edits: 0, commands: 0, other: 0, failed: 0 };
+    const summary: TurnSummary = { reads: 0, edits: 0, commands: 0, other: 0, failed: 0, outcome: "done" };
     const files = new Map<string, FoldedFile>();
     let hasThinking = false;
     let foldable = 0;
     let endedAt: number | undefined;
 
+    let ended = false;
     for (const message of agentMessages) {
+      // The turn's own working time ends where it ended: a notice that arrives later (background work finishing) or
+      // a retry after a failure doesn't stretch it.
       const finished = message.completedAt ?? message.createdAt;
-      if (finished !== undefined && (endedAt === undefined || finished > endedAt)) endedAt = finished;
+      // The first notice of background work that finished is where the turn's own work stopped: what follows is the
+      // agent picking that work up again.
+      if (message.background) ended = true;
+      if (!ended && finished !== undefined && (endedAt === undefined || finished > endedAt)) endedAt = finished;
+      if (message.turnError) {
+        ended = true;
+        summary.outcome = "failed";
+      }
       if (message.reasoningParts?.some((part) => part.text.trim() || part.summary?.trim())) hasThinking = true;
 
       for (const tool of message.tools ?? []) {
-        if (tool.delegation) continue;
+        if (tool.delegation || isPageShow(tool)) continue;
         if (tool.status !== "Completed") {
           summary.failed += 1;
+          if (tool.status === "Stopped" && summary.outcome === "done") summary.outcome = "stopped";
           continue;
         }
-        if (isReadCall(tool.kind)) summary.reads += 1;
+        if (isPlanExit(tool)) summary.other += 1;
+        else if (isReadCall(tool.kind)) summary.reads += 1;
         else if (isShellRow(tool.kind)) summary.commands += 1;
         else if (isWriteCall(tool.kind)) {
           const filePath = tool.filePath;
@@ -254,22 +333,7 @@ export function foldTurns(messages: readonly ActivityMessage[], options: FoldOpt
     };
 
     const folds = (foldable > 0 || hasThinking);
-    // Text the agent wrote before or between its calls is narration of the work: it folds with it. Only the text after
-    // the last call is the answer. A turn whose text all came before its last call keeps the last of it as the answer.
-    let lastWork = -1;
-    range.agent.forEach((messageIndex, position) => {
-      const message = messages[messageIndex]!;
-      if ((message.tools?.some((tool) => !tool.delegation) ?? false) || message.reasoningParts?.some((part) => part.text.trim() || part.summary?.trim())) lastWork = position;
-    });
-    let answerFrom = lastWork + 1;
-    if (!agentMessages.slice(answerFrom).some((message) => message.body.trim())) {
-      for (let position = agentMessages.length - 1; position >= 0; position -= 1) {
-        if (agentMessages[position]!.body.trim()) {
-          answerFrom = position;
-          break;
-        }
-      }
-    }
+    // The fold hides tool rows and thinking only: every block of the agent's text stays, in order.
     const collapsed = folds && !options.open.has(turnId);
     let last: number | null = null;
 
@@ -281,7 +345,6 @@ export function foldTurns(messages: readonly ActivityMessage[], options: FoldOpt
           ...message,
           tools: message.tools ? visibleTools(message.tools) : message.tools,
           reasoningParts: NO_REASONING,
-          body: position < answerFrom ? "" : message.body,
         };
       }
       const isHost = position === 0;

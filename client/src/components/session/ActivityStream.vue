@@ -10,8 +10,8 @@ import ShellCommandBlock from "@/components/session/ShellCommandBlock.vue";
 import { mergeReadRuns } from "@/lib/merge-reads";
 import TurnFoldRow from "@/components/session/TurnFoldRow.vue";
 import ChangedFilesCard from "@/components/session/ChangedFilesCard.vue";
-import { foldTurns, withFileStats } from "@/lib/turn-fold";
-import { useFileStats } from "@/composables/use-file-stats";
+import { capturableStats, foldTurns, withFileStats } from "@/lib/turn-fold";
+import { useCapturedStats, useFileStats } from "@/composables/use-file-stats";
 import CompactionDivider from "@/components/session/CompactionDivider.vue";
 import { sessionRetry } from "@/lib/session-row-status";
 import WorkingIndicator from "@/components/session/WorkingIndicator.vue";
@@ -376,7 +376,12 @@ const fileStats = useFileStats({
   wanted: () => hasWholeFileWrite.value && !isStreaming.value,
   refreshOn: () => isStreaming.value,
 });
-const foldedMessages = computed(() => foldTurns(withFileStats(mergedMessages.value, fileStats.value, selectedSession.value?.workspaceDirectory), {
+const { captured: capturedStats, keep: keepStats } = useCapturedStats(() => props.sessionId);
+// As a turn ends its writes' changes are kept: later turns change the same files, but not what this turn did.
+watch(fileStats, (stats) => {
+  if (stats && !isStreaming.value) keepStats(capturableStats(mergedMessages.value, stats, selectedSession.value?.workspaceDirectory));
+});
+const foldedMessages = computed(() => foldTurns(withFileStats(mergedMessages.value, fileStats.value, selectedSession.value?.workspaceDirectory, capturedStats.value), {
   running: isStreaming.value,
   directory: selectedSession.value?.workspaceDirectory,
   open: openTurns.value,

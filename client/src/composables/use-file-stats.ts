@@ -1,6 +1,6 @@
 import { shallowRef, watch, type ShallowRef } from "vue";
 import { useMachineTarget } from "@/lib/machine-target";
-import type { FileStats } from "@/lib/turn-fold";
+import type { CapturedStats, FileStats } from "@/lib/turn-fold";
 
 /**
  * The files the session changed and how much, from its diff (the numbers the Changes panel shows), for calls that
@@ -43,4 +43,40 @@ export function useFileStats(options: {
     { immediate: true },
   );
   return stats;
+}
+
+const KEY = "fleet.turn-stats.";
+const MAX_KEPT = 500;
+
+function readKept(sessionId: string): Map<string, { additions: number; deletions: number }> {
+  try {
+    const raw = localStorage.getItem(KEY + sessionId);
+    return new Map(raw ? (JSON.parse(raw) as [string, { additions: number; deletions: number }][]) : []);
+  } catch {
+    return new Map();
+  }
+}
+
+/**
+ * The change each whole-file write made, kept as its turn ended (call id → counts), and kept across reloads. A past
+ * turn's card reads from here; what was never kept is unknown and draws no counts, never today's diff.
+ */
+export function useCapturedStats(sessionId: () => string): { captured: ShallowRef<CapturedStats>; keep: (entries: [string, { additions: number; deletions: number }][]) => void } {
+  const captured = shallowRef<CapturedStats>(readKept(sessionId()));
+  watch(sessionId, (id) => {
+    captured.value = readKept(id);
+  });
+  function keep(entries: [string, { additions: number; deletions: number }][]): void {
+    const fresh = entries.filter(([id]) => !captured.value.has(id));
+    if (fresh.length === 0) return;
+    const next = new Map([...captured.value, ...fresh]);
+    while (next.size > MAX_KEPT) next.delete(next.keys().next().value as string);
+    captured.value = next;
+    try {
+      localStorage.setItem(KEY + sessionId(), JSON.stringify([...next]));
+    } catch {
+      // Not kept across a reload; it still holds for this page.
+    }
+  }
+  return { captured, keep };
 }

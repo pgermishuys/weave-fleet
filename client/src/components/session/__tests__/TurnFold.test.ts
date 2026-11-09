@@ -6,7 +6,7 @@ import type { FoldedTurn } from "@/lib/turn-fold";
 
 const turn: FoldedTurn = {
   id: "u1",
-  summary: { durationMs: 34_000, reads: 4, edits: 2, commands: 2, other: 0, failed: 0 },
+  summary: { durationMs: 34_000, reads: 4, edits: 2, commands: 2, other: 0, failed: 0, outcome: "done" },
   files: [
     { path: "src/notes.ts", name: "notes.ts", dir: "src", additions: 11, deletions: 2 },
     { path: "test/notes.test.ts", name: "notes.test.ts", dir: "test", additions: 14, deletions: 1 },
