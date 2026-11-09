@@ -3,6 +3,7 @@ import type { AccumulatedMessage, AccumulatedPart, DelegationDto } from "@/lib/c
 import {
   clearTurnDerivationCache,
   deriveTurns,
+  fileEditsOf,
   modelDisplayName,
   parseUnifiedDiff,
   turnTotals,
@@ -449,5 +450,17 @@ describe("an empty session", () => {
   it("has no turns", () => {
     expect(deriveTurns([])).toEqual([]);
     expect(turnTotals([])).toEqual({ turns: 0, additions: 0, deletions: 0 });
+  });
+});
+
+describe("whole-file writes", () => {
+  it("marks a write that sent only the file's new contents, whose lines aren't the change", () => {
+    const [edit] = fileEditsOf(tool("write", { status: "completed", input: { filePath: "/w/a.ts", content: "a\nb\n" } }) as never);
+    expect(edit).toMatchObject({ path: "/w/a.ts", additions: 2, wholeFile: true });
+  });
+
+  it("does not mark an edit, whose old and new text give the change", () => {
+    const [edit] = fileEditsOf(tool("edit", { status: "completed", input: { filePath: "/w/a.ts", oldString: "a", newString: "b" } }) as never);
+    expect(edit!.wholeFile).toBeUndefined();
   });
 });

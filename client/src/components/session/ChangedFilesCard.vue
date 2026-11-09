@@ -26,7 +26,10 @@ function filesLabel(count: number): string {
   >
     <header class="changed-files__head">
       <span class="changed-files__title">{{ filesLabel(turn.files.length) }}</span>
-      <span class="changed-files__counts">
+      <span
+        v-if="turn.countsKnown"
+        class="changed-files__counts"
+      >
         <span class="changed-files__adds">+{{ turn.additions }}</span>
         <span class="changed-files__removes">−{{ turn.deletions }}</span>
       </span>
@@ -54,7 +57,10 @@ function filesLabel(count: number): string {
         aria-hidden="true"
       />
       <span class="changed-files__path">{{ file.path }}</span>
-      <span class="changed-files__counts">
+      <span
+        v-if="!file.unknownCounts"
+        class="changed-files__counts"
+      >
         <span class="changed-files__adds">+{{ file.additions }}</span>
         <span class="changed-files__removes">−{{ file.deletions }}</span>
       </span>

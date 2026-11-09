@@ -164,10 +164,12 @@ const withFileEdit: ToolItemDecorator = (item, part) => {
   if (!getTool(part.tool).fileWrite) return item;
   const [edit] = fileEditsOf(part);
   if (!edit) return item;
+  const harnessDiff = item.diffLines && item.diffLines.length > 0;
   return {
     ...item,
     filePath: edit.path,
-    diffLines: item.diffLines && item.diffLines.length > 0 ? item.diffLines : [...edit.diff],
+    diffLines: harnessDiff ? item.diffLines : [...edit.diff],
+    ...(!harnessDiff && edit.wholeFile ? { diffFromContent: true } : {}),
   };
 };
 

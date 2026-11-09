@@ -13,6 +13,7 @@ const turn: FoldedTurn = {
   ],
   additions: 25,
   deletions: 3,
+  countsKnown: true,
 };
 
 describe("TurnFoldRow", () => {

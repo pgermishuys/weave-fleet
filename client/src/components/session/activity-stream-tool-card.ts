@@ -82,6 +82,10 @@ export interface ToolCardItem {
   exit?: number;
   /** The file a write call changed, and the lines it wrote (the card's diff when the harness sent none). */
   filePath?: string;
+  /** The call wrote the whole file and the harness sent no diff, so `diffLines` is every line as an addition, not the change. */
+  diffFromContent?: boolean;
+  /** The file's real change (session diff), set for `diffFromContent` calls; null while it isn't known. */
+  diffStat?: { additions: number; deletions: number } | null;
 }
 
 /**

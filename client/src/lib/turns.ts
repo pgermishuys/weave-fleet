@@ -114,6 +114,11 @@ export interface TurnFileEdit {
   deletions: number;
   created: boolean;
   diff: readonly DiffLine[];
+  /**
+   * The call carried only the file's new contents, so `diff` is every line written as an addition: the real counts
+   * need the file as it was, which the call doesn't have.
+   */
+  wholeFile?: boolean;
 }
 
 function cacheFileEdits(key: string, edits: readonly TurnFileEdit[]): readonly TurnFileEdit[] {
@@ -207,6 +212,7 @@ export function fileEditsOf(part: AccumulatedToolPart): readonly TurnFileEdit[] 
       deletions: 0,
       created: tool.fileWrite === "create",
       diff,
+      wholeFile: true,
     }]);
   }
 

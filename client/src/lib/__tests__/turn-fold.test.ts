@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { foldTurns, summaryParts } from "@/lib/turn-fold";
+import { foldTurns, summaryParts, withFileStats } from "@/lib/turn-fold";
 import type { ActivityMessage } from "@/composables/use-activity-messages";
 
 function msg(over: Partial<ActivityMessage> & { id: string; role: ActivityMessage["role"] }): ActivityMessage {
@@ -104,3 +104,51 @@ describe("foldTurns", () => {
     expect(out[1]!.card).toMatchObject({ additions: 5, deletions: 1, files: [{ path: "a.ts", additions: 5, deletions: 1 }] });
   });
 });
+
+describe("whole-file writes", () => {
+  // A Write sends only the new contents: its lines are all "added" (28), but the file changed by +11 −2.
+  const write = (id: string, path: string, lines: number) => tool(id, "write", {
+    filePath: path,
+    diffFromContent: true,
+    diffLines: Array.from({ length: lines }, () => ({ type: "add", content: "+x" })),
+  });
+  const writeTurn = () => [
+    msg({ id: "u1", role: "user", body: "do it", createdAt: 1000 }),
+    msg({ id: "a1", role: "assistant", createdAt: 2000, completedAt: 5000, tools: [tool("t1", "read"), write("t2", "/work/demo/src/notes.ts", 28), write("t3", "/work/demo/test/notes.test.ts", 25)] as never }),
+    msg({ id: "a2", role: "assistant", createdAt: 6000, completedAt: 6000, body: "Done." }),
+  ];
+  const stats = new Map([
+    ["src/notes.ts", { additions: 11, deletions: 2 }],
+    ["test/notes.test.ts", { additions: 14, deletions: 1 }],
+  ]);
+
+  it("counts the file's real change from the session diff, not every line written", () => {
+    const messages = withFileStats(writeTurn(), stats, "/work/demo");
+    const card = foldTurns(messages, { running: false, directory: "/work/demo", open }).at(-1)!.card!;
+    expect(card.files.map((f) => [f.path, f.additions, f.deletions])).toEqual([["src/notes.ts", 11, 2], ["test/notes.test.ts", 14, 1]]);
+    expect([card.additions, card.deletions, card.countsKnown]).toEqual([25, 3, true]);
+    expect(messages[1]!.tools![1]).toMatchObject({ diffStat: { additions: 11, deletions: 2 } });
+  });
+
+  it("draws no counts while the session diff isn't loaded, rather than a wrong +28", () => {
+    const messages = withFileStats(writeTurn(), null, "/work/demo");
+    const card = foldTurns(messages, { running: false, directory: "/work/demo", open }).at(-1)!.card!;
+    expect(card.files.every((f) => f.unknownCounts)).toBe(true);
+    expect(card.countsKnown).toBe(false);
+  });
+
+  it("counts a file the session diff doesn't list as unchanged", () => {
+    const messages = withFileStats(writeTurn(), new Map(), "/work/demo");
+    const card = foldTurns(messages, { running: false, directory: "/work/demo", open }).at(-1)!.card!;
+    expect([card.additions, card.deletions]).toEqual([0, 0]);
+  });
+
+  it("does not add up a file written twice: the file's change stands once", () => {
+    const m = writeTurn();
+    m[1] = { ...m[1]!, tools: [write("t2", "/work/demo/src/notes.ts", 28), write("t3", "/work/demo/src/notes.ts", 28)] as never } as ActivityMessage;
+    const card = foldTurns(withFileStats(m, stats, "/work/demo"), { running: false, directory: "/work/demo", open }).at(-1)!.card!;
+    expect(card.files).toHaveLength(1);
+    expect([card.files[0]!.additions, card.files[0]!.deletions]).toEqual([11, 2]);
+  });
+});
+
