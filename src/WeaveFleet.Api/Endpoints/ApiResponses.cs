@@ -149,7 +149,7 @@ public sealed record InstanceProviderItem(
     string Name,
     IReadOnlyList<InstanceModelItem> Models);
 
-public sealed record InstanceModelItem(string Id, string Name, IReadOnlyList<string>? Variants = null, string? PriceTier = null, string? Capability = null);
+public sealed record InstanceModelItem(string Id, string Name, IReadOnlyList<string>? Variants = null, string? PriceTier = null, string? Capability = null, int? ContextWindow = null);
 
 public sealed record InstanceCommandsResponse(
     string InstanceId,

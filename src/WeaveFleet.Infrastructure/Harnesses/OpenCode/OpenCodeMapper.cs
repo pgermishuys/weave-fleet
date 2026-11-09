@@ -535,6 +535,7 @@ internal static class OpenCodeMapper
                     Id = m.Id,
                     Name = m.Name,
                     Variants = m.Variants?.Keys.ToList(),
+                    ContextWindow = m.Limit is { Context: > 0 } limit ? limit.Context : null,
                 }).ToList(),
             }).ToList();
     }

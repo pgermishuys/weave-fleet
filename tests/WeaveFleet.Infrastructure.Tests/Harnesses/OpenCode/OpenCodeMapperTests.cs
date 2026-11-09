@@ -567,6 +567,34 @@ public sealed class OpenCodeMapperTests
     ];
 
     [Fact]
+    public void ToConnectedProviderInfos_CarriesAModelsContextWindowAndLeavesAnUnstatedOneEmpty()
+    {
+        var response = new OpenCodeProvidersResponse
+        {
+            All =
+            [
+                new OpenCodeProviderInfo
+                {
+                    Id = "p",
+                    Models = new Dictionary<string, OpenCodeProviderModel>
+                    {
+                        ["sized"] = new OpenCodeProviderModel { Id = "sized", Limit = new OpenCodeModelLimit { Context = 200_000, Output = 8_000 } },
+                        ["zero"] = new OpenCodeProviderModel { Id = "zero", Limit = new OpenCodeModelLimit { Context = 0 } },
+                        ["none"] = new OpenCodeProviderModel { Id = "none" },
+                    },
+                },
+            ],
+            Connected = ["p"],
+        };
+
+        var models = OpenCodeMapper.ToConnectedProviderInfos(response).Single().Models.ToDictionary(model => model.Id);
+
+        models["sized"].ContextWindow.ShouldBe(200_000);
+        models["zero"].ContextWindow.ShouldBeNull();
+        models["none"].ContextWindow.ShouldBeNull();
+    }
+
+    [Fact]
     public void ToHarnessCatalog_TakesTheDefaultAgentAndModelFromTheConfig()
     {
         var catalog = OpenCodeMapper.ToHarnessCatalog(

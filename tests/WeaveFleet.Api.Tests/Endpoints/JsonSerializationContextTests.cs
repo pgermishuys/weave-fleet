@@ -36,6 +36,16 @@ public sealed class JsonSerializationContextTests
     }
 
     [Fact]
+    public void Model_items_serialize_their_context_window_and_leave_an_unknown_one_null()
+    {
+        var sized = JsonSerializer.Serialize(new InstanceModelItem("m1", "Model One", ContextWindow: 200_000), ApiJsonContext.Default.InstanceModelItem);
+        var unknown = JsonSerializer.Serialize(new InstanceModelItem("m2", "Model Two"), ApiJsonContext.Default.InstanceModelItem);
+
+        Assert.Contains("\"contextWindow\":200000", sized, StringComparison.Ordinal);
+        Assert.DoesNotContain("\"contextWindow\":2", unknown, StringComparison.Ordinal);
+    }
+
+    [Fact]
     public void Session_progress_serializes_from_the_source_generated_context()
     {
         // The HTTP JSON options fall back to reflection, which hides a missing registration until an AOT build.
