@@ -24,7 +24,7 @@ public sealed class GitTurnFileStatsSource(ISessionRepository sessions, GitDiffS
 
         var diffs = await git.ComputeDiffsWithAvailabilityAsync(scope.RepoRoot, scope.Base.Ref, scope.WorkspacePrefix, ct).ConfigureAwait(false);
         return diffs.Available
-            ? [.. diffs.Diffs.Select(diff => new TurnFileStat(diff.Path, diff.AddedLines ?? 0, diff.DeletedLines ?? 0))]
+            ? [.. diffs.Diffs.Select(diff => new TurnFileStat(scope.ToSessionPath(diff.Path), diff.AddedLines ?? 0, diff.DeletedLines ?? 0))]
             : null;
     }
 }

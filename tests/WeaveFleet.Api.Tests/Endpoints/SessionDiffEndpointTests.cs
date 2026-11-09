@@ -62,6 +62,49 @@ public sealed class SessionDiffEndpointTests(SessionDiffEndpointTests.Server ser
         }
     }
 
+    [Fact]
+    public async Task a_session_in_a_repo_subfolder_keeps_and_serves_turn_stats_relative_to_its_folder()
+    {
+        var tempRoot = Path.Combine(Path.GetTempPath(), $"weave-api-turn-stats-sub-{Guid.NewGuid():N}");
+        var workspaceDirectory = Path.Combine(tempRoot, "apps", "web");
+        Directory.CreateDirectory(workspaceDirectory);
+        var service = new GitDiffService();
+
+        try
+        {
+            await RunGitAsync(tempRoot, "init");
+            await File.WriteAllTextAsync(Path.Combine(workspaceDirectory, "README.md"), "one\ntwo\n");
+            await RunGitAsync(tempRoot, "add", ".");
+            await RunGitAsync(tempRoot, "-c", "user.name=Weave Test", "-c", "user.email=weave@example.invalid", "commit", "-m", "initial");
+            var baseline = await service.CaptureBaselineAsync(workspaceDirectory, "turn-stats-sub", CancellationToken.None);
+            baseline.ShouldNotBeNull();
+            await InsertSessionAsync(server.Factory, "session-turn-stats-sub", "workspace-turn-stats-sub", "instance-turn-stats-sub", Path.Combine(baseline.RepoRoot, "apps", "web"), baseline.RefName, baseline.RepoRoot);
+            using var client = server.Factory.CreateClient();
+
+            await File.WriteAllTextAsync(Path.Combine(workspaceDirectory, "README.md"), "one\nTWO\nthree\n");
+            server.Factory.Services.GetRequiredService<TurnFileStatsRecorder>().Observe(
+                "session-turn-stats-sub", "local-user", new WeaveFleet.Domain.Events.SessionIdled { Payload = new WeaveFleet.Domain.Events.SessionIdledPayload { SessionId = "session-turn-stats-sub" } });
+
+            JsonElement[] snapshots;
+            var deadline = DateTime.UtcNow.AddSeconds(20);
+            do
+            {
+                var json = await client.GetFromJsonAsync<JsonElement>("/api/sessions/session-turn-stats-sub/turn-stats", JsonSerializerOptions.Web);
+                snapshots = json.GetProperty("snapshots").EnumerateArray().ToArray();
+                if (snapshots.Length == 0)
+                    await Task.Delay(100);
+            }
+            while (snapshots.Length == 0 && DateTime.UtcNow < deadline);
+
+            var file = snapshots.ShouldHaveSingleItem().GetProperty("files").EnumerateArray().ShouldHaveSingleItem();
+            file.GetProperty("file").GetString().ShouldBe("README.md");
+        }
+        finally
+        {
+            Directory.Delete(tempRoot, recursive: true);
+        }
+    }
+
     private static async Task<JsonElement[]> WaitForSnapshotsAsync(HttpClient client, int count)
     {
         var deadline = DateTime.UtcNow.AddSeconds(20);
@@ -111,28 +154,30 @@ public sealed class SessionDiffEndpointTests(SessionDiffEndpointTests.Server ser
             json.GetProperty("available").GetBoolean().ShouldBeTrue();
             var diffs = json.GetProperty("diffs").EnumerateArray().ToArray();
             var files = diffs.Select(diff => diff.GetProperty("file").GetString()).ToArray();
-            files.ShouldBe(["workspace/new.txt", "workspace/tracked.txt"]);
+            // Paths are relative to the session's folder (what the user sees), not to the repository.
+            files.ShouldBe(["new.txt", "tracked.txt"]);
 
             // The list carries no contents; a file's contents come from /diffs/file.
-            var newFile = diffs.Single(diff => diff.GetProperty("file").GetString() == "workspace/new.txt");
+            var newFile = diffs.Single(diff => diff.GetProperty("file").GetString() == "new.txt");
             newFile.GetProperty("status").GetString().ShouldBe("added");
             newFile.GetProperty("additions").GetInt32().ShouldBe(1);
             newFile.GetProperty("before").ValueKind.ShouldBe(JsonValueKind.Null);
             newFile.GetProperty("after").ValueKind.ShouldBe(JsonValueKind.Null);
 
-            var trackedSummary = diffs.Single(diff => diff.GetProperty("file").GetString() == "workspace/tracked.txt");
+            var trackedSummary = diffs.Single(diff => diff.GetProperty("file").GetString() == "tracked.txt");
             trackedSummary.GetProperty("status").GetString().ShouldBe("modified");
             trackedSummary.GetProperty("before").ValueKind.ShouldBe(JsonValueKind.Null);
 
-            var newFileResponse = await client.GetAsync("/api/sessions/session-prefix/diffs/file?path=workspace/new.txt");
+            var newFileResponse = await client.GetAsync("/api/sessions/session-prefix/diffs/file?path=new.txt");
             newFileResponse.StatusCode.ShouldBe(HttpStatusCode.OK);
             var newFileJson = await newFileResponse.Content.ReadFromJsonAsync<JsonElement>(JsonSerializerOptions.Web);
+            newFileJson.GetProperty("file").GetString().ShouldBe("new.txt");
             newFileJson.GetProperty("before").GetString().ShouldBe(string.Empty);
             newFileJson.GetProperty("after").GetString().ShouldBe("inside new\n");
             newFileJson.GetProperty("isBinary").GetBoolean().ShouldBeFalse();
             newFileJson.GetProperty("isTruncated").GetBoolean().ShouldBeFalse();
 
-            var trackedResponse = await client.GetAsync("/api/sessions/session-prefix/diffs/file?path=workspace/tracked.txt");
+            var trackedResponse = await client.GetAsync("/api/sessions/session-prefix/diffs/file?path=tracked.txt");
             trackedResponse.StatusCode.ShouldBe(HttpStatusCode.OK);
             var trackedFile = await trackedResponse.Content.ReadFromJsonAsync<JsonElement>(JsonSerializerOptions.Web);
             trackedFile.GetProperty("before").GetString().ShouldBe("alpha\nbeta\n");
@@ -141,6 +186,8 @@ public sealed class SessionDiffEndpointTests(SessionDiffEndpointTests.Server ser
             trackedFile.GetProperty("isTruncated").GetBoolean().ShouldBeFalse();
 
             // Only the session's own changes can be read this way.
+            (await client.GetAsync("/api/sessions/session-prefix/diffs/file?path=workspace/new.txt")).StatusCode.ShouldBe(HttpStatusCode.NotFound);
+            (await client.GetAsync("/api/sessions/session-prefix/diffs/file?path=../outside.txt")).StatusCode.ShouldBe(HttpStatusCode.NotFound);
             var outsideResponse = await client.GetAsync("/api/sessions/session-prefix/diffs/file?path=outside.txt");
             outsideResponse.StatusCode.ShouldBe(HttpStatusCode.NotFound);
         }
