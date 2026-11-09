@@ -11,6 +11,7 @@ import type { SessionListItem } from "@/api/client";
 import { useMachineTarget } from "@/lib/machine-target";
 import { sessionBucket, sessionUpdatedAt } from "@/lib/needs-you";
 import { useAppShellStore } from "@/stores/app-shell";
+import { useArchiveQueueStore } from "@/stores/archive-queue";
 import { useMachinesStore } from "@/stores/machines";
 import { useHarnessSetupStore } from "@/stores/harness-setup";
 import { useSessionsStore } from "@/stores/sessions";
@@ -24,6 +25,7 @@ const RECENT_LIMIT = 8;
 
 const router = useRouter();
 const sessionsStore = useSessionsStore();
+const archiveQueue = useArchiveQueueStore();
 const { retentionStatus, sessions: storeSessions } = storeToRefs(sessionsStore);
 const now = useRelativeTime();
 const { config } = storeToRefs(useAppShellStore());
@@ -86,6 +88,8 @@ const storeSessionsShown = computed(() => (isOther.value ? otherSessions.value :
 const sessions = computed(() =>
   storeSessionsShown.value.filter((session) => {
     if (session.parentSessionId || session.isHidden) return false;
+    // Waiting on Undo or on the server, as in the sidebar: gone from the list, not yet archived.
+    if (archiveQueue.pendingIds.has(session.session.id)) return false;
     return retentionStatus.value === "all" || session.retentionStatus === retentionStatus.value;
   }));
 
