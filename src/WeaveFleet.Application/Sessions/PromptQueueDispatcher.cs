@@ -23,6 +23,9 @@ public sealed partial class PromptQueueDispatcher(IServiceScopeFactory scopeFact
     private readonly Lock _gate = new();
     private readonly List<Task> _inFlight = [];
 
+    // session id → what to do if the follow-up claimed at its idle turns out not to start a turn
+    private readonly System.Collections.Concurrent.ConcurrentDictionary<string, Func<Task>> _followUps = new(StringComparer.Ordinal);
+
     /// <summary>Finished when every send in flight has been made. Tests wait on it.</summary>
     internal Task Pending
     {
@@ -31,6 +34,34 @@ public sealed partial class PromptQueueDispatcher(IServiceScopeFactory scopeFact
             lock (_gate)
                 return Task.WhenAll(_inFlight);
         }
+    }
+
+    /// <summary>
+    /// Called by the relay before it shows a session's idle. When the event is an idle with a message queued, Fleet is
+    /// about to start the next turn, so the session is claimed as following up: the relay shows it as still working and
+    /// stays quiet about a finish. If the send then starts no turn (refused, or only shell commands), <paramref name="released"/>
+    /// runs so the relay can show the idle it held back.
+    /// </summary>
+    public async Task<bool> ClaimFollowUpAsync(string sessionId, string? userId, DomainEvent? domainEvent, Func<Task> released)
+    {
+        if (domainEvent is not SessionIdled || string.IsNullOrEmpty(userId))
+            return false;
+
+        try
+        {
+            using var scope = scopeFactory.CreateScope();
+            using var user = scope.ServiceProvider.GetRequiredService<IBackgroundUserScope>().Begin(userId);
+            if (!await scope.ServiceProvider.GetRequiredService<PromptQueueService>().HasFollowUpAsync(sessionId).ConfigureAwait(false))
+                return false;
+        }
+        catch (Exception ex)
+        {
+            LogSendFailed(ex, sessionId);
+            return false;
+        }
+
+        _followUps[sessionId] = released;
+        return true;
     }
 
     /// <summary>Called for every event the relay translates, on its pump.</summary>
@@ -59,6 +90,7 @@ public sealed partial class PromptQueueDispatcher(IServiceScopeFactory scopeFact
 
     private async Task SendNextAsync(string sessionId, string userId)
     {
+        var started = false;
         try
         {
             using var scope = scopeFactory.CreateScope();
@@ -66,11 +98,28 @@ public sealed partial class PromptQueueDispatcher(IServiceScopeFactory scopeFact
             // The user's mods hear the turn ended first; one may queue a follow-up, which the send below then sends.
             if (modTurns is not null)
                 await CompleteTurnAsync(scope.ServiceProvider, sessionId, userId).ConfigureAwait(false);
-            await scope.ServiceProvider.GetRequiredService<PromptQueueService>().SendNextAsync(sessionId).ConfigureAwait(false);
+            started = await scope.ServiceProvider.GetRequiredService<PromptQueueService>().SendNextAsync(sessionId).ConfigureAwait(false);
         }
         catch (Exception ex)
         {
             LogSendFailed(ex, sessionId);
+        }
+
+        // The idle was held back for a follow-up that didn't start: show it now.
+        if (!started && _followUps.TryRemove(sessionId, out var released))
+        {
+            try
+            {
+                await released().ConfigureAwait(false);
+            }
+            catch (Exception ex)
+            {
+                LogSendFailed(ex, sessionId);
+            }
+        }
+        else if (started)
+        {
+            _followUps.TryRemove(sessionId, out _);
         }
     }
 
