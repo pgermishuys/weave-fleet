@@ -25,8 +25,7 @@ public sealed class FleetToolSettings(
     AgentMemoryFeature memory,
     AgentMemorySearchFeature memorySearch,
     WorkflowsFeature workflows,
-    ModsFeature mods,
-    PageChoiceFeature pageChoice)
+    ModsFeature mods)
 {
     public async Task<FleetToolSwitches> ForSessionAsync(string userId, string fleetSessionId)
     {
@@ -45,7 +44,6 @@ public sealed class FleetToolSettings(
                 AgentHandoff: await agentHandoff.IsEnabledAsync().ConfigureAwait(false),
                 // Switched on is enough: safe mode only stops drafts from loading, and the tools say so when called.
                 Mods: await mods.IsSwitchedOnAsync().ConfigureAwait(false),
-                PageChoice: await pageChoice.IsEnabledAsync().ConfigureAwait(false),
                 MemorySearch: await memorySearch.IsEnabledAsync().ConfigureAwait(false));
         }
     }

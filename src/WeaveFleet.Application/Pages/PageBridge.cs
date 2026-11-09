@@ -26,8 +26,7 @@ public sealed class PageBridge(
     ISessionRepository sessions,
     IPageChecker? checker = null,
     ILocalFleetUrl? fleetUrl = null,
-    PageChoices? choices = null,
-    PageChoiceFeature? choiceFeature = null)
+    PageChoices? choices = null)
 {
     public const string PathRequirement = "\"path\" must name an .html file you wrote, e.g. \"/tmp/mockups/settings/options.html\".";
 
@@ -89,7 +88,6 @@ public sealed class PageBridge(
             // The session waits on the user before the page says so, so the page's bar never reads as a wait that's over.
             var pageTitle = BrowserPreviews.TitleOr(title, Path.GetFileNameWithoutExtension(file));
             var waits = waitForChoice && cantWait is null && callId is { Length: > 0 } && choices is not null
-                        && choiceFeature is not null && await choiceFeature.IsEnabledAsync()
                         && choices.Start(sessionId, callId, pageTitle);
             // The tab says it waits as soon as it opens, before Fleet checks the page: the check can take a while (a cold browser on
             // a busy Mac took over a minute), and the user mustn't wait on it to be asked.

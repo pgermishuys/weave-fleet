@@ -113,7 +113,7 @@ public sealed class AgentHandoffToolsTests
     }
 
     private static FleetToolSwitches Switches(bool handoff)
-        => new(SessionMessages: true, Memory: true, WorkflowStep: true, Browser: true, Walkthrough: true, AgentHandoff: handoff);
+        => new(SessionMessages: true, Memory: true, WorkflowStep: true, Browser: true, Walkthrough: true, AgentHandoff: handoff, PageChoice: false);
 
     private static List<string> Names(JsonArray tools) => [.. tools.Select(tool => tool!["name"]!.GetValue<string>())];
 

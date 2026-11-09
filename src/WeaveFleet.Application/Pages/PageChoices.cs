@@ -25,21 +25,6 @@ public sealed record PageChoiceAnswer(bool Answered, string? Value = null, strin
 }
 
 /// <summary>
-/// Choosing on a page: <c>fleet_page_show</c> with <c>waitForChoice</c>, the call waiting for the user's pick. Experimental,
-/// off unless the user turns it on in Settings.
-/// </summary>
-public sealed class PageChoiceFeature(IUserPreferenceRepository preferences)
-{
-    public const string PreferenceKey = "PageChoice";
-
-    /// <summary>Set to <c>1</c> for an OpenCode process started with it on: its plugin offers <c>waitForChoice</c>.</summary>
-    public const string EnvironmentVariable = "FLEET_PAGE_CHOICE";
-
-    public async Task<bool> IsEnabledAsync()
-        => string.Equals(await preferences.GetAsync(PreferenceKey).ConfigureAwait(false), "true", StringComparison.OrdinalIgnoreCase);
-}
-
-/// <summary>
 /// The pages waiting for the user's pick, one per tool call. A wait outlives the requests the plugin makes for it: the
 /// plugin asks again every <see cref="Round"/>, since OpenCode cuts a request held for about five minutes. While a page
 /// waits, the session waits on the user (<c>waiting_input</c>), as it does on a harness's question. A wait ends when the

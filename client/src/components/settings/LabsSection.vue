@@ -12,7 +12,6 @@ import { JOBS_PREFERENCE_KEY } from "@/lib/jobs";
 import { MEMORY_PREFERENCE_KEY, MEMORY_SEARCH_PREFERENCE_KEY } from "@/lib/agent-memory";
 import { LIVE_MACHINES_PREFERENCE_KEY } from "@/lib/machines";
 import { MISSION_CONTROL_PREFERENCE_KEY } from "@/lib/mission-control";
-import { PAGE_CHOICE_PREFERENCE_KEY } from "@/lib/page-choice";
 import { useMachinesStore } from "@/stores/machines";
 import { usePreferencesStore } from "@/stores/preferences";
 
@@ -26,7 +25,6 @@ const liveMachines = usePreferenceSwitch(LIVE_MACHINES_PREFERENCE_KEY);
 const fleetUpdates = usePreferenceSwitch(FLEET_UPDATES_PREFERENCE_KEY);
 const jobs = usePreferenceSwitch(JOBS_PREFERENCE_KEY);
 const missionControl = usePreferenceSwitch(MISSION_CONTROL_PREFERENCE_KEY);
-const pageChoice = usePreferenceSwitch(PAGE_CHOICE_PREFERENCE_KEY);
 const memorySearch = usePreferenceSwitch(MEMORY_SEARCH_PREFERENCE_KEY);
 const memoryOn = computed(() => preferencesStore.get(MEMORY_PREFERENCE_KEY, "false") === "true");
 
@@ -168,26 +166,6 @@ function openRoute(path: string): void {
             aria-label="Enable searching older notes"
             data-testid="memory-search-switch"
             @click="memorySearch.toggle"
-          />
-        </template>
-      </SettingRow>
-
-      <SettingRow
-        id="page-choice"
-        title="Choose on a page"
-        summary="The agent shows you a page and waits while you pick."
-      >
-        <template #more>
-          The agent can show you a page and wait while you pick on it. Works with OpenCode and Claude Code; GitHub Copilot needs a weave-copilot update first.
-        </template>
-        <template #control>
-          <SettingSwitch
-            :checked="pageChoice.enabled.value"
-            :saving="pageChoice.saving.value"
-            :disabled="preferencesStore.isLoading || pageChoice.saving.value"
-            aria-label="Enable choosing on a page"
-            data-testid="page-choice-switch"
-            @click="pageChoice.toggle"
           />
         </template>
       </SettingRow>
