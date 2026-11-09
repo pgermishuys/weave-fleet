@@ -10,7 +10,7 @@ vi.mock("@/lib/machine-target", () => ({
   liveTarget: () => ({ key: "live", isLive: true, api: { GET: vi.fn().mockResolvedValue({ data: {} }), PUT: put } }),
 }));
 
-function setup(stored: Record<string, string>) {
+function setup(stored: Record<string, string>, initialVariants: string[] = ["low", "medium", "high"]) {
   const pinia = createPinia();
   setActivePinia(pinia);
   const store = usePreferencesStore();
@@ -18,7 +18,7 @@ function setup(stored: Record<string, string>) {
   store.hasFetched = true;
   const draft = reactive({ text: "", agentId: "", modelId: "", effort: "" });
   const model = ref("anthropic/opus");
-  const variants = ref<string[]>(["low", "medium", "high"]);
+  const variants = ref<string[]>(initialVariants);
   const memory = effectScope().run(() => useEffortMemory({
     draft,
     setEffort: (value) => { draft.effort = value; },
@@ -37,6 +37,15 @@ describe("useEffortMemory", () => {
   it("opens a draft on the remembered level, else Default", () => {
     expect(setup({ "effort.opencode2.anthropic:opus": "high" }).draft.effort).toBe("high");
     expect(setup({}).draft.effort).toBe("");
+  });
+
+  it("takes the remembered level once the model's levels load, when its key was known first", async () => {
+    // A session started on a named model knows its key before the catalog arrives, so the levels come later.
+    const { draft, variants } = setup({ "effort.opencode2.anthropic:opus": "high" }, []);
+    expect(draft.effort).toBe("");
+    variants.value = ["low", "medium", "high"];
+    await nextTick();
+    expect(draft.effort).toBe("high");
   });
 
   it("ignores a remembered level the model no longer offers, without deleting it", () => {
