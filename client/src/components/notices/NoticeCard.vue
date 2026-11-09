@@ -583,8 +583,9 @@ onUnmounted(() => {
 
 .notice__actions {
   display: flex;
+  flex-wrap: wrap;
   align-items: center;
-  gap: 6px;
+  gap: 4px 6px;
   margin-top: 10px;
   padding-left: 36px;
 }
@@ -600,6 +601,9 @@ onUnmounted(() => {
   font: inherit;
   font-size: 12px;
   font-weight: 500;
+  /* A label never breaks inside its button; when the row is full, a whole button moves to the next line. */
+  white-space: nowrap;
+  flex-shrink: 0;
   cursor: pointer;
   transition: background var(--transition), color var(--transition);
 }
