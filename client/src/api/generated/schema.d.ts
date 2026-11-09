@@ -325,6 +325,22 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/sessions/now": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get: operations["GetSessionsNow"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/sessions/{id}": {
         parameters: {
             query?: never;
@@ -421,22 +437,6 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
-    "/api/work/running": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        get: operations["GetRunningWork"];
-        put?: never;
-        post?: never;
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
     "/api/sessions/{id}/source-preview": {
         parameters: {
             query?: never;
@@ -479,6 +479,134 @@ export interface paths {
         get?: never;
         put?: never;
         post: operations["PromptSession"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/sessions/{id}/queue": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get: operations["ListSessionQueue"];
+        put?: never;
+        post: operations["QueueSessionPrompt"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/sessions/{id}/queue/{itemId}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post?: never;
+        delete: operations["RemoveQueuedPrompt"];
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/sessions/{id}/queue/{itemId}/send": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post: operations["SendQueuedPromptNow"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/sessions/{id}/retry": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get: operations["GetSessionRetry"];
+        put?: never;
+        post?: never;
+        delete: operations["CancelSessionRetry"];
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/sessions/{id}/retry/send": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post: operations["SendSessionRetryNow"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/sessions/{id}/interruption": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get: operations["GetSessionInterruption"];
+        put?: never;
+        post?: never;
+        delete: operations["DismissSessionInterruption"];
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/sessions/{id}/interruption/continue": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post: operations["ContinueInterruptedSession"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/sessions/interruptions/stop-automatic": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post: operations["StopAutomaticInterruptionContinue"];
         delete?: never;
         options?: never;
         head?: never;
@@ -528,6 +656,70 @@ export interface paths {
         put?: never;
         post: operations["RejectQuestion"];
         delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/sessions/{id}/permissions": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get: operations["ListSessionPermissions"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/sessions/{id}/permissions/{requestId}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post: operations["ReplyToPermission"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/sessions/{id}/permission-rules": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get: operations["ListSessionPermissionRules"];
+        put?: never;
+        post?: never;
+        delete: operations["ClearSessionPermissionRules"];
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/sessions/{id}/permission-rules/{ruleId}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post?: never;
+        delete: operations["DeleteSessionPermissionRule"];
         options?: never;
         head?: never;
         patch?: never;
@@ -629,6 +821,22 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/sessions/{id}/screenshots/{screenshotId}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get: operations["GetSessionScreenshot"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/sessions/{id}/progress": {
         parameters: {
             query?: never;
@@ -671,6 +879,54 @@ export interface paths {
         get?: never;
         put?: never;
         post: operations["SendSessionCommand"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/sessions/{id}/shell": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post: operations["RunSessionShellCommand"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/sessions/{id}/context": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get: operations["GetSessionContext"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/sessions/{id}/compact": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post: operations["CompactSession"];
         delete?: never;
         options?: never;
         head?: never;
@@ -767,262 +1023,6 @@ export interface paths {
         get?: never;
         put?: never;
         post: operations["KeepSideConversation"];
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
-    "/api/sessions/{id}/shell": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        get?: never;
-        put?: never;
-        post: operations["RunSessionShellCommand"];
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
-    "/api/harnesses/usage": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        get: operations["GetHarnessUsage"];
-        put?: never;
-        post?: never;
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
-    "/api/sessions/{id}/context": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        get: operations["GetSessionContext"];
-        put?: never;
-        post?: never;
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
-    "/api/sessions/{id}/compact": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        get?: never;
-        put?: never;
-        post: operations["CompactSession"];
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
-    "/api/sessions/{id}/permissions": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        get: operations["ListSessionPermissions"];
-        put?: never;
-        post?: never;
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
-    "/api/sessions/{id}/permissions/{requestId}": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        get?: never;
-        put?: never;
-        post: operations["ReplyToPermission"];
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
-    "/api/sessions/{id}/permission-rules": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        get: operations["ListSessionPermissionRules"];
-        put?: never;
-        post?: never;
-        delete: operations["ClearSessionPermissionRules"];
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
-    "/api/sessions/{id}/permission-rules/{ruleId}": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        get?: never;
-        put?: never;
-        post?: never;
-        delete: operations["DeleteSessionPermissionRule"];
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
-    "/api/sessions/{id}/queue": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        get: operations["ListSessionQueue"];
-        put?: never;
-        post: operations["QueueSessionPrompt"];
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
-    "/api/sessions/{id}/queue/{itemId}": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        get?: never;
-        put?: never;
-        post?: never;
-        delete: operations["RemoveQueuedPrompt"];
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
-    "/api/sessions/{id}/queue/{itemId}/send": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        get?: never;
-        put?: never;
-        post: operations["SendQueuedPromptNow"];
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
-    "/api/sessions/{id}/interruption": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        get: operations["GetSessionInterruption"];
-        put?: never;
-        post?: never;
-        delete: operations["DismissSessionInterruption"];
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
-    "/api/sessions/{id}/interruption/continue": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        get?: never;
-        put?: never;
-        post: operations["ContinueInterruptedSession"];
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
-    "/api/sessions/interruptions/stop-automatic": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        get?: never;
-        put?: never;
-        post: operations["StopAutomaticInterruptionContinue"];
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
-    "/api/sessions/{id}/retry": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        get: operations["GetSessionRetry"];
-        put?: never;
-        post?: never;
-        delete: operations["CancelSessionRetry"];
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
-    "/api/sessions/{id}/retry/send": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        get?: never;
-        put?: never;
-        post: operations["SendSessionRetryNow"];
         delete?: never;
         options?: never;
         head?: never;
@@ -1221,16 +1221,16 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
-    "/api/sessions/{id}/files/restore": {
+    "/api/sessions/{id}/files/image": {
         parameters: {
             query?: never;
             header?: never;
             path?: never;
             cookie?: never;
         };
-        get?: never;
+        get: operations["GetSessionImage"];
         put?: never;
-        post: operations["RestoreSessionFile"];
+        post?: never;
         delete?: never;
         options?: never;
         head?: never;
@@ -1247,6 +1247,54 @@ export interface paths {
         get?: never;
         put?: never;
         post: operations["ResolveSessionFiles"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/sessions/{id}/attachments": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post: operations["UploadSessionAttachment"];
+        delete: operations["ClearSessionAttachments"];
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/sessions/{id}/files/restore": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post: operations["RestoreSessionFile"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/work/running": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get: operations["GetRunningWork"];
+        put?: never;
+        post?: never;
         delete?: never;
         options?: never;
         head?: never;
@@ -1295,6 +1343,38 @@ export interface paths {
         get?: never;
         put?: never;
         post: operations["FocusSessionCanvas"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/sessions/{id}/page-choices/{callId}/send": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post: operations["SendPageChoice"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/sessions/{id}/page-choices/{callId}/skip": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post: operations["SkipPageChoice"];
         delete?: never;
         options?: never;
         head?: never;
@@ -1471,6 +1551,54 @@ export interface paths {
         get?: never;
         put?: never;
         post: operations["StopSessionApp"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/sessions/{id}/agent-browser": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get: operations["GetAgentBrowser"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/sessions/{id}/agent-browser/tabs/{tabId}/frame": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get: operations["GetAgentBrowserFrame"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/agent-browser/settings": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get: operations["GetAgentBrowserSettings"];
+        put: operations["SaveAgentBrowserSettings"];
+        post?: never;
         delete?: never;
         options?: never;
         head?: never;
@@ -1749,6 +1877,54 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/update/apply": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post: operations["ApplyUpdate"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/update/rule": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put: operations["SetUpdateRule"];
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/update/rollout": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get: operations["GetUpdateRollout"];
+        put?: never;
+        post: operations["StartUpdateRollout"];
+        delete: operations["CancelUpdateRollout"];
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/desktop/status": {
         parameters: {
             query?: never;
@@ -1789,6 +1965,22 @@ export interface paths {
             cookie?: never;
         };
         get: operations["GetActivityStream"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/smart-links": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get: operations["GetHeaderSmartLinks"];
         put?: never;
         post?: never;
         delete?: never;
@@ -1845,22 +2037,6 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
-    "/api/directories/find": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        get: operations["FindDirectoryFiles"];
-        put?: never;
-        post?: never;
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
     "/api/directories/inspect": {
         parameters: {
             query?: never;
@@ -1869,6 +2045,22 @@ export interface paths {
             cookie?: never;
         };
         get: operations["InspectDirectory"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/directories/find": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get: operations["FindDirectoryFiles"];
         put?: never;
         post?: never;
         delete?: never;
@@ -2092,8 +2284,920 @@ export interface paths {
             path?: never;
             cookie?: never;
         };
-        get?: never;
+        get: operations["GetBuiltInSkill"];
         put: operations["SetBuiltInSkill"];
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/skills/built-in/{name}/versions": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post: operations["SaveBuiltInSkillVersion"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/skills/built-in/{name}/versions/{version}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get: operations["GetBuiltInSkillVersion"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/skills/built-in/{name}/active": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put: operations["UseBuiltInSkillVersion"];
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/skills/built-in/{name}/keep-mine": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post: operations["KeepBuiltInSkillVersion"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/skills/built-in/{name}/improve": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post: operations["ImproveBuiltInSkill"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/mods": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get: operations["ListMods"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/mods/safe-mode": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put: operations["SetModsSafeMode"];
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/mods/{name}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get: operations["GetMod"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/mods/{name}/versions/{version}/files": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get: operations["GetModVersionFiles"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/mods/{name}/active": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put: operations["UseModVersion"];
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/mods/{name}/undo": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post: operations["UndoMod"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/mods/{name}/on": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post: operations["TurnModOn"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/mods/{name}/off": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post: operations["TurnModOff"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/mods/samples/{name}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post: operations["AddModSample"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/sessions/{sessionId}/mods/drafts": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get: operations["ListModDrafts"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/sessions/{sessionId}/mods/drafts/{name}/files": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get: operations["GetModDraftFiles"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/sessions/{sessionId}/mods/drafts/{name}/check": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get: operations["CheckModDraft"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/sessions/{sessionId}/mods/drafts/{name}/keep": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post: operations["KeepModDraft"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/sessions/{sessionId}/mods/drafts/{name}/off": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post: operations["TurnModDraftOff"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/sessions/{sessionId}/mods/drafts/{name}/on": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post: operations["TurnModDraftOn"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/sessions/{sessionId}/mods/drafts/{name}/keep-request": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post?: never;
+        delete: operations["DeclineModKeepRequest"];
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/sessions/{sessionId}/mods/sites": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get: operations["GetModSites"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/sessions/{sessionId}/mods/render": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post: operations["RenderModRow"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/sessions/{sessionId}/mods/action": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post: operations["ActOnModControl"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/features/mods": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get: operations["GetModsSwitch"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/features/mods/runtime": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get: operations["GetModsRuntime"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/features/mods/runtime/install": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post: operations["InstallModsRuntime"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/features/mods/runtime/use": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post: operations["UseModsRuntime"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/features/mods/runtime/cancel": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post: operations["CancelModsRuntimeInstall"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/memory": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get: operations["GetMemory"];
+        put: operations["SetMemoryEnabled"];
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/memory/notes": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get: operations["ListMemoryNotes"];
+        put?: never;
+        post: operations["AddMemoryNote"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/memory/notes/{id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put: operations["UpdateMemoryNote"];
+        post?: never;
+        delete: operations["ForgetMemoryNote"];
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/memory/notes/{id}/keep": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post: operations["KeepMemoryNote"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/memory/notes/{id}/place": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post: operations["MoveMemoryNote"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/memory/clear": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post: operations["ClearMemory"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/memory/dreams": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get: operations["ListDreams"];
+        put?: never;
+        post: operations["StartDream"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/memory/dreams/{dreamId}/changes/{changeId}/undo": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post: operations["UndoDreamChange"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/memory/dreaming/nightly": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get: operations["GetNightlyDreaming"];
+        put: operations["SetNightlyDreaming"];
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/reports/prepare": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post: operations["PrepareReport"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/reports/send": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post: operations["SendReport"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/reports/file": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post: operations["SaveReportFile"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/workflows": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get: operations["ListWorkflows"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/workflows/runs": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get: operations["ListWorkflowRuns"];
+        put?: never;
+        post: operations["StartWorkflowRun"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/workflows/runs/{id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get: operations["GetWorkflowRun"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/workflows/runs/{id}/answer": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post: operations["AnswerWorkflowRun"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/workflows/runs/{id}/move-on": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post: operations["MoveOnWorkflowRun"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/workflows/runs/{id}/check-with-me": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put: operations["SetWorkflowRunCheckWithMe"];
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/workflows/runs/{id}/end": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post: operations["EndWorkflowRun"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/workflows/check": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post: operations["CheckWorkflow"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/workflows/files/open": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post: operations["OpenWorkflowFile"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/workflows/files": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put: operations["SaveWorkflowFile"];
+        post: operations["CreateWorkflowFile"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/workflows/drafts/from-session": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post: operations["DraftWorkflowFromSession"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/workflows/drafts/from-description": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post: operations["DraftWorkflowFromDescription"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/jobs": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get: operations["ListJobs"];
+        put?: never;
+        post: operations["PostJob"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/jobs/repositories": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get: operations["ListJobRepositories"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/jobs/{id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post?: never;
+        delete: operations["CancelJob"];
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/jobs/machines/{id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put: operations["SaveJobMachine"];
         post?: never;
         delete?: never;
         options?: never;
@@ -2261,17 +3365,17 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
-    "/api/harnesses/{type}/update": {
+    "/api/harnesses/usage": {
         parameters: {
             query?: never;
             header?: never;
             path?: never;
             cookie?: never;
         };
-        get?: never;
+        get: operations["GetHarnessUsage"];
         put?: never;
-        post: operations["UpdateHarness"];
-        delete: operations["DismissHarnessUpdate"];
+        post?: never;
+        delete?: never;
         options?: never;
         head?: never;
         patch?: never;
@@ -2304,6 +3408,54 @@ export interface paths {
         put?: never;
         post?: never;
         delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/harnesses/{type}/update": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post: operations["UpdateHarness"];
+        delete: operations["DismissHarnessUpdate"];
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/usage/limits": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get: operations["GetUsageLimits"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/usage/limits/{provider}/allow": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post: operations["AllowUsageLimits"];
+        delete: operations["RevokeUsageLimits"];
         options?: never;
         head?: never;
         patch?: never;
@@ -2629,70 +3781,6 @@ export interface paths {
         patch: operations["RenameWorkspace"];
         trace?: never;
     };
-    "/api/storage/worktrees": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        get: operations["ListWorktreeCheckouts"];
-        put?: never;
-        post?: never;
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
-    "/api/storage/worktrees/clean": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        get?: never;
-        put?: never;
-        post: operations["CleanWorktreeCheckouts"];
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
-    "/api/storage/worktrees/{workspaceId}/size": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        get: operations["GetWorktreeCheckoutSize"];
-        put?: never;
-        post?: never;
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
-    "/api/storage/worktrees/{workspaceId}/restore": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        get?: never;
-        put?: never;
-        post: operations["RestoreWorktreeCheckout"];
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
     "/api/worktrees/naming": {
         parameters: {
             query?: never;
@@ -2719,6 +3807,70 @@ export interface paths {
         get?: never;
         put?: never;
         post: operations["PreviewWorktreeNaming"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/storage/worktrees": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get: operations["ListWorktreeCheckouts"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/storage/worktrees/{workspaceId}/size": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get: operations["GetWorktreeCheckoutSize"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/storage/worktrees/clean": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post: operations["CleanWorktreeCheckouts"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/storage/worktrees/{workspaceId}/restore": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post: operations["RestoreWorktreeCheckout"];
         delete?: never;
         options?: never;
         head?: never;
@@ -3425,6 +4577,454 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/machine": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get: operations["GetMachine"];
+        put: operations["UpdateMachine"];
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/machine/id": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get: operations["GetMachineId"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/machine/access": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get: operations["GetMachineAccess"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/machine/access/token": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post: operations["ReplaceMachineToken"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/machine/pairing": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post: operations["CreatePairingCode"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/machine/pairing/code": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post: operations["CreateMachinePairingCode"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/machine/devices": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get: operations["ListDevices"];
+        put?: never;
+        post: operations["CreateDevice"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/machine/devices/{id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post?: never;
+        delete: operations["RemoveDevice"];
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/machine/devices/me/token": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post: operations["ReissueDeviceToken"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/pairing/preview": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post: operations["PreviewPairingCode"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/pairing/redeem": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post: operations["RedeemPairingCode"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/push/vapid": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get: operations["GetVapidKey"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/push/subscriptions": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put: operations["SavePushSubscription"];
+        post?: never;
+        delete: operations["DeletePushSubscription"];
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/push/subscriptions/lookup": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post: operations["LookUpPushSubscription"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/push/test": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post: operations["SendTestPush"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/machines": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get: operations["ListMachines"];
+        put?: never;
+        post: operations["AddMachine"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/machines/pair/preview": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post: operations["PreviewPairMachine"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/machines/pair": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post: operations["PairMachine"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/machines/candidates": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get: operations["ListMachineCandidates"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/machines/candidates/probe": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post: operations["ProbeMachineCandidate"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/machines/setup": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post: operations["StartMachineSetup"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/machines/setup/{id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get: operations["GetMachineSetup"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/machines/{id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put: operations["UpdateRemoteMachine"];
+        post?: never;
+        delete: operations["RemoveRemoteMachine"];
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/machines/{id}/check": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post: operations["CheckRemoteMachine"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/machines/{id}/device-grant": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post: operations["CreateDeviceGrant"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/machines/import": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post: operations["ImportMachines"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/machine/peer/sessions/{id}/message": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post: operations["SendPeerSessionMessage"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/machine/peer/sessions/{id}/page": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get: operations["ReadPeerSessionPage"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/bridge/canvas/list": {
         parameters: {
             query?: never;
@@ -3441,22 +5041,6 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
-    "/api/bridge/canvas/open": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        get?: never;
-        put?: never;
-        post: operations["CanvasBridgeOpen"];
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
     "/api/bridge/canvas/read": {
         parameters: {
             query?: never;
@@ -3467,22 +5051,6 @@ export interface paths {
         get?: never;
         put?: never;
         post: operations["CanvasBridgeRead"];
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
-    "/api/bridge/canvas/patch": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        get?: never;
-        put?: never;
-        post: operations["CanvasBridgePatch"];
         delete?: never;
         options?: never;
         head?: never;
@@ -3553,6 +5121,86 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/bridge/canvas/browser-read": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post: operations["CanvasBridgeBrowserRead"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/bridge/canvas/browser-act": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post: operations["CanvasBridgeBrowserAct"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/bridge/canvas/page-show": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post: operations["CanvasBridgePageShow"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/bridge/canvas/page-choice": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post: operations["CanvasBridgePageChoice"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/bridge/canvas/walkthrough-show": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post: operations["CanvasBridgeWalkthroughShow"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/bridge/session/message": {
         parameters: {
             query?: never;
@@ -3569,10 +5217,195 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/bridge/session/read": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post: operations["SessionReadBridgeRead"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/bridge/session/machines": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post: operations["MachineHandoffBridgeList"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/bridge/session/start": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post: operations["MachineHandoffBridgeStart"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/bridge/workflow/step-done": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post: operations["WorkflowStepBridgeDone"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/bridge/memory/save": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post: operations["MemoryBridgeSave"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/bridge/memory/search": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post: operations["MemoryBridgeSearch"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/bridge/memory/forget": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post: operations["MemoryBridgeForget"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/bridge/mods/write": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post: operations["ModBridgeWrite"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/bridge/mods/check": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post: operations["ModBridgeCheck"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/bridge/mods/reload": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post: operations["ModBridgeReload"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/bridge/mods/keep": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post: operations["ModBridgeKeep"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
 }
 export type webhooks = Record<string, never>;
 export interface components {
     schemas: {
+        AddMachineRequest: {
+            baseUrl: null | string;
+            token: null | string;
+        };
+        AddMemoryNoteRequest: {
+            list: null | string;
+            repository: null | string;
+            text: null | string;
+        };
         AddSessionSourceApiRequest: {
             source: components["schemas"]["SessionSourceSelection"];
             confirm: boolean;
@@ -3580,8 +5413,53 @@ export interface components {
         AddSmartLinkRequest: {
             url: string;
         };
+        AddSshMachineRequest: {
+            destination: null | string;
+        };
         AddWorkspaceRootRequest: {
             path: string;
+        };
+        AgentBrowserResponse: {
+            tabs: components["schemas"]["AgentTab"][];
+            focusedTabId: null | string;
+            steps: components["schemas"]["BrowserStep"][];
+        };
+        AgentBrowserSettingsRequest: {
+            enabled: null | boolean;
+            pages: null | string;
+            scripts: null | boolean;
+        };
+        AgentBrowserSettingsResponse: {
+            enabled: boolean;
+            pages: string;
+            scripts: boolean;
+        };
+        AgentBrowserToolRequest: {
+            harnessSessionId: null | string;
+            what?: null | string;
+            action?: null | string;
+            tab?: null | string;
+            ref?: null | string;
+            text?: null | string;
+            url?: null | string;
+            key?: null | string;
+            values?: null | string[];
+            checked?: null | boolean;
+            /** Format: int32 */
+            deltaY?: null | number | string;
+            read?: null | boolean;
+            callId?: null | string;
+        };
+        AgentTab: {
+            id: string;
+            url: string;
+            title: string;
+            loading: boolean;
+            loadError: null | string;
+            canGoBack: boolean;
+            canGoForward: boolean;
+            /** Format: int32 */
+            generation: number | string;
         };
         AnalyticsSummary: {
             /** Format: double */
@@ -3603,6 +5481,11 @@ export interface components {
             tokens: number | string;
             /** Format: double */
             cost: number | string;
+        };
+        AnswerWorkflowRunRequest: {
+            choice: string;
+            note?: null | string;
+            checkWithMe?: null | boolean;
         };
         ApiErrorResponse: {
             error: string;
@@ -3690,6 +5573,16 @@ export interface components {
             relativePath: string;
             isDirectory: boolean;
         };
+        BrowserBox: {
+            /** Format: double */
+            x: number | string;
+            /** Format: double */
+            y: number | string;
+            /** Format: double */
+            width: number | string;
+            /** Format: double */
+            height: number | string;
+        };
         BrowserOpenRequest: {
             url: null | string;
             title: null | string;
@@ -3707,26 +5600,74 @@ export interface components {
             target: string;
             origin: string;
         };
+        BrowserShot: {
+            id: string;
+            /** Format: int32 */
+            width: number | string;
+            /** Format: int32 */
+            height: number | string;
+        };
+        BrowserStep: {
+            sessionId: string;
+            /** Format: int64 */
+            seq: number | string;
+            /** Format: date-time */
+            at: string;
+            kind: string;
+            summary: string;
+            detail: string;
+            ok?: boolean;
+            error?: null | string;
+            callId?: null | string;
+            tabId?: null | string;
+            url?: null | string;
+            title?: null | string;
+            box?: null | components["schemas"]["BrowserBox"];
+            screenshot?: null | components["schemas"]["BrowserShot"];
+        };
         BrowseSessionDirectoryResponse: {
             entries: components["schemas"]["BrowseEntryDto"][];
             currentPath: string;
+        };
+        BuiltInSkillDetail: {
+            name: string;
+            description: string;
+            enabled: boolean;
+            fleetContent: string;
+            yourContent: null | string;
+            /** Format: int32 */
+            version: null | number | string;
+            fleetChanged: boolean;
+            fleetBefore: null | string;
+            versions: components["schemas"]["SkillVersionView"][];
         };
         BuiltInSkillView: {
             name: string;
             description: string;
             enabled: boolean;
+            /** Format: int32 */
+            version?: null | number | string;
+            /** @default false */
+            fleetChanged: boolean;
+            /**
+             * Format: int32
+             * @default 0
+             */
+            versionCount: number | string;
+            /** @default false */
+            withMods: boolean;
         };
         CanvasBridgeRequest: {
             harnessSessionId: null | string;
             canvasId?: null | string;
-            kind?: null | string;
             title?: null | string;
-            state?: unknown;
-            ops?: unknown;
             command?: null | string;
             url?: null | string;
             path?: null | string;
             viewport?: null | string;
+            placement?: null | string;
+            waitForChoice?: null | boolean;
+            callId?: null | string;
         };
         CanvasResponse: {
             canvasId: string;
@@ -3763,6 +5704,24 @@ export interface components {
                 [key: string]: string;
             };
         };
+        CheckWithMeRequest: {
+            on: boolean;
+        };
+        CheckWorkflowRequest: {
+            text?: null | string;
+            draft?: null | components["schemas"]["WorkflowDraftDto"];
+        };
+        CleanWorktreesRequest: {
+            workspaceIds: string[];
+        };
+        ClearMemoryRequest: {
+            scope: null | string;
+            repository: null | string;
+        };
+        ClearMemoryResponse: {
+            /** Format: int32 */
+            deleted: number | string;
+        };
         ClientConfigResponse: {
             cloudMode: boolean;
             authEnabled: boolean;
@@ -3773,6 +5732,21 @@ export interface components {
         CloneFolderRequest: {
             repository: string;
             path: string;
+        };
+        ContextCall: {
+            /** Format: int32 */
+            input?: number | string;
+            /** Format: int32 */
+            cacheRead?: number | string;
+            /** Format: int32 */
+            cacheWrite?: number | string;
+            /** Format: int32 */
+            output?: number | string;
+            /** Format: int32 */
+            reasoning?: number | string;
+            totalOnly?: boolean;
+            /** Format: int32 */
+            used?: number | string;
         };
         CreateAutomationRequest: {
             name: string;
@@ -3825,10 +5799,30 @@ export interface components {
             providerType: null | string;
             config: null | string;
         };
+        CreateDeviceRequest: {
+            name: null | string;
+            platform: null | string;
+            pairedVia: null | string;
+        };
+        CreateDeviceResponse: {
+            deviceId: string;
+            token: string;
+        };
         CreateFolderRequest: {
             path: string;
             git: boolean;
             branch?: null | string;
+        };
+        CreatePairingRequest: {
+            baseUrl: null | string;
+        };
+        CreatePairingResponse: {
+            secret: string;
+            manualCode: string;
+            /** Format: date-time */
+            expiresAt: string;
+            url: string;
+            payload: components["schemas"]["PairingPayload"];
         };
         CreateProjectRequest: {
             name: string;
@@ -3856,6 +5850,13 @@ export interface components {
             cols?: null | number | string;
             /** Format: int32 */
             rows?: null | number | string;
+        };
+        CreateWorkflowRequest: {
+            directory: string;
+            name?: null | string;
+            workflowId?: null | string;
+            text?: null | string;
+            draft?: null | components["schemas"]["WorkflowDraftDto"];
         };
         CredentialResponse: {
             id: string;
@@ -3888,6 +5889,101 @@ export interface components {
             status: string;
             createdAt: string;
         };
+        DeviceGrantResponse: {
+            machineId: string;
+            baseUrl: string;
+            token: string;
+        };
+        DeviceListResponse: {
+            devices: components["schemas"]["DeviceSummary"][];
+        };
+        DeviceSummary: {
+            id: string;
+            name: string;
+            platform: null | string;
+            /** Format: date-time */
+            createdAt: string;
+            /** Format: date-time */
+            lastUsedAt: string;
+            pairedVia: null | string;
+            /** @default device */
+            kind: string;
+        };
+        DraftedWorkflowDto: {
+            repository: string;
+            repositoryName: string;
+            sessionTitle: null | string;
+            check: components["schemas"]["WorkflowCheckDto"];
+            /** Format: int32 */
+            asks: number | string;
+            tokens: null | components["schemas"]["DraftTokensDto"];
+        };
+        DraftTokensDto: {
+            /** Format: int64 */
+            total: number | string;
+            /** Format: int64 */
+            fromCache: number | string;
+        };
+        DraftWorkflowFromDescriptionRequest: {
+            directory: string;
+            description: string;
+            harnessType?: null | string;
+            harnessProfileId?: null | string;
+        };
+        DraftWorkflowFromSessionRequest: {
+            sessionId: string;
+        };
+        DreamChangeView: {
+            id: string;
+            kind: string;
+            list: null | string;
+            noteId: null | string;
+            text: null | string;
+            replaced: components["schemas"]["DreamNoteView"][];
+            why: string;
+            sessions: components["schemas"]["DreamSessionView"][];
+            /** Format: int32 */
+            ofSessions: number | string;
+            quote: null | string;
+            reason: null | string;
+            undone: boolean;
+            evidence?: null | string;
+            how?: null | string;
+        };
+        DreamListView: {
+            dreams: components["schemas"]["DreamView"][];
+        };
+        DreamNoteView: {
+            id: string;
+            text: string;
+            kind: string;
+            list: string;
+        };
+        DreamSessionView: {
+            id: string;
+            title: string;
+            harnessType: string;
+        };
+        DreamView: {
+            id: string;
+            repository: string;
+            repositoryName: string;
+            sessionId: null | string;
+            harnessType: null | string;
+            status: string;
+            error: null | string;
+            /** Format: date-time */
+            started: string;
+            /** Format: date-time */
+            finished: null | string;
+            readSessions: components["schemas"]["DreamSessionView"][];
+            changes: components["schemas"]["DreamChangeView"][];
+            runId?: null | string;
+            /** Format: int32 */
+            tokens?: null | number | string;
+            /** Format: date-time */
+            since?: null | string;
+        };
         ErrorResponse: {
             error: string;
         };
@@ -3902,6 +5998,11 @@ export interface components {
             totalCost: number | string;
             /** Format: int32 */
             queuedTasks: number | string;
+        };
+        FolderSize: {
+            /** Format: int64 */
+            bytes: number | string;
+            complete: boolean;
         };
         ForkSessionApiRequest: {
             title: null | string;
@@ -3982,10 +6083,35 @@ export interface components {
             fromVersion: null | string;
             toVersion: null | string;
         };
+        HarnessUsage: {
+            harnessType: string;
+            windows: components["schemas"]["UsageLimitWindow"][];
+            /** Format: date-time */
+            updatedAt: string;
+        };
         ImageAttachmentDto: {
             mime: string;
             filename: null | string;
             data: string;
+        };
+        ImportMachineEntry: {
+            id: null | string;
+            name: null | string;
+            baseUrl: null | string;
+            token: null | string;
+            os: null | string;
+            /** Format: date-time */
+            addedAt: null | string;
+        };
+        ImportMachinesRequest: {
+            machines: null | components["schemas"]["ImportMachineEntry"][];
+        };
+        ImproveSkillRequest: {
+            sessionId: string;
+            note: string;
+            context?: null | string;
+            /** @default false */
+            wholeConversation: boolean;
         };
         InstallScope: number;
         InstallSkillRequest: {
@@ -4041,14 +6167,63 @@ export interface components {
             id: string;
             name: string;
             variants?: null | string[];
+            priceTier?: null | string;
+            capability?: null | string;
+            /** Format: int32 */
+            contextWindow?: null | number | string;
         };
         InstanceProviderItem: {
             id: string;
             name: string;
             models: components["schemas"]["InstanceModelItem"][];
         };
+        JobDto: {
+            id: string;
+            title: string;
+            ask: string;
+            repository: string;
+            labels: string[];
+            pinnedMachineId: null | string;
+            state: string;
+            machineId: null | string;
+            machineName: null | string;
+            sessionId: null | string;
+            whyWaiting: null | string;
+            error: null | string;
+            /** Format: date-time */
+            createdAt: string;
+        };
+        JobMachineDto: {
+            id: string;
+            name: string;
+            isLocal: boolean;
+            /** Format: int32 */
+            seats: number | string;
+            /** Format: int32 */
+            used: number | string;
+            labels: string[];
+            status: string;
+        };
+        JobRepositoryDto: {
+            name: string;
+            repository: string;
+            machines: string[];
+        };
+        JobsDto: {
+            jobs: components["schemas"]["JobDto"][];
+            machines: components["schemas"]["JobMachineDto"][];
+        };
         JsonElement: unknown;
         JsonObject: Record<string, never>;
+        KeepModRequest: {
+            note?: null | string;
+        };
+        LastUpdate: {
+            from: string;
+            to: string;
+            at: string;
+            trigger: string;
+        };
         LegacySessionImportApiResponse: {
             imported: boolean;
             skipped: boolean;
@@ -4057,6 +6232,275 @@ export interface components {
             count: number | string;
             status: string;
             errors: string[];
+        };
+        MachineAccessResponse: {
+            token: string;
+            tokenSource: string;
+            host: string;
+            /** Format: int32 */
+            port: number | string;
+            remoteReachable: boolean;
+            requiresToken: boolean;
+            addresses: components["schemas"]["MachineAddress"][];
+        };
+        MachineAddress: {
+            url: string;
+            kind: string;
+        };
+        MachineAddressEntry: {
+            url: string;
+            kind: string;
+            learned: boolean;
+            lastResult: null | string;
+            /** Format: date-time */
+            lastTriedAt: null | string;
+        };
+        MachineCandidateListResponse: {
+            candidates: components["schemas"]["MachineCandidateResponse"][];
+            commands: string[];
+        };
+        MachineCandidateResponse: {
+            name: string;
+            destination: string;
+            source: string;
+            os: null | string;
+        };
+        MachineCapabilities: {
+            harnesses: null | components["schemas"]["MachineHarness"][];
+            sessions: components["schemas"]["MachineSessionCounts"];
+            peerMessages: boolean;
+            permissionLevel?: null | string;
+        };
+        MachineCheckResponse: {
+            reachable: boolean;
+            error: null | string;
+            diagnosis: null | components["schemas"]["MachineDiagnosis"];
+        };
+        MachineDiagnosis: {
+            code: string;
+            headline: string;
+            steps: components["schemas"]["MachineStep"][];
+            try: string;
+        };
+        MachineEntryResponse: {
+            id: string;
+            name: string;
+            baseUrl: string;
+            os: null | string;
+            status: string;
+            /** Format: date-time */
+            addedAt: string;
+            /** Format: date-time */
+            lastSeenAt: null | string;
+            token: null | string;
+            agentWork: string;
+            sshDestination?: null | string;
+            tunnelUp?: null | boolean;
+            diagnosis?: null | components["schemas"]["MachineDiagnosis"];
+            addresses?: null | components["schemas"]["MachineAddressEntry"][];
+        };
+        MachineHarness: {
+            type: string;
+            name: string;
+            available: boolean;
+            enabled: boolean;
+            version: null | string;
+            permissionLevel?: null | string;
+        };
+        MachineIdResponse: {
+            id: string;
+            /** Format: int32 */
+            apiVersion: number | string;
+        };
+        MachineListResponse: {
+            machines: components["schemas"]["MachineEntryResponse"][];
+        };
+        MachinePairingCodeResponse: {
+            manualCode: string;
+            /** Format: date-time */
+            expiresAt: string;
+            machineId: string;
+            machineName: string;
+            addresses: string[];
+            link?: null | string;
+        };
+        MachineResponse: {
+            id: string;
+            name: string;
+            hostName: string;
+            os: string;
+            version: string;
+            /** Format: int32 */
+            apiVersion: number | string;
+            authMode: string;
+            remoteReachable: boolean;
+            requiresToken: boolean;
+            webApp: boolean;
+            publicUrl?: null | string;
+            capabilities?: null | components["schemas"]["MachineCapabilities"];
+            update?: null | components["schemas"]["MachineUpdate"];
+            addresses?: null | components["schemas"]["MachineAddress"][];
+        };
+        MachineSessionCounts: {
+            /** Format: int32 */
+            working: number | string;
+            /** Format: int32 */
+            needsYou: number | string;
+            /** Format: int32 */
+            busy?: number | string;
+        };
+        MachineStep: {
+            label: string;
+            state: string;
+            detail?: null | string;
+        };
+        MachineUpdate: {
+            status: string;
+            latestVersion: null | string;
+            stagedVersion: null | string;
+            checkedAt: null | string;
+            /** @default false */
+            canRestart: boolean;
+            restartUnavailableReason?: null | string;
+            rolledBack?: null | components["schemas"]["UpdateFailure"];
+            rule?: null | string;
+            ruleSource?: null | string;
+            lastUpdate?: null | components["schemas"]["LastUpdate"];
+        };
+        MemoryBridgeRequest: {
+            harnessSessionId: null | string;
+            list?: null | string;
+            text?: null | string;
+            kind?: null | string;
+            replaces?: null | string;
+            id?: null | string;
+            how?: null | string;
+            query?: null | string;
+        };
+        MemoryNotesView: {
+            repository: null | string;
+            repositoryNotes: components["schemas"]["MemoryNoteView"][];
+            machineNotes: components["schemas"]["MemoryNoteView"][];
+            /** Format: int32 */
+            tokens: number | string;
+            expiredNotes?: null | components["schemas"]["MemoryNoteView"][];
+        };
+        MemoryNoteView: {
+            id: string;
+            list: string;
+            text: string;
+            kind: string;
+            repository: null | string;
+            sessionId: null | string;
+            sessionTitle: null | string;
+            /** Format: date-time */
+            created: string;
+            /** Format: date-time */
+            updated: string;
+            /** Format: int32 */
+            lifetime?: null | number | string;
+            /** Format: int32 */
+            daysLeft?: null | number | string;
+            /** @default false */
+            expired: boolean;
+            /**
+             * Format: int32
+             * @default 0
+             */
+            relearned: number | string;
+            how?: null | string;
+            /** @default false */
+            inSearch: boolean;
+            /** @default false */
+            pinned: boolean;
+            /**
+             * Format: int32
+             * @default 0
+             */
+            found: number | string;
+            /** Format: date-time */
+            lastFound?: null | string;
+        };
+        MemoryOverview: {
+            enabled: boolean;
+            repositories: components["schemas"]["MemoryRepositoryView"][];
+            /** Format: int32 */
+            machineCount: number | string;
+            /** Format: int32 */
+            maxRepositoryNotes: number | string;
+            /** Format: int32 */
+            maxMachineNotes: number | string;
+            /** @default false */
+            searchEnabled: boolean;
+            /**
+             * Format: int32
+             * @default 15
+             */
+            maxAlwaysRepositoryNotes: number | string;
+            /**
+             * Format: int32
+             * @default 8
+             */
+            maxAlwaysMachineNotes: number | string;
+            /**
+             * Format: int32
+             * @default 200
+             */
+            maxSearchRepositoryNotes: number | string;
+            /**
+             * Format: int32
+             * @default 60
+             */
+            maxSearchMachineNotes: number | string;
+        };
+        MemoryRepositoryView: {
+            path: string;
+            name: string;
+            /** Format: int32 */
+            count: number | string;
+        };
+        ModActionRequest: {
+            handle: null | string;
+            kind: null | string;
+            value: null | string;
+            surface: null | string;
+        };
+        ModActionView: {
+            handled: boolean;
+        };
+        ModBridgeRequest: {
+            harnessSessionId: null | string;
+            name?: null | string;
+            files?: unknown;
+            note?: null | string;
+        };
+        ModCheckView: {
+            check: null | components["schemas"]["JsonElement"];
+        };
+        ModDeclaredPane: {
+            mod: string;
+            id: string;
+            title: string;
+            icon: null | string;
+            draft: boolean;
+            off: boolean;
+        };
+        ModDraftProblemView: {
+            code: string;
+            message: string;
+            /** Format: int32 */
+            line: null | number | string;
+        };
+        ModDraftView: {
+            sessionId: string;
+            name: string;
+            description: null | string;
+            version: null | string;
+            off: null | components["schemas"]["ModOff"];
+            /** Format: int32 */
+            kept: null | number | string;
+            keepRequest?: null | components["schemas"]["ModKeepRequestView"];
+            problem?: null | components["schemas"]["ModDraftProblemView"];
         };
         ModelAnalytics: {
             modelId: string;
@@ -4073,23 +6517,151 @@ export interface components {
             avgCostPerMessage: number | string;
         };
         ModelRef: unknown;
+        ModFile: {
+            path: string;
+            content: string;
+        };
+        ModFilesView: {
+            files: components["schemas"]["ModFile"][];
+        };
+        ModKeepRequestView: {
+            note: null | string;
+            /** Format: date-time */
+            at: string;
+        };
+        ModOff: {
+            by: string;
+            /** Format: date-time */
+            at: string;
+            error?: null | string;
+        };
+        ModRenderedBy: {
+            name: string;
+            draft: boolean;
+        };
+        ModRenderRequest: {
+            site: null | string;
+            requestId: null | string;
+            props: null | components["schemas"]["JsonElement"];
+            mod?: null | string;
+        };
+        ModRenderView: {
+            tree: null | components["schemas"]["JsonElement"];
+            mods: components["schemas"]["ModRenderedBy"][];
+        };
+        ModSiteHooks: {
+            site: string;
+            tools: null | string[];
+        };
+        ModSitesView: {
+            sites: components["schemas"]["ModSiteHooks"][];
+            panes: components["schemas"]["ModDeclaredPane"][];
+        };
+        ModsRuntimeBun: {
+            path: string;
+            displayPath: string;
+            source: string;
+            version: string;
+            safe: boolean;
+            message: null | string;
+        };
+        ModsRuntimeFound: {
+            path: string;
+            displayPath: string;
+            version: string;
+        };
+        ModsRuntimeJob: {
+            phase: string;
+            version: string;
+            message?: null | string;
+            reason?: null | string;
+            /** Format: int64 */
+            bytesReceived?: number | string;
+            /** Format: int64 */
+            bytesTotal?: null | number | string;
+            /** Format: date-time */
+            startedAt: string;
+        };
+        ModsRuntimeRelease: {
+            version: string;
+            /** Format: int64 */
+            size: null | number | string;
+            hasBuild: boolean;
+            installFolder: string;
+            source: string;
+        };
+        ModsRuntimeView: {
+            bun: null | components["schemas"]["ModsRuntimeBun"];
+            configuredPath: null | string;
+            release: components["schemas"]["ModsRuntimeRelease"];
+            job: null | components["schemas"]["ModsRuntimeJob"];
+            found: components["schemas"]["ModsRuntimeFound"][];
+        };
+        ModsSwitchView: {
+            on: boolean;
+            safeMode: boolean;
+        };
+        ModsView: {
+            safeMode: boolean;
+            mods: components["schemas"]["ModView"][];
+        };
+        ModVersion: {
+            /** Format: int32 */
+            number: number | string;
+            /** Format: date-time */
+            createdAt: string;
+            version: string;
+            sha256: string;
+            sessionId: null | string;
+            sessionTitle: null | string;
+            note: null | string;
+            check: null | components["schemas"]["JsonElement"];
+        };
+        ModView: {
+            name: string;
+            description: null | string;
+            /** Format: int32 */
+            active: null | number | string;
+            activeVersion: null | string;
+            off: null | components["schemas"]["ModOff"];
+            versions: components["schemas"]["ModVersion"][];
+        };
         MoveBoardCardRequest: {
             laneId: string;
             /** Format: int32 */
             position: number | string;
         };
+        MoveMemoryNoteRequest: {
+            group: null | string;
+        };
+        MoveOnWorkflowRunRequest: {
+            outcome?: null | string;
+            note?: null | string;
+        };
         MoveSessionRequest: {
             projectId: null | string;
         };
-        UpdateSessionLineageRequest: {
-            detached: boolean;
+        NightlyDreamingRequest: {
+            enabled: null | boolean;
+            time: null | string;
+            timeZone: null | string;
+            harnessType: null | string;
+            model: null | string;
+            /** Format: int32 */
+            budgetTokens: null | number | string;
         };
-        PinSessionRequest: {
-            beforeSessionId: null | string;
-        };
-        PinSessionResponse: {
-            /** Format: double */
-            pinOrder: number;
+        NightlyDreamingView: {
+            enabled: boolean;
+            automationId: null | string;
+            paused: boolean;
+            time: string;
+            timeZone: null | string;
+            harnessType: null | string;
+            model: null | string;
+            /** Format: int32 */
+            budgetTokens: number | string;
+            nextRunAt: null | string;
+            recent: components["schemas"]["DreamView"][];
         };
         OnCompleteInfo: {
             notifySessionId: string;
@@ -4127,6 +6699,110 @@ export interface components {
             filePath: string;
             tool: string;
         };
+        OpenWorkflowFileRequest: {
+            directory: string;
+            workflowId: string;
+        };
+        PageChoiceSendRequest: {
+            value: null | string;
+            summary: null | string;
+        };
+        PairingPayload: {
+            /** Format: int32 */
+            v: number | string;
+            machineId: string;
+            machineName: string;
+            url: string;
+            secret: string;
+        };
+        PairingPreviewRequest: {
+            secret: null | string;
+            manualCode: null | string;
+        };
+        PairingPreviewResponse: {
+            machineId: string;
+            machineName: string;
+            os: string;
+            /** Format: date-time */
+            expiresAt: string;
+            version?: null | string;
+        };
+        PairingRedeemRequest: {
+            secret: null | string;
+            manualCode: null | string;
+            deviceName: null | string;
+            platform: null | string;
+            kind?: null | string;
+        };
+        PairingRedeemResponse: {
+            deviceId: string;
+            token: string;
+            machine: components["schemas"]["MachineResponse"];
+        };
+        PairMachinePreviewResponse: {
+            machineId: string;
+            name: string;
+            os: null | string;
+            version: null | string;
+            baseUrl: string;
+        };
+        PairMachineRequest: {
+            baseUrl: null | string;
+            code: null | string;
+        };
+        PeerSessionMessageRequest: {
+            fromMachineId: null | string;
+            fromMachineName: null | string;
+            fromSessionId: null | string;
+            fromTitle: null | string;
+            text: null | string;
+        };
+        PeerSessionMessageResponse: {
+            sessionId: string;
+            title: string;
+            messageId: null | string;
+        };
+        PeerSessionPageResponse: {
+            title: string;
+            text: string;
+        };
+        PermissionReplyApiRequest: {
+            reply: string;
+            message?: null | string;
+        };
+        PinSessionRequest: {
+            beforeSessionId: null | string;
+        };
+        PinSessionResponse: {
+            /** Format: double */
+            pinOrder: number | string;
+        };
+        PostJobRequest: {
+            title: null | string;
+            ask: null | string;
+            repository: null | string;
+            labels: null | string[];
+            pinnedMachineId: null | string;
+        };
+        PreparedReport: {
+            title: string;
+            body: string;
+            log: null | string;
+            /** Format: int32 */
+            logEntries: number | string;
+            labels: string[];
+            replacements: components["schemas"]["ReportReplacementResponse"][];
+            problems: components["schemas"]["ReportItemProblem"][];
+            canSend: boolean;
+        };
+        PrepareReportRequest: {
+            kind: string;
+            description: string;
+            expected: null | string;
+            sessionId: null | string;
+            include: null | components["schemas"]["ReportIncludes"];
+            client: null | components["schemas"]["ReportClientContext"];
+        };
         PreviewSessionSourceApiRequest: {
             source: components["schemas"]["SessionSourceSelection"];
         };
@@ -4150,25 +6826,53 @@ export interface components {
             createdAt: string;
             updatedAt: string;
         };
+        ProviderUsage: {
+            provider: string;
+            name: string;
+            state: string;
+            harnesses: string[];
+            windows: components["schemas"]["UsageLimitWindow"][];
+            account: null | string;
+            source: null | string;
+            /** Format: date-time */
+            readAt: null | string;
+            credits: null | components["schemas"]["UsageCredits"];
+            accountKey?: null | string;
+        };
+        PushEndpointRequest: {
+            endpoint: null | string;
+        };
+        PushKeys: {
+            p256dh: null | string;
+            auth: null | string;
+        };
+        PushSubscriptionResponse: {
+            channel: string;
+            kinds: string[];
+            quietWhenDesk: boolean;
+            /** Format: date-time */
+            createdAt: string;
+            /** Format: date-time */
+            lastSuccessAt: null | string;
+        };
+        PushTestResponse: {
+            outcome: string;
+            /** Format: int32 */
+            statusCode: null | number | string;
+        };
         QuestionAnswerApiRequest: {
             answers: string[][];
         };
-        PermissionAsk: {
-            id: string;
-            sessionId: string;
-            kind: string;
-            tool: string;
-            title?: null | string;
-            detail?: null | string;
-            directory?: null | string;
-            always: string[];
-            callId?: null | string;
-            subagent?: null | string;
-            askedAt: string;
-        };
-        PermissionReplyApiRequest: {
-            reply: string;
-            message?: null | string;
+        QueuePromptApiRequest: {
+            text: string;
+            kind?: null | string;
+            command?: null | string;
+            arguments?: null | string;
+            agent?: null | string;
+            model?: unknown;
+            effort?: null | string;
+            sessionReferences?: null | components["schemas"]["SessionReferenceDto"][];
+            skills?: null | string[];
         };
         ReadSessionFileResponse: {
             path: string;
@@ -4176,16 +6880,6 @@ export interface components {
             isBinary: boolean;
             isTruncated: boolean;
             hash: null | string;
-        };
-        ResolveSessionFilesRequest: {
-            paths: null | string[];
-        };
-        ResolveSessionFilesResponse: {
-            files: components["schemas"]["ResolvedSessionFileDto"][];
-        };
-        ResolvedSessionFileDto: {
-            path: string;
-            relativePath: string;
         };
         RenameWorkspaceRequest: {
             displayName: string;
@@ -4197,38 +6891,53 @@ export interface components {
             /** Format: int32 */
             position: number | string;
         };
-        QueuePromptApiRequest: {
-            text: string;
-            kind?: null | string;
-            command?: null | string;
-            arguments?: null | string;
-            agent?: null | string;
-            model?: null | components["schemas"]["ModelRef"];
-            effort?: null | string;
-            sessionReferences?: null | components["schemas"]["SessionReferenceDto"][];
-            skills?: null | string[];
+        ReportClientContext: {
+            app: null | string;
+            screen: null | string;
+            shownStatus: null | string;
+            where: null | components["schemas"]["ReportFact"][];
+            connection: null | components["schemas"]["ReportFact"][];
+            privateValues: null | components["schemas"]["ReportPrivateValue"][];
         };
-        QueuedPromptView: {
-            id: string;
-            kind: string;
-            text: string;
-            createdAt: string;
+        ReportFact: {
+            name: string;
+            value: string;
         };
-        SessionInterruptionView: {
-            at: string;
-            waiting: boolean;
-            lastCall?: null | string;
-            /** Format: int32 */
-            changedFiles?: null | number;
-            auto?: boolean;
+        ReportIncludes: {
+            /** @default true */
+            environment: boolean;
+            /** @default true */
+            where: boolean;
+            /** @default true */
+            connection: boolean;
+            /** @default true */
+            log: boolean;
         };
-        ScheduledRetryView: {
-            dueAt: string;
-            /** Format: int32 */
-            attempt: number;
-            kind: string;
+        ReportItemProblem: {
+            item: string;
             reason: string;
-            providerSaid: boolean;
+        };
+        ReportPrivateValue: {
+            kind: string;
+            value: string;
+        };
+        ReportReplacementResponse: {
+            label: string;
+            kind: string;
+            shown: string;
+        };
+        ResolvedSessionFileDto: {
+            path: string;
+            relativePath: string;
+        };
+        ResolveSessionFilesRequest: {
+            paths: null | string[];
+        };
+        ResolveSessionFilesResponse: {
+            files: components["schemas"]["ResolvedSessionFileDto"][];
+        };
+        RolloutRequest: {
+            machineIds: null | string[];
         };
         RunningWorkItem: {
             id: string;
@@ -4251,47 +6960,50 @@ export interface components {
         RunShellCommandApiRequest: {
             command: null | string;
         };
-        SideConversationResponse: {
-            sessionId: string;
-            instanceId: string;
-            title: string;
-            boundaryMessageId: null | string;
-            createdAt: string;
-            minimized: boolean;
-            seenAnswerId: null | string;
-        };
-        SideMinimizedApiRequest: {
-            minimized: boolean;
-        };
-        SideSeenApiRequest: {
-            answerId: null | string;
-        };
-        UndoableSideConversationResponse: {
-            sideConversation: components["schemas"]["SideConversationResponse"];
-            /** Format: int64 */
-            undoRemainingMs: number;
-        };
-        SideQuestionApiRequest: {
-            text: null | string;
-            agent: null | string;
-            model: null | components["schemas"]["ModelRef"];
-            effort: null | string;
-            correlationId: null | string;
-        };
-        SideQuestionApiResponse: {
-            sideConversation: components["schemas"]["SideConversationResponse"];
-            correlationId: string;
-            messageId: null | string;
-        };
         SaveHarnessProfileRequest: {
             name: null | string;
             content: null | string;
+        };
+        SaveJobMachineRequest: {
+            /** Format: int32 */
+            seats: null | number | string;
+            labels: null | string[];
+        };
+        SavePushSubscriptionRequest: {
+            endpoint: null | string;
+            keys: null | components["schemas"]["PushKeys"];
+            kinds?: null | string[];
+            quietWhenDesk?: null | boolean;
+            channel?: null | string;
+            previousEndpoint?: null | string;
+        };
+        SaveSkillVersionRequest: {
+            content: string;
+            note?: null | string;
+            sessionId?: null | string;
         };
         SaveWeaveConfigRequest: {
             source: null | string;
             files: null | {
                 [key: string]: string;
             };
+        };
+        SaveWorkflowFileRequest: {
+            directory: string;
+            workflowId: string;
+            hash: null | string;
+            text?: null | string;
+            draft?: null | components["schemas"]["WorkflowDraftDto"];
+            /** @default false */
+            force: boolean;
+        };
+        ScheduledRetryView: {
+            dueAt: string;
+            /** Format: int32 */
+            attempt: number | string;
+            kind: string;
+            reason: string;
+            providerSaid: boolean;
         };
         SendCommandApiRequest: {
             command: string;
@@ -4311,55 +7023,17 @@ export interface components {
             sessionReferences?: null | components["schemas"]["SessionReferenceDto"][];
             skills?: null | string[];
         };
-        SessionReferenceDto: {
-            token: string;
-            sessionId: string;
+        SendReportRequest: {
+            kind: string;
+            title: string;
+            body: string;
+            log: null | string;
+            screenshot: null | string;
+            contact: null | string;
+            labels: null | string[];
         };
-        HarnessUsage: {
-            harnessType: string;
-            windows: components["schemas"]["UsageLimitWindow"][];
-            /** Format: date-time */
-            updatedAt: string;
-        };
-        UsageLimitWindow: {
-            window: string;
-            /** Format: double */
-            utilization?: number | null;
-            /** Format: date-time */
-            resetsAt?: string | null;
-            status?: string;
-        };
-        SessionContextUsage: {
-            sessionId: string;
-            used?: null | number | string;
-            limit?: null | number | string;
-            compactsAt?: null | number | string;
-            modelId?: null | string;
-            providerId?: null | string;
-            lastCall?: null | components["schemas"]["ContextCall"];
-            lastCallAt?: null | string;
-            compacting: boolean;
-            compactedAt?: null | string;
-            compactionError?: null | string;
-            turns: components["schemas"]["SessionContextTurn"][];
-            /** Format: date-time */
-            updatedAt: string;
-        };
-        ContextCall: {
-            input: number | string;
-            cacheRead: number | string;
-            cacheWrite: number | string;
-            output: number | string;
-            reasoning: number | string;
-            totalOnly: boolean;
-            used: number | string;
-        };
-        SessionContextTurn: {
-            used: number | string;
-            limit: null | number | string;
-            /** Format: date-time */
-            at: string;
-            afterCompaction: boolean;
+        SendReportResponse: {
+            id: string;
         };
         SessionActionCapabilities: {
             canPrompt: boolean;
@@ -4399,11 +7073,63 @@ export interface components {
             apps: components["schemas"]["AppRunResponse"][];
             previewCommand: null | string;
         };
+        SessionAttachmentDto: {
+            path: string;
+            name: string;
+            /** Format: int64 */
+            size: number | string;
+            /** Format: int32 */
+            lines: null | number | string;
+            mime: string;
+        };
+        SessionContextTurn: {
+            /** Format: int32 */
+            used: number | string;
+            /** Format: int32 */
+            limit: null | number | string;
+            /** Format: date-time */
+            at: string;
+            afterCompaction: boolean;
+        };
+        SessionContextUsage: {
+            sessionId: string;
+            /** Format: int32 */
+            used?: null | number | string;
+            /** Format: int32 */
+            limit?: null | number | string;
+            /** Format: int32 */
+            compactsAt?: null | number | string;
+            modelId?: null | string;
+            providerId?: null | string;
+            lastCall?: null | components["schemas"]["ContextCall"];
+            /** Format: date-time */
+            lastCallAt?: null | string;
+            compacting?: boolean;
+            /** Format: date-time */
+            compactedAt?: null | string;
+            compactionError?: null | string;
+            turns?: components["schemas"]["SessionContextTurn"][];
+            /** Format: date-time */
+            updatedAt?: string;
+        };
+        SessionFailureView: {
+            at: string;
+            message: string;
+        };
         SessionFleetInfo: {
             id: string;
             title: string;
             time: components["schemas"]["SessionTime"];
             tags: string[];
+        };
+        SessionInterruptionView: {
+            at: string;
+            waiting: boolean;
+            lastCall: null | string;
+            /** Format: int32 */
+            changedFiles: null | number | string;
+            /** @default false */
+            auto: boolean;
         };
         SessionListResponse: {
             instanceId: string;
@@ -4421,7 +7147,6 @@ export interface components {
             lifecycleStatus: string;
             retentionStatus: string;
             archivedAt: null | string;
-            checkoutRemovedAt?: null | string;
             typedInstanceStatus: string;
             isHidden: boolean;
             /** Format: int32 */
@@ -4430,7 +7155,7 @@ export interface components {
             totalCost: null | number | string;
             projectId: null | string;
             projectName: null | string;
-            harnessType: null | string;
+            harnessType: string;
             capabilities: components["schemas"]["SessionActionCapabilities"];
             tags: string[];
             origin?: null | components["schemas"]["SessionOriginDto"];
@@ -4439,16 +7164,26 @@ export interface components {
             selectedModel?: null | components["schemas"]["SessionModelChoiceDto"];
             workflowRunId?: null | string;
             /** Format: int32 */
+            retryAttempt?: null | number | string;
+            /** Format: int32 */
+            retryMaxAttempts?: null | number | string;
+            retryMessage?: null | string;
+            retryNext?: null | string;
+            /** Format: int32 */
             runningWorkCount?: number | string;
             /** Format: int32 */
             pageCount?: number | string;
             lastPageShownAt?: null | string;
+            checkoutRemovedAt?: null | string;
             forkedFromSessionId?: null | string;
             spawnedBySessionId?: null | string;
             spawnKind?: null | string;
             lineageDetachedAt?: null | string;
             /** Format: double */
-            pinOrder?: null | number;
+            pinOrder?: null | number | string;
+            scheduledRetry?: null | components["schemas"]["ScheduledRetryView"];
+            interrupted?: null | components["schemas"]["SessionInterruptionView"];
+            failed?: null | components["schemas"]["SessionFailureView"];
         };
         SessionMessageBridgeRequest: {
             harnessSessionId: null | string;
@@ -4456,10 +7191,17 @@ export interface components {
             text?: null | string;
             /** @default false */
             notifyWhenDone: boolean;
+            machine?: null | string;
         };
         SessionModelChoiceDto: {
             providerID: string;
             modelID: string;
+        };
+        SessionNow: {
+            text: string;
+            kind: string;
+            /** Format: date-time */
+            at: string;
         };
         SessionOriginDto: {
             sourceType: string;
@@ -4487,6 +7229,18 @@ export interface components {
             total: number | string;
             current: null | string;
         };
+        SessionReadBridgeRequest: {
+            harnessSessionId: null | string;
+            sessionId?: null | string;
+            before?: null | string;
+            /** Format: int32 */
+            limit?: null | number | string;
+            machine?: null | string;
+        };
+        SessionReferenceDto: {
+            token: string;
+            sessionId: string;
+        };
         SessionSourceKey: {
             providerId: string;
             sourceType: string;
@@ -4497,6 +7251,17 @@ export interface components {
         SessionSourceSelection: {
             key: components["schemas"]["SessionSourceKey"];
             input: components["schemas"]["JsonElement"];
+        };
+        SessionStartBridgeRequest: {
+            harnessSessionId: null | string;
+            machine?: null | string;
+            folder?: null | string;
+            title?: null | string;
+            task?: null | string;
+            branch?: null | string;
+            harness?: null | string;
+            /** @default false */
+            notifyWhenDone: boolean;
         };
         SessionTime: {
             /** Format: int64 */
@@ -4510,8 +7275,59 @@ export interface components {
         SetDefaultHarnessProfileRequest: {
             profileId: null | string;
         };
+        SetMemoryEnabledRequest: {
+            enabled: boolean;
+        };
+        SetModsSafeModeRequest: {
+            on: null | boolean;
+        };
         SetPreferenceRequest: {
             value: string;
+        };
+        SetUpdateRuleRequest: {
+            rule: null | string;
+        };
+        SetupJobResponse: {
+            id: string;
+            destination: string;
+            status: string;
+            steps: components["schemas"]["SetupStep"][];
+            machine: null | components["schemas"]["MachineEntryResponse"];
+            error: null | string;
+            diagnosis: null | components["schemas"]["MachineDiagnosis"];
+        };
+        SetupStep: {
+            key: string;
+            label: string;
+            state: string;
+            detail?: null | string;
+        };
+        SideConversationResponse: {
+            sessionId: string;
+            instanceId: string;
+            title: string;
+            boundaryMessageId: null | string;
+            createdAt: string;
+            minimized: boolean;
+            seenAnswerId: null | string;
+        };
+        SideMinimizedApiRequest: {
+            minimized: boolean;
+        };
+        SideQuestionApiRequest: {
+            text: null | string;
+            agent: null | string;
+            model: null | components["schemas"]["ModelRef"];
+            effort: null | string;
+            correlationId: null | string;
+        };
+        SideQuestionApiResponse: {
+            sideConversation: components["schemas"]["SideConversationResponse"];
+            correlationId: string;
+            messageId: null | string;
+        };
+        SideSeenApiRequest: {
+            answerId: null | string;
         };
         SignInCallbackRequest: {
             address: null | string;
@@ -4574,6 +7390,16 @@ export interface components {
             /** Format: date-time */
             updatedAt: string;
         };
+        SkillProposal: {
+            name: string;
+            base: string;
+            /** Format: int32 */
+            baseVersion: null | number | string;
+            content: string;
+            /** Format: int32 */
+            asks: number | string;
+            tokens: null | components["schemas"]["DraftTokensDto"];
+        };
         SkillSource: number;
         SkillSyncResultDto: {
             skillName: string;
@@ -4582,6 +7408,22 @@ export interface components {
             skipped: boolean;
             errorMessage: null | string;
             targetPath: null | string;
+        };
+        SkillVersionContent: {
+            name: string;
+            /** Format: int32 */
+            version: number | string;
+            content: string;
+        };
+        SkillVersionView: {
+            /** Format: int32 */
+            number: number | string;
+            /** Format: date-time */
+            createdAt: string;
+            note: null | string;
+            sessionId: null | string;
+            sessionTitle: null | string;
+            active: boolean;
         };
         SmartLinkDto: {
             id: string;
@@ -4602,9 +7444,40 @@ export interface components {
             enrichmentStatus: string;
             lastCheckedAt: null | string;
         };
+        SshProbeResponse: {
+            state: string;
+            os: null | string;
+            version: null | string;
+            error: null | string;
+            diagnosis: null | components["schemas"]["MachineDiagnosis"];
+        };
+        StartDreamRequest: {
+            repository: null | string;
+            harnessType: null | string;
+            providerId: null | string;
+            modelId: null | string;
+            /** Format: date-time */
+            since?: null | string;
+            runId?: null | string;
+        };
         StartSignInRequest: {
             methodId: null | string;
             answers: null | Record<string, never>;
+        };
+        StartWorkflowRunRequest: {
+            workflowId: string;
+            directory: string;
+            request: string;
+            baseBranch?: null | string;
+            harnessType?: null | string;
+            harnessProfileId?: null | string;
+            optionalSteps?: null | string[];
+            roleOverrides?: null | {
+                [key: string]: components["schemas"]["WorkflowModelChoice"];
+            };
+            /** @default false */
+            checkWithMe: boolean;
+            projectId?: null | string;
         };
         StoreCredentialRequest: {
             label: string;
@@ -4709,6 +7582,11 @@ export interface components {
             sessionId: null | string;
             metadata: null | components["schemas"]["JsonElement"];
         };
+        UndoableSideConversationResponse: {
+            sideConversation: components["schemas"]["SideConversationResponse"];
+            /** Format: int64 */
+            undoRemainingMs: number | string;
+        };
         UpdateAutomationRequest: {
             name: string;
             prompt: string;
@@ -4772,9 +7650,32 @@ export interface components {
             value: string;
             metadata: null | string;
         };
+        UpdateFailure: {
+            from: string;
+            to: string;
+            reason: string;
+            at: string;
+        };
+        UpdateMachineRequest: {
+            name: null | string;
+            publicUrl?: null | string;
+        };
+        UpdateMemoryNoteRequest: {
+            text: null | string;
+        };
         UpdateProjectRequest: {
             name: null | string;
             description: null | string;
+        };
+        UpdateRemoteMachineRequest: {
+            baseUrl: null | string;
+            token: null | string;
+            name: null | string;
+            agentWork?: null | string;
+            addresses?: null | string[];
+        };
+        UpdateSessionLineageRequest: {
+            detached: boolean;
         };
         UpdateSessionRetentionRequest: {
             retentionStatus: string;
@@ -4791,6 +7692,36 @@ export interface components {
             updatedAt: string;
             syncResults: components["schemas"]["SkillSyncResultDto"][];
         };
+        UsageCredits: {
+            /** Format: double */
+            remaining: null | number | string;
+            /** Format: double */
+            limit: null | number | string;
+            /** Format: double */
+            used: null | number | string;
+            unit?: null | string;
+        };
+        UsageLimitsSnapshot: {
+            enabled: boolean;
+            providers: components["schemas"]["ProviderUsage"][];
+        };
+        UsageLimitWindow: {
+            window: string;
+            /** Format: double */
+            utilization?: null | number | string;
+            /** Format: date-time */
+            resetsAt?: null | string;
+            /** Format: int32 */
+            windowSeconds?: null | number | string;
+            status?: string;
+        };
+        UseModsRuntimeRequest: {
+            path: null | string;
+        };
+        UseModVersionRequest: {
+            /** Format: int32 */
+            version: number | string;
+        };
         UserMeResponse: {
             userId: string;
             email: null | string;
@@ -4804,8 +7735,210 @@ export interface components {
             hasStoredCredentials: boolean;
             hasCreatedSession: boolean;
         };
+        UseSkillVersionRequest: {
+            /** Format: int32 */
+            version: null | number | string;
+        };
+        VapidKeyResponse: {
+            publicKey: string;
+        };
+        WalkthroughBridgeRequest: {
+            harnessSessionId: null | string;
+            title?: null | string;
+            guide?: unknown;
+        };
         /** @enum {unknown} */
         WeaveFlavor: "weave" | "legacy";
+        WorkflowCheckDto: {
+            text: string;
+            errors: components["schemas"]["WorkflowProblem"][];
+            draft: null | components["schemas"]["WorkflowDraftDto"];
+            comments: components["schemas"]["WorkflowComment"][];
+        };
+        WorkflowChoice: {
+            label: string;
+            to: string;
+            note: boolean;
+        };
+        WorkflowComment: {
+            /** Format: int32 */
+            line: number | string;
+            text: string;
+        };
+        WorkflowDraftDto: {
+            name: string;
+            description: null | string;
+            placeholder: null | string;
+            steps: components["schemas"]["WorkflowStepDto"][];
+        };
+        WorkflowDto: {
+            id: string;
+            builtIn: boolean;
+            file: null | string;
+            name: string;
+            description: null | string;
+            placeholder: null | string;
+            startsFrom: null | string;
+            runsIn: null | string;
+            steps: components["schemas"]["WorkflowStepDto"][];
+            errors: string[];
+        };
+        WorkflowFileDto: {
+            workflowId: string;
+            file: string;
+            hash: string;
+            check: components["schemas"]["WorkflowCheckDto"];
+        };
+        WorkflowLibraryDto: {
+            repository: null | string;
+            repositoryName: null | string;
+            workflows: components["schemas"]["WorkflowDto"][];
+        };
+        WorkflowModelChoice: {
+            model: null | string;
+            effort: null | string;
+        };
+        WorkflowProblem: {
+            /** Format: int32 */
+            line: number | string;
+            message: string;
+            /** Format: int32 */
+            step: null | number | string;
+        };
+        WorkflowRunChoiceDto: {
+            id: string;
+            label: string;
+            note: boolean;
+            to: null | string;
+            /** @default false */
+            involvement: boolean;
+        };
+        WorkflowRunDto: {
+            id: string;
+            workflowId: string;
+            workflowName: string;
+            title: string;
+            request: string;
+            status: string;
+            currentStepId?: null | string;
+            result?: null | string;
+            repositoryPath: string;
+            branch?: null | string;
+            baseBranch?: null | string;
+            worktreePath?: null | string;
+            harnessType: string;
+            createdAt: string;
+            updatedAt: string;
+            endedAt?: null | string;
+            steps: components["schemas"]["WorkflowRunStepDto"][];
+            sessions: components["schemas"]["WorkflowRunSessionDto"][];
+            waiting?: null | components["schemas"]["WorkflowRunWaitingDto"];
+            checkWithMe?: boolean;
+            withYou?: null | components["schemas"]["WorkflowRunWithYouDto"];
+            startedBy?: null | components["schemas"]["WorkflowRunStartedByDto"];
+        };
+        WorkflowRunMoveDto: {
+            outcome: string;
+            to: null | string;
+            toTitle: null | string;
+            back: boolean;
+            /** Format: int32 */
+            loopsUsed: null | number | string;
+            /** Format: int32 */
+            maxLoops: null | number | string;
+            allowed: boolean;
+        };
+        WorkflowRunSessionDto: {
+            sessionId: string;
+            stepId: string;
+            /** Format: int32 */
+            visit: number | string;
+            outcome: null | string;
+            summary: null | string;
+            note: null | string;
+            withYou: boolean;
+            files: string[];
+            filesChecked: boolean;
+            filesCommit: null | string;
+            filesCommitError: null | string;
+            promptMessageId: null | string;
+            wrapUpMessageId: null | string;
+            handOffNote: null | string;
+        };
+        WorkflowRunStartedByDto: {
+            automationId: string;
+            automationName: string;
+        };
+        WorkflowRunStepDto: {
+            id: string;
+            title: string;
+            kind: string;
+            state: string;
+            /** Format: int32 */
+            visits: number | string;
+            optional: boolean;
+            enabled: boolean;
+            outcome: null | string;
+            sessionId: null | string;
+            model: null | string;
+            role: null | string;
+            skill: null | string;
+            /** Format: int32 */
+            maxLoops: null | number | string;
+            finishYou: boolean;
+            finishAgent: boolean;
+            withYou: boolean;
+            outcomes: string[];
+        };
+        WorkflowRunWaitingDto: {
+            kind: string;
+            stepId: string;
+            stepTitle: string;
+            message: string;
+            question: null | string;
+            sessionId: null | string;
+            choices: components["schemas"]["WorkflowRunChoiceDto"][];
+            files: string[];
+            thenAlone: string[];
+            nextYouTitle: null | string;
+        };
+        WorkflowRunWithYouDto: {
+            stepId: string;
+            stepTitle: string;
+            sessionId: string;
+            files: string[];
+            wrappingUp: boolean;
+            outcome: null | string;
+            moves: components["schemas"]["WorkflowRunMoveDto"][];
+        };
+        WorkflowStepBridgeRequest: {
+            harnessSessionId: null | string;
+            outcome?: null | string;
+            summary?: null | string;
+        };
+        WorkflowStepDto: {
+            id: string;
+            title: string;
+            kind: string;
+            agent: null | string;
+            model: null | string;
+            effort: null | string;
+            skill: null | string;
+            optional: boolean;
+            optionalHint: null | string;
+            outcomes: string[];
+            routes: {
+                [key: string]: string;
+            };
+            /** Format: int32 */
+            maxLoops: null | number | string;
+            ask: null | string;
+            choices: components["schemas"]["WorkflowChoice"][];
+            finishYou: boolean;
+            finishAgent: boolean;
+            writes: string[];
+            prompt?: null | string;
+        };
         WorkOutputResponse: {
             output: string;
             /** Format: int64 */
@@ -4824,25 +7957,17 @@ export interface components {
             verdict: string;
             reason: string;
             /** Format: int32 */
-            unpushedCommits: null | number;
+            unpushedCommits: null | number | string;
             archivedAt: null | string;
         };
         WorktreeCheckoutsResponse: {
             checkouts: components["schemas"]["WorktreeCheckout"][];
             /** Format: int32 */
-            archivedDays: number;
+            archivedDays: number | string;
         };
         WorktreeCleanupReport: {
             removed: components["schemas"]["WorktreeCheckout"][];
             kept: components["schemas"]["WorktreeCheckout"][];
-        };
-        FolderSize: {
-            /** Format: int64 */
-            bytes: number;
-            complete: boolean;
-        };
-        CleanWorktreesRequest: {
-            workspaceIds: string[];
         };
         WorktreeNamingPreviewRequest: {
             directory: string;
@@ -5747,6 +8872,28 @@ export interface operations {
             };
         };
     };
+    GetSessionsNow: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        [key: string]: components["schemas"]["SessionNow"];
+                    };
+                };
+            };
+        };
+    };
     GetSession: {
         parameters: {
             query?: never;
@@ -5990,26 +9137,6 @@ export interface operations {
             };
         };
     };
-    GetRunningWork: {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        requestBody?: never;
-        responses: {
-            /** @description OK */
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["RunningWorkItem"][];
-                };
-            };
-        };
-    };
     PreviewSessionSource: {
         parameters: {
             query?: never;
@@ -6082,6 +9209,230 @@ export interface operations {
             };
         };
     };
+    ListSessionQueue: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+        };
+    };
+    QueueSessionPrompt: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["QueuePromptApiRequest"];
+            };
+        };
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+        };
+    };
+    RemoveQueuedPrompt: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: string;
+                itemId: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+        };
+    };
+    SendQueuedPromptNow: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: string;
+                itemId: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+        };
+    };
+    GetSessionRetry: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+        };
+    };
+    CancelSessionRetry: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+        };
+    };
+    SendSessionRetryNow: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+        };
+    };
+    GetSessionInterruption: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+        };
+    };
+    DismissSessionInterruption: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+        };
+    };
+    ContinueInterruptedSession: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+        };
+    };
+    StopAutomaticInterruptionContinue: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+        };
+    };
     AbortSession: {
         parameters: {
             query?: never;
@@ -6134,6 +9485,112 @@ export interface operations {
             path: {
                 id: string;
                 requestId: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+        };
+    };
+    ListSessionPermissions: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+        };
+    };
+    ReplyToPermission: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: string;
+                requestId: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["PermissionReplyApiRequest"];
+            };
+        };
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+        };
+    };
+    ListSessionPermissionRules: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+        };
+    };
+    ClearSessionPermissionRules: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+        };
+    };
+    DeleteSessionPermissionRule: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: string;
+                ruleId: string;
             };
             cookie?: never;
         };
@@ -6277,6 +9734,27 @@ export interface operations {
             };
         };
     };
+    GetSessionScreenshot: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: string;
+                screenshotId: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+        };
+    };
     GetSessionProgress: {
         parameters: {
             query?: never;
@@ -6341,6 +9819,72 @@ export interface operations {
             };
         };
     };
+    RunSessionShellCommand: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["RunShellCommandApiRequest"];
+            };
+        };
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+        };
+    };
+    GetSessionContext: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["SessionContextUsage"];
+                };
+            };
+        };
+    };
+    CompactSession: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+        };
+    };
     GetSideConversation: {
         parameters: {
             query?: never;
@@ -6360,13 +9904,6 @@ export interface operations {
                 content: {
                     "application/json": components["schemas"]["SideConversationResponse"];
                 };
-            };
-            /** @description No Content */
-            204: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content?: never;
             };
         };
     };
@@ -6407,8 +9944,8 @@ export interface operations {
         };
         requestBody?: never;
         responses: {
-            /** @description No Content */
-            204: {
+            /** @description OK */
+            200: {
                 headers: {
                     [name: string]: unknown;
                 };
@@ -6457,13 +9994,6 @@ export interface operations {
                 content: {
                     "application/json": components["schemas"]["UndoableSideConversationResponse"];
                 };
-            };
-            /** @description No Content */
-            204: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content?: never;
             };
         };
     };
@@ -6541,453 +10071,6 @@ export interface operations {
             };
         };
     };
-    GetHarnessUsage: {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        requestBody?: never;
-        responses: {
-            /** @description OK */
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["HarnessUsage"][];
-                };
-            };
-        };
-    };
-    GetSessionContext: {
-        parameters: {
-            query?: never;
-            header?: never;
-            path: {
-                id: string;
-            };
-            cookie?: never;
-        };
-        requestBody?: never;
-        responses: {
-            /** @description OK */
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["SessionContextUsage"];
-                };
-            };
-        };
-    };
-    CompactSession: {
-        parameters: {
-            query?: never;
-            header?: never;
-            path: {
-                id: string;
-            };
-            cookie?: never;
-        };
-        requestBody?: never;
-        responses: {
-            /** @description OK */
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content?: never;
-            };
-        };
-    };
-    RunSessionShellCommand: {
-        parameters: {
-            query?: never;
-            header?: never;
-            path: {
-                id: string;
-            };
-            cookie?: never;
-        };
-        requestBody: {
-            content: {
-                "application/json": components["schemas"]["RunShellCommandApiRequest"];
-            };
-        };
-        responses: {
-            /** @description OK */
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content?: never;
-            };
-        };
-    };
-    ListSessionPermissions: {
-        parameters: {
-            query?: never;
-            header?: never;
-            path: {
-                id: string;
-            };
-            cookie?: never;
-        };
-        requestBody?: never;
-        responses: {
-            /** @description OK */
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["PermissionAsk"][];
-                };
-            };
-        };
-    };
-    ReplyToPermission: {
-        parameters: {
-            query?: never;
-            header?: never;
-            path: {
-                id: string;
-                requestId: string;
-            };
-            cookie?: never;
-        };
-        requestBody: {
-            content: {
-                "application/json": components["schemas"]["PermissionReplyApiRequest"];
-            };
-        };
-        responses: {
-            /** @description No Content */
-            204: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content?: never;
-            };
-        };
-    };
-    ListSessionPermissionRules: {
-        parameters: {
-            query?: never;
-            header?: never;
-            path: {
-                id: string;
-            };
-            cookie?: never;
-        };
-        requestBody?: never;
-        responses: {
-            /** @description OK */
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content?: never;
-            };
-        };
-    };
-    ClearSessionPermissionRules: {
-        parameters: {
-            query?: never;
-            header?: never;
-            path: {
-                id: string;
-            };
-            cookie?: never;
-        };
-        requestBody?: never;
-        responses: {
-            /** @description OK */
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content?: never;
-            };
-        };
-    };
-    DeleteSessionPermissionRule: {
-        parameters: {
-            query?: never;
-            header?: never;
-            path: {
-                id: string;
-                ruleId: string;
-            };
-            cookie?: never;
-        };
-        requestBody?: never;
-        responses: {
-            /** @description OK */
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content?: never;
-            };
-        };
-    };
-    ListSessionQueue: {
-        parameters: {
-            query?: never;
-            header?: never;
-            path: {
-                id: string;
-            };
-            cookie?: never;
-        };
-        requestBody?: never;
-        responses: {
-            /** @description OK */
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["QueuedPromptView"][];
-                };
-            };
-        };
-    };
-    QueueSessionPrompt: {
-        parameters: {
-            query?: never;
-            header?: never;
-            path: {
-                id: string;
-            };
-            cookie?: never;
-        };
-        requestBody: {
-            content: {
-                "application/json": components["schemas"]["QueuePromptApiRequest"];
-            };
-        };
-        responses: {
-            /** @description Created */
-            201: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["QueuedPromptView"];
-                };
-            };
-        };
-    };
-    RemoveQueuedPrompt: {
-        parameters: {
-            query?: never;
-            header?: never;
-            path: {
-                id: string;
-                itemId: string;
-            };
-            cookie?: never;
-        };
-        requestBody?: never;
-        responses: {
-            /** @description No Content */
-            204: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content?: never;
-            };
-        };
-    };
-    SendQueuedPromptNow: {
-        parameters: {
-            query?: never;
-            header?: never;
-            path: {
-                id: string;
-                itemId: string;
-            };
-            cookie?: never;
-        };
-        requestBody?: never;
-        responses: {
-            /** @description Accepted */
-            202: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content?: never;
-            };
-        };
-    };
-    GetSessionInterruption: {
-        parameters: {
-            query?: never;
-            header?: never;
-            path: {
-                id: string;
-            };
-            cookie?: never;
-        };
-        requestBody?: never;
-        responses: {
-            /** @description OK */
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["SessionInterruptionView"];
-                };
-            };
-            /** @description No Content */
-            204: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content?: never;
-            };
-        };
-    };
-    DismissSessionInterruption: {
-        parameters: {
-            query?: never;
-            header?: never;
-            path: {
-                id: string;
-            };
-            cookie?: never;
-        };
-        requestBody?: never;
-        responses: {
-            /** @description No Content */
-            204: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content?: never;
-            };
-        };
-    };
-    ContinueInterruptedSession: {
-        parameters: {
-            query?: never;
-            header?: never;
-            path: {
-                id: string;
-            };
-            cookie?: never;
-        };
-        requestBody?: never;
-        responses: {
-            /** @description Accepted */
-            202: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content?: never;
-            };
-            /** @description Not Found */
-            404: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content?: never;
-            };
-        };
-    };
-    StopAutomaticInterruptionContinue: {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        requestBody?: never;
-        responses: {
-            /** @description No Content */
-            204: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content?: never;
-            };
-        };
-    };
-    GetSessionRetry: {
-        parameters: {
-            query?: never;
-            header?: never;
-            path: {
-                id: string;
-            };
-            cookie?: never;
-        };
-        requestBody?: never;
-        responses: {
-            /** @description OK */
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["ScheduledRetryView"];
-                };
-            };
-            /** @description No Content */
-            204: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content?: never;
-            };
-        };
-    };
-    CancelSessionRetry: {
-        parameters: {
-            query?: never;
-            header?: never;
-            path: {
-                id: string;
-            };
-            cookie?: never;
-        };
-        requestBody?: never;
-        responses: {
-            /** @description No Content */
-            204: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content?: never;
-            };
-        };
-    };
-    SendSessionRetryNow: {
-        parameters: {
-            query?: never;
-            header?: never;
-            path: {
-                id: string;
-            };
-            cookie?: never;
-        };
-        requestBody?: never;
-        responses: {
-            /** @description Accepted */
-            202: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content?: never;
-            };
-        };
-    };
     UpdateSessionRetention: {
         parameters: {
             query?: never;
@@ -7033,6 +10116,48 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content?: never;
+            };
+        };
+    };
+    UpdateSessionLineage: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["UpdateSessionLineageRequest"];
+            };
+        };
+        responses: {
+            /** @description No Content */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Bad Request */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiErrorResponse"];
+                };
+            };
+            /** @description Not Found */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiErrorResponse"];
+                };
             };
         };
     };
@@ -7097,48 +10222,6 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content?: never;
-            };
-            /** @description Not Found */
-            404: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["ApiErrorResponse"];
-                };
-            };
-        };
-    };
-    UpdateSessionLineage: {
-        parameters: {
-            query?: never;
-            header?: never;
-            path: {
-                id: string;
-            };
-            cookie?: never;
-        };
-        requestBody: {
-            content: {
-                "application/json": components["schemas"]["UpdateSessionLineageRequest"];
-            };
-        };
-        responses: {
-            /** @description No Content */
-            204: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content?: never;
-            };
-            /** @description Bad Request */
-            400: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["ApiErrorResponse"];
-                };
             };
             /** @description Not Found */
             404: {
@@ -7263,7 +10346,7 @@ export interface operations {
                 q?: string;
                 regex?: boolean;
                 matchCase?: boolean;
-                limit?: number;
+                limit?: number | string;
             };
             header?: never;
             path: {
@@ -7407,6 +10490,140 @@ export interface operations {
             };
         };
     };
+    GetSessionImage: {
+        parameters: {
+            query?: {
+                path?: string;
+            };
+            header?: never;
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Bad Request */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Not Found */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+        };
+    };
+    ResolveSessionFiles: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["ResolveSessionFilesRequest"];
+            };
+        };
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ResolveSessionFilesResponse"];
+                };
+            };
+            /** @description Not Found */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+        };
+    };
+    UploadSessionAttachment: {
+        parameters: {
+            query?: {
+                name?: string;
+            };
+            header?: never;
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["SessionAttachmentDto"];
+                };
+            };
+            /** @description Bad Request */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Not Found */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+        };
+    };
+    ClearSessionAttachments: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description No Content */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Not Found */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+        };
+    };
     RestoreSessionFile: {
         parameters: {
             query?: never;
@@ -7456,20 +10673,14 @@ export interface operations {
             };
         };
     };
-    ResolveSessionFiles: {
+    GetRunningWork: {
         parameters: {
             query?: never;
             header?: never;
-            path: {
-                id: string;
-            };
+            path?: never;
             cookie?: never;
         };
-        requestBody: {
-            content: {
-                "application/json": components["schemas"]["ResolveSessionFilesRequest"];
-            };
-        };
+        requestBody?: never;
         responses: {
             /** @description OK */
             200: {
@@ -7477,15 +10688,8 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["ResolveSessionFilesResponse"];
+                    "application/json": components["schemas"]["RunningWorkItem"][];
                 };
-            };
-            /** @description Not Found */
-            404: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content?: never;
             };
         };
     };
@@ -7569,6 +10773,52 @@ export interface operations {
             };
             /** @description Not Found */
             404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+        };
+    };
+    SendPageChoice: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: string;
+                callId: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["PageChoiceSendRequest"];
+            };
+        };
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+        };
+    };
+    SkipPageChoice: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: string;
+                callId: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
                 headers: {
                     [name: string]: unknown;
                 };
@@ -8067,6 +11317,114 @@ export interface operations {
             };
         };
     };
+    GetAgentBrowser: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["AgentBrowserResponse"];
+                };
+            };
+            /** @description Not Found */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+        };
+    };
+    GetAgentBrowserFrame: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: string;
+                tabId: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Not Found */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+        };
+    };
+    GetAgentBrowserSettings: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["AgentBrowserSettingsResponse"];
+                };
+            };
+        };
+    };
+    SaveAgentBrowserSettings: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["AgentBrowserSettingsRequest"];
+            };
+        };
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["AgentBrowserSettingsResponse"];
+                };
+            };
+            /** @description Unprocessable Entity */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+        };
+    };
     GetProjects: {
         parameters: {
             query?: never;
@@ -8461,6 +11819,106 @@ export interface operations {
             };
         };
     };
+    ApplyUpdate: {
+        parameters: {
+            query?: {
+                trigger?: string;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+        };
+    };
+    SetUpdateRule: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["SetUpdateRuleRequest"];
+            };
+        };
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+        };
+    };
+    GetUpdateRollout: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+        };
+    };
+    StartUpdateRollout: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: {
+            content: {
+                "application/json": null | components["schemas"]["RolloutRequest"];
+            };
+        };
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+        };
+    };
+    CancelUpdateRollout: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+        };
+    };
     GetDesktopStatus: {
         parameters: {
             query?: never;
@@ -8514,6 +11972,26 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content?: never;
+            };
+        };
+    };
+    GetHeaderSmartLinks: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["SmartLinkDto"][];
+                };
             };
         };
     };
@@ -8596,17 +12074,18 @@ export interface operations {
             };
         };
     };
-    FindDirectoryFiles: {
+    CreateDirectory: {
         parameters: {
-            query: {
-                path: string;
-                q?: string;
-            };
+            query?: never;
             header?: never;
             path?: never;
             cookie?: never;
         };
-        requestBody?: never;
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["CreateFolderRequest"];
+            };
+        };
         responses: {
             /** @description OK */
             200: {
@@ -8637,9 +12116,12 @@ export interface operations {
             };
         };
     };
-    GetNewFolderDefaults: {
+    FindDirectoryFiles: {
         parameters: {
-            query?: never;
+            query?: {
+                path?: string;
+                q?: string;
+            };
             header?: never;
             path?: never;
             cookie?: never;
@@ -8655,18 +12137,14 @@ export interface operations {
             };
         };
     };
-    CreateDirectory: {
+    GetNewFolderDefaults: {
         parameters: {
             query?: never;
             header?: never;
             path?: never;
             cookie?: never;
         };
-        requestBody: {
-            content: {
-                "application/json": components["schemas"]["CreateFolderRequest"];
-            };
-        };
+        requestBody?: never;
         responses: {
             /** @description OK */
             200: {
@@ -9057,6 +12535,28 @@ export interface operations {
             };
         };
     };
+    GetBuiltInSkill: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                name: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["BuiltInSkillDetail"];
+                };
+            };
+        };
+    };
     SetBuiltInSkill: {
         parameters: {
             query?: never;
@@ -9079,6 +12579,1517 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["BuiltInSkillView"];
+                };
+            };
+        };
+    };
+    SaveBuiltInSkillVersion: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                name: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["SaveSkillVersionRequest"];
+            };
+        };
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["BuiltInSkillDetail"];
+                };
+            };
+        };
+    };
+    GetBuiltInSkillVersion: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                name: string;
+                version: number;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["SkillVersionContent"];
+                };
+            };
+        };
+    };
+    UseBuiltInSkillVersion: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                name: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["UseSkillVersionRequest"];
+            };
+        };
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["BuiltInSkillDetail"];
+                };
+            };
+        };
+    };
+    KeepBuiltInSkillVersion: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                name: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["BuiltInSkillDetail"];
+                };
+            };
+        };
+    };
+    ImproveBuiltInSkill: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                name: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["ImproveSkillRequest"];
+            };
+        };
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["SkillProposal"];
+                };
+            };
+        };
+    };
+    ListMods: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ModsView"];
+                };
+            };
+        };
+    };
+    SetModsSafeMode: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["SetModsSafeModeRequest"];
+            };
+        };
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ModsView"];
+                };
+            };
+        };
+    };
+    GetMod: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                name: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ModView"];
+                };
+            };
+        };
+    };
+    GetModVersionFiles: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                name: string;
+                version: number;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ModFilesView"];
+                };
+            };
+        };
+    };
+    UseModVersion: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                name: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["UseModVersionRequest"];
+            };
+        };
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ModView"];
+                };
+            };
+        };
+    };
+    UndoMod: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                name: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ModView"];
+                };
+            };
+        };
+    };
+    TurnModOn: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                name: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ModView"];
+                };
+            };
+        };
+    };
+    TurnModOff: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                name: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ModView"];
+                };
+            };
+        };
+    };
+    AddModSample: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                name: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ModView"];
+                };
+            };
+        };
+    };
+    ListModDrafts: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                sessionId: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ModDraftView"][];
+                };
+            };
+        };
+    };
+    GetModDraftFiles: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                sessionId: string;
+                name: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ModFilesView"];
+                };
+            };
+        };
+    };
+    CheckModDraft: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                sessionId: string;
+                name: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ModCheckView"];
+                };
+            };
+        };
+    };
+    KeepModDraft: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                sessionId: string;
+                name: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: {
+            content: {
+                "application/json": null | components["schemas"]["KeepModRequest"];
+            };
+        };
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ModView"];
+                };
+            };
+        };
+    };
+    TurnModDraftOff: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                sessionId: string;
+                name: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ModDraftView"];
+                };
+            };
+        };
+    };
+    TurnModDraftOn: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                sessionId: string;
+                name: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ModDraftView"];
+                };
+            };
+        };
+    };
+    DeclineModKeepRequest: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                sessionId: string;
+                name: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description No Content */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+        };
+    };
+    GetModSites: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                sessionId: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ModSitesView"];
+                };
+            };
+        };
+    };
+    RenderModRow: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                sessionId: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["ModRenderRequest"];
+            };
+        };
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ModRenderView"];
+                };
+            };
+        };
+    };
+    ActOnModControl: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                sessionId: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["ModActionRequest"];
+            };
+        };
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ModActionView"];
+                };
+            };
+        };
+    };
+    GetModsSwitch: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ModsSwitchView"];
+                };
+            };
+        };
+    };
+    GetModsRuntime: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ModsRuntimeView"];
+                };
+            };
+        };
+    };
+    InstallModsRuntime: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ModsRuntimeView"];
+                };
+            };
+            /** @description Accepted */
+            202: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ModsRuntimeView"];
+                };
+            };
+        };
+    };
+    UseModsRuntime: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["UseModsRuntimeRequest"];
+            };
+        };
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ModsRuntimeView"];
+                };
+            };
+        };
+    };
+    CancelModsRuntimeInstall: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ModsRuntimeView"];
+                };
+            };
+        };
+    };
+    GetMemory: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["MemoryOverview"];
+                };
+            };
+        };
+    };
+    SetMemoryEnabled: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["SetMemoryEnabledRequest"];
+            };
+        };
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["MemoryOverview"];
+                };
+            };
+        };
+    };
+    ListMemoryNotes: {
+        parameters: {
+            query?: {
+                repository?: string;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["MemoryNotesView"];
+                };
+            };
+        };
+    };
+    AddMemoryNote: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["AddMemoryNoteRequest"];
+            };
+        };
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["MemoryNoteView"];
+                };
+            };
+        };
+    };
+    UpdateMemoryNote: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["UpdateMemoryNoteRequest"];
+            };
+        };
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["MemoryNoteView"];
+                };
+            };
+        };
+    };
+    ForgetMemoryNote: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+        };
+    };
+    KeepMemoryNote: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["MemoryNoteView"];
+                };
+            };
+        };
+    };
+    MoveMemoryNote: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["MoveMemoryNoteRequest"];
+            };
+        };
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["MemoryNoteView"];
+                };
+            };
+        };
+    };
+    ClearMemory: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["ClearMemoryRequest"];
+            };
+        };
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ClearMemoryResponse"];
+                };
+            };
+        };
+    };
+    ListDreams: {
+        parameters: {
+            query?: {
+                repository?: string;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["DreamListView"];
+                };
+            };
+        };
+    };
+    StartDream: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["StartDreamRequest"];
+            };
+        };
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["DreamView"];
+                };
+            };
+        };
+    };
+    UndoDreamChange: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                dreamId: string;
+                changeId: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["DreamView"];
+                };
+            };
+        };
+    };
+    GetNightlyDreaming: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["NightlyDreamingView"];
+                };
+            };
+        };
+    };
+    SetNightlyDreaming: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["NightlyDreamingRequest"];
+            };
+        };
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["NightlyDreamingView"];
+                };
+            };
+        };
+    };
+    PrepareReport: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["PrepareReportRequest"];
+            };
+        };
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["PreparedReport"];
+                };
+            };
+        };
+    };
+    SendReport: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["SendReportRequest"];
+            };
+        };
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["SendReportResponse"];
+                };
+            };
+        };
+    };
+    SaveReportFile: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["SendReportRequest"];
+            };
+        };
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+        };
+    };
+    ListWorkflows: {
+        parameters: {
+            query?: {
+                directory?: string;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["WorkflowLibraryDto"];
+                };
+            };
+        };
+    };
+    ListWorkflowRuns: {
+        parameters: {
+            query?: {
+                workflowId?: string;
+                limit?: number | string;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["WorkflowRunDto"][];
+                };
+            };
+        };
+    };
+    StartWorkflowRun: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["StartWorkflowRunRequest"];
+            };
+        };
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["WorkflowRunDto"];
+                };
+            };
+        };
+    };
+    GetWorkflowRun: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["WorkflowRunDto"];
+                };
+            };
+        };
+    };
+    AnswerWorkflowRun: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["AnswerWorkflowRunRequest"];
+            };
+        };
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["WorkflowRunDto"];
+                };
+            };
+        };
+    };
+    MoveOnWorkflowRun: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["MoveOnWorkflowRunRequest"];
+            };
+        };
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["WorkflowRunDto"];
+                };
+            };
+        };
+    };
+    SetWorkflowRunCheckWithMe: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["CheckWithMeRequest"];
+            };
+        };
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["WorkflowRunDto"];
+                };
+            };
+        };
+    };
+    EndWorkflowRun: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["WorkflowRunDto"];
+                };
+            };
+        };
+    };
+    CheckWorkflow: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["CheckWorkflowRequest"];
+            };
+        };
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["WorkflowCheckDto"];
+                };
+            };
+        };
+    };
+    OpenWorkflowFile: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["OpenWorkflowFileRequest"];
+            };
+        };
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["WorkflowFileDto"];
+                };
+            };
+        };
+    };
+    SaveWorkflowFile: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["SaveWorkflowFileRequest"];
+            };
+        };
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["WorkflowFileDto"];
+                };
+            };
+        };
+    };
+    CreateWorkflowFile: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["CreateWorkflowRequest"];
+            };
+        };
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["WorkflowFileDto"];
+                };
+            };
+        };
+    };
+    DraftWorkflowFromSession: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["DraftWorkflowFromSessionRequest"];
+            };
+        };
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["DraftedWorkflowDto"];
+                };
+            };
+        };
+    };
+    DraftWorkflowFromDescription: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["DraftWorkflowFromDescriptionRequest"];
+            };
+        };
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["DraftedWorkflowDto"];
+                };
+            };
+        };
+    };
+    ListJobs: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["JobsDto"];
+                };
+            };
+        };
+    };
+    PostJob: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["PostJobRequest"];
+            };
+        };
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["JobDto"];
+                };
+            };
+        };
+    };
+    ListJobRepositories: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["JobRepositoryDto"][];
+                };
+            };
+        };
+    };
+    CancelJob: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+        };
+    };
+    SaveJobMachine: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["SaveJobMachineRequest"];
+            };
+        };
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["JobMachineDto"];
                 };
             };
         };
@@ -9359,6 +14370,69 @@ export interface operations {
             };
         };
     };
+    GetHarnessUsage: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HarnessUsage"][];
+                };
+            };
+        };
+    };
+    WarmupOpenCodeHarness: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description No Content */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+        };
+    };
+    GetHarnessCatalog: {
+        parameters: {
+            query?: {
+                directory?: string;
+                profile?: string;
+            };
+            header?: never;
+            path: {
+                type: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HarnessCatalogResponse"];
+                };
+            };
+        };
+    };
     UpdateHarness: {
         parameters: {
             query?: never;
@@ -9437,34 +14511,13 @@ export interface operations {
             };
         };
     };
-    WarmupOpenCodeHarness: {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        requestBody?: never;
-        responses: {
-            /** @description No Content */
-            204: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content?: never;
-            };
-        };
-    };
-    GetHarnessCatalog: {
+    GetUsageLimits: {
         parameters: {
             query?: {
-                directory?: string;
-                profile?: string;
+                watch?: boolean;
             };
             header?: never;
-            path: {
-                type: string;
-            };
+            path?: never;
             cookie?: never;
         };
         requestBody?: never;
@@ -9475,8 +14528,48 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["HarnessCatalogResponse"];
+                    "application/json": components["schemas"]["UsageLimitsSnapshot"];
                 };
+            };
+        };
+    };
+    AllowUsageLimits: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                provider: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+        };
+    };
+    RevokeUsageLimits: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                provider: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
             };
         };
     };
@@ -9662,8 +14755,8 @@ export interface operations {
     };
     GetOwnWeaveConfig: {
         parameters: {
-            query: {
-                flavor: components["schemas"]["WeaveFlavor"];
+            query?: {
+                flavor?: string;
             };
             header?: never;
             path?: never;
@@ -10078,92 +15171,6 @@ export interface operations {
             };
         };
     };
-    ListWorktreeCheckouts: {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        requestBody?: never;
-        responses: {
-            /** @description OK */
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["WorktreeCheckoutsResponse"];
-                };
-            };
-        };
-    };
-    CleanWorktreeCheckouts: {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        requestBody: {
-            content: {
-                "application/json": components["schemas"]["CleanWorktreesRequest"];
-            };
-        };
-        responses: {
-            /** @description OK */
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["WorktreeCleanupReport"];
-                };
-            };
-        };
-    };
-    GetWorktreeCheckoutSize: {
-        parameters: {
-            query?: never;
-            header?: never;
-            path: {
-                workspaceId: string;
-            };
-            cookie?: never;
-        };
-        requestBody?: never;
-        responses: {
-            /** @description OK */
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["FolderSize"];
-                };
-            };
-        };
-    };
-    RestoreWorktreeCheckout: {
-        parameters: {
-            query?: never;
-            header?: never;
-            path: {
-                workspaceId: string;
-            };
-            cookie?: never;
-        };
-        requestBody?: never;
-        responses: {
-            /** @description No Content */
-            204: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content?: never;
-            };
-        };
-    };
     GetWorktreeNaming: {
         parameters: {
             query?: {
@@ -10231,6 +15238,92 @@ export interface operations {
                 content: {
                     "application/json": components["schemas"]["WorktreeNamingPreviewResponse"];
                 };
+            };
+        };
+    };
+    ListWorktreeCheckouts: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["WorktreeCheckoutsResponse"];
+                };
+            };
+        };
+    };
+    GetWorktreeCheckoutSize: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                workspaceId: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["FolderSize"];
+                };
+            };
+        };
+    };
+    CleanWorktreeCheckouts: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["CleanWorktreesRequest"];
+            };
+        };
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["WorktreeCleanupReport"];
+                };
+            };
+        };
+    };
+    RestoreWorktreeCheckout: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                workspaceId: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
             };
         };
     };
@@ -10803,6 +15896,756 @@ export interface operations {
             };
         };
     };
+    GetMachine: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["MachineResponse"];
+                };
+            };
+        };
+    };
+    UpdateMachine: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["UpdateMachineRequest"];
+            };
+        };
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["MachineResponse"];
+                };
+            };
+        };
+    };
+    GetMachineId: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["MachineIdResponse"];
+                };
+            };
+        };
+    };
+    GetMachineAccess: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["MachineAccessResponse"];
+                };
+            };
+        };
+    };
+    ReplaceMachineToken: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["MachineAccessResponse"];
+                };
+            };
+        };
+    };
+    CreatePairingCode: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["CreatePairingRequest"];
+            };
+        };
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["CreatePairingResponse"];
+                };
+            };
+        };
+    };
+    CreateMachinePairingCode: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["MachinePairingCodeResponse"];
+                };
+            };
+        };
+    };
+    ListDevices: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["DeviceListResponse"];
+                };
+            };
+        };
+    };
+    CreateDevice: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["CreateDeviceRequest"];
+            };
+        };
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["CreateDeviceResponse"];
+                };
+            };
+        };
+    };
+    RemoveDevice: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+        };
+    };
+    ReissueDeviceToken: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["PairingRedeemResponse"];
+                };
+            };
+        };
+    };
+    PreviewPairingCode: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["PairingPreviewRequest"];
+            };
+        };
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["PairingPreviewResponse"];
+                };
+            };
+        };
+    };
+    RedeemPairingCode: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["PairingRedeemRequest"];
+            };
+        };
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["PairingRedeemResponse"];
+                };
+            };
+        };
+    };
+    GetVapidKey: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["VapidKeyResponse"];
+                };
+            };
+        };
+    };
+    SavePushSubscription: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["SavePushSubscriptionRequest"];
+            };
+        };
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["PushSubscriptionResponse"];
+                };
+            };
+        };
+    };
+    DeletePushSubscription: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["PushEndpointRequest"];
+            };
+        };
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+        };
+    };
+    LookUpPushSubscription: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["PushEndpointRequest"];
+            };
+        };
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["PushSubscriptionResponse"];
+                };
+            };
+        };
+    };
+    SendTestPush: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["PushEndpointRequest"];
+            };
+        };
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["PushTestResponse"];
+                };
+            };
+        };
+    };
+    ListMachines: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["MachineListResponse"];
+                };
+            };
+        };
+    };
+    AddMachine: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["AddMachineRequest"];
+            };
+        };
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["MachineEntryResponse"];
+                };
+            };
+        };
+    };
+    PreviewPairMachine: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["PairMachineRequest"];
+            };
+        };
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["PairMachinePreviewResponse"];
+                };
+            };
+        };
+    };
+    PairMachine: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["PairMachineRequest"];
+            };
+        };
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["MachineEntryResponse"];
+                };
+            };
+        };
+    };
+    ListMachineCandidates: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["MachineCandidateListResponse"];
+                };
+            };
+        };
+    };
+    ProbeMachineCandidate: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["AddSshMachineRequest"];
+            };
+        };
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["SshProbeResponse"];
+                };
+            };
+        };
+    };
+    StartMachineSetup: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["AddSshMachineRequest"];
+            };
+        };
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["SetupJobResponse"];
+                };
+            };
+        };
+    };
+    GetMachineSetup: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["SetupJobResponse"];
+                };
+            };
+        };
+    };
+    UpdateRemoteMachine: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["UpdateRemoteMachineRequest"];
+            };
+        };
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["MachineEntryResponse"];
+                };
+            };
+            /** @description Forbidden */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+        };
+    };
+    RemoveRemoteMachine: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+        };
+    };
+    CheckRemoteMachine: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["MachineCheckResponse"];
+                };
+            };
+        };
+    };
+    CreateDeviceGrant: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["DeviceGrantResponse"];
+                };
+            };
+        };
+    };
+    ImportMachines: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["ImportMachinesRequest"];
+            };
+        };
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["MachineListResponse"];
+                };
+            };
+        };
+    };
+    SendPeerSessionMessage: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["PeerSessionMessageRequest"];
+            };
+        };
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["PeerSessionMessageResponse"];
+                };
+            };
+        };
+    };
+    ReadPeerSessionPage: {
+        parameters: {
+            query?: {
+                before?: string;
+                limit?: number | string;
+            };
+            header?: never;
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["PeerSessionPageResponse"];
+                };
+            };
+        };
+    };
     CanvasBridgeList: {
         parameters: {
             query?: never;
@@ -10825,51 +16668,7 @@ export interface operations {
             };
         };
     };
-    CanvasBridgeOpen: {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        requestBody: {
-            content: {
-                "application/json": components["schemas"]["CanvasBridgeRequest"];
-            };
-        };
-        responses: {
-            /** @description OK */
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content?: never;
-            };
-        };
-    };
     CanvasBridgeRead: {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        requestBody: {
-            content: {
-                "application/json": components["schemas"]["CanvasBridgeRequest"];
-            };
-        };
-        responses: {
-            /** @description OK */
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content?: never;
-            };
-        };
-    };
-    CanvasBridgePatch: {
         parameters: {
             query?: never;
             header?: never;
@@ -10979,6 +16778,116 @@ export interface operations {
             };
         };
     };
+    CanvasBridgeBrowserRead: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["AgentBrowserToolRequest"];
+            };
+        };
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+        };
+    };
+    CanvasBridgeBrowserAct: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["AgentBrowserToolRequest"];
+            };
+        };
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+        };
+    };
+    CanvasBridgePageShow: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["CanvasBridgeRequest"];
+            };
+        };
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+        };
+    };
+    CanvasBridgePageChoice: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["CanvasBridgeRequest"];
+            };
+        };
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+        };
+    };
+    CanvasBridgeWalkthroughShow: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["WalkthroughBridgeRequest"];
+            };
+        };
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+        };
+    };
     SessionMessageBridgeSend: {
         parameters: {
             query?: never;
@@ -10989,6 +16898,248 @@ export interface operations {
         requestBody: {
             content: {
                 "application/json": components["schemas"]["SessionMessageBridgeRequest"];
+            };
+        };
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+        };
+    };
+    SessionReadBridgeRead: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["SessionReadBridgeRequest"];
+            };
+        };
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+        };
+    };
+    MachineHandoffBridgeList: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["CanvasBridgeRequest"];
+            };
+        };
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+        };
+    };
+    MachineHandoffBridgeStart: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["SessionStartBridgeRequest"];
+            };
+        };
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+        };
+    };
+    WorkflowStepBridgeDone: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["WorkflowStepBridgeRequest"];
+            };
+        };
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+        };
+    };
+    MemoryBridgeSave: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["MemoryBridgeRequest"];
+            };
+        };
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+        };
+    };
+    MemoryBridgeSearch: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["MemoryBridgeRequest"];
+            };
+        };
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+        };
+    };
+    MemoryBridgeForget: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["MemoryBridgeRequest"];
+            };
+        };
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+        };
+    };
+    ModBridgeWrite: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["ModBridgeRequest"];
+            };
+        };
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+        };
+    };
+    ModBridgeCheck: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["ModBridgeRequest"];
+            };
+        };
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+        };
+    };
+    ModBridgeReload: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["ModBridgeRequest"];
+            };
+        };
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+        };
+    };
+    ModBridgeKeep: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["ModBridgeRequest"];
             };
         };
         responses: {

@@ -128,8 +128,8 @@ async function load(machine: MachineTarget, sessionId: string): Promise<void> {
     // A discard still in its Undo window (the page was reloaded, or left and come back to): Undo again, for what's left.
     if (!state.side && !state.discarded) {
       const discarded = await machine.api.GET("/api/sessions/{id}/side/discarded", { params: { path: { id: sessionId } } });
-      if (discarded.response.status === 200 && discarded.data && discarded.data.undoRemainingMs > 0 && !state.side) {
-        offerUndo(sessionId, state, discarded.data.sideConversation, discarded.data.undoRemainingMs);
+      if (discarded.response.status === 200 && discarded.data && Number(discarded.data.undoRemainingMs) > 0 && !state.side) {
+        offerUndo(sessionId, state, discarded.data.sideConversation, Number(discarded.data.undoRemainingMs));
       }
     }
   } catch {

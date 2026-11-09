@@ -79,8 +79,10 @@ async function loadSizes(list: Checkout[], run: number, machine: string): Promis
         const { data } = await target.api.GET("/api/storage/worktrees/{workspaceId}/size", {
           params: { path: { workspaceId: next.workspaceId } },
         });
-        if (data) rememberStorageSize(machine, next.workspaceId, data);
-        if (data && run === generation) sizes.value = { ...sizes.value, [next.workspaceId]: data };
+        // int64 byte counts come typed number | string; a size fits a number.
+        const size = data ? { bytes: Number(data.bytes), complete: data.complete } : null;
+        if (size) rememberStorageSize(machine, next.workspaceId, size);
+        if (size && run === generation) sizes.value = { ...sizes.value, [next.workspaceId]: size };
       } catch {
         // A folder that can't be measured stays "—".
       }
@@ -108,7 +110,7 @@ async function load(): Promise<void> {
       return;
     }
     checkouts.value = data.checkouts;
-    archivedDays.value = data.archivedDays;
+    archivedDays.value = Number(data.archivedDays);
     isLoading.value = false;
     // Counts first; sizes fill in as they arrive, removable folders first since they matter most.
     // Folders measured a few minutes ago keep that size.
