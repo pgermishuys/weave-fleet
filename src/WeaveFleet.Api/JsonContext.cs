@@ -156,6 +156,7 @@ internal sealed record ErrorResponse(string Error);
 [JsonSerializable(typeof(GetSessionMessagesApiResponse))]
 [JsonSerializable(typeof(SessionMessagesPagination))]
 [JsonSerializable(typeof(GetSessionDiffsResponse))]
+[JsonSerializable(typeof(WeaveFleet.Application.Git.GitFolderRefusal))]
 [JsonSerializable(typeof(FileDiffSummary))]
 [JsonSerializable(typeof(IReadOnlyList<FileDiffSummary>))]
 [JsonSerializable(typeof(List<FileDiffSummary>))]

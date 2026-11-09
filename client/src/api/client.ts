@@ -338,6 +338,8 @@ export interface SessionDiffsResponse {
   available: boolean;
   /** What the changes are compared with; null when they aren't available. */
   base?: SessionDiffBase | null;
+  /** Set when git refuses the folder (another user owns it): why, and the command that lets git read it. */
+  refusal?: { message: string; fixCommand: string } | null;
 }
 
 /**

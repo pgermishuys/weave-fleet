@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { computed, inject, onBeforeUnmount } from "vue";
+import { computed, inject, onBeforeUnmount, shallowRef } from "vue";
 import { FileText, GitBranch, History } from "lucide-vue-next";
 import type { UseDiffsResult } from "@/composables/use-diffs";
 import { diffBaseLabel } from "@/lib/diff-base";
@@ -13,6 +13,14 @@ const canvases = useCanvasesStore();
 const sharedDiffs = inject<UseDiffsResult>("sharedDiffs");
 
 const base = computed(() => sharedDiffs?.base.value ?? null);
+const refusal = computed(() => sharedDiffs?.refusal?.value ?? null);
+const copied = shallowRef(false);
+
+function copyFixCommand(): void {
+  const command = refusal.value?.fixCommand;
+  if (command) void navigator.clipboard?.writeText(command).then(() => { copied.value = true; }).catch(() => {});
+}
+
 const baseLabel = computed(() => diffBaseLabel(base.value));
 
 const changedFiles = computed(() =>
@@ -87,6 +95,29 @@ function isOpen(path: string): boolean {
     >
       Loading changes…
     </p>
+    <div
+      v-else-if="changedFiles.length === 0 && refusal"
+      class="changes-canvas__refused"
+      data-testid="changes-git-refused"
+    >
+      <p class="changes-canvas__refused-title">
+        {{ refusal.message }}
+      </p>
+      <p class="changes-canvas__refused-hint">
+        To let git read it, run this once:
+      </p>
+      <code
+        class="changes-canvas__refused-command"
+        data-testid="git-fix-command"
+      >{{ refusal.fixCommand }}</code>
+      <button
+        type="button"
+        class="changes-canvas__refused-copy"
+        @click="copyFixCommand"
+      >
+        {{ copied ? "Copied" : "Copy command" }}
+      </button>
+    </div>
     <p
       v-else-if="changedFiles.length === 0"
       class="changes-canvas__empty"
@@ -176,6 +207,45 @@ function isOpen(path: string): boolean {
   padding: 14px 18px;
   font-size: 13px;
   color: var(--muted);
+}
+
+.changes-canvas__refused {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 8px;
+  padding: 14px 18px;
+  font-size: 13px;
+}
+
+.changes-canvas__refused-title,
+.changes-canvas__refused-hint {
+  margin: 0;
+}
+
+.changes-canvas__refused-hint {
+  color: var(--muted);
+}
+
+.changes-canvas__refused-command {
+  max-width: 100%;
+  padding: 6px 8px;
+  border: 1px solid var(--border);
+  background: color-mix(in srgb, var(--muted) 10%, transparent);
+  font-family: var(--font-mono-stack);
+  font-size: 12px;
+  overflow-wrap: anywhere;
+  user-select: all;
+}
+
+.changes-canvas__refused-copy {
+  min-height: 28px;
+  padding: 4px 12px;
+  border: 1px solid var(--border);
+  background: transparent;
+  color: var(--text);
+  cursor: pointer;
+  font: inherit;
 }
 
 .changes-canvas__change {

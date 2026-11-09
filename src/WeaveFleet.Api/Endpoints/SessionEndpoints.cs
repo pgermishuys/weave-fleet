@@ -718,7 +718,11 @@ public static class SessionEndpoints
                 async session =>
                 {
                     if (await SessionDiffScope.ResolveAsync(session, gitDiffService, ct) is not { } scope)
-                        return Results.Ok(new GetSessionDiffsResponse([], Available: false, Base: null));
+                        return Results.Ok(new GetSessionDiffsResponse(
+                            [],
+                            Available: false,
+                            Base: null,
+                            Refusal: await gitDiffService.FindRefusalAsync(session.Directory, ct)));
 
                     var diffAvailability = await gitDiffService.ComputeDiffsWithAvailabilityAsync(
                         scope.RepoRoot,

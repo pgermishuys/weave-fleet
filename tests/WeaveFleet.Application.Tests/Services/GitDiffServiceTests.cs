@@ -7,6 +7,30 @@ namespace WeaveFleet.Application.Tests.Services;
 public sealed class GitDiffServiceTests
 {
     [Fact]
+    public async Task find_refusal_names_the_folder_git_refuses_for_dubious_ownership()
+    {
+        var dir = Path.GetTempPath();
+        var runner = new RecordingGitRunner(new GitCommandResult(128, string.Empty,
+            "fatal: detected dubious ownership in repository at '/srv/my repo'\nTo add an exception for this directory, call:\n\n\tgit config --global --add safe.directory '/srv/my repo'\n"));
+        var service = new GitDiffService(runner);
+
+        var refusal = await service.FindRefusalAsync(dir, CancellationToken.None);
+
+        refusal.ShouldNotBeNull();
+        refusal.Message.ShouldBe("Git won't read this folder because another user owns it.");
+        refusal.FixCommand.ShouldBe("git config --global --add safe.directory '/srv/my repo'");
+    }
+
+    [Fact]
+    public async Task find_refusal_is_null_when_the_folder_is_simply_not_a_repository()
+    {
+        var runner = new RecordingGitRunner(new GitCommandResult(128, string.Empty, "fatal: not a git repository (or any of the parent directories): .git"));
+        var service = new GitDiffService(runner);
+
+        (await service.FindRefusalAsync(Path.GetTempPath(), CancellationToken.None)).ShouldBeNull();
+    }
+
+    [Fact]
     public async Task capture_baseline_creates_stable_ref_from_supplied_baseline_id()
     {
         var runner = new RecordingGitRunner(
