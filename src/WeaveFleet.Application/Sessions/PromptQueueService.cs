@@ -181,23 +181,29 @@ public sealed partial class PromptQueueService(
     }
 
     /// <summary>
+    /// True when a message that starts a turn is queued and Fleet would send it if the session idled now.
+    /// </summary>
+    public async Task<bool> HasFollowUpAsync(string sessionId)
+        => !retries.IsHolding(sessionId) && (await queue.ListAsync(sessionId).ConfigureAwait(false)).Any(i => i.Kind != QueuedPromptKinds.Shell);
+
+    /// <summary>
     /// Sends the first queued item: called when the session's turn ends, and after queueing into an idle session. A
     /// shell command isn't a turn, so the item after one goes straight away. An item the session refuses goes back
     /// to the front, for the next time the session is free. While Fleet waits to try a turn a limit stopped again
     /// (<see cref="TurnRetryService"/>), nothing goes: the queue comes after the work the limit cut off.
     /// </summary>
-    public async Task SendNextAsync(string sessionId, CancellationToken ct = default)
+    public async Task<bool> SendNextAsync(string sessionId, CancellationToken ct = default)
     {
         if (retries.IsHolding(sessionId))
-            return;
+            return false;
 
         // Two turn ends close together (a repeated idle event, or a queue into an idle session as one arrives) must
         // send one message, not two: the second call would send the next item into the turn the first just started.
         if (!gate.TryEnter(sessionId))
-            return;
+            return false;
         try
         {
-            await SendFirstAsync(sessionId, ct).ConfigureAwait(false);
+            return await SendFirstAsync(sessionId, ct).ConfigureAwait(false);
         }
         finally
         {
@@ -205,7 +211,7 @@ public sealed partial class PromptQueueService(
         }
     }
 
-    private async Task SendFirstAsync(string sessionId, CancellationToken ct)
+    private async Task<bool> SendFirstAsync(string sessionId, CancellationToken ct)
     {
         while (await queue.TakeFirstAsync(sessionId).ConfigureAwait(false) is { } item)
         {
@@ -216,12 +222,14 @@ public sealed partial class PromptQueueService(
                 LogSendFailed(sessionId, item.Id, sent.Error.Description);
                 await queue.ReturnToFrontAsync(item).ConfigureAwait(false);
                 await BroadcastAsync(sessionId, ct).ConfigureAwait(false);
-                return;
+                return false;
             }
 
             if (item.Kind != QueuedPromptKinds.Shell)
-                return;
+                return true;
         }
+
+        return false;
     }
 
     private Task<Result<Unit>> SendAsync(QueuedPrompt item, PromptDelivery delivery, CancellationToken ct) => item.Kind switch

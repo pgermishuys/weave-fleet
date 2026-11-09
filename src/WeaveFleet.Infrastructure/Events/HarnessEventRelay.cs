@@ -479,6 +479,12 @@ public sealed class HarnessEventRelay : BackgroundService
                 ObserveBrowserCall(targetFleetSessionId, domainEvent);
                 // Before the queue: a limit's failure holds the queue before the idle after it reaches the queue.
                 _retries?.Observe(targetFleetSessionId, sessionUserId, domainEvent);
+                var followingUp = _queue is not null
+                    && await _queue.ClaimFollowUpAsync(
+                        targetFleetSessionId,
+                        sessionUserId,
+                        domainEvent,
+                        () => ShowHeldIdleAsync(targetFleetSessionId, sessionUserId, ct)).ConfigureAwait(false);
                 _queue?.Observe(targetFleetSessionId, sessionUserId, domainEvent);
                 _turns?.Observe(targetFleetSessionId, sessionUserId, domainEvent, StatusTypeOf(evt));
                 _callbacks?.Observe(targetFleetSessionId, sessionUserId, domainEvent);
@@ -542,6 +548,9 @@ public sealed class HarnessEventRelay : BackgroundService
                         // A parent whose subagent waits on a question shows that, not its own busy; the notifier
                         // hears the same, so it tells you about the question once.
                         var shownStatus = _activityTracker.ShownActivityStatus(targetFleetSessionId, parsedStatus.Status);
+                        // The queue is about to send the next message: the session carries on, so nobody hears it finished.
+                        if (followingUp && shownStatus == ActivityStatuses.Idle)
+                            continue;
                         _notifier?.OnActivityChanged(targetFleetSessionId, shownStatus);
 
                         await _broadcaster.BroadcastAsync(
@@ -802,6 +811,19 @@ public sealed class HarnessEventRelay : BackgroundService
             retryMessage,
             retryNext,
             retryMax);
+    }
+
+    /// <summary>The idle that was held back for a queued follow-up that never started a turn.</summary>
+    private async Task ShowHeldIdleAsync(string fleetSessionId, string? sessionUserId, CancellationToken ct)
+    {
+        var shownStatus = _activityTracker.ShownActivityStatus(fleetSessionId, ActivityStatuses.Idle);
+        _notifier?.OnActivityChanged(fleetSessionId, shownStatus);
+        await _broadcaster.BroadcastAsync(
+            "sessions",
+            "activity_status",
+            await BuildActivityStatusPayloadAsync(fleetSessionId, shownStatus).ConfigureAwait(false),
+            sessionUserId,
+            ct).ConfigureAwait(false);
     }
 
     private static ParsedActivityStatus? ParseActivityStatus(string eventType, JsonElement? payload)
