@@ -52,7 +52,7 @@ public sealed partial class DreamingAutomation(
     public async Task<AutomationExecutionOutcome> RunAsync(Automation automation, AutomationRun run, CancellationToken ct = default)
     {
         if (!await IsOnAsync(automation).ConfigureAwait(false))
-            return AutomationExecutionOutcome.SkippedBecause("Skipped: Dreaming is off.");
+            return AutomationExecutionOutcome.SkippedBecause("Skipped: Memory is off.");
 
         using var user = users.Begin(automation.UserId);
         var earlier = (await runs.ListByAutomationAsync(automation.Id, 20).ConfigureAwait(false))

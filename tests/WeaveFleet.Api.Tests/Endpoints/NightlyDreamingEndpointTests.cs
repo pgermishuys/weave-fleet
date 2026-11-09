@@ -3,13 +3,14 @@ using System.Net.Http.Json;
 using System.Text.Json;
 using Microsoft.Extensions.DependencyInjection;
 using WeaveFleet.Api.Tests.Infrastructure;
+using WeaveFleet.Application.Memory;
 using WeaveFleet.Application.Memory.Dreaming;
 using WeaveFleet.Application.Users;
 using WeaveFleet.Domain.Repositories;
 
 namespace WeaveFleet.Api.Tests.Endpoints;
 
-/// <summary>"Dream each night": 404 while Dreaming is off; on, it makes the built-in automation, which people can't delete and which hides with the feature.</summary>
+/// <summary>"Dream each night": 404 while Memory is off; on, it makes the built-in automation, which people can't delete and which hides while Memory is off.</summary>
 public sealed class NightlyDreamingEndpointTests : IDisposable
 {
     private const string User = "local-user";
@@ -21,7 +22,7 @@ public sealed class NightlyDreamingEndpointTests : IDisposable
     {
         using var scope = _factory.Services.CreateScope();
         using (scope.ServiceProvider.GetRequiredService<IBackgroundUserScope>().Begin(User))
-            await scope.ServiceProvider.GetRequiredService<IUserPreferenceRepository>().SetAsync(DreamRules.PreferenceKey, on ? "true" : "false");
+            await scope.ServiceProvider.GetRequiredService<IUserPreferenceRepository>().SetAsync(AgentMemory.PreferenceKey, on ? "true" : "false");
     }
 
     private static async Task<JsonElement> AutomationsAsync(HttpClient client)

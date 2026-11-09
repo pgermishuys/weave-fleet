@@ -27,11 +27,11 @@ public sealed class DreamEndpointTests : IDisposable
     {
         using var scope = _factory.Services.CreateScope();
         using (scope.ServiceProvider.GetRequiredService<IBackgroundUserScope>().Begin(User))
-            await scope.ServiceProvider.GetRequiredService<IUserPreferenceRepository>().SetAsync(DreamRules.PreferenceKey, "true");
+            await scope.ServiceProvider.GetRequiredService<IUserPreferenceRepository>().SetAsync(AgentMemory.PreferenceKey, "true");
     }
 
     [Fact]
-    public async Task Every_route_is_a_404_while_dreaming_is_off()
+    public async Task Every_route_is_a_404_while_memory_is_off()
     {
         var client = _factory.CreateClient();
 
