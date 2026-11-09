@@ -99,4 +99,15 @@ describe("ChangesCanvas", () => {
     expect(wrapper.get("[data-testid='changes-base']").text()).toBe("Since this session started");
     expect(wrapper.text()).toContain("No changes in this session yet.");
   });
+
+  it("leaves the base line out when changes show: the scope select carries it", async () => {
+    sharedDiffs.base.value = { kind: "session" };
+    sharedDiffs.diffs.value = [{ file: "a.ts", status: "modified", additions: 1, deletions: 0 }] as FileDiffItem[];
+
+    const wrapper = mountCanvas();
+    await flushPromises();
+
+    expect(wrapper.find("[data-testid='changes-base']").exists()).toBe(false);
+    expect(wrapper.get("[data-testid='review-scope']").attributes("title")).toBe("Since this session started");
+  });
 })

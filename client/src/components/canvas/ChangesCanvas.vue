@@ -27,8 +27,9 @@ const hasChanges = computed(() => (sharedDiffs?.diffs.value.length ?? 0) > 0);
 
 <template>
   <div class="changes-canvas">
+    <!-- With changes showing, the review's scope select names what they're compared with (its tooltip says it). -->
     <p
-      v-if="baseLabel"
+      v-if="baseLabel && !hasChanges"
       class="changes-canvas__base"
       :title="baseLabel.detail"
       data-testid="changes-base"

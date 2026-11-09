@@ -28,6 +28,7 @@ const summary = [
 
 const sharedDiffs = {
   hasLoaded: ref(true),
+  base: ref(null),
   diffs: ref<FileDiffItem[]>(summary),
   fetchDiffs: vi.fn(),
   byFile: computed(() => new Map<string, FileDiffItem>()),

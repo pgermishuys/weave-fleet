@@ -31,6 +31,7 @@ import { readSessionFile, writeSessionFile } from "@/api/session-files";
 import type { FileDiffItem } from "@/api/client";
 import type { UseDiffsResult } from "@/composables/use-diffs";
 import { useFileDiffContents } from "@/composables/use-file-diff-contents";
+import { diffBaseLabel } from "@/lib/diff-base";
 import { useMachineTarget } from "@/lib/machine-target";
 import { parseDiffLines, type DiffLine } from "@/lib/diff-parser";
 import {
@@ -98,6 +99,10 @@ const scopePref = shallowRef<"turn" | "session" | null>(null);
 const scope = computed<"turn" | "session">(() =>
   turnPaths.value.length === 0 ? "session" : (scopePref.value ?? "turn"),
 );
+const baseDetail = computed(() => {
+  const label = diffBaseLabel(sharedDiffs?.base.value ?? null);
+  return label ? `${label.text}${label.commit ? ` ${label.commit}` : ""}` : "Which changes to show";
+});
 const scopeLabel = computed(() => (scope.value === "turn" ? "This turn" : "Whole session"));
 
 const allFiles = computed(() =>
@@ -370,6 +375,7 @@ function nameOf(path: string): string {
             class="review__scope"
             data-testid="review-scope"
             aria-label="Which changes to show"
+            :title="baseDetail"
           >
             {{ scopeLabel }}
             <ChevronDown
