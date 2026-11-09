@@ -1046,7 +1046,7 @@ internal sealed partial class OpenCode2HarnessSession : IHarnessSession, IOpenCo
     /// </summary>
     internal static OpenCode2ModelRef? ChosenModel(OpenCode2ModelRef? fallback, string? providerId, string? modelId, string? effort)
     {
-        var variant = string.IsNullOrWhiteSpace(effort) ? null : effort;
+        var variant = string.IsNullOrWhiteSpace(effort) ? null : PromptEffort.Named(effort);
         if (!string.IsNullOrWhiteSpace(providerId) && !string.IsNullOrWhiteSpace(modelId))
             return new OpenCode2ModelRef { ProviderId = providerId, Id = modelId, Variant = variant };
 

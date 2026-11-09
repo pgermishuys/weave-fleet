@@ -44,7 +44,7 @@ vi.mock("@/composables/use-agents", async () => {
 
 vi.mock("@/composables/use-models", async () => {
   const { computed, ref } = await import("vue")
-  const model = { id: "model-1", name: "Model", providerId: "provider-1", selectionKey: "model-key", provider: "Provider", description: "" }
+  const model = { id: "model-1", name: "Model", providerId: "provider-1", selectionKey: "model-key", provider: "Provider", description: "", variants: ["low", "high"] }
   const models = ref([model])
   const modelsByKey = ref({ "model-key": model })
 
@@ -309,6 +309,29 @@ describe("use-send-prompt refused sends", () => {
     await settle()
 
     expect(draft.draft.text).toBe("")
+  })
+})
+
+describe("use-send-prompt effort", () => {
+  function sentEffort(): string | undefined {
+    const promptCall = (mockApi.POST.mock.calls as unknown[][]).find(([url]) => url === "/api/sessions/{id}/prompt")
+    return (promptCall?.[1] as { body: { effort?: string } }).body.effort
+  }
+
+  it("sends the explicit model default for a Default pick on a model that has levels, and the level when one is picked", async () => {
+    for (const [sessionId, picked, expected] of [
+      ["session-effort-default", "", "fleet:default"],
+      ["session-effort-high", "high", "high"],
+    ] as const) {
+      mockApi.POST.mockReset()
+      const draft = useDraftState(sessionId, { agentId: "", modelId: "" })
+      draft.setEffort(picked)
+      draft.setText("hello")
+      mockApi.POST.mockReturnValueOnce(new Promise(() => {}))
+      useSendPrompt(sessionId).sendPrompt()
+      await nextTick()
+      expect(sentEffort()).toBe(expected)
+    }
   })
 })
 

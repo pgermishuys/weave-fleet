@@ -5,6 +5,7 @@ import { useAgents } from "@/composables/use-agents";
 import { useDraftState, type EffortLevel } from "@/composables/use-draft-state";
 import { useModels } from "@/composables/use-models";
 import type { AccumulatedMessage, ImageAttachment } from "@/lib/client-types";
+import { effortToSend } from "@/lib/effort-memory";
 import { modelFromKey } from "@/lib/agent-model-choice";
 import { diagLog } from "@/lib/message-diagnostics";
 import { sessionReferencesIn, stripSessionReferences, type SessionReference } from "@/lib/session-references";
@@ -639,8 +640,9 @@ export function useSendPrompt(sessionId: string) {
       request.attachments = attachments;
     }
 
-    if (draft.effort) {
-      request.effort = draft.effort;
+    const effort = effortToSend(draft.effort, model?.variants);
+    if (effort) {
+      request.effort = effort;
     }
 
     if (options?.steer) {

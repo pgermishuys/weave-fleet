@@ -472,6 +472,7 @@ public sealed class OpenCode2AgentsTests
     [Theory]
     [InlineData("high", "high")]
     [InlineData(null, null)]
+    [InlineData(PromptEffort.ModelDefault, null)]
     public async Task Effort_is_the_models_variant(string? effort, string? variant)
     {
         var api = Accepting();
