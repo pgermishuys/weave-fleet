@@ -25,7 +25,7 @@ public sealed class JobsQueueTests
     [Fact]
     public async Task Jobs_start_on_free_seats_wait_with_a_reason_and_start_when_a_seat_frees()
     {
-        await using var host = new JobsHost(on: true);
+        await using var host = new JobsHost(on: true, dispatcherRuns: false);
         var sessions = host.Services.GetRequiredService<ScriptedJobSessions>();
         host.Services.GetRequiredService<ScriptedJobMachines>().Machines =
         [
@@ -72,7 +72,7 @@ public sealed class JobsQueueTests
     [Fact]
     public async Task A_start_that_fails_puts_the_job_back_to_waiting_with_the_reason()
     {
-        await using var host = new JobsHost(on: true);
+        await using var host = new JobsHost(on: true, dispatcherRuns: false);
         var sessions = host.Services.GetRequiredService<ScriptedJobSessions>();
         sessions.FailWith = "Couldn't start: no disk space.";
         host.Services.GetRequiredService<ScriptedJobMachines>().Machines = [new JobMachine(host.MachineId, "atlas", true, true, true, 2, [], [_ledgerApi])];
@@ -89,7 +89,7 @@ public sealed class JobsQueueTests
     [Fact]
     public async Task Only_a_waiting_job_can_be_cancelled()
     {
-        await using var host = new JobsHost(on: true);
+        await using var host = new JobsHost(on: true, dispatcherRuns: false);
         host.Services.GetRequiredService<ScriptedJobMachines>().Machines = [new JobMachine(host.MachineId, "atlas", true, true, true, 1, [], [_ledgerApi])];
         var running = await host.PostAsync("Add rate limits");
         await host.Services.GetRequiredService<JobDispatcher>().RunOnceAsync(CancellationToken.None);
