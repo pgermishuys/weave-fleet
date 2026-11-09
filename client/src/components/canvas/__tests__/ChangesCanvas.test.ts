@@ -19,6 +19,7 @@ const sharedDiffs = {
   hasLoaded: ref(true),
   diffs: ref<FileDiffItem[]>([]),
   base: ref<SessionDiffBase | null>(null),
+  refusal: ref<{ message: string; fixCommand: string } | null>(null),
   byFile: computed((): ReadonlyMap<string, FileDiffItem> => new Map(sharedDiffs.diffs.value.map((diff) => [diff.file, diff]))),
 };
 
@@ -44,6 +45,19 @@ describe("ChangesCanvas", () => {
     sharedDiffs.diffs.value = [];
     sharedDiffs.base.value = null;
     sharedDiffs.hasLoaded.value = true;
+  });
+
+  it("says_why_when_git_refuses_the_folder_and_shows_the_fix_command", () => {
+    sharedDiffs.refusal.value = {
+      message: "Git won't read this folder because another user owns it.",
+      fixCommand: "git config --global --add safe.directory /srv/app",
+    };
+    const wrapper = mountCanvas();
+    sharedDiffs.refusal.value = null;
+
+    expect(wrapper.get('[data-testid="changes-git-refused"]').text()).toContain("another user owns it");
+    expect(wrapper.get('[data-testid="git-fix-command"]').text()).toBe("git config --global --add safe.directory /srv/app");
+    expect(wrapper.text()).not.toContain("No changes");
   });
 
   it("says so when the session has no changes", async () => {

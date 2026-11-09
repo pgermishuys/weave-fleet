@@ -70,6 +70,20 @@ public sealed class GitDiffService
         return result.IsSuccess && !string.IsNullOrWhiteSpace(repoRoot) ? repoRoot : null;
     }
 
+    /// <summary>
+    /// Why git refuses to read <paramref name="directory"/> ("detected dubious ownership": another user owns it), or null
+    /// when it doesn't refuse. <see cref="FindRepoRootAsync"/> returns null for that too, so callers that would show
+    /// nothing ask here to tell "not a repository" from "git won't look".
+    /// </summary>
+    public async Task<GitFolderRefusal?> FindRefusalAsync(string directory, CancellationToken ct)
+    {
+        if (string.IsNullOrWhiteSpace(directory) || !Directory.Exists(directory))
+            return null;
+
+        var result = await RunGitAsync(directory, ["rev-parse", "--show-toplevel"], ct).ConfigureAwait(false);
+        return result.IsSuccess ? null : GitFolderRefusal.FromGitError(result.StandardError, directory);
+    }
+
     /// <summary>The branch checked out in <paramref name="directory"/>, or null when it isn't in a git repository or HEAD is detached.</summary>
     public async Task<string?> CurrentBranchAsync(string directory, CancellationToken ct)
     {
@@ -708,6 +722,34 @@ public sealed class GitDiffProcessCommandRunner : IGitDiffCommandRunner
 public sealed record GitCommandResult(int ExitCode, string StandardOutput, string StandardError)
 {
     public bool IsSuccess => ExitCode == 0;
+}
+
+/// <summary>A folder git won't read because of <c>safe.directory</c>, with the command git itself suggests.</summary>
+public sealed record GitFolderRefusal(string Message, string FixCommand)
+{
+    private const string Marker = "detected dubious ownership in repository at '";
+
+    /// <summary>The refusal git's error describes, or null when the error is something else (not a repository, say).</summary>
+    public static GitFolderRefusal? FromGitError(string standardError, string directory)
+    {
+        if (string.IsNullOrEmpty(standardError) || !standardError.Contains("dubious ownership", StringComparison.OrdinalIgnoreCase))
+            return null;
+
+        var path = directory;
+        var start = standardError.IndexOf(Marker, StringComparison.Ordinal);
+        if (start >= 0)
+        {
+            start += Marker.Length;
+            var end = standardError.IndexOf('\'', start);
+            if (end > start)
+                path = standardError[start..end];
+        }
+
+        var quoted = path.Contains(' ', StringComparison.Ordinal) ? $"'{path}'" : path;
+        return new GitFolderRefusal(
+            "Git won't read this folder because another user owns it.",
+            $"git config --global --add safe.directory {quoted}");
+    }
 }
 
 public sealed record GitBaselineCapture(string RefName, string RepoRoot);

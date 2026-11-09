@@ -4,12 +4,16 @@ import { useWeaveSocket } from "@/composables/use-weave-socket";
 import type { DomainEvent } from "@/lib/domain-events";
 import { useMachineTarget } from "@/lib/machine-target";
 
+export type GitRefusal = NonNullable<SessionDiffsResponse["refusal"]>;
+
 export interface UseDiffsResult {
   /** The changed files with their line counts. Contents aren't included; see {@link fetchFileDiff}. */
   diffs: Readonly<Ref<readonly FileDiffItem[]>>;
   /** The same list by path, for lookups from every row of a file tree. */
   byFile: ComputedRef<ReadonlyMap<string, FileDiffItem>>;
   available: Readonly<ShallowRef<boolean>>;
+  /** Why the changes are unavailable when git refuses the folder; null otherwise. */
+  refusal: Readonly<ShallowRef<GitRefusal | null>>;
   /** What the changes are compared with; it moves when the branch is rebased onto a newer main. */
   base: Readonly<ShallowRef<SessionDiffBase | null>>;
   isLoading: Readonly<ShallowRef<boolean>>;
@@ -44,6 +48,7 @@ export function useDiffs(
   // Replaced whole, never mutated: a session can change hundreds of files.
   const diffs = shallowRef<readonly FileDiffItem[]>([]);
   const available = shallowRef(false);
+  const refusal = shallowRef<GitRefusal | null>(null);
   const base = shallowRef<SessionDiffBase | null>(null);
   const isLoading = shallowRef(false);
   const hasLoaded = shallowRef(false);
@@ -97,6 +102,7 @@ export function useDiffs(
       // Keep the old list when nothing changed, so what's derived from it doesn't recompute on every edit event.
       if (listKey(items) !== listKey(diffs.value)) diffs.value = items;
       available.value = Array.isArray(responseData) || typeof responseData?.available !== "boolean" ? true : responseData.available;
+      refusal.value = Array.isArray(responseData) ? null : (responseData?.refusal ?? null);
       const nextBase = Array.isArray(responseData) ? null : (responseData?.base ?? null);
       if (baseKey(nextBase) !== baseKey(base.value)) base.value = nextBase;
       isStale.value = false;
@@ -203,6 +209,7 @@ export function useDiffs(
     diffs: computed(() => diffs.value),
     byFile,
     available: readonly(available),
+    refusal: readonly(refusal),
     base: readonly(base),
     isLoading: readonly(isLoading),
     hasLoaded: readonly(hasLoaded),

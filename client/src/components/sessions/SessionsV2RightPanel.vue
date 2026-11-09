@@ -61,6 +61,7 @@ const sharedDiffs: UseDiffsResult = {
   diffs: computed(() => activeDiffs.value.diffs.value),
   byFile: computed(() => activeDiffs.value.byFile.value),
   available: computed(() => activeDiffs.value.available.value),
+  refusal: computed(() => activeDiffs.value.refusal.value),
   base: computed(() => activeDiffs.value.base.value),
   isLoading: computed(() => activeDiffs.value.isLoading.value),
   hasLoaded: computed(() => activeDiffs.value.hasLoaded.value),

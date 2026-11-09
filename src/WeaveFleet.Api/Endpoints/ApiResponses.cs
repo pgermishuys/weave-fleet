@@ -1,4 +1,5 @@
 using System.Text.Json;
+using WeaveFleet.Application.Git;
 using System.Text.Json.Nodes;
 using System.Text.Json.Serialization;
 using WeaveFleet.Application.DTOs;
@@ -279,7 +280,8 @@ public sealed record SessionMessagesPagination(
     string? OldestMessageId,
     int TotalCount);
 
-public sealed record GetSessionDiffsResponse(IReadOnlyList<FileDiffSummary> Diffs, bool Available, SessionDiffBase? Base);
+public sealed record GetSessionDiffsResponse(IReadOnlyList<FileDiffSummary> Diffs, bool Available, SessionDiffBase? Base,
+    [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] GitFolderRefusal? Refusal = null);
 
 /// <summary>
 /// What a session's changes are compared with: "branch" is where the folder's branch left <see cref="Branch"/>
