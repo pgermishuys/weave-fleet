@@ -5,6 +5,7 @@ import { buildTiles, groupTiles, needsYou, summarize, type Grouping, type Missio
 import { InboxFeed, type InboxSnapshot } from "@/lib/phone/inbox-feed";
 import { fetchNow, nudgeRequest, readRequest } from "@/lib/mission-control-requests";
 import { permissionAnswerRequest, questionAnswerRequest, sendAnswer, type AnswerOutcome, type AnswerTarget, type PermissionReply } from "@/lib/push/answer";
+import { useArchiveQueueStore } from "@/stores/archive-queue";
 import { useMachinesStore, type MachineEntry } from "@/stores/machines";
 import { useRelativeTime } from "@/composables/use-relative-time";
 
@@ -36,7 +37,8 @@ export function useMissionControl() {
     asks: snapshot?.asks ?? {},
     now: nowLines.value[entry.key] ?? {},
   })));
-  const tiles = computed(() => buildTiles(states.value, clock.value));
+  const archiveQueue = useArchiveQueueStore();
+  const tiles = computed(() => buildTiles(states.value, clock.value, undefined, archiveQueue.pendingIds));
   const groups = computed(() => groupTiles(tiles.value, grouping.value));
   const waiting = computed(() => needsYou(tiles.value));
   const summary = computed(() => summarize(tiles.value));

@@ -4,7 +4,7 @@
  */
 import type { SessionListItem } from "@/api/client";
 import { FINISHED_FOR_MS, sessionFolder, type InboxAsk } from "@/lib/phone/inbox";
-import { isTopLevel, sessionBucket, sessionUpdatedAt } from "@/lib/needs-you";
+import { isHiddenWhileArchiving, isTopLevel, sessionBucket, sessionUpdatedAt } from "@/lib/needs-you";
 import type { FeedStatus } from "@/lib/machine-feed";
 import { askPreviewWording } from "@/lib/tools";
 
@@ -128,11 +128,11 @@ function tile(machine: MissionMachine, session: SessionListItem): Tile {
  * Every machine's top-level sessions that wait on the user or work, and those that went quiet in the last day, newest
  * first.
  */
-export function buildTiles(machines: readonly MissionMachine[], now: number, quietFor = FINISHED_FOR_MS): Tile[] {
+export function buildTiles(machines: readonly MissionMachine[], now: number, quietFor = FINISHED_FOR_MS, archiving?: ReadonlySet<string>): Tile[] {
   const tiles: Tile[] = [];
   for (const machine of machines) {
     for (const session of machine.sessions) {
-      if (!isTopLevel(session) || session.retentionStatus === "archived") continue;
+      if (!isTopLevel(session) || session.retentionStatus === "archived" || isHiddenWhileArchiving(session.session.id, archiving)) continue;
       const entry = tile(machine, session);
       if (entry.state === "idle" && now - entry.updatedAt > quietFor) continue;
       tiles.push(entry);

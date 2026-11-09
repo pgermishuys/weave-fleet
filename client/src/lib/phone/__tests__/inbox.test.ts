@@ -46,6 +46,14 @@ describe("buildInbox", () => {
     expect(inbox.finished).toEqual([]);
   });
 
+  it("leaves out a session archived a moment ago, until Undo", () => {
+    const sessions = [session("a", "waiting_input", 3), session("b", "active", 6), session("c", "idle", 22)];
+    const hidden = buildInbox([machine("hangar", sessions)], NOW, undefined, new Set(["a", "b", "c"]));
+    expect([...hidden.needsYou, ...hidden.working, ...hidden.finished]).toEqual([]);
+    const undone = buildInbox([machine("hangar", sessions)], NOW, undefined, new Set());
+    expect(undone.needsYou.length + undone.working.length + undone.finished.length).toBe(3);
+  });
+
   it("marks an unreachable machine's sessions as stale and carries asks", () => {
     const ask = { kind: "permission" as const, ask: { id: "p1", sessionId: "a", kind: "shell" as const, tool: "bash", title: "dotnet test", always: [], askedAt: "" } };
     const inbox = buildInbox([machine("falcon", [session("a", "waiting_input", 3)], { status: "unreachable", asks: { a: ask } })], NOW);

@@ -40,6 +40,12 @@ const question: InboxAsk = {
 };
 
 describe("mission control tiles", () => {
+  it("leaves out a session archived a moment ago", () => {
+    const machines = [machine("home", "atlas", [session("a"), session("b")])];
+    expect(buildTiles(machines, NOW, undefined, new Set(["a"])).map((t) => t.sessionId)).toEqual(["b"]);
+    expect(buildTiles(machines, NOW, undefined, new Set()).map((t) => t.sessionId).sort()).toEqual(["a", "b"]);
+  });
+
   it("makes a tile for every machine's working and waiting session, newest first, and drops what's old, archived or a helper", () => {
     const tiles = buildTiles([
       machine("home", "atlas", [

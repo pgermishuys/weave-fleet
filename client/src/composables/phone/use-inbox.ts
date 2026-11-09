@@ -6,6 +6,7 @@ import { feedHubFor } from "@/composables/use-signalr-socket";
 import { liveTarget, targetFor as machineTarget } from "@/lib/machine-target";
 import { readCredentials, readCredentialsSync, type DeviceCredentials } from "@/lib/device-credentials";
 import { fetchMachineList, unreachableReason, type ListedMachine } from "@/lib/phone/grants";
+import { useArchiveQueueStore } from "@/stores/archive-queue";
 import { buildInbox, type InboxMachineState } from "@/lib/phone/inbox";
 import { HIDDEN_CLOSE_MS } from "@/lib/machine-feed";
 import { InboxFeed, type InboxSnapshot } from "@/lib/phone/inbox-feed";
@@ -79,7 +80,8 @@ export function useInbox() {
     diagnosis: entry.listed.diagnosis ?? null,
   })));
 
-  const inbox = computed(() => buildInbox(machines.value, now.value));
+  const archiveQueue = useArchiveQueueStore();
+  const inbox = computed(() => buildInbox(machines.value, now.value, undefined, archiveQueue.pendingIds));
 
   function homeEntry(credentials: DeviceCredentials | null, os: string | null): MachineEntry {
     return {

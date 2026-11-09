@@ -21,6 +21,7 @@ import { rememberPhoneMachine } from "@/lib/machines";
 import { haptic } from "@/lib/phone/haptics";
 import { holdKeyboard } from "@/lib/phone/keyboard";
 import { buildInbox, machinesStatus, restartRow, sectionRows, type InboxItem } from "@/lib/phone/inbox";
+import { useArchiveQueueStore } from "@/stores/archive-queue";
 import { ago, clock } from "@/lib/phone/time";
 import type { AnswerOutcome, PermissionReply } from "@/lib/push/answer";
 
@@ -69,8 +70,9 @@ const finished = computed(() => finishedSection.value.rows);
 
 /** Every session from the last 30 days, by machine: what needs you first, then newest first. */
 const query = shallowRef("");
+const archiveQueue = useArchiveQueueStore();
 const recent = computed(() => {
-  const built = buildInbox(machines.value, now.value, 30 * 24 * 3_600_000);
+  const built = buildInbox(machines.value, now.value, 30 * 24 * 3_600_000, archiveQueue.pendingIds);
   return shown([...built.needsYou, ...built.working, ...built.finished]);
 });
 const allSessions = computed(() => {
