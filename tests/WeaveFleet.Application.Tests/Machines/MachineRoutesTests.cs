@@ -129,6 +129,34 @@ public sealed class MachineRoutesTests : IDisposable
     }
 
     [Fact]
+    public async Task An_address_the_machine_stopped_reporting_is_not_dialled_again()
+    {
+        _network.Identity[Name] = """{"id":"machine-studio","name":"studio","apiVersion":1,"authMode":"token","addresses":[{"url":"http://studio.tail4f2a.ts.net:2113","kind":"tailnet"},{"url":"http://192.168.1.77:2113","kind":"lan"}]}""";
+        await _routes.LearnAsync(Id, Name, Token, CancellationToken.None);
+        _network.Asked.Clear();
+        _network.Answers["http://192.168.1.77:2113"] = Id;
+
+        // The name stops answering: only addresses still on the list are tried, never the dropped 192.168.1.42.
+        (await _routes.PickAsync(Id, CancellationToken.None)).ShouldBe("http://192.168.1.77:2113");
+
+        _network.Asked.ShouldNotContain(url => url.StartsWith(Lan, StringComparison.Ordinal));
+    }
+
+    [Fact]
+    public async Task An_address_dropped_while_a_probe_was_under_way_does_not_become_the_one_in_use()
+    {
+        // The owner's list loses Lan between the race starting and its result being saved.
+        _network.Answers[Lan] = Id;
+        _network.OnAsk[Lan] = () => _machines.UpdateAddressesAsync(
+            Id, Name, [new RemoteMachineAddress(Name, "tailnet", false)]).GetAwaiter().GetResult();
+
+        await _routes.PickAsync(Id, CancellationToken.None);
+
+        var saved = (await _machines.GetAsync(Id))!;
+        saved.Addresses.Select(a => a.Url).ShouldContain(saved.BaseUrl);
+    }
+
+    [Fact]
     public async Task A_machine_with_one_address_is_never_probed()
     {
         await _machines.UpsertAsync((await _machines.GetAsync(Id))! with { Addresses = MachineAddresses.Seed(Name) });
@@ -239,6 +267,7 @@ public sealed class MachineRoutesTests : IDisposable
     {
         public Dictionary<string, string> Answers { get; } = [];
         public Dictionary<string, string> Identity { get; } = [];
+        public Dictionary<string, Action> OnAsk { get; } = [];
         public List<string> Asked { get; } = [];
         public List<(string Url, string Token)> Tokens { get; } = [];
         public List<string> Clients { get; } = [];
@@ -261,6 +290,8 @@ public sealed class MachineRoutesTests : IDisposable
                     Tokens.Add((origin, token));
             }
 
+            if (OnAsk.TryGetValue(origin, out var onAsk))
+                onAsk();
             if (uri.AbsolutePath == "/api/machine" && Identity.TryGetValue(origin, out var identity))
                 return Task.FromResult(Json(identity));
             if (uri.AbsolutePath == "/api/machine/id" && Answers.TryGetValue(origin, out var id))
