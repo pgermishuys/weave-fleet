@@ -25,6 +25,24 @@ public sealed record SessionDiffScope(string RepoRoot, GitDiffBase Base, string 
         return diffBase is null ? null : new SessionDiffScope(repoRoot, diffBase, prefix);
     }
 
+    /// <summary>
+    /// A changed file's path as the session's folder knows it (what the user sees, and every client lookup uses): git
+    /// names it from the repository root, so a session in a subfolder drops the folder's own prefix. A path outside
+    /// the folder (the diff never lists one) stays as it is.
+    /// </summary>
+    public string ToSessionPath(string repoPath)
+    {
+        var prefix = WorkspacePrefix.Trim('/');
+        return prefix.Length > 0 && repoPath.StartsWith(prefix + "/", StringComparison.Ordinal) ? repoPath[(prefix.Length + 1)..] : repoPath;
+    }
+
+    /// <summary>The path git needs, from the repository root, for one the session's folder knows (the inverse of <see cref="ToSessionPath"/>).</summary>
+    public string ToRepoPath(string sessionPath)
+    {
+        var prefix = WorkspacePrefix.Trim('/');
+        return prefix.Length > 0 ? $"{prefix}/{sessionPath.TrimStart('/')}" : sessionPath;
+    }
+
     /// <summary>The session's folder relative to the repository, with forward slashes; null when it's outside it.</summary>
     public static string? ComputeWorkspacePrefix(string repoRoot, string sessionDirectory)
     {

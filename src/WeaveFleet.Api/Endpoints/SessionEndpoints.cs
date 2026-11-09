@@ -731,7 +731,7 @@ public static class SessionEndpoints
                         ct);
 
                     return Results.Ok(new GetSessionDiffsResponse(
-                        diffAvailability.Diffs.Select(ToFileDiffSummary).ToList(),
+                        diffAvailability.Diffs.Select(diff => ToFileDiffSummary(diff, scope)).ToList(),
                         diffAvailability.Available,
                         diffAvailability.Available ? ToSessionDiffBase(scope.Base) : null));
                 },
@@ -782,10 +782,10 @@ public static class SessionEndpoints
                         scope.RepoRoot,
                         scope.Base.Ref,
                         scope.WorkspacePrefix,
-                        path,
+                        scope.ToRepoPath(path),
                         ct);
 
-                    return diff is null ? Results.NotFound() : Results.Ok(ToFileDiffSummary(diff));
+                    return diff is null ? Results.NotFound() : Results.Ok(ToFileDiffSummary(diff, scope));
                 },
                 error => Task.FromResult(error.ToSessionApiResult()));
         })
@@ -1423,9 +1423,9 @@ public static class SessionEndpoints
             ? new SessionDiffBase("branch", diffBase.MainBranch, diffBase.Ref)
             : new SessionDiffBase("session", Branch: null, Commit: null);
 
-    private static FileDiffSummary ToFileDiffSummary(WeaveFleet.Application.Git.FileDiffSummary diff) =>
+    private static FileDiffSummary ToFileDiffSummary(WeaveFleet.Application.Git.FileDiffSummary diff, SessionDiffScope scope) =>
         new(
-            file: diff.Path,
+            file: scope.ToSessionPath(diff.Path),
             status: diff.Status ?? (diff.IsUntracked ? "added" : "modified"),
             additions: diff.AddedLines ?? 0,
             deletions: diff.DeletedLines ?? 0)
@@ -1433,9 +1433,9 @@ public static class SessionEndpoints
             IsBinary = diff.IsBinary
         };
 
-    private static FileDiffSummary ToFileDiffSummary(WeaveFleet.Application.Git.FileDiffContent diff) =>
+    private static FileDiffSummary ToFileDiffSummary(WeaveFleet.Application.Git.FileDiffContent diff, SessionDiffScope scope) =>
         new(
-            File: diff.Path,
+            File: scope.ToSessionPath(diff.Path),
             Status: diff.Status,
             Additions: diff.Additions,
             Deletions: diff.Deletions,
