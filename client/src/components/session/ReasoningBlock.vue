@@ -1,8 +1,6 @@
 <script setup lang="ts">
 import { computed, shallowRef, useId } from "vue";
 import { Brain, ChevronRight } from "lucide-vue-next";
-import { useTimeAgo } from "@vueuse/core";
-import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
 import { sharedMarkdownRenderer } from "@/lib/markdown-renderer";
 import { reasoningGist } from "@/lib/reasoning-gist";
 import { useThemeStore } from "@/stores/theme";
@@ -20,7 +18,6 @@ const themeStore = useThemeStore();
 const bodyId = useId();
 const isOpen = shallowRef(false);
 
-const relativeTime = useTimeAgo(() => props.createdAt ? new Date(props.createdAt) : new Date());
 const absoluteTime = computed(() => {
   if (!props.createdAt) return "";
   return new Date(props.createdAt).toLocaleString();
@@ -37,6 +34,7 @@ const gistHtml = computed(() => markdownRenderer.renderInline(reasoningGist(prop
     v-if="themeStore.thinking !== 'hidden' && (text.trim() || summary?.trim())"
     class="reasoning-row"
     :class="{ 'reasoning-row--folded': isFolded }"
+    :title="absoluteTime || undefined"
     data-testid="reasoning-block"
   >
     <div class="reasoning-row__layout">
@@ -59,6 +57,7 @@ const gistHtml = computed(() => markdownRenderer.renderInline(reasoningGist(prop
             aria-hidden="true"
           />
           <span
+            v-if="live || isOpen"
             class="reasoning-row__label"
             :class="{ 'reasoning-row__label--live': live }"
           >{{ live ? "Thinking…" : "Thinking" }}</span>
@@ -86,50 +85,39 @@ const gistHtml = computed(() => markdownRenderer.renderInline(reasoningGist(prop
         </div>
       </div>
 
-      <TooltipProvider v-if="createdAt">
-        <Tooltip>
-          <TooltipTrigger as-child>
-            <span class="reasoning-row__timestamp">{{ relativeTime }}</span>
-          </TooltipTrigger>
-          <TooltipContent side="top">
-            {{ absoluteTime }}
-          </TooltipContent>
-        </Tooltip>
-      </TooltipProvider>
     </div>
   </article>
 </template>
 
 <style scoped>
+/* One quiet line: a small brain and the newest sentence, muted and italic. The time is in the tooltip. */
 .reasoning-row {
   width: var(--activity-bubble-width, 100%);
   box-sizing: border-box;
-  padding: 12px;
-  border-bottom: 1px solid var(--border);
-  border-left: 3px solid transparent;
+  padding: 3px 8px;
   background: transparent;
 }
 
 .reasoning-row__layout {
   display: flex;
-  gap: 12px;
+  gap: 9px;
   align-items: flex-start;
 }
 
 .reasoning-row__icon {
   flex-shrink: 0;
-  width: 20px;
-  height: 20px;
+  width: 14px;
+  height: 14px;
   display: flex;
   align-items: center;
   justify-content: center;
-  margin-top: 2px;
+  margin-top: 8px;
 }
 
 .reasoning-row__icon-svg {
-  width: 16px;
-  height: 16px;
-  color: var(--muted);
+  width: 14px;
+  height: 14px;
+  color: color-mix(in srgb, var(--muted) 75%, transparent);
 }
 
 .reasoning-row__content {
@@ -161,8 +149,8 @@ const gistHtml = computed(() => markdownRenderer.renderInline(reasoningGist(prop
 
 /* Folded: one line per block, opened on click. */
 .reasoning-row--folded {
-  padding-top: 8px;
-  padding-bottom: 8px;
+  padding-top: 0;
+  padding-bottom: 0;
 }
 
 .reasoning-row--folded .reasoning-row__body {
@@ -251,12 +239,5 @@ const gistHtml = computed(() => markdownRenderer.renderInline(reasoningGist(prop
     background: none;
     color: var(--muted);
   }
-}
-
-.reasoning-row__timestamp {
-  flex-shrink: 0;
-  font-size: 12px;
-  color: var(--muted);
-  margin-top: 2px;
 }
 </style>

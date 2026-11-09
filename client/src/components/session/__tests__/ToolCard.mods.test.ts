@@ -70,8 +70,7 @@ describe("ToolCard with a ToolUse tree", () => {
 
   it("draws the tree in the header and drops the check and the preview", () => {
     const base = mount_({ ...BASH });
-    expect(base.find("[aria-label='Completed']").exists()).toBe(true);
-    expect(base.find(".tool-preview").exists()).toBe(true);
+    expect(base.find("[aria-label='Completed']").exists()).toBe(false);
     contribute("ToolUse", text("3 files"));
     const w = mount_(BASH);
     expect(w.get(".tool-header .tool-header__mod").text()).toBe("3 files");
@@ -138,8 +137,7 @@ describe("ToolCard with a ToolUse tree", () => {
     contribute("ToolUse", { type: "Nope" });
     const w = mount_(BASH);
     expect(w.find(".tool-header__mod").exists()).toBe(false);
-    expect(w.find("[aria-label='Completed']").exists()).toBe(true);
-    expect(w.find(".tool-preview").exists()).toBe(true);
+    expect(w.find("[aria-label='Completed']").exists()).toBe(false);
   });
 
   it("redraws when contributed and when removed, and removal restores Fleet's drawing", async () => {
@@ -180,8 +178,7 @@ describe("ToolCard with a ToolResult tree", () => {
     expect(body.text()).toBe("custom body");
     expect(body.find(".tool-output").exists()).toBe(false);
     expect(w.find(".tool-header__mod").exists()).toBe(false);
-    expect(w.find("[aria-label='Completed']").exists()).toBe(true);
-    expect(w.find(".tool-preview").exists()).toBe(true);
+    expect(w.find("[aria-label='Completed']").exists()).toBe(false);
   });
 
   it("draws Fleet's own body where the tree says Fleet", () => {

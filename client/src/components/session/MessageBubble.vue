@@ -464,7 +464,8 @@ function handleExpandVisual(payload: VisualPayload): void {
 }
 
 .msg-body {
-  font-size: 14px;
+  /* Reading text (the answer and your own message) is 15px; the chrome around it stays 13px. */
+  font-size: 15px;
   line-height: 1.65;
   color: var(--text);
 }

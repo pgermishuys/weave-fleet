@@ -1,6 +1,5 @@
 <script setup lang="ts">
 import { computed, shallowRef, watch, type Component } from "vue";
-import { Check } from "lucide-vue-next";
 import DiffView from "@/components/session/DiffView.vue";
 import ToolOutputBody from "@/components/session/ToolOutputBody.vue";
 import StatusGlyph from "@/components/sessions/StatusGlyph.vue";
@@ -14,6 +13,7 @@ import { useModToolRows } from "@/lib/mods/renders";
 import { useResolvedModView } from "@/lib/mods/resolve";
 import type { ModAction } from "@/lib/mods/types";
 import { isRetiredCanvasTool } from "@/components/session/activity-stream-tool-card";
+import { formatCallDuration, isReadCall, isShellRow, isWriteCall, shellHeader } from "@/lib/tool-row";
 
 interface DiffLine {
   type: "add" | "remove" | "context";
@@ -46,6 +46,10 @@ const props = withDefaults(
     improvable?: boolean;
     /** The call waits for the user (a page they pick on): the row is amber. */
     waiting?: boolean;
+    /** How long the call ran, when the harness timed it. */
+    durationMs?: number;
+    /** A shell call's exit code, when the harness reports one. */
+    exit?: number;
   }>(),
   {
     callId: undefined,
@@ -62,6 +66,8 @@ const props = withDefaults(
     canvasId: undefined,
     improvable: false,
     waiting: false,
+    durationMs: undefined,
+    exit: undefined,
   },
 );
 
@@ -73,8 +79,19 @@ const emit = defineEmits<{
 
 const workspaceUiStore = useWorkspaceUiStore();
 
-const shouldShowDiff = computed(() => workspaceUiStore.inlineToolDiffs && props.diffLines.length > 0);
-const isCollapsed = shallowRef(props.initiallyCollapsed && !shouldShowDiff.value);
+const isRead = computed(() => isReadCall(props.kind));
+const isWrite = computed(() => isWriteCall(props.kind));
+const isShell = computed(() => isShellRow(props.kind));
+// A write row opens on what it wrote; other rows show a diff only when the user turned inline diffs on.
+const shouldShowDiff = computed(() => props.diffLines.length > 0 && (isWrite.value || workspaceUiStore.inlineToolDiffs));
+/** An opened write shows at most this many lines, then offers the rest. */
+const DIFF_PREVIEW_LINES = 12;
+const showAllDiff = shallowRef(false);
+const shownDiffLines = computed(() => (showAllDiff.value ? props.diffLines : props.diffLines.slice(0, DIFF_PREVIEW_LINES)));
+const hiddenDiffLines = computed(() => props.diffLines.length - shownDiffLines.value.length);
+const shellLabel = computed(() => shellHeader(props.input, props.title, props.exit, props.durationMs));
+const tookLabel = computed(() => formatCallDuration(props.durationMs));
+const isCollapsed = shallowRef(props.initiallyCollapsed && (isWrite.value || !shouldShowDiff.value));
 
 const toolIcon = computed(() => getToolIcon(props.kind));
 /** Copilot's turn row and HydraFusion's pass rows are a sentence of facts (model, time, credits), not a path: they wrap rather than clip. */
@@ -91,7 +108,7 @@ const visualRenderer = computed(() => {
 watch(
   () => props.initiallyCollapsed,
   (nextValue) => {
-    if (shouldShowDiff.value) {
+    if (shouldShowDiff.value && !isWrite.value) {
       isCollapsed.value = false;
       return;
     }
@@ -101,7 +118,7 @@ watch(
 );
 
 watch(shouldShowDiff, (nextValue) => {
-  if (nextValue) {
+  if (nextValue && !isWrite.value) {
     isCollapsed.value = false;
   }
 });
@@ -195,6 +212,7 @@ function handleExpandVisual(): void {
 <template>
   <details
     class="tool-card"
+    :class="{ 'tool-card--read': isRead, 'tool-card--write': isWrite, 'tool-card--shell': isShell }"
     data-testid="tool-card"
     :data-tool-card-id="id"
     :open="!isCollapsed"
@@ -275,14 +293,15 @@ function handleExpandVisual(): void {
         <span class="tool-header__adds">+{{ diffStats.adds }}</span>
         <span class="tool-header__removes">−{{ diffStats.removes }}</span>
       </span>
-      <Check
-        v-else-if="status === 'Completed' && !useView.draws"
-        class="tool-header__done"
-        aria-label="Completed"
-      />
+      <span
+        v-else-if="isShell && tookLabel"
+        class="tool-header__result tool-header__took"
+        data-testid="tool-card-took"
+      >{{ tookLabel }}</span>
     </summary>
 
-    <p v-if="preview && !useView.draws" class="tool-preview">{{ preview }}</p>
+    <!-- Quiet rows say nothing under the line while closed; a failed call keeps what it printed. -->
+    <p v-if="preview && status === 'Error' && !useView.draws" class="tool-preview">{{ preview }}</p>
 
     <!-- A closed row draws no body: a long conversation holds many rows, and most stay closed. -->
     <div
@@ -306,8 +325,17 @@ function handleExpandVisual(): void {
 
           <DiffView
             v-if="shouldShowDiff"
-            :lines="diffLines"
+            :lines="isWrite ? shownDiffLines : diffLines"
           />
+          <button
+            v-if="shouldShowDiff && isWrite && hiddenDiffLines > 0"
+            type="button"
+            class="tool-diff-more"
+            data-testid="tool-card-diff-more"
+            @click="showAllDiff = true"
+          >
+            Show all {{ diffLines.length }} lines
+          </button>
 
           <div
             v-if="visualPayload && visualRenderer"
@@ -325,8 +353,9 @@ function handleExpandVisual(): void {
           </div>
 
           <ToolOutputBody
-            v-if="output && !visualPayload"
+            v-if="output && !visualPayload && !(isWrite && shouldShowDiff)"
             :output="output"
+            :header="isShell ? shellLabel : undefined"
           />
 
           <p
@@ -349,8 +378,28 @@ function handleExpandVisual(): void {
   transition: background var(--transition);
 }
 
-.tool-card[open] {
-  background: color-mix(in srgb, var(--text) 3%, transparent);
+/* Reads are background work: the verb is as quiet as the path. */
+.tool-card--read .tool-header__label {
+  color: var(--muted);
+  font-weight: 400;
+}
+
+.tool-diff-more {
+  margin: 4px 0 0;
+  padding: 0;
+  border: 0;
+  background: transparent;
+  color: var(--muted);
+  font-size: 12px;
+  cursor: pointer;
+}
+
+.tool-diff-more:hover {
+  color: var(--text);
+}
+
+.tool-header__took {
+  color: var(--muted);
 }
 
 .tool-header {
@@ -494,10 +543,6 @@ function handleExpandVisual(): void {
   margin-left: 0;
 }
 
-.tool-header__show + .tool-header__done {
-  margin-left: 0;
-}
-
 .tool-header__status,
 .tool-header__result {
   display: flex;
@@ -526,14 +571,6 @@ function handleExpandVisual(): void {
 
 .tool-header__removes {
   color: var(--error);
-}
-
-.tool-header__done {
-  width: 13px;
-  height: 13px;
-  margin-left: auto;
-  flex-shrink: 0;
-  color: var(--running);
 }
 
 .tool-preview {

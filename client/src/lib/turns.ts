@@ -108,7 +108,7 @@ function stringField(input: Record<string, unknown> | null, ...keys: readonly st
 const MAX_CACHED_CALLS = 4000;
 const fileEditCache = new Map<string, readonly TurnFileEdit[]>();
 
-interface TurnFileEdit {
+export interface TurnFileEdit {
   path: string;
   additions: number;
   deletions: number;
@@ -150,7 +150,7 @@ function linesOf(content: string): string[] {
 }
 
 /** Every file a completed write call touched, with the lines it wrote to each. */
-function fileEditsOf(part: AccumulatedToolPart): readonly TurnFileEdit[] {
+export function fileEditsOf(part: AccumulatedToolPart): readonly TurnFileEdit[] {
   const tool = getTool(part.tool);
   if (!tool.fileWrite) return [];
   // A call that failed or hasn't finished wrote nothing.

@@ -17,7 +17,8 @@ describe("ReasoningBlock", () => {
     const fold = wrapper.get("[data-testid='reasoning-fold']");
 
     expect(fold.attributes("aria-expanded")).toBe("false");
-    expect(fold.text()).toContain("Thinking");
+    // One muted line: the gist only, the time in the tooltip.
+    expect(wrapper.find(".reasoning-row__label").exists()).toBe(false);
     expect(wrapper.get("[data-testid='reasoning-gist']").text()).toBe("The list sorts every order in memory.");
     expect(wrapper.find(".reasoning-row__text").exists()).toBe(false);
 
