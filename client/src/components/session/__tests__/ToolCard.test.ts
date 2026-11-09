@@ -101,7 +101,7 @@ describe("ToolCard", () => {
       props: {
         id: "tool-card-diff",
         title: "Edit",
-        kind: "edit",
+        kind: "Tool",
         status: "Completed",
         initiallyCollapsed: true,
         diffLines: [

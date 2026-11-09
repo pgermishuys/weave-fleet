@@ -220,8 +220,18 @@ describe("MessageBubble tool rows: pages", () => {
   });
 
   it("has no paging of its own: every call is drawn, however many", () => {
-    const many = Array.from({ length: 25 }, (_, i) => tool({ id: `t${i}`, kind: "read", title: `f${i}.ts` }));
+    const many = Array.from({ length: 25 }, (_, i) => tool({ id: `t${i}`, kind: "bash", title: `f${i}.ts` }));
 
     expect(bubble(many).findAllComponents(ToolCard)).toHaveLength(25);
+  });
+
+  it("collapses completed reads in a row into one Read N files row that opens to the list", async () => {
+    const reads = Array.from({ length: 4 }, (_, i) => tool({ id: `r${i}`, kind: "read", title: `f${i}.ts`, status: "Completed" }));
+    const w = bubble(reads);
+
+    expect(w.findAllComponents(ToolCard)).toHaveLength(0);
+    expect(w.get("[data-testid='tool-reads-toggle']").text()).toContain("Read 4 files");
+    await w.get("[data-testid='tool-reads-toggle']").trigger("click");
+    expect(w.findAllComponents(ToolCard)).toHaveLength(4);
   });
 });

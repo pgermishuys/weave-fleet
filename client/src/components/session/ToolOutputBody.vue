@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { computed, nextTick, onBeforeUnmount, shallowRef, useTemplateRef } from "vue";
-import { ChevronDown, ChevronUp } from "lucide-vue-next";
+import { Check, ChevronDown, ChevronUp, Copy } from "lucide-vue-next";
 import { linesToHtml, parseToolOutputCached } from "@/lib/tool-output";
 
 /**
@@ -10,6 +10,8 @@ import { linesToHtml, parseToolOutputCached } from "@/lib/tool-output";
  */
 const props = defineProps<{
   output: string;
+  /** A shell call's one header, "bun test · exit 0 · 0.1s"; without it the bar is only the copy icon. */
+  header?: string;
 }>();
 
 /** Lines shown until the user asks for the rest, as the `!` block does. */
@@ -68,8 +70,9 @@ function count(n: number, noun: string): string {
     <div class="tool-output-bar">
       <span
         class="tool-output-bar__count"
-        data-testid="tool-card-output-count"
-      >{{ count(total, "line") }}</span>
+        data-testid="tool-card-output-header"
+        :title="header"
+      >{{ header ?? "" }}</span>
       <button
         type="button"
         class="tool-output-bar__copy"
@@ -77,7 +80,11 @@ function count(n: number, noun: string): string {
         :aria-label="copied ? 'Copied' : 'Copy output'"
         @click="copy"
       >
-        {{ copied ? "Copied" : "Copy" }}
+        <component
+          :is="copied ? Check : Copy"
+          class="tool-output-bar__copy-icon"
+          aria-hidden="true"
+        />
       </button>
     </div>
     <button
@@ -138,23 +145,36 @@ function count(n: number, noun: string): string {
 
 .tool-output-bar__count {
   flex: 1;
-  font-variant-numeric: tabular-nums;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-family: var(--font-mono-stack);
 }
 
 .tool-output-bar__copy {
-  padding: 1px 8px;
-  border: 1px solid var(--border);
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 22px;
+  height: 22px;
+  padding: 0;
+  border: 0;
   border-radius: calc(var(--radius-btn) - 2px);
   background: transparent;
   color: var(--muted);
-  font-size: 12px;
   cursor: pointer;
-  transition: color var(--transition), border-color var(--transition);
+  transition: color var(--transition), background var(--transition);
+}
+
+.tool-output-bar__copy-icon {
+  width: 13px;
+  height: 13px;
 }
 
 .tool-output-bar__copy:hover {
   color: var(--text);
-  border-color: color-mix(in srgb, var(--text) 25%, transparent);
+  background: color-mix(in srgb, var(--text) 8%, transparent);
 }
 
 .tool-output-bar__copy:focus-visible,

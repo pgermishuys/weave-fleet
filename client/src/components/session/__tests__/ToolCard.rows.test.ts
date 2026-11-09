@@ -37,10 +37,10 @@ describe("ToolCard status indicator", () => {
     expect(w.get("[data-testid='tool-card-background']").text()).toBe("Background");
   });
 
-  it("shows a Completed call with a check and no glyph", () => {
+  it("shows a Completed call with no tick and no glyph: the turn's fold says it", () => {
     const w = card({ kind: "bash" });
 
-    expect(header(w).find("[aria-label='Completed']").exists()).toBe(true);
+    expect(header(w).find("[aria-label='Completed']").exists()).toBe(false);
     expect(w.findComponent(StatusGlyph).exists()).toBe(false);
   });
 
@@ -61,7 +61,7 @@ describe("ToolCard status indicator", () => {
   });
 
   it("defaults to Completed when no status is given", () => {
-    expect(header(card({ kind: "bash", status: undefined })).find("[aria-label='Completed']").exists()).toBe(true);
+    expect(header(card({ kind: "bash", status: undefined })).find("[aria-label='Completed']").exists()).toBe(false);
   });
 
   it("shows +N and -N instead of the check when a completed call changed a file", () => {
@@ -91,7 +91,7 @@ describe("ToolCard status indicator", () => {
     const w = card({ kind: "edit", diffLines: [{ type: "context", content: " same" }] });
 
     expect(header(w).find(".tool-header__adds").exists()).toBe(false);
-    expect(header(w).find("[aria-label='Completed']").exists()).toBe(true);
+    expect(header(w).find("[aria-label='Completed']").exists()).toBe(false);
   });
 });
 
@@ -101,11 +101,12 @@ describe("ToolCard open and closed", () => {
     expect(isOpen(card({ kind: "bash", initiallyCollapsed: true }))).toBe(false);
   });
 
-  it("keeps the header, and the preview line, when collapsed", () => {
+  it("keeps the header, and no preview line, when collapsed", () => {
     const w = card({ kind: "bash", title: "ls", initiallyCollapsed: true, preview: "└ a.ts (3 lines)", output: "a.ts\nb.ts\nc.ts" });
 
     expect(header(w).text()).toContain("Bash");
-    expect(w.get(".tool-preview").text()).toBe("└ a.ts (3 lines)");
+    // Quiet rows say nothing under the line while closed.
+    expect(w.find(".tool-preview").exists()).toBe(false);
     expect(isOpen(w)).toBe(false);
   });
 
@@ -132,13 +133,13 @@ describe("ToolCard open and closed", () => {
   });
 
   it("stays open for a diff when inline diffs are on, even if told to start collapsed", () => {
-    const w = card({ kind: "edit", initiallyCollapsed: true, diffLines: [{ type: "add", content: "+x" }] }, true);
+    const w = card({ kind: "Tool", initiallyCollapsed: true, diffLines: [{ type: "add", content: "+x" }] }, true);
 
     expect(isOpen(w)).toBe(true);
   });
 
   it("starts collapsed for a diff when inline diffs are off", async () => {
-    const w = card({ kind: "edit", initiallyCollapsed: true, diffLines: [{ type: "add", content: "+x" }] }, false);
+    const w = card({ kind: "Tool", initiallyCollapsed: true, diffLines: [{ type: "add", content: "+x" }] }, false);
 
     expect(isOpen(w)).toBe(false);
     // A closed row draws no body.
@@ -149,6 +150,45 @@ describe("ToolCard open and closed", () => {
     expect(w.find("[data-testid='tool-card-diff']").exists()).toBe(false);
     // With the diff hidden and no output or summary, the body says so.
     expect(w.find("[data-testid='tool-card-empty-state']").exists()).toBe(true);
+  });
+});
+
+describe("ToolCard quiet rows", () => {
+  const manyLines = Array.from({ length: 30 }, (_, i) => ({ type: "add" as const, content: `+line ${i}` }));
+
+  it("a write opens on what it wrote even with inline diffs off, twelve lines then Show all", async () => {
+    const w = card({ kind: "write", initiallyCollapsed: true, diffLines: manyLines }, false);
+    expect(isOpen(w)).toBe(false);
+
+    (w.get("details").element as HTMLDetailsElement).open = true;
+    await w.get("details").trigger("toggle");
+    expect(w.findAll("[data-testid='tool-card-diff-row']")).toHaveLength(12);
+
+    await w.get("[data-testid='tool-card-diff-more']").trigger("click");
+    expect(w.findAll("[data-testid='tool-card-diff-row']")).toHaveLength(30);
+    expect(w.find("[data-testid='tool-card-diff-more']").exists()).toBe(false);
+  });
+
+  it("a write shows +N −N on its line", () => {
+    const w = card({ kind: "write", initiallyCollapsed: true, diffLines: manyLines });
+    expect(header(w).find(".tool-header__adds").text()).toBe("+30");
+  });
+
+  it("a shell row shows how long it took, and its open body has one header and one copy icon", () => {
+    const w = card({ kind: "bash", title: "bun test", input: { command: "bun test" }, exit: 0, durationMs: 100, output: "ok\n1 pass" });
+    expect(header(w).get("[data-testid='tool-card-took']").text()).toBe("0.1s");
+    expect(w.get("[data-testid='tool-card-output-header']").text()).toBe("bun test · exit 0 · 0.1s");
+    expect(w.findAll("[data-testid='tool-card-output-copy']")).toHaveLength(1);
+    expect(w.text()).not.toContain("lines)");
+  });
+
+  it("reads are dimmed", () => {
+    expect(card({ kind: "read" }).get("[data-testid='tool-card']").classes()).toContain("tool-card--read");
+  });
+
+  it("a failed call keeps its preview line", () => {
+    const w = card({ kind: "bash", status: "Error", initiallyCollapsed: true, preview: "└ boom" });
+    expect(w.get(".tool-preview").text()).toBe("└ boom");
   });
 });
 

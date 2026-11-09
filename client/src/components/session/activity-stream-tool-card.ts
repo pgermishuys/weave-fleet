@@ -76,6 +76,12 @@ export interface ToolCardItem {
   input?: Record<string, unknown>;
   /** A page call that waits for the user's pick: the row reads as waiting. */
   waiting?: boolean;
+  /** How long the call ran, when the harness timed it. */
+  durationMs?: number;
+  /** A shell call's exit code, when the harness reports one. */
+  exit?: number;
+  /** The file a write call changed, and the lines it wrote (the card's diff when the harness sent none). */
+  filePath?: string;
 }
 
 /**
@@ -286,8 +292,18 @@ export function toToolCardItem(
     page: toolPage(part),
     callId: part.callId,
     input: input ?? undefined,
+    durationMs: toolDurationMs(state),
+    exit: getNumberValue(asRecord(state?.metadata)?.exit) ?? getNumberValue(asRecord(state?.metadata)?.exitCode),
     waiting: pickTitle !== undefined && toolStatus(part) !== "completed" && toolStatus(part) !== "error" ? true : undefined,
   };
+}
+
+/** How long a call ran, from the start and end times the harness kept on its state (ms); undefined when it kept none. */
+export function toolDurationMs(state: Record<string, unknown> | null): number | undefined {
+  const time = asRecord(state?.time);
+  const start = getNumberValue(time?.start);
+  const end = getNumberValue(time?.end);
+  return start !== undefined && end !== undefined && end >= start ? end - start : undefined;
 }
 
 const BACKGROUND_STATE_TO_STATUS: Record<BackgroundState, string> = {

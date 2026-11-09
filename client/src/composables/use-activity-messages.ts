@@ -8,6 +8,7 @@ import { compactionOf, foldCompactionSummaries, type CompactionView } from "@/li
 import { modelDisplayName } from "@/lib/agent-model-choice";
 import { isDelegationWaiting } from "@/lib/domain-event-reducer";
 import { getTool } from "@/lib/tools";
+import { fileEditsOf } from "@/lib/turns";
 import {
   isSubagentTool,
   subagentKind,
@@ -153,8 +154,23 @@ const withDelegation: ToolItemDecorator = (item, part, context) => {
 const withImprove: ToolItemDecorator = (item, part, context) =>
   getTool(part.tool).category === "skill" && context.isBuiltInSkill(item.title) ? { ...item, improvable: true } : item;
 
+/**
+ * A call that wrote a file shows the file and what it wrote, whichever harness it came from: when the harness sent no
+ * diff of its own, the lines are worked out from the call's input (`fileEditsOf`, which the Turns canvas reads too).
+ */
+const withFileEdit: ToolItemDecorator = (item, part) => {
+  if (!getTool(part.tool).fileWrite) return item;
+  const [edit] = fileEditsOf(part);
+  if (!edit) return item;
+  return {
+    ...item,
+    filePath: edit.path,
+    diffLines: item.diffLines && item.diffLines.length > 0 ? item.diffLines : [...edit.diff],
+  };
+};
+
 /** What each tool card gets added to it, in order. */
-const toolItemDecorators: readonly ToolItemDecorator[] = [withDelegation, withImprove];
+const toolItemDecorators: readonly ToolItemDecorator[] = [withDelegation, withImprove, withFileEdit];
 
 interface DerivedMessage {
   /** Everything besides the message itself that the derived message was built from. */

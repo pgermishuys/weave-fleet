@@ -22,7 +22,7 @@ describe("ToolOutputBody", () => {
 
     expect(shown(wrapper)).toEqual(["FAIL limiter", "ok"]);
     expect(wrapper.get(".ansi-fg-red").text()).toBe("FAIL");
-    expect(wrapper.get("[data-testid='tool-card-output-count']").text()).toBe("2 lines");
+    expect(wrapper.find("[data-testid='tool-card-output-count']").exists()).toBe(false);
     expect(wrapper.find("[data-testid='tool-card-output-expand']").exists()).toBe(false);
     expect(wrapper.html()).not.toContain(ESC);
   });
@@ -41,7 +41,7 @@ describe("ToolOutputBody", () => {
     expect(shown(wrapper)).toHaveLength(12);
     expect(shown(wrapper)[0]).toBe("✓ case 189");
     expect(shown(wrapper).at(-1)).toBe("✓ case 200");
-    expect(wrapper.get("[data-testid='tool-card-output-count']").text()).toBe("200 lines");
+    expect(wrapper.get("[data-testid='tool-card-output-header']").text()).toBe("");
 
     const expand = wrapper.get("[data-testid='tool-card-output-expand']");
     expect(expand.text()).toBe("Show 188 earlier lines");
@@ -85,7 +85,7 @@ describe("ToolOutputBody", () => {
     expect(copied.startsWith("✓ case 1\n")).toBe(true);
     expect(copied.endsWith("✓ case 30\n[###] 100%")).toBe(true);
     expect(copied).not.toContain(ESC);
-    expect(copy.text()).toBe("Copied");
+    expect(copy.attributes("aria-label")).toBe("Copied");
   });
 
   it("stays quiet when the clipboard refuses", async () => {
@@ -95,7 +95,7 @@ describe("ToolOutputBody", () => {
     await wrapper.get("[data-testid='tool-card-output-copy']").trigger("click");
     await flushPromises();
 
-    expect(wrapper.get("[data-testid='tool-card-output-copy']").text()).toBe("Copy");
+    expect(wrapper.get("[data-testid='tool-card-output-copy']").attributes("aria-label")).toBe("Copy output");
   });
 });
 

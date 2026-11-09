@@ -7,6 +7,7 @@ import type { PeerSender } from "@/lib/session-messages";
 import MessageBubble from "@/components/session/MessageBubble.vue";
 import ReasoningBlock from "@/components/session/ReasoningBlock.vue";
 import ShellCommandBlock from "@/components/session/ShellCommandBlock.vue";
+import { mergeReadRuns } from "@/lib/merge-reads";
 import CompactionDivider from "@/components/session/CompactionDivider.vue";
 import { sessionRetry } from "@/lib/session-row-status";
 import WorkingIndicator from "@/components/session/WorkingIndicator.vue";
@@ -352,8 +353,11 @@ const turnStartedAt = computed(() => {
   return null;
 });
 
+// Reads the agent made in separate steps, with nothing between them, are one row.
+const mergedMessages = computed(() => mergeReadRuns(messages.value));
+
 const { mounted: mountedMessages, unmountedOlder, mountAll: mountAllMessages } = useIncrementalMount(
-  messages,
+  mergedMessages,
   () => props.sessionId,
 );
 
@@ -380,6 +384,12 @@ const {
   unmountedOlder: () => unmountedOlder.value,
   mountAll: mountAllMessages,
 });
+
+/** An agent message that is only thinking and calls: its rows sit close together, not 20px apart like paragraphs. */
+function isRowsOnly(message: { role: string; body: string; images: unknown[]; questionParts?: unknown[]; turnError?: unknown }): boolean {
+  return message.role === "assistant" && message.body.trim().length === 0 && message.images.length === 0
+    && (message.questionParts?.length ?? 0) === 0 && !message.turnError;
+}
 
 /** A session chip in a message of yours: opens the session it names. */
 function openReferencedSession(sessionId: string): void {
@@ -570,7 +580,7 @@ function handleImproveSkill(skill: string, toolId: string): void {
         :class="[
           `activity-message--${message.role}`,
           `activity-message--${message.clusterPosition}`,
-          { 'activity-message--shown': highlightedMessageId === message.id },
+          { 'activity-message--shown': highlightedMessageId === message.id, 'activity-message--rows': isRowsOnly(message) },
         ]"
       >
         <ReasoningBlock
@@ -1129,6 +1139,19 @@ function handleImproveSkill(skill: string, toolId: string): void {
 .activity-message--user,
 .activity-message--shell {
   align-items: flex-end;
+}
+
+/* Rows of one turn are a dense list: only text blocks get paragraph spacing. */
+.activity-message--rows {
+  margin-bottom: 0;
+}
+
+.activity-message--rows :deep(.message) {
+  padding: 0;
+}
+
+.activity-message--rows + .activity-message:not(.activity-message--rows) {
+  margin-top: 10px;
 }
 
 .activity-message--first,
