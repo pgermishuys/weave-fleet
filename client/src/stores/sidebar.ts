@@ -86,10 +86,31 @@ export const useSidebarStore = defineStore("sidebar", () => {
   const rightPanelSessionId = computed(() =>
     activeRail.value === "sessions" ? sessionsStore.activeSessionId : null,
   );
+  // Sessions seen with no changes and no open files keep the panel collapsed until the agent first changes a file;
+  // then it opens by itself. Only a default: a session's own remembered choice wins over both.
+  const emptySessions = shallowRef<ReadonlySet<string>>(new Set());
+  const openedByChange = shallowRef<ReadonlySet<string>>(new Set());
   const rightPanelCollapsed = computed(() => {
     const sessionId = rightPanelSessionId.value;
-    return (sessionId ? rightPanelCollapsedBySession.value[sessionId] : undefined) ?? lastRightPanelCollapsed.value;
+    const chosen = sessionId ? rightPanelCollapsedBySession.value[sessionId] : undefined;
+    if (chosen !== undefined) return chosen;
+    if (sessionId && emptySessions.value.has(sessionId)) return true;
+    if (sessionId && openedByChange.value.has(sessionId)) return false;
+    return lastRightPanelCollapsed.value;
   });
+
+  /** What the open session has to show in the panel: nothing yet (it stays collapsed), or its first change. */
+  function noteSessionContent(sessionId: string, hasContent: boolean): void {
+    const empty = emptySessions.value.has(sessionId);
+    if (!hasContent && !empty) {
+      emptySessions.value = new Set([...emptySessions.value, sessionId]);
+    } else if (hasContent && empty) {
+      const nextEmpty = new Set(emptySessions.value);
+      nextEmpty.delete(sessionId);
+      emptySessions.value = nextEmpty;
+      openedByChange.value = new Set([...openedByChange.value, sessionId]);
+    }
+  }
   const mobileDrawerOpen = shallowRef(false);
   // Where the conversation would be too narrow beside it (phones, narrow windows), the right
   // panel is a sheet over the conversation, closed until asked for. AppShell decides which.
@@ -179,6 +200,7 @@ export const useSidebarStore = defineStore("sidebar", () => {
     activeRail,
     panelCollapsed,
     rightPanelCollapsed,
+    noteSessionContent,
     mobileDrawerOpen,
     rightPanelAsSheet,
     rightPanelSheetOpen,

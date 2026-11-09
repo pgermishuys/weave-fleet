@@ -83,6 +83,20 @@ watch(
   { immediate: true },
 );
 
+// A session with no changes and no open files keeps the panel collapsed until the agent first changes a file.
+const hasFileTabs = computed(() =>
+  activeSessionId.value
+    ? canvasesStore.sessionCanvases(activeSessionId.value).canvases.some((canvas) => canvas.kind === "file")
+    : false,
+);
+watch(
+  [activeSessionId, () => sharedDiffs.hasLoaded.value, () => sharedDiffs.diffs.value.length, hasFileTabs],
+  ([sessionId, loaded, changed, files]) => {
+    if (sessionId && loaded) sidebarStore.noteSessionContent(sessionId, changed > 0 || files);
+  },
+  { immediate: true },
+);
+
 // Server canvases stay in sync while the panel is collapsed, so they're current when it opens.
 useServerCanvases(activeSessionId);
 

@@ -79,6 +79,13 @@ export interface SessionCanvases {
   knownVisuals: VisualPayload[];
   /** Built-in canvases already introduced for this session, so closing one keeps it closed. */
   introduced?: readonly CanvasKind[];
+  /**
+   * The user opened Changes (from a changed-files card or its tab): the panel makes room for reviewing. Moving to
+   * another tab ends it; dragging the gutter wins over it.
+   */
+  review?: boolean;
+  /** Changes should scroll to this file; `seq` makes asking for the same file twice work. */
+  reviewFocus?: { path: string; seq: number };
 }
 
 const WIDENED_STORAGE_KEY = "weave:canvas-widened";
@@ -222,9 +229,31 @@ export const useCanvasesStore = defineStore("canvases", () => {
   function activate(sessionId: string, canvasId: string): void {
     update(sessionId, (current) =>
       current.canvases.some((canvas) => canvas.id === canvasId)
-        ? { ...current, activeId: canvasId }
+        ? { ...current, activeId: canvasId, review: canvasId === "changes" && (current.activeId !== "changes" || current.review === true) }
         : current,
     );
+  }
+
+  /** Opens Changes for reviewing, scrolled to one file when a path is given. */
+  function openChanges(sessionId: string, path?: string): void {
+    update(sessionId, (current) => ({
+      ...current,
+      canvases: current.canvases.some((canvas) => canvas.id === "changes")
+        ? current.canvases
+        : [{ id: "changes", kind: "changes" }, ...current.canvases],
+      activeId: "changes",
+      review: true,
+      reviewFocus: path ? { path, seq: (current.reviewFocus?.seq ?? 0) + 1 } : current.reviewFocus,
+    }));
+  }
+
+  /** Files the latest turn changed, for Changes' "This turn" scope. */
+  const turnFiles = shallowRef<Record<string, readonly string[]>>({});
+
+  function setTurnFiles(sessionId: string, paths: readonly string[]): void {
+    const current = turnFiles.value[sessionId];
+    if (current && current.length === paths.length && current.every((path, i) => path === paths[i])) return;
+    turnFiles.value = { ...turnFiles.value, [sessionId]: paths };
   }
 
   /** Open (or focus) one of the built-in singleton canvases. */
@@ -235,6 +264,7 @@ export const useCanvasesStore = defineStore("canvases", () => {
         ...current,
         canvases: exists ? current.canvases : [...current.canvases, { id: kind, kind }],
         activeId: kind,
+        review: kind === "changes",
         introduced: current.introduced?.includes(kind) ? current.introduced : [...(current.introduced ?? []), kind],
       };
     });
@@ -516,6 +546,9 @@ export const useCanvasesStore = defineStore("canvases", () => {
     sessionCanvases,
     activate,
     open,
+    openChanges,
+    turnFiles,
+    setTurnFiles,
     introduce,
     openVisual,
     openModPane,

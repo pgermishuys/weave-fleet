@@ -75,6 +75,45 @@ describe("useSidebarStore", () => {
     });
   });
 
+  it("keeps the right panel collapsed for a session with nothing to show, and opens it on the first change", () => {
+    const store = useSidebarStore();
+    const sessions = useSessionsStore();
+    sessions.setActiveSessionId("empty");
+
+    store.noteSessionContent("empty", false);
+    expect(store.rightPanelCollapsed).toBe(true);
+
+    store.noteSessionContent("empty", true);
+    expect(store.rightPanelCollapsed).toBe(false);
+  });
+
+  it("lets a remembered choice win over the empty-session default", () => {
+    const store = useSidebarStore();
+    const sessions = useSessionsStore();
+    sessions.setActiveSessionId("mine");
+    store.setRightPanelCollapsed(false);
+
+    store.noteSessionContent("mine", false);
+    expect(store.rightPanelCollapsed).toBe(false);
+
+    store.setRightPanelCollapsed(true);
+    store.noteSessionContent("mine", true);
+    expect(store.rightPanelCollapsed).toBe(true);
+  });
+
+  it("doesn't open a session that already had changes when the app loaded", () => {
+    const store = useSidebarStore();
+    const sessions = useSessionsStore();
+    store.setRightPanelCollapsed(true);
+    sessions.setActiveSessionId("old");
+    // New session, never toggled: takes the last choice (collapsed) rather than opening.
+    sessions.setActiveSessionId("older");
+
+    store.noteSessionContent("older", true);
+
+    expect(store.rightPanelCollapsed).toBe(true);
+  });
+
   it("remembers the right panel per session", () => {
     const store = useSidebarStore();
     const sessions = useSessionsStore();

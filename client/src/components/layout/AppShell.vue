@@ -205,14 +205,29 @@ const showRightPanelSheet = computed(() => showRightPanel.value && !rightPanelFi
 watch(rightPanelFits, (fits) => sidebarStore.setRightPanelAsSheet(!fits), { immediate: true });
 watch(pathname, () => sidebarStore.setRightPanelSheetOpen(false));
 
-const sessionsRightPanelWidth = computed(() =>
-  Math.min(
+// Opening Changes to review it (from a changed-files card or its tab) gives the panel about 60% of the room beside
+// the session list. Dragging the gutter once is the user's own width and wins from then on.
+const REVIEW_PANEL_SHARE = 0.6;
+const userSizedPanel = ref(false);
+const reviewing = computed(() => {
+  const id = openSessionId.value;
+  if (!id || userSizedPanel.value) return false;
+  const state = canvasesStore.sessionCanvases(id);
+  return state.review === true && state.activeId === "changes";
+});
+
+const sessionsRightPanelWidth = computed(() => {
+  if (reviewing.value && workspaceSheetWidth.value > 0) {
+    const review = Math.round(workspaceSheetWidth.value * REVIEW_PANEL_SHARE);
+    return Math.min(inlineRoom.value, Math.max(rightPanelWidth.value, review));
+  }
+  return Math.min(
     inlineRoom.value,
     canvasesStore.widened
       ? Math.max(rightPanelWidth.value, Math.min(WIDENED_RIGHT_PANEL_WIDTH, inlineRoom.value))
       : rightPanelWidth.value,
-  ),
-);
+  );
+});
 const boardRightPanelWidth = computed(() => Math.min(inlineRoom.value, rightPanelWidth.value));
 
 // --- Left gutter (context panel ↔ conversation) ---
@@ -249,11 +264,12 @@ function onLeftGutterPointerDown(e: PointerEvent): void {
 }
 
 function onGutterPointerDown(e: PointerEvent): void {
-  if (showSessionsV2Panel.value && canvasesStore.widened) {
-    // Dragging takes over from Widen, starting at the width on screen.
+  if (showSessionsV2Panel.value && (canvasesStore.widened || reviewing.value)) {
+    // Dragging takes over from Widen and from the review width, starting at the width on screen.
     rightPanelWidth.value = sessionsRightPanelWidth.value;
     canvasesStore.setWidened(false);
   }
+  userSizedPanel.value = true;
 
   isGutterDragging.value = true;
   const startX = e.clientX;
@@ -265,7 +281,7 @@ function onGutterPointerDown(e: PointerEvent): void {
     const delta = startX - e.clientX;
     const mainEl = document.querySelector(".main");
     const appWidth = mainEl?.getBoundingClientRect().width ?? window.innerWidth;
-    const maxWidth = Math.min(appWidth * 0.5, inlineRoom.value);
+    const maxWidth = Math.min(Math.max(appWidth * 0.5, startWidth), inlineRoom.value);
     rightPanelWidth.value = Math.max(MIN_RIGHT_PANEL_WIDTH, Math.min(maxWidth, startWidth + delta));
   };
 
