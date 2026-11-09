@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { foldTurns, summaryParts, withFileStats } from "@/lib/turn-fold";
+import { capturableStats, foldTurns, relativePath, summaryParts, withFileStats } from "@/lib/turn-fold";
 import type { ActivityMessage } from "@/composables/use-activity-messages";
 
 function msg(over: Partial<ActivityMessage> & { id: string; role: ActivityMessage["role"] }): ActivityMessage {
@@ -36,17 +36,27 @@ describe("foldTurns", () => {
     expect(summaryParts(host.fold!.summary)).toEqual(["read 2 files", "edited 1", "ran 1 command"]);
   });
 
-  it("folds text written before or between calls, and keeps only the text after the last call", () => {
+  it("never hides the agent's text: narration between calls stays, in order, and only tool rows fold", () => {
     const m = turn();
     m[1] = { ...m[1]!, body: "I'll start by looking." } as ActivityMessage;
     m[2] = { ...m[2]!, body: "Now the test." } as ActivityMessage;
     const out = foldTurns(m, { running: false, directory: "/work/demo", open });
-    expect(out.map((x) => x.id)).toEqual(["u1", "a1", "a3"]);
-    expect(out[1]!.body).toBe("");
-    expect(out[2]!.body).toBe("All done.");
-    // Opened, the narration shows where it was written.
-    const opened = foldTurns(m, { running: false, directory: "/work/demo", open: new Set(["u1"]) });
-    expect(opened[1]!.body).toBe("I'll start by looking.");
+    expect(out.map((x) => x.id)).toEqual(["u1", "a1", "a2", "a3"]);
+    expect(out.map((x) => x.body)).toEqual(["do it", "I'll start by looking.", "Now the test.", "All done."]);
+    expect(out[1]!.foldOnly).toBeUndefined();
+    expect(out[1]!.fold).toBeDefined();
+    expect(out[1]!.tools).toEqual([]);
+  });
+
+  it("keeps the reply to a steered message visible in its own turn", () => {
+    const m = [
+      msg({ id: "u1", role: "user", createdAt: 1 }),
+      msg({ id: "a1", role: "assistant", tools: [tool("t", "bash")] as never }),
+      msg({ id: "u2", role: "user", body: "also this", createdAt: 5 }),
+      msg({ id: "a2", role: "assistant", body: "Sure, done.", tools: [tool("t2", "read")] as never }),
+    ];
+    const out = foldTurns(m, { running: false, open });
+    expect(out.find((x) => x.id === "a2")!.body).toBe("Sure, done.");
   });
 
   it("keeps the last text as the answer when all of it came before the last call", () => {
@@ -152,3 +162,84 @@ describe("whole-file writes", () => {
   });
 });
 
+
+describe("regressions in the folded turn", () => {
+  it("keeps a Show page row out of the fold even when the call carries no page, and doesn't count it", () => {
+    const m = [msg({ id: "u", role: "user" }), msg({ id: "a", role: "assistant", tools: [tool("p", "mcp__fleet__fleet_page_show"), tool("r", "read")] as never })];
+    const out = foldTurns(m, { running: false, open });
+    expect(out[1]!.tools?.map((t) => t.id)).toEqual(["p"]);
+    expect(out[1]!.fold?.summary).toMatchObject({ other: 0, reads: 1 });
+    expect(summaryParts(out[1]!.fold!.summary)).toEqual(["read 1 file"]);
+  });
+
+  it("doesn't count ExitPlanMode as a read", () => {
+    const m = [msg({ id: "u", role: "user" }), msg({ id: "a", role: "assistant", tools: [tool("x", "ExitPlanMode")] as never })];
+    const summary = foldTurns(m, { running: false, open })[1]!.fold!.summary;
+    expect(summary.reads).toBe(0);
+    expect(summary.edits).toBe(0);
+  });
+
+  it("marks a turn that failed or was stopped, so no ✓ is drawn for it", () => {
+    const failed = [msg({ id: "u", role: "user" }), msg({ id: "a", role: "assistant", tools: [tool("t", "read")] as never }), msg({ id: "b", role: "assistant", turnError: { name: "x", message: "boom", isRetryable: false } })];
+    expect(foldTurns(failed, { running: false, open })[1]!.fold!.summary.outcome).toBe("failed");
+    const stopped = [msg({ id: "u", role: "user" }), msg({ id: "a", role: "assistant", tools: [tool("r", "read"), tool("t", "bash", { status: "Stopped" })] as never })];
+    expect(foldTurns(stopped, { running: false, open })[1]!.fold!.summary.outcome).toBe("stopped");
+    expect(foldTurns(turn(), { running: false, open })[1]!.fold!.summary.outcome).toBe("done");
+  });
+
+  it("ends 'Worked for' with the turn's own work, not a later background notice or retry", () => {
+    const m = [
+      msg({ id: "u", role: "user", createdAt: 1000 }),
+      msg({ id: "a", role: "assistant", createdAt: 1500, completedAt: 2000, tools: [tool("t", "bash")] as never }),
+      msg({ id: "n", role: "assistant", createdAt: 21_000, completedAt: 21_000, background: { state: "completed" } as never }),
+      msg({ id: "r", role: "assistant", createdAt: 22_000, completedAt: 23_000, body: "Picked it up." }),
+    ];
+    expect(foldTurns(m, { running: false, open })[1]!.fold!.summary.durationMs).toBe(1000);
+    const retry = [
+      msg({ id: "u", role: "user", createdAt: 1000 }),
+      msg({ id: "a", role: "assistant", createdAt: 1500, completedAt: 2000, turnError: { name: "x", message: "m", isRetryable: true }, tools: [tool("t", "read")] as never }),
+      msg({ id: "b", role: "assistant", createdAt: 90_000, completedAt: 95_000, body: "later" }),
+    ];
+    expect(foldTurns(retry, { running: false, open })[1]!.fold!.summary.durationMs).toBe(1000);
+  });
+
+  it("relativises Windows paths (either slash, any drive case) so the card finds their stats", () => {
+    expect(relativePath("C:\\work\\demo\\src\\a.ts", "c:\\work\\demo")).toBe("src/a.ts");
+    expect(relativePath("/work/demo/src/a.ts", "/work/demo/")).toBe("src/a.ts");
+    expect(relativePath("/elsewhere/a.ts", "/work/demo")).toBe("/elsewhere/a.ts");
+  });
+
+  describe("past turns keep what they changed", () => {
+    const write = (id: string, path: string) => tool(id, "write", { filePath: path, diffFromContent: true, diffLines: [{ type: "add", content: "+x" }] });
+    const two = () => [
+      msg({ id: "u1", role: "user" }), msg({ id: "a1", role: "assistant", body: "ok", tools: [write("w1", "/work/demo/README.md")] as never }),
+      msg({ id: "u2", role: "user" }), msg({ id: "a2", role: "assistant", body: "ok" }),
+    ];
+    const cardOf = (messages: ActivityMessage[]) => foldTurns(messages, { running: false, directory: "/work/demo", open }).find((x) => x.id === "a1")!.card!;
+
+    it("doesn't recount an earlier turn from today's diff: unknown draws no counts", () => {
+      const today = new Map([["README.md", { additions: 0, deletions: 3 }]]);
+      const card = cardOf(withFileStats(two(), today, "/work/demo"));
+      expect(card.countsKnown).toBe(false);
+    });
+
+    it("uses the counts kept when the turn ended", () => {
+      const today = new Map([["README.md", { additions: 0, deletions: 3 }]]);
+      const card = cardOf(withFileStats(two(), today, "/work/demo", new Map([["w1", { additions: 3, deletions: 1 }]])));
+      expect([card.additions, card.deletions]).toEqual([3, 1]);
+    });
+
+    it("captures only the latest turn's writes", () => {
+      const stats = new Map([["README.md", { additions: 3, deletions: 1 }]]);
+      expect(capturableStats(two(), stats, "/work/demo")).toEqual([]);
+      expect(capturableStats(two().slice(0, 2), stats, "/work/demo")).toEqual([["w1", { additions: 3, deletions: 1 }]]);
+    });
+
+    it("a file outside the session's folder is unknown, not +0 −0", () => {
+      const m = two().slice(0, 2);
+      m[1] = { ...m[1]!, tools: [write("w9", "/other/place/x.md")] as never } as ActivityMessage;
+      const card = foldTurns(withFileStats(m, new Map(), "/work/demo"), { running: false, directory: "/work/demo", open }).at(-1)!.card!;
+      expect(card.countsKnown).toBe(false);
+    });
+  });
+});

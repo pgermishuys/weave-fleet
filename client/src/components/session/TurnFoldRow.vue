@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { computed } from "vue";
-import { Check, ChevronRight } from "lucide-vue-next";
+import { Check, ChevronRight, CircleAlert } from "lucide-vue-next";
 import { formatCallDuration } from "@/lib/tool-row";
 import { summaryParts, type FoldedTurn } from "@/lib/turn-fold";
 
@@ -43,9 +43,17 @@ const details = computed(() => summaryParts(props.turn.summary).join(" · "));
       class="turn-fold__details"
     >· {{ details }}</span>
     <Check
+      v-if="turn.summary.outcome === 'done'"
       class="turn-fold__done"
       aria-label="Done"
     />
+    <span
+      v-else
+      class="turn-fold__ended"
+      data-testid="turn-fold-ended"
+    >
+      <CircleAlert aria-hidden="true" />{{ turn.summary.outcome === "failed" ? "Failed" : "Stopped" }}
+    </span>
   </button>
 </template>
 
@@ -101,6 +109,21 @@ const details = computed(() => summaryParts(props.turn.summary).join(" · "));
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
+}
+
+.turn-fold__ended {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  margin-left: auto;
+  flex-shrink: 0;
+  font-size: 12px;
+  color: var(--danger, var(--muted));
+}
+
+.turn-fold__ended svg {
+  width: 13px;
+  height: 13px;
 }
 
 .turn-fold__done {
