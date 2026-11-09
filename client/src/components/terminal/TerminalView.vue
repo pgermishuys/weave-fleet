@@ -155,6 +155,9 @@ function copySelection(): void {
 }
 
 function onFocus(): void {
+  // One shell has one size: another client attaching (a phone beside the desktop) resizes it for everyone. Whoever takes
+  // the keyboard takes the size back, so the shell wraps at the width of the screen being typed on.
+  if (term) connection?.resize(term.cols, term.rows);
   emit("focus", true);
 }
 
