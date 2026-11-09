@@ -32,6 +32,14 @@ export function composerStatus(activityStatus: string | null | undefined, optimi
   return "idle";
 }
 
+/**
+ * Whether the composer offers Interrupt: while a turn runs, retries or delegates, and while the session waits on a
+ * question or permission (the phone header has no Abort, so the composer's button is the only way to stop it).
+ */
+export function canInterruptSession(status: ComposerStatus, aborting = false): boolean {
+  return status !== "idle" && !aborting;
+}
+
 export interface HarnessCapabilities {
   /** It takes a message into a running turn, read at the agent's next step. */
   canSteer: boolean;

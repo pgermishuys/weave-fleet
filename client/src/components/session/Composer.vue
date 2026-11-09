@@ -20,7 +20,7 @@ import ModComposerBand from "@/components/mods/ModComposerBand.vue";
 import { Button } from "@/components/ui/button";
 import { useAgents } from "@/composables/use-agents";
 import { useAbortSession } from "@/composables/use-session-actions";
-import { composerStatus, harnessCapabilities } from "@/composables/use-composer-actions";
+import { canInterruptSession, composerStatus, harnessCapabilities } from "@/composables/use-composer-actions";
 import { AUTOCOMPLETE_LISTBOX_ID, useAutocomplete } from "@/composables/use-autocomplete";
 import { useDraftReferences } from "@/composables/use-draft-references";
 import { useReferableSessions } from "@/composables/use-referable-sessions";
@@ -54,7 +54,7 @@ import {
 import { useMachineTarget } from "@/lib/machine-target";
 import { usePreferencesStore } from "@/stores/preferences";
 import { addDraftTerminalContext, useDraftTerminalContext } from "@/composables/use-draft-terminal-context";
-import { describeSessionDefaults, modelFromKey, plainDefaultLabel, sessionDefaultModelKey } from "@/lib/agent-model-choice";
+import { describeSessionDefaults, modelFromKey, sessionDefaultModelKey } from "@/lib/agent-model-choice";
 import { formatTerminalContext, terminalLineRange, type TerminalContextDraft } from "@/lib/format-terminal-context";
 import { sessionReferencesIn } from "@/lib/session-references";
 import { sessionSkillNames, skillDeliveries, skillListHint, skillNamesIn } from "@/lib/skill-mentions";
@@ -375,7 +375,7 @@ const isDisabled = computed(() => {
 
 const sessionStatus = computed(() => composerStatus(effectiveActivityStatus.value, optimisticBusy.value));
 
-const canInterrupt = computed(() => sessionStatus.value === "busy" && !isAborting.value);
+const canInterrupt = computed(() => canInterruptSession(sessionStatus.value, isAborting.value));
 
 /**
  * The session's harness can take a message into a running turn (steer), which the agent reads at its next step. Without
@@ -601,8 +601,6 @@ const { width: composerWidth } = useElementSize(composerRef);
 /** Under this the chips don't fit whole ("Default (DeepSeek V4.1 …"): they say the plain name, as the phone's do. */
 const NARROW_COMPOSER_PX = 640;
 const narrow = computed(() => composerWidth.value > 0 && composerWidth.value < NARROW_COMPOSER_PX);
-
-const plainLabel = (label: string): string => (narrow.value ? plainDefaultLabel(label) : label);
 
 /** "Default" is the session's own agent and model, which prompts that name none get; the chips say which. */
 const defaultLabels = computed(() => {
@@ -1301,7 +1299,8 @@ function handleKeydown(event: KeyboardEvent): void {
             v-model="selectedAgentId"
             class="composer-chip composer-chip--agent"
             :agents="agents"
-            :default-label="plainLabel(defaultLabels.agentLabel)"
+            :default-label="defaultLabels.agentLabel"
+            :plain-default="narrow"
             :default-description="defaultLabels.agentDescription"
           />
           <ModelSelector
@@ -1309,7 +1308,8 @@ function handleKeydown(event: KeyboardEvent): void {
             class="composer-chip composer-chip--model"
             :models="models"
             :harness-type="selectedSession?.harnessType"
-            :default-label="plainLabel(defaultLabels.modelLabel)"
+            :default-label="defaultLabels.modelLabel"
+            :plain-default="narrow"
             :default-description="defaultLabels.modelDescription"
           />
           <EffortToggle

@@ -10,12 +10,15 @@ const props = withDefaults(
     defaultLabel?: string;
     defaultDescription?: string;
     disabled?: boolean;
+    /** The chip drops "Default (…)" to the name; the list keeps the whole Default row. */
+    plainDefault?: boolean;
     testId?: string;
   }>(),
   {
     defaultLabel: "Default",
     defaultDescription: "Use the session default agent",
     disabled: false,
+    plainDefault: false,
     testId: undefined,
   },
 );
@@ -48,6 +51,7 @@ const placeholder = computed(() => selectedAgentId.value || "Select agent");
     :placeholder="placeholder"
     :items="items"
     :disabled="disabled"
+    :plain-default="plainDefault"
     :test-id="testId"
   />
 </template>

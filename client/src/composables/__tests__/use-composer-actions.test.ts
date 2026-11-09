@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { canSendQueuedNow, composerStatus, harnessCapabilities, primaryAction, routeDraft, type HarnessCapabilities } from "../use-composer-actions";
+import { canInterruptSession, canSendQueuedNow, composerStatus, harnessCapabilities, primaryAction, routeDraft, type HarnessCapabilities } from "../use-composer-actions";
 
 const steers: HarnessCapabilities = { canSteer: true, steersByDefault: true, supportsShell: true, supportsSide: true, supportsImages: true };
 const plain: HarnessCapabilities = { canSteer: false, steersByDefault: false, supportsShell: false, supportsSide: false, supportsImages: false };
@@ -86,5 +86,19 @@ describe("the phone's buttons", () => {
     expect(canSendQueuedNow(prompt, "busy", steers)).toBe(true);
     expect(canSendQueuedNow(prompt, "busy", plain)).toBe(false);
     expect(canSendQueuedNow(shell, "busy", steers)).toBe(false);
+  });
+});
+
+describe("canInterruptSession", () => {
+  it("allows stopping a running turn and a session waiting on a question or permission", () => {
+    expect(canInterruptSession(composerStatus("busy"))).toBe(true);
+    expect(canInterruptSession(composerStatus("retry"))).toBe(true);
+    expect(canInterruptSession(composerStatus("delegating"))).toBe(true);
+    expect(canInterruptSession(composerStatus("waiting_input"))).toBe(true);
+  });
+
+  it("offers nothing when idle or already aborting", () => {
+    expect(canInterruptSession(composerStatus("idle"))).toBe(false);
+    expect(canInterruptSession("busy", true)).toBe(false);
   });
 });

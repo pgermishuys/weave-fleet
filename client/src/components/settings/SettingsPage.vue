@@ -90,7 +90,7 @@ watch(
 
 <template>
   <section class="grid grid-cols-1 gap-6">
-    <div>
+    <div class="phone-menu-lane">
       <h1
         class="text-2xl font-semibold tracking-tight text-text"
         data-testid="settings-page-title"

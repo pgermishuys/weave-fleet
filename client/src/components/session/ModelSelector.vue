@@ -20,6 +20,8 @@ const props = withDefaults(
     /** Recent is for pickers where a model is sent with; settings pickers show favourites only. */
     showRecent?: boolean;
     disabled?: boolean;
+    /** The chip drops "Default (…)" to the name; the list keeps the whole Default row. */
+    plainDefault?: boolean;
     testId?: string;
     /** Passed to the menu: "auto" opens it downward when there's no room above. */
     placement?: "up" | "auto";
@@ -30,6 +32,7 @@ const props = withDefaults(
     harnessType: undefined,
     showRecent: true,
     disabled: false,
+    plainDefault: false,
     testId: undefined,
     placement: "up",
   },
@@ -104,6 +107,7 @@ const placeholder = computed(() => modelFromKey(selectedModelId.value)?.modelID 
     :items="items"
     :sections="sections"
     :disabled="disabled"
+    :plain-default="plainDefault"
     :test-id="testId"
     :placement="placement"
     @toggle-star="toggleStar"

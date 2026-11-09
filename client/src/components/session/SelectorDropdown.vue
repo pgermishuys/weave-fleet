@@ -42,6 +42,8 @@ const props = withDefaults(
     placeholder?: string;
     disabled?: boolean;
     testId?: string;
+    /** The chip says "build" for "Default (build)"; the list keeps the whole row. A phone always does this. */
+    plainDefault?: boolean;
     /** "up" always opens above, as the composer at the bottom of the screen wants; "auto" opens below when there's no room above. */
     placement?: "up" | "auto";
   }>(),
@@ -49,6 +51,7 @@ const props = withDefaults(
     placeholder: "Select",
     disabled: false,
     testId: undefined,
+    plainDefault: false,
     placement: "up",
     sections: undefined,
   },
@@ -61,7 +64,7 @@ const selectedId = defineModel<string>({ required: true });
 // On a phone a chip has no room for "Default (DeepSeek V4.1 Flash)": it shows the name inside, whole, and gives way only at its end.
 const phone = useIsMobileNav();
 const fullLabel = computed(() => selectedItem.value?.label ?? props.placeholder);
-const chipLabel = computed(() => (phone.value ? fullLabel.value.replace(/^Default \((.*)\)$/, "$1") : fullLabel.value));
+const chipLabel = computed(() => (phone.value || props.plainDefault ? fullLabel.value.replace(/^Default \((.*)\)$/, "$1") : fullLabel.value));
 
 const isOpen = shallowRef(false);
 const opensDown = shallowRef(false);
