@@ -6,12 +6,75 @@ using Dapper;
 using Microsoft.Extensions.DependencyInjection;
 using WeaveFleet.Application.Data;
 using WeaveFleet.Application.Git;
+using WeaveFleet.Application.Sessions;
 using WeaveFleet.Api.Tests.Infrastructure;
 
 namespace WeaveFleet.Api.Tests.Endpoints;
 
 public sealed class SessionDiffEndpointTests(SessionDiffEndpointTests.Server server) : IClassFixture<SessionDiffEndpointTests.Server>
 {
+    [Fact]
+    public async Task a_turn_that_ends_keeps_the_sessions_changed_files_and_serves_them_as_turn_stats()
+    {
+        var tempRoot = Path.Combine(Path.GetTempPath(), $"weave-api-turn-stats-{Guid.NewGuid():N}");
+        Directory.CreateDirectory(tempRoot);
+        var service = new GitDiffService();
+
+        try
+        {
+            await RunGitAsync(tempRoot, "init");
+            await File.WriteAllTextAsync(Path.Combine(tempRoot, "README.md"), "one\ntwo\nthree\n");
+            await RunGitAsync(tempRoot, "add", ".");
+            await RunGitAsync(tempRoot, "-c", "user.name=Weave Test", "-c", "user.email=weave@example.invalid", "commit", "-m", "initial");
+            var baseline = await service.CaptureBaselineAsync(tempRoot, "turn-stats-check", CancellationToken.None);
+            baseline.ShouldNotBeNull();
+            await InsertSessionAsync(server.Factory, "session-turn-stats", "workspace-turn-stats", "instance-turn-stats", baseline.RepoRoot, baseline.RefName, baseline.RepoRoot);
+            using var client = server.Factory.CreateClient();
+
+            // Nothing kept yet.
+            var before = await client.GetFromJsonAsync<JsonElement>("/api/sessions/session-turn-stats/turn-stats", JsonSerializerOptions.Web);
+            before.GetProperty("snapshots").GetArrayLength().ShouldBe(0);
+
+            // Turn one rewrites the README, and its end is kept.
+            await File.WriteAllTextAsync(Path.Combine(tempRoot, "README.md"), "one\nTWO\nthree\nfour\n");
+            var recorder = server.Factory.Services.GetRequiredService<TurnFileStatsRecorder>();
+            recorder.Observe("session-turn-stats", "local-user", new WeaveFleet.Domain.Events.SessionIdled { Payload = new WeaveFleet.Domain.Events.SessionIdledPayload { SessionId = "session-turn-stats" } });
+            var first = await WaitForSnapshotsAsync(client, 1);
+
+            // Turn two deletes the file; turn one's snapshot still says what it changed.
+            File.Delete(Path.Combine(tempRoot, "README.md"));
+            recorder.Observe("session-turn-stats", "local-user", new WeaveFleet.Domain.Events.SessionIdled { Payload = new WeaveFleet.Domain.Events.SessionIdledPayload { SessionId = "session-turn-stats" } });
+            var both = await WaitForSnapshotsAsync(client, 2);
+
+            var turnOne = first[0].GetProperty("files").EnumerateArray().ShouldHaveSingleItem();
+            (turnOne.GetProperty("file").GetString(), turnOne.GetProperty("additions").GetInt32(), turnOne.GetProperty("deletions").GetInt32()).ShouldBe(("README.md", 2, 1));
+            DateTimeOffset.Parse(first[0].GetProperty("endedAt").GetString()!, System.Globalization.CultureInfo.InvariantCulture).ShouldBeGreaterThan(DateTimeOffset.UtcNow.AddMinutes(-5));
+            var turnOneLater = both[0].GetProperty("files").EnumerateArray().ShouldHaveSingleItem();
+            turnOneLater.GetProperty("additions").GetInt32().ShouldBe(2);
+            var turnTwo = both[1].GetProperty("files").EnumerateArray().ShouldHaveSingleItem();
+            (turnTwo.GetProperty("additions").GetInt32(), turnTwo.GetProperty("deletions").GetInt32()).ShouldBe((0, 3));
+
+            (await client.GetAsync("/api/sessions/no-such-session/turn-stats")).StatusCode.ShouldBe(HttpStatusCode.NotFound);
+        }
+        finally
+        {
+            Directory.Delete(tempRoot, recursive: true);
+        }
+    }
+
+    private static async Task<JsonElement[]> WaitForSnapshotsAsync(HttpClient client, int count)
+    {
+        var deadline = DateTime.UtcNow.AddSeconds(20);
+        while (true)
+        {
+            var json = await client.GetFromJsonAsync<JsonElement>("/api/sessions/session-turn-stats/turn-stats", JsonSerializerOptions.Web);
+            var snapshots = json.GetProperty("snapshots").EnumerateArray().ToArray();
+            if (snapshots.Length >= count || DateTime.UtcNow > deadline)
+                return snapshots;
+            await Task.Delay(100);
+        }
+    }
+
     [Fact]
     public async Task get_session_diffs_for_workspace_subdirectory_excludes_files_outside_workspace_prefix()
     {

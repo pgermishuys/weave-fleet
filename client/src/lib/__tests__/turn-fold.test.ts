@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { capturableStats, foldTurns, relativePath, summaryParts, withFileStats } from "@/lib/turn-fold";
+import { foldTurns, relativePath, summaryParts, withFileStats } from "@/lib/turn-fold";
 import type { ActivityMessage } from "@/composables/use-activity-messages";
 
 function msg(over: Partial<ActivityMessage> & { id: string; role: ActivityMessage["role"] }): ActivityMessage {
@@ -223,16 +223,32 @@ describe("regressions in the folded turn", () => {
       expect(card.countsKnown).toBe(false);
     });
 
-    it("uses the counts kept when the turn ended", () => {
+    it("uses the snapshot the server took as the turn ended, whatever today's diff says", () => {
+      const m = two();
+      m[0] = { ...m[0]!, createdAt: 1000 } as ActivityMessage;
+      m[1] = { ...m[1]!, createdAt: 2000, completedAt: 3000 } as ActivityMessage;
+      m[2] = { ...m[2]!, createdAt: 10_000 } as ActivityMessage;
       const today = new Map([["README.md", { additions: 0, deletions: 3 }]]);
-      const card = cardOf(withFileStats(two(), today, "/work/demo", new Map([["w1", { additions: 3, deletions: 1 }]])));
+      const snapshots = [{ endedAt: 3500, files: new Map([["README.md", { additions: 3, deletions: 1 }]]) }];
+      const card = cardOf(withFileStats(m, today, "/work/demo", snapshots));
       expect([card.additions, card.deletions]).toEqual([3, 1]);
     });
 
-    it("captures only the latest turn's writes", () => {
-      const stats = new Map([["README.md", { additions: 3, deletions: 1 }]]);
-      expect(capturableStats(two(), stats, "/work/demo")).toEqual([]);
-      expect(capturableStats(two().slice(0, 2), stats, "/work/demo")).toEqual([["w1", { additions: 3, deletions: 1 }]]);
+    it("never takes a later turn's snapshot for an earlier turn", () => {
+      const m = two();
+      m[0] = { ...m[0]!, createdAt: 1000 } as ActivityMessage;
+      m[1] = { ...m[1]!, createdAt: 2000, completedAt: 3000 } as ActivityMessage;
+      m[2] = { ...m[2]!, createdAt: 10_000 } as ActivityMessage;
+      const later = [{ endedAt: 20_000, files: new Map([["README.md", { additions: 9, deletions: 9 }]]) }];
+      expect(cardOf(withFileStats(m, new Map(), "/work/demo", later)).countsKnown).toBe(false);
+    });
+
+    it("a snapshot that lists no such file means the turn left it unchanged", () => {
+      const m = two().slice(0, 2);
+      m[0] = { ...m[0]!, createdAt: 1000 } as ActivityMessage;
+      m[1] = { ...m[1]!, createdAt: 2000, completedAt: 3000 } as ActivityMessage;
+      const card = foldTurns(withFileStats(m, null, "/work/demo", [{ endedAt: 3100, files: new Map() }]), { running: false, directory: "/work/demo", open }).at(-1)!.card!;
+      expect([card.additions, card.deletions, card.countsKnown]).toEqual([0, 0, true]);
     });
 
     it("a file outside the session's folder is unknown, not +0 −0", () => {

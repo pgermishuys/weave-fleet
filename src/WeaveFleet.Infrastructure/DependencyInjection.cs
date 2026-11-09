@@ -302,6 +302,8 @@ public static class DependencyInjection
         services.AddScoped<IQueuedPromptRepository, QueuedPromptRepository>();
         services.AddScoped<IScheduledRetryRepository, ScheduledRetryRepository>();
         services.AddScoped<ISessionInterruptionRepository, SessionInterruptionRepository>();
+        services.AddScoped<ITurnFileStatsRepository, TurnFileStatsRepository>();
+        services.AddScoped<ITurnFileStatsSource, GitTurnFileStatsSource>();
         services.AddScoped<SessionInterruptions>();
         // Singleton: the sessions Fleet continues by itself after a restart, and the pace it does it at.
         services.AddSingleton<RestartContinuer>();
@@ -383,6 +385,7 @@ public static class DependencyInjection
         services.AddHostedService<SessionCallbackPoller>();
         // Singleton: the relay hands it every event; it keeps each failed turn's failure so a reload still shows it.
         services.AddSingleton<TurnFailureRecorder>();
+        services.AddSingleton<TurnFileStatsRecorder>();
         services.AddScoped<TurnRetryService>();
         // Singleton: the relay hands it every event; it tries a turn a model provider's limit stopped again when it resets.
         services.AddSingleton<TurnRetryScheduler>();

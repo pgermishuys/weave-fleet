@@ -243,8 +243,12 @@ describe("MessageToolList", () => {
 describe("ToolCard rows at scale", () => {
   beforeEach(() => toolRowViews.clear());
 
-  /** 500 rows, counting how many redraw (a render spy on each card's update). */
-  function rows(n = 500) {
+  /**
+   * Many rows, counting how many redraw (a render spy on each card's update). "One row redraws" doesn't depend on how
+   * many others there are; mounting 500 cards took ~8 s on a busy machine and tripped the 5 s test timeout, so the
+   * list is big enough to tell one row from all of them and no bigger.
+   */
+  function rows(n = 120) {
     const pinia = createPinia();
     setActivePinia(pinia);
     const state = { updates: 0 };

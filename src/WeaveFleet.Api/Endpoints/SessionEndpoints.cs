@@ -739,6 +739,27 @@ public static class SessionEndpoints
         })
         .WithName("GetSessionDiffs");
 
+        // GET /api/sessions/{id}/turn-stats — the changed files and line counts as each turn ended, so a turn's card
+        // shows what its whole-file writes changed after later turns change the same files, in any browser or machine.
+        group.MapGet("/{id}/turn-stats", async (
+            string id,
+            SessionService sessionService,
+            ITurnFileStatsRepository turnStats) =>
+        {
+            var result = await sessionService.GetSessionAsync(id);
+            return await result.Match<Task<IResult>>(
+                async _ =>
+                {
+                    var snapshots = await turnStats.ListAsync(id);
+                    return Results.Ok(new GetSessionTurnStatsResponse(
+                        [.. snapshots.Select(snapshot => new TurnFileStatsSnapshot(
+                            snapshot.EndedAt.ToString("O", System.Globalization.CultureInfo.InvariantCulture),
+                            [.. snapshot.Files.Select(file => new TurnFileStatResponse(file.File, file.Additions, file.Deletions))]))]));
+                },
+                error => Task.FromResult(error.ToSessionApiResult()));
+        })
+        .WithName("GetSessionTurnStats");
+
         // GET /api/sessions/{id}/diffs/file?path= — one changed file with its baseline and current contents
         group.MapGet("/{id}/diffs/file", async (
             string id,
