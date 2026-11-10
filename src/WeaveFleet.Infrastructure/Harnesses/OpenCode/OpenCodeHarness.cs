@@ -67,8 +67,8 @@ public sealed class OpenCodeHarness(FleetOptions options) : IHarness
             All: "Fleet allows everything OpenCode asks about"),
         AgentBrowser = "Fleet's browser tools: read the page, act on it.",
         ProfileNote = "Fleet hands this to OpenCode as `OPENCODE_CONFIG`, on top of your own opencode.json. Fleet's own "
-            + "settings (every tool allowed, the Fleet plugin) still apply after it. Keep API keys in Credentials and refer "
-            + "to them with `{env:NAME}`.",
+            + "settings (every tool allowed, the Fleet plugin) still apply after it. Keep API keys out of it: sign in to "
+            + "providers in OpenCode itself.",
     };
 
     /// <inheritdoc />

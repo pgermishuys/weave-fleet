@@ -37,6 +37,19 @@ public sealed class OpenCodeHarnessTests
             loggerFactory: NullLoggerFactory.Instance);
 
     [Fact]
+    public void profile_note_does_not_promise_credentials_as_env_variables()
+    {
+        // Fleet only turns the anthropic and openai API keys into environment variables (and only when the
+        // session's model is from that provider), so the note must not tell people to keep other keys in
+        // Credentials and refer to them with {env:NAME}.
+        var note = CreateHarness().Presentation.ProfileNote;
+
+        note.ShouldNotBeNull();
+        note.ShouldNotContain("Credentials");
+        note.ShouldNotContain("{env:");
+    }
+
+    [Fact]
     public void type_returns_opencode()
     {
         var harness = CreateHarness();
