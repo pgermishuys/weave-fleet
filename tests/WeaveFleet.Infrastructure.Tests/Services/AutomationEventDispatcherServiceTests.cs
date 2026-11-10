@@ -455,4 +455,5 @@ internal sealed class FakeSessionRepository : ISessionRepository
     public Task<IReadOnlyList<(string Id, double PinOrder)>> ListPinnedAsync() => throw new NotImplementedException();
     public Task UpdateSelectedModelAsync(string id, string providerId, string modelId) => throw new NotImplementedException();
     public Task UpdateSelectedAgentAsync(string id, string agent) => throw new NotImplementedException();
+    public Task UpdateSelectedEffortAsync(string id, string effort) => throw new NotImplementedException();
 }

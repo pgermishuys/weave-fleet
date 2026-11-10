@@ -105,6 +105,7 @@ public sealed partial class SessionForking(
             UserId = parent.UserId,
             // The copied conversation carries on as the parent's did.
             SelectedAgent = parent.SelectedAgent,
+            SelectedEffort = parent.SelectedEffort,
             SelectedProviderId = parent.SelectedProviderId,
             SelectedModelId = parent.SelectedModelId,
             ForkedFromSessionId = parent.Id,

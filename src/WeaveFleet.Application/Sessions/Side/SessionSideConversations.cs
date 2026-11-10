@@ -358,6 +358,7 @@ public sealed partial class SessionSideConversations(
             // The session's own choices, so a question that names none is asked as the session's prompts are: the
             // same model and agent read the copied conversation from the provider's cache.
             SelectedAgent = session.SelectedAgent,
+            SelectedEffort = session.SelectedEffort,
             SelectedProviderId = session.SelectedProviderId,
             SelectedModelId = session.SelectedModelId,
             SideOfSessionId = session.Id,

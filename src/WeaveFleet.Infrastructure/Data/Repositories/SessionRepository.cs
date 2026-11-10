@@ -35,14 +35,14 @@ public sealed class SessionRepository(
                 status, directory, created_at, stopped_at, parent_session_id,
                 lifecycle_status, retention_status, archived_at, is_hidden, total_tokens, total_cost,
                 harness_type, runtime_mode, harness_profile_id, harness_resume_token, git_baseline_ref, git_repo_root, user_id,
-                source_reference, tags, selected_agent, selected_provider_id, selected_model_id, workflow_run_id, workflow_user_finishes,
+                source_reference, tags, selected_agent, selected_effort, selected_provider_id, selected_model_id, workflow_run_id, workflow_user_finishes,
                 side_of_session_id, side_boundary_message_id, kept_from_side, side_minimized, side_discarded_at, side_seen_answer_id,
                 forked_from_session_id, spawned_by_session_id, spawn_kind)
             SELECT @Id, @WorkspaceId, @InstanceId, @ProjectId, @OpencodeSessionId, @Title,
                 @Status, @Directory, @CreatedAt, @StoppedAt, @ParentSessionId,
                 @LifecycleStatus, @RetentionStatus, @ArchivedAt, @IsHidden, @TotalTokens, @TotalCost,
                 @HarnessType, @RuntimeMode, @HarnessProfileId, @HarnessResumeToken, @GitBaselineRef, @GitRepoRoot, @UserId,
-                @SourceReference, @Tags, @SelectedAgent, @SelectedProviderId, @SelectedModelId, @WorkflowRunId, @WorkflowUserFinishes,
+                @SourceReference, @Tags, @SelectedAgent, @SelectedEffort, @SelectedProviderId, @SelectedModelId, @WorkflowRunId, @WorkflowUserFinishes,
                 @SideOfSessionId, @SideBoundaryMessageId, @KeptFromSide, @SideMinimized, @SideDiscardedAt, @SideSeenAnswerId,
                 @ForkedFromSessionId, @SpawnedBySessionId, @SpawnKind
             FROM workspaces workspace_row
@@ -86,6 +86,7 @@ public sealed class SessionRepository(
                 cmd.AddParameter("SourceReference", session.SourceReference);
                 cmd.AddParameter("Tags", tagsJson);
                 cmd.AddParameter("SelectedAgent", session.SelectedAgent);
+                cmd.AddParameter("SelectedEffort", session.SelectedEffort);
                 cmd.AddParameter("SelectedProviderId", session.SelectedProviderId);
                 cmd.AddParameter("WorkflowRunId", session.WorkflowRunId);
                 cmd.AddParameter("WorkflowUserFinishes", session.WorkflowUserFinishes ? 1 : 0);
@@ -851,6 +852,19 @@ public sealed class SessionRepository(
             });
     }
 
+    public async Task UpdateSelectedEffortAsync(string id, string effort)
+    {
+        using var conn = connectionFactory.CreateConnection();
+        await conn.ExecuteNonQueryAsync(
+            "UPDATE sessions SET selected_effort = @Effort WHERE id = @Id AND user_id = @UserId",
+            cmd =>
+            {
+                cmd.AddParameter("Id", id);
+                cmd.AddParameter("Effort", effort);
+                cmd.AddParameter("UserId", userContext.UserId);
+            });
+    }
+
     public async Task UpdateTagsAsync(string id, List<string> tags)
     {
         using var conn = connectionFactory.CreateConnection();
@@ -900,6 +914,7 @@ public sealed class SessionRepository(
             SelectedProviderId = r.GetNullableString(r.GetOrdinal("selected_provider_id")),
             SelectedModelId = r.GetNullableString(r.GetOrdinal("selected_model_id")),
             SelectedAgent = r.GetNullableString(r.GetOrdinal("selected_agent")),
+            SelectedEffort = r.GetNullableString(r.GetOrdinal("selected_effort")),
             SourceReference = r.GetNullableString(r.GetOrdinal("source_reference")),
             WorkflowRunId = r.GetNullableString(r.GetOrdinal("workflow_run_id")),
             WorkflowUserFinishes = r.GetInt64(r.GetOrdinal("workflow_user_finishes")) != 0,

@@ -49,6 +49,12 @@ public sealed class Session
     /// </summary>
     public string? SelectedAgent { get; set; }
 
+    /// <summary>
+    /// The effort the last prompt that named one was sent with (possibly <see cref="PromptEffort.ModelDefault"/>). A prompt
+    /// that names none, such as Continue after a restart, goes with it; null means none was named.
+    /// </summary>
+    public string? SelectedEffort { get; set; }
+
     /// <summary>The workflow run this session is a step of; null for every other session.</summary>
     public string? WorkflowRunId { get; set; }
 

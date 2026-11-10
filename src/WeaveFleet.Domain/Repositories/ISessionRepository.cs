@@ -98,6 +98,8 @@ public interface ISessionRepository
     /// Record the agent a session was prompted with by name, so prompts that name none go to it too.
     /// </summary>
     Task UpdateSelectedAgentAsync(string id, string agent);
+    /// <summary>Record the effort a session was last prompted with, so prompts that name none keep it.</summary>
+    Task UpdateSelectedEffortAsync(string id, string effort);
     /// <summary>
     /// Update the tags for a session.
     /// </summary>

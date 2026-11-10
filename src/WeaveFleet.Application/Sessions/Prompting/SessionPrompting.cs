@@ -289,6 +289,12 @@ public sealed partial class SessionPrompting(
                 await sessionRepository.UpdateSelectedAgentAsync(id, agent);
             }
 
+            if (requestedOptions?.Effort is { Length: > 0 } effort
+                && !string.Equals(effort, sessionResult.Value.SelectedEffort, StringComparison.Ordinal))
+            {
+                await sessionRepository.UpdateSelectedEffortAsync(id, effort);
+            }
+
             return new PromptSessionResult(EventId: null, effectiveCorrelationId, generatedMessageId);
         }
         catch (HarnessBusyException ex)
@@ -593,10 +599,13 @@ public sealed partial class SessionPrompting(
         var agent = string.IsNullOrWhiteSpace(options?.Agent) ? session.SelectedAgent : options.Agent;
         var namesModel = HasModel(options?.ProviderId, options?.ModelId);
         var useSessionModel = !namesModel && HasModel(session.SelectedProviderId, session.SelectedModelId);
-        if (agent == options?.Agent && !useSessionModel)
+        var useSessionEffort = string.IsNullOrWhiteSpace(options?.Effort) && !string.IsNullOrWhiteSpace(session.SelectedEffort);
+        if (agent == options?.Agent && !useSessionModel && !useSessionEffort)
             return options;
 
         var withChoices = (options ?? new PromptOptions()) with { Agent = agent };
+        if (useSessionEffort)
+            withChoices = withChoices with { Effort = session.SelectedEffort };
         return useSessionModel
             ? withChoices with { ProviderId = session.SelectedProviderId, ModelId = session.SelectedModelId }
             : withChoices;
