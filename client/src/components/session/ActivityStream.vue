@@ -13,7 +13,7 @@ import ChangedFilesCard from "@/components/session/ChangedFilesCard.vue";
 import { foldTurns, turnIdsOf, withFileStats } from "@/lib/turn-fold";
 import ConversationFindBar from "@/components/session/ConversationFindBar.vue";
 import { useConversationFind } from "@/composables/use-conversation-find";
-import type { FindUnit } from "@/lib/conversation-find";
+import { COMPOSER_SELECTOR, type FindUnit } from "@/lib/conversation-find";
 import { isReadCall } from "@/lib/tool-row";
 import { useFileStats, useTurnStats } from "@/composables/use-file-stats";
 import CompactionDivider from "@/components/session/CompactionDivider.vue";
@@ -462,7 +462,7 @@ const find = useConversationFind({
     findBar.value?.field?.focus();
     findBar.value?.field?.select();
   },
-  focusComposer: () => document.querySelector<HTMLElement>("textarea.composer-frame__textarea")?.focus(),
+  focusComposer: () => document.querySelector<HTMLElement>(COMPOSER_SELECTOR)?.focus(),
   elementOf: (id) => streamRef.value?.querySelector(`[data-message-id="${CSS.escape(id)}"]`) ?? null,
   reveal: (hit) => {
     // A hit in a folded turn opens the turn, and it stays open after the bar closes.

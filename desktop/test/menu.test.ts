@@ -23,4 +23,13 @@ describe("application menu", () => {
     }
     expect(findInConversation).toHaveBeenCalledTimes(2);
   });
+
+  it("on Windows, where the accelerator can't be left to the page, shows the key as text instead of registering it", () => {
+    const findInConversation = vi.fn();
+    buildAppMenu("win32", { openLogs: vi.fn(), openDataFolder: vi.fn(), checkForUpdates: vi.fn(), reportProblem: vi.fn(), findInConversation });
+    const edit = (built.at(-1)!.template as { label?: string; submenu?: { label?: string; accelerator?: string }[] }[]).find((entry) => entry.label === "Edit");
+    const item = edit?.submenu?.find((entry) => entry.label?.startsWith("Find in Conversation"));
+    expect(item?.label).toBe("Find in Conversation\tCtrl+F");
+    expect(item?.accelerator).toBeUndefined();
+  });
 });

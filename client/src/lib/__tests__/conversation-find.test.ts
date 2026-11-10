@@ -46,10 +46,12 @@ describe("findHits", () => {
 
 describe("Ctrl/⌘F focus rules", () => {
   it("lets fields, editors, the terminal and dialogs keep the key", () => {
-    document.body.innerHTML = `<textarea id="a"></textarea><input id="b"><div class="cm-editor"><div id="c" tabindex="0"></div></div>
+    document.body.innerHTML = `<textarea id="a"></textarea><input id="b"><textarea id="g" class="composer-frame__textarea"></textarea><div class="cm-editor"><div id="c" tabindex="0"></div></div>
       <div class="xterm"><span id="d"></span></div><div role="dialog"><button id="e"></button></div><p id="f">text</p>`;
     for (const id of ["a", "b", "c", "d", "e"]) expect(focusKeepsFindKey(document.getElementById(id))).toBe(true);
     expect(focusKeepsFindKey(document.getElementById("f"))).toBe(false);
+    // The composer has no Ctrl/⌘F of its own: it counts as part of the conversation.
+    expect(focusKeepsFindKey(document.getElementById("g"))).toBe(false);
     expect(focusKeepsFindKey(document.body)).toBe(false);
   });
 
