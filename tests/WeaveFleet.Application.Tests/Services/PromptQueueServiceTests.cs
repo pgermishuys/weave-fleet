@@ -271,6 +271,23 @@ public sealed class PromptQueueServiceTests : IAsyncDisposable
     }
 
     [Fact]
+    public async Task Send_now_for_a_message_the_idle_just_sent_is_not_an_error_and_sends_nothing_twice()
+    {
+        Seed(steering: true);
+        Busy();
+        var service = Build();
+        var id = await QueueAsync(service, "on its way");
+        Idle();
+
+        // The turn ended and the auto-send took the item while the user's click was on its way.
+        (await service.SendNextAsync("s1")).ShouldBeTrue();
+        var result = await service.SendNowAsync("s1", id);
+
+        result.IsSuccess.ShouldBeTrue();
+        _harness.SendPromptCalls.ShouldHaveSingleItem().Text.ShouldBe("on its way");
+    }
+
+    [Fact]
     public async Task A_removed_message_is_gone_for_every_client()
     {
         Seed();
