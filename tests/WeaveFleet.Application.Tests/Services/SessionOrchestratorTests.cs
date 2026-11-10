@@ -1211,6 +1211,32 @@ public sealed class SessionOrchestratorTests : IAsyncDisposable
     }
 
     [Fact]
+    public async Task PromptSessionAsync_WithANamedEffort_RemembersItForPromptsThatNameNone()
+    {
+        _builder.SessionRepository.Seed(new Session
+        {
+            Id = "s1", InstanceId = "inst-1", Title = "T", Status = "active",
+            Directory = "/tmp", CreatedAt = "2026-01-01", RetentionStatus = "active"
+        });
+        _tracker.Register("inst-1", _defaultSession);
+        var sut = BuildSutWithTracker();
+
+        (await sut.PromptSessionAsync("s1", "think hard", new PromptOptions { Effort = "high" })).IsSuccess.ShouldBeTrue();
+        // What Continue after a restart sends: no effort named.
+        (await sut.PromptSessionAsync("s1", "Continue where you left off.")).IsSuccess.ShouldBeTrue();
+        // A prompt that names one wins, and "Default" is remembered too.
+        (await sut.PromptSessionAsync("s1", "easy now", new PromptOptions { Effort = PromptEffort.ModelDefault })).IsSuccess.ShouldBeTrue();
+        (await sut.PromptSessionAsync("s1", "and again")).IsSuccess.ShouldBeTrue();
+
+        _defaultSession.SendPromptCalls.Count.ShouldBe(4);
+        string? EffortOf(string text) => _defaultSession.SendPromptCalls.Single(c => c.Text == text).Options?.Effort;
+        EffortOf("think hard").ShouldBe("high");
+        EffortOf("Continue where you left off.").ShouldBe("high");
+        EffortOf("easy now").ShouldBe(PromptEffort.ModelDefault);
+        EffortOf("and again").ShouldBe(PromptEffort.ModelDefault);
+    }
+
+    [Fact]
     public async Task PromptSessionAsync_WhenTheSessionHasNoChoices_NamesNoAgentOrModel()
     {
         _builder.SessionRepository.Seed(new Session

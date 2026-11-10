@@ -452,6 +452,13 @@ public sealed class InMemorySessionRepository : ISessionRepository
         return Task.CompletedTask;
     }
 
+    public Task UpdateSelectedEffortAsync(string id, string effort)
+    {
+        if (_store.TryGetValue(id, out var session))
+            session.SelectedEffort = effort;
+        return Task.CompletedTask;
+    }
+
     public Task UpdateTagsAsync(string id, List<string> tags)
     {
         if (_store.TryGetValue(id, out var session))
