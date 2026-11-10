@@ -83,3 +83,55 @@ describe("useThemeStore", () => {
     expect(document.documentElement.dataset.theme).toBe("dark");
   });
 });
+
+describe("useThemeStore code theme", () => {
+  beforeEach(() => {
+    localStorage.clear();
+    document.documentElement.style.removeProperty("--syntax-keyword");
+    Object.defineProperty(window, "matchMedia", {
+      configurable: true,
+      writable: true,
+      value: vi.fn(createMatchMedia(true)),
+    });
+    setActivePinia(createPinia());
+  });
+
+  it("defaults to matching the app theme and writes that theme's syntax tokens on the document", () => {
+    const store = useThemeStore();
+    store.setTheme("nord");
+    store.initializeTheme();
+
+    expect(store.codeTheme).toBe("match");
+    expect(document.documentElement.style.getPropertyValue("--syntax-keyword")).toBe("#81a1c1");
+  });
+
+  it("persists an explicit code theme and applies it over the app theme", () => {
+    const store = useThemeStore();
+    store.setTheme("nord");
+    store.setCodeTheme("monokai");
+
+    expect(store.codeTheme).toBe("monokai");
+    expect(localStorage.getItem("weave:code-theme")).toBe("monokai");
+    expect(document.documentElement.style.getPropertyValue("--syntax-keyword")).toBe("#f92672");
+    expect(document.documentElement.style.getPropertyValue("--syntax-string")).toBe("#e6db74");
+  });
+
+  it("re-applies the syntax tokens when the app theme changes under 'match'", () => {
+    const store = useThemeStore();
+    store.setCodeTheme("match");
+    store.setTheme("monokai");
+    expect(document.documentElement.style.getPropertyValue("--syntax-keyword")).toBe("#f92672");
+
+    store.setTheme("github-dark");
+    expect(document.documentElement.style.getPropertyValue("--syntax-keyword")).toBe("#ff7b72");
+  });
+
+  it("reads a stored code theme back and ignores an unknown one", () => {
+    localStorage.setItem("weave:code-theme", "darcula");
+    expect(useThemeStore().codeTheme).toBe("darcula");
+
+    setActivePinia(createPinia());
+    localStorage.setItem("weave:code-theme", "comic-sans");
+    expect(useThemeStore().codeTheme).toBe("match");
+  });
+});

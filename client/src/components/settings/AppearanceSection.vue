@@ -12,10 +12,30 @@ import {
   type ThemeSelection,
   type ThinkingDisplay,
 } from "@/stores/theme";
+import { codeThemes, resolveCodePalette, resolveCodeThemeId, type CodePalette, type CodeThemeSelection } from "@/lib/code-themes";
 
 const themeStore = useThemeStore();
 
 const activeTheme = computed(() => themeStore.currentTheme);
+const activeCodeTheme = computed(() => themeStore.codeTheme);
+
+interface CodeThemeCard {
+  id: CodeThemeSelection;
+  label: string;
+  /** What "Match theme" currently resolves to, so its card says which scheme it is. */
+  note?: string;
+  palette: CodePalette;
+}
+
+/** One card per scheme, each previewed in its own colours for the current light/dark setting. */
+const codeThemeCards = computed<CodeThemeCard[]>(() => {
+  const theme = themeStore.resolvedTheme;
+  const matched = codeThemes.find((t) => t.id === resolveCodeThemeId("match", theme.id));
+  return [
+    { id: "match", label: "Match theme", note: matched?.label, palette: resolveCodePalette("match", theme.id, theme.colorScheme) },
+    ...codeThemes.map((t) => ({ id: t.id, label: t.label, palette: resolveCodePalette(t.id, theme.id, theme.colorScheme) })),
+  ];
+});
 const activeFontFamily = computed(() => themeStore.fontFamily);
 const activeFontSize = computed(() => themeStore.fontSize);
 
@@ -37,6 +57,10 @@ const fontOptions: ReadonlyArray<{ id: FontFamily; label: string; fontFamily: st
 
 function selectTheme(theme: ThemeSelection): void {
   themeStore.setTheme(theme);
+}
+
+function selectCodeTheme(selection: CodeThemeSelection): void {
+  themeStore.setCodeTheme(selection);
 }
 
 function selectFontFamily(fontFamily: FontFamily): void {
@@ -122,6 +146,84 @@ function selectFontSize(size: FontSize): void {
                   <span class="text-xs font-medium text-text">{{ theme.label }}</span>
                   <Check
                     v-if="activeTheme === theme.id"
+                    :size="14"
+                    class="text-accent"
+                  />
+                </div>
+              </button>
+            </div>
+          </div>
+        </template>
+      </SettingRow>
+      <SettingRow
+        id="code-theme"
+        title="Code theme"
+        summary="Syntax colours for files and code blocks. Match theme uses the scheme named after your theme, or One Dark."
+      >
+        <template #below>
+          <div class="mt-3">
+            <div
+              class="grid gap-3 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4"
+              role="group"
+              aria-label="Code theme"
+            >
+              <button
+                v-for="card in codeThemeCards"
+                :key="card.id"
+                type="button"
+                class="flex flex-col gap-3 rounded-card border p-3 text-left transition-colors"
+                :class="activeCodeTheme === card.id
+                  ? 'border-accent bg-accent-dim'
+                  : 'border-border hover:border-accent/50'"
+                :aria-pressed="activeCodeTheme === card.id"
+                :data-code-theme="card.id"
+                @click="selectCodeTheme(card.id)"
+              >
+                <!-- Mini code preview in the scheme's colours -->
+                <pre
+                  class="code-theme-preview m-0 overflow-hidden rounded-btn border border-border/60 bg-card-bg px-2 py-1.5 font-mono text-[10px] leading-[1.5] text-text"
+                  aria-hidden="true"
+                ><span
+  data-token="keyword"
+  :style="{ color: card.palette.keyword }"
+>const</span> <span
+  data-token="function"
+  :style="{ color: card.palette.function }"
+>run</span> = (<span
+  data-token="attr"
+  :style="{ color: card.palette.attr }"
+>name</span>) => <span
+  data-token="literal"
+  :style="{ color: card.palette.literal }"
+>true</span>;
+<span
+  data-token="string"
+  :style="{ color: card.palette.string }"
+>"nord"</span>: <span
+  data-token="number"
+  :style="{ color: card.palette.number }"
+>42</span> <span
+  data-token="comment"
+  :style="{ color: card.palette.comment }"
+>// ok</span>
+<span
+  data-token="type"
+  :style="{ color: card.palette.type }"
+>Fleet</span>.<span
+  data-token="function"
+  :style="{ color: card.palette.function }"
+>start</span>()</pre>
+
+                <div class="flex items-center justify-between gap-2">
+                  <span class="text-xs font-medium text-text">
+                    {{ card.label }}
+                    <span
+                      v-if="card.note"
+                      class="text-muted"
+                    >· {{ card.note }}</span>
+                  </span>
+                  <Check
+                    v-if="activeCodeTheme === card.id"
                     :size="14"
                     class="text-accent"
                   />

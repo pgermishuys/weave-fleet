@@ -1,5 +1,6 @@
 import { defineStore } from "pinia";
 import { computed, shallowRef } from "vue";
+import { isValidCodeTheme, resolveCodePalette, syntaxTokens, type CodeThemeSelection } from "@/lib/code-themes";
 
 export type ThemeId =
   | "dark"
@@ -61,6 +62,7 @@ const themeStorageKey = "weave:theme";
 const fontFamilyStorageKey = "weave:font-family";
 const fontSizeStorageKey = "weave:font-size";
 const thinkingStorageKey = "weave:thinking";
+const codeThemeStorageKey = "weave:code-theme";
 
 const fontStacks: Record<FontFamily, string> = {
   inter: '"Inter Variable", "Inter", system-ui, -apple-system, sans-serif',
@@ -142,6 +144,19 @@ function readStoredThinking(): ThinkingDisplay {
   }
 }
 
+function readStoredCodeTheme(): CodeThemeSelection {
+  if (typeof window === "undefined") {
+    return "match";
+  }
+
+  try {
+    const raw = window.localStorage.getItem(codeThemeStorageKey);
+    return raw && isValidCodeTheme(raw) ? raw : "match";
+  } catch {
+    return "match";
+  }
+}
+
 function getSystemThemeId(): ThemeId {
   if (typeof window === "undefined") {
     return "dark";
@@ -186,6 +201,18 @@ function persistFontSize(fontSize: FontSize): void {
   }
 }
 
+function persistCodeTheme(codeTheme: CodeThemeSelection): void {
+  if (typeof window === "undefined") {
+    return;
+  }
+
+  try {
+    window.localStorage.setItem(codeThemeStorageKey, codeTheme);
+  } catch {
+    // localStorage unavailable
+  }
+}
+
 function persistThinking(thinking: ThinkingDisplay): void {
   if (typeof window === "undefined") {
     return;
@@ -203,6 +230,7 @@ export const useThemeStore = defineStore("theme", () => {
   const fontFamily = shallowRef<FontFamily>(readStoredFontFamily());
   const fontSize = shallowRef<FontSize>(readStoredFontSize());
   const thinking = shallowRef<ThinkingDisplay>(readStoredThinking());
+  const codeTheme = shallowRef<CodeThemeSelection>(readStoredCodeTheme());
 
   const resolvedThemeId = computed<ThemeId>(() => {
     return currentTheme.value === "system" ? getSystemThemeId() : currentTheme.value;
@@ -220,6 +248,20 @@ export const useThemeStore = defineStore("theme", () => {
     const theme = resolvedTheme.value;
     document.documentElement.dataset.theme = theme.id;
     document.documentElement.style.colorScheme = theme.colorScheme;
+    applyCodeTheme();
+  }
+
+  /** Writes the eight `--syntax-*` variables that the editor and Markdown code blocks read. */
+  function applyCodeTheme(): void {
+    if (typeof document === "undefined") {
+      return;
+    }
+
+    const theme = resolvedTheme.value;
+    const palette = resolveCodePalette(codeTheme.value, theme.id, theme.colorScheme);
+    for (const token of syntaxTokens) {
+      document.documentElement.style.setProperty(`--syntax-${token}`, palette[token]);
+    }
   }
 
   function applyFontFamily(): void {
@@ -277,6 +319,12 @@ export const useThemeStore = defineStore("theme", () => {
     applyFontSize();
   }
 
+  function setCodeTheme(selection: CodeThemeSelection): void {
+    codeTheme.value = selection;
+    persistCodeTheme(selection);
+    applyCodeTheme();
+  }
+
   function setThinking(display: ThinkingDisplay): void {
     thinking.value = display;
     persistThinking(display);
@@ -292,11 +340,13 @@ export const useThemeStore = defineStore("theme", () => {
     fontFamily,
     fontSize,
     thinking,
+    codeTheme,
     resolvedThemeId,
     resolvedTheme,
     initializeTheme,
     setFontFamily,
     setFontSize,
+    setCodeTheme,
     setThinking,
     setTheme,
     toggleTheme,

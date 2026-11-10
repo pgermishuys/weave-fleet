@@ -3,6 +3,8 @@
 /* Apply .md-content class to container holding markdown-it rendered content  */
 
 /* ─── Syntax Highlighting Theme Variables ─────────────────────────────────── */
+/* These are the no-JS fallback (One Dark / One Light). The theme store overrides all eight
+   on <html> from the chosen code theme; the schemes live in lib/code-themes.ts. */
 :root {
   /* Default dark syntax tokens */
   --syntax-keyword: #c678dd;
