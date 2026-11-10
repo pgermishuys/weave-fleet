@@ -70,8 +70,8 @@ public sealed class OpenCodeSideBySideLiveTests
         // Both answer, prompted together.
         await Task.WhenAll(PromptAsync(fleet, v1.Id, v1Hello, cts.Token), PromptAsync(fleet, v2, v2Hello, cts.Token));
         await WaitForAsync(fleet, events, () => Idles(v1.Id) >= 1 && Idles(v2) >= 1, cts.Token);
-        LatestTexts(events, v1.Id).ShouldContain(v1Reply);
-        LatestTexts(events, v2).ShouldContain(v2Reply);
+        Said(fleet, events, v1.Id, v1Reply);
+        Said(fleet, events, v2, v2Reply);
 
         // A turn on each while the other is working: the quick one ends first, and the slow one isn't ended by it.
         await PromptAsync(fleet, v1.Id, v1Slow, cts.Token);
@@ -81,8 +81,8 @@ public sealed class OpenCodeSideBySideLiveTests
         await WaitForAsync(fleet, events, () => Idles(v2) > v2Idles, cts.Token);
         Idles(v1.Id).ShouldBe(v1Idles, "OpenCode 1's turn ended when OpenCode 2's did.");
         await WaitForAsync(fleet, events, () => Idles(v1.Id) > v1Idles, cts.Token);
-        LatestTexts(events, v1.Id).ShouldContain("OpenCode 1's check passed.");
-        LatestTexts(events, v2).ShouldContain("OpenCode 2 answered while OpenCode 1 worked.");
+        Said(fleet, events, v1.Id, "OpenCode 1's check passed.");
+        Said(fleet, events, v2, "OpenCode 2 answered while OpenCode 1 worked.");
 
         await PromptAsync(fleet, v2, v2Slow, cts.Token);
         await WaitForAsync(fleet, events, () => IsRunning(events, v2, "call_v2_slow"), cts.Token);
@@ -91,8 +91,8 @@ public sealed class OpenCodeSideBySideLiveTests
         await WaitForAsync(fleet, events, () => Idles(v1.Id) > v1Idles, cts.Token);
         Idles(v2).ShouldBe(v2Idles, "OpenCode 2's turn ended when OpenCode 1's did.");
         await WaitForAsync(fleet, events, () => Idles(v2) > v2Idles, cts.Token);
-        LatestTexts(events, v2).ShouldContain("OpenCode 2's check passed.");
-        LatestTexts(events, v1.Id).ShouldContain("OpenCode 1 answered while OpenCode 2 worked.");
+        Said(fleet, events, v2, "OpenCode 2's check passed.");
+        Said(fleet, events, v1.Id, "OpenCode 1 answered while OpenCode 2 worked.");
 
         // No cross-talk: each session's topic carried only its own conversation. Both harnesses' events go through
         // the same relay and broadcaster, so a session id mapped to the wrong session would show here.
@@ -357,6 +357,21 @@ public sealed class OpenCodeSideBySideLiveTests
         => Parts(events, sessionId).Any(p => p.GetProperty("type").GetString() == "tool"
             && p.GetProperty("callID").GetString() == callId
             && p.GetProperty("state").GetProperty("status").GetString() == "running");
+
+    /// <summary>
+    /// Asserts the session's live stream showed <paramref name="text"/>. When it didn't, says what the model was asked,
+    /// so a turn the scripted model answered with its fallback shows which request it didn't recognise.
+    /// </summary>
+    private static void Said(OpenCode2LiveFleet fleet, LiveEvents events, string sessionId, string text)
+    {
+        var texts = LatestTexts(events, sessionId);
+        if (texts.Contains(text))
+            return;
+
+        texts.ShouldContain(text,
+            "The model was asked:\n" + string.Join("\n", fleet.Llm.Queue.Requests.Select(r =>
+                $"  tools={LlmRequest.OffersTools(r)} last={LlmRequest.LastRole(r)} user={Trim(LlmRequest.LastUserText(r))} tool={Trim(LlmRequest.LastToolText(r))}")));
+    }
 
     /// <summary>The session's text parts as the live stream last showed them.</summary>
     private static List<string> LatestTexts(LiveEvents events, string sessionId)
