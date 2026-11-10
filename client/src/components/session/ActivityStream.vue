@@ -98,7 +98,7 @@ const stream = useSessionStream(computed(() => props.sessionId));
 useAgentBrowser(() => props.sessionId);
 // What the agent asks to do that the session's permission level doesn't allow; each waits under the conversation.
 const { asks: permissionAsks, answer: answerPermission } = useSessionPermissions(() => props.sessionId);
-const { delegations, sessionStatus, isLoadingOlder, isPartial, loadOlder } = stream;
+const { delegations, sessionStatus, isLoadingOlder, loadOlderFailed, isPartial, loadOlder } = stream;
 const sessionMessages = computed(() => messagesAfter(stream.messages.value, props.after));
 /** A side conversation's older messages are its session's, which it doesn't show. */
 const hasMore = computed(() => stream.hasMore.value && sessionMessages.value.length === stream.messages.value.length);
@@ -453,6 +453,7 @@ const find = useConversationFind({
   units: findUnits,
   hasMore: () => hasMore.value,
   isLoadingOlder: () => isLoadingOlder.value,
+  loadOlderFailed: () => loadOlderFailed.value,
   loadOlder,
   root: shellRef,
   // A side conversation (it has `after`) never takes the key from the conversation it sits beside.
@@ -625,6 +626,8 @@ function handleImproveSkill(skill: string, toolId: string): void {
       :total="find.hits.value.length"
       :current="find.current.value"
       :searching-older="find.searchingOlder.value"
+      :older-failed="find.olderFailed.value"
+      @retry-older="find.retryOlder"
       @step="find.step"
       @close="find.close"
       @stop-older="find.stopSearchingOlder"
@@ -665,7 +668,12 @@ function handleImproveSkill(skill: string, toolId: string): void {
         class="load-older-button"
         @click="handleLoadOlder"
       >
-        Load older messages
+        <template v-if="loadOlderFailed">
+          Couldn't load older messages · Retry
+        </template>
+        <template v-else>
+          Load older messages
+        </template>
       </button>
 
       <div

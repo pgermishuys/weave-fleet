@@ -20,7 +20,7 @@ const props = defineProps<{
   sessionId: string;
 }>();
 
-const { messages, delegations, hasMore, isLoadingOlder, loadOlder } = useSessionStream(() => props.sessionId);
+const { messages, delegations, hasMore, isLoadingOlder, loadOlderFailed, loadOlder } = useSessionStream(() => props.sessionId);
 const { models } = useModels();
 const { hideRightPanel } = useSidebarMobile();
 
@@ -328,7 +328,7 @@ function showInChat(turn: SessionTurn): void {
           :disabled="isLoadingOlder"
           @click="loadOlder()"
         >
-          {{ isLoadingOlder ? "Loading…" : "Load older" }}
+          {{ isLoadingOlder ? "Loading…" : loadOlderFailed ? "Couldn't load · Retry" : "Load older" }}
         </button>
       </div>
     </div>

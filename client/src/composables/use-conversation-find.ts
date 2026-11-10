@@ -25,6 +25,8 @@ export interface ConversationFindOptions {
   /** The stream's paging: older history pages load while the bar is open. */
   hasMore: MaybeRefOrGetter<boolean>;
   isLoadingOlder: MaybeRefOrGetter<boolean>;
+  /** The last older page failed: the paging stops until the user retries. */
+  loadOlderFailed?: MaybeRefOrGetter<boolean>;
   loadOlder: () => void;
   /** The conversation's element, which the Ctrl/⌘F key is taken inside of. */
   root: MaybeRefOrGetter<HTMLElement | null | undefined>;
@@ -56,7 +58,8 @@ export function useConversationFind(options: ConversationFindOptions) {
 
   const hits = computed(() => (isOpen.value ? findHits(toValue(options.units), query.value, scope.value) : []));
   const currentHit = computed(() => hits.value[current.value] ?? null);
-  const searchingOlder = computed(() => isOpen.value && !pagingStopped.value && toValue(options.hasMore));
+  const olderFailed = computed(() => isOpen.value && !pagingStopped.value && toValue(options.hasMore) && toValue(options.loadOlderFailed) === true);
+  const searchingOlder = computed(() => isOpen.value && !pagingStopped.value && toValue(options.hasMore) && !olderFailed.value);
   const hasQuery = computed(() => query.value.trim().length > 0);
 
   function open(): void {
@@ -74,6 +77,11 @@ export function useConversationFind(options: ConversationFindOptions) {
 
   function stopSearchingOlder(): void {
     pagingStopped.value = true;
+  }
+
+  /** Asks again for the page that failed; the paging carries on from there. */
+  function retryOlder(): void {
+    options.loadOlder();
   }
 
   // Older pages load one after another while the bar is open: each arrival asks for the next.
@@ -187,6 +195,8 @@ export function useConversationFind(options: ConversationFindOptions) {
     current,
     hits,
     searchingOlder,
+    olderFailed,
+    retryOlder,
     open,
     close,
     step,

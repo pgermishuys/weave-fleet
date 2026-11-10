@@ -14,6 +14,7 @@ function setup(options: { units?: FindUnit[]; hasMore?: boolean; enabled?: boole
   ]);
   const hasMore = ref(options.hasMore ?? false);
   const isLoadingOlder = ref(false);
+  const loadOlderFailed = ref(false);
   const loadOlder = vi.fn(() => {
     isLoadingOlder.value = true;
   });
@@ -30,6 +31,7 @@ function setup(options: { units?: FindUnit[]; hasMore?: boolean; enabled?: boole
         units,
         hasMore,
         isLoadingOlder,
+        loadOlderFailed,
         loadOlder,
         root: () => root,
         elementOf: () => null,
@@ -43,7 +45,7 @@ function setup(options: { units?: FindUnit[]; hasMore?: boolean; enabled?: boole
     },
   }));
   mounted.push(wrapper);
-  return { api, units, hasMore, isLoadingOlder, loadOlder, reveal, focusComposer, focusField, wrapper, root };
+  return { api, units, hasMore, isLoadingOlder, loadOlderFailed, loadOlder, reveal, focusComposer, focusField, wrapper, root };
 }
 
 afterEach(() => {
@@ -107,6 +109,26 @@ describe("useConversationFind", () => {
     await nextTick();
     expect(loadOlder).toHaveBeenCalledTimes(3);
     hasMore.value = false;
+  });
+
+  it("stops paging when an older page fails, says so, and carries on after a retry", async () => {
+    const { api, loadOlder, isLoadingOlder, loadOlderFailed } = setup({ hasMore: true });
+    api.open();
+    await nextTick();
+    expect(loadOlder).toHaveBeenCalledTimes(1);
+    loadOlderFailed.value = true;
+    isLoadingOlder.value = false;
+    await nextTick();
+    expect(loadOlder).toHaveBeenCalledTimes(1);
+    expect(api.olderFailed.value).toBe(true);
+    expect(api.searchingOlder.value).toBe(false);
+
+    api.retryOlder();
+    loadOlderFailed.value = false;
+    isLoadingOlder.value = false;
+    await nextTick();
+    expect(loadOlder).toHaveBeenCalledTimes(3);
+    expect(api.searchingOlder.value).toBe(true);
   });
 
   it("closes to the composer", () => {

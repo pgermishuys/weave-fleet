@@ -40,6 +40,8 @@ export interface UseSessionStreamResult {
   isLoading: Readonly<ShallowRef<boolean>>
   hasMore: Readonly<ShallowRef<boolean>>
   isLoadingOlder: Readonly<ShallowRef<boolean>>
+  /** The last older page failed to load; the cursor is kept, so `loadOlder` asks for the same page again. */
+  loadOlderFailed: Readonly<ShallowRef<boolean>>
   isPartial: Readonly<ShallowRef<boolean>>
   loadOlder: () => void
 }
@@ -108,6 +110,7 @@ export function useSessionStream(
   const hasMore = shallowRef(false)
   const cursor = shallowRef<string | null>(null)
   const isLoadingOlder = shallowRef(false)
+  const loadOlderFailed = shallowRef(false)
   const isPartial = shallowRef(false)
   const isMounted = shallowRef(false)
   const pendingEvents: DomainEvent[] = []
@@ -182,6 +185,7 @@ export function useSessionStream(
     hasMore.value = false
     cursor.value = null
     isLoadingOlder.value = false
+    loadOlderFailed.value = false
     isPartial.value = false
   }
 
@@ -241,6 +245,7 @@ export function useSessionStream(
     unsubscribeActivity?.()
     unsubscribeActivity = null
     isLoadingOlder.value = false
+    loadOlderFailed.value = false
   }
 
   function applyHistoryPage(page: SessionHistoryPage): void {
@@ -252,6 +257,7 @@ export function useSessionStream(
     cursor.value = page.cursor
     hasMore.value = page.hasMore
     isLoadingOlder.value = false
+    loadOlderFailed.value = false
   }
 
   function applyLiveDomainEvent(state: SessionStreamState, event: DomainEvent): SessionStreamState {
@@ -271,6 +277,7 @@ export function useSessionStream(
     }
 
     isLoadingOlder.value = true
+    loadOlderFailed.value = false
     void loadSessionHistory(machine, activeSessionId, requestedCursor).then((page) => {
       // Leaving the session already reset the stream.
       if (currentSessionId.value !== activeSessionId) {
@@ -283,6 +290,8 @@ export function useSessionStream(
         return
       }
 
+      // No page: the request failed (or the connection is down). The cursor stays, so a retry asks for the same page.
+      loadOlderFailed.value = page === null
       isLoadingOlder.value = false
     })
   }
@@ -395,6 +404,7 @@ export function useSessionStream(
     isLoading: readonly(isLoading),
     hasMore: readonly(hasMore),
     isLoadingOlder: readonly(isLoadingOlder),
+    loadOlderFailed: readonly(loadOlderFailed),
     isPartial: readonly(isPartial),
     loadOlder,
   }
