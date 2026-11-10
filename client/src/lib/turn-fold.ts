@@ -59,9 +59,15 @@ export interface FoldMark {
 
 export type FoldedMessage = ActivityMessage & FoldMark;
 
-/** The call showed a page: output the user needs, so it stays out of the fold and isn't counted as "other". */
+/** Fleet's tools that hand the user something to open (a page, a running app, a browser tab, a walkthrough). */
+const OPENS_SOMETHING: ReadonlySet<string> = new Set(["fleet_page_show", "fleet_app_start", "fleet_browser_open", "fleet_walkthrough_show"]);
+
+/**
+ * The call produced something the user opens (a page, an app run, a browser tab, a walkthrough, any canvas): its Show
+ * button must stay on screen, so it stays out of the fold and isn't counted as "other".
+ */
 function isPageShow(tool: ToolCardItem): boolean {
-  return Boolean(tool.page) || getTool(tool.kind).name === "fleet_page_show";
+  return Boolean(tool.page || tool.canvasId) || OPENS_SOMETHING.has(getTool(tool.kind).name);
 }
 
 /** Claude Code's ExitPlanMode hands over the plan: it reads nothing and changes no file. */
@@ -174,22 +180,28 @@ export interface TurnStatsSnapshot {
 
 const statted = new WeakMap<readonly ToolCardItem[], { stats: FileStats | null; snapshots: readonly TurnStatsSnapshot[] | undefined; last: boolean; tools: ToolCardItem[] }>();
 
-/** A turn's own end: the last of its agent messages, leaving out a notice that arrived later (background work). */
-function turnEnd(messages: readonly ActivityMessage[], from: number, to: number): number | undefined {
-  let end: number | undefined;
+/** When a turn began: its prompt's time, or its first message's when it has no prompt. */
+function turnStart(messages: readonly ActivityMessage[], from: number, to: number): number | undefined {
+  const prompt = messages[from - 1];
+  if (prompt?.role === "user" && prompt.createdAt !== undefined) return prompt.createdAt;
   for (let i = from; i < to; i += 1) {
-    const message = messages[i]!;
-    if (message.role !== "assistant" || message.background) continue;
-    const at = message.completedAt ?? message.createdAt;
-    if (at !== undefined && (end === undefined || at > end)) end = at;
+    const at = messages[i]!.createdAt;
+    if (at !== undefined) return at;
   }
-  return end;
+  return undefined;
 }
 
-/** The snapshot the server took as the turn ended: the first one after the turn's last message and before the next prompt. */
-function snapshotFor(snapshots: readonly TurnStatsSnapshot[], end: number | undefined, nextStart: number | undefined): TurnStatsSnapshot | undefined {
-  if (end === undefined) return undefined;
-  return snapshots.find((snapshot) => snapshot.endedAt >= end - 2000 && (nextStart === undefined || snapshot.endedAt < nextStart));
+/**
+ * The snapshot that says where the turn left the files: the last one the server took after the turn's prompt and before
+ * the next. (A turn can idle more than once, and clocks differ a little, so the window is by prompt, not by message.)
+ */
+function snapshotFor(snapshots: readonly TurnStatsSnapshot[], start: number | undefined, nextStart: number | undefined): TurnStatsSnapshot | undefined {
+  if (start === undefined) return undefined;
+  let found: TurnStatsSnapshot | undefined;
+  for (const snapshot of snapshots) {
+    if (snapshot.endedAt >= start && (nextStart === undefined || snapshot.endedAt < nextStart)) found = snapshot;
+  }
+  return found;
 }
 
 /**
@@ -229,7 +241,7 @@ export function withFileStats(
         }
       }
       const nextStart = nextUser < messages.length ? messages[nextUser]!.createdAt : undefined;
-      snapshot = snapshotFor(snapshots, turnEnd(messages, start, nextUser), nextStart);
+      snapshot = snapshotFor(snapshots, turnStart(messages, start, nextUser), nextStart);
     }
 
     const next = tools.map((tool) => {
@@ -254,6 +266,38 @@ export interface FoldOptions {
   directory?: string;
   /** Turn ids the user opened: their rows show again (the fold row and the card stay). */
   open: ReadonlySet<string>;
+  /**
+   * What the server kept of the session's files as each turn ended. Each is the session's whole diff at that moment, so
+   * a turn's card is the difference between its snapshot and the one before. With these (or `liveStats`), the card's
+   * files and counts come from them, not from the calls that wrote a file.
+   */
+  snapshots?: readonly TurnStatsSnapshot[];
+  /** The session's diff now: the latest turn's end until its snapshot arrives. */
+  liveStats?: FileStats | null;
+}
+
+const NO_FILES: FileStats = new Map();
+
+/** What a turn changed: the files whose counts moved between the previous snapshot and this one. */
+export function diffSnapshots(previous: FileStats, current: FileStats): FoldedFile[] {
+  const files: FoldedFile[] = [];
+  for (const path of new Set([...previous.keys(), ...current.keys()])) {
+    const before = previous.get(path);
+    const after = current.get(path);
+    const addDelta = (after?.additions ?? 0) - (before?.additions ?? 0);
+    const delDelta = (after?.deletions ?? 0) - (before?.deletions ?? 0);
+    if (addDelta === 0 && delDelta === 0 && before?.status === after?.status) continue;
+    // Lines the turn took back count the other way: an added line removed again is a deleted line.
+    const slash = path.lastIndexOf("/");
+    files.push({
+      path,
+      name: slash >= 0 ? path.slice(slash + 1) : path,
+      dir: slash >= 0 ? path.slice(0, slash) : "",
+      additions: Math.max(0, addDelta) + Math.max(0, -delDelta),
+      deletions: Math.max(0, delDelta) + Math.max(0, -addDelta),
+    });
+  }
+  return files;
 }
 
 /**
@@ -339,7 +383,23 @@ export function foldTurns(messages: readonly ActivityMessage[], options: FoldOpt
     const started = range.user?.createdAt;
     if (started !== undefined && endedAt !== undefined && endedAt > started) summary.durationMs = endedAt - started;
 
-    const fileList = [...files.values()];
+    let fileList = [...files.values()];
+    if (options.snapshots?.length || options.liveStats) {
+      const snapshots = options.snapshots ?? [];
+      const first = range.agent[0]!;
+      const nextStart = ranges[rangeIndex + 1]?.user?.createdAt;
+      const start = range.user?.createdAt ?? messages[first]!.createdAt;
+      const mine = snapshotFor(snapshots, start, nextStart);
+      const current = mine?.files ?? (isLast ? options.liveStats : null);
+      // Where the files stood before the turn: the last snapshot taken before its prompt.
+      let previous: FileStats | undefined;
+      for (const snapshot of snapshots) {
+        if (start !== undefined && snapshot.endedAt < start) previous = snapshot.files;
+      }
+      // With nothing before it, a turn that ran no call able to change a file changed none: what's in the folder was there already.
+      const changedNothing = !previous && summary.edits + summary.commands === 0;
+      if (current) fileList = changedNothing ? [] : diffSnapshots(previous ?? NO_FILES, current);
+    }
     const turn: FoldedTurn = {
       id: turnId,
       summary,

@@ -80,4 +80,10 @@ describe("the dashboard on another machine", () => {
     expect(remember).toHaveBeenCalledWith(falcon.id, ["f-1"]);
     expect(navigate).toHaveBeenCalledWith(expect.objectContaining({ to: "/sessions/$id", params: { id: "f-1" } }));
   });
+
+  it("starts its heading clear of the phone's menu button, as every other page's heading does", async () => {
+    const wrapper = mount(FleetDashboard, { global: { provide: { [MACHINE_TARGET as symbol]: () => targetFor(falcon) } } });
+    await flushPromises();
+    expect(wrapper.get(".dashboard__heading").classes()).toContain("phone-menu-lane");
+  });
 });

@@ -172,7 +172,7 @@ function handleNewSession(): void {
     aria-label="Fleet dashboard"
   >
     <header class="dashboard__head">
-      <div class="dashboard__heading">
+      <div class="dashboard__heading phone-menu-lane">
         <h1 class="dashboard__title">
           {{ greeting }}
         </h1>

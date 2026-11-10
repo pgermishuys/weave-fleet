@@ -11,6 +11,7 @@ import { mergeReadRuns } from "@/lib/merge-reads";
 import TurnFoldRow from "@/components/session/TurnFoldRow.vue";
 import ChangedFilesCard from "@/components/session/ChangedFilesCard.vue";
 import { foldTurns, withFileStats } from "@/lib/turn-fold";
+import { isReadCall } from "@/lib/tool-row";
 import { useFileStats, useTurnStats } from "@/composables/use-file-stats";
 import CompactionDivider from "@/components/session/CompactionDivider.vue";
 import { sessionRetry } from "@/lib/session-row-status";
@@ -370,22 +371,26 @@ function toggleTurn(turnId: string): void {
 // A call that wrote a whole file knows only the new contents; the file's real change is the session's diff, the same
 // numbers the Changes panel shows.
 // Read once a call has written a whole file, and again as each turn ends (the session's changes have moved on).
-const hasWholeFileWrite = computed(() => mergedMessages.value.some((message) => message.tools?.some((tool) => tool.diffFromContent)));
+// A turn's changed-files card is the session's diff as the turn ended against the one before, so any call that isn't a
+// read may have changed files (a shell command can delete one).
+const mayHaveChangedFiles = computed(() => mergedMessages.value.some((message) => message.tools?.some((tool) => !isReadCall(tool.kind))));
 const fileStats = useFileStats({
   sessionId: () => props.sessionId,
-  wanted: () => hasWholeFileWrite.value && !isStreaming.value,
+  wanted: () => mayHaveChangedFiles.value && !isStreaming.value,
   refreshOn: () => isStreaming.value,
 });
 // What each turn changed is kept by the server as the turn ends: read again as turns start and end.
 const turnStats = useTurnStats({
   sessionId: () => props.sessionId,
-  wanted: () => hasWholeFileWrite.value,
+  wanted: () => mayHaveChangedFiles.value,
   refreshOn: () => isStreaming.value,
 });
 const foldedMessages = computed(() => foldTurns(withFileStats(mergedMessages.value, fileStats.value, selectedSession.value?.workspaceDirectory, turnStats.value), {
   running: isStreaming.value,
   directory: selectedSession.value?.workspaceDirectory,
   open: openTurns.value,
+  snapshots: turnStats.value,
+  liveStats: fileStats.value,
 }));
 
 /** Open diff on a turn's changed-files card: the session's Changes, beside the conversation. */
