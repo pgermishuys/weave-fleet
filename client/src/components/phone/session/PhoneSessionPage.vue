@@ -171,6 +171,7 @@ const find = useConversationFind({
   units: findUnits,
   hasMore: () => stream.hasMore.value,
   isLoadingOlder: () => stream.isLoadingOlder.value,
+  loadOlderFailed: () => stream.loadOlderFailed.value,
   loadOlder: stream.loadOlder,
   root: scrollRef,
   focusField: () => {
@@ -504,7 +505,7 @@ onUnmounted(() => {
             :disabled="stream.isLoadingOlder.value"
             @click="stream.loadOlder"
           >
-            {{ stream.isLoadingOlder.value ? "Loading…" : "Earlier messages" }}
+            {{ stream.isLoadingOlder.value ? "Loading…" : stream.loadOlderFailed.value ? "Couldn't load · Retry" : "Earlier messages" }}
           </button>
           <div
             v-if="stream.isLoading.value && blocks.length === 0"
@@ -723,6 +724,8 @@ onUnmounted(() => {
       :total="find.hits.value.length"
       :current="find.current.value"
       :searching-older="find.searchingOlder.value"
+      :older-failed="find.olderFailed.value"
+      @retry-older="find.retryOlder"
       @step="find.step"
       @close="find.close"
       @stop-older="find.stopSearchingOlder"

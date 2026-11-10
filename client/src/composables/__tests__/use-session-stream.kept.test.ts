@@ -129,6 +129,29 @@ describe("useSessionStream kept sessions", () => {
     expect(loadSessionHistoryMock).not.toHaveBeenCalled();
   });
 
+  it("a failed older page clears the loading state, flags the failure and retries the same page", async () => {
+    const { result } = await mountStream();
+    listeners.get("session:a")!.onSnapshot(snapshot("a", ["Hello"]));
+    loadSessionHistoryMock.mockResolvedValueOnce(null);
+
+    result.loadOlder();
+    expect(result.isLoadingOlder.value).toBe(true);
+    await Promise.resolve();
+    await Promise.resolve();
+    expect(result.isLoadingOlder.value).toBe(false);
+    expect(result.loadOlderFailed.value).toBe(true);
+    expect(result.hasMore.value).toBe(true);
+
+    loadSessionHistoryMock.mockResolvedValueOnce({ messages: [message("a", "m0", "Older")], cursor: null, hasMore: false });
+    result.loadOlder();
+    expect(result.loadOlderFailed.value).toBe(false);
+    await Promise.resolve();
+    await Promise.resolve();
+    expect(loadSessionHistoryMock.mock.calls[1]?.[2]).toBe(loadSessionHistoryMock.mock.calls[0]?.[2]);
+    expect(result.hasMore.value).toBe(false);
+    expect(result.loadOlderFailed.value).toBe(false);
+  });
+
   it("keeps nothing for a session whose snapshot never arrived", async () => {
     const { sessionId, texts } = await mountStream();
     sessionId.value = "b";

@@ -17,6 +17,8 @@ const props = defineProps<{
   current: number;
   /** Older history is still loading for the search. */
   searchingOlder: boolean;
+  /** The last older page failed to load; the search waits for a retry. */
+  olderFailed?: boolean;
   docked?: boolean;
 }>();
 
@@ -26,6 +28,7 @@ const emit = defineEmits<{
   step: [direction: 1 | -1];
   close: [];
   "stop-older": [];
+  "retry-older": [];
 }>();
 
 const field = useTemplateRef<HTMLInputElement>("field");
@@ -156,6 +159,19 @@ watch(() => props.docked, trackKeyboard);
           class="find-bar__stop"
           @click="emit('stop-older')"
         >Stop</button>
+      </span>
+      <span
+        v-else-if="olderFailed"
+        class="find-bar__older"
+        role="alert"
+        data-testid="conversation-find-older-failed"
+      >
+        couldn't load older messages ·
+        <button
+          type="button"
+          class="find-bar__stop"
+          @click="emit('retry-older')"
+        >Retry</button>
       </span>
     </div>
   </div>

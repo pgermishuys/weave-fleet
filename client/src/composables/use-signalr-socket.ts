@@ -750,13 +750,23 @@ export async function loadSessionHistory(machine: MachineTarget, sessionId: stri
     return null
   }
 
+  // A page the server never answers must not hold the conversation's loading state for good.
+  let timer: ReturnType<typeof setTimeout> | undefined
+  const timeout = new Promise<null>((resolve) => {
+    timer = setTimeout(() => resolve(null), HISTORY_PAGE_TIMEOUT_MS)
+  })
   try {
-    return await connection.invoke<SessionHistoryPage>("LoadHistoryAsync", sessionId, cursor)
+    return await Promise.race([connection.invoke<SessionHistoryPage>("LoadHistoryAsync", sessionId, cursor), timeout])
   } catch (error) {
     console.error(`Failed to load older messages for session ${sessionId}:`, error)
     return null
+  } finally {
+    clearTimeout(timer)
   }
 }
+
+/** How long an older history page may take before the conversation calls it failed and offers a retry. */
+const HISTORY_PAGE_TIMEOUT_MS = 30_000
 
 /** The test API speaks for the live machine; suspending holds every machine's connection. */
 function syncTestApi(): void {
