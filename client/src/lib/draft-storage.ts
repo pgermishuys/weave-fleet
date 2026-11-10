@@ -49,3 +49,10 @@ export function storedDraftKeys(start: string): string[] {
 export const sessionDraftKey = (sessionId: string) => `session.${sessionId}`;
 export const sideDraftKey = (sessionId: string, sideConversationId: string) => `side.${sessionId}.${sideConversationId}`;
 export const sideMainDraftKey = (sessionId: string) => `side-main.${sessionId}`;
+
+/** Forgets everything kept for a session (its own draft and its side conversations'), once the session is deleted. */
+export function clearStoredDraftsOf(sessionId: string): void {
+  for (const start of [sessionDraftKey(sessionId), `side.${sessionId}.`, sideMainDraftKey(sessionId)]) {
+    for (const key of storedDraftKeys(start)) writeStoredDraft(key, "");
+  }
+}

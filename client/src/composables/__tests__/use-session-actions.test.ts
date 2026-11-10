@@ -4,11 +4,13 @@ import {
   useRenameSession,
   useCreateSession,
   useDeleteProject,
+  useDeleteSession,
   useForkSession,
   useNewSessionInFolder,
 } from "@/composables/use-session-actions";
 import type { CreateSessionResponse, ForkSessionResponse, SessionListItem } from "@/api/client";
 import { useSessionsStore } from "@/stores/sessions";
+import { readStoredDraft, sessionDraftKey, writeStoredDraft } from "@/lib/draft-storage";
 import { flushAll, mountComposable } from "./test-utils";
 
 const { apiFetchMock } = vi.hoisted(() => ({
@@ -137,6 +139,22 @@ describe("useSessionActions", () => {
     await expect(createPromise).resolves.toEqual(responseBody);
     expect(result.isLoading.value).toBe(false);
     expect(result.error.value).toBeUndefined();
+  });
+
+  it("forgets a deleted session's unsent drafts, and only its own", async () => {
+    writeStoredDraft(sessionDraftKey("gone"), "half a thought");
+    writeStoredDraft("side.gone.btw-1", "a side question");
+    writeStoredDraft("side-main.gone", "back in the main one");
+    writeStoredDraft(sessionDraftKey("kept"), "still typing");
+    apiFetchMock.mockResolvedValue({ data: undefined, error: undefined, response: createJsonResponse({}) });
+
+    const { result } = await mountComposable(() => useDeleteSession());
+    await result.deleteSession("gone", "instance-1");
+
+    expect(readStoredDraft(sessionDraftKey("gone"))).toBeNull();
+    expect(readStoredDraft("side.gone.btw-1")).toBeNull();
+    expect(readStoredDraft("side-main.gone")).toBeNull();
+    expect(readStoredDraft(sessionDraftKey("kept"))).toBe("still typing");
   });
 
   it("reports API errors for project deletion", async () => {

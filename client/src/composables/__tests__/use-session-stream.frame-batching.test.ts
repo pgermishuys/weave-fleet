@@ -1,6 +1,6 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { createPinia, setActivePinia } from "pinia";
-import { watch } from "vue";
+import { nextTick, shallowRef, watch } from "vue";
 import type { DomainEvent } from "@/lib/domain-events";
 import type { SessionSnapshot } from "@/lib/session-snapshot";
 import { mountComposable } from "./test-utils";
@@ -122,6 +122,35 @@ describe("useSessionStream frame batching", () => {
     listener!.onSnapshot(snapshot("Hello again"));
     vi.advanceTimersToNextFrame();
     expect(text()).toBe("Hello again");
+  });
+
+  it("keeps events that arrive while the snapshot loads, and swapping the session in place loses none", async () => {
+    const { useSessionStream } = await import("@/composables/use-session-stream");
+    const id = shallowRef("s1");
+    const { result } = await mountComposable(() => useSessionStream(id));
+    const text = () => {
+      const part = result.messages.value[0]?.parts[0];
+      return part?.type === "text" ? part.text : undefined;
+    };
+
+    // Events ahead of the snapshot wait for it and are applied over it.
+    listener!.onEvent(delta(" world"));
+    listener!.onSnapshot(snapshot("Hello"));
+    expect(text()).toBe("Hello world");
+
+    // The view moves to another session and back: the new subscription's early events survive too.
+    id.value = "s2";
+    await nextTick();
+    id.value = "s1";
+    await nextTick();
+    listener!.onEvent(delta("!"));
+    listener!.onSnapshot(snapshot("Hello world"));
+    expect(text()).toBe("Hello world!");
+
+    // After the snapshot, live events reach the conversation on the next frame.
+    listener!.onEvent(delta(" Bye"));
+    vi.advanceTimersToNextFrame();
+    expect(text()).toBe("Hello world! Bye");
   });
 
   it("drops them when the view leaves the session", async () => {
