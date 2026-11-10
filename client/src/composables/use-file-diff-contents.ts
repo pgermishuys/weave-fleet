@@ -9,6 +9,23 @@ export type FileDiffEntry =
   | { status: "error"; message: string };
 
 /**
+ * What was fetched, kept by machine and session so a panel that closes and reopens (or a session switched away from and
+ * back to) draws the files it already had at once; each is still fetched again quietly and replaced when it differs.
+ */
+const MAX_CACHED = 200;
+const cache = new Map<string, FileDiffItem>();
+
+function cacheKey(machine: MachineTarget, sessionId: string, path: string): string {
+  return `${machine.key}\u0000${sessionId}\u0000${path}`;
+}
+
+function remember(key: string, item: FileDiffItem): void {
+  cache.delete(key);
+  cache.set(key, item);
+  if (cache.size > MAX_CACHED) cache.delete(cache.keys().next().value as string);
+}
+
+/**
  * The contents (before and after) of the files Changes shows, fetched one file at a time from /diffs/file as each
  * section opens. An entry is replaced when its file's counts change (the agent edited it again) or on `reload`.
  */
@@ -31,7 +48,10 @@ export function useFileDiffContents(
   async function fetchOne(path: string, version: string): Promise<void> {
     const id = sessionId();
     versions.set(path, version);
-    if (entries.value[path]?.status !== "ready") set(path, { status: "loading" });
+    if (entries.value[path]?.status !== "ready") {
+      const cached = cache.get(cacheKey(machine, id, path));
+      set(path, cached ? { status: "ready", item: cached } : { status: "loading" });
+    }
     try {
       const response = await apiFetchOn(
         machine.connection,
@@ -42,7 +62,9 @@ export function useFileDiffContents(
         set(path, { status: "error", message: `HTTP ${response.status}` });
         return;
       }
-      set(path, { status: "ready", item: (await response.json()) as FileDiffItem });
+      const item = (await response.json()) as FileDiffItem;
+      remember(cacheKey(machine, id, path), item);
+      set(path, { status: "ready", item });
     } catch (error) {
       if (versions.get(path) !== version) return;
       set(path, { status: "error", message: error instanceof Error ? error.message : String(error) });
