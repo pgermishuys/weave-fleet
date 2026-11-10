@@ -146,10 +146,13 @@ export function useConversationFind(options: ConversationFindOptions) {
     if (!root || root.offsetParent === null) return;
     const target = event.target;
     const owner = target instanceof Node && target !== document.body && target !== document.documentElement;
-    if (focusKeepsFindKey(target)) {
-      // The bar's own field keeps the key too: selecting its text is what a second press should do.
+    if (isOpen.value && target instanceof HTMLInputElement && root.contains(target)) {
+      // The bar's own field: a second press selects the query, as a browser's find does.
+      event.preventDefault();
+      target.select();
       return;
     }
+    if (focusKeepsFindKey(target)) return;
     if (owner && !root.contains(target as Node)) return;
     event.preventDefault();
     open();

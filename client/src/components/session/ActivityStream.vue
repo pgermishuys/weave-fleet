@@ -461,7 +461,7 @@ const find = useConversationFind({
     findBar.value?.field?.focus();
     findBar.value?.field?.select();
   },
-  focusComposer: () => document.querySelector<HTMLElement>("textarea.composer-input")?.focus(),
+  focusComposer: () => document.querySelector<HTMLElement>("textarea.composer-frame__textarea")?.focus(),
   elementOf: (id) => streamRef.value?.querySelector(`[data-message-id="${CSS.escape(id)}"]`) ?? null,
   reveal: (hit) => {
     // A hit in a folded turn opens the turn, and it stays open after the bar closes.

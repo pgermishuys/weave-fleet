@@ -37,11 +37,7 @@ const count = computed(() => {
 });
 
 function onKeydown(event: KeyboardEvent): void {
-  if (event.key === "Escape") {
-    event.preventDefault();
-    event.stopPropagation();
-    emit("close");
-  } else if (event.key === "Enter") {
+  if (event.key === "Enter") {
     event.preventDefault();
     emit("step", event.shiftKey ? -1 : 1);
   }
@@ -73,6 +69,7 @@ watch(() => props.docked, trackKeyboard);
     role="search"
     aria-label="Find in this conversation"
     data-testid="conversation-find"
+    @keydown.esc.stop.prevent="emit('close')"
   >
     <div class="find-bar__row">
       <input
@@ -185,6 +182,8 @@ watch(() => props.docked, trackKeyboard);
 
 .find-bar--docked {
   position: fixed;
+  /* Above the phone's composer bar, below its sheets. */
+  z-index: 35;
   top: auto;
   right: 0;
   left: 0;

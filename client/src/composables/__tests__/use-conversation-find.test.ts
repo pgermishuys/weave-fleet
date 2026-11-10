@@ -135,6 +135,17 @@ describe("useConversationFind", () => {
       expect(api.isOpen.value).toBe(true);
     });
 
+    it("selects the query when pressed again inside the bar's field", () => {
+      const { api, root } = setup();
+      const field = document.createElement("input");
+      root.appendChild(field);
+      field.value = "retry";
+      const select = vi.spyOn(field, "select");
+      api.open();
+      expect(press(field).defaultPrevented).toBe(true);
+      expect(select).toHaveBeenCalled();
+    });
+
     it("leaves the key to a text field, the editor and elements outside the conversation", () => {
       const { api } = setup();
       const field = document.createElement("textarea");
