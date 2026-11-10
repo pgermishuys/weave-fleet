@@ -246,6 +246,30 @@ public sealed class OpenCode2MapperTests
     }
 
     [Fact]
+    public void The_retried_step_starting_shows_the_session_working_again()
+    {
+        // V2 starts the step over once the wait is up, and says nothing else about the retry ending.
+        var mapper = new OpenCode2Mapper(FleetSession);
+        mapper.Map(Event("session.retry.scheduled",
+            """{"sessionID":"ses_1","assistantMessageID":"msg_1","attempt":2,"at":0,"error":{"type":"decode","message":"Decode error"}}"""));
+
+        var restarted = mapper.Map(Event("session.step.started", """{"sessionID":"ses_1","assistantMessageID":"msg_1","agent":"build"}"""));
+
+        restarted[0].Type.ShouldBe(EventTypes.SessionStatus);
+        restarted[0].Payload!.Value.GetProperty("status").GetProperty("type").GetString().ShouldBe(ActivityStatuses.Busy);
+
+        // Only once: the steps after it aren't retries.
+        mapper.Map(Event("session.step.started", """{"sessionID":"ses_1","assistantMessageID":"msg_2","agent":"build"}"""))
+            .ShouldNotContain(e => e.Type == EventTypes.SessionStatus);
+    }
+
+    [Fact]
+    public void A_step_starting_without_a_retry_says_nothing_of_the_status()
+        => new OpenCode2Mapper(FleetSession)
+            .Map(Event("session.step.started", """{"sessionID":"ses_1","assistantMessageID":"msg_1","agent":"build"}"""))
+            .ShouldNotContain(e => e.Type == EventTypes.SessionStatus);
+
+    [Fact]
     public void Reasoning_streams_as_a_reasoning_part()
     {
         var mapper = new OpenCode2Mapper(FleetSession);

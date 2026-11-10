@@ -57,6 +57,12 @@ internal sealed class OpenCode2Mapper(string fleetSessionId, string? workingDire
     private readonly HashSet<string> _questions = new(StringComparer.Ordinal);
 
     /// <summary>
+    /// True from a scheduled retry until the step it retries starts again. V2 says nothing else when the wait is up,
+    /// so the restarted step is what tells Fleet the session is working again rather than still retrying.
+    /// </summary>
+    private bool _retrying;
+
+    /// <summary>
     /// The user's shell commands this mapper saw start, by shell id: their message, and when it started. The end
     /// names only the shell. V2's notice that one finished is for the model; the command's own message shows it.
     /// </summary>
@@ -82,9 +88,9 @@ internal sealed class OpenCode2Mapper(string fleetSessionId, string? workingDire
 
         return evt.Type switch
         {
-            "session.execution.started" => [Status(ActivityStatuses.Busy)],
-            "session.execution.succeeded" or "session.execution.interrupted" => [Idle()],
-            "session.execution.failed" => [Error(ReadError(data)), Idle()],
+            "session.execution.started" => [EndRetry(Status(ActivityStatuses.Busy))],
+            "session.execution.succeeded" or "session.execution.interrupted" => [EndRetry(Idle())],
+            "session.execution.failed" => [Error(ReadError(data)), EndRetry(Idle())],
             "session.retry.scheduled" => [Retry(data)],
             "session.step.started" => StepStarted(evt, data),
             "session.step.ended" => StepEnded(evt, data, ReadString(data, "finish")),
@@ -927,7 +933,8 @@ internal sealed class OpenCode2Mapper(string fleetSessionId, string? workingDire
         _messages[messageId] = message;
         CurrentModel = (providerId, modelId);
 
-        return
+        List<HarnessEvent> events = _retrying ? [EndRetry(Status(ActivityStatuses.Busy))] : [];
+        events.AddRange(
         [
             MessageUpdated(messageId, message, completed: null, cost: null, tokens: null, finish: null),
             PartUpdated(new OpenCode2Part
@@ -938,7 +945,8 @@ internal sealed class OpenCode2Mapper(string fleetSessionId, string? workingDire
                 Type = "step-start",
                 Index = message.StepIndex,
             }),
-        ];
+        ]);
+        return events;
     }
 
     private List<HarnessEvent> StepEnded(OpenCode2Event evt, JsonElement data, string? finish)
@@ -1247,9 +1255,17 @@ internal sealed class OpenCode2Mapper(string fleetSessionId, string? workingDire
             new OpenCode2ErrorPayload { SessionId = fleetSessionId, Error = error },
             OpenCode2JsonContext.Default.OpenCode2ErrorPayload));
 
+    /// <summary>The status that ends a retry: the turn is working again, or over.</summary>
+    private HarnessEvent EndRetry(HarnessEvent status)
+    {
+        _retrying = false;
+        return status;
+    }
+
     /// <summary>V2 says when it will try again (<c>at</c>, epoch milliseconds); Fleet's retry status wants how long until then.</summary>
     private HarnessEvent Retry(JsonElement data)
     {
+        _retrying = true;
         long? delay = data.TryGetProperty("at", out var at) && at.TryGetInt64(out var atMs)
             ? Math.Max(0, atMs - DateTimeOffset.UtcNow.ToUnixTimeMilliseconds())
             : null;
