@@ -358,8 +358,10 @@ async function confirmRevert(): Promise<void> {
       const result = await writeSessionFile(machine, props.sessionId, request.path, text, current.hash ?? "");
       if (!result.saved) notice.value = `${request.path} changed on disk, so nothing was reverted.`;
     }
-    reload(request.path, versionOf(view.item));
+    // Refresh the list first: a file that is no longer in the diff (reverted clean) has no contents to ask for.
     await sharedDiffs?.fetchDiffs();
+    const remaining = allFiles.value.find((file) => file.file === request.path);
+    if (remaining) reload(request.path, versionOf(remaining));
   } catch (error) {
     notice.value = `Could not revert ${request.path}: ${error instanceof Error ? error.message : String(error)}`;
   } finally {

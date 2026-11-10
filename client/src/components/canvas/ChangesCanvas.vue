@@ -121,7 +121,7 @@ const hasChanges = computed(() => (sharedDiffs?.diffs.value.length ?? 0) > 0);
   color: color-mix(in srgb, var(--muted) 80%, transparent);
 }
 
-.changes-canvas__base + .changes-canvas__empty {
+.changes-canvas__empty {
   margin: 0;
   padding: 14px 18px;
   font-size: 13px;
