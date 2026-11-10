@@ -69,6 +69,31 @@ public sealed class RestartContinueWithQueueTests : IAsyncDisposable
         (await _queue.ListAsync("s1")).ShouldBeEmpty();
     }
 
+    [Fact]
+    public async Task Continue_runs_at_the_effort_the_session_was_on()
+    {
+        _builder.RegisterHarness("opencode", "OpenCode", new HarnessCapabilities { SupportsSteering = true });
+        _builder.SessionRepository.Seed(new Session
+        {
+            Id = "s1", InstanceId = "inst-1", Title = "T", Status = "active", Directory = "/tmp", CreatedAt = "2026-01-01",
+            RetentionStatus = "active", HarnessType = "opencode", UserId = "user-1", SelectedEffort = "high",
+        });
+        _builder.InstanceTracker.Register("inst-1", _harness);
+        _builder.ActivityTracker.Update("s1", ActivityStatuses.Idle, "user-1");
+        _builder.Build();
+
+        var interruptions = new MemoryInterruptions();
+        await interruptions.SaveAsync(new SessionInterruption { SessionId = "s1", UserId = "user-1", At = DateTimeOffset.UtcNow });
+        var continuer = new SessionInterruptions(
+            new FleetOptions(), interruptions, _builder.SessionRepository, _builder.WorkspaceRepository, _builder.SessionMessageProxy,
+            _builder.Prompting, _builder.EventBroadcaster, _user, new NoBackgroundUser(), new RestartContinuer(NullLogger<RestartContinuer>.Instance),
+            TimeProvider.System, NullLogger<SessionInterruptions>.Instance);
+
+        (await continuer.ContinueAsync("s1")).IsSuccess.ShouldBeTrue();
+
+        _harness.SendPromptCalls.ShouldHaveSingleItem().Options.ShouldNotBeNull().Effort.ShouldBe("high");
+    }
+
     private sealed class NoBackgroundUser : IBackgroundUserScope
     {
         public IDisposable Begin(string userId) => new Scope();
