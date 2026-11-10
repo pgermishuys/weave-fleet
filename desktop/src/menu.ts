@@ -5,6 +5,7 @@ export interface MenuActions {
   openDataFolder: () => void;
   checkForUpdates: () => void;
   reportProblem: () => void;
+  findInConversation: () => void;
 }
 
 /** The application menu. The Edit roles are what make copy and paste work on macOS. */
@@ -30,7 +31,23 @@ export function buildAppMenu(platform: NodeJS.Platform, actions: MenuActions): M
           },
         ]
       : [{ label: "File", submenu: [{ role: "quit" as const, label: "Quit Fleet" }] }]),
-    { role: "editMenu" },
+    {
+      label: "Edit",
+      submenu: [
+        { role: "undo" },
+        { role: "redo" },
+        { type: "separator" },
+        { role: "cut" },
+        { role: "copy" },
+        { role: "paste" },
+        { role: "selectAll" },
+        { type: "separator" },
+        // Shown with its key, but the key is left to the page (`registerAccelerator: false`): Fleet's find bar takes
+        // Ctrl/⌘F only while the conversation has focus, so in the composer, an editor or the terminal the key keeps
+        // its own meaning. Choosing the item with the mouse always opens the bar.
+        { label: "Find in Conversation", accelerator: "CommandOrControl+F", registerAccelerator: false, click: actions.findInConversation },
+      ],
+    },
     {
       label: "View",
       submenu: [

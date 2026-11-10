@@ -1,12 +1,12 @@
 <script setup lang="ts">
 import { computed, nextTick, shallowRef, useTemplateRef, watch } from "vue";
-import { Archive, Copy, Diff, File, GitFork, Laptop, MessageCircle, Pencil, PanelsTopLeft, Square, Terminal } from "lucide-vue-next";
+import { Archive, Copy, Search, Diff, File, GitFork, Laptop, MessageCircle, Pencil, PanelsTopLeft, Square, Terminal } from "lucide-vue-next";
 import BottomSheet from "@/components/phone/BottomSheet.vue";
 import ModDraftMark from "@/components/mods/ModDraftMark.vue";
 import { splitTypedPath } from "@/lib/new-folder";
 
 /** The session's ⋯ menu, a floating sheet drawn as the desktop's dropdown menu: what its side panels and header actions do. */
-export type MenuAction = "changes" | "files" | "side" | "copy-folder" | "fork" | "rename" | "computer" | "terminal" | "archive" | "stop";
+export type MenuAction = "changes" | "files" | "side" | "find" | "copy-folder" | "fork" | "rename" | "computer" | "terminal" | "archive" | "stop";
 
 const props = defineProps<{
   open: boolean;
@@ -155,6 +155,16 @@ async function pick(action: MenuAction): Promise<void> {
           v-if="pane.hint"
           class="ph-mi__hint"
         >{{ pane.hint }}</span>
+      </button>
+      <button
+        type="button"
+        class="ph-mi"
+        role="menuitem"
+        data-testid="menu-find"
+        @click="pick('find')"
+      >
+        <Search aria-hidden="true" />
+        <span>Find in conversation</span>
       </button>
       <hr>
       <button

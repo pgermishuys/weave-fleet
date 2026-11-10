@@ -41,6 +41,12 @@ const bridge = {
     ipcRenderer.on("fleet-desktop:report-problem", listener);
     return () => ipcRenderer.removeListener("fleet-desktop:report-problem", listener);
   },
+  /** Calls back when Edit → Find in Conversation is chosen in the app's menu. */
+  onFindInConversation: (callback: () => void): (() => void) => {
+    const listener = () => callback();
+    ipcRenderer.on("fleet-desktop:find-in-conversation", listener);
+    return () => ipcRenderer.removeListener("fleet-desktop:find-in-conversation", listener);
+  },
 };
 
 contextBridge.exposeInMainWorld("fleetDesktop", bridge);

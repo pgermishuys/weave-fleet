@@ -169,6 +169,21 @@ function turnRanges(messages: readonly ActivityMessage[]): TurnRange[] {
   return ranges;
 }
 
+/**
+ * The id of the turn each message belongs to (the turn's first message: its prompt, or its first agent message when it
+ * has none), for the messages of turns that have agent messages. Folded turns are opened by this id.
+ */
+export function turnIdsOf(messages: readonly ActivityMessage[]): Map<string, string> {
+  const ids = new Map<string, string>();
+  for (const range of turnRanges(messages)) {
+    if (range.agent.length === 0) continue;
+    const turnId = (range.user ?? messages[range.agent[0]!]!).id;
+    if (range.user) ids.set(range.user.id, turnId);
+    for (const index of range.agent) ids.set(messages[index]!.id, turnId);
+  }
+  return ids;
+}
+
 /** The file's change as the session's diff counts it, by path as the session's folder knows it. */
 export type FileStats = ReadonlyMap<string, { additions: number; deletions: number; status?: "added" | "deleted" | "modified" }>;
 
