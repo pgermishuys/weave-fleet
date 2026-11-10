@@ -37,6 +37,8 @@ export interface FleetDesktopBridge {
   captureWindow?(): Promise<string | null>;
   /** Calls back when Help → Report a Problem… is chosen in the app's menu. Absent in older apps. */
   onReportProblem?(callback: () => void): () => void;
+  /** Calls back when Edit → Find in Conversation is chosen in the app's menu. Absent in older apps. */
+  onFindInConversation?(callback: () => void): () => void;
 }
 
 /** The release notes for a version, on the repository both the app and the CLI update from. */

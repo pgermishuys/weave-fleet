@@ -48,6 +48,10 @@ async function start(): Promise<void> {
         showWindow();
         window?.webContents.send("fleet-desktop:report-problem");
       },
+      findInConversation: () => {
+        showWindow();
+        window?.webContents.send("fleet-desktop:find-in-conversation");
+      },
     }),
   );
   ipcMain.on("fleet-desktop:version", (event) => {

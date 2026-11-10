@@ -16,6 +16,9 @@ import { fileExtensionLabel, parseAttachedNote } from "@/lib/attached-files";
 import FilesSheet from "@/components/phone/session/FilesSheet.vue";
 import OpenOnComputerCard from "@/components/phone/session/OpenOnComputerCard.vue";
 import PlanSheet from "@/components/phone/session/PlanSheet.vue";
+import ConversationFindBar from "@/components/session/ConversationFindBar.vue";
+import { useConversationFind } from "@/composables/use-conversation-find";
+import type { FindUnit } from "@/lib/conversation-find";
 import SessionMenuSheet, { type MenuAction } from "@/components/phone/session/SessionMenuSheet.vue";
 import SideConversationSheet from "@/components/phone/session/SideConversationSheet.vue";
 import SinceYouLookedMarker from "@/components/phone/session/SinceYouLookedMarker.vue";
@@ -151,6 +154,35 @@ function onVisibility(): void {
 
 const scrollRef = useTemplateRef<HTMLElement>("scroll");
 const dockRef = useTemplateRef<HTMLElement>("dock");
+const findBar = useTemplateRef<InstanceType<typeof ConversationFindBar>>("findBar");
+
+// Find in conversation (⋯ menu): the messages' text, and with "+ Tool output" what the calls printed.
+const findUnits = computed<FindUnit[]>(() => items.value.flatMap((block) => {
+  if (block.kind === "user" || block.kind === "text") return [{ id: block.key, turnId: null, text: block.text, toolText: [] }];
+  if (block.kind !== "tools") return [];
+  const toolText = block.parts.flatMap((part) => (part.kind === "steps" ? part.steps : []))
+    .flatMap((step) => {
+      const output = (step.part.state as { output?: unknown } | null)?.output;
+      return typeof output === "string" && output ? [output] : [];
+    });
+  return toolText.length > 0 ? [{ id: block.key, turnId: null, text: "", toolText }] : [];
+}));
+const find = useConversationFind({
+  units: findUnits,
+  hasMore: () => stream.hasMore.value,
+  isLoadingOlder: () => stream.isLoadingOlder.value,
+  loadOlder: stream.loadOlder,
+  root: scrollRef,
+  focusField: () => {
+    findBar.value?.field?.focus();
+    findBar.value?.field?.select();
+  },
+  elementOf: (id) => scrollRef.value?.querySelector(`[data-find-id="${CSS.escape(id)}"]`) ?? null,
+  reveal: (hit) => scrollRef.value?.querySelector(`[data-find-id="${CSS.escape(hit.unitId)}"]`)?.scrollIntoView({ block: "center" }),
+  scrollTo: (range) => range.startContainer.parentElement?.scrollIntoView({ block: "center" }),
+  // The phone has no hardware Ctrl+F; the menu asks for the bar.
+  enabled: false,
+});
 let scrolledOnArrival = false;
 
 // The conversation always clears the dock (a docked ask, a five-line message, the keyboard), staying at the bottom.
@@ -332,6 +364,10 @@ async function onMenu(action: MenuAction): Promise<void> {
     case "side":
       sheet.value = action;
       break;
+    case "find":
+      sheet.value = null;
+      find.open();
+      break;
     case "copy-folder": {
       sheet.value = null;
       const folder = session.value?.workspaceDirectory;
@@ -494,6 +530,7 @@ onUnmounted(() => {
               <p
                 v-if="userBody(block.text).text || !userBody(block.text).files.length"
                 class="ph-umsg"
+                :data-find-id="block.key"
                 data-testid="phone-user-message"
               >
                 {{ userBody(block.text).text }}
@@ -533,6 +570,7 @@ onUnmounted(() => {
             <PhoneMarkdown
               v-else-if="block.kind === 'text'"
               :text="block.text"
+              :data-find-id="block.key"
             />
             <PhoneToolRun
               v-else-if="block.kind === 'tools'"
@@ -676,6 +714,19 @@ onUnmounted(() => {
       </div>
     </div>
 
+    <ConversationFindBar
+      v-if="find.isOpen.value"
+      ref="findBar"
+      v-model:query="find.query.value"
+      v-model:scope="find.scope.value"
+      docked
+      :total="find.hits.value.length"
+      :current="find.current.value"
+      :searching-older="find.searchingOlder.value"
+      @step="find.step"
+      @close="find.close"
+      @stop-older="find.stopSearchingOlder"
+    />
     <SessionMenuSheet
       :open="sheet === 'menu'"
       :title="title"

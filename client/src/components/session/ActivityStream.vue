@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { computed, nextTick, onMounted, onUnmounted, ref, watch } from "vue";
+import { computed, nextTick, onMounted, onUnmounted, ref, useTemplateRef, watch } from "vue";
 import { ArrowDown, ArrowUpRight, Bot, Bug, CornerDownRight, Puzzle, RotateCw, TerminalSquare, TriangleAlert, Workflow } from "lucide-vue-next";
 import { useMachineTarget } from "@/lib/machine-target";
 import { useRouter } from "@tanstack/vue-router";
@@ -10,7 +10,10 @@ import ShellCommandBlock from "@/components/session/ShellCommandBlock.vue";
 import { mergeReadRuns } from "@/lib/merge-reads";
 import TurnFoldRow from "@/components/session/TurnFoldRow.vue";
 import ChangedFilesCard from "@/components/session/ChangedFilesCard.vue";
-import { foldTurns, withFileStats } from "@/lib/turn-fold";
+import { foldTurns, turnIdsOf, withFileStats } from "@/lib/turn-fold";
+import ConversationFindBar from "@/components/session/ConversationFindBar.vue";
+import { useConversationFind } from "@/composables/use-conversation-find";
+import type { FindUnit } from "@/lib/conversation-find";
 import { isReadCall } from "@/lib/tool-row";
 import { useFileStats, useTurnStats } from "@/composables/use-file-stats";
 import CompactionDivider from "@/components/session/CompactionDivider.vue";
@@ -434,6 +437,43 @@ const {
   mountAll: mountAllMessages,
 });
 
+// Find in this conversation (Ctrl/⌘F): searches the messages' data, so folded turns and unloaded rows count too.
+const shellRef = useTemplateRef<HTMLElement>("shell");
+const findBar = useTemplateRef<InstanceType<typeof ConversationFindBar>>("findBar");
+const findUnits = computed<FindUnit[]>(() => {
+  const turnIds = turnIdsOf(mergedMessages.value);
+  return mergedMessages.value.map((message) => ({
+    id: message.id,
+    turnId: turnIds.get(message.id) ?? null,
+    text: message.body,
+    toolText: (message.tools ?? []).flatMap((tool) => (tool.output ? [tool.output] : [])),
+  }));
+});
+const find = useConversationFind({
+  units: findUnits,
+  hasMore: () => hasMore.value,
+  isLoadingOlder: () => isLoadingOlder.value,
+  loadOlder,
+  root: shellRef,
+  // A side conversation (it has `after`) never takes the key from the conversation it sits beside.
+  enabled: () => props.after === undefined,
+  focusField: () => {
+    findBar.value?.field?.focus();
+    findBar.value?.field?.select();
+  },
+  focusComposer: () => document.querySelector<HTMLElement>("textarea.composer-frame__textarea")?.focus(),
+  elementOf: (id) => streamRef.value?.querySelector(`[data-message-id="${CSS.escape(id)}"]`) ?? null,
+  reveal: (hit) => {
+    // A hit in a folded turn opens the turn, and it stays open after the bar closes.
+    if (hit.turnId && !openTurns.value.has(hit.turnId)) toggleTurn(hit.turnId);
+    showMessage(hit.unitId);
+  },
+  scrollTo: (range) => {
+    const element = range.startContainer.parentElement;
+    element?.scrollIntoView({ block: "center", behavior: "instant" });
+  },
+});
+
 /** An agent message that is only thinking and calls: its rows sit close together, not 20px apart like paragraphs. */
 function isRowsOnly(message: { role: string; body: string; images: unknown[]; questionParts?: unknown[]; turnError?: unknown }): boolean {
   return message.role === "assistant" && message.body.trim().length === 0 && message.images.length === 0
@@ -573,7 +613,22 @@ function handleImproveSkill(skill: string, toolId: string): void {
 </script>
 
 <template>
-  <div class="activity-stream-shell">
+  <div
+    ref="shell"
+    class="activity-stream-shell"
+  >
+    <ConversationFindBar
+      v-if="find.isOpen.value"
+      ref="findBar"
+      v-model:query="find.query.value"
+      v-model:scope="find.scope.value"
+      :total="find.hits.value.length"
+      :current="find.current.value"
+      :searching-older="find.searchingOlder.value"
+      @step="find.step"
+      @close="find.close"
+      @stop-older="find.stopSearchingOlder"
+    />
     <section
       ref="streamRef"
       class="activity-stream"
