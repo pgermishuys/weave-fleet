@@ -141,7 +141,8 @@ public sealed partial class PromptQueueService(
 
     /// <summary>
     /// Sends one queued item now instead of waiting its turn. While a turn runs, a message goes into it (a steer),
-    /// where the harness can take one; a command can't go into a turn. When the session is idle, it's sent as usual.
+    /// where the harness can take one; a command can't go into a turn. When the session is idle, it's sent as usual. An item that
+    /// is already gone (the idle's auto-send won the race, or it was removed) is not an error: there is nothing to send.
     /// </summary>
     public async Task<Result<Unit>> SendNowAsync(string sessionId, string itemId, CancellationToken ct = default)
     {
@@ -154,7 +155,7 @@ public sealed partial class PromptQueueService(
         {
             var listed = (await queue.ListAsync(sessionId).ConfigureAwait(false)).FirstOrDefault(i => i.Id == itemId);
             if (listed is null)
-                return FleetError.NotFoundFor(nameof(QueuedPrompt), itemId);
+                return Unit.Value; // Gone while the click was on its way: sent by the idle, or removed. Nothing is left to send.
             if (listed.Kind != QueuedPromptKinds.Prompt)
                 return FleetError.ValidationError("Queue.Kind", "Only a message can go into a running turn. A command waits for the turn to end.");
             if (harnesses.GetByType(session.HarnessType)?.Capabilities.SupportsSteering != true)
@@ -167,7 +168,7 @@ public sealed partial class PromptQueueService(
         var behind = position >= 0 && position + 1 < before.Count ? before[position + 1].Id : null;
         var item = await queue.TakeAsync(sessionId, itemId).ConfigureAwait(false);
         if (item is null)
-            return FleetError.NotFoundFor(nameof(QueuedPrompt), itemId);
+            return Unit.Value; // The idle's auto-send took it first: it is on its way, so the click has nothing to report.
 
         await BroadcastAsync(sessionId, ct).ConfigureAwait(false);
         var sent = await SendAsync(item, inTurn ? PromptDelivery.Steer : PromptDelivery.Queue, ct).ConfigureAwait(false);
