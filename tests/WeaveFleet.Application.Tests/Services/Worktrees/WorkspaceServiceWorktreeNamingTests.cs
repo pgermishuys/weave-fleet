@@ -181,6 +181,37 @@ public sealed class WorkspaceServiceWorktreeNamingTests
         Directory.Exists(Path.Combine(repository.ParentPath, "all-worktrees", "repo")).ShouldBeFalse();
     }
 
+    [Fact]
+    public async Task CleaningUp_KeepsAWorktreeWithUncommittedWork()
+    {
+        using var repository = new RealGitRepository();
+        var service = Service();
+        var created = await service.CreateWorkspaceAsync(
+            repository.Path, "worktree", branch: null, provenance: null, message: "Add rate limiting");
+        created.IsSuccess.ShouldBeTrue(ErrorOf(created));
+        var note = Path.Combine(created.Value.Directory!, "unsaved-note.txt");
+        await File.WriteAllTextAsync(note, "work in progress");
+
+        var cleanup = await service.CleanupWorkspaceAsync(created.Value.Id);
+
+        cleanup.IsSuccess.ShouldBeTrue();
+        File.Exists(note).ShouldBeTrue("deleting a session must not discard uncommitted work");
+    }
+
+    [Fact]
+    public async Task CleaningUp_RemovesACleanWorktree()
+    {
+        using var repository = new RealGitRepository();
+        var service = Service();
+        var created = await service.CreateWorkspaceAsync(
+            repository.Path, "worktree", branch: null, provenance: null, message: "Add rate limiting");
+        created.IsSuccess.ShouldBeTrue(ErrorOf(created));
+
+        (await service.CleanupWorkspaceAsync(created.Value.Id)).IsSuccess.ShouldBeTrue();
+
+        Directory.Exists(created.Value.Directory).ShouldBeFalse();
+    }
+
     private async Task SaveUserNamingAsync(WorktreeNamingOverride layer)
     {
         var naming = new WorktreeNamingService(_preferences, NullLogger<WorktreeNamingService>.Instance);
