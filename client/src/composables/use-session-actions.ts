@@ -15,6 +15,7 @@ import type {
 } from "@/api/client";
 import { useMachineTarget, type MachineTarget } from "@/lib/machine-target";
 import type { ImageAttachment } from "@/lib/client-types";
+import { clearStoredDraftsOf } from "@/lib/draft-storage";
 import { trackAction } from "@/lib/track-action";
 import { dispatchSessionUpsert } from "@/lib/session-sync";
 import { useSessionsStore } from "@/stores/sessions";
@@ -324,6 +325,8 @@ export function useDeleteSession(): UseDeleteSessionResult {
         throw new Error(await readErrorMessage(response, error));
       }
 
+      // An unsent draft would stay in the browser for good.
+      clearStoredDraftsOf(sessionId);
       trackAction("session.delete", sessionId);
     }, "Failed to delete session");
   }
