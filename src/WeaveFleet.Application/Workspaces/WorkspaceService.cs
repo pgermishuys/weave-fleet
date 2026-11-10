@@ -189,8 +189,24 @@ public sealed partial class WorkspaceService(
         {
             try
             {
-                await RunGitAsync(workspace.SourceDirectory ?? workspace.Directory,
-                    "worktree", "remove", "--force", workspace.Directory);
+                // Plain remove first: git itself refuses a checkout with uncommitted work or a paused merge/rebase.
+                var source = workspace.SourceDirectory ?? workspace.Directory;
+                try
+                {
+                    await RunGitAsync(source, "worktree", "remove", workspace.Directory);
+                }
+                catch (GitCommandException ex)
+                {
+                    if (await HasUnsavedWorkAsync(workspace.Directory).ConfigureAwait(false))
+                    {
+                        // The session goes; the folder stays, so the user's unsaved work isn't lost without their say.
+                        LogCheckoutKeptUnsaved(ex, workspace.Directory);
+                        await workspaceRepository.MarkCleanedAsync(id);
+                        return Unit.Value;
+                    }
+
+                    await RunGitAsync(source, "worktree", "remove", "--force", workspace.Directory);
+                }
             }
             catch (Exception ex)
             {
@@ -217,6 +233,30 @@ public sealed partial class WorkspaceService(
         await workspaceRepository.MarkCleanedAsync(id);
         return Unit.Value;
     }
+
+    /// <summary>True when the checkout has uncommitted changes, untracked files, or a merge, rebase or cherry-pick paused.</summary>
+    private static async Task<bool> HasUnsavedWorkAsync(string directory)
+    {
+        if (!System.IO.Directory.Exists(directory))
+            return false;
+        var status = await TryRunGitAsync(directory, "status", "--porcelain");
+        if (!string.IsNullOrWhiteSpace(status))
+            return true;
+        foreach (var marker in new[] { "MERGE_HEAD", "CHERRY_PICK_HEAD", "REVERT_HEAD", "rebase-merge", "rebase-apply" })
+        {
+            var path = await TryRunGitAsync(directory, "rev-parse", "--git-path", marker);
+            if (path is not null)
+            {
+                var full = Path.IsPathRooted(path.Trim()) ? path.Trim() : Path.Combine(directory, path.Trim());
+                if (File.Exists(full) || System.IO.Directory.Exists(full))
+                    return true;
+            }
+        }
+        return false;
+    }
+
+    [LoggerMessage(Level = LogLevel.Warning, Message = "Kept {Dir}: git refused to remove it and it holds unsaved work")]
+    private partial void LogCheckoutKeptUnsaved(Exception ex, string dir);
 
     /// <summary>
     /// Puts back a worktree checkout that Clean now removed (<see cref="WorktreeCleanup"/>): the same folder, on its
