@@ -70,9 +70,13 @@ export function findHits(units: readonly FindUnit[], query: string, scope: FindS
 
 // ─── Focus ──────────────────────────────────────────────────────────────────
 
+/** The session composer's text area. It has no Ctrl/⌘F of its own, so it counts as part of the conversation. */
+export const COMPOSER_SELECTOR = "textarea.composer-frame__textarea";
+
 /** Where focus sits decides who owns Ctrl/⌘F: a field, an editor and the terminal keep the key's own meaning. */
 export function focusKeepsFindKey(target: EventTarget | null): boolean {
   if (!(target instanceof HTMLElement)) return false;
+  if (target.matches(COMPOSER_SELECTOR)) return false;
   if (target instanceof HTMLInputElement || target instanceof HTMLTextAreaElement || target instanceof HTMLSelectElement) return true;
   return target.isContentEditable || target.closest(".cm-editor, .xterm, [contenteditable='true'], [role='dialog']") !== null;
 }

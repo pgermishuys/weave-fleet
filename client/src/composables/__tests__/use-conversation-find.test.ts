@@ -168,6 +168,18 @@ describe("useConversationFind", () => {
       expect(select).toHaveBeenCalled();
     });
 
+    it("opens from the composer, which sits beside the conversation, and leaves the draft alone", () => {
+      const { api } = setup();
+      const composer = document.createElement("textarea");
+      composer.className = "composer-frame__textarea";
+      composer.value = "half a thought";
+      document.body.appendChild(composer);
+      composer.focus();
+      expect(press(composer).defaultPrevented).toBe(true);
+      expect(api.isOpen.value).toBe(true);
+      expect(composer.value).toBe("half a thought");
+    });
+
     it("leaves the key to a text field, the editor and elements outside the conversation", () => {
       const { api } = setup();
       const field = document.createElement("textarea");

@@ -1,6 +1,7 @@
 import { computed, nextTick, onBeforeUnmount, onMounted, ref, toValue, watch, type MaybeRefOrGetter } from "vue";
 import { getDesktopBridge } from "@/lib/desktop";
 import {
+  COMPOSER_SELECTOR,
   clearMarks,
   findHits,
   focusKeepsFindKey,
@@ -161,7 +162,9 @@ export function useConversationFind(options: ConversationFindOptions) {
       return;
     }
     if (focusKeepsFindKey(target)) return;
-    if (owner && !root.contains(target as Node)) return;
+    // The composer sits beside the conversation, not in it, but is part of it for this key.
+    const inComposer = target instanceof HTMLElement && target.matches(COMPOSER_SELECTOR);
+    if (owner && !inComposer && !root.contains(target as Node)) return;
     event.preventDefault();
     open();
   }

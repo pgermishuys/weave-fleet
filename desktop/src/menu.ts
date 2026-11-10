@@ -42,10 +42,14 @@ export function buildAppMenu(platform: NodeJS.Platform, actions: MenuActions): M
         { role: "paste" },
         { role: "selectAll" },
         { type: "separator" },
-        // Shown with its key, but the key is left to the page (`registerAccelerator: false`): Fleet's find bar takes
-        // Ctrl/⌘F only while the conversation has focus, so in the composer, an editor or the terminal the key keeps
-        // its own meaning. Choosing the item with the mouse always opens the bar.
-        { label: "Find in Conversation", accelerator: "CommandOrControl+F", registerAccelerator: false, click: actions.findInConversation },
+        // Fleet's find bar takes Ctrl/⌘F from the conversation and its composer, while the editor and the terminal keep
+        // the key. So the key must reach the page: macOS and Linux show the accelerator without registering it
+        // (`registerAccelerator: false`). Windows registers every menu accelerator and doesn't honour that option, so
+        // there the key is only shown, as text after a tab, and the page handles the key. Choosing the item with the
+        // mouse always opens the bar.
+        platform !== "win32"
+          ? { label: "Find in Conversation", accelerator: "CommandOrControl+F", registerAccelerator: false, click: actions.findInConversation }
+          : { label: "Find in Conversation\tCtrl+F", click: actions.findInConversation },
       ],
     },
     {
