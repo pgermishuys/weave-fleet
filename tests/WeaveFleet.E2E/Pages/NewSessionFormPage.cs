@@ -55,9 +55,16 @@ public sealed class NewSessionFormPage(IPage page)
         await TitleInput.WaitForAsync(new LocatorWaitForOptions { State = WaitForSelectorState.Detached });
     }
 
+    /// <summary>
+    /// Creating a session is a server round trip (folder checks, harness start) before the page navigates. On a busy CI
+    /// runner it took the whole 5 s page default once (run 42769356065, attempt 1; attempt 2 passed untouched), so the
+    /// wait gets the same 30 s the tests give a prompt.
+    /// </summary>
+    private const int CreateTimeoutMs = 30_000;
+
     /// <summary>Create the session and wait for navigation to the session detail page.</summary>
     public Task<SessionDetailPage> SubmitAsync()
-        => SubmitAsync(5_000);
+        => SubmitAsync(CreateTimeoutMs);
 
     /// <summary>
     /// Create the session and wait for navigation to the session detail page. Sends the typed
