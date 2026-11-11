@@ -105,12 +105,45 @@ public sealed class SessionDiffEndpointTests(SessionDiffEndpointTests.Server ser
         }
     }
 
-    private static async Task<JsonElement[]> WaitForSnapshotsAsync(HttpClient client, int count)
+    [Fact]
+    public async Task a_turn_that_adds_a_new_untracked_file_keeps_its_lines_as_additions()
+    {
+        var tempRoot = Path.Combine(Path.GetTempPath(), $"weave-api-turn-stats-new-{Guid.NewGuid():N}");
+        Directory.CreateDirectory(Path.Combine(tempRoot, "src"));
+        var service = new GitDiffService();
+
+        try
+        {
+            await RunGitAsync(tempRoot, "init");
+            await File.WriteAllTextAsync(Path.Combine(tempRoot, "README.md"), "one\n");
+            await RunGitAsync(tempRoot, "add", ".");
+            await RunGitAsync(tempRoot, "-c", "user.name=Weave Test", "-c", "user.email=weave@example.invalid", "commit", "-m", "initial");
+            var baseline = await service.CaptureBaselineAsync(tempRoot, "turn-stats-new", CancellationToken.None);
+            baseline.ShouldNotBeNull();
+            await InsertSessionAsync(server.Factory, "session-turn-stats-new", "workspace-turn-stats-new", "instance-turn-stats-new", baseline.RepoRoot, baseline.RefName, baseline.RepoRoot);
+            using var client = server.Factory.CreateClient();
+
+            // The turn writes a file git has never seen: untracked, not staged.
+            await File.WriteAllTextAsync(Path.Combine(tempRoot, "src", "archive.js"), "export function archive(note) {\n  return { ...note, archived: true };\n}\n");
+            server.Factory.Services.GetRequiredService<TurnFileStatsRecorder>().Observe(
+                "session-turn-stats-new", "local-user", new WeaveFleet.Domain.Events.SessionIdled { Payload = new WeaveFleet.Domain.Events.SessionIdledPayload { SessionId = "session-turn-stats-new" } });
+
+            var snapshot = (await WaitForSnapshotsAsync(client, 1, "session-turn-stats-new")).ShouldHaveSingleItem();
+            var file = snapshot.GetProperty("files").EnumerateArray().ShouldHaveSingleItem();
+            (file.GetProperty("file").GetString(), file.GetProperty("additions").GetInt32(), file.GetProperty("deletions").GetInt32()).ShouldBe(("src/archive.js", 3, 0));
+        }
+        finally
+        {
+            Directory.Delete(tempRoot, recursive: true);
+        }
+    }
+
+    private static async Task<JsonElement[]> WaitForSnapshotsAsync(HttpClient client, int count, string sessionId = "session-turn-stats")
     {
         var deadline = DateTime.UtcNow.AddSeconds(20);
         while (true)
         {
-            var json = await client.GetFromJsonAsync<JsonElement>("/api/sessions/session-turn-stats/turn-stats", JsonSerializerOptions.Web);
+            var json = await client.GetFromJsonAsync<JsonElement>($"/api/sessions/{sessionId}/turn-stats", JsonSerializerOptions.Web);
             var snapshots = json.GetProperty("snapshots").EnumerateArray().ToArray();
             if (snapshots.Length >= count || DateTime.UtcNow > deadline)
                 return snapshots;
