@@ -12,28 +12,37 @@ import {
   type ThemeSelection,
   type ThinkingDisplay,
 } from "@/stores/theme";
-import { codeThemes, resolveCodePalette, resolveCodeThemeId, type CodePalette, type CodeThemeSelection } from "@/lib/code-themes";
+import { codeThemeLabel, codeThemes, isCodeThemeAvailable, resolveCodePalette, resolveCodeThemeId, type CodePalette, type CodeThemeSelection } from "@/lib/code-themes";
 
 const themeStore = useThemeStore();
 
 const activeTheme = computed(() => themeStore.currentTheme);
-const activeCodeTheme = computed(() => themeStore.codeTheme);
+/** The card in use: a dark-only scheme saved on a dark theme shows as Match theme on a light one. */
+const activeCodeTheme = computed<CodeThemeSelection>(() => {
+  const selection = themeStore.codeTheme;
+  return selection === "match" || isCodeThemeAvailable(selection, themeStore.resolvedTheme.colorScheme) ? selection : "match";
+});
 
 interface CodeThemeCard {
   id: CodeThemeSelection;
   label: string;
-  /** What "Match theme" currently resolves to, so its card says which scheme it is. */
+  /** What "Match theme" currently resolves to, so its card says which scheme it is; "Dark themes only" on an unavailable card. */
   note?: string;
   palette: CodePalette;
+  available: boolean;
 }
 
 /** One card per scheme, each previewed in its own colours for the current light/dark setting. */
 const codeThemeCards = computed<CodeThemeCard[]>(() => {
   const theme = themeStore.resolvedTheme;
-  const matched = codeThemes.find((t) => t.id === resolveCodeThemeId("match", theme.id));
+  const matched = codeThemes.find((t) => t.id === resolveCodeThemeId("match", theme.id, theme.colorScheme));
   return [
-    { id: "match", label: "Match theme", note: matched?.label, palette: resolveCodePalette("match", theme.id, theme.colorScheme) },
-    ...codeThemes.map((t) => ({ id: t.id, label: t.label, palette: resolveCodePalette(t.id, theme.id, theme.colorScheme) })),
+    { id: "match", label: "Match theme", note: matched && codeThemeLabel(matched, theme.colorScheme), palette: resolveCodePalette("match", theme.id, theme.colorScheme), available: true },
+    ...codeThemes.map((t) => {
+      const available = isCodeThemeAvailable(t.id, theme.colorScheme);
+      // An unavailable card still previews the scheme's own colours, so you can see why it's for dark themes.
+      return { id: t.id, label: codeThemeLabel(t, theme.colorScheme), note: available ? undefined : "Dark themes only", palette: available ? resolveCodePalette(t.id, theme.id, theme.colorScheme) : t.dark, available };
+    }),
   ];
 });
 const activeFontFamily = computed(() => themeStore.fontFamily);
@@ -158,7 +167,7 @@ function selectFontSize(size: FontSize): void {
       <SettingRow
         id="code-theme"
         title="Code theme"
-        summary="Syntax colours for files and code blocks. Match theme uses the scheme named after your theme, or One Dark."
+        summary="Syntax colours for files and code blocks. Match theme uses your theme's own scheme where it has one, otherwise One Dark or One Light. Darcula, Monokai and Nord are for dark themes."
       >
         <template #below>
           <div class="mt-3">
@@ -174,8 +183,11 @@ function selectFontSize(size: FontSize): void {
                 class="flex flex-col gap-3 rounded-card border p-3 text-left transition-colors"
                 :class="activeCodeTheme === card.id
                   ? 'border-accent bg-accent-dim'
-                  : 'border-border hover:border-accent/50'"
+                  : card.available
+                    ? 'border-border hover:border-accent/50'
+                    : 'cursor-not-allowed border-border opacity-50'"
                 :aria-pressed="activeCodeTheme === card.id"
+                :disabled="!card.available"
                 :data-code-theme="card.id"
                 @click="selectCodeTheme(card.id)"
               >

@@ -134,4 +134,18 @@ describe("useThemeStore code theme", () => {
     localStorage.setItem("weave:code-theme", "comic-sans");
     expect(useThemeStore().codeTheme).toBe("match");
   });
+
+  it("keeps a dark-only scheme for dark themes and uses Match theme on a light one", () => {
+    const store = useThemeStore();
+    store.setTheme("dark");
+    store.setCodeTheme("monokai");
+    expect(document.documentElement.style.getPropertyValue("--syntax-keyword")).toBe("#f92672");
+
+    store.setTheme("light");
+    expect(store.codeTheme).toBe("monokai");
+    expect(document.documentElement.style.getPropertyValue("--syntax-keyword")).toBe("#a626a4");
+
+    store.setTheme("dark");
+    expect(document.documentElement.style.getPropertyValue("--syntax-keyword")).toBe("#f92672");
+  });
 });

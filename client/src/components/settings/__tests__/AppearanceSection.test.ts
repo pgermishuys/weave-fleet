@@ -52,4 +52,25 @@ describe("AppearanceSection code theme", () => {
     expect(keyword.exists()).toBe(true);
     expect(keyword.attributes("style")).toContain("color: rgb(204, 120, 50)");
   });
+
+  it("on a light theme the dark-only schemes can't be picked and Match theme shows as in use", async () => {
+    localStorage.setItem("weave:code-theme", "monokai");
+    const store = useThemeStore();
+    store.setTheme("light");
+    const wrapper = mount(AppearanceSection);
+
+    for (const id of ["darcula", "monokai", "nord"]) {
+      const card = wrapper.find(`[data-code-theme='${id}']`);
+      expect(card.attributes("disabled"), id).toBeDefined();
+      expect(card.text(), id).toContain("Dark themes only");
+    }
+    expect(wrapper.find("[data-code-theme='github']").attributes("disabled")).toBeUndefined();
+    expect(wrapper.find("[data-code-theme='match']").attributes("aria-pressed")).toBe("true");
+    expect(wrapper.find("[data-code-theme='match']").text()).toContain("Match theme · One Light");
+    expect(wrapper.find("[data-code-theme='one-dark']").text()).toContain("One Light");
+    expect(wrapper.find("[data-code-theme='monokai']").attributes("aria-pressed")).toBe("false");
+
+    await wrapper.find("[data-code-theme='nord']").trigger("click");
+    expect(store.codeTheme).toBe("monokai");
+  });
 });

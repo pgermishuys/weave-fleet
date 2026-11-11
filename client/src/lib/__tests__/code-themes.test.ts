@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { codeThemes, resolveCodePalette, syntaxTokens } from "@/lib/code-themes";
+import { codeThemes, isCodeThemeAvailable, resolveCodePalette, syntaxTokens } from "@/lib/code-themes";
 
 describe("code themes", () => {
   it("offers Darcula, Monokai, GitHub, One Dark, Solarized and Nord", () => {
@@ -39,9 +39,16 @@ describe("code themes", () => {
     expect(resolveCodePalette("github", "nord", "dark")).toBe(github.dark);
   });
 
-  it("a dark-only scheme keeps its dark palette on a light theme", () => {
-    const darcula = codeThemes.find((t) => t.id === "darcula")!;
-    expect(darcula.light).toBeUndefined();
-    expect(resolveCodePalette("darcula", "light", "light")).toBe(darcula.dark);
+  it("Darcula, Monokai and Nord are for dark themes only", () => {
+    expect(codeThemes.filter((t) => !isCodeThemeAvailable(t.id, "light")).map((t) => t.id)).toEqual(["darcula", "monokai", "nord"]);
+    expect(codeThemes.every((t) => isCodeThemeAvailable(t.id, "dark"))).toBe(true);
+  });
+
+  it("a dark-only scheme falls back to Match theme on a light theme", () => {
+    const oneDark = codeThemes.find((t) => t.id === "one-dark")!;
+    const solarized = codeThemes.find((t) => t.id === "solarized")!;
+    expect(resolveCodePalette("darcula", "light", "light")).toBe(oneDark.light);
+    expect(resolveCodePalette("monokai", "solarized-light", "light")).toBe(solarized.light);
+    expect(resolveCodePalette("nord", "dark", "dark")).toBe(codeThemes.find((t) => t.id === "nord")!.dark);
   });
 });

@@ -30,8 +30,10 @@ export type CodeThemeSelection = CodeThemeId | "match";
 export interface CodeThemeDefinition {
   id: CodeThemeId;
   label: string;
+  /** The name to show when the light palette is in use, where it has its own (One Dark's is One Light). */
+  lightLabel?: string;
   dark: CodePalette;
-  /** Only schemes with a real light variant have one; the rest keep their dark colours on a light theme. */
+  /** Only schemes with a real light variant have one; the rest are for dark themes only (see isCodeThemeAvailable). */
   light?: CodePalette;
 }
 
@@ -91,6 +93,7 @@ export const codeThemes: readonly CodeThemeDefinition[] = [
   {
     id: "one-dark",
     label: "One Dark",
+    lightLabel: "One Light",
     dark: {
       keyword: "#c678dd",
       string: "#98c379",
@@ -143,7 +146,8 @@ export const codeThemes: readonly CodeThemeDefinition[] = [
       keyword: "#81a1c1",
       string: "#a3be8c",
       number: "#b48ead",
-      comment: "#616e88",
+      // Lighter than Nord's own #616e88 (2.3:1 on a Nord code block); this one reads at about 4:1.
+      comment: "#909aae",
       function: "#88c0d0",
       attr: "#8fbcbb",
       type: "#8fbcbb",
@@ -165,13 +169,28 @@ export function isValidCodeTheme(value: string): value is CodeThemeSelection {
   return value === "match" || codeThemes.some((t) => t.id === value);
 }
 
-export function resolveCodeThemeId(selection: CodeThemeSelection, themeId: ThemeId): CodeThemeId {
-  if (selection !== "match") return selection;
+/**
+ * Whether a scheme can be used under this colour scheme. Darcula, Monokai and Nord have no light
+ * colours, and their dark ones are unreadable on a light background, so they're for dark themes only.
+ */
+export function isCodeThemeAvailable(id: CodeThemeId, colorScheme: "dark" | "light"): boolean {
+  if (colorScheme === "dark") return true;
+  return codeThemes.find((t) => t.id === id)?.light !== undefined;
+}
+
+export function resolveCodeThemeId(selection: CodeThemeSelection, themeId: ThemeId, colorScheme: "dark" | "light"): CodeThemeId {
+  // A dark-only scheme picked on a dark theme falls back to Match theme on a light one, and comes back on a dark one.
+  if (selection !== "match" && isCodeThemeAvailable(selection, colorScheme)) return selection;
   return themeSchemes[themeId] ?? "one-dark";
 }
 
+/** The scheme's name as shown under this colour scheme: One Dark reads One Light on a light theme. */
+export function codeThemeLabel(theme: CodeThemeDefinition, colorScheme: "dark" | "light"): string {
+  return colorScheme === "light" && theme.light && theme.lightLabel ? theme.lightLabel : theme.label;
+}
+
 export function resolveCodePalette(selection: CodeThemeSelection, themeId: ThemeId, colorScheme: "dark" | "light"): CodePalette {
-  const id = resolveCodeThemeId(selection, themeId);
+  const id = resolveCodeThemeId(selection, themeId, colorScheme);
   const theme = codeThemes.find((t) => t.id === id) ?? codeThemes[0];
   return colorScheme === "light" && theme.light ? theme.light : theme.dark;
 }
