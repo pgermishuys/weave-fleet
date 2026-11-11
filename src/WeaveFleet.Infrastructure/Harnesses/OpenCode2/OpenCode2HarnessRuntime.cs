@@ -329,7 +329,7 @@ public sealed partial class OpenCode2HarnessRuntime : IHarnessRuntime, IAsyncDis
         }
 
         return new OpenCode2OffTheRecordConversation(
-            (prompt, token) => server.Client.GenerateAsync(session.Id!, prompt, token),
+            (prompt, token) => server.Client.GenerateWithUsageAsync(session.Id!, prompt, token),
             ConversationQuestionTimeout,
             () => DeleteThrowawayAsync(server, session.Id!));
     }

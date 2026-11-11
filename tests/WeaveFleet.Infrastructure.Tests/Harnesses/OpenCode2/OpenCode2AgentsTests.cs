@@ -602,6 +602,22 @@ public sealed class OpenCode2AgentsTests
     }
 
     [Fact]
+    public async Task An_off_the_record_answer_carries_the_tokens_generate_reports()
+    {
+        // OpenCode 2.2.7 adds tokens and cost to a generate reply (shape from its openapi.json).
+        var api = new StubHandler(_ => Json("""
+            {"data":{"text":"Done.","tokens":{"input":1200,"output":80,"reasoning":20,"cache":{"read":900,"write":100}},"cost":0.0042}}
+            """));
+        await using var server = OpenCode2EventlessServer(api);
+        await using var session = NewSession(server);
+
+        var conversation = (await session.StartOffTheRecordAsync(CancellationToken.None)).ShouldNotBeNull();
+        var answer = await conversation.AskAsync("Recap please", CancellationToken.None);
+
+        answer.ShouldBe(new OffTheRecordAnswer("Done.", new OffTheRecordTokens(2300, 900)));
+    }
+
+    [Fact]
     public async Task A_follow_up_off_the_record_carries_the_question_and_answer_before_it()
     {
         var answers = new Queue<string>(["name: first", "name: second"]);
@@ -616,7 +632,7 @@ public sealed class OpenCode2AgentsTests
         var second = await conversation.AskAsync("That file has errors.", CancellationToken.None);
         await conversation.DisposeAsync();
 
-        // V2 reports no tokens for generate, and keeps nothing: there's no fork to delete.
+        // These replies carry no tokens (2.2.6), and generate keeps nothing: there's no fork to delete.
         (first, second).ShouldBe((new OffTheRecordAnswer("name: first", null), new OffTheRecordAnswer("name: second", null)));
         var requests = api.Requests.Where(r => r.Path != "/api/event").ToList();
         requests.Select(r => r.Path).ShouldBe([$"/api/session/{Session}/generate", $"/api/session/{Session}/generate"]);

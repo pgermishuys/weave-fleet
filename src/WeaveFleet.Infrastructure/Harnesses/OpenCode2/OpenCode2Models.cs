@@ -1,3 +1,4 @@
+using WeaveFleet.Domain.Harnesses;
 using System.Text.Json;
 using System.Text.Json.Serialization;
 using WeaveFleet.Domain.Events;
@@ -444,6 +445,36 @@ internal sealed record OpenCode2GenerateRequest
 internal sealed record OpenCode2GenerateResult
 {
     public string? Text { get; init; }
+
+    /// <summary>What the call used (2.2.7 and later; absent before).</summary>
+    public OpenCode2GenerateTokens? Tokens { get; init; }
+
+    /// <summary>The answer's text with what it cost in tokens.</summary>
+    internal OffTheRecordTokens? ToOffTheRecordTokens()
+    {
+        if (Tokens is not { } tokens)
+            return null;
+
+        var cacheRead = (long)(tokens.Cache?.Read ?? 0);
+        var cacheWrite = (long)(tokens.Cache?.Write ?? 0);
+        var total = (long)((tokens.Input ?? 0) + (tokens.Output ?? 0) + (tokens.Reasoning ?? 0)) + cacheRead + cacheWrite;
+        return total > 0 ? new OffTheRecordTokens(total, cacheRead) : null;
+    }
+}
+
+/// <summary>V2's <c>TokenUsage.Info</c> on a <c>generate</c> reply.</summary>
+internal sealed record OpenCode2GenerateTokens
+{
+    public double? Input { get; init; }
+    public double? Output { get; init; }
+    public double? Reasoning { get; init; }
+    public OpenCode2GenerateCache? Cache { get; init; }
+}
+
+internal sealed record OpenCode2GenerateCache
+{
+    public double? Read { get; init; }
+    public double? Write { get; init; }
 }
 
 internal sealed record OpenCode2TokenUsage
