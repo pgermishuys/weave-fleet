@@ -268,9 +268,26 @@ internal static class LlmRequest
     public static string? LastRole(string request)
     {
         using var body = JsonDocument.Parse(request);
-        var messages = body.RootElement.GetProperty("messages");
-        return messages[messages.GetArrayLength() - 1].GetProperty("role").GetString();
+        var messages = Conversation(body);
+        return messages.Count == 0 ? null : messages[^1].GetProperty("role").GetString();
     }
+
+    /// <summary>
+    /// The request's messages without V2's trailing <c>&lt;system-update&gt;</c> notes (2.2.7 adds one as a user message
+    /// after a tool result when its Code Mode tool catalog changed, e.g. once the browser tools load): they say
+    /// nothing about what the conversation is waiting on.
+    /// </summary>
+    private static List<JsonElement> Conversation(JsonDocument body)
+    {
+        var messages = body.RootElement.GetProperty("messages").EnumerateArray().ToList();
+        while (messages.Count > 0 && IsSystemUpdate(messages[^1]))
+            messages.RemoveAt(messages.Count - 1);
+        return messages;
+    }
+
+    private static bool IsSystemUpdate(JsonElement message)
+        => message.GetProperty("role").GetString() == "user"
+            && ContentText(message.GetProperty("content")).TrimStart().StartsWith("<system-update>", StringComparison.Ordinal);
 
     public static string? FirstUserText(string request) => Texts(request, "user").FirstOrDefault();
 
@@ -284,8 +301,11 @@ internal static class LlmRequest
     public static string? LastToolText(string request)
     {
         using var body = JsonDocument.Parse(request);
-        var messages = body.RootElement.GetProperty("messages");
-        var last = messages[messages.GetArrayLength() - 1];
+        var messages = Conversation(body);
+        if (messages.Count == 0)
+            return null;
+
+        var last = messages[^1];
         return last.GetProperty("role").GetString() == "tool" ? ContentText(last.GetProperty("content")) : null;
     }
 
@@ -300,7 +320,8 @@ internal static class LlmRequest
     /// gives a subagent its prompt after instructions of its own, so it's a part of the message, not all of it.
     /// </summary>
     private static bool Asked(string request, string prompt)
-        => Texts(request, "user").LastOrDefault() is { } text && text.Contains(prompt, StringComparison.Ordinal);
+        => Texts(request, "user").LastOrDefault(text => !text.TrimStart().StartsWith("<system-update>", StringComparison.Ordinal)) is { } text
+            && text.Contains(prompt, StringComparison.Ordinal);
 
     public static HashSet<string> OfferedToolNames(string request)
     {
