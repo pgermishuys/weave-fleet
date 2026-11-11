@@ -79,8 +79,8 @@ public sealed partial class OpenCode2WorkflowLiveTests
             result.IsSuccess.ShouldBeTrue(result.IsFailure ? result.Error.Description : null);
             var drafted = result.Value;
             (drafted.Asks, drafted.Check.IsValid, drafted.Check.Draft!.Name, drafted.SessionTitle).ShouldBe((2, true, "Live draft", "Look around"));
-            // V2 reports no tokens for generate.
-            drafted.Tokens.ShouldBeNull();
+            // generate reports its tokens from 2.2.7; before that there are none.
+            (drafted.Tokens is null || drafted.Tokens.Total > 0).ShouldBeTrue();
 
             // The follow-up carried the question, the first answer and the errors.
             var retry = fleet.Llm.Queue.Requests.Single(r => (LlmRequest.LastUserText(r) ?? "").Contains("That file has errors:", StringComparison.Ordinal));

@@ -28,7 +28,7 @@ public sealed class OpenCode2AgentsTests
 
         api.Requests[0].Path.ShouldBe("/api/location");
         api.Requests.Skip(1).Select(r => r.Path).Order().ShouldBe(
-            ["/api/agent", "/api/model", "/api/model/default", "/api/provider"]);
+            ["/api/agent", "/api/config", "/api/model", "/api/model/default", "/api/provider"]);
     }
 
     [Fact]
@@ -48,6 +48,53 @@ public sealed class OpenCode2AgentsTests
         var catalog = await OpenCode2Catalog.ReadAsync(server, Folder, CancellationToken.None);
 
         catalog.Agents.ShouldNotBeEmpty();
+    }
+
+    [Fact]
+    public async Task The_catalog_waits_for_the_plugins_the_config_lists_before_reading_agents()
+    {
+        // 2.2.7 answers /api/agent at once with what is loaded: on a cold folder that is V2's own agents, and the
+        // agents a plugin (Weave) adds come only once the plugin is in the plugin list.
+        var pluginReads = 0;
+        var api = CatalogApi(intercept: request => request.RequestUri!.AbsolutePath switch
+        {
+            "/api/config" => Json("""[{"type":"document","info":{"plugins":["@weaveio/weave-adapter-opencode2@0.2.0"]}}]"""),
+            "/api/plugin" => Json(++pluginReads > 2
+                ? """{"data":[{"id":"weave","source":{"type":"package","target":"@weaveio/weave-adapter-opencode2@0.2.0"}}]}"""
+                : """{"data":[]}"""),
+            "/api/agent" => Json(pluginReads > 2
+                ? """{"data":[{"id":"build","name":"Build","mode":"primary","permissions":[]},{"id":"loom","name":"loom","mode":"primary","permissions":[]}]}"""
+                : """{"data":[{"id":"build","name":"Build","mode":"primary","permissions":[]}]}"""),
+            _ => null,
+        });
+        await using var server = LoadingServer(api);
+        server.Client.PluginPollDelay = TimeSpan.FromMilliseconds(1);
+
+        var catalog = await OpenCode2Catalog.ReadAsync(server, Folder, CancellationToken.None);
+
+        catalog.Agents.Select(a => a.Name).ShouldContain("loom");
+    }
+
+    [Fact]
+    public async Task A_plugin_V2_never_lists_does_not_hold_the_catalog_up_for_long()
+    {
+        var api = CatalogApi(intercept: request => request.RequestUri!.AbsolutePath switch
+        {
+            "/api/config" => Json("""[{"type":"document","info":{"plugins":["broken-plugin@1.0.0"]}}]"""),
+            "/api/plugin" => Json("""{"data":[]}"""),
+            _ => null,
+        });
+        await using var server = LoadingServer(api);
+        server.Client.PluginWait = TimeSpan.FromMilliseconds(50);
+        server.Client.PluginPollDelay = TimeSpan.FromMilliseconds(1);
+
+        var catalog = await OpenCode2Catalog.ReadAsync(server, Folder, CancellationToken.None);
+        catalog.Agents.ShouldNotBeEmpty();
+
+        // The next read doesn't wait for it again.
+        var pluginReads = api.Requests.Count(r => r.Path == "/api/plugin");
+        await OpenCode2Catalog.ReadAsync(server, Folder, CancellationToken.None);
+        api.Requests.Count(r => r.Path == "/api/plugin").ShouldBe(pluginReads);
     }
 
     [Fact]
