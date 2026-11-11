@@ -436,6 +436,56 @@ internal sealed partial class OpenCode2HttpClient(HttpClient http, HttpClient ev
         }
     }
 
+    /// <summary>How long a catalog read waits for the plugins the config lists to appear in V2's plugin list; a test shortens it.</summary>
+    internal TimeSpan PluginWait { get; set; } = TimeSpan.FromSeconds(45);
+
+    private readonly System.Collections.Concurrent.ConcurrentDictionary<string, byte> _pluginWaitGaveUp = new(StringComparer.Ordinal);
+
+    internal TimeSpan PluginPollDelay { get; set; } = TimeSpan.FromMilliseconds(250);
+
+    /// <summary>
+    /// Waits until every plugin the folder's config lists is in V2's plugin list, loaded or failed. Since 2.2.7 the
+    /// agent and skill lists answer at once with what is loaded (no 503 while plugins settle), so on a cold folder
+    /// they can come back without the agents and skills plugins add (Weave's). A plugin V2 never lists (it failed
+    /// without a trace) is waited for only up to <see cref="PluginWait"/>, and only once per folder.
+    /// </summary>
+    public async Task WaitForPluginsAsync(string directory, CancellationToken ct)
+    {
+        HashSet<string> wanted;
+        try
+        {
+            wanted = OpenCode2Weave.ListedPlugins(await GetConfigAsync(directory, ct).ConfigureAwait(false))
+                .Select(OpenCode2Weave.PackageOf)
+                .OfType<string>()
+                .ToHashSet(StringComparer.Ordinal);
+        }
+        catch (Exception ex) when (ex is HttpRequestException or System.Text.Json.JsonException)
+        {
+            return; // Not being able to tell what the config lists must not hold up the catalog.
+        }
+
+        if (wanted.Count == 0 || _pluginWaitGaveUp.ContainsKey(directory))
+            return;
+
+        var until = DateTimeOffset.UtcNow + PluginWait;
+        while (true)
+        {
+            var listed = (await GetPluginsAsync(directory, ct).ConfigureAwait(false))
+                .Select(plugin => OpenCode2Weave.Describe(plugin)?.Package)
+                .OfType<string>()
+                .ToHashSet(StringComparer.Ordinal);
+            if (wanted.IsSubsetOf(listed))
+                return;
+            if (DateTimeOffset.UtcNow >= until)
+            {
+                _pluginWaitGaveUp.TryAdd(directory, 0);
+                return;
+            }
+
+            await Task.Delay(PluginPollDelay, ct).ConfigureAwait(false);
+        }
+    }
+
     /// <summary>The agents in <paramref name="directory"/>; load the location first.</summary>
     public async Task<IReadOnlyList<OpenCode2AgentInfo>> GetAgentsAsync(string directory, CancellationToken ct)
         => (await GetWhenSettledAsync(

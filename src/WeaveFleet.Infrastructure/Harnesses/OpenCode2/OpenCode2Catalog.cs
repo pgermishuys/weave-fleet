@@ -13,6 +13,7 @@ internal static class OpenCode2Catalog
     {
         await server.LoadLocationAsync(directory, ct).ConfigureAwait(false);
         var client = server.Client;
+        await client.WaitForPluginsAsync(directory, ct).ConfigureAwait(false);
         var agents = client.GetAgentsAsync(directory, ct);
         var models = client.GetModelsAsync(directory, ct);
         var providers = client.GetProvidersAsync(directory, ct);
@@ -26,6 +27,7 @@ internal static class OpenCode2Catalog
     {
         await server.LoadLocationAsync(directory, ct).ConfigureAwait(false);
         var client = server.Client;
+        await client.WaitForPluginsAsync(directory, ct).ConfigureAwait(false);
         return ToAgentInfos(await client.GetAgentsAsync(directory, ct).ConfigureAwait(false));
     }
 
@@ -39,6 +41,7 @@ internal static class OpenCode2Catalog
     {
         await server.LoadLocationAsync(directory, ct).ConfigureAwait(false);
         var client = server.Client;
+        await client.WaitForPluginsAsync(directory, ct).ConfigureAwait(false);
         if (AgentsOwnModel(await client.GetAgentsAsync(directory, ct).ConfigureAwait(false), agent) is { } own)
             return own;
 
@@ -71,6 +74,7 @@ internal static class OpenCode2Catalog
     public static async Task<IReadOnlyList<CommandInfo>> ReadCommandsAsync(OpenCode2Server server, string directory, CancellationToken ct)
     {
         await server.LoadLocationAsync(directory, ct).ConfigureAwait(false);
+        await server.Client.WaitForPluginsAsync(directory, ct).ConfigureAwait(false);
         var commands = server.Client.GetCommandsAsync(directory, ct);
         var skills = SkillsOrNoneAsync(server, directory, ct);
         await Task.WhenAll(commands, skills).ConfigureAwait(false);
