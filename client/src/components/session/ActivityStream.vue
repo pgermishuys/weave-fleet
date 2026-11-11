@@ -9,12 +9,10 @@ import ReasoningBlock from "@/components/session/ReasoningBlock.vue";
 import ShellCommandBlock from "@/components/session/ShellCommandBlock.vue";
 import { mergeReadRuns } from "@/lib/merge-reads";
 import TurnFoldRow from "@/components/session/TurnFoldRow.vue";
-import ChangedFilesCard from "@/components/session/ChangedFilesCard.vue";
 import { foldTurns, turnIdsOf, withFileStats } from "@/lib/turn-fold";
 import ConversationFindBar from "@/components/session/ConversationFindBar.vue";
 import { useConversationFind } from "@/composables/use-conversation-find";
 import { COMPOSER_SELECTOR, type FindUnit } from "@/lib/conversation-find";
-import { isReadCall } from "@/lib/tool-row";
 import { useFileStats, useTurnStats } from "@/composables/use-file-stats";
 import CompactionDivider from "@/components/session/CompactionDivider.vue";
 import { sessionRetry } from "@/lib/session-row-status";
@@ -374,39 +372,23 @@ function toggleTurn(turnId: string): void {
 // A call that wrote a whole file knows only the new contents; the file's real change is the session's diff, the same
 // numbers the Changes panel shows.
 // Read once a call has written a whole file, and again as each turn ends (the session's changes have moved on).
-// A turn's changed-files card is the session's diff as the turn ended against the one before, so any call that isn't a
-// read may have changed files (a shell command can delete one).
-const mayHaveChangedFiles = computed(() => mergedMessages.value.some((message) => message.tools?.some((tool) => !isReadCall(tool.kind))));
+const hasWholeFileWrite = computed(() => mergedMessages.value.some((message) => message.tools?.some((tool) => tool.diffFromContent)));
 const fileStats = useFileStats({
   sessionId: () => props.sessionId,
-  wanted: () => mayHaveChangedFiles.value && !isStreaming.value,
+  wanted: () => hasWholeFileWrite.value && !isStreaming.value,
   refreshOn: () => isStreaming.value,
 });
 // What each turn changed is kept by the server as the turn ends: read again as turns start and end.
 const turnStats = useTurnStats({
   sessionId: () => props.sessionId,
-  wanted: () => mayHaveChangedFiles.value,
+  wanted: () => hasWholeFileWrite.value,
   refreshOn: () => isStreaming.value,
 });
 const foldedMessages = computed(() => foldTurns(withFileStats(mergedMessages.value, fileStats.value, selectedSession.value?.workspaceDirectory, turnStats.value), {
   running: isStreaming.value,
   directory: selectedSession.value?.workspaceDirectory,
   open: openTurns.value,
-  snapshots: turnStats.value,
-  liveStats: fileStats.value,
 }));
-
-/** Open diff on a turn's changed-files card: the session's Changes, beside the conversation. */
-function openChanges(): void {
-  canvasesStore.openChanges(props.sessionId);
-  showRightPanel();
-}
-
-/** A file row on the card: Changes, scrolled to that file. */
-function openChangedFile(path: string): void {
-  canvasesStore.openChanges(props.sessionId, path);
-  showRightPanel();
-}
 
 const { mounted: mountedMessages, unmountedOlder, mountAll: mountAllMessages } = useIncrementalMount(
   foldedMessages,
@@ -814,12 +796,6 @@ function handleImproveSkill(skill: string, toolId: string): void {
           @expand-visual="handleExpandVisual"
           @show-canvas="handleShowCanvas"
           @improve-skill="handleImproveSkill"
-        />
-        <ChangedFilesCard
-          v-if="message.card"
-          :turn="message.card"
-          @open-diff="openChanges"
-          @open-file="openChangedFile"
         />
         <div
           v-if="message.turnError"

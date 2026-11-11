@@ -25,14 +25,13 @@ function turn() {
 }
 
 describe("foldTurns", () => {
-  it("folds a finished turn: tool rows and thinking go, the answer stays, the fold row and card appear", () => {
+  it("folds a finished turn: tool rows and thinking go, the answer stays, the fold row appears", () => {
     const out = foldTurns(turn(), { running: false, directory: "/work/demo", open });
     expect(out.map((m) => m.id)).toEqual(["u1", "a1", "a3"]);
     const host = out[1]!;
     expect(host.foldOnly).toBe(true);
     expect(host.tools).toEqual([]);
     expect(host.fold?.summary).toMatchObject({ reads: 2, edits: 1, commands: 1, durationMs: 35_000 });
-    expect(out[2]!.card?.files).toEqual([{ path: "src/notes.ts", name: "notes.ts", dir: "src", additions: 11, deletions: 2 }]);
     expect(summaryParts(host.fold!.summary)).toEqual(["read 2 files", "edited 1", "ran 1 command"]);
   });
 
@@ -94,24 +93,27 @@ describe("foldTurns", () => {
     expect(out[1]!.tools?.map((t) => t.id)).toEqual(["d", "p"]);
   });
 
-  it("shows everything again when the turn is opened, with the fold row and card kept", () => {
+  it("shows everything again when the turn is opened, with the fold row kept", () => {
     const out = foldTurns(turn(), { running: false, directory: "/work/demo", open: new Set(["u1"]) });
     expect(out.map((m) => m.id)).toEqual(["u1", "a1", "a2", "a3"]);
     expect(out[1]!.fold).toBeDefined();
     expect(out[1]!.foldOnly).toBeUndefined();
-    expect(out[3]!.card).toBeDefined();
   });
 
-  it("leaves a turn with nothing to fold and no files as it is", () => {
+  it("leaves a turn with nothing to fold as it is", () => {
     const m = [msg({ id: "u", role: "user" }), msg({ id: "a", role: "assistant", body: "hi" })];
     const out = foldTurns(m, { running: false, open });
     expect(out[1]).toBe(m[1]);
   });
 
-  it("merges several edits of one file and shows a changed-files card even when nothing folds", () => {
-    const m = [msg({ id: "u", role: "user" }), msg({ id: "a", role: "assistant", body: "ok", tools: [edit("e1", "a.ts", 2, 1), edit("e2", "a.ts", 3, 0)] as never })];
-    const out = foldTurns(m, { running: false, open });
-    expect(out[1]!.card).toMatchObject({ additions: 5, deletions: 1, files: [{ path: "a.ts", additions: 5, deletions: 1 }] });
+  it("counts several edits of one file as one file edited", () => {
+    const m = [msg({ id: "u", role: "user" }), msg({ id: "a", role: "assistant", body: "ok", tools: [edit("e1", "a.ts", 2, 1), edit("e2", "/work/demo/a.ts", 3, 0)] as never })];
+    expect(foldTurns(m, { running: false, directory: "/work/demo", open })[1]!.fold!.summary.edits).toBe(1);
+  });
+
+  it("puts nothing after the answer of a turn that changed files: no changed-files card", () => {
+    const out = foldTurns(turn(), { running: false, directory: "/work/demo", open: new Set(["u1"]) });
+    expect(out.every((m) => !("card" in m))).toBe(true);
   });
 });
 
@@ -134,31 +136,24 @@ describe("whole-file writes", () => {
 
   it("counts the file's real change from the session diff, not every line written", () => {
     const messages = withFileStats(writeTurn(), stats, "/work/demo");
-    const card = foldTurns(messages, { running: false, directory: "/work/demo", open }).at(-1)!.card!;
-    expect(card.files.map((f) => [f.path, f.additions, f.deletions])).toEqual([["src/notes.ts", 11, 2], ["test/notes.test.ts", 14, 1]]);
-    expect([card.additions, card.deletions, card.countsKnown]).toEqual([25, 3, true]);
     expect(messages[1]!.tools![1]).toMatchObject({ diffStat: { additions: 11, deletions: 2 } });
+    expect(messages[1]!.tools![2]).toMatchObject({ diffStat: { additions: 14, deletions: 1 } });
   });
 
   it("draws no counts while the session diff isn't loaded, rather than a wrong +28", () => {
     const messages = withFileStats(writeTurn(), null, "/work/demo");
-    const card = foldTurns(messages, { running: false, directory: "/work/demo", open }).at(-1)!.card!;
-    expect(card.files.every((f) => f.unknownCounts)).toBe(true);
-    expect(card.countsKnown).toBe(false);
+    expect(messages[1]!.tools!.slice(1).map((t) => t.diffStat)).toEqual([null, null]);
   });
 
   it("counts a file the session diff doesn't list as unchanged", () => {
     const messages = withFileStats(writeTurn(), new Map(), "/work/demo");
-    const card = foldTurns(messages, { running: false, directory: "/work/demo", open }).at(-1)!.card!;
-    expect([card.additions, card.deletions]).toEqual([0, 0]);
+    expect(messages[1]!.tools![1]!.diffStat).toEqual({ additions: 0, deletions: 0 });
   });
 
-  it("does not add up a file written twice: the file's change stands once", () => {
+  it("counts a file written twice as one file edited", () => {
     const m = writeTurn();
     m[1] = { ...m[1]!, tools: [write("t2", "/work/demo/src/notes.ts", 28), write("t3", "/work/demo/src/notes.ts", 28)] as never } as ActivityMessage;
-    const card = foldTurns(withFileStats(m, stats, "/work/demo"), { running: false, directory: "/work/demo", open }).at(-1)!.card!;
-    expect(card.files).toHaveLength(1);
-    expect([card.files[0]!.additions, card.files[0]!.deletions]).toEqual([11, 2]);
+    expect(foldTurns(withFileStats(m, stats, "/work/demo"), { running: false, directory: "/work/demo", open })[1]!.fold!.summary.edits).toBe(1);
   });
 });
 
@@ -214,7 +209,7 @@ describe("regressions in the folded turn", () => {
     expect(foldTurns(retry, { running: false, open })[1]!.fold!.summary.durationMs).toBe(1000);
   });
 
-  it("relativises Windows paths (either slash, any drive case) so the card finds their stats", () => {
+  it("relativises Windows paths (either slash, any drive case) so a write row finds its stats", () => {
     expect(relativePath("C:\\work\\demo\\src\\a.ts", "c:\\work\\demo")).toBe("src/a.ts");
     expect(relativePath("/work/demo/src/a.ts", "/work/demo/")).toBe("src/a.ts");
     expect(relativePath("/elsewhere/a.ts", "/work/demo")).toBe("/elsewhere/a.ts");
@@ -226,12 +221,11 @@ describe("regressions in the folded turn", () => {
       msg({ id: "u1", role: "user" }), msg({ id: "a1", role: "assistant", body: "ok", tools: [write("w1", "/work/demo/README.md")] as never }),
       msg({ id: "u2", role: "user" }), msg({ id: "a2", role: "assistant", body: "ok" }),
     ];
-    const cardOf = (messages: ActivityMessage[]) => foldTurns(messages, { running: false, directory: "/work/demo", open }).find((x) => x.id === "a1")!.card!;
+    const statOf = (messages: ActivityMessage[]) => messages.find((x) => x.id === "a1")!.tools![0]!.diffStat;
 
     it("doesn't recount an earlier turn from today's diff: unknown draws no counts", () => {
       const today = new Map([["README.md", { additions: 0, deletions: 3 }]]);
-      const card = cardOf(withFileStats(two(), today, "/work/demo"));
-      expect(card.countsKnown).toBe(false);
+      expect(statOf(withFileStats(two(), today, "/work/demo"))).toBeNull();
     });
 
     it("uses the snapshot the server took as the turn ended, whatever today's diff says", () => {
@@ -241,8 +235,7 @@ describe("regressions in the folded turn", () => {
       m[2] = { ...m[2]!, createdAt: 10_000 } as ActivityMessage;
       const today = new Map([["README.md", { additions: 0, deletions: 3 }]]);
       const snapshots = [{ endedAt: 3500, files: new Map([["README.md", { additions: 3, deletions: 1 }]]) }];
-      const card = cardOf(withFileStats(m, today, "/work/demo", snapshots));
-      expect([card.additions, card.deletions]).toEqual([3, 1]);
+      expect(statOf(withFileStats(m, today, "/work/demo", snapshots))).toEqual({ additions: 3, deletions: 1 });
     });
 
     it("never takes a later turn's snapshot for an earlier turn", () => {
@@ -251,68 +244,21 @@ describe("regressions in the folded turn", () => {
       m[1] = { ...m[1]!, createdAt: 2000, completedAt: 3000 } as ActivityMessage;
       m[2] = { ...m[2]!, createdAt: 10_000 } as ActivityMessage;
       const later = [{ endedAt: 20_000, files: new Map([["README.md", { additions: 9, deletions: 9 }]]) }];
-      expect(cardOf(withFileStats(m, new Map(), "/work/demo", later)).countsKnown).toBe(false);
+      expect(statOf(withFileStats(m, new Map(), "/work/demo", later))).toBeNull();
     });
 
     it("a snapshot that lists no such file means the turn left it unchanged", () => {
       const m = two().slice(0, 2);
       m[0] = { ...m[0]!, createdAt: 1000 } as ActivityMessage;
       m[1] = { ...m[1]!, createdAt: 2000, completedAt: 3000 } as ActivityMessage;
-      const card = foldTurns(withFileStats(m, null, "/work/demo", [{ endedAt: 3100, files: new Map() }]), { running: false, directory: "/work/demo", open }).at(-1)!.card!;
-      expect([card.additions, card.deletions, card.countsKnown]).toEqual([0, 0, true]);
+      expect(statOf(withFileStats(m, null, "/work/demo", [{ endedAt: 3100, files: new Map() }]))).toEqual({ additions: 0, deletions: 0 });
     });
 
     it("a file outside the session's folder is unknown, not +0 −0", () => {
       const m = two().slice(0, 2);
       m[1] = { ...m[1]!, tools: [write("w9", "/other/place/x.md")] as never } as ActivityMessage;
-      const card = foldTurns(withFileStats(m, new Map(), "/work/demo"), { running: false, directory: "/work/demo", open }).at(-1)!.card!;
-      expect(card.countsKnown).toBe(false);
+      expect(statOf(withFileStats(m, new Map(), "/work/demo"))).toBeNull();
     });
   });
 });
 
-describe("a turn's card comes from the server's snapshots", () => {
-  const snap = (endedAt: number, files: Record<string, [number, number]>) => ({
-    endedAt,
-    files: new Map(Object.entries(files).map(([path, [additions, deletions]]) => [path, { additions, deletions }])),
-  });
-  const two = () => [
-    msg({ id: "u1", role: "user", createdAt: 1000 }),
-    msg({ id: "a1", role: "assistant", createdAt: 2000, completedAt: 3000, tools: [edit("t1", "/work/demo/a.md", 3, 0)] as never }),
-    msg({ id: "u2", role: "user", createdAt: 10_000 }),
-    msg({ id: "a2", role: "assistant", createdAt: 11_000, completedAt: 12_000, tools: [edit("t2", "/work/demo/b.md", 2, 0), tool("t3", "bash")] as never }),
-  ];
-
-  it("lists what a shell command changed, and counts each turn against the one before, not the session total", () => {
-    const snapshots = [snap(3100, { "a.md": [3, 0] }), snap(12_100, { "a.md": [3, 0], "b.md": [2, 0], "README.md": [0, 3] })];
-    const out = foldTurns(two(), { running: false, directory: "/work/demo", open, snapshots });
-    const cards = out.filter((m) => m.card).map((m) => m.card!.files.map((f) => [f.path, f.additions, f.deletions]));
-    expect(cards).toEqual([[["a.md", 3, 0]], [["b.md", 2, 0], ["README.md", 0, 3]]]);
-    expect(out.find((m) => m.id === "a2")!.card).toMatchObject({ additions: 2, deletions: 3 });
-  });
-
-  it("uses the live diff for the latest turn until its snapshot arrives", () => {
-    const live = new Map([["a.md", { additions: 3, deletions: 0 }], ["gone.md", { additions: 0, deletions: 4 }]]);
-    const out = foldTurns(two(), { running: false, directory: "/work/demo", open, snapshots: [snap(3100, { "a.md": [3, 0] })], liveStats: live });
-    expect(out.filter((m) => m.card).map((m) => m.card!.files.map((f) => f.path))).toEqual([["a.md"], ["gone.md"]]);
-  });
-
-  it("counts lines a turn took back the other way and drops files that didn't move", () => {
-    const m = two();
-    const out = foldTurns(m, { running: false, directory: "/work/demo", open, snapshots: [snap(3100, { "a.md": [5, 0] }), snap(12_100, { "a.md": [2, 0] })] });
-    expect(out.find((x) => x.id === "a2")!.card!.files).toMatchObject([{ path: "a.md", additions: 0, deletions: 3 }]);
-  });
-
-  it("gives a first turn that only read files no card, and picks the last snapshot taken in a turn's window", () => {
-    const m = [
-      msg({ id: "u1", role: "user", createdAt: 1000 }),
-      msg({ id: "a1", role: "assistant", createdAt: 2000, completedAt: 3000, tools: [tool("r", "read")] as never }),
-      msg({ id: "u2", role: "user", createdAt: 10_000 }),
-      msg({ id: "a2", role: "assistant", createdAt: 11_000, completedAt: 12_000, tools: [edit("t", "/work/demo/b.md", 2, 0)] as never }),
-    ];
-    const snapshots = [snap(3100, { "old.md": [4, 0] }), snap(11_500, { "old.md": [4, 0], "b.md": [1, 0] }), snap(12_100, { "old.md": [4, 0], "b.md": [2, 0] })];
-    const out = foldTurns(m, { running: false, directory: "/work/demo", open, snapshots });
-    expect(out.filter((x) => x.card).map((x) => x.card!.files.map((f) => f.path))).toEqual([["b.md"]]);
-    expect(out.find((x) => x.card)!.card).toMatchObject({ additions: 2 });
-  });
-});

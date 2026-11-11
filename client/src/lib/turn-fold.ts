@@ -1,6 +1,6 @@
 /**
- * A finished turn folds into one line: "Worked for 34s · read 4 files · edited 2 · ran 2 commands", with the answer and a
- * changed-files card after it. This reads the conversation's message views (so it's the same live and after a reload,
+ * A finished turn folds into one line: "Worked for 34s · read 4 files · edited 2 · ran 2 commands", with the answer
+ * after it. This reads the conversation's message views (so it's the same live and after a reload,
  * and for every harness: the tool registry's categories decide what a call is, not one harness's shapes).
  *
  * A turn is one message of yours and every agent message until the next one. It folds when it isn't the turn still
@@ -12,17 +12,6 @@ import type { ActivityMessage } from "@/composables/use-activity-messages";
 import type { ToolCardItem } from "@/components/session/activity-stream-tool-card";
 import { isReadCall, isShellRow, isWriteCall } from "@/lib/tool-row";
 import { getTool } from "@/lib/tools";
-
-export interface FoldedFile {
-  /** The path as the session's folder knows it (relative when the call named an absolute path inside it). */
-  path: string;
-  name: string;
-  dir: string;
-  additions: number;
-  deletions: number;
-  /** The file was written whole and its real change isn't known yet: the counts are 0 and shouldn't be drawn. */
-  unknownCounts?: boolean;
-}
 
 export interface TurnSummary {
   durationMs?: number;
@@ -40,19 +29,12 @@ export interface FoldedTurn {
   /** The id of the turn's first message: what the open state is kept by. */
   id: string;
   summary: TurnSummary;
-  files: FoldedFile[];
-  additions: number;
-  deletions: number;
-  /** False when no file's counts are known (every one was written whole and the session's diff isn't loaded). */
-  countsKnown: boolean;
 }
 
 /** What a message view gets from folding. */
 export interface FoldMark {
   /** The turn's fold row draws above this message's content. */
   fold?: FoldedTurn;
-  /** The turn's changed-files card draws below this message's content. */
-  card?: FoldedTurn;
   /** The message has nothing left but the fold row: its own content was all folded away. */
   foldOnly?: boolean;
 }
@@ -112,23 +94,6 @@ function isOutside(path: string, directory: string | undefined): boolean {
   if (!directory) return false;
   const absolute = path.startsWith("/") || WINDOWS_PATH.test(path);
   return absolute && relativePath(path, directory) === path;
-}
-
-/**
- * A call that wrote the whole file has no change of its own to count: its lines are all additions. The change is the
- * file's session diff (see {@link withFileStats}); until that's known the call has no counts.
- */
-function countDiff(tool: ToolCardItem): { additions: number; deletions: number; unknown?: boolean } {
-  if (tool.diffFromContent) {
-    return tool.diffStat ? { ...tool.diffStat } : { additions: 0, deletions: 0, unknown: true };
-  }
-  let additions = 0;
-  let deletions = 0;
-  for (const line of tool.diffLines ?? []) {
-    if (line.type === "add") additions += 1;
-    else if (line.type === "remove") deletions += 1;
-  }
-  return { additions, deletions };
 }
 
 function hasContent(message: ActivityMessage): boolean {
@@ -279,45 +244,13 @@ export interface FoldOptions {
   running: boolean;
   /** The session's folder, so a call that named an absolute path shows it as the folder knows it. */
   directory?: string;
-  /** Turn ids the user opened: their rows show again (the fold row and the card stay). */
+  /** Turn ids the user opened: their rows show again (the fold row stays). */
   open: ReadonlySet<string>;
-  /**
-   * What the server kept of the session's files as each turn ended. Each is the session's whole diff at that moment, so
-   * a turn's card is the difference between its snapshot and the one before. With these (or `liveStats`), the card's
-   * files and counts come from them, not from the calls that wrote a file.
-   */
-  snapshots?: readonly TurnStatsSnapshot[];
-  /** The session's diff now: the latest turn's end until its snapshot arrives. */
-  liveStats?: FileStats | null;
-}
-
-const NO_FILES: FileStats = new Map();
-
-/** What a turn changed: the files whose counts moved between the previous snapshot and this one. */
-export function diffSnapshots(previous: FileStats, current: FileStats): FoldedFile[] {
-  const files: FoldedFile[] = [];
-  for (const path of new Set([...previous.keys(), ...current.keys()])) {
-    const before = previous.get(path);
-    const after = current.get(path);
-    const addDelta = (after?.additions ?? 0) - (before?.additions ?? 0);
-    const delDelta = (after?.deletions ?? 0) - (before?.deletions ?? 0);
-    if (addDelta === 0 && delDelta === 0 && before?.status === after?.status) continue;
-    // Lines the turn took back count the other way: an added line removed again is a deleted line.
-    const slash = path.lastIndexOf("/");
-    files.push({
-      path,
-      name: slash >= 0 ? path.slice(slash + 1) : path,
-      dir: slash >= 0 ? path.slice(0, slash) : "",
-      additions: Math.max(0, addDelta) + Math.max(0, -delDelta),
-      deletions: Math.max(0, delDelta) + Math.max(0, -addDelta),
-    });
-  }
-  return files;
 }
 
 /**
- * The messages as they draw once finished turns fold. A turn with nothing to fold (no calls, no thinking) and no
- * changed files is left as it is.
+ * The messages as they draw once finished turns fold. A turn with nothing to fold (no calls, no thinking) is left as
+ * it is.
  */
 export function foldTurns(messages: readonly ActivityMessage[], options: FoldOptions): FoldedMessage[] {
   const out: (FoldedMessage | null)[] = [...messages];
@@ -332,7 +265,7 @@ export function foldTurns(messages: readonly ActivityMessage[], options: FoldOpt
     const turnId = (range.user ?? agentMessages[0]!).id;
 
     const summary: TurnSummary = { reads: 0, edits: 0, commands: 0, other: 0, failed: 0, outcome: "done" };
-    const files = new Map<string, FoldedFile>();
+    const files = new Set<string>();
     let hasThinking = false;
     let foldable = 0;
     let endedAt: number | undefined;
@@ -363,33 +296,7 @@ export function foldTurns(messages: readonly ActivityMessage[], options: FoldOpt
         else if (isReadCall(tool.kind)) summary.reads += 1;
         else if (isShellRow(tool.kind)) summary.commands += 1;
         else if (isWriteCall(tool.kind)) {
-          const filePath = tool.filePath;
-          const { additions, deletions, unknown } = countDiff(tool);
-          if (filePath) {
-            const path = relativePath(filePath, options.directory);
-            const existing = files.get(path);
-            if (existing) {
-              // A whole-file write's stat is the file's whole session change: the latest one stands, it isn't summed.
-              if (tool.diffFromContent && !unknown) {
-                existing.additions = additions;
-                existing.deletions = deletions;
-                existing.unknownCounts = undefined;
-              } else if (!existing.unknownCounts) {
-                existing.additions += additions;
-                existing.deletions += deletions;
-              }
-            } else {
-              const slash = path.lastIndexOf("/");
-              files.set(path, {
-                path,
-                name: slash >= 0 ? path.slice(slash + 1) : path,
-                dir: slash >= 0 ? path.slice(0, slash) : "",
-                additions,
-                deletions,
-                ...(unknown ? { unknownCounts: true } : {}),
-              });
-            }
-          }
+          if (tool.filePath) files.add(relativePath(tool.filePath, options.directory));
         } else summary.other += 1;
         if (!staysVisible(tool)) foldable += 1;
       }
@@ -398,36 +305,10 @@ export function foldTurns(messages: readonly ActivityMessage[], options: FoldOpt
     const started = range.user?.createdAt;
     if (started !== undefined && endedAt !== undefined && endedAt > started) summary.durationMs = endedAt - started;
 
-    let fileList = [...files.values()];
-    if (options.snapshots?.length || options.liveStats) {
-      const snapshots = options.snapshots ?? [];
-      const first = range.agent[0]!;
-      const nextStart = ranges[rangeIndex + 1]?.user?.createdAt;
-      const start = range.user?.createdAt ?? messages[first]!.createdAt;
-      const mine = snapshotFor(snapshots, start, nextStart);
-      const current = mine?.files ?? (isLast ? options.liveStats : null);
-      // Where the files stood before the turn: the last snapshot taken before its prompt.
-      let previous: FileStats | undefined;
-      for (const snapshot of snapshots) {
-        if (start !== undefined && snapshot.endedAt < start) previous = snapshot.files;
-      }
-      // With nothing before it, a turn that ran no call able to change a file changed none: what's in the folder was there already.
-      const changedNothing = !previous && summary.edits + summary.commands === 0;
-      if (current) fileList = changedNothing ? [] : diffSnapshots(previous ?? NO_FILES, current);
-    }
-    const turn: FoldedTurn = {
-      id: turnId,
-      summary,
-      files: fileList,
-      additions: fileList.reduce((total, file) => total + file.additions, 0),
-      deletions: fileList.reduce((total, file) => total + file.deletions, 0),
-      countsKnown: fileList.some((file) => !file.unknownCounts),
-    };
-
-    const folds = (foldable > 0 || hasThinking);
+    if (foldable === 0 && !hasThinking) return;
+    const turn: FoldedTurn = { id: turnId, summary };
     // The fold hides tool rows and thinking only: every block of the agent's text stays, in order.
-    const collapsed = folds && !options.open.has(turnId);
-    let last: number | null = null;
+    const collapsed = !options.open.has(turnId);
 
     range.agent.forEach((messageIndex, position) => {
       const message = messages[messageIndex]!;
@@ -449,14 +330,9 @@ export function foldTurns(messages: readonly ActivityMessage[], options: FoldOpt
           return;
         }
       }
-      if (isHost && folds) view = { ...view, fold: turn };
+      if (isHost) view = { ...view, fold: turn };
       out[messageIndex] = view;
-      last = messageIndex;
     });
-
-    if (fileList.length > 0 && last !== null) {
-      out[last] = { ...(out[last] as FoldedMessage), card: turn };
-    }
   });
 
   return out.filter((message): message is FoldedMessage => message !== null);
