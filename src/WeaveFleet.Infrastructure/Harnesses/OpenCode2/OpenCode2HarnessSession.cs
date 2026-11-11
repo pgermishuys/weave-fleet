@@ -492,7 +492,7 @@ internal sealed partial class OpenCode2HarnessSession : IHarnessSession, IOpenCo
         var server = await AttachedServerAsync(ct).ConfigureAwait(false);
         var sessionId = ResumeToken;
         return new OpenCode2OffTheRecordConversation(
-            (prompt, token) => server.Client.GenerateAsync(sessionId, prompt, token),
+            (prompt, token) => server.Client.GenerateWithUsageAsync(sessionId, prompt, token),
             OpenCode2HarnessRuntime.ConversationQuestionTimeout);
     }
 

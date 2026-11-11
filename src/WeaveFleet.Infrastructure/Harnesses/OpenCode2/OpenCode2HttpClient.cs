@@ -383,6 +383,12 @@ internal sealed partial class OpenCode2HttpClient(HttpClient http, HttpClient ev
     /// answer, so it has no request timeout of its own; <paramref name="ct"/> bounds it.
     /// </summary>
     public async Task<string?> GenerateAsync(string sessionId, string prompt, CancellationToken ct)
+        => (await GenerateWithUsageAsync(sessionId, prompt, ct).ConfigureAwait(false))?.Text;
+
+    /// <summary>
+    /// <see cref="GenerateAsync"/> with what the call used (2.2.7 and later report it; before that the tokens are null).
+    /// </summary>
+    public async Task<OpenCode2GenerateResult?> GenerateWithUsageAsync(string sessionId, string prompt, CancellationToken ct)
     {
         using var response = await events.PostAsJsonAsync(
             $"api/session/{Uri.EscapeDataString(sessionId)}/generate",
@@ -392,7 +398,7 @@ internal sealed partial class OpenCode2HttpClient(HttpClient http, HttpClient ev
         await EnsureSuccessAsync(response, "answer off the record", ct).ConfigureAwait(false);
         var body = await response.Content.ReadFromJsonAsync(
             OpenCode2JsonContext.Default.OpenCode2EnvelopeOpenCode2GenerateResult, ct).ConfigureAwait(false);
-        return body?.Data?.Text;
+        return body?.Data;
     }
 
     /// <summary>
