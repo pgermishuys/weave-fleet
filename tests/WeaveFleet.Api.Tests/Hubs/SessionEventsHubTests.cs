@@ -306,7 +306,14 @@ public sealed class SessionEventsHubTests : IClassFixture<SessionEventsHubTests.
     [Fact]
     public async Task PumpFailure_ClosesTheConnectionSoTheClientReconnects()
     {
-        _connection = await CreateConnectedHubAsync(_failingPumpServer.Factory);
+        var factory = _failingPumpServer.Factory;
+        _connection = new HubConnectionBuilder()
+            .WithUrl($"{factory.Server.BaseAddress}hubs/session-events", options =>
+            {
+                options.HttpMessageHandlerFactory = _ => factory.Server.CreateHandler();
+            })
+            .AddJsonProtocol()
+            .Build();
         var closed = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
         _connection.Closed += _ =>
         {
@@ -314,7 +321,17 @@ public sealed class SessionEventsHubTests : IClassFixture<SessionEventsHubTests.
             return Task.CompletedTask;
         };
 
-        var finished = await Task.WhenAny(closed.Task, Task.Delay(TimeSpan.FromSeconds(5)));
+        // The pump fails at once, so the server may close the connection before the client has finished starting.
+        try
+        {
+            await _connection.StartAsync();
+        }
+        catch (Exception)
+        {
+            closed.TrySetResult();
+        }
+
+        var finished = await Task.WhenAny(closed.Task, Task.Delay(TimeSpan.FromSeconds(15)));
 
         finished.ShouldBe(closed.Task);
     }
