@@ -20,18 +20,20 @@ namespace WeaveFleet.Api.Tests.Hubs;
 /// Tests hub connectivity, subscription, snapshot delivery, and event broadcasting.
 /// </summary>
 #pragma warning disable CA1001 // IAsyncLifetime handles disposal via DisposeAsync
-public sealed class SessionEventsHubTests : IClassFixture<SessionEventsHubTests.Server>, IClassFixture<SessionEventsHubTests.BroadcastServer>, IAsyncLifetime
+public sealed class SessionEventsHubTests : IClassFixture<SessionEventsHubTests.Server>, IClassFixture<SessionEventsHubTests.BroadcastServer>, IClassFixture<SessionEventsHubTests.FailingPumpServer>, IAsyncLifetime
 #pragma warning restore CA1001
 {
     private readonly Server _server;
     private readonly BroadcastServer _broadcastServer;
+    private readonly FailingPumpServer _failingPumpServer;
     private HubConnection? _connection;
     private FakeSessionMessageProxy _proxy => _server.Proxy;
     private InMemorySessionContextRepository _contexts => _server.Contexts;
     private ApiWebApplicationFactory _factory => _server.Factory;
 
-    public SessionEventsHubTests(Server server, BroadcastServer broadcastServer)
+    public SessionEventsHubTests(Server server, BroadcastServer broadcastServer, FailingPumpServer failingPumpServer)
     {
+        _failingPumpServer = failingPumpServer;
         _server = server;
         _broadcastServer = broadcastServer;
         _proxy.GetSnapshotBehavior = null;
@@ -297,6 +299,61 @@ public sealed class SessionEventsHubTests : IClassFixture<SessionEventsHubTests.
             if (SubscriberCount(broadcaster) > baseline) return;
             await Task.Delay(25);
         }
+    }
+
+    // A pump that dies on an open connection leaves the client with a socket that never speaks again; the server
+    // closes it so SignalR reconnects and the client resubscribes (a client can't tell silence from a quiet session).
+    [Fact]
+    public async Task PumpFailure_ClosesTheConnectionSoTheClientReconnects()
+    {
+        _connection = await CreateConnectedHubAsync(_failingPumpServer.Factory);
+        var closed = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+        _connection.Closed += _ =>
+        {
+            closed.TrySetResult();
+            return Task.CompletedTask;
+        };
+
+        var finished = await Task.WhenAny(closed.Task, Task.Delay(TimeSpan.FromSeconds(5)));
+
+        finished.ShouldBe(closed.Task);
+    }
+
+    // A broadcaster whose subscription fails as soon as the pump starts.
+    public sealed class FailingPumpServer : IDisposable
+    {
+        public ApiWebApplicationFactory Factory { get; }
+
+        public FailingPumpServer()
+        {
+            Factory = new ApiWebApplicationFactory(
+                authEnabled: false,
+                configureTestServices: services =>
+                {
+                    services.AddSingleton<ISessionMessageProxy>(new FakeSessionMessageProxy());
+                    services.AddSingleton<IEventBroadcaster>(new FailingBroadcaster());
+                });
+        }
+
+        public void Dispose() => Factory.Dispose();
+    }
+
+    private sealed class FailingBroadcaster : IEventBroadcaster
+    {
+        public Task BroadcastAsync(string topic, string type, JsonElement payload, string? userId, CancellationToken ct) => Task.CompletedTask;
+        public Task BroadcastAsync(string topic, string type, JsonElement payload, long? eventId, string? userId, CancellationToken ct) => Task.CompletedTask;
+        public Task BroadcastAsync(string topic, string type, JsonElement payload, DomainEvent? domainEvent, string? userId, CancellationToken ct) => Task.CompletedTask;
+        public Task BroadcastAsync(string topic, string type, JsonElement payload, long? eventId, DomainEvent? domainEvent, string? userId, CancellationToken ct) => Task.CompletedTask;
+
+#pragma warning disable CS1998
+        public async IAsyncEnumerable<BroadcastEvent> SubscribeAsync(IReadOnlyList<string> topics, string? subscriberUserId, [System.Runtime.CompilerServices.EnumeratorCancellation] CancellationToken ct)
+        {
+            throw new InvalidOperationException("the subscription broke");
+#pragma warning disable CS0162
+            yield break;
+#pragma warning restore CS0162
+        }
+#pragma warning restore CS1998
     }
 
     // A fake message proxy that returns empty snapshots, and a context repository the tests can fill.
