@@ -112,6 +112,19 @@ public sealed class HarnessEventRelayQueuedFollowUpTests
 
         public void Idle() => EmitStatus(ActivityStatuses.Idle);
 
+        /// <summary>How OpenCode ends a turn: a status event saying idle, then the idle event itself.</summary>
+        public void IdleTwice()
+        {
+            Harness.Emit(new HarnessEvent
+            {
+                Type = EventTypes.SessionStatus,
+                SessionId = "oc-s1",
+                Timestamp = DateTimeOffset.UtcNow,
+                Payload = JsonSerializer.SerializeToElement(new { status = new { type = ActivityStatuses.Idle } }),
+            });
+            Idle();
+        }
+
         public ValueTask DisposeAsync() => Harness.DisposeAsync();
     }
 
@@ -130,6 +143,27 @@ public sealed class HarnessEventRelayQueuedFollowUpTests
         await Task.Delay(300); // a negative check below: a late idle or notice would be caught here, a slow runner can't fail it
 
         rig.Harness.SendPromptCalls.Select(c => c.Text).ShouldBe(["next"]);
+        rig.Shown.Skip(before).ShouldNotContain(ActivityStatuses.Idle);
+        rig.Finished.ShouldBe(0);
+
+        await cts.CancelAsync();
+        await rig.Relay.StopAsync(CancellationToken.None);
+    }
+
+    [Fact]
+    public async Task A_turn_that_ends_with_two_idle_events_and_a_message_queued_is_not_shown_idle_or_finished()
+    {
+        await using var rig = new Rig();
+        using var cts = new CancellationTokenSource(TimeSpan.FromSeconds(20));
+        await rig.Relay.StartAsync(cts.Token);
+        await rig.BusyAsync();
+        await rig.Service.EnqueueAsync("s1", new QueuePromptRequest("next", QueuedPromptKinds.Prompt));
+        var before = rig.Shown.Count;
+
+        rig.IdleTwice();
+        await Rig.UntilAsync(() => rig.Harness.SendPromptCalls.Count > 0, "the queued message to be sent");
+        await Task.Delay(300);
+
         rig.Shown.Skip(before).ShouldNotContain(ActivityStatuses.Idle);
         rig.Finished.ShouldBe(0);
 

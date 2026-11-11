@@ -398,6 +398,9 @@ public sealed class HarnessEventRelay : BackgroundService
         var suppressedUserMessageIds = new HashSet<string>(StringComparer.Ordinal);
         var refusedAsks = new HashSet<string>(StringComparer.Ordinal);
         string? refusedStatusFrom = null;
+        // Set when the queue claimed a turn's end for its follow-up: harnesses report that end twice (a status, then an
+        // idle event), so every idle until the next busy, or until the held idle is released, is held back too.
+        var holdingIdle = false;
         using var translationScope = _scopeFactory.CreateScope();
         var translator = translationScope.ServiceProvider.GetRequiredService<DomainEventTranslator>();
 
@@ -482,12 +485,18 @@ public sealed class HarnessEventRelay : BackgroundService
                 ObserveBrowserCall(targetFleetSessionId, domainEvent);
                 // Before the queue: a limit's failure holds the queue before the idle after it reaches the queue.
                 _retries?.Observe(targetFleetSessionId, sessionUserId, domainEvent);
-                var followingUp = _queue is not null
+                var claimed = _queue is not null
                     && await _queue.ClaimFollowUpAsync(
                         targetFleetSessionId,
                         sessionUserId,
                         domainEvent,
-                        () => ShowHeldIdleAsync(targetFleetSessionId, sessionUserId, ct)).ConfigureAwait(false);
+                        () =>
+                        {
+                            holdingIdle = false;
+                            return ShowHeldIdleAsync(targetFleetSessionId, sessionUserId, ct);
+                        }).ConfigureAwait(false);
+                if (claimed)
+                    holdingIdle = true;
                 _queue?.Observe(targetFleetSessionId, sessionUserId, domainEvent);
                 _turns?.Observe(targetFleetSessionId, sessionUserId, domainEvent, StatusTypeOf(evt));
                 _callbacks?.Observe(targetFleetSessionId, sessionUserId, domainEvent);
@@ -553,8 +562,10 @@ public sealed class HarnessEventRelay : BackgroundService
                         // hears the same, so it tells you about the question once.
                         var shownStatus = _activityTracker.ShownActivityStatus(targetFleetSessionId, parsedStatus.Status);
                         // The queue is about to send the next message: the session carries on, so nobody hears it finished.
-                        if (followingUp && shownStatus == ActivityStatuses.Idle)
+                        if (holdingIdle && shownStatus == ActivityStatuses.Idle)
                             continue;
+                        if (shownStatus != ActivityStatuses.Idle)
+                            holdingIdle = false;
                         _notifier?.OnActivityChanged(targetFleetSessionId, shownStatus);
 
                         await _broadcaster.BroadcastAsync(
