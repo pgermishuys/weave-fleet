@@ -110,6 +110,7 @@ public class SessionEventsHub : Hub
         ConnectionCancellations[connectionId] = cts;
 
         // Start background event pump for this connection
+        var hubContext = Context;
         _ = Task.Run(async () =>
         {
             try
@@ -120,12 +121,19 @@ public class SessionEventsHub : Hub
             {
                 if (_logger.IsEnabled(LogLevel.Debug))
                     LogPumpCancelled(_logger, connectionId, null);
+                return;
             }
             catch (Exception ex)
             {
                 LogPumpFailed(_logger, connectionId, ex);
             }
-        }, cts.Token);
+
+            // The pump ended while the connection was still wanted (it failed, or a send did). The socket would stay
+            // open and never speak again, which a client can't tell from a quiet session, so close it: SignalR
+            // reconnects and the client resubscribes and reloads what it missed.
+            if (!cts.IsCancellationRequested && ConnectionTopics.ContainsKey(connectionId))
+                hubContext.Abort();
+        }, CancellationToken.None);
 
         await base.OnConnectedAsync();
     }
