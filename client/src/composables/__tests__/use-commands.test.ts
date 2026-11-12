@@ -321,6 +321,66 @@ describe("useCommands", () => {
       expect(press("Escape").defaultPrevented).toBe(true);
     });
 
+    it("Escape in a text field leaves the session running: the field's own Escape cancels or clears", async () => {
+      useSessionsStore().setSessions([item("s1", "First")]);
+      useSessionsStore().setActiveSessionId("s1");
+      await start();
+      const interrupt = vi.fn();
+      const stop = vi.spyOn(byId("interrupt-session"), "action").mockImplementation(interrupt);
+      const rename = document.createElement("input");
+      const notes = document.createElement("textarea");
+      const picker = document.createElement("select");
+      const editable = document.createElement("div");
+      editable.setAttribute("contenteditable", "true");
+      const editor = document.createElement("div");
+      editor.className = "cm-editor";
+      const editorContent = document.createElement("div");
+      editorContent.className = "cm-content";
+      editorContent.setAttribute("contenteditable", "true");
+      const editorLine = document.createElement("span");
+      editorContent.append(editorLine);
+      editor.append(editorContent);
+      document.body.append(rename, notes, picker, editable, editor);
+
+      for (const target of [rename, notes, picker, editable, editorContent, editorLine]) {
+        expect(press("Escape", {}, target).defaultPrevented, target.outerHTML).toBe(false);
+      }
+      expect(interrupt).not.toHaveBeenCalled();
+      stop.mockRestore();
+    });
+
+    it("Escape in the session's composer still interrupts it", async () => {
+      useSessionsStore().setSessions([item("s1", "First")]);
+      useSessionsStore().setActiveSessionId("s1");
+      await start();
+      const interrupt = vi.fn();
+      const stop = vi.spyOn(byId("interrupt-session"), "action").mockImplementation(interrupt);
+      const composer = document.createElement("textarea");
+      composer.setAttribute("data-escape-interrupts", "");
+      document.body.append(composer);
+
+      expect(press("Escape", {}, composer).defaultPrevented).toBe(true);
+      expect(interrupt).toHaveBeenCalledTimes(1);
+      stop.mockRestore();
+    });
+
+    it("Escape that a field already handled doesn't interrupt", async () => {
+      useSessionsStore().setSessions([item("s1", "First")]);
+      useSessionsStore().setActiveSessionId("s1");
+      await start();
+      const interrupt = vi.fn();
+      const stop = vi.spyOn(byId("interrupt-session"), "action").mockImplementation(interrupt);
+      const composer = document.createElement("textarea");
+      composer.setAttribute("data-escape-interrupts", "");
+      composer.addEventListener("keydown", (event) => event.preventDefault());
+      document.body.append(composer);
+
+      press("Escape", {}, composer);
+
+      expect(interrupt).not.toHaveBeenCalled();
+      stop.mockRestore();
+    });
+
     it("leaves a key alone when something else already handled it", async () => {
       await start();
       const handled = new KeyboardEvent("keydown", { key: "=", ctrlKey: true, bubbles: true, cancelable: true });

@@ -16,11 +16,22 @@ function isApplePlatform(): boolean {
   return typeof navigator !== "undefined" && /Mac|iPhone|iPad|iPod/.test(navigator.userAgent);
 }
 
+/**
+ * Whether a key pressed on this target is typing: a form field, anything inside an editable region, or a code editor.
+ * `closest` covers a key that lands on a node inside a contenteditable (CodeMirror's lines), which `isContentEditable`
+ * alone misses where it isn't implemented.
+ */
 export function isEditableKeyboardTarget(target: EventTarget | null): boolean {
-  return target instanceof HTMLInputElement
-    || target instanceof HTMLTextAreaElement
-    || target instanceof HTMLSelectElement
-    || (target instanceof HTMLElement && target.isContentEditable);
+  if (target instanceof HTMLInputElement || target instanceof HTMLTextAreaElement || target instanceof HTMLSelectElement) {
+    return true;
+  }
+
+  if (!(target instanceof Element)) {
+    return false;
+  }
+
+  return (target instanceof HTMLElement && target.isContentEditable)
+    || target.closest('[contenteditable]:not([contenteditable="false"]), .cm-editor') !== null;
 }
 
 function normalizeKey(key: string): string {
