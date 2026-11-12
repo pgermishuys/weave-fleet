@@ -5,6 +5,7 @@ import { useDraftState } from "@/composables/use-draft-state";
 import { forgetPageStates } from "@/lib/page-bridge";
 import { sessionCommands } from "@/lib/session-commands";
 import type { ShownPage } from "@/lib/server-canvas";
+import { useSessionsStore } from "@/stores/sessions";
 
 vi.mock("@/lib/api-client", () => ({
   apiUrl: (path: string) => `http://fleet.test${path}`,
@@ -148,6 +149,44 @@ describe("PageCanvas", () => {
       post(second, { type: "fleet:page-hello" });
       expect(secondAnswer).toHaveBeenCalledWith({ type: "fleet:page-state", state: { answers: { keep: "db" } } }, "*");
       wrapper.unmount();
+    });
+
+    describe("a page that waits for a pick", () => {
+      const waiting = { ...page, choice: { callId: "call-1", status: "waiting" as const, at: "2026-09-28T10:00:00Z" } };
+
+      function mountWaiting() {
+        useSessionsStore().setSessions([{ session: { id: "s-pick" }, activityStatus: "busy" }] as never);
+        return mount(PageCanvas, { props: { sessionId: "s-pick", page: waiting }, attachTo: document.body });
+      }
+
+      it("says when the page's pick is too long to send, and keeps Send off with that reason", async () => {
+        const wrapper = mountWaiting();
+
+        post(frameWindow(wrapper), { type: "fleet:page-choice", value: "x".repeat(20_000), summary: "Every answer" });
+        await wrapper.vm.$nextTick();
+
+        const reason = "The page's pick was too long to send: 20,000 characters, and the most is 16,000.";
+        expect(wrapper.get("[data-testid=page-choice-bar]").text()).toContain(reason);
+        const send = wrapper.get("[data-testid=page-choice-send]");
+        expect(send.attributes("disabled")).toBeDefined();
+        expect(send.attributes("title")).toBe(reason);
+        expect(wrapper.find("[data-testid=page-choice-skip]").exists()).toBe(true);
+        wrapper.unmount();
+      });
+
+      it("takes a pick the page sends after a refused one", async () => {
+        const wrapper = mountWaiting();
+
+        post(frameWindow(wrapper), { type: "fleet:page-choice", value: "  " });
+        await wrapper.vm.$nextTick();
+        expect(wrapper.get("[data-testid=page-choice-bar]").text()).toContain("The page's pick was empty");
+
+        post(frameWindow(wrapper), { type: "fleet:page-choice", value: "a", summary: "Layout A" });
+        await wrapper.vm.$nextTick();
+        expect(wrapper.get("[data-testid=page-choice-bar]").text()).toContain("You picked Layout A.");
+        expect(wrapper.get("[data-testid=page-choice-send]").attributes("disabled")).toBeUndefined();
+        wrapper.unmount();
+      });
     });
 
     it("stops listening once the canvas is gone", () => {

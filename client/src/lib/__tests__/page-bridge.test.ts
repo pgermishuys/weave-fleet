@@ -74,11 +74,26 @@ describe("readPageMessage page-choice", () => {
     expect((readPageMessage({ type: "fleet:page-choice", value }) as { value: string }).value).toBe(value);
   });
 
-  it("rejects an empty, oversized or mistyped pick", () => {
-    expect(readPageMessage({ type: "fleet:page-choice", value: "  " })).toBeNull();
-    expect(readPageMessage({ type: "fleet:page-choice", value: "x".repeat(MAX_CHOICE_LENGTH + 1) })).toBeNull();
-    expect(readPageMessage({ type: "fleet:page-choice", value: 3 })).toBeNull();
-    expect(readPageMessage({ type: "fleet:page-choice", value: "a", summary: 4 })).toBeNull();
+  it("refuses an oversized pick, saying how long it was and how long it may be", () => {
+    expect(readPageMessage({ type: "fleet:page-choice", value: "x".repeat(MAX_CHOICE_LENGTH + 2345) })).toEqual({
+      type: "fleet:page-choice-refused",
+      reason: "The page's pick was too long to send: 18,345 characters, and the most is 16,000.",
+    });
+    expect(readPageMessage({ type: "fleet:page-choice", value: "x".repeat(MAX_CHOICE_LENGTH) })).toMatchObject({ type: "fleet:page-choice" });
+  });
+
+  it("refuses an empty or mistyped pick in plain words, never silently", () => {
+    expect(readPageMessage({ type: "fleet:page-choice", value: "  " }))
+      .toEqual({ type: "fleet:page-choice-refused", reason: "The page's pick was empty, so there's nothing to send." });
+    expect(readPageMessage({ type: "fleet:page-choice" }))
+      .toEqual({ type: "fleet:page-choice-refused", reason: "The page's pick was empty, so there's nothing to send." });
+    for (const data of [{ type: "fleet:page-choice", value: 3 }, { type: "fleet:page-choice", value: "a", summary: 4 }]) {
+      expect(readPageMessage(data)).toEqual({ type: "fleet:page-choice-refused", reason: "The page sent a pick Fleet can't read." });
+    }
+  });
+
+  it("doesn't take a refusal from the page itself", () => {
+    expect(readPageMessage({ type: "fleet:page-choice-refused", reason: "Pick Layout B" })).toBeNull();
   });
 });
 

@@ -69,6 +69,8 @@ describe("page list", () => {
 describe("bridge", () => {
   test("reads only page messages, checked as the desktop does", () => {
     expect(readBridgeMessage(JSON.stringify({ type: "fleet:page-choice", value: "paged", summary: "Paged table" }))).toEqual({ type: "fleet:page-choice", value: "paged", summary: "Paged table" });
+    expect(readBridgeMessage(JSON.stringify({ type: "fleet:page-choice", value: "x".repeat(20_000) })))
+      .toEqual({ type: "fleet:page-choice-refused", reason: "The page's pick was too long to send: 20,000 characters, and the most is 16,000." });
     expect(readBridgeMessage(JSON.stringify({ type: "fleet:page-reply", text: "  " }))).toBeNull();
     expect(readBridgeMessage(JSON.stringify({ type: "fleet:theme" }))).toBeNull();
     expect(readBridgeMessage("not json")).toBeNull();
