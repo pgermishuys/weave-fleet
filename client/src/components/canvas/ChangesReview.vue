@@ -1,6 +1,6 @@
 <script setup lang="ts">
-import { computed, inject, nextTick, ref, shallowRef, watch } from "vue";
-import { useElementSize } from "@vueuse/core";
+import { computed, inject, nextTick, onBeforeUnmount, ref, shallowRef, watch } from "vue";
+import { useElementSize, useEventListener } from "@vueuse/core";
 import {
   ChevronDown,
   ChevronsDownUp,
@@ -24,7 +24,11 @@ import {
 } from "@/components/ui/alert-dialog";
 import { readSessionFile, restoreSessionFile, writeSessionFile } from "@/api/session-files";
 import type { FileDiffItem } from "@/api/client";
+import LinesBar from "@/components/canvas/LinesBar.vue";
+import { useCanvasAnnotate } from "@/composables/use-canvas-annotation";
+import { appendDraftReference, appendDraftText } from "@/composables/use-draft-state";
 import type { UseDiffsResult } from "@/composables/use-diffs";
+import type { AnnotationAnchor } from "@/lib/annotation-types";
 import { useFileDiffContents } from "@/composables/use-file-diff-contents";
 import { diffBaseLabel } from "@/lib/diff-base";
 import { useMachineTarget } from "@/lib/machine-target";
@@ -38,6 +42,9 @@ import {
   type ReviewItem,
   type ReviewLine,
 } from "@/lib/diff-review";
+import { lineCountLabel, lineQuote, lineRangeLabel, lineReference, sliceLines } from "@/lib/line-quote";
+import { sameSelection, selectionLines, type ReviewSelection, type SelectedRow } from "@/lib/review-selection";
+import { runSessionCommand } from "@/lib/session-commands";
 import { getVisualRenderer } from "@/lib/visual-renderer-registry";
 import { findLines, type ChangesHit, type FindFile } from "@/lib/changes-find";
 import { useChangesFind } from "@/composables/use-changes-find";
@@ -442,6 +449,143 @@ const findUnsearched = computed(
   () => files.value.filter((file) => entries.value[file.file]?.status !== "ready" && startsCollapsed(file) && !isOpen(file.file)).length,
 );
 
+// ─── Selected lines: Copy link, Quote, Add to message ────────────────────────
+
+const annotate = useCanvasAnnotate();
+function onAnnotate(path: string, anchor: AnnotationAnchor, position: { x: number; y: number }): void {
+  annotate(anchor, position, path);
+}
+
+/**
+ * The side a drag in Split started on: the other column stays out of the selection. Set on the element at once,
+ * not through a render, on pointerdown: the browser starts the selection on the mousedown that follows.
+ */
+let pickSide: "old" | "new" | null = null;
+function onBodyPointerDown(event: PointerEvent): void {
+  const side = (event.target as Element | null)?.closest<HTMLElement>(".rline[data-side]")?.dataset.side;
+  const next = side === "old" || side === "new" ? side : null;
+  // A selection down one column runs through the other column's rows in between, so a press there lands "inside"
+  // it and would drag it instead of starting a new one. Let it go first.
+  if (next && pickSide && next !== pickSide) document.getSelection()?.removeAllRanges();
+  pickSide = next;
+  if (pickSide) root.value?.setAttribute("data-pick", pickSide);
+  else root.value?.removeAttribute("data-pick");
+}
+
+const selected = shallowRef<(ReviewSelection & { path: string }) | null>(null);
+
+function elementOf(node: Node | null): Element | null {
+  return node instanceof Element ? node : (node?.parentElement ?? null);
+}
+function lineNumber(value: string | undefined): number | null {
+  return value ? Number(value) : null;
+}
+/** Whether the selection takes in none of the row's text: it starts at the end of the row, or ends at its start. */
+function touchesOnly(row: HTMLElement, range: Range, edge: "first" | "last"): boolean {
+  const text = row.querySelector(".rline__tx");
+  if (!text?.textContent) return false;
+  const part = document.createRange();
+  if (edge === "first") {
+    part.setStart(range.startContainer, range.startOffset);
+    part.setEnd(text, text.childNodes.length);
+  } else {
+    part.setStart(text, 0);
+    part.setEnd(range.endContainer, range.endOffset);
+  }
+  return part.toString() === "";
+}
+
+/** The lines the page's text selection spans in one file of the review, or null when it isn't in the review. */
+function readSelection(): void {
+  const selection = document.getSelection();
+  let next: (ReviewSelection & { path: string }) | null = null;
+  const anchor = elementOf(selection?.anchorNode ?? null);
+  const section = anchor?.closest<HTMLElement>("[data-review-file]");
+  if (selection && selection.rangeCount > 0 && !selection.isCollapsed && section && body.value?.contains(section)) {
+    const range = selection.getRangeAt(0);
+    const side = layout.value === "split"
+      ? (pickSide ?? anchor?.closest<HTMLElement>(".rline[data-side]")?.dataset.side ?? null)
+      : null;
+    const rows = [...section.querySelectorAll<HTMLElement>(".rline[data-old], .rline[data-new]")].filter(
+      (row) => range.intersectsNode(row) && (!side || row.dataset.side === side),
+    );
+    if (rows.length > 1 && touchesOnly(rows[0]!, range, "first")) rows.shift();
+    if (rows.length > 1 && touchesOnly(rows[rows.length - 1]!, range, "last")) rows.pop();
+    const lines = selectionLines(
+      rows.map((row): SelectedRow => ({ old: lineNumber(row.dataset.old), new: lineNumber(row.dataset.new) })),
+    );
+    if (lines) next = { ...lines, path: section.dataset.reviewFile! };
+  }
+  const current = selected.value;
+  if (current === next || (current && next && current.path === next.path && sameSelection(current, next))) return;
+  selected.value = next;
+}
+useEventListener(document, "selectionchange", readSelection);
+
+const selectedLabel = computed(() => {
+  const current = selected.value;
+  if (!current) return "";
+  return `${current.side === "old" ? "Old " : ""}${lineRangeLabel(current.range)}`;
+});
+const selectedCount = computed(() => (selected.value ? lineCountLabel(selected.value.range) : ""));
+/** Old lines have no place in the file as it is, so they have no link; they're quoted instead. */
+const selectedLink = computed(() =>
+  selected.value?.side === "new" ? lineReference(selected.value.path, selected.value.range) : null,
+);
+
+function selectedQuote(): string | null {
+  const current = selected.value;
+  const entry = current ? views.value[current.path]?.entry : undefined;
+  if (!current || entry?.status !== "ready") return null;
+  const text = sliceLines((current.side === "new" ? entry.item.after : entry.item.before) ?? "", current.range);
+  const reference = lineReference(current.path, current.range);
+  return lineQuote(current.side === "new" ? reference : `${reference} (before)`, current.path, text);
+}
+
+const toastMessage = shallowRef<string | null>(null);
+let toastTimer: ReturnType<typeof setTimeout> | undefined;
+function toast(message: string): void {
+  toastMessage.value = message;
+  clearTimeout(toastTimer);
+  toastTimer = setTimeout(() => {
+    toastMessage.value = null;
+  }, 2200);
+}
+onBeforeUnmount(() => clearTimeout(toastTimer));
+
+async function copyText(text: string, done: string): Promise<void> {
+  try {
+    await navigator.clipboard.writeText(text);
+    toast(done);
+  } catch {
+    toast("Couldn't copy to the clipboard");
+  }
+}
+function copySelectedLink(): void {
+  if (selectedLink.value) void copyText(selectedLink.value, `Copied ${selectedLink.value}`);
+}
+function copySelectedQuote(): void {
+  const quote = selectedQuote();
+  if (quote && selected.value) void copyText(quote, `Copied ${lineRangeLabel(selected.value.range)} as a quote`);
+}
+function clearSelected(): void {
+  document.getSelection()?.removeAllRanges();
+  selected.value = null;
+}
+/** Lines of the file as it is go in as an @ reference, like a file tab's; old lines go in quoted. */
+function addSelectedToMessage(): void {
+  const current = selected.value;
+  if (!current) return;
+  if (current.side === "new") appendDraftReference(props.sessionId, `@${lineReference(current.path, current.range)}`);
+  else {
+    const quote = selectedQuote();
+    if (!quote) return;
+    appendDraftText(props.sessionId, quote);
+  }
+  clearSelected();
+  runSessionCommand("focus-prompt", props.sessionId);
+}
+
 // ─── Scroll to a file asked for from the changed-files card ─────────────────
 
 const focusRequest = computed(() => canvases.sessionCanvases(props.sessionId).reviewFocus);
@@ -573,6 +717,7 @@ function nameOf(path: string): string {
     <div
       ref="body"
       class="review__body"
+      @pointerdown="onBodyPointerDown"
     >
       <p
         v-if="notice"
@@ -720,8 +865,9 @@ function nameOf(path: string): string {
             :is="rendererFor(file.file)"
             v-else-if="rendered.has(file.file) && views[file.file]?.entry?.status === 'ready' && rendererFor(file.file)"
             :content="(views[file.file]?.entry as { item: FileDiffItem }).item.after"
-            :annotatable="false"
+            :annotatable="!/\.html?$/i.test(file.file)"
             class="rfile__rendered"
+            @annotate="(anchor: AnnotationAnchor, position: { x: number; y: number }) => onAnnotate(file.file, anchor, position)"
           />
           <p
             v-else-if="(views[file.file]?.items.length ?? 0) === 0"
@@ -758,6 +904,8 @@ function nameOf(path: string): string {
                       v-for="line in item.lines"
                       :key="line.index"
                       class="rline rline--context"
+                      :data-old="line.oldLineNumber"
+                      :data-new="line.newLineNumber"
                     >
                       <span class="rline__no">{{ line.oldLineNumber }}</span>
                       <span class="rline__no rline__no--new">{{ line.newLineNumber }}</span>
@@ -778,7 +926,11 @@ function nameOf(path: string): string {
                     :key="row.left!.index"
                     class="rsplit__row"
                   >
-                    <div class="rline rline--context">
+                    <div
+                      class="rline rline--context"
+                      data-side="old"
+                      :data-old="row.left!.oldLineNumber"
+                    >
                       <span class="rline__no">{{ row.left!.oldLineNumber }}</span>
                       <span class="rline__mk" />
                       <span
@@ -786,7 +938,11 @@ function nameOf(path: string): string {
                         :data-find-line="row.left!.index"
                       >{{ row.left!.content }}</span>
                     </div>
-                    <div class="rline rline--context">
+                    <div
+                      class="rline rline--context"
+                      data-side="new"
+                      :data-new="row.right!.newLineNumber"
+                    >
                       <span class="rline__no">{{ row.right!.newLineNumber }}</span>
                       <span class="rline__mk" />
                       <span
@@ -833,6 +989,8 @@ function nameOf(path: string): string {
                       :class="`rline--${line.type}`"
                       data-testid="review-line"
                       :data-diff-type="line.type"
+                      :data-old="line.oldLineNumber"
+                      :data-new="line.newLineNumber"
                     >
                       <span class="rline__no">{{ line.oldLineNumber }}</span>
                       <span class="rline__no rline__no--new">{{ line.newLineNumber }}</span>
@@ -863,6 +1021,8 @@ function nameOf(path: string): string {
                     <div
                       class="rline"
                       :class="row.left ? `rline--${row.left.type}` : 'rline--pad'"
+                      data-side="old"
+                      :data-old="row.left?.oldLineNumber"
                     >
                       <span class="rline__no">{{ row.left?.oldLineNumber }}</span>
                       <span class="rline__mk">{{ row.left?.type === "remove" ? "−" : "" }}</span>
@@ -880,6 +1040,8 @@ function nameOf(path: string): string {
                     <div
                       class="rline"
                       :class="row.right ? `rline--${row.right.type}` : 'rline--pad'"
+                      data-side="new"
+                      :data-new="row.right?.newLineNumber"
                     >
                       <span class="rline__no">{{ row.right?.newLineNumber }}</span>
                       <span class="rline__mk">{{ row.right?.type === "add" ? "+" : "" }}</span>
@@ -910,6 +1072,26 @@ function nameOf(path: string): string {
           </template>
         </div>
       </section>
+    </div>
+
+    <LinesBar
+      v-if="selected"
+      :file="nameOf(selected.path)"
+      :label="selectedLabel"
+      :count="selectedCount"
+      :link="selectedLink"
+      @copy-link="copySelectedLink"
+      @quote="copySelectedQuote"
+      @add="addSelectedToMessage"
+      @clear="clearSelected"
+    />
+    <div
+      class="review__toast"
+      :class="{ 'is-shown': toastMessage, 'is-lifted': selected }"
+      role="status"
+      aria-live="polite"
+    >
+      {{ toastMessage }}
     </div>
 
     <AlertDialog
@@ -944,6 +1126,7 @@ function nameOf(path: string): string {
   --del-bg: color-mix(in srgb, var(--diff-del) 9%, transparent);
   --add-word: color-mix(in srgb, var(--diff-add) 26%, transparent);
   --del-word: color-mix(in srgb, var(--diff-del) 24%, transparent);
+  position: relative;
   flex: 1;
   min-height: 0;
   min-width: 0;
@@ -1357,6 +1540,44 @@ function nameOf(path: string): string {
   flex: 1;
   min-width: 0;
   padding-right: 16px;
+}
+/* A drag in Split selects down its own column, not across both. */
+.review[data-pick="old"] .rline[data-side="new"] .rline__tx,
+.review[data-pick="new"] .rline[data-side="old"] .rline__tx {
+  user-select: none;
+}
+
+.review__toast {
+  position: absolute;
+  bottom: 18px;
+  left: 50%;
+  z-index: 20;
+  max-width: calc(100% - 32px);
+  padding: 7px 12px;
+  border-radius: 9px;
+  background: var(--text);
+  color: var(--panel-bg);
+  font-size: 12.5px;
+  font-weight: 500;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  opacity: 0;
+  pointer-events: none;
+  transform: translate(-50%, 8px);
+  transition: opacity 160ms ease-out, transform 160ms ease-out;
+}
+.review__toast.is-lifted {
+  bottom: 58px;
+}
+.review__toast.is-shown {
+  opacity: 1;
+  transform: translate(-50%, 0);
+}
+@media (prefers-reduced-motion: reduce) {
+  .review__toast {
+    transition: none;
+  }
 }
 
 .rline--add {
