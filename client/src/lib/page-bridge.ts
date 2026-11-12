@@ -22,7 +22,9 @@ export interface PageStateMessage {
 }
 
 export const MAX_REPLY_LENGTH = 64 * 1024;
-export const MAX_CHOICE_LENGTH = 1000;
+/** Room for a page of many questions sending every answer at once, e.g. as JSON. The server takes as much. */
+export const MAX_CHOICE_LENGTH = 16_000;
+/** The longest summary the bar shows and the agent gets; a longer one is shortened, not refused. */
 export const MAX_CHOICE_SUMMARY_LENGTH = 200;
 export const MAX_STATE_LENGTH = 256 * 1024;
 const MAX_KEPT_PAGES = 50;
@@ -45,12 +47,16 @@ export function readPageMessage(data: unknown): PageMessage | null {
       if (typeof message.value !== "string" || !message.value.trim() || message.value.length > MAX_CHOICE_LENGTH) return null;
       const summary = message.summary;
       if (summary !== undefined && summary !== null && typeof summary !== "string") return null;
-      if (typeof summary === "string" && summary.length > MAX_CHOICE_SUMMARY_LENGTH) return null;
-      return { type: "fleet:page-choice", value: message.value, summary: summary?.trim() || message.value.slice(0, MAX_CHOICE_SUMMARY_LENGTH) };
+      return { type: "fleet:page-choice", value: message.value, summary: shortenSummary(summary?.trim() || message.value.trim()) };
     }
     default:
       return null;
   }
+}
+
+/** A page with many questions sums up every answer: past the limit, the summary ends in an ellipsis. */
+function shortenSummary(summary: string): string {
+  return summary.length <= MAX_CHOICE_SUMMARY_LENGTH ? summary : `${summary.slice(0, MAX_CHOICE_SUMMARY_LENGTH - 1)}…`;
 }
 
 function isSmallJson(value: unknown): boolean {
