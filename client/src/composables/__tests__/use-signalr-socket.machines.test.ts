@@ -158,6 +158,27 @@ describe("one hub connection per machine", () => {
     expect(atHome.events).toEqual([])
   })
 
+  it("counts a session subscribed on another machine on that machine's connection, for a problem report", async () => {
+    const { describeSocketForReport, useWeaveSocket } = await import("@/composables/use-signalr-socket")
+
+    await mountComposable(() => useWeaveSocket(liveTarget()))
+    const { result: other } = await mountComposable(() => useWeaveSocket(targetFor(falcon)))
+    await flushAll()
+    other.subscribeV2("session:s1", () => {}, () => {})
+    await flushAll()
+
+    expect(describeSocketForReport(liveTarget(), "session:s1")).toMatchObject({
+      topics: 0,
+      withSnapshot: 0,
+      topic: { subscribed: false, snapshot: false },
+    })
+    expect(describeSocketForReport(targetFor(falcon), "session:s1")).toMatchObject({
+      topics: 1,
+      withSnapshot: 1,
+      topic: { subscribed: true, snapshot: true },
+    })
+  })
+
   it("hears a machine's sessions topic only from that machine", async () => {
     const { onGlobalEvent, useWeaveSocket } = await import("@/composables/use-signalr-socket")
     const atHome: string[] = []

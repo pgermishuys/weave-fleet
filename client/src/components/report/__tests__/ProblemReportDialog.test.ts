@@ -3,13 +3,31 @@ import { defineComponent, h, ref } from "vue";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import ProblemReportDialog from "@/components/report/ProblemReportDialog.vue";
 import type { PrepareReportRequest, PreparedReport } from "@/lib/problem-report";
+import { useMachinesStore } from "@/stores/machines";
 import { useProblemReportStore } from "@/stores/problem-report";
 import { useSessionsStore } from "@/stores/sessions";
-import type { SessionListItem } from "@/api/client";
+import { api, type SessionListItem } from "@/api/client";
+import type { MachineTarget } from "@/lib/machine-target";
 
-const { apiFetch, requests } = vi.hoisted(() => ({
+const { apiFetch, requests, sockets } = vi.hoisted(() => ({
   apiFetch: vi.fn(),
   requests: [] as { path: string; body: unknown }[],
+  // What each machine's connection holds, by machine key; a key not listed has no connection yet.
+  sockets: new Map<string, { state: string; topics: string[]; withSnapshot: string[] }>(),
+}));
+
+vi.mock("@/composables/use-signalr-socket", async (importOriginal) => ({
+  ...(await importOriginal<typeof import("@/composables/use-signalr-socket")>()),
+  describeSocketForReport: (machine: { key: string }, topic?: string) => {
+    const socket = sockets.get(machine.key) ?? { state: "not started", topics: [], withSnapshot: [] };
+    return {
+      state: socket.state,
+      topics: socket.topics.length,
+      withSnapshot: socket.withSnapshot.length,
+      retrying: 0,
+      topic: topic === undefined ? null : { subscribed: socket.topics.includes(topic), snapshot: socket.withSnapshot.includes(topic) },
+    };
+  },
 }));
 
 vi.mock("@/lib/api-client", () => ({ apiFetch }));
@@ -84,6 +102,7 @@ async function opened(options: { description?: string } = {}) {
 describe("ProblemReportDialog", () => {
   beforeEach(() => {
     requests.length = 0;
+    sockets.clear();
     apiFetch.mockReset();
     apiFetch.mockImplementation(async (path: string, init?: RequestInit) => {
       const body = init?.body ? JSON.parse(init.body as string) : null;
@@ -127,6 +146,47 @@ describe("ProblemReportDialog", () => {
     expect(prepare.client.screen).toBe("Sessions");
     expect(prepare.client.connection[0].name).toBe("Live updates");
     expect(prepare.client.privateValues).toContainEqual({ kind: "url", value: window.location.origin });
+    wrapper.unmount();
+  });
+
+  it("reports the connection of the machine the open session is on, not only the live machine's", async () => {
+    const far: MachineTarget = { key: "m-far", connection: { id: "m-far", url: "https://far.example:6262", token: null } as never, isLive: false, api };
+    sockets.set("home", { state: "Connected", topics: [], withSnapshot: [] });
+    sockets.set("m-far", { state: "Connected", topics: ["sessions", "session:s1"], withSnapshot: ["sessions", "session:s1"] });
+    const machines = useMachinesStore();
+    const sessionTarget = machines.sessionTarget;
+    machines.sessionTarget = (id) => (id === "s1" ? far : sessionTarget(id));
+
+    const wrapper = await opened();
+    await wrapper.get('[data-testid="problem-report-description"]').setValue("Stopped updating.");
+    await wrapper.get('[data-testid="problem-report-review"]').trigger("click");
+    await flushPromises();
+
+    const prepare = requests.find((r) => r.path === "/api/reports/prepare")!.body as PrepareReportRequest;
+    expect(prepare.client.connection).toEqual([
+      { name: "Live updates", value: "Connected" },
+      { name: "Subscribed", value: "0 topics, 0 with a snapshot" },
+      { name: "Session's machine", value: "Connected · 2 topics, 2 with a snapshot" },
+      { name: "Open session", value: "subscribed, with a snapshot" },
+    ]);
+    machines.sessionTarget = sessionTarget;
+    wrapper.unmount();
+  });
+
+  it("says whether the open session is subscribed when it's on the live machine", async () => {
+    sockets.set("home", { state: "Connected", topics: ["sessions", "session:s1"], withSnapshot: ["sessions"] });
+
+    const wrapper = await opened();
+    await wrapper.get('[data-testid="problem-report-description"]').setValue("Stopped updating.");
+    await wrapper.get('[data-testid="problem-report-review"]').trigger("click");
+    await flushPromises();
+
+    const prepare = requests.find((r) => r.path === "/api/reports/prepare")!.body as PrepareReportRequest;
+    expect(prepare.client.connection).toEqual([
+      { name: "Live updates", value: "Connected" },
+      { name: "Subscribed", value: "2 topics, 1 with a snapshot" },
+      { name: "Open session", value: "subscribed, no snapshot yet" },
+    ]);
     wrapper.unmount();
   });
 

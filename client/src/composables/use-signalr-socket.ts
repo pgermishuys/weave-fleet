@@ -645,17 +645,25 @@ export function _isConnected(machine: MachineTarget): boolean {
 }
 
 /**
- * The machine's connection as it is right now, for a problem report. Reads state the socket already keeps; nothing
- * is recorded for reports ahead of time.
+ * The machine's connection as it is right now, for a problem report, and whether it holds `topic` (the open
+ * session's) when one is given. Reads state the socket already keeps; nothing is recorded for reports ahead of time.
+ * Each machine has its own connection, so a session on another machine is counted on that machine's.
  */
-export function describeSocketForReport(machine: MachineTarget): { state: string; topics: number; withSnapshot: number; retrying: number } {
+export function describeSocketForReport(machine: MachineTarget, topic?: string): {
+  state: string
+  topics: number
+  withSnapshot: number
+  retrying: number
+  topic: { subscribed: boolean; snapshot: boolean } | null
+} {
   const hub = hubFor(machine)
-  const topics = Array.from(hub.topicListenersV2.entries()).filter(([, listeners]) => listeners.size > 0).map(([topic]) => topic)
+  const topics = Array.from(hub.topicListenersV2.entries()).filter(([, listeners]) => listeners.size > 0).map(([name]) => name)
   return {
     state: hub.connection?.state ?? "not started",
     topics: topics.length,
-    withSnapshot: topics.filter((topic) => hub.lastSnapshotsV2.has(topic)).length,
+    withSnapshot: topics.filter((name) => hub.lastSnapshotsV2.has(name)).length,
     retrying: hub.reconnectAttempt,
+    topic: topic === undefined ? null : { subscribed: topics.includes(topic), snapshot: hub.lastSnapshotsV2.has(topic) },
   }
 }
 

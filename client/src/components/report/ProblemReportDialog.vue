@@ -25,6 +25,7 @@ import {
   type SendReportRequest,
 } from "@/lib/problem-report";
 import { useProblemReportStore } from "@/stores/problem-report";
+import { useMachinesStore } from "@/stores/machines";
 import { useSessionsStore } from "@/stores/sessions";
 
 type Stage = "describe" | "review" | "sent";
@@ -42,6 +43,7 @@ const ITEMS: readonly { id: Item; name: string; detail: string }[] = [
 const store = useProblemReportStore();
 const { open, opening, screenshot, capturing } = storeToRefs(store);
 const sessionsStore = useSessionsStore();
+const machinesStore = useMachinesStore();
 const pathname = useLocation({ select: (location) => location.pathname });
 
 const stage = shallowRef<Stage>("describe");
@@ -97,14 +99,34 @@ function close(): void {
   store.hide();
 }
 
+// Each machine has its own connection: the live machine's, then the open session's machine's when it's another one,
+// where that session's topic is subscribed.
 function connectionFacts(): ReportFact[] {
-  const socket = describeSocketForReport(liveTarget());
+  const live = liveTarget();
+  const target = sessionId.value ? machinesStore.sessionTarget(sessionId.value) : live;
+  const topic = sessionId.value ? `session:${sessionId.value}` : undefined;
+  const socket = describeSocketForReport(live, target.key === live.key ? topic : undefined);
   const facts: ReportFact[] = [
-    { name: "Live updates", value: `${socket.state}${socket.retrying > 0 ? ` · reconnect attempt ${socket.retrying}` : ""}` },
-    { name: "Subscribed", value: `${socket.topics} topic${socket.topics === 1 ? "" : "s"}, ${socket.withSnapshot} with a snapshot` },
+    { name: "Live updates", value: socketState(socket) },
+    { name: "Subscribed", value: subscribed(socket) },
   ];
+  let open = socket.topic;
+  if (target.key !== live.key) {
+    const elsewhere = describeSocketForReport(target, topic);
+    facts.push({ name: "Session's machine", value: `${socketState(elsewhere)} · ${subscribed(elsewhere)}` });
+    open = elsewhere.topic;
+  }
+  if (open) facts.push({ name: "Open session", value: open.subscribed ? `subscribed, ${open.snapshot ? "with a snapshot" : "no snapshot yet"}` : "not subscribed" });
   if (!navigator.onLine) facts.push({ name: "Network", value: "the browser says it's offline" });
   return facts;
+}
+
+function socketState(socket: { state: string; retrying: number }): string {
+  return `${socket.state}${socket.retrying > 0 ? ` · reconnect attempt ${socket.retrying}` : ""}`;
+}
+
+function subscribed(socket: { topics: number; withSnapshot: number }): string {
+  return `${socket.topics} topic${socket.topics === 1 ? "" : "s"}, ${socket.withSnapshot} with a snapshot`;
 }
 
 function whereFacts(): ReportFact[] {
