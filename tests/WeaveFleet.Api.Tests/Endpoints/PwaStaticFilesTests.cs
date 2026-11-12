@@ -57,6 +57,19 @@ public sealed class PwaStaticFilesTests : IClassFixture<PwaStaticFilesTests.Serv
         response.Content.Headers.ContentType?.MediaType.ShouldBe("image/png");
     }
 
+    [Fact]
+    public async Task The_favicon_is_served_without_signing_in()
+    {
+        var factory = _server;
+        using var client = factory.CreateClient(new WebApplicationFactoryClientOptions { HandleCookies = false });
+        await File.WriteAllBytesAsync(Path.Combine(factory.WebRootPath, "favicon.ico"), [0x00, 0x00, 0x01, 0x00]);
+
+        var response = await client.GetAsync("/favicon.ico");
+
+        response.StatusCode.ShouldBe(HttpStatusCode.OK);
+        response.Content.Headers.ContentType?.MediaType.ShouldBe("image/x-icon");
+    }
+
     public sealed class Server : IDisposable
     {
         public ApiWebApplicationFactory Factory { get; } = CreateFactory();
