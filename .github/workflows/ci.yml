@@ -27,7 +27,8 @@ jobs:
   # .NET jobs build with -p:RunAnalyzers=false.
   unit:
     name: .NET Unit Tests
-    runs-on: ubuntu-latest
+    # Not ubuntu-latest: that is Ubuntu 26.04 now, which the pinned Playwright can't install a browser on.
+    runs-on: ubuntu-24.04
     timeout-minutes: 20
 
     steps:
@@ -580,7 +581,8 @@ jobs:
   # restore, not from a NuGet cache another job saved.
   e2e:
     name: E2E
-    runs-on: ubuntu-latest
+    # Not ubuntu-latest: that is Ubuntu 26.04 now, which the pinned Playwright can't install a browser on.
+    runs-on: ubuntu-24.04
     timeout-minutes: 20
 
     steps:
