@@ -47,6 +47,11 @@ const NOT_ANSWERED: Record<string, string> = {
   "timed out": "Not answered after 24 hours.",
 };
 
+/** A summary shortened with an ellipsis (page-bridge.ts) ends the sentence already. */
+function fullStop(summary: string): string {
+  return summary.endsWith("…") ? "" : ".";
+}
+
 /** What the bar under the page says, from the canvas's choice, whether it's live and what the page proposed. */
 export function pageChoiceBar(
   choice: PageChoice,
@@ -54,11 +59,12 @@ export function pageChoiceBar(
   proposal: { value: string; summary: string } | null,
 ): PageChoiceBarState {
   if (choice.status === "answered") {
-    return { kind: "answered", text: "Sent: ", strong: choice.summary ?? choice.value ?? "", after: ".", at: choice.at };
+    const strong = choice.summary ?? choice.value ?? "";
+    return { kind: "answered", text: "Sent: ", strong, after: fullStop(strong), at: choice.at };
   }
   if (choice.status === "waiting" && live) {
     return proposal
-      ? { kind: "proposed", text: "You picked ", strong: proposal.summary, after: "." }
+      ? { kind: "proposed", text: "You picked ", strong: proposal.summary, after: fullStop(proposal.summary) }
       : { kind: "waiting", text: "The agent is waiting for your pick." };
   }
   const text = (choice.status === "not-answered" && choice.reason && NOT_ANSWERED[choice.reason]) || "Not answered.";

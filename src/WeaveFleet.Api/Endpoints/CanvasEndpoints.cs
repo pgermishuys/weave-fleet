@@ -95,7 +95,8 @@ public static class CanvasEndpoints
         return app;
     }
 
-    private const int MaxChoiceValue = 1000;
+    // Room for a page of many questions sending every answer at once (client page-bridge.ts MAX_CHOICE_LENGTH).
+    private const int MaxChoiceValue = 16_000;
 
     private static string Shorten(string summary) => summary.Length <= 200 ? summary : summary[..200];
 

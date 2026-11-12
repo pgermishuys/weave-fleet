@@ -24,6 +24,13 @@ describe("pageChoiceBar", () => {
       .toMatchObject({ kind: "answered", strong: "Layout B", at: waiting.at });
   });
 
+  it("adds no full stop after a summary shortened with an ellipsis", () => {
+    const shortened = { value: "{}", summary: "Framework: SvelteKit; Licence: Ap…" };
+    expect(pageChoiceBar(waiting, true, pick)).toMatchObject({ after: "." });
+    expect(pageChoiceBar(waiting, true, shortened)).toMatchObject({ strong: shortened.summary, after: "" });
+    expect(pageChoiceBar({ ...waiting, status: "answered", ...shortened }, false, null)).toMatchObject({ after: "" });
+  });
+
   it("says why it wasn't answered", () => {
     const text = (reason?: string, live = false) => pageChoiceBar({ ...waiting, status: "not-answered", reason }, live, null).text;
     expect(text("wrote instead")).toBe("Not answered. You wrote instead.");

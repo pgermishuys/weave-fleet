@@ -6,6 +6,8 @@ import {
   MAX_REPLY_LENGTH,
   MAX_STATE_LENGTH,
   pageStateMessage,
+  MAX_CHOICE_LENGTH,
+  MAX_CHOICE_SUMMARY_LENGTH,
   MAX_PAGE_HEIGHT,
   readPageMessage,
   readPageSize,
@@ -52,11 +54,30 @@ describe("readPageMessage page-choice", () => {
     expect((readPageMessage({ type: "fleet:page-choice", value: long, summary: "" }) as { summary: string }).summary).toHaveLength(200);
   });
 
+  it("reads every answer on a page of many questions, shortening a long summary", () => {
+    // What an agent wrote for ten questions: every answer as JSON, and each "Question: answer" in the summary.
+    const answers = Object.fromEntries(Array.from({ length: 10 }, (_, i) => [`question-${i + 1}`, `The answer to question ${i + 1}`]));
+    const value = JSON.stringify(answers);
+    const summary = Object.entries(answers).map(([question, answer]) => `${question}: ${answer}`).join("; ");
+    expect(value.length).toBeGreaterThan(400);
+    expect(summary.length).toBeGreaterThan(MAX_CHOICE_SUMMARY_LENGTH);
+
+    const message = readPageMessage({ type: "fleet:page-choice", value, summary }) as { value: string; summary: string };
+
+    expect(message.value).toBe(value);
+    expect(message.summary).toHaveLength(MAX_CHOICE_SUMMARY_LENGTH);
+    expect(message.summary).toBe(`${summary.slice(0, MAX_CHOICE_SUMMARY_LENGTH - 1)}…`);
+  });
+
+  it("takes a pick of several thousand characters", () => {
+    const value = "x".repeat(5000);
+    expect((readPageMessage({ type: "fleet:page-choice", value }) as { value: string }).value).toBe(value);
+  });
+
   it("rejects an empty, oversized or mistyped pick", () => {
     expect(readPageMessage({ type: "fleet:page-choice", value: "  " })).toBeNull();
-    expect(readPageMessage({ type: "fleet:page-choice", value: "x".repeat(1001) })).toBeNull();
+    expect(readPageMessage({ type: "fleet:page-choice", value: "x".repeat(MAX_CHOICE_LENGTH + 1) })).toBeNull();
     expect(readPageMessage({ type: "fleet:page-choice", value: 3 })).toBeNull();
-    expect(readPageMessage({ type: "fleet:page-choice", value: "a", summary: "y".repeat(201) })).toBeNull();
     expect(readPageMessage({ type: "fleet:page-choice", value: "a", summary: 4 })).toBeNull();
   });
 });

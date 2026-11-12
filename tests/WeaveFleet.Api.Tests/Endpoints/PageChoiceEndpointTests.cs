@@ -46,6 +46,20 @@ public sealed class PageChoiceEndpointTests : IClassFixture<PageChoiceEndpointTe
     }
 
     [Fact]
+    public async Task A_page_of_many_questions_sends_every_answer()
+    {
+        Choices.Start(Session, "call-3", "Project setup");
+        var value = "{" + string.Join(",", Enumerable.Range(1, 10).Select(i => $"\"Which option for question {i}?\":\"{new string('a', 150)}\"")) + "}";
+        var summary = string.Join("; ", Enumerable.Range(1, 10).Select(i => $"Question {i}: answer {i}"));
+
+        var sent = await _client.PostAsJsonAsync($"/api/sessions/{Session}/page-choices/call-3/send", new { value, summary });
+
+        value.Length.ShouldBeGreaterThan(1000);
+        sent.StatusCode.ShouldBe(HttpStatusCode.NoContent);
+        (await Choices.NextAsync(Session, "call-3", TimeSpan.Zero, CancellationToken.None)).ShouldBe(PageChoiceAnswer.Picked(value, summary[..200]));
+    }
+
+    [Fact]
     public async Task An_agent_cannot_answer_its_own_page()
     {
         Choices.Start(Session, "call-2", "Layouts");
