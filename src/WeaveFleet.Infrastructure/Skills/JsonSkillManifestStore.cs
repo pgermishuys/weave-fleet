@@ -20,9 +20,11 @@ public sealed class JsonSkillManifestStore : ISkillManifestStore
     private static readonly SemaphoreSlim FileLock = new(1, 1);
 
     private readonly string _skillsDir;
+    private readonly Microsoft.Extensions.Logging.ILogger? _logger;
 
-    public JsonSkillManifestStore(string? baseDirectory = null)
+    public JsonSkillManifestStore(string? baseDirectory = null, Microsoft.Extensions.Logging.ILogger<JsonSkillManifestStore>? logger = null)
     {
+        _logger = logger;
         var baseDir = baseDirectory ?? Environment.GetFolderPath(Environment.SpecialFolder.UserProfile);
         _skillsDir = Path.Combine(baseDir, ".weave", "skills");
     }
@@ -50,9 +52,7 @@ public sealed class JsonSkillManifestStore : ISkillManifestStore
         await FileLock.WaitAsync(ct).ConfigureAwait(false);
         try
         {
-            var json = await File.ReadAllTextAsync(storePath, ct).ConfigureAwait(false);
-            var manifest = JsonSerializer.Deserialize(json, InfrastructureJsonContext.Default.SkillManifest);
-            return manifest ?? throw new InvalidOperationException($"Failed to deserialize manifest at {storePath}");
+            return ReadOrSetAside(storePath, userId, workspaceId);
         }
         finally
         {
@@ -206,9 +206,7 @@ public sealed class JsonSkillManifestStore : ISkillManifestStore
             };
         }
 
-        var json = await File.ReadAllTextAsync(storePath, ct).ConfigureAwait(false);
-        var manifest = JsonSerializer.Deserialize(json, InfrastructureJsonContext.Default.SkillManifest);
-        return manifest ?? throw new InvalidOperationException($"Failed to deserialize manifest at {storePath}");
+        return ReadOrSetAside(storePath, userId, workspaceId);
     }
 
     /// <summary>
@@ -260,6 +258,17 @@ public sealed class JsonSkillManifestStore : ISkillManifestStore
             throw new ArgumentException($"workspaceId contains invalid characters: '{workspaceId}'", nameof(workspaceId));
         }
     }
+
+    private SkillManifest ReadOrSetAside(string storePath, string userId, string? workspaceId) =>
+        CorruptJsonFile.Read(storePath, InfrastructureJsonContext.Default.SkillManifest, () => new SkillManifest
+        {
+            Id = GenerateManifestId(userId, workspaceId),
+            UserId = userId,
+            WorkspaceId = workspaceId,
+            Skills = [],
+            CreatedAt = DateTimeOffset.UtcNow,
+            UpdatedAt = DateTimeOffset.UtcNow
+        }, _logger);
 
     private static string GetStorePath(string skillsDir, string userId, string? workspaceId)
     {

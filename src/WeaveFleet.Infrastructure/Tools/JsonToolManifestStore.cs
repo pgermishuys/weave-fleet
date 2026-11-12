@@ -21,9 +21,11 @@ public sealed class JsonToolManifestStore : IToolManifestStore
     private static readonly SemaphoreSlim FileLock = new(1, 1);
 
     private readonly string _toolsDir;
+    private readonly Microsoft.Extensions.Logging.ILogger? _logger;
 
-    public JsonToolManifestStore(string? baseDirectory = null)
+    public JsonToolManifestStore(string? baseDirectory = null, Microsoft.Extensions.Logging.ILogger<JsonToolManifestStore>? logger = null)
     {
+        _logger = logger;
         var baseDir = baseDirectory ?? Environment.GetFolderPath(Environment.SpecialFolder.UserProfile);
         _toolsDir = Path.Combine(baseDir, ".config", "weave-fleet");
     }
@@ -51,9 +53,7 @@ public sealed class JsonToolManifestStore : IToolManifestStore
         await FileLock.WaitAsync(ct).ConfigureAwait(false);
         try
         {
-            var json = await File.ReadAllTextAsync(storePath, ct).ConfigureAwait(false);
-            var manifest = JsonSerializer.Deserialize(json, InfrastructureJsonContext.Default.ToolManifest);
-            return manifest ?? throw new InvalidOperationException($"Failed to deserialize manifest at {storePath}");
+            return ReadOrSetAside(storePath, userId, workspaceId);
         }
         finally
         {
@@ -207,9 +207,7 @@ public sealed class JsonToolManifestStore : IToolManifestStore
             };
         }
 
-        var json = await File.ReadAllTextAsync(storePath, ct).ConfigureAwait(false);
-        var manifest = JsonSerializer.Deserialize(json, InfrastructureJsonContext.Default.ToolManifest);
-        return manifest ?? throw new InvalidOperationException($"Failed to deserialize manifest at {storePath}");
+        return ReadOrSetAside(storePath, userId, workspaceId);
     }
 
     /// <summary>
@@ -261,6 +259,17 @@ public sealed class JsonToolManifestStore : IToolManifestStore
             throw new ArgumentException($"workspaceId contains invalid characters: '{workspaceId}'", nameof(workspaceId));
         }
     }
+
+    private ToolManifest ReadOrSetAside(string storePath, string userId, string? workspaceId) =>
+        CorruptJsonFile.Read(storePath, InfrastructureJsonContext.Default.ToolManifest, () => new ToolManifest
+        {
+            Id = GenerateManifestId(userId, workspaceId),
+            UserId = userId,
+            WorkspaceId = workspaceId,
+            Tools = [],
+            CreatedAt = DateTimeOffset.UtcNow,
+            UpdatedAt = DateTimeOffset.UtcNow
+        }, _logger);
 
     private static string GetStorePath(string toolsDir, string userId, string? workspaceId)
     {
