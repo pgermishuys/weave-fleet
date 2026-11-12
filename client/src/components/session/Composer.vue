@@ -1172,6 +1172,7 @@ function handleKeydown(event: KeyboardEvent): void {
           class="composer-frame__textarea"
           dir="auto"
           data-testid="prompt-input"
+          :data-escape-interrupts="hasValidSessionId ? '' : undefined"
           aria-label="Message"
           :aria-controls="hasValidSessionId && autocomplete.activeOptionId.value ? AUTOCOMPLETE_LISTBOX_ID : undefined"
           :aria-activedescendant="hasValidSessionId ? autocomplete.activeOptionId.value : undefined"

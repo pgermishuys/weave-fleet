@@ -4,6 +4,7 @@ import { ArrowLeft, Info } from "lucide-vue-next";
 import DiffView from "@/components/session/DiffView.vue";
 import FilesChangedFileList from "@/components/session/FilesChangedFileList.vue";
 import type { FilesChangedFileListItem } from "@/components/session/FilesChangedFileList.vue";
+import { isEditableKeyboardTarget } from "@/composables/use-keyboard-shortcut";
 import { useSessionDiffsContext } from "@/composables/use-session-diffs-context";
 import { parseDiffLines } from "@/lib/diff-parser";
 
@@ -165,7 +166,7 @@ function retryLoadingFiles(): void {
 }
 
 function handleViewKeydown(event: KeyboardEvent): void {
-  if (event.defaultPrevented || isEditableTarget(event.target)) {
+  if (event.defaultPrevented || isEditableKeyboardTarget(event.target)) {
     return;
   }
 
@@ -312,15 +313,6 @@ function getActiveElement(): HTMLElement | null {
   }
 
   return document.activeElement;
-}
-
-function isEditableTarget(target: EventTarget | null): boolean {
-  if (!(target instanceof HTMLElement)) {
-    return false;
-  }
-
-  const tagName = target.tagName.toLowerCase();
-  return target.isContentEditable || tagName === "input" || tagName === "textarea" || tagName === "select";
 }
 </script>
 

@@ -37,7 +37,7 @@ import { clearDraftText } from "@/composables/use-draft-state";
 import type { Command } from "@/lib/command-registry";
 import { commandPoint } from "@/lib/command-registry";
 import { runSessionCommand } from "@/lib/session-commands";
-import { matchesKeyboardShortcut, useKeyboardShortcut } from "@/composables/use-keyboard-shortcut";
+import { isEditableKeyboardTarget, matchesKeyboardShortcut, useKeyboardShortcut } from "@/composables/use-keyboard-shortcut";
 import { useAbortSession, useForkSession, useNewSessionInFolder } from "@/composables/use-session-actions";
 import { useSettingsNav } from "@/composables/use-settings-nav";
 import { useMachinesStore } from "@/stores/machines";
@@ -58,11 +58,9 @@ import { useWorkspaceUiStore } from "@/stores/workspace-ui";
 import { useProblemReportStore } from "@/stores/problem-report";
 import { useStartWithoutMods } from "@/composables/use-start-without-mods";
 
-function isEditableTarget(target: EventTarget | null): boolean {
-  return target instanceof HTMLInputElement
-    || target instanceof HTMLTextAreaElement
-    || target instanceof HTMLSelectElement
-    || (target instanceof HTMLElement && target.isContentEditable);
+/** The field that sends the open session its prompts: Escape there interrupts the session, as in a terminal. */
+function isInterruptingField(target: EventTarget | null): boolean {
+  return target instanceof Element && target.closest("[data-escape-interrupts]") !== null;
 }
 
 function isModalContentTarget(target: EventTarget | null): boolean {
@@ -822,7 +820,11 @@ export function useCommands() {
       return;
     }
 
-    if (event.key === "Escape") {
+    const inEditable = isEditableKeyboardTarget(event.target);
+
+    // Escape in a field cancels or clears that field (a rename, a search, a setting), so the only field it
+    // interrupts the session from is the composer. In any other field it's a key typed there, handled below.
+    if (event.key === "Escape" && (!inEditable || isInterruptingField(event.target))) {
       if (isModalContentTarget(event.target)) {
         return;
       }
@@ -837,8 +839,6 @@ export function useCommands() {
         return;
       }
     }
-
-    const inEditable = isEditableTarget(event.target);
 
     for (const command of commandStore.commands) {
       if (!command.globalShortcut || command.disabled) {
