@@ -311,4 +311,192 @@ describe("ChangesReview", () => {
       expect(sectionOf(wrapper, "data.json").findAll(".rline").length).toBeGreaterThan(1500);
     }, 30000);
   });
+
+  describe("find in changes", () => {
+    const highlights = new Map<string, Range[]>();
+    beforeEach(() => {
+      highlights.clear();
+      (globalThis as { CSS?: unknown }).CSS = {
+        escape: (value: string) => value,
+        highlights: {
+          set: (name: string, value: { ranges: Range[] }) => highlights.set(name, value.ranges),
+          delete: (name: string) => highlights.delete(name),
+        },
+      };
+      (globalThis as { Highlight?: unknown }).Highlight = class {
+        ranges: Range[];
+        constructor(...ranges: Range[]) {
+          this.ranges = ranges;
+        }
+      };
+      Range.prototype.getBoundingClientRect ??= () => new DOMRect(0, 0, 0, 0);
+      for (const key of Object.keys(extraItems)) delete extraItems[key];
+    });
+
+    function show(...items: FileDiffItem[]) {
+      for (const item of items) extraItems[item.file] = item;
+      sharedDiffs.diffs.value = items.map(({ file, status, additions, deletions }) => ({ file, status, additions, deletions }) as FileDiffItem);
+    }
+    function sectionOf(wrapper: ReturnType<typeof mountReview>, path: string) {
+      return wrapper.findAll("[data-testid='review-file']").find((section) => section.attributes("data-review-file") === path)!;
+    }
+    async function openFind(wrapper: ReturnType<typeof mountReview>, query: string) {
+      const root = wrapper.get("[data-testid='changes-review']");
+      await root.trigger("keydown", { key: "f", ctrlKey: true });
+      await flushPromises();
+      await wrapper.get("[data-testid='changes-find-input']").setValue(query);
+      await settle();
+    }
+    async function settle() {
+      await flushPromises();
+      await new Promise((resolve) => requestAnimationFrame(() => resolve(null)));
+      await flushPromises();
+    }
+    const count = (wrapper: ReturnType<typeof mountReview>) => wrapper.get("[data-testid='changes-find-count']").text();
+    const currentText = () => highlights.get("changes-find-current")?.map((range) => range.toString()) ?? [];
+
+    it("opens on Ctrl+F inside Changes, keeps the browser's find out, and closes on Esc without reaching the app", async () => {
+      const wrapper = mount(ChangesReview, {
+        props: { sessionId: "s1" },
+        global: { plugins: [pinia], provide: { sharedDiffs }, stubs: dialogStubs },
+        attachTo: document.body,
+      });
+      await flushPromises();
+      const root = wrapper.get("[data-testid='changes-review']").element as HTMLElement;
+
+      const press = new KeyboardEvent("keydown", { key: "f", ctrlKey: true, bubbles: true, cancelable: true });
+      root.dispatchEvent(press);
+      await flushPromises();
+      expect(press.defaultPrevented).toBe(true);
+      expect(document.activeElement).toBe(wrapper.get("[data-testid='changes-find-input']").element);
+
+      const esc = new KeyboardEvent("keydown", { key: "Escape", bubbles: true, cancelable: true });
+      wrapper.get("[data-testid='changes-find-input']").element.dispatchEvent(esc);
+      await flushPromises();
+      // The app's Esc (stop the agent) skips a key that was already handled.
+      expect(esc.defaultPrevented).toBe(true);
+      expect(wrapper.find("[data-testid='changes-find']").exists()).toBe(false);
+      expect(document.activeElement).toBe(root);
+      wrapper.unmount();
+    });
+
+    it("counts matches across files, steps with Enter and Shift+Enter, and wraps", async () => {
+      const wrapper = mountReview();
+      await flushPromises();
+      // notes.ts has six const lines and a changed one ("const f = …" before and after).
+      await openFind(wrapper, "Const");
+      expect(count(wrapper)).toBe("1 of 7");
+      expect(currentText()).toEqual(["const"]);
+
+      const field = wrapper.get("[data-testid='changes-find-input']");
+      await field.trigger("keydown", { key: "Enter" });
+      await settle();
+      expect(count(wrapper)).toBe("2 of 7");
+      await field.trigger("keydown", { key: "Enter", shiftKey: true });
+      await field.trigger("keydown", { key: "Enter", shiftKey: true });
+      await settle();
+      expect(count(wrapper)).toBe("7 of 7");
+      await wrapper.get("[data-testid='changes-find-next']").trigger("click");
+      await settle();
+      expect(count(wrapper)).toBe("1 of 7");
+    });
+
+    it("says No matches, and steps on F3 and Ctrl+G", async () => {
+      const wrapper = mountReview();
+      await flushPromises();
+      await openFind(wrapper, "zzz");
+      expect(count(wrapper)).toBe("No matches");
+
+      await wrapper.get("[data-testid='changes-find-input']").setValue("const");
+      await settle();
+      const root = wrapper.get("[data-testid='changes-review']");
+      await root.trigger("keydown", { key: "F3" });
+      await root.trigger("keydown", { key: "g", ctrlKey: true });
+      await settle();
+      expect(count(wrapper)).toBe("3 of 7");
+    });
+
+    it("finds a match in a folded unchanged run and opens the run when it steps there", async () => {
+      const before = [...Array.from({ length: 30 }, (_, i) => `row ${i}`), ""].join("\n");
+      const after = before.replace("row 1\n", "row 1!\n").replace("row 28\n", "row 28!\n");
+      show({ file: "rows.txt", status: "modified", additions: 2, deletions: 2, before, after } as FileDiffItem);
+      const wrapper = mountReview();
+      await flushPromises();
+      expect(sectionOf(wrapper, "rows.txt").find("[data-testid='review-fold']").exists()).toBe(true);
+
+      await openFind(wrapper, "row 15");
+      expect(count(wrapper)).toBe("1 of 1");
+      expect(sectionOf(wrapper, "rows.txt").find("[data-testid='review-fold']").exists()).toBe(false);
+      expect(currentText()).toEqual(["row 15"]);
+    });
+
+    it("searches a collapsed file, opens it on the match, and says which collapsed files it can't search", async () => {
+      show(
+        { file: "package-lock.json", status: "modified", additions: 1, deletions: 1, before: "needle\n", after: "other\n" } as FileDiffItem,
+        { file: "src/a.ts", status: "modified", additions: 1, deletions: 1, before: "a\n", after: "b\n" } as FileDiffItem,
+        { file: "src/b.ts", status: "modified", additions: 1, deletions: 1, before: "x\n", after: "needle\n" } as FileDiffItem,
+      );
+      const wrapper = mountReview();
+      await flushPromises();
+      await sectionOf(wrapper, "src/b.ts").get(".rfile__head").trigger("click");
+      expect(sectionOf(wrapper, "src/b.ts").classes()).toContain("rfile--collapsed");
+      // Earlier tests' panels are still mounted on the same diffs and fetch for them: count only what opening find asks.
+      fetchMock.mockClear();
+
+      await openFind(wrapper, "needle");
+      expect(count(wrapper)).toBe("1 of 1");
+      expect(sectionOf(wrapper, "src/b.ts").classes()).not.toContain("rfile--collapsed");
+      expect(wrapper.get("[data-testid='changes-find-unsearched']").text()).toBe("1 collapsed file not searched");
+      // The lockfile is still shut and never fetched.
+      expect(sectionOf(wrapper, "package-lock.json").classes()).toContain("rfile--collapsed");
+      expect(fetchMock.mock.calls.some(([, url]) => String(url).includes("package-lock.json"))).toBe(false);
+    });
+
+    it("loads files that start collapsed past the first few when the bar opens", async () => {
+      const items = Array.from({ length: 10 }, (_, i) => ({
+        file: `f${i}.ts`, status: "modified", additions: 1, deletions: 1, before: "a\n", after: i === 9 ? "late needle\n" : "b\n",
+      }) as FileDiffItem);
+      show(...items);
+      const wrapper = mountReview();
+      await flushPromises();
+      expect(sectionOf(wrapper, "f9.ts").classes()).toContain("rfile--collapsed");
+
+      await openFind(wrapper, "needle");
+      await settle();
+      expect(count(wrapper)).toBe("1 of 1");
+      expect(sectionOf(wrapper, "f9.ts").classes()).not.toContain("rfile--collapsed");
+      expect(wrapper.find("[data-testid='changes-find-unsearched']").exists()).toBe(false);
+    });
+
+    it("counts an unchanged line once in split view and marks both of its copies", async () => {
+      const wrapper = mountReview();
+      await flushPromises();
+      await wrapper.get("[data-testid='review-split']").trigger("click");
+      await openFind(wrapper, "  id: string");
+      expect(count(wrapper)).toBe("1 of 1");
+      expect(currentText()).toEqual(["  id: string", "  id: string"]);
+      expect(highlights.get("changes-find-hit")).toHaveLength(2);
+    });
+
+    it("keeps its marks when the layout switches", async () => {
+      const wrapper = mountReview();
+      await flushPromises();
+      await openFind(wrapper, "newName");
+      expect(currentText()).toEqual(["newName"]);
+      await wrapper.get("[data-testid='review-split']").trigger("click");
+      await settle();
+      const [range] = highlights.get("changes-find-current")!;
+      expect(wrapper.find(".rsplit").exists()).toBe(true);
+      expect(wrapper.element.contains(range!.startContainer)).toBe(true);
+    });
+
+    it("shows the diff of a file viewed as Rendered when a match is in it", async () => {
+      const wrapper = mountReview();
+      await flushPromises();
+      await wrapper.get("[data-testid='review-rendered']").trigger("click");
+      await openFind(wrapper, "more");
+      expect(count(wrapper)).toBe("1 of 1");
+      expect(sectionOf(wrapper, "README.md").find(".rline").exists()).toBe(true);
+    });
+  });
 });

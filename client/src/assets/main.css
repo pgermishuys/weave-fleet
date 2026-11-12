@@ -466,3 +466,14 @@
   background-color: var(--status-waiting, #d4a017);
   color: #1a1400;
 }
+
+/* Find in Changes: the same marks under their own names, so the two bars never clear each other's. */
+::highlight(changes-find-hit) {
+  background-color: color-mix(in srgb, var(--status-waiting, #d4a017) 38%, transparent);
+  color: inherit;
+}
+
+::highlight(changes-find-current) {
+  background-color: var(--status-waiting, #d4a017);
+  color: #1a1400;
+}

@@ -39,6 +39,9 @@ import {
   type ReviewLine,
 } from "@/lib/diff-review";
 import { getVisualRenderer } from "@/lib/visual-renderer-registry";
+import { findLines, type ChangesHit, type FindFile } from "@/lib/changes-find";
+import { useChangesFind } from "@/composables/use-changes-find";
+import ChangesFindBar from "@/components/canvas/ChangesFindBar.vue";
 import { hasRenderedView, useCanvasesStore } from "@/stores/canvases";
 
 const props = defineProps<{ sessionId: string }>();
@@ -387,6 +390,58 @@ async function copyPath(path: string): Promise<void> {
   }
 }
 
+// ─── Find in changes ─────────────────────────────────────────────────────────
+
+const findBar = ref<InstanceType<typeof ChangesFindBar> | null>(null);
+const findFiles = computed<FindFile[]>(() => {
+  const out: FindFile[] = [];
+  for (const file of files.value) {
+    const view = views.value[file.file];
+    if (view?.entry?.status === "ready" && !view.placeholder) out.push({ path: file.file, lines: findLines(view.items) });
+  }
+  return out;
+});
+
+/** Draws a match's line: opens its file, its unchanged run, the rest of a long diff, or its diff behind Rendered. */
+function revealHit(hit: ChangesHit): void {
+  if (!isOpen(hit.path)) toggleFile(hit.path);
+  if (rendered.value.has(hit.path)) toggleRendered(hit.path, false);
+  if (hit.inFold && !openFolds.value.has(foldKey(hit.path, hit.itemId))) openFold(hit.path, hit.itemId);
+  const drawn = visibleItems(hit.path).some(
+    (item) => item.id === hit.itemId && (item.kind === "fold" || item.lines.some((line) => line.index === hit.line)),
+  );
+  if (!drawn) showAll(hit.path);
+}
+
+const find = useChangesFind({
+  files: findFiles,
+  root,
+  body,
+  reveal: revealHit,
+  focusField: () => {
+    findBar.value?.field?.focus();
+    findBar.value?.field?.select();
+  },
+  redraws: () => [layout.value, collapsed.value, openFolds.value, drawnAll.value, rendered.value, views.value],
+});
+
+// While the bar is open, collapsed files load too, so the search covers every file. Lockfiles and very large diffs
+// stay shut: drawing their lines is what freezes the panel, and nobody searches them.
+watch(
+  [find.isOpen, files],
+  ([open]) => {
+    if (!open) return;
+    for (const file of files.value) {
+      if (!startsCollapsed(file)) load(file.file, versionOf(file));
+    }
+  },
+  { immediate: true },
+);
+const findSearching = computed(() => files.value.some((file) => entries.value[file.file]?.status === "loading"));
+const findUnsearched = computed(
+  () => files.value.filter((file) => entries.value[file.file]?.status !== "ready" && startsCollapsed(file) && !isOpen(file.file)).length,
+);
+
 // ─── Scroll to a file asked for from the changed-files card ─────────────────
 
 const focusRequest = computed(() => canvases.sessionCanvases(props.sessionId).reviewFocus);
@@ -424,7 +479,9 @@ function nameOf(path: string): string {
     ref="root"
     class="review"
     :class="{ 'review--wrap': wrap }"
+    tabindex="-1"
     data-testid="changes-review"
+    @keydown="find.onKeydown"
   >
     <header class="review__head">
       <h2 class="review__title">
@@ -499,6 +556,19 @@ function nameOf(path: string): string {
         />
       </button>
     </header>
+
+    <ChangesFindBar
+      v-if="find.isOpen.value"
+      ref="findBar"
+      :query="find.query.value"
+      :total="find.hits.value.length"
+      :current="find.current.value"
+      :searching="findSearching"
+      :unsearched="findUnsearched"
+      @update:query="find.query.value = $event"
+      @step="find.step"
+      @close="find.close"
+    />
 
     <div
       ref="body"
@@ -692,7 +762,10 @@ function nameOf(path: string): string {
                       <span class="rline__no">{{ line.oldLineNumber }}</span>
                       <span class="rline__no rline__no--new">{{ line.newLineNumber }}</span>
                       <span class="rline__mk" />
-                      <span class="rline__tx">{{ line.content }}</span>
+                      <span
+                        class="rline__tx"
+                        :data-find-line="line.index"
+                      >{{ line.content }}</span>
                     </div>
                   </div>
                 </div>
@@ -708,12 +781,18 @@ function nameOf(path: string): string {
                     <div class="rline rline--context">
                       <span class="rline__no">{{ row.left!.oldLineNumber }}</span>
                       <span class="rline__mk" />
-                      <span class="rline__tx">{{ row.left!.content }}</span>
+                      <span
+                        class="rline__tx"
+                        :data-find-line="row.left!.index"
+                      >{{ row.left!.content }}</span>
                     </div>
                     <div class="rline rline--context">
                       <span class="rline__no">{{ row.right!.newLineNumber }}</span>
                       <span class="rline__mk" />
-                      <span class="rline__tx">{{ row.right!.content }}</span>
+                      <span
+                        class="rline__tx"
+                        :data-find-line="row.right!.index"
+                      >{{ row.right!.content }}</span>
                     </div>
                   </div>
                 </div>
@@ -758,7 +837,10 @@ function nameOf(path: string): string {
                       <span class="rline__no">{{ line.oldLineNumber }}</span>
                       <span class="rline__no rline__no--new">{{ line.newLineNumber }}</span>
                       <span class="rline__mk">{{ line.type === "add" ? "+" : line.type === "remove" ? "−" : "" }}</span>
-                      <span class="rline__tx"><template
+                      <span
+                        class="rline__tx"
+                        :data-find-line="line.index"
+                      ><template
                         v-for="(part, n) in segments(line)"
                         :key="n"
                       ><mark
@@ -784,7 +866,10 @@ function nameOf(path: string): string {
                     >
                       <span class="rline__no">{{ row.left?.oldLineNumber }}</span>
                       <span class="rline__mk">{{ row.left?.type === "remove" ? "−" : "" }}</span>
-                      <span class="rline__tx"><template v-if="row.left"><template
+                      <span
+                        class="rline__tx"
+                        :data-find-line="row.left?.index"
+                      ><template v-if="row.left"><template
                         v-for="(part, k) in segments(row.left)"
                         :key="k"
                       ><mark
@@ -798,7 +883,10 @@ function nameOf(path: string): string {
                     >
                       <span class="rline__no">{{ row.right?.newLineNumber }}</span>
                       <span class="rline__mk">{{ row.right?.type === "add" ? "+" : "" }}</span>
-                      <span class="rline__tx"><template v-if="row.right"><template
+                      <span
+                        class="rline__tx"
+                        :data-find-line="row.right?.index"
+                      ><template v-if="row.right"><template
                         v-for="(part, k) in segments(row.right)"
                         :key="k"
                       ><mark
@@ -861,6 +949,11 @@ function nameOf(path: string): string {
   min-width: 0;
   display: flex;
   flex-direction: column;
+}
+
+/* Focusable so a click in the diff gives Changes its Ctrl/⌘F; no ring for that. */
+.review:focus {
+  outline: none;
 }
 
 .review__head {
