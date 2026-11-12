@@ -31,7 +31,8 @@ export function isChoiceLive(choice: PageChoice | undefined, activityStatus: str
 }
 
 export interface PageChoiceBarState {
-  kind: "waiting" | "proposed" | "answered" | "not-answered";
+  /** "refused": the page sent a pick Fleet can't take (page-bridge.ts), and `text` says why; Send stays off. */
+  kind: "waiting" | "proposed" | "refused" | "answered" | "not-answered";
   text: string;
   /** Bold part of the sentence, e.g. the picked summary. */
   strong?: string;
@@ -52,20 +53,23 @@ function fullStop(summary: string): string {
   return summary.endsWith("…") ? "" : ".";
 }
 
-/** What the bar under the page says, from the canvas's choice, whether it's live and what the page proposed. */
+/**
+ * What the bar under the page says, from the canvas's choice, whether it's live, what the page proposed and why
+ * Fleet refused what the page last sent, if it did.
+ */
 export function pageChoiceBar(
   choice: PageChoice,
   live: boolean,
   proposal: { value: string; summary: string } | null,
+  refusal?: string | null,
 ): PageChoiceBarState {
   if (choice.status === "answered") {
     const strong = choice.summary ?? choice.value ?? "";
     return { kind: "answered", text: "Sent: ", strong, after: fullStop(strong), at: choice.at };
   }
   if (choice.status === "waiting" && live) {
-    return proposal
-      ? { kind: "proposed", text: "You picked ", strong: proposal.summary, after: fullStop(proposal.summary) }
-      : { kind: "waiting", text: "The agent is waiting for your pick." };
+    if (proposal) return { kind: "proposed", text: "You picked ", strong: proposal.summary, after: fullStop(proposal.summary) };
+    return refusal ? { kind: "refused", text: refusal } : { kind: "waiting", text: "The agent is waiting for your pick." };
   }
   const text = (choice.status === "not-answered" && choice.reason && NOT_ANSWERED[choice.reason]) || "Not answered.";
   return { kind: "not-answered", text, at: choice.at };

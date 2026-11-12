@@ -19,6 +19,15 @@ describe("pageChoiceBar", () => {
     expect(pageChoiceBar(waiting, true, pick)).toMatchObject({ kind: "proposed", text: "You picked ", strong: "Layout A" });
   });
 
+  it("says why the page's pick was refused, and keeps Send off", () => {
+    const reason = "The page's pick was too long to send: 18,345 characters, and the most is 16,000.";
+    expect(pageChoiceBar(waiting, true, null, reason)).toEqual({ kind: "refused", text: reason });
+    // A pick the page sends afterwards wins; so does the end of the wait.
+    expect(pageChoiceBar(waiting, true, pick, reason)).toMatchObject({ kind: "proposed", strong: "Layout A" });
+    expect(pageChoiceBar(waiting, false, null, reason)).toMatchObject({ kind: "not-answered" });
+    expect(pageChoiceBar({ ...waiting, status: "answered", value: "b" }, false, null, reason)).toMatchObject({ kind: "answered" });
+  });
+
   it("shows an answer", () => {
     expect(pageChoiceBar({ ...waiting, status: "answered", summary: "Layout B", value: "b" }, false, null))
       .toMatchObject({ kind: "answered", strong: "Layout B", at: waiting.at });

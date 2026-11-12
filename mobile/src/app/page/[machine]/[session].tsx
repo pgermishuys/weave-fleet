@@ -42,6 +42,8 @@ export default function PageScreen() {
   const [failed, setFailed] = useState(false);
   const [menu, setMenu] = useState(false);
   const [proposal, setProposal] = useState<{ value: string; summary: string } | null>(null);
+  // Why Fleet refused what the page last sent as its pick (too long, empty): the bar says so instead of waiting.
+  const [refusal, setRefusal] = useState<string | null>(null);
   const [sending, setSending] = useState(false);
   const [reply, setReply] = useState<string | null>(null);
   const [replySending, setReplySending] = useState(false);
@@ -52,7 +54,7 @@ export default function PageScreen() {
   const online = machineView?.state === "connected";
   const activity = useSessionActivity(machine, session, state?.sessionStatus);
   const live = isChoiceLive(page?.choice, activity);
-  const bar = page?.choice ? pageChoiceBar(page.choice, live, proposal) : null;
+  const bar = page?.choice ? pageChoiceBar(page.choice, live, proposal, refusal) : null;
 
   // The theme changed while the page is open: the page follows without a reload.
   useEffect(() => {
@@ -68,7 +70,10 @@ export default function PageScreen() {
     wasOnline.current = online;
   }, [online]);
   // Another page, or the same page shown again: forget the old pick.
-  useEffect(() => setProposal(null), [page?.key, page?.choice?.callId]);
+  useEffect(() => {
+    setProposal(null);
+    setRefusal(null);
+  }, [page?.key, page?.choice?.callId]);
 
   function onMessage(event: WebViewMessageEvent) {
     const message = readBridgeMessage(event.nativeEvent.data);
@@ -84,6 +89,12 @@ export default function PageScreen() {
         // Kept even while the session's status hasn't loaded (live is false then): the bar only shows a pick once the
         // choice is live, and a tap on a freshly opened page can land before that.
         setProposal({ value: message.value, summary: message.summary });
+        setRefusal(null);
+        break;
+      case "fleet:page-choice-refused":
+        // The page's latest pick is the one that counts here, so a refused one replaces an earlier pick.
+        setProposal(null);
+        setRefusal(message.reason);
         break;
       case "fleet:page-reply":
         setReply(message.text);

@@ -33,11 +33,13 @@ const sessionsStore = useSessionsStore();
 
 // What the page proposed for a page that waits for a pick; the user sends it from the bar, or presses Change.
 const proposal = ref<{ value: string; summary: string } | null>(null);
+// Why Fleet refused what the page last sent as its pick (too long, empty), so the bar says so instead of waiting.
+const refusal = ref("");
 const sending = ref(false);
 const sendError = ref("");
 const choice = computed(() => props.page.choice);
 const live = computed(() => isChoiceLive(choice.value, sessionsStore.sessionById(props.sessionId)?.activityStatus ?? undefined));
-const bar = computed(() => (choice.value ? pageChoiceBar(choice.value, live.value, proposal.value) : null));
+const bar = computed(() => (choice.value ? pageChoiceBar(choice.value, live.value, proposal.value, refusal.value) : null));
 const answeredAt = computed(() => {
   const at = bar.value?.at ? new Date(bar.value.at) : null;
   return at && !Number.isNaN(at.getTime()) && bar.value?.kind === "answered"
@@ -48,6 +50,7 @@ const answeredAt = computed(() => {
 // A new wait starts clean.
 watch(() => choice.value?.callId, () => {
   proposal.value = null;
+  refusal.value = "";
   sending.value = false;
   sendError.value = "";
 });
@@ -118,7 +121,13 @@ function onMessage(event: MessageEvent): void {
       return;
     case "fleet:page-choice":
       // Only while the agent waits, and only the first: Change clears it, so a page can't swap it under the user.
-      if (live.value && !proposal.value) proposal.value = { value: message.value, summary: message.summary };
+      if (live.value && !proposal.value) {
+        proposal.value = { value: message.value, summary: message.summary };
+        refusal.value = "";
+      }
+      return;
+    case "fleet:page-choice-refused":
+      if (live.value && !proposal.value) refusal.value = message.reason;
       return;
   }
 }
@@ -208,7 +217,16 @@ onBeforeUnmount(() => window.removeEventListener("message", onMessage));
       :class="`page-canvas__choice--${bar.kind}`"
       data-testid="page-choice-bar"
     >
-      <p class="page-canvas__choice-text">
+      <p
+        class="page-canvas__choice-text"
+        :role="bar.kind === 'refused' ? 'alert' : undefined"
+      >
+        <TriangleAlert
+          v-if="bar.kind === 'refused'"
+          :size="13"
+          class="page-canvas__choice-warn"
+          aria-hidden="true"
+        />
         {{ bar.text }}<b v-if="bar.strong !== undefined">{{ bar.strong }}</b>{{ bar.after }}
         <span
           v-if="answeredAt"
@@ -220,7 +238,7 @@ onBeforeUnmount(() => window.removeEventListener("message", onMessage));
           role="alert"
         >{{ sendError }}</span>
       </p>
-      <template v-if="bar.kind === 'waiting' || bar.kind === 'proposed'">
+      <template v-if="bar.kind === 'waiting' || bar.kind === 'proposed' || bar.kind === 'refused'">
         <button
           v-if="bar.kind === 'proposed'"
           type="button"
@@ -244,7 +262,8 @@ onBeforeUnmount(() => window.removeEventListener("message", onMessage));
         <button
           type="button"
           class="page-canvas__choice-btn page-canvas__choice-btn--primary"
-          :disabled="sending || bar.kind === 'waiting'"
+          :disabled="sending || bar.kind !== 'proposed'"
+          :title="bar.kind === 'refused' ? bar.text : undefined"
           data-testid="page-choice-send"
           @click="answerChoice($event, 'send')"
         >
@@ -362,7 +381,8 @@ onBeforeUnmount(() => window.removeEventListener("message", onMessage));
 }
 
 .page-canvas__choice--waiting,
-.page-canvas__choice--proposed {
+.page-canvas__choice--proposed,
+.page-canvas__choice--refused {
   color: var(--text);
   border-top-color: color-mix(in srgb, var(--status-waiting) 40%, var(--border));
   background: color-mix(in srgb, var(--status-waiting) 6%, transparent);
@@ -388,6 +408,13 @@ onBeforeUnmount(() => window.removeEventListener("message", onMessage));
   flex: 1;
   min-width: 0;
   margin: 0;
+}
+
+.page-canvas__choice-warn {
+  display: inline-block;
+  margin-right: 6px;
+  vertical-align: -2px;
+  color: var(--status-waiting);
 }
 
 .page-canvas__choice-text b {

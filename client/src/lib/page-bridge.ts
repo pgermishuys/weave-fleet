@@ -13,7 +13,13 @@ export type PageMessage =
   /** The page has loaded. Fleet answers with `fleet:page-state` holding what it kept, or null. */
   | { type: "fleet:page-hello" }
   /** The page proposes a pick for a page that waits for one. Only Fleet's bar under the page sends it. */
-  | { type: "fleet:page-choice"; value: string; summary: string };
+  | { type: "fleet:page-choice"; value: string; summary: string }
+  /**
+   * Not something a page sends: a `fleet:page-choice` Fleet can't take, with why in plain words, so the bar under the
+   * page can say so instead of waiting on a pick that never comes. `fleet.choose` gets nothing back, so the page and
+   * the agent don't hear it; the user does, and can skip or write instead.
+   */
+  | { type: "fleet:page-choice-refused"; reason: string };
 
 /** Fleet's answer to a hello. */
 export interface PageStateMessage {
@@ -29,7 +35,10 @@ export const MAX_CHOICE_SUMMARY_LENGTH = 200;
 export const MAX_STATE_LENGTH = 256 * 1024;
 const MAX_KEPT_PAGES = 50;
 
-/** The page message in `data`, or null for anything else (an unknown type, a malformed or oversized one). */
+/**
+ * The page message in `data`, or null for anything else (an unknown type, a malformed or oversized one). A pick that
+ * can't be taken is a `fleet:page-choice-refused` rather than null: the user is waiting on it.
+ */
 export function readPageMessage(data: unknown): PageMessage | null {
   if (data === null || typeof data !== "object") return null;
   const message = data as Record<string, unknown>;
@@ -44,14 +53,29 @@ export function readPageMessage(data: unknown): PageMessage | null {
     case "fleet:page-hello":
       return { type: "fleet:page-hello" };
     case "fleet:page-choice": {
-      if (typeof message.value !== "string" || !message.value.trim() || message.value.length > MAX_CHOICE_LENGTH) return null;
-      const summary = message.summary;
-      if (summary !== undefined && summary !== null && typeof summary !== "string") return null;
-      return { type: "fleet:page-choice", value: message.value, summary: shortenSummary(summary?.trim() || message.value.trim()) };
+      const { value, summary } = message;
+      if (value === undefined || value === null || (typeof value === "string" && !value.trim())) {
+        return refused("The page's pick was empty, so there's nothing to send.");
+      }
+      if (typeof value !== "string" || (summary !== undefined && summary !== null && typeof summary !== "string")) {
+        return refused("The page sent a pick Fleet can't read.");
+      }
+      if (value.length > MAX_CHOICE_LENGTH) {
+        return refused(`The page's pick was too long to send: ${count(value.length)} characters, and the most is ${count(MAX_CHOICE_LENGTH)}.`);
+      }
+      return { type: "fleet:page-choice", value, summary: shortenSummary(summary?.trim() || value.trim()) };
     }
     default:
       return null;
   }
+}
+
+function refused(reason: string): PageMessage {
+  return { type: "fleet:page-choice-refused", reason };
+}
+
+function count(n: number): string {
+  return n.toLocaleString("en-US");
 }
 
 /** A page with many questions sums up every answer: past the limit, the summary ends in an ellipsis. */

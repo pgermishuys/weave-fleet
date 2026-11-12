@@ -105,7 +105,7 @@ export function PageChoiceBar({ text, strong, after, canSend, sending, onSend, o
   const { color } = useTheme();
   return (
     <View testID="page-choice-bar" style={{ gap: 10, paddingHorizontal: 12, paddingTop: 10, paddingBottom: 4, borderTopWidth: 1, borderColor: color.waitingEdge, backgroundColor: color.waitingBg }}>
-      <Text size={14} numberOfLines={2}>
+      <Text size={14} numberOfLines={3}>
         {text}{strong ? <Text size={14} weight="semibold">{strong}</Text> : null}{after}
       </Text>
       {onSend || onSkip ? (
