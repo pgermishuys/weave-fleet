@@ -1,5 +1,6 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { createPinia, setActivePinia } from "pinia";
+import { ref } from "vue";
 import type { DomainEvent } from "@/lib/domain-events";
 import { flushAll, mountComposable } from "./test-utils";
 
@@ -13,7 +14,15 @@ vi.mock("@/api/client", () => ({ api: { GET: getPreferencesMock, PUT: vi.fn() } 
 
 vi.mock("@/composables/use-signalr-socket", () => ({ onGlobalEvent: onGlobalEventMock }));
 
-vi.mock("@tanstack/vue-router", () => ({ useRouter: () => ({ navigate: navigateMock }) }));
+const locationRef = ref({ pathname: "/" });
+
+vi.mock("@tanstack/vue-router", () => ({ useRouter: () => ({ navigate: navigateMock }), useLocation: () => locationRef }));
+
+/** What the router does when you go to a path: the address and the reactive location both change. */
+function goTo(pathname: string): void {
+  window.history.replaceState({}, "", pathname);
+  locationRef.value = { pathname };
+}
 
 /** The handler the composable registered for the global sessions topic. */
 let handler: ((event: DomainEvent) => void) | null = null;
@@ -35,7 +44,8 @@ class FakeNotification {
   static permission: NotificationPermission = "granted";
   static requestPermission = vi.fn();
   onclick: (() => void) | null = null;
-  close = vi.fn();
+  static closed = 0;
+  close = () => { FakeNotification.closed++; };
 
   constructor(title: string, options: NotificationOptions = {}) {
     shown.push({ title, options });
@@ -45,8 +55,12 @@ class FakeNotification {
 async function mountNotifications(enabled = true) {
   getPreferencesMock.mockResolvedValue({ data: enabled ? { DesktopNotifications: "true" } : {} });
   const { useSessionNotifications } = await import("@/composables/use-session-notifications");
-  return mountComposable(() => useSessionNotifications());
+  const mounted = await mountComposable(() => useSessionNotifications());
+  wrappers.push(mounted.wrapper);
+  return mounted;
 }
+
+const wrappers: { unmount(): void }[] = [];
 
 describe("useSessionNotifications", () => {
   beforeEach(() => {
@@ -66,10 +80,11 @@ describe("useSessionNotifications", () => {
     vi.stubGlobal("Notification", FakeNotification);
     Object.defineProperty(FakeNotification, "permission", { get: () => permission, configurable: true });
     vi.spyOn(document, "hasFocus").mockImplementation(() => hasFocus);
-    window.history.replaceState({}, "", "/");
+    goTo("/");
   });
 
   afterEach(() => {
+    for (const wrapper of wrappers.splice(0)) wrapper.unmount();
     vi.unstubAllGlobals();
     vi.restoreAllMocks();
   });
@@ -108,7 +123,7 @@ describe("useSessionNotifications", () => {
 
   it("stays quiet about the session this tab is looking at", async () => {
     await mountNotifications();
-    window.history.replaceState({}, "", "/sessions/s1");
+    goTo("/sessions/s1");
 
     handler?.(notificationEvent("s1"));
     await flushAll();
@@ -118,13 +133,54 @@ describe("useSessionNotifications", () => {
 
   it("still speaks up about the open session when the window is in the background", async () => {
     await mountNotifications();
-    window.history.replaceState({}, "", "/sessions/s1");
+    goTo("/sessions/s1");
     hasFocus = false;
 
     handler?.(notificationEvent("s1"));
     await flushAll();
 
     expect(shown).toHaveLength(1);
+  });
+
+  it("takes down its own notification when you open that session", async () => {
+    FakeNotification.closed = 0;
+    await mountNotifications();
+
+    handler?.(notificationEvent("s1"));
+    await flushAll();
+    goTo("/sessions/s2");
+    await flushAll();
+    expect(FakeNotification.closed).toBe(0);
+
+    goTo("/sessions/s1");
+    await flushAll();
+    expect(FakeNotification.closed).toBe(1);
+  });
+
+  it("takes down a pushed notification for the session once it is open and in front", async () => {
+    const { useServiceWorker } = await import("@/composables/use-service-worker");
+    const closeMine = vi.fn();
+    const closeTheirs = vi.fn();
+    const getNotifications = vi.fn().mockResolvedValue([
+      { tag: "machine-1:s1", close: closeMine },
+      { tag: "s1", close: closeMine },
+      { tag: "machine-1:s2", close: closeTheirs },
+    ]);
+    useServiceWorker().registration.value = { getNotifications } as unknown as ServiceWorkerRegistration;
+    await mountNotifications();
+
+    hasFocus = false;
+    goTo("/sessions/s1");
+    await flushAll();
+    expect(closeMine).not.toHaveBeenCalled();
+
+    hasFocus = true;
+    window.dispatchEvent(new Event("focus"));
+    await flushAll();
+
+    expect(closeMine).toHaveBeenCalledTimes(2);
+    expect(closeTheirs).not.toHaveBeenCalled();
+    useServiceWorker().registration.value = null;
   });
 
   it("ignores other events on the sessions topic", async () => {
