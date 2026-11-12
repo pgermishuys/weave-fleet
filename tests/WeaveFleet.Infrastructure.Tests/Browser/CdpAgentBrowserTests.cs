@@ -140,6 +140,43 @@ public sealed class CdpAgentBrowserTests
     }
 
     [Fact]
+    public async Task A_popup_to_a_page_outside_the_sessions_own_never_loads_and_the_agent_is_told_about_it()
+    {
+        if (Chrome() is not { } options)
+            return;
+        using var other = new LocalSite("<title>Other</title>elsewhere");
+        using var site = new LocalSite($$"""
+            <!doctype html><title>Popups</title>
+            <button onclick="window.open('{{other.Url}}', '_blank')">Pop</button>
+            <a href="{{other.Url}}" target="_blank">New tab link</a>
+            <label for="f">Attach</label><input type="file" id="f">
+            """);
+        await using var browser = Browser(options, new Steps(), Limits(site));
+        var opened = await Run(browser, new AgentBrowserAction(AgentBrowserKinds.TabsOpen) { Url = site.Url });
+        var tab = opened.Tab.ShouldNotBeNull(opened.Failure?.Message);
+
+        foreach (var line in new[] { "[button] \"Pop\"", "[link] \"New tab link\"" })
+        {
+            var page = await Run(browser, new AgentBrowserAction(AgentBrowserKinds.Snapshot) { TabId = tab.Id });
+            var clicked = await Run(browser, new AgentBrowserAction(AgentBrowserKinds.Click) { TabId = tab.Id, Ref = Ref(page.Content!, line) }).WaitAsync(TimeSpan.FromSeconds(20));
+            clicked.Ok.ShouldBeTrue(clicked.Failure?.Message);
+            await Task.Delay(700);
+            other.Hits.ShouldBe(0, $"the popup from {line} reached a page the session may not open");
+        }
+
+        // The agent can see a popup: it's a tab, and says Fleet blocked it.
+        var tabs = (await Run(browser, new AgentBrowserAction(AgentBrowserKinds.TabsList))).Tabs.ShouldNotBeNull();
+        var popups = tabs.Where(t => t.Id != tab.Id).ToList();
+        popups.ShouldNotBeEmpty();
+        popups.ShouldAllBe(t => t.LoadError != null && t.LoadError.Contains("Fleet blocked " + other.Url));
+
+        // The click that opens a file chooser doesn't stall the page either.
+        var chooser = await Run(browser, new AgentBrowserAction(AgentBrowserKinds.Snapshot) { TabId = tab.Id });
+        (await Run(browser, new AgentBrowserAction(AgentBrowserKinds.Click) { TabId = tab.Id, Ref = Ref(chooser.Content!, "[button] \"Attach\"") }).WaitAsync(TimeSpan.FromSeconds(20))).Ok.ShouldBeTrue();
+        (await Run(browser, new AgentBrowserAction(AgentBrowserKinds.Snapshot) { TabId = tab.Id }).WaitAsync(TimeSpan.FromSeconds(20))).Ok.ShouldBeTrue();
+    }
+
+    [Fact]
     public async Task Dropdowns_checkboxes_and_keys_work_like_a_person_using_them()
     {
         if (Chrome() is not { } options)
