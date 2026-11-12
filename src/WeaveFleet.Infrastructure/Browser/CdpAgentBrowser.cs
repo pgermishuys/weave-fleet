@@ -254,6 +254,24 @@ public sealed partial class CdpAgentBrowser : IAgentBrowser, IAsyncDisposable
             cdpSession = attached.RootElement.GetProperty("result").GetProperty("sessionId").GetString()!;
         }
 
+        var tab = await SetUpTabAsync(cdp, session, targetId, cdpSession, limits, action.Focus != false, ct);
+
+        if (target is not null)
+        {
+            var navigated = await NavigateAsync(new Page(cdp, tab), target.AbsoluteUri, limits, ct);
+            if (!navigated.Ok)
+                return navigated with { Tab = await InfoAsync(new Page(cdp, tab), ct) };
+        }
+
+        return new AgentBrowserResult { Tab = await InfoAsync(new Page(cdp, tab), ct) };
+    }
+
+    /// <summary>
+    /// Makes a page target the session's tab: subscribes to it, turns on the domains Fleet reads, polices every document it
+    /// loads against <paramref name="limits"/>, and 
+    /// </summary>
+    private static async Task<Tab> SetUpTabAsync(CdpConnection cdp, SessionTabs session, string targetId, string cdpSession, AgentBrowserLimits limits, bool focus, CancellationToken ct)
+    {
         var tab = new Tab("tab_" + Guid.NewGuid().ToString("D"), targetId, cdpSession, session.SessionId) { Limits = limits };
         tab.Subscription = cdp.Subscribe(cdpSession, (method, parameters) => OnPageEvent(cdp, tab, method, parameters));
         foreach (var domain in (string[])["Page.enable", "Runtime.enable", "DOM.enable", "Network.enable", "Log.enable"])
@@ -283,18 +301,66 @@ public sealed partial class CdpAgentBrowser : IAgentBrowser, IAsyncDisposable
         lock (session)
         {
             session.Tabs[tab.Id] = tab;
-            if (action.Focus != false)
+            if (focus)
                 session.Focused = tab.Id;
         }
 
-        if (target is not null)
+        return tab;
+    }
+
+    /// <summary>A page the browser started paused. One of a tab's popups becomes a tab of that session; anything else just runs.</summary>
+    private void OnTargetAttached(CdpConnection cdp, JsonElement p)
+    {
+        var popupSession = p.TryGetProperty("sessionId", out var s) ? s.GetString() : null;
+        if (popupSession is null || !p.TryGetProperty("targetInfo", out var info))
+            return;
+        var targetId = info.TryGetProperty("targetId", out var t) ? t.GetString() : null;
+        var openerId = info.TryGetProperty("openerId", out var o) ? o.GetString() : null;
+        SessionTabs? owner = null;
+        Tab? opener = null;
+        if (targetId is not null && openerId is not null)
         {
-            var navigated = await NavigateAsync(new Page(cdp, tab), target.AbsoluteUri, limits, ct);
-            if (!navigated.Ok)
-                return navigated with { Tab = await InfoAsync(new Page(cdp, tab), ct) };
+            foreach (var session in _sessions.Values)
+            {
+                lock (session)
+                    opener = session.Tabs.Values.FirstOrDefault(tab => tab.TargetId == openerId);
+                if (opener is not null)
+                {
+                    owner = session;
+                    break;
+                }
+            }
         }
 
-        return new AgentBrowserResult { Tab = await InfoAsync(new Page(cdp, tab), ct) };
+        _ = AdoptPopupAsync(cdp, owner, opener, targetId, popupSession);
+    }
+
+    private static async Task AdoptPopupAsync(CdpConnection cdp, SessionTabs? session, Tab? opener, string? targetId, string popupSession)
+    {
+        try
+        {
+            if (session is not null && opener is not null && targetId is not null)
+            {
+                var limits = opener.Limits ?? new AgentBrowserLimits(new AgentBrowserSettings(), new HashSet<int>(), null, []);
+                using var timeout = new CancellationTokenSource(TimeSpan.FromSeconds(10));
+                await SetUpTabAsync(cdp, session, targetId, popupSession, limits, focus: false, timeout.Token);
+            }
+        }
+        catch (Exception error) when (error is CdpException or OperationCanceledException)
+        {
+            // The popup closed before it could be set up; nothing to read.
+        }
+        finally
+        {
+            try
+            {
+                (await cdp.SendAsync("Runtime.runIfWaitingForDebugger", sessionId: popupSession)).Dispose();
+            }
+            catch (Exception error) when (error is CdpException or OperationCanceledException)
+            {
+                // Gone.
+            }
+        }
     }
 
     private static AgentBrowserResult Focus(SessionTabs session, Tab tab)
@@ -405,7 +471,23 @@ public sealed partial class CdpAgentBrowser : IAgentBrowser, IAsyncDisposable
             }
 
             _cdp = connection;
-            _browserEvents = connection.Subscribe(string.Empty, (method, parameters) => OnBrowserEvent(method, parameters));
+            _browserEvents = connection.Subscribe(string.Empty, (method, parameters) => OnBrowserEvent(connection, method, parameters));
+            // A page one of the tabs opens (window.open, a target=_blank link) starts paused, so none of it loads before it's
+            // policed: OnBrowserEvent turns it into a tab, or lets it run if it isn't a popup of ours.
+            (await connection.SendAsync("Target.setAutoAttach", w =>
+            {
+                w.WriteBoolean("autoAttach", true);
+                w.WriteBoolean("waitForDebuggerOnStart", true);
+                w.WriteBoolean("flatten", true);
+                w.WriteStartArray("filter");
+                w.WriteStartObject();
+                w.WriteString("type", "page");
+                w.WriteEndObject();
+                w.WriteStartObject();
+                w.WriteBoolean("exclude", true);
+                w.WriteEndObject();
+                w.WriteEndArray();
+            }, ct: ct)).Dispose();
             _ = connection.Closed.ContinueWith(_ => OnBrowserGone(connection), TaskScheduler.Default);
             return (connection, null);
         }
@@ -457,8 +539,14 @@ public sealed partial class CdpAgentBrowser : IAgentBrowser, IAsyncDisposable
         }
     }
 
-    private void OnBrowserEvent(string method, JsonElement parameters)
+    private void OnBrowserEvent(CdpConnection cdp, string method, JsonElement parameters)
     {
+        if (method == "Target.attachedToTarget")
+        {
+            OnTargetAttached(cdp, parameters);
+            return;
+        }
+
         // A tab the page closed itself (window.close()), or whose renderer crashed.
         if (method is not ("Target.detachedFromTarget" or "Target.targetCrashed"))
             return;
