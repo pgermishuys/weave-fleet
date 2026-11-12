@@ -1,5 +1,5 @@
-import { computed, onUnmounted } from "vue";
-import { useRouter } from "@tanstack/vue-router";
+import { computed, onUnmounted, watch } from "vue";
+import { useLocation, useRouter } from "@tanstack/vue-router";
 import { onGlobalEvent } from "@/composables/use-signalr-socket";
 import { liveTarget } from "@/lib/machine-target";
 import { usePreferencesStore } from "@/stores/preferences";
@@ -41,6 +41,17 @@ function isLookingAt(sessionId: string, pathname: string): boolean {
     && document.hasFocus();
 }
 
+/** The session a path shows, or null. */
+function sessionIdOf(pathname: string): string | null {
+  const match = /^\/sessions\/([^/?#]+)/.exec(pathname);
+  return match ? decodeURIComponent(match[1]!) : null;
+}
+
+/** Whether a notification's tag is this session's: a desktop one is tagged with the id, a push with `machine:id`. */
+function isTagFor(tag: string, sessionId: string): boolean {
+  return tag === sessionId || tag.endsWith(`:${sessionId}`);
+}
+
 /**
  * Shows a desktop notification when a session needs you, or finishes, while you're looking somewhere
  * else. The server decides that — it knows which session each tab has open — and sends one event per
@@ -53,6 +64,37 @@ export function useSessionNotifications(): void {
   const router = useRouter();
   const enabled = computed(() => preferences.get(DESKTOP_NOTIFICATIONS_PREFERENCE_KEY, "false") === "true");
   const { registration } = useServiceWorker();
+  const location = useLocation();
+  /** Notifications this tab constructed itself (no service worker), by session, so opening the session can close them. */
+  const constructed = new Map<string, Notification>();
+
+  /** Once you're looking at a session, what it told you is old: take its notifications off the screen. */
+  function clearFor(sessionId: string): void {
+    const own = constructed.get(sessionId);
+    if (own) {
+      own.close();
+      constructed.delete(sessionId);
+    }
+    const worker = registration.value;
+    if (!worker) return;
+    void worker.getNotifications()
+      .then((open) => {
+        for (const notification of open) {
+          if (isTagFor(notification.tag, sessionId)) notification.close();
+        }
+      })
+      .catch(() => undefined);
+  }
+
+  function clearForOpenSession(): void {
+    const sessionId = sessionIdOf(location.value.pathname);
+    if (sessionId && isLookingAt(sessionId, location.value.pathname)) clearFor(sessionId);
+  }
+
+  watch(() => location.value.pathname, clearForOpenSession, { immediate: true });
+  watch(registration, clearForOpenSession);
+  window.addEventListener("focus", clearForOpenSession);
+  document.addEventListener("visibilitychange", clearForOpenSession);
 
   const unsubscribe = onGlobalEvent(liveTarget(), "sessions", (event: DomainEvent) => {
     if (!isSessionNotificationEvent(event) || !enabled.value) return;
@@ -82,7 +124,9 @@ export function useSessionNotifications(): void {
         tag: sessionId,
       });
 
+      constructed.set(sessionId, notification);
       notification.onclick = () => {
+        constructed.delete(sessionId);
         window.focus();
         notification.close();
         void router.navigate({
@@ -96,5 +140,9 @@ export function useSessionNotifications(): void {
     }
   });
 
-  onUnmounted(unsubscribe);
+  onUnmounted(() => {
+    unsubscribe();
+    window.removeEventListener("focus", clearForOpenSession);
+    document.removeEventListener("visibilitychange", clearForOpenSession);
+  });
 }
