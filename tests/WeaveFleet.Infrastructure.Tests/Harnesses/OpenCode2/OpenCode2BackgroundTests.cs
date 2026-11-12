@@ -148,8 +148,31 @@ public sealed class OpenCode2BackgroundTests
             """);
 
         mapper.TryReadDelegation(notice).ShouldBe(new OpenCode2Delegation("call_1", "general", "Slow helper", Child, expected, Background: true));
-        // Only once: a second notice for the same child ends nothing.
-        mapper.TryReadDelegation(notice).ShouldBeNull();
+    }
+
+    [Fact]
+    public void A_later_report_from_the_same_child_still_finds_its_delegation()
+    {
+        // OpenCode dev: the child reports every time it goes idle, also after later rounds of work.
+        var mapper = new OpenCode2Mapper(FleetSession);
+        mapper.Map(Event("session.tool.input.started", $$"""{"sessionID":"{{Session}}","assistantMessageID":"msg_1","id":"call_1","name":"subagent"}"""));
+        mapper.Map(Event("session.tool.called", $$"""{"sessionID":"{{Session}}","assistantMessageID":"msg_1","id":"call_1","input":{"agent":"general","description":"Slow helper"} }"""));
+        var success = Event("session.tool.success", $$"""
+            {"sessionID":"{{Session}}","assistantMessageID":"msg_1","id":"call_1","content":[],"metadata":{"sessionID":"{{Child}}","status":"running"} }
+            """);
+        mapper.TryReadDelegation(success);
+        mapper.Map(success);
+
+        OpenCode2Event Report(string state) => Event("session.inbox.enqueued", $$"""
+            {"inboxID":"msg_2","sessionID":"{{Session}}","item":{"type":"synthetic","payload":{
+              "text":"<subagent sessionID=\"{{Child}}\" state=\"{{state}}\">over</subagent>",
+              "metadata":{"source":"subagent","childID":"{{Child}}","agent":"General","state":"{{state}}"} } } }
+            """);
+
+        mapper.TryReadDelegation(Report("completed")).ShouldBe(new OpenCode2Delegation("call_1", "general", "Slow helper", Child, "completed", Background: true));
+        mapper.TryReadDelegation(Report("error")).ShouldBe(new OpenCode2Delegation("call_1", "general", "Slow helper", Child, "error", Background: true));
+        // A child that already reported is not lost with the server: it had ended.
+        mapper.BackgroundDelegationsLost().ShouldBeEmpty();
     }
 
     [Fact]

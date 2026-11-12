@@ -48,6 +48,7 @@ internal sealed class OpenCode2Mapper(string fleetSessionId, string? workingDire
     /// a restart stops the server too, and Fleet's startup cancels every delegation still running.
     /// </summary>
     private readonly Dictionary<string, OpenCode2Delegation> _backgroundSubagents = new(StringComparer.Ordinal);
+    private readonly Dictionary<string, OpenCode2Delegation> _reportedSubagents = new(StringComparer.Ordinal);
 
     /// <summary>
     /// The calls whose work carries on in the background, by the handle it runs under (<see cref="BackgroundHandle"/>),
@@ -365,10 +366,13 @@ internal sealed class OpenCode2Mapper(string fleetSessionId, string? workingDire
         if (ReadNoticeMetadata(data) is not { } metadata
             || ReadString(metadata, "source") != SubagentTool
             || ReadString(metadata, "childID") is not { } childSessionId
-            || !_backgroundSubagents.Remove(childSessionId, out var started))
+            || !(_backgroundSubagents.Remove(childSessionId, out var started) || _reportedSubagents.TryGetValue(childSessionId, out started)))
         {
             return null;
         }
+
+        // The child may report again after a later round of work (OpenCode reports every time it goes idle): keep it.
+        _reportedSubagents[childSessionId] = started;
 
         return started with
         {
