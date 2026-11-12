@@ -46,7 +46,7 @@ describe("CanvasHost + menu: From mods", () => {
     modPanes.clear();
     resetModRenders();
     fetchMock.mockReset().mockImplementation(async (_machine: unknown, path: string) =>
-      answer(path.endsWith("/mods/sites") ? { sites: [], panes: PANES } : { tree: { type: "Text", props: {}, children: ["Board"] }, mods: [{ name: "release-board", draft: false }] }));
+      answer(path === "/api/features/mods" ? { on: true, safeMode: false } : path.endsWith("/mods/sites") ? { sites: [], panes: PANES } : { tree: { type: "Text", props: {}, children: ["Board"] }, mods: [{ name: "release-board", draft: false }] }));
   });
   afterEach(() => modPanes.clear());
 
@@ -61,7 +61,7 @@ describe("CanvasHost + menu: From mods", () => {
   });
 
   it("has no From mods group when no mod declares a pane", async () => {
-    fetchMock.mockImplementation(async () => answer({ sites: [], panes: [] }));
+    fetchMock.mockImplementation(async (_machine: unknown, path: string) => answer(path === "/api/features/mods" ? { on: true, safeMode: false } : { sites: [], panes: [] }));
     const wrapper = mountHost();
     await flushPromises();
     expect(wrapper.text()).not.toContain("From mods");

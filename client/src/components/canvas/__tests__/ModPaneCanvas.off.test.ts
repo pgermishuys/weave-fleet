@@ -10,7 +10,9 @@ const { fetchMock, setModOn, setDraftOn } = vi.hoisted(() => ({ fetchMock: vi.fn
 vi.mock("@/lib/api-client", async (importOriginal) => ({ ...(await importOriginal<object>()), apiFetchOn: fetchMock }));
 vi.mock("@/lib/mods/kept-api", async (importOriginal) => ({ ...(await importOriginal<object>()), setModOn, setDraftOn, fetchMods: vi.fn(async () => ({ safeMode: false, mods: [] })) }));
 
-const sites = (panes: unknown[]) => fetchMock.mockImplementation(async () => new Response(JSON.stringify({ sites: [], panes })));
+// The Mods switch is on (sites are only asked for then); the session's mods declare `panes`.
+const sites = (panes: unknown[]) => fetchMock.mockImplementation(async (_machine: unknown, path: string) =>
+  new Response(JSON.stringify(path === "/api/features/mods" ? { on: true, safeMode: false } : { sites: [], panes })));
 const mountPane = (mod = "ci-watch") => mount(ModPaneCanvas, { props: { sessionId: "s1", paneId: "runs", mod } });
 const declared = (extra: object = {}) => ({ mod: "ci-watch", id: "runs", title: "CI runs", icon: null, draft: false, off: true, ...extra });
 
