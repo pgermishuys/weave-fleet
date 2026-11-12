@@ -1,4 +1,4 @@
-import { reactive, shallowReactive, watchEffect } from "vue";
+import { effectScope, reactive, shallowReactive, watch, watchEffect } from "vue";
 import { onDomainEvent } from "@/composables/on-domain-event";
 import { apiFetchOn } from "@/lib/api-client";
 import { modActionSender } from "@/lib/mods/actions";
@@ -6,12 +6,15 @@ import { toolRowViews, type ToolRowView } from "@/lib/mods/points";
 import type { ModAuthor, ModWireElement } from "@/lib/mods/types";
 import { useMachineTarget, type MachineTarget } from "@/lib/machine-target";
 import { getTool } from "@/lib/tools";
+import { useModsStore } from "@/stores/mods";
 
 /**
  * Asks the server to draw tool rows. A session's mods say which tools they hook at which site (`/mods/sites`); a row
  * of a hooked tool asks for its tree (`/mods/render`) when it appears and when its status changes, never as its
  * output streams, and the answer is contributed to `toolRowViews`, which the desktop and phone rows already draw.
  * Rows of one call, on desktop or phone, share one request. `mod.ui` and `mods.changed` ask for fresh drawings.
+ * Nothing is asked while the session's machine has the Mods switch off (every Mods route answers 404 then); turning it
+ * on asks for the sites of every session watched on that machine.
  */
 
 type Site = ToolRowView["site"];
@@ -66,7 +69,11 @@ const callGen = reactive<Record<string, number>>({});
 const wanted = new Map<string, string>();
 const answers = new Map<string, Promise<RenderResponse | null>>();
 const ownersBySession = new Map<string, Set<string>>();
+/** The sessions watched on each machine (by key), so a machine's events and switch reload only its own sessions. */
+const sessionsByMachine = new Map<string, Set<string>>();
 const listening = new Set<string>();
+/** Stops following each machine's Mods switch. */
+const switchWatches = new Map<string, () => void>();
 const queue: Array<() => void> = [];
 let inFlight = 0;
 
@@ -78,7 +85,10 @@ export function resetModRenders(): void {
   wanted.clear();
   answers.clear();
   ownersBySession.clear();
+  sessionsByMachine.clear();
   listening.clear();
+  for (const stop of switchWatches.values()) stop();
+  switchWatches.clear();
   queue.length = 0;
   inFlight = 0;
 }
@@ -128,11 +138,19 @@ export function renderProps(row: ModToolRow) {
   };
 }
 
+/** Whether the machine's Mods switch is on, reading it first when nothing has yet. Unknown (it can't be read): ask anyway. */
+async function switchedOn(machine: MachineTarget): Promise<boolean> {
+  const mods = useModsStore(machine);
+  if (mods.modsSwitch === null) await mods.loadSwitch();
+  return mods.modsSwitch === null || mods.isSwitchedOn;
+}
+
 async function fetchHooks(machine: MachineTarget, sessionId: string): Promise<SiteHook[] | null> {
   try {
-    const response = await apiFetchOn(machine.connection, `/api/sessions/${encodeURIComponent(sessionId)}/mods/sites`);
-    // 404 is Mods off: no sites, and no asking again until `mods.changed`.
-    if (!response.ok) {
+    const on = await switchedOn(machine);
+    const response = on ? await apiFetchOn(machine.connection, `/api/sessions/${encodeURIComponent(sessionId)}/mods/sites`) : null;
+    // Off (or a 404, which is Mods off too): no sites, and no asking again until the switch or the mods change.
+    if (!response?.ok) {
       declaredPanes[sessionId] = [];
       return null;
     }
@@ -172,16 +190,32 @@ function listen(machine: MachineTarget, sessionId: string): void {
   if (!listening.has(machine.key)) {
     listening.add(machine.key);
     const reloadAll = () => {
-      for (const id of Object.keys(hooks)) void loadHooks(machine, id);
+      for (const id of sessionsByMachine.get(machine.key) ?? []) void loadHooks(machine, id);
     };
-    onDomainEvent(machine, "sessions", "mods.changed", reloadAll);
+    // The switch moving is followed below, once the store has read it again: asking now would go by the old value.
+    onDomainEvent(machine, "sessions", "mods.changed", ({ payload }) => {
+      if (payload.reason !== "switch") reloadAll();
+    });
     // With no session it's every session. Fleet's own (no mod) follows the host loading or dropping mods, which changes
     // which sites they hook, so ask for the sites again. A mod's own redraw can't change its hooks: only draw again.
     onDomainEvent(machine, "sessions", "mod.ui", ({ payload }) => {
       if (payload.sessionId || payload.mod) invalidate(payload.sessionId, payload.requestId);
       else reloadAll();
     });
+    // The switch moves in Settings (a preference, no event) or on the server (`mods.changed` "switch", which the store
+    // follows): ask for the sites when it turns on, and drop the drawings when it turns off.
+    // Not while it is first read: the first ask goes by that read. In a scope of its own, like the listeners: the page
+    // that first watched the session goes when the user opens Settings to turn Mods on.
+    const mods = useModsStore(machine);
+    const scope = effectScope(true);
+    scope.run(() => watch(() => (mods.modsSwitch === null ? null : mods.isSwitchedOn), (on, was) => {
+      if (on !== null && was !== null) reloadAll();
+    }));
+    switchWatches.set(machine.key, () => scope.stop());
   }
+  let sessions = sessionsByMachine.get(machine.key);
+  if (!sessions) sessionsByMachine.set(machine.key, (sessions = new Set()));
+  sessions.add(sessionId);
   const topic = `${machine.key}:session:${sessionId}`;
   if (!listening.has(topic)) {
     listening.add(topic);

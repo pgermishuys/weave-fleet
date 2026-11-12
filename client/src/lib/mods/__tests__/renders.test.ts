@@ -8,6 +8,8 @@ import { foldMessages } from "@/lib/phone/fold-steps";
 import { toolRowViews } from "@/lib/mods/points";
 import { MAX_INPUT_BYTES, MAX_OUTPUT_CHARS, resetModRenders, watchModSession } from "@/lib/mods/renders";
 import type { ModWireElement } from "@/lib/mods/types";
+import { liveTarget } from "@/lib/machine-target";
+import { usePreferencesStore } from "@/stores/preferences";
 
 const { fetchMock, listeners } = vi.hoisted(() => ({
   fetchMock: vi.fn(),
@@ -25,12 +27,16 @@ vi.mock("@/composables/use-signalr-socket", async (importOriginal) => ({
 
 const text = (value: string) => ({ type: "Text", props: {}, children: [value] }) as unknown as ModWireElement;
 const answer = (body: unknown, status = 200) => new Response(JSON.stringify(body), { status });
+const switchAnswer = (path: string) => (path === "/api/features/mods" ? answer({ on: modsOn, safeMode: false }) : null);
 const emit = (topic: string, type: string, payload: unknown) => listeners.get(topic)?.forEach((handler) => handler({ type, payload }));
 
 const BOTH = [{ site: "ToolUse", tools: ["bash"] }, { site: "ToolResult", tools: ["bash"] }];
 let sitesBody: { status: number; body: unknown };
+/** What `/api/features/mods` answers: the server's Mods switch for the user. */
+let modsOn: boolean;
 let renderAnswers: Array<unknown>;
 
+const sites = () => fetchMock.mock.calls.filter(([, path]) => String(path).endsWith("/mods/sites"));
 const renders = () => fetchMock.mock.calls.filter(([, path]) => String(path).endsWith("/mods/render"));
 const sent = () => renders().map(([, , init]) => JSON.parse((init as RequestInit).body as string));
 
@@ -52,8 +58,11 @@ beforeEach(() => {
   toolRowViews.clear();
   listeners.clear();
   sitesBody = { status: 200, body: { sites: BOTH } };
+  modsOn = true;
   renderAnswers = [];
   fetchMock.mockReset().mockImplementation(async (_machine: unknown, path: string) => {
+    const modsSwitch = switchAnswer(path);
+    if (modsSwitch) return modsSwitch;
     if (path.endsWith("/mods/sites")) return answer(sitesBody.body, sitesBody.status);
     const next = renderAnswers.length > 1 ? renderAnswers.shift() : renderAnswers[0];
     return answer(next ?? { tree: text("5 passed"), mods: [{ name: "test-chips", draft: false }] });
@@ -107,6 +116,58 @@ describe("mod tool row renders", () => {
     await flushPromises();
     expect(renders()).toHaveLength(0);
     expect(fetchMock.mock.calls.filter(([, path]) => String(path).endsWith("/mods/sites"))).toHaveLength(1);
+  });
+
+  it("never asks for the sites while the Mods switch is off", async () => {
+    modsOn = false;
+    card();
+    card({ callId: "c2" });
+    watchModSession(liveTarget(), "s1");
+    await flushPromises();
+    expect(sites()).toHaveLength(0);
+    expect(renders()).toHaveLength(0);
+    // Nor when the mods change: they can't while it's off, and the answer would be the same 404.
+    emit("sessions", "mod.ui", { sessionId: null, site: null, requestId: null });
+    await flushPromises();
+    expect(sites()).toHaveLength(0);
+  });
+
+  it("asks for the sites as soon as Mods is turned on in Settings, without a reload", async () => {
+    modsOn = false;
+    card();
+    await flushPromises();
+    expect(sites()).toHaveLength(0);
+    // Settings saves the choice as a preference; no event says the switch moved.
+    usePreferencesStore().preferences = { Mods: "true" };
+    await flushPromises();
+    expect(sites()).toHaveLength(1);
+    expect(renders()).toHaveLength(2);
+    expect(toolRowViews.get("ToolUse:s1:c1")?.mods).toEqual([{ name: "test-chips", draft: false }]);
+  });
+
+  it("still follows the switch after the page that first watched the session has gone (Settings is its own page)", async () => {
+    modsOn = false;
+    card().unmount();
+    await flushPromises();
+    usePreferencesStore().preferences = { Mods: "true" };
+    await flushPromises();
+    expect(sites()).toHaveLength(1);
+  });
+
+  it("asks for the sites when the server says the switch turned on, and forgets the drawings when it turns off", async () => {
+    modsOn = false;
+    card();
+    await flushPromises();
+    modsOn = true;
+    emit("sessions", "mods.changed", { name: null, reason: "switch", sessionId: null });
+    await flushPromises();
+    expect(sites()).toHaveLength(1);
+    expect(toolRowViews.get("ToolUse:s1:c1")).toBeDefined();
+    modsOn = false;
+    emit("sessions", "mods.changed", { name: null, reason: "switch", sessionId: null });
+    await flushPromises();
+    expect(sites()).toHaveLength(1);
+    expect(toolRowViews.get("ToolUse:s1:c1")).toBeUndefined();
   });
 
   it("shares one request between rows of a call", async () => {
@@ -207,6 +268,8 @@ describe("mod tool row renders", () => {
     let active = 0;
     let peak = 0;
     fetchMock.mockImplementation(async (_machine: unknown, path: string) => {
+      const modsSwitch = switchAnswer(path);
+      if (modsSwitch) return modsSwitch;
       if (path.endsWith("/mods/sites")) return answer({ sites: [{ site: "ToolUse", tools: null }] });
       active += 1;
       peak = Math.max(peak, active);

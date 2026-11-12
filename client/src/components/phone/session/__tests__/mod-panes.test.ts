@@ -12,6 +12,9 @@ import type { ModWireElement } from "@/lib/mods/types";
 
 const { fetchSites } = vi.hoisted(() => ({ fetchSites: vi.fn() }));
 vi.mock("@/lib/api-client", async (importOriginal) => ({ ...(await importOriginal<object>()), apiFetchOn: fetchSites }));
+/** The Mods switch is on (sites are only asked for then); the session's mods answer `body`. */
+const answerSites = (body: unknown) => async (_machine: unknown, path: string) =>
+  new Response(JSON.stringify(path === "/api/features/mods" ? { on: true, safeMode: false } : body));
 
 // The sheet's own behaviour (gestures, history) isn't under test: just what it holds.
 const BottomSheet = defineComponent({
@@ -36,7 +39,7 @@ const menuProps = { open: true, title: "Fix", machineName: "atlas", changedFiles
 beforeEach(() => {
   setActivePinia(createPinia());
   resetModRenders();
-  fetchSites.mockReset().mockImplementation(async () => new Response(JSON.stringify({ sites: [], panes: [] })));
+  fetchSites.mockReset().mockImplementation(answerSites({ sites: [], panes: [] }));
   modPanes.clear();
   composerBands.clear();
 });
@@ -113,7 +116,7 @@ describe("Pane sheet", () => {
   });
 
   it("says the mod is off, with Turn on, while its declared pane is off", async () => {
-    fetchSites.mockImplementation(async () => new Response(JSON.stringify({ sites: [], panes: [{ mod: "panel", id: "a", title: "Pane a", icon: null, draft: false, off: true }] })));
+    fetchSites.mockImplementation(answerSites({ sites: [], panes: [{ mod: "panel", id: "a", title: "Pane a", icon: null, draft: false, off: true }] }));
     watchModSession(liveTarget(), "s1");
     await flushPromises();
     modPanes.contribute("t", [pane("a")]);
