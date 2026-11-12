@@ -1,8 +1,9 @@
 <script setup lang="ts">
 import { computed, inject, nextTick, onActivated, onBeforeUnmount, onMounted, ref, shallowRef, watch } from "vue";
-import { ChevronRight, Link, MessageSquarePlus, Quote, WrapText, X } from "lucide-vue-next";
+import { ChevronRight, WrapText } from "lucide-vue-next";
 import { Transaction, type EditorState, type Text } from "@codemirror/state";
 import { EditorView, type ViewUpdate } from "@codemirror/view";
+import LinesBar from "@/components/canvas/LinesBar.vue";
 import { useDiffBase } from "@/composables/use-diff-base";
 import { baseKey, type UseDiffsResult } from "@/composables/use-diffs";
 import { useCanvasAnnotate } from "@/composables/use-canvas-annotation";
@@ -15,6 +16,7 @@ import { finishCompare, openBuffer, saveBuffer, useDiskVersion } from "@/lib/cod
 import { isWrapped, setWrap } from "@/lib/code-editor/editor-extensions";
 import { clearPick, pickedLines, selectedLines, type LineRange } from "@/lib/code-editor/line-pick";
 import { WRAP_BY_DEFAULT } from "@/lib/code-editor/wrap-preference";
+import { lineCountLabel, lineQuote, lineRangeLabel, lineReference } from "@/lib/line-quote";
 import { useMachineTarget } from "@/lib/machine-target";
 import { createDeletedView, markStripe, setMerge } from "@/lib/code-editor/merge";
 import { getVisualRenderer } from "@/lib/visual-renderer-registry";
@@ -319,20 +321,9 @@ function sameLines(current: LineRange | null, next: LineRange | null): LineRange
   return current && next && current.first === next.first && current.last === next.last ? current : next;
 }
 
-const linesLabel = computed(() => {
-  const range = lines.value;
-  if (!range) return "";
-  return range.first === range.last ? `L${range.first}` : `L${range.first}–${range.last}`;
-});
-const linesCount = computed(() => {
-  const count = lines.value ? lines.value.last - lines.value.first + 1 : 0;
-  return count === 1 ? "1 line" : `${count} lines`;
-});
-const linesReference = computed(() => {
-  const range = lines.value;
-  if (!range) return props.path;
-  return `${props.path}:${range.first === range.last ? range.first : `${range.first}-${range.last}`}`;
-});
+const linesLabel = computed(() => (lines.value ? lineRangeLabel(lines.value) : ""));
+const linesCount = computed(() => (lines.value ? lineCountLabel(lines.value) : ""));
+const linesReference = computed(() => (lines.value ? lineReference(props.path, lines.value) : props.path));
 
 /** Clear the picked lines, or the text selection the bar was showing. */
 function clearLines(): void {
@@ -354,16 +345,12 @@ function copyLink(): void {
   void copy(linesReference.value, `Copied ${linesReference.value}`);
 }
 
-/** The reference, then the lines in a fence that's longer than any run of backticks inside them. */
 function copyQuote(): void {
   const range = lines.value;
   if (!editor || !range) return;
   const doc = editor.state.doc;
   const text = doc.sliceString(doc.line(range.first).from, doc.line(range.last).to);
-  const longest = Math.max(0, ...(text.match(/`+/g) ?? []).map((run) => run.length));
-  const fence = "`".repeat(Math.max(3, longest + 1));
-  const extension = /\.([a-z0-9]+)$/i.exec(fileName.value)?.[1]?.toLowerCase() ?? "";
-  void copy(`${linesReference.value}\n${fence}${extension}\n${text}\n${fence}\n`, `Copied ${linesLabel.value} as a quote`);
+  void copy(lineQuote(linesReference.value, props.path, text), `Copied ${linesLabel.value} as a quote`);
 }
 
 function addToMessage(): void {
@@ -613,74 +600,16 @@ function addToMessage(): void {
       data-testid="file-editor"
     />
 
-    <div
+    <LinesBar
       v-if="lines && showEditor"
-      class="file-canvas__lines"
-      role="toolbar"
-      aria-label="Picked lines"
-      data-testid="line-bar"
-    >
-      <span class="file-canvas__lines-label">
-        <b data-testid="line-bar-label">{{ linesLabel }}</b>
-        <span>{{ linesCount }}</span>
-      </span>
-      <span class="file-canvas__spacer" />
-      <button
-        type="button"
-        aria-label="Copy link"
-        :title="`Copy ${linesReference}`"
-        data-testid="copy-link"
-        @mousedown.prevent
-        @click="copyLink"
-      >
-        <Link
-          :size="13"
-          aria-hidden="true"
-        />
-        <span class="file-canvas__lines-text">Copy link</span>
-      </button>
-      <button
-        type="button"
-        aria-label="Quote"
-        title="Copy the lines as a quote"
-        data-testid="copy-quote"
-        @mousedown.prevent
-        @click="copyQuote"
-      >
-        <Quote
-          :size="13"
-          aria-hidden="true"
-        />
-        <span class="file-canvas__lines-text">Quote</span>
-      </button>
-      <button
-        type="button"
-        class="is-primary"
-        data-testid="add-to-message"
-        @mousedown.prevent
-        @click="addToMessage"
-      >
-        <MessageSquarePlus
-          :size="13"
-          aria-hidden="true"
-        />
-        Add to message
-      </button>
-      <button
-        type="button"
-        class="file-canvas__lines-clear"
-        aria-label="Clear"
-        title="Clear (Esc)"
-        data-testid="line-bar-clear"
-        @mousedown.prevent
-        @click="clearLines"
-      >
-        <X
-          :size="13"
-          aria-hidden="true"
-        />
-      </button>
-    </div>
+      :label="linesLabel"
+      :count="linesCount"
+      :link="linesReference"
+      @copy-link="copyLink"
+      @quote="copyQuote"
+      @add="addToMessage"
+      @clear="clearLines"
+    />
 
     <div
       class="file-canvas__toast"
@@ -818,8 +747,7 @@ function addToMessage(): void {
 .file-canvas__toggle button:focus-visible,
 .file-canvas__wrap:focus-visible,
 .file-canvas__save:focus-visible,
-.file-canvas__notice-actions button:focus-visible,
-.file-canvas__lines button:focus-visible {
+.file-canvas__notice-actions button:focus-visible {
   outline: 2px solid var(--accent);
   outline-offset: 1px;
 }
@@ -906,74 +834,6 @@ function addToMessage(): void {
   box-shadow: 0 0 0 1px var(--border);
 }
 
-/* Picked lines, or the lines a selection spans. Docked, so scrolling the file never hides it. */
-.file-canvas__lines {
-  display: flex;
-  flex-shrink: 0;
-  align-items: center;
-  gap: 4px;
-  margin: 0 8px 8px;
-  padding: 5px 6px 5px 12px;
-  border: 1px solid var(--border);
-  border-radius: 10px;
-  background: var(--card-bg);
-  box-shadow: 0 16px 40px -12px rgba(0, 0, 0, 0.45);
-  font-size: 12px;
-  white-space: nowrap;
-  animation: file-canvas-pop 140ms ease-out;
-}
-
-.file-canvas__lines-label {
-  display: inline-flex;
-  align-items: baseline;
-  gap: 6px;
-  color: var(--muted);
-  font-size: 11px;
-}
-
-.file-canvas__lines-label b {
-  font-family: var(--font-mono-stack);
-  font-size: 12px;
-  font-weight: 600;
-  color: var(--text);
-}
-
-.file-canvas__lines button {
-  display: inline-flex;
-  align-items: center;
-  gap: 5px;
-  height: 26px;
-  padding: 0 8px;
-  border: 1px solid var(--border);
-  border-radius: 7px;
-  background: transparent;
-  color: var(--text);
-  font-size: 12px;
-  font-weight: 500;
-  cursor: pointer;
-  transition: border-color var(--transition), background-color var(--transition);
-}
-
-.file-canvas__lines button:hover {
-  border-color: var(--accent);
-}
-
-.file-canvas__lines button.is-primary {
-  border-color: var(--accent);
-  background: var(--accent);
-  color: var(--primary-foreground);
-}
-
-.file-canvas__lines button.file-canvas__lines-clear {
-  padding: 0 6px;
-  border-color: transparent;
-  color: var(--muted);
-}
-
-.file-canvas__lines button.file-canvas__lines-clear:hover {
-  color: var(--text);
-}
-
 .file-canvas__wrap {
   display: inline-flex;
   flex-shrink: 0;
@@ -1046,16 +906,6 @@ function addToMessage(): void {
   }
 }
 
-@container (max-width: 420px) {
-  .file-canvas__lines-text {
-    display: none;
-  }
-
-  .file-canvas__lines button {
-    padding: 0 6px;
-  }
-}
-
 @keyframes file-canvas-rise {
   from {
     opacity: 0;
@@ -1063,22 +913,13 @@ function addToMessage(): void {
   }
 }
 
-@keyframes file-canvas-pop {
-  from {
-    opacity: 0;
-    transform: scale(0.96);
-  }
-}
-
 @media (prefers-reduced-motion: reduce) {
-  .file-canvas__notice,
-  .file-canvas__lines {
+  .file-canvas__notice {
     animation: none;
   }
 
   .file-canvas__toast,
   .file-canvas__wrap,
-  .file-canvas__lines button,
   .file-canvas__toggle button,
   .file-canvas__save,
   .file-canvas__notice-actions button {

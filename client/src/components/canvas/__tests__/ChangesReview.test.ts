@@ -4,6 +4,8 @@ import { computed, defineComponent, h, ref } from "vue";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import ChangesReview from "@/components/canvas/ChangesReview.vue";
 import type { FileDiffItem } from "@/api/client";
+import { useDraftState } from "@/composables/use-draft-state";
+import { sessionCommands } from "@/lib/session-commands";
 import { useCanvasesStore } from "@/stores/canvases";
 
 const { readSessionFileMock, writeSessionFileMock, restoreSessionFileMock, fetchMock } = vi.hoisted(() => ({
@@ -48,10 +50,11 @@ function respond(path: string): Response {
 
 let pinia = createPinia();
 
-function mountReview() {
+function mountReview(options: { attachTo?: HTMLElement } = {}) {
   return mount(ChangesReview, {
     props: { sessionId: "s1" },
     global: { plugins: [pinia], provide: { sharedDiffs }, stubs: dialogStubs },
+    ...options,
   });
 }
 
@@ -497,6 +500,139 @@ describe("ChangesReview", () => {
       await openFind(wrapper, "more");
       expect(count(wrapper)).toBe("1 of 1");
       expect(sectionOf(wrapper, "README.md").find(".rline").exists()).toBe(true);
+    });
+  });
+
+  describe("selecting lines", () => {
+    function textNodes(element: Element): Text[] {
+      const walker = document.createTreeWalker(element.querySelector(".rline__tx")!, NodeFilter.SHOW_TEXT);
+      const nodes: Text[] = [];
+      while (walker.nextNode()) nodes.push(walker.currentNode as Text);
+      return nodes;
+    }
+
+    /** Select from `from` (its text's start, or `fromEnd` its end) to `to`'s end, or `toStart` its start. */
+    async function select(from: Element, to: Element, edges: { fromEnd?: boolean; toStart?: boolean } = {}) {
+      const start = edges.fromEnd ? textNodes(from).at(-1)! : textNodes(from)[0]!;
+      const end = edges.toStart ? textNodes(to)[0]! : textNodes(to).at(-1)!;
+      const range = document.createRange();
+      range.setStart(start, edges.fromEnd ? start.length : 0);
+      range.setEnd(end, edges.toStart ? 0 : end.length);
+      const selection = document.getSelection()!;
+      selection.removeAllRanges();
+      selection.addRange(range);
+      document.dispatchEvent(new Event("selectionchange"));
+      await flushPromises();
+    }
+
+    function line(wrapper: ReturnType<typeof mountReview>, query: string): Element {
+      return notesSection(wrapper).get(`.rline${query}`).element;
+    }
+
+    let host: HTMLElement;
+    beforeEach(() => {
+      host = document.body.appendChild(document.createElement("div"));
+      useDraftState("s1", { agentId: "a", modelId: "m" }).setText("");
+    });
+
+    it("a selection of the file's lines shows the bar; Add to message puts them in the draft as a reference", async () => {
+      const writeText = vi.fn().mockResolvedValue(undefined);
+      Object.defineProperty(navigator, "clipboard", { value: { writeText }, configurable: true });
+      const focus = vi.fn();
+      const stop = sessionCommands.contribute("test", [{ sessionId: "s1", handlers: { "focus-prompt": focus } }]);
+      const wrapper = mountReview({ attachTo: host });
+      await flushPromises();
+      expect(wrapper.find("[data-testid='line-bar']").exists()).toBe(false);
+
+      // From "  id: string;" through the added "  tags: string[];"
+      await select(line(wrapper, "[data-new='2']"), line(wrapper, "[data-new='4']"));
+
+      expect(wrapper.get("[data-testid='line-bar-file']").text()).toBe("notes.ts");
+      expect(wrapper.get("[data-testid='line-bar-label']").text()).toBe("L2–4");
+      expect(wrapper.get("[data-testid='line-bar']").text()).toContain("3 lines");
+      await wrapper.get("[data-testid='copy-link']").trigger("click");
+      expect(writeText).toHaveBeenLastCalledWith("src/notes.ts:2-4");
+      await wrapper.get("[data-testid='copy-quote']").trigger("click");
+      expect(writeText).toHaveBeenLastCalledWith("src/notes.ts:2-4\n```ts\n  id: string;\n  title: string;\n  tags: string[];\n```\n");
+
+      await wrapper.get("[data-testid='add-to-message']").trigger("click");
+
+      expect(useDraftState("s1", { agentId: "a", modelId: "m" }).draft.text).toBe("@src/notes.ts:2-4 ");
+      expect(focus).toHaveBeenCalledTimes(1);
+      expect(wrapper.find("[data-testid='line-bar']").exists()).toBe(false);
+      stop();
+      wrapper.unmount();
+    });
+
+    it("removed lines are quoted as they were, with no link", async () => {
+      const wrapper = mountReview({ attachTo: host });
+      await flushPromises();
+
+      await select(line(wrapper, "[data-diff-type='remove']"), line(wrapper, "[data-diff-type='remove']"));
+
+      expect(wrapper.get("[data-testid='line-bar-label']").text()).toBe("Old L11");
+      expect(wrapper.find("[data-testid='copy-link']").exists()).toBe(false);
+      await wrapper.get("[data-testid='add-to-message']").trigger("click");
+      expect(useDraftState("s1", { agentId: "a", modelId: "m" }).draft.text).toBe(
+        "src/notes.ts:11 (before)\n```ts\nconst f = oldName(1);\n```\n",
+      );
+      wrapper.unmount();
+    });
+
+    it("a selection that only touches the edge of a line leaves it out", async () => {
+      const wrapper = mountReview({ attachTo: host });
+      await flushPromises();
+
+      await select(line(wrapper, "[data-new='1']"), line(wrapper, "[data-new='4']"), { fromEnd: true, toStart: true });
+
+      expect(wrapper.get("[data-testid='line-bar-label']").text()).toBe("L2–3");
+      wrapper.unmount();
+    });
+
+    it("in Split, a drag down the old column counts old lines only", async () => {
+      localStorage.setItem("weave:changes-layout", "split");
+      const wrapper = mountReview({ attachTo: host });
+      await flushPromises();
+
+      const removed = notesSection(wrapper).findAll(".rline--remove").at(-1)!.element;
+      await notesSection(wrapper).get(".rline[data-side='old'][data-old='10']").trigger("pointerdown");
+      await select(notesSection(wrapper).get(".rline[data-side='old'][data-old='10']").element, removed);
+
+      expect(wrapper.get("[data-testid='line-bar-label']").text()).toBe("Old L10–11");
+      expect(wrapper.get(".review").attributes("data-pick")).toBe("old");
+
+      // A press in the new column next lets the old selection go (it runs through the new column's rows, so the
+      // press would drag it), and takes the new side.
+      await notesSection(wrapper).get(".rline[data-side='new'][data-new='3']").trigger("pointerdown");
+      expect(document.getSelection()!.rangeCount).toBe(0);
+      expect(wrapper.get(".review").attributes("data-pick")).toBe("new");
+      await select(notesSection(wrapper).get(".rline[data-side='new'][data-new='3']").element, notesSection(wrapper).get(".rline[data-side='new'][data-new='4']").element);
+      expect(wrapper.get("[data-testid='line-bar-label']").text()).toBe("L3–4");
+      wrapper.unmount();
+    });
+
+    it("a selection outside the review shows no bar", async () => {
+      const wrapper = mountReview({ attachTo: host });
+      await flushPromises();
+      const outside = document.body.appendChild(document.createElement("p"));
+      outside.innerHTML = '<span class="rline__tx">elsewhere</span>';
+
+      await select(outside, outside);
+
+      expect(wrapper.find("[data-testid='line-bar']").exists()).toBe(false);
+      outside.remove();
+      wrapper.unmount();
+    });
+
+    it("rendered markdown can be asked about, like a file tab's", async () => {
+      const wrapper = mountReview();
+      await flushPromises();
+      const readme = wrapper.findAll("[data-testid='review-file']").find((section) => section.attributes("data-review-file") === "README.md")!;
+
+      await readme.get("[data-testid='review-rendered']").trigger("click");
+
+      expect(readme.getComponent({ name: "MarkdownRenderer" }).props("annotatable")).toBe(true);
+      wrapper.unmount();
     });
   });
 });
