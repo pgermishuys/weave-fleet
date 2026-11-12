@@ -1632,7 +1632,7 @@ internal sealed record PreviewSessionSourceApiRequest(SessionSourceSelection Sou
 internal sealed record AddSessionSourceApiRequest(SessionSourceSelection Source, bool Confirm);
 
 internal sealed record SendPromptApiRequest(
-    string Text,
+    [property: JsonRequired] string Text,
     string? Agent,
     ModelRef? Model,
     ImageAttachmentDto[]? Attachments,
@@ -1653,7 +1653,7 @@ internal sealed record SendPromptApiResponse(long? EventId, string CorrelationId
 
 /// <summary>A message to queue. <c>kind</c> is "prompt" (the default), "command" (with its name and arguments) or "shell".</summary>
 internal sealed record QueuePromptApiRequest(
-    string Text,
+    [property: JsonRequired] string Text,
     string? Kind = null,
     string? Command = null,
     string? Arguments = null,
@@ -1668,7 +1668,7 @@ internal sealed record ImageAttachmentDto(string Mime, string? Filename, string 
 internal sealed record ForkSessionApiRequest(string? Title);
 
 internal sealed record SendCommandApiRequest(
-    string Command,
+    [property: JsonRequired] string Command,
     string? Arguments,
     string? Agent,
     ModelRef? Model);

@@ -30,6 +30,26 @@ public sealed class UnreadableBodyTests : IClassFixture<UnreadableBodyTests.Serv
         public void Dispose() => Factory.Dispose();
     }
 
+    [Theory]
+    [InlineData("/api/sessions/s1/prompt")]
+    [InlineData("/api/sessions/s1/queue")]
+    public async Task MissingText_AnswersA400NamingIt(string path)
+    {
+        var (status, error) = await PostAsync(path, """{"zzz":1}""");
+
+        status.ShouldBe(HttpStatusCode.BadRequest);
+        error.ShouldContain("text (required)");
+    }
+
+    [Fact]
+    public async Task MissingCommand_AnswersA400NamingIt()
+    {
+        var (status, error) = await PostAsync("/api/sessions/s1/command", """{"zzz":1}""");
+
+        status.ShouldBe(HttpStatusCode.BadRequest);
+        error.ShouldContain("command (required)");
+    }
+
     [Fact]
     public async Task UnknownField_NamesItAndListsTheFieldsTheEndpointTakes()
     {
