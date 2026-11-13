@@ -25,6 +25,15 @@ function turn() {
 }
 
 describe("foldTurns", () => {
+  it("keeps the latest turn open after it ends when you watched it (keepLast), and folds it once a newer turn exists", () => {
+    const kept = foldTurns(turn(), { running: false, open, keepLast: true });
+    expect(kept.map((m) => m.id)).toEqual(["u1", "a1", "a2", "a3"]);
+    expect(kept.some((m) => m.fold)).toBe(false);
+    const next = [...turn(), msg({ id: "u2", role: "user", body: "next", createdAt: 40_000 }), msg({ id: "b1", role: "assistant", createdAt: 41_000, body: "ok" })];
+    const out = foldTurns(next, { running: false, open, keepLast: true });
+    expect(out.find((m) => m.id === "a1")?.fold).toBeTruthy();
+  });
+
   it("folds a finished turn: tool rows and thinking go, the answer stays, the fold row appears", () => {
     const out = foldTurns(turn(), { running: false, directory: "/work/demo", open });
     expect(out.map((m) => m.id)).toEqual(["u1", "a1", "a3"]);
