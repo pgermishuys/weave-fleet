@@ -365,7 +365,9 @@ public sealed partial class FleetCanvasPluginLiveTests
             if (ChromeFinder.Find(services.GetRequiredService<FleetOptions>().Browser.ChromePath) is null)
                 afterShow.ShouldContain("To look at the page yourself, use fleet_browser_screenshot");
             else
-                afterShow.ShouldContain("Fleet loaded the page at 1280 and 390 px wide: no script errors, every file loaded, nothing wider than the window.");
+                afterShow.ShouldContain(
+                    "Fleet loaded the page at 1280 and 390 px wide: no script errors, every file loaded, nothing wider than the window.",
+                    customMessage: "the check said: " + CheckSentence(afterShow));
 
             // The page is in a page canvas, and Fleet serves its copy to anyone with the address.
             PageState shown;
@@ -391,6 +393,15 @@ public sealed partial class FleetCanvasPluginLiveTests
             await factory.DisposeAsync();
             try { Directory.Delete(root, recursive: true); } catch { /* best effort */ }
         }
+    }
+
+    /// <summary>The page check's sentence in a recorded request, so a failure shows what the agent was told, not the whole request.</summary>
+    private static string CheckSentence(string request)
+    {
+        var at = request.IndexOf("Fleet loaded the page at", StringComparison.OrdinalIgnoreCase);
+        if (at < 0)
+            at = request.IndexOf("Fleet couldn't check the page", StringComparison.OrdinalIgnoreCase);
+        return at < 0 ? "(no check sentence)" : request[at..Math.Min(request.Length, at + 400)];
     }
 
     private static async Task<bool> HasExitedAsync(int processId, TimeSpan within)
