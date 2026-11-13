@@ -616,6 +616,17 @@ function dirOf(path: string): string {
 function nameOf(path: string): string {
   return path.slice(path.lastIndexOf("/") + 1);
 }
+
+/**
+ * Line numbers stick to the left only in a hunk you've scrolled sideways. A sticky number on every line made each
+ * repaint of the page (every keystroke in the composer beside it) lay out and hit-test thousands of sticky boxes;
+ * unscrolled, a static number sits exactly where a sticky one would, so nothing moves.
+ */
+function onCodeScroll(event: Event): void {
+  const scroller = event.target;
+  if (!(scroller instanceof HTMLElement) || !scroller.classList.contains("rscroll")) return;
+  scroller.classList.toggle("rscroll--scrolled", scroller.scrollLeft > 0);
+}
 </script>
 
 <template>
@@ -626,6 +637,7 @@ function nameOf(path: string): string {
     tabindex="-1"
     data-testid="changes-review"
     @keydown="find.onKeydown"
+    @scroll.capture.passive="onCodeScroll"
   >
     <header class="review__head">
       <h2 class="review__title">
@@ -1509,8 +1521,8 @@ function nameOf(path: string): string {
   overflow-wrap: anywhere;
 }
 
+/* left and z-index apply once the hunk is scrolled sideways and the numbers stick (.rscroll--scrolled). */
 .rline__no {
-  position: sticky;
   left: 0;
   z-index: 1;
   flex: none;
@@ -1526,6 +1538,11 @@ function nameOf(path: string): string {
 .rline__no--new {
   left: 36px;
   border-right: 1px solid var(--border);
+}
+
+/* Sticky only in a hunk scrolled sideways (onCodeScroll): a sticky number on every line slowed every repaint. */
+.rscroll--scrolled .rline__no {
+  position: sticky;
 }
 
 .rline__mk {
