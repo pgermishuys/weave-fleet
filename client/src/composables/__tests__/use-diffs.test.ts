@@ -399,4 +399,40 @@ describe("useDiffs", () => {
     page.wrapper.unmount();
     panel.wrapper.unmount();
   });
+
+  it("refreshes during a long run of edits, not only once they stop, and never runs two at once", async () => {
+    // A debounce that restarted on every edit left Changes frozen while the agent kept writing. As OpenChamber does, the
+    // first edit opens a 250 ms window and the refresh runs at its end; edits inside it don't push it back.
+    vi.useFakeTimers();
+    try {
+      let inFlight = 0;
+      let most = 0;
+      apiFetchMock.mockImplementation(async () => {
+        inFlight += 1;
+        most = Math.max(most, inFlight);
+        await new Promise((resolve) => setTimeout(resolve, 400));
+        inFlight -= 1;
+        return { data: { diffs: [], available: true }, error: undefined, response: createJsonResponse({}) };
+      });
+      const { useDiffs } = await import("@/composables/use-diffs");
+      const { wrapper } = await mountComposable(() => useDiffs("session-burst"));
+      const changed = (): DomainEvent => ({
+        type: "files.changed",
+        payload: { sessionId: "session-burst", files: [{ path: "a.ts", changeType: "modified" }] },
+      } as DomainEvent);
+
+      for (let i = 0; i < 10; i++) {
+        v2EventCallback?.(changed());
+        await vi.advanceTimersByTimeAsync(200);
+      }
+      // Two seconds of edits every 200 ms: refreshed while they went on.
+      expect(apiFetchMock.mock.calls.length).toBeGreaterThanOrEqual(2);
+      await vi.advanceTimersByTimeAsync(2000);
+      expect(most).toBe(1);
+
+      wrapper.unmount();
+    } finally {
+      vi.useRealTimers();
+    }
+  });
 });
