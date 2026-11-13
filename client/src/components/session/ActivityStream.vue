@@ -301,7 +301,11 @@ watch(
 
 const isStreaming = computed(() => isStreamWorking(sessionStatus.value));
 // Paths a message named that weren't files are asked about again when a turn ends: the agent may have made them.
+// The turn you watched run stays as you saw it until you send the next prompt; a reload or another session folds it.
+const watchedLastTurn = ref(false);
+watch(() => props.sessionId, () => { watchedLastTurn.value = false; });
 watch(isStreaming, (working) => {
+  if (working) watchedLastTurn.value = true;
   if (!working) fileLinks.forgetMissing(props.sessionId);
 });
 
@@ -386,6 +390,7 @@ const turnStats = useTurnStats({
 });
 const foldedMessages = computed(() => foldTurns(withFileStats(mergedMessages.value, fileStats.value, selectedSession.value?.workspaceDirectory, turnStats.value), {
   running: isStreaming.value,
+  keepLast: watchedLastTurn.value,
   directory: selectedSession.value?.workspaceDirectory,
   open: openTurns.value,
 }));

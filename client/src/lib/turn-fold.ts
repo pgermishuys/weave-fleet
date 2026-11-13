@@ -242,6 +242,11 @@ export function withFileStats(
 export interface FoldOptions {
   /** The session is working: its last turn is still running and stays open. */
   running: boolean;
+  /**
+   * You watched the latest turn run: it stays as you saw it after it ends, and folds once you send the next prompt.
+   * Without it (a reload, a session opened after the turn) every finished turn folds.
+   */
+  keepLast?: boolean;
   /** The session's folder, so a call that named an absolute path shows it as the folder knows it. */
   directory?: string;
   /** Turn ids the user opened: their rows show again (the fold row stays). */
@@ -259,7 +264,7 @@ export function foldTurns(messages: readonly ActivityMessage[], options: FoldOpt
   ranges.forEach((range, rangeIndex) => {
     if (range.agent.length === 0) return;
     const isLast = rangeIndex === ranges.length - 1;
-    if (isLast && options.running) return;
+    if (isLast && (options.running || options.keepLast)) return;
 
     const agentMessages = range.agent.map((index) => messages[index]!);
     const turnId = (range.user ?? agentMessages[0]!).id;
