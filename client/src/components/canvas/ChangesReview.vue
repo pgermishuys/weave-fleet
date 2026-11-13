@@ -179,7 +179,10 @@ function markNear(paths: readonly string[]): void {
   const fresh = paths.filter((path) => !near.value.has(path));
   if (fresh.length > 0) near.value = new Set([...near.value, ...fresh]);
 }
-/** The room a file not drawn yet holds: about as tall as its changed lines will draw. */
+/**
+ * The room a file not drawn yet holds, and keeps while its diff loads: about as tall as its changed lines will draw. A
+ * short "Loading…" in its place would pull the files below it into view, and they would all load at once.
+ */
 function pendingHeight(file: FileDiffItem): number {
   return Math.min(file.additions + file.deletions + 8, MAX_DRAWN_LINES) * 20;
 }
@@ -975,6 +978,7 @@ function onCodeScroll(event: Event): void {
         <div
           v-else-if="isOpen(file.file)"
           class="rfile__body"
+          :style="!views[file.file]?.entry || views[file.file]?.entry?.status === 'loading' ? { minHeight: `${pendingHeight(file)}px` } : undefined"
         >
           <p
             v-if="!views[file.file]?.entry || views[file.file]?.entry?.status === 'loading'"
