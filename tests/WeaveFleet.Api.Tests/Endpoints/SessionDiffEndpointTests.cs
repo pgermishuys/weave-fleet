@@ -223,6 +223,18 @@ public sealed class SessionDiffEndpointTests(SessionDiffEndpointTests.Server ser
             (await client.GetAsync("/api/sessions/session-prefix/diffs/file?path=../outside.txt")).StatusCode.ShouldBe(HttpStatusCode.NotFound);
             var outsideResponse = await client.GetAsync("/api/sessions/session-prefix/diffs/file?path=outside.txt");
             outsideResponse.StatusCode.ShouldBe(HttpStatusCode.NotFound);
+
+            // Find asks which changed files hold the text, any case, on either side; paths as the session's folder knows
+            // them, and nothing outside it (outside.txt held "alpha" too).
+            async Task<string?[]> SearchAsync(string query)
+            {
+                var found = await client.GetFromJsonAsync<JsonElement>($"/api/sessions/session-prefix/diffs/search?q={Uri.EscapeDataString(query)}", JsonSerializerOptions.Web);
+                return [.. found.GetProperty("files").EnumerateArray().Select(match => match.GetProperty("file").GetString()).Order()];
+            }
+            (await SearchAsync("ALPHA")).ShouldBe(["tracked.txt"]);
+            (await SearchAsync("inside")).ShouldBe(["new.txt"]);
+            (await SearchAsync("nowhere")).ShouldBeEmpty();
+            (await client.GetAsync("/api/sessions/session-prefix/diffs/search?q=")).StatusCode.ShouldBe(HttpStatusCode.BadRequest);
         }
         finally
         {

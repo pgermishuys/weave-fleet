@@ -791,6 +791,35 @@ public static class SessionEndpoints
         })
         .WithName("GetSessionFileDiff");
 
+        // GET /api/sessions/{id}/diffs/search?q= — the changed files whose text (before or after) holds q, any case. Find
+        // in Changes asks this first and loads only those files, instead of every file of the change set.
+        group.MapGet("/{id}/diffs/search", async (
+            string id,
+            [FromQuery] string? q,
+            SessionService sessionService,
+            GitDiffService gitDiffService,
+            CancellationToken ct) =>
+        {
+            if (string.IsNullOrEmpty(q) || q.Length > 200 || q.Contains('\n') || q.Contains('\r'))
+                return Results.BadRequest(new { error = "q is required: one line, at most 200 characters" });
+
+            var result = await sessionService.GetSessionAsync(id);
+            return await result.Match<Task<IResult>>(
+                async session =>
+                {
+                    if (await SessionDiffScope.ResolveAsync(session, gitDiffService, ct) is not { } scope)
+                        return Results.Ok(new SearchSessionChangesResponse([]));
+
+                    var matches = await gitDiffService.SearchChangesAsync(scope.RepoRoot, scope.Base.Ref, scope.WorkspacePrefix, q, ct);
+                    return matches is null
+                        ? Results.Problem("git couldn't search the changes", statusCode: StatusCodes.Status502BadGateway)
+                        : Results.Ok(new SearchSessionChangesResponse(
+                            [.. matches.Select(match => new ChangeSearchFile(scope.ToSessionPath(match.Path), match.Count))]));
+                },
+                error => Task.FromResult(error.ToSessionApiResult()));
+        })
+        .WithName("SearchSessionChanges");
+
         // GET /api/sessions/{id}/screenshots/{screenshotId} — a screenshot an agent took, for its tool row in the conversation
         group.MapGet("/{id}/screenshots/{screenshotId}", async (
             string id,

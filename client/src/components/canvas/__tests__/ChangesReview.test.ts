@@ -8,7 +8,8 @@ import { useDraftState } from "@/composables/use-draft-state";
 import { sessionCommands } from "@/lib/session-commands";
 import { useCanvasesStore } from "@/stores/canvases";
 
-const { readSessionFileMock, writeSessionFileMock, restoreSessionFileMock, fetchMock } = vi.hoisted(() => ({
+const { readSessionFileMock, writeSessionFileMock, restoreSessionFileMock, fetchMock, searchMock } = vi.hoisted(() => ({
+  searchMock: vi.fn(async (): Promise<ReadonlyMap<string, number> | null> => null),
   readSessionFileMock: vi.fn(),
   restoreSessionFileMock: vi.fn(),
   writeSessionFileMock: vi.fn(),
@@ -19,6 +20,7 @@ vi.mock("@/api/session-files", () => ({
   readSessionFile: readSessionFileMock,
   writeSessionFile: writeSessionFileMock,
   restoreSessionFile: restoreSessionFileMock,
+  searchSessionChanges: searchMock,
 }));
 vi.mock("@/lib/api-client", () => ({ apiFetchOn: fetchMock }));
 
@@ -89,6 +91,8 @@ describe("ChangesReview", () => {
     restoreSessionFileMock.mockReset();
     sharedDiffs.fetchDiffs.mockReset();
     fetchMock.mockReset();
+    searchMock.mockReset();
+    searchMock.mockImplementation(async () => null);
     fetchMock.mockImplementation(async (_machine: unknown, url: string) =>
       respond(decodeURIComponent(new URL(url, "http://x").searchParams.get("path") ?? "")));
   });
@@ -387,6 +391,8 @@ describe("ChangesReview", () => {
       await settle();
     }
     async function settle() {
+      // The machine is asked which files match 120 ms after the last keystroke.
+      await new Promise((resolve) => setTimeout(resolve, 130));
       await flushPromises();
       await new Promise((resolve) => requestAnimationFrame(() => resolve(null)));
       await flushPromises();
@@ -467,6 +473,55 @@ describe("ChangesReview", () => {
       expect(count(wrapper)).toBe("1 of 1");
       expect(sectionOf(wrapper, "rows.txt").find("[data-testid='review-fold']").exists()).toBe(false);
       expect(currentText()).toEqual(["row 15"]);
+    });
+
+    it("opens and closes from the Find button in the header", async () => {
+      const wrapper = mountReview();
+      await flushPromises();
+      const button = wrapper.get("[data-testid='review-find']");
+
+      await button.trigger("click");
+      await flushPromises();
+      expect(wrapper.find("[data-testid='changes-find']").exists()).toBe(true);
+      expect(button.attributes("aria-pressed")).toBe("true");
+
+      await button.trigger("click");
+      await flushPromises();
+      expect(wrapper.find("[data-testid='changes-find']").exists()).toBe(false);
+    });
+
+    it("asks the machine which files hold the text and loads only those, not every collapsed file", async () => {
+      const items = Array.from({ length: 10 }, (_, i) => ({
+        file: `f${i}.ts`, status: "modified", additions: 1, deletions: 1, before: "a\n", after: i === 9 ? "late needle\n" : "b\n",
+      }) as FileDiffItem);
+      show(...items);
+      searchMock.mockImplementation(async () => new Map([["f9.ts", 1]]));
+      const wrapper = mountReview();
+      await flushPromises();
+      fetchMock.mockClear();
+
+      await openFind(wrapper, "needle");
+
+      expect(searchMock).toHaveBeenCalledWith(expect.anything(), "s1", "needle", expect.anything());
+      expect(count(wrapper)).toBe("1 of 1");
+      const asked = fetchMock.mock.calls.map(([, url]) => decodeURIComponent(String(url)));
+      expect(asked.some((url) => url.includes("path=f9.ts"))).toBe(true);
+      expect(asked.some((url) => url.includes("path=f8.ts"))).toBe(false);
+    });
+
+    it("searches every file itself when the machine can't say (an older Fleet), and for text git can't fold", async () => {
+      const items = Array.from({ length: 10 }, (_, i) => ({
+        file: `f${i}.ts`, status: "modified", additions: 1, deletions: 1, before: "a\n", after: i === 9 ? "late Ünïcode\n" : "b\n",
+      }) as FileDiffItem);
+      show(...items);
+      const wrapper = mountReview();
+      await flushPromises();
+
+      await openFind(wrapper, "ünïcode");
+
+      // (Earlier tests' panels are still mounted and search their own queries.)
+      expect(searchMock).not.toHaveBeenCalledWith(expect.anything(), expect.anything(), "ünïcode", expect.anything());
+      expect(count(wrapper)).toBe("1 of 1");
     });
 
     it("searches a collapsed file, opens it on the match, and says which collapsed files it can't search", async () => {

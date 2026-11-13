@@ -9,6 +9,7 @@ import {
   Ellipsis,
   ExternalLink,
   FileText,
+  Search,
   Undo2,
   WrapText,
 } from "lucide-vue-next";
@@ -22,7 +23,7 @@ import {
   AlertDialogHeader,
   AlertDialogTitle,
 } from "@/components/ui/alert-dialog";
-import { readSessionFile, restoreSessionFile, writeSessionFile } from "@/api/session-files";
+import { readSessionFile, restoreSessionFile, searchSessionChanges, writeSessionFile } from "@/api/session-files";
 import type { FileDiffItem } from "@/api/client";
 import LinesBar from "@/components/canvas/LinesBar.vue";
 import { useCanvasAnnotate } from "@/composables/use-canvas-annotation";
@@ -432,21 +433,75 @@ const find = useChangesFind({
   redraws: () => [layout.value, collapsed.value, openFolds.value, drawnAll.value, rendered.value, views.value],
 });
 
-// While the bar is open, collapsed files load too, so the search covers every file. Lockfiles and very large diffs
-// stay shut: drawing their lines is what freezes the panel, and nobody searches them.
+// The machine says which changed files hold the text (one git grep of each side of the change set), and only those
+// load: loading every file to search it meant hundreds of requests on a big change. A machine that can't say (an older
+// Fleet, git failing) gets the old way, every file loading while the bar is open. git's -i folds ASCII letters only, so
+// a query with others is searched the old way too.
+// undefined: nothing asked (bar shut, nothing typed, or the answer is on its way); null: the machine can't say.
+const serverMatches = shallowRef<ReadonlyMap<string, number> | null | undefined>(undefined);
+const searchPending = shallowRef(false);
+let searchRun = 0;
+let searchTimer: ReturnType<typeof setTimeout> | undefined;
+let searchAbort: AbortController | undefined;
 watch(
-  [find.isOpen, files],
+  [find.isOpen, () => find.query.value.trim(), files],
+  ([open, query]) => {
+    clearTimeout(searchTimer);
+    searchAbort?.abort();
+    const run = ++searchRun;
+    if (!open || query === "") {
+      serverMatches.value = undefined;
+      searchPending.value = false;
+      return;
+    }
+    if (/[^\u0000-\u007f]/.test(query)) {
+      serverMatches.value = null;
+      searchPending.value = false;
+      return;
+    }
+    searchPending.value = true;
+    searchTimer = setTimeout(async () => {
+      searchAbort = new AbortController();
+      const found = await searchSessionChanges(machine, props.sessionId, query, searchAbort.signal);
+      if (run !== searchRun) return;
+      serverMatches.value = found;
+      searchPending.value = false;
+    }, 120);
+  },
+  { immediate: true },
+);
+onBeforeUnmount(() => {
+  clearTimeout(searchTimer);
+  searchAbort?.abort();
+});
+
+/** Whether find needs this file loaded: it holds the text, or the machine can't say. Lockfiles and very large diffs stay shut. */
+function findWants(file: FileDiffItem): boolean {
+  const matches = serverMatches.value;
+  return !startsCollapsed(file) && matches !== undefined && (matches === null || matches.has(file.file));
+}
+watch(
+  [find.isOpen, serverMatches, files],
   ([open]) => {
     if (!open) return;
     for (const file of files.value) {
-      if (!startsCollapsed(file)) load(file.file, versionOf(file));
+      if (findWants(file)) load(file.file, versionOf(file));
     }
   },
   { immediate: true },
 );
-const findSearching = computed(() => files.value.some((file) => entries.value[file.file]?.status === "loading"));
+const findSearching = computed(
+  () => searchPending.value || files.value.some((file) => findWants(file) && entries.value[file.file]?.status === "loading"),
+);
+// Files with matches that aren't searched here: lockfiles and very large diffs, shut. Without the machine's answer,
+// every such file counts.
 const findUnsearched = computed(
-  () => files.value.filter((file) => entries.value[file.file]?.status !== "ready" && startsCollapsed(file) && !isOpen(file.file)).length,
+  () => files.value.filter((file) =>
+    startsCollapsed(file)
+    && !isOpen(file.file)
+    && entries.value[file.file]?.status !== "ready"
+    && (serverMatches.value == null || serverMatches.value.has(file.file)),
+  ).length,
 );
 
 // ─── Selected lines: Copy link, Quote, Add to message ────────────────────────
@@ -678,6 +733,20 @@ function onCodeScroll(event: Event): void {
           Split
         </button>
       </div>
+      <button
+        type="button"
+        class="review__icon"
+        :aria-pressed="find.isOpen.value"
+        title="Find in changes (Ctrl+F)"
+        aria-label="Find in changes"
+        data-testid="review-find"
+        @click="find.isOpen.value ? find.close() : find.open()"
+      >
+        <Search
+          :size="15"
+          aria-hidden="true"
+        />
+      </button>
       <button
         type="button"
         class="review__icon"

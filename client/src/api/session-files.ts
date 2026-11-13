@@ -1,5 +1,6 @@
 import type { BrowseDirectoryResponse, FileContentResponse } from "./client";
 import type { MachineTarget } from "@/lib/machine-target";
+import { apiFetchOn } from "@/lib/api-client";
 
 /**
  * Browse the directory structure of a session's workspace.
@@ -147,4 +148,29 @@ export async function resolveSessionFiles(
   }
 
   return new Map(data.files.map((file) => [file.path, file.relativePath]));
+}
+
+/**
+ * The changed files whose text (before or after) holds `query`, any case, with how many lines do: one request instead
+ * of loading every file to search it. Null when the machine can't say (an older Fleet without the endpoint, git failed),
+ * so the caller searches the loaded diffs instead.
+ */
+export async function searchSessionChanges(
+  machine: MachineTarget,
+  sessionId: string,
+  query: string,
+  signal?: AbortSignal,
+): Promise<ReadonlyMap<string, number> | null> {
+  try {
+    const response = await apiFetchOn(
+      machine.connection,
+      `/api/sessions/${encodeURIComponent(sessionId)}/diffs/search?q=${encodeURIComponent(query)}`,
+      { signal },
+    );
+    if (!response.ok) return null;
+    const body = (await response.json()) as { files?: Array<{ file: string; count: number }> };
+    return new Map((body.files ?? []).map((match) => [match.file, match.count]));
+  } catch {
+    return null;
+  }
 }
