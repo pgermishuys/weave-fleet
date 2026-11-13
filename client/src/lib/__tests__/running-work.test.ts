@@ -174,3 +174,15 @@ describe("applyDomainEvent with work events", () => {
     expect(applyDomainEvent(state, { type: "work.ended", payload: { nope: true } as never })).toBe(state);
   });
 });
+
+describe("turnStartedAt", () => {
+  it("is the prompt that began the turn; a prompt sent mid-turn doesn't restart the clock", async () => {
+    const { turnStartedAt } = await import("@/lib/running-work");
+    expect(turnStartedAt([
+      { role: "user", createdAt: 1_000 },
+      { role: "assistant", createdAt: 2_000 },
+      { role: "user", createdAt: 600_000, steered: true },
+    ])).toBe(1_000);
+    expect(turnStartedAt([{ role: "assistant", createdAt: 1 }])).toBeNull();
+  });
+});

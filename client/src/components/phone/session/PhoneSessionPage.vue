@@ -61,6 +61,7 @@ import { readCredentialsSync } from "@/lib/device-credentials";
 import { useMachineTarget } from "@/lib/machine-target";
 import { foldMessages, groupTools, type FoldedStep } from "@/lib/phone/fold-steps";
 import { sessionFolder } from "@/lib/phone/inbox";
+import { turnStartedAt as startOfTurn } from "@/lib/running-work";
 import { lastSeenAt, markSeen, sinceYouLookedIndex } from "@/lib/phone/last-seen";
 import { headerStatus } from "@/lib/phone/session-status";
 import { useSessionsStore } from "@/stores/sessions";
@@ -107,12 +108,7 @@ const machineName = computed(() => machine.connection?.name ?? readCredentialsSy
 const title = computed(() => session.value?.session.title?.trim() || "Session");
 const folder = computed(() => (session.value ? sessionFolder(session.value) : null));
 
-const turnStartedAt = computed(() => {
-  for (const message of [...stream.messages.value].reverse()) {
-    if (message.role === "user") return message.createdAt ?? null;
-  }
-  return null;
-});
+const turnStartedAt = computed(() => startOfTurn(stream.messages.value));
 const lastMessageAt = computed(() => stream.messages.value.at(-1)?.createdAt ?? null);
 const updatedAt = computed(() => {
   const time = session.value?.session.time;

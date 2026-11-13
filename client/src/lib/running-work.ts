@@ -188,3 +188,17 @@ export function workResult(item: RunningWorkItem): string | null {
 export function workFailed(item: RunningWorkItem): boolean {
   return !isWorkRunning(item) && (item.status === "error" || item.endedReason === "error" || item.endedReason === "lost");
 }
+
+/**
+ * When the running turn began: your last prompt that started it. A prompt sent into the running turn (steered) is
+ * part of that turn, so it doesn't restart the clock.
+ */
+export function turnStartedAt(messages: readonly { role: string; createdAt?: number; steered?: boolean }[]): number | null {
+  for (let index = messages.length - 1; index >= 0; index -= 1) {
+    const message = messages[index];
+    if (message.role === "user" && message.steered !== true) {
+      return message.createdAt ?? null;
+    }
+  }
+  return null;
+}
