@@ -353,4 +353,77 @@ public sealed class PromptQueueServiceTests : IAsyncDisposable
         _harness.SendPromptCalls.Select(c => c.Text).ShouldBe(["first"]);
         (await _queue.ListAsync("s1")).Select(i => i.Text).ShouldBe(["second"]);
     }
+
+    [Fact]
+    public async Task Two_Send_nows_at_once_on_a_busy_session_steer_each_message_once_in_queue_order()
+    {
+        var (service, a, b, _) = await QueueThreeAsync();
+        var release = new TaskCompletionSource();
+        var order = new List<string>(); // the harness fake's own call list isn't ordered
+        _harness.SendPromptBehavior = (text, _, _) =>
+        {
+            lock (order)
+                order.Add(text);
+            return release.Task;
+        };
+
+        var one = service.SendNowAsync("s1", a);
+        var two = service.SendNowAsync("s1", b);
+        await Task.Delay(100);
+        release.SetResult();
+        var results = await Task.WhenAll(one, two);
+
+        results.ShouldAllBe(r => r.IsSuccess);
+        order.ShouldBe(["a", "b"]);
+        (await _queue.ListAsync("s1")).Select(i => i.Text).ShouldBe(["c"]);
+    }
+
+    [Fact]
+    public async Task Two_Send_nows_for_one_message_at_once_send_it_once_and_neither_fails()
+    {
+        var (service, a, _, _) = await QueueThreeAsync();
+        var release = new TaskCompletionSource();
+        _harness.SendPromptBehavior = (_, _, _) => release.Task;
+
+        var one = service.SendNowAsync("s1", a);
+        var two = service.SendNowAsync("s1", a);
+        await Task.Delay(100);
+        release.SetResult();
+        var results = await Task.WhenAll(one, two);
+
+        results.ShouldAllBe(r => r.IsSuccess);
+        _harness.SendPromptCalls.Select(c => c.Text).ShouldBe(["a"]);
+    }
+
+    [Fact]
+    public async Task Two_Send_nows_at_once_on_an_idle_session_do_not_start_two_turns_at_the_same_time()
+    {
+        Seed();
+        Idle();
+        var service = Build();
+        var a = await QueueSilentlyAsync(service, "a");
+        var b = await QueueSilentlyAsync(service, "b");
+        // A harness takes one turn at a time: a second prompt while one is being started is refused.
+        var starting = 0;
+        var order = new List<string>();
+        _harness.SendPromptBehavior = async (text, _, token) =>
+        {
+            lock (order)
+                order.Add(text);
+            if (Interlocked.Increment(ref starting) > 1)
+                throw new InvalidOperationException("Session already has an active run.");
+            await Task.Delay(100, token);
+            Interlocked.Decrement(ref starting);
+        };
+
+        var results = await Task.WhenAll(service.SendNowAsync("s1", a), service.SendNowAsync("s1", b));
+
+        results.ShouldAllBe(r => r.IsSuccess);
+        order.ShouldBe(["a", "b"]);
+        (await _queue.ListAsync("s1")).ShouldBeEmpty();
+    }
+
+    // An item put straight into the store, as a message queued while the session works: no send, whatever the status.
+    private static async Task<string> QueueSilentlyAsync(PromptQueueService service, string text)
+        => (await service.EnqueueWithoutSendingAsync("s1", new QueuePromptRequest(text, QueuedPromptKinds.Prompt))).Value.Id;
 }
