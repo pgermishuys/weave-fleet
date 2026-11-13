@@ -67,7 +67,7 @@ function chart(t: string): string {
 
 function table(t: string): string {
   const { rows } = rowsFor(t);
-  let h = `<table><thead><tr><th>Interaction</th><th>Metric</th><th>${esc(cmp.base)}<br>median / p95</th><th>${esc(cmp.head)}<br>median / p95</th><th>Change</th></tr></thead><tbody>`;
+  let h = `<div class="tw"><table><thead><tr><th>Interaction</th><th>Metric</th><th>${esc(cmp.base)}<br>median / p95</th><th>${esc(cmp.head)}<br>median / p95</th><th>Change</th></tr></thead><tbody>`;
   let last = "";
   for (const r of rows) {
     const first = r.scenario !== last;
@@ -80,7 +80,7 @@ function table(t: string): string {
       + `<td>${r.head.skipped ? '<span class="muted">n/a</span>' : `${fmt(r.head.median)} / ${fmt(r.head.p95)}`}</td>`
       + `<td class="${sig}">${skipped || ch == null ? "–" : `${ch >= 0 ? "+" : ""}${ch.toFixed(0)}%`}${sig === "worse" ? " ▲" : sig === "better" ? " ▼" : ""}</td></tr>`;
   }
-  return h + `</tbody></table>`;
+  return h + `</tbody></table></div>`;
 }
 
 function img(path: string, alt: string): string {
@@ -107,7 +107,7 @@ svg .grid{stroke:var(--border)}svg .axis{fill:var(--muted);font-size:11px}svg .l
 svg .s1{fill:var(--s1)}svg .s2{fill:var(--s2)}svg .tick{stroke:var(--text);stroke-width:1.5;opacity:.55}
 figure{display:inline-block;vertical-align:top;width:300px;margin:12px 14px 0 0}figure img{width:100%;border:1px solid var(--border);border-radius:8px}figcaption{color:var(--muted);font-size:13px}
 .ask{border-left:3px solid var(--accent);padding-left:12px}
-ol li,ul li{margin:4px 0}`;
+ol li,ul li{margin:4px 0}.tw{overflow-x:auto}code{overflow-wrap:anywhere}`;
 
 let html = `<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>${esc(findings.title)}</title><style>${css}</style></head><body><main>`;
 html += `<h1>${esc(findings.title)}</h1><p class="muted">${findings.subtitle}</p>`;
