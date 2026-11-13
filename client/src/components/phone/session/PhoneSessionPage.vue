@@ -62,6 +62,7 @@ import { useMachineTarget } from "@/lib/machine-target";
 import { foldMessages, groupTools, type FoldedStep } from "@/lib/phone/fold-steps";
 import { sessionFolder } from "@/lib/phone/inbox";
 import { turnStartedAt as startOfTurn } from "@/lib/running-work";
+import { workingOn, workingOnText } from "@/lib/working-on";
 import { lastSeenAt, markSeen, sinceYouLookedIndex } from "@/lib/phone/last-seen";
 import { headerStatus } from "@/lib/phone/session-status";
 import { useSessionsStore } from "@/stores/sessions";
@@ -274,6 +275,11 @@ watch(() => stream.isLoading.value, (loading) => {
 const sheet = shallowRef<"menu" | "changes" | "files" | "side" | "terminal" | "pane" | null>(null);
 const { harnesses } = useHarnesses();
 const caps = computed(() => harnessCapabilities(session.value?.harnessType, harnesses.value));
+// The call the turn waits on, in the working line, as the desktop says it.
+const workingLine = computed(() => {
+  const work = workingOn(stream.messages.value, caps.value.steerDelivery);
+  return work ? workingOnText(work, now.value) : null;
+});
 const { diffs, base: diffsBase, isLoading: diffsLoading, fetchDiffs } = useDiffs(sessionId);
 const { runShellCommand } = useRunShellCommand(sessionId.value);
 const { abortSession } = useAbortSession();
@@ -633,6 +639,11 @@ onUnmounted(() => {
               v-if="status.detail"
               class="ph-working__t"
             >· {{ status.detail }}</span>
+            <span
+              v-if="workingLine"
+              class="ph-working__t"
+              data-testid="phone-working-tool"
+            >· {{ workingLine }}</span>
           </p>
           <p
             v-else-if="shown.tone === 'needs-you'"

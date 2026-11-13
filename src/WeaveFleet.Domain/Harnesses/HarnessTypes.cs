@@ -78,6 +78,13 @@ public sealed record HarnessCapabilities
     public bool SteersByDefault { get; init; }
 
     /// <summary>
+    /// With <see cref="SupportsSteering"/>: when the agent reads a steered message. <see cref="SteerDeliveries.NextStep"/>:
+    /// when its current step ends, so a tool call that is running finishes first. <see cref="SteerDeliveries.Immediate"/>:
+    /// while the call runs. Null without steering. The conversation uses it to tell you the message is waiting.
+    /// </summary>
+    public string? SteerDelivery { get; init; }
+
+    /// <summary>
     /// The user can run a shell command in the session's folder from the composer (<c>!git status</c>):
     /// <see cref="IHarnessSession.RunShellCommandAsync"/> runs it without a model turn, the command and its output
     /// show in the conversation as a message of role <see cref="ShellCommands.Role"/>, and the agent sees them on
@@ -619,6 +626,13 @@ public sealed record PromptOptions
     /// for the running turn throws <see cref="HarnessBusyException"/> at once instead, for the caller to queue the prompt.
     /// </summary>
     public bool FailIfBusy { get; init; }
+}
+
+/// <summary>The values of <see cref="HarnessCapabilities.SteerDelivery"/>.</summary>
+public static class SteerDeliveries
+{
+    public const string NextStep = "next-step";
+    public const string Immediate = "immediate";
 }
 
 /// <summary>When a prompt sent while a turn runs reaches the agent.</summary>

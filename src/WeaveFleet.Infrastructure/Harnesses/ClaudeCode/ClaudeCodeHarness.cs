@@ -43,6 +43,7 @@ public sealed class ClaudeCodeHarness : IHarness
         // step ends, in the same turn.
         SupportsSteering = true,
         SteersByDefault = true,
+        SteerDelivery = SteerDeliveries.NextStep,
         // Background shells, monitors and subagents (task_* messages); stop_task stops one, and a command's output file
         // can be read.
         ReportsBackgroundWork = true,

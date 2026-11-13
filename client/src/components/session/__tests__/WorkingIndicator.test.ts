@@ -84,3 +84,36 @@ describe("WorkingIndicator when the session's machine isn't answering", () => {
     expect(wrapper.find(".working__elapsed").exists()).toBe(false);
   });
 });
+
+describe("WorkingIndicator names the running call", () => {
+  const since = Date.parse("2026-11-13T10:02:00Z");
+  const now = Date.parse("2026-11-13T10:12:00Z");
+
+  it("adds the call and its own time after the turn's", () => {
+    vi.useFakeTimers();
+    vi.setSystemTime(now);
+    const wrapper = mount(WorkingIndicator, {
+      props: { since: now - 12 * 60_000, work: { name: "Bash", since, more: 0, held: false } },
+    });
+    expect(wrapper.get(".working__elapsed").text()).toBe("· 12m");
+    expect(wrapper.get("[data-testid='working-tool']").text()).toBe("· Bash running 10m");
+    wrapper.unmount();
+    vi.useRealTimers();
+  });
+
+  it("says the message waits when it's held", () => {
+    vi.useFakeTimers();
+    vi.setSystemTime(now);
+    const wrapper = mount(WorkingIndicator, {
+      props: { since: now - 12 * 60_000, work: { name: "Bash", since, more: 0, held: true } },
+    });
+    expect(wrapper.get("[data-testid='working-tool']").text()).toContain("Your message goes to the agent when it finishes.");
+    wrapper.unmount();
+    vi.useRealTimers();
+  });
+
+  it("shows only Working with no call", () => {
+    const wrapper = mount(WorkingIndicator, { props: { work: null } });
+    expect(wrapper.find("[data-testid='working-tool']").exists()).toBe(false);
+  });
+});

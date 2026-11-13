@@ -37,6 +37,7 @@ public sealed class OpenCodeHarness(FleetOptions options) : IHarness
         HistoryLivesInHarness = true,
         // A prompt sent while a turn runs is read at the turn's next model call.
         SupportsSteering = true,
+        SteerDelivery = SteerDeliveries.NextStep,
         // POST /session/{id}/shell, between turns (OpenCode refuses one while a turn runs).
         SupportsShellCommands = true,
         SupportsCompaction = true,

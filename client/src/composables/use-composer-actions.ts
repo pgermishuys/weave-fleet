@@ -45,6 +45,8 @@ export interface HarnessCapabilities {
   canSteer: boolean;
   /** Enter steers and Queue waits (the harness says so); other harnesses that steer keep Enter for the queue. */
   steersByDefault: boolean;
+  /** When the agent reads a steered message: `next-step` is after the running tool call finishes. Null when it can't steer. */
+  steerDelivery: "next-step" | "immediate" | null;
   /** Images can go with a prompt. */
   supportsImages: boolean;
   /** `!command` runs in the session's folder. */
@@ -58,6 +60,7 @@ interface HarnessLike {
   capabilities: {
     supportsSteering?: boolean;
     steersByDefault?: boolean;
+    steerDelivery?: "next-step" | "immediate" | null;
     supportsShellCommands?: boolean;
     supportsSideConversations?: boolean;
     supportsImageAttachments?: boolean;
@@ -71,6 +74,7 @@ export function harnessCapabilities(harnessType: string | null | undefined, harn
   return {
     canSteer,
     steersByDefault: canSteer && caps?.steersByDefault === true,
+    steerDelivery: canSteer ? caps?.steerDelivery ?? null : null,
     supportsShell: caps?.supportsShellCommands === true,
     supportsSide: caps?.supportsSideConversations === true,
     supportsImages: caps?.supportsImageAttachments === true,
