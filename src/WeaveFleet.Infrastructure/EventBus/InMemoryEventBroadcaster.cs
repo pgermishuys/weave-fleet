@@ -25,7 +25,22 @@ public sealed class InMemoryEventBroadcaster : IEventBroadcaster, IDisposable
         string? SubscriberUserId,
         Channel<BroadcastEvent> Channel);
 
+    /// <summary>
+    /// Most events one subscriber may have waiting. A subscriber that reads more slowly than events arrive (a stalled
+    /// socket, a phone on a bad link) would otherwise grow the queue, and the server's memory, for as long as it stays
+    /// connected. Past this the subscriber is cut off with <see cref="SubscriberFellBehindException"/>; the hub then
+    /// closes that connection and the client reconnects and reloads a snapshot.
+    /// </summary>
+    internal const int DefaultBacklogLimit = 20_000;
+
+    private readonly int _backlogLimit;
     private readonly ConcurrentDictionary<string, Subscription> _subscriptions = new();
+
+    public InMemoryEventBroadcaster() : this(DefaultBacklogLimit)
+    {
+    }
+
+    internal InMemoryEventBroadcaster(int backlogLimit) => _backlogLimit = backlogLimit;
 
     /// <summary>Number of active subscribers (exposed for test synchronisation).</summary>
     internal int SubscriberCount => _subscriptions.Count;
@@ -94,8 +109,10 @@ public sealed class InMemoryEventBroadcaster : IEventBroadcaster, IDisposable
                 continue;
             }
 
-            // TryWrite is fine — unbounded channel; drop if disposed
-            sub.Channel.Writer.TryWrite(evt);
+            // A full queue means the subscriber stopped reading: cut it off instead of holding events for it forever.
+            // Events still queued are delivered first, then the reader sees the exception.
+            if (!sub.Channel.Writer.TryWrite(evt))
+                sub.Channel.Writer.TryComplete(new SubscriberFellBehindException(_backlogLimit));
         }
 
         return Task.CompletedTask;
@@ -119,10 +136,11 @@ public sealed class InMemoryEventBroadcaster : IEventBroadcaster, IDisposable
         [EnumeratorCancellation] CancellationToken ct)
     {
         var id = Guid.NewGuid().ToString();
-        var channel = Channel.CreateUnbounded<BroadcastEvent>(new UnboundedChannelOptions
+        var channel = Channel.CreateBounded<BroadcastEvent>(new BoundedChannelOptions(_backlogLimit)
         {
             SingleReader = true,
-            SingleWriter = false
+            SingleWriter = false,
+            FullMode = BoundedChannelFullMode.Wait
         });
 
         var sub = new Subscription(id, topics, subscriberUserId, channel);
@@ -149,3 +167,7 @@ public sealed class InMemoryEventBroadcaster : IEventBroadcaster, IDisposable
         _subscriptions.Clear();
     }
 }
+
+/// <summary>A subscriber let more events pile up than the broadcaster keeps for one subscriber.</summary>
+public sealed class SubscriberFellBehindException(int limit)
+    : Exception($"The subscriber had more than {limit} events waiting and was cut off.");
