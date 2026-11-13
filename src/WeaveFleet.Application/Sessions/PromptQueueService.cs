@@ -146,6 +146,22 @@ public sealed partial class PromptQueueService(
     /// </summary>
     public async Task<Result<Unit>> SendNowAsync(string sessionId, string itemId, CancellationToken ct = default)
     {
+        // Two clicks at once (a double click, a phone and a desktop) take their turns, in the order they came: a harness
+        // takes one prompt at a time, so the second would otherwise be refused ("already has an active run") while the
+        // first was still being handed over, or go out ahead of it.
+        await gate.EnterAsync(sessionId, ct).ConfigureAwait(false);
+        try
+        {
+            return await SendNowCoreAsync(sessionId, itemId, ct).ConfigureAwait(false);
+        }
+        finally
+        {
+            gate.Leave(sessionId);
+        }
+    }
+
+    private async Task<Result<Unit>> SendNowCoreAsync(string sessionId, string itemId, CancellationToken ct)
+    {
         var session = await sessions.GetByIdAsync(sessionId).ConfigureAwait(false);
         if (session is null)
             return FleetError.NotFoundFor(nameof(Session), sessionId);
@@ -286,9 +302,15 @@ public sealed partial class PromptQueueService(
 /// <summary>Which sessions have a queue send under way. Shared by every scope, so two sends for one session can't overlap.</summary>
 public sealed class PromptQueueGate
 {
-    private readonly System.Collections.Concurrent.ConcurrentDictionary<string, byte> _sending = new();
+    private readonly System.Collections.Concurrent.ConcurrentDictionary<string, SemaphoreSlim> _sending = new();
 
-    public bool TryEnter(string sessionId) => _sending.TryAdd(sessionId, 0);
+    private SemaphoreSlim Of(string sessionId) => _sending.GetOrAdd(sessionId, _ => new SemaphoreSlim(1, 1));
 
-    public void Leave(string sessionId) => _sending.TryRemove(sessionId, out _);
+    /// <summary>Takes the session's turn at sending, or says another send holds it.</summary>
+    public bool TryEnter(string sessionId) => Of(sessionId).Wait(0);
+
+    /// <summary>Waits for the session's turn at sending; waiters go in the order they asked.</summary>
+    public Task EnterAsync(string sessionId, CancellationToken ct = default) => Of(sessionId).WaitAsync(ct);
+
+    public void Leave(string sessionId) => Of(sessionId).Release();
 }
