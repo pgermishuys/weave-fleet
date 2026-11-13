@@ -27,11 +27,11 @@ Each fix has a test that failed first: `GitDiffServiceTests` (pathspec, outside-
 
 | main: `/diffs` fails (forced 502), panel stays shut | this PR: the panel opens on the error |
 |---|---|
-| ![](https://raw.githubusercontent.com/pgermishuys/weave-fleet/c585bb5f1b93526328dbcb982bddc042a7539c27/mockups/changes-sluggish/main-load-failed-light.png) | ![](https://raw.githubusercontent.com/pgermishuys/weave-fleet/c585bb5f1b93526328dbcb982bddc042a7539c27/mockups/changes-sluggish/fix-load-failed-light.png) |
+| ![](https://raw.githubusercontent.com/pgermishuys/weave-fleet/30bba6b489fe2b038dfd29fad3601a69a28711a4/mockups/changes-sluggish/main-load-failed-light.png) | ![](https://raw.githubusercontent.com/pgermishuys/weave-fleet/30bba6b489fe2b038dfd29fad3601a69a28711a4/mockups/changes-sluggish/fix-load-failed-light.png) |
 
 | A file's diff failed: Try again | Big repository, dark |
 |---|---|
-| ![](https://raw.githubusercontent.com/pgermishuys/weave-fleet/c585bb5f1b93526328dbcb982bddc042a7539c27/mockups/changes-sluggish/fix-file-retry-light.png) | ![](https://raw.githubusercontent.com/pgermishuys/weave-fleet/c585bb5f1b93526328dbcb982bddc042a7539c27/mockups/changes-sluggish/fix-big-repo-dark.png) |
+| ![](https://raw.githubusercontent.com/pgermishuys/weave-fleet/30bba6b489fe2b038dfd29fad3601a69a28711a4/mockups/changes-sluggish/fix-file-retry-light.png) | ![](https://raw.githubusercontent.com/pgermishuys/weave-fleet/30bba6b489fe2b038dfd29fad3601a69a28711a4/mockups/changes-sluggish/fix-big-repo-dark.png) |
 
 ## Rerun the measurements
 
