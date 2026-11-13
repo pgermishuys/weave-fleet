@@ -781,7 +781,11 @@ async function submit(withoutMessage: boolean): Promise<void> {
     // The live machine's list holds only its own sessions.
     const row = buildCreatedSessionRow(response, request, projectForRow());
     if (target.isLive) sessionsStore.upsertSession(row);
-    else sessionsStore.upsertElsewhere(target.key, row);
+    else {
+      sessionsStore.upsertElsewhere(target.key, row);
+      // The sidebar lists another machine's sessions from that machine's own list, which reads seconds later.
+      machines.upsertSession(target.key, row);
+    }
     workspaceUiStore.handOffNewSessionDraft(sessionId);
 
     // Someone who left while it started stays where they went; the row is there for them.

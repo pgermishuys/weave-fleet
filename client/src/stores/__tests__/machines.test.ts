@@ -328,6 +328,22 @@ describe("machines store", () => {
       expect(loadSessionMachines()["remote-1"]).toBe(falcon.id);
     });
 
+    it("shows a session just started on it in its list at once, before its next list says so", async () => {
+      routes["http://100.64.90.72:2113/api/sessions"] = () => json([session("remote-1", "Older")]);
+      const store = useMachinesStore();
+      await store.refreshMachine(falcon.id);
+
+      store.upsertSession(falcon.id, session("remote-2", "Just started") as never);
+
+      // Newest first, and the older one stays.
+      expect(store.others[falcon.id].sessions.map((item) => item.session.id)).toEqual(["remote-2", "remote-1"]);
+      expect(loadSessionMachines()["remote-2"]).toBe(falcon.id);
+
+      // The same session again updates its row, never doubles it.
+      store.upsertSession(falcon.id, { ...session("remote-2", "Renamed") } as never);
+      expect(store.others[falcon.id].sessions.map((item) => item.session.title)).toEqual(["Renamed", "Older"]);
+    });
+
     it("keeps the last list and says why when a machine goes away", async () => {
       routes["http://100.64.90.72:2113/api/sessions"] = () => json([session("remote-1", "Kept")]);
       const store = useMachinesStore();

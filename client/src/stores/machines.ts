@@ -794,6 +794,21 @@ export const useMachinesStore = defineStore("machines", () => {
     };
   }
 
+  /**
+   * Shows a session just started on another machine in that machine's list at once, newest first, before the
+   * machine's next list has it (a read can take seconds). A session the list already has is updated in place.
+   */
+  function upsertSession(key: string, row: SessionListItem): void {
+    const state = sessionsOf(key);
+    const known = state.sessions.some((item) => item.session.id === row.session.id);
+    const sessions = known
+      ? state.sessions.map((item) => (item.session.id === row.session.id ? { ...item, ...row } : item))
+      : [row, ...state.sessions];
+    others.value = { ...others.value, [key]: { ...state, sessions } };
+    saveCachedSessions(others.value);
+    rememberSessions(key, [row.session.id]);
+  }
+
   /** Keeps the last list: an unreachable machine's sessions stay, marked as such. */
   function markUnreachable(key: string, error: string): void {
     others.value = { ...others.value, [key]: { ...sessionsOf(key), error, loading: false } };
@@ -1141,6 +1156,7 @@ export const useMachinesStore = defineStore("machines", () => {
     replaceHomeToken,
     refreshMachine,
     patchSession,
+    upsertSession,
     refreshOthers,
     refreshUpdates,
     rememberLiveSessions,
