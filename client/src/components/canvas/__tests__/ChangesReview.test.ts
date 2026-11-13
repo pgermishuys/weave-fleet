@@ -1,7 +1,7 @@
 import { flushPromises, mount } from "@vue/test-utils";
 import { createPinia, setActivePinia } from "pinia";
 import { computed, defineComponent, h, ref } from "vue";
-import { beforeEach, describe, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import ChangesReview from "@/components/canvas/ChangesReview.vue";
 import type { FileDiffItem } from "@/api/client";
 import { useDraftState } from "@/composables/use-draft-state";
@@ -80,8 +80,18 @@ function notesSection(wrapper: ReturnType<typeof mountReview>) {
   return wrapper.findAll("[data-testid='review-file']").find((section) => section.attributes("data-review-file") === "src/notes.ts")!;
 }
 
+/** Every section is in view at once (the shared setup's observer reports nothing, so no file would ever draw). */
+class AllInViewObserver {
+  constructor(private readonly callback: (entries: Array<{ target: Element; isIntersecting: boolean }>) => void) {}
+  observe(element: Element) { this.callback([{ target: element, isIntersecting: true }]); }
+  disconnect() {}
+  unobserve() {}
+}
+
 describe("ChangesReview", () => {
+  afterEach(() => { vi.unstubAllGlobals(); });
   beforeEach(() => {
+    vi.stubGlobal("IntersectionObserver", AllInViewObserver);
     pinia = createPinia();
     setActivePinia(pinia);
     localStorage.clear();
@@ -95,6 +105,46 @@ describe("ChangesReview", () => {
     searchMock.mockImplementation(async () => null);
     fetchMock.mockImplementation(async (_machine: unknown, url: string) =>
       respond(decodeURIComponent(new URL(url, "http://x").searchParams.get("path") ?? "")));
+  });
+
+  it("fetches and draws an open file only once it comes near the visible part, and keeps it drawn", async () => {
+    // As T3 Code and OpenChamber do: drawing every open file's lines at once made opening a session a third slower.
+    const observed: Element[] = [];
+    let report: ((entries: Array<{ target: Element; isIntersecting: boolean }>) => void) | null = null;
+    class StubObserver {
+      constructor(callback: (entries: Array<{ target: Element; isIntersecting: boolean }>) => void, public options: { rootMargin?: string }) {
+        report = callback;
+      }
+      observe(element: Element) { observed.push(element); }
+      disconnect() {}
+      unobserve() {}
+    }
+    vi.stubGlobal("IntersectionObserver", StubObserver);
+    try {
+      const wrapper = mountReview();
+      await flushPromises();
+      fetchMock.mockClear();
+      await flushPromises();
+
+      expect(wrapper.findAll("[data-testid='review-file-pending']")).toHaveLength(2);
+      expect(fetchMock).not.toHaveBeenCalled();
+
+      const notes = observed.find((element) => (element as HTMLElement).dataset.reviewFile === "src/notes.ts")!;
+      report!([{ target: notes, isIntersecting: true }]);
+      await flushPromises();
+
+      expect(notesSection(wrapper).find("[data-testid='review-file-pending']").exists()).toBe(false);
+      expect(notesSection(wrapper).text()).toContain("tags: string[];");
+      expect(fetchMock.mock.calls.map(([, url]) => decodeURIComponent(String(url)))).toEqual([expect.stringContaining("path=src/notes.ts")]);
+
+      // Scrolled away again: it stays drawn.
+      report!([{ target: notes, isIntersecting: false }]);
+      await flushPromises();
+      expect(notesSection(wrapper).text()).toContain("tags: string[];");
+      wrapper.unmount();
+    } finally {
+      vi.unstubAllGlobals();
+    }
   });
 
   it("offers Try again on a file whose diff failed to load, and draws it when the retry answers", async () => {
