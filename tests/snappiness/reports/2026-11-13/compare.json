@@ -1,0 +1,1638 @@
+{
+  "base": "v0.60.0",
+  "head": "main-1e5a98f6",
+  "throttles": {
+    "1": [
+      {
+        "scenario": "coldStart",
+        "metric": "shownMs",
+        "label": "session list shown",
+        "base": {
+          "median": 1575.7000000029802,
+          "p95": 3653.720000007746,
+          "n": 10
+        },
+        "head": {
+          "median": 983.4999999850988,
+          "p95": 1918.8099999874817,
+          "n": 10
+        }
+      },
+      {
+        "scenario": "coldStart",
+        "metric": "conversationMs",
+        "label": "conversation shown",
+        "base": {
+          "median": 2921.0499999970198,
+          "p95": 4928.320000007747,
+          "n": 10
+        },
+        "head": {
+          "median": 1804.5999999940395,
+          "p95": 2684.8599999994026,
+          "n": 10
+        }
+      },
+      {
+        "scenario": "coldStart",
+        "metric": "longTaskMs",
+        "label": "long tasks",
+        "base": {
+          "median": 868.5,
+          "p95": 993.1499999999999,
+          "n": 10
+        },
+        "head": {
+          "median": 652.5,
+          "p95": 777.85,
+          "n": 10
+        }
+      },
+      {
+        "scenario": "coldStart",
+        "metric": "requests",
+        "label": "requests",
+        "base": {
+          "median": 232,
+          "p95": 232,
+          "n": 10
+        },
+        "head": {
+          "median": 238,
+          "p95": 242.55,
+          "n": 10
+        }
+      },
+      {
+        "scenario": "coldStart",
+        "metric": "jsKB",
+        "label": "JS decoded KB",
+        "base": {
+          "median": 2579.6357421875,
+          "p95": 2579.6357421875,
+          "n": 10
+        },
+        "head": {
+          "median": 2792.4287109375,
+          "p95": 2792.4287109375,
+          "n": 10
+        }
+      },
+      {
+        "scenario": "openSession",
+        "metric": "shownMs",
+        "label": "shown",
+        "base": {
+          "median": 253.65000000596046,
+          "p95": 314.9150000080466,
+          "n": 10
+        },
+        "head": {
+          "median": 205.25,
+          "p95": 271.0750000059604,
+          "n": 10
+        }
+      },
+      {
+        "scenario": "openSession",
+        "metric": "settledMs",
+        "label": "settled",
+        "base": {
+          "median": 284.5,
+          "p95": 324.59000000655647,
+          "n": 10
+        },
+        "head": {
+          "median": 290.70000000298023,
+          "p95": 570.1100000038742,
+          "n": 10
+        }
+      },
+      {
+        "scenario": "openSession",
+        "metric": "longTaskMs",
+        "label": "long tasks",
+        "base": {
+          "median": 219,
+          "p95": 264.29999999999995,
+          "n": 10
+        },
+        "head": {
+          "median": 132.5,
+          "p95": 217.84999999999997,
+          "n": 10
+        }
+      },
+      {
+        "scenario": "openSession",
+        "metric": "requests",
+        "label": "requests",
+        "base": {
+          "median": 23,
+          "p95": 23,
+          "n": 10
+        },
+        "head": {
+          "median": 22,
+          "p95": 30,
+          "n": 10
+        }
+      },
+      {
+        "scenario": "switchLong",
+        "metric": "shownMs",
+        "label": "shown",
+        "base": {
+          "median": 582.2999999970198,
+          "p95": 673.5650000020861,
+          "n": 10
+        },
+        "head": {
+          "median": 400.04999999701977,
+          "p95": 559.5650000065565,
+          "n": 10
+        }
+      },
+      {
+        "scenario": "switchLong",
+        "metric": "settledMs",
+        "label": "settled",
+        "base": {
+          "median": 700.2999999970198,
+          "p95": 855.4300000131129,
+          "n": 10
+        },
+        "head": {
+          "median": 586.75,
+          "p95": 748.630000001192,
+          "n": 10
+        }
+      },
+      {
+        "scenario": "switchLong",
+        "metric": "longTaskMs",
+        "label": "long tasks",
+        "base": {
+          "median": 523,
+          "p95": 594.95,
+          "n": 10
+        },
+        "head": {
+          "median": 395.5,
+          "p95": 638.55,
+          "n": 10
+        }
+      },
+      {
+        "scenario": "switchLong",
+        "metric": "requests",
+        "label": "requests",
+        "base": {
+          "median": 13,
+          "p95": 13,
+          "n": 10
+        },
+        "head": {
+          "median": 14,
+          "p95": 21,
+          "n": 10
+        }
+      },
+      {
+        "scenario": "typing",
+        "metric": "keyP95Ms",
+        "label": "keystroke→paint p95",
+        "base": {
+          "median": 17.899999991059303,
+          "p95": 19.374999994039534,
+          "n": 10
+        },
+        "head": {
+          "median": 22.00000001490116,
+          "p95": 28.274999989569185,
+          "n": 10
+        }
+      },
+      {
+        "scenario": "typing",
+        "metric": "keyMedianMs",
+        "label": "keystroke→paint median",
+        "base": {
+          "median": 10.150000005960464,
+          "p95": 10.655000007152557,
+          "n": 10
+        },
+        "head": {
+          "median": 12.349999994039536,
+          "p95": 17.640000008046627,
+          "n": 10
+        }
+      },
+      {
+        "scenario": "typing",
+        "metric": "inpMs",
+        "label": "INP (Event Timing)",
+        "base": {
+          "median": 20,
+          "p95": 24,
+          "n": 10
+        },
+        "head": {
+          "median": 28,
+          "p95": 40,
+          "n": 10
+        }
+      },
+      {
+        "scenario": "sendPrompt",
+        "metric": "shownMs",
+        "label": "bubble shown",
+        "base": {
+          "median": 40.1000000089407,
+          "p95": 77.46000000387426,
+          "n": 10
+        },
+        "head": {
+          "median": 35.75,
+          "p95": 48.25499999672173,
+          "n": 10
+        }
+      },
+      {
+        "scenario": "sendPrompt",
+        "metric": "settledMs",
+        "label": "settled",
+        "base": {
+          "median": 123.84999999403954,
+          "p95": 268.6499999999999,
+          "n": 10
+        },
+        "head": {
+          "median": 93.54999999701977,
+          "p95": 184.01499999463545,
+          "n": 10
+        }
+      },
+      {
+        "scenario": "sendPrompt",
+        "metric": "longTaskMs",
+        "label": "long tasks",
+        "base": {
+          "median": 0,
+          "p95": 163.59999999999994,
+          "n": 10
+        },
+        "head": {
+          "median": 0,
+          "p95": 97.34999999999981,
+          "n": 10
+        }
+      },
+      {
+        "scenario": "sendPrompt",
+        "metric": "requests",
+        "label": "requests",
+        "base": {
+          "median": 3,
+          "p95": 4,
+          "n": 10
+        },
+        "head": {
+          "median": 3,
+          "p95": 3.549999999999999,
+          "n": 10
+        }
+      },
+      {
+        "scenario": "railSessions",
+        "metric": "shownMs",
+        "label": "shown",
+        "base": {
+          "median": 372.24999998509884,
+          "p95": 440.1149999946356,
+          "n": 10
+        },
+        "head": {
+          "median": 269.49999998509884,
+          "p95": 306.32500001788134,
+          "n": 10
+        }
+      },
+      {
+        "scenario": "railSessions",
+        "metric": "settledMs",
+        "label": "settled",
+        "base": {
+          "median": 399.69999998807907,
+          "p95": 527.5299999967217,
+          "n": 10
+        },
+        "head": {
+          "median": 295.54999999701977,
+          "p95": 345.7900000140071,
+          "n": 10
+        }
+      },
+      {
+        "scenario": "railSessions",
+        "metric": "longTaskMs",
+        "label": "long tasks",
+        "base": {
+          "median": 362.5,
+          "p95": 419.65,
+          "n": 10
+        },
+        "head": {
+          "median": 254,
+          "p95": 291.84999999999997,
+          "n": 10
+        }
+      },
+      {
+        "scenario": "railSessions",
+        "metric": "requests",
+        "label": "requests",
+        "base": {
+          "median": 6,
+          "p95": 9,
+          "n": 10
+        },
+        "head": {
+          "median": 6,
+          "p95": 7,
+          "n": 10
+        }
+      },
+      {
+        "scenario": "railSettings",
+        "metric": "shownMs",
+        "label": "shown",
+        "base": {
+          "median": 53.30000001192093,
+          "p95": 80.58999999612566,
+          "n": 10
+        },
+        "head": {
+          "median": 44.79999999701977,
+          "p95": 85.29499999880785,
+          "n": 10
+        }
+      },
+      {
+        "scenario": "railSettings",
+        "metric": "settledMs",
+        "label": "settled",
+        "base": {
+          "median": 61.1000000089407,
+          "p95": 254.755000001192,
+          "n": 10
+        },
+        "head": {
+          "median": 44.79999999701977,
+          "p95": 171.11500000059598,
+          "n": 10
+        }
+      },
+      {
+        "scenario": "railSettings",
+        "metric": "longTaskMs",
+        "label": "long tasks",
+        "base": {
+          "median": 0,
+          "p95": 67.19999999999997,
+          "n": 10
+        },
+        "head": {
+          "median": 0,
+          "p95": 46.19999999999991,
+          "n": 10
+        }
+      },
+      {
+        "scenario": "railSettings",
+        "metric": "requests",
+        "label": "requests",
+        "base": {
+          "median": 3,
+          "p95": 10,
+          "n": 10
+        },
+        "head": {
+          "median": 2,
+          "p95": 8,
+          "n": 10
+        }
+      },
+      {
+        "scenario": "railAnalytics",
+        "metric": "shownMs",
+        "label": "shown",
+        "base": {
+          "median": 322.6499999910593,
+          "p95": 461.8049999922514,
+          "n": 10
+        },
+        "head": {
+          "median": 27.25,
+          "p95": 48.04499999880789,
+          "n": 10
+        }
+      },
+      {
+        "scenario": "railAnalytics",
+        "metric": "settledMs",
+        "label": "settled",
+        "base": {
+          "median": 348.29999999701977,
+          "p95": 525.2999999940395,
+          "n": 10
+        },
+        "head": {
+          "median": 66.09999999403954,
+          "p95": 151.36499999016513,
+          "n": 10
+        }
+      },
+      {
+        "scenario": "railAnalytics",
+        "metric": "longTaskMs",
+        "label": "long tasks",
+        "base": {
+          "median": 312,
+          "p95": 435.34999999999997,
+          "n": 10
+        },
+        "head": {
+          "median": 0,
+          "p95": 0,
+          "n": 10
+        }
+      },
+      {
+        "scenario": "railAnalytics",
+        "metric": "requests",
+        "label": "requests",
+        "base": {
+          "median": 8,
+          "p95": 13,
+          "n": 10
+        },
+        "head": {
+          "median": 11,
+          "p95": 16,
+          "n": 10
+        }
+      },
+      {
+        "scenario": "railFleet",
+        "metric": "shownMs",
+        "label": "shown",
+        "base": {
+          "median": null,
+          "p95": null,
+          "n": 0,
+          "skipped": "not in this version's rail"
+        },
+        "head": {
+          "median": 26,
+          "p95": 29.720000001788137,
+          "n": 10
+        }
+      },
+      {
+        "scenario": "railFleet",
+        "metric": "settledMs",
+        "label": "settled",
+        "base": {
+          "median": null,
+          "p95": null,
+          "n": 0,
+          "skipped": "not in this version's rail"
+        },
+        "head": {
+          "median": 26.74999998509884,
+          "p95": 45.05000000596046,
+          "n": 10
+        }
+      },
+      {
+        "scenario": "railFleet",
+        "metric": "longTaskMs",
+        "label": "long tasks",
+        "base": {
+          "median": null,
+          "p95": null,
+          "n": 0,
+          "skipped": "not in this version's rail"
+        },
+        "head": {
+          "median": 0,
+          "p95": 0,
+          "n": 10
+        }
+      },
+      {
+        "scenario": "railFleet",
+        "metric": "requests",
+        "label": "requests",
+        "base": {
+          "median": null,
+          "p95": null,
+          "n": 0,
+          "skipped": "not in this version's rail"
+        },
+        "head": {
+          "median": 2,
+          "p95": 6,
+          "n": 10
+        }
+      },
+      {
+        "scenario": "openChanges",
+        "metric": "shownMs",
+        "label": "shown",
+        "base": {
+          "median": 21.149999991059303,
+          "p95": 32.14000000804663,
+          "n": 10
+        },
+        "head": {
+          "median": 141.79999999701977,
+          "p95": 176.20500000417232,
+          "n": 10
+        }
+      },
+      {
+        "scenario": "openChanges",
+        "metric": "settledMs",
+        "label": "settled",
+        "base": {
+          "median": 21.149999991059303,
+          "p95": 32.14000000804663,
+          "n": 10
+        },
+        "head": {
+          "median": 141.79999999701977,
+          "p95": 176.20500000417232,
+          "n": 10
+        }
+      },
+      {
+        "scenario": "openChanges",
+        "metric": "longTaskMs",
+        "label": "long tasks",
+        "base": {
+          "median": 0,
+          "p95": 0,
+          "n": 10
+        },
+        "head": {
+          "median": 122,
+          "p95": 149.5,
+          "n": 10
+        }
+      },
+      {
+        "scenario": "openChanges",
+        "metric": "requests",
+        "label": "requests",
+        "base": {
+          "median": 0,
+          "p95": 0,
+          "n": 10
+        },
+        "head": {
+          "median": 0,
+          "p95": 1.0999999999999979,
+          "n": 10
+        }
+      },
+      {
+        "scenario": "scrollLong",
+        "metric": "p95FrameMs",
+        "label": "frame p95",
+        "base": {
+          "median": 16.799999999999272,
+          "p95": 16.799999999999773,
+          "n": 10
+        },
+        "head": {
+          "median": 16.799999999999272,
+          "p95": 16.79999999999952,
+          "n": 10
+        }
+      },
+      {
+        "scenario": "scrollLong",
+        "metric": "droppedFrames",
+        "label": "dropped frames / 3 s",
+        "base": {
+          "median": 0,
+          "p95": 8.199999999999996,
+          "n": 10
+        },
+        "head": {
+          "median": 0,
+          "p95": 1,
+          "n": 10
+        }
+      },
+      {
+        "scenario": "scrollLong",
+        "metric": "longTaskMs",
+        "label": "long tasks",
+        "base": {
+          "median": 0,
+          "p95": 153.04999999999993,
+          "n": 10
+        },
+        "head": {
+          "median": 0,
+          "p95": 0,
+          "n": 10
+        }
+      },
+      {
+        "scenario": "scrollLong",
+        "metric": "scrolledPx",
+        "label": "scrolled px",
+        "base": {
+          "median": 30000,
+          "p95": 30000,
+          "n": 10
+        },
+        "head": {
+          "median": 30000,
+          "p95": 30000,
+          "n": 10
+        }
+      },
+      {
+        "scenario": "newSessionPage",
+        "metric": "shownMs",
+        "label": "shown",
+        "base": {
+          "median": 90.25000001490116,
+          "p95": 224.93999998867497,
+          "n": 10
+        },
+        "head": {
+          "median": 105.79999999701977,
+          "p95": 165.93999998420475,
+          "n": 10
+        }
+      },
+      {
+        "scenario": "newSessionPage",
+        "metric": "settledMs",
+        "label": "settled",
+        "base": {
+          "median": 90.25000001490116,
+          "p95": 224.93999998867497,
+          "n": 10
+        },
+        "head": {
+          "median": 105.79999999701977,
+          "p95": 165.93999998420475,
+          "n": 10
+        }
+      },
+      {
+        "scenario": "newSessionPage",
+        "metric": "longTaskMs",
+        "label": "long tasks",
+        "base": {
+          "median": 66.5,
+          "p95": 105.04999999999998,
+          "n": 10
+        },
+        "head": {
+          "median": 87.5,
+          "p95": 96.19999999999999,
+          "n": 10
+        }
+      },
+      {
+        "scenario": "newSessionPage",
+        "metric": "requests",
+        "label": "requests",
+        "base": {
+          "median": 2,
+          "p95": 12,
+          "n": 10
+        },
+        "head": {
+          "median": 2,
+          "p95": 11,
+          "n": 10
+        }
+      },
+      {
+        "scenario": "streamingList",
+        "metric": "longTaskMs",
+        "label": "long tasks / 6 s",
+        "base": {
+          "median": 0,
+          "p95": 0,
+          "n": 10
+        },
+        "head": {
+          "median": 0,
+          "p95": 0,
+          "n": 10
+        }
+      },
+      {
+        "scenario": "streamingList",
+        "metric": "maxFrameMs",
+        "label": "worst frame",
+        "base": {
+          "median": 16.80000000000291,
+          "p95": 16.80000000000291,
+          "n": 10
+        },
+        "head": {
+          "median": 16.80000000000291,
+          "p95": 33.40000000000009,
+          "n": 10
+        }
+      },
+      {
+        "scenario": "streamingList",
+        "metric": "keyP95Ms",
+        "label": "keystroke→paint p95",
+        "base": {
+          "median": 20.349999994039536,
+          "p95": 24.15000000745058,
+          "n": 10
+        },
+        "head": {
+          "median": 27.399999991059303,
+          "p95": 30.780000002682208,
+          "n": 10
+        }
+      },
+      {
+        "scenario": "streamingWatch",
+        "metric": "longTaskMs",
+        "label": "long tasks / 6 s",
+        "base": {
+          "median": 0,
+          "p95": 0,
+          "n": 10
+        },
+        "head": {
+          "median": 0,
+          "p95": 0,
+          "n": 10
+        }
+      },
+      {
+        "scenario": "streamingWatch",
+        "metric": "maxFrameMs",
+        "label": "worst frame",
+        "base": {
+          "median": 16.80000000000291,
+          "p95": 16.80000000000291,
+          "n": 10
+        },
+        "head": {
+          "median": 16.80000000000291,
+          "p95": 42.629999999999185,
+          "n": 10
+        }
+      },
+      {
+        "scenario": "streamingWatch",
+        "metric": "keyP95Ms",
+        "label": "keystroke→paint p95",
+        "base": {
+          "median": 20.25,
+          "p95": 24.664999990165235,
+          "n": 10
+        },
+        "head": {
+          "median": 21.549999997019768,
+          "p95": 25.795000015199182,
+          "n": 10
+        }
+      }
+    ],
+    "4": [
+      {
+        "scenario": "coldStart",
+        "metric": "shownMs",
+        "label": "session list shown",
+        "base": {
+          "median": 4053.3500000089407,
+          "p95": 5738.054999984799,
+          "n": 10
+        },
+        "head": {
+          "median": 4639.6500000059605,
+          "p95": 5894.715000008046,
+          "n": 10
+        }
+      },
+      {
+        "scenario": "coldStart",
+        "metric": "conversationMs",
+        "label": "conversation shown",
+        "base": {
+          "median": 8742.89999999106,
+          "p95": 10278.609999991952,
+          "n": 10
+        },
+        "head": {
+          "median": 11329.40000000596,
+          "p95": 12987.640000012516,
+          "n": 10
+        }
+      },
+      {
+        "scenario": "coldStart",
+        "metric": "longTaskMs",
+        "label": "long tasks",
+        "base": {
+          "median": 3582.5,
+          "p95": 5088.5999999999985,
+          "n": 10
+        },
+        "head": {
+          "median": 3871.5,
+          "p95": 5152.599999999999,
+          "n": 10
+        }
+      },
+      {
+        "scenario": "coldStart",
+        "metric": "requests",
+        "label": "requests",
+        "base": {
+          "median": 232,
+          "p95": 232,
+          "n": 10
+        },
+        "head": {
+          "median": 251,
+          "p95": 251,
+          "n": 10
+        }
+      },
+      {
+        "scenario": "coldStart",
+        "metric": "jsKB",
+        "label": "JS decoded KB",
+        "base": {
+          "median": 2579.6357421875,
+          "p95": 2579.6357421875,
+          "n": 10
+        },
+        "head": {
+          "median": 2792.4287109375,
+          "p95": 2792.4287109375,
+          "n": 10
+        }
+      },
+      {
+        "scenario": "openSession",
+        "metric": "shownMs",
+        "label": "shown",
+        "base": {
+          "median": 1398.9000000059605,
+          "p95": 1954.8799999892708,
+          "n": 10
+        },
+        "head": {
+          "median": 1851.050000011921,
+          "p95": 2731.1950000047677,
+          "n": 10
+        }
+      },
+      {
+        "scenario": "openSession",
+        "metric": "settledMs",
+        "label": "settled",
+        "base": {
+          "median": 1436.8500000089407,
+          "p95": 2044.4799999907607,
+          "n": 10
+        },
+        "head": {
+          "median": 2435.1500000059605,
+          "p95": 3330.049999994039,
+          "n": 10
+        }
+      },
+      {
+        "scenario": "openSession",
+        "metric": "longTaskMs",
+        "label": "long tasks",
+        "base": {
+          "median": 1226.5,
+          "p95": 1771.4499999999996,
+          "n": 10
+        },
+        "head": {
+          "median": 2158,
+          "p95": 3109.249999999999,
+          "n": 10
+        }
+      },
+      {
+        "scenario": "openSession",
+        "metric": "requests",
+        "label": "requests",
+        "base": {
+          "median": 23,
+          "p95": 23.549999999999997,
+          "n": 10
+        },
+        "head": {
+          "median": 23,
+          "p95": 32.199999999999996,
+          "n": 10
+        }
+      },
+      {
+        "scenario": "switchLong",
+        "metric": "shownMs",
+        "label": "shown",
+        "base": {
+          "median": 3162.0499999970198,
+          "p95": 4377.924999999999,
+          "n": 10
+        },
+        "head": {
+          "median": 3035.5499999970198,
+          "p95": 3787.0699999988074,
+          "n": 10
+        }
+      },
+      {
+        "scenario": "switchLong",
+        "metric": "settledMs",
+        "label": "settled",
+        "base": {
+          "median": 3618.2999999970198,
+          "p95": 4886.62500000596,
+          "n": 10
+        },
+        "head": {
+          "median": 3396.3499999940395,
+          "p95": 4272.114999996125,
+          "n": 10
+        }
+      },
+      {
+        "scenario": "switchLong",
+        "metric": "longTaskMs",
+        "label": "long tasks",
+        "base": {
+          "median": 3413.5,
+          "p95": 4661.7,
+          "n": 10
+        },
+        "head": {
+          "median": 3358,
+          "p95": 4234.25,
+          "n": 10
+        }
+      },
+      {
+        "scenario": "switchLong",
+        "metric": "requests",
+        "label": "requests",
+        "base": {
+          "median": 14,
+          "p95": 15,
+          "n": 10
+        },
+        "head": {
+          "median": 21,
+          "p95": 24,
+          "n": 10
+        }
+      },
+      {
+        "scenario": "typing",
+        "metric": "keyP95Ms",
+        "label": "keystroke→paint p95",
+        "base": {
+          "median": 59.150000005960464,
+          "p95": 65.36000001132489,
+          "n": 10
+        },
+        "head": {
+          "median": 444.6000000089407,
+          "p95": 624.359999999404,
+          "n": 10
+        }
+      },
+      {
+        "scenario": "typing",
+        "metric": "keyMedianMs",
+        "label": "keystroke→paint median",
+        "base": {
+          "median": 38.19999998807907,
+          "p95": 43.15500001311302,
+          "n": 10
+        },
+        "head": {
+          "median": 161.15000000596046,
+          "p95": 238.8249999999999,
+          "n": 10
+        }
+      },
+      {
+        "scenario": "typing",
+        "metric": "inpMs",
+        "label": "INP (Event Timing)",
+        "base": {
+          "median": 64,
+          "p95": 80.79999999999998,
+          "n": 10
+        },
+        "head": {
+          "median": 112,
+          "p95": 152,
+          "n": 10
+        }
+      },
+      {
+        "scenario": "sendPrompt",
+        "metric": "shownMs",
+        "label": "bubble shown",
+        "base": {
+          "median": 192.70000000298023,
+          "p95": 279.5700000032782,
+          "n": 10
+        },
+        "head": {
+          "median": 303.6000000089407,
+          "p95": 391.690000000596,
+          "n": 10
+        }
+      },
+      {
+        "scenario": "sendPrompt",
+        "metric": "settledMs",
+        "label": "settled",
+        "base": {
+          "median": 645.3500000089407,
+          "p95": 1542.080000002682,
+          "n": 10
+        },
+        "head": {
+          "median": 2068.25,
+          "p95": 2860.4899999961253,
+          "n": 10
+        }
+      },
+      {
+        "scenario": "sendPrompt",
+        "metric": "longTaskMs",
+        "label": "long tasks",
+        "base": {
+          "median": 603,
+          "p95": 1500.8999999999996,
+          "n": 10
+        },
+        "head": {
+          "median": 2099.5,
+          "p95": 2897.95,
+          "n": 10
+        }
+      },
+      {
+        "scenario": "sendPrompt",
+        "metric": "requests",
+        "label": "requests",
+        "base": {
+          "median": 3.5,
+          "p95": 4.549999999999999,
+          "n": 10
+        },
+        "head": {
+          "median": 4,
+          "p95": 6.549999999999999,
+          "n": 10
+        }
+      },
+      {
+        "scenario": "railSessions",
+        "metric": "shownMs",
+        "label": "shown",
+        "base": {
+          "median": 2128.449999988079,
+          "p95": 3317.6350000098346,
+          "n": 10
+        },
+        "head": {
+          "median": 2818.449999988079,
+          "p95": 3920.7500000119207,
+          "n": 10
+        }
+      },
+      {
+        "scenario": "railSessions",
+        "metric": "settledMs",
+        "label": "settled",
+        "base": {
+          "median": 2334.5999999940395,
+          "p95": 3771.945000004768,
+          "n": 10
+        },
+        "head": {
+          "median": 3191.2999999970198,
+          "p95": 4289.430000002682,
+          "n": 10
+        }
+      },
+      {
+        "scenario": "railSessions",
+        "metric": "longTaskMs",
+        "label": "long tasks",
+        "base": {
+          "median": 2203,
+          "p95": 3635.45,
+          "n": 10
+        },
+        "head": {
+          "median": 3058.5,
+          "p95": 4182,
+          "n": 10
+        }
+      },
+      {
+        "scenario": "railSessions",
+        "metric": "requests",
+        "label": "requests",
+        "base": {
+          "median": 7,
+          "p95": 9.549999999999999,
+          "n": 10
+        },
+        "head": {
+          "median": 7,
+          "p95": 8,
+          "n": 10
+        }
+      },
+      {
+        "scenario": "railSettings",
+        "metric": "shownMs",
+        "label": "shown",
+        "base": {
+          "median": 297.45000000298023,
+          "p95": 508.255000001192,
+          "n": 10
+        },
+        "head": {
+          "median": 354.6000000089407,
+          "p95": 694.7649999961254,
+          "n": 10
+        }
+      },
+      {
+        "scenario": "railSettings",
+        "metric": "settledMs",
+        "label": "settled",
+        "base": {
+          "median": 314.3999999910593,
+          "p95": 976.1249999880788,
+          "n": 10
+        },
+        "head": {
+          "median": 354.6000000089407,
+          "p95": 876.5999999821183,
+          "n": 10
+        }
+      },
+      {
+        "scenario": "railSettings",
+        "metric": "longTaskMs",
+        "label": "long tasks",
+        "base": {
+          "median": 261.5,
+          "p95": 863.2499999999997,
+          "n": 10
+        },
+        "head": {
+          "median": 302,
+          "p95": 732.2499999999997,
+          "n": 10
+        }
+      },
+      {
+        "scenario": "railSettings",
+        "metric": "requests",
+        "label": "requests",
+        "base": {
+          "median": 3,
+          "p95": 10,
+          "n": 10
+        },
+        "head": {
+          "median": 2,
+          "p95": 8,
+          "n": 10
+        }
+      },
+      {
+        "scenario": "railAnalytics",
+        "metric": "shownMs",
+        "label": "shown",
+        "base": {
+          "median": 1709.1499999910593,
+          "p95": 3026.62500000149,
+          "n": 10
+        },
+        "head": {
+          "median": 244.5,
+          "p95": 359.3600000157952,
+          "n": 10
+        }
+      },
+      {
+        "scenario": "railAnalytics",
+        "metric": "settledMs",
+        "label": "settled",
+        "base": {
+          "median": 2057.7999999970198,
+          "p95": 3548.3750000044697,
+          "n": 10
+        },
+        "head": {
+          "median": 303.25,
+          "p95": 599.8850000053643,
+          "n": 10
+        }
+      },
+      {
+        "scenario": "railAnalytics",
+        "metric": "longTaskMs",
+        "label": "long tasks",
+        "base": {
+          "median": 1889,
+          "p95": 3344.45,
+          "n": 10
+        },
+        "head": {
+          "median": 216.5,
+          "p95": 455.14999999999986,
+          "n": 10
+        }
+      },
+      {
+        "scenario": "railAnalytics",
+        "metric": "requests",
+        "label": "requests",
+        "base": {
+          "median": 8,
+          "p95": 13.549999999999999,
+          "n": 10
+        },
+        "head": {
+          "median": 11,
+          "p95": 16,
+          "n": 10
+        }
+      },
+      {
+        "scenario": "railFleet",
+        "metric": "shownMs",
+        "label": "shown",
+        "base": {
+          "median": null,
+          "p95": null,
+          "n": 0,
+          "skipped": "not in this version's rail"
+        },
+        "head": {
+          "median": 98,
+          "p95": 137.44499999880787,
+          "n": 10
+        }
+      },
+      {
+        "scenario": "railFleet",
+        "metric": "settledMs",
+        "label": "settled",
+        "base": {
+          "median": null,
+          "p95": null,
+          "n": 0,
+          "skipped": "not in this version's rail"
+        },
+        "head": {
+          "median": 115.84999999403954,
+          "p95": 233.95499999821178,
+          "n": 10
+        }
+      },
+      {
+        "scenario": "railFleet",
+        "metric": "longTaskMs",
+        "label": "long tasks",
+        "base": {
+          "median": null,
+          "p95": null,
+          "n": 0,
+          "skipped": "not in this version's rail"
+        },
+        "head": {
+          "median": 83.5,
+          "p95": 114.94999999999997,
+          "n": 10
+        }
+      },
+      {
+        "scenario": "railFleet",
+        "metric": "requests",
+        "label": "requests",
+        "base": {
+          "median": null,
+          "p95": null,
+          "n": 0,
+          "skipped": "not in this version's rail"
+        },
+        "head": {
+          "median": 2,
+          "p95": 6,
+          "n": 10
+        }
+      },
+      {
+        "scenario": "openChanges",
+        "metric": "shownMs",
+        "label": "shown",
+        "base": {
+          "median": 84.6499999910593,
+          "p95": 112.30000000745058,
+          "n": 10
+        },
+        "head": {
+          "median": 777.1499999910593,
+          "p95": 1068.7599999934432,
+          "n": 10
+        }
+      },
+      {
+        "scenario": "openChanges",
+        "metric": "settledMs",
+        "label": "settled",
+        "base": {
+          "median": 84.6499999910593,
+          "p95": 112.30000000745058,
+          "n": 10
+        },
+        "head": {
+          "median": 777.1499999910593,
+          "p95": 1068.7599999934432,
+          "n": 10
+        }
+      },
+      {
+        "scenario": "openChanges",
+        "metric": "longTaskMs",
+        "label": "long tasks",
+        "base": {
+          "median": 0,
+          "p95": 60.849999999999994,
+          "n": 10
+        },
+        "head": {
+          "median": 767.5,
+          "p95": 1055.35,
+          "n": 10
+        }
+      },
+      {
+        "scenario": "openChanges",
+        "metric": "requests",
+        "label": "requests",
+        "base": {
+          "median": 0,
+          "p95": 0,
+          "n": 10
+        },
+        "head": {
+          "median": 0,
+          "p95": 1.6499999999999968,
+          "n": 10
+        }
+      },
+      {
+        "scenario": "scrollLong",
+        "metric": "p95FrameMs",
+        "label": "frame p95",
+        "base": {
+          "median": 66.70000000000437,
+          "p95": 100,
+          "n": 10
+        },
+        "head": {
+          "median": 66.60000000000036,
+          "p95": 66.65500000000301,
+          "n": 10
+        }
+      },
+      {
+        "scenario": "scrollLong",
+        "metric": "droppedFrames",
+        "label": "dropped frames / 3 s",
+        "base": {
+          "median": 83.5,
+          "p95": 107.19999999999999,
+          "n": 10
+        },
+        "head": {
+          "median": 71,
+          "p95": 87.14999999999999,
+          "n": 10
+        }
+      },
+      {
+        "scenario": "scrollLong",
+        "metric": "longTaskMs",
+        "label": "long tasks",
+        "base": {
+          "median": 1591,
+          "p95": 1795.75,
+          "n": 10
+        },
+        "head": {
+          "median": 1013,
+          "p95": 1236.35,
+          "n": 10
+        }
+      },
+      {
+        "scenario": "scrollLong",
+        "metric": "scrolledPx",
+        "label": "scrolled px",
+        "base": {
+          "median": 30000,
+          "p95": 30000,
+          "n": 10
+        },
+        "head": {
+          "median": 30000,
+          "p95": 30000,
+          "n": 10
+        }
+      },
+      {
+        "scenario": "newSessionPage",
+        "metric": "shownMs",
+        "label": "shown",
+        "base": {
+          "median": 532.2999999970198,
+          "p95": 1406.7450000092379,
+          "n": 10
+        },
+        "head": {
+          "median": 474,
+          "p95": 904.275,
+          "n": 10
+        }
+      },
+      {
+        "scenario": "newSessionPage",
+        "metric": "settledMs",
+        "label": "settled",
+        "base": {
+          "median": 535.7999999970198,
+          "p95": 1406.7450000092379,
+          "n": 10
+        },
+        "head": {
+          "median": 474,
+          "p95": 904.275,
+          "n": 10
+        }
+      },
+      {
+        "scenario": "newSessionPage",
+        "metric": "longTaskMs",
+        "label": "long tasks",
+        "base": {
+          "median": 487,
+          "p95": 1266.6499999999992,
+          "n": 10
+        },
+        "head": {
+          "median": 433,
+          "p95": 774.75,
+          "n": 10
+        }
+      },
+      {
+        "scenario": "newSessionPage",
+        "metric": "requests",
+        "label": "requests",
+        "base": {
+          "median": 3,
+          "p95": 12.549999999999999,
+          "n": 10
+        },
+        "head": {
+          "median": 3,
+          "p95": 11,
+          "n": 10
+        }
+      },
+      {
+        "scenario": "streamingList",
+        "metric": "longTaskMs",
+        "label": "long tasks / 6 s",
+        "base": {
+          "median": 57.5,
+          "p95": 164.64999999999998,
+          "n": 10
+        },
+        "head": {
+          "median": 1096.5,
+          "p95": 1666.8999999999992,
+          "n": 10
+        }
+      },
+      {
+        "scenario": "streamingList",
+        "metric": "maxFrameMs",
+        "label": "worst frame",
+        "base": {
+          "median": 74.99999999999727,
+          "p95": 168.31499999999957,
+          "n": 10
+        },
+        "head": {
+          "median": 116.69999999999982,
+          "p95": 203.28500000000253,
+          "n": 10
+        }
+      },
+      {
+        "scenario": "streamingList",
+        "metric": "keyP95Ms",
+        "label": "keystroke→paint p95",
+        "base": {
+          "median": 60.54999999701977,
+          "p95": 88.34499999731779,
+          "n": 10
+        },
+        "head": {
+          "median": 296.04999999701977,
+          "p95": 715.6750000014899,
+          "n": 10
+        }
+      },
+      {
+        "scenario": "streamingWatch",
+        "metric": "longTaskMs",
+        "label": "long tasks / 6 s",
+        "base": {
+          "median": 0,
+          "p95": 121.84999999999987,
+          "n": 10
+        },
+        "head": {
+          "median": 0,
+          "p95": 208.24999999999972,
+          "n": 10
+        }
+      },
+      {
+        "scenario": "streamingWatch",
+        "metric": "maxFrameMs",
+        "label": "worst frame",
+        "base": {
+          "median": 50.05000000000018,
+          "p95": 145.86000000000087,
+          "n": 10
+        },
+        "head": {
+          "median": 50,
+          "p95": 145.87000000000072,
+          "n": 10
+        }
+      },
+      {
+        "scenario": "streamingWatch",
+        "metric": "keyP95Ms",
+        "label": "keystroke→paint p95",
+        "base": {
+          "median": 52.650000005960464,
+          "p95": 89.06999998688694,
+          "n": 10
+        },
+        "head": {
+          "median": 50,
+          "p95": 61.664999996125694,
+          "n": 10
+        }
+      }
+    ]
+  }
+}

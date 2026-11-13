@@ -73,6 +73,10 @@ public sealed class TestHarnessRuntime : IHarnessRuntime
     {
         // No id → use the in-memory scenario configured via Configure(...). This is the path
         // E2E tests use; they program the scenario from C# before driving the harness.
+        // The API doesn't take a scenario id, so a live rig (tests/snappiness) names the next
+        // session's scenario in {FLEET_BETA_SCENARIO_DIR}/next-scenario.txt just before it creates it.
+        if (string.IsNullOrWhiteSpace(scenarioId))
+            scenarioId = NextScenarioFromFile();
         if (string.IsNullOrWhiteSpace(scenarioId))
             return _scenario;
 
@@ -100,5 +104,21 @@ public sealed class TestHarnessRuntime : IHarnessRuntime
         var scenario = builder.Build();
         Configure(scenario);
         return scenario;
+    }
+
+    private static string? NextScenarioFromFile()
+    {
+        var directory = Environment.GetEnvironmentVariable("FLEET_BETA_SCENARIO_DIR");
+        if (string.IsNullOrWhiteSpace(directory))
+            return null;
+        var path = Path.Combine(directory, "next-scenario.txt");
+        try
+        {
+            return File.Exists(path) ? File.ReadAllText(path).Trim() : null;
+        }
+        catch (IOException)
+        {
+            return null;
+        }
     }
 }

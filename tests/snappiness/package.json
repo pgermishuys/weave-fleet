@@ -1,0 +1,17 @@
+{
+  "name": "weave-fleet-snappiness",
+  "version": "0.0.1",
+  "private": true,
+  "description": "Repeatable UI snappiness check: seeds a scratch Fleet (test harness) with invented data and measures interaction latency with Playwright.",
+  "type": "module",
+  "scripts": {
+    "snappiness": "bun run.ts",
+    "measure": "bun measure.ts",
+    "compare": "bun compare.ts"
+  },
+  "devDependencies": {
+    "playwright": "1.51.0",
+    "source-map-js": "1.2.1",
+    "@types/node": "22.10.5"
+  }
+}

@@ -1,0 +1,65 @@
+diff --git a/src/WeaveFleet.TestHarness/TestHarnessRuntime.cs b/src/WeaveFleet.TestHarness/TestHarnessRuntime.cs
+index ff0be089..5778c495 100644
+--- a/src/WeaveFleet.TestHarness/TestHarnessRuntime.cs
++++ b/src/WeaveFleet.TestHarness/TestHarnessRuntime.cs
+@@ -73,6 +73,10 @@ public sealed class TestHarnessRuntime : IHarnessRuntime
+     {
+         // No id → use the in-memory scenario configured via Configure(...). This is the path
+         // E2E tests use; they program the scenario from C# before driving the harness.
++        // The API doesn't take a scenario id, so a live rig (tests/snappiness) names the next
++        // session's scenario in {FLEET_BETA_SCENARIO_DIR}/next-scenario.txt just before it creates it.
++        if (string.IsNullOrWhiteSpace(scenarioId))
++            scenarioId = NextScenarioFromFile();
+         if (string.IsNullOrWhiteSpace(scenarioId))
+             return _scenario;
+ 
+@@ -101,4 +105,20 @@ public sealed class TestHarnessRuntime : IHarnessRuntime
+         Configure(scenario);
+         return scenario;
+     }
++
++    private static string? NextScenarioFromFile()
++    {
++        var directory = Environment.GetEnvironmentVariable("FLEET_BETA_SCENARIO_DIR");
++        if (string.IsNullOrWhiteSpace(directory))
++            return null;
++        var path = Path.Combine(directory, "next-scenario.txt");
++        try
++        {
++            return File.Exists(path) ? File.ReadAllText(path).Trim() : null;
++        }
++        catch (IOException)
++        {
++            return null;
++        }
++    }
+ }
+diff --git a/src/WeaveFleet.TestHarness/TestHarnessSession.cs b/src/WeaveFleet.TestHarness/TestHarnessSession.cs
+index 0aa7a906..704f96a8 100644
+--- a/src/WeaveFleet.TestHarness/TestHarnessSession.cs
++++ b/src/WeaveFleet.TestHarness/TestHarnessSession.cs
+@@ -906,11 +906,23 @@ public sealed class TestHarnessSession : IHarnessSession
+                     : (part.TryGetProperty("state", out var stateEl2) && stateEl2.TryGetProperty("input", out var nestedInput)
+                         ? nestedInput.Clone()
+                         : JsonDocument.Parse("{}").RootElement.Clone()),
+-                State: MapToolState(part)),
++                State: MapToolState(part))
++            {
++                // Keep what the tool returned, as the real harnesses do, so seeded history looks like a real one.
++                Output = StateProperty(part, "output"),
++                Title = StateProperty(part, "title") is { ValueKind: JsonValueKind.String } title ? title.GetString() : null,
++                Metadata = StateProperty(part, "metadata"),
++            },
+             _ => null,
+         };
+     }
+ 
++    private static JsonElement? StateProperty(JsonElement part, string name)
++        => part.TryGetProperty("state", out var state) && state.ValueKind == JsonValueKind.Object
++            && state.TryGetProperty(name, out var value) && value.ValueKind is not (JsonValueKind.Null or JsonValueKind.Undefined)
++                ? value.Clone()
++                : null;
++
+     private static ToolUseState MapToolState(JsonElement part)
+     {
+         if (!part.TryGetProperty("state", out var stateEl) || stateEl.ValueKind != JsonValueKind.Object)

@@ -906,10 +906,22 @@ public sealed class TestHarnessSession : IHarnessSession
                     : (part.TryGetProperty("state", out var stateEl2) && stateEl2.TryGetProperty("input", out var nestedInput)
                         ? nestedInput.Clone()
                         : JsonDocument.Parse("{}").RootElement.Clone()),
-                State: MapToolState(part)),
+                State: MapToolState(part))
+            {
+                // Keep what the tool returned, as the real harnesses do, so seeded history looks like a real one.
+                Output = StateProperty(part, "output"),
+                Title = StateProperty(part, "title") is { ValueKind: JsonValueKind.String } title ? title.GetString() : null,
+                Metadata = StateProperty(part, "metadata"),
+            },
             _ => null,
         };
     }
+
+    private static JsonElement? StateProperty(JsonElement part, string name)
+        => part.TryGetProperty("state", out var state) && state.ValueKind == JsonValueKind.Object
+            && state.TryGetProperty(name, out var value) && value.ValueKind is not (JsonValueKind.Null or JsonValueKind.Undefined)
+                ? value.Clone()
+                : null;
 
     private static ToolUseState MapToolState(JsonElement part)
     {
